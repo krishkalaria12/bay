@@ -57,6 +57,7 @@ export type BrowserWindow = {
 };
 
 export type Tab = {
+  newTabHistory?: { url: string; title: string; favicon: string | null };
   id: string;
   // The window its page is in (the one that last showed it); "" when none has since it was made or its window
   // closed. A Little Bay page is its window's alone.

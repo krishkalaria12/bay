@@ -1,4 +1,4 @@
-import { requireOptionalNativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule, nativeRandomUUID, nativeSnapshot } from "@bay/platform/native";
 import type { Listing, Transport } from "./scope.ts";
 
 export type FolderInfo = {
@@ -50,7 +50,20 @@ type SyncNative = {
   readPasswords(engineProfile: string): Promise<SavedLogin[] | null>;
 };
 
-export const SyncNative = requireOptionalNativeModule<SyncNative>("BaySync");
+const Native = requireOptionalNativeModule<SyncNative>("BaySync");
+// Device IDs are local utilities and the name is host state. Neither requires
+// synchronous IPC in the WebUI renderer.
+const newDeviceId = () => nativeRandomUUID(() => Native!.newDeviceId());
+const deviceName = () => nativeSnapshot("BaySync", "deviceName", [], () => Native!.deviceName());
+export const SyncNative: SyncNative | null =
+  Native &&
+  new Proxy(Native, {
+    get(target, property) {
+      if (property === "newDeviceId") return newDeviceId;
+      if (property === "deviceName") return deviceName;
+      return Reflect.get(target, property);
+    },
+  });
 
 export const folderTransport = (native: SyncNative, folder: string): Transport => ({
   write: (scope, payload) => native.write(folder, scope, payload),

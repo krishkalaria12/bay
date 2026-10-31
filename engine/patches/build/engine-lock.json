@@ -1,0 +1,13 @@
+{
+  "chromium": "154.0.8037.58",
+  "cefBranch": "8037",
+  "cefCommit": "564dd6c4aafff558154bd3176eb5d13551db6734",
+  "depotToolsCommit": "ccecefb58648ac0a416756b0a4591ec8905a7f55",
+  "ungoogledCommit": "800d0bb5078472e4442c1fd73373172754a60939",
+  "ungoogledVersion": "154.0.8037.57-1",
+  "platform": "windows",
+  "architecture": "x64",
+  "minimumWindowsBuild": 22621,
+  "outputDirectory": "out/Release_GN_x64",
+  "runtime": "chrome-webui"
+}

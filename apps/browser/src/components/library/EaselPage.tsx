@@ -1,3 +1,4 @@
+import { capabilities, isMac, Pressable, TextInput, View } from "@bay/platform";
 import { WebView, type WebViewHandle } from "@bay/nncore";
 import {
   EaselCanvas,
@@ -11,9 +12,11 @@ import {
   type EaselTool,
 } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { newTab } from "../../runtime/tabActions";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile } from "../../store/model";
 import { engineIdOf } from "../../store/spaces";
 import { showToast } from "../layout/splitActions";
@@ -25,6 +28,7 @@ import { applyEaselDocument, startLibrary, updateEasel, useLibrary } from "./sta
 import { liveClipTransform } from "./liveClip";
 import { webLink, type EaselItem } from "./model";
 import { EaselShareButton } from "./EaselShareButton";
+import { thisComputer } from "./words";
 
 export const easelCanvases = new Map<string, EaselCanvasHandle>();
 export const easelCanvasStates = new Map<string, EaselState>();
@@ -123,7 +127,7 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
       { id: "deleteSelection", title: "Delete Selection", enabled: !!state.selection.length },
       { separator: true },
       { id: "html", title: "Export as HTML…" },
-      { id: "share", title: "Share PNG…" },
+      ...(capabilities.shareSheet ? [{ id: "share", title: "Share PNG…" }] : []),
       { separator: true },
       { id: "delete", title: "Delete Easel…" },
     ]);
@@ -170,7 +174,7 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
           selectTextOnFocus
           style={{ flex: 1, minWidth: 60, fontSize: 19, fontWeight: "600", color: theme.textPrimary, padding: 4 }}
         />
-        <Text style={{ fontSize: 11, color: theme.textTertiary }}>Saved on this Mac</Text>
+        <Text style={{ fontSize: 11, color: theme.textTertiary }}>Saved on {thisComputer}</Text>
         {isEaselWebSharingEnabled() ? <EaselShareButton doc={doc} canvas={canvas} windowId={windowId} /> : null}
         <Button title={busy ? "Exporting…" : "Export PNG"} disabled={busy} onPress={() => void exportPNG()} />
         <IconButton icon="ellipsis" size={16} box={30} radius={8} tooltip="Easel actions" onPress={() => void more()} />
@@ -247,7 +251,7 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
           size={14}
           box={30}
           radius={7}
-          tooltip="Undo (⌘Z)"
+          tooltip={`Undo (${isMac ? "⌘" : "Ctrl+"}Z)`}
           disabled={!state.canUndo}
           onPress={() => void canvas.current?.undo()}
         />
@@ -256,7 +260,7 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
           size={14}
           box={30}
           radius={7}
-          tooltip="Redo (⇧⌘Z)"
+          tooltip={`Redo (${isMac ? "⇧⌘" : "Ctrl+Shift+"}Z)`}
           disabled={!state.canRedo}
           onPress={() => void canvas.current?.redo()}
         />
@@ -271,7 +275,7 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
           dark={theme.dark}
           onChange={change}
           onOpenLink={(url) => {
-            if (webLink(url)) useBrowser.getState().newTab(windowId, { url });
+            if (webLink(url)) reportBrowserCommand(newTab(windowId, { url }));
           }}
           style={StyleSheet.absoluteFill}
         />
@@ -332,7 +336,7 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
               borderColor: theme.panelBorder,
             }}
           >
-            <Button title="Open Source" onPress={() => useBrowser.getState().newTab(windowId, { url: selected.source!.url })} />
+            <Button title="Open Source" onPress={() => reportBrowserCommand(newTab(windowId, { url: selected.source!.url }))} />
             {selected.source.clip ? <Button title={selected.live ? "Pause Live Clip" : "Make Live"} onPress={toggleLive} /> : null}
           </View>
         ) : null}
@@ -408,7 +412,7 @@ function LiveClip({
           onLoadError={(e) => setError(e.text)}
           onCrashed={() => setError("The page stopped responding.")}
           onOpenWindow={(r) => {
-            if (webLink(r.url)) useBrowser.getState().newTab(windowId, { url: r.url });
+            if (webLink(r.url)) reportBrowserCommand(newTab(windowId, { url: r.url }));
           }}
           style={StyleSheet.absoluteFill}
         />

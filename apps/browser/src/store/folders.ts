@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import type { BrowserProjection } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
 import { listIds, newId, pinnedPage, spaceListKey, withList, without } from "./model";
@@ -7,8 +8,8 @@ import { withSplitPanes } from "./splits";
 import type { PinnedFolder, Tab, TabGroup } from "./types";
 
 export const MAX_FOLDER_DEPTH = 5;
-type FolderState = Pick<BrowserState, "pinnedFolders">;
-type FolderTabsState = FolderState & Pick<BrowserState, "tabs" | "spaces" | "tabLists">;
+type FolderState = Pick<BrowserState, "pinnedFolders"> | Pick<BrowserProjection, "pinnedFolders">;
+type FolderTabsState = FolderState & Pick<BrowserProjection, "tabs" | "spaces" | "tabLists">;
 
 type FolderMove = {
   id?: string;

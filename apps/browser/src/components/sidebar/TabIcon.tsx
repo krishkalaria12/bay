@@ -1,9 +1,10 @@
+import { View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { memo } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineMark, ENGINE_NAMES, ENGINE_SYMBOLS } from "../../store/engines";
 import { Favicon } from "../primitives";
 import { SYMBOL_PREFIX } from "../../lib/constants";

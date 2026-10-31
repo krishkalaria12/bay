@@ -1,21 +1,34 @@
-import { ContextMenuArea, fileExists, MouseArea, openFile, showMenu, Surface, Symbol } from "@bay/shell";
+import { Pressable, ScrollView, View } from "@bay/platform";
+import { ContextMenuArea, libraryImageUri, MouseArea, openFile, showMenu, Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Text } from "react-native";
+import { useFileExists } from "../useFileExists";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { isIncognitoSpace } from "../../store/model";
 import { downloadsIn } from "../../store/ui";
 import { downloadMenu, FileIcon } from "../Downloads";
 import { showToast } from "../layout/splitActions";
 import { IconButton, useHover } from "../primitives";
 import { useSidebarWidth } from "../sidebar/tokens";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { toggleDownloads } from "../../runtime/windowUiActions";
+import { libraryAvailable } from "./availability";
 import { openLibrary } from "./actions";
 import { startLibrary, useLibrary } from "./state";
 
 type RecentTypes = { media: boolean; downloads: boolean };
 
 export function LibraryButton({ windowId }: { windowId: string }) {
+  if (!libraryAvailable())
+    return (
+      <IconButton icon="arrow.down.circle" size={15} box={28} radius={7} tooltip="Downloads" onPress={() => reportBrowserCommand(toggleDownloads(windowId))} />
+    );
+  return <AvailableLibraryButton windowId={windowId} />;
+}
+
+function AvailableLibraryButton({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const privateWindow = useBrowser((s) => !s.windows[windowId] || s.windows[windowId].incognito || isIncognitoSpace(s.windows[windowId].spaceId));
   const downloads = useBrowser(useShallow((s) => downloadsIn(s, windowId)));
@@ -211,7 +224,7 @@ function RecentHeading({ title, onPress }: { title: string; onPress: () => void 
 function RecentFile({ name, path, icon, onPress }: { name: string; path: string; icon: ReactNode; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
-  const exists = fileExists(path);
+  const exists = useFileExists(path) === true;
   return (
     <MouseArea path={exists ? path : null}>
       <View {...hoverProps} style={{ marginHorizontal: 5, borderRadius: 7, backgroundColor: hovered ? theme.rowHover : undefined }}>
@@ -236,13 +249,9 @@ function RecentFile({ name, path, icon, onPress }: { name: string; path: string;
 function RecentImage({ path }: { path: string }) {
   const theme = useTheme();
   const [broken, setBroken] = useState(false);
-  if (broken || !fileExists(path)) return <Symbol name="photo" size={20} color={theme.textTertiary} style={{ width: 30, height: 30 }} />;
+  const exists = useFileExists(path);
+  if (broken || exists !== true) return <Symbol name="photo" size={20} color={theme.textTertiary} style={{ width: 30, height: 30 }} />;
   return (
-    <Image
-      source={{ uri: `file://${path.split("/").map(encodeURIComponent).join("/")}` }}
-      onError={() => setBroken(true)}
-      resizeMode="cover"
-      style={{ width: 30, height: 30, borderRadius: 4 }}
-    />
+    <Image source={{ uri: libraryImageUri(path) }} onError={() => setBroken(true)} resizeMode="cover" style={{ width: 30, height: 30, borderRadius: 4 }} />
   );
 }

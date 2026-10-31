@@ -1,8 +1,13 @@
 import { confirm, prompt, showMenu } from "@bay/shell";
-import { useBrowser } from "../../store/browser";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { activate, newTab, closeTabs, updateTabDetails } from "../../runtime/tabActions";
+import { pinRows, setPinnedUrl } from "../../runtime/organizeActions";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { resolveWindowId, viewTabIds } from "../../store/model";
 import { showToast } from "../layout/splitActions";
 import { openInternalPage, tabDestination } from "../pages/urls";
+import { libraryAvailable } from "./availability";
+import { thisComputer } from "./words";
 import type { LibraryMedia } from "./model";
 import { addMediaToEasel, createEasel, deleteEasel, duplicateEasel, startLibrary, updateEasel, useLibrary } from "./state";
 import { startEaselShares, stopSharingEasel, useEaselShares } from "./sharing";
@@ -21,8 +26,12 @@ export function libraryWindow(windowId?: string | null): string | null {
   const s = useBrowser.getState();
   const id = resolveWindowId(s, windowId);
   if (!id) return null;
+  if (!libraryAvailable()) {
+    showToast(id, "Library Is Unavailable", "Library and Easels are not supported in this window yet.", { icon: "books.vertical" });
+    return null;
+  }
   if (s.windows[id]?.incognito) {
-    showToast(id, "Open Library in a Regular Window", "Library and Easels are saved on this Mac.", { icon: "books.vertical" });
+    showToast(id, "Open Library in a Regular Window", `Library and Easels are saved on ${thisComputer}.`, { icon: "books.vertical" });
     return null;
   }
   return id;
@@ -36,6 +45,10 @@ export function openLibrary(windowId?: string | null, section?: string) {
 }
 
 export function openEasel(id: string, windowId?: string | null) {
+  reportBrowserCommand(openEaselTab(id, windowId));
+}
+
+async function openEaselTab(id: string, windowId?: string | null) {
   const window = libraryWindow(windowId);
   if (!window) return;
   startLibrary();
@@ -44,10 +57,14 @@ export function openEasel(id: string, windowId?: string | null) {
   if (!doc) return;
   const existing = viewTabIds(s, window).find((t) => easelIdOf(tabDestination(s.tabs[t]!)) === id);
   if (existing) {
-    s.activate(existing, window);
+    await activate(existing, window);
     return existing;
   }
-  return s.newTab(window, { url: easelUrl(id), snapshot: { title: doc.title, pinnedRow: true, pinnedUrl: easelUrl(id) } });
+  const tabId = await newTab(window, { url: easelUrl(id) });
+  await updateTabDetails(tabId, { customTitle: doc.title });
+  await pinRows([tabId], true);
+  await setPinnedUrl(tabId, easelUrl(id));
+  return tabId;
 }
 
 export function newEasel(windowId?: string | null) {
@@ -83,6 +100,7 @@ export async function chooseEasel(media: LibraryMedia, windowId: string) {
 }
 
 export async function renameEasel(id: string) {
+  if (!libraryAvailable()) return;
   const doc = useLibrary.getState().easels[id];
   if (!doc) return;
   const title = await prompt({ title: "Rename Easel", value: doc.title, confirmTitle: "Rename" });
@@ -90,6 +108,7 @@ export async function renameEasel(id: string) {
 }
 
 export async function easelMenu(id: string, windowId: string) {
+  if (!libraryAvailable()) return;
   const choice = await showMenu([
     { id: "open", title: "Open Easel" },
     { id: "rename", title: "Rename…" },
@@ -107,6 +126,7 @@ export async function easelMenu(id: string, windowId: string) {
 }
 
 export async function removeEasel(id: string) {
+  if (!libraryAvailable()) return;
   const doc = useLibrary.getState().easels[id];
   if (!doc) return;
   startEaselShares();
@@ -128,7 +148,7 @@ export async function removeEasel(id: string) {
   }
   deleteEasel(id);
   const s = useBrowser.getState();
-  s.closeTabs(
+  await closeTabs(
     Object.values(s.tabs)
       .filter((t) => easelIdOf(tabDestination(t)) === id)
       .map((t) => t.id),

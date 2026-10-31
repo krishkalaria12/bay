@@ -1,6 +1,7 @@
 import { confirm, copyText, sharePage, showMenu, type EaselCanvasHandle } from "@bay/shell";
 import { useEffect, type RefObject } from "react";
-import { useBrowser } from "../../store/browser";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { newTab } from "../../runtime/tabActions";
 import { showToast } from "../layout/splitActions";
 import { Button } from "../settings/controls";
 import type { EaselDocument } from "./model";
@@ -60,7 +61,7 @@ async function openEaselSharing(doc: EaselDocument, canvas: RefObject<EaselCanva
       copyText(url);
       showToast(windowId, "Easel Link Copied", undefined, { icon: "link" });
     }
-    if (choice === "open") useBrowser.getState().newTab(windowId, { url });
+    if (choice === "open") reportBrowserCommand(newTab(windowId, { url }));
     if (choice === "share") await sharePage(url, doc.title, windowId);
     if (choice === "update") await publish();
     if (choice === "stop") {

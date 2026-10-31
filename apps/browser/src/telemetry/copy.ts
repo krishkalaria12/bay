@@ -23,8 +23,8 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
   {
     title: "With everything",
     items: [
-      "A random install ID, made on this Mac (a new one each time sharing is turned back on)",
-      "App version and build, macOS version, chip (arm64 or x86_64), engine version",
+      "A random install ID, made on this computer (a new one each time sharing is turned back on)",
+      "App version and build, operating system version, processor architecture, engine version",
       "Whether it's a test build",
     ],
   },
@@ -42,14 +42,14 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
     items: [
       "Launches, updates, and whether the last session ended cleanly",
       "How many tabs and windows you open (a count, not which)",
-      "Opening split view, switching profiles and opening the command bar",
+      "Opening split view, switching spaces and opening the command bar",
       "The kind of command bar row you pick: history, bookmark, tab, address, search, calculator, emoji or action",
       "Installing an extension, turning sync on or off, translating a page, and which Settings sections you open",
     ],
   },
   {
     title: "Speed",
-    items: ["Time to the first window, profile switch time, and command bar speed (a sample of keystrokes)", "Memory use and the number of tabs, once an hour"],
+    items: ["Time to the first window, space switch time, and command bar speed (a sample of keystrokes)", "Memory use and the number of tabs, once an hour"],
   },
   {
     title: "Never",
@@ -57,7 +57,7 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
       "Web addresses, site names or page titles",
       "Anything you type or search for",
       "History, bookmarks, passwords or what's in your tabs",
-      "Profile, extension or file names",
+      "Space, extension or file names",
       "Screen recordings",
     ],
   },

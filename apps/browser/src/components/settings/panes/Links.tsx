@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { View } from "@bay/platform";
 import { Group, SectionHeader, SettingToggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { LinkRules } from "./LinkRules";

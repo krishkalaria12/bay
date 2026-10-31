@@ -1,8 +1,11 @@
+import { View } from "@bay/platform";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead, browserRead } from "../../../store/read";
 import { defaultLinkDestination, validateLinkPattern, type ExternalLinkRule, type LinkDestination, type LinkMatchType } from "../../../lib/externalLinkRules";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { useSpaces } from "../../../store/hooks";
 import { newId } from "../../../store/model";
 import { IconButton } from "../../primitives";
@@ -11,26 +14,25 @@ import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 
 export function showRuleEditor(ruleId?: string) {
-  const rule = ruleId === undefined ? undefined : useBrowser.getState().settings.externalLinkRules.find((candidate) => candidate.id === ruleId);
+  const rule = ruleId === undefined ? undefined : browserRead.getState().settings.externalLinkRules.find((candidate) => candidate.id === ruleId);
   if (ruleId !== undefined && !rule) return;
   showSettingsSheet(<RuleSheet key={rule?.id ?? "new"} rule={rule} />);
 }
 
 export function LinkRules() {
-  const settings = useBrowser((s) => s.settings);
-  const updateSettings = useBrowser((s) => s.updateSettings);
+  const settings = useBrowserRead((s) => s.settings);
   const spaces = useSpaces();
   const rules = settings.externalLinkRules;
   const defaultDestination = defaultLinkDestination(settings);
   const selectedDefault = defaultDestination.kind === "space" ? `space:${defaultDestination.spaceId}` : defaultDestination.kind;
   const move = (id: string, direction: number) => {
-    const state = useBrowser.getState();
+    const state = browserRead.getState();
     const next = [...state.settings.externalLinkRules];
     const from = next.findIndex((rule) => rule.id === id);
     const to = from + direction;
     if (from < 0 || to < 0 || to >= next.length) return;
     [next[from], next[to]] = [next[to]!, next[from]!];
-    state.updateSettings({ externalLinkRules: next });
+    reportBrowserCommand(updateSettings({ externalLinkRules: next }));
   };
   return (
     <>
@@ -55,11 +57,13 @@ export function LinkRules() {
               ...(defaultDestination.kind === "newWindow" ? [{ value: "newWindow", title: "New window" }] : []),
             ]}
             onChange={(value) =>
-              updateSettings({
-                externalLinkDefault: value.startsWith("space:")
-                  ? { kind: "space", spaceId: value.slice(6) }
-                  : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
-              })
+              reportBrowserCommand(
+                updateSettings({
+                  externalLinkDefault: value.startsWith("space:")
+                    ? { kind: "space", spaceId: value.slice(6) }
+                    : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
+                }),
+              )
             }
             minWidth={180}
           />
@@ -103,7 +107,7 @@ export function LinkRules() {
 export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
   const theme = useTheme();
   const spaces = useSpaces();
-  const defaultSpaceId = useBrowser((s) => s.settings.defaultSpaceId);
+  const defaultSpaceId = useBrowserRead((s) => s.settings.defaultSpaceId);
   const [pattern, setPattern] = useState(rule?.pattern ?? "");
   const [matchType, setMatchType] = useState<LinkMatchType | undefined>(rule ? rule.matchType : "contains");
   const [sourceApp, setSourceApp] = useState(rule?.sourceApp ?? "");
@@ -111,13 +115,13 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
   const [error, setError] = useState<string | null>(null);
   const selected = destination.kind === "space" ? `space:${destination.spaceId}` : destination.kind;
   const missingSpace = destination.kind === "space" && !spaces.some((space) => space.id === destination.spaceId);
-  const save = () => {
+  const save = async () => {
     const cleanPattern = pattern.trim();
     const cleanSource = sourceApp.trim();
     const patternError = validateLinkPattern(cleanPattern, matchType);
     if (patternError) return setError(patternError);
     if (cleanSource && !/^[\w.-]+$/.test(cleanSource)) return setError("Enter an app bundle ID without spaces, or leave it blank for any app.");
-    const state = useBrowser.getState();
+    const state = browserRead.getState();
     if (destination.kind === "space" && !state.spaces[destination.spaceId]) return setError("Choose an existing space for this rule.");
     const saved: ExternalLinkRule = {
       id: rule?.id ?? newId("link-rule"),
@@ -127,8 +131,13 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
       destination,
     };
     const rules = state.settings.externalLinkRules;
-    state.updateSettings({ externalLinkRules: rule ? rules.map((existing) => (existing.id === rule.id ? saved : existing)) : [...rules, saved] });
-    closeSettingsSheet();
+    const externalLinkRules = rule ? rules.map((existing) => (existing.id === rule.id ? saved : existing)) : [...rules, saved];
+    try {
+      await updateSettings({ externalLinkRules });
+      closeSettingsSheet();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Couldn't save the link rule.");
+    }
   };
   const labelStyle = { fontSize: 11.5, marginBottom: 5, color: theme.textSecondary };
   const helpStyle = { fontSize: 11.5, lineHeight: 16, marginTop: 5, color: theme.textSecondary };
@@ -204,10 +213,14 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
           <Button
             title="Delete"
             kind="destructive"
-            onPress={() => {
-              const state = useBrowser.getState();
-              state.updateSettings({ externalLinkRules: state.settings.externalLinkRules.filter((existing) => existing.id !== rule.id) });
-              closeSettingsSheet();
+            onPress={async () => {
+              const state = browserRead.getState();
+              try {
+                await updateSettings({ externalLinkRules: state.settings.externalLinkRules.filter((existing) => existing.id !== rule.id) });
+                closeSettingsSheet();
+              } catch (failure) {
+                setError(failure instanceof Error ? failure.message : "Couldn't delete the link rule.");
+              }
             }}
           />
         )}

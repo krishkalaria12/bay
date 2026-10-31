@@ -1,5 +1,6 @@
+import { ScrollView } from "@bay/platform";
 import { Component, type ReactNode } from "react";
-import { ScrollView, Text } from "react-native";
+import { Text } from "react-native";
 
 export class DevErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };

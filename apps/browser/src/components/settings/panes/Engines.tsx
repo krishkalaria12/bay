@@ -4,7 +4,9 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { setWebsiteEngine } from "../../../lib/engines";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { defaultEngine, ENGINE_NAMES, PROTECTED_VIDEO_SITES, RECOMMENDED_ENGINE, siteOf } from "../../../store/engines";
 import { Favicon, IconButton } from "../../primitives";
 import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Sheet, TextField } from "../controls";
@@ -24,7 +26,7 @@ export function EnginesPane() {
   const engine = useBrowser((s) => defaultEngine(s));
   const rules = useBrowser((s) => s.settings.websiteEngines);
   const sites = Object.keys(rules ?? {}).sort((a, b) => siteLabel(a).localeCompare(siteLabel(b)));
-  const setDefault = (value: PageEngine) => useBrowser.getState().updateSettings({ pageEngine: value });
+  const setDefault = (value: PageEngine) => reportBrowserCommand(updateSettings({ pageEngine: value }));
 
   return (
     <View>

@@ -2,7 +2,7 @@
 // it mounts or lays out. GroupBlock and Fold draw groups by these numbers; revealing a tab scrolls by them.
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
-import type { BrowserState } from "../../store/browser";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { folderTabIds } from "../../store/folders";
 import { activeTabId, spaceFolded } from "../../store/model";
 import { GROUP_BORDER, GROUP_PAD, NEW_TAB_GAP } from "./constants";

@@ -1,7 +1,8 @@
-import { MarkupCanvas, MouseArea, Surface, Symbol, type MarkupCanvasHandle, type MarkupState, type MarkupTool } from "@bay/shell";
+import { capabilities, Pressable, View } from "@bay/platform";
+import { libraryImageUri, MarkupCanvas, MouseArea, Surface, Symbol, type MarkupCanvasHandle, type MarkupState, type MarkupTool } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { Image, StyleSheet, Text } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { bouncySpring } from "../../lib/springs";
 import { hex, useTheme } from "../../lib/theme";
 import { PromptButton } from "../layout/controls";
@@ -110,7 +111,7 @@ function CaptureResult({ tabId, session, pane }: { tabId: string; session: Ready
         />
         {/* Dragged out, the picture goes as its PNG (to Finder, Mail, a message). */}
         <MouseArea path={session.image.path} style={[StyleSheet.absoluteFill, { borderRadius: 6, overflow: "hidden" }]}>
-          <Image source={{ uri: `file://${session.image.path}` }} resizeMode="stretch" style={StyleSheet.absoluteFill} />
+          <Image source={{ uri: libraryImageUri(session.image.path) }} resizeMode="stretch" style={StyleSheet.absoluteFill} />
         </MouseArea>
       </Animated.View>
       <Animated.View
@@ -138,10 +139,14 @@ function CaptureResult({ tabId, session, pane }: { tabId: string; session: Ready
             onPress={() => void captureToLibrary(tabId, true)}
           />
           <BarButton compact={pane.width < 740} icon="arrow.down.circle" title="Save" tooltip="Save to Downloads" onPress={() => void saveCapture(tabId)} />
-          <View ref={share} collapsable={false}>
-            <BarButton compact={pane.width < 740} icon="square.and.arrow.up" title="Share" tooltip="Share" onPress={openShare} />
-          </View>
-          <BarButton compact={pane.width < 740} icon="pencil.tip.crop.circle" title="Mark Up" tooltip="Mark Up" onPress={() => setMarkingUp(tabId, true)} />
+          {capabilities.shareSheet ? (
+            <View ref={share} collapsable={false}>
+              <BarButton compact={pane.width < 740} icon="square.and.arrow.up" title="Share" tooltip="Share" onPress={openShare} />
+            </View>
+          ) : null}
+          {capabilities.captureMarkup ? (
+            <BarButton compact={pane.width < 740} icon="pencil.tip.crop.circle" title="Mark Up" tooltip="Mark Up" onPress={() => setMarkingUp(tabId, true)} />
+          ) : null}
           <BarButton compact={pane.width < 740} icon="arrow.counterclockwise" title="Retake" tooltip="Retake" onPress={() => retakeCapture(tabId)} />
           <View
             style={{

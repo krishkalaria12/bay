@@ -1,5 +1,10 @@
 import { setSidebarKeyboard } from "@bay/shell";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { toggleTabLayout } from "../../runtime/splitActions";
+import { toggleSidebar } from "../../runtime/windowActions";
+import { dismissCommandPanel } from "../../runtime/windowUiActions";
+import { updatePinnedFolder, updateGroup } from "../../runtime/organizeActions";
 import { activeTabId } from "../../store/model";
 import { dismissPeek } from "../layout/peekDismiss";
 import { live, setLive, updateFolder } from "../../live/store";
@@ -74,14 +79,24 @@ function focusRow(windowId: string, row?: SidebarKeyboardRow) {
   previous.set(windowId, keyboardRows(windowId));
 }
 
-export function focusSidebar(windowId: string) {
+export function focusSidebar(windowId: string): void {
   const s = useBrowser.getState();
   const w = s.windows[windowId];
   if (!w || w.kind === "small") return;
-  // Reveal a hidden or top-layout sidebar before asking its rows for frames.
-  if ((w.tabLayout ?? s.settings.tabLayout) !== "sidebar") s.toggleTabLayout(windowId);
-  if (!useBrowser.getState().windows[windowId]?.sidebarOpen) useBrowser.getState().toggleSidebar(windowId);
-  s.closePanel(windowId);
+  // Local commands apply immediately; a remote window waits for the acknowledged projection before measuring rows.
+  if ((w.tabLayout ?? s.settings.tabLayout) !== "sidebar") {
+    const changed = toggleTabLayout(windowId);
+    const current = useBrowser.getState();
+    if ((current.windows[windowId]?.tabLayout ?? current.settings.tabLayout) !== "sidebar")
+      return reportBrowserCommand(changed.then(() => focusSidebar(windowId)));
+    reportBrowserCommand(changed);
+  }
+  if (!useBrowser.getState().windows[windowId]?.sidebarOpen) {
+    const changed = toggleSidebar(windowId);
+    if (!useBrowser.getState().windows[windowId]?.sidebarOpen) return reportBrowserCommand(changed.then(() => focusSidebar(windowId)));
+    reportBrowserCommand(changed);
+  }
+  reportBrowserCommand(dismissCommandPanel(windowId));
   const rows = keyboardRows(windowId);
   const remembered = sidebarUi().keyboard[windowId]?.rowId;
   const active = activeTabId(s, windowId);
@@ -112,10 +127,9 @@ export function reconcileSidebarKeyboard(windowId: string) {
 }
 
 function expand(row: SidebarKeyboardRow, collapsed: boolean) {
-  const s = useBrowser.getState();
   if (row.expand) row.expand(collapsed);
-  else if (row.kind === "folder") s.updatePinnedFolder(row.id.slice(2), { collapsed });
-  else if (row.kind === "group") s.updateGroup(row.id.slice(2), { collapsed });
+  else if (row.kind === "folder") reportBrowserCommand(updatePinnedFolder(row.id.slice(2), { collapsed }));
+  else if (row.kind === "group") reportBrowserCommand(updateGroup(row.id.slice(2), { collapsed }));
   else if (row.kind === "liveFolder") updateFolder(row.folderId!, { collapsed });
   else if (row.kind === "stack") setLive((state) => ({ expandedStacks: { ...state.expandedStacks, [row.section!]: !collapsed } }));
 }

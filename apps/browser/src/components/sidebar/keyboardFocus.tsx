@@ -1,6 +1,10 @@
+import { View, type ScrollView, type ViewProps } from "@bay/platform";
 import { focusSidebarRow, prompt } from "@bay/shell";
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
-import { findNodeHandle, StyleSheet, View, type ScrollView, type ViewProps } from "react-native";
+import { StyleSheet } from "react-native";
+import { nodeTag } from "../../lib/nodeTag";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { openPeek } from "../../runtime/splitActions";
 import { closeTab } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
@@ -8,7 +12,7 @@ import { openLiveItem } from "../../live/engine";
 import { live, updateFolder, useLive } from "../../live/store";
 import { useShallow } from "zustand/react/shallow";
 import { sidebarKeyboardRows } from "./entries";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId, spaceFolded } from "../../store/model";
 import { usePageSpaceId, useWindowId } from "../../store/hooks";
 import { clickTab, startRename } from "./actions";
@@ -52,7 +56,7 @@ export function SidebarKeyboardRowView({ rowId, legacyId, label, children, ...pr
         if (!ref.current) return;
         revealers.get(windowId)?.(ref.current);
         if (ms === 220) {
-          const tag = findNodeHandle(ref.current);
+          const tag = nodeTag(ref.current);
           if (tag) void focusSidebarRow(windowId, tag);
         }
       }, ms),
@@ -127,7 +131,7 @@ export function useSidebarKeyboard(windowId: string, scroll: RefObject<ScrollVie
           const id = tabId(row);
           const url = row.item?.url ?? (id ? s.tabs[id]?.url : undefined);
           if (from && url) {
-            s.openPeek(from, url);
+            reportBrowserCommand(openPeek(from, url));
             // The peek takes focus when mounted. Keep Escape on the page's existing peek handler.
             blurSidebar(windowId);
           }

@@ -1,4 +1,5 @@
-import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule, nativeSnapshot, type EventSubscription } from "@bay/platform/native";
+import { capabilities } from "@bay/platform";
 
 export type UpdaterState =
   | { available: false }
@@ -111,6 +112,7 @@ export type ScriptCommand = { id: string } & (
 );
 
 type AppModule = {
+  readonly apiVersion: number;
   addListener(name: "onNotificationResponse", listener: (e: NotificationResponse) => void): EventSubscription;
   addListener(name: "onScriptCommand", listener: (e: ScriptCommand) => void): EventSubscription;
   addListener(name: "onUpdatePending", listener: (e: { pending: PendingUpdate | null }) => void): EventSubscription;
@@ -193,7 +195,7 @@ export const setScriptState = (state: ScriptState) => App.setScriptState(state);
 export const replyToScript = (id: string, result: Record<string, unknown> | null, error: string | null = null) => App.replyToScript(id, result, error);
 export const onScriptCommand = (listener: (e: ScriptCommand) => void) => App.addListener("onScriptCommand", listener);
 
-export const systemInfo = () => App.systemInfo();
+export const systemInfo = () => nativeSnapshot("BayApp", "systemInfo", [], () => App.systemInfo());
 export const openExternalURL = (url: string) => App.openExternalURL(url);
 export type IntroMusicCues = {
   icon: number;
@@ -204,11 +206,17 @@ export type IntroMusicCues = {
   exit: number;
   end: number;
 };
-export const playIntroMusic = (cues: IntroMusicCues, muted: boolean) => void App.playIntroMusic(cues, muted);
-export const setIntroMusicMuted = (muted: boolean) => void App.setIntroMusicMuted(muted);
-export const stopIntroMusic = (fade = 0.4) => void App.stopIntroMusic(fade);
+export const playIntroMusic = (cues: IntroMusicCues, muted: boolean) => {
+  if (capabilities.introMusic) void App.playIntroMusic(cues, muted);
+};
+export const setIntroMusicMuted = (muted: boolean) => {
+  if (capabilities.introMusic) void App.setIntroMusicMuted(muted);
+};
+export const stopIntroMusic = (fade = 0.4) => {
+  if (capabilities.introMusic) void App.stopIntroMusic(fade);
+};
 export const devRenderIntroMusic = (cues: IntroMusicCues, path: string) => App.devRenderIntroMusic(cues, path);
-export const launchEnvironment = (name: string) => App.launchEnvironment(name);
+export const launchEnvironment = (name: string) => nativeSnapshot("BayApp", "launchEnvironment", [name], () => App.launchEnvironment(name));
 export const devRunAppleScript = (source: string) => App.devRunAppleScript(source);
 export const devSnapshotWindow = (windowId: string, path: string, transparent = false) =>
   transparent ? App.devSnapshotWindow(windowId, path, true) : App.devSnapshotWindow(windowId, path);

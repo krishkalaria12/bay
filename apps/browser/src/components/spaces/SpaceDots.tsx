@@ -1,9 +1,9 @@
-import { Pressable, View } from "react-native";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { Pressable, View } from "@bay/platform";
+import Animated, { useAnimatedStyle } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { switchSpace } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/spacePager";
 import { useHover } from "../primitives";
 import { useSpaceDrag, useSpaceReorder, type SpaceReorder } from "./reorder";

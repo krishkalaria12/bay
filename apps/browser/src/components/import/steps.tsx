@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import type { DiaTabsResult, ImportKind } from "@bay/import";
-import { ActivityIndicator, Image, Text, View } from "react-native";
+import { ActivityIndicator, Image, Text } from "react-native";
 import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { plural } from "../../store/model";
@@ -162,7 +163,7 @@ export function SpacesStep({ flow }: StepProps) {
           )}
           <Text
             style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}
-          >{`Customize which profiles to bring over to ${APP_NAME}. The first goes into your selected profile; the others become new profiles.`}</Text>
+          >{`Customize which profiles to bring over to ${APP_NAME}. The first goes into your selected space; the others become new spaces.`}</Text>
           <View style={{ gap: 6 }}>
             {source.profiles.map((p) => (
               <SelectRow

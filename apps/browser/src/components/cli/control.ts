@@ -1,11 +1,14 @@
 import { cliControlStatus, onCliControlChanged, setCliActiveTab, setCliControl, type CliControlStatus } from "@bay/nncore";
 import { installedCliVersion, installCli, onCliInstallLine, readDocument, writeDocument, type CliInstallResult } from "@bay/shell";
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection } from "../../runtime/projection";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSettings } from "../../runtime/settingsActions";
 import { tabEngine } from "../../store/engines";
 import { activeTabId } from "../../store/model";
 import { shownPeek } from "../../store/peeks";
-import { pageOf, usePages } from "../layout/pageState";
+import { usePages } from "../layout/pageState";
 
 const INSTALL_DOC = "bay-cli.json";
 
@@ -80,19 +83,12 @@ export function describeCliControl(server: CliControlStatus | null): string {
 }
 
 /** The current pane, including a Peek over it, once its Chromium page exists. */
-export function shownCliTab(s: BrowserState): number | null {
+export function shownCliTab(s: BrowserProjection): number | null {
   const windowId = s.ui.focusedWindowId;
   if (!windowId || !s.windows[windowId]) return null;
   const id = shownPeek(s, windowId)?.tabId ?? activeTabId(s, windowId);
   const tab = id ? s.tabs[id] : undefined;
-  if (
-    !id ||
-    !tab ||
-    !/^(https?|about|data|blob):/i.test(tab.url) ||
-    !(tab.navigation || tab.adoptId) ||
-    tabEngine(s, id) !== "chromium" ||
-    pageOf(id).newTabShown
-  )
+  if (!id || !tab || !/^(https?|about|data|blob):/i.test(tab.url) || !(tab.navigation || tab.adoptId) || tabEngine(s, id) !== "chromium" || tab.newTabHistory)
     return null;
   return usePages.getState().chromeTabs[id] ?? null;
 }
@@ -127,7 +123,7 @@ export function startCliControl() {
     generation = Math.max(generation, server.generation ?? 0);
     useCli.setState({ server });
     if (reconcile && server.state === "off" && server.reason && useBrowser.getState().settings.cliControl === true) {
-      useBrowser.getState().updateSettings({ cliControl: false });
+      reportBrowserCommand(updateSettings({ cliControl: false }));
     }
     pushActive();
   };

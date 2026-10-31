@@ -1,11 +1,14 @@
+import { isMac, TextInput, View, modKey } from "@bay/platform";
 import { customBangTable, displayUrl, hostOf, joinBangTables, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/shell";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { TextInput, View } from "react-native";
 import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
+import { browserRead, useBrowserRead } from "../store/read";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
+import { showToast } from "./layout/splitActions";
 import { useWindowId, useWindowSpaceId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
@@ -28,6 +31,8 @@ import { appPaletteActions } from "./omnibox/paletteAppActions";
 import { forgettable, rowMenuActions } from "./omnibox/paletteRowActions";
 import { currentPageActions, type PaletteSuggestion } from "./omnibox/paletteStart";
 import { isEscapeKey } from "../lib/escapeKey";
+import { removeHistory } from "../runtime/bookmarkActions";
+import { isIncognitoSpace } from "../store/model";
 
 type Variant = "palette" | "sidebar";
 type Selection = { start: number; end: number };
@@ -83,15 +88,15 @@ export function Omnibox({
   const theme = useTheme();
   const windowId = useWindowId();
   const spaceId = useWindowSpaceId();
-  const engine = useBrowser((s) => defaultSearchEngine(s.settings));
-  const engines = useBrowser((s) => searchEngines(s.settings));
-  const bangsEnabled = useBrowser((s) => s.settings.searchShortcutMode === "duckduckgo");
+  const engine = useBrowserRead((s) => defaultSearchEngine(s.settings));
+  const engines = useBrowserRead((s) => searchEngines(s.settings));
+  const bangsEnabled = useBrowserRead((s) => s.settings.searchShortcutMode === "duckduckgo");
   const searchTemplates = engines.map((e) => e.url);
-  const currentUrl = useBrowser((s) => s.tabs[tabId]?.url ?? "");
-  const currentTitle = useBrowser((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
-  const currentFavicon = useBrowser((s) => s.tabs[tabId]?.favicon ?? null);
+  const currentUrl = useBrowserRead((s) => s.tabs[tabId]?.url ?? "");
+  const currentTitle = useBrowserRead((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
+  const currentFavicon = useBrowserRead((s) => s.tabs[tabId]?.favicon ?? null);
   const palette = variant === "palette";
-  const newTab = useBrowser((s) => s.windowUi[windowId]?.panel.mode === "newTab");
+  const newTab = useBrowserRead((s) => s.windowUi[windowId]?.panel.mode === "newTab");
   const [menu, setMenu] = useState<PaletteMenu | null>(null);
   const dropdown = variant === "sidebar";
 
@@ -193,12 +198,22 @@ export function Omnibox({
     requestAnimationFrame(() => input.current?.focus());
   };
 
+  const openingFailed = (error: unknown) => {
+    console.error("Couldn't open the address", error);
+    showToast(windowId, "Couldn't open the address", "Please try again.");
+  };
+  const background = (url: string) => {
+    void openInBackground(url, tabId).catch(openingFailed);
+  };
   const go = (url: string, disposition: Disposition = "current", background = false) => {
     bangEnter.cancel();
     if (!url) return;
-    if (background) return openInBackground(url, tabId);
-    if (palette && newTab && disposition !== "newWindow") useBrowser.getState().submitNewTabPanel(windowId, url);
-    else openFromBar(url, tabId, disposition);
+    if (background) return void openInBackground(url, tabId).catch(openingFailed);
+    const result =
+      palette && newTab && disposition !== "newWindow"
+        ? dispatchBrowserCommand({ method: "submitNewTab", windowId, url })
+        : openFromBar(url, tabId, disposition);
+    void result.catch(openingFailed);
   };
 
   const choose = (s: Suggestion | undefined, disposition: Disposition = "current", byEnter = false, background = false) => {
@@ -229,10 +244,14 @@ export function Omnibox({
       case "page":
         if (s.tabId) {
           if (background || (palette && newTab && disposition !== "current")) return go(s.url, disposition, background);
-          switchFromBar(s.tabId, s.url, tabId, disposition);
+          void switchFromBar(s.tabId, s.url, tabId, disposition).catch(openingFailed);
           return;
         }
-        if (s.cleanedId && disposition === "current" && restoreFromBar(s.cleanedId, tabId)) return;
+        if (s.cleanedId && disposition === "current" && !background) {
+          const url = s.url;
+          void restoreFromBar(s.cleanedId, tabId).then((restored) => restored || go(url), openingFailed);
+          return;
+        }
         return go(s.url, disposition, background);
       case "search":
       case "create":
@@ -289,9 +308,9 @@ export function Omnibox({
   };
 
   const forget = (s: PaletteSuggestion) => {
-    const { history, removeHistory } = useBrowser.getState();
+    const { history } = useBrowser.getState();
     const urls = s.host ? (history[spaceId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
-    removeHistory(spaceId, urls);
+    if (urls.length) reportBrowserCommand(removeHistory(spaceId, urls));
   };
 
   const openRowMenu = (target = current) => {
@@ -306,7 +325,7 @@ export function Omnibox({
             : target.title;
     const actions = rowMenuActions(target, newTab, searchTemplates, {
       choose,
-      openInBackground: (url) => openInBackground(url, tabId),
+      openInBackground: background,
       copyLink: copyText,
       closeTab,
       forget,
@@ -316,7 +335,8 @@ export function Omnibox({
   const openAppMenu = () => void appPaletteActions(windowId, dismiss).then((actions) => setMenu({ side: "left", title: "Bay", actions }));
 
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
-    const { key, metaKey, altKey, shiftKey, ctrlKey } = e.nativeEvent;
+    const { key, altKey, shiftKey, ctrlKey } = e.nativeEvent;
+    const metaKey = modKey(e.nativeEvent);
     bangEnter.cancel();
     if (key === "Escape") {
       if (menu) return closeMenu();
@@ -352,7 +372,7 @@ export function Omnibox({
       // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
       if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return choose(current, "newTab", true, true);
       if (shiftKey && !metaKey && !altKey && topResult) return go(topResult);
-      if (metaKey || altKey || shiftKey) return choose(current, dispositionFor({ metaKey, altKey, shiftKey }), true);
+      if (metaKey || altKey || shiftKey) return choose(current, dispositionFor(e.nativeEvent), true);
       return choose(current, "current", true);
     }
   };
@@ -442,13 +462,27 @@ export function Omnibox({
   // Focus once the field has its frame: autoFocus hands the window's shared field editor a
   // zero-width field, and the editor then stays wider than the field (its text draws past the
   // edge and never scrolls).
+  const focusField = () => {
+    input.current?.focus();
+    const { start, end } = selection.current;
+    input.current?.setSelection(start, end);
+  };
   const focused = useRef(false);
   const focusOnce = () => {
     if (focused.current) return;
     focused.current = true;
-    input.current?.focus();
-    const { start, end } = selection.current;
-    input.current?.setSelection(start, end);
+    focusField();
+  };
+  // macOS's buttons never take the keyboard, nor does a page attaching under the palette; the web host's do. So, as
+  // there, the open palette's field keeps the keyboard (across a space switch, say) unless another field takes it.
+  const keepFocus = () => {
+    if (isMac) return;
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      const field = active instanceof HTMLElement && (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+      if (field || !document.hasFocus() || !browserRead.getState().windowUi[windowId]?.panel.open) return;
+      focusField();
+    });
   };
 
   const field = (
@@ -466,7 +500,7 @@ export function Omnibox({
       enableFocusRing={false}
       onSubmitEditing={() => choose(current, "current", true)}
       submitBehavior={palette ? "submit" : "blurAndSubmit"}
-      onBlur={palette ? undefined : onCancel}
+      onBlur={palette ? keepFocus : onCancel}
       keyDownEvents={scope && !typed ? SCOPE_KEYS : canForget ? FORGET_KEYS : BASE_KEYS}
       onKeyDown={onKeyDown}
       onKeyPress={(e) => isEscapeKey(e) && onKeyDown({ nativeEvent: { key: "Escape" } })}
@@ -481,7 +515,8 @@ export function Omnibox({
 
   // Stable, so the rows (memoized) don't re-render as the bar does.
   const chooseRow = useEffectEvent((s: Suggestion) => choose(s));
-  const removeRow = useEffectEvent((url: string) => useBrowser.getState().removeHistory(spaceId, [url]));
+  // A private window keeps no history to remove from.
+  const removeRow = useEffectEvent((url: string) => !isIncognitoSpace(spaceId) && reportBrowserCommand(removeHistory(spaceId, [url])));
   const rowActions: RowActions = { choose: chooseRow, hover: setSelected, remove: removeRow };
   const suggestionList = (
     <SuggestionList

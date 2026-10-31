@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { copyText } from "@bay/shell";
 
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { navigate } from "../../runtime/tabActions";
+import { openPeek } from "../../runtime/splitActions";
 import { showToast } from "../layout/splitActions";
 
 export type LinkPreviewData = { url: string; rect: { x: number; y: number; width: number; height: number } };
@@ -62,14 +65,14 @@ export function openLinkPreview(tabId: string, url: string) {
   const tab = useBrowser.getState().tabs[tabId];
   if (!tab) return;
   setLinkPreview(tabId, null);
-  useBrowser.getState().navigate(tabId, url, { userInitiated: true });
+  reportBrowserCommand(navigate(tabId, url, { userInitiated: true }));
 }
 
 export function peekLinkPreview(tabId: string, url: string) {
   const store = useBrowser.getState();
   if (!store.tabs[tabId]) return;
   setLinkPreview(tabId, null);
-  store.openPeek(tabId, url);
+  reportBrowserCommand(openPeek(tabId, url));
 }
 
 export function copyLinkPreview(tabId: string, url: string) {

@@ -1,14 +1,17 @@
 import { decodeSharedCollection, sharedCollectionToken, sharedCollectionUrl, sharedLinkCount, type SharedCollection, type SharedItem } from "@bay/core";
-import { confirm, copyText, focusWindow } from "@bay/shell";
+import { confirm, copyText } from "@bay/shell";
 import { folderEntries } from "../components/sidebar/entries";
 import { showToast } from "../components/layout/toasts";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { browserRead } from "../store/read";
+import type { BrowserProjection } from "../runtime/projection";
+import { dispatchBrowserCommand } from "../runtime/commands";
+import { createWindow } from "../runtime/windowActions";
 import { isIncognitoSpace, tabLabel } from "../store/model";
 import { checkSharedFolderDepth } from "../store/sharedCollections";
 
 export type CollectionSource = { kind: "folder"; id: string } | { kind: "split"; id: string } | { kind: "selection"; tabIds: string[] };
 
-export function collectionSnapshot(s: BrowserState, source: CollectionSource): SharedCollection {
+export function collectionSnapshot(s: BrowserProjection, source: CollectionSource): SharedCollection {
   const link = (id: string): SharedItem => {
     const tab = s.tabs[id];
     if (!tab) throw new Error("One of these tabs is no longer available.");
@@ -38,7 +41,7 @@ export function collectionSnapshot(s: BrowserState, source: CollectionSource): S
 
 export async function shareCollection(windowId: string, source: CollectionSource) {
   try {
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
     const window = s.windows[windowId];
     if (!window || window.incognito) throw new Error("Choose a regular Bay window to share this collection.");
     const collection = collectionSnapshot(s, source);
@@ -70,7 +73,7 @@ export function handleSharedCollectionUrl(url: string, windowId?: string): boole
   return true;
 }
 
-function importWindow(s: BrowserState, requested?: string) {
+function importWindow(s: BrowserProjection, requested?: string) {
   return (
     [...new Set([requested, s.ui.focusedWindowId, ...s.ui.focusOrder, ...s.windowOrder])].find((id) => {
       const w = id ? s.windows[id] : undefined;
@@ -80,14 +83,14 @@ function importWindow(s: BrowserState, requested?: string) {
 }
 
 export async function importCollectionUrl(url: string, requestedWindow?: string) {
-  let windowId = importWindow(useBrowser.getState(), requestedWindow);
+  let windowId = importWindow(browserRead.getState(), requestedWindow);
   try {
     const token = sharedCollectionToken(url);
     if (!token) throw new Error("This shared collection link is invalid or incomplete.");
     const collection = decodeSharedCollection(token);
     checkSharedFolderDepth(collection);
     const count = sharedLinkCount(collection);
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
     const spaceId = windowId ? s.windows[windowId]?.spaceId : undefined;
     const name = spaceId ? s.spaces[spaceId]?.name : undefined;
     const { confirmed } = await confirm({
@@ -97,10 +100,9 @@ export async function importCollectionUrl(url: string, requestedWindow?: string)
       windowId,
     });
     if (!confirmed) return;
-    if (!windowId) windowId = useBrowser.getState().createWindow();
-    useBrowser.getState().importSharedCollection(windowId, collection, spaceId);
-    useBrowser.getState().setFocusedWindow(windowId);
-    void focusWindow(windowId);
+    if (!windowId) windowId = await createWindow();
+    await dispatchBrowserCommand({ method: "addSharedCollection", windowId, token, ...(spaceId ? { spaceId } : {}) });
+    await dispatchBrowserCommand({ method: "focusWindow", windowId });
     showToast(windowId, "Folder Added", collection.title, { icon: "folder" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "This shared collection could not be opened.";

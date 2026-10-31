@@ -1,6 +1,7 @@
 import { installExtension, listExtensions, reloadExtension, uninstallExtension, type InstalledExtension } from "@bay/nncore";
 import { onUserScriptsChange, readUserScripts, userScriptsAvailable, watchUserScripts, writeUserScriptsStatus, type UserScriptsFolder } from "@bay/shell";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { engineProfile, isIncognitoSpace } from "../../store/model";
 
 export type ScriptsOutcome = { ok: true } | { disabled: true } | { removed: true } | { error: string };

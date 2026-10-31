@@ -1,8 +1,9 @@
+import { View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { onAppEvent, setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { interpolate, useAnimatedStyle } from "@bay/platform/motion";
 import { CommandPanel } from "./components/CommandPanel";
 import { ContentCard } from "./components/ContentCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
@@ -16,9 +17,11 @@ import { isUtilityWindowId } from "./components/settings/windows";
 import { OnboardingOverlay } from "./components/onboarding";
 import { CreateSpaceHost } from "./components/spaces/CreateSpace";
 import { RenameDialogHost } from "./components/RenameDialog";
+import { AppDialogHost } from "./components/AppDialog";
 import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
 import { useFullscreenTab } from "./components/layout/pageState";
 import { SpaceSwipe, SpaceTint } from "./components/layout/SpaceSwipe";
+import { CaptionButtons } from "./components/layout/CaptionButtons";
 import { TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
 import { TOP_CARD_INSET } from "./components/layout/constants";
 import { TOP_STRIP_HEIGHT } from "./components/layout/constants";
@@ -35,7 +38,7 @@ import { useSidebarWidth } from "./components/sidebar/tokens";
 import { hex, ThemeScope, useTheme } from "./lib/theme";
 import { layout } from "./lib/constants";
 import { useEffectEvent } from "./lib/useEffectEvent";
-import { useBrowser } from "./store/browser";
+import { useBrowserRead as useBrowser } from "./store/read";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
 
 export function WindowRoot({ windowId }: { windowId?: string }) {
@@ -43,6 +46,7 @@ export function WindowRoot({ windowId }: { windowId?: string }) {
     return (
       <ThemeScope>
         <UtilityWindow id={windowId!} />
+        <AppDialogHost windowId={windowId!} />
       </ThemeScope>
     );
   return <BrowserWindowRoot windowId={windowId} />;
@@ -55,7 +59,10 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   if (!id || !exists) return null;
   return (
     <WindowContext.Provider value={id}>
-      <ThemeScope>{small ? <LittleBayWindow /> : <BrowserWindow />}</ThemeScope>
+      <ThemeScope>
+        {small ? <LittleBayWindow /> : <BrowserWindow />}
+        <AppDialogHost windowId={id} />
+      </ThemeScope>
     </WindowContext.Provider>
   );
 }
@@ -73,6 +80,10 @@ function BrowserWindow() {
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left.
   const right = useSidebarOnRight();
   const addressInSidebar = useAddressBarInSidebar();
+  // Windows' caption buttons sit at the other corner: over the page there when it has no toolbar to hold them.
+  const captionOnHover = !topTabs && addressInSidebar && (!right || !showSidebar);
+  const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
+  const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   const [peekOut, setPeekOut] = useState(false);
   const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, topTabs, peekOut });
   const lightsColor = theme.windowTint[0];
@@ -147,6 +158,7 @@ function BrowserWindow() {
       )}
       {!sidebarOpen &&
         (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} onOut={setPeekOut} />)}
+      {!fullscreen && <CaptionButtons windowId={windowId} height={captionHeight} glyphCenter={captionCenter} onHover={captionOnHover} />}
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />

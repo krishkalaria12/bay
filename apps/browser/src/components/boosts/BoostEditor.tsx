@@ -1,7 +1,8 @@
+import { Pressable, ScrollView, TextInput, View } from "@bay/platform";
 import { useShallow } from "zustand/react/shallow";
 import { fontFamilies, showMenu, Surface, Symbol, type MenuItem } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { PanResponder, Pressable, ScrollView, Text, TextInput, View, type GestureResponderEvent } from "react-native";
+import { PanResponder, Text, type GestureResponderEvent } from "react-native";
 import { BOOST_CASES, BOOST_FONTS, BOOST_SIZES, DEFAULT_BOOST_COLOR, tintEnds, type Boost, type BoostColor, type BoostTextCase } from "../../lib/boosts";
 import { hex, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";

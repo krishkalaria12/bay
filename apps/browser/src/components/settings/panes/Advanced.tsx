@@ -1,8 +1,11 @@
+import { View, isMac } from "@bay/platform";
 import { engineInfo, listComponents, WIDEVINE_COMPONENT_ID, type EngineComponent, type EngineInfo } from "@bay/nncore";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { openInternalPage } from "../../pages/urls";
 import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
@@ -12,8 +15,7 @@ import { describeCliControl, describeCliInstall, installCliInBackground, useCli 
 
 export function AdvancedPane() {
   const theme = useTheme();
-  const settings = useBrowser((s) => s.settings);
-  const update = useBrowser((s) => s.updateSettings);
+  const settings = useBrowserRead((s) => s.settings);
   const [info, setInfo] = useState<EngineInfo | null>(null);
   const [widevine, setWidevine] = useState<EngineComponent | null | undefined>(undefined);
   const cli = useCli();
@@ -32,17 +34,17 @@ export function AdvancedPane() {
       <SectionHeader title="Browsing" />
       <Group>
         <Row settingId={SETTINGS.showFullUrl.id} title={SETTINGS.showFullUrl.title} description="Instead of the site alone.">
-          <Toggle value={settings.showFullUrl} onChange={(v) => update({ showFullUrl: v })} />
+          <Toggle value={settings.showFullUrl} onChange={(v) => reportBrowserCommand(updateSettings({ showFullUrl: v }))} />
         </Row>
         <Row
           settingId={SETTINGS.warnBeforeMovingTabsToSpace.id}
           title={SETTINGS.warnBeforeMovingTabsToSpace.title}
           description="Some site data doesn't come along."
         >
-          <Toggle value={settings.warnBeforeMovingTabsToSpace} onChange={(v) => update({ warnBeforeMovingTabsToSpace: v })} />
+          <Toggle value={settings.warnBeforeMovingTabsToSpace} onChange={(v) => reportBrowserCommand(updateSettings({ warnBeforeMovingTabsToSpace: v }))} />
         </Row>
         <Row settingId={SETTINGS.showBookmarksImport.id} title={SETTINGS.showBookmarksImport.title} description="On an empty bookmarks bar.">
-          <Toggle value={!settings.hideBookmarksBarImport} onChange={(v) => update({ hideBookmarksBarImport: !v })} />
+          <Toggle value={!settings.hideBookmarksBarImport} onChange={(v) => reportBrowserCommand(updateSettings({ hideBookmarksBarImport: !v }))} />
         </Row>
       </Group>
 
@@ -61,19 +63,23 @@ export function AdvancedPane() {
         </Row>
       </Group>
 
-      <SectionHeader title="Terminal" />
-      <Group>
-        <Row settingId={SETTINGS.installCli.id} title={SETTINGS.installCli.title} description={describeCliInstall(cli)}>
-          <Button
-            title={cli.installing ? "Installing…" : cli.installedVersion ? "Reinstall" : "Install"}
-            disabled={cli.installing}
-            onPress={() => void installCliInBackground()}
-          />
-        </Row>
-        <Row settingId={SETTINGS.cliControl.id} title={SETTINGS.cliControl.title} description={describeCliControl(cli.server)}>
-          <Toggle value={settings.cliControl === true} onChange={(cliControl) => update({ cliControl })} />
-        </Row>
-      </Group>
+      {isMac ? (
+        <>
+          <SectionHeader title="Terminal" />
+          <Group>
+            <Row settingId={SETTINGS.installCli.id} title={SETTINGS.installCli.title} description={describeCliInstall(cli)}>
+              <Button
+                title={cli.installing ? "Installing…" : cli.installedVersion ? "Reinstall" : "Install"}
+                disabled={cli.installing}
+                onPress={() => void installCliInBackground()}
+              />
+            </Row>
+            <Row settingId={SETTINGS.cliControl.id} title={SETTINGS.cliControl.title} description={describeCliControl(cli.server)}>
+              <Toggle value={settings.cliControl === true} onChange={(cliControl) => reportBrowserCommand(updateSettings({ cliControl }))} />
+            </Row>
+          </Group>
+        </>
+      ) : null}
 
       <SectionHeader title="Web engine" />
       <Group>

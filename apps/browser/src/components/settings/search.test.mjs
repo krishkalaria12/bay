@@ -23,6 +23,11 @@ function renderTabs(tabLayout) {
   );
   const mocks = {
     "@bay/shell": { Symbol: "Symbol" },
+    "@bay/platform": { View: "View", Pressable: "Pressable", capabilities: { calendar: true } },
+    "../../../runtime/commands": { reportBrowserCommand: () => {} },
+    "../../../runtime/settingsActions": { updateSettings: (patch) => state.updateSettings(patch) },
+    "../../../runtime/splitActions": { toggleTabLayout: () => {} },
+    "../../../store/read": { useBrowserRead: (selector) => selector(state), browserRead: { getState: () => state } },
     "react-native": { View: "View", Text: "Text", Pressable: "Pressable" },
     "../../../lib/theme": {},
     "../../../store/browser": { useBrowser: (selector) => selector(state) },

@@ -59,7 +59,7 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
         statuses.push(JSON.parse(json));
       },
     },
-    "../../store/browser": { useBrowser: { getState: () => state, subscribe() {} } },
+    "../../store/read": { useBrowserRead: { getState: () => state, subscribe() {} } },
     "../../store/model": {
       isIncognitoSpace: (id) => id.startsWith("incognito:"),
       engineProfile: (id) => (["default", "shared"].includes(id) ? "" : id),

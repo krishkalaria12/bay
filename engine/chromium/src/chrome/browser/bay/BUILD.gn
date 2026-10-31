@@ -1,15 +1,17 @@
 # Copyright 2026 Bay. Apache-2.0.
 #
-# //chrome/browser/bay: Bay's own code in the Chromium tree. Plain
-# Chromium code over Chrome's services, exported as plain C (public/nn_engine.h)
-# and linked by both engines: CEF's libcef_static and NNCore's //chrome:chrome_dll
-# (hooks in engine/chromium/apply.sh). The repo copy is engine/chromium/src;
-# never edit the tree's copy.
+# //chrome/browser/bay: Bay's own code in the Chromium tree. Plain Chromium code
+# over Chrome's services, exported as plain C (public/nn_engine.h) and linked by
+# both engines: CEF's libcef_static and NNCore's //chrome:chrome_dll (hooks in
+# engine/chromium/apply.sh). The repo copy is engine/chromium/src; never edit
+# the tree's copy.
 #
 # One source_set: add your nn_<domain>.{h,cc} to `sources` (sorted) and the
 # deps it needs. Nothing in //chrome depends on this target.
 
-assert(is_mac)
+import("//testing/test.gni")
+
+assert(is_mac || is_win || is_linux)
 
 source_set("bay") {
   sources = [
@@ -19,26 +21,20 @@ source_set("bay") {
     "nn_browsing_data.cc",
     "nn_browsing_data.h",
     "nn_cli_control.cc",
-    "nn_cli_token_policy.cc",
-    "nn_cli_token_policy.h",
-    "nn_cli_token_policy_contexts.cc",
-    "nn_cli_token_policy_events.cc",
-    "nn_cli_token_policy_internal.h",
-    "nn_cli_token_policy_methods.cc",
-    "nn_cli_token_policy_web_targets.cc",
     "nn_cookies.cc",
     "nn_cookies.h",
+    "nn_dispatch.cc",
+    "nn_dispatch.h",
     "nn_downloads.cc",
     "nn_downloads.h",
-    "nn_downloads_mac.mm",
     "nn_engine.cc",
     "nn_engine.h",
     "nn_extension_import.cc",
     "nn_extension_import.h",
     "nn_extensions.cc",
     "nn_extensions.h",
+    "nn_external_apps.cc",
     "nn_external_apps.h",
-    "nn_external_apps.mm",
     "nn_favicons.cc",
     "nn_history.cc",
     "nn_passwords.cc",
@@ -51,8 +47,8 @@ source_set("bay") {
     "nn_reauth.h",
     "nn_search_engines.cc",
     "nn_search_engines.h",
-    "nn_scripts_policy.cc",
-    "nn_scripts_policy.h",
+    "nn_search_suggestions.cc",
+    "nn_search_suggestions.h",
     "nn_sensitive_args.cc",
     "nn_sensitive_args.h",
     "nn_site_settings.cc",
@@ -64,14 +60,14 @@ source_set("bay") {
     "nn_zoom.h",
     "pip/nn_pip_controls.cc",
     "pip/nn_pip_controls.h",
-    "pip/nn_pip_mac.h",
-    "pip/nn_pip_mac.mm",
+    "pip/nn_pip_platform.h",
     "pip/nn_pip_window.cc",
     "pip/nn_pip_window.h",
     "public/nn_engine.h",
   ]
 
   deps = [
+    ":search_suggestions_policy",
     "//base",
     "//cc/paint",
     "//chrome/app:generated_resources",
@@ -115,11 +111,11 @@ source_set("bay") {
     "//components/search_engines",
     "//components/sessions",
     "//components/strings",
+    "//components/tab_groups",
+    "//components/tabs:public",
     "//components/update_client",
     "//components/value_store",
     "//components/version_info",
-    "//components/tab_groups",
-    "//components/tabs:public",
     "//content/public/browser",
     "//crypto",
     "//extensions/browser",
@@ -139,17 +135,42 @@ source_set("bay") {
     "//url",
   ]
 
-  # pip/: the Picture in Picture window's Core Animation fade.
-  frameworks = [ "QuartzCore.framework" ]
+  if (is_mac) {
+    sources += [
+      "nn_cli_token_policy.cc",
+      "nn_cli_token_policy.h",
+      "nn_cli_token_policy_contexts.cc",
+      "nn_cli_token_policy_events.cc",
+      "nn_cli_token_policy_internal.h",
+      "nn_cli_token_policy_methods.cc",
+      "nn_cli_token_policy_web_targets.cc",
+      "nn_scripts_policy.cc",
+      "nn_scripts_policy.h",
+      "nn_downloads_mac.mm",
+      "nn_external_apps.mm",
+      "pip/nn_pip_mac.mm",
+    ]
 
-  # nn_downloads_mac.mm: the quarantine record (LSQuarantine);
-  # nn_external_apps.mm: the app that opens a scheme, and its icon;
-  # nn_reauth.cc: whether the running code is signed for distribution.
-  frameworks += [
-    "AppKit.framework",
-    "CoreServices.framework",
-    "Security.framework",
-  ]
+    # Downloads quarantine, external apps, Picture in Picture, and the
+    # distribution signature check for reauthentication.
+    frameworks = [
+      "QuartzCore.framework",
+      "AppKit.framework",
+      "CoreServices.framework",
+      "Security.framework",
+    ]
+  } else if (is_win) {
+    sources += [
+      "nn_downloads_win.cc",
+      "nn_external_apps_win.cc",
+      "pip/nn_pip_win.cc",
+    ]
+    deps += [
+      "//ui/aura",
+      "//ui/compositor",
+    ]
+    libs = [ "shlwapi.lib" ]
+  }
 }
 
 # Chrome's framework exports only what its lists name; NNCore's framework also
@@ -157,11 +178,30 @@ source_set("bay") {
 # already, and an exports list there would hide CEF's own API, so only
 # //chrome:chrome_dll depends on this.
 config("exports_config") {
-  ldflags = [ "-Wl,-exported_symbols_list," +
-              rebase_path("nn_engine.exports", root_build_dir) ]
+  if (is_mac) {
+    ldflags = [ "-Wl,-exported_symbols_list," +
+                rebase_path("nn_engine.exports", root_build_dir) ]
+  }
 }
 
 group("exports") {
   all_dependent_configs = [ ":exports_config" ]
   public_deps = [ ":bay" ]
+}
+
+source_set("search_suggestions_policy") {
+  sources = [
+    "nn_search_suggestions_policy.cc",
+    "nn_search_suggestions_policy.h",
+  ]
+  public_deps = [ "//url" ]
+}
+
+test("search_suggestions_policy_unittests") {
+  sources = [ "nn_search_suggestions_policy_unittest.cc" ]
+  deps = [
+    ":search_suggestions_policy",
+    "//base/test:run_all_unittests",
+    "//testing/gtest",
+  ]
 }

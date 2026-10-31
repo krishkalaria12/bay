@@ -3,7 +3,7 @@ import { beforeEach, test } from "node:test";
 import { useBrowser } from "../../store/browser.ts";
 import { SYNCED_SETTINGS } from "../../sync/adapters.ts";
 import { activeTabId } from "../../store/model.ts";
-import { clearChromeTabId, patchPage, setBrowserId, usePages } from "../layout/pageState.ts";
+import { clearChromeTabId, setBrowserId, usePages } from "../layout/pageState.ts";
 import { shownCliTab, startCliControl, useCli } from "./control.ts";
 import * as stub from "../../test-native-stub.mjs";
 
@@ -36,9 +36,9 @@ test("an unready page, New Tab surface, sleeping page, or WebKit page has no ter
   setBrowserId(id, 4);
   assert.equal(shownCliTab(S()), null);
   setBrowserId(id, 4, 81);
-  patchPage(id, { newTabShown: { url: "https://example.com", title: "Example", favicon: null } });
+  S().updateTab(id, { newTabHistory: { url: "https://example.com", title: "Example", favicon: null } });
   assert.equal(shownCliTab(S()), null);
-  patchPage(id, { newTabShown: null });
+  S().updateTab(id, { newTabHistory: undefined });
   clearChromeTabId(id);
   assert.equal(shownCliTab(S()), null);
   setBrowserId(id, 4, 81);

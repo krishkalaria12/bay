@@ -1,5 +1,9 @@
 // Copyright 2026 Bay. Apache-2.0.
 
+#include "build/build_config.h"
+#include "chrome/browser/bay/nn_engine.h"
+
+#if BUILDFLAG(IS_MAC)
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -552,3 +556,9 @@ NN_ENGINE_CALL(nn_cli_control) {
   }
   out.Send(server.Status());
 }
+
+#else
+NN_ENGINE_CALL(nn_cli_control) {
+  bay::Reply(reply, context).Error("Terminal control is only available on macOS.");
+}
+#endif

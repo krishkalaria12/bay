@@ -1,5 +1,6 @@
-import { requireNativeModule, requireOptionalNativeModule } from "expo-modules-core";
-import { AppRegistry, Text, View } from "react-native";
+import { View } from "@bay/platform";
+import { requireNativeModule, requireOptionalNativeModule } from "@bay/platform/native";
+import { AppRegistry, Text } from "react-native";
 
 // The JS/native contract. Bump it together with `apiVersion` in packages/shell/ios/AppModule.swift whenever JS
 // starts needing native code an older build lacks (a module, function, view, event or field), so JS never has to

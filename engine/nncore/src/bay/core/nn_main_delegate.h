@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "base/functional/callback.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_main_delegate.h"
 
 namespace nncore {
@@ -26,7 +27,10 @@ class NNMainDelegate : public ChromeMainDelegate {
  protected:
   // ChromeMainDelegate:
   std::optional<int> BasicStartupComplete() override;
+#if BUILDFLAG(IS_MAC)
+  // Recheck the host profile gate after Chrome applies chrome://flags.
   std::optional<int> PostEarlyInitialization(InvokedIn invoked_in) override;
+#endif
   void PreSandboxStartup() override;
   void CreateThreadPool(std::string_view name) override;
   content::ContentBrowserClient* CreateContentBrowserClient() override;

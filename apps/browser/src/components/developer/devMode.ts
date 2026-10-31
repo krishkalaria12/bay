@@ -1,7 +1,9 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as settingsCommands from "../../runtime/settingsActions";
 import { copyText } from "@bay/shell";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId } from "../../store/model";
 import { showToast } from "../layout/splitActions";
 import { inspectorScript } from "./inspectorScript";
@@ -16,7 +18,7 @@ export function setDeveloperMode(url: string, on: boolean) {
   if (!site) return;
   const s = useBrowser.getState();
   const sites = (s.settings.developerSites ?? []).filter((x) => x !== site);
-  s.updateSettings({ developerSites: on ? [...sites, site] : sites });
+  reportBrowserCommand(settingsCommands.updateSettings({ developerSites: on ? [...sites, site] : sites }));
   declined.add(site);
   useDeveloperUi.setState((u) => ({ offers: withoutSite(u.offers, site) }));
 }

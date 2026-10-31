@@ -1,5 +1,6 @@
 import type { Download } from "@bay/nncore";
 import type { StateCreator } from "zustand";
+import type { BrowserProjection } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { isIncognitoSpace, newId } from "./model";
 import type { FindState, Space, WindowUi } from "./types";
@@ -38,7 +39,7 @@ export function downloadVisibleIn(d: Pick<Download, "profile">, window: { incogn
   return window.incognito ? d.profile === window.spaceId : !incognito;
 }
 
-export const downloadsIn = (s: Pick<BrowserState, "downloads" | "windows">, windowId: string) =>
+export const downloadsIn = (s: Pick<BrowserProjection, "downloads" | "windows">, windowId: string) =>
   s.downloads.filter((d) => downloadVisibleIn(d, s.windows[windowId]));
 
 export const DEFAULT_WINDOW_UI: WindowUi = { panel: { open: false, initialText: "" }, downloadsOpen: false };
@@ -66,7 +67,8 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
   },
 
   openPanel(windowId, initialText = "") {
-    set((s) => patchWindowUi(s, windowId, { panel: { open: true, initialText, mode: "navigate", sessionId: newId("panel") } }));
+    // One of the palette and the downloads panel at a time: the one opened last.
+    set((s) => patchWindowUi(s, windowId, { panel: { open: true, initialText, mode: "navigate", sessionId: newId("panel") }, downloadsOpen: false }));
   },
 
   openNewTabPanel(windowId, groupId) {
@@ -77,6 +79,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     set(
       patchWindowUi(s, windowId, {
         panel: { open: true, initialText: "", mode: "newTab", sessionId: newId("panel"), ...(groupId ? { groupId } : {}) },
+        downloadsOpen: false,
       }),
     );
   },
@@ -103,7 +106,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
   },
 
   setDownloadsOpen(windowId, downloadsOpen) {
-    set((s) => patchWindowUi(s, windowId, { downloadsOpen }));
+    set((s) => patchWindowUi(s, windowId, downloadsOpen ? { downloadsOpen, panel: { open: false, initialText: "" } } : { downloadsOpen }));
   },
 
   setFind(tabId, patch) {

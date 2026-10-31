@@ -41,12 +41,23 @@ const isNeeded = (job: Entry) => {
 export function everySlowly(job: SlowJob): Unsubscribe {
   const entry: Entry = { ...job, next: slotAfter(clock(), job.every), armed: false };
   jobs.add(entry);
-  const unwatch = job.watch?.(reschedule);
-  reschedule();
-  return () => {
+  let unwatch: Unsubscribe | undefined;
+  try {
+    unwatch = job.watch?.(reschedule);
+    reschedule();
+  } catch (error) {
     jobs.delete(entry);
     unwatch?.();
-    reschedule();
+    if (!timer) timerAt = Infinity;
+    throw error;
+  }
+  return () => {
+    jobs.delete(entry);
+    try {
+      unwatch?.();
+    } finally {
+      reschedule();
+    }
   };
 }
 

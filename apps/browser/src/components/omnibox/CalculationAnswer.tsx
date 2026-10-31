@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import type { Suggestion } from "@bay/core";
 import { Symbol } from "@bay/shell";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Keycaps } from "./Keycaps";
 

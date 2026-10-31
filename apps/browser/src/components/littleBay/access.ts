@@ -1,7 +1,9 @@
 import { setLittleBayHotKey, setLittleBayMenuBarItem, type HotKeyStatus } from "@bay/shell";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import type { LittleBayShortcut } from "../../store/settings";
+import type { BrowserProjection } from "../../runtime/projection";
+type ReadShortcut = BrowserProjection["settings"]["littleBayShortcut"];
 
 // Little Bay from any app (packages/shell LittleBayAccess.swift), as Little Arc's: a shortcut and a menu bar button,
 // each opening a Little Bay ready to type with Bay in the background or not. Settings › Links turns them on.
@@ -12,7 +14,7 @@ export const DEFAULT_LITTLE_BAY_SHORTCUT: LittleBayShortcut = { key: "n", keyCod
 /** Whether the shortcut is registered: "taken" when another app holds it. */
 export const useLittleBayAccess = create<{ status: HotKeyStatus }>()(() => ({ status: "off" }));
 
-const sameShortcut = (a: LittleBayShortcut | null, b: LittleBayShortcut | null) =>
+const sameShortcut = (a: ReadShortcut, b: ReadShortcut) =>
   a === b || (!!a && !!b && a.keyCode === b.keyCode && [...a.modifiers].sort().join() === [...b.modifiers].sort().join());
 
 let started = false;
@@ -20,7 +22,7 @@ let started = false;
 export function startLittleBayAccess() {
   if (started) return;
   started = true;
-  let shortcut: LittleBayShortcut | null = null;
+  let shortcut: ReadShortcut = null;
   let menuBar = false;
   const apply = () => {
     const settings = useBrowser.getState().settings;
@@ -29,7 +31,7 @@ export function startLittleBayAccess() {
     const unregistered = !!next && useLittleBayAccess.getState().status === "off";
     if (!sameShortcut(next, shortcut) || unregistered) {
       shortcut = next;
-      void setLittleBayHotKey(next?.keyCode ?? null, next?.modifiers ?? []).then(
+      void setLittleBayHotKey(next?.keyCode ?? null, [...(next?.modifiers ?? [])]).then(
         (status) => {
           // A newer choice has its own registration on the way.
           if (sameShortcut(shortcut, next)) useLittleBayAccess.setState({ status });

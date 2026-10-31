@@ -1,18 +1,21 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
+import { libraryAvailable } from "../library/availability";
 import { newEasel, openLibrary } from "../library/actions";
 import { createSpace, switchSpace } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { installUpdate, updateTitle, usePendingUpdate } from "../../lib/updates";
-import { useBrowser } from "../../store/browser";
 import { splitWithCurrentTab } from "../layout/splitActions";
 import { useSidebarOnRight } from "../layout/windowLayout";
 import { useHover } from "../primitives";
 import { newPinnedFolderWith } from "./actions";
 import { measureRow, setSidebarUi, useSidebarUi } from "./state";
 import { NEW_MENU_ID, NEW_MENU_MS, NEW_MENU_WIDTH } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { openNewTabPanel } from "../../lib/newTab";
 
 // yab's + at the sidebar's foot: not a system menu but a panel of its own, rising out of the + (which turns to ×),
 // with icons by the things it makes and the shortcuts that make them.
@@ -45,9 +48,9 @@ function run(windowId: string, id: string) {
   else if (id === "easel") newEasel(windowId);
   else if (id === "library") openLibrary(windowId);
   else if (id === "space") void newSpace(windowId);
-  else if (id === "folder") newPinnedFolderWith(windowId);
+  else if (id === "folder") reportBrowserCommand(newPinnedFolderWith(windowId));
   else if (id === "split") splitWithCurrentTab(windowId);
-  else if (id === "tab") useBrowser.getState().openNewTabPanel(windowId);
+  else if (id === "tab") reportBrowserCommand(openNewTabPanel(windowId));
 }
 
 export function NewMenu({ windowId, windowWidth, windowHeight }: { windowId: string; windowWidth: number; windowHeight: number }) {
@@ -97,8 +100,12 @@ function Panel({
       ? [{ id: "update", title: `${updateTitle(pending)} (${pending.version})`, icon: "arrow.down.circle" }, "separator" as const]
       : []),
     { id: "space", title: "New Space", icon: "plus.square.on.square" },
-    { id: "easel", title: "New Easel", icon: "scribble.variable", shortcut: "⌃⇧E" },
-    { id: "library", title: "Library", icon: "books.vertical" },
+    ...(libraryAvailable()
+      ? [
+          { id: "easel", title: "New Easel", icon: "scribble.variable", shortcut: "⌃⇧E" },
+          { id: "library", title: "Library", icon: "books.vertical" },
+        ]
+      : []),
     { id: "folder", title: "New Folder", icon: "folder.badge.plus" },
     "separator",
     { id: "split", title: "Split View", icon: "rectangle.split.2x1", shortcut: "⌃⇧=" },

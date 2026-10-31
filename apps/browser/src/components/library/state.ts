@@ -1,11 +1,32 @@
 import { readDocument, retainLibraryImage, writeDocument } from "@bay/shell";
 import { create } from "zustand";
 import { newId } from "../../store/model";
-import { mediaItem, parseEasel, readLibrary, type CaptureSource, type EaselDocument, type LibraryData, type LibraryMedia } from "./model";
+import { fileNameOf, mediaItem, parseEasel, readLibrary, type CaptureSource, type EaselDocument, type LibraryData, type LibraryMedia } from "./model";
 
 export type LibraryState = LibraryData & { loaded: boolean; error: string | null };
 export const useLibrary = create<LibraryState>()(() => ({ version: 1, easels: {}, media: {}, removedMediaPaths: [], loaded: false, error: null }));
 let stop: (() => void) | undefined;
+
+const libraryData = ({ easels, media, removedMediaPaths }: LibraryData): LibraryData => ({ version: 1, easels, media, removedMediaPaths });
+
+/** On the desktop hosts each window holds its own copy of the Library: one's changes reach the others here. */
+function syncWindows() {
+  if (typeof BroadcastChannel === "undefined") return null;
+  const channel = new BroadcastChannel("bay-library");
+  // Node's channel would otherwise hold a test process open; a page's has no unref.
+  (channel as { unref?(): void }).unref?.();
+  let applying = false;
+  channel.onmessage = ({ data }: MessageEvent<LibraryData>) => {
+    applying = true;
+    useLibrary.setState(data);
+    applying = false;
+  };
+  return {
+    publish: (data: LibraryData) => channel.postMessage(data),
+    applying: () => applying,
+    close: () => channel.close(),
+  };
+}
 
 export function startLibrary() {
   if (useLibrary.getState().loaded) return;
@@ -16,15 +37,22 @@ export function startLibrary() {
     // Do not overwrite an unreadable document. The user can recover it instead of silently losing it.
     useLibrary.setState({ loaded: true, error: `Couldn't read Library: ${String(error)}` });
   }
-  stop = useLibrary.subscribe((s, prev) => {
-    if (!s.loaded || !prev.loaded) return;
+  const windows = syncWindows();
+  const unsubscribe = useLibrary.subscribe((s, prev) => {
+    if (!s.loaded || !prev.loaded || windows?.applying()) return;
     if ((s.easels === prev.easels && s.media === prev.media && s.removedMediaPaths === prev.removedMediaPaths) || s.error) return;
+    const data = libraryData(s);
     try {
-      writeDocument("library.json", JSON.stringify({ version: 1, easels: s.easels, media: s.media, removedMediaPaths: s.removedMediaPaths }));
+      writeDocument("library.json", JSON.stringify(data));
+      windows?.publish(data);
     } catch (error) {
       useLibrary.setState({ error: `Couldn't save Library: ${String(error)}` });
     }
   });
+  stop = () => {
+    unsubscribe();
+    windows?.close();
+  };
 }
 
 export function createEasel(spaceId: string, title = "Untitled Easel"): string | null {
@@ -68,7 +96,7 @@ export function applyEaselDocument(id: string, json: string) {
         const mediaId = newId("media");
         media[mediaId] = {
           id: mediaId,
-          name: item.source?.title || item.path.split("/").pop() || "Image",
+          name: item.source?.title || fileNameOf(item.path) || "Image",
           path: item.path,
           width: item.width,
           height: item.height,

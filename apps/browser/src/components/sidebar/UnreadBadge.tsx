@@ -1,7 +1,8 @@
-import { Text, View } from "react-native";
+import { View } from "@bay/platform";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { unreadFromTitle, unreadLabel } from "../../lib/unreadBadges";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { UNREAD_BADGE_RED } from "./constants";
 
 /** A favorite's unread count (or dot) from its page's title, in the tile's top corner, as Arc's Favorites had it. */

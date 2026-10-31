@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/ui/webui/chrome_web_ui_controller_factory.cc b/chrome/browser/ui/webui/chrome_web_ui_controller_factory.cc
+--- a/chrome/browser/ui/webui/chrome_web_ui_controller_factory.cc
++++ b/chrome/browser/ui/webui/chrome_web_ui_controller_factory.cc
+@@ -57,6 +57,7 @@
+ #include "content/public/browser/web_ui.h"
+ #include "content/public/browser/web_ui_data_source.h"
+ #include "content/public/common/content_client.h"
++#include "content/public/common/url_constants.h"
+ #include "content/public/common/url_utils.h"
+ #include "crypto/crypto_buildflags.h"
+ #include "extensions/buildflags/buildflags.h"
+@@ -340,6 +341,13 @@
+ // static
+ bool ChromeWebUIControllerFactory::IsWebUIAllowedToMakeNetworkRequests(
+     const url::Origin& origin) {
++  // Bay's installed UI fetches HTTPS suggestions, bangs and exchange rates.
++  // Give it the network loader while keeping chrome resources on the WebUI
++  // loader. Its CSP still restricts connections and executable resources.
++  if (origin.scheme() == content::kChromeUIScheme && origin.host() == "bay") {
++    return true;
++  }
++
+   // Allowlist to work around exceptional cases.
+   //
+   // If you are adding a new host to this list, please file a corresponding bug

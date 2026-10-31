@@ -1,8 +1,10 @@
 import { hapticTick } from "@bay/shell";
 import { useLayoutEffect, useState } from "react";
 import { PanResponder } from "react-native";
-import { Easing, makeMutable, withTiming, type SharedValue } from "react-native-reanimated";
-import { useBrowser } from "../../store/browser";
+import { Easing, makeMutable, withTiming, type SharedValue } from "@bay/platform/motion";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { reorderSpaces } from "../../runtime/spaceActions";
 
 // Arc's space reordering: drag a space along its list (the sidebar's icons or dots, the settings rows), the spaces it
 // passes make room, and let go, the store reorders them.
@@ -65,7 +67,7 @@ function spaceReorder(step: number, setDragging: (id: string | null) => void) {
       const ids = useBrowser.getState().spaceOrder.filter((x) => x !== id);
       ids.splice(to, 0, id);
       drag.reorderPending = true;
-      useBrowser.getState().reorderSpaces(ids);
+      reportBrowserCommand(reorderSpaces(ids));
     },
   };
 }

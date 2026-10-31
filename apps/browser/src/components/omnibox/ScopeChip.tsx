@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import type { SearchScope } from "@bay/core";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Favicon } from "../primitives";
 import type { ScopeColors } from "./scopeColors";

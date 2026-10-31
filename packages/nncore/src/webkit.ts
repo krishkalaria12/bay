@@ -1,4 +1,4 @@
-import { requireOptionalNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireOptionalNativeModule, type EventSubscription } from "@bay/platform/native";
 import type { ExternalAppAllowance } from "./externalApps";
 import type { BrowsingDataType, Download, PermissionRequest, PermissionResult } from "./module";
 import type { SiteSettings, SiteSettingType, SiteSettingValue } from "./siteSettings";

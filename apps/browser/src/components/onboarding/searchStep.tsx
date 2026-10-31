@@ -1,8 +1,11 @@
 import { engineHost, type SearchEngine } from "@bay/core";
 import { Symbol } from "@bay/shell";
 import { useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { useBrowser } from "../../store/browser";
+import { View } from "@bay/platform";
+import { StyleSheet, Text } from "react-native";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { setSearchEngine, updateSettings } from "../../runtime/settingsActions";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { searchEngines, type Settings } from "../../store/settings";
 import { Favicon } from "../primitives";
 import { nextStep } from "./state";
@@ -28,7 +31,8 @@ export function SearchStep() {
   const engines = current && !offered.includes(current) ? [...offered.slice(0, ENGINES.length - 1), current] : offered;
 
   const done = () => {
-    useBrowser.getState().updateSettings({ searchEngine: engineId, commandBarPreference: typed });
+    reportBrowserCommand(setSearchEngine(engineId));
+    reportBrowserCommand(updateSettings({ commandBarPreference: typed }));
     nextStep([`Search with ${current?.name ?? "your engine"}`, TYPED.find((t) => t.value === typed)!.picked]);
   };
 

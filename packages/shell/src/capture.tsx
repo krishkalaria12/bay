@@ -1,34 +1,39 @@
-import { requireNativeModule, requireNativeViewManager } from "expo-modules-core";
+import { requireNativeModule } from "@bay/platform/native";
+import { requireNativeViewManager } from "./nativeViews";
+import { imageFiles } from "./imageFiles";
 import type { Ref } from "react";
-import type { ViewProps } from "react-native";
+import type { ViewProps } from "@bay/platform";
 
 // Capture's files (a PNG the engine wrote, NNCoreWebView captureImage) and its Mark Up canvas (ios/Capture.swift).
 
-const Capture = requireNativeModule<{
-  copyImage(path: string): Promise<boolean>;
-  saveImage(path: string, name: string): Promise<string | null>;
-  shareImage(path: string, name: string, windowId: string | null, anchor: number[] | null): Promise<void>;
-  portraitImage(path: string, colors: string[], dark: boolean): Promise<{ path: string; width: number; height: number } | null>;
-  copyQuote(text: string, title: string, url: string, colors: string[], dark: boolean): Promise<boolean>;
-  shareQuote(text: string, title: string, url: string, colors: string[], dark: boolean, windowId: string): Promise<boolean>;
-}>("BayCapture");
+const Capture = () =>
+  requireNativeModule<{
+    copyImage(path: string): Promise<boolean>;
+    saveImage(path: string, name: string): Promise<string | null>;
+    shareImage(path: string, name: string, windowId: string | null, anchor: number[] | null): Promise<void>;
+    portraitImage(path: string, colors: string[], dark: boolean): Promise<{ path: string; width: number; height: number } | null>;
+    copyQuote(text: string, title: string, url: string, colors: string[], dark: boolean): Promise<boolean>;
+    shareQuote(text: string, title: string, url: string, colors: string[], dark: boolean, windowId: string): Promise<boolean>;
+  }>("BayCapture");
 
 export type QuoteCard = { text: string; title: string; url: string; colors: string[]; dark: boolean };
 /** A locally rendered quote card and its text-fragment link in one clipboard item. */
-export const copyQuoteCard = ({ text, title, url, colors, dark }: QuoteCard) => Capture.copyQuote(text, title, url, colors, dark);
+export const copyQuoteCard = async ({ text, title, url, colors, dark }: QuoteCard) => Capture().copyQuote(text, title, url, colors, dark);
 /** Share the card image together with the link to its source passage. */
-export const shareQuoteCard = ({ text, title, url, colors, dark }: QuoteCard, windowId: string) => Capture.shareQuote(text, title, url, colors, dark, windowId);
+export const shareQuoteCard = async ({ text, title, url, colors, dark }: QuoteCard, windowId: string) =>
+  Capture().shareQuote(text, title, url, colors, dark, windowId);
 
 /** Capture in Portrait: the picture framed, with a shadow, on a gradient of `colors` (hex), as a new PNG. */
-export const portraitCaptureImage = (path: string, colors: string[], dark: boolean) => Capture.portraitImage(path, colors, dark);
+export const portraitCaptureImage = async (path: string, colors: string[], dark: boolean) =>
+  imageFiles ? imageFiles.portrait(path, colors, dark) : Capture().portraitImage(path, colors, dark);
 
 /** The picture on the clipboard. */
-export const copyCaptureImage = (path: string) => Capture.copyImage(path);
+export const copyCaptureImage = async (path: string) => (imageFiles ? imageFiles.copy(path) : Capture().copyImage(path));
 /** A copy in Downloads named `name` (numbered when taken): its path. */
-export const saveCaptureImage = (path: string, name: string) => Capture.saveImage(path, name);
+export const saveCaptureImage = async (path: string, name: string) => (imageFiles ? imageFiles.save(path, name) : Capture().saveImage(path, name));
 /** The share menu for the picture, under `anchor` (x, y, width, height in the window's content from its top-left). */
-export const shareCaptureImage = (path: string, name: string, windowId: string | null, anchor?: [number, number, number, number]) =>
-  Capture.shareImage(path, name, windowId, anchor ?? null);
+export const shareCaptureImage = async (path: string, name: string, windowId: string | null, anchor?: [number, number, number, number]) =>
+  Capture().shareImage(path, name, windowId, anchor ?? null);
 
 export type MarkupTool = "pen" | "highlighter" | "arrow" | "rect" | "oval" | "text";
 export type MarkupState = { canUndo: boolean; canRedo: boolean; marks: number };

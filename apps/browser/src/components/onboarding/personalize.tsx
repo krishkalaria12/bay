@@ -1,12 +1,16 @@
+import { Pressable, View } from "@bay/platform";
 import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { SPACE_COLORS } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { DEFAULT_SPACE } from "../../store/spaces";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
 import { useOnboardingColors } from "./ui";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { toggleTabLayout } from "../../runtime/splitActions";
+import { updateSpace } from "../../runtime/spaceActions";
 
 export const PERSONALIZE_COPY = {
   title: "Make it yours",
@@ -18,7 +22,8 @@ const COLORS = Object.keys(SPACE_COLORS) as SpaceColor[];
 
 // The first space starts on Twilight (store/spaces.ts DEFAULT_SPACE): it leads the choices, and a plain color replaces it.
 const TWILIGHT = DEFAULT_SPACE.theme!;
-const isTwilight = (theme: SpaceTheme | null | undefined) => !!theme && theme.colors.join() === TWILIGHT.colors.join();
+const isTwilight = (theme: (Readonly<Omit<SpaceTheme, "colors">> & { readonly colors: readonly string[] }) | null | undefined) =>
+  !!theme && theme.colors.join() === TWILIGHT.colors.join();
 
 export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; size?: number }) {
   const spaceId = useBrowser((s) => s.windows[windowId]?.spaceId);
@@ -34,7 +39,7 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
         colors={TWILIGHT.colors}
         size={size}
         selected={twilight}
-        onPress={() => useBrowser.getState().updateSpace(spaceId, { color: "purple", theme: { ...TWILIGHT } })}
+        onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: "purple", theme: { ...TWILIGHT } }))}
       />
       {COLORS.map((c) => (
         <ColorButton
@@ -43,7 +48,7 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
           colors={[SPACE_COLORS[c].swatch]}
           size={size}
           selected={!themed && current === c}
-          onPress={() => useBrowser.getState().updateSpace(spaceId, { color: c, theme: null })}
+          onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: c, theme: null }))}
         />
       ))}
     </View>
@@ -106,7 +111,7 @@ function ColorButton({ name, colors, size, selected, onPress }: { name: string; 
 export function TabLayoutPicker({ windowId }: { windowId: string }) {
   const layout = useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
   const pick = (next: "sidebar" | "top") => {
-    if (next !== layout) useBrowser.getState().toggleTabLayout(windowId);
+    if (next !== layout) reportBrowserCommand(toggleTabLayout(windowId));
   };
   return (
     <View style={{ flexDirection: "row", gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel="Tab layout">

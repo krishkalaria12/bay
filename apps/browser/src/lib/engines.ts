@@ -1,8 +1,10 @@
-import { addHistoryVisits, type PageEngine } from "@bay/nncore";
+import { addHistoryVisits, hasWebKit, type PageEngine } from "@bay/nncore";
 import { confirm } from "@bay/shell";
 import { create } from "zustand";
 import { pageOf, patchPage } from "../components/layout/pageState";
 import { hideKeyedToast, showToast } from "../components/layout/toasts";
+import { reportBrowserCommand } from "../runtime/commands";
+import { updateSettings } from "../runtime/settingsActions";
 import { useBrowser } from "../store/browser";
 import { canSwitchEngine, chosenEngine, ENGINE_NAMES, siteOf, tabEngine, visitRecorder, type WebKitPage } from "../store/engines";
 import { engineProfile, isIncognitoSpace, navigationTo } from "../store/model";
@@ -47,11 +49,13 @@ export function setWebsiteEngine(url: string, engine: PageEngine | null) {
   const rules = { ...store().settings.websiteEngines };
   if (engine) rules[site] = engine;
   else delete rules[site];
-  store().updateSettings({ websiteEngines: rules });
+  reportBrowserCommand(updateSettings({ websiteEngines: rules }));
 }
 
 /** A tab keeps the engine its first view chose, so a later rule or setting doesn't move its page. */
 export function persistEngine(tabId: string, engine: PageEngine) {
+  // Without WebKit every page is Chromium's; there is nothing to keep.
+  if (!hasWebKit()) return;
   const t = store().tabs[tabId];
   if (t && !t.engine) store().updateTab(tabId, { engine });
 }

@@ -1,6 +1,8 @@
 import type { AreaLightPalette } from "@bay/shaders";
 import { createContext, createElement, useContext, type ReactNode } from "react";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { create } from "zustand";
+import { useBrowserRead as useBrowser } from "../store/read";
+import type { BrowserProjection as BrowserState, DeepReadonly } from "../runtime/projection";
 import { PageSpaceContext, WindowContext } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { DEFAULT_SPACE } from "../store/spaces";
@@ -223,7 +225,7 @@ const SITE = "@";
 const transient = (key: string) => key.startsWith(CUSTOM) || key.includes(SITE);
 
 /** A space's theme key: its preset colour's, or its own theme's (the theme editor); glass windows' end in ":glass". */
-export function spaceThemeKey(profile: Pick<Space, "color" | "theme"> | undefined, dark: boolean, glass = false): string {
+export function spaceThemeKey(profile: DeepReadonly<Pick<Space, "color" | "theme">> | undefined, dark: boolean, glass = false): string {
   const space = profile ?? DEFAULT_SPACE;
   const mode = `${dark ? "dark" : "light"}${glass ? GLASS : ""}`;
   const t = space.theme;
@@ -299,14 +301,17 @@ function siteColor(s: BrowserState, windowId: string, spaceId: string): string |
  * A window's theme key for a space (its own by default): a solid one takes its page's colour, glass its space's. A
  * space's own theme (the theme editor's) always shows, as Arc's and Zen's do: only a preset colour gives way to the page.
  */
-export function themeKey(s: BrowserState, windowId: string | null, page: string | null): string {
+type PreviewLook = Pick<Space, "color" | "theme" | "followSite">;
+const usePreviewLooks = create<Record<string, PreviewLook>>(() => ({}));
+
+export function themeKey(s: BrowserState, windowId: string | null, page: string | null, looks = usePreviewLooks.getState()): string {
   const id = windowId ?? s.ui.focusedWindowId ?? "";
   const w = s.windows[id];
   const glass = s.settings.windowMaterial === "glass";
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
   const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
   // A look being chosen for this window (the new space panel's) shows on its space meanwhile.
-  const preview = w && spaceId === w.spaceId ? s.ui.previewLooks?.[id] : undefined;
+  const preview = w && spaceId === w.spaceId ? looks[id] : undefined;
   const space = { ...(s.spaces[spaceId] ?? DEFAULT_SPACE), ...preview };
   // Light or dark is always the user's (Appearance, or macOS's with Automatic); the page's colour is fitted to it.
   const follow = space?.followSite ?? !space?.theme?.colors.length;
@@ -320,12 +325,12 @@ const ThemeContext = createContext<Theme | null>(null);
 
 /** Shows `look` on the window's space until it's cleared (null): the new space panel's Look step. */
 export function setPreviewLook(windowId: string, look: Pick<Space, "color" | "theme" | "followSite"> | null) {
-  useBrowser.setState((s) => {
-    const looks = { ...s.ui.previewLooks };
+  usePreviewLooks.setState((current) => {
+    const looks = { ...current };
     if (look) looks[windowId] = look;
     else delete looks[windowId];
-    return { ui: { ...s.ui, previewLooks: looks } };
-  });
+    return looks;
+  }, true);
 }
 
 // Resolves the theme once for everything below it: every window root and every profile page (which
@@ -334,7 +339,8 @@ export function setPreviewLook(windowId: string, look: Pick<Space, "color" | "th
 export function ThemeScope({ children }: { children: ReactNode }) {
   const windowId = useContext(WindowContext);
   const page = useContext(PageSpaceContext);
-  const key = useBrowser((s) => themeKey(s, windowId, page));
+  const looks = usePreviewLooks();
+  const key = useBrowser((s) => themeKey(s, windowId, page, looks));
   return createElement(ThemeContext.Provider, { value: themeFor(key) }, children);
 }
 

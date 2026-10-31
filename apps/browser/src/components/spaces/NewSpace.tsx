@@ -1,11 +1,12 @@
+import { Pressable, TextInput, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { layout } from "../../lib/constants";
 import { onEscapeKey } from "../../lib/escapeKey";
 import { hex, setPreviewLook, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId, pinnedPage } from "../../store/model";
 import { unusedSpaceLook } from "../../store/spaces";
 import { useSidebarOnRight } from "../layout/windowLayout";
@@ -14,6 +15,8 @@ import { useSidebarWidth } from "../sidebar/tokens";
 import { SPACE_EMOJI, unusedSpaceIcon } from "./icons";
 import { ThemeControls, type Look } from "./ThemeEditor";
 import { NEW_SPACE_FADE_MS, NEW_SPACE_PAD, PROFILE_DOTS_HEIGHT } from "./constants";
+import { createSpace, updateSpace } from "../../runtime/spaceActions";
+import { moveTabToSpace } from "../../runtime/windowActions";
 
 // yab's New Space, at the sidebar's foot rather than a dialog: start empty or with this tab, name it (and its icon),
 // choose its look (the window shows it meanwhile), then whether it shares the current space's sign-ins.
@@ -76,11 +79,10 @@ export function NewSpacePanel({ windowId, presetName, onDone }: { windowId: stri
   };
   const previous = () => go(ORDER[Math.max(0, ORDER.indexOf(step) - (presetName && step === "name" ? 0 : 1))]!);
 
-  const create = () => {
-    const s = useBrowser.getState();
-    const id = s.createSpace({ name: name.trim() || "Untitled", color: look.color, theme: look.theme, icon, shareWith: shared ? fromSpace : null });
-    if (look.followSite !== undefined) s.updateSpace(id, { followSite: look.followSite });
-    if (take && tab) s.moveTabToSpace(tab.id, id);
+  const create = async () => {
+    const id = await createSpace({ name: name.trim() || "Untitled", color: look.color, theme: look.theme, icon, shareWith: shared ? fromSpace : null });
+    if (look.followSite !== undefined) await updateSpace(id, { followSite: look.followSite });
+    if (take && tab) await moveTabToSpace(tab.id, id);
     finish(id);
   };
 

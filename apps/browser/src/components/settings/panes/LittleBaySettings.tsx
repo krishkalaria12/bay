@@ -1,6 +1,9 @@
 import { cancelShortcutRecording, menuShortcuts, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { useBrowser } from "../../../store/browser";
+import { useBrowserRead as useBrowser } from "../../../store/read";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import type { Settings } from "../../../store/settings";
 import type { LittleBayShortcut } from "../../../store/settings";
 import { DEFAULT_LITTLE_BAY_SHORTCUT, useLittleBayAccess } from "../../littleBay/access";
 import { Group, PopUp, Row, SectionHeader, SettingToggle, Toggle } from "../controls";
@@ -17,11 +20,12 @@ const PUT_AWAY_CHOICES = [
 
 // Little Bay, as Little Arc: from any app with a shortcut or the menu bar, and put away once left alone.
 export function LittleBaySettings() {
-  const shortcut = useBrowser((s) => s.settings.littleBayShortcut);
+  const savedShortcut = useBrowser((s) => s.settings.littleBayShortcut);
+  const shortcut = savedShortcut ? { ...savedShortcut, modifiers: [...savedShortcut.modifiers] } : null;
   const hours = useBrowser((s) => s.settings.littleBayPutAwayAfterHours);
   const status = useLittleBayAccess((a) => a.status);
   const overrides = useBrowser((s) => s.settings.shortcuts);
-  const update = useBrowser((s) => s.updateSettings);
+  const update = (patch: Partial<Settings>) => reportBrowserCommand(updateSettings(patch));
   const [recording, setRecording] = useState(false);
   const [menus, setMenus] = useState<MenuShortcut[]>([]);
   useEffect(() => {

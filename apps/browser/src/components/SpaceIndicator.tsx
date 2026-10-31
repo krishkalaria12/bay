@@ -1,8 +1,9 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol, showMenu, type MenuItem } from "@bay/shell";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { createSpace, switchSpace } from "../lib/actions";
 import { SPACE_COLORS, profileNameColor, useTheme } from "../lib/theme";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { useIsIncognito, useSpaces, useWindowId, useWindowSpace } from "../store/hooks";
 import { setMeasuredWidth, useMeasuredWidth } from "./layout/measuredWidths";
 import { useHover } from "./primitives";

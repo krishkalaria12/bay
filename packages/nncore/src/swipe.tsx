@@ -1,7 +1,9 @@
-import { requireNativeModule, requireNativeViewManager } from "expo-modules-core";
+import { View } from "@bay/platform";
+import type { ViewProps } from "@bay/platform";
+import { requireOptionalNativeModule, requireNativeViewManager } from "@bay/platform/native";
 import { forwardRef, useImperativeHandle, useRef } from "react";
-import { type NativeSyntheticEvent, type ViewProps } from "react-native";
-import Animated from "react-native-reanimated";
+import { type NativeSyntheticEvent } from "react-native";
+import Animated from "@bay/platform/motion";
 
 export type SwipeEvent = {
   phase: "began" | "changed" | "ended" | "cancelled" | "swipe" | "wheel";
@@ -80,22 +82,24 @@ type SwipeModule = {
 };
 type NativeComponent = React.ComponentType<NativeProps & { ref?: React.Ref<NativeHandle> }>;
 
-const Module = requireNativeModule<SwipeModule>("BaySwipe");
-const Native = requireNativeViewManager<NativeProps>("BaySwipe") as unknown as NativeComponent;
+const Module = requireOptionalNativeModule<SwipeModule>("BaySwipe");
+const Native = (Module ? requireNativeViewManager<NativeProps>("BaySwipe") : View) as unknown as NativeComponent;
 // Reanimated attaches onPagerPosition to this view, so frames update the value without JS.
 let AnimatedNative: NativeComponent | undefined;
 const animatedNative = () => (AnimatedNative ??= Animated.createAnimatedComponent(Native) as unknown as NativeComponent);
 
-export const swipeHaptic = (pattern: "levelChange" | "alignment" | "generic") => Module.haptic(pattern);
+export const swipeHaptic = (pattern: "levelChange" | "alignment" | "generic") => Module?.haptic(pattern);
 
 // order: the caller's profile ids joined with newlines, so the index means what the caller meant.
-export const switchPager = (key: string, index: number, order?: string): Promise<boolean> => Module.switchPager(key, index, order);
+export const switchPager = (key: string, index: number, order?: string): Promise<boolean> => Module?.switchPager(key, index, order) ?? Promise.resolve(false);
 // False when the window has no native pager; the caller falls back to the store.
-export const stepPager = (key: string, delta: -1 | 1, wrap = false, order?: string): Promise<boolean> => Module.stepPager(key, delta, wrap, order);
+export const stepPager = (key: string, delta: -1 | 1, wrap = false, order?: string): Promise<boolean> =>
+  Module?.stepPager(key, delta, wrap, order) ?? Promise.resolve(false);
 // Order is the profile ids joined with newlines, as in NativePagerConfig.order.
-export const selectPager = (key: string, profileId: string, order: string): Promise<boolean> => Module.selectPager(key, profileId, order);
-export const pagerState = (key: string): PagerSnapshot | null => Module.pagerState(key);
-export const devPagerState = (key: string): Promise<unknown> => Module.devPagerState(key);
+export const selectPager = (key: string, profileId: string, order: string): Promise<boolean> =>
+  Module?.selectPager(key, profileId, order) ?? Promise.resolve(false);
+export const pagerState = (key: string): PagerSnapshot | null => Module?.pagerState(key) ?? null;
+export const devPagerState = (key: string): Promise<unknown> => Module?.devPagerState(key) ?? Promise.resolve(null);
 
 export const SwipeArea = forwardRef<SwipeAreaHandle, SwipeAreaProps>(function SwipeArea({ onSwipe, onPagerState, ...props }, ref) {
   const handle = useRef<NativeHandle>(null);
@@ -105,12 +109,18 @@ export const SwipeArea = forwardRef<SwipeAreaHandle, SwipeAreaProps>(function Sw
       if (!at) return { error: "area not in a window" };
       const x = at.x + (options.x ?? at.width / 2);
       const y = at.y + (options.y ?? at.height / 2);
-      return Module.devSimulate(x, y, at.windowNumber, steps, options.ignorePreference ?? false);
+      return Module?.devSimulate(x, y, at.windowNumber, steps, options.ignorePreference ?? false);
     },
   }));
-  const View = props.nativePager ? animatedNative() : Native;
+  if (!Module)
+    return (
+      <View style={props.style} pointerEvents={props.pointerEvents ?? "box-none"}>
+        {props.children}
+      </View>
+    );
+  const SwipeView = props.nativePager ? animatedNative() : Native;
   return (
-    <View
+    <SwipeView
       ref={handle}
       {...props}
       onSwipe={(e: NativeSyntheticEvent<SwipeEvent>) => onSwipe(e.nativeEvent)}

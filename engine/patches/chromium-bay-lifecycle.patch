@@ -1,0 +1,170 @@
+diff --git a/chrome/browser/profiles/profile.h b/chrome/browser/profiles/profile.h
+--- a/chrome/browser/profiles/profile.h
++++ b/chrome/browser/profiles/profile.h
+@@ -95,6 +95,9 @@
+     static OTRProfileID CreateUnique(const std::string& profile_id_prefix);
+ 
+     // Creates a unique OTR profile id to be used for CEF browser contexts.
++    // Each Bay private window owns an isolated, extension-free context.
++    static OTRProfileID CreateUniqueForBay();
++
+     static OTRProfileID CreateUniqueForCEF();
+     bool IsUniqueForCEF() const;
+ 
+diff --git a/chrome/browser/profiles/profile.cc b/chrome/browser/profiles/profile.cc
+--- a/chrome/browser/profiles/profile.cc
++++ b/chrome/browser/profiles/profile.cc
+@@ -104,6 +104,7 @@
+ // differentiated by such prefixes. Consult with the profile owners before
+ // proceeding if you believe a new prefix is strictly necessary.
+ // See `chrome/browser/PRESUBMIT.py` which enforces this via a warning.
++constexpr char kBayOTRProfileIDPrefix[] = "Bay::PrivateWindow";
+ constexpr char kCEFOTRProfileIDPrefix[] = "CEF::BrowserContext";
+ constexpr char kDevToolsOTRProfileIDPrefix[] = "Devtools::BrowserContext";
+ constexpr char kMediaRouterOTRProfileIDPrefix[] = "MediaRouter::Presentation";
+@@ -125,6 +126,8 @@
+   // DevTools::BrowserContext, MediaRouter::Presentation, and
+   // CaptivePortal::Signin are exceptions to this ban.
+   if (*this == PrimaryID() || IsDevTools() ||
++      base::StartsWith(profile_id_, kBayOTRProfileIDPrefix,
++                       base::CompareCase::SENSITIVE) ||
+       base::StartsWith(profile_id_, kCEFOTRProfileIDPrefix,
+                        base::CompareCase::SENSITIVE) ||
+       base::StartsWith(profile_id_, kMediaRouterOTRProfileIDPrefix,
+@@ -165,6 +168,11 @@
+   return OTRProfileID(base::StringPrintf(
+       "%s-%s", profile_id_prefix.c_str(),
+       base::Uuid::GenerateRandomV4().AsLowercaseString().c_str()));
++}
++
++// static
++Profile::OTRProfileID Profile::OTRProfileID::CreateUniqueForBay() {
++  return CreateUnique(kBayOTRProfileIDPrefix);
+ }
+ 
+ // static
+diff --git a/chrome/browser/lifetime/browser_close_manager.h b/chrome/browser/lifetime/browser_close_manager.h
+--- a/chrome/browser/lifetime/browser_close_manager.h
++++ b/chrome/browser/lifetime/browser_close_manager.h
+@@ -23,6 +23,12 @@
+   BrowserCloseManager(const BrowserCloseManager&) = delete;
+   BrowserCloseManager& operator=(const BrowserCloseManager&) = delete;
+ 
++  // Bay prepares updater workers and detached pages before Chrome checks
++  // beforeunload handlers. The completion callback must run exactly once.
++  static void SetBayClosePreflight(
++      void (*preflight)(base::OnceCallback<void(bool)>),
++      void (*cancelled)());
++
+   // Starts closing all browser windows.
+   void StartClosingBrowsers();
+ 
+@@ -36,6 +42,8 @@
+       base::OnceCallback<void(bool)> callback);
+ 
+  private:
++  void ContinueClosingBrowsers(bool proceed);
++
+   // Notifies all browser windows that the close is cancelled.
+   void CancelBrowserClose();
+ 
+diff --git a/chrome/browser/lifetime/browser_close_manager.cc b/chrome/browser/lifetime/browser_close_manager.cc
+--- a/chrome/browser/lifetime/browser_close_manager.cc
++++ b/chrome/browser/lifetime/browser_close_manager.cc
+@@ -36,6 +36,8 @@
+ #endif
+ 
+ namespace {
++void (*g_bay_close_preflight)(base::OnceCallback<void(bool)>) = nullptr;
++void (*g_bay_close_cancelled)() = nullptr;
+ 
+ // Navigates a browser window for |profile|, creating one if necessary, to the
+ // downloads page if there are downloads in progress for |profile|.
+@@ -54,8 +56,30 @@
+ BrowserCloseManager::BrowserCloseManager() : current_browser_(nullptr) {}
+ BrowserCloseManager::~BrowserCloseManager() = default;
+ 
++void BrowserCloseManager::SetBayClosePreflight(
++    void (*preflight)(base::OnceCallback<void(bool)>),
++    void (*cancelled)()) {
++  g_bay_close_preflight = preflight;
++  g_bay_close_cancelled = cancelled;
++}
++
+ void BrowserCloseManager::StartClosingBrowsers() {
+   close_timer_.emplace();
++  if (g_bay_close_preflight) {
++    // Keep the manager alive while Bay completes asynchronous preparation.
++    g_bay_close_preflight(base::BindOnce(
++        &BrowserCloseManager::ContinueClosingBrowsers,
++        scoped_refptr<BrowserCloseManager>(this)));
++    return;
++  }
++  ContinueClosingBrowsers(true);
++}
++
++void BrowserCloseManager::ContinueClosingBrowsers(bool proceed) {
++  if (!proceed) {
++    CancelBrowserClose();
++    return;
++  }
+ 
+   // If the session is ending or a silent exit was requested, skip straight to
+   // closing the browsers without waiting for beforeunload dialogs.
+@@ -69,6 +93,8 @@
+ }
+ 
+ void BrowserCloseManager::CancelBrowserClose() {
++  if (g_bay_close_cancelled)
++    g_bay_close_cancelled();
+   // This is the abort endpoint. Record the metric if we haven't already.
+   if (close_timer_) {
+     base::UmaHistogramMediumTimes("Shutdown.Time.BrowserCloseManager.Canceled",
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.h b/chrome/browser/ui/webui_browser/webui_browser_window.h
+--- a/chrome/browser/ui/webui_browser/webui_browser_window.h
++++ b/chrome/browser/ui/webui_browser/webui_browser_window.h
+@@ -50,6 +50,10 @@
+   explicit WebUIBrowserWindow(BrowserWindowInterface* browser);
+   WebUIBrowserWindow(BrowserWindowInterface* browser, const GURL& initial_url);
+   ~WebUIBrowserWindow() override;
++
++  // Returning true defers this close request before native unload handling.
++  static void SetBayCloseRequestHandler(
++      bool (*handler)(BrowserWindowInterface*));
+ 
+   // Returns the containing browser window for a WebContents that hosts
+   // WebShell.
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.cc b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+--- a/chrome/browser/ui/webui_browser/webui_browser_window.cc
++++ b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+@@ -71,6 +71,7 @@
+ #include "ui/views/widget/widget_delegate.h"
+ 
+ namespace {
++bool (*g_bay_close_request_handler)(BrowserWindowInterface*) = nullptr;
+ 
+ const char* const kWebUIBrowserWindowKey = "__WEBUI_BROWSER_WINDOW__";
+ 
+@@ -1223,9 +1224,22 @@
+   widget_->Restore();
+ }
+ 
++void WebUIBrowserWindow::SetBayCloseRequestHandler(
++    bool (*handler)(BrowserWindowInterface*)) {
++  g_bay_close_request_handler = handler;
++}
++
+ void WebUIBrowserWindow::OnWindowCloseRequested(
+     views::Widget::ClosedReason close_reason) {
+   // TODO(webium): don't close a window during tab dragging.
++
++  if (g_bay_close_request_handler && g_bay_close_request_handler(browser_)) {
++    // MakeCloseSynchronous consumes its callback before invoking it. Rearm it
++    // before the posted application quit can return through Close().
++    widget_->MakeCloseSynchronous(base::BindOnce(
++        &WebUIBrowserWindow::OnWindowCloseRequested, base::Unretained(this)));
++    return;
++  }
+ 
+   // Give beforeunload handlers, the user, or policy the chance to cancel the
+   // close before we hide the window below.

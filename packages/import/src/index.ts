@@ -1,4 +1,4 @@
-import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule, type EventSubscription } from "@bay/platform/native";
 
 export type ImportKind = "bookmarks" | "history" | "tabs" | "passwords" | "cookies" | "autofill" | "extensions" | "spaces" | "pinnedTabs" | "favorites";
 
@@ -299,7 +299,7 @@ export function importData(browserId: string, profileId: string, kinds: ImportKi
 export const unlockBrowser = (browserId: string, options: { primaryPassword?: string } = {}) =>
   call<void>(Native.unlockBrowser(browserId, options.primaryPassword ?? null));
 
-export const isBrowserUnlocked = (browserId: string) => Native.isBrowserUnlocked(browserId);
+export const isBrowserUnlocked = async (browserId: string): Promise<boolean> => await Native.isBrowserUnlocked(browserId);
 
 export const forgetUnlockedKeys = () => Native.forgetUnlockedKeys();
 
@@ -320,7 +320,7 @@ export const writeExtension = (browserId: string, profileId: string, id: string,
 export const importSafariExport = (path: string, options: Pick<ImportOptions, "signal"> = {}) =>
   job<SafariExport>(options, (jobId) => Native.importSafariExport(jobId, path));
 
-export const safariHasFullDiskAccess = () => Native.safariHasFullDiskAccess();
+export const safariHasFullDiskAccess = async (): Promise<boolean> => await Native.safariHasFullDiskAccess();
 
 export const openFullDiskAccessSettings = () => call<void>(Native.openFullDiskAccessSettings());
 

@@ -1,6 +1,9 @@
 import { onAppEvent, onWindowEvent } from "@bay/shell";
 import { everySlowly } from "../../lib/slowTimers";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection } from "../../runtime/projection";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { closeWindow } from "../../runtime/windowActions";
 import { activeTabId } from "../../store/model";
 import { PUT_AWAY_SWEEP_MS } from "./constants";
 
@@ -15,7 +18,7 @@ const HOUR = 60 * 60_000;
  * window in front while Bay is the active app, which is never idle.
  */
 export function littleBaysToPutAway(
-  s: BrowserState,
+  s: BrowserProjection,
   { now, hours, usedAt, inUse }: { now: number; hours: number | null; usedAt: (windowId: string) => number | undefined; inUse: string | null },
 ): string[] {
   if (hours === null || !(hours > 0)) return [];
@@ -45,7 +48,7 @@ export function putAwayIdleLittleBays(now = Date.now()): string[] {
   });
   for (const id of ids) {
     usedAt.delete(id);
-    store().closeWindow(id);
+    reportBrowserCommand(closeWindow(id));
   }
   return ids;
 }

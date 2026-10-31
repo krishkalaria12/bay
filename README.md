@@ -290,6 +290,16 @@ It renders each SVG through headless Chrome at 1024 and downsamples with Lanczos
 Chrome and ImageMagick. The geometry in the SVGs is computed, not drawn by hand: the squircle is
 `|x/a|⁵ + |y/a|⁵ = 1`, and the cable hangers sit on the same cubic béziers the cable is drawn from.
 
+## Windows port
+
+Bay targets desktop macOS and Windows 11 x64. The Windows port is in progress: on
+Windows, Bay's React UI runs on react-native-web as a Chrome WebUI page, with tabs
+embedded through SurfaceEmbed, on the same NNCore engine as macOS. See the
+[port plan](docs/windows-port-plan.html) and the
+[implementation status and Windows commands](docs/windows-implementation-status.md).
+Mobile application targets are disabled. Native macOS code remains in packages'
+existing `ios` source directories.
+
 ## License
 
 Bay is open source under the [Apache License 2.0](LICENSE). You may use, modify and distribute it,

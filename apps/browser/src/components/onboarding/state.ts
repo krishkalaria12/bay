@@ -1,6 +1,7 @@
+import { capabilities } from "@bay/platform";
 import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/shell";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { resolveWindowId } from "../../store/model";
 import { pinSites } from "./sites";
 import { endToolTour, startToolTour } from "./tour/state";
@@ -24,7 +25,7 @@ type OnboardingState = {
 
 export const useOnboarding = create<OnboardingState>(() => ({
   windowId: null,
-  step: "intro",
+  step: capabilities.introMusic ? "intro" : FIRST_STEP,
   leaving: false,
   session: 0,
   tourAfter: false,
@@ -109,8 +110,10 @@ export function startOnboarding(windowId?: string | null, step: OnboardingStep =
   const id = resolveWindowId(useBrowser.getState(), windowId);
   if (!id) return;
   endToolTour();
-  useOnboarding.setState((s) => ({ windowId: id, step, picked, leaving: false, tourAfter: false, session: s.session + 1 }));
-  if (step !== "intro") save({ step });
+  // Builds without the intro's music (Windows, Linux) start at the first setup step.
+  const first = step === "intro" && !capabilities.introMusic ? FIRST_STEP : step;
+  useOnboarding.setState((s) => ({ windowId: id, step: first, picked, leaving: false, tourAfter: false, session: s.session + 1 }));
+  if (first !== "intro") save({ step: first });
 }
 
 export function finishOnboarding(options: { tour?: boolean } = {}) {
@@ -123,7 +126,7 @@ export function finishOnboarding(options: { tour?: boolean } = {}) {
 export function dismissOnboarding(session: number) {
   const { session: current, windowId, tourAfter } = useOnboarding.getState();
   if (current !== session) return;
-  useOnboarding.setState({ windowId: null, step: "intro", leaving: false, tourAfter: false, picked: {} });
+  useOnboarding.setState({ windowId: null, step: capabilities.introMusic ? "intro" : FIRST_STEP, leaving: false, tourAfter: false, picked: {} });
   if (tourAfter && windowId) startToolTour(windowId);
 }
 

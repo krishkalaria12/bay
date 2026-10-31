@@ -1,11 +1,26 @@
 import { setSidebarMoveUndo } from "@bay/shell";
-import { useBrowser } from "../store/browser";
+import { reportBrowserCommand } from "../runtime/commands";
+import { useBrowserRead as useBrowser } from "../store/read";
+import { browserRead } from "../store/read";
 
 /** The drag or menu is finished; the sidebar can now own Undo. */
 export function armSidebarMoveUndo(windowId: string) {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   if (!s.windows[windowId] || !s.sidebarUndo[windowId]?.length) return;
   void setSidebarMoveUndo(windowId, true, true);
+}
+
+// The undo stack is capped, so a recorded move shows as a new last entry rather than a longer stack.
+const lastFolderMove = () => JSON.stringify(browserRead.getState().folderMoveUndo.at(-1) ?? null);
+
+/** Arms Undo once `move` is acknowledged, if it recorded a folder move. Dispatch it inside `move`. */
+export function withFolderMoveUndo(windowId: string, move: () => Promise<unknown>) {
+  const before = lastFolderMove();
+  reportBrowserCommand(
+    move().then(() => {
+      if (lastFolderMove() !== before) armSidebarMoveUndo(windowId);
+    }),
+  );
 }
 
 export function startSidebarMoveUndoSync() {

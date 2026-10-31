@@ -2,23 +2,28 @@
 
 #include "chrome/browser/bay/nn_reauth.h"
 
-#include <Security/Security.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <memory>
 #include <utility>
 
-#include "base/apple/scoped_cftyperef.h"
-#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/nn_engine.h"
+#include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
 #include "components/device_reauth/device_authenticator.h"
+
+#if BUILDFLAG(IS_MAC)
+#include <Security/Security.h>
+
+#include "base/apple/scoped_cftyperef.h"
+#include "base/command_line.h"
 #include "components/os_crypt/common/os_crypt_switches.h"
+#endif
 
 namespace bay {
 namespace {
@@ -28,6 +33,7 @@ bool HiddenTestInstance() {
   return background && !strcmp(background, "1");
 }
 
+#if BUILDFLAG(IS_MAC)
 // Whether this code is signed for distribution: a Mac App Store or Developer ID
 // signature, as every shipped build is. Any API failure counts as signed, so the
 // test grant fails closed.
@@ -61,6 +67,12 @@ bool TestGrantHonoured() {
           os_crypt::switches::kUseMockKeychain);
   return honoured;
 }
+#else
+bool TestGrantHonoured() {
+  // Other hosts have no mock-keychain isolation for this test grant.
+  return false;
+}
+#endif
 
 bool TestGrant() {
   const char* grant = getenv("BAY_TEST_REAUTH");

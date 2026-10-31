@@ -1,6 +1,8 @@
 import { onDownload, releaseProfile } from "@bay/nncore";
+import { capabilities, isMac } from "@bay/platform";
 import {
   closeWindow,
+  focusWindow,
   isDarkAppearance,
   onAppEvent,
   onCommand,
@@ -12,12 +14,13 @@ import {
   setMenuStateParts,
   setWindowTitle,
   windowIds,
+  type OpenWindowOptions,
   type MenuBookmark,
   type MenuState,
 } from "@bay/shell";
 import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { useBrowser, type BrowserStore, type BrowserState } from "../store/browser";
 import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId, tabLabel, windowTitle } from "../store/model";
 import { canSwitchEngine, tabEngine } from "../store/engines";
 import { pinnableSplit, pinRowTitle, splitOf } from "../store/splits";
@@ -37,97 +40,148 @@ import { everySlowly } from "./slowTimers";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./commands";
 import { startSidebarMoveUndoSync } from "./folderUndo";
-import { flushPersistence, resumePersistence } from "./persist";
+import type { PersistenceOwner } from "./persist";
+import { prepareSyncForQuit, resumeSyncAfterQuit } from "../sync/engine";
+import { prepareTelemetryForQuit, resumeTelemetryAfterQuit } from "../telemetry/usage";
+import { prepareApplicationQuit } from "./quitPreparation";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
+import { createNativeWindowReconciler } from "./nativeWindows";
 
 let quitting = false;
+let quitAttempt = 0;
 export const isQuitting = () => quitting;
 
-export function startNativeSync() {
-  const store = useBrowser;
+export function startNativeSync({
+  persistence,
+  store = useBrowser,
+  shared = false,
+}: {
+  persistence: Pick<PersistenceOwner, "flush" | "resume">;
+  store?: BrowserStore;
+  shared?: boolean;
+}) {
+  const stops: (() => void)[] = [];
+  let disposed = false;
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
-  onCommand(runCommand);
-  startSidebarMoveUndoSync();
-  startWindowCloseGuard();
-  startExtensionsBridge();
-  startLittleBayAccess();
-  startLittleBayPutAway();
-  onOpenURLs(openExternalUrls);
-  onDownload((d) => store.getState().upsertDownload(d));
-  startTidyDownloadOffers();
+  if (!shared) {
+    const commands = onCommand(runCommand);
+    stops.push(() => commands.remove());
+    stops.push(startSidebarMoveUndoSync());
+    stops.push(startWindowCloseGuard());
+    startExtensionsBridge();
+    if (store === useBrowser) {
+      startLittleBayAccess();
+      startLittleBayPutAway();
+    }
+  }
+  const urls = onOpenURLs(openExternalUrls);
+  const downloads = onDownload((d) => store.getState().upsertDownload(d));
+  stops.push(
+    () => urls.remove(),
+    () => downloads.remove(),
+  );
+  stops.push(startTidyDownloadOffers(store));
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
   void setAppearance(store.getState().settings.appearance);
-  void isDarkAppearance().then((dark) => store.getState().setAppDark(dark));
+  void isDarkAppearance().then((dark) => {
+    if (!disposed) store.getState().setAppDark(dark);
+  });
 
-  onAppEvent((e) => {
+  const appEvents = onAppEvent((e) => {
     const s = store.getState();
     if (e.type === "appearance") s.setAppDark(e.dark);
     if (e.type === "reopen") createWindow();
     if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
     if (e.type === "willQuit") {
       quitting = true;
-      flushPersistence({ final: true });
-      void replyToTerminate(true);
+      const attempt = ++quitAttempt;
+      const isCurrent = () => quitting && attempt === quitAttempt;
+      void prepareApplicationQuit({
+        isCurrent,
+        prepareSync: prepareSyncForQuit,
+        flushSession: () => persistence.flush({ final: true }),
+        // The service owner acknowledges Live alongside session/downloads.
+        flushLive: () => Promise.resolve(),
+        flushTelemetry: prepareTelemetryForQuit,
+      })
+        .then(
+          (prepared) => {
+            if (prepared && isCurrent()) return replyToTerminate(true);
+          },
+          (error) => {
+            console.error("Couldn't save app data before quitting", error);
+            if (isCurrent()) return replyToTerminate(false);
+          },
+        )
+        .catch((error) => console.error("Couldn't reply to app shutdown", error));
     }
     if (e.type === "quitCancelled") {
       quitting = false;
-      resumePersistence();
+      quitAttempt++;
+      resumeSyncAfterQuit();
+      persistence.resume();
+      void resumeTelemetryAfterQuit().catch((error) => console.error("Couldn't restore telemetry after cancelled quit", error));
     }
   });
 
-  onWindowEvent((e) => {
+  const windowEvents = onWindowEvent((e) => {
     const s = store.getState();
     if (e.type === "focus") s.setFocusedWindow(e.id);
     if (e.type === "frame") s.setWindowFrame(e.id, e.frame);
     if (e.type === "close") {
       if (quitting) return;
-      open.delete(e.id);
+      windows.nativeClosed(e.id);
       s.closeWindow(e.id);
-      releaseIfIncognito(e.id, s);
     }
   });
 
-  const open = new Set<string>();
-  const titles = new Map<string, string>();
+  stops.push(
+    () => appEvents.remove(),
+    () => windowEvents.remove(),
+  );
 
-  const releaseIfIncognito = (id: string, s: BrowserState) => {
-    if (s.windows[id]?.incognito) void releaseProfile(incognitoSpaceId(id));
-  };
+  const windows = createNativeWindowReconciler<OpenWindowOptions>({
+    open: openWindow,
+    close: closeWindow,
+    setTitle: setWindowTitle,
+    focus: focusWindow,
+    openFailed: (id) => store.getState().closeWindow(id),
+    closed: (id, options) => {
+      if (options.incognito) void releaseProfile(incognitoSpaceId(id));
+    },
+    report: (operation, id, error) => console.error(`Couldn't ${operation} window ${id}`, error),
+  });
 
   const syncWindows = (s: BrowserState, prev?: BrowserState) => {
-    // Open the focused window last so it comes to front.
+    if (
+      prev &&
+      s.tabs === prev.tabs &&
+      s.tabLists === prev.tabLists &&
+      s.windows === prev.windows &&
+      s.spaces === prev.spaces &&
+      s.ui.focusedWindowId === prev.ui.focusedWindowId
+    )
+      return;
+    // Dispatch the focused window last so it comes to front.
     const focused = s.ui.focusedWindowId;
     const order = s.windowOrder.filter((id) => id !== focused);
     if (focused && s.windows[focused]) order.push(focused);
-    for (const id of order) {
-      const w = s.windows[id]!;
-      if (!open.has(id)) {
-        open.add(id);
-        titles.set(id, windowTitle(s, id));
-        const profile = engineProfile(w.spaceId);
+    windows.sync(
+      order.map((id) => {
+        const w = s.windows[id]!;
+        const title = windowTitle(s, id);
+        // A macOS window shows any profile's pages. A Chrome-hosted one is the Default profile's and keeps a Browser for
+        // each other profile its spaces show (WindowRegistry::BrowserFor), so a space switch never replaces the window.
+        const profile = isMac || w.incognito ? engineProfile(w.spaceId) : "";
         const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.littleBaySize } : {};
-        void openWindow(id, { frame: w.frame, incognito: w.incognito, title: titles.get(id), focus: id === s.ui.focusedWindowId, profile, ...small });
-      }
-    }
-    for (const id of Array.from(open)) {
-      if (s.windows[id]) continue;
-      open.delete(id);
-      titles.delete(id);
-      void closeWindow(id);
-      if (prev?.windows[id]?.incognito) void releaseProfile(incognitoSpaceId(id));
-    }
-    if (prev && s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows && s.spaces === prev.spaces) return;
-    for (const id of open) {
-      const title = windowTitle(s, id);
-      if (titles.get(id) !== title) {
-        titles.set(id, title);
-        void setWindowTitle(id, title);
-      }
-    }
+        return { id, title, options: { frame: w.frame, incognito: w.incognito, title, focus: id === focused, profile, ...small } };
+      }),
+      focused,
+    );
   };
 
   let lastMenu = "";
@@ -135,6 +189,7 @@ export function startNativeSync() {
   let menuTimer: ReturnType<typeof setTimeout> | undefined;
   const syncMenu = () => {
     menuTimer = undefined;
+    if (!capabilities.menuBar) return;
     const state = menuState(store.getState());
     // The bookmark menus are cached per bookmarks tree (bookmarkMenus), so they compare by identity;
     // stringifying them (thousands of bookmarks) on every store change is what this sync used to spend.
@@ -151,41 +206,64 @@ export function startNativeSync() {
   // The windows open now, without first asking which exist: that answer comes from the main thread, which Chrome's
   // startup holds, and waiting for it put 20–100 ms before the first frame. Opening one that exists (after a JS reload)
   // only brings it forward; the ones the store doesn't have close when the answer comes.
-  syncWindows(store.getState());
+  if (!shared) syncWindows(store.getState());
   syncMenu();
-  store.subscribe((s, prev) => {
-    syncWindows(s, prev);
-    menuTimer ??= setTimeout(syncMenu, 120);
-  });
-  store.subscribe((s, prev) => {
-    if (s.settings.appearance !== prev.settings.appearance) void setAppearance(s.settings.appearance);
-  });
-  useExtensions.subscribe((e, prev) => {
-    if (e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
-  });
-  // Join Meeting (⌃⌘J) comes and goes with the calendar and the clock, not the store.
-  useCalendar.subscribe((c, prev) => {
-    if (c.events !== prev.events) menuTimer ??= setTimeout(syncMenu, 120);
-  });
-  everySlowly({
-    every: 30_000,
-    run: () => void (menuTimer ??= setTimeout(syncMenu, 120)),
-    needed: () => useCalendar.getState().events.length > 0,
-    watch: (changed) => useCalendar.subscribe(changed),
-  });
-  void windowIds().then((ids) => {
-    const s = store.getState();
-    for (const id of ids) {
-      if (!s.windows[id]) {
-        if (!isUtilityWindowId(id)) void closeWindow(id);
-        continue;
+  stops.push(
+    store.subscribe((s, prev) => {
+      if (!shared) syncWindows(s, prev);
+      if (capabilities.menuBar) menuTimer ??= setTimeout(syncMenu, 120);
+    }),
+  );
+  stops.push(
+    store.subscribe((s, prev) => {
+      if (s.settings.appearance !== prev.settings.appearance) void setAppearance(s.settings.appearance);
+    }),
+  );
+  stops.push(
+    useExtensions.subscribe((e, prev) => {
+      if (capabilities.menuBar && e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
+    }),
+  );
+  stops.push(
+    useCalendar.subscribe((c, prev) => {
+      if (capabilities.menuBar && c.events !== prev.events) menuTimer ??= setTimeout(syncMenu, 120);
+    }),
+  );
+  stops.push(
+    everySlowly({
+      every: 30_000,
+      run: () => void (menuTimer ??= setTimeout(syncMenu, 120)),
+      needed: () => capabilities.menuBar && useCalendar.getState().events.length > 0,
+      watch: (changed) => useCalendar.subscribe(changed),
+    }),
+  );
+  if (!shared)
+    void windowIds().then((ids) => {
+      if (disposed) return;
+      const s = store.getState();
+      for (const id of ids) {
+        if (!s.windows[id]) {
+          if (!isUtilityWindowId(id)) void closeWindow(id);
+          continue;
+        }
+        // One that already existed kept the title it had (openWindow leaves it be): send the current one.
+        const title = windowTitle(s, id);
+        void setWindowTitle(id, title);
       }
-      // One that already existed kept the title it had (openWindow leaves it be): send the current one.
-      const title = windowTitle(s, id);
-      titles.set(id, title);
-      void setWindowTitle(id, title);
-    }
-  });
+    });
+  return {
+    async reconcile(state: BrowserState) {
+      if (disposed) return;
+      syncWindows(state);
+      await windows.flush();
+    },
+    dispose() {
+      disposed = true;
+      clearTimeout(menuTimer);
+      windows.dispose();
+      for (const stop of stops.reverse()) stop();
+    },
+  };
 }
 
 const PAGE_COMMANDS = [

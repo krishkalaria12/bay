@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import type { BrowserProjection } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { leaveGroups, syncGroupOrder } from "./groups";
 import { listOfTab, newId, pinnedPage, tabListKey, withList } from "./model";
@@ -36,7 +37,7 @@ export type OpenPaneResult = { ok: true; tabId: string; splitId: string } | { ok
 
 export type SplitSlot = string[];
 
-export function slotsOf(split: Pick<SplitView, "tabIds" | "stack">): SplitSlot[] {
+export function slotsOf(split: Pick<BrowserProjection["splits"][string], "tabIds" | "stack">): SplitSlot[] {
   const slots: SplitSlot[] = [];
   for (let i = 0; i < split.tabIds.length; i++) {
     if (split.stack?.index === i) slots.push([split.tabIds[i]!, split.tabIds[++i]!]);
@@ -57,30 +58,33 @@ function fromSlots(split: SplitView, slots: SplitSlot[], sizes?: number[]): Spli
   return next;
 }
 
-export function splitOf(s: Pick<BrowserState, "splits">, tabId: string | undefined): SplitView | undefined {
+export function splitOf<S extends Pick<BrowserState, "splits"> | Pick<BrowserProjection, "splits">>(
+  s: S,
+  tabId: string | undefined,
+): S["splits"][string] | undefined {
   if (!tabId) return undefined;
-  for (const v of Object.values(s.splits)) if (v.tabIds.includes(tabId)) return v;
+  for (const v of Object.values(s.splits) as S["splits"][string][]) if (v.tabIds.includes(tabId)) return v;
   return undefined;
 }
 
-export function pinnedSplitOf(s: Pick<BrowserState, "splits" | "tabs">, tabId: string | undefined): SplitView | undefined {
+export function pinnedSplitOf<S extends Pick<BrowserProjection, "splits" | "tabs">>(s: S, tabId: string | undefined): S["splits"][string] | undefined {
   const split = splitOf(s, tabId);
   return split && isPinnedSplit(s, split) ? split : undefined;
 }
 
 /** A split pinned as one row: every pane in the Pinned section, in one folder or none. */
-export function isPinnedSplit(s: Pick<BrowserState, "tabs">, split: Pick<SplitView, "tabIds">): boolean {
+export function isPinnedSplit(s: Pick<BrowserProjection, "tabs">, split: Pick<BrowserProjection["splits"][string], "tabIds">): boolean {
   const folderId = s.tabs[split.tabIds[0] ?? ""]?.folderId;
   return split.tabIds.every((id) => s.tabs[id]?.pinnedRow && s.tabs[id]!.folderId === folderId);
 }
 
 /** The panes a split's row shows: outside a pinned split, a pane pinned on its own has its own row or tile. */
-export function splitRowTabs(s: Pick<BrowserState, "tabs">, split: Pick<SplitView, "tabIds">): string[] {
-  return isPinnedSplit(s, split) ? split.tabIds : split.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!));
+export function splitRowTabs(s: Pick<BrowserProjection, "tabs">, split: Pick<BrowserProjection["splits"][string], "tabIds">): string[] {
+  return isPinnedSplit(s, split) ? [...split.tabIds] : split.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!));
 }
 
 /** The split that goes in and out of the Pinned section whole. An Essential stays a tile, so with one its panes go alone. */
-export function pinnableSplit(s: Pick<BrowserState, "splits" | "tabs">, tabId: string): SplitView | undefined {
+export function pinnableSplit<S extends Pick<BrowserProjection, "splits" | "tabs">>(s: S, tabId: string): S["splits"][string] | undefined {
   const split = splitOf(s, tabId);
   return split && !split.tabIds.some((id) => s.tabs[id]?.pinned) ? split : undefined;
 }
@@ -90,12 +94,12 @@ export const withSplitPanes = (s: Pick<BrowserState, "splits" | "tabs">, ids: st
 ];
 
 /** Whether Pin Tab would unpin: the tab's row, or its whole split. */
-export function rowPinned(s: Pick<BrowserState, "splits" | "tabs">, tabId: string): boolean {
+export function rowPinned(s: Pick<BrowserProjection, "splits" | "tabs">, tabId: string): boolean {
   const split = pinnableSplit(s, tabId);
   return split ? isPinnedSplit(s, split) : !!s.tabs[tabId]?.pinnedRow;
 }
 
-export function pinRowTitle(s: Pick<BrowserState, "splits" | "tabs">, tabId: string): string {
+export function pinRowTitle(s: Pick<BrowserProjection, "splits" | "tabs">, tabId: string): string {
   const noun = pinnableSplit(s, tabId) ? "Split View" : "Tab";
   return `${rowPinned(s, tabId) ? "Unpin" : "Pin"} ${noun}`;
 }

@@ -1,7 +1,11 @@
+import { View } from "@bay/platform";
 import { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
-import { useBrowser } from "../../store/browser";
+import { StyleSheet } from "react-native";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
 import { bookmarkSpaceId } from "../../store/model";
+import { libraryAvailable } from "../library/availability";
+import { EmptyState } from "./PageLayout";
 import { LibraryPage } from "../library/LibraryPage";
 import { EaselPage } from "../library/EaselPage";
 import { easelIdOf } from "../library/actions";
@@ -9,7 +13,7 @@ import { useLibrary } from "../library/state";
 import { BookmarksPage } from "./BookmarksPage";
 import { DownloadsPage } from "./DownloadsPage";
 import { HistoryPage } from "./HistoryPage";
-import { INTERNAL_PAGES, internalPageOf, internalQuery, tabDestination } from "./urls";
+import { internalPageOf, internalQuery, tabDestination } from "./urls";
 
 export function InternalPage({ tabId }: { tabId: string }) {
   const url = useBrowser((s) => {
@@ -24,13 +28,12 @@ export function InternalPage({ tabId }: { tabId: string }) {
 
   useEffect(() => {
     if (!page) return;
-    const t = useBrowser.getState().tabs[tabId];
-    const title = page === "easel" ? easelTitle || "Easel" : INTERNAL_PAGES[page].title;
-    if (t && (t.url !== url || t.title !== title)) useBrowser.getState().updateTab(tabId, { url, title, favicon: null });
-    useBrowser.getState().updateLive(tabId, { isLoading: false, progress: 0, canGoBack: false, canGoForward: false });
+    reportBrowserCommand(dispatchBrowserCommand({ method: "syncInternalPage", tabId }));
   }, [page, url, easelTitle, tabId]);
 
   if (!page) return null;
+  if ((page === "library" || page === "easel") && !libraryAvailable())
+    return <EmptyState title="Library and Easels are unavailable" subtitle="These features are not supported in this window yet." />;
   return (
     <View style={StyleSheet.absoluteFill}>
       {page === "library" && <LibraryPage tabId={tabId} initialSection={internalQuery(url)} />}

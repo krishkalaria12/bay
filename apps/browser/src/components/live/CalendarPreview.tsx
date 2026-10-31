@@ -1,13 +1,16 @@
+import { Pressable, View } from "@bay/platform";
 import { FadeLabel } from "@bay/shell";
 import { useEffect } from "react";
-import { Pressable, Text, View } from "react-native";
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { joinEvent } from "../../live/alerts";
 import { connectCalendar, refreshCalendar, useCalendar, useNow } from "../../live/calendar";
 import { isCalendarUrl, isMeeting, joinLink, joinTitle, relativeTime, timeRange, type CalendarEvent } from "../../live/meetings";
 import { useLive } from "../../live/store";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { activate } from "../../runtime/tabActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { IconButton, useHover } from "../primitives";
 import { dismissHover } from "../sidebar/hover";
 import type { Anchor } from "../sidebar/state";
@@ -136,7 +139,7 @@ function EventRow({ event, now, windowId, tabId }: { event: CalendarEvent; now: 
       <Pressable
         onPress={() => {
           dismissHover();
-          useBrowser.getState().activate(tabId);
+          reportBrowserCommand(activate(tabId));
         }}
       >
         <View

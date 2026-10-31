@@ -16,16 +16,23 @@ import {
   type SuggestionResult,
 } from "@bay/core";
 import { useEffect, useMemo, useState } from "react";
+import { isMac } from "@bay/platform";
+import { engineCall } from "@bay/nncore";
 import { bookmarksByUrl } from "../../store/bookmarks";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { bookmarkSpaceId } from "../../store/model";
 import { cleanedTabsFor } from "../../store/organize";
 import { defaultSearchEngine, searchEngines } from "../../store/settings";
-import type { Bookmarks, ClosedTab, HistoryEntry } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type Bookmarks = DeepReadonly<import("../../store/types").Bookmarks>;
+type ClosedTab = DeepReadonly<import("../../store/types").ClosedTab>;
+type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 import { currentBarActions } from "./actions";
 import { mayBeBang, useBangs } from "./bangs";
 import { NO_HISTORY } from "../../store/constants";
 import { SUGGEST_WARM_SLICE_MS } from "./constants";
+import { createSuggestionFetch, suggestionProfile } from "./suggestFetch";
 
 const NO_REMOTE: string[] = [];
 const EMPTY: SuggestionResult = { items: [], completion: "" };
@@ -49,10 +56,10 @@ function profileBookmarks(b: Bookmarks, spaceId: string): BookmarkRow[] {
 }
 
 type CleanedRow = { id: string; url: string; title: string; favicon: string | null; closedAt: number };
-const cleanedCache = new WeakMap<ClosedTab[], Map<string, CleanedRow[]>>();
+const cleanedCache = new WeakMap<readonly ClosedTab[], Map<string, CleanedRow[]>>();
 
 // The space's cleaned up tabs (Arc's archive), newest first, for the bar to find and restore.
-function spaceCleaned(list: ClosedTab[], spaceId: string): CleanedRow[] {
+function spaceCleaned(list: readonly ClosedTab[], spaceId: string): CleanedRow[] {
   let perSpace = cleanedCache.get(list);
   if (!perSpace) cleanedCache.set(list, (perSpace = new Map()));
   let rows = perSpace.get(spaceId);
@@ -67,9 +74,9 @@ function spaceCleaned(list: ClosedTab[], spaceId: string): CleanedRow[] {
   return rows;
 }
 
-const historyHostCache = new WeakMap<HistoryEntry[], string[]>();
+const historyHostCache = new WeakMap<readonly HistoryEntry[], string[]>();
 
-function historyHosts(history: HistoryEntry[]): string[] {
+function historyHosts(history: readonly HistoryEntry[]): string[] {
   let hosts = historyHostCache.get(history);
   if (!hosts) {
     const set = new Set<string>();
@@ -154,7 +161,25 @@ export function useSuggestions({
   }, [source]);
 
   const [remote, setRemote] = useState<{ text: string; list: string[] }>({ text: "", list: [] });
-  const [fetcher] = useState(() => createSuggestFetcher({ fetch: (url, init) => fetch(url, init) }));
+  const fromEngine = suggestEngine(scope, engines, engine);
+  // Built-in suggestions carry no profile state or cookies. Extension endpoints
+  // are checked against the profile that registered that exact engine record.
+  const nativeProfile = useBrowser((s) => suggestionProfile(fromEngine, s.settings.extensionSearchEngines ?? []));
+  const fetcher = useMemo(
+    () =>
+      createSuggestFetcher({
+        fetch: createSuggestionFetch(
+          (url, init) => fetch(url, init),
+          isMac
+            ? undefined
+            : (url) =>
+                nativeProfile === null
+                  ? Promise.reject(new Error("The search extension profile is unavailable"))
+                  : engineCall("nn_search_suggestions", nativeProfile, { url, client: windowId }),
+        ),
+      }),
+    [nativeProfile, windowId],
+  );
   const query = text.trim();
   const [currency, setCurrency] = useState<CurrencyAnswer | null>(null);
   const [convertCurrency] = useState(() => createCurrencyConverter({ fetch: (url, init) => fetch(url, init) }));
@@ -179,7 +204,6 @@ export function useSuggestions({
   );
   const bang = useMemo(() => (bangs ? findBang(query, bangs) : null), [bangs, query]);
   const pendingBang = bangsEnabled && !bundledBangs && mayBeBang(query);
-  const fromEngine = suggestEngine(scope, engines, engine);
   useEffect(() => {
     const q = query.replace(/^\?/, "").trim();
     if (!active || !suggestionsOn || !q || /^[a-z][a-z0-9+.-]*:\/\//i.test(q) || scope?.kind === "history" || bang || (!scope && pendingBang)) {

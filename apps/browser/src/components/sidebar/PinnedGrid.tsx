@@ -1,14 +1,15 @@
+import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, DockSelection, MouseArea, Surface, Symbol } from "@bay/shell";
 import { memo, useEffect } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "@bay/platform/motion";
 import { closeTab } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useTileTheme, type TileTheme } from "../../lib/tileTheme";
 import { GlassFill, useLiquidGlass } from "../glass";
 import { listTopGap, useSidebarFieldShown } from "../layout/windowLayout";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useIsActiveTab, useTab, useTabLive, useWindowId } from "../../store/hooks";
 import { awayFromPin } from "../../store/organize";
 import { NextMeetingBadge } from "../live/NextMeetingBadge";
@@ -23,6 +24,8 @@ import { UnreadBadge } from "./UnreadBadge";
 import { clickMods } from "./TabRow";
 import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 import { MIN_PINNED_TILE, PINNED_BADGE_SPRING, PINNED_GLASS_RIM, PINNED_SELECTION_STROKE, PINNED_TILE_GAP } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { returnToPinnedUrl } from "../../runtime/organizeActions";
 
 export function PinnedGrid({ tabs, innerWidth }: { tabs: string[]; innerWidth: number }) {
   const controller = useDragController();
@@ -208,7 +211,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
           </ContextMenuArea>
         </MouseArea>
         <Animated.View pointerEvents={away ? "auto" : "none"} style={[{ position: "absolute", top: 3, right: 3 }, badgeStyle]}>
-          <Pressable onPress={() => useBrowser.getState().returnToPinnedUrl(tabId)} tooltip="Back to Pinned URL (⌘↩)">
+          <Pressable onPress={() => reportBrowserCommand(returnToPinnedUrl(tabId))} tooltip="Back to Pinned URL (⌘↩)">
             <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: tokens.badge, alignItems: "center", justifyContent: "center" }}>
               <Symbol name="arrow.uturn.backward" size={7} weight="bold" color={tokens.badgeGlyph} style={{ width: 10, height: 10 }} />
             </View>

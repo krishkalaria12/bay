@@ -1,6 +1,8 @@
-import { View } from "react-native";
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as settingsCommands from "../../runtime/settingsActions";
+import { View } from "@bay/platform";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useResizeDrag } from "../layout/useResizeDrag";
 import { useSidebarOnRight } from "../layout/windowLayout";
 import { setSidebarUi, sidebarUi } from "./state";
@@ -20,12 +22,12 @@ export function ResizeHandle({ windowId }: { windowId: string }) {
       else dragWidth[windowId] = Math.round(w * 2) / 2;
       setSidebarUi({ dragWidth });
     },
-    onCommit: (w) => useBrowser.getState().updateSettings({ sidebarWidth: w }),
+    onCommit: (w) => reportBrowserCommand(settingsCommands.updateSettings({ sidebarWidth: w })),
   });
   return (
     <View
       {...handlers}
-      onDoubleClick={() => useBrowser.getState().updateSettings({ sidebarWidth: layout.sidebarWidth })}
+      onDoubleClick={() => reportBrowserCommand(settingsCommands.updateSettings({ sidebarWidth: layout.sidebarWidth }))}
       style={[{ position: "absolute", top: 46, bottom: 0, width: 7, cursor: "col-resize" }, right ? { left: -3 } : { right: -3 }]}
     />
   );

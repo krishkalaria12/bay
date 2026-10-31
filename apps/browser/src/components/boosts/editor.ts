@@ -2,12 +2,12 @@ import { confirm, openTextFile, prompt, saveTextFile } from "@bay/shell";
 import { create } from "zustand";
 import { boostChanges, boostHost, cleanSelector, exportBoost, importBoost, newBoost, shuffledBoost, type Boost } from "../../lib/boosts";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { newId } from "../../store/model";
 import { setPopover } from "../layout/pageState";
 import { showToast } from "../layout/splitActions";
 import { countScript, pickerScript, previewScript, type PickerMode } from "./pickerScript";
-import { addBoost, addSelector, boostsForHost, createBoost, deleteBoost, setBoostScript, startBoosts, updateBoost, useBoosts } from "./state";
+import { addBoost, addSelector, boostsAvailable, boostsForHost, createBoost, deleteBoost, setBoostScript, startBoosts, updateBoost, useBoosts } from "./state";
 
 // The Boost editor over a tab's page (BoostEditor.tsx), as Arc's and Zen's: one Boost of the page's site at a time,
 // changed as you go, the page the preview. Zap, Focus and the selector picker run in the page (pickerScript.ts).
@@ -42,13 +42,18 @@ function patchSession(tabId: string, patch: Partial<EditorSession> | null) {
 }
 
 /** The tab's page can have a Boost: a website. */
-export const canBoost = (tabId: string) => !!boostHost(useBrowser.getState().tabs[tabId]?.url);
+export const canBoost = (tabId: string) => boostsAvailable() && !!boostHost(useBrowser.getState().tabs[tabId]?.url);
 
 /**
  * Opens the editor over a tab with one of its site's Boosts: `boostId`, else the first one, else a new one (Arc's
  * "New Boost" makes a new one even when there are others: `fresh`).
  */
 export function openBoostEditor(tabId: string, options: { boostId?: string; fresh?: boolean } = {}) {
+  if (!boostsAvailable()) {
+    const tab = useBrowser.getState().tabs[tabId];
+    if (tab) showToast(tab.windowId, "Boosts Are Unavailable", "Boost editing is not supported in this window yet.");
+    return;
+  }
   startBoosts();
   startBoostEditor();
   const tab = useBrowser.getState().tabs[tabId];
@@ -258,6 +263,7 @@ export async function exportBoostFile(id: string) {
 
 /** A Boost from a file (Bay's or Zen's) for the tab's site, opened in the editor. Its script stays off. */
 export async function importBoostFile(tabId: string) {
+  if (!boostsAvailable()) return;
   const tab = useBrowser.getState().tabs[tabId];
   const host = boostHost(tab?.url);
   if (!tab || !host) return;
@@ -323,6 +329,7 @@ export function siteBoosts(tabId: string): Boost[] {
 
 /** The site's Boosts all off, or (if none is on) back on: the command bar's switch. */
 export function toggleSiteBoosts(tabId: string) {
+  if (!boostsAvailable()) return;
   const tab = useBrowser.getState().tabs[tabId];
   const boosts = siteBoosts(tabId);
   if (!tab || !boosts.length) return;

@@ -25,7 +25,7 @@ test("PDF/image/HTML native browser opens create one file tab and reuse it", asy
     await openLocalFile(windowId, id);
     assert.equal(Object.keys(S().tabs).length, count + 1);
     const tab = Object.values(S().tabs).find((t) => t.url.endsWith(filename));
-    assert.equal(tab.title, "Report");
+    assert.equal(tab.customTitle, "Report");
   }
 });
 
@@ -54,7 +54,7 @@ test("nested file opens forward only a root grant plus relative path", async () 
     return { status: "available", browserReadable: true, url: "file:///Users/owner/Work/Photo.png", name: "Photo.png" };
   };
   await openLocalFile(windowId, id, "Work/Photo.png");
-  assert.equal(Object.values(S().tabs).find((t) => t.url.endsWith("Photo.png")).title, "Photo.png");
+  assert.equal(Object.values(S().tabs).find((t) => t.url.endsWith("Photo.png")).customTitle, "Photo.png");
 });
 
 test("late native resolution does not open a file after its pin was removed", async () => {

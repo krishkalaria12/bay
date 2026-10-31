@@ -1,4 +1,5 @@
 import { hasWebKit, type PageEngine } from "@bay/nncore";
+import type { DeepReadonly } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import type { Tab } from "./types";
 
@@ -12,8 +13,9 @@ export const ENGINE_SYMBOLS: Record<PageEngine, string> = { chromium: "globe", w
 export const RECOMMENDED_ENGINE: PageEngine = "chromium";
 export const otherEngine = (engine: PageEngine): PageEngine => (engine === "webkit" ? "chromium" : "webkit");
 
-type SettingsState = Pick<BrowserState, "settings">;
-type EngineState = Pick<BrowserState, "tabs" | "settings">;
+// Read-only, so the coordinator's store and a window's projection (runtime/projection.ts) both answer.
+type SettingsState = DeepReadonly<Pick<BrowserState, "settings">>;
+type EngineState = DeepReadonly<Pick<BrowserState, "tabs" | "settings">>;
 
 /** A website rule's key: scheme, host and port (no subdomains), for web pages only. */
 export function siteOf(url: string | undefined | null): string | null {
@@ -73,7 +75,7 @@ export const recommendedEngineFor = (s: SettingsState, url: string | undefined |
 
 export const engineForUrl = (s: SettingsState, url: string | undefined | null): PageEngine => chosenEngine(s, url) ?? defaultEngine(s);
 
-const fromAdoption = (s: EngineState, t: Tab, depth: number): PageEngine | undefined => {
+const fromAdoption = (s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine | undefined => {
   const id = t.adoptId;
   if (!id) return undefined;
   if (id.startsWith("webkit:")) return "webkit";
@@ -85,7 +87,7 @@ const fromAdoption = (s: EngineState, t: Tab, depth: number): PageEngine | undef
   return undefined;
 };
 
-function engineOf(s: EngineState, t: Tab, depth: number): PageEngine {
+function engineOf(s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine {
   if (!hasWebKit() || chromiumOnly(t.navigation?.url ?? t.url)) return "chromium";
   if (t.engine) return t.engine;
   const adopted = fromAdoption(s, t, depth);
@@ -102,7 +104,7 @@ export function tabEngine(s: EngineState, tabId: string): PageEngine {
 }
 
 /** An address the user typed follows its site's choice, else keeps the page's engine. */
-export function typedNavigationEngine(s: EngineState, tab: Tab, url: string): PageEngine {
+export function typedNavigationEngine(s: EngineState, tab: DeepReadonly<Tab>, url: string): PageEngine {
   if (chromiumOnly(url)) return "chromium";
   const chosen = chosenEngine(s, url);
   if (chosen) return chosen;

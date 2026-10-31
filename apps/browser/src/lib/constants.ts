@@ -4,6 +4,7 @@
 // MARK: App
 
 export const APP_NAME = "Bay";
+export const AUTO_CLEAN_EVERY_MS = 30 * 60 * 1000;
 
 // For codes, keys and paths.
 export const MONO_FONT = "Menlo";

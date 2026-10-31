@@ -3,16 +3,17 @@ import { addHistoryVisits, deleteHistoryUrls, deletePassword, savePassword } fro
 import { assignPositions, SyncNative, type Adapter, type Extraction, type SavedLogin } from "@bay/sync";
 import { bookmarkUuidFor, ensureRoots, isBookmarkUuid } from "../store/bookmarks";
 import { DEFAULT_SPACE_ID, MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
-import { useBrowser } from "../store/browser";
+import { assertSyncGeneration, syncGeneration, syncStore } from "./store";
 import { normalizePinnedFolders, prunePinnedFolders } from "../store/folders";
 import { orderSections, syncGroupOrder } from "../store/groups";
-import { engineProfile, IDLE_LIVE, listIds, makeTab, pinnedFirst, spaceListKey, withList } from "../store/model";
+import { engineProfileFor, IDLE_LIVE, listIds, makeTab, pinnedFirst, spaceListKey, withList } from "../store/model";
 import { removeTabs } from "../store/tabs";
 import type { Settings } from "../store/settings";
 import type { BookmarkNode, HistoryEntry, PinnedFolder, Space, Tab, TabGroup } from "../store/types";
 import { HISTORY_WINDOW_MS, MAX_DEVICE_TABS, PASSWORD_READ_INTERVAL_MS, SAME_VISIT_MS } from "./constants";
 
-const store = () => useBrowser.getState();
+const store = () => syncStore().getState();
+const engineProfile = (spaceId: string) => engineProfileFor(spaceId, store().spaces);
 
 // MARK: App scope: settings, profiles, devices
 
@@ -247,7 +248,7 @@ export function bookmarksAdapter(spaceId: string): Adapter {
         const folder = nodes[parent];
         if (folder?.kind === "folder") nodes[parent] = { ...folder, children: ids.sort(byPosition) };
       }
-      useBrowser.setState({ bookmarks: { ...b, nodes } });
+      syncStore().setState({ bookmarks: { ...b, nodes } });
     },
   };
 }
@@ -299,6 +300,7 @@ export function historyAdapter(spaceId: string): Adapter {
     },
     editedAt: (v) => lastVisitOf(v as HistoryValue),
     apply: async (visible, changed) => {
+      const generation = syncGeneration();
       if (!ready()) return false;
       const since = Date.now() - HISTORY_WINDOW_MS;
       const byUrl = new Map((store().history[spaceId] ?? []).map((e) => [e.url, e]));
@@ -332,8 +334,9 @@ export function historyAdapter(spaceId: string): Adapter {
       if (!updates.size) return;
       const engine = engineProfile(spaceId);
       await Promise.all([addHistoryVisits(engine, add, SAME_VISIT_MS), deleteHistoryUrls(engine, remove)]);
+      assertSyncGeneration(generation);
       // The view as it is now (Chrome's reports may have landed meanwhile), with the records merged in.
-      useBrowser.setState((s) => {
+      syncStore().setState((s) => {
         const current = new Map((s.history[spaceId] ?? []).map((e) => [e.url, e]));
         for (const [url, update] of updates) {
           const now = current.get(url);
@@ -586,7 +589,7 @@ export function pinnedAdapter(spaceId: string): Adapter {
       const list = { key, tabIds: orderSections(pinnedFirst(ids, tabs), tabs, groups, pinnedFolders) };
       groups = syncGroupOrder(groups, list);
       const live = { ...s.live, ...Object.fromEntries(added.map((id) => [id, s.live[id] ?? IDLE_LIVE])) };
-      useBrowser.setState(prunePinnedFolders(withList({ ...s, tabs, groups, live, pinnedFolders }, list)));
+      syncStore().setState(prunePinnedFolders(withList({ ...s, tabs, groups, live, pinnedFolders }, list)));
     },
   };
 }
@@ -607,7 +610,9 @@ export function passwordsAdapter(
   const profile = () => engineProfile(spaceId);
   const keyOf = (origin: string, username: string) => `pw:${origin}\n${username}`;
   const read = async () => {
+    const generation = syncGeneration();
     const logins = await readLogins(profile());
+    assertSyncGeneration(generation);
     if (!logins) return null;
     const out = new Map<string, PasswordValue & { c: number }>();
     for (const l of logins) {
@@ -629,10 +634,12 @@ export function passwordsAdapter(
     },
     editedAt: (v) => created.get(keyOf((v as PasswordValue).o, (v as PasswordValue).u)) || undefined,
     apply: async (visible, changed, base) => {
+      const generation = syncGeneration();
       const local = await read();
       if (!local) return false;
       let ok = true;
       for (const key of changed) {
+        assertSyncGeneration(generation);
         const v = visible.get(key) as PasswordValue | undefined;
         const have = local.get(key);
         const known = base(key) as PasswordValue | undefined;
@@ -641,6 +648,7 @@ export function passwordsAdapter(
         if (v) {
           if (have?.p === v.p) continue;
           if (have) ok = (await deletePassword(profile(), origin, username)) && ok;
+          assertSyncGeneration(generation);
           ok = (await savePassword(profile(), v.o, v.u, v.p)) && ok;
         } else if (have) {
           ok = (await deletePassword(profile(), origin, username)) && ok;

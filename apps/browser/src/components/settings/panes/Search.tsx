@@ -1,9 +1,12 @@
+import { View } from "@bay/platform";
 import { engineHost, POPULAR_SITE_SEARCHES, validateEngine, type EngineInput, type SearchEngine } from "@bay/core";
 import { Symbol } from "@bay/shell";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings, setSearchEngine, addCustomEngine, updateCustomEngine, removeCustomEngine } from "../../../runtime/settingsActions";
+import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { controllingSearchExtension, defaultSearchEngine, searchEngines } from "../../../store/settings";
 import { setEnabled } from "../../extensions/state";
 import { Favicon, IconButton } from "../../primitives";
@@ -13,7 +16,7 @@ import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { openSettings } from "../windows";
 
 export function SearchPane() {
-  const settings = useBrowser((s) => s.settings);
+  const settings = useBrowserRead((s) => s.settings);
   const colors = useFormColors();
   const engines = searchEngines(settings);
   const builtIn = engines.filter((e) => !e.custom && !e.extension);
@@ -47,7 +50,7 @@ export function SearchPane() {
               { value: "arc", title: "Arc-style" },
               { value: "duckduckgo", title: "DuckDuckGo-style" },
             ]}
-            onChange={(v) => useBrowser.getState().updateSettings({ searchShortcutMode: v })}
+            onChange={(v) => reportBrowserCommand(updateSettings({ searchShortcutMode: v }))}
             minWidth={160}
           />
         </Row>
@@ -124,7 +127,7 @@ export function SearchPane() {
           title={SETTINGS.searchSuggestions.title}
           description="Sends what you type to your search engine to suggest searches."
         >
-          <Toggle value={settings.searchSuggestions} onChange={(v) => useBrowser.getState().updateSettings({ searchSuggestions: v })} />
+          <Toggle value={settings.searchSuggestions} onChange={(v) => reportBrowserCommand(updateSettings({ searchSuggestions: v }))} />
         </Row>
       </Group>
       <SectionHeader title="Command bar" />
@@ -134,7 +137,7 @@ export function SearchPane() {
           title={SETTINGS.calculatorEnabled.title}
           description="Show answers for math, unit conversions and currency conversions. Currency rates require an internet connection."
         >
-          <Toggle value={settings.calculatorEnabled} onChange={(v) => useBrowser.getState().updateSettings({ calculatorEnabled: v })} />
+          <Toggle value={settings.calculatorEnabled} onChange={(v) => reportBrowserCommand(updateSettings({ calculatorEnabled: v }))} />
         </Row>
       </Group>
     </View>
@@ -144,7 +147,7 @@ export function SearchPane() {
 function EngineRow({ engine, selected, locked, editable }: { engine: SearchEngine; selected: boolean; locked: boolean; editable?: boolean }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const duckduckgo = useBrowser((s) => s.settings.searchShortcutMode === "duckduckgo");
+  const duckduckgo = useBrowserRead((s) => s.settings.searchShortcutMode === "duckduckgo");
   const shortcutError = engine.custom ? validateEngine(engine, []) : null;
   const description = engine.extension
     ? `${engine.keyword ? `${engine.keyword} · ` : ""}Added by ${engine.extension.name || "an extension"}`
@@ -160,7 +163,7 @@ function EngineRow({ engine, selected, locked, editable }: { engine: SearchEngin
           <Text style={{ fontSize: 12, color: theme.textSecondary }}>Default</Text>
         </View>
       ) : (
-        <Button title="Make Default" disabled={locked} onPress={() => useBrowser.getState().setSearchEngine(engine.id)} style={{ minWidth: 92 }} />
+        <Button title="Make Default" disabled={locked} onPress={() => reportBrowserCommand(setSearchEngine(engine.id))} style={{ minWidth: 92 }} />
       )}
     </Row>
   );
@@ -173,17 +176,26 @@ function EngineSheet({ engine, preset }: { engine?: SearchEngine; preset?: Engin
   const [keyword, setKeyword] = useState(initial?.keyword ?? "");
   const [url, setUrl] = useState(initial?.url ?? "");
   const [error, setError] = useState<string | null>(null);
-  const save = () => {
-    const s = useBrowser.getState();
+  const save = async () => {
     const input = { name, keyword, url };
-    let result: string | null;
-    if (engine) result = s.updateCustomEngine(engine.id, input);
-    else {
-      const added = s.addCustomEngine(input);
-      result = "error" in added ? added.error : null;
+    setError(null);
+    try {
+      if (engine) await updateCustomEngine(engine.id, input);
+      else await addCustomEngine(input);
+      closeSettingsSheet();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Couldn't save the search engine.");
     }
-    if (result) return setError(result);
-    closeSettingsSheet();
+  };
+  const remove = async () => {
+    if (!engine) return;
+    setError(null);
+    try {
+      await removeCustomEngine(engine.id);
+      closeSettingsSheet();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Couldn't delete the search engine.");
+    }
   };
   const field = (label: string, value: string, set: (v: string) => void, placeholder: string) => (
     <View style={{ marginTop: 12 }}>
@@ -204,16 +216,7 @@ function EngineSheet({ engine, preset }: { engine?: SearchEngine; preset?: Engin
       {field("URL with %s in place of the query", url, setUrl, "https://en.wikipedia.org/w/index.php?search=%s")}
       {error && <Text style={{ fontSize: 12, marginTop: 10, color: "#FF453A" }}>{error}</Text>}
       <View style={{ flexDirection: "row", gap: 8, marginTop: 18 }}>
-        {engine && (
-          <Button
-            title="Delete"
-            kind="destructive"
-            onPress={() => {
-              useBrowser.getState().removeCustomEngine(engine.id);
-              closeSettingsSheet();
-            }}
-          />
-        )}
+        {engine && <Button title="Delete" kind="destructive" onPress={() => void remove()} />}
         <View style={{ flex: 1 }} />
         <Button title="Cancel" onPress={closeSettingsSheet} />
         <Button title={engine ? "Save" : "Add"} kind="primary" onPress={save} />

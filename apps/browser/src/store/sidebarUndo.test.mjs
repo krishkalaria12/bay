@@ -273,3 +273,83 @@ test("live-folder names and icons respect explicit window ownership", async () =
   S().undoSidebarEdit(w);
   assert.equal(live().folders.lf.icon, null);
 });
+
+test("live-folder undo stays with the authority and its snapshot contains only JSON data", async () => {
+  const { createBrowserStore, useBrowser } = await import("./browser.ts");
+  const { createBrowserProjector } = await import("../runtime/projection.ts");
+  const { bindLiveBrowser } = await import("../live/engine.ts");
+  const { setLive, updateFolder, useLive } = await import("../live/store.ts");
+  const owner = createBrowserStore();
+  const windowId = owner.getState().createWindow();
+  const legacy = useBrowser.getState();
+  const previous = useLive.getState();
+  const release = bindLiveBrowser(owner);
+  try {
+    setLive({
+      folders: {
+        lf: { id: "lf", name: "Before", icon: null, spaceId: "default", kind: "documents", sources: [], filters: {}, createdAt: 0, collapsed: false },
+      },
+    });
+    updateFolder("lf", { name: "After" }, windowId);
+    const snapshot = createBrowserProjector()(owner.getState());
+    assert.equal(JSON.parse(JSON.stringify(snapshot)).sidebarUndo[windowId].length, 1);
+    assert.strictEqual(useBrowser.getState(), legacy);
+    owner.getState().undoSidebarEdit(windowId);
+    assert.equal(useLive.getState().folders.lf.name, "Before");
+  } finally {
+    release();
+    useLive.setState(previous, true);
+  }
+});
+
+test("live-folder undo still works after the authority recovers from JSON", async () => {
+  const { createBrowserStore } = await import("./browser.ts");
+  const { bindLiveBrowser } = await import("../live/engine.ts");
+  const { setLive, updateFolder, useLive } = await import("../live/store.ts");
+  const owner = createBrowserStore();
+  const windowId = owner.getState().createWindow();
+  const previous = useLive.getState();
+  const release = bindLiveBrowser(owner);
+  try {
+    setLive({
+      folders: {
+        lf: { id: "lf", name: "Before", icon: "★", spaceId: "default", kind: "documents", sources: [], filters: {}, createdAt: 0, collapsed: false },
+      },
+    });
+    updateFolder("lf", { name: "After", icon: "☆" }, windowId);
+    owner.setState({ sidebarUndo: JSON.parse(JSON.stringify(owner.getState().sidebarUndo)) });
+    // A later rename survives: undo restores only what that edit changed.
+    setLive({ folders: { lf: { ...useLive.getState().folders.lf, name: "Renamed again" } } });
+    assert.equal(owner.getState().undoSidebarEdit(windowId), true);
+    assert.deepEqual([useLive.getState().folders.lf.name, useLive.getState().folders.lf.icon], ["Renamed again", "★"]);
+    assert.equal(owner.getState().sidebarUndo[windowId].length, 0);
+  } finally {
+    release();
+    useLive.setState(previous, true);
+  }
+});
+
+for (const kind of ["automatic", "action"]) {
+  test(`${kind} undo entries retain distinct serializable transaction IDs at the stack limit`, async () => {
+    const { createBrowserStore } = await import("./browser.ts");
+    const browser = createBrowserStore();
+    const windowId = browser.getState().createWindow({ url: "https://example.test" });
+    const tabId = viewTabIds(browser.getState(), windowId)[0];
+    const seen = new Set();
+    let previousSummary;
+    for (let index = 0; index < 55; index++) {
+      if (kind === "automatic") browser.getState().updateTab(tabId, { customTitle: `Edit ${index}` });
+      else browser.getState().pushSidebarUndo(windowId, { kind: "test", data: { index } });
+      const stack = JSON.parse(JSON.stringify(browser.getState().sidebarUndo[windowId]));
+      assert.equal(stack.length, Math.min(index + 1, 50));
+      const id = stack.at(-1).id;
+      assert.equal(typeof id, "string");
+      assert.ok(id.startsWith("undo-"));
+      assert.ok(!seen.has(id));
+      seen.add(id);
+      const summary = JSON.stringify(stack.map(({ id }) => ({ id, changes: [], closedIds: [], cleanedIds: [], groupIds: [] })));
+      assert.notEqual(summary, previousSummary);
+      previousSummary = summary;
+    }
+  });
+}

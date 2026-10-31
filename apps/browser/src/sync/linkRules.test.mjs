@@ -4,6 +4,8 @@ import { Clock, emptyScope, syncScope } from "@bay/sync";
 import { useBrowser } from "../store/browser.ts";
 import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules.ts";
 
+const { configureSyncStore } = await import("./store.ts");
+configureSyncStore(useBrowser);
 const S = () => useBrowser.getState();
 const rule = (id, destination) => ({ id, pattern: `${id}.example/*`, destination });
 const extract = (adapter) => adapter.extract(() => undefined);

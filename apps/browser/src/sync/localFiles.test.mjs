@@ -3,6 +3,9 @@ import { test } from "node:test";
 import { Clock, emptyScope, syncScope } from "@bay/sync";
 import { useBrowser } from "../store/browser.ts";
 import { localFilesAdapter } from "./localFiles.ts";
+import { configureSyncStore } from "./store.ts";
+
+configureSyncStore(useBrowser);
 
 const S = () => useBrowser.getState();
 const pin = (id, order = 0, extra = {}) => ({
@@ -137,4 +140,22 @@ test("two Macs converge on file paths, order, rename and deletion without transf
   await converge();
   assert.equal(b.browser.localFiles.folder, undefined);
   assert.equal([...files.values()].join("").includes("bookmark"), false);
+});
+
+test("file sync mutates only its configured coordinator store", async () => {
+  const { createBrowserStore } = await import("../store/browser.ts");
+  const owner = createBrowserStore();
+  const legacy = useBrowser.getState();
+  const release = configureSyncStore(owner);
+  try {
+    localFilesAdapter("default").apply(
+      new Map([["file:owner", { p: "/Documents/owner.pdf", n: "Owner", k: "file", a: 100, pos: "V" }]]),
+      new Set(["file:owner"]),
+    );
+    assert.equal(owner.getState().localFiles.owner.name, "Owner");
+    assert.strictEqual(useBrowser.getState(), legacy);
+  } finally {
+    release();
+    configureSyncStore(useBrowser);
+  }
 });

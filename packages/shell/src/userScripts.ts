@@ -1,4 +1,4 @@
-import { requireOptionalNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireOptionalNativeModule, type EventSubscription } from "@bay/platform/native";
 
 export type UserScriptsFolder = { token?: string } & (
   | { state: "empty" | "busy" | "pending"; generation?: number }

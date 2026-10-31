@@ -1,6 +1,6 @@
 import { clearBrowsingData } from "@bay/nncore";
 import { confirm } from "@bay/shell";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile, isIncognitoSpace, plural } from "../../store/model";
 import { webviews } from "../../lib/webviews";
 import { showToast } from "../layout/toasts";

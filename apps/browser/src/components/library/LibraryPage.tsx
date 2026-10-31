@@ -1,7 +1,9 @@
+import { capabilities, Pressable, ScrollView, View } from "@bay/platform";
 import {
   ContextMenuArea,
   copyCaptureImage,
   fileExists,
+  libraryImageUri,
   MouseArea,
   openFile,
   pickFiles,
@@ -12,10 +14,15 @@ import {
 } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
 import { LegendList } from "@legendapp/list/react-native";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
+import { useFileExists } from "../useFileExists";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { activate, newTab, closeTab } from "../../runtime/tabActions";
+import { switchSpace, moveTabToSpace, restoreClosed } from "../../runtime/windowActions";
+import { restoreCleaned } from "../../runtime/organizeActions";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { isIncognitoSpace, spaceTabIds } from "../../store/model";
 import type { Tab, TabSnapshot } from "../../store/types";
 import { openUrl } from "../bookmarks/actions";
@@ -27,7 +34,8 @@ import { Button, SearchField, useFormColors } from "../settings/controls";
 import { tabTitle } from "../sidebar/actions";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
 import { chooseEasel, easelMenu, libraryWindow, newEasel, openEasel } from "./actions";
-import type { EaselDocument, LibraryMedia } from "./model";
+import { fileNameOf, type EaselDocument, type LibraryMedia } from "./model";
+import { thisComputer } from "./words";
 import { removeLibraryMedia, saveLibraryMedia, startLibrary, useLibrary } from "./state";
 import type { Boost } from "../../lib/boosts";
 import { Toggle } from "../layout/controls";
@@ -47,8 +55,6 @@ function sectionOf(value?: string): Section {
   if (value === "archived-tabs" || value === "archived") return "archive";
   return SECTIONS.find((section) => section.id === value)?.id ?? "media";
 }
-const fileUri = (path: string) => `file://${path.split("/").map(encodeURIComponent).join("/")}`;
-
 export function LibraryPage({ tabId, initialSection }: { tabId: string; initialSection?: string }) {
   const window = useBrowser((s) => s.windows[s.tabs[tabId]?.windowId ?? ""]);
   if (!window || window.incognito || isIncognitoSpace(window.spaceId)) {
@@ -57,7 +63,7 @@ export function LibraryPage({ tabId, initialSection }: { tabId: string; initialS
         <LibraryTitle />
         <EmptyState
           title="Library is available in regular windows"
-          subtitle="Media and Easels are saved on this Mac. Open a regular window to use your Library."
+          subtitle={`Media and Easels are saved on ${thisComputer}. Open a regular window to use your Library.`}
         />
       </View>
     );
@@ -97,7 +103,9 @@ function PublicLibrary({ tabId, windowId, initialSection }: { tabId: string; win
       setActionError(`Couldn't import images: ${String(error)}`);
     }
     if (failed)
-      setActionError(`${failed === 1 ? "One file couldn't" : `${failed} files couldn't`} be imported. Choose image files that are available on this Mac.`);
+      setActionError(
+        `${failed === 1 ? "One file couldn't" : `${failed} files couldn't`} be imported. Choose image files that are available on ${thisComputer}.`,
+      );
     setImporting(false);
   }
 
@@ -170,7 +178,7 @@ async function importMediaFiles(windowId: string) {
     if (!libraryWindow(windowId)) break;
     try {
       const path = file.startsWith("file://") ? decodeURIComponent(new URL(file).pathname) : file;
-      const media = await saveLibraryMedia({ path, width: 1, height: 1 }, path.split("/").pop() || "Image");
+      const media = await saveLibraryMedia({ path, width: 1, height: 1 }, fileNameOf(path) || "Image");
       if (!media) failed++;
     } catch {
       failed++;
@@ -251,7 +259,8 @@ function MediaCard({ media, windowId, width }: { media: LibraryMedia; windowId: 
   const theme = useTheme();
   const colors = useFormColors();
   const [broken, setBroken] = useState(false);
-  const available = !broken && fileExists(media.path);
+  const exists = useFileExists(media.path);
+  const available = !broken && exists === true;
   return (
     <View style={{ width, gap: 8 }}>
       <MouseArea path={available ? media.path : null}>
@@ -273,7 +282,7 @@ function MediaCard({ media, windowId, width }: { media: LibraryMedia; windowId: 
           >
             {available ? (
               <Image
-                source={{ uri: fileUri(media.path) }}
+                source={{ uri: libraryImageUri(media.path) }}
                 resizeMode="contain"
                 onError={() => setBroken(true)}
                 accessibilityIgnoresInvertColors
@@ -314,12 +323,12 @@ async function openMediaFile(media: LibraryMedia, windowId: string) {
 
 async function mediaMenu(media: LibraryMedia, windowId: string) {
   if (!libraryWindow(windowId)) return;
-  const exists = fileExists(media.path);
   try {
+    const exists = await fileExists(media.path);
     const choice = await showMenu([
       { id: "copy", title: "Copy Image", enabled: exists },
       { id: "save", title: "Save to Downloads", enabled: exists },
-      { id: "share", title: "Share…", enabled: exists },
+      ...(capabilities.shareSheet ? [{ id: "share", title: "Share…", enabled: exists }] : []),
       { id: "source", title: "Open Source", enabled: !!media.source },
       { id: "easel", title: "Add to Easel…", enabled: exists && !useLibrary.getState().error },
       { separator: true },
@@ -441,8 +450,9 @@ function EaselCard({ easel, windowId, width }: { easel: EaselDocument; windowId:
 
 function EaselImage({ path }: { path: string }) {
   const [broken, setBroken] = useState(false);
-  if (broken || !fileExists(path)) return <Text style={{ fontSize: 9, color: "#777777" }}>Image unavailable</Text>;
-  return <Image source={{ uri: fileUri(path) }} resizeMode="contain" onError={() => setBroken(true)} style={{ width: "100%", height: "100%" }} />;
+  const exists = useFileExists(path);
+  if (broken || exists !== true) return <Text style={{ fontSize: 9, color: "#777777" }}>Image unavailable</Text>;
+  return <Image source={{ uri: libraryImageUri(path) }} resizeMode="contain" onError={() => setBroken(true)} style={{ width: "100%", height: "100%" }} />;
 }
 
 function SpacesSection({ windowId, query }: { windowId: string; query: string }) {
@@ -486,7 +496,7 @@ function SpacesSection({ windowId, query }: { windowId: string; query: string })
                 {tabs.length} {tabs.length === 1 ? "tab" : "tabs"}
               </Text>
             </View>
-            <Button title="Open Space" onPress={() => useBrowser.getState().switchSpace(windowId, space.id)} />
+            <Button title="Open Space" onPress={() => reportBrowserCommand(switchSpace(windowId, space.id))} />
           </View>
           {shownTabs.map((tab) => (
             <ContextMenuArea key={tab.id} onContextMenu={() => void libraryTabMenu(windowId, tab)}>
@@ -495,9 +505,7 @@ function SpacesSection({ windowId, query }: { windowId: string; query: string })
                 detail={hostLabel(tab.url)}
                 icon={<Favicon url={tab.url} favicon={tab.favicon} spaceId={tab.spaceId} />}
                 onPress={() => {
-                  const s = useBrowser.getState();
-                  s.switchSpace(windowId, space.id);
-                  useBrowser.getState().activate(tab.id, windowId);
+                  reportBrowserCommand(switchSpace(windowId, space.id).then(() => activate(tab.id, windowId)));
                 }}
                 accessory={<IconButton icon="ellipsis" box={24} size={12} tooltip="Tab actions" onPress={() => void libraryTabMenu(windowId, tab)} />}
               />
@@ -595,8 +603,7 @@ function boostSummary(b: Boost, script: boolean): string {
 
 function editBoostOnSite(windowId: string, b: Boost) {
   if (!libraryWindow(windowId)) return;
-  const tabId = useBrowser.getState().newTab(windowId, { url: `https://${b.host}/` });
-  openBoostEditor(tabId, { boostId: b.id });
+  reportBrowserCommand(newTab(windowId, { url: `https://${b.host}/` }).then((tabId) => openBoostEditor(tabId, { boostId: b.id })));
 }
 
 async function libraryBoostMenu(windowId: string, b: Boost) {
@@ -635,11 +642,11 @@ async function libraryTabMenu(windowId: string, tab: Tab) {
   const live = current.tabs[tab.id];
   if (!live || isIncognitoSpace(live.spaceId)) return;
   if (choice === "open") {
-    current.switchSpace(windowId, live.spaceId);
-    useBrowser.getState().activate(tab.id, windowId);
+    await switchSpace(windowId, live.spaceId);
+    await activate(tab.id, windowId);
   }
-  if (choice.startsWith("space:")) current.moveTabToSpace(tab.id, choice.slice(6));
-  if (choice === "close") current.closeTab(tab.id);
+  if (choice.startsWith("space:")) await moveTabToSpace(tab.id, choice.slice(6));
+  if (choice === "close") await closeTab(tab.id);
 }
 
 type ArchiveEntry = { id: string; title: string; detail: string; at: number; icon: string; cleaned: boolean; small?: boolean; tab?: TabSnapshot };
@@ -711,9 +718,7 @@ function ArchiveSection({ windowId, query }: { windowId: string; query: string }
       </View>
     ) : null;
   const restore = (entry: ArchiveEntry) => {
-    const s = useBrowser.getState();
-    if (entry.cleaned) s.restoreCleaned(entry.id, windowId);
-    else s.restoreClosed(entry.id, windowId);
+    reportBrowserCommand(entry.cleaned ? restoreCleaned(windowId, entry.id) : restoreClosed(entry.id, windowId));
   };
   if (!shown.length) {
     let empty = { title: "No archived tabs", subtitle: "Closed tabs and tabs cleaned up from your spaces appear here." };

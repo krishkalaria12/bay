@@ -1,3 +1,4 @@
+import { Pressable, View } from "@bay/platform";
 import {
   localFiles,
   LocalFilesArea,
@@ -11,11 +12,12 @@ import {
   type LocalFileListing,
 } from "@bay/shell";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { closeLocalFileTab, localFileStatusText, openLocalFile, peekLocalFile, reconnectLocalFile } from "../../lib/localFiles";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePageSpaceId } from "../../store/hooks";
 import { localFilePins } from "../../store/localFiles";
 import { spaceFolded } from "../../store/model";
@@ -128,7 +130,7 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
     const current = useBrowser.getState().localFiles[pin.id];
     if (!current) return;
     const name = await prompt({ title: "Rename Pin", value: current.name, confirmTitle: "Rename", windowId });
-    if (name?.trim()) useBrowser.getState().renameLocalFile(pin.id, name);
+    if (name?.trim()) await dispatchBrowserCommand({ method: "renameLocalFile", id: pin.id, name });
   };
   const peek = (relativePath = "") => {
     void peekLocalFile(windowId, pin.id, relativePath).then(
@@ -156,7 +158,7 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
     ]);
     const s = useBrowser.getState();
     if (!s.localFiles[pin.id]) return;
-    if (choice === "remove") s.removeLocalFile(pin.id);
+    if (choice === "remove") await dispatchBrowserCommand({ method: "removeLocalFile", id: pin.id });
     else if (choice === "open") void open();
     else if (choice === "reconnect") void reconnect();
     else if (choice === "refresh") setRetry((v) => v + 1);
@@ -164,8 +166,9 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
     else if (choice === "up" || choice === "down") {
       const pins = localFilePins(s, pin.spaceId);
       const index = pins.findIndex((p) => p.id === pin.id);
-      if (choice === "up" && index > 0) s.moveLocalFile(pin.id, pins[index - 1]!.id);
-      if (choice === "down" && index < pins.length - 1) s.moveLocalFile(pin.id, pins[index + 2]?.id ?? null);
+      if (choice === "up" && index > 0) await dispatchBrowserCommand({ method: "moveLocalFile", id: pin.id, beforeId: pins[index - 1]!.id });
+      if (choice === "down" && index < pins.length - 1)
+        await dispatchBrowserCommand({ method: "moveLocalFile", id: pin.id, beforeId: pins[index + 2]?.id ?? null });
     }
   };
   return (
@@ -185,9 +188,9 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
             if (!access || available) peek();
             else void reconnect();
           },
-          close: () => useBrowser.getState().removeLocalFile(pin.id),
+          close: () => reportBrowserCommand(dispatchBrowserCommand({ method: "removeLocalFile", id: pin.id })),
           rename: () => void rename(),
-          expand: (collapsed) => useBrowser.getState().setLocalFileExpanded(pin.id, !collapsed),
+          expand: (collapsed) => reportBrowserCommand(dispatchBrowserCommand({ method: "setLocalFileExpanded", id: pin.id, expanded: !collapsed })),
         }}
         rootPath={pin.path}
         name={pin.name}
@@ -198,7 +201,7 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
         onPress={() => {
           if (!access) return;
           if (!available) void reconnect();
-          else if (folder) useBrowser.getState().setLocalFileExpanded(pin.id, !pin.expanded);
+          else if (folder) reportBrowserCommand(dispatchBrowserCommand({ method: "setLocalFileExpanded", id: pin.id, expanded: !pin.expanded }));
           else void open();
         }}
         onContextMenu={() => void menu()}

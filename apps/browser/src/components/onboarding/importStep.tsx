@@ -1,8 +1,9 @@
-import type { BrowserSource } from "@bay/import";
+import { listInstalledBrowsers, type BrowserSource } from "@bay/import";
+import { isMac, Pressable, View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { fileIcon, hapticTick, Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Image, PanResponder, Pressable, StyleSheet, Text, View, type ImageSourcePropType } from "react-native";
+import { ActivityIndicator, Image, PanResponder, StyleSheet, Text, type ImageSourcePropType } from "react-native";
 import Animated, {
   Easing,
   Extrapolation,
@@ -16,7 +17,7 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { APP_ICON } from "../../lib/assets";
 import { APP_NAME } from "../../lib/constants";
 import { reduceMotion } from "../../lib/reduceMotion";
@@ -134,7 +135,19 @@ function canDrop(flow: ImportFlow) {
 
 export function ImportStep() {
   const flow = useImportFlow();
-  const [found] = useState<Leaving[]>(detectBrowsers);
+  const [found, setFound] = useState<Leaving[]>(() => (isMac ? detectBrowsers() : []));
+  useEffect(() => {
+    if (isMac) return;
+    let active = true;
+    void listInstalledBrowsers()
+      .then((browsers) => {
+        if (active) setFound(browsers);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const [icons, setIcons] = useState<Record<string, string>>({});
   const [chosenId, setChosenId] = useState<string | null>(null);
   // Dropped before the scan was done: the id of the browser that waits for it.

@@ -1,0 +1,332 @@
+diff --git a/chrome/browser/ui/views/frame/browser_window_factory.cc b/chrome/browser/ui/views/frame/browser_window_factory.cc
+--- a/chrome/browser/ui/views/frame/browser_window_factory.cc
++++ b/chrome/browser/ui/views/frame/browser_window_factory.cc
+@@ -5,6 +5,7 @@
+ #include <memory>
+ 
+ #include "build/build_config.h"
++#include "chrome/browser/bay/webui/bay_webui.h"
+ #include "chrome/browser/ui/browser_window_deleter.h"
+ #include "chrome/browser/ui/fullscreen/browser_window_fullscreen_controller.h"
+ #include "chrome/browser/ui/views/frame/browser_native_widget_factory.h"
+@@ -33,7 +34,7 @@
+   if (webui_browser::IsWebUIBrowserEnabled() &&
+       browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL) {
+     return std::unique_ptr<BrowserWindow, BrowserWindowDeleter>(
+-        new WebUIBrowserWindow(browser));
++        new bay::BayWebUIBrowserWindow(browser));
+   }
+ 
+ #if defined(USE_AURA)
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.h b/chrome/browser/ui/webui_browser/webui_browser_window.h
+--- a/chrome/browser/ui/webui_browser/webui_browser_window.h
++++ b/chrome/browser/ui/webui_browser/webui_browser_window.h
+@@ -48,6 +48,7 @@
+                            public webui_toolbar::IconTable::Delegate {
+  public:
+   explicit WebUIBrowserWindow(BrowserWindowInterface* browser);
++  WebUIBrowserWindow(BrowserWindowInterface* browser, const GURL& initial_url);
+   ~WebUIBrowserWindow() override;
+ 
+   // Returns the containing browser window for a WebContents that hosts
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.cc b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+--- a/chrome/browser/ui/webui_browser/webui_browser_window.cc
++++ b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+@@ -135,6 +135,10 @@
+ };
+ 
+ WebUIBrowserWindow::WebUIBrowserWindow(BrowserWindowInterface* browser)
++    : WebUIBrowserWindow(browser, GURL(chrome::kChromeUIWebuiBrowserURL)) {}
++
++WebUIBrowserWindow::WebUIBrowserWindow(BrowserWindowInterface* browser,
++                                       const GURL& initial_url)
+     : browser_(browser) {
+   // GuestContents is not approved for use in production. Restrict its
+   // proxy content feature kAttachUnownedInnerWebContents to development,
+@@ -192,7 +196,7 @@
+       std::make_unique<ui::ScopedUnownedUserData<ExtensionsContainer>>(
+           browser_->GetUnownedUserDataHost(), *extensions_container_);
+ 
+-  web_view->LoadInitialURL(GURL(chrome::kChromeUIWebuiBrowserURL));
++  web_view->LoadInitialURL(initial_url);
+   web_view_ = widget_->SetClientContentsView(std::move(web_view));
+   // Set the ColorProviderSource after attaching to the WebView otherwise
+   // attaching overwrites it.
+diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+--- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
++++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+@@ -87,6 +87,7 @@
+ #include "chrome/browser/ui/tabs/tab_group_home/tab_group_home_ui.h"
+ #include "chrome/browser/ui/webui/webui_toolbar/webui_toolbar_ui.h"
+ #include "chrome/browser/ui/webui_browser/webui_browser_ui.h"
++#include "chrome/browser/bay/webui/bay_webui.h"
+ #if !BUILDFLAG(IS_CHROMEOS)
+ #include "chrome/browser/ui/webui/app_home/app_home_ui.h"
+ #endif  // !BUILDFLAG(IS_CHROMEOS)
+@@ -399,6 +400,7 @@
+   map.AddWebUIConfig(std::make_unique<WebNNInternalsUIConfig>());
+   map.AddWebUIConfig(std::make_unique<IndigoInternalsUIConfig>());
+   map.AddWebUIConfig(std::make_unique<WebUIBrowserUIConfig>());
++  map.AddWebUIConfig(std::make_unique<bay::BayWebUIConfig>());
+   map.AddWebUIConfig(std::make_unique<WebuiGalleryUIConfig>());
+   map.AddWebUIConfig(std::make_unique<WebUIJsErrorUIConfig>());
+   map.AddWebUIConfig(std::make_unique<WebUIToolbarConfig>());
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_ui.h b/chrome/browser/ui/webui_browser/webui_browser_ui.h
+--- a/chrome/browser/ui/webui_browser/webui_browser_ui.h
++++ b/chrome/browser/ui/webui_browser/webui_browser_ui.h
+@@ -5,6 +5,8 @@
+ #ifndef CHROME_BROWSER_UI_WEBUI_BROWSER_WEBUI_BROWSER_UI_H_
+ #define CHROME_BROWSER_UI_WEBUI_BROWSER_WEBUI_BROWSER_UI_H_
+ 
++#include "chrome/browser/bay/webui/native_host.mojom-forward.h"
++
+ #include <memory>
+ 
+ #include "chrome/browser/ui/side_panel/side_panel_entry_key.h"
+@@ -65,6 +67,9 @@
+   explicit WebUIBrowserUI(content::WebUI* web_ui);
+   ~WebUIBrowserUI() override;
+ 
++  void BindInterface(mojo::PendingReceiver<bay::mojom::NativeHost> receiver);
++  void BindInterface(mojo::PendingReceiver<bay::mojom::AppRuntime> receiver);
++
+   void BindInterface(
+       mojo::PendingReceiver<webui_browser::mojom::PageHandlerFactory> receiver);
+   void BindInterface(
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_ui.cc b/chrome/browser/ui/webui_browser/webui_browser_ui.cc
+--- a/chrome/browser/ui/webui_browser/webui_browser_ui.cc
++++ b/chrome/browser/ui/webui_browser/webui_browser_ui.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/webui_browser/webui_browser_ui.h"
++#include "chrome/browser/bay/webui/bay_webui.h"
+ 
+ #include "base/notimplemented.h"
+ #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+@@ -98,10 +99,19 @@
+                               /*enable_chrome_histograms=*/true) {
+   WebUIBrowserWindow* webui_browser_window =
+       WebUIBrowserWindow::FromWebShellWebContents(web_ui->GetWebContents());
++  // Ordinary tabs cannot acquire a Bay window association or native host.
++  if (!webui_browser_window) {
++    bay::ConfigureBayWebUI(web_ui);
++    return;
++  }
+   Profile* profile = Profile::FromWebUI(web_ui);
+   browser_ = webui_browser_window->browser();
+ 
+   webui::SetBrowserWindowInterface(web_ui->GetWebContents(), browser_);
++
++  if (bay::ConfigureBayWebUI(web_ui)) {
++    return;
++  }
+ 
+   // Set up the chrome://webui-browser source.
+   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+@@ -170,6 +180,16 @@
+ WebUIBrowserUI::~WebUIBrowserUI() = default;
+ 
+ void WebUIBrowserUI::BindInterface(
++    mojo::PendingReceiver<bay::mojom::AppRuntime> receiver) {
++  bay::BindAppRuntime(web_ui(), std::move(receiver));
++}
++
++void WebUIBrowserUI::BindInterface(
++    mojo::PendingReceiver<bay::mojom::NativeHost> receiver) {
++  bay::BindNativeHost(web_ui(), std::move(receiver));
++}
++
++void WebUIBrowserUI::BindInterface(
+     mojo::PendingReceiver<webui_browser::mojom::PageHandlerFactory> receiver) {
+   page_factory_receiver_.reset();
+   page_factory_receiver_.Bind(std::move(receiver));
+diff --git a/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc b/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc
+--- a/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc
++++ b/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc
+@@ -94,6 +94,7 @@
+ #include "chrome/browser/ui/webui/webui_toolbar/webui_toolbar_ui.h"
+ #include "chrome/browser/ui/webui_browser/webui_browser.h"
+ #include "chrome/browser/ui/webui_browser/webui_browser_ui.h"
++#include "chrome/browser/bay/webui/native_host.mojom.h"
+ #include "chrome/common/chrome_features.h"
+ #include "components/autofill/core/browser/ml_model/logging/autofill_ml_internals.mojom.h"
+ #include "components/browser_apis/bookmarks/bookmarks_api.mojom.h"
+@@ -546,6 +547,10 @@
+       on_device_internals::OnDeviceInternalsUI>(map);
+   RegisterWebUIControllerInterfaceBinder<
+       guest_contents::mojom::GuestContentsHost, WebUIBrowserUI>(map);
++  RegisterWebUIControllerInterfaceBinder<bay::mojom::AppRuntime,
++                                         WebUIBrowserUI>(map);
++  RegisterWebUIControllerInterfaceBinder<bay::mojom::NativeHost,
++                                         WebUIBrowserUI>(map);
+ 
+   const bool is_contextual_tasks_enabled =
+       contextual_tasks::IsContextualTasksUIEnabled();
+@@ -687,6 +692,8 @@
+ 
+   if (webui_browser::IsWebUIBrowserEnabled()) {
+     registry.ForWebUI<WebUIBrowserUI>()
++        .Add<bay::mojom::AppRuntime>()
++        .Add<bay::mojom::NativeHost>()
+         .Add<webui_browser::mojom::PageHandlerFactory>()
+         .Add<bookmark_bar::mojom::PageHandlerFactory>()
+         .Add<bookmarks_api::mojom::BookmarksService>()
+diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
+--- a/chrome/renderer/chrome_content_renderer_client.cc
++++ b/chrome/renderer/chrome_content_renderer_client.cc
+@@ -942,7 +942,8 @@
+   if (base::FeatureList::IsEnabled(surface_embed::features::kSurfaceEmbed)) {
+     GURL url = render_frame->GetWebFrame()->GetDocument().Url();
+     if (url.SchemeIs(content::kChromeUIScheme) &&
+-        url.host() == chrome::kChromeUIWebuiBrowserHost) {
++        (url.host() == chrome::kChromeUIWebuiBrowserHost ||
++         url.host() == "bay")) {
+       if (surface_embed::MaybeCreatePlugin(render_frame, params, plugin)) {
+         return true;
+       }
+diff --git a/chrome/app/chrome_main.cc b/chrome/app/chrome_main.cc
+--- a/chrome/app/chrome_main.cc
++++ b/chrome/app/chrome_main.cc
+@@ -21,7 +21,10 @@
+ #include "build/build_config.h"
+ #if !defined(BUILDING_CHROME_RENDERER)
+ #include "chrome/app/chrome_main_delegate.h"
++#if BUILDFLAG(IS_WIN)
++#include "bay/core/nn_main_delegate.h"  // nogncheck
+ #endif
++#endif
+ #include "chrome/app/startup_timestamps.h"
+ #include "chrome/browser/headless/headless_mode_init.h"
+ #include "chrome/common/buildflags.h"
+@@ -129,7 +132,7 @@
+       base::TimeTicks::FromInternalValue(exe_entry_point_ticks),
+       base::TimeTicks::FromInternalValue(preread_begin_ticks),
+       base::TimeTicks::FromInternalValue(preread_end_ticks)};
+-  ChromeMainDelegate chrome_main_delegate(timestamps);
++  nncore::NNMainDelegate chrome_main_delegate(timestamps);
+ #else  // BUILDFLAG(IS_WIN)
+   ChromeMainDelegate chrome_main_delegate(
+       {.exe_entry_point_ticks = base::TimeTicks::Now()});
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1320,6 +1320,7 @@
+       "//chrome/browser/ui/webui/webnn_internals",
+       "//chrome/browser/ui/webui/whats_new",
+       "//chrome/browser/ui/webui_browser",
++      "//chrome/browser/bay/webui:webui",
+       "//chrome/browser/web_applications",
+       "//chrome/browser/web_applications:features",
+       "//chrome/browser/web_applications:sub_apps_service",
+@@ -2656,6 +2657,7 @@
+       "//chrome/browser/ui/webui/whats_new",
+       "//chrome/browser/ui/webui/whats_new:impl",
+       "//chrome/browser/ui/webui_browser",
++      "//chrome/browser/bay/webui:webui",
+       "//chrome/browser/ui/webui_browser:impl",
+       "//chrome/browser/upgrade_detector",
+       "//chrome/browser/upgrade_detector:impl",
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1575,6 +1575,7 @@
+       "//chrome/browser/ui/webui/whats_new",
+       "//chrome/browser/ui/webui/whats_new:impl",
+       "//chrome/browser/ui/webui_browser",
++      "//chrome/browser/bay/webui:webui",
+       "//chrome/browser/ui/webui_browser:impl",
+       "//chrome/browser/ui/window_sizer",
+       "//chrome/browser/ui/window_sizer:impl",
+@@ -1726,6 +1727,7 @@
+       "//chrome/browser/ui/webui/searchbox",
+       "//chrome/browser/ui/webui/top_chrome:impl",
+       "//chrome/browser/ui/webui_browser",
++      "//chrome/browser/bay/webui:webui",
+       "//chrome/browser/ui/webui_browser:impl",
+ 
+       # TODO(crbug.com/382237520): Remove this once NTP code is modularized.
+diff --git a/chrome/browser/ui/webui_browser/BUILD.gn b/chrome/browser/ui/webui_browser/BUILD.gn
+--- a/chrome/browser/ui/webui_browser/BUILD.gn
++++ b/chrome/browser/ui/webui_browser/BUILD.gn
+@@ -23,6 +23,7 @@
+   ]
+   public_deps = [
+     ":browser_mojo_bindings",
++    "//chrome/browser/bay/webui:mojom",
+     ":headers",
+     "//base",
+     "//chrome/browser/ui/bookmarks",
+@@ -81,6 +82,7 @@
+   }
+ 
+   deps = [
++    "//chrome/browser/bay/webui:webui",
+     ":browser_mojo_bindings",
+     ":webui_browser",
+     "//base",
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -441,6 +441,8 @@
+       "//chrome/browser:chrome_process_singleton",
+       "//chrome/browser:process_singleton",
+       "//chrome/browser/bay:exports",  # Bay: engine/chromium (Windows DLL)
++      "//chrome/browser/bay/webui:impl",
++      "//bay/core",
+       "//chrome/browser:startup_data",
+       "//chrome/browser/lifetime",
+       "//chrome/browser/win/isolated_browser:isolated_browser_support",
+diff --git a/chrome/browser/ui/browser.cc b/chrome/browser/ui/browser.cc
+--- a/chrome/browser/ui/browser.cc
++++ b/chrome/browser/ui/browser.cc
+@@ -35,6 +35,9 @@
+ #include "base/time/time.h"
+ #include "base/trace_event/trace_event.h"
+ #include "build/build_config.h"
++#if BUILDFLAG(IS_WIN)
++#include "chrome/browser/ui/webui_browser/webui_browser_window.h"
++#endif
+ #include "chrome/browser/ai/ai_data_keyed_service.h"          // nogncheck
+ #include "chrome/browser/ai/ai_data_keyed_service_factory.h"  // nogncheck
+ #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+@@ -620,6 +623,13 @@
+ 
+ 
+ void Browser::TabStripEmpty() {
++  // The WebUI owns the window even when its last page is parked or closed.
++#if BUILDFLAG(IS_WIN)
++  if (WebUIBrowserWindow::FromBrowser(this) &&
++      !UnloadController::From(this)->is_attempting_to_close_browser()) {
++    return;
++  }
++#endif
+   // Note: even though the tab strip is empty, the call to Close() may not
+   // result in closing this Browser. This can happen in the case of closing
+   // the last Browser with ongoing downloads.
+diff --git a/chrome/browser/ui/unload_controller.cc b/chrome/browser/ui/unload_controller.cc
+--- a/chrome/browser/ui/unload_controller.cc
++++ b/chrome/browser/ui/unload_controller.cc
+@@ -9,6 +9,9 @@
+ #include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/location.h"
++#if BUILDFLAG(IS_WIN)
++#include "chrome/browser/ui/webui_browser/webui_browser_window.h"
++#endif
+ #include "base/task/single_thread_task_runner.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/devtools/devtools_window.h"
+@@ -577,6 +580,12 @@
+ }
+ 
+ void UnloadController::TabStripEmpty() {
++#if BUILDFLAG(IS_WIN)
++  if (!is_attempting_to_close_browser_ &&
++      WebUIBrowserWindow::FromBrowser(browser_)) {
++    return;
++  }
++#endif
+   // Set is_attempting_to_close_browser_ here, so that extensions, etc, do not
+   // attempt to add tabs to the browser before it closes.
+   is_attempting_to_close_browser_ = true;

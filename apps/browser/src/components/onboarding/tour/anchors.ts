@@ -1,6 +1,6 @@
-import type { View } from "react-native";
+import { type View } from "@bay/platform";
 import { layout } from "../../../lib/constants";
-import { useBrowser } from "../../../store/browser";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { activeTabId } from "../../../store/model";
 import { splitOf } from "../../../store/splits";
 import { toolbarGeometry, type Rect } from "../../layout/geometry";

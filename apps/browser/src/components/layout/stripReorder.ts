@@ -1,4 +1,4 @@
-import { cancelAnimation, withSpring, type SharedValue } from "react-native-reanimated";
+import { cancelAnimation, withSpring, type SharedValue } from "@bay/platform/motion";
 import { dragGeometry, type DragGeometry } from "./stripGroups";
 import { STRIP_SLIDE } from "./constants";
 
