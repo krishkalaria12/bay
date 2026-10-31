@@ -266,130 +266,234 @@
   <body>
     <main>
       <header>
-        <p class="meta">Implementation plan · researched 31 October 2026 · setup done, features not started</p>
-        <h1>Bay for iPhone.<br />A quiet browser with a glass bottom bar.</h1>
+        <p class="meta">Implementation plan · revised 31 October 2026 · setup done on both platforms, engine and features not started</p>
+        <h1>Bay for iPhone and Android.<br />One Lens design, WebKit on iOS, Chromium on Android.</h1>
         <p class="lead">
-          Build Bay's mobile browser in <code>apps/mobile</code> with Expo, HeroUI Native and Expo UI. The interface follows the Lens demo you shared: it opens
-          to a search field, the page runs edge to edge, and one floating glass bar holds the controls. Agents check every screen in the iOS simulator through
-          Argent.
+          Build Bay's mobile browser in <code>apps/mobile</code> with Expo and HeroUI Native. Both platforms get the same design, the Lens demo you shared: it
+          opens to a search field, the page runs edge to edge, and floating controls sit at the bottom. iOS draws it in Liquid Glass. Android draws it with our
+          own components, the way Arc Search does on Android: no Material and no imitation glass.
         </p>
         <p>
-          Phase 0 (the project and agent tooling) is done and runs on the simulator. Everything after that is a plan; no browser feature is built yet. iPhone
-          comes first, then iPad, then Android.
+          iOS renders pages with WebKit. Android uses the system WebView (also Chromium) while we build, and our own Chromium, built from the desktop engine
+          tree, comes in the last phase before release. Phase 0 is done; everything after it is a plan. iOS is tested completely, and every UI change is also
+          tested on Android.
         </p>
       </header>
 
       <nav aria-label="Plan sections">
-        <a href="#target">Target UI</a><a href="#decisions">Decisions</a><a href="#engine">Web view engine</a><a href="#architecture">Architecture</a
-        ><a href="#phases">Phases</a><a href="#agents">Agent loop</a><a href="#risks">Risks</a><a href="#questions">Open questions</a
-        ><a href="#sources">Sources</a>
+        <a href="#design">Design</a><a href="#testing">Testing</a><a href="#engine">Engines</a><a href="#reuse">What we reuse</a
+        ><a href="#decisions">Decisions</a><a href="#architecture">Architecture</a><a href="#target">Target UI</a><a href="#phases">Phases</a
+        ><a href="#risks">Risks</a><a href="#sources">Sources</a>
       </nav>
 
-      <section id="target">
-        <h2>Target UI, screen by screen</h2>
+      <section id="design">
+        <h2>One design, drawn natively on each platform</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>&nbsp;</th>
+                <th>iOS</th>
+                <th>Android</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Design</td>
+                <td colspan="2">Lens, on both: same screens, layout, flows and gestures (the screen list is under <a href="#target">Target UI</a>)</td>
+              </tr>
+              <tr>
+                <td>Floating controls</td>
+                <td>
+                  Liquid Glass through <code>@expo/ui/swift-ui</code> (<code>buttonStyle("glass")</code>, <code>glassEffect</code>,
+                  <code>GlassEffectContainer</code>)
+                </td>
+                <td>
+                  Our own React Native views, following Arc Search for Android: flat surfaces, translucent fills and hairline edges; over a page, the bar takes
+                  the page's colour. No Material components, ripples or elevation, and no blur pretending to be glass.
+                </td>
+              </tr>
+              <tr>
+                <td>Sheets and screens</td>
+                <td colspan="2">HeroUI Native, shared (settings, archive, reader settings, inspector panels, fonts, downloads)</td>
+              </tr>
+              <tr>
+                <td>Icons</td>
+                <td>SF Symbols</td>
+                <td>Material Symbols outline paths (<code>src/chrome/MaterialSymbol.tsx</code>), the same style Arc uses on Android</td>
+              </tr>
+              <tr>
+                <td>Motion and gestures</td>
+                <td colspan="2">Reanimated and Gesture Handler, shared: the bar hides on scroll, swipe the bar to switch tabs, drag up to expand it</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          Arc's Android app shows the pattern: a flat bar with a tab-stack button, a wide translucent pill in the middle, and a control that pulls up into a
+          tinted sheet with back/forward, the domain, copy link, reload, a row of tiles (Translate, Pinned, Find, Share), and a blocked-trackers line. We use
+          that way of drawing for Lens's layout. The placeholder already does: <code>StartToolbar.ios.tsx</code> uses glass buttons, and
+          <code>StartToolbar.android.tsx</code> uses flat round buttons in the same places.
+        </p>
+      </section>
+
+      <section id="testing">
+        <h2>Testing: iOS completely, Android for every UI change</h2>
+        <ul>
+          <li><b>iOS is tested completely:</b> every flow, screen and state, with Argent on the simulator.</li>
+          <li>
+            <b>Every UI change is also tested on Android</b> before it's done: run it on the emulator, screenshot it next to iOS, and pass <code>pnpm e2e</code>
+            on both. The Android UI is our own code, so it breaks independently; passing on iOS is never enough on its own.
+          </li>
+          <li>
+            Each finished flow is recorded once as an Argent e2e test with a launch map (<code>ios:</code> / <code>android:</code>), so one file runs on both.
+          </li>
+          <li>Engine work adds a parity check: the same page gives the same features and blocking results on both engines.</li>
+          <li>Performance claims need Argent's profilers on both: <code>native-profiler-*</code> uses Instruments on iOS and Perfetto on Android.</li>
+        </ul>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Command (in <code>apps/mobile</code>)</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>pnpm start</code></td>
+                <td>Metro, serving both apps (run it in the background).</td>
+              </tr>
+              <tr>
+                <td><code>pnpm native</code></td>
+                <td>
+                  Boots the iOS simulator and the <code>bay-pixel</code> emulator, then builds and installs both dev clients in parallel.
+                  <code>pnpm ios</code> or <code>pnpm android</code> builds one.
+                </td>
+              </tr>
+              <tr>
+                <td><code>pnpm e2e</code></td>
+                <td>Boots both devices if needed and runs every Argent test in <code>.argent/e2e</code> on iOS, then on Android.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="engine">
+        <h2>Two engines, one API</h2>
         <p>
-          The inventory below comes from the 25-second demo and Lens's press kit. Times refer to <code>apps/mobile/.reference/lens-demo.mp4</code>. One frame
-          per second sits in <code>.reference/video-frames/</code> and the press screenshots in <code>.reference/lens-press/</code>. That folder is git-ignored
-          because the material isn't ours to redistribute. Bay keeps its own name, icon, start-page art and copy.
+          The app's JavaScript talks to one interface, <code>@bay/engine</code> (the local Expo module <code>modules/bay-engine</code>). Every feature ships on
+          both, built with each engine's own tools. Page scripts (reader, hide elements, inspector, font identifier) are shared JavaScript injected into an
+          isolated world on both engines.
         </p>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Screen</th>
-                <th>What it shows</th>
-                <th>Built with</th>
-                <th>Phase</th>
+                <th>&nbsp;</th>
+                <th>iOS: WebKit</th>
+                <th>Android, phases 1–6: system WebView</th>
+                <th>Android, phase 7 on: our Chromium</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>Start page <span class="note">0:00</span></td>
-                <td>Soft gradient wallpaper with a faint dot grid, "Tap to search ↓", and three glass buttons along the bottom: archive, search, settings.</td>
-                <td>RN view + Expo UI glass buttons</td>
-                <td>1</td>
+                <td>What renders</td>
+                <td><code>WKWebView</code>, updated with iOS</td>
+                <td><code>android.webkit.WebView</code> (Chromium, updated through Google Play)</td>
+                <td>Chromium's content layer with our embedder <code>//bay/mobile</code>, arm64</td>
               </tr>
               <tr>
-                <td>Search sheet <span class="note">0:01–0:02</span></td>
+                <td>Native side of <code>bay-engine</code></td>
+                <td>Swift</td>
+                <td>Kotlin over WebView and <code>androidx.webkit</code></td>
+                <td>Kotlin over <code>bay-engine.aar</code> (Java API + JNI)</td>
+              </tr>
+              <tr>
+                <td>Blocking</td>
+                <td>Desktop's filter lists converted to content rule lists</td>
+                <td>Request interception (<code>shouldInterceptRequest</code>) plus injected cosmetic CSS, from the same lists</td>
+                <td>Desktop's blocker itself, through <code>//bay/content</code></td>
+              </tr>
+              <tr>
+                <td>Private tabs</td>
+                <td>Non-persistent data store</td>
+                <td>A separate WebView profile (<code>androidx.webkit</code> multi-profile), wiped on close</td>
+                <td>Off-the-record profile</td>
+              </tr>
+              <tr>
+                <td>Tab snapshots</td>
+                <td><code>takeSnapshot(with:)</code></td>
+                <td>Draw the WebView to a bitmap</td>
+                <td>Surface copy</td>
+              </tr>
+              <tr>
+                <td>Engine build</td>
+                <td>None</td>
+                <td>None</td>
                 <td>
-                  Glass card above the keyboard: an address field, a row of pinned site icons, then history and suggestions, each with a ↖ button that copies
-                  the entry into the field. Autocomplete fills inline ("kinfolk<u>.com — Home</u>").
+                  On a Linux machine (Chromium doesn't build for Android on macOS), published per <code>engine/</code> tree as a GitHub prerelease like
+                  desktop's <code>publish-engine.sh</code>; the app fetches it
                 </td>
-                <td>Expo UI glass container; field and list to be decided (open question 3)</td>
-                <td>1</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          Because the swap happens behind <code>@bay/engine</code> and the e2e tests only use the UI, the same tests prove the Android app before and after our
+          Chromium goes in. Blink on iOS stays out of scope: Apple allows it only in the EU and Japan.
+        </p>
+      </section>
+
+      <section id="reuse">
+        <h2>What carries over from the desktop engine (phase 7)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Desktop piece</th>
+                <th>On mobile</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Pinned Chromium 154 checkout (<code>scripts/download-engine</code>)</td>
+                <td><b>Reused for Android</b>, from a Linux copy of the same pin with <code>target_os = ["android"]</code> in <code>.gclient</code>.</td>
               </tr>
               <tr>
-                <td>Page view <span class="note">0:03, 0:09</span></td>
+                <td>ungoogled-chromium patches and domain substitution</td>
+                <td><b>Reused</b>, minus desktop-only patches. ungoogled-chromium already maintains Android variants.</td>
+              </tr>
+              <tr>
+                <td>Bay's 33 <code>chromium-*.patch</code> files</td>
                 <td>
-                  Web content runs full screen under the status bar. A small floating bar holds tabs, a search pill and "…", and shrinks or hides as you scroll.
+                  <b>Mostly not:</b> most hook desktop Chrome UI. Branding, the scripts policy, injected style-sheet order and local password generation may be
+                  shared.
                 </td>
-                <td>bay-webkit native view + Expo UI bar</td>
-                <td>1</td>
               </tr>
               <tr>
-                <td>Link menu <span class="note">0:10–0:11</span></td>
-                <td>Long-press preview with Open in New Tab, Open in Background, Copy Link, Share, and Where Does It Go (shows where a link redirects).</td>
-                <td>WKWebView context menu configuration</td>
-                <td>1</td>
+                <td>18 <code>cef-*.patch</code> files</td>
+                <td><b>No.</b> CEF isn't built for mobile.</td>
               </tr>
               <tr>
-                <td>Tab switcher <span class="note">0:23–0:24</span></td>
+                <td><code>//bay/core</code> (NNCore)</td>
                 <td>
-                  Horizontal stack of overlapping page cards with favicon and title above each, on the start-page wallpaper. The same three-button bar sits
-                  below.
+                  <b>Split:</b> move the parts that only need <code>content/</code> (request blocking, renderer code, mojom) into <code>//bay/content</code>,
+                  shared with <code>//bay/mobile</code>.
                 </td>
-                <td>Reanimated + Gesture Handler over web view snapshots</td>
-                <td>1</td>
               </tr>
               <tr>
-                <td>Reader <span class="note">0:04–0:05</span></td>
-                <td>Clean typeset article. A glass popover holds the font (New York), seven colour themes, text size (A 100% A) and Hide Reader.</td>
-                <td>Readability in an isolated content world + Expo UI popover</td>
-                <td>3</td>
+                <td>Filter lists and the content blocker</td>
+                <td><b>Reused</b> on every engine: one list source for desktop, iOS and Android.</td>
               </tr>
               <tr>
-                <td>Hide elements <span class="note">0:06–0:08</span></td>
-                <td>
-                  Edit mode: ✕, undo, list and redo up top, ✓ to finish. Tapping highlights an element and shows its label ("Cookies We use c… · Floating Box ·
-                  402 × 424"); "Zap" removes it. "2 hidden here · tap to select more" counts what's hidden on this site.
-                </td>
-                <td>Injected script + Expo UI toolbar; rules saved per site</td>
-                <td>3</td>
+                <td><code>@bay/core</code> (omnibox, bangs, engines, <code>cleanUrl</code>, …)</td>
+                <td><b>Reused</b> from phase 2, as-is, on both platforms.</td>
               </tr>
               <tr>
-                <td>Font identifier <span class="note">0:12–0:13</span></td>
-                <td>
-                  Select text and a magnifier shows the font. A "Fonts" sheet lists the page's typefaces with samples and descriptions (SF Pro, SF Compact).
-                </td>
-                <td>Injected computed-style read + HeroUI sheet</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td>Mini player <span class="note">0:16–0:17</span></td>
-                <td>Video keeps playing in a compact bar (play/pause, ±10 s, source and title) while you browse.</td>
-                <td>WKWebView media + Now Playing</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td>Web inspector <span class="note">0:18–0:21</span></td>
-                <td>
-                  "Inspector" pill with pause and ✕. "Tap anything on the page" selects an element and shows its selector and size, Box/Text/Colors/Element
-                  tabs, a margin/border/padding diagram, and Parent / Child buttons.
-                </td>
-                <td>Injected script + HeroUI sheet + Expo UI pill</td>
-                <td>4</td>
-              </tr>
-              <tr>
-                <td>Private browsing <span class="note">press kit</span></td>
-                <td>Dark search sheet with a "Private" badge and "You're browsing privately" explainer. Private tabs can be locked with Face ID.</td>
-                <td>Non-persistent WKWebsiteDataStore</td>
-                <td>2</td>
-              </tr>
-              <tr>
-                <td>Settings, archive</td>
-                <td>Search engine, blocking, per-site settings, themes; automatically archived old tabs.</td>
-                <td>HeroUI Native screens (Expo Router)</td>
-                <td>1–2</td>
+                <td><code>@bay/sync</code></td>
+                <td><b>Reused after the first release</b>: the TypeScript as-is, the Swift module ported to iOS, a Kotlin version for Android.</td>
               </tr>
             </tbody>
           </table>
@@ -398,7 +502,6 @@
 
       <section id="decisions">
         <h2>Decisions</h2>
-        <h3>Accepted</h3>
         <div class="table-wrap">
           <table>
             <thead>
@@ -409,140 +512,67 @@
             </thead>
             <tbody>
               <tr>
-                <td>Expo SDK 58 (React Native 0.88, React 19.3), Expo Router, dev-client builds</td>
-                <td>Your choice. Expo UI and our own native modules need a native build, so Expo Go is out.</td>
-              </tr>
-              <tr>
-                <td>HeroUI Native 1.0 with Uniwind (Tailwind 4) for React-rendered UI</td>
-                <td>Your choice. The official <code>create-heroui-native-app</code> template wires up Uniwind, providers and peer dependency versions.</td>
-              </tr>
-              <tr>
-                <td><code>@expo/ui/swift-ui</code> for the controls that float over the page</td>
                 <td>
-                  Your choice. Liquid Glass (<code>glassEffect</code>, <code>buttonStyle("glass")</code>, <code>GlassEffectContainer</code>) and native menus,
-                  popovers and context menus only feel right in SwiftUI.
+                  Lens's design on both platforms; Liquid Glass on iOS; on Android, our own components in Arc Search's Android style, with no Material and no
+                  imitation glass
                 </td>
+                <td>Your choice.</td>
+              </tr>
+              <tr>
+                <td>iOS renders with WebKit; Android with our Chromium, from the desktop engine tree</td>
+                <td>Your choice. The App Store requires WebKit outside the EU and Japan.</td>
+              </tr>
+              <tr>
+                <td>Android uses the system WebView until phase 7, when our Chromium build and swap happen</td>
+                <td>Your choice: Android's engine build comes last. The UI and features are proven first.</td>
+              </tr>
+              <tr>
+                <td>iOS tested completely; every UI change also tested on Android, with e2e tests passing on both</td>
+                <td>Your choice.</td>
+              </tr>
+              <tr>
+                <td>One engine API, <code>@bay/engine</code>; nothing ships on one platform only</td>
+                <td>The UI and JavaScript stay shared.</td>
               </tr>
               <tr>
                 <td>
-                  Split rule: <b>Expo UI</b> for anything drawn over web content (bars, search, menus, popovers). <b>HeroUI</b> for full screens and sheets with
-                  React content (settings, archive, inspector panels, the Fonts list).
+                  Platform code in <code>.ios.tsx</code> / <code>.android.tsx</code>; shared code in plain <code>.tsx</code>; <code>moduleSuffixes</code> in
+                  <code>tsconfig.json</code>
                 </td>
-                <td>Keeps each library where it's strongest and avoids two looks for the same kind of control.</td>
+                <td>Your choice, and Metro's built-in platform resolution.</td>
+              </tr>
+              <tr>
+                <td>Android engine builds run on your Linux machine and are published like desktop's engine</td>
+                <td>Recommended: desktop already builds Chromium locally and publishes it, because CI can't.</td>
+              </tr>
+              <tr>
+                <td>Phones first; iPad and Android tablets after the first release</td>
+                <td>Recommended: keeps the first release focused.</td>
+              </tr>
+              <tr>
+                <td>Sync with desktop after the first release</td>
+                <td>Recommended: it needs the Swift module ported and a Kotlin one written.</td>
               </tr>
               <tr>
                 <td>
-                  <code>apps/mobile</code> is a standalone project with its own <code>pnpm-workspace.yaml</code> and lockfile, excluded from the root workspace
+                  iOS 26 minimum; Android at the WebView's and later Chromium 154's floor; zustand for state, expo-sqlite for history, tabs and site rules
                 </td>
-                <td>
-                  The root hoists react-native-macos 0.81 for the desktop app, and mobile needs React Native 0.88. This follows the pattern already used by
-                  <code>apps/web</code>, <code>apps/cli</code> and <code>apps/videos</code>.
-                </td>
+                <td>Recommended: Liquid Glass needs iOS 26; zustand matches desktop.</td>
               </tr>
               <tr>
-                <td>Bundle id <code>in.krishkalaria.bay.mobile</code>, URL scheme <code>bay://</code></td>
+                <td>
+                  Expo SDK 58 (React Native 0.88), Expo Router, dev-client builds, HeroUI Native with Uniwind; <code>apps/mobile</code> is its own pnpm
+                  workspace
+                </td>
+                <td>Your choice; the root workspace hoists react-native-macos 0.81 for desktop.</td>
+              </tr>
+              <tr>
+                <td>Bundle id and package <code>in.krishkalaria.bay.mobile</code>, scheme <code>bay://</code></td>
                 <td>Sits next to the desktop id <code>in.krishkalaria.bay</code>.</td>
               </tr>
-              <tr>
-                <td>The repo's oxlint and oxfmt, not the template's ESLint and Prettier</td>
-                <td>One lint and format setup across the repo; <code>apps/mobile</code> passes both.</td>
-              </tr>
             </tbody>
           </table>
         </div>
-        <h3>Proposed (confirm before phase 1)</h3>
-        <ul>
-          <li>
-            <b>Our own web view module</b> (<code>apps/mobile/modules/bay-webkit</code>) instead of <code>react-native-webview</code>. See the next section.
-          </li>
-          <li><b>iOS 26 minimum</b>, which Liquid Glass needs (Lens sets the same floor). The simulators here run iOS 27.</li>
-          <li>
-            <b>zustand</b> for browser state, as on desktop (<code>apps/browser</code> uses zustand 5), and <b>expo-sqlite</b> for history, tabs and per-site
-            rules.
-          </li>
-          <li>
-            <b>Reuse <code>@bay/core</code></b> through <code>"@bay/core": "file:../../packages/core"</code>, as <code>apps/web</code> does: omnibox, bangs,
-            engines, suggest, calculator, <code>cleanUrl</code>, fuzzy, siteSearch, textFragment.
-          </li>
-        </ul>
-      </section>
-
-      <section id="engine">
-        <h2>The web view engine</h2>
-        <p>
-          Every iOS browser must render with WebKit. Apple's BrowserEngineKit exception covers only the EU and isn't worth the cost here. So the real choice is
-          how much of <code>WKWebView</code> we can reach. Most of the target UI depends on WebKit features that <code>react-native-webview</code> doesn't
-          expose.
-        </p>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Needed for</th>
-                <th>WebKit API</th>
-                <th>react-native-webview 14</th>
-                <th>Own Expo module</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Ad, tracker and cookie-banner blocking</td>
-                <td><code>WKContentRuleListStore</code></td>
-                <td>No</td>
-                <td>Yes</td>
-              </tr>
-              <tr>
-                <td>Tab cards</td>
-                <td><code>takeSnapshot(with:)</code></td>
-                <td>No</td>
-                <td>Yes</td>
-              </tr>
-              <tr>
-                <td>Bar that hides on scroll, pull gestures</td>
-                <td><code>scrollView</code> delegate, native on the UI thread</td>
-                <td>Throttled JS events</td>
-                <td>Yes, can drive Reanimated values directly</td>
-              </tr>
-              <tr>
-                <td>Link menu with preview and custom actions</td>
-                <td><code>contextMenuConfigurationFor</code></td>
-                <td>Limited</td>
-                <td>Yes</td>
-              </tr>
-              <tr>
-                <td>Private tabs</td>
-                <td><code>WKWebsiteDataStore.nonPersistent()</code>, separate store per profile</td>
-                <td>Incognito flag only</td>
-                <td>Yes</td>
-              </tr>
-              <tr>
-                <td>Reader, hide elements, inspector, fonts</td>
-                <td><code>WKUserScript</code> in a separate <code>WKContentWorld</code></td>
-                <td>Page world only</td>
-                <td>Yes, page scripts can't see or tamper with ours</td>
-              </tr>
-              <tr>
-                <td>Find on page, downloads, media</td>
-                <td><code>UIFindInteraction</code>, <code>WKDownload</code>, media playback APIs</td>
-                <td>Partial</td>
-                <td>Yes</td>
-              </tr>
-              <tr>
-                <td>Many tabs without a reload storm</td>
-                <td>We decide which web views stay live and which become snapshots</td>
-                <td>One view per component</td>
-                <td>Yes</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="stop">
-          <b>Recommendation:</b> build <code>bay-webkit</code> as a local Expo module (<code>npx create-expo-module --local</code>). Define the TypeScript
-          interface first: a native view plus <code>TabEngine</code> functions for load, back/forward, snapshot, scripts, rule lists and events. Implement iOS
-          with <code>WKWebView</code>, and later Android with <code>android.webkit.WebView</code> behind the same interface. The repo already ships five Expo
-          native modules for macOS (<code>sync</code>, <code>shell</code>, <code>nncore</code>, <code>shaders</code>, <code>import</code>), so the pattern is
-          familiar.
-        </p>
       </section>
 
       <section id="architecture">
@@ -551,77 +581,161 @@
           <div class="layer">
             <b>Routes · <code>src/app</code></b>
             <p>
-              One browser route (start page, page view, tab switcher and search as overlays of the same screen, so the web view never remounts). Settings,
-              archive and site settings are Expo Router sheets.
+              One browser route: the start page, page view, tab switcher and search are overlays of one screen, so the engine view never remounts. Settings and
+              archive are sheets.
             </p>
           </div>
           <div class="layer">
             <b>Chrome · <code>src/chrome</code></b>
             <p>
-              Expo UI <code>Host</code> trees: bottom bar, search card, popovers, edit-mode toolbars. One <code>GlassEffectContainer</code> so glass shapes
-              morph into each other.
+              Floating controls, search card, popovers, edit-mode toolbars: <code>*.ios.tsx</code> in SwiftUI glass, <code>*.android.tsx</code> as our own
+              views. Each pair shares one props type.
             </p>
           </div>
           <div class="layer">
             <b>Panels · <code>src/panels</code></b>
-            <p>HeroUI Native screens and sheets: settings, archive, reader settings list, inspector details, fonts, downloads.</p>
+            <p>HeroUI Native screens and sheets, the same on both.</p>
           </div>
           <div class="layer">
             <b>State · <code>src/store</code></b>
+            <p>zustand stores for tabs, the current tab and the omnibox, persisted to expo-sqlite. The tab model matches desktop's so sync is a mapping.</p>
+          </div>
+          <div class="layer">
+            <b>Engine API · <code>modules/bay-engine</code></b>
             <p>
-              zustand stores for tabs, the current tab and the omnibox, persisted to expo-sqlite (history full-text search, tab restore, per-site rules). The
-              tab model matches desktop's where it can, so sync is a mapping rather than a rewrite.
+              <code>EngineView</code>, <code>Tab</code> (load, back and forward, snapshot, run script in an isolated world, find), profiles, blocking, downloads
+              and events. <code>ios/</code> wraps <code>WKWebView</code>; <code>android/</code> wraps the system WebView, then <code>bay-engine.aar</code>.
             </p>
           </div>
           <div class="layer">
-            <b>Shared logic · <code>@bay/core</code></b>
-            <p>The omnibox pipeline already used on desktop: suggestions, bangs, engines, calculator and currency, URL cleaning, site search.</p>
+            <b>Page scripts · <code>modules/bay-engine/scripts</code></b>
+            <p>Shared JavaScript injected on both engines: reader, hide elements, inspector, font identifier.</p>
           </div>
           <div class="layer">
-            <b>Engine · <code>modules/bay-webkit</code></b>
+            <b>Android embedder · <code>engine/mobile</code> → <code>//bay/mobile</code> (phase 7)</b>
             <p>
-              Swift: WKWebView pool, content rule lists, user scripts in an isolated world, snapshots, scroll and navigation events, context menus, downloads.
-            </p>
-          </div>
-          <div class="layer">
-            <b>Sync · <code>@bay/sync</code> (phase 5)</b>
-            <p>
-              The desktop's end-to-end-encrypted folder sync, through iCloud Drive. Its <code>BaySync</code> Swift module already targets <code>"apple"</code>.
-              Only the folder picker (AppKit) needs an iOS version.
+              C++ on <code>content/public</code>, with <code>//bay/content</code> for blocking; copied into the Chromium tree by an <code>apply.sh</code>, like
+              <code>engine/nncore</code>.
             </p>
           </div>
         </div>
       </section>
 
+      <section id="target">
+        <h2>Target UI, screen by screen</h2>
+        <p>
+          From the 25-second demo and Lens's press kit. Times refer to <code>apps/mobile/.reference/lens-demo.mp4</code> (git-ignored, with one frame per second
+          and the press screenshots). Each screen ships on both platforms in the same layout. Bay keeps its own name, icon, art and copy.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Screen</th>
+                <th>What it shows</th>
+                <th>Engine feature it needs</th>
+                <th>Phase</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Start page <span class="note">0:00</span></td>
+                <td>Gradient wallpaper with a dot grid, "Tap to search ↓", three round buttons: archive, search, settings.</td>
+                <td>None</td>
+                <td>2</td>
+              </tr>
+              <tr>
+                <td>Search sheet <span class="note">0:01–0:02</span></td>
+                <td>Card above the keyboard: address field, pinned sites, history and suggestions with a ↖ fill button, inline autocomplete.</td>
+                <td>None (<code>@bay/core</code> omnibox)</td>
+                <td>2</td>
+              </tr>
+              <tr>
+                <td>Page view <span class="note">0:03, 0:09</span></td>
+                <td>Edge-to-edge page; a small floating bar (tabs, search pill, "…") that hides on scroll.</td>
+                <td>Scroll events</td>
+                <td>2</td>
+              </tr>
+              <tr>
+                <td>Link menu <span class="note">0:10–0:11</span></td>
+                <td>Long-press preview: Open in New Tab, Open in Background, Copy Link, Share, Where Does It Go.</td>
+                <td>Long-press hit test with the link URL</td>
+                <td>2</td>
+              </tr>
+              <tr>
+                <td>Tab switcher <span class="note">0:23–0:24</span></td>
+                <td>Horizontal stack of overlapping page cards with favicon and title.</td>
+                <td>Snapshots</td>
+                <td>2</td>
+              </tr>
+              <tr>
+                <td>Private browsing <span class="note">press kit</span></td>
+                <td>Dark search card, "You're browsing privately", optional biometric lock.</td>
+                <td>Private profile</td>
+                <td>3</td>
+              </tr>
+              <tr>
+                <td>Reader <span class="note">0:04–0:05</span></td>
+                <td>Typeset article; popover with font, seven themes, size, Hide Reader.</td>
+                <td>Shared page script (Readability)</td>
+                <td>4</td>
+              </tr>
+              <tr>
+                <td>Hide elements <span class="note">0:06–0:08</span></td>
+                <td>Edit mode with highlight label, Zap, undo/redo, "2 hidden here".</td>
+                <td>Shared page script + per-site rules</td>
+                <td>4</td>
+              </tr>
+              <tr>
+                <td>Font identifier <span class="note">0:12–0:13</span></td>
+                <td>Magnifier on selected text; Fonts sheet with samples.</td>
+                <td>Shared page script (computed fonts, loaded font faces)</td>
+                <td>5</td>
+              </tr>
+              <tr>
+                <td>Mini player <span class="note">0:16–0:17</span></td>
+                <td>Video keeps playing in a compact bar.</td>
+                <td>Media session; a background playback service on Android</td>
+                <td>5</td>
+              </tr>
+              <tr>
+                <td>Web inspector <span class="note">0:18–0:21</span></td>
+                <td>Tap to select; selector, size, Box/Text/Colors/Element, box model, Parent/Child.</td>
+                <td>Shared page script (computed styles, box sizes)</td>
+                <td>5</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="phases">
         <h2>Phases</h2>
+        <p class="note">
+          Every phase is done only when its flows pass on iOS completely and its UI is checked on Android, with <code>pnpm e2e</code> passing on both.
+        </p>
 
         <div class="stage">
           <div class="stage-number">0</div>
           <div>
-            <h3>Project and agent tooling <span class="done">done</span></h3>
+            <h3>Project, both native builds, Argent <span class="done">done</span></h3>
             <ul>
+              <li><code>apps/mobile</code>: Expo SDK 58, HeroUI Native, Expo UI (SwiftUI) and dev client, in its own workspace. Oxlint and oxfmt pass.</li>
               <li>
-                Scaffolded <code>apps/mobile</code> from <code>create-heroui-native-app</code> (Expo SDK 58), renamed it <code>@bay/mobile</code>, set the app
-                name to Bay, and set the bundle id and scheme.
+                Built and running on the iPhone 18 Pro simulator (iOS 27) and the <code>bay-pixel</code> emulator (Android 16, API 36). Argent drives both.
               </li>
               <li>
-                Added <code>@expo/ui</code> and <code>expo-dev-client</code>, and pinned React Native to 0.88.1 so <code>expo install --check</code> passes.
-              </li>
-              <li>Excluded <code>apps/mobile</code> from the root workspace. Root <code>pnpm install</code> is unchanged.</li>
-              <li>
-                Placeholder start page: a HeroUI "Tap to search" hint above an Expo UI glass bar. Built, installed and screenshotted on the iPhone 18 Pro
-                simulator (iOS 27).
+                Placeholder start page: shared HeroUI text, glass buttons on iOS (<code>StartToolbar.ios.tsx</code>), flat round buttons on Android
+                (<code>StartToolbar.android.tsx</code>).
               </li>
               <li>
-                Argent 0.31 is installed globally. <code>.mcp.json</code> and <code>.codex/config.toml</code> register its MCP server,
-                <code>.claude/settings.json</code> auto-approves it, and its skills are in <code>.agents/skills</code> (linked from
-                <code>.claude/skills</code>).
+                The dev launcher skips onboarding and the menu and opens Metro at <code>127.0.0.1:8081</code>. When Argent starts the Android app it shows the
+                launcher instead, so tests wait for it to settle and then open the dev-client link.
               </li>
               <li>
-                <code>apps/mobile/AGENTS.md</code> (with a <code>CLAUDE.md</code> that imports it) explains how to build, launch and drive the app. Design
-                reference material is in <code>apps/mobile/.reference/</code>.
+                <code>pnpm native</code> and <code>pnpm e2e</code> boot and run both platforms. A <code>smoke</code> e2e test passes twice in a row on both.
               </li>
+              <li>Argent's MCP server, skills and rules are in the repo; <code>apps/mobile/AGENTS.md</code> explains the loop and the testing rule.</li>
             </ul>
           </div>
         </div>
@@ -629,26 +743,17 @@
         <div class="stage">
           <div class="stage-number">1</div>
           <div>
-            <h3>Browsing core</h3>
-            <p>A browser you can use every day, with no extras yet.</p>
+            <h3>Engine API on both platforms</h3>
             <ul>
-              <li><code>bay-webkit</code>: view, navigation, title, URL and progress events, scroll offset, snapshot, context menu, new-window handling.</li>
-              <li>Start page with wallpaper and the three-button glass bar.</li>
-              <li>Search card: address field, pinned sites, history and suggestions from <code>@bay/core</code>, inline autocomplete, the ↖ fill button.</li>
-              <li>Page view: edge-to-edge web view, floating bar that hides on scroll, back and forward edge swipes, pull to reload.</li>
-              <li>Tabs: create, close, restore, and the stacked card switcher built from snapshots. Old tabs move to the archive automatically.</li>
-              <li>Link menu: new tab, background tab, copy, share, and where it goes.</li>
-              <li>Settings: search engine (DuckDuckGo, Brave, Kagi, Ecosia, Google, Bing, using desktop's engine list), clear data.</li>
+              <li>Write the <code>@bay/engine</code> TypeScript API and scaffold <code>modules/bay-engine</code>.</li>
+              <li>
+                <code>EngineView</code> with load, title, URL, progress and back/forward: Swift over <code>WKWebView</code>, Kotlin over the system WebView.
+              </li>
             </ul>
             <div class="check">
               <strong>Done when</strong>
               <ul>
-                <li>
-                  Argent e2e flows <code>search-and-open</code>, <code>tabs-roundtrip</code> and <code>link-menu</code> pass twice in a row with no changes in
-                  between.
-                </li>
-                <li>Screenshots of the start page, search card, page view and tab switcher match the reference frames in layout, checked side by side.</li>
-                <li>Scrolling a long page shows no dropped frames in Argent's native profiler; ten tabs restore after a cold launch.</li>
+                <li>An Argent e2e test opens a URL and waits for the page title on both the simulator and the emulator.</li>
               </ul>
             </div>
           </div>
@@ -657,20 +762,17 @@
         <div class="stage">
           <div class="stage-number">2</div>
           <div>
-            <h3>Privacy and blocking</h3>
+            <h3>Browsing core UI</h3>
             <ul>
-              <li>
-                Turn filter lists (ads, trackers, cookie banners) into <code>WKContentRuleList</code> JSON. Refresh daily in the background and compile on
-                device. Pause blocking per site.
-              </li>
-              <li>Strip tracking parameters from links with <code>cleanUrl</code>. Upgrade connections to HTTPS.</li>
-              <li>Private tabs in a non-persistent data store, a dark search card, and an optional Face ID lock.</li>
-              <li>Per-site settings screen.</li>
+              <li>Start page, search card with <code>@bay/core</code> suggestions, page view with the hiding bar, edge swipes, pull to reload.</li>
+              <li>Tabs and the card switcher from snapshots; automatic archive; the link menu.</li>
+              <li>Settings: search engine (desktop's list), clear data.</li>
             </ul>
             <div class="check">
               <strong>Done when</strong>
               <ul>
-                <li>Known ad and cookie-banner test pages render clean. A private tab leaves no cookies or history after it closes.</li>
+                <li><code>search-and-open</code>, <code>tabs-roundtrip</code> and <code>link-menu</code> pass twice in a row on both platforms.</li>
+                <li>Screenshots of both platforms match the reference frames in layout.</li>
               </ul>
             </div>
           </div>
@@ -679,11 +781,13 @@
         <div class="stage">
           <div class="stage-number">3</div>
           <div>
-            <h3>Reading tools</h3>
+            <h3>Privacy and blocking</h3>
             <ul>
-              <li>Reader: Readability running in an isolated world, seven themes, font choice, text size, and Hide Reader in a glass popover.</li>
-              <li>Hide elements: edit mode, highlight with a label, Zap, undo and redo, per-site persistence, and a hidden-elements list with restore.</li>
-              <li>On-device translation (Apple's Translation framework through a small native bridge) and Copy as Markdown.</li>
+              <li>
+                Desktop's filter lists on both: content rule lists on iOS, request interception plus cosmetic CSS on Android. Blocking can be paused per site.
+              </li>
+              <li>Tracking-parameter stripping (<code>cleanUrl</code>), HTTPS upgrades, third-party cookies blocked by default.</li>
+              <li>Private tabs with a biometric lock.</li>
             </ul>
           </div>
         </div>
@@ -691,14 +795,9 @@
         <div class="stage">
           <div class="stage-number">4</div>
           <div>
-            <h3>Power tools</h3>
+            <h3>Reading tools</h3>
             <ul>
-              <li>
-                Web inspector: tap to select, selector and size, Box/Text/Colors/Element tabs, a box-model diagram, Parent/Child, and pause for menus that only
-                show on hover.
-              </li>
-              <li>Font identifier from text selection, plus the Fonts sheet.</li>
-              <li>Mini player and Now Playing controls, background downloads manager, find on page.</li>
+              <li>Reader with themes, font and size; Hide elements with Zap, undo and per-site rules; on-device translation; Copy as Markdown.</li>
             </ul>
           </div>
         </div>
@@ -706,17 +805,9 @@
         <div class="stage">
           <div class="stage-number">5</div>
           <div>
-            <h3>Apple integration and sync with desktop Bay</h3>
+            <h3>Power tools</h3>
             <ul>
-              <li>
-                Default browser: request the <code>com.apple.developer.web-browser</code> entitlement. It also unlocks passkeys (WebAuthn) in the web view.
-              </li>
-              <li>Password and passkey AutoFill, Apple Pay, and Wallet passes.</li>
-              <li>
-                <code>@bay/sync</code> over iCloud Drive (tabs, pins, history) with the same recovery phrase as desktop. Handoff between Mac and iPhone needs
-                the same Team ID on both apps.
-              </li>
-              <li>Shortcuts and Siri, Spotlight, widgets.</li>
+              <li>Web inspector and font identifier (shared page scripts), mini player, downloads, find on page.</li>
             </ul>
           </div>
         </div>
@@ -724,46 +815,57 @@
         <div class="stage">
           <div class="stage-number">6</div>
           <div>
-            <h3>Ship, then iPad and Android</h3>
+            <h3>Platform integration</h3>
             <ul>
-              <li>Sign with the existing team, ship TestFlight builds, then the App Store.</li>
-              <li>iPad layout and keyboard shortcuts.</li>
-              <li>
-                Android: the same <code>bay-webkit</code> interface on <code>android.webkit.WebView</code>; Expo UI's Jetpack Compose components for the bars.
-              </li>
+              <li>Default browser on both (iOS needs Apple's web-browser entitlement, which also enables passkeys in the web view).</li>
+              <li>Password and passkey AutoFill: iOS AutoFill, Android Credential Manager.</li>
             </ul>
           </div>
         </div>
-      </section>
 
-      <section id="agents">
-        <h2>How agents build and check each screen</h2>
-        <ol>
-          <li>
-            Read <code>apps/mobile/AGENTS.md</code>, export <code>DEVELOPER_DIR</code>, and run <code>pnpm ios</code> once per native change and Metro in the
-            background.
-          </li>
-          <li>
-            Use Argent to launch <code>in.krishkalaria.bay.mobile</code>. Take tap targets from <code>debugger-component-tree</code> for React content and from
-            <code>describe</code> for native or SwiftUI controls, never from screenshot pixels.
-          </li>
-          <li>
-            Screenshot the result and compare it with the matching frame in <code>.reference/</code>. Use <code>screenshot-diff</code> against our own previous
-            baseline to catch regressions.
-          </li>
-          <li>
-            Record each finished flow once as an Argent e2e test (<code>argent-create-e2e</code> / <code>argent-qa-e2e</code>), then replay it as a smoke test
-            before every commit.
-          </li>
-          <li>
-            For any performance claim, profile with <code>react-profiler-*</code> for JS and <code>native-profiler-*</code> for scrolling and web view work.
-          </li>
-        </ol>
-        <p class="note">
-          Lens itself can't be installed on a simulator: it's App Store and TestFlight only, the simulator has no App Store, and App Store builds are encrypted
-          device binaries. To compare against the real app, install Lens on an iPhone connected by cable and drive it with Argent's
-          <code>argent-ios-device-*</code> skills.
-        </p>
+        <div class="stage">
+          <div class="stage-number">7</div>
+          <div>
+            <h3>Our Chromium on Android</h3>
+            <ul>
+              <li>
+                On the Linux machine: a copy of the pinned tree with Android dependencies; build upstream <code>content_shell</code> for arm64 and run it under
+                Argent.
+              </li>
+              <li>Split <code>//bay/content</code> out of NNCore. Write <code>//bay/mobile</code> and wrap it as <code>bay-engine.aar</code>.</li>
+              <li>Swap the Kotlin side of <code>bay-engine</code> from the system WebView to the AAR. Blocking moves to desktop's blocker.</li>
+              <li>Publish the AAR per engine tree and fetch it in the app's prebuild. Rebase with each desktop Chromium update from then on.</li>
+            </ul>
+            <div class="check">
+              <strong>Done when</strong>
+              <ul>
+                <li>Every e2e test passes on Android with our Chromium, unchanged.</li>
+                <li>We've measured app size, cold start, memory with five tabs and Speedometer against the system WebView.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="stage-number">8</div>
+          <div>
+            <h3>Ship both</h3>
+            <ul>
+              <li>TestFlight and Google Play testing tracks, then the App Store and Play Store, released together.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="stage-number">9</div>
+          <div>
+            <h3>After the first release</h3>
+            <ul>
+              <li>Sync with desktop through <code>@bay/sync</code> (iCloud Drive folder).</li>
+              <li>iPad and Android tablet layouts with keyboard shortcuts.</li>
+            </ul>
+          </div>
+        </div>
       </section>
 
       <section id="risks">
@@ -778,88 +880,83 @@
             </thead>
             <tbody>
               <tr>
-                <td>Expo UI's SwiftUI API changes between SDK versions (for example, native tabs props changed in SDK 55).</td>
-                <td>Pin Expo minor versions. Keep all <code>@expo/ui</code> use inside <code>src/chrome</code> so an upgrade touches one folder.</td>
+                <td>Testing mostly on iOS lets Android UI bugs through: Android's controls are our own code.</td>
+                <td>Every UI change is checked on the emulator, with screenshots next to iOS, and <code>pnpm e2e</code> must pass on both.</td>
               </tr>
               <tr>
-                <td>Each list in <code>WKContentRuleList</code> has a rule limit (about 150,000), and compiling large lists is slow.</td>
-                <td>Split lists by category, compile off the main thread, cache compiled lists, and measure compile time on a real device.</td>
+                <td>Swapping Android's engine late (phase 7) could break features built on the system WebView.</td>
+                <td>Keep everything behind <code>@bay/engine</code>; e2e tests use only the UI, so the same tests prove the swap.</td>
               </tr>
               <tr>
-                <td>Apple Pay is unavailable in web views that inject user scripts.</td>
-                <td>Check on a device in phase 5. If needed, skip injection for payment pages or inject on demand only.</td>
+                <td>The system WebView lacks some features (no content-blocking API, limited profile control).</td>
+                <td>Interim versions (request interception, a separate profile) until our Chromium takes over in phase 7.</td>
               </tr>
               <tr>
-                <td>Default-browser and passkey support depend on Apple granting the web-browser entitlement.</td>
-                <td>Apply early, in phase 2, so approval is in place by phase 5.</td>
+                <td>Android engine builds need Linux and about 100 GB of disk.</td>
+                <td>Build on the Linux machine and publish the AAR; the app only downloads it.</td>
               </tr>
               <tr>
-                <td>Mixing HeroUI and SwiftUI could make two different-looking apps.</td>
-                <td>Follow the split rule above and pull shared colours and type into Uniwind tokens that both sides use.</td>
+                <td>No stable Chromium embedding API since WebLayer was deprecated; <code>content/public</code> changes every release.</td>
+                <td>Keep <code>//bay/mobile</code> small; rebase it with desktop's Chromium updates.</td>
               </tr>
               <tr>
-                <td>Following Lens too closely.</td>
-                <td>Match layout and interactions. Bay's name, icon, wallpaper art, colours and copy stay Bay's own.</td>
+                <td>Shipping Chromium makes the Android app much larger than one using the system WebView.</td>
+                <td>Measure in phase 7; App Bundles split by ABI; strip symbols as desktop releases do.</td>
+              </tr>
+              <tr>
+                <td>Custom Android controls take more work than stock components and can feel off.</td>
+                <td>Follow Arc's Android app closely for touch targets, spacing and motion; build shared primitives (round button, pill, sheet) once.</td>
+              </tr>
+              <tr>
+                <td>iOS content rule lists have a per-list rule limit (about 150,000); WebKit disables Apple Pay in pages with injected scripts.</td>
+                <td>Split lists by category and cache compiled lists; skip injection on payment pages if needed.</td>
               </tr>
               <tr>
                 <td>
-                  Machine setup: <code>xcode-select</code> points at the Command Line Tools, and Metro started with <code>CI=1</code> doesn't watch files.
+                  Machine setup: <code>xcode-select</code> points at the Command Line Tools; Metro with <code>CI=1</code> doesn't watch files; cold emulator
+                  boots can show a System UI dialog.
                 </td>
-                <td>Both are documented in <code>apps/mobile/AGENTS.md</code>.</td>
+                <td>The scripts set the toolchain paths and close system dialogs after boot; the quirks are in <code>AGENTS.md</code>.</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
 
-      <section id="questions">
-        <h2>Open questions</h2>
-        <ol>
-          <li>Do you approve the custom <code>bay-webkit</code> module over <code>react-native-webview</code>? It's the biggest decision in phase 1.</li>
-          <li>Is iOS 26 the minimum, and is iPad in or out of the first release?</li>
-          <li>
-            Should the search card's text field be a native SwiftUI <code>TextField</code> (best glass and keyboard behaviour) or a HeroUI
-            <code>SearchField</code> inside a glass container (easier styling)? A short spike in phase 1 settles it.
-          </li>
-          <li>Should desktop sync land before the first TestFlight build, or after?</li>
-          <li>Local signing (like desktop releases) or EAS Build for TestFlight?</li>
-          <li>When should Android start: after the iOS 1.0, or alongside it from phase 3?</li>
-        </ol>
-      </section>
-
       <section id="sources">
         <h2>Sources</h2>
         <ul class="sources">
-          <li><a href="https://lens.maximos.work/">Lens</a>: features, iOS 26 requirement, App Store and TestFlight links, and the press kit.</li>
           <li>
-            <a href="https://github.com/software-mansion/argent">software-mansion/argent</a> and <a href="https://docs.swmansion.com/argent/">Argent docs</a>:
-            MCP server, skills, e2e tests and profilers.
+            Arc Search for Android: <a href="https://play.google.com/store/apps/details?id=company.thebrowser.arc">Play Store listing</a>,
+            <a href="https://9to5google.com/2024/10/14/arc-search-android-fun-woe/">9to5Google review</a>,
+            <a href="https://www.androidpolice.com/chrome-vs-arc-which-browser-is-better-on-android/">Android Police</a>,
+            <a href="https://resources.arc.net/hc/en-us/articles/27306904379031-Arc-Search-for-Android-Release-Notes">release notes</a> (bar swipe to switch
+            tabs).
+          </li>
+          <li><a href="https://lens.maximos.work/">Lens</a>: the design on both platforms.</li>
+          <li>
+            <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/android_build_instructions.md">Chromium Android build instructions</a>: Linux
+            host required.
           </li>
           <li>
-            <a href="https://heroui.com/docs/native/getting-started/quick-start">HeroUI Native quick start</a> and the <code>create-heroui-native-app</code> 1.0
-            release notes.
+            <a href="https://chromium.googlesource.com/chromium/src/+/110.0.5481.77/weblayer/README.md">WebLayer / WebEngine README</a>: the deprecated
+            embedding API.
           </li>
           <li>
-            <a href="https://docs.expo.dev/versions/latest/sdk/ui/swift-ui/">Expo UI SwiftUI reference</a> and
-            <a href="https://expo.dev/blog/liquid-glass-app-with-expo-ui-and-swiftui">Liquid Glass with Expo UI</a>.
+            <a href="https://developer.apple.com/support/alternative-browser-engines/">Alternative browser engines in the EU</a> and
+            <a href="https://developer.apple.com/support/alternative-browser-engines-jp">in Japan</a> (Apple): why iOS stays on WebKit.
           </li>
           <li>
-            <a href="https://developer.apple.com/documentation/webkit/wkwebview">WKWebView</a>,
-            <a href="https://developer.apple.com/documentation/webkit/wkcontentruleliststore">WKContentRuleListStore</a>,
-            <a href="https://developer.apple.com/documentation/webkit/wkcontentworld">WKContentWorld</a>.
+            <a href="https://github.com/software-mansion/argent">Argent</a>,
+            <a href="https://heroui.com/docs/native/getting-started/quick-start">HeroUI Native</a>,
+            <a href="https://docs.expo.dev/versions/latest/sdk/ui/">Expo UI</a>.
           </li>
-          <li>
-            <a href="https://developer.apple.com/documentation/xcode/preparing-your-app-to-be-the-default-browser"
-              >Preparing your app to be the default browser</a
-            >.
-          </li>
-          <li><a href="https://docs.expo.dev/modules/get-started/">Expo Modules API</a>: local modules and native views.</li>
         </ul>
       </section>
 
       <footer class="note">
-        Bay mobile plan · <code>docs/mobile-plan.html</code> · Phase 0 set up and checked on the iPhone 18 Pro simulator (iOS 27, Xcode 27.1) on 31 October
-        2026.
+        Bay mobile plan · <code>docs/mobile-plan.html</code> · Phase 0 set up and checked on the iPhone 18 Pro simulator (iOS 27) and the bay-pixel emulator
+        (Android 16) on 31 October 2026.
       </footer>
     </main>
   </body>
