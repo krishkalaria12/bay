@@ -69,3 +69,6 @@ scripts/.notary.env
 # Bun build artifacts
 *.bun-build
 .*.bun-build
+
+# Rust build output
+packages/adblock/target/
