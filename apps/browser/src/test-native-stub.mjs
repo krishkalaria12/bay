@@ -310,3 +310,9 @@ export const engineBoostCalls = [];
 export const setBoosts = (boosts) => (engineBoostCalls.push(boosts), Promise.resolve());
 
 export const tidyNames = null;
+export const userScriptsAvailable = () => false;
+export const watchUserScripts = () => {};
+export const readUserScripts = async () => ({ state: "empty" });
+export const readUserScriptsStatus = async () => null;
+export const writeUserScriptsStatus = async () => {};
+export const onUserScriptsChange = () => ({ remove() {} });

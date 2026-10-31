@@ -23,7 +23,8 @@
       "TidyNamesModule",
       "WindowProfileModule",
       "CaptureModule",
-      "EaselModule"
+      "EaselModule",
+      "UserScriptsModule"
     ]
   }
 }
