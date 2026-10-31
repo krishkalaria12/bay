@@ -5,6 +5,7 @@ import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { plural } from "../../store/model";
 import { Button, Checkbox } from "../settings/controls";
+import { importedSummary } from "./apply";
 import { DIA_NOT_SHARED, KINDS } from "./constants";
 import type { ImportFlow } from "./useImportFlow";
 import {
@@ -428,17 +429,7 @@ export function DoneStep({ flow }: StepProps) {
   const theme = useTheme();
   const { counts, failures, notes, extensions } = flow;
   const failed = failures.length > 0;
-  const summary = [
-    counts.bookmarks && plural(counts.bookmarks, "bookmark"),
-    counts.history && plural(counts.history, "history item"),
-    counts.passwords && plural(counts.passwords, "password"),
-    counts.cookies && plural(counts.cookies, "cookie"),
-    counts.addresses && `${counts.addresses} ${counts.addresses === 1 ? "address" : "addresses"}`,
-    counts.cards && plural(counts.cards, "card"),
-    counts.tabs && plural(counts.tabs, "tab"),
-    counts.extensions && plural(counts.extensions, "extension"),
-    counts.extensionSettings && plural(counts.extensionSettings, "extension setting"),
-  ].filter(Boolean) as string[];
+  const summary = importedSummary(counts);
   const leftBehind = notes.length ? (
     <Text style={{ fontSize: 12, lineHeight: 17, marginTop: 10, color: theme.textTertiary, textAlign: failed ? "left" : "center" }}>{notes.join(" ")}</Text>
   ) : null;

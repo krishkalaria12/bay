@@ -10,7 +10,7 @@ import { canSwitchEngine, tabEngine } from "../../store/engines";
 import { isDeveloperUrl, siteKey } from "../developer/sites";
 import type { Tab } from "../../store/types";
 import { isInternalTab } from "../pages/urls";
-import { splitOf } from "../../store/splits";
+import { splitOf, pinnableSplit, pinRowTitle } from "../../store/splits";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../littleBay/menu";
 import { boostHost } from "../../lib/boosts";
 import { libraryAvailable } from "../library/availability";
@@ -31,7 +31,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "site" | "tab" | "spaces" | "boost" | "boosted" | "engine";
+  needs?: "page" | "site" | "tab" | "split" | "spaces" | "boost" | "boosted" | "engine";
   available?: (context: Context) => boolean;
 };
 
@@ -50,6 +50,14 @@ const DEFS: ActionDef[] = [
     icon: "pin",
     keywords: ["pin", "unpin", "pin tab", "unpin tab", "remove from top apps", "favorites"],
     needs: "tab",
+  },
+  {
+    command: "togglePinRow",
+    title: ({ s, tab }) => (tab ? pinRowTitle(s, tab.id) : ""),
+    icon: "pin",
+    hint: "⇧⌘D",
+    keywords: ["pin split", "unpin split", "pin split view", "unpin split view"],
+    needs: "split",
   },
   { command: "duplicateTab", title: "Duplicate Tab", icon: "plus.square.on.square", needs: "tab" },
   { command: "renameTab", title: "Rename Tab", icon: "pencil", needs: "tab" },
@@ -169,6 +177,13 @@ const DEFS: ActionDef[] = [
   { command: "showHistory", title: "History", icon: "clock", hint: "⌘Y", keywords: ["show history"] },
   { command: "manageBookmarks", title: "Bookmarks", icon: "book", hint: "⌥⌘B", keywords: ["manage bookmarks", "show bookmarks"] },
   { command: "openSettings", title: "Settings", icon: "gearshape", hint: "⌘,", keywords: ["preferences", "prefs", "options"] },
+  {
+    command: "clearCookiesAndCache",
+    title: "Clear Cookies and Cache",
+    icon: "trash",
+    keywords: ["clear cookies", "clear cache", "clear site data", "delete cookies", "sign out of site"],
+    needs: "site",
+  },
   { command: "clearBrowsingData", title: "Clear Browsing Data", icon: "trash", keywords: ["clear history", "clear cache", "clear cookies"] },
   { command: "importBrowserData", title: "Import Browser Data", icon: "square.and.arrow.down", keywords: ["import bookmarks", "import passwords"] },
   { command: "keyboardShortcuts", title: "Keyboard Shortcuts", icon: "keyboard", keywords: ["shortcuts", "hotkeys"] },
@@ -255,6 +270,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     if ((d.needs === "boost" || d.needs === "boosted") && !boostsAvailable()) continue;
     if (d.needs === "page" && !tab?.url) continue;
     if (d.needs === "tab" && !tab) continue;
+    if (d.needs === "split" && !(tab && pinnableSplit(s, tab.id))) continue;
     if (d.needs === "site" && !siteKey(tab?.url ?? "")) continue;
     if (d.needs === "spaces" && w?.incognito) continue;
     if (d.needs === "boost" && !boostHost(tab?.url)) continue;

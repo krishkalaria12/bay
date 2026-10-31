@@ -27,6 +27,7 @@ import { TOP_CARD_INSET } from "./components/layout/constants";
 import { TOP_STRIP_HEIGHT } from "./components/layout/constants";
 import { usePeek } from "./components/layout/usePeek";
 import { useSidebarDock } from "./components/layout/useSidebarDock";
+import { useSidebarLights } from "./components/layout/useSidebarLights";
 import { useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./components/layout/windowLayout";
 import { WindowProfile } from "./components/layout/WindowProfile";
 import { Sidebar } from "./components/Sidebar";
@@ -76,7 +77,7 @@ function BrowserWindow() {
   // sizes and swipe surface. Moved out of the window rather than made transparent, so nothing in them takes the pointer.
   const showSidebar = sidebarOpen && !topTabs;
   const showStrip = sidebarOpen && topTabs;
-  // The sidebar on the window's right (Appearance › Sidebar): the page on its left, the window buttons where they are.
+  // The sidebar on the window's right (Appearance › Sidebar): the page on its left.
   const right = useSidebarOnRight();
   const addressInSidebar = useAddressBarInSidebar();
   // Caption buttons sit in the desktop layout's corners: over the page there when it has no toolbar to hold them.
@@ -87,7 +88,7 @@ function BrowserWindow() {
   const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
   const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   const [peekOut, setPeekOut] = useState(false);
-  const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, right, topTabs, peekOut });
+  const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, topTabs, peekOut });
   const lightsColor = theme.windowTint[0];
   useEffect(() => {
     void setTrafficLightsMode(windowId, lights, lightsColor);
@@ -96,6 +97,7 @@ function BrowserWindow() {
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);
   const dock = useSidebarDock(showSidebar);
+  useSidebarLights(windowId, { on: right && addressInSidebar && !fullscreen, progress: dock.progress, windowWidth: width, sidebarWidth, peekOut });
   // The sidebar's slot narrows to the card's inset as it closes; the sidebar slides out by as much, so its edge stays
   // on the card's (no clipping: the resize handle reaches past it). On the right it's already held at the slot's
   // start, so it goes out past the window's edge as the slot narrows.
@@ -184,20 +186,13 @@ function BrowserWindow() {
   );
 }
 
-// The page has no toolbar to hold the window buttons with the address bar in the sidebar: it runs up under them. With
-// the sidebar on the right they show only while the pointer is over the window's top, as Zen has it; with it closed on
-// the left, only with its peek, as Arc has it, so they never sit over the page's corner.
-function trafficLightsMode(o: {
-  addressInSidebar: boolean;
-  fullscreen: boolean;
-  sidebarOpen: boolean;
-  right: boolean;
-  topTabs: boolean;
-  peekOut: boolean;
-}): TrafficLightsMode {
-  if (!o.addressInSidebar || o.fullscreen) return "shown";
-  if (!o.sidebarOpen && !o.right && !o.topTabs) return o.peekOut ? "shown" : "hidden";
-  return o.right || !o.sidebarOpen ? "hover" : "shown";
+// The page has no toolbar to hold the window buttons with the address bar in the sidebar: they sit in the sidebar's
+// header, on either side (useSidebarLights). With it closed, they show only with its peek, as Arc has it, so they never
+// sit over the page's corner; with the top strip closed, only while the pointer is over the window's top, as Zen has it.
+function trafficLightsMode(o: { addressInSidebar: boolean; fullscreen: boolean; sidebarOpen: boolean; topTabs: boolean; peekOut: boolean }): TrafficLightsMode {
+  if (!o.addressInSidebar || o.fullscreen || o.sidebarOpen) return "shown";
+  if (o.topTabs) return "hover";
+  return o.peekOut ? "shown" : "hidden";
 }
 
 // DEV: the peek's show, by window, as the pointer reaching the window's edge does (nnPeek(windowId)), and whether

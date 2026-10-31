@@ -17,6 +17,8 @@ export * from "./live";
 export * from "./capture";
 export * from "./easel";
 export * from "./localFiles";
+export * from "./cli";
+export * from "./userScripts";
 
 export type BrowserCommand =
   | "focusSidebar"
@@ -95,6 +97,7 @@ export type BrowserCommand =
   | "importBrowserData"
   | "showHistory"
   | "clearBrowsingData"
+  | "clearCookiesAndCache"
   | "manageBookmarks"
   | "bookmarkAllTabs"
   | "setBookmarksBar"

@@ -21,6 +21,7 @@ import {
   without,
   type TabList,
 } from "./model";
+import { withSplitPanes } from "./splits";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { ClosedGroup, ClosedTab, Tab, TabGroup } from "./types";
 import { CLEAN_UP_AFTER_MS, DELETED_GROUP_MS, MAX_CLEANED, MAX_CLOSED_GROUPS, RECENT_TABS } from "./constants";
@@ -552,7 +553,11 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
   },
 
   placeTabs(ids, placement) {
-    set((s) => withFolderPlacementUndo(s, placing(s, ids, placement), ids));
+    set((s) => {
+      // In and out of the Pinned section, a split goes whole.
+      const moving = placement.row === undefined ? ids : withSplitPanes(s, ids);
+      return withFolderPlacementUndo(s, placing(s, moving, placement), moving);
+    });
   },
 
   pinTabs(ids, pinned) {
@@ -567,9 +572,10 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     const s = get();
     const w = listOfTab(s, ids[0] ?? "");
     if (!w) return;
+    const rows = withSplitPanes(s, ids);
     // Unpinned, they go to the top of the list, below anything pinned.
-    const beforeId = pinned ? null : w.tabIds.find((id) => !inPinnedContainer(s, id) && !ids.includes(id));
-    set(placing(s, ids, { pinned: false, row: pinned, beforeId }));
+    const beforeId = pinned ? null : w.tabIds.find((id) => !inPinnedContainer(s, id) && !rows.includes(id));
+    set(placing(s, rows, { pinned: false, row: pinned, beforeId }));
   },
 
   returnToPinnedUrl(tabId) {

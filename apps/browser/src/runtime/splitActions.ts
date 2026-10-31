@@ -13,7 +13,8 @@ export const updateSplit = (splitId: string, patch: SplitPatch) => dispatchBrows
 export const movePane = (tabId: string, delta: 1 | -1) => dispatchBrowserCommand({ method: "movePane", tabId, delta });
 export const focusPane = (windowId: string, delta: 1 | -1) => dispatchBrowserCommand({ method: "focusPane", windowId, delta });
 export const toggleTabLayout = (windowId: string) => dispatchBrowserCommand({ method: "toggleTabLayout", windowId });
-export const openPeek = (fromTabId: string, url: string) => dispatchBrowserCommand({ method: "openPeek", fromTabId, url });
+export const openPeek = (fromTabId: string, url: string, point?: { x: number; y: number }) =>
+  dispatchBrowserCommand({ method: "openPeek", fromTabId, url, ...(point ? { point } : {}) });
 export const closePeek = (windowId: string) => dispatchBrowserCommand({ method: "closePeek", windowId });
 export const keepPeek = (windowId: string) => dispatchBrowserCommand({ method: "keepPeek", windowId });
 export const splitPeek = (windowId: string) => dispatchBrowserCommand({ method: "splitPeek", windowId });

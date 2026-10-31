@@ -11,7 +11,7 @@ import { everySlowly } from "../lib/slowTimers";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { useBrowserRead as useBrowser } from "../store/read";
 import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId } from "../store/hooks";
-import { activeTabId, listIds, windowListKey } from "../store/model";
+import { activeTabId, listIds, spaceFolded, spaceHeaderHidden, windowListKey } from "../store/model";
 import { cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
 import { LIGHTS_WIDTH, useWindowButtonLayout } from "./layout/windowButtons";
@@ -260,7 +260,8 @@ type PageProps = {
 function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom, rows, geometryRef, onListHeight, onScrollView, onScrollY }: PageProps) {
   const windowId = useWindowId();
   const metrics = useSidebarMetrics();
-  const folded = useBrowser((s) => !!s.spaces[spaceId]?.folded);
+  const folded = useBrowser((s) => spaceFolded(s, spaceId));
+  const headerHidden = useBrowser(spaceHeaderHidden);
   const hasLocalFiles = useBrowser((s) => Object.values(s.localFiles).some((pin) => pin.spaceId === spaceId));
   const { tiles, pinned, pinnedGroups, list: all } = useSidebarEntries(windowId, spaceId);
   // A page's first render mounts only the rows a screen can show; the rest follow in chunks, one per frame, so a
@@ -355,7 +356,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                         >
                           <PinnedGrid tabs={tiles} innerWidth={innerWidth} />
                           <View style={{ marginTop: tiles.length ? 6 : topGap }}>
-                            <SpaceTitle windowId={windowId} spaceId={spaceId} />
+                            {headerHidden ? null : <SpaceTitle windowId={windowId} spaceId={spaceId} />}
                           </View>
                           {/* The Pinned section (Arc's, Zen's): pinned rows and folders, above a line. */}
                           <FoldAway
@@ -458,7 +459,9 @@ const ListEntry = memo(function ListEntry({ entry }: { entry: string }) {
 
 const PinnedEntry = memo(function PinnedEntry({ entry }: { entry: string }) {
   const id = entry.slice(2);
-  return entry.startsWith("f:") ? <FolderBlock folderId={id} /> : <TabRowItem tabId={id} section="pinned" />;
+  if (entry.startsWith("f:")) return <FolderBlock folderId={id} />;
+  if (entry.startsWith("s:")) return <SplitRowItem splitId={id} section="pinned" />;
+  return <TabRowItem tabId={id} section="pinned" />;
 });
 
 // The line separates pinned content from the tab list, including a lone tab. Dropping above its middle pins a tab.

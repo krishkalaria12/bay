@@ -123,6 +123,10 @@ bool EngineHasTabModel();
 // A tab Chrome made with no page opener (an extension's tabs.create): offered as "tab:<browserId>".
 + (NSString *)offerTab:(NNCoreTab *)tab prefix:(NSString *)prefix;
 + (nullable NNCoreTab *)takeOffered:(NSString *)adoptId;
+// Chrome activated an offered tab before the app adopted it (the bay command's activate right after newTab): the
+// view that adopts it asks the app to show it.
++ (void)noteActivation:(NNCoreTab *)tab;
++ (BOOL)takeActivation:(NNCoreTab *)tab;
 + (void)forget:(NNCoreTab *)tab;
 @end
 

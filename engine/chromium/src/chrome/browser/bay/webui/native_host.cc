@@ -634,7 +634,7 @@ base::DictValue NativeHost::Info() const {
           .Set("optionalMethods", std::move(engine_methods))
           .Set("constants",
                base::DictValue()
-                   .Set("BayApp", base::DictValue().Set("apiVersion", 13))
+                   .Set("BayApp", base::DictValue().Set("apiVersion", 14))
                    .Set("BayShell", std::move(shell)))
           .Set("snapshots",
                base::DictValue()

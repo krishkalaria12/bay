@@ -700,6 +700,7 @@ const char kPageReportsKey = 0;
   // From where the last view left it: a tab that comes into sight in this one leaves Picture in Picture.
   [self userSightChanged];
   [self adoptIntoWindow];
+  if ([NNCoreTabs takeActivation:tab]) [self tab:tab requestsActivation:@"page"];
   NSView *page = tab.view;
   if (page.superview != self) {
     [page removeFromSuperview];
@@ -854,14 +855,15 @@ const char kPageReportsKey = 0;
     });
     return;
   }
-  [self emit:@"openWindow"
-      payload:@{
-        @"url" : url ?: @"",
-        @"disposition" : disposition,
-        @"adoptId" : adoptId,
-        @"userGesture" : @YES,
-        @"postBody" : @NO,
-      }];
+  NSMutableDictionary *payload = [@{
+    @"url" : url ?: @"",
+    @"disposition" : disposition,
+    @"adoptId" : adoptId,
+    @"userGesture" : @YES,
+    @"postBody" : @NO,
+  } mutableCopy];
+  if ([disposition isEqualToString:@"foreground"]) payload[@"point"] = [self pointerPoint];
+  [self emit:@"openWindow" payload:payload];
 }
 
 - (void)tabRemovedFromWindow:(NNCoreWindow *)window {
@@ -1457,7 +1459,20 @@ const char kPageReportsKey = 0;
 }
 
 - (void)tab:(NNCoreTab *)tab wantsPeekOfURL:(NSString *)url {
-  [self emit:@"peekLink" payload:@{@"url" : url ?: @""}];
+  NSMutableDictionary *payload = [@{@"url" : url ?: @""} mutableCopy];
+  payload[@"point"] = [self pointerPoint];
+  [self emit:@"peekLink" payload:payload];
+}
+
+// Where the pointer is, when over the page: in the window's content, from its top left (as JS measures in the window),
+// for a peek to open out of the link just clicked. nil off the page.
+- (NSDictionary *)pointerPoint {
+  NSView *content = self.window.contentView;
+  if (!content) return nil;
+  NSPoint inWindow = self.window.mouseLocationOutsideOfEventStream;
+  if (!NSPointInRect([self convertPoint:inWindow fromView:nil], self.bounds)) return nil;
+  NSPoint p = [content convertPoint:inWindow fromView:nil];
+  return @{@"x" : @(p.x), @"y" : @(content.isFlipped ? p.y : NSHeight(content.bounds) - p.y)};
 }
 
 - (void)tabDidGainFocus:(NNCoreTab *)tab {
@@ -2249,6 +2264,11 @@ NSMutableDictionary<NSString *, NNCoreTab *> *Offered() {
   return offered;
 }
 
+NSHashTable<NNCoreTab *> *Activated() {
+  static NSHashTable *activated = [NSHashTable weakObjectsHashTable];
+  return activated;
+}
+
 // A tab Chrome opened that the app never adopts (it chose to open the URL fresh, in a private window, say).
 constexpr int64_t kOfferSeconds = 30;
 
@@ -2286,8 +2306,19 @@ constexpr int64_t kOfferSeconds = 30;
   return tab;
 }
 
++ (void)noteActivation:(NNCoreTab *)tab {
+  if ([Offered() allKeysForObject:tab].count) [Activated() addObject:tab];
+}
+
++ (BOOL)takeActivation:(NNCoreTab *)tab {
+  if (![Activated() containsObject:tab]) return NO;
+  [Activated() removeObject:tab];
+  return YES;
+}
+
 + (void)forget:(NNCoreTab *)tab {
   [Views() removeObjectForKey:tab];
+  [Activated() removeObject:tab];
   for (NSString *key in [Offered() allKeysForObject:tab]) [Offered() removeObjectForKey:key];
 }
 

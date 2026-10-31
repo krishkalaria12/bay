@@ -4,7 +4,7 @@ import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { folderTabIds } from "../../store/folders";
-import { activeTabId } from "../../store/model";
+import { activeTabId, spaceFolded } from "../../store/model";
 import { GROUP_BORDER, GROUP_PAD, NEW_TAB_GAP } from "./constants";
 import { folderEntries, groupEntries, sidebarEntries } from "./entries";
 
@@ -68,7 +68,7 @@ export function rowSpan(
   newTabAtTop: boolean,
 ): { section: Section; top: number; height: number } | null {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
-  const folded = !!s.spaces[spaceId]?.folded;
+  const folded = spaceFolded(s, spaceId);
   const { pinned, pinnedGroups, list } = sidebarEntries(s, windowId, spaceId);
   const sections: [Section, string[], number][] = [
     ["pinned", folded ? [] : pinned, 0],
@@ -110,7 +110,7 @@ function folderRowSpan(s: BrowserState, windowId: string, spaceId: string, folde
   }
   let nextTop = top + ROW + GAP;
   for (const entry of entries) {
-    if (entry === `t:${tabId}`) return { top: nextTop, height: ROW };
+    if (entry === `t:${tabId}` || (entry.startsWith("s:") && s.splits[entry.slice(2)]?.tabIds.includes(tabId))) return { top: nextTop, height: ROW };
     if (entry.startsWith("f:") && folderTabIds(s, entry.slice(2)).includes(tabId)) return folderRowSpan(s, windowId, spaceId, entry.slice(2), tabId, nextTop);
     nextTop += entryHeight(s, windowId, spaceId, entry) + GAP;
   }
@@ -135,7 +135,7 @@ export function folderDragItemVisible(s: BrowserState, windowId: string, item: {
   while (parent) {
     if (parent.collapsed) {
       const active = activeTabId(s, windowId);
-      return item.kind === "row" && !!active && item.tabIds.includes(active);
+      return (item.kind === "row" || item.kind === "split") && !!active && item.tabIds.includes(active);
     }
     parent = parent.parentId ? s.pinnedFolders[parent.parentId] : undefined;
   }

@@ -1,7 +1,7 @@
 // The app itself, which index.js loads once the native build matches this bundle (nativeApi.tsx).
 // First, so every native module listener the app adds applies held page reports before it runs.
 import "./lib/nativeEvents";
-import { batchedUpdates } from "@bay/platform";
+import { batchedUpdates, isMac } from "@bay/platform";
 import { quietLaunchTabs } from "./components/BlankTabSurface";
 import { registerWindowApplication } from "./windowEntry";
 import { startTranslate } from "./components/site/translate";
@@ -15,6 +15,8 @@ import { startSync } from "./sync/engine";
 import { setStoreBatching, useBrowser } from "./store/browser";
 import { installErrorReporting, startTelemetry } from "./telemetry";
 import { markFirstWindow } from "./telemetry/track";
+import { startCliControl } from "./components/cli/control";
+import { startUserScripts } from "./components/cli/userScripts";
 
 probeStore("browser", useBrowser);
 // Reports stay silent until the user shares them.
@@ -27,6 +29,8 @@ startNativeSync({ persistence: backgroundServices });
 // After the first window is made: the tab each window starts on doesn't open the command bar.
 quietLaunchTabs();
 startAppIntegration();
+if (isMac) startCliControl();
+startUserScripts();
 startTabLifecycle();
 startTranslate();
 startSync(useBrowser);

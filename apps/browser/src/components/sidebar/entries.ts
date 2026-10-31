@@ -2,10 +2,11 @@ import { useShallow } from "zustand/react/shallow";
 import type { BrowserProjection } from "../../runtime/projection";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { childFolderIds, folderRootId, folderTabIds, inFolder } from "../../store/folders";
-import { activeTabId, favoriteTabIds, pinnedPage, viewTabIds } from "../../store/model";
+import { activeTabId, favoriteTabIds, spaceFolded, viewTabIds } from "../../store/model";
 import { live, profileFolders } from "../../live/store";
 import { folderRows } from "../../live/rows";
 import type { SidebarKeyboardRow } from "./keyboardModel";
+import { splitRowTabs } from "../../store/splits";
 import { splitIndex, stableList } from "../../store/structure";
 
 // The Essentials (tiles), the Pinned section's rows and folders ("t:" and "f:" entries), the pinned groups, and the
@@ -53,7 +54,7 @@ function computeEntries(s: BrowserProjection, windowId: string, spaceId?: string
     if (tab.pinnedRow) {
       const folder = tab.folderId ? s.pinnedFolders[tab.folderId] : undefined;
       const rootId = folder && inFolder(tab, folder) ? folderRootId(s, folder.id) : undefined;
-      const entry = rootId ? `f:${rootId}` : `t:${id}`;
+      const entry = rootId ? `f:${rootId}` : splitEntry(s, id, splits);
       if (!seen.has(entry)) pinned.push(entry);
       seen.add(entry);
       continue;
@@ -86,7 +87,7 @@ export function numberedTabs(s: BrowserProjection, windowId: string): string[] {
     if (entry.startsWith("g:")) return groupEntries(s, id).flatMap(rowTab);
     if (entry.startsWith("f:")) return folderEntries(s, id).flatMap(rowTab);
     if (!entry.startsWith("s:")) return [id];
-    const panes = (s.splits[id]?.tabIds ?? []).filter((tabId) => s.tabs[tabId] && !pinnedPage(s.tabs[tabId]!));
+    const panes = s.splits[id] ? splitRowTabs(s, s.splits[id]) : [];
     if (active && panes.includes(active)) return [active];
     const last = panes.reduce<string | undefined>((a, b) => (!a || s.tabs[b]!.lastActiveAt > s.tabs[a]!.lastActiveAt ? b : a), undefined);
     return last ? [last] : [];
@@ -133,7 +134,8 @@ export function groupEntries(s: BrowserProjection, groupId: string): string[] {
 
 function splitEntry(s: BrowserProjection, tabId: string, splits = splitIndex(s.splits)): string {
   for (const v of splits.get(tabId) ?? []) {
-    if (v.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!)).length >= 2) return `s:${v.id}`;
+    const panes = splitRowTabs(s, v);
+    if (panes.length >= 2 && panes.includes(tabId)) return `s:${v.id}`;
   }
   return `t:${tabId}`;
 }
@@ -146,14 +148,20 @@ export const useGroupEntries = (groupId: string) => useBrowser(useShallow((s) =>
 
 const folderMemo = new Map<
   string,
-  { tabs: BrowserProjection["tabs"]; lists: BrowserProjection["tabLists"]; folders: BrowserProjection["pinnedFolders"]; result: string[] }
+  {
+    tabs: BrowserProjection["tabs"];
+    lists: BrowserProjection["tabLists"];
+    folders: BrowserProjection["pinnedFolders"];
+    splits: BrowserProjection["splits"];
+    result: string[];
+  }
 >();
 
 /** A folder's immediate tabs and child folders in sidebar order. */
 export function folderEntries(s: BrowserProjection, folderId: string): string[] {
   const cached = folderMemo.get(folderId);
   const folder = s.pinnedFolders[folderId];
-  if (cached && cached.tabs === s.tabs && cached.lists === s.tabLists && cached.folders === s.pinnedFolders) return cached.result;
+  if (cached && cached.tabs === s.tabs && cached.lists === s.tabLists && cached.folders === s.pinnedFolders && cached.splits === s.splits) return cached.result;
   const out: string[] = [];
   if (folder) {
     const children = childFolderIds(s, folderId, folder.spaceId);
@@ -162,7 +170,7 @@ export function folderEntries(s: BrowserProjection, folderId: string): string[] 
     const seen = new Set<string>();
     for (const id of folderTabIds(s, folderId)) {
       const child = childForTab.get(id);
-      const entry = child ? `f:${child}` : `t:${id}`;
+      const entry = child ? `f:${child}` : splitEntry(s, id);
       if (!seen.has(entry)) out.push(entry);
       seen.add(entry);
     }
@@ -173,7 +181,7 @@ export function folderEntries(s: BrowserProjection, folderId: string): string[] 
     );
   }
   const result = stableList(cached?.result, out);
-  if (folder) folderMemo.set(folderId, { tabs: s.tabs, lists: s.tabLists, folders: s.pinnedFolders, result });
+  if (folder) folderMemo.set(folderId, { tabs: s.tabs, lists: s.tabLists, folders: s.pinnedFolders, splits: s.splits, result });
   else folderMemo.delete(folderId);
   return result;
 }
@@ -239,12 +247,12 @@ export function sidebarKeyboardRows(s: BrowserProjection, windowId: string, live
         .filter((child) => !group.collapsed || child === `t:${active}` || (child.startsWith("s:") && s.splits[child.slice(2)]?.tabIds.includes(active ?? "")))
         .forEach((child) => append(child, entry));
     } else if (entry.startsWith("s:")) {
-      const tabIds = (s.splits[id]?.tabIds ?? []).filter((tabId) => s.tabs[tabId] && !pinnedPage(s.tabs[tabId]!));
+      const tabIds = s.splits[id] ? splitRowTabs(s, s.splits[id]) : [];
       if (tabIds.length >= 2) out.push({ id: entry, kind: "split", tabIds, parentId });
     } else if (s.tabs[id]) out.push({ id: entry, kind: "tab", tabIds: [id], parentId });
   };
   tiles.forEach((id) => append(`t:${id}`));
-  if (!s.spaces[w.spaceId]?.folded) {
+  if (!spaceFolded(s, w.spaceId)) {
     pinned.forEach((entry) => append(entry));
     out.push(...extensions);
     pinnedGroups.forEach((id) => append(`g:${id}`));

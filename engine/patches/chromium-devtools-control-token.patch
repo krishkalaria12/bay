@@ -1,0 +1,629 @@
+diff --git a/content/browser/devtools/devtools_agent_host_impl.cc b/content/browser/devtools/devtools_agent_host_impl.cc
+--- a/content/browser/devtools/devtools_agent_host_impl.cc
++++ b/content/browser/devtools/devtools_agent_host_impl.cc
+@@ -46,6 +46,11 @@
+ #include <io.h>
+ #endif
+ 
++#include "bay/core/nn_content_hooks.h"  // nogncheck
++
++bool (*g_bay_devtools_may_attach)(content::DevToolsAgentHostClient* root_client,
++                                    content::DevToolsAgentHost* host) = nullptr;
++
+ namespace content {
+ 
+ namespace {
+@@ -319,6 +324,11 @@
+       !manager->delegate()->AllowInspectingTarget(this)) {
+     return false;
+   }
++  if (g_bay_devtools_may_attach &&
++      !g_bay_devtools_may_attach(session->GetRootSession()->GetClient(),
++                                   this)) {
++    return false;
++  }
+   session->SetAgentHost(this);
+   if (!AttachSession(session)) {
+     return false;
+diff --git a/content/browser/devtools/devtools_http_handler.cc b/content/browser/devtools/devtools_http_handler.cc
+--- a/content/browser/devtools/devtools_http_handler.cc
++++ b/content/browser/devtools/devtools_http_handler.cc
+@@ -26,6 +26,7 @@
+ #include "base/message_loop/message_pump_type.h"
+ #include "base/strings/escape.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/string_view_util.h"
+ #include "base/strings/stringprintf.h"
+@@ -67,6 +68,27 @@
+ extern const int kCcompressedProtocolJSON;
+ #endif
+ 
++#include "bay/core/nn_content_hooks.h"  // nogncheck
++
++bool (*g_bay_devtools_token_factory)(
++    const content::DevToolsSocketFactory* factory) = nullptr;
++bool (*g_bay_devtools_token_accepts)(
++    const content::DevToolsSocketFactory* factory,
++    std::string_view token) = nullptr;
++void (*g_bay_devtools_token_server)(
++    const content::DevToolsSocketFactory* factory,
++    std::string_view browser_path,
++    int port,
++    size_t connections) = nullptr;
++bool (*g_bay_devtools_active_target)(
++    const content::DevToolsSocketFactory* factory,
++    std::string_view token,
++    std::string* target_id) = nullptr;
++std::unique_ptr<BayDevToolsTokenClient> (*g_bay_devtools_token_client)(
++    const content::DevToolsSocketFactory* factory,
++    content::DevToolsAgentHostClient* client,
++    content::DevToolsAgentHost* host) = nullptr;
++
+ namespace content {
+ 
+ namespace {
+@@ -116,6 +138,26 @@
+           "Not implemented, only used in Devtools and is behind a switch."
+       })");
+ 
++void SplitBayPath(std::string_view full,
++                    std::string_view* path,
++                    std::string_view* token) {
++  *path = full;
++  std::string_view query;
++  if (size_t query_pos = full.find('?'); query_pos != std::string_view::npos) {
++    query = full.substr(query_pos + 1);
++    *path = full.substr(0, query_pos);
++  }
++  *token = std::string_view();
++  for (std::string_view pair :
++       base::SplitStringPiece(query, "&", base::KEEP_WHITESPACE,
++                              base::SPLIT_WANT_NONEMPTY)) {
++    if (base::StartsWith(pair, "token=")) {
++      *token = pair.substr(6);
++      return;
++    }
++  }
++}
++
+ bool RequestIsSafeToServe(const net::HttpServerRequestInfo& info) {
+   // For browser-originating requests, serve only those that are coming from
+   // pages loaded off localhost or fixed IPs.
+@@ -258,6 +300,10 @@
+         std::unique_ptr<DevToolsSocketFactory>(socket_factory),
+         std::move(ip_address));
+   } else {
++    if (handler && handler->bay_token_mode_ &&
++        g_bay_devtools_token_server) {
++      g_bay_devtools_token_server(socket_factory, "", 0, 0);
++    }
+     TerminateOnUI(std::move(thread),
+                   std::unique_ptr<ServerWrapper>(server_wrapper),
+                   std::unique_ptr<DevToolsSocketFactory>(socket_factory));
+@@ -328,14 +374,51 @@
+       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+       ServerWrapper* server_wrapper,
+       int connection_id,
+-      scoped_refptr<DevToolsAgentHost> agent_host)
++      scoped_refptr<DevToolsAgentHost> agent_host,
++      const DevToolsSocketFactory* bay_token_factory = nullptr)
+       : task_runner_(std::move(task_runner)),
+         server_wrapper_(server_wrapper),
+         connection_id_(connection_id),
+         agent_host_(agent_host) {
+     DCHECK_CURRENTLY_ON(BrowserThread::UI);
++    if (bay_token_factory) {
++      if (g_bay_devtools_token_client) {
++        bay_token_client_ = g_bay_devtools_token_client(
++            bay_token_factory, this, agent_host_.get());
++      }
++      if (!bay_token_client_) {
++        agent_host_ = nullptr;
++        return;
++      }
++    }
+     // TODO(dgozman): handle return value of AttachClient.
+-    agent_host_->AttachClient(this);
++    attached_ = agent_host_->AttachClient(this);
++  }
++
++  bool attached() const { return attached_; }
++
++  bool MayAttachToURL(const GURL& url, bool is_webui) override {
++    return bay_token_client_
++               ? bay_token_client_->MayAttachToURL(url, is_webui)
++               : DevToolsAgentHostClient::MayAttachToURL(url, is_webui);
++  }
++
++  bool MayAttachToRenderFrameHost(
++      RenderFrameHost* render_frame_host) override {
++    return bay_token_client_
++               ? bay_token_client_->MayAttachToRenderFrameHost(
++                     render_frame_host)
++               : DevToolsAgentHostClient::MayAttachToRenderFrameHost(
++                     render_frame_host);
++  }
++
++  bool MayReadLocalFiles() override {
++    return !bay_token_client_ && DevToolsAgentHostClient::MayReadLocalFiles();
++  }
++
++  bool MayWriteLocalFiles() override {
++    return !bay_token_client_ &&
++           DevToolsAgentHostClient::MayWriteLocalFiles();
+   }
+ 
+   ~DevToolsAgentHostClientImpl() override {
+@@ -366,17 +449,37 @@
+                                base::span<const uint8_t> message) override {
+     DCHECK_CURRENTLY_ON(BrowserThread::UI);
+     DCHECK(agent_host == agent_host_.get());
+-    task_runner_->PostTask(
+-        FROM_HERE,
+-        base::BindOnce(&ServerWrapper::SendOverWebSocket,
+-                       base::Unretained(server_wrapper_), connection_id_,
+-                       std::string(message.begin(), message.end())));
++    std::string text(message.begin(), message.end());
++    if (bay_token_client_ && !bay_token_client_->FilterEvent(text)) {
++      return;
++    }
++    SendToSocket(std::move(text));
+   }
+ 
+   void OnMessage(base::span<const uint8_t> message) {
+     DCHECK_CURRENTLY_ON(BrowserThread::UI);
+-    if (agent_host_)
+-      agent_host_->DispatchProtocolMessage(this, message);
++    if (!agent_host_) {
++      return;
++    }
++    if (bay_token_client_) {
++      std::string command(message.begin(), message.end());
++      std::string reply;
++      if (!bay_token_client_->FilterCommand(command, &reply)) {
++        if (!reply.empty()) {
++          SendToSocket(std::move(reply));
++        }
++        if (bay_token_client_->ShouldClose()) {
++          task_runner_->PostTask(
++              FROM_HERE, base::BindOnce(&ServerWrapper::Close,
++                                        base::Unretained(server_wrapper_),
++                                        connection_id_));
++        }
++        return;
++      }
++      agent_host_->DispatchProtocolMessage(this, base::as_byte_span(command));
++      return;
++    }
++    agent_host_->DispatchProtocolMessage(this, message);
+   }
+ 
+  private:
+@@ -384,6 +487,16 @@
+   const raw_ptr<ServerWrapper> server_wrapper_;
+   const int connection_id_;
+   scoped_refptr<DevToolsAgentHost> agent_host_;
++  std::unique_ptr<BayDevToolsTokenClient> bay_token_client_;
++  bool attached_ = false;
++
++  void SendToSocket(std::string text) {
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ServerWrapper::SendOverWebSocket,
++                       base::Unretained(server_wrapper_), connection_id_,
++                       std::move(text)));
++  }
+ };
+ 
+ static bool TimeComparator(scoped_refptr<DevToolsAgentHost> host1,
+@@ -410,6 +523,9 @@
+   // by the targets. It is essential that this happens before we issue delete
+   // soon for the server wrapper.
+   connection_to_client_.clear();
++  if (bay_token_mode_ && socket_factory_ && g_bay_devtools_token_server) {
++    g_bay_devtools_token_server(socket_factory_.get(), "", 0, 0);
++  }
+   TerminateOnUI(std::move(thread_), std::move(server_wrapper_),
+                 std::move(socket_factory_));
+   delegate_ = nullptr;
+@@ -466,6 +582,13 @@
+ 
+   server_->SetSendBufferSize(connection_id, kSendBufferSizeForDevTools);
+ 
++  if (base::StartsWith(info.path, "/bay/", base::CompareCase::SENSITIVE)) {
++    GetUIThreadTaskRunner({})->PostTask(
++        FROM_HERE, base::BindOnce(&DevToolsHttpHandler::OnBayRequest,
++                                  handler_, connection_id, info));
++    return;
++  }
++
+   if (base::StartsWith(info.path, "/json", base::CompareCase::SENSITIVE)) {
+     GetUIThreadTaskRunner({})->PostTask(
+         FROM_HERE, base::BindOnce(&DevToolsHttpHandler::OnJsonRequest, handler_,
+@@ -584,7 +707,8 @@
+     int connection_id,
+     const net::HttpServerRequestInfo& info) {
+   if (mode_ ==
+-      DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly) {
++          DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly ||
++      bay_token_mode_) {
+     Send404(connection_id);
+     return;
+   }
+@@ -755,9 +879,34 @@
+   SendJson(connection_id, net::HTTP_OK, list_value, "");
+ }
+ 
++void DevToolsHttpHandler::OnBayRequest(
++    int connection_id,
++    const net::HttpServerRequestInfo& info) {
++  std::string_view path;
++  std::string_view token;
++  SplitBayPath(info.path, &path, &token);
++  std::string target_id;
++  if (!bay_token_mode_ || info.method != "GET" ||
++      info.headers.count("origin") || path != "/bay/active" ||
++      !g_bay_devtools_active_target ||
++      !g_bay_devtools_active_target(socket_factory_.get(), token,
++                                      &target_id)) {
++    Send404(connection_id);
++    return;
++  }
++  base::DictValue body;
++  if (target_id.empty()) {
++    body.Set("targetId", base::Value());
++  } else {
++    body.Set("targetId", target_id);
++  }
++  SendJson(connection_id, net::HTTP_OK, body, "");
++}
++
+ void DevToolsHttpHandler::OnDiscoveryPageRequest(int connection_id) {
+   if (mode_ ==
+-      DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly) {
++          DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly ||
++      bay_token_mode_) {
+     Send404(connection_id);
+     return;
+   }
+@@ -775,7 +924,8 @@
+ void DevToolsHttpHandler::OnFrontendResourceRequest(int connection_id,
+                                                     std::string_view path) {
+   if (mode_ ==
+-      DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly) {
++          DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly ||
++      bay_token_mode_) {
+     Send404(connection_id);
+     return;
+   }
+@@ -814,6 +964,11 @@
+   if (!thread_)
+     return;
+ 
++  if (bay_token_mode_ && request.headers.count("origin")) {
++    Send403(connection_id, "Connection rejected");
++    return;
++  }
++
+   if (request.headers.count("origin") &&
+       !remote_allow_origins_.count(request.headers.at("origin")) &&
+       !remote_allow_origins_.count("*")) {
+@@ -829,6 +984,29 @@
+     return;
+   }
+ 
++  net::HttpServerRequestInfo bay_routed;
++  if (bay_token_mode_) {
++    std::string_view path;
++    std::string_view token;
++    SplitBayPath(request.path, &path, &token);
++    if (!g_bay_devtools_token_accepts ||
++        !g_bay_devtools_token_accepts(socket_factory_.get(), token)) {
++      Send403(connection_id, "Connection rejected");
++      return;
++    }
++    const std::string version =
++        request.GetHeaderValue("sec-websocket-version");
++    if ((version != "8" && version != "13") ||
++        request.GetHeaderValue("sec-websocket-key").empty()) {
++      Send500(connection_id, "Invalid WebSocket handshake");
++      return;
++    }
++    bay_routed = request;
++    bay_routed.path = std::string(path);
++  }
++  const net::HttpServerRequestInfo& routed =
++      bay_token_mode_ ? bay_routed : request;
++
+   // If we require user approval, we do not require guid.
+   if (mode_ ==
+       DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly) {
+@@ -844,28 +1022,32 @@
+     return;
+   }
+ 
+-  if (base::StartsWith(request.path, browser_guid_,
++  if (base::StartsWith(routed.path, browser_guid_,
+                        base::CompareCase::SENSITIVE)) {
+     scoped_refptr<DevToolsAgentHost> browser_agent =
+         DevToolsAgentHost::CreateForBrowser(
+             thread_->task_runner(),
+             base::BindRepeating(&DevToolsSocketFactory::CreateForTethering,
+                                 base::Unretained(socket_factory_.get())));
+-    connection_to_client_[connection_id] =
+-        std::make_unique<DevToolsAgentHostClientImpl>(
+-            thread_->task_runner(), server_wrapper_.get(), connection_id,
+-            browser_agent);
+-    AcceptWebSocket(connection_id, request);
+-    return;
+-  }
+-
+-  if (!base::StartsWith(request.path, kPageUrlPrefix,
++    auto browser_client = std::make_unique<DevToolsAgentHostClientImpl>(
++        thread_->task_runner(), server_wrapper_.get(), connection_id,
++        browser_agent, bay_token_mode_ ? socket_factory_.get() : nullptr);
++    if (bay_token_mode_ && !browser_client->attached()) {
++      Send403(connection_id, "Connection rejected");
++      return;
++    }
++    connection_to_client_[connection_id] = std::move(browser_client);
++    AcceptWebSocket(connection_id, routed);
++    return;
++  }
++
++  if (!base::StartsWith(routed.path, kPageUrlPrefix,
+                         base::CompareCase::SENSITIVE)) {
+     Send404(connection_id);
+     return;
+   }
+ 
+-  std::string target_id = request.path.substr(strlen(kPageUrlPrefix));
++  std::string target_id = routed.path.substr(strlen(kPageUrlPrefix));
+   scoped_refptr<DevToolsAgentHost> agent =
+       DevToolsAgentHost::GetForId(target_id);
+   if (!agent) {
+@@ -873,11 +1055,16 @@
+     return;
+   }
+ 
+-  connection_to_client_[connection_id] =
+-      std::make_unique<DevToolsAgentHostClientImpl>(
+-          thread_->task_runner(), server_wrapper_.get(), connection_id, agent);
+-
+-  AcceptWebSocket(connection_id, request);
++  auto client = std::make_unique<DevToolsAgentHostClientImpl>(
++      thread_->task_runner(), server_wrapper_.get(), connection_id, agent,
++      bay_token_mode_ ? socket_factory_.get() : nullptr);
++  if (bay_token_mode_ && !client->attached()) {
++    Send403(connection_id, "Connection rejected");
++    return;
++  }
++  connection_to_client_[connection_id] = std::move(client);
++
++  AcceptWebSocket(connection_id, routed);
+ }
+ 
+ void DevToolsHttpHandler::OnWebSocketMessage(int connection_id,
+@@ -890,6 +1077,9 @@
+ 
+ void DevToolsHttpHandler::OnClose(int connection_id) {
+   auto removed_count = connection_to_client_.erase(connection_id);
++  if (removed_count > 0 && bay_token_mode_) {
++    ReportBayTokenServer();
++  }
+   if (delegate_ && removed_count > 0 &&
+       mode_ ==
+           DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly) {
+@@ -904,6 +1094,8 @@
+     const base::FilePath& debug_frontend_dir,
+     DevToolsAgentHost::RemoteDebuggingServerMode mode)
+     : mode_(mode), delegate_(delegate) {
++  bay_token_mode_ = g_bay_devtools_token_factory &&
++                      g_bay_devtools_token_factory(socket_factory.get());
+   browser_guid_ =
+       delegate_->IsBrowserTargetDiscoverable()
+           ? kBrowserUrlPrefix
+@@ -942,6 +1134,18 @@
+   server_wrapper_ = std::move(server_wrapper);
+   socket_factory_ = std::move(socket_factory);
+   server_ip_address_ = std::move(ip_address);
++  if (bay_token_mode_) {
++    ReportBayTokenServer();
++  }
++}
++
++void DevToolsHttpHandler::ReportBayTokenServer() {
++  if (g_bay_devtools_token_server && socket_factory_) {
++    g_bay_devtools_token_server(
++        socket_factory_.get(), browser_guid_,
++        server_ip_address_ ? server_ip_address_->port() : 0,
++        connection_to_client_.size());
++  }
+ }
+ 
+ void DevToolsHttpHandler::SendJson(int connection_id,
+@@ -1022,6 +1226,9 @@
+   if (mode_ ==
+       DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly) {
+     delegate_->SetActiveWebSocketConnections(connection_to_client_.size());
++  }
++  if (bay_token_mode_) {
++    ReportBayTokenServer();
+   }
+   thread_->task_runner()->PostTask(
+       FROM_HERE, base::BindOnce(&ServerWrapper::AcceptWebSocket,
+diff --git a/content/browser/devtools/devtools_http_handler.h b/content/browser/devtools/devtools_http_handler.h
+--- a/content/browser/devtools/devtools_http_handler.h
++++ b/content/browser/devtools/devtools_http_handler.h
+@@ -79,6 +79,8 @@
+                          const std::string& host,
+                          DevToolsAgentHost::List agent_hosts,
+                          bool for_tab);
++  void OnBayRequest(int connection_id,
++                      const net::HttpServerRequestInfo& info);
+   void OnDiscoveryPageRequest(int connection_id);
+   void OnFrontendResourceRequest(int connection_id, std::string_view path);
+   void OnWebSocketRequest(int connection_id,
+@@ -110,6 +112,7 @@
+       DevToolsManagerDelegate::AcceptConnectionResult result);
+ 
+   void DecompressAndSendJsonProtocol(int connection_id);
++  void ReportBayTokenServer();
+ 
+   // Returns the front end url without the host at the beginning.
+   std::string GetFrontendURLInternal(
+@@ -122,6 +125,7 @@
+       const std::string& host);
+ 
+   DevToolsAgentHost::RemoteDebuggingServerMode mode_;
++  bool bay_token_mode_ = false;
+   std::set<std::string> remote_allow_origins_;
+   // The thread used by the devtools handler to run server socket.
+   std::unique_ptr<base::Thread> thread_;
+diff --git a/content/browser/devtools/protocol/input_handler.cc b/content/browser/devtools/protocol/input_handler.cc
+--- a/content/browser/devtools/protocol/input_handler.cc
++++ b/content/browser/devtools/protocol/input_handler.cc
+@@ -56,7 +56,40 @@
+ #include "ui/gfx/geometry/point_f.h"
+ #include "ui/gfx/range/range.h"
+ 
++#include "bay/core/nn_content_hooks.h"  // nogncheck
++#include "content/browser/devtools/devtools_session.h"
++#include "content/public/browser/web_contents.h"
++
++bool (*g_bay_devtools_may_input)(content::DevToolsAgentHostClient* root_client,
++                                   content::RenderFrameHost* frame) = nullptr;
++
+ namespace content::protocol {
++
++namespace {
++
++bool BayMayInject(DevToolsSession* session,
++                    RenderFrameHostImpl* host,
++                    RenderWidgetHostImpl* widget) {
++  if (!g_bay_devtools_may_input) {
++    return true;
++  }
++  WebContents* contents = host ? WebContents::FromRenderFrameHost(host) : nullptr;
++  if (!session || !widget || !contents) {
++    return false;
++  }
++  DevToolsAgentHostClient* client = session->GetRootSession()->GetClient();
++  bool found = false;
++  bool allowed = true;
++  contents->ForEachRenderFrameHost([&](RenderFrameHost* frame) {
++    if (frame->GetRenderWidgetHost() == widget) {
++      found = true;
++      allowed = allowed && g_bay_devtools_may_input(client, frame);
++    }
++  });
++  return found && allowed;
++}
++
++}  // namespace
+ 
+ namespace {
+ 
+@@ -1124,6 +1157,12 @@
+     return;
+   }
+   auto* host = RenderWidgetHostImpl::From(view->GetRenderWidgetHost());
++  if (!BayMayInject(handler_->session(), handler_->host_, host)) {
++    CancelDragging(
++        base::BindOnce(&FailSafe<DispatchMouseEventCallback>::sendFailure,
++                       std::move(callback), Response::InvalidParams("Not allowed")));
++    return;
++  }
+   auto point = *maybe_point;
+ 
+   host->DragTargetDrop(drag_state_->data, point, point, event->GetModifiers(),
+@@ -1267,6 +1306,11 @@
+       widget_host = target_host;
+   }
+ 
++  if (!BayMayInject(session(), host_, widget_host)) {
++    callback->sendFailure(Response::InvalidParams("Not allowed"));
++    return;
++  }
++
+   // We do not pass events to browser if there is no native key event
+   // due to Mac needing the actual os_event.
+   if (event.native_key_code && allow_sending_input_to_browser_)
+@@ -1292,6 +1336,11 @@
+         widget_host->delegate()->GetFocusedRenderWidgetHost(widget_host);
+     if (target_host)
+       widget_host = target_host;
++  }
++
++  if (!BayMayInject(session(), host_, widget_host)) {
++    callback->sendFailure(Response::InvalidParams("Not allowed"));
++    return;
+   }
+ 
+   base::OnceClosure closure =
+@@ -1643,6 +1692,10 @@
+ 
+   RenderWidgetHostImpl* widget_host =
+       RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
++  if (!BayMayInject(session(), host_, widget_host)) {
++    callback->sendFailure(Response::InvalidParams("Not allowed"));
++    return;
++  }
+   if (event->GetType() == blink::WebInputEvent::Type::kMouseWheel) {
+     EnsureInjector(widget_host)
+         ->InjectWheelEvent(static_cast<blink::WebMouseWheelEvent*>(event.get()),
+@@ -1659,6 +1712,13 @@
+     std::optional<double> timestamp,
+     std::unique_ptr<DispatchTouchEventCallback> callback) {
+   if (base::FeatureList::IsEnabled(features::kSyntheticPointerActions)) {
++    if (g_bay_devtools_may_input &&
++        (!session() ||
++         !g_bay_devtools_may_input(session()->GetRootSession()->GetClient(),
++                                     nullptr))) {
++      callback->sendFailure(Response::InvalidParams("Not allowed"));
++      return;
++    }
+     DispatchSyntheticPointerActionTouch(
+         event_type, std::move(touch_points), std::move(modifiers),
+         std::move(timestamp), std::move(callback));
+@@ -1744,6 +1804,10 @@
+   }
+   RenderWidgetHostImpl* widget_host =
+       RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
++  if (!BayMayInject(session(), host_, widget_host)) {
++    callback->sendFailure(Response::InvalidParams("Not allowed"));
++    return;
++  }
+ 
+   RenderWidgetHostViewBase* root_view = target->GetRootView();
+   if (!root_view) {
+diff --git a/content/browser/devtools/render_frame_devtools_agent_host.cc b/content/browser/devtools/render_frame_devtools_agent_host.cc
+--- a/content/browser/devtools/render_frame_devtools_agent_host.cc
++++ b/content/browser/devtools/render_frame_devtools_agent_host.cc
+@@ -534,6 +534,24 @@
+     return;
+   }
+   NavigationRequest* request = NavigationRequest::From(navigation_handle);
++  scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
++  if (request->frame_tree_node() == frame_tree_node_ &&
++      !request->IsSameDocument()) {
++    RenderFrameHostImpl* committing = request->GetRenderFrameHost();
++    const bool is_webui = committing && committing->web_ui();
++    std::vector<DevToolsSession*> restricted_sessions;
++    for (DevToolsSession* session : sessions()) {
++      if (!session->GetClient()->MayAttachToURL(request->GetURL(), is_webui)) {
++        restricted_sessions.push_back(session);
++      }
++    }
++    if (!restricted_sessions.empty()) {
++      ForceDetachRestrictedSessions(restricted_sessions);
++    }
++    if (!frame_tree_node_) {
++      return;
++    }
++  }
+   for (auto* tracing : protocol::TracingHandler::ForAgentHost(this)) {
+     tracing->ReadyToCommitNavigation(request);
+   }

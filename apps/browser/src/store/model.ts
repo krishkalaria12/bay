@@ -108,6 +108,14 @@ export function inPinnedContainer(s: Pick<BrowserState, "tabs" | "groups"> | Pic
   return false;
 }
 
+/** With the setting on and one space, the sidebar has no space header. */
+export const spaceHeaderHidden = (s: DeepReadonly<Pick<BrowserState, "settings" | "spaceOrder">>) =>
+  s.settings.hideSingleSpaceHeader && s.spaceOrder.length <= 1;
+
+/** A space's pinned section folded away: never without a header to unfold it. */
+export const spaceFolded = (s: DeepReadonly<Pick<BrowserState, "settings" | "spaceOrder" | "spaces">>, spaceId: string) =>
+  !!s.spaces[spaceId]?.folded && !spaceHeaderHidden(s);
+
 // MARK: Tab lists
 
 // Every window on a space lists that space's tabs. Private windows and Little Bay keep their own lists.

@@ -1,0 +1,69 @@
+--- a/chrome/browser/extensions/chrome_extension_system.cc
++++ b/chrome/browser/extensions/chrome_extension_system.cc
+@@ -92,6 +92,11 @@
+ 
+ static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+ 
++namespace bay {
++void RegisterManagementPolicyProviders(Profile* profile,
++                                        extensions::ManagementPolicy* policy);
++}
++
+ namespace extensions {
+ 
+ namespace {
+@@ -191,6 +196,8 @@
+         policy::features::kEnableExtensionInstallPolicyFetching));
+     management_policy_->RegisterProvider(extension_install_policy_service);
+   }
++
++  bay::RegisterManagementPolicyProviders(profile_, management_policy_.get());
+ }
+ 
+ void ChromeExtensionSystem::Shared::InitInstallGates() {
+
+--- a/extensions/browser/unpacked_installer.cc
++++ b/extensions/browser/unpacked_installer.cc
+@@ -61,6 +61,10 @@
+ using extensions::Extension;
+ using extensions::SharedModuleInfo;
+ 
++bool (*g_bay_unpacked_path_allowed)(const base::FilePath& requested,
++                                      const base::FilePath& resolved,
++                                      std::u16string* error) = nullptr;
++
+ namespace extensions {
+ 
+ namespace {
+@@ -164,6 +168,13 @@
+ 
+   if (!IsLoadingUnpackedAllowed()) {
+     ReportExtensionLoadError(kUnpackedExtensionsBlocklistedError);
++    return false;
++  }
++
++  if (std::u16string bay_error;
++      g_bay_unpacked_path_allowed &&
++      !g_bay_unpacked_path_allowed(path_in, extension_path_, &bay_error)) {
++    ReportExtensionLoadError(bay_error);
+     return false;
+   }
+ 
+@@ -379,6 +390,17 @@
+     return;
+   }
+ 
++  if (std::u16string bay_error;
++      g_bay_unpacked_path_allowed &&
++      !g_bay_unpacked_path_allowed(extension_path_, resolved_absolute_path,
++                                     &bay_error)) {
++    content::GetUIThreadTaskRunner({base::TaskPriority::USER_BLOCKING})
++        ->PostTask(FROM_HERE,
++                   base::BindOnce(&UnpackedInstaller::ReportExtensionLoadError,
++                                  this, bay_error));
++    return;
++  }
++
+   extension_path_ = resolved_absolute_path;
+   // Set priority explicitly to avoid unwanted task priority inheritance.
+   content::GetUIThreadTaskRunner({base::TaskPriority::USER_BLOCKING})

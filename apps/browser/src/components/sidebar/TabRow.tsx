@@ -9,7 +9,8 @@ import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
-import { activeTabId, pinnedPage } from "../../store/model";
+import { activeTabId } from "../../store/model";
+import { splitRowTabs } from "../../store/splits";
 import type { Tab } from "../../store/types";
 import { useIsActiveTab, usePageSpaceId, useTab, useWindowId } from "../../store/hooks";
 import { HoverSlot } from "../HoverSlot";
@@ -246,7 +247,7 @@ export const SplitRowItem = memo(function SplitRowItem({
 }) {
   const metrics = useSidebarMetrics();
   const windowId = useWindowId();
-  const tabIds = useBrowser((s) => s.splits[splitId]?.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!)).join(",") ?? "")
+  const tabIds = useBrowser((s) => (s.splits[splitId] ? splitRowTabs(s, s.splits[splitId]).join(",") : ""))
     .split(",")
     .filter(Boolean);
   const { ref, style, handle } = useDragItem(`s:${splitId}`, { kind: "split", tabIds, section, parentGroup });

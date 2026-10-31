@@ -31,7 +31,7 @@ export type SplitCommand =
   | { method: "movePane"; tabId: string; delta: 1 | -1 }
   | { method: "focusPane"; windowId: string; delta: 1 | -1 }
   | { method: "toggleTabLayout" | "closePeek" | "keepPeek" | "splitPeek" | "reopenPeekOrClosed"; windowId: string }
-  | { method: "openPeek"; fromTabId: string; url: string };
+  | { method: "openPeek"; fromTabId: string; url: string; point?: { x: number; y: number } };
 
 export const SPLIT_COMMAND_METHODS = [
   "createSplit",
@@ -123,9 +123,21 @@ export function parseSplitCommand(value: unknown): SplitCommand {
     case "reopenPeekOrClosed":
       fields("windowId");
       return { method: c.method, windowId: windowId() };
-    case "openPeek":
-      fields("fromTabId", "url");
-      return { method: c.method, fromTabId: commandText(c.fromTabId), url: commandUrl(c.url) };
+    case "openPeek": {
+      fields("fromTabId", "url", "point");
+      let point: { x: number; y: number } | undefined;
+      if (c.point !== undefined) {
+        const p = commandObject(c.point, ["x", "y"]);
+        if (typeof p.x !== "number" || !Number.isFinite(p.x) || typeof p.y !== "number" || !Number.isFinite(p.y)) return invalidCommand("invalid peek point");
+        point = { x: p.x, y: p.y };
+      }
+      return {
+        method: c.method,
+        fromTabId: commandText(c.fromTabId),
+        url: commandUrl(c.url),
+        ...(point ? { point } : {}),
+      };
+    }
     default:
       return invalidCommand("unknown split command");
   }
@@ -177,7 +189,7 @@ export function executeSplitCommand(store: BrowserStore, command: SplitCommand, 
       break;
     case "openPeek":
       requireCommandTab(s, command.fromTabId);
-      return s.openPeek(command.fromTabId, command.url) ?? null;
+      return s.openPeek(command.fromTabId, command.url, undefined, command.point) ?? null;
     case "reopenPeekOrClosed":
       // One commit: a closed peek comes back over its tab, else the window's last closed tab.
       requireCommandWindow(s, command.windowId);

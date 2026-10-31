@@ -1,0 +1,22 @@
+{
+  "name": "@bay/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The bay command: drive a running Bay from the terminal with TypeScript.",
+  "bin": {
+    "bay": "./bin/bay.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "bun run bin/bay.ts",
+    "build": "bash scripts/build.sh",
+    "test": "bun test tests/",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "typescript": "~5.9.2"
+  },
+  "devDependencies": {
+    "bun-types": "1.3.14"
+  }
+}

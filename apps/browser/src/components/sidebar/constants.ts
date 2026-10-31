@@ -76,7 +76,6 @@ export const ADDRESS_NAV_WIDTH = 3 * ADDRESS_BUTTON + 2 * ADDRESS_NAV_GAP;
 export const ADDRESS_LIGHTS_Y = 26.75;
 export const ADDRESS_TOGGLE_X = 70.75 + 27;
 export const ADDRESS_EDGE = 7;
-// On the window's right there are no window buttons to clear: the toggle starts at the edge.
 export const ADDRESS_TOGGLE_X_RIGHT = ADDRESS_EDGE + ADDRESS_BUTTON / 2;
 /** The narrowest sidebar that fits the toggle at `x`, and the navigation buttons `end` from its right edge. */
 export const addressToggleMinWidth = (x: number, end: number) => x + ADDRESS_BUTTON / 2 + ADDRESS_NAV_GAP + ADDRESS_NAV_WIDTH + end;

@@ -42,7 +42,7 @@ import {
   type ToolbarGeometry,
 } from "./layout/geometry";
 import { dismissPermissions, startPermissionPrompts } from "./site/permissions";
-import { patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePopover } from "./layout/pageState";
+import { clearChromeTabId, patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePopover } from "./layout/pageState";
 import { useTabDrag } from "./layout/tabDrag";
 import { OpenElsewhere, SadTab, StatusBubble } from "./layout/PaneOverlays";
 import { PeekLayer, startPeeks } from "./layout/PeekLayer";
@@ -50,6 +50,7 @@ import { DropTargets, SplitDividers, SplitToast } from "./layout/SplitChrome";
 import { SplitEmptyState } from "./layout/SplitEmptyState";
 import { pagerFor } from "./layout/spacePager";
 import { openFromPage } from "./layout/openFromPage";
+import { dismissPeek } from "./layout/peekDismiss";
 import { setUrlAnchor, useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
 import { BlankTabSurface } from "./BlankTabSurface";
 import { InternalPage } from "./pages";
@@ -98,7 +99,7 @@ import { BoostEditor } from "./boosts/BoostEditor";
 import { closeBoostEditorOnEscape, onBoostMessage } from "./boosts/editor";
 import { useIsDeveloperTab } from "./developer/sites";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
-import { closePeek, openPeek } from "../runtime/splitActions";
+import { openPeek } from "../runtime/splitActions";
 import { activate, closeTab, navigate } from "../runtime/tabActions";
 import { browserRead, useBrowserRead } from "../store/read";
 
@@ -292,7 +293,7 @@ export function ContentCard() {
       {split && !fullscreenTab && <SplitDividers split={split} dividers={dividers} width={size.width} height={size.height} />}
       {!fullscreenTab && <DropTargets panes={panes} origin={origin} />}
       {peek && peekRect && (
-        <PeekLayer windowId={windowId} peek={peek} rect={peekRect}>
+        <PeekLayer windowId={windowId} peek={peek} rect={peekRect} origin={origin}>
           <TabWebView key={peek.tabId} tabId={peek.tabId} visible warm={false} />
         </PeekLayer>
       )}
@@ -549,11 +550,10 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       warm={warm}
       autoPictureInPicture={autoPictureInPicture}
       peekLinks={peekLinks}
-      // The card under the page (ContentCard's background) is drawn once, by the app: a page without a background of its
-      // own shows it, as on CEF. The page drawing it again darkened every transparent page.
-      pageBackgroundColor="transparent"
-      onReady={(browserId) => {
-        setBrowserId(tabId, browserId);
+      // Keep the engine's default canvas: sites without an authored background expect white, or the canvas their
+      // color-scheme selects. A transparent override puts their text over the window's colors instead.
+      onReady={(browserId, chromeTabId) => {
+        setBrowserId(tabId, browserId, chromeTabId);
         noteReady(tabId);
         if (tab()?.muted) void webviews.get(tabId)?.setMuted(true);
       }}
@@ -633,12 +633,12 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       onDisplayMediaRequest={(request) => requestDisplayMedia(tabId, request)}
       onOpenWindow={onOpenWindow}
       onStatus={(status) => patchPage(tabId, { status })}
-      onPeekLink={(url) => {
+      onPeekLink={(url, point) => {
         // The engine judged it another site (Chrome's own rule); the tab stayed. A tab that has just stopped peeking
         // still gets its click: the link loads in it.
         if (!/^https?:/i.test(url)) return;
         const s = browserRead.getState();
-        reportBrowserCommand(peeksLinks(s, tabId) ? openPeek(tabId, url) : navigate(tabId, url, { userInitiated: false }));
+        reportBrowserCommand(peeksLinks(s, tabId) ? openPeek(tabId, url, point) : navigate(tabId, url, { userInitiated: false }));
       }}
       onCrashed={(crashed) => {
         if (!isQuitting()) patchPage(tabId, { crashed, unresponsive: false, fullscreen: false, status: "" });
@@ -676,7 +676,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
           if (closeCaptureOnEscape(tabId)) return;
           if (closeBoostEditorOnEscape(tabId)) return;
           if (t && closeThemeEditorOnEscape(t.windowId)) return;
-          if (t?.peekOf) reportBrowserCommand(closePeek(t.windowId));
+          if (t?.peekOf) dismissPeek(t.windowId);
           else closeLittleBayOnEscape(tabId);
         }
       }}
@@ -692,6 +692,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       }}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url) => {
+        clearChromeTabId(tabId);
         pending.current = url;
         fromNewTab.current = false;
         patchPage(tabId, { backToNewTab: false, status: "" });

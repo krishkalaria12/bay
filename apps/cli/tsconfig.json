@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["bun-types"],
+    "lib": ["ESNext"],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["bin/**/*.ts", "src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts"]
+}

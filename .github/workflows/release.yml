@@ -76,7 +76,7 @@ jobs:
             [ -z "$VERSION" ] || [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]+$ ]] || fail "a nightly is <next stable>-nightly.<n>, not $VERSION (or leave it empty)"
             [ -n "$VERSION" ] || VERSION="$(scripts/release/next-nightly.sh)"
             last="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null || true)"
-            if [ -n "$last" ] && [ "$FORCE" != true ] && git diff --quiet "$last" HEAD -- apps/browser packages engine; then
+            if [ -n "$last" ] && [ "$FORCE" != true ] && git diff --quiet "$last" HEAD -- apps/browser apps/cli packages engine; then
               echo "::notice::the app hasn't changed since $last: no nightly tonight"
               skip=true
             fi
@@ -187,6 +187,9 @@ jobs:
           key: ubo-${{ hashFiles('packages/nncore/scripts/ubo.sh') }}
       - name: Pods
         run: pnpm pods
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
       - name: Tree is clean
         run: |
           # BayNNCore's podspec reads a path under this checkout, so its checksum in Podfile.lock differs here: that
@@ -198,7 +201,7 @@ jobs:
             echo "::notice::pod install only rehashed BayNNCore's podspec (its checksum includes this checkout's path)"
             git update-index --assume-unchanged "$lock"
           fi
-          dirty="$(git status --porcelain -- apps/browser packages engine | grep -v ' apps/browser/build' || true)"
+          dirty="$(git status --porcelain -- apps/browser apps/cli packages engine | grep -v ' apps/browser/build' || true)"
           [ -z "$dirty" ] || { echo "::error::installing changed tracked files, so release.sh would refuse the tree:"; echo "$dirty"; exit 1; }
       - name: Update channels
         run: python3 packages/shell/scripts/test-updater.py
@@ -208,7 +211,7 @@ jobs:
           [ "$DRY_RUN" != true ] || args+=(--rc)
           scripts/release.sh "${args[@]}"
       - name: Pack the build
-        run: COPYFILE_DISABLE=1 tar --no-mac-metadata -cf "$RUNNER_TEMP/build.tar" -C "$DIST" Bay.xcarchive provenance.txt
+        run: COPYFILE_DISABLE=1 tar --no-mac-metadata -cf "$RUNNER_TEMP/build.tar" -C "$DIST" Bay.xcarchive provenance.txt "bay-cli-$VERSION-macos-arm64.tar.gz" "bay-cli-$VERSION-macos-arm64.tar.gz.sha256"
       - uses: actions/upload-artifact@v7
         with:
           name: build
@@ -314,6 +317,8 @@ jobs:
           path: |
             ${{ needs.plan.outputs.dist }}/Bay-${{ needs.plan.outputs.version }}.dmg
             ${{ needs.plan.outputs.dist }}/Bay-${{ needs.plan.outputs.version }}.zip
+            ${{ needs.plan.outputs.dist }}/bay-cli-${{ needs.plan.outputs.version }}-macos-arm64.tar.gz
+            ${{ needs.plan.outputs.dist }}/bay-cli-${{ needs.plan.outputs.version }}-macos-arm64.tar.gz.sha256
             ${{ needs.plan.outputs.dist }}/appcast.xml
             ${{ needs.plan.outputs.dist }}/release-notes.md
             ${{ needs.plan.outputs.dist }}/provenance.txt

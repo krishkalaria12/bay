@@ -54,7 +54,7 @@ import {
   windowTitle,
 } from "../../store/model";
 import { awayFromPin, cleanedTabsFor, groupLabel, groupOf, keptDeletedGroups, selectedTabIds } from "../../store/organize";
-import { splitOf } from "../../store/splits";
+import { pinRowTitle, rowPinned, splitOf } from "../../store/splits";
 import type { GroupColor, Tab } from "../../store/types";
 import {
   allMuted,
@@ -198,7 +198,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
         ]
       : []),
     // Arc's and Zen's two kinds of pins: a row in the Pinned section, and an Essential (a tile above it).
-    { id: "pinRow", title: tab.pinnedRow ? "Unpin Tab" : "Pin Tab", symbol: tab.pinnedRow ? "pin.slash" : "pin", ...hint("d", "shift", "command") },
+    { id: "pinRow", title: pinRowTitle(s, tab.id), symbol: rowPinned(s, tab.id) ? "pin.slash" : "pin", ...hint("d", "shift", "command") },
     { id: "essential", title: tab.pinned ? "Remove from Essentials" : "Add to Essentials", symbol: "square.grid.2x2" },
     { id: "moveToFolder", title: "Move to Folder", symbol: "folder", children: moveToFolderItems(windowId, folder?.id) },
     ...(folder ? [{ id: "leaveFolder", title: "Remove from Folder", symbol: "folder.badge.minus" }] : []),
@@ -258,7 +258,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   if (choice === "backToPin") reportBrowserCommand(returnToPinnedUrl(tab.id));
   else if (choice === "replacePin") reportBrowserCommand(setPinnedUrl(tab.id));
   else if (choice === "editPin") void editPinnedPage(windowId, tab.id);
-  else if (choice === "pinRow") reportBrowserCommand(pinRows([tab.id], !tab.pinnedRow));
+  else if (choice === "pinRow") reportBrowserCommand(pinRows([tab.id], !rowPinned(s, tab.id)));
   else if (choice === "essential") reportBrowserCommand(togglePin(tab.id));
   else if (runFolderChoice(windowId, [tab.id], choice)) return;
   else if (choice === "leaveFolder")

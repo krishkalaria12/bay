@@ -13,12 +13,14 @@ import { openNewTabPanel } from "./newTab";
 import { webviews } from "./webviews";
 import { goBack, goForward } from "../components/layout/history";
 import { openSplitPane } from "../components/layout/splitActions";
+import { dismissPeek } from "../components/layout/peekDismiss";
 import { runSidebarCommand } from "../components/sidebar/commands";
 import { numberedTabs } from "../components/sidebar/entries";
 import { openExtensionFromMenu } from "../components/extensions/bridge";
 import { toggleCastPicker } from "../components/media/cast";
 import { openManageExtensions, openPinDialog, openWebStore } from "../components/extensions/state";
 import { requestAutofill } from "../components/site/Autofill";
+import { clearCookiesAndCache } from "../components/site/clearSite";
 import { copyPageUrl, jumpToSelection } from "../components/site/selection";
 import { toggleDeveloperMode } from "../components/developer/devMode";
 import { captureFullPage, capturePortrait, startCapture } from "../components/capture/state";
@@ -27,11 +29,12 @@ import { newEasel, openLibrary } from "../components/library/actions";
 import { openSpaceMenu } from "../components/SpaceIndicator";
 import { groupOf } from "../store/organize";
 import { shownPeek } from "../store/peeks";
+import { rowPinned } from "../store/splits";
 import { isSmall, mainWindowFor } from "../store/small";
 import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
 import { closeGroup, pinRows, undoSidebarEdit } from "../runtime/organizeActions";
 import { updateSettings } from "../runtime/settingsActions";
-import { closePeek, focusPane, keepPeek, removeTabFromSplit, reopenPeekOrClosed, toggleTabLayout } from "../runtime/splitActions";
+import { focusPane, keepPeek, removeTabFromSplit, reopenPeekOrClosed, toggleTabLayout } from "../runtime/splitActions";
 import { activate, cycle, duplicateTab, moveTab, navigate, newTab, togglePin } from "../runtime/tabActions";
 import { mergeAllWindows, reopenClosed, reopenClosedWindow, restoreClosed, toggleSidebar } from "../runtime/windowActions";
 import { browserRead } from "../store/read";
@@ -250,7 +253,7 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "togglePin":
       return tab ? reportBrowserCommand(togglePin(tab.id)) : undefined;
     case "togglePinRow":
-      return tab ? reportBrowserCommand(pinRows([tab.id], !tab.pinnedRow)) : undefined;
+      return tab ? reportBrowserCommand(pinRows([tab.id], !rowPinned(s, tab.id))) : undefined;
     case "moveTabDown":
     case "moveTabUp": {
       if (!tab) return;
@@ -295,6 +298,8 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "clearBrowsingData":
       openInternalPage("history", windowId);
       return useClearDataRequest.getState().request(windowId);
+    case "clearCookiesAndCache":
+      return page ? void clearCookiesAndCache(page.id) : undefined;
     case "manageBookmarks":
       return openInternalPage("bookmarks", windowId);
     case "bookmarkAllTabs":
@@ -323,6 +328,7 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
 // What Little Bay runs on its own page; everything else goes to the main window (menuState disables the tab and
 // sidebar commands that make no sense from there).
 const LITTLE_BAY_PAGE_COMMANDS = new Set<string>([
+  "clearCookiesAndCache",
   "print",
   "printWithSystemDialog",
   "savePage",
@@ -393,7 +399,7 @@ function runPeekCommand(command: string, windowId: string): boolean {
   if (!shownPeek(browserRead.getState(), windowId)) return false;
   switch (command) {
     case "closeTab":
-      reportBrowserCommand(closePeek(windowId));
+      dismissPeek(windowId);
       return true;
     case "openFile":
       reportBrowserCommand(keepPeek(windowId));

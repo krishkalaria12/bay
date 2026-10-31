@@ -7,7 +7,7 @@ public class AppModule: Module {
     Name("BayApp")
     // The JS/native contract: NATIVE_API_VERSION in apps/browser/src/nativeApi.tsx, which a JS bundle checks before it
     // loads the app. Bump both together whenever JS starts needing native code that older builds lack.
-    Constant("apiVersion") { () -> Int in 13 }
+    Constant("apiVersion") { () -> Int in 14 }
     Events("onNotificationResponse", "onScriptCommand", "onUpdatePending")
 
     OnCreate {

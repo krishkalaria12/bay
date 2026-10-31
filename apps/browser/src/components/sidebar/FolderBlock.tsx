@@ -19,7 +19,7 @@ import { openFolderMenu } from "./menus";
 import { SidebarKeyboardRowView } from "./keyboardFocus";
 import { useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
-import { RenameField, TabRowItem } from "./TabRow";
+import { RenameField, SplitRowItem, TabRowItem } from "./TabRow";
 import { useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
 import { folderDepth, folderTabIds, MAX_FOLDER_DEPTH } from "../../store/folders";
 import { reportBrowserCommand } from "../../runtime/commands";
@@ -82,6 +82,8 @@ export const FolderBlock = memo(function PinnedFolderBlock({ folderId }: { folde
                 <TabRowItem tabId={activeTab} section="pinned" parentGroup={activeFolderId} />
               ) : entry.startsWith("f:") && depth < MAX_FOLDER_DEPTH ? (
                 <FolderBlock folderId={entry.slice(2)} />
+              ) : entry.startsWith("s:") ? (
+                <SplitRowItem splitId={entry.slice(2)} section="pinned" parentGroup={folderId} />
               ) : (
                 <TabRowItem tabId={entry.slice(2)} section="pinned" parentGroup={folderId} />
               ),

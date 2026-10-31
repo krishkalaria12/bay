@@ -32,7 +32,7 @@ import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./organi
 import { searchUrlPrefix } from "./settings";
 import { mainWindowFor } from "./small";
 import { tabEngine, typedNavigationEngine } from "./engines";
-import { removeFromSplits, splitOf } from "./splits";
+import { pinnedSplitOf, removeFromSplits, splitOf } from "./splits";
 import type { BrowserWindow, ClosedTab, Tab, TabLive, TabSnapshot } from "./types";
 import { MAX_CLOSED_TABS } from "./constants";
 
@@ -240,8 +240,12 @@ function adoptOrphans(tabs: Record<string, Tab>, before: Record<string, Tab>, go
 }
 
 export function unloadPinnedTabs(s: BrowserState, ids: string[]): BrowserState {
-  const closing = new Set(ids);
-  const pinned = ids.filter((id) => inPinnedContainer(s, id));
+  // A pinned split unloads whole and stays a split, less any pane that never had a page.
+  const whole = new Set(ids.flatMap((id) => pinnedSplitOf(s, id)?.tabIds ?? []));
+  const blank = [...whole].filter((id) => !s.tabs[id]!.url);
+  if (blank.length) s = removeTabs(s, blank, false);
+  const closing = new Set([...ids, ...whole]);
+  const pinned = [...closing].filter((id) => inPinnedContainer(s, id));
   if (!pinned.length) return s;
   const gone = new Set(pinned);
   const now = Date.now();
@@ -272,7 +276,7 @@ export function unloadPinnedTabs(s: BrowserState, ids: string[]): BrowserState {
     tabs,
     live,
     find: without(s.find, gone),
-    splits: removeFromSplits(s.splits, gone),
+    splits: removeFromSplits(s.splits, new Set(pinned.filter((id) => !pinnedSplitOf(s, id)))),
     selection: pruneSelection(s.selection, gone),
     closedTabs: closed.length ? [...s.closedTabs, ...closed].slice(-MAX_CLOSED_TABS) : s.closedTabs,
   };

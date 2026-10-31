@@ -22,6 +22,7 @@ source_set("bay") {
     "nn_bookmarks.cc",
     "nn_browsing_data.cc",
     "nn_browsing_data.h",
+    "nn_cli_control.cc",
     "nn_cookies.cc",
     "nn_cookies.h",
     "nn_dispatch.cc",
@@ -119,6 +120,7 @@ source_set("bay") {
     "//components/value_store",
     "//components/version_info",
     "//content/public/browser",
+    "//crypto",
     "//extensions/browser",
     "//extensions/browser:crx_installer",
     "//extensions/common",
@@ -138,6 +140,15 @@ source_set("bay") {
 
   if (is_mac) {
     sources += [
+      "nn_cli_token_policy.cc",
+      "nn_cli_token_policy.h",
+      "nn_cli_token_policy_contexts.cc",
+      "nn_cli_token_policy_events.cc",
+      "nn_cli_token_policy_internal.h",
+      "nn_cli_token_policy_methods.cc",
+      "nn_cli_token_policy_web_targets.cc",
+      "nn_scripts_policy.cc",
+      "nn_scripts_policy.h",
       "nn_downloads_mac.mm",
       "nn_external_apps.mm",
       "pip/nn_pip_mac.mm",

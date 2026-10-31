@@ -12,6 +12,8 @@ const files = [
   "shell/src/live.ts",
   "shell/src/capture.tsx",
   "shell/src/easel.tsx",
+  "shell/src/cli.ts",
+  "shell/src/userScripts.ts",
   "shell/src/localFiles.tsx",
   "nncore/src/native.ts",
   "nncore/src/chromeUI.ts",

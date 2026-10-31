@@ -13,6 +13,7 @@ NN_ENGINE_CALL(nn_bookmarks_apply);
 NN_ENGINE_CALL(nn_bookmarks_tree);
 NN_ENGINE_CALL(nn_bookmarks_watch);
 NN_ENGINE_CALL(nn_browsing_data_clear);
+NN_ENGINE_CALL(nn_cli_control);
 NN_ENGINE_CALL(nn_components_list);
 NN_ENGINE_CALL(nn_cookies_import);
 NN_ENGINE_CALL(nn_downloads_cancel);
@@ -88,6 +89,7 @@ bool DispatchEngineCall(std::string_view name,
       {"nn_bookmarks_tree", &nn_bookmarks_tree},
       {"nn_bookmarks_watch", &nn_bookmarks_watch},
       {"nn_browsing_data_clear", &nn_browsing_data_clear},
+      {"nn_cli_control", &nn_cli_control},
       {"nn_components_list", &nn_components_list},
       {"nn_cookies_import", &nn_cookies_import},
       {"nn_downloads_cancel", &nn_downloads_cancel},
@@ -154,6 +156,7 @@ bool IsWebEngineCall(std::string_view name) {
       "nn_bookmarks_apply",
       "nn_bookmarks_tree",
       "nn_bookmarks_watch",
+      "nn_cli_control",
       "nn_favicons_get",
       "nn_favicons_set",
       "nn_history_add",
