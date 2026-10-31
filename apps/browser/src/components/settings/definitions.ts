@@ -152,6 +152,13 @@ export const SETTINGS = {
   },
   showBookmarksImport: { id: "advanced.showBookmarksImport", pane: "advanced", title: "Show the Import bookmarks button", words: "bookmarks bar" },
   boosts: { id: "advanced.boosts", pane: "advanced", title: "Boosts", words: "boost zap custom css site style javascript arc" },
+  cliControl: {
+    id: "advanced.cliControl",
+    pane: "advanced",
+    title: "Let the bay command control Bay",
+    words: "cli terminal automation agents scripts userscripts",
+  },
+  installCli: { id: "advanced.installCli", pane: "advanced", title: "Install the bay command", words: "cli terminal command path" },
   history: { id: "advanced.history", pane: "advanced", title: "History", words: "visited pages" },
   downloads: { id: "advanced.downloads", pane: "advanced", title: "Downloads", words: "files" },
   chromium: { id: "advanced.chromium", pane: "advanced", title: "Chromium", words: "web engine version" },

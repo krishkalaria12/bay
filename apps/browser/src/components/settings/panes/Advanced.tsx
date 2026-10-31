@@ -8,6 +8,7 @@ import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { setBoostsOn, startBoosts, useBoosts } from "../../boosts/state";
 import { openLibrary } from "../../library/actions";
+import { describeCliControl, describeCliInstall, installCliInBackground, useCli } from "../../cli/control";
 
 export function AdvancedPane() {
   const theme = useTheme();
@@ -15,6 +16,7 @@ export function AdvancedPane() {
   const update = useBrowser((s) => s.updateSettings);
   const [info, setInfo] = useState<EngineInfo | null>(null);
   const [widevine, setWidevine] = useState<EngineComponent | null | undefined>(undefined);
+  const cli = useCli();
   useEffect(() => {
     void engineInfo()
       .then(setInfo)
@@ -56,6 +58,20 @@ export function AdvancedPane() {
         </Row>
         <Row settingId={SETTINGS.downloads.id} title={SETTINGS.downloads.title} description="Files you downloaded, with where they're saved.">
           <Button title="Show Downloads" onPress={() => openInternalPage("downloads")} />
+        </Row>
+      </Group>
+
+      <SectionHeader title="Terminal" />
+      <Group>
+        <Row settingId={SETTINGS.installCli.id} title={SETTINGS.installCli.title} description={describeCliInstall(cli)}>
+          <Button
+            title={cli.installing ? "Installing…" : cli.installedVersion ? "Reinstall" : "Install"}
+            disabled={cli.installing}
+            onPress={() => void installCliInBackground()}
+          />
+        </Row>
+        <Row settingId={SETTINGS.cliControl.id} title={SETTINGS.cliControl.title} description={describeCliControl(cli.server)}>
+          <Toggle value={settings.cliControl === true} onChange={(cliControl) => update({ cliControl })} />
         </Row>
       </Group>
 
