@@ -60,6 +60,7 @@ chromium chromium-bay-layer.patch
 chromium chromium-injected-author-sheet-order.patch
 
 chromium chromium-devtools-control-token.patch
+chromium chromium-devtools-background-target.patch
 
 layer engine/chromium
 layer engine/nncore

@@ -538,16 +538,16 @@ namespace {
 // A tab Chrome made while the app shows no page to announce it through (in a window of its own, from
 // chrome.windows.create, or before the app's first page): offered to the app (tab:<id>) through the extensions module,
 // which opens it in a window of its profile. Its URL first, as -[NNCoreWebView openedTab:…] waits for it.
-void AnnounceStrayTab(NNCoreTab *tab, int tries) {
+void AnnounceStrayTab(NNCoreTab *tab, BOOL active, int tries) {
   if (tab.closed) return;
   NSString *url = tab.url;
   if ((!url.length || [url isEqualToString:@"about:blank"]) && tries < 20) {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{ AnnounceStrayTab(tab, tries + 1); });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{ AnnounceStrayTab(tab, active, tries + 1); });
     return;
   }
   if (!NNCoreServices.extensionsHandler) return;
   NNCoreServices.extensionsHandler(@"tabs", @{
-    @"action" : @"open", @"url" : url ?: @"", @"profile" : nncore_host::ProfileName(tab.profile), @"active" : @YES,
+    @"action" : @"open", @"url" : url ?: @"", @"profile" : nncore_host::ProfileName(tab.profile), @"active" : @(active),
     @"window" : NSNull.null, @"extensionId" : @"", @"adoptId" : [NNCoreTabs offerTab:tab prefix:@"tab"]
   });
 }
@@ -681,6 +681,8 @@ NSMapTable<NNCoreProfile *, NNCoreWindowController *> *StandaloneWindows() {
   [NNCoreTabStrip changedInWindow:self profile:tab.profile];
   // The app's own (a WebView opening its tab, or adopting one): the view attaches it itself.
   if (_hostChanges > 0 || [NNCoreTabs viewForTab:tab]) return;
+  // A tab Chrome made behind the current one (the bay command's background newTab) stays behind in the app too.
+  const BOOL behind = [disposition isEqualToString:@"background_tab"];
   if (_stray) {
     // A window Chrome made (chrome.windows.create, Open Link in Incognito Window): the tab goes to the app's windows,
     // as a tab Chrome made. A private tab goes to a private window showing its profile, else to a private window the
@@ -693,9 +695,9 @@ NSMapTable<NNCoreProfile *, NNCoreWindowController *> *StandaloneWindows() {
       // A view of the tab's own profile announces it. With none (a launch on the New Tab page, or only another
       // profile's pages shown, which would adopt it under their profile), the extensions module does, live.
       if (view && [view.profile isEqualToString:nncore_host::ProfileName(profile)])
-        [view openedTab:tab adoptId:[NNCoreTabs offerTab:tab prefix:@"tab"] disposition:@"foreground"];
+        [view openedTab:tab adoptId:[NNCoreTabs offerTab:tab prefix:@"tab"] disposition:behind ? @"background" : @"foreground"];
       else
-        AnnounceStrayTab(tab, 0);
+        AnnounceStrayTab(tab, !behind, 0);
       return;
     }
     if (!(view = [NNCoreWindowController hostingViewForProfile:nil])) return;
@@ -719,8 +721,8 @@ NSMapTable<NNCoreProfile *, NNCoreWindowController *> *StandaloneWindows() {
     // through a view of this window; with none (just after launch), through the extensions module, which adopts the
     // live tab rather than loading its URL again.
     NNCoreWebView *view = [self anyShownViewForProfile:tab.profile] ?: [self anyView];
-    if (view) [view openedTab:tab adoptId:[NNCoreTabs offerTab:tab prefix:@"tab"] disposition:@"foreground"];
-    else AnnounceStrayTab(tab, 0);
+    if (view) [view openedTab:tab adoptId:[NNCoreTabs offerTab:tab prefix:@"tab"] disposition:behind ? @"background" : @"foreground"];
+    else AnnounceStrayTab(tab, !behind, 0);
   }
 }
 
@@ -755,7 +757,9 @@ NSMapTable<NNCoreProfile *, NNCoreWindowController *> *StandaloneWindows() {
 - (void)window:(NNCoreWindow *)window didActivateTab:(NNCoreTab *)tab {
   [NNCoreTabStrip activated:tab inWindow:self];
   [NNCoreTabStrip changedInWindow:self profile:tab.profile];
-  [[self viewFor:tab] tabActivatedByChrome:!self.appChanging];
+  NNCoreWebView *view = [self viewFor:tab];
+  if (view) [view tabActivatedByChrome:!self.appChanging];
+  else if (!self.appChanging) [NNCoreTabs noteActivation:tab];
 }
 
 - (void)window:(NNCoreWindow *)window devToolsDidChangeForTab:(NNCoreTab *)tab view:(NSView *)devToolsView {

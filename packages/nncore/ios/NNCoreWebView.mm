@@ -700,6 +700,7 @@ const char kPageReportsKey = 0;
   // From where the last view left it: a tab that comes into sight in this one leaves Picture in Picture.
   [self userSightChanged];
   [self adoptIntoWindow];
+  if ([NNCoreTabs takeActivation:tab]) [self tab:tab requestsActivation:@"page"];
   NSView *page = tab.view;
   if (page.superview != self) {
     [page removeFromSuperview];
@@ -2249,6 +2250,11 @@ NSMutableDictionary<NSString *, NNCoreTab *> *Offered() {
   return offered;
 }
 
+NSHashTable<NNCoreTab *> *Activated() {
+  static NSHashTable *activated = [NSHashTable weakObjectsHashTable];
+  return activated;
+}
+
 // A tab Chrome opened that the app never adopts (it chose to open the URL fresh, in a private window, say).
 constexpr int64_t kOfferSeconds = 30;
 
@@ -2286,8 +2292,19 @@ constexpr int64_t kOfferSeconds = 30;
   return tab;
 }
 
++ (void)noteActivation:(NNCoreTab *)tab {
+  if ([Offered() allKeysForObject:tab].count) [Activated() addObject:tab];
+}
+
++ (BOOL)takeActivation:(NNCoreTab *)tab {
+  if (![Activated() containsObject:tab]) return NO;
+  [Activated() removeObject:tab];
+  return YES;
+}
+
 + (void)forget:(NNCoreTab *)tab {
   [Views() removeObjectForKey:tab];
+  [Activated() removeObject:tab];
   for (NSString *key in [Offered() allKeysForObject:tab]) [Offered() removeObjectForKey:key];
 }
 

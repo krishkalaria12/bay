@@ -56,4 +56,8 @@ extern bool (*g_bay_devtools_may_input)(
     content::DevToolsAgentHostClient* root_client,
     content::RenderFrameHost* frame);
 
+// Target.createTarget's `background`, for the delegate that makes the tab: upstream it only skips activating the
+// window, and the tab still opens in front.
+extern bool g_bay_devtools_background_target;
+
 #endif
