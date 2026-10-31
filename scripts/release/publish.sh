@@ -41,9 +41,10 @@ else
 fi
 dmg="$dist/Bay-$version.dmg"
 zip="$dist/Bay-$version.zip"
+cli="$dist/bay-cli-$version-macos-arm64.tar.gz"
 feed="$dist/appcast.xml"
 notes="$dist/release-notes.md"
-for file in "$dmg" "$zip" "$feed" "$notes" "$dist/provenance.txt"; do
+for file in "$dmg" "$zip" "$cli" "$cli.sha256" "$feed" "$notes" "$dist/provenance.txt"; do
   [ -f "$file" ] || die "no $file (scripts/release.sh $version --channel $channel first)"
 done
 provenance_commit="$(sed -n 's/^commit \([0-9a-f]\{40\}\)$/\1/p' "$dist/provenance.txt")"
@@ -141,10 +142,10 @@ echo "==> Release"
 if [ "$channel" = stable ]; then
   cp -c "$dmg" "$work/out/Bay.dmg"
   run gh release create "v$version" -R "$repo" --latest "${tag_args[@]}" --title "Bay $version" \
-    --notes-file "$notes" "$dmg" "$work/out/Bay.dmg" "$zip" "$merged"
+    --notes-file "$notes" "$dmg" "$work/out/Bay.dmg" "$zip" "$cli" "$cli.sha256" "$merged"
 else
   run gh release create "v$version" -R "$repo" --prerelease --latest=false "${tag_args[@]}" --title "Bay $version" \
-    --notes-file "$notes" "$dmg" "$zip"
+    --notes-file "$notes" "$dmg" "$zip" "$cli" "$cli.sha256"
   # The feed's home stays the latest stable release.
   run gh release upload "$stable_tag" -R "$repo" --clobber "$merged"
   nightly_notes="The newest nightly, always as Bay-Nightly.dmg (https://bay.krishkalaria.in/nightly). Now $version: https://github.com/$repo/releases/tag/v$version. Nightlies update themselves to the next one; Settings › General › Update channel switches a copy between Stable and Nightly."
