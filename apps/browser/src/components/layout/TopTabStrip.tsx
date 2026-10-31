@@ -87,7 +87,7 @@ import { makeRoom, registerSlot, reorderOffsets, settleRoom } from "./stripReord
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, setInsert, setInsertResolver, updateTabDrag, useTabDrag } from "./tabDrag";
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type EasedColor, type ToolbarPalette } from "./toolbarColors";
 import { listOfTab } from "../../store/model";
-import { captionPeekInsets, useWindowButtonLayout, windowButtonRoom } from "./windowButtons";
+import { useWindowButtonLayout, windowButtonRoom } from "./windowButtons";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { closeGroup, moveGroup, placeTabs, updateGroup } from "../../runtime/organizeActions";
 import { browserRead } from "../../store/read";
@@ -1390,11 +1390,11 @@ function NewTabButton({ windowId }: { windowId: string }) {
   );
 }
 
+const PEEK_INSET = 6;
+
 export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; enabled: boolean }) {
-  const buttons = useWindowButtonLayout();
-  const room = windowButtonRoom(buttons);
-  const insets = captionPeekInsets(buttons, 6);
-  const peekWidth = Math.max(0, windowWidth - insets.left - insets.right);
+  const room = windowButtonRoom(useWindowButtonLayout());
+  const peekWidth = Math.max(0, windowWidth - 2 * PEEK_INSET);
   const theme = useTheme();
   const { slide, live, show, hide } = usePeek(enabled);
   const slideStyle = useAnimatedStyle(() => {
@@ -1419,7 +1419,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
         style={[
           {
             position: "absolute",
-            left: insets.left,
+            left: PEEK_INSET,
             width: peekWidth,
             // Out of the window while hidden (a transform doesn't move hover tracking): its tabs mustn't hover under the page.
             top: live ? 4 : -10_000,

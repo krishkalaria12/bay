@@ -322,11 +322,9 @@ const Shell = requireNativeModule<{
 }>("BayShell");
 
 export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
-/** Linux publishes snapshots.BayShell.windowButtonLayout and matching onAppEvent updates. Other hosts keep their native order. */
-export const windowButtonLayout = (): WindowButtonLayout =>
-  platformOS === "linux"
-    ? nativeSnapshot("BayShell", "windowButtonLayout", [], () => Shell.windowButtonLayout?.() ?? { left: [], right: ["minimize", "maximize", "close"] })
-    : { left: [], right: capabilities.captionButtons ? ["minimize", "maximize", "close"] : [] };
+/** The caption buttons the app draws (capabilities.captionButtons), in Windows' order. Linux hosts still publish the
+ *  desktop's button layout (snapshots.BayShell.windowButtonLayout), but Bay's Linux windows show no buttons. */
+export const windowButtonLayout = (): WindowButtonLayout => ({ left: [], right: capabilities.captionButtons ? ["minimize", "maximize", "close"] : [] });
 export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
 export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));

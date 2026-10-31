@@ -230,7 +230,7 @@ export function ContentCard() {
     // The pane at the top right, beside a sidebar docked on the right: its toolbar's end holds the toggle.
     const trailing = !!rect && rect.y === 0 && rect.x + rect.width >= size.width - 1;
     const clearance = paneButtonClearance(leading, trailing, tabLayout, sidebarOpen, sidebarRight);
-    if (addressInSidebar) return noToolbarGeometry(clearance.clearTrafficLights, clearance.captionEnd, windowButtons);
+    if (addressInSidebar) return noToolbarGeometry(clearance.clearTrafficLights, windowButtons);
     return toolbarGeometry(
       {
         sidebarButton: leading && tabLayout === "sidebar" && !sidebarRight,

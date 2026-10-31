@@ -1,55 +1,21 @@
-import { capabilities, platformOS } from "@bay/platform";
-import { onAppEvent, windowButtonLayout, type WindowButtonLayout } from "@bay/shell";
-import { useSyncExternalStore } from "react";
+import { capabilities } from "@bay/platform";
+import { windowButtonLayout, type WindowButtonLayout } from "@bay/shell";
 import { layout } from "../../lib/constants";
 
 /** Native macOS traffic lights keep their existing spacing. */
 export const LIGHTS_WIDTH = capabilities.trafficLights ? layout.trafficLightsWidth : 0;
-/** Windows' own width. Linux title bar buttons are compact: with three at the sidebar's edge, its header keeps the
- *  sidebar toggle and the back, forward and reload buttons, as beside macOS's lights. */
-export const CAPTION_BUTTON_WIDTH = platformOS === "linux" ? 26 : 46;
+/** Windows' own caption button width. */
+export const CAPTION_BUTTON_WIDTH = 46;
 
-const listeners = new Set<() => void>();
-let subscription: ReturnType<typeof onAppEvent> | undefined;
-let current: WindowButtonLayout = immutableLayout(windowButtonLayout());
-
-function immutableLayout(value: WindowButtonLayout): WindowButtonLayout {
-  return Object.freeze({ left: Object.freeze([...value.left]), right: Object.freeze([...value.right]) });
-}
-
-function update(value: WindowButtonLayout) {
-  if (value.left.join() === current.left.join() && value.right.join() === current.right.join()) return;
-  current = immutableLayout(value);
-  for (const listener of listeners) listener();
-}
+/** The caption buttons the app draws: Windows' minimize, maximize and close. macOS has its traffic lights, and Linux
+ *  windows show none, as on macOS the window is the app's own: the desktop's shortcuts and title-bar gestures move,
+ *  maximize and close it. */
+const native = windowButtonLayout();
+const current: WindowButtonLayout = Object.freeze({ left: Object.freeze([...native.left]), right: Object.freeze([...native.right]) });
 
 export const getWindowButtonLayout = () => current;
-
-export function subscribeWindowButtonLayout(listener: () => void) {
-  listeners.add(listener);
-  if (!subscription) {
-    // Subscribe first: a desktop setting may have changed since the initial render.
-    let receivedEvent = false;
-    subscription = onAppEvent((event) => {
-      if (event.type !== "windowButtonLayout") return;
-      receivedEvent = true;
-      update(event.layout);
-    });
-    const snapshot = windowButtonLayout();
-    if (!receivedEvent) update(snapshot);
-  }
-  return () => {
-    listeners.delete(listener);
-    if (!listeners.size) {
-      subscription?.remove();
-      subscription = undefined;
-    }
-  };
-}
-
-export function useWindowButtonLayout() {
-  return useSyncExternalStore(subscribeWindowButtonLayout, getWindowButtonLayout);
-}
+/** A stable layout: it never changes while the app runs. */
+export const useWindowButtonLayout = () => current;
 
 /** Room at each outer window edge, including native macOS lights. */
 export function windowButtonRoom(buttons: WindowButtonLayout) {
@@ -64,15 +30,4 @@ export function captionMaximizeRect(buttons: WindowButtonLayout, width: number, 
       return [(side === "left" ? 0 : width - buttons.right.length * CAPTION_BUTTON_WIDTH) + index * CAPTION_BUTTON_WIDTH, 0, CAPTION_BUTTON_WIDTH, height];
   }
   return null;
-}
-
-/** Linux utilities need a caption band; Windows and macOS retain their existing content origin. */
-export function utilityCaptionHeight(buttons: WindowButtonLayout, height: number) {
-  return platformOS === "linux" && (buttons.left.length > 0 || buttons.right.length > 0) ? height : 0;
-}
-
-/** The collapsed top-tabs popup shares the caption's height in an ordinary Linux window. */
-export function captionPeekInsets(buttons: WindowButtonLayout, inset: number) {
-  const room = windowButtonRoom(buttons);
-  return platformOS === "linux" ? { left: Math.max(inset, room.left), right: Math.max(inset, room.right) } : { left: inset, right: inset };
 }

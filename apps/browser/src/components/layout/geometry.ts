@@ -1,4 +1,3 @@
-import { platformOS } from "@bay/platform";
 import type { WindowButtonLayout } from "@bay/shell";
 import { layout } from "../../lib/constants";
 import { slotsOf } from "../../store/splits";
@@ -141,17 +140,15 @@ export const NO_TOOLBAR: ToolbarGeometry = {
   reload: 21,
   urlLeft: 8,
 };
-const noToolbars = new Map<string, ToolbarGeometry>();
+const noToolbars = new Map<number, ToolbarGeometry>();
 
 /** No toolbar, but developer bars and prompts must still clear the window's corners. */
-export function noToolbarGeometry(clearStart: boolean, clearEnd: boolean, buttons = getWindowButtonLayout()): ToolbarGeometry {
+export function noToolbarGeometry(clearStart: boolean, buttons = getWindowButtonLayout()): ToolbarGeometry {
   const room = windowButtonRoom(buttons);
   const start = clearStart ? (LIGHTS_WIDTH ? TRAFFIC_LIGHTS_OFFSET : Math.max(8, room.left - layout.cardInset)) : 8;
-  const end = platformOS === "linux" && clearEnd ? Math.max(0, room.right - layout.cardInset) : 0;
-  if (start === 8 && end === 0) return NO_TOOLBAR;
-  const key = `${start}|${end}`;
-  let g = noToolbars.get(key);
-  if (!g) noToolbars.set(key, (g = { ...NO_TOOLBAR, urlLeft: start, captionEnd: end > 0, captionRoom: end }));
+  if (start === 8) return NO_TOOLBAR;
+  let g = noToolbars.get(start);
+  if (!g) noToolbars.set(start, (g = { ...NO_TOOLBAR, urlLeft: start }));
   return g;
 }
 
@@ -159,7 +156,7 @@ export function noToolbarGeometry(clearStart: boolean, clearEnd: boolean, button
 export function paneButtonClearance(leading: boolean, trailing: boolean, tabLayout: "sidebar" | "top", sidebarOpen: boolean, sidebarRight: boolean) {
   const strip = tabLayout === "top" && sidebarOpen;
   return {
-    clearTrafficLights: leading && (tabLayout === "sidebar" || platformOS === "linux") && !strip && (!sidebarOpen || sidebarRight),
+    clearTrafficLights: leading && tabLayout === "sidebar" && !strip && (!sidebarOpen || sidebarRight),
     captionEnd: trailing && !strip && (!sidebarOpen || !sidebarRight),
   };
 }

@@ -1,5 +1,5 @@
 import * as windowCommands from "../../runtime/windowActions";
-import { platformOS, Pressable, View, shortcutForCommand } from "@bay/platform";
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { useRef } from "react";
 import { FadeLabel } from "@bay/shell";
 import { StyleSheet } from "react-native";
@@ -20,16 +20,7 @@ import { GlassFill, useLiquidGlass } from "../glass";
 import { useSidebarMetrics } from "./tokens";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
-import {
-  addressToggleMinWidth,
-  ADDRESS_BUTTON,
-  ADDRESS_EDGE,
-  ADDRESS_LIGHTS_Y,
-  ADDRESS_NAV_GAP,
-  ADDRESS_NAV_WIDTH,
-  ADDRESS_TOGGLE_X,
-  ADDRESS_TOGGLE_X_RIGHT,
-} from "./constants";
+import { addressToggleMinWidth, ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { openCommandPanel } from "../../runtime/windowUiActions";
 
@@ -54,11 +45,9 @@ export function SidebarHeaderTools({ width }: { width: number }) {
           tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
         />
       ) : null}
-      {platformOS !== "linux" || width >= room.left + end + ADDRESS_NAV_WIDTH ? (
-        <View style={{ position: "absolute", top, right: end, flexDirection: "row", gap: ADDRESS_NAV_GAP }}>
-          {tab ? <NavigationButtons tab={tab} palette={palette} /> : null}
-        </View>
-      ) : null}
+      <View style={{ position: "absolute", top, right: end, flexDirection: "row", gap: ADDRESS_NAV_GAP }}>
+        {tab ? <NavigationButtons tab={tab} palette={palette} /> : null}
+      </View>
     </>
   );
 }
