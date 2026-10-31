@@ -51,6 +51,8 @@ source_set("bay") {
     "nn_reauth.h",
     "nn_search_engines.cc",
     "nn_search_engines.h",
+    "nn_scripts_policy.cc",
+    "nn_scripts_policy.h",
     "nn_sensitive_args.cc",
     "nn_sensitive_args.h",
     "nn_site_settings.cc",
