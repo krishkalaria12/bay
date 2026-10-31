@@ -24,7 +24,7 @@ export type Theme = typeof dark &
 const dark = {
   dark: true,
   // Dia: 0.09 sidebar, 0.05 page.
-  grain: 0.006,
+  grain: 0.09,
   // Dia: 0.5 tint.
   card: "rgba(18,18,18,0.5)",
   cardEdge: "rgba(0,0,0,0.35)",
@@ -237,6 +237,9 @@ export function spaceThemeKey(profile: DeepReadonly<Pick<Space, "color" | "theme
   return `${CUSTOM}${t.colors.join(",")}|${t.intensity.toFixed(2)}|${t.grain.toFixed(2)}:${mode}`;
 }
 
+/** A custom theme's grain dial (0–1) as the backdrop's grain opacity; the dial's preview uses the same. */
+export const customGrain = (dial: number) => dial * 0.12;
+
 function customTheme(key: string): Theme {
   const [body, mode, material] = key.split(":") as [string, string, string | undefined];
   const [, list, intensity, grain] = body.split("|") as [string, string, string, string];
@@ -258,7 +261,7 @@ function customTheme(key: string): Theme {
     windowTint,
     glass: !solid,
     powerUpColor: first,
-    grain: Number(grain) * 0.12,
+    grain: customGrain(Number(grain)),
   };
 }
 
