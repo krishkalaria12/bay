@@ -13,11 +13,9 @@ internal object BayAdblock {
   @JvmStatic external fun nativeLoad(files: Array<String>, cache: String, version: String, resources: String): Long
   /** "" to load the request, "block", or a `data:` URL to answer it with. */
   @JvmStatic external fun nativeCheck(handle: Long, url: String, source: String, kind: String): String
-  /** The page's scriptlets as one script ("" when none). */
-  @JvmStatic external fun nativeScriptlets(handle: Long, url: String): String
   @JvmStatic external fun nativeFree(handle: Long)
-  /** JSON `{ hide, exceptions, generichide }`. */
-  @JvmStatic external fun nativeCosmetic(handle: Long, url: String): String
+  /** The page's cosmetic resources and scriptlets from one lookup: JSON `{ hide, exceptions, generichide, script }`. */
+  @JvmStatic external fun nativePageResources(handle: Long, url: String): String
   /** JSON array of selectors. Arguments are JSON arrays of strings. */
   @JvmStatic external fun nativeHiddenSelectors(handle: Long, classes: String, ids: String, exceptions: String): String
   @JvmStatic external fun nativeSetTracking(json: String): Boolean

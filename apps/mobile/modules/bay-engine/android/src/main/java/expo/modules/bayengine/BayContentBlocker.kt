@@ -50,7 +50,10 @@ internal object BayContentBlocker {
           return@post
         }
         val previous = handle
-        handle = next
+        synchronized(pages) {
+          handle = next
+          pages.clear()
+        }
         // Requests already inside the old engine finish quickly; free it once they have.
         if (previous != 0L) main.postDelayed({ BayAdblock.nativeFree(previous) }, 30_000)
         onDone(Result.success(Unit))
@@ -62,25 +65,43 @@ internal object BayContentBlocker {
     pausedHosts = hosts.map { it.lowercase() }.toSet()
   }
 
-  private fun isActive(pageUrl: String?): Boolean {
-    if (handle == 0L) return false
-    val host = pageUrl?.let { Uri.parse(it).host?.lowercase() } ?: return true
-    return pausedHosts.none { host == it || host.endsWith(".$it") }
+  /**
+   * The engine to ask about `pageUrl`, or 0 when blocking is off or paused there. Callers read `handle` only through
+   * this, once per call: turning blocking off sets it to 0 from the main thread while network threads are mid-check.
+   */
+  private fun engineFor(pageUrl: String?): Long {
+    val engine = handle
+    if (engine == 0L) return 0L
+    val host = pageUrl?.let { Uri.parse(it).host?.lowercase() } ?: return engine
+    return if (pausedHosts.none { host == it || host.endsWith(".$it") }) engine else 0L
   }
 
-  /** The scriptlet and redirect resources ship in the app's assets; the engine reads them from a file. */
+  /**
+   * The scriptlet and redirect resources ship in the app's assets; the engine reads them from a file, copied (1 MB)
+   * once per install or update of the app, which a stamp of its `lastUpdateTime` records.
+   */
   private fun bundledResources(context: android.content.Context, directory: java.io.File): java.io.File? = runCatching {
     val file = directory.resolve("resources.json")
-    context.assets.open("bay-adblock-resources.json").use { input -> file.outputStream().use { input.copyTo(it) } }
+    val stamp = directory.resolve("resources.stamp")
+    @Suppress("DEPRECATION") // The flags overload is API 33+.
+    val installed = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
+    if (!file.exists() || !stamp.exists() || stamp.readText() != installed) {
+      val draft = directory.resolve("resources.json.tmp")
+      context.assets.open("bay-adblock-resources.json").use { input -> draft.outputStream().use { input.copyTo(it) } }
+      check(draft.renameTo(file)) { "The blocker resources couldn't be saved." }
+      stamp.writeText(installed)
+    }
     file
   }.getOrNull()
 
   /** For a blocked subresource, an empty response or a harmless stand-in (`$redirect`); null to let it load. */
   fun intercept(request: WebResourceRequest, pageUrl: String?): WebResourceResponse? {
-    if (request.isForMainFrame || !isActive(pageUrl)) return null
+    if (request.isForMainFrame) return null
+    val engine = engineFor(pageUrl)
+    if (engine == 0L) return null
     val url = request.url.toString()
     if (!url.startsWith("http")) return null
-    val answer = BayAdblock.nativeCheck(handle, url, pageUrl ?: url, resourceType(request))
+    val answer = BayAdblock.nativeCheck(engine, url, pageUrl ?: url, resourceType(request))
     return when {
       answer.isEmpty() -> null
       answer.startsWith("data:") -> standIn(answer)
@@ -98,66 +119,132 @@ internal object BayContentBlocker {
   }
 
   /** The page's scriptlets (`##+js`), or "" when it has none or blocking is off for it. */
-  fun scriptlets(pageUrl: String): String = if (isActive(pageUrl)) BayAdblock.nativeScriptlets(handle, pageUrl) else ""
+  fun scriptlets(pageUrl: String): String {
+    val engine = engineFor(pageUrl)
+    return if (engine != 0L) page(engine, pageUrl).script else ""
+  }
+
+  /** A page's cosmetic resources and scriptlets, from one `url_cosmetic_resources` lookup (an expensive one). */
+  private class Page(val engine: Long, val hide: List<String>, val exceptions: String, val generichide: Boolean, val script: String)
+
+  // The scriptlets are read when a navigation starts and the cosmetic CSS in two passes once it loads; they share one
+  // lookup. Frames have their own URLs, hence a few entries. Cleared when the engine changes.
+  private val pages = object : java.util.LinkedHashMap<String, Page>(16, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Page>?): Boolean = size > 32
+  }
+
+  private fun page(engine: Long, url: String): Page {
+    synchronized(pages) { pages[url] }?.takeIf { it.engine == engine }?.let { return it }
+    val json = JSONObject(BayAdblock.nativePageResources(engine, url))
+    val hide = json.optJSONArray("hide")
+    val page = Page(
+      engine,
+      if (hide == null) emptyList() else List(hide.length()) { hide.getString(it) },
+      json.optJSONArray("exceptions")?.toString() ?: "[]",
+      json.optBoolean("generichide"),
+      json.optString("script"),
+    )
+    // An engine swapped in meanwhile cleared the cache; don't put this one's answer back.
+    synchronized(pages) { if (engine == handle) pages[url] = page }
+    return page
+  }
 
   private val imagePath = Regex("\\.(png|jpe?g|gif|webp|svg|ico|avif)$")
   private val fontPath = Regex("\\.(woff2?|ttf|otf)$")
   private val mediaPath = Regex("\\.(mp4|webm|m3u8|mp3|m4a)$")
 
   private fun resourceType(request: WebResourceRequest): String {
-    val accept = request.requestHeaders["Accept"].orEmpty()
-    val path = request.url.path.orEmpty().lowercase()
-    return when {
-      accept.startsWith("text/css") || path.endsWith(".css") -> "stylesheet"
-      accept.startsWith("image/") || imagePath.containsMatchIn(path) -> "image"
-      path.endsWith(".js") || path.endsWith(".mjs") -> "script"
-      fontPath.containsMatchIn(path) -> "font"
-      mediaPath.containsMatchIn(path) -> "media"
-      else -> "other"
-    }
+    val headers = request.requestHeaders
+    fun header(name: String) = headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+    return requestType(header("Sec-Fetch-Dest"), header("X-Requested-With"), header("Accept").orEmpty(),
+      request.url.path.orEmpty().lowercase())
   }
 
-  /** CSS hiding the page's ad slots: its site rules, plus generic rules for the classes and ids it uses. */
-  fun cosmeticCss(pageUrl: String, classesJson: String, idsJson: String): String {
-    if (!isActive(pageUrl)) return ""
-    val engine = handle
-    val resources = JSONObject(BayAdblock.nativeCosmetic(engine, pageUrl))
-    val selectors = mutableListOf<String>()
-    resources.optJSONArray("hide")?.let { hide -> for (i in 0 until hide.length()) selectors += hide.getString(i) }
-    if (!resources.optBoolean("generichide")) {
-      val exceptions = resources.optJSONArray("exceptions")?.toString() ?: "[]"
-      val generic = JSONArray(BayAdblock.nativeHiddenSelectors(engine, classesJson, idsJson, exceptions))
+  /**
+   * adblock-rust's request type (the names `Request::new` accepts) for a subresource, so `$script`, `$xmlhttprequest`,
+   * `$subdocument` rules and `$redirect` stand-ins apply. `Sec-Fetch-Dest` is exact when WebView passes it; without
+   * it, a page's own `X-Requested-With: XMLHttpRequest`, then the `Accept` header Chromium sets per destination (often
+   * missing on WebView), then the file extension. Anything else is "other", which only untyped rules match.
+   */
+  internal fun requestType(fetchDest: String?, requestedWith: String?, accept: String, path: String): String =
+    when (fetchDest?.lowercase()) {
+      "script", "worker", "sharedworker", "serviceworker", "audioworklet", "paintworklet" -> "script"
+      "style" -> "stylesheet"
+      "image" -> "image"
+      "font" -> "font"
+      "audio", "video", "track" -> "media"
+      "iframe", "frame" -> "subdocument"
+      "empty" -> "xmlhttprequest"
+      "document" -> "document"
+      "object", "embed" -> "object"
+      else -> when {
+        requestedWith.equals("XMLHttpRequest", ignoreCase = true) -> "xmlhttprequest"
+        // Only navigations ask for HTML first, and main-frame ones never get here: this is a frame.
+        accept.startsWith("text/html") -> "subdocument"
+        accept.startsWith("text/css") || path.endsWith(".css") -> "stylesheet"
+        accept.startsWith("image/") || imagePath.containsMatchIn(path) -> "image"
+        path.endsWith(".js") || path.endsWith(".mjs") -> "script"
+        fontPath.containsMatchIn(path) -> "font"
+        mediaPath.containsMatchIn(path) -> "media"
+        else -> "other"
+      }
+    }
+
+  /**
+   * CSS hiding the page's ad slots: its site rules (when `siteRules`, the page's first pass), plus generic rules for
+   * the classes and ids it uses (JSON arrays of the ones not sent before).
+   */
+  fun cosmeticCss(pageUrl: String, classesJson: String, idsJson: String, siteRules: Boolean): String {
+    val engine = engineFor(pageUrl)
+    if (engine == 0L) return ""
+    val page = page(engine, pageUrl)
+    val selectors = if (siteRules) page.hide.toMutableList() else mutableListOf()
+    if (!page.generichide && (classesJson != "[]" || idsJson != "[]")) {
+      val generic = JSONArray(BayAdblock.nativeHiddenSelectors(engine, classesJson, idsJson, page.exceptions))
       for (i in 0 until generic.length()) selectors += generic.getString(i)
     }
     // One rule per chunk, so a selector the browser can't parse only drops its own chunk.
     return selectors.chunked(200).joinToString("\n") { "${it.joinToString(",")}{display:none!important}" }
   }
 
-  /** The page side: collect the classes and ids in use, ask for CSS, add it as a style sheet; again after load. */
+  /**
+   * The page side: at DOMContentLoaded, ask for the site rules and the generic rules for the classes and ids in use;
+   * after load, only for classes and ids not seen yet. Each answer goes in a new style sheet, so earlier ones aren't
+   * parsed again. A cross-origin frame (ads, embeds) only gets its site rules: scanning its whole DOM runs on the
+   * page's main thread.
+   */
   const val COSMETIC_SCRIPT = """
 (() => {
   if (window.__bayCosmeticDone || !window.__bayCosmetic) return;
   window.__bayCosmeticDone = true;
+  let scan = true;
+  try { scan = window === window.top || !!window.top.location.href; } catch (e) { scan = false; }
   const seen = { classes: new Set(), ids: new Set() };
-  const style = document.createElement('style');
+  let first = true;
   const apply = () => {
     const classes = [], ids = [];
-    for (const el of document.querySelectorAll('[class],[id]')) {
+    if (scan) for (const el of document.querySelectorAll('[class],[id]')) {
       for (const c of el.classList) if (!seen.classes.has(c)) { seen.classes.add(c); classes.push(c); }
       if (el.id && !seen.ids.has(el.id)) { seen.ids.add(el.id); ids.push(el.id); }
     }
-    const css = window.__bayCosmetic.css(location.href, JSON.stringify(classes), JSON.stringify(ids));
-    if (css) { style.textContent += css + '\n'; (document.head || document.documentElement).appendChild(style); }
+    if (!first && !classes.length && !ids.length) return;
+    const css = window.__bayCosmetic.css(location.href, JSON.stringify(classes), JSON.stringify(ids), first);
+    first = false;
+    if (!css) return;
+    const style = document.createElement('style');
+    style.textContent = css;
+    (document.head || document.documentElement).appendChild(style);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply, { once: true }); else apply();
-  window.addEventListener('load', apply, { once: true });
+  if (scan) window.addEventListener('load', apply, { once: true });
 })();
 """
 
   /** Exposed to pages as `__bayCosmetic`; it only answers with CSS selectors. */
   class Bridge {
     @JavascriptInterface
-    fun css(pageUrl: String, classes: String, ids: String): String = runCatching { cosmeticCss(pageUrl, classes, ids) }.getOrDefault("")
+    fun css(pageUrl: String, classes: String, ids: String, siteRules: Boolean): String =
+      runCatching { cosmeticCss(pageUrl, classes, ids, siteRules) }.getOrDefault("")
   }
 }
 
