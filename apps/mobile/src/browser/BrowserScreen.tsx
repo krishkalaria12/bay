@@ -542,6 +542,8 @@ export function BrowserScreen(): JSX.Element {
           restoreTab(id);
           setOverlay("none");
         }}
+        onRemove={(id) => dispatch({ type: "remove-archived", id })}
+        onClear={() => dispatch({ type: "clear-archive" })}
       />
       <SettingsPanel
         visible={panel === "settings"}
