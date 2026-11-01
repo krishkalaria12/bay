@@ -13,6 +13,7 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.net.http.SslError
@@ -28,11 +29,14 @@ import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import expo.modules.kotlin.AppContext
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -43,6 +47,12 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   val onNavigationError by EventDispatcher()
   val onScroll by EventDispatcher()
   val onLinkPress by EventDispatcher()
+  val onPageMessage by EventDispatcher()
+  // The system WebView has no isolated worlds: page scripts run in the main world and answer through this bridge,
+  // which ignores anything without this view's token.
+  private val pageToken = UUID.randomUUID().toString()
+  private val scriptHandler = Handler(Looper.getMainLooper())
+  private val pendingScripts = ConcurrentHashMap<String, Promise>()
   private var loading = false
   private var recoveryURL: String? = null
   private var disposed = false
@@ -106,6 +116,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     importantForAccessibility = if (isActive) IMPORTANT_FOR_ACCESSIBILITY_AUTO else IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
     CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
     addJavascriptInterface(BayContentBlocker.Bridge(), "__bayCosmetic")
+    addJavascriptInterface(PageBridge(), "__bayPage")
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       WebViewCompat.addDocumentStartJavaScript(this, BayContentBlocker.COSMETIC_SCRIPT, setOf("*"))
     }
@@ -170,6 +181,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       }
 
       override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+        cancelScripts("The page navigated before the script finished.")
         pageUrl = url
         navigationGeneration += 1
         loading = true
@@ -197,6 +209,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       }
 
       override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+        cancelScripts("The page renderer stopped.")
         recoveryURL = view.url
         navigationGeneration += 1
         removeView(view)
@@ -252,6 +265,54 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     val origin = "${uri.scheme}://$host" + if (uri.port != -1) ":${uri.port}" else ""
     scriptlets = WebViewCompat.addDocumentStartJavaScript(webView, "try{$script}catch(e){}", setOf(origin))
     android.util.Log.d("BayAdblock", "scriptlets for $host: ${script.length} chars")
+  }
+
+  /** Rejects every script still waiting for the page. */
+  private fun cancelScripts(message: String) {
+    scriptHandler.removeCallbacksAndMessages(null)
+    pendingScripts.keys.toList().forEach { id -> pendingScripts.remove(id)?.reject("E_PAGE_CLOSED", message, null) }
+  }
+
+  /** Runs a page script and resolves with its result as JSON text (see the TypeScript `Tab.evaluate`). */
+  fun evaluate(script: String, promise: Promise) {
+    if (disposed) {
+      promise.reject("E_PAGE_CLOSED", "The page is closed.", null)
+      return
+    }
+    val id = UUID.randomUUID().toString()
+    pendingScripts[id] = promise
+    scriptHandler.postAtTime({ pendingScripts.remove(id)?.reject("E_PAGE_SCRIPT", "The page didn't answer.", null) }, id, SystemClock.uptimeMillis() + 10_000)
+    val token = JSONObject.quote(pageToken)
+    webView.evaluateJavascript(
+      """
+      (() => {
+        const post = (message) => __bayPage.post($token, JSON.stringify(message));
+        (async () => {
+        $script
+        })().then(
+          (value) => __bayPage.resolve($token, "$id", JSON.stringify(value === undefined ? null : value)),
+        ).catch((error) => __bayPage.reject($token, "$id", String((error && error.message) || error)));
+      })();
+      """.trimIndent(),
+      null,
+    )
+  }
+
+  private inner class PageBridge {
+    @JavascriptInterface
+    fun resolve(token: String, id: String, json: String) {
+      if (token == pageToken) { scriptHandler.removeCallbacksAndMessages(id); pendingScripts.remove(id)?.resolve(json) }
+    }
+
+    @JavascriptInterface
+    fun reject(token: String, id: String, message: String) {
+      if (token == pageToken) { scriptHandler.removeCallbacksAndMessages(id); pendingScripts.remove(id)?.reject("E_PAGE_SCRIPT", message, null) }
+    }
+
+    @JavascriptInterface
+    fun post(token: String, json: String) {
+      if (token == pageToken) post { if (!disposed) onPageMessage(mapOf("message" to json)) }
+    }
   }
 
   /** The address without tracking parameters, or upgraded to HTTPS; null when it should load as it is. */
@@ -429,6 +490,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   fun dispose() {
     disposed = true
+    cancelScripts("The page closed before the script finished.")
     scrollHandler.removeCallbacksAndMessages(null)
     webView.animate().cancel()
     webView.stopLoading()

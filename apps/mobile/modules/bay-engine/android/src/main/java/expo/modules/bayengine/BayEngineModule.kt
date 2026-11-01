@@ -55,7 +55,7 @@ class BayEngineModule : Module() {
     Function("setTrackingParameters") { json: String -> BayAdblock.nativeSetTracking(json) }
 
     View(BayEngineView::class) {
-      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress")
+      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage")
       Prop("pullToRefreshEnabled") { view: BayEngineView, enabled: Boolean -> view.pullToRefreshEnabled = enabled }
       Prop("private") { view: BayEngineView, isPrivate: Boolean -> view.isPrivate = isPrivate }
       Prop("active") { view: BayEngineView, active: Boolean -> view.isActive = active }
@@ -66,6 +66,7 @@ class BayEngineModule : Module() {
       AsyncFunction("reload") { view: BayEngineView -> view.reload() }
       AsyncFunction("stop") { view: BayEngineView -> view.stop() }
       AsyncFunction("snapshot") { view: BayEngineView -> view.snapshot() }
+      AsyncFunction("evaluate") { view: BayEngineView, script: String, promise: Promise -> view.evaluate(script, promise) }.runOnQueue(Queues.MAIN)
       OnViewDestroys { view: BayEngineView -> view.dispose() }
     }
   }

@@ -12,6 +12,12 @@ export interface Tab {
   stop(): Promise<void>;
   /** A JPEG file URI in the app cache, or null before a page has a drawable viewport. */
   snapshot(): Promise<string | null>;
+  /**
+   * Runs a page script (the body of an async function) in the page and resolves with its JSON-serializable result.
+   * iOS runs it in an isolated world the page can't see; Android's system WebView has none, so it runs in the main
+   * world: keep state under a Symbol.for key there. `post(message)` sends a message to `onPageMessage`.
+   */
+  evaluate(script: string): Promise<unknown>;
 }
 
 export interface NavigationState {
@@ -60,6 +66,8 @@ export interface EngineViewProps extends ViewProps {
   onNavigationError?: (event: NativeSyntheticEvent<NavigationError>) => void;
   onScroll?: (event: NativeSyntheticEvent<PageScroll>) => void;
   onLinkPress?: (event: NativeSyntheticEvent<LinkPress>) => void;
+  /** A message a page script sent with `post(message)`, as JSON text. */
+  onPageMessage?: (event: NativeSyntheticEvent<{ message: string }>) => void;
 }
 
 /** Keep mounted while search, start page, or tab chrome overlays it. After `initialUrl`, navigation uses the ref. */
@@ -98,4 +106,25 @@ export function setTrackingParameters(table: unknown): boolean {
 /** Clear cookies, website storage, network cache and tab snapshots. Close page views first to prevent websites writing new data. */
 export function clearData(): Promise<void> {
   return nativeEngine.clearData();
+}
+
+/** Runs a page script on a tab and resolves with its parsed result; rejects after `timeout` ms (a navigation can drop it). */
+export function runPageScript<T>(tab: Tab, script: string, timeout = 10_000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("The page didn't answer.")), timeout);
+    tab.evaluate(script).then(
+      (json) => {
+        clearTimeout(timer);
+        try {
+          resolve(JSON.parse(String(json)) as T);
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
 }

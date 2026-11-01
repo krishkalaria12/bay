@@ -12,6 +12,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   let onNavigationError = EventDispatcher()
   let onScroll = EventDispatcher()
   let onLinkPress = EventDispatcher()
+  let onPageMessage = EventDispatcher()
+  private lazy var messageProxy = BayPageMessageProxy(view: self)
   private let refreshControl = UIRefreshControl()
   private var observations: [NSKeyValueObservation] = []
   private var lastScrollOffset: CGFloat = 0
@@ -90,6 +92,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     press.minimumPressDuration = 0.5
     press.delegate = self
     webView.addGestureRecognizer(press)
+    // Page scripts run in this isolated world (see evaluate), so only they can post to the app.
+    webView.configuration.userContentController.add(messageProxy, contentWorld: .defaultClient, name: "bay")
     addSubview(webView)
     observations = [
       webView.observe(\.url, options: [.new]) { [weak self] _, _ in self?.emitState() },
@@ -104,6 +108,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   private func replaceWebView() {
     observations = []
+    webView.configuration.userContentController.removeScriptMessageHandler(forName: "bay", contentWorld: .defaultClient)
     webView.navigationDelegate = nil
     webView.uiDelegate = nil
     webView.scrollView.delegate = nil
@@ -144,6 +149,28 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
       self.pendingInitialURL = nil
       try? self.load(address)
     }
+  }
+
+  /// Runs a page script in the isolated world and resolves with its result as JSON text.
+  func evaluate(_ script: String, _ promise: Promise) {
+    let body = """
+      const post = (message) => window.webkit.messageHandlers.bay.postMessage(JSON.stringify(message));
+      const value = await (async () => {
+      \(script)
+      })();
+      return JSON.stringify(value === undefined ? null : value);
+      """
+    webView.callAsyncJavaScript(body, arguments: [:], in: nil, in: .defaultClient) { result in
+      switch result {
+      case .success(let value): promise.resolve(value as? String ?? "null")
+      case .failure(let error): promise.reject("E_PAGE_SCRIPT", error.localizedDescription)
+      }
+    }
+  }
+
+  fileprivate func receive(_ message: WKScriptMessage) {
+    guard message.frameInfo.isMainFrame, let text = message.body as? String else { return }
+    onPageMessage(["message": text])
   }
 
   func stop() {
@@ -347,5 +374,18 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     refreshControl.endRefreshing()
     onNavigationError(["url": webView.url?.absoluteString ?? "", "code": "renderer-terminated",
                        "message": "The page stopped responding. Reload to try again."])
+  }
+}
+
+/// Holds the view weakly: WebKit's user content controller keeps its message handlers alive.
+private final class BayPageMessageProxy: NSObject, WKScriptMessageHandler {
+  weak var view: BayEngineView?
+
+  init(view: BayEngineView) {
+    self.view = view
+  }
+
+  func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    view?.receive(message)
   }
 }

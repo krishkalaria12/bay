@@ -47,7 +47,7 @@ public class BayEngineModule: Module {
     }
 
     View(BayEngineView.self) {
-      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress")
+      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage")
       Prop("pullToRefreshEnabled", true) { (view: BayEngineView, enabled: Bool) in
         view.pullToRefreshEnabled = enabled
       }
@@ -67,6 +67,7 @@ public class BayEngineModule: Module {
       AsyncFunction("reload") { (view: BayEngineView) in _ = view.webView.reload() }
       AsyncFunction("stop") { (view: BayEngineView) in view.stop() }
       AsyncFunction("snapshot") { (view: BayEngineView, promise: Promise) in view.snapshot(promise) }
+      AsyncFunction("evaluate") { (view: BayEngineView, script: String, promise: Promise) in view.evaluate(script, promise) }
     }
   }
 }
