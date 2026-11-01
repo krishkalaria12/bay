@@ -22,6 +22,7 @@ import { SearchCard, type OpenTarget } from "./SearchCard";
 import { StartPage } from "./StartPage";
 import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
+import { TabSwipe } from "./TabSwipe";
 import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
 import { sameNavigation } from "./navigationEvents";
@@ -192,6 +193,14 @@ export function BrowserScreen(): JSX.Element {
     setSearchInNewTab(inNewTab);
     setSearchPrivately(privately);
     setOverlay("search");
+  }
+
+  // The bar swipe moves through tabs in the switcher's order.
+  function swipeTabs(step: 1 | -1): void {
+    const next = data.tabs[data.tabs.findIndex((tab) => tab.id === active.id) + step];
+    if (!next) return;
+    capture(active.id);
+    activate(next.id);
   }
 
   function showTabs(): void {
@@ -442,18 +451,20 @@ export function BrowserScreen(): JSX.Element {
           ) : null}
           {toast.toast ? <Toast key={toast.toast.key} text={toast.toast.text} action={toast.toast.action} onDone={toast.dismiss} /> : null}
           {hasPage && showPages ? (
-            <BrowserBar
-              mode="page"
-              site={locked && active.private ? undefined : host}
-              privately={Boolean(active.private)}
-              onTabs={showTabs}
-              onTabsLongPress={() => setPanel("tabs")}
-              tabCount={data.tabs.length}
-              onSearch={() => search(false)}
-              onMore={() => {
-                if (!(locked && active.private)) setPanel("page");
-              }}
-            />
+            <TabSwipe onSwipe={swipeTabs}>
+              <BrowserBar
+                mode="page"
+                site={locked && active.private ? undefined : host}
+                privately={Boolean(active.private)}
+                onTabs={showTabs}
+                onTabsLongPress={() => setPanel("tabs")}
+                tabCount={data.tabs.length}
+                onSearch={() => search(false)}
+                onMore={() => {
+                  if (!(locked && active.private)) setPanel("page");
+                }}
+              />
+            </TabSwipe>
           ) : (
             <BrowserBar
               mode="start"
