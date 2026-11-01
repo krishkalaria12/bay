@@ -76,10 +76,21 @@ internal object BayContentBlocker {
     return if (pausedHosts.none { host == it || host.endsWith(".$it") }) engine else 0L
   }
 
-  /** The scriptlet and redirect resources ship in the app's assets; the engine reads them from a file. */
+  /**
+   * The scriptlet and redirect resources ship in the app's assets; the engine reads them from a file, copied (1 MB)
+   * once per install or update of the app, which a stamp of its `lastUpdateTime` records.
+   */
   private fun bundledResources(context: android.content.Context, directory: java.io.File): java.io.File? = runCatching {
     val file = directory.resolve("resources.json")
-    context.assets.open("bay-adblock-resources.json").use { input -> file.outputStream().use { input.copyTo(it) } }
+    val stamp = directory.resolve("resources.stamp")
+    @Suppress("DEPRECATION") // The flags overload is API 33+.
+    val installed = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
+    if (!file.exists() || !stamp.exists() || stamp.readText() != installed) {
+      val draft = directory.resolve("resources.json.tmp")
+      context.assets.open("bay-adblock-resources.json").use { input -> draft.outputStream().use { input.copyTo(it) } }
+      check(draft.renameTo(file)) { "The blocker resources couldn't be saved." }
+      stamp.writeText(installed)
+    }
     file
   }.getOrNull()
 
