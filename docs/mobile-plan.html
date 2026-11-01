@@ -412,8 +412,14 @@
               </tr>
               <tr>
                 <td>Blocking</td>
-                <td>Bay's Rust blocker (<code>packages/adblock</code>, Brave's adblock-rust) converts the lists to WebKit content rule lists, compiled once per list version</td>
-                <td>The same Rust blocker checks every request (<code>shouldInterceptRequest</code>) and supplies cosmetic CSS; the built engine is cached per list version</td>
+                <td>
+                  Bay's Rust blocker (<code>packages/adblock</code>, Brave's adblock-rust) converts the lists to WebKit content rule lists, compiled once per
+                  list version
+                </td>
+                <td>
+                  The same Rust blocker checks every request (<code>shouldInterceptRequest</code>) and supplies cosmetic CSS; the built engine is cached per
+                  list version
+                </td>
                 <td>Desktop's blocker itself, through <code>//bay/content</code></td>
               </tr>
               <tr>
@@ -555,15 +561,15 @@
               </tr>
               <tr>
                 <td>
-                  iOS 26 minimum; Android at the WebView's and later Chromium 154's floor; zustand for state, persisted as one versioned JSON document
-                  with <code>expo-file-system</code>; passwords and keys in <code>expo-secure-store</code>; content blocking in Bay's Rust blocker
+                  iOS 26 minimum; Android at the WebView's and later Chromium 154's floor; zustand for state, persisted as one versioned JSON document with
+                  <code>expo-file-system</code>; passwords and keys in <code>expo-secure-store</code>; content blocking in Bay's Rust blocker
                   (<code>packages/adblock</code>, Brave's adblock-rust), shared with desktop
                 </td>
                 <td>
-                  Recommended: Liquid Glass needs iOS 26; zustand matches desktop. expo-sqlite 58 doesn't register its native module on Android (its
-                  module is written against Expo's new module API, which this build doesn't wire up), and one document is all phase 2 needs; the
-                  store sits behind a repository interface, so SQLite can return when history outgrows a file. The Keychain/Keystore-backed secure store
-                  is for credentials (phase 6).
+                  Recommended: Liquid Glass needs iOS 26; zustand matches desktop. expo-sqlite 58 doesn't register its native module on Android (its module is
+                  written against Expo's new module API, which this build doesn't wire up), and one document is all phase 2 needs; the store sits behind a
+                  repository interface, so SQLite can return when history outgrows a file. The Keychain/Keystore-backed secure store is for credentials (phase
+                  6).
                 </td>
               </tr>
               <tr>
@@ -605,7 +611,10 @@
           </div>
           <div class="layer">
             <b>State · <code>src/store</code></b>
-            <p>One zustand store for tabs, history, pins, the archive and preferences, saved as a versioned JSON file (<code>expo-file-system</code>, written atomically). The tab model matches desktop's so sync is a mapping.</p>
+            <p>
+              One zustand store for tabs, history, pins, the archive and preferences, saved as a versioned JSON file (<code>expo-file-system</code>, written
+              atomically). The tab model matches desktop's so sync is a mapping.
+            </p>
           </div>
           <div class="layer">
             <b>Engine API · <code>modules/bay-engine</code></b>
@@ -778,10 +787,10 @@
             <p class="note">
               <code>search-and-open</code>, <code>tabs-roundtrip</code>, <code>link-menu</code> and <code>smoke</code> pass twice in a row on the iPhone 18 Pro
               simulator and the bay-pixel emulator; each starts from <code>.argent/flows/fresh-start.yaml</code>, which clears browsing data in Settings. The
-              start page, search card, page bar and switcher match on both platforms. Open: on a page too short to scroll, its last line sits under the
-              floating bar (the bar only hides on scroll); Android's back edge is the system back gesture, with no forward edge swipe; pull to reload and
-              the hiding bar have no e2e test yet; on iOS, taps inside the Settings sheet are sometimes lost during <code>fresh-start</code>, so a
-              run can fail before its test begins (Android passes every run).
+              start page, search card, page bar and switcher match on both platforms. Open: on a page too short to scroll, its last line sits under the floating
+              bar (the bar only hides on scroll); Android's back edge is the system back gesture, with no forward edge swipe; pull to reload and the hiding bar
+              have no e2e test yet; on iOS, taps inside the Settings sheet are sometimes lost during <code>fresh-start</code>, so a run can fail before its test
+              begins (Android passes every run).
             </p>
             <ul>
               <li>Start page, search card with <code>@bay/core</code> suggestions, page view with the hiding bar, edge swipes, pull to reload.</li>
@@ -803,18 +812,17 @@
           <div>
             <h3>Privacy and blocking <span class="done">done</span></h3>
             <p class="note">
-              Blocking runs on Bay's own Rust blocker (<code>packages/adblock</code>, Brave's adblock-rust), shared with desktop, which now uses it
-              instead of uBlock Origin. Both engines use uBlock Origin's default lists plus EasyList Cookie, downloaded daily straight to files (list
-              text never passes through JavaScript), with uBO's <code>!#if</code> sections resolved per platform. iOS: 178,070 WebKit rules, compiled in
-              about 14 s on first launch in the background and ready in about 25 ms afterwards; adblock.turtlecute.org scores 73% (97 of 132). Android:
-              the engine is built once and loaded from its serialized cache. <code>privacy</code> joins the e2e tests (blocker running with every list,
-              parameter stripping, HTTPS upgrade, per-site pause, private tabs). Scriptlets (<code>##+js</code>) and
-              <code>$redirect</code> stand-ins come from uBlock Origin's resources and Brave's, assembled by
-              <code>packages/adblock/scripts/assemble-resources.mjs</code> and shipped in the app: Android answers redirected requests with the
-              stand-in and registers a page's scriptlets as an origin-scoped document-start script; iOS, whose content rules can't run scripts,
-              also loads the engine (7 ms from cache) and installs them as a user script before each navigation. uBO's trusted scriptlets only
-              run for uBO's own lists. Sheets drag by their handle only, which fixed taps lost in them on iOS. Open: the biometric lock has no
-              e2e test (the simulators have no enrolled biometrics).
+              Blocking runs on Bay's own Rust blocker (<code>packages/adblock</code>, Brave's adblock-rust), shared with desktop, which now uses it instead of
+              uBlock Origin. Both engines use uBlock Origin's default lists plus EasyList Cookie, downloaded daily straight to files (list text never passes
+              through JavaScript), with uBO's <code>!#if</code> sections resolved per platform. iOS: 178,070 WebKit rules, compiled in about 14 s on first
+              launch in the background and ready in about 25 ms afterwards; adblock.turtlecute.org scores 73% (97 of 132). Android: the engine is built once and
+              loaded from its serialized cache. <code>privacy</code> joins the e2e tests (blocker running with every list, parameter stripping, HTTPS upgrade,
+              per-site pause, private tabs). Scriptlets (<code>##+js</code>) and <code>$redirect</code> stand-ins come from uBlock Origin's resources and
+              Brave's, assembled by <code>packages/adblock/scripts/assemble-resources.mjs</code> and shipped in the app: Android answers redirected requests
+              with the stand-in and registers a page's scriptlets as an origin-scoped document-start script; iOS, whose content rules can't run scripts, also
+              loads the engine (7 ms from cache) and installs them as a user script before each navigation. uBO's trusted scriptlets only run for uBO's own
+              lists. Sheets drag by their handle only, which fixed taps lost in them on iOS. Open: the biometric lock has no e2e test (the simulators have no
+              enrolled biometrics).
             </p>
             <ul>
               <li>
@@ -831,11 +839,10 @@
           <div>
             <h3>Reading tools</h3>
             <p>
-              Reader, Copy as Markdown and Hide elements share page scripts through the native engine bridge. Reader has seven themes,
-              three font families and adjustable text size. Hide elements has Zap, Parent, Undo and Reset site; rules persist per host, while private
-              tabs keep separate rules in memory. Article markup is sanitized before display or conversion. Reader preferences and hide rules have
-              persistence tests, the page scripts have DOM tests, and <code>reading-tools.yaml</code> passes on both devices. On-device
-              translation remains open.
+              Reader, Copy as Markdown and Hide elements share page scripts through the native engine bridge. Reader has seven themes, three font families and
+              adjustable text size. Hide elements has Zap, Parent, Undo and Reset site; rules persist per host, while private tabs keep separate rules in
+              memory. Article markup is sanitized before display or conversion. Reader preferences and hide rules have persistence tests, the page scripts have
+              DOM tests, and <code>reading-tools.yaml</code> passes on both devices. On-device translation remains open.
             </p>
             <ul>
               <li>Reader with themes, font and size; Hide elements with Zap, undo and per-site rules; on-device translation; Copy as Markdown.</li>
@@ -848,13 +855,12 @@
           <div>
             <h3>Power tools <span class="done">done</span></h3>
             <p>
-              Find on page marks matches with the CSS Custom Highlight API and steps through them from a bar above the keyboard. Inspect reuses
-              desktop's Developer Mode element script (<code>ELEMENT_INFO</code> in <code>@bay/core</code>) through the picker, and adds the font
-              identifier: the family that actually renders, whether it's a web font and where its file comes from. Downloads go through
-              <code>WKDownload</code> into Bay's Files folder on iOS and the system DownloadManager on Android, with a toast and a Downloads list.
-              A tab playing media stays loaded and shows a mini player when it's off screen; iOS keeps playing in the background with the
-              playback audio session, and Android runs a media playback service with a media notification. <code>power-tools.yaml</code>,
-              <code>downloads.yaml</code> and <code>mini-player.yaml</code> pass on both devices.
+              Find on page marks matches with the CSS Custom Highlight API and steps through them from a bar above the keyboard. Inspect reuses desktop's
+              Developer Mode element script (<code>ELEMENT_INFO</code> in <code>@bay/core</code>) through the picker, and adds the font identifier: the family
+              that actually renders, whether it's a web font and where its file comes from. Downloads go through <code>WKDownload</code> into Bay's Files folder
+              on iOS and the system DownloadManager on Android, with a toast and a Downloads list. A tab playing media stays loaded and shows a mini player when
+              it's off screen; iOS keeps playing in the background with the playback audio session, and Android runs a media playback service with a media
+              notification. <code>power-tools.yaml</code>, <code>downloads.yaml</code> and <code>mini-player.yaml</code> pass on both devices.
             </p>
             <ul>
               <li>Web inspector and font identifier (shared page scripts), mini player, downloads, find on page.</li>
@@ -1005,8 +1011,8 @@
       </section>
 
       <footer class="note">
-        Bay mobile plan · <code>docs/mobile-plan.html</code> · Phases 0–3 checked on the iPhone 18 Pro simulator (iOS 27) and the bay-pixel emulator
-        (Android 16) on 31 October 2026.
+        Bay mobile plan · <code>docs/mobile-plan.html</code> · Phases 0–3 checked on the iPhone 18 Pro simulator (iOS 27) and the bay-pixel emulator (Android
+        16) on 31 October 2026.
       </footer>
     </main>
   </body>
