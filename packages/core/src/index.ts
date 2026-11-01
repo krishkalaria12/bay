@@ -7,6 +7,7 @@ export * from "./engines.ts";
 export * from "./emoji.ts";
 export * from "./emojiData.ts";
 export * from "./fuzzy.ts";
+export * from "./elementInfo.ts";
 export * from "./idn.ts";
 export * from "./omnibox.ts";
 export * from "./quickCreate.ts";
