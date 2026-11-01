@@ -72,8 +72,9 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeFree(
     }
 }
 
+/// The page's cosmetic resources and scriptlets from one lookup, as JSON `{ hide, exceptions, generichide, script }`.
 #[no_mangle]
-pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCosmetic(
+pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativePageResources(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -82,7 +83,7 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCosme
     let url = text(&mut env, &url);
     let json = blocker(handle).map_or_else(
         || "{}".to_owned(),
-        |b| serde_json::to_string(&b.cosmetic_resources(&url)).unwrap_or_default(),
+        |b| serde_json::to_string(&b.page_resources(&url)).unwrap_or_default(),
     );
     give(&mut env, &json)
 }
@@ -156,17 +157,4 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCheck
             crate::Check::Redirect(data_url) => data_url,
         };
     give(&mut env, &answer)
-}
-
-/// The page's scriptlets as one script ("" when none).
-#[no_mangle]
-pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeScriptlets(
-    mut env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    url: JString,
-) -> jstring {
-    let url = text(&mut env, &url);
-    let script = blocker(handle).map_or_else(String::new, |b| b.scriptlets(&url));
-    give(&mut env, &script)
 }

@@ -50,7 +50,10 @@ internal object BayContentBlocker {
           return@post
         }
         val previous = handle
-        handle = next
+        synchronized(pages) {
+          handle = next
+          pages.clear()
+        }
         // Requests already inside the old engine finish quickly; free it once they have.
         if (previous != 0L) main.postDelayed({ BayAdblock.nativeFree(previous) }, 30_000)
         onDone(Result.success(Unit))
@@ -107,7 +110,32 @@ internal object BayContentBlocker {
   /** The page's scriptlets (`##+js`), or "" when it has none or blocking is off for it. */
   fun scriptlets(pageUrl: String): String {
     val engine = engineFor(pageUrl)
-    return if (engine != 0L) BayAdblock.nativeScriptlets(engine, pageUrl) else ""
+    return if (engine != 0L) page(engine, pageUrl).script else ""
+  }
+
+  /** A page's cosmetic resources and scriptlets, from one `url_cosmetic_resources` lookup (an expensive one). */
+  private class Page(val engine: Long, val hide: List<String>, val exceptions: String, val generichide: Boolean, val script: String)
+
+  // The scriptlets are read when a navigation starts and the cosmetic CSS in two passes once it loads; they share one
+  // lookup. Frames have their own URLs, hence a few entries. Cleared when the engine changes.
+  private val pages = object : java.util.LinkedHashMap<String, Page>(16, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Page>?): Boolean = size > 32
+  }
+
+  private fun page(engine: Long, url: String): Page {
+    synchronized(pages) { pages[url] }?.takeIf { it.engine == engine }?.let { return it }
+    val json = JSONObject(BayAdblock.nativePageResources(engine, url))
+    val hide = json.optJSONArray("hide")
+    val page = Page(
+      engine,
+      if (hide == null) emptyList() else List(hide.length()) { hide.getString(it) },
+      json.optJSONArray("exceptions")?.toString() ?: "[]",
+      json.optBoolean("generichide"),
+      json.optString("script"),
+    )
+    // An engine swapped in meanwhile cleared the cache; don't put this one's answer back.
+    synchronized(pages) { if (engine == handle) pages[url] = page }
+    return page
   }
 
   private val imagePath = Regex("\\.(png|jpe?g|gif|webp|svg|ico|avif)$")
@@ -151,47 +179,61 @@ internal object BayContentBlocker {
       }
     }
 
-  /** CSS hiding the page's ad slots: its site rules, plus generic rules for the classes and ids it uses. */
-  fun cosmeticCss(pageUrl: String, classesJson: String, idsJson: String): String {
+  /**
+   * CSS hiding the page's ad slots: its site rules (when `siteRules`, the page's first pass), plus generic rules for
+   * the classes and ids it uses (JSON arrays of the ones not sent before).
+   */
+  fun cosmeticCss(pageUrl: String, classesJson: String, idsJson: String, siteRules: Boolean): String {
     val engine = engineFor(pageUrl)
     if (engine == 0L) return ""
-    val resources = JSONObject(BayAdblock.nativeCosmetic(engine, pageUrl))
-    val selectors = mutableListOf<String>()
-    resources.optJSONArray("hide")?.let { hide -> for (i in 0 until hide.length()) selectors += hide.getString(i) }
-    if (!resources.optBoolean("generichide")) {
-      val exceptions = resources.optJSONArray("exceptions")?.toString() ?: "[]"
-      val generic = JSONArray(BayAdblock.nativeHiddenSelectors(engine, classesJson, idsJson, exceptions))
+    val page = page(engine, pageUrl)
+    val selectors = if (siteRules) page.hide.toMutableList() else mutableListOf()
+    if (!page.generichide && (classesJson != "[]" || idsJson != "[]")) {
+      val generic = JSONArray(BayAdblock.nativeHiddenSelectors(engine, classesJson, idsJson, page.exceptions))
       for (i in 0 until generic.length()) selectors += generic.getString(i)
     }
     // One rule per chunk, so a selector the browser can't parse only drops its own chunk.
     return selectors.chunked(200).joinToString("\n") { "${it.joinToString(",")}{display:none!important}" }
   }
 
-  /** The page side: collect the classes and ids in use, ask for CSS, add it as a style sheet; again after load. */
+  /**
+   * The page side: at DOMContentLoaded, ask for the site rules and the generic rules for the classes and ids in use;
+   * after load, only for classes and ids not seen yet. Each answer goes in a new style sheet, so earlier ones aren't
+   * parsed again. A cross-origin frame (ads, embeds) only gets its site rules: scanning its whole DOM runs on the
+   * page's main thread.
+   */
   const val COSMETIC_SCRIPT = """
 (() => {
   if (window.__bayCosmeticDone || !window.__bayCosmetic) return;
   window.__bayCosmeticDone = true;
+  let scan = true;
+  try { scan = window === window.top || !!window.top.location.href; } catch (e) { scan = false; }
   const seen = { classes: new Set(), ids: new Set() };
-  const style = document.createElement('style');
+  let first = true;
   const apply = () => {
     const classes = [], ids = [];
-    for (const el of document.querySelectorAll('[class],[id]')) {
+    if (scan) for (const el of document.querySelectorAll('[class],[id]')) {
       for (const c of el.classList) if (!seen.classes.has(c)) { seen.classes.add(c); classes.push(c); }
       if (el.id && !seen.ids.has(el.id)) { seen.ids.add(el.id); ids.push(el.id); }
     }
-    const css = window.__bayCosmetic.css(location.href, JSON.stringify(classes), JSON.stringify(ids));
-    if (css) { style.textContent += css + '\n'; (document.head || document.documentElement).appendChild(style); }
+    if (!first && !classes.length && !ids.length) return;
+    const css = window.__bayCosmetic.css(location.href, JSON.stringify(classes), JSON.stringify(ids), first);
+    first = false;
+    if (!css) return;
+    const style = document.createElement('style');
+    style.textContent = css;
+    (document.head || document.documentElement).appendChild(style);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply, { once: true }); else apply();
-  window.addEventListener('load', apply, { once: true });
+  if (scan) window.addEventListener('load', apply, { once: true });
 })();
 """
 
   /** Exposed to pages as `__bayCosmetic`; it only answers with CSS selectors. */
   class Bridge {
     @JavascriptInterface
-    fun css(pageUrl: String, classes: String, ids: String): String = runCatching { cosmeticCss(pageUrl, classes, ids) }.getOrDefault("")
+    fun css(pageUrl: String, classes: String, ids: String, siteRules: Boolean): String =
+      runCatching { cosmeticCss(pageUrl, classes, ids, siteRules) }.getOrDefault("")
   }
 }
 
