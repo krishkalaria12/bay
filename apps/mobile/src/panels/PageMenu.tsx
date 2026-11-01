@@ -43,6 +43,7 @@ function NavigationAction({
   label,
   accessibilityLabel = label,
   disabled,
+  iconOnly = false,
   onPress,
 }: {
   id: string;
@@ -50,6 +51,8 @@ function NavigationAction({
   label: string;
   accessibilityLabel?: string;
   disabled?: boolean;
+  /** A slim round button with just the icon (back, forward, reload, share). */
+  iconOnly?: boolean;
   onPress: () => void;
 }): JSX.Element {
   const foreground = useThemeColor("foreground");
@@ -61,11 +64,19 @@ function NavigationAction({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      className="min-h-[68px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-default px-2 active:opacity-70"
+      className={
+        iconOnly
+          ? "h-11 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          : "min-h-[60px] flex-1 items-center justify-center gap-1 rounded-2xl bg-default px-1 active:opacity-70"
+      }
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
-      <Icon name={icon} color={foreground} size={22} />
-      <Typography className="text-xs">{label}</Typography>
+      <Icon name={icon} color={foreground} size={iconOnly ? 22 : 20} />
+      {iconOnly ? null : (
+        <Typography numberOfLines={1} style={{ fontSize: 11 }}>
+          {label}
+        </Typography>
+      )}
     </Pressable>
   );
 }
@@ -76,26 +87,19 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
     action();
   }
   return (
-    <PanelSheet visible={props.visible} onClose={props.onClose} title="Page" testID="page-menu" height="80%">
-      <View className="flex-row gap-3">
-        {props.url ? <SiteIcon url={props.url} size={36} /> : null}
-        <View className="flex-1">
-          <Typography numberOfLines={2}>{props.title || props.url}</Typography>
-          <Typography testID="page-menu-url" className="mt-1 text-sm text-muted" numberOfLines={2}>
-            {props.url}
-          </Typography>
-          <SiteStatus url={props.url} blocking={props.blocking} />
-        </View>
-      </View>
-      <View className="mb-2 mt-5 flex-row gap-2">
-        <NavigationAction id="page-back" icon="back" label="Back" disabled={!props.canGoBack} onPress={() => act(props.onBack)} />
-        <NavigationAction id="page-forward" icon="forward" label="Forward" disabled={!props.canGoForward} onPress={() => act(props.onForward)} />
+    <PanelSheet visible={props.visible} onClose={props.onClose} title="Page" testID="page-menu" height="63%">
+      <SiteHeader title={props.title} url={props.url} />
+      <View className="mb-3 mt-4 flex-row gap-2">
+        <NavigationAction id="page-back" icon="back" label="Back" iconOnly disabled={!props.canGoBack} onPress={() => act(props.onBack)} />
+        <NavigationAction id="page-forward" icon="forward" label="Forward" iconOnly disabled={!props.canGoForward} onPress={() => act(props.onForward)} />
         <NavigationAction
           id={props.isLoading ? "page-stop" : "page-reload"}
           icon={props.isLoading ? "close" : "reload"}
           label={props.isLoading ? "Stop" : "Reload"}
+          iconOnly
           onPress={() => act(props.isLoading ? props.onStop : props.onReload)}
         />
+        <NavigationAction id="page-share" icon="share" label="Share" iconOnly onPress={() => act(props.onShare)} />
       </View>
       <View className="mb-2 flex-row gap-2">
         <NavigationAction
@@ -106,14 +110,11 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
           onPress={() => act(props.onReader)}
         />
         <NavigationAction id="page-find" icon="find" label="Find" accessibilityLabel="Find on page" onPress={() => act(props.onFind)} />
+        <NavigationAction id="page-hide-elements" icon="hide" label="Hide" accessibilityLabel="Hide elements" onPress={() => act(props.onHideElements)} />
         <NavigationAction id="page-inspect" icon="inspect" label="Inspect" accessibilityLabel="Inspect element" onPress={() => act(props.onInspect)} />
       </View>
       <View className="mb-2 flex-row gap-2">
-        <NavigationAction id="page-hide-elements" icon="hide" label="Hide" accessibilityLabel="Hide elements" onPress={() => act(props.onHideElements)} />
         <NavigationAction id="page-markdown" icon="markdown" label="Markdown" accessibilityLabel="Copy as Markdown" onPress={() => act(props.onCopyMarkdown)} />
-        <NavigationAction id="page-share" icon="share" label="Share" onPress={() => act(props.onShare)} />
-      </View>
-      <View className="mb-2 flex-row gap-2">
         <NavigationAction id="page-copy" icon="link" label="Copy link" onPress={() => act(props.onCopy)} />
         <NavigationAction id="page-history" icon="history" label="History" onPress={() => act(props.onHistory)} />
         <NavigationAction id="page-settings" icon="settings" label="Settings" onPress={() => act(props.onSettings)} />
@@ -138,19 +139,29 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
   );
 }
 
-/** Whether the connection is encrypted, and what the blocker is doing here. */
-function SiteStatus({ url, blocking }: { url: string; blocking: PageMenuProps["blocking"] }): JSX.Element | null {
+/** The page's title, and its address behind a lock (or a warning when it isn't encrypted). */
+function SiteHeader({ title, url }: { title: string; url: string }): JSX.Element {
   const muted = useThemeColor("muted");
   const danger = useThemeColor("danger");
-  if (!/^https?:/.test(url)) return null;
-  const secure = url.startsWith("https:");
-  const blocker = { on: "Ads and trackers blocked", paused: "Blocking paused here", off: "Blocking off" }[blocking];
+  const insecure = url.startsWith("http:");
   return (
-    <View testID="page-site-status" className="mt-2 flex-row items-center gap-1.5">
-      <Icon name={secure ? "lock" : "error"} color={secure ? muted : danger} size={15} />
-      <Typography className={secure ? "text-xs text-muted" : "text-xs text-danger"}>
-        {secure ? "Secure connection" : "Not secure"} · {blocker}
-      </Typography>
+    <View className="flex-row items-center gap-3">
+      {url ? <SiteIcon url={url} size={32} /> : null}
+      <View className="flex-1">
+        <Typography numberOfLines={1} className="font-medium">
+          {title || url}
+        </Typography>
+        <View className="mt-0.5 flex-row items-center gap-1">
+          {/^https?:/.test(url) ? (
+            <View accessible accessibilityLabel={insecure ? "Not secure" : "Secure connection"}>
+              <Icon name={insecure ? "error" : "lock"} color={insecure ? danger : muted} size={13} />
+            </View>
+          ) : null}
+          <Typography testID="page-menu-url" numberOfLines={1} className="flex-1 text-sm text-muted">
+            {url}
+          </Typography>
+        </View>
+      </View>
     </View>
   );
 }
