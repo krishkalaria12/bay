@@ -1,11 +1,12 @@
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { BottomSheet, Typography, useThemeColor } from "heroui-native";
-import { useState, type JSX, type ReactNode } from "react";
+import { Children, createContext, isValidElement, useContext, useState, type JSX, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
+import { Toggle } from "@/chrome/Toggle";
 
 export interface PanelSheetProps {
   visible: boolean;
@@ -15,10 +16,13 @@ export interface PanelSheetProps {
   children: ReactNode;
   height?: string;
   dismissible?: boolean;
+  /** Shows a back arrow before the title, for a sub-page inside the sheet. */
+  onBack?: () => void;
 }
 
-export function PanelSheet({ visible, onClose, title, testID, children, height = "65%", dismissible = true }: PanelSheetProps): JSX.Element {
+export function PanelSheet({ visible, onClose, title, testID, children, height = "65%", dismissible = true, onBack }: PanelSheetProps): JSX.Element {
   const insets = useSafeAreaInsets();
+  const foreground = useThemeColor("foreground");
   // HeroUI renders a closed sheet's content anyway, so every panel's rows would render with the browser. Content
   // mounts on open and stays until the sheet finishes animating closed.
   const [shown, setShown] = useState(visible);
@@ -46,7 +50,20 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
         >
           <View testID={testID} className="flex-1">
             <View className="flex-row items-center justify-between px-5 pb-3">
-              <BottomSheet.Title className="text-xl font-semibold">{title}</BottomSheet.Title>
+              <View className="flex-1 flex-row items-center gap-1">
+                {onBack ? (
+                  <Pressable
+                    testID={`${testID}-back`}
+                    accessibilityRole="button"
+                    accessibilityLabel="Back"
+                    onPress={onBack}
+                    className="-ml-2.5 h-11 w-11 items-center justify-center rounded-full active:opacity-60"
+                  >
+                    <Icon name="back" color={foreground} size={22} />
+                  </Pressable>
+                ) : null}
+                <BottomSheet.Title className="text-xl font-semibold">{title}</BottomSheet.Title>
+              </View>
               <Pressable
                 testID={`${testID}-close`}
                 accessibilityRole="button"
@@ -81,6 +98,9 @@ export function ActionRow({
   disabled = false,
   selected = false,
   destructive = false,
+  value,
+  chevron = false,
+  toggle,
 }: {
   testID: string;
   icon?: IconName;
@@ -88,23 +108,36 @@ export function ActionRow({
   detail?: string;
   onPress: () => void;
   disabled?: boolean;
+  /** A check mark, for one choice in a list. */
   selected?: boolean;
   destructive?: boolean;
+  /** The current setting, before the chevron. */
+  value?: string;
+  /** Opens a sub-page. */
+  chevron?: boolean;
+  /** A switch showing this state; the whole row flips it. */
+  toggle?: boolean;
 }): JSX.Element {
   const muted = useThemeColor("muted");
   const danger = useThemeColor("danger");
+  const foreground = useThemeColor("foreground");
+  const grouped = useContext(InGroup);
   return (
     <Pressable
       testID={testID}
-      accessibilityRole="button"
+      accessibilityRole={toggle === undefined ? "button" : "switch"}
       accessibilityLabel={label}
-      accessibilityState={{ disabled, selected }}
+      accessibilityState={toggle === undefined ? { disabled, selected } : { disabled, checked: toggle }}
       disabled={disabled}
       onPress={onPress}
-      className="min-h-12 flex-row items-center gap-3 border-b border-foreground/5 py-3"
+      className={
+        grouped
+          ? "min-h-[52px] flex-row items-center gap-3.5 px-4 py-3 active:bg-foreground/5"
+          : "min-h-12 flex-row items-center gap-3 border-b border-foreground/5 py-3 active:opacity-60"
+      }
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
-      {icon ? <Icon name={icon} color={destructive ? danger : muted} size={22} /> : null}
+      {icon ? <Icon name={icon} color={destructive ? danger : grouped ? foreground : muted} size={22} /> : null}
       <View className="flex-1">
         <Typography className={destructive ? "text-danger" : "text-foreground"} style={{ fontSize: 16, lineHeight: 22 }}>
           {label}
@@ -115,6 +148,13 @@ export function ActionRow({
           </Typography>
         ) : null}
       </View>
+      {value ? (
+        <Typography testID={`${testID}-value`} numberOfLines={1} className="max-w-[45%] text-sm text-muted">
+          {value}
+        </Typography>
+      ) : null}
+      {chevron ? <Icon name="chevron" color={muted} size={20} /> : null}
+      {toggle !== undefined ? <Toggle value={toggle} disabled={disabled} /> : null}
       {selected ? (
         <Typography accessibilityLabel="Selected" className="text-accent">
           ✓
@@ -126,4 +166,26 @@ export function ActionRow({
 
 export function SectionLabel({ children }: { children: ReactNode }): JSX.Element {
   return <Typography className="mt-5 mb-1 text-sm font-medium text-muted">{children}</Typography>;
+}
+
+const InGroup = createContext(false);
+
+/** Rows on one rounded card, split by hairlines that start after the icons. */
+export function Group({ label, children, testID }: { label?: string; children: ReactNode; testID?: string }): JSX.Element {
+  const rows = Children.toArray(children).filter(isValidElement);
+  return (
+    <View testID={testID}>
+      {label ? <Typography className="mb-2 mt-5 px-1 text-[13px] font-medium text-muted">{label}</Typography> : null}
+      <InGroup.Provider value>
+        <View className="overflow-hidden rounded-[20px] bg-default">
+          {rows.map((row, index) => (
+            <View key={row.key ?? index}>
+              {index ? <View className="ml-[52px] h-px bg-foreground/5" /> : null}
+              {row}
+            </View>
+          ))}
+        </View>
+      </InGroup.Provider>
+    </View>
+  );
 }

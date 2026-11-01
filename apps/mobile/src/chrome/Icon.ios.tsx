@@ -38,6 +38,9 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   desktop: "desktopcomputer",
   offline: "wifi.slash",
   error: "exclamationmark.circle",
+  chevron: "chevron.forward",
+  wallpaper: "photo.on.rectangle",
+  download: "arrow.down.circle",
 };
 
 // An SF Symbol inside React Native layout. The host ignores touches so the surrounding Pressable gets them.

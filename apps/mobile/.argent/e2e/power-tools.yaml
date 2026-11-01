@@ -31,6 +31,8 @@ steps:
 
   # Inspect: pick the first paragraph, read its details, go to its parent, done.
   - tap: { id: bar-more }
+  - await: { visible: { id: page-more-tools }, timeout: 10000 }
+  - tap: { id: page-more-tools }
   - await: { visible: { id: page-inspect }, timeout: 10000 }
   - tap: { id: page-inspect }
   - await: { text: { in: { id: inspect-instructions }, contains: "Tap an element" }, timeout: 20000 }

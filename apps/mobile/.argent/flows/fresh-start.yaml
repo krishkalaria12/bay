@@ -13,6 +13,8 @@ steps:
   - when: { visible: { id: bar-more } }
     steps:
       - tap: { id: bar-more }
+      - await: { visible: { id: page-more-tools }, timeout: 10000 }
+      - tap: { id: page-more-tools }
       - await: { visible: { id: page-settings }, timeout: 10000 }
       - tap: { id: page-settings }
   - when: { visible: { id: bar-settings } }

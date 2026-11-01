@@ -31,7 +31,10 @@ export type IconName =
   | "delete"
   | "desktop"
   | "offline"
-  | "error";
+  | "error"
+  | "chevron"
+  | "wallpaper"
+  | "download";
 
 export interface IconProps {
   name: IconName;
