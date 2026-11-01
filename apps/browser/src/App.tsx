@@ -28,6 +28,8 @@ import { useSidebarLights } from "./components/layout/useSidebarLights";
 import { useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./components/layout/windowLayout";
 import { WindowProfile } from "./components/layout/WindowProfile";
 import { Sidebar } from "./components/Sidebar";
+import { LibrarySidebar } from "./components/library/LibrarySidebar";
+import { closeLibrarySidebar, useLibrarySidebar } from "./components/library/sidebarState";
 import { LittleBayWindow } from "./components/littleBay/LittleBayWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
 import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
@@ -82,6 +84,11 @@ function BrowserWindow() {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);
+  const library = useLibrarySidebar((l) => !!l[windowId]);
+  // Hiding the sidebar (or moving tabs to the top) puts the Library away with it.
+  useEffect(() => {
+    if (!showSidebar) closeLibrarySidebar(windowId);
+  }, [showSidebar, windowId]);
   const dock = useSidebarDock(showSidebar);
   useSidebarLights(windowId, { on: right && addressInSidebar && !fullscreen, progress: dock.progress, windowWidth: width, sidebarWidth, peekOut });
   // The sidebar's slot narrows to the card's inset as it closes; the sidebar slides out by as much, so its edge stays
@@ -111,9 +118,13 @@ function BrowserWindow() {
         >
           {dock.mounted ? (
             <Animated.View style={[{ width: sidebarWidth, height: "100%" }, dockedStyle]}>
-              <SpaceSwipe>
-                <Sidebar />
-              </SpaceSwipe>
+              {/* The Library in the sidebar's place; the tabs stay mounted underneath, keeping their scroll and rows. */}
+              <View style={{ flex: 1, display: library ? "none" : "flex" }}>
+                <SpaceSwipe>
+                  <Sidebar />
+                </SpaceSwipe>
+              </View>
+              {library ? <LibrarySidebar windowId={windowId} /> : null}
             </Animated.View>
           ) : null}
         </Animated.View>

@@ -4,6 +4,7 @@ import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import type { GroupColor } from "../../store/types";
 import { useSidebarUi } from "./state";
+import { LIBRARY_SIDEBAR_WIDTH, useLibrarySidebar } from "../library/sidebarState";
 
 const DARK = {
   groupFill: "rgba(255,255,255,0.1)", // TabGroupNeutralBackground
@@ -114,7 +115,10 @@ export function withAlpha(hex: string, alpha: number): string {
 export function useSidebarWidth(windowId: string): number {
   const saved = useBrowser((s) => s.settings.sidebarWidth ?? layout.sidebarWidth);
   const dragging = useSidebarUi((u) => u.dragWidth[windowId]);
-  return dragging ?? saved;
+  // The Library in the sidebar needs room for its rail and its list.
+  const library = useLibrarySidebar((l) => !!l[windowId]);
+  const width = dragging ?? saved;
+  return library ? Math.max(width, LIBRARY_SIDEBAR_WIDTH) : width;
 }
 
 export function useSidebarMetrics() {

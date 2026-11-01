@@ -97,6 +97,21 @@ export function GeneralPane() {
         </Row>
       </Group>
 
+      <SectionHeader title="Library" description="Media, downloads, Easels, spaces, Boosts and archived tabs." />
+      <Group>
+        <Row settingId={SETTINGS.libraryIn.id} title={SETTINGS.libraryIn.title} description="With tabs on top or the sidebar hidden, it opens as a page.">
+          <PopUp
+            value={settings.libraryIn}
+            options={[
+              { value: "sidebar", title: "The Sidebar" },
+              { value: "page", title: "A Page" },
+            ]}
+            onChange={(v) => update({ libraryIn: v })}
+            minWidth={190}
+          />
+        </Row>
+      </Group>
+
       <SectionHeader title="Command bar" description="What happens when what you type could be a website or a search." />
       <Group>
         <Row settingId={SETTINGS.commandBarPreference.id} title={SETTINGS.commandBarPreference.title}>

@@ -6,6 +6,8 @@ import { openInternalPage, tabDestination } from "../pages/urls";
 import type { LibraryMedia } from "./model";
 import { addMediaToEasel, createEasel, deleteEasel, duplicateEasel, startLibrary, updateEasel, useLibrary } from "./state";
 import { startEaselShares, stopSharingEasel, useEaselShares } from "./sharing";
+import { sectionOf } from "./sections";
+import { closeLibrarySidebar, librarySidebarOpen, showLibrarySidebar, useLibrarySidebar } from "./sidebarState";
 
 export const easelUrl = (id: string) => `bay://easel/${encodeURIComponent(id)}`;
 export function easelIdOf(url: string): string | null {
@@ -28,11 +30,35 @@ export function libraryWindow(windowId?: string | null): string | null {
   return id;
 }
 
+// The sidebar shows it where it can (Settings › General › Open Library in): a window with its tabs in a sidebar
+// that's open. Elsewhere, and when chosen, it's a page.
+function libraryFitsSidebar(windowId: string): boolean {
+  const s = useBrowser.getState();
+  const w = s.windows[windowId];
+  return !!w && s.settings.libraryIn !== "page" && w.sidebarOpen && (w.tabLayout ?? s.settings.tabLayout) === "sidebar";
+}
+
 export function openLibrary(windowId?: string | null, section?: string) {
   const id = libraryWindow(windowId);
   if (!id) return;
+  if (libraryFitsSidebar(id)) {
+    startLibrary();
+    showLibrarySidebar(id, section ? sectionOf(section) : (useLibrarySidebar.getState()[id] ?? "media"));
+  } else openLibraryPage(id, section);
+}
+
+export function openLibraryPage(windowId?: string | null, section?: string) {
+  const id = libraryWindow(windowId);
+  if (!id) return;
+  closeLibrarySidebar(id);
   startLibrary();
   openInternalPage("library", id, section ? { query: section } : {});
+}
+
+/** The Library button: shows the Library, or hides it from the sidebar when it's there. */
+export function toggleLibrary(windowId: string) {
+  if (librarySidebarOpen(windowId)) closeLibrarySidebar(windowId);
+  else openLibrary(windowId);
 }
 
 export function openEasel(id: string, windowId?: string | null) {

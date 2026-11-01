@@ -36,6 +36,8 @@ export type Settings = {
   searchSuggestions: boolean;
   calculatorEnabled: boolean;
   tidyDownloads: boolean;
+  // Where the Library opens: in the sidebar, as Arc's does (beside the page), or as a page of its own.
+  libraryIn: "sidebar" | "page";
   commandBarPreference: "website" | "search";
 
   tabLayout: "sidebar" | "top";
@@ -129,6 +131,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchSuggestions: true,
   calculatorEnabled: true,
   tidyDownloads: false,
+  libraryIn: "sidebar",
   commandBarPreference: "website",
   tabLayout: "sidebar",
   hideToolbarWhileScrolling: true,
