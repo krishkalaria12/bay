@@ -207,3 +207,17 @@ test("Markdown falls back to short page content when Readability finds no articl
   assert.match(markdown, /Hello \*\*world\*\*/);
   assert.match(markdown, /\[Next\]\(https:\/\/example.com\/next\)/);
 });
+
+test("the favicon script picks the page's best non-SVG icon, else /favicon.ico", async () => {
+  const { FAVICON_SCRIPT } = await import("../src/pagescripts/favicon.ts");
+  const icon = (head: string) => {
+    const dom = new JSDOM(`<head>${head}</head>`, { url: "https://example.com/a/b", runScripts: "outside-only" });
+    return JSON.parse(vm.runInContext(`JSON.stringify((() => { ${FAVICON_SCRIPT}\n })())`, dom.getInternalVMContext())).href;
+  };
+  assert.equal(icon(""), "https://example.com/favicon.ico");
+  assert.equal(
+    icon('<link rel="icon" href="/16.png" sizes="16x16"><link rel="apple-touch-icon" href="/touch.png"><link rel="icon" href="/i.svg" type="image/svg+xml">'),
+    "https://example.com/touch.png",
+  );
+  assert.equal(icon('<link rel="shortcut icon" href="https://cdn.example.net/f.ico"><link rel="icon" href="/logo.svg">'), "https://cdn.example.net/f.ico");
+});

@@ -79,7 +79,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
   }
   if (tools) {
     return (
-      <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setTools(false)} title="More tools" testID="page-menu" height="63%">
+      <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setTools(false)} title="More tools" testID="page-menu" height="72%">
         <Group>
           <ActionRow testID="page-copy" icon="link" label="Copy link" onPress={() => act(props.onCopy)} />
           <ActionRow testID="page-markdown" icon="markdown" label="Copy as Markdown" onPress={() => act(props.onCopyMarkdown)} />
@@ -102,7 +102,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
     );
   }
   return (
-    <PanelSheet visible={props.visible} onClose={props.onClose} title="Page" testID="page-menu" height="63%">
+    <PanelSheet visible={props.visible} onClose={props.onClose} title="Page" testID="page-menu" height="72%">
       <SiteHeader title={props.title} url={props.url} blocking={props.blocking} />
       <View className="mb-1 mt-4 flex-row gap-2">
         <NavigationAction id="page-back" icon="back" label="Back" disabled={!props.canGoBack} onPress={() => act(props.onBack)} />

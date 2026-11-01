@@ -75,6 +75,8 @@ export interface BrowserData {
   /** Newest first. */
   downloads: DownloadItem[];
   preferences: BrowserPreferences;
+  /** Each site's icon (host without www.), downloaded once into the app's cache: a file:// URI. */
+  favicons: Record<string, string>;
 }
 
 export type TabUpdate = Partial<Pick<BrowserTab, "url" | "title" | "favicon" | "lastVisit" | "snapshot">>;

@@ -16,6 +16,13 @@ const DAY = 24 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 1000;
 const ARCHIVE_LIMIT = 200;
 const DOWNLOAD_LIMIT = 100;
+const FAVICON_LIMIT = 500;
+
+/** The key icons are kept under: a URL's host without "www.". */
+export function siteHost(url: string): string {
+  const match = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#:]+)/i.exec(url);
+  return (match?.[1] ?? "").toLowerCase().replace(/^www\./, "");
+}
 const DOWNLOAD_STATES = ["downloading", "finished", "failed", "cancelled"] as const;
 
 /** A download update from the engine (`DownloadUpdate` in @bay/engine). */
@@ -43,6 +50,7 @@ export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFER
     pinnedSites: [],
     archive: [],
     downloads: [],
+    favicons: {},
     preferences: {
       ...preferences,
       blockingPausedHosts: [...preferences.blockingPausedHosts],
@@ -65,6 +73,7 @@ export type BrowserAction =
   | { type: "add-pin"; site: PinnedSite; index: number }
   | { type: "remove-history"; url: string }
   | { type: "clear-history" }
+  | { type: "favicon"; host: string; uri: string | null }
   | { type: "remove-archived"; id: string }
   | { type: "clear-archive" }
   | { type: "wallpaper"; id: WallpaperId }
@@ -165,8 +174,19 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return WALLPAPERS.includes(action.id) && action.id !== data.preferences.wallpaper
         ? { ...data, preferences: { ...data.preferences, wallpaper: action.id } }
         : data;
-    case "clear-history":
-      return data.history.length ? { ...data, history: [] } : data;
+    case "clear-history": {
+      if (!data.history.length) return data;
+      // Icons stay for sites a tab, the archive or a pin still shows.
+      const shown = new Set([...data.tabs, ...data.archive, ...data.pinnedSites].map((entry) => siteHost(entry.url)));
+      return { ...data, history: [], favicons: Object.fromEntries(Object.entries(data.favicons).filter(([host]) => shown.has(host))) };
+    }
+    case "favicon": {
+      if ((data.favicons[action.host] ?? null) === action.uri) return data;
+      const { [action.host]: _previous, ...rest } = data.favicons;
+      if (action.uri === null) return { ...data, favicons: rest };
+      // Oldest first, so the cap drops the icons fetched longest ago.
+      return { ...data, favicons: Object.fromEntries([...Object.entries(rest), [action.host, action.uri]].slice(-FAVICON_LIMIT)) };
+    }
     case "search-engine":
       return action.id && action.id !== data.preferences.searchEngineId ? { ...data, preferences: { ...data.preferences, searchEngineId: action.id } } : data;
     case "archive-days":
@@ -461,6 +481,11 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
       .sort((a, b) => b.startedAt - a.startedAt)
       .slice(0, DOWNLOAD_LIMIT),
     preferences,
+    favicons: Object.fromEntries(
+      Object.entries(isRecord(value.favicons) ? value.favicons : {})
+        .filter((entry): entry is [string, string] => /^[a-z0-9.-]+$/.test(entry[0]) && typeof entry[1] === "string" && entry[1].startsWith("file://"))
+        .slice(-FAVICON_LIMIT),
+    ),
   };
 }
 

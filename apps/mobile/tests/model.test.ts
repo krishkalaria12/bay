@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, reduceBrowserData } from "../src/store/model.ts";
+import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, reduceBrowserData, siteHost } from "../src/store/model.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const page = (id: string, url: string, lastVisit = 0) => ({ ...createTab(id, lastVisit, url), title: id });
@@ -318,4 +318,22 @@ test("the wallpaper is one of Bay's built-ins", () => {
   assert.equal(data.preferences.wallpaper, "forest");
   const saved = { version: 1, ...data, preferences: { ...data.preferences, wallpaper: "neon" } };
   assert.equal(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).preferences.wallpaper, "bay");
+});
+
+test("site icons are kept per host, and clearing history drops the ones nothing else shows", () => {
+  assert.equal(siteHost("https://www.Example.com:8080/a?b"), "example.com");
+  assert.equal(siteHost("about:blank"), "");
+  let data = {
+    ...initialBrowserData(page("a", "https://www.a.com/")),
+    history: [{ url: "https://h.com/", title: "", favicon: null, visits: 1, lastVisit: 1 }],
+  };
+  data = reduceBrowserData(data, { type: "favicon", host: "a.com", uri: "file:///a" });
+  data = reduceBrowserData(data, { type: "favicon", host: "h.com", uri: "file:///h" });
+  assert.deepEqual(Object.keys(data.favicons), ["a.com", "h.com"]);
+  data = reduceBrowserData(data, { type: "clear-history" });
+  assert.deepEqual(data.favicons, { "a.com": "file:///a" });
+  data = reduceBrowserData(data, { type: "favicon", host: "a.com", uri: null });
+  assert.deepEqual(data.favicons, {});
+  const saved = { version: 1, ...data, favicons: { "b.com": "file:///b", "c.com": "https://tracker.example/c.png" } };
+  assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).favicons, { "b.com": "file:///b" });
 });

@@ -25,6 +25,7 @@ import { TabSwitcher } from "./TabSwitcher";
 import { TabSwipe } from "./TabSwipe";
 import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
+import { fetchFavicon } from "./favicons";
 import { sameNavigation } from "./navigationEvents";
 import { MiniPlayer } from "./MiniPlayer";
 import { PageError } from "./PageError";
@@ -153,6 +154,8 @@ export function BrowserScreen(): JSX.Element {
     if (!state.isLoading && visited.get(tabId) !== state.url) {
       visited.set(tabId, state.url);
       dispatch({ type: "visit", url: state.url, title: state.title, favicon: null, now: Date.now() });
+      const view = views.get(tabId);
+      if (view) fetchFavicon(view, state.url);
       setTimeout(() => capture(tabId), 700);
     }
   }
