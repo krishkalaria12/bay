@@ -163,6 +163,43 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const keptAwake = siteKeptAwake(tab.url, s.settings.awakeSites);
   const awake = !!webviews.get(tab.id) && !useLifecycle.getState().discarded[tab.id];
 
+  const engine = canSwitchEngine(tab.url) ? otherEngine(tabEngine(s, tab.id)) : null;
+  // The everyday actions up top; the rest under More, so the menu stays short.
+  const more: MenuItem[] = [
+    ...(pinnedPage(tab) ? [] : [{ id: "keep", title: tab.kept ? "Don’t Keep Tab" : "Keep Tab", symbol: "anchor" }]),
+    { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
+    ...(tab.customIcon ? [{ id: "resetIcon", title: "Reset Icon", symbol: "arrow.counterclockwise" }] : []),
+    ...(tab.customTitle ? [{ id: "resetName", title: "Reset Name", symbol: "arrow.counterclockwise" }] : []),
+    { id: "copyMd", title: "Copy Markdown Link", symbol: "m.square", enabled: !!tab.url, ...hint("c", "option", "shift", "command") },
+    ...(split && !incognito ? [{ id: "shareSplit", title: "Share Split View…", symbol: "square.and.arrow.up" }] : []),
+    sep,
+    { id: "siteControls", title: "Site Controls", symbol: "slider.horizontal.3", enabled: !!tab.url },
+    // Arc's "Boost this site": the editor over the tab's page.
+    { id: "boost", title: "Boost This Site", symbol: "paintbrush.pointed", enabled: !!boostHost(tab.url) },
+    { id: "mute", title: tab.muted ? "Unmute Site" : "Mute Site", symbol: tab.muted ? "speaker.wave.2" : "speaker.slash", enabled: !!tab.url },
+    { id: "keepSiteAwake", title: "Keep This Site Awake", symbol: "sun.max", checked: keptAwake, enabled: !!site },
+    { id: "sleep", title: "Put Tab to Sleep", symbol: "moon", enabled: !current && awake },
+    ...(engine ? [{ id: "engine", title: `Open Page in ${ENGINE_NAMES[engine]}`, symbol: ENGINE_SYMBOLS[engine] }] : []),
+    sep,
+    { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
+    { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
+    ...(pinnedPage(tab)
+      ? []
+      : [
+          group
+            ? { id: "ungroupTab", title: "Remove from Group", symbol: "folder.badge.minus" }
+            : { id: "newGroup", title: "New Group with Tab", symbol: "plus.rectangle.on.rectangle", ...hint("n", "control", "command") },
+          ...(groups.length ? [{ id: "moveToGroup", title: "Move to Group", symbol: "rectangle.stack", children: groups }] : []),
+        ]),
+    sep,
+    { id: "window:new", title: "Move to New Window", symbol: "macwindow.on.rectangle", enabled: !incognito, ...hint("n", "option", "shift", "command") },
+    ...(windows.length && !incognito ? [{ id: "moveToWindow", title: "Move to Window", symbol: "macwindow", children: windows }] : []),
+    { id: "copyToWindow", title: "Open Copy in New Window", symbol: "macwindow.badge.plus", enabled: !!tab.url },
+    sep,
+    { id: "closeOthers", title: "Close Other Tabs", symbol: "xmark.square", enabled: others.length > 0, ...hint("w", "option", "command") },
+    { id: "closeAbove", title: across ? "Close Tabs to the Left" : "Close Tabs Above", symbol: across ? "arrow.left" : "arrow.up", enabled: above.length > 0 },
+  ];
+
   const choice = await showMenu([
     ...(pinnedPage(tab)
       ? [
@@ -178,49 +215,16 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "essential", title: tab.pinned ? "Remove from Essentials" : "Add to Essentials", symbol: "square.grid.2x2" },
     { id: "moveToFolder", title: "Move to Folder", symbol: "folder", children: moveToFolderItems(windowId, folder?.id) },
     ...(folder ? [{ id: "leaveFolder", title: "Remove from Folder", symbol: "folder.badge.minus" }] : []),
-    // A pin stays anyway.
-    ...(pinnedPage(tab) ? [] : [{ id: "keep", title: tab.kept ? "Don’t Keep Tab" : "Keep Tab", symbol: "anchor" }]),
-    { id: "rename", title: "Rename…", symbol: "pencil", ...hint("r", "control", "command") },
-    ...(tab.customTitle ? [{ id: "resetName", title: "Reset Name", symbol: "arrow.counterclockwise" }] : []),
-    sep,
-    { id: "duplicate", title: "Duplicate", symbol: "plus.square.on.square" },
-    sep,
-    { id: "window:new", title: "Move to New Window", symbol: "macwindow.on.rectangle", enabled: !incognito, ...hint("n", "option", "shift", "command") },
-    { id: "copyToWindow", title: "Open Copy in New Window", symbol: "macwindow.badge.plus", enabled: !!tab.url },
-    sep,
-    { id: "siteControls", title: "Site Controls", symbol: "slider.horizontal.3", enabled: !!tab.url },
-    // Arc's "Boost this site": the editor over the tab's page.
-    { id: "boost", title: "Boost This Site", symbol: "paintbrush.pointed", enabled: !!boostHost(tab.url) },
-    { id: "copy", title: "Copy Address", symbol: "link", enabled: !!tab.url, ...hint("c", "shift", "command") },
-    { id: "copyMd", title: "Copy Markdown Link", symbol: "m.square", enabled: !!tab.url, ...hint("c", "option", "shift", "command") },
-    ...(split && !incognito ? [{ id: "shareSplit", title: "Share Split View…", symbol: "square.and.arrow.up" }] : []),
     { id: "moveToSpace", title: "Move to Space", symbol: "square.stack.3d.up", enabled: !incognito, children: moveToSpace },
-    ...(!current && active && !split?.tabIds.includes(active) ? [{ id: "split", title: "Split with Current Tab", symbol: "rectangle.split.2x1" }] : []),
-    { id: "keepSiteAwake", title: "Keep This Site Awake", symbol: "sun.max", checked: keptAwake, enabled: !!site },
-    { id: "sleep", title: "Put Tab to Sleep", symbol: "moon", enabled: !current && awake },
     sep,
-    { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
-    ...(tab.customIcon ? [{ id: "resetIcon", title: "Reset Icon", symbol: "arrow.counterclockwise" }] : []),
-    { id: "mute", title: tab.muted ? "Unmute Site" : "Mute Site", symbol: tab.muted ? "speaker.wave.2" : "speaker.slash", enabled: !!tab.url },
-    { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
-    { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
-    ...(canSwitchEngine(tab.url)
-      ? [{ id: "engine", title: `Open Page in ${ENGINE_NAMES[otherEngine(tabEngine(s, tab.id))]}`, symbol: ENGINE_SYMBOLS[otherEngine(tabEngine(s, tab.id))] }]
-      : []),
-    ...(pinnedPage(tab)
-      ? []
-      : [
-          group
-            ? { id: "ungroupTab", title: "Remove from Group", symbol: "folder.badge.minus" }
-            : { id: "newGroup", title: "New Group with Tab", symbol: "plus.rectangle.on.rectangle", ...hint("n", "control", "command") },
-          ...(groups.length ? [{ id: "moveToGroup", title: "Move to Group", symbol: "rectangle.stack", children: groups }] : []),
-        ]),
-    ...(windows.length && !incognito ? [{ id: "moveToWindow", title: "Move to Window", symbol: "macwindow", children: windows }] : []),
+    { id: "copy", title: "Copy Address", symbol: "link", enabled: !!tab.url, ...hint("c", "shift", "command") },
+    { id: "rename", title: "Rename…", symbol: "pencil", ...hint("r", "control", "command") },
+    { id: "duplicate", title: "Duplicate", symbol: "plus.square.on.square" },
+    ...(!current && active && !split?.tabIds.includes(active) ? [{ id: "split", title: "Split with Current Tab", symbol: "rectangle.split.2x1" }] : []),
     ...(split ? [{ id: "unsplit", title: "Remove from Split View", symbol: "rectangle.split.2x1.slash", ...hint("-", "shift", "control") }] : []),
+    { id: "more", title: "More", symbol: "ellipsis.circle", children: more },
     sep,
     { id: "close", title: "Close Tab", symbol: "xmark", ...hint("w", "command") },
-    { id: "closeOthers", title: "Close Other Tabs", symbol: "paintbrush", enabled: others.length > 0, ...hint("w", "option", "command") },
-    { id: "closeAbove", title: across ? "Close Tabs to the Left" : "Close Tabs Above", symbol: across ? "arrow.left" : "arrow.up", enabled: above.length > 0 },
     {
       id: "closeBelow",
       title: across ? "Close Tabs to the Right" : "Close Tabs Below",
