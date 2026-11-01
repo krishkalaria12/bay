@@ -85,13 +85,14 @@ class BayEngineModule : Module() {
       Prop("pullToRefreshEnabled") { view: BayEngineView, enabled: Boolean -> view.pullToRefreshEnabled = enabled }
       Prop("private") { view: BayEngineView, isPrivate: Boolean -> view.isPrivate = isPrivate }
       Prop("active") { view: BayEngineView, active: Boolean -> view.isActive = active }
+      Prop("suspended") { view: BayEngineView, suspended: Boolean -> view.isSuspended = suspended }
       Prop("initialUrl") { view: BayEngineView, url: String? -> view.loadInitial(url) }
       AsyncFunction("load") { view: BayEngineView, url: String -> view.load(url) }
       AsyncFunction("goBack") { view: BayEngineView -> view.webView.goBack() }
       AsyncFunction("goForward") { view: BayEngineView -> view.webView.goForward() }
       AsyncFunction("reload") { view: BayEngineView -> view.reload() }
       AsyncFunction("stop") { view: BayEngineView -> view.stop() }
-      AsyncFunction("snapshot") { view: BayEngineView -> view.snapshot() }
+      AsyncFunction("snapshot") { view: BayEngineView, promise: Promise -> view.snapshot(promise) }.runOnQueue(Queues.MAIN)
       AsyncFunction("evaluate") { view: BayEngineView, script: String, promise: Promise -> view.evaluate(script, promise) }.runOnQueue(Queues.MAIN)
       OnViewDestroys { view: BayEngineView -> view.dispose() }
     }

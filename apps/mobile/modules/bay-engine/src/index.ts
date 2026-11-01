@@ -60,6 +60,8 @@ export interface EngineViewProps extends ViewProps {
   private?: boolean;
   /** Defaults to true. Hidden tabs pass false so assistive technology skips them. */
   active?: boolean;
+  /** Defaults to false. Hidden tabs that aren't playing media pass true so the engine pauses their timers, animations and drawing; snapshots then resolve null. */
+  suspended?: boolean;
   /** Defaults to true. iOS also supports the native back/forward edge gestures. */
   pullToRefreshEnabled?: boolean;
   onNavigationStateChange?: (event: NativeSyntheticEvent<NavigationState>) => void;

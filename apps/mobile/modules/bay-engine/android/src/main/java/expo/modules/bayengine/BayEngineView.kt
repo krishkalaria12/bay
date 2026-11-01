@@ -37,6 +37,7 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -100,6 +101,22 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       field = value
       webView.importantForAccessibility = if (value) IMPORTANT_FOR_ACCESSIBILITY_AUTO else IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
     }
+  /**
+   * Hidden tabs that aren't playing media pause: Chromium then reports the page hidden and stops its animation frames
+   * and compositing. Applied to every WebView this view creates.
+   */
+  var isSuspended = false
+    set(value) {
+      if (field == value) return
+      field = value
+      if (value) {
+        webView.onPause()
+        webView.visibility = INVISIBLE
+      } else {
+        webView.visibility = VISIBLE
+        webView.onResume()
+      }
+    }
   override val shouldUseAndroidLayout = true
   var webView = createWebView()
     private set
@@ -114,6 +131,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     }
     layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
     importantForAccessibility = if (isActive) IMPORTANT_FOR_ACCESSIBILITY_AUTO else IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+    if (isSuspended) {
+      onPause()
+      visibility = INVISIBLE
+    }
     CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
     addJavascriptInterface(BayContentBlocker.Bridge(), "__bayCosmetic")
     addJavascriptInterface(PageBridge(), "__bayPage")
@@ -393,28 +414,40 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     emitState()
   }
 
-  fun snapshot(): String? {
-    if (disposed || webView.width <= 0 || webView.height <= 0 || webView.url == null) return null
+  /** Draws the page on the main thread, then encodes and writes the JPEG on [snapshotWriter]. A suspended page resolves null: it may not have drawn. */
+  fun snapshot(promise: Promise) {
+    if (disposed || isSuspended || webView.width <= 0 || webView.height <= 0 || webView.url == null) {
+      promise.resolve(null)
+      return
+    }
     val ratio = min(1.0, 640.0 / webView.width)
     val bitmap = Bitmap.createBitmap(max(1, (webView.width * ratio).toInt()), max(1, (webView.height * ratio).toInt()), Bitmap.Config.ARGB_8888)
     try {
       val canvas = Canvas(bitmap)
       canvas.scale(ratio.toFloat(), ratio.toFloat())
       webView.draw(canvas)
-      val directory = BayEngineSnapshots.directory(context)
-      check(directory.isDirectory || directory.mkdirs()) { "Couldn't create the snapshot cache." }
+    } catch (error: Exception) {
+      bitmap.recycle()
+      promise.reject("E_SNAPSHOT", "Couldn't draw the page snapshot.", error)
+      return
+    }
+    val directory = BayEngineSnapshots.directory(context)
+    snapshotWriter.execute {
       val file = File(directory, "${UUID.randomUUID()}.jpg")
       try {
+        check(directory.isDirectory || directory.mkdirs()) { "Couldn't create the snapshot cache." }
         file.outputStream().use { if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 75, it)) throw IOException("Couldn't encode the page snapshot.") }
+        // Only this single thread touches snapshotFile, so swaps can't race.
+        val previous = snapshotFile
+        snapshotFile = file
+        previous?.delete()
+        promise.resolve(Uri.fromFile(file).toString())
       } catch (error: Exception) {
         file.delete()
-        throw error
+        promise.reject("E_SNAPSHOT", "Couldn't save the page snapshot.", error)
+      } finally {
+        bitmap.recycle()
       }
-      snapshotFile?.delete()
-      snapshotFile = file
-      return Uri.fromFile(file).toString()
-    } finally {
-      bitmap.recycle()
     }
   }
 
@@ -519,6 +552,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   companion object {
     private const val PRIVATE_PROFILE = "bay-private"
     private var privateViews = 0
+    /** Encodes and writes snapshots off the main thread, one at a time. */
+    private val snapshotWriter = Executors.newSingleThreadExecutor()
     val privateBrowsingSupported: Boolean
       get() = WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
   }

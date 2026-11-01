@@ -13,6 +13,8 @@ export interface TabPageProps {
   onPageMessage: (message: string) => void;
   /** Hidden pages stay mounted, so switching back keeps their scroll position and history. */
   visible: boolean;
+  /** Paused in the background (see EngineView `suspended`). */
+  suspended: boolean;
   register: (view: Tab | null) => void;
   onNavigation: (state: NavigationState) => void;
   onError: (message: string) => void;
@@ -20,7 +22,18 @@ export interface TabPageProps {
   onLinkPress: (press: LinkPress) => void;
 }
 
-export function TabPage({ tab, visible, register, onNavigation, onError, onScroll, onLinkPress, hiddenSelectors, onPageMessage }: TabPageProps): JSX.Element {
+export function TabPage({
+  tab,
+  visible,
+  suspended,
+  register,
+  onNavigation,
+  onError,
+  onScroll,
+  onLinkPress,
+  hiddenSelectors,
+  onPageMessage,
+}: TabPageProps): JSX.Element {
   const view = useRef<Tab>(null);
   // A tab restored from disk or the archive, or opened from a link, starts at its saved address.
   const [initialUrl] = useState(tab.url);
@@ -57,6 +70,7 @@ export function TabPage({ tab, visible, register, onNavigation, onError, onScrol
         initialUrl={initialUrl || undefined}
         private={tab.private ?? false}
         active={visible}
+        suspended={suspended}
         style={{ flex: 1 }}
         onNavigationStateChange={({ nativeEvent }) => {
           onNavigation(nativeEvent);
