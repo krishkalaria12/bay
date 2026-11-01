@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 
 import { WATCH_MEDIA_SCRIPT } from "@/pagescripts/media";
 import { hideElementsScript } from "@/pagescripts/picker";
+import { initialTiming, scriptsFor, shouldHide } from "./navigationEvents";
 
 import type { BrowserTab } from "@/store/types";
 
@@ -35,6 +36,7 @@ export function TabPage({
   onPageMessage,
 }: TabPageProps): JSX.Element {
   const view = useRef<Tab>(null);
+  const timing = useRef(initialTiming());
   // A tab restored from disk or the archive, or opened from a link, starts at its saved address.
   const [initialUrl] = useState(tab.url);
 
@@ -53,7 +55,8 @@ export function TabPage({
 
   const selectorsKey = JSON.stringify(hiddenSelectors);
   useEffect(() => {
-    applyHiddenElements(JSON.parse(selectorsKey) as string[]);
+    const selectors = JSON.parse(selectorsKey) as string[];
+    if (shouldHide(timing.current, selectors.length > 0)) applyHiddenElements(selectors);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectorsKey]);
 
@@ -74,11 +77,10 @@ export function TabPage({
         style={{ flex: 1 }}
         onNavigationStateChange={({ nativeEvent }) => {
           onNavigation(nativeEvent);
+          const run = scriptsFor(timing.current, nativeEvent, hiddenSelectors.length > 0);
           if (!view.current) return;
-          if (!nativeEvent.isLoading) applyHiddenElements(hiddenSelectors);
-          // Media can play before a page finishes loading (a media file streams for as long as it plays), so watching
-          // starts once the document is there; it runs once per document.
-          if (!nativeEvent.isLoading || nativeEvent.progress > 0.1) void runPageScript(view.current, WATCH_MEDIA_SCRIPT).catch(() => {});
+          if (run.hideElements) applyHiddenElements(hiddenSelectors);
+          if (run.watchMedia) void runPageScript(view.current, WATCH_MEDIA_SCRIPT).catch(() => {});
         }}
         onPageMessage={({ nativeEvent }) => onPageMessage(nativeEvent.message)}
         onNavigationError={({ nativeEvent }) => onError(nativeEvent.message)}

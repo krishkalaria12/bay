@@ -23,6 +23,7 @@ import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
 import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
+import { sameNavigation } from "./navigationEvents";
 import { MiniPlayer } from "./MiniPlayer";
 import { DownloadToast, useDownloads } from "./useDownloads";
 import { useFindInPage } from "./useFindInPage";
@@ -123,7 +124,11 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function onNavigation(tabId: string, state: NavigationState): void {
-    setNavigation((previous) => ({ ...previous, [tabId]: state }));
+    // Hidden tabs report progress too; the screen only renders when something it shows changes.
+    setNavigation((previous) => {
+      const before = previous[tabId];
+      return before && sameNavigation(before, state, tabId !== active.id) ? previous : { ...previous, [tabId]: state };
+    });
     // A new document has no media until it reports some.
     if (state.isLoading && !navigation[tabId]?.isLoading) media.loadStarted(tabId);
     if (!isWebURL(state.url)) return;
