@@ -98,7 +98,15 @@ test("saved state is validated and repaired", () => {
   );
   assert.equal(data.activeTabId, "a");
   assert.equal(data.history.length, 1);
-  assert.deepEqual(data.preferences, { searchEngineId: "bing", archiveAfterDays: 7, blockContent: true, blockingPausedHosts: [], lockPrivateTabs: false });
+  assert.deepEqual(data.preferences, {
+    searchEngineId: "bing",
+    archiveAfterDays: 7,
+    blockContent: true,
+    blockingPausedHosts: [],
+    lockPrivateTabs: false,
+    reader: { theme: "paper", font: "serif", size: 19 },
+    hiddenElements: {},
+  });
   assert.throws(() => parseBrowserData({ version: 2 }, fallback));
 });
 
@@ -146,4 +154,50 @@ test("blocking can be turned off and paused per site", () => {
   assert.deepEqual(saved.preferences.blockingPausedHosts, ["ok.com"]);
   assert.equal(saved.preferences.lockPrivateTabs, false);
   assert.equal(saved.preferences.blockContent, true);
+});
+
+test("reader settings survive persistence and clamp the text size", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, { type: "reader-settings", settings: { theme: "dark", font: "mono", size: 80 } });
+  assert.deepEqual(data.preferences.reader, { theme: "dark", font: "mono", size: 28 });
+  assert.equal(reduceBrowserData(data, { type: "reader-settings", settings: { theme: "dark", font: "mono", size: 28 } }), data);
+  const restored = parseBrowserData(JSON.parse(JSON.stringify({ version: 1, ...persistedBrowserData(data) })), data);
+  assert.deepEqual(restored.preferences.reader, data.preferences.reader);
+  assert.notEqual(restored.preferences.reader, data.preferences.reader);
+});
+
+test("malformed reader settings use defaults and finite sizes stay within bounds", () => {
+  const fallback = initialBrowserData(createTab("a", 0));
+  const restore = (reader: unknown) => parseBrowserData({ version: 1, preferences: { reader } }, fallback).preferences.reader;
+  assert.deepEqual(restore({ theme: "unknown", font: [], size: NaN }), { theme: "paper", font: "serif", size: 19 });
+  assert.equal(restore({ size: -10 }).size, 14);
+  assert.equal(restore({ size: 20.6 }).size, 21);
+  assert.equal(restore({ size: Infinity }).size, 19);
+  assert.deepEqual(restore(null), fallback.preferences.reader);
+});
+
+test("hidden element rules are scoped to hosts, deduplicated and removable", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, { type: "hidden-elements", host: "www.News.com", selectors: [" .ad ", ".ad", "", "#promo"] });
+  assert.deepEqual(data.preferences.hiddenElements, { "news.com": [".ad", "#promo"] });
+  assert.equal(reduceBrowserData(data, { type: "hidden-elements", host: "news.com", selectors: [".ad", "#promo"] }), data);
+  assert.equal(reduceBrowserData(data, { type: "hidden-elements", host: "https://other.com/", selectors: [".ad"] }), data);
+  data = reduceBrowserData(data, { type: "hidden-elements", host: "other.com", selectors: ["aside"] });
+  data = reduceBrowserData(data, { type: "hidden-elements", host: "news.com", selectors: [] });
+  assert.deepEqual(data.preferences.hiddenElements, { "other.com": ["aside"] });
+  const restored = parseBrowserData(JSON.parse(JSON.stringify({ version: 1, ...persistedBrowserData(data) })), data);
+  assert.deepEqual(restored.preferences.hiddenElements, data.preferences.hiddenElements);
+});
+
+test("restoring hidden element rules rejects malformed hosts and selector values", () => {
+  const fallback = initialBrowserData(createTab("a", 0));
+  const hiddenElements = JSON.parse('{"www.News.com":[".ad",".ad",4," "],"bad host":["div"],"__proto__":["body"],"ok.com":null,"[::1]":["aside"]}');
+  const data = parseBrowserData({ version: 1, preferences: { hiddenElements } }, fallback);
+  assert.deepEqual(data.preferences.hiddenElements, { "news.com": [".ad"], "[::1]": ["aside"] });
+  assert.equal(Object.getPrototypeOf(data.preferences.hiddenElements), Object.prototype);
+  const copy = initialBrowserData(createTab("b", 0), data.preferences);
+  copy.preferences.reader.size = 25;
+  copy.preferences.hiddenElements["news.com"].push("nav");
+  assert.equal(data.preferences.reader.size, 19);
+  assert.deepEqual(data.preferences.hiddenElements["news.com"], [".ad"]);
 });

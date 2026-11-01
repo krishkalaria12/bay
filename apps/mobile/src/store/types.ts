@@ -1,3 +1,5 @@
+import type { ReaderSettings } from "../pagescripts/reader.ts";
+
 export interface BrowserTab {
   id: string;
   url: string;
@@ -38,6 +40,9 @@ export interface BrowserPreferences {
   blockingPausedHosts: string[];
   /** Ask for Face ID, Touch ID or the device passcode before showing private tabs again. */
   lockPrivateTabs: boolean;
+  reader: ReaderSettings;
+  /** Element selectors hidden on each host. Private edits stay in memory outside this document. */
+  hiddenElements: Record<string, string[]>;
 }
 
 export interface BrowserData {

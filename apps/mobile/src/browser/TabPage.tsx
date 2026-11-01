@@ -1,11 +1,15 @@
-import { EngineView, type LinkPress, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
+import { runPageScript, EngineView, type LinkPress, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { StyleSheet, View } from "react-native";
+
+import { hideElementsScript } from "@/pagescripts/picker";
 
 import type { BrowserTab } from "@/store/types";
 
 export interface TabPageProps {
   tab: BrowserTab;
+  hiddenSelectors: string[];
+  onPageMessage: (message: string) => void;
   /** Hidden pages stay mounted, so switching back keeps their scroll position and history. */
   visible: boolean;
   register: (view: Tab | null) => void;
@@ -15,7 +19,7 @@ export interface TabPageProps {
   onLinkPress: (press: LinkPress) => void;
 }
 
-export function TabPage({ tab, visible, register, onNavigation, onError, onScroll, onLinkPress }: TabPageProps): JSX.Element {
+export function TabPage({ tab, visible, register, onNavigation, onError, onScroll, onLinkPress, hiddenSelectors, onPageMessage }: TabPageProps): JSX.Element {
   const view = useRef<Tab>(null);
   // A tab restored from disk or the archive, or opened from a link, starts at its saved address.
   const [initialUrl] = useState(tab.url);
@@ -27,6 +31,17 @@ export function TabPage({ tab, visible, register, onNavigation, onError, onScrol
     return () => register(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The page may be mid-navigation; the next finished load applies the rules again.
+  function applyHiddenElements(selectors: string[]): void {
+    if (view.current) void runPageScript(view.current, hideElementsScript(selectors)).catch(() => {});
+  }
+
+  const selectorsKey = JSON.stringify(hiddenSelectors);
+  useEffect(() => {
+    applyHiddenElements(JSON.parse(selectorsKey) as string[]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectorsKey]);
 
   return (
     <View
@@ -42,7 +57,11 @@ export function TabPage({ tab, visible, register, onNavigation, onError, onScrol
         private={tab.private ?? false}
         active={visible}
         style={{ flex: 1 }}
-        onNavigationStateChange={({ nativeEvent }) => onNavigation(nativeEvent)}
+        onNavigationStateChange={({ nativeEvent }) => {
+          onNavigation(nativeEvent);
+          if (!nativeEvent.isLoading) applyHiddenElements(hiddenSelectors);
+        }}
+        onPageMessage={({ nativeEvent }) => onPageMessage(nativeEvent.message)}
         onNavigationError={({ nativeEvent }) => onError(nativeEvent.message)}
         onScroll={({ nativeEvent }) => onScroll(nativeEvent)}
         onLinkPress={({ nativeEvent }) => onLinkPress(nativeEvent)}

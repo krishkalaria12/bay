@@ -21,6 +21,7 @@ import { SearchCard, type OpenTarget } from "./SearchCard";
 import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
 import { Wallpaper } from "./Wallpaper";
+import { useReadingTools } from "./useReadingTools";
 
 // Live page views kept in memory; other tabs reload from their address when opened.
 const MAX_LIVE = 4;
@@ -91,6 +92,8 @@ export function BrowserScreen(): JSX.Element {
     setError({ tabId, message: cause instanceof Error ? cause.message : "Couldn't open this page." });
   }, []);
 
+  const reading = useReadingTools(active, views.get(active.id), page.isLoading, locked && Boolean(active.private), (cause) => fail(active.id, cause));
+
   function capture(tabId: string): void {
     // Private pages leave no snapshot files behind.
     if (data.tabs.find((tab) => tab.id === tabId)?.private) return;
@@ -117,7 +120,7 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function onScroll(tabId: string, { offsetY, deltaY }: PageScroll): void {
-    if (tabId !== active.id) return;
+    if (tabId !== active.id || reading.picking) return;
     if (offsetY < 24 || deltaY < -8) barHidden.value = withTiming(0, { duration: 180 });
     else if (deltaY > 8) barHidden.value = withTiming(1, { duration: 220 });
   }
@@ -248,6 +251,10 @@ export function BrowserScreen(): JSX.Element {
                 key={id}
                 tab={tab}
                 visible={visible}
+                hiddenSelectors={reading.selectorsFor(tab)}
+                onPageMessage={(message) => {
+                  if (id === active.id) reading.pageMessage(message);
+                }}
                 register={(view) => (view ? views.set(id, view) : views.delete(id))}
                 onNavigation={(state) => onNavigation(id, state)}
                 onError={(message) => setError({ tabId: id, message })}
@@ -299,6 +306,7 @@ export function BrowserScreen(): JSX.Element {
 
       {overlay !== "search" ? (
         <Animated.View className="absolute inset-x-0 gap-3 px-4" style={[{ bottom: Math.max(insets.bottom, 12) + 4 }, barStyle]} pointerEvents="box-none">
+          {hasPage && showPages && !(locked && active.private) ? reading.controls : null}
           {tabError && showPages ? (
             <Surface radius={18} style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
               <Text testID="navigation-error" accessibilityRole="alert" style={{ color: muted, fontSize: 14 }}>
@@ -307,7 +315,15 @@ export function BrowserScreen(): JSX.Element {
             </Surface>
           ) : null}
           {hasPage && showPages ? (
-            <BrowserBar mode="page" privately={Boolean(active.private)} onTabs={showTabs} onSearch={() => search(false)} onMore={() => setPanel("page")} />
+            <BrowserBar
+              mode="page"
+              privately={Boolean(active.private)}
+              onTabs={showTabs}
+              onSearch={() => search(false)}
+              onMore={() => {
+                if (!(locked && active.private)) setPanel("page");
+              }}
+            />
           ) : (
             <BrowserBar
               mode="start"
@@ -335,7 +351,7 @@ export function BrowserScreen(): JSX.Element {
       ) : null}
 
       <PageMenu
-        visible={panel === "page"}
+        visible={panel === "page" && !(locked && active.private)}
         onClose={() => closePanel("page")}
         url={page.url || active.url}
         title={page.title || active.title}
@@ -344,6 +360,10 @@ export function BrowserScreen(): JSX.Element {
         isLoading={page.isLoading}
         isPinned={data.pinnedSites.some((site) => site.url === active.url)}
         blocking={blocking}
+        readerActive={reading.reader}
+        onReader={reading.openReader}
+        onHideElements={reading.startPicking}
+        onCopyMarkdown={reading.copyMarkdown}
         onToggleBlocking={toggleBlocking}
         onBack={() => run((tab) => tab.goBack())}
         onForward={() => run((tab) => tab.goForward())}

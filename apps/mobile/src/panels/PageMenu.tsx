@@ -24,15 +24,31 @@ export interface PageMenuProps {
   onShare: () => void;
   onCopy: () => void;
   onCloseTab: () => void;
+  readerActive: boolean;
+  onReader: () => void;
+  onHideElements: () => void;
+  onCopyMarkdown: () => void;
   onSettings: () => void;
 }
 
-function NavigationAction({ id, label, disabled, onPress }: { id: string; label: string; disabled?: boolean; onPress: () => void }): JSX.Element {
+function NavigationAction({
+  id,
+  label,
+  accessibilityLabel = label,
+  disabled,
+  onPress,
+}: {
+  id: string;
+  label: string;
+  accessibilityLabel?: string;
+  disabled?: boolean;
+  onPress: () => void;
+}): JSX.Element {
   return (
     <Pressable
       testID={id}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
@@ -50,7 +66,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
     action();
   }
   return (
-    <PanelSheet visible={props.visible} onClose={props.onClose} title="Page" testID="page-menu" height="65%">
+    <PanelSheet visible={props.visible} onClose={props.onClose} title="Page" testID="page-menu" height="72%">
       <Typography numberOfLines={2}>{props.title || props.url}</Typography>
       <Typography testID="page-menu-url" className="mt-1 text-sm text-muted" numberOfLines={2}>
         {props.url}
@@ -63,6 +79,16 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
           label={props.isLoading ? "Stop" : "Reload"}
           onPress={() => act(props.isLoading ? props.onStop : props.onReload)}
         />
+      </View>
+      <View className="mb-2 flex-row gap-2">
+        <NavigationAction
+          id="page-reader"
+          label="Reader"
+          accessibilityLabel={props.readerActive ? "Reader settings" : "Reader"}
+          onPress={() => act(props.onReader)}
+        />
+        <NavigationAction id="page-hide-elements" label="Hide" accessibilityLabel="Hide elements" onPress={() => act(props.onHideElements)} />
+        <NavigationAction id="page-markdown" label="Markdown" accessibilityLabel="Copy as Markdown" onPress={() => act(props.onCopyMarkdown)} />
       </View>
       <ActionRow testID="page-pin" label={props.isPinned ? "Unpin site" : "Pin site"} onPress={() => act(props.onPin)} />
       {props.blocking !== "off" ? (

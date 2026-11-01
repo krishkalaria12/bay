@@ -1,4 +1,5 @@
 import type { ArchivedTab, BrowserData, BrowserPreferences, BrowserTab, HistoryEntry, PinnedSite, TabUpdate } from "./types";
+import type { ReaderSettings } from "../pagescripts/reader.ts";
 
 export const DEFAULT_PREFERENCES: BrowserPreferences = {
   searchEngineId: "google",
@@ -6,6 +7,8 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   blockContent: true,
   blockingPausedHosts: [],
   lockPrivateTabs: false,
+  reader: { theme: "paper", font: "serif", size: 19 },
+  hiddenElements: {},
 };
 const DAY = 24 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 1000;
@@ -22,7 +25,12 @@ export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFER
     history: [],
     pinnedSites: [],
     archive: [],
-    preferences: { ...preferences, blockingPausedHosts: [...preferences.blockingPausedHosts] },
+    preferences: {
+      ...preferences,
+      blockingPausedHosts: [...preferences.blockingPausedHosts],
+      reader: { ...preferences.reader },
+      hiddenElements: Object.fromEntries(Object.entries(preferences.hiddenElements).map(([host, selectors]) => [host, [...selectors]])),
+    },
   };
 }
 
@@ -40,7 +48,9 @@ export type BrowserAction =
   | { type: "archive-stale"; now: number }
   | { type: "block-content"; enabled: boolean }
   | { type: "pause-blocking"; host: string; paused: boolean }
-  | { type: "lock-private-tabs"; enabled: boolean };
+  | { type: "lock-private-tabs"; enabled: boolean }
+  | { type: "reader-settings"; settings: ReaderSettings }
+  | { type: "hidden-elements"; host: string; selectors: string[] };
 
 export function reduceBrowserData(data: BrowserData, action: BrowserAction): BrowserData {
   switch (action.type) {
@@ -130,6 +140,24 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
     case "lock-private-tabs":
       return action.enabled === data.preferences.lockPrivateTabs ? data : { ...data, preferences: { ...data.preferences, lockPrivateTabs: action.enabled } };
+    case "reader-settings": {
+      const reader = parseReaderSettings(action.settings, data.preferences.reader);
+      const previous = data.preferences.reader;
+      return reader.theme === previous.theme && reader.font === previous.font && reader.size === previous.size
+        ? data
+        : { ...data, preferences: { ...data.preferences, reader } };
+    }
+    case "hidden-elements": {
+      const host = normalizeHost(action.host);
+      if (!host) return data;
+      const selectors = parseSelectors(action.selectors);
+      const previous = Object.hasOwn(data.preferences.hiddenElements, host) ? data.preferences.hiddenElements[host] : [];
+      if (selectors.length === previous.length && selectors.every((selector, index) => selector === previous[index])) return data;
+      const hiddenElements = { ...data.preferences.hiddenElements };
+      if (selectors.length) hiddenElements[host] = selectors;
+      else delete hiddenElements[host];
+      return { ...data, preferences: { ...data.preferences, hiddenElements } };
+    }
     case "archive-stale": {
       if (data.preferences.archiveAfterDays === null) return data;
       const cutoff = action.now - data.preferences.archiveAfterDays * DAY;
@@ -153,6 +181,51 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isTimestamp(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function parseReaderSettings(value: unknown, fallback = DEFAULT_PREFERENCES.reader): ReaderSettings {
+  const settings = isRecord(value) ? value : {};
+  return {
+    theme: ["light", "paper", "sepia", "mint", "gray", "dark", "black"].includes(settings.theme as string)
+      ? (settings.theme as ReaderSettings["theme"])
+      : fallback.theme,
+    font: ["serif", "sans", "mono"].includes(settings.font as string) ? (settings.font as ReaderSettings["font"]) : fallback.font,
+    size: typeof settings.size === "number" && Number.isFinite(settings.size) ? Math.min(28, Math.max(14, Math.round(settings.size))) : fallback.size,
+  };
+}
+
+function normalizeHost(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  const host = value.toLowerCase().replace(/^www\./, "");
+  if (!/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:]+\])$/.test(host)) return null;
+  try {
+    return new URL(`https://${host}`).hostname === host ? host : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseSelectors(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [
+        ...new Set(
+          value
+            .filter((selector): selector is string => typeof selector === "string")
+            .map((selector) => selector.trim())
+            .filter(Boolean),
+        ),
+      ]
+    : [];
+}
+
+function parseHiddenElements(value: unknown): Record<string, string[]> {
+  if (!isRecord(value)) return {};
+  const entries = Object.entries(value).flatMap(([key, value]) => {
+    const host = normalizeHost(key);
+    const selectors = parseSelectors(value);
+    return host && selectors.length ? [[host, selectors] as const] : [];
+  });
+  return Object.fromEntries(entries);
 }
 
 function isWebAddress(value: unknown): value is string {
@@ -247,6 +320,8 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
       ? [...new Set(savedPreferences.blockingPausedHosts.filter((host): host is string => typeof host === "string" && /^[a-z0-9.-]+$/.test(host)))]
       : [],
     lockPrivateTabs: savedPreferences.lockPrivateTabs === true,
+    reader: parseReaderSettings(savedPreferences.reader),
+    hiddenElements: parseHiddenElements(savedPreferences.hiddenElements),
   };
   return {
     tabs: tabs.length ? tabs : fallback.tabs,

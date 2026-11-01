@@ -71,7 +71,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
     return restoredId;
   },
   reset() {
-    set((state) => ({ data: initialBrowserData(createTab(newId(), Date.now()), state.data.preferences) }));
+    set((state) => ({ data: initialBrowserData(createTab(newId(), Date.now()), { ...state.data.preferences, hiddenElements: {} }) }));
   },
 }));
 
