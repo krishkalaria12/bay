@@ -7,7 +7,7 @@ use std::sync::RwLock;
 
 use serde::Deserialize;
 
-use crate::{content_blocking_rules, Blocker, FilterList, TrackingParams};
+use crate::{Blocker, FilterList, TrackingParams};
 
 pub(crate) static TRACKING: RwLock<Option<TrackingParams>> = RwLock::new(None);
 
@@ -25,9 +25,10 @@ fn give(text: String) -> *mut c_char {
 ///
 /// # Safety
 /// `lists` must be a valid NUL-terminated string.
+#[cfg(not(target_os = "android"))]
 #[no_mangle]
 pub unsafe extern "C" fn bay_content_blocking_rules(lists: *const c_char) -> *mut c_char {
-    give(content_blocking_rules(&read(lists).unwrap_or_default()))
+    give(crate::content_blocking_rules(&read(lists).unwrap_or_default()))
 }
 
 /// Sets the tracking-parameter table (JSON from `@bay/core`). Returns false if it can't be read.

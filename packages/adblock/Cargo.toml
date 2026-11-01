@@ -9,9 +9,14 @@ description = "Bay's content blocker: Brave's adblock-rust behind a C ABI and JN
 crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
-adblock = { version = "0.13.5", features = ["content-blocking", "debug-info"] }
+adblock = { version = "0.13.5", features = ["debug-info"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# WebKit content-blocking rules are for iOS (and desktop links the same C ABI); Android matches requests itself, so its
+# library leaves the converter out.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+adblock = { version = "0.13.5", features = ["content-blocking"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = { version = "0.21", default-features = false }
