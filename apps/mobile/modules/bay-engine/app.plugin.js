@@ -1,4 +1,11 @@
-const { withAndroidManifest, withInfoPlist } = require("expo/config-plugins");
+const { withAndroidManifest, withGradleProperties, withInfoPlist } = require("expo/config-plugins");
+
+const gradleProperties = {
+  // The Rust ad blocker (libbay_adblock.so, scripts/adblock) is built for arm64 only, so other ABIs would crash on
+  // the first page load, and each extra ABI adds a copy of every native library. The Apple-Silicon emulator is arm64.
+  reactNativeArchitectures: "arm64-v8a",
+  "android.enableShrinkResourcesInReleaseBuilds": "true",
+};
 
 // A browser accepts HTTP pages. TLS validation and mixed-content restrictions still apply.
 module.exports = function withBayEngine(config) {
@@ -7,6 +14,14 @@ module.exports = function withBayEngine(config) {
       ...mod.modResults.NSAppTransportSecurity,
       NSAllowsArbitraryLoadsInWebContent: true,
     };
+    return mod;
+  });
+  config = withGradleProperties(config, (mod) => {
+    for (const [key, value] of Object.entries(gradleProperties)) {
+      const item = mod.modResults.find((item) => item.type === "property" && item.key === key);
+      if (item) item.value = value;
+      else mod.modResults.push({ type: "property", key, value });
+    }
     return mod;
   });
   return withAndroidManifest(config, (mod) => {
