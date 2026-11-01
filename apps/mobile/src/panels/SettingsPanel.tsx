@@ -23,6 +23,8 @@ export interface SettingsPanelProps {
   onClearData: () => Promise<void>;
   downloadCount: number;
   onDownloads: () => void;
+  historyCount: number;
+  onHistory: () => void;
 }
 
 const archiveOptions = [
@@ -169,6 +171,13 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           }}
         />
       )}
+      <ActionRow
+        testID="settings-history"
+        label="History"
+        detail={props.historyCount ? `${props.historyCount} ${props.historyCount === 1 ? "page" : "pages"}` : undefined}
+        disabled={busy}
+        onPress={props.onHistory}
+      />
       <ActionRow
         testID="settings-downloads"
         label="Downloads"

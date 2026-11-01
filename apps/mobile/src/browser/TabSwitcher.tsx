@@ -12,6 +12,7 @@ export interface TabSwitcherProps {
   activeTabId: string;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
+  onCloseAll: () => void;
   /** Private pages are hidden while private tabs are locked. */
   privateLocked: boolean;
 }
@@ -19,7 +20,7 @@ export interface TabSwitcherProps {
 const GAP = 14;
 
 /** Lens's switcher: page cards side by side over the wallpaper, each under its site and title. */
-export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, privateLocked }: TabSwitcherProps): JSX.Element {
+export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, onCloseAll, privateLocked }: TabSwitcherProps): JSX.Element {
   const { width, height } = useWindowDimensions();
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
@@ -33,6 +34,22 @@ export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, privateLocke
 
   return (
     <View testID="tab-switcher" className="flex-1 justify-center">
+      <View className="absolute inset-x-0 top-2 flex-row items-center justify-between px-5">
+        <Text testID="tab-switcher-count" accessibilityRole="header" style={{ color: foreground, fontSize: 17, fontWeight: "600" }}>
+          {tabs.length === 1 ? "1 tab" : `${tabs.length} tabs`}
+        </Text>
+        {tabs.length > 1 ? (
+          <Pressable
+            testID="tab-switcher-archive-all"
+            accessibilityRole="button"
+            accessibilityLabel={`Archive all ${tabs.length} tabs`}
+            onPress={onCloseAll}
+            className="min-h-11 justify-center px-2 active:opacity-60"
+          >
+            <Text style={{ color: muted, fontSize: 15, fontWeight: "500" }}>Archive all</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <ScrollView
         horizontal
         style={{ flexGrow: 0 }}

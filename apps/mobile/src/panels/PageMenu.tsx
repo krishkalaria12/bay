@@ -33,6 +33,7 @@ export interface PageMenuProps {
   onFind: () => void;
   onInspect: () => void;
   onSettings: () => void;
+  onHistory: () => void;
 }
 
 function NavigationAction({
@@ -121,6 +122,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
         />
       ) : null}
       <ActionRow testID="page-copy" icon="link" label="Copy link" onPress={() => act(props.onCopy)} />
+      <ActionRow testID="page-history" icon="history" label="History" onPress={() => act(props.onHistory)} />
       <ActionRow testID="page-settings" icon="settings" label="Settings" onPress={() => act(props.onSettings)} />
       <ActionRow testID="page-close-tab" icon="archive" label="Archive tab" destructive onPress={() => act(props.onCloseTab)} />
     </PanelSheet>

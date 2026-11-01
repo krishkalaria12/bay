@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { barButtons, barSite, type BarButton, type BrowserBarProps } from "./BrowserBar.types";
 import { MaterialSymbol, type MaterialSymbolName } from "./MaterialSymbol";
+import { TabCount } from "./TabCount";
 
 // Same layout as iOS, drawn the way Arc Search does on Android: flat translucent buttons with a hairline edge.
 function BarPressable({
@@ -28,6 +29,7 @@ function BarPressable({
       accessibilityRole="button"
       accessibilityLabel={button.label}
       onPress={button.onPress}
+      onLongPress={button.onLongPress}
       className={
         privately
           ? "h-[52px] items-center justify-center rounded-full border border-white/10 bg-neutral-900/95 active:bg-neutral-800/95"
@@ -42,6 +44,7 @@ function BarPressable({
       ) : (
         <MaterialSymbol name={icon} color={foreground} size={22} />
       )}
+      {button.badge ? <TabCount count={button.badge} /> : null}
     </Pressable>
   );
 }

@@ -135,6 +135,14 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
   return {
     reader,
     picking,
+    /** Android Back: closes the innermost reading tool. False when none is open. */
+    back(): boolean {
+      if (settingsOpen) setSettingsOpen(false);
+      else if (inspected) setInspected(null);
+      else if (picking) task(endPicking);
+      else return false;
+      return true;
+    },
     selectorsFor(tab: BrowserTab): string[] {
       const site = hostOf(tab.url);
       return siteRules(tab.private ? privateRules[tab.id] : data.preferences.hiddenElements, site);

@@ -5,6 +5,7 @@ import { View } from "react-native";
 
 import { barButtons, barSite, type BrowserBarProps } from "./BrowserBar.types";
 import { GlassIconButton } from "./GlassIconButton";
+import { TabCount } from "./TabCount";
 import { useStableCallback } from "./useStableCallback";
 
 const symbols = { archive: "archivebox", tabs: "square.on.square", settings: "gearshape", more: "ellipsis" } as const;
@@ -18,7 +19,16 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const prominentTint = props.privately ? PRIVATE_TINT : undefined;
   return (
     <View className="flex-row items-center justify-center gap-4">
-      <GlassIconButton id={left.id} label={left.label} systemImage={symbols[left.icon]} prominentTint={prominentTint} onPress={left.onPress} />
+      <GlassIconButton
+        id={left.id}
+        label={left.label}
+        systemImage={symbols[left.icon]}
+        prominentTint={prominentTint}
+        onPress={left.onPress}
+        onLongPress={left.onLongPress}
+      >
+        {left.badge ? <TabCount count={left.badge} /> : null}
+      </GlassIconButton>
       <View testID={search.id} collapsable={false}>
         <Host matchContents>
           <Button

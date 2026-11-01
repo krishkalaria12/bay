@@ -29,7 +29,6 @@ export type IconName =
   | "copy"
   | "history"
   | "delete"
-  | "newTab"
   | "desktop"
   | "offline"
   | "error";

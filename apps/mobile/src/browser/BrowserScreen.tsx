@@ -4,20 +4,22 @@ import { clearData, privateBrowsingSupported, type LinkPress, type NavigationSta
 import * as Clipboard from "expo-clipboard";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "heroui-native";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
-import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel } from "@/panels";
+import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
+import { HistoryPanel } from "@/panels/HistoryPanel";
 import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
 import { newId, useBrowserStore } from "@/store/browser";
 import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
 import { PrivateLock } from "./PrivateLock";
 import { SearchCard, type OpenTarget } from "./SearchCard";
+import { StartPage } from "./StartPage";
 import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
 import { Wallpaper } from "./Wallpaper";
@@ -36,9 +38,11 @@ const MAX_LIVE = 4;
 const BAR_HEIGHT = 52;
 const views = new Map<string, Tab>();
 const visited = new Map<string, string>();
+// Tabs whose current load failed: the engine shows its own error document, whose title and snapshot aren't the page's.
+const failed = new Set<string>();
 
 type Overlay = "none" | "search" | "tabs";
-type Panel = "archive" | "settings" | "page" | "downloads" | null;
+type Panel = "archive" | "settings" | "page" | "downloads" | "tabs" | "history" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -51,6 +55,7 @@ export function BrowserScreen(): JSX.Element {
   const [navigation, setNavigation] = useState<Record<string, NavigationState>>({});
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [searchInNewTab, setSearchInNewTab] = useState(false);
+  const [searchPrivately, setSearchPrivately] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [link, setLink] = useState<LinkPress | null>(null);
   // A main-frame load failure, shown in place of that tab's page.
@@ -117,7 +122,7 @@ export function BrowserScreen(): JSX.Element {
 
   function capture(tabId: string): void {
     // Private pages leave no snapshot files behind.
-    if (data.tabs.find((tab) => tab.id === tabId)?.private) return;
+    if (failed.has(tabId) || data.tabs.find((tab) => tab.id === tabId)?.private) return;
     void views
       .get(tabId)
       ?.snapshot()
@@ -131,10 +136,15 @@ export function BrowserScreen(): JSX.Element {
       const before = previous[tabId];
       return before && sameNavigation(before, state, tabId !== active.id) ? previous : { ...previous, [tabId]: state };
     });
-    // A new document has no media until it reports some.
-    if (state.isLoading && !navigation[tabId]?.isLoading) media.loadStarted(tabId);
+    const started = state.isLoading && !navigation[tabId]?.isLoading;
+    if (started) {
+      // A new document has no media until it reports some.
+      media.loadStarted(tabId);
+      failed.delete(tabId);
+      setError((current) => (current?.tabId === tabId ? null : current));
+    }
     if (!isWebURL(state.url)) return;
-    if (state.isLoading) setError((current) => (current?.tabId === tabId ? null : current));
+    if (failed.has(tabId)) return dispatch({ type: "update-tab", id: tabId, update: { url: state.url } });
     dispatch({ type: "update-tab", id: tabId, update: { url: state.url, ...(state.title ? { title: state.title } : {}) } });
     // Private pages stay out of history.
     if (data.tabs.find((tab) => tab.id === tabId)?.private) return;
@@ -178,8 +188,9 @@ export function BrowserScreen(): JSX.Element {
     if (emptyTab) closeTab(emptyTab);
   }
 
-  function search(inNewTab: boolean): void {
+  function search(inNewTab: boolean, privately = false): void {
     setSearchInNewTab(inNewTab);
+    setSearchPrivately(privately);
     setOverlay("search");
   }
 
@@ -217,6 +228,21 @@ export function BrowserScreen(): JSX.Element {
     toast.show("Tab archived", { label: "Undo", onPress: () => void restoreTab(id) });
   }
 
+  function archiveAll(): void {
+    const archived = data.tabs.filter((tab) => tab.url && !tab.private).map((tab) => tab.id);
+    for (const tab of data.tabs) closeTab(tab.id);
+    setOverlay("none");
+    if (!archived.length) return;
+    toast.show(archived.length === 1 ? "1 tab archived" : `${archived.length} tabs archived`, {
+      label: "Undo",
+      onPress: () => {
+        for (const id of archived) restoreTab(id);
+        // Closing every tab left a blank one behind.
+        for (const tab of useBrowserStore.getState().data.tabs) if (!tab.url) closeTab(tab.id);
+      },
+    });
+  }
+
   const host = hostOf(active.url);
   const pausedEntry = blockingPausedHosts.find((entry) => host === entry || host.endsWith(`.${entry}`));
   const blocking = !blockContent ? "off" : pausedEntry ? "paused" : "on";
@@ -239,35 +265,45 @@ export function BrowserScreen(): JSX.Element {
     setNavigation({});
     setLive([]);
     visited.clear();
+    failed.clear();
     // Let the page views unmount first so no page writes fresh data.
     await new Promise((resolve) => setTimeout(resolve, 150));
     await clearData();
   }
 
+  // Android Back, newest state each press; registered once while the screen is focused.
+  const backRef = useRef<() => boolean>(() => false);
+  backRef.current = () => {
+    // Back closes an open sheet first, as on every Android sheet.
+    if (panel || link) {
+      setPanel(null);
+      setLink(null);
+      return true;
+    }
+    if (reading.back()) return true;
+    if (overlay !== "none") {
+      setOverlay("none");
+      return true;
+    }
+    if (find.open) {
+      find.done();
+      return true;
+    }
+    if (page.canGoBack) {
+      views
+        .get(active.id)
+        ?.goBack()
+        .catch(() => {});
+      return true;
+    }
+    return false;
+  };
   useFocusEffect(
     useCallback(() => {
       if (Platform.OS !== "android") return;
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        if (overlay !== "none") {
-          setOverlay("none");
-          return true;
-        }
-        if (find.open) {
-          find.done();
-          return true;
-        }
-        if (page.canGoBack) {
-          views
-            .get(active.id)
-            ?.goBack()
-            .catch(() => {});
-          return true;
-        }
-        return false;
-      });
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => backRef.current());
       return () => subscription.remove();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [active.id, overlay, page.canGoBack, find.open]),
+    }, []),
   );
 
   const barStyle = useAnimatedStyle(() => ({
@@ -299,7 +335,10 @@ export function BrowserScreen(): JSX.Element {
                 }}
                 register={(view) => (view ? views.set(id, view) : views.delete(id))}
                 onNavigation={(state) => onNavigation(id, state)}
-                onError={({ url, message }) => setError({ tabId: id, url: url || tab.url, message })}
+                onError={({ url, message }) => {
+                  failed.add(id);
+                  setError({ tabId: id, url: url || tab.url, message });
+                }}
                 onScroll={(scroll) => onScroll(id, scroll)}
                 onLinkPress={(press) => {
                   if (id === active.id) setLink(press);
@@ -338,6 +377,18 @@ export function BrowserScreen(): JSX.Element {
       {ready && !hasPage && overlay === "none" ? (
         <Pressable testID="start-screen" accessibilityLabel="Tap to search" style={StyleSheet.absoluteFill} onPress={() => search(false)}>
           <View className="flex-1 items-center justify-end" style={{ paddingBottom: insets.bottom + BAR_HEIGHT + 40 }}>
+            <View className="mb-8 w-full">
+              <StartPage
+                pins={data.pinnedSites}
+                history={data.history}
+                onOpen={(url) => open({ kind: "url", url }, false)}
+                onUnpin={(site) => {
+                  const index = data.pinnedSites.indexOf(site);
+                  dispatch({ type: "remove-pin", id: site.id });
+                  toast.show("Unpinned", { label: "Undo", onPress: () => dispatch({ type: "add-pin", site, index }) });
+                }}
+              />
+            </View>
             <Text style={{ color: muted, fontSize: 14 }}>Tap to search</Text>
             <Text style={{ color: muted, fontSize: 14, marginTop: 2 }}>↓</Text>
           </View>
@@ -346,7 +397,7 @@ export function BrowserScreen(): JSX.Element {
 
       {overlay === "tabs" ? (
         <View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, paddingBottom: insets.bottom + BAR_HEIGHT + 16 }]}>
-          <TabSwitcher tabs={data.tabs} activeTabId={active.id} onSelect={activate} onClose={archiveTab} privateLocked={locked} />
+          <TabSwitcher tabs={data.tabs} activeTabId={active.id} onSelect={activate} onClose={archiveTab} onCloseAll={archiveAll} privateLocked={locked} />
         </View>
       ) : null}
 
@@ -396,6 +447,8 @@ export function BrowserScreen(): JSX.Element {
               site={locked && active.private ? undefined : host}
               privately={Boolean(active.private)}
               onTabs={showTabs}
+              onTabsLongPress={() => setPanel("tabs")}
+              tabCount={data.tabs.length}
               onSearch={() => search(false)}
               onMore={() => {
                 if (!(locked && active.private)) setPanel("page");
@@ -418,7 +471,7 @@ export function BrowserScreen(): JSX.Element {
           engine={engine}
           data={data}
           privateAvailable={privateBrowsingSupported}
-          initialPrivate={!searchInNewTab && Boolean(active.private)}
+          initialPrivate={searchPrivately || (!searchInNewTab && Boolean(active.private))}
           onOpen={open}
           onDismiss={() => {
             Keyboard.dismiss();
@@ -457,6 +510,17 @@ export function BrowserScreen(): JSX.Element {
         onCopy={() => copy(active.url)}
         onCloseTab={() => archiveTab(active.id)}
         onSettings={() => setPanel("settings")}
+        onHistory={() => setPanel("history")}
+      />
+      <TabsMenu
+        visible={panel === "tabs"}
+        onClose={() => closePanel("tabs")}
+        tabCount={data.tabs.length}
+        privateAvailable={privateBrowsingSupported}
+        onNewTab={() => search(true)}
+        onNewPrivateTab={() => search(true, true)}
+        onArchiveTab={() => archiveTab(active.id)}
+        onArchiveAll={archiveAll}
       />
       <ArchivePanel
         visible={panel === "archive"}
@@ -484,6 +548,21 @@ export function BrowserScreen(): JSX.Element {
         onClearData={wipe}
         downloadCount={downloads.downloads.length}
         onDownloads={() => setPanel("downloads")}
+        historyCount={data.history.length}
+        onHistory={() => setPanel("history")}
+      />
+      <HistoryPanel
+        visible={panel === "history"}
+        onClose={() => closePanel("history")}
+        history={data.history}
+        onOpen={(url) => {
+          setOverlay("none");
+          // A page on screen stays; the history page opens beside it.
+          if (hasPage) openTab(url);
+          else navigate(active.id, url);
+        }}
+        onRemove={(url) => dispatch({ type: "remove-history", url })}
+        onClear={() => dispatch({ type: "clear-history" })}
       />
       <DownloadsPanel
         visible={panel === "downloads"}

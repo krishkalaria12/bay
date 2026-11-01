@@ -248,3 +248,32 @@ test("downloads track an engine's updates and survive a restart as finished or f
     ["d2"],
   );
 });
+
+test("pins can be removed and put back in place; history entries can be removed or cleared", () => {
+  let data = initialBrowserData(page("a", "https://a.example/"));
+  data = reduceBrowserData(data, { type: "new-tab", tab: page("b", "https://b.example/"), background: false });
+  data = reduceBrowserData(data, { type: "pin-site", tabId: "a", pinId: "pa" });
+  data = reduceBrowserData(data, { type: "pin-site", tabId: "b", pinId: "pb" });
+  const removed = data.pinnedSites[0]!;
+  data = reduceBrowserData(data, { type: "remove-pin", id: "pa" });
+  assert.deepEqual(
+    data.pinnedSites.map((site) => site.id),
+    ["pb"],
+  );
+  data = reduceBrowserData(data, { type: "add-pin", site: removed, index: 0 });
+  assert.deepEqual(
+    data.pinnedSites.map((site) => site.id),
+    ["pa", "pb"],
+  );
+  assert.equal(reduceBrowserData(data, { type: "add-pin", site: removed, index: 0 }), data);
+
+  data = reduceBrowserData(data, { type: "visit", url: "https://a.example/", title: "A", favicon: null, now: 1 });
+  data = reduceBrowserData(data, { type: "visit", url: "https://b.example/", title: "B", favicon: null, now: 2 });
+  data = reduceBrowserData(data, { type: "remove-history", url: "https://a.example/" });
+  assert.deepEqual(
+    data.history.map((entry) => entry.url),
+    ["https://b.example/"],
+  );
+  data = reduceBrowserData(data, { type: "clear-history" });
+  assert.equal(data.history.length, 0);
+});

@@ -35,7 +35,6 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   copy: "doc.on.doc",
   history: "clock.arrow.circlepath",
   delete: "trash",
-  newTab: "plus.square.on.square",
   desktop: "desktopcomputer",
   offline: "wifi.slash",
   error: "exclamationmark.circle",

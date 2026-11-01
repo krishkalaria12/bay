@@ -22,7 +22,7 @@ export function useToast() {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), toast.action ? 5000 : 2500);
+    const timer = setTimeout(() => setToast(null), toast.action ? 8000 : 2500);
     return () => clearTimeout(timer);
   }, [toast]);
 

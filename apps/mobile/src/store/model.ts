@@ -59,6 +59,10 @@ export type BrowserAction =
   | { type: "close-tab"; id: string; now: number; fallback: BrowserTab }
   | { type: "restore-tab"; id: string; restoredId: string; now: number }
   | { type: "pin-site"; tabId: string; pinId: string }
+  | { type: "remove-pin"; id: string }
+  | { type: "add-pin"; site: PinnedSite; index: number }
+  | { type: "remove-history"; url: string }
+  | { type: "clear-history" }
   | { type: "search-engine"; id: string }
   | { type: "archive-days"; days: number | null }
   | { type: "archive-stale"; now: number }
@@ -141,6 +145,18 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
           : [...data.pinnedSites, { id: action.pinId, url: tab.url, title: tab.title, favicon: tab.favicon }],
       };
     }
+    case "remove-pin":
+      return { ...data, pinnedSites: data.pinnedSites.filter((site) => site.id !== action.id) };
+    case "add-pin": {
+      if (data.pinnedSites.some((site) => site.url === action.site.url)) return data;
+      const pinnedSites = [...data.pinnedSites];
+      pinnedSites.splice(action.index, 0, action.site);
+      return { ...data, pinnedSites };
+    }
+    case "remove-history":
+      return { ...data, history: data.history.filter((entry) => entry.url !== action.url) };
+    case "clear-history":
+      return data.history.length ? { ...data, history: [] } : data;
     case "search-engine":
       return action.id && action.id !== data.preferences.searchEngineId ? { ...data, preferences: { ...data.preferences, searchEngineId: action.id } } : data;
     case "archive-days":
