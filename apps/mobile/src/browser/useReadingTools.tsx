@@ -4,6 +4,7 @@ import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Surface } from "@/chrome/Surface";
+import { Toast } from "./Toast";
 import { INSPECT_SCRIPT, type InspectedElement } from "@/pagescripts/inspect";
 import { MARKDOWN_SCRIPT } from "@/pagescripts/markdown";
 import { PICK_PARENT_SCRIPT, START_PICKER_SCRIPT, STOP_PICKER_SCRIPT, type PickedElement } from "@/pagescripts/picker";
@@ -239,13 +240,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
             </View>
           </Surface>
         ) : null}
-        {notice ? (
-          <Surface radius={18} style={{ padding: 12 }}>
-            <Text accessibilityRole="alert" testID="reading-notice" className="text-foreground">
-              {notice}
-            </Text>
-          </Surface>
-        ) : null}
+        {notice ? <Toast key={notice} text={notice} testID="reading-notice" /> : null}
       </>
     ),
   };

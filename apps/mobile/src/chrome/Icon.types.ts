@@ -13,7 +13,26 @@ export type IconName =
   | "up"
   | "down"
   | "play"
-  | "pause";
+  | "pause"
+  | "back"
+  | "forward"
+  | "reload"
+  | "reader"
+  | "find"
+  | "inspect"
+  | "hide"
+  | "markdown"
+  | "share"
+  | "pin"
+  | "unpin"
+  | "link"
+  | "copy"
+  | "history"
+  | "delete"
+  | "newTab"
+  | "desktop"
+  | "offline"
+  | "error";
 
 export interface IconProps {
   name: IconName;

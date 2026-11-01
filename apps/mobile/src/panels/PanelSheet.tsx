@@ -1,8 +1,11 @@
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import { BottomSheet, Typography } from "heroui-native";
+import { BottomSheet, Typography, useThemeColor } from "heroui-native";
 import { useState, type JSX, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { Icon } from "@/chrome/Icon";
+import type { IconName } from "@/chrome/Icon.types";
 
 export interface PanelSheetProps {
   visible: boolean;
@@ -71,6 +74,7 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
 
 export function ActionRow({
   testID,
+  icon,
   label,
   detail,
   onPress,
@@ -79,6 +83,7 @@ export function ActionRow({
   destructive = false,
 }: {
   testID: string;
+  icon?: IconName;
   label: string;
   detail?: string;
   onPress: () => void;
@@ -86,6 +91,8 @@ export function ActionRow({
   selected?: boolean;
   destructive?: boolean;
 }): JSX.Element {
+  const muted = useThemeColor("muted");
+  const danger = useThemeColor("danger");
   return (
     <Pressable
       testID={testID}
@@ -97,6 +104,7 @@ export function ActionRow({
       className="min-h-12 flex-row items-center gap-3 border-b border-foreground/5 py-3"
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
+      {icon ? <Icon name={icon} color={destructive ? danger : muted} size={22} /> : null}
       <View className="flex-1">
         <Typography className={destructive ? "text-danger" : "text-foreground"} style={{ fontSize: 16, lineHeight: 22 }}>
           {label}

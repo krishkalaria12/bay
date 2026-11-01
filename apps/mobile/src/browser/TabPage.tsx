@@ -1,4 +1,4 @@
-import { runPageScript, EngineView, type LinkPress, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
+import { runPageScript, EngineView, type LinkPress, type NavigationError, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -18,7 +18,7 @@ export interface TabPageProps {
   suspended: boolean;
   register: (view: Tab | null) => void;
   onNavigation: (state: NavigationState) => void;
-  onError: (message: string) => void;
+  onError: (error: NavigationError) => void;
   onScroll: (scroll: PageScroll) => void;
   onLinkPress: (press: LinkPress) => void;
 }
@@ -83,7 +83,7 @@ export function TabPage({
           if (run.watchMedia) void runPageScript(view.current, WATCH_MEDIA_SCRIPT).catch(() => {});
         }}
         onPageMessage={({ nativeEvent }) => onPageMessage(nativeEvent.message)}
-        onNavigationError={({ nativeEvent }) => onError(nativeEvent.message)}
+        onNavigationError={({ nativeEvent }) => onError(nativeEvent)}
         onScroll={({ nativeEvent }) => onScroll(nativeEvent)}
         onLinkPress={({ nativeEvent }) => onLinkPress(nativeEvent)}
       />

@@ -1,9 +1,9 @@
-import { Button, Host, Image } from "@expo/ui/swift-ui";
-import { accessibilityLabel, buttonStyle, controlSize, frame, tint } from "@expo/ui/swift-ui/modifiers";
+import { Button, Host, Image, Text } from "@expo/ui/swift-ui";
+import { accessibilityLabel, buttonStyle, controlSize, font, frame, tint, truncationMode } from "@expo/ui/swift-ui/modifiers";
 import type { JSX } from "react";
 import { View } from "react-native";
 
-import { barButtons, type BrowserBarProps } from "./BrowserBar.types";
+import { barButtons, barSite, type BrowserBarProps } from "./BrowserBar.types";
 import { GlassIconButton } from "./GlassIconButton";
 import { useStableCallback } from "./useStableCallback";
 
@@ -13,6 +13,7 @@ const PRIVATE_TINT = "#18181B";
 // iOS: Liquid Glass buttons, a wide search capsule between two round ones.
 export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const [left, search, right] = barButtons(props);
+  const site = barSite(props);
   const onSearch = useStableCallback(search.onPress);
   const prominentTint = props.privately ? PRIVATE_TINT : undefined;
   return (
@@ -28,7 +29,12 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
               accessibilityLabel(search.label),
             ]}
           >
-            <Image systemName="magnifyingglass" modifiers={[frame({ width: 92 })]} />
+            {site ? (
+              // A fixed height keeps the host on one line, truncated.
+              <Text modifiers={[font({ size: 15, weight: "medium" }), truncationMode("tail"), frame({ width: 136, height: 20 })]}>{site}</Text>
+            ) : (
+              <Image systemName="magnifyingglass" modifiers={[frame({ width: 92 })]} />
+            )}
           </Button>
         </Host>
       </View>

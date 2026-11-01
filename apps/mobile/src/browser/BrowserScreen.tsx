@@ -11,7 +11,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "heroui-native";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
-import { Surface } from "@/chrome/Surface";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
@@ -25,6 +24,8 @@ import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
 import { sameNavigation } from "./navigationEvents";
 import { MiniPlayer } from "./MiniPlayer";
+import { PageError } from "./PageError";
+import { Toast, useToast } from "./Toast";
 import { DownloadToast, useDownloads } from "./useDownloads";
 import { useFindInPage } from "./useFindInPage";
 import { useReadingTools } from "./useReadingTools";
@@ -52,7 +53,9 @@ export function BrowserScreen(): JSX.Element {
   const [searchInNewTab, setSearchInNewTab] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [link, setLink] = useState<LinkPress | null>(null);
-  const [error, setError] = useState<{ tabId: string; message: string } | null>(null);
+  // A main-frame load failure, shown in place of that tab's page.
+  const [error, setError] = useState<{ tabId: string; url: string; message: string } | null>(null);
+  const toast = useToast();
   const [locked, setLocked] = useState(false);
   const barHidden = useSharedValue(0);
 
@@ -105,11 +108,10 @@ export function BrowserScreen(): JSX.Element {
     barHidden.value = withTiming(0);
   }, [mountedKey, barHidden]);
 
-  const fail = useCallback((tabId: string, cause: unknown) => {
-    setError({ tabId, message: cause instanceof Error ? cause.message : "Couldn't open this page." });
-  }, []);
+  const showToast = toast.show;
+  const fail = useCallback((_tabId: string, cause: unknown) => showToast(cause instanceof Error ? cause.message : "Something went wrong."), [showToast]);
 
-  const downloads = useDownloads((message) => setError({ tabId: active.id, message }));
+  const downloads = useDownloads((message) => toast.show(message));
   const find = useFindInPage(views.get(active.id), `${active.id} ${active.url}`);
   const reading = useReadingTools(active, views.get(active.id), page.isLoading, locked && Boolean(active.private), (cause) => fail(active.id, cause));
 
@@ -203,7 +205,16 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function copy(url: string): void {
-    void Clipboard.setStringAsync(cleanUrl(url));
+    // Android 13+ confirms copies itself with the system clipboard preview.
+    void Clipboard.setStringAsync(cleanUrl(url)).then(() => Platform.OS === "ios" && toast.show("Link copied"));
+  }
+
+  // Closing a tab archives it, so it can come straight back.
+  function archiveTab(id: string): void {
+    const tab = data.tabs.find((entry) => entry.id === id);
+    closeTab(id);
+    if (!tab?.url || tab.private) return;
+    toast.show("Tab archived", { label: "Undo", onPress: () => void restoreTab(id) });
   }
 
   const host = hostOf(active.url);
@@ -265,7 +276,7 @@ export function BrowserScreen(): JSX.Element {
   }));
 
   const player = media.player;
-  const tabError = error?.tabId === active.id ? error.message : null;
+  const tabError = error?.tabId === active.id ? error : null;
 
   return (
     <View className="flex-1 bg-background">
@@ -288,7 +299,7 @@ export function BrowserScreen(): JSX.Element {
                 }}
                 register={(view) => (view ? views.set(id, view) : views.delete(id))}
                 onNavigation={(state) => onNavigation(id, state)}
-                onError={(message) => setError({ tabId: id, message })}
+                onError={({ url, message }) => setError({ tabId: id, url: url || tab.url, message })}
                 onScroll={(scroll) => onScroll(id, scroll)}
                 onLinkPress={(press) => {
                   if (id === active.id) setLink(press);
@@ -296,6 +307,19 @@ export function BrowserScreen(): JSX.Element {
               />
             );
           })}
+        </View>
+      ) : null}
+
+      {tabError && hasPage && showPages ? (
+        <View style={[StyleSheet.absoluteFill, { top: insets.top }]}>
+          <PageError
+            url={tabError.url}
+            message={tabError.message}
+            onRetry={() => {
+              setError(null);
+              navigate(active.id, tabError.url);
+            }}
+          />
         </View>
       ) : null}
 
@@ -322,7 +346,7 @@ export function BrowserScreen(): JSX.Element {
 
       {overlay === "tabs" ? (
         <View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, paddingBottom: insets.bottom + BAR_HEIGHT + 16 }]}>
-          <TabSwitcher tabs={data.tabs} activeTabId={active.id} onSelect={activate} onClose={closeTab} privateLocked={locked} />
+          <TabSwitcher tabs={data.tabs} activeTabId={active.id} onSelect={activate} onClose={archiveTab} privateLocked={locked} />
         </View>
       ) : null}
 
@@ -365,16 +389,11 @@ export function BrowserScreen(): JSX.Element {
               }}
             />
           ) : null}
-          {tabError && showPages ? (
-            <Surface radius={18} style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-              <Text testID="navigation-error" accessibilityRole="alert" style={{ color: muted, fontSize: 14 }}>
-                {tabError}
-              </Text>
-            </Surface>
-          ) : null}
+          {toast.toast ? <Toast key={toast.toast.key} text={toast.toast.text} action={toast.toast.action} onDone={toast.dismiss} /> : null}
           {hasPage && showPages ? (
             <BrowserBar
               mode="page"
+              site={locked && active.private ? undefined : host}
               privately={Boolean(active.private)}
               onTabs={showTabs}
               onSearch={() => search(false)}
@@ -429,10 +448,14 @@ export function BrowserScreen(): JSX.Element {
         onForward={() => run((tab) => tab.goForward())}
         onReload={() => run((tab) => tab.reload())}
         onStop={() => run((tab) => tab.stop())}
-        onPin={() => dispatch({ type: "pin-site", tabId: active.id, pinId: newId() })}
+        onPin={() => {
+          const pinned = data.pinnedSites.some((site) => site.url === active.url);
+          dispatch({ type: "pin-site", tabId: active.id, pinId: newId() });
+          toast.show(pinned ? "Unpinned" : "Pinned");
+        }}
         onShare={() => void share(active.url)}
         onCopy={() => copy(active.url)}
-        onCloseTab={() => closeTab(active.id)}
+        onCloseTab={() => archiveTab(active.id)}
         onSettings={() => setPanel("settings")}
       />
       <ArchivePanel
