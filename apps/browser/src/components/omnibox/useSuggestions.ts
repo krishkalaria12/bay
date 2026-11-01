@@ -114,7 +114,7 @@ export function useSuggestions({
   scope,
   limit,
   remoteLimit,
-  remoteFirst,
+  pagesAhead,
 }: {
   text: string;
   active: boolean;
@@ -125,7 +125,7 @@ export function useSuggestions({
   scope: SearchScope | null;
   limit?: number;
   remoteLimit?: number;
-  remoteFirst?: boolean;
+  pagesAhead?: number;
 }): SuggestionResult {
   const allTabs = useBrowser((s) => s.tabs);
   const history = useBrowser((s) => s.history[spaceId] ?? NO_HISTORY);
@@ -201,7 +201,7 @@ export function useSuggestions({
     scope,
     limit,
     remoteLimit,
-    remoteFirst,
+    pagesAhead,
     currency,
     calculatorEnabled,
     bangs,
