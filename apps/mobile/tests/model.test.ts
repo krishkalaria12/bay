@@ -106,6 +106,7 @@ test("saved state is validated and repaired", () => {
     lockPrivateTabs: false,
     reader: { theme: "paper", font: "serif", size: 19 },
     hiddenElements: {},
+    wallpaper: "bay",
   });
   assert.throws(() => parseBrowserData({ version: 2 }, fallback));
 });
@@ -276,4 +277,45 @@ test("pins can be removed and put back in place; history entries can be removed 
   );
   data = reduceBrowserData(data, { type: "clear-history" });
   assert.equal(data.history.length, 0);
+});
+
+test("the archive keeps one entry per address, and entries can be removed or cleared", () => {
+  const tabs = [page("a", "https://a.com/"), page("b", "https://a.com/"), page("c", "https://c.com/"), page("d", "https://d.com/")];
+  let data = { ...initialBrowserData(tabs[0]), tabs, activeTabId: "d" };
+  data = reduceBrowserData(data, { type: "close-tab", id: "a", now: 1, fallback: createTab("blank", 1) });
+  data = reduceBrowserData(data, { type: "close-tab", id: "c", now: 2, fallback: createTab("blank", 2) });
+  data = reduceBrowserData(data, { type: "close-tab", id: "b", now: 3, fallback: createTab("blank", 3) });
+  assert.deepEqual(
+    data.archive.map((tab) => tab.id),
+    ["b", "c"],
+  );
+  data = reduceBrowserData(data, { type: "remove-archived", id: "c" });
+  assert.deepEqual(
+    data.archive.map((tab) => tab.id),
+    ["b"],
+  );
+  assert.equal(reduceBrowserData(data, { type: "clear-archive" }).archive.length, 0);
+
+  // Saved data from before the dedupe loads with the newest copy of each page.
+  const saved = {
+    version: 1,
+    ...data,
+    archive: [
+      { ...page("x", "https://x.com/"), closedAt: 1 },
+      { ...page("y", "https://x.com/"), closedAt: 9 },
+    ],
+  };
+  assert.deepEqual(
+    parseBrowserData(JSON.parse(JSON.stringify(saved)), data).archive.map((tab) => tab.id),
+    ["y"],
+  );
+});
+
+test("the wallpaper is one of Bay's built-ins", () => {
+  let data = initialBrowserData(page("a", "https://a.com/"));
+  assert.equal(data.preferences.wallpaper, "bay");
+  data = reduceBrowserData(data, { type: "wallpaper", id: "forest" });
+  assert.equal(data.preferences.wallpaper, "forest");
+  const saved = { version: 1, ...data, preferences: { ...data.preferences, wallpaper: "neon" } };
+  assert.equal(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).preferences.wallpaper, "bay");
 });

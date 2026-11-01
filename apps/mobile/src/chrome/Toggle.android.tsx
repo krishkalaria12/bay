@@ -16,8 +16,8 @@ export function Toggle({ value, disabled }: ToggleProps): JSX.Element {
   return (
     <View
       pointerEvents="none"
-      className={value ? "" : "bg-foreground/15"}
-      style={{ width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: value ? accent : undefined, opacity: disabled ? 0.4 : 1 }}
+      className="bg-foreground/20"
+      style={[{ width: 44, height: 26, borderRadius: 13, padding: 3, opacity: disabled ? 0.4 : 1 }, value && { backgroundColor: accent }]}
     >
       <Animated.View style={[{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#FFFFFF" }, thumb]} />
     </View>

@@ -1,8 +1,11 @@
 import { Typography } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 
-import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
+import { WALLPAPERS } from "@/store/model";
+import type { WallpaperId } from "@/store/types";
+import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 
 export interface SettingsPanelProps {
   visible: boolean;
@@ -20,6 +23,8 @@ export interface SettingsPanelProps {
   privateAvailable: boolean;
   lockPrivateTabs: boolean;
   onLockPrivateTabsChange: (enabled: boolean) => void;
+  wallpaper: WallpaperId;
+  onWallpaperChange: (id: WallpaperId) => void;
   onClearData: () => Promise<void>;
   downloadCount: number;
   onDownloads: () => void;
@@ -34,14 +39,17 @@ const archiveOptions = [
   { days: null, label: "Never" },
 ];
 
-// The sheet stays mounted and toggles open, like the other panels; each opening starts a fresh confirmation.
+type Page = "main" | "engine" | "archive" | "wallpaper";
+const titles: Record<Page, string> = { main: "Settings", engine: "Search engine", archive: "Archive inactive tabs", wallpaper: "Wallpaper" };
+
+const count = (n: number, one: string, many: string) => (n ? `${n} ${n === 1 ? one : many}` : undefined);
+
+// The sheet stays mounted and toggles open, like the other panels; each opening starts on the main page.
 export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
+  const [page, setPage] = useState<Page>("main");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The engine list stays folded so the rest of Settings fits without scrolling.
-  const [choosingEngine, setChoosingEngine] = useState(false);
-  const [choosingArchive, setChoosingArchive] = useState(false);
   const mounted = useRef(true);
   useEffect(
     () => () => {
@@ -51,9 +59,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   );
   useEffect(() => {
     if (!props.visible) return;
+    setPage("main");
     setConfirming(false);
-    setChoosingEngine(false);
-    setChoosingArchive(false);
     setError(null);
   }, [props.visible]);
 
@@ -74,127 +81,205 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     }
   }
 
+  const engineName = props.engines.find((engine) => engine.id === props.searchEngineId)?.name;
   return (
-    <PanelSheet visible={props.visible} onClose={props.onClose} title="Settings" testID="settings-screen" height="85%" dismissible={!busy}>
-      <SectionLabel>Search</SectionLabel>
-      <ActionRow
-        testID="settings-engine"
-        label="Search engine"
-        detail={props.engines.find((engine) => engine.id === props.searchEngineId)?.name}
-        disabled={busy}
-        onPress={() => setChoosingEngine((open) => !open)}
-      />
-      {choosingEngine
-        ? props.engines.map((engine) => (
+    <PanelSheet
+      visible={props.visible}
+      onClose={props.onClose}
+      onBack={page === "main" ? undefined : () => setPage("main")}
+      title={titles[page]}
+      testID="settings-screen"
+      height="85%"
+      dismissible={!busy}
+    >
+      {page === "engine" ? (
+        <Group>
+          {props.engines.map((engine) => (
             <ActionRow
               key={engine.id}
               testID={`settings-engine-${engine.id}`}
               label={engine.name}
               selected={engine.id === props.searchEngineId}
-              disabled={busy}
               onPress={() => {
                 props.onSearchEngineChange(engine.id);
-                setChoosingEngine(false);
-              }}
-            />
-          ))
-        : null}
-      <SectionLabel>Privacy</SectionLabel>
-      <ActionRow
-        testID="settings-block-content"
-        label="Block ads and trackers"
-        detail={props.blockerDetail}
-        selected={props.blockContent}
-        disabled={busy}
-        onPress={() => props.onBlockContentChange(!props.blockContent)}
-      />
-      {props.privateAvailable ? (
-        <ActionRow
-          testID="settings-lock-private"
-          label="Lock private tabs"
-          detail="Face ID, Touch ID or passcode"
-          selected={props.lockPrivateTabs}
-          disabled={busy}
-          onPress={() => props.onLockPrivateTabsChange(!props.lockPrivateTabs)}
-        />
-      ) : null}
-      <SectionLabel>Tabs</SectionLabel>
-      <ActionRow
-        testID="settings-archive"
-        label="Archive inactive tabs"
-        detail={archiveOptions.find((option) => option.days === props.archiveAfterDays)?.label}
-        disabled={busy}
-        onPress={() => setChoosingArchive((open) => !open)}
-      />
-      {choosingArchive ? (
-        <>
-          <Typography className="text-sm text-muted">Your current tab stays open. You can restore archived tabs at any time.</Typography>
-          {archiveOptions.map((option) => (
-            <ActionRow
-              key={option.days ?? "never"}
-              testID={`settings-archive-${option.days ?? "never"}`}
-              label={option.label}
-              selected={props.archiveAfterDays === option.days}
-              disabled={busy}
-              onPress={() => {
-                props.onArchiveAfterDaysChange(option.days);
-                setChoosingArchive(false);
+                setPage("main");
               }}
             />
           ))}
+        </Group>
+      ) : page === "archive" ? (
+        <>
+          <Typography className="px-1 text-sm text-muted">Your current tab stays open. You can restore archived tabs at any time.</Typography>
+          <Group>
+            {archiveOptions.map((option) => (
+              <ActionRow
+                key={option.days ?? "never"}
+                testID={`settings-archive-${option.days ?? "never"}`}
+                label={option.label}
+                selected={props.archiveAfterDays === option.days}
+                onPress={() => {
+                  props.onArchiveAfterDaysChange(option.days);
+                  setPage("main");
+                }}
+              />
+            ))}
+          </Group>
         </>
-      ) : null}
-      <SectionLabel>Browsing data</SectionLabel>
-      {confirming ? (
-        <View testID="clear-data-confirmation">
-          <ActionRow
-            testID="clear-data-confirm"
-            label={busy ? "Clearing data…" : "Clear all browsing data"}
-            detail="Tabs, archive, history, pins, cookies and website data. Settings stay."
-            destructive
-            disabled={busy}
-            onPress={() => {
-              void clearData();
-            }}
-          />
-          <ActionRow testID="clear-data-cancel" label="Keep browsing data" disabled={busy} onPress={() => setConfirming(false)} />
-        </View>
+      ) : page === "wallpaper" ? (
+        <WallpaperPicker value={props.wallpaper} onChange={props.onWallpaperChange} />
       ) : (
-        <ActionRow
-          testID="settings-clear-data"
-          label="Clear browsing data"
-          destructive
-          disabled={busy}
-          onPress={() => {
-            setConfirming(true);
-            setError(null);
-          }}
-        />
+        <>
+          <Group label="Search">
+            <ActionRow
+              testID="settings-engine"
+              icon="search"
+              label="Search engine"
+              value={engineName}
+              chevron
+              disabled={busy}
+              onPress={() => setPage("engine")}
+            />
+          </Group>
+          <Group label="Privacy">
+            <ActionRow
+              testID="settings-block-content"
+              icon="shield"
+              label="Block ads and trackers"
+              detail={props.blockerDetail}
+              toggle={props.blockContent}
+              disabled={busy}
+              onPress={() => props.onBlockContentChange(!props.blockContent)}
+            />
+            {props.privateAvailable ? (
+              <ActionRow
+                testID="settings-lock-private"
+                icon="lock"
+                label="Lock private tabs"
+                detail="Face ID, Touch ID or passcode"
+                toggle={props.lockPrivateTabs}
+                disabled={busy}
+                onPress={() => props.onLockPrivateTabsChange(!props.lockPrivateTabs)}
+              />
+            ) : null}
+          </Group>
+          <Group label="Appearance">
+            <ActionRow
+              testID="settings-wallpaper"
+              icon="wallpaper"
+              label="Wallpaper"
+              value={WALLPAPER_NAMES[props.wallpaper]}
+              chevron
+              disabled={busy}
+              onPress={() => setPage("wallpaper")}
+            />
+          </Group>
+          <Group label="Tabs">
+            <ActionRow
+              testID="settings-archive"
+              icon="archive"
+              label="Archive inactive tabs"
+              value={archiveOptions.find((option) => option.days === props.archiveAfterDays)?.label.replace("After ", "")}
+              chevron
+              disabled={busy}
+              onPress={() => setPage("archive")}
+            />
+          </Group>
+          <Group label="Your data">
+            <ActionRow
+              testID="settings-history"
+              icon="history"
+              label="History"
+              value={count(props.historyCount, "page", "pages")}
+              chevron
+              disabled={busy}
+              onPress={props.onHistory}
+            />
+            <ActionRow
+              testID="settings-downloads"
+              icon="download"
+              label="Downloads"
+              value={count(props.downloadCount, "file", "files")}
+              chevron
+              disabled={busy}
+              onPress={props.onDownloads}
+            />
+            {confirming ? (
+              <ActionRow
+                testID="clear-data-confirm"
+                icon="delete"
+                label={busy ? "Clearing data…" : "Clear all browsing data"}
+                detail="Tabs, archive, history, pins, cookies and website data. Settings stay."
+                destructive
+                disabled={busy}
+                onPress={() => {
+                  void clearData();
+                }}
+              />
+            ) : (
+              <ActionRow
+                testID="settings-clear-data"
+                icon="delete"
+                label="Clear browsing data"
+                destructive
+                disabled={busy}
+                onPress={() => {
+                  setConfirming(true);
+                  setError(null);
+                }}
+              />
+            )}
+            {confirming ? <ActionRow testID="clear-data-cancel" label="Keep browsing data" disabled={busy} onPress={() => setConfirming(false)} /> : null}
+          </Group>
+          {busy ? (
+            <Typography testID="clear-data-busy" className="mt-3 px-1 text-sm text-muted">
+              Clearing website data…
+            </Typography>
+          ) : null}
+          {error ? (
+            <Typography testID="clear-data-error" accessibilityRole="alert" className="mt-3 px-1 text-sm text-danger">
+              {error}
+            </Typography>
+          ) : null}
+        </>
       )}
-      <ActionRow
-        testID="settings-history"
-        label="History"
-        detail={props.historyCount ? `${props.historyCount} ${props.historyCount === 1 ? "page" : "pages"}` : undefined}
-        disabled={busy}
-        onPress={props.onHistory}
-      />
-      <ActionRow
-        testID="settings-downloads"
-        label="Downloads"
-        detail={props.downloadCount ? `${props.downloadCount} ${props.downloadCount === 1 ? "file" : "files"}` : undefined}
-        disabled={busy}
-        onPress={props.onDownloads}
-      />
-      {busy ? (
-        <Typography testID="clear-data-busy" className="mt-3 text-sm text-muted">
-          Clearing website data…
-        </Typography>
-      ) : null}
-      {error ? (
-        <Typography testID="clear-data-error" accessibilityRole="alert" className="mt-3 text-sm text-danger">
-          {error}
-        </Typography>
-      ) : null}
     </PanelSheet>
+  );
+}
+
+/** Three columns of start page previews. */
+function WallpaperPicker({ value, onChange }: { value: WallpaperId; onChange: (id: WallpaperId) => void }): JSX.Element {
+  return (
+    <View className="mt-1 flex-row flex-wrap justify-between" style={{ rowGap: 16 }}>
+      {WALLPAPERS.map((id) => {
+        const selected = id === value;
+        return (
+          <Pressable
+            key={id}
+            testID={`settings-wallpaper-${id}`}
+            accessibilityRole="radio"
+            accessibilityLabel={WALLPAPER_NAMES[id]}
+            accessibilityState={{ selected }}
+            onPress={() => onChange(id)}
+            className="items-center gap-2 active:opacity-70"
+            style={{ width: "31%" }}
+          >
+            <View
+              className={
+                selected ? "w-full overflow-hidden rounded-2xl border-2 border-accent" : "w-full overflow-hidden rounded-2xl border border-foreground/10"
+              }
+              style={{ aspectRatio: 0.62 }}
+            >
+              <Wallpaper id={id} scale={0.6} />
+              <View className="absolute bottom-2.5 left-0 right-0 flex-row justify-center gap-1">
+                <View className="h-3 w-3 rounded-full bg-foreground/15" />
+                <View className="h-3 w-8 rounded-full bg-foreground/15" />
+                <View className="h-3 w-3 rounded-full bg-foreground/15" />
+              </View>
+            </View>
+            <Typography className={selected ? "text-sm font-medium text-accent" : "text-sm"}>{WALLPAPER_NAMES[id]}</Typography>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }

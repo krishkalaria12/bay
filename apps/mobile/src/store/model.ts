@@ -1,4 +1,4 @@
-import type { ArchivedTab, BrowserData, BrowserPreferences, BrowserTab, DownloadItem, HistoryEntry, PinnedSite, TabUpdate } from "./types";
+import type { ArchivedTab, BrowserData, BrowserPreferences, BrowserTab, DownloadItem, HistoryEntry, PinnedSite, TabUpdate, WallpaperId } from "./types";
 import type { ReaderSettings } from "../pagescripts/reader.ts";
 
 export const DEFAULT_PREFERENCES: BrowserPreferences = {
@@ -9,7 +9,9 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   lockPrivateTabs: false,
   reader: { theme: "paper", font: "serif", size: 19 },
   hiddenElements: {},
+  wallpaper: "bay",
 };
+export const WALLPAPERS = ["bay", "dusk", "forest", "plain"] as const;
 const DAY = 24 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 1000;
 const ARCHIVE_LIMIT = 200;
@@ -63,6 +65,9 @@ export type BrowserAction =
   | { type: "add-pin"; site: PinnedSite; index: number }
   | { type: "remove-history"; url: string }
   | { type: "clear-history" }
+  | { type: "remove-archived"; id: string }
+  | { type: "clear-archive" }
+  | { type: "wallpaper"; id: WallpaperId }
   | { type: "search-engine"; id: string }
   | { type: "archive-days"; days: number | null }
   | { type: "archive-stale"; now: number }
@@ -117,10 +122,7 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         tabs,
         activeTabId: data.activeTabId === action.id ? tabs[Math.min(index, tabs.length - 1)].id : data.activeTabId,
         // Private tabs leave nothing behind.
-        archive:
-          tab.url && !tab.private
-            ? [{ ...tab, closedAt: action.now }, ...data.archive.filter((entry) => entry.id !== tab.id)].slice(0, ARCHIVE_LIMIT)
-            : data.archive,
+        archive: tab.url && !tab.private ? archiveTabs(data.archive, [tab], action.now) : data.archive,
       };
     }
     case "restore-tab": {
@@ -155,6 +157,14 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
     case "remove-history":
       return { ...data, history: data.history.filter((entry) => entry.url !== action.url) };
+    case "remove-archived":
+      return data.archive.some((tab) => tab.id === action.id) ? { ...data, archive: data.archive.filter((tab) => tab.id !== action.id) } : data;
+    case "clear-archive":
+      return data.archive.length ? { ...data, archive: [] } : data;
+    case "wallpaper":
+      return WALLPAPERS.includes(action.id) && action.id !== data.preferences.wallpaper
+        ? { ...data, preferences: { ...data.preferences, wallpaper: action.id } }
+        : data;
     case "clear-history":
       return data.history.length ? { ...data, history: [] } : data;
     case "search-engine":
@@ -248,7 +258,7 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return {
         ...data,
         tabs: data.tabs.filter((tab) => !ids.has(tab.id)),
-        archive: [...stale.map((tab) => ({ ...tab, closedAt: action.now })), ...data.archive.filter((tab) => !ids.has(tab.id))].slice(0, ARCHIVE_LIMIT),
+        archive: archiveTabs(data.archive, stale, action.now),
       };
     }
   }
@@ -339,6 +349,16 @@ function parseTab(value: unknown): BrowserTab | null {
   };
 }
 
+/** Newest first, one entry per address: archiving a page again replaces its older copy. */
+function archiveTabs(archive: ArchivedTab[], tabs: BrowserTab[], now: number): ArchivedTab[] {
+  const urls = new Set(tabs.map((tab) => tab.url));
+  const ids = new Set(tabs.map((tab) => tab.id));
+  return [
+    ...uniqueBy(tabs, (tab) => tab.url).map((tab) => ({ ...tab, closedAt: now })),
+    ...archive.filter((entry) => !urls.has(entry.url) && !ids.has(entry.id)),
+  ].slice(0, ARCHIVE_LIMIT);
+}
+
 function uniqueBy<T>(entries: T[], key: (entry: T) => string): T[] {
   const seen = new Set<string>();
   return entries.filter((entry) => {
@@ -421,6 +441,7 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
     lockPrivateTabs: savedPreferences.lockPrivateTabs === true,
     reader: parseReaderSettings(savedPreferences.reader),
     hiddenElements: parseHiddenElements(savedPreferences.hiddenElements),
+    wallpaper: WALLPAPERS.includes(savedPreferences.wallpaper as WallpaperId) ? (savedPreferences.wallpaper as WallpaperId) : DEFAULT_PREFERENCES.wallpaper,
   };
   return {
     tabs: tabs.length ? tabs : fallback.tabs,
@@ -429,9 +450,13 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
       .sort((a, b) => b.lastVisit - a.lastVisit)
       .slice(0, HISTORY_LIMIT),
     pinnedSites: uniqueBy(pinnedSites, (entry) => entry.url),
-    archive: uniqueBy(archive, (entry) => entry.id)
-      .sort((a, b) => b.closedAt - a.closedAt)
-      .slice(0, ARCHIVE_LIMIT),
+    archive: uniqueBy(
+      uniqueBy(
+        archive.sort((a, b) => b.closedAt - a.closedAt),
+        (entry) => entry.url,
+      ),
+      (entry) => entry.id,
+    ).slice(0, ARCHIVE_LIMIT),
     downloads: uniqueBy(downloads, (entry) => entry.id)
       .sort((a, b) => b.startedAt - a.startedAt)
       .slice(0, DOWNLOAD_LIMIT),

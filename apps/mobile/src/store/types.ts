@@ -60,7 +60,11 @@ export interface BrowserPreferences {
   reader: ReaderSettings;
   /** Element selectors hidden on each host. Private edits stay in memory outside this document. */
   hiddenElements: Record<string, string[]>;
+  /** The start page's wallpaper; each follows light and dark mode. */
+  wallpaper: WallpaperId;
 }
+
+export type WallpaperId = "bay" | "dusk" | "forest" | "plain";
 
 export interface BrowserData {
   tabs: BrowserTab[];

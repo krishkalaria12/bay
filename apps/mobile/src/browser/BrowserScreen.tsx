@@ -325,7 +325,7 @@ export function BrowserScreen(): JSX.Element {
 
   return (
     <View className="flex-1 bg-background">
-      <Wallpaper />
+      <Wallpaper id={data.preferences.wallpaper} />
       {ready ? (
         <View style={[StyleSheet.absoluteFill, { top: insets.top }]} pointerEvents="box-none">
           {mounted.map((id) => {
@@ -557,6 +557,8 @@ export function BrowserScreen(): JSX.Element {
         privateAvailable={privateBrowsingSupported}
         lockPrivateTabs={lockPrivateTabs}
         onLockPrivateTabsChange={(enabled) => void setLockPrivateTabs(enabled)}
+        wallpaper={data.preferences.wallpaper}
+        onWallpaperChange={(id) => dispatch({ type: "wallpaper", id })}
         onClearData={wipe}
         downloadCount={downloads.downloads.length}
         onDownloads={() => setPanel("downloads")}
