@@ -436,6 +436,24 @@ mod tests {
     }
 
     #[test]
+    fn typed_rules_match_the_request_types_android_sends() {
+        let blocker = Blocker::new(
+            "||cdn.example/gtag/js$script\n||ads.example^$subdocument\n||api.example/track$xmlhttprequest\n",
+        );
+        let site = "https://site.example/";
+        let check = |url: &str, kind: &str| blocker.should_block(url, site, kind);
+        assert!(check("https://cdn.example/gtag/js?id=G-1", "script"));
+        assert!(!check("https://cdn.example/gtag/js?id=G-1", "other"));
+        assert!(check("https://ads.example/frame.html", "subdocument"));
+        assert!(!check("https://ads.example/frame.html", "image"));
+        assert!(check("https://api.example/track", "xmlhttprequest"));
+        assert!(!check("https://api.example/track", "other"));
+        for kind in ["stylesheet", "image", "font", "media", "document", "object"] {
+            assert!(!check("https://cdn.example/gtag/js?id=G-1", kind), "{kind}");
+        }
+    }
+
+    #[test]
     fn redirects_runs_scriptlets_and_trusts_only_ublock_lists() {
         let resources = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),

@@ -115,17 +115,41 @@ internal object BayContentBlocker {
   private val mediaPath = Regex("\\.(mp4|webm|m3u8|mp3|m4a)$")
 
   private fun resourceType(request: WebResourceRequest): String {
-    val accept = request.requestHeaders["Accept"].orEmpty()
-    val path = request.url.path.orEmpty().lowercase()
-    return when {
-      accept.startsWith("text/css") || path.endsWith(".css") -> "stylesheet"
-      accept.startsWith("image/") || imagePath.containsMatchIn(path) -> "image"
-      path.endsWith(".js") || path.endsWith(".mjs") -> "script"
-      fontPath.containsMatchIn(path) -> "font"
-      mediaPath.containsMatchIn(path) -> "media"
-      else -> "other"
-    }
+    val headers = request.requestHeaders
+    fun header(name: String) = headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+    return requestType(header("Sec-Fetch-Dest"), header("X-Requested-With"), header("Accept").orEmpty(),
+      request.url.path.orEmpty().lowercase())
   }
+
+  /**
+   * adblock-rust's request type (the names `Request::new` accepts) for a subresource, so `$script`, `$xmlhttprequest`,
+   * `$subdocument` rules and `$redirect` stand-ins apply. `Sec-Fetch-Dest` is exact when WebView passes it; without
+   * it, a page's own `X-Requested-With: XMLHttpRequest`, then the `Accept` header Chromium sets per destination (often
+   * missing on WebView), then the file extension. Anything else is "other", which only untyped rules match.
+   */
+  internal fun requestType(fetchDest: String?, requestedWith: String?, accept: String, path: String): String =
+    when (fetchDest?.lowercase()) {
+      "script", "worker", "sharedworker", "serviceworker", "audioworklet", "paintworklet" -> "script"
+      "style" -> "stylesheet"
+      "image" -> "image"
+      "font" -> "font"
+      "audio", "video", "track" -> "media"
+      "iframe", "frame" -> "subdocument"
+      "empty" -> "xmlhttprequest"
+      "document" -> "document"
+      "object", "embed" -> "object"
+      else -> when {
+        requestedWith.equals("XMLHttpRequest", ignoreCase = true) -> "xmlhttprequest"
+        // Only navigations ask for HTML first, and main-frame ones never get here: this is a frame.
+        accept.startsWith("text/html") -> "subdocument"
+        accept.startsWith("text/css") || path.endsWith(".css") -> "stylesheet"
+        accept.startsWith("image/") || imagePath.containsMatchIn(path) -> "image"
+        path.endsWith(".js") || path.endsWith(".mjs") -> "script"
+        fontPath.containsMatchIn(path) -> "font"
+        mediaPath.containsMatchIn(path) -> "media"
+        else -> "other"
+      }
+    }
 
   /** CSS hiding the page's ad slots: its site rules, plus generic rules for the classes and ids it uses. */
   fun cosmeticCss(pageUrl: String, classesJson: String, idsJson: String): String {
