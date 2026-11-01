@@ -4,7 +4,7 @@ import { StyleSheet, View } from "react-native";
 
 import { WATCH_MEDIA_SCRIPT } from "@/pagescripts/media";
 import { hideElementsScript } from "@/pagescripts/picker";
-import { initialTiming, scriptsFor, shouldHide } from "./pageScriptTiming";
+import { initialTiming, scriptsFor, shouldHide } from "./navigationEvents";
 
 import type { BrowserTab } from "@/store/types";
 

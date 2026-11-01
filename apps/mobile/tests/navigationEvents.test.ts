@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { initialTiming, scriptsFor, shouldHide } from "../src/browser/pageScriptTiming.ts";
+import { initialTiming, sameNavigation, scriptsFor, shouldHide } from "../src/browser/navigationEvents.ts";
 
 const A = "https://a.example/";
 const B = "https://b.example/";
@@ -51,4 +51,14 @@ test("removing every rule clears them once", () => {
   // A finished load after rules went away clears what an earlier document may still show.
   shouldHide(timing, true);
   assert.deepEqual(run([ev(B, 0.5, true), ev(B, 1, false), ev(B, 0.5, true), ev(B, 1, false)], false, timing), ["m", "mh", "m", "m"]);
+});
+
+test("only changes the screen shows count as a new navigation state", () => {
+  const before = { url: A, title: "A", progress: 0.3, isLoading: true, canGoBack: false, canGoForward: false };
+  assert.equal(sameNavigation(before, { ...before }, false), true);
+  assert.equal(sameNavigation(before, { ...before, progress: 0.6 }, false), false);
+  assert.equal(sameNavigation(before, { ...before, progress: 0.6 }, true), true);
+  for (const change of [{ url: B }, { title: "B" }, { isLoading: false }, { canGoBack: true }, { canGoForward: true }]) {
+    assert.equal(sameNavigation(before, { ...before, ...change }, true), false);
+  }
 });

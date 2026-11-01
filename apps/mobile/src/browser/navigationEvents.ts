@@ -1,5 +1,5 @@
-// Engines report navigation state dozens of times per load (progress, title, history), for hidden tabs too. Page
-// scripts only need to run when a document appears, so this decides which events run them.
+// Engines report navigation state dozens of times per load (progress, title, history), for hidden tabs too. These
+// decide which reports run page scripts (only a new document needs them) and which are worth a render.
 
 export interface ScriptTiming {
   /** The last event was loading. Starts true so the first settled event counts as a finished load. */
@@ -43,4 +43,25 @@ export function shouldHide(timing: ScriptTiming, hasRules: boolean): boolean {
   const run = hasRules || timing.hidden;
   if (run) timing.hidden = hasRules;
   return run;
+}
+
+interface Navigation {
+  url: string;
+  title: string;
+  progress: number;
+  isLoading: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+/** Whether a report changes nothing the screen shows. Only the active tab's progress is drawn. */
+export function sameNavigation(before: Navigation, after: Navigation, ignoreProgress: boolean): boolean {
+  return (
+    before.url === after.url &&
+    before.title === after.title &&
+    before.isLoading === after.isLoading &&
+    before.canGoBack === after.canGoBack &&
+    before.canGoForward === after.canGoForward &&
+    (ignoreProgress || before.progress === after.progress)
+  );
 }
