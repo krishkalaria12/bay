@@ -32,12 +32,14 @@ for devices in json.load(sys.stdin)["devices"].values():
 # Starts the emulator if none is running, waits for boot, forwards Metro's port, and prints its serial.
 boot_android() {
   if ! "$adb" devices | grep -q '^emulator-'; then
-    "$ANDROID_HOME/emulator/emulator" -avd "$android_avd" -no-audio >/dev/null 2>&1 &
+    # With audio, so pages' media can play (with -no-audio it never starts); the media stream is muted below.
+    "$ANDROID_HOME/emulator/emulator" -avd "$android_avd" >/dev/null 2>&1 &
   fi
   "$adb" wait-for-device
   until [[ $("$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') == 1 ]]; do sleep 2; done
   # A cold boot can leave a "System UI isn't responding" dialog over the app; close system dialogs.
   "$adb" shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+  "$adb" shell cmd audio set-volume 3 0 >/dev/null 2>&1 || true
   "$adb" reverse tcp:8081 tcp:8081 >/dev/null
   "$adb" devices | awk '/^emulator-/ { print $1; exit }'
 }
