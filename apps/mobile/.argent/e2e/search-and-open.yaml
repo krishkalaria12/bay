@@ -33,16 +33,19 @@ steps:
   - tap: { id: bar-more }
   - await: { text: { in: { id: page-menu-url }, contains: "google.com/search?q=bay" }, timeout: 30000 }
 
-  # Back, forward and reload from the page menu.
+  # Back, forward and reload from the page menu, once its sheet has finished sliding up.
+  - await: { idle: true, timeout: 15000 }
   - tap: { id: page-back }
   - await: { hidden: { id: page-menu-url }, timeout: 10000 }
   - await: { idle: true, timeout: 20000 }
   - tap: { id: bar-more }
   - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/" }, timeout: 20000 }
+  - await: { idle: true, timeout: 15000 }
   - tap: { id: page-forward }
   - await: { idle: true, timeout: 20000 }
   - tap: { id: bar-more }
   - await: { text: { in: { id: page-menu-url }, contains: "google.com/search?q=bay" }, timeout: 20000 }
   - await: { visible: { id: page-reload }, timeout: 20000 }
+  - await: { idle: true, timeout: 15000 }
   - tap: { id: page-reload }
   - await: { idle: true, timeout: 20000 }
