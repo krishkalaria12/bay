@@ -218,6 +218,9 @@ test("downloads track an engine's updates and survive a restart as finished or f
   data = reduceBrowserData(data, { type: "download", update: update("progress", { received: 10, total: 100 }), now: 2 });
   assert.equal(data.downloads[0]?.state, "downloading");
   assert.equal(data.downloads[0]?.startedAt, 1);
+  // An unchanged update keeps the same data, so nothing re-renders.
+  assert.equal(reduceBrowserData(data, { type: "download", update: update("progress", { received: 10, total: 100 }), now: 3 }), data);
+  assert.notEqual(reduceBrowserData(data, { type: "download", update: update("progress", { received: 20, total: 100 }), now: 3 }), data);
 
   // Restarting Bay while it's still running can't resume it.
   const restored = parseBrowserData({ version: 1, ...JSON.parse(JSON.stringify(persistedBrowserData(data))) }, data);

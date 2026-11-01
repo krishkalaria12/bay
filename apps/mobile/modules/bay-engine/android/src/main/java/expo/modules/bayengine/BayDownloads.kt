@@ -7,23 +7,27 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import android.webkit.URLUtil
 import expo.modules.kotlin.Promise
 
 /**
  * Page downloads through the system's DownloadManager, into the public Downloads folder with the system's
  * notification. The page's cookies and user agent go with the request, so signed-in downloads work. Progress is polled
- * while anything is downloading and goes to JavaScript as the module's `onDownload` event.
+ * on a background thread while anything is downloading (the query is a cross-process SQLite read) and goes to
+ * JavaScript as the module's `onDownload` event, only when a download's status or byte counts change.
  */
 object BayDownloads {
   /** Set by the module: sends an `onDownload` event. */
   var emit: ((Map<String, Any>) -> Unit)? = null
 
   private const val POLL_MS = 500L
-  private val handler = Handler(Looper.getMainLooper())
+  // Everything below the handler is touched only on its thread.
+  private val handler by lazy { Handler(HandlerThread("bay-downloads").apply { start() }.looper) }
   private val active = mutableMapOf<Long, String>()
   private val privateIds = mutableSetOf<Long>()
+  /** The status, bytes so far and total last sent for each download, so unchanged polls send nothing. */
+  private val lastSent = mutableMapOf<Long, Triple<Int, Long, Long>>()
   private var appContext: Context? = null
   private var polling = false
 
@@ -51,14 +55,23 @@ object BayDownloads {
         "received" to 0.0, "total" to 0.0, "private" to isPrivate, "error" to (error.message ?: "The download couldn't start.")))
       return
     }
-    appContext = context.applicationContext
-    active[id] = url
-    if (isPrivate) privateIds += id
     emit?.invoke(mapOf("id" to id.toString(), "url" to url, "filename" to filename, "state" to "started", "received" to 0.0, "total" to 0.0, "private" to isPrivate))
-    if (!polling) {
-      polling = true
-      handler.postDelayed(::poll, POLL_MS)
+    val applicationContext = context.applicationContext
+    handler.post {
+      appContext = applicationContext
+      active[id] = url
+      if (isPrivate) privateIds += id
+      if (!polling) {
+        polling = true
+        handler.postDelayed(::poll, POLL_MS)
+      }
     }
+  }
+
+  private fun forget(id: Long) {
+    active.remove(id)
+    privateIds.remove(id)
+    lastSent.remove(id)
   }
 
   private fun poll() {
@@ -74,8 +87,13 @@ object BayDownloads {
         val id = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_ID))
         seen += id
         val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-        val received = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)).toDouble()
-        val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)).coerceAtLeast(0).toDouble()
+        val receivedBytes = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+        val totalBytes = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)).coerceAtLeast(0)
+        val snapshot = Triple(status, receivedBytes, totalBytes)
+        if (lastSent[id] == snapshot) continue
+        lastSent[id] = snapshot
+        val received = receivedBytes.toDouble()
+        val total = totalBytes.toDouble()
         val filename = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE)) ?: "download"
         val state = when (status) {
           DownloadManager.STATUS_SUCCESSFUL -> "finished"
@@ -87,17 +105,13 @@ object BayDownloads {
         if (state == "finished") manager.getUriForDownloadedFile(id)?.let { body["path"] = it.toString() }
         if (state == "failed") body["error"] = "The download failed."
         emit?.invoke(body)
-        if (state != "progress") {
-          active.remove(id)
-          privateIds.remove(id)
-        }
+        if (state != "progress") forget(id)
       }
       // Removed from the system's list (the user cancelled it from the notification).
       (active.keys - seen).forEach { id ->
         emit?.invoke(mapOf("id" to id.toString(), "url" to (active[id] ?: ""), "filename" to "download", "state" to "cancelled",
           "received" to 0.0, "total" to 0.0, "private" to (id in privateIds)))
-        active.remove(id)
-        privateIds.remove(id)
+        forget(id)
       }
     }
     handler.postDelayed(::poll, POLL_MS)

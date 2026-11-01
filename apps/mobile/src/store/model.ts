@@ -196,6 +196,19 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         startedAt: previous?.startedAt ?? action.now,
         ...(update.private ? { private: true } : {}),
       };
+      // Engines repeat unchanged progress; keep the same data so nothing re-renders.
+      if (
+        previous &&
+        item.state === previous.state &&
+        item.received === previous.received &&
+        item.total === previous.total &&
+        item.path === previous.path &&
+        item.filename === previous.filename &&
+        item.url === previous.url &&
+        item.error === previous.error &&
+        item.private === previous.private
+      )
+        return data;
       return {
         ...data,
         downloads: (previous ? data.downloads.map((entry) => (entry.id === update.id ? item : entry)) : [item, ...data.downloads]).slice(0, DOWNLOAD_LIMIT),
