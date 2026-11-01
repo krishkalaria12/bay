@@ -21,10 +21,12 @@ fn strings(json: &str) -> Vec<String> {
     serde_json::from_str(json).unwrap_or_default()
 }
 
+/// None for handle 0 (blocking off), so a call racing a toggle answers harmlessly instead of crashing.
+///
 /// # Safety
-/// `handle` must come from `nativeNew` and not have been freed.
-unsafe fn blocker<'a>(handle: jlong) -> &'a Blocker {
-    &*(handle as *const Blocker)
+/// `handle` must be 0 or come from `nativeLoad` and not have been freed.
+unsafe fn blocker<'a>(handle: jlong) -> Option<&'a Blocker> {
+    (handle as *const Blocker).as_ref()
 }
 
 /// The cached engine for `version`, or one built from the list files (then cached); 0 if the files can't be read.
@@ -78,7 +80,10 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCosme
     url: JString,
 ) -> jstring {
     let url = text(&mut env, &url);
-    let json = serde_json::to_string(&blocker(handle).cosmetic_resources(&url)).unwrap_or_default();
+    let json = blocker(handle).map_or_else(
+        || "{}".to_owned(),
+        |b| serde_json::to_string(&b.cosmetic_resources(&url)).unwrap_or_default(),
+    );
     give(&mut env, &json)
 }
 
@@ -96,8 +101,9 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeHidde
         text(&mut env, &ids),
         text(&mut env, &exceptions),
     );
-    let selectors =
-        blocker(handle).hidden_selectors(&strings(&classes), &strings(&ids), &strings(&exceptions));
+    let selectors = blocker(handle).map_or_else(Vec::new, |b| {
+        b.hidden_selectors(&strings(&classes), &strings(&ids), &strings(&exceptions))
+    });
     give(
         &mut env,
         &serde_json::to_string(&selectors).unwrap_or_default(),
@@ -143,11 +149,12 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCheck
         text(&mut env, &source),
         text(&mut env, &kind),
     );
-    let answer = match blocker(handle).check(&url, &source, &kind) {
-        crate::Check::Allow => String::new(),
-        crate::Check::Block => "block".to_owned(),
-        crate::Check::Redirect(data_url) => data_url,
-    };
+    let answer =
+        match blocker(handle).map_or(crate::Check::Allow, |b| b.check(&url, &source, &kind)) {
+            crate::Check::Allow => String::new(),
+            crate::Check::Block => "block".to_owned(),
+            crate::Check::Redirect(data_url) => data_url,
+        };
     give(&mut env, &answer)
 }
 
@@ -160,6 +167,6 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeScrip
     url: JString,
 ) -> jstring {
     let url = text(&mut env, &url);
-    let script = blocker(handle).scriptlets(&url);
+    let script = blocker(handle).map_or_else(String::new, |b| b.scriptlets(&url));
     give(&mut env, &script)
 }

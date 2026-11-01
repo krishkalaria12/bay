@@ -62,10 +62,15 @@ internal object BayContentBlocker {
     pausedHosts = hosts.map { it.lowercase() }.toSet()
   }
 
-  private fun isActive(pageUrl: String?): Boolean {
-    if (handle == 0L) return false
-    val host = pageUrl?.let { Uri.parse(it).host?.lowercase() } ?: return true
-    return pausedHosts.none { host == it || host.endsWith(".$it") }
+  /**
+   * The engine to ask about `pageUrl`, or 0 when blocking is off or paused there. Callers read `handle` only through
+   * this, once per call: turning blocking off sets it to 0 from the main thread while network threads are mid-check.
+   */
+  private fun engineFor(pageUrl: String?): Long {
+    val engine = handle
+    if (engine == 0L) return 0L
+    val host = pageUrl?.let { Uri.parse(it).host?.lowercase() } ?: return engine
+    return if (pausedHosts.none { host == it || host.endsWith(".$it") }) engine else 0L
   }
 
   /** The scriptlet and redirect resources ship in the app's assets; the engine reads them from a file. */
@@ -77,10 +82,12 @@ internal object BayContentBlocker {
 
   /** For a blocked subresource, an empty response or a harmless stand-in (`$redirect`); null to let it load. */
   fun intercept(request: WebResourceRequest, pageUrl: String?): WebResourceResponse? {
-    if (request.isForMainFrame || !isActive(pageUrl)) return null
+    if (request.isForMainFrame) return null
+    val engine = engineFor(pageUrl)
+    if (engine == 0L) return null
     val url = request.url.toString()
     if (!url.startsWith("http")) return null
-    val answer = BayAdblock.nativeCheck(handle, url, pageUrl ?: url, resourceType(request))
+    val answer = BayAdblock.nativeCheck(engine, url, pageUrl ?: url, resourceType(request))
     return when {
       answer.isEmpty() -> null
       answer.startsWith("data:") -> standIn(answer)
@@ -98,7 +105,10 @@ internal object BayContentBlocker {
   }
 
   /** The page's scriptlets (`##+js`), or "" when it has none or blocking is off for it. */
-  fun scriptlets(pageUrl: String): String = if (isActive(pageUrl)) BayAdblock.nativeScriptlets(handle, pageUrl) else ""
+  fun scriptlets(pageUrl: String): String {
+    val engine = engineFor(pageUrl)
+    return if (engine != 0L) BayAdblock.nativeScriptlets(engine, pageUrl) else ""
+  }
 
   private val imagePath = Regex("\\.(png|jpe?g|gif|webp|svg|ico|avif)$")
   private val fontPath = Regex("\\.(woff2?|ttf|otf)$")
@@ -119,8 +129,8 @@ internal object BayContentBlocker {
 
   /** CSS hiding the page's ad slots: its site rules, plus generic rules for the classes and ids it uses. */
   fun cosmeticCss(pageUrl: String, classesJson: String, idsJson: String): String {
-    if (!isActive(pageUrl)) return ""
-    val engine = handle
+    val engine = engineFor(pageUrl)
+    if (engine == 0L) return ""
     val resources = JSONObject(BayAdblock.nativeCosmetic(engine, pageUrl))
     val selectors = mutableListOf<String>()
     resources.optJSONArray("hide")?.let { hide -> for (i in 0 until hide.length()) selectors += hide.getString(i) }
