@@ -126,6 +126,18 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     settings.allowContentAccess = false
     settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
     overScrollMode = OVER_SCROLL_NEVER
+    setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+      // A private page's cookies are in its own profile.
+      val cookies = if (usesPrivateProfile) {
+        ProfileStore.getInstance().getProfile(PRIVATE_PROFILE)?.cookieManager?.getCookie(url)
+      } else {
+        CookieManager.getInstance().getCookie(url)
+      }
+      BayDownloads.start(context, url, userAgent, contentDisposition, mimeType, cookies, usesPrivateProfile)
+      // The navigation became a download and never finishes, so the page stops loading here.
+      loading = false
+      emitState()
+    }
     setOnTouchListener { _, event ->
       if (event.actionMasked == MotionEvent.ACTION_DOWN) {
         lastTouchX = event.x

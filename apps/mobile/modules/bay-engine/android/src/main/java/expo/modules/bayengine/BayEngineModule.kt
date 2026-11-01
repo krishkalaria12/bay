@@ -13,6 +13,28 @@ class BayEngineModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("BayEngine")
 
+    Events("onDownload", "onMediaControl")
+
+    OnCreate {
+      BayDownloads.emit = { body -> sendEvent("onDownload", body) }
+      BayMedia.emit = { action -> sendEvent("onMediaControl", mapOf("action" to action)) }
+    }
+
+    OnDestroy { BayMedia.clear() }
+
+    AsyncFunction("setMediaSession") { title: String?, site: String, playing: Boolean ->
+      val context = appContext.reactContext ?: return@AsyncFunction
+      if (title == null) BayMedia.clear() else BayMedia.update(context, title, site, playing)
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("openDownload") { id: String, promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
+      else BayDownloads.open(context, id, promise)
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("cancelDownload") { id: String -> appContext.reactContext?.let { BayDownloads.cancel(it, id) } }
+
     AsyncFunction("clearData") { promise: Promise ->
       val context = appContext.reactContext
       if (context == null) {

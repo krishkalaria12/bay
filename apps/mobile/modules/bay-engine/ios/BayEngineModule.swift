@@ -1,9 +1,26 @@
+import AVFoundation
 import ExpoModulesCore
 import WebKit
 
 public class BayEngineModule: Module {
   public func definition() -> ModuleDefinition {
     Name("BayEngine")
+
+    Events("onDownload", "onMediaControl")
+
+    OnCreate { [weak self] in
+      // Pages' audio keeps playing with the silent switch on and while Bay is in the background, as in Safari.
+      try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+      BayDownloads.shared.emit = { body in self?.sendEvent("onDownload", body) }
+    }
+
+    AsyncFunction("openDownload") { (path: String, promise: Promise) in
+      BayDownloads.shared.open(path, promise: promise)
+    }.runOnQueue(.main)
+
+    AsyncFunction("cancelDownload") { (id: String) in
+      BayDownloads.shared.cancel(id)
+    }.runOnQueue(.main)
 
     AsyncFunction("clearData") { (promise: Promise) in
       WKWebsiteDataStore.default().removeData(

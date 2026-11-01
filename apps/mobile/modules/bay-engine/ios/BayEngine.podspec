@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.source = { :git => s.homepage }
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
-  s.frameworks = 'WebKit'
+  s.frameworks = 'WebKit', 'QuickLook'
   s.source_files = '*.swift'
   # Built by scripts/adblock from packages/adblock.
   s.vendored_frameworks = 'BayAdblock.xcframework'

@@ -55,6 +55,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   private static func makeWebView(isPrivate: Bool) -> WKWebView {
     let configuration = WKWebViewConfiguration()
     if isPrivate { configuration.websiteDataStore = BayPrivateBrowsing.dataStore() }
+    // Video plays in the page when it asks to (playsinline), as in Safari.
+    configuration.allowsInlineMediaPlayback = true
     configuration.userContentController.addUserScript(linkStyle)
     return WKWebView(frame: .zero, configuration: configuration)
   }
@@ -271,6 +273,10 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
       decisionHandler(.cancel)
       return
     }
+    if navigationAction.shouldPerformDownload {
+      decisionHandler(.download)
+      return
+    }
     if navigationAction.targetFrame?.isMainFrame == true {
       if (navigationAction.request.httpMethod ?? "GET") == "GET", let replacement = BayTracking.clean(url) ?? httpsUpgrade(url) {
         decisionHandler(.cancel)
@@ -281,6 +287,22 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
       applyScriptlets(for: url)
     }
     decisionHandler(.allow)
+  }
+
+  /// Attachments and types WebKit can't show become downloads.
+  func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+               decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+    let disposition = (navigationResponse.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
+    let attachment = disposition.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("attachment")
+    decisionHandler(attachment || !navigationResponse.canShowMIMEType ? .download : .allow)
+  }
+
+  func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+    BayDownloads.shared.track(download, url: navigationAction.request.url, isPrivate: isPrivate)
+  }
+
+  func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+    BayDownloads.shared.track(download, url: navigationResponse.response.url, isPrivate: isPrivate)
   }
 
   private func httpsUpgrade(_ url: URL) -> URL? {
@@ -363,6 +385,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     refreshControl.endRefreshing()
     let nativeError = error as NSError
     guard nativeError.code != NSURLErrorCancelled else { return }
+    // 102: the response became a download. 204: a media file is playing in its own document. Neither is a failure.
+    if nativeError.domain == "WebKitErrorDomain" && [102, 204].contains(nativeError.code) { return }
     onNavigationError([
       "url": nativeError.userInfo[NSURLErrorFailingURLStringErrorKey] as? String ?? webView.url?.absoluteString ?? "",
       "code": "\(nativeError.domain):\(nativeError.code)",

@@ -1,4 +1,5 @@
 import { requireNativeModule, requireNativeView } from "expo";
+import { Platform } from "react-native";
 import type { Ref } from "react";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
 
@@ -79,6 +80,11 @@ const nativeEngine = requireNativeModule<{
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
   privateBrowsingSupported: boolean;
+  openDownload(reference: string): Promise<void>;
+  cancelDownload(id: string): Promise<void>;
+  addListener(event: "onDownload", listener: (update: DownloadUpdate) => void): { remove(): void };
+  addListener(event: "onMediaControl", listener: (event: { action: MediaControl }) => void): { remove(): void };
+  setMediaSession?(title: string | null, site: string, playing: boolean): Promise<void>;
 }>("BayEngine");
 
 /** False on Android when the installed WebView can't keep a separate profile; private tabs are unavailable then. */
@@ -127,4 +133,55 @@ export function runPageScript<T>(tab: Tab, script: string, timeout = 10_000): Pr
       },
     );
   });
+}
+
+/** A page download's progress. iOS saves to the app's Downloads folder (shown in Files); Android to the public one. */
+export interface DownloadUpdate {
+  id: string;
+  url: string;
+  filename: string;
+  state: "started" | "progress" | "finished" | "failed" | "cancelled";
+  /** Bytes so far and in total; total is 0 when the server didn't say. */
+  received: number;
+  total: number;
+  /** The saved file (a file:// URL on iOS, a content:// URI on Android), once finished. */
+  path?: string;
+  error?: string;
+  /** Started in a private tab: kept out of anything Bay saves. */
+  private: boolean;
+}
+
+/** Calls `listener` for every download update from any tab, including tabs that have closed since. */
+export function addDownloadListener(listener: (update: DownloadUpdate) => void): { remove(): void } {
+  return nativeEngine.addListener("onDownload", listener);
+}
+
+/** iOS works with a download's file, Android with the system's download id. */
+function downloadReference(download: { id: string; path?: string }): string {
+  return Platform.OS === "android" ? download.id : (download.path ?? "");
+}
+
+/** Opens a finished download: Quick Look on iOS, the app the system picks on Android. */
+export function openDownload(download: { id: string; path?: string }): Promise<void> {
+  return nativeEngine.openDownload(downloadReference(download));
+}
+
+export function cancelDownload(id: string): Promise<void> {
+  return nativeEngine.cancelDownload(id);
+}
+
+/** What the system's media controls asked for. */
+export type MediaControl = "toggle" | "stop";
+
+/**
+ * Tells the system what's playing, or null when nothing is. On Android this runs a media playback service with a media
+ * notification, so pages keep playing while Bay is in the background; iOS plays in the background on its own.
+ */
+export function setMediaSession(session: { title: string; site: string; playing: boolean } | null): void {
+  void nativeEngine.setMediaSession?.(session?.title ?? null, session?.site ?? "", session?.playing ?? false).catch(() => {});
+}
+
+/** Calls `listener` when the media notification's play/pause or stop is pressed (Android). */
+export function addMediaControlListener(listener: (action: MediaControl) => void): { remove(): void } {
+  return nativeEngine.addListener("onMediaControl", (event) => listener(event.action));
 }
