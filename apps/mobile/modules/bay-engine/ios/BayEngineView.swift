@@ -37,6 +37,11 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     didSet { webView.accessibilityElementsHidden = !isActive }
   }
 
+  /// Hidden tabs that aren't playing media are hidden from WebKit too, which then throttles their timers and animations.
+  var isSuspended = false {
+    didSet { webView.isHidden = isSuspended }
+  }
+
   var pullToRefreshEnabled = true {
     didSet {
       webView.scrollView.refreshControl = pullToRefreshEnabled ? refreshControl : nil
@@ -86,6 +91,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     webView.uiDelegate = self
     webView.allowsBackForwardNavigationGestures = true
     webView.accessibilityElementsHidden = !isActive
+    webView.isHidden = isSuspended
     webView.scrollView.delegate = self
     webView.scrollView.contentInsetAdjustmentBehavior = .never
     webView.scrollView.alwaysBounceVertical = true
@@ -188,40 +194,47 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     webView.reload()
   }
 
+  /// WebKit draws on the main thread; the resize, JPEG encoding and file write run in the background. A suspended
+  /// (hidden) page resolves nil: WebKit may not have drawn it.
   func snapshot(_ promise: Promise) {
-    guard bounds.width > 0, bounds.height > 0, webView.url != nil else {
+    guard !isSuspended, bounds.width > 0, bounds.height > 0, webView.url != nil else {
       promise.resolve(nil as String?)
       return
     }
     let configuration = WKSnapshotConfiguration()
     configuration.rect = webView.bounds
     webView.takeSnapshot(with: configuration) { [weak self] image, error in
-      guard let self else { promise.resolve(nil as String?); return }
       if let error { promise.reject(error); return }
       guard let image, image.size.width > 0, image.size.height > 0, let directory = BayEngineSnapshots.directory else {
         promise.resolve(nil as String?)
         return
       }
-      let width = min(image.size.width, 640)
-      let size = CGSize(width: width, height: image.size.height * width / image.size.width)
-      let format = UIGraphicsImageRendererFormat()
-      format.scale = 1
-      let thumbnail = UIGraphicsImageRenderer(size: size, format: format).image { _ in
-        image.draw(in: CGRect(origin: .zero, size: size))
-      }
-      guard let data = thumbnail.jpegData(compressionQuality: 0.75) else {
-        promise.resolve(nil as String?)
-        return
-      }
-      do {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      DispatchQueue.global(qos: .utility).async {
+        let width = min(image.size.width, 640)
+        let size = CGSize(width: width, height: image.size.height * width / image.size.width)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let thumbnail = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+          image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        guard let data = thumbnail.jpegData(compressionQuality: 0.75) else {
+          promise.resolve(nil as String?)
+          return
+        }
         let url = directory.appendingPathComponent("\(UUID().uuidString).jpg")
-        try data.write(to: url, options: .atomic)
-        if let previous = self.snapshotURL { try? FileManager.default.removeItem(at: previous) }
-        self.snapshotURL = url
-        promise.resolve(url.absoluteString)
-      } catch {
-        promise.reject(error)
+        do {
+          try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+          try data.write(to: url, options: .atomic)
+        } catch {
+          promise.reject(error)
+          return
+        }
+        // snapshotURL is only read and swapped on the main thread, so overlapping snapshots can't race.
+        DispatchQueue.main.async {
+          if let previous = self?.snapshotURL { try? FileManager.default.removeItem(at: previous) }
+          self?.snapshotURL = url
+          promise.resolve(url.absoluteString)
+        }
       }
     }
   }

@@ -74,6 +74,9 @@ public class BayEngineModule: Module {
       Prop("active", true) { (view: BayEngineView, active: Bool) in
         view.isActive = active
       }
+      Prop("suspended", false) { (view: BayEngineView, suspended: Bool) in
+        view.isSuspended = suspended
+      }
       Prop("initialUrl") { (view: BayEngineView, url: String?) in
         view.loadInitial(url)
       }

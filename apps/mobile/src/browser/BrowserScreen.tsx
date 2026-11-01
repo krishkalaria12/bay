@@ -275,6 +275,8 @@ export function BrowserScreen(): JSX.Element {
                 key={id}
                 tab={tab}
                 visible={visible}
+                // The active tab stays live behind the switcher and search so its snapshot and return are instant.
+                suspended={id !== active.id && !playing.includes(id)}
                 hiddenSelectors={reading.selectorsFor(tab)}
                 onPageMessage={(message) => {
                   if (!media.pageMessage(id, message) && id === active.id) reading.pageMessage(message);
