@@ -125,7 +125,7 @@ export async function openSpaceMenu(windowId: string, id: string) {
   const choice = await showMenu([
     { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
     { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
-    { id: "look", title: "Edit Look…", symbol: "paintpalette" },
+    { id: "look", title: "Edit Theme…", symbol: "paintpalette" },
     { separator: true },
     { id: "newFolder", title: "New Folder", symbol: "folder.badge.plus" },
     newLiveFolderMenuItem(),

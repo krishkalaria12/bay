@@ -183,6 +183,13 @@ const DEFS: ActionDef[] = [
   { command: "keyboardShortcuts", title: "Keyboard Shortcuts", icon: "keyboard", keywords: ["shortcuts", "hotkeys"] },
   { command: "mergeAllWindows", title: "Merge All Windows", icon: "rectangle.stack", needs: "spaces" },
   { command: "newSpace", title: "New Space", icon: "plus.square.on.square", keywords: ["create space", "new profile", "create profile"], needs: "spaces" },
+  {
+    command: "editTheme",
+    title: "Edit Theme",
+    icon: "paintpalette",
+    keywords: ["theme", "space color", "colour", "appearance", "personalize", "look", "gradient", "edit look"],
+    needs: "spaces",
+  },
   { command: "setAppearance", arg: "dark", title: "Dark Appearance", icon: "moon", keywords: ["dark mode"] },
   { command: "setAppearance", arg: "light", title: "Light Appearance", icon: "sun.max", keywords: ["light mode"] },
   { command: "setAppearance", arg: "auto", title: "Use System Appearance", icon: "circle.lefthalf.filled", keywords: ["auto appearance", "system appearance"] },

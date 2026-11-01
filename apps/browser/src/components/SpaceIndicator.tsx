@@ -7,6 +7,7 @@ import { useIsIncognito, useSpaces, useWindowId, useWindowSpace } from "../store
 import { setMeasuredWidth, useMeasuredWidth } from "./layout/measuredWidths";
 import { useHover } from "./primitives";
 import { openSettings } from "./settings/windows";
+import { openThemeEditor } from "./spaces/ThemeEditor";
 import { INDICATOR_HEIGHT, INDICATOR_ICON_WIDTH, INDICATOR_MIN_CUT_NAME, INDICATOR_PAD } from "./spaces/constants";
 
 function useIndicator(room: number) {
@@ -86,6 +87,7 @@ export async function openSpaceMenu(windowId: string) {
     })),
     { separator: true },
     { id: "new", title: "New Space", symbol: "plus" },
+    { id: "theme", title: "Edit Theme…", symbol: "paintpalette", enabled: !!current },
     { id: "edit", title: "Edit Spaces…", symbol: "pencil" },
   ];
   const choice = await showMenu(items);
@@ -94,5 +96,6 @@ export async function openSpaceMenu(windowId: string) {
   else if (choice === "new") {
     const id = await createSpace(windowId);
     if (id) switchSpace(windowId, id);
-  } else if (choice === "edit") openSettings("spaces", current);
+  } else if (choice === "theme" && current) openThemeEditor(windowId, current);
+  else if (choice === "edit") openSettings("spaces", current);
 }

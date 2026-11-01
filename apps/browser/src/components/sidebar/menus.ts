@@ -46,6 +46,7 @@ import { openInSplit } from "../layout/splitActions";
 import { calendarMenuItem, newLiveFolderMenuItem, runCalendarMenu, runNewLiveFolder } from "./liveMenus";
 import { openSyncedTab, syncedDevicesMenuItem } from "../../sync/menu";
 import { setSidebarUi } from "./state";
+import { openThemeEditor } from "../spaces/ThemeEditor";
 import { GROUP_COLORS, nearestGroupColor } from "./tokens";
 import { canMoveFolder, childFolderIds, folderDepth, folderTabIds, MAX_FOLDER_DEPTH } from "../../store/folders";
 
@@ -454,9 +455,11 @@ export async function openSidebarMenu(windowId: string) {
     sep,
     { id: "newFolder", title: "New Folder", symbol: "folder.badge.plus" },
     newLiveFolderMenuItem(),
+    ...(s.windows[windowId]?.incognito ? [] : [sep, { id: "theme", title: "Edit Theme…", symbol: "paintpalette" }]),
   ]);
   if (choice && runNewLiveFolder(windowId, choice)) return;
-  if (choice === "newTab") store().openNewTabPanel(windowId);
+  if (choice === "theme") openThemeEditor(windowId, s.windows[windowId]!.spaceId);
+  else if (choice === "newTab") store().openNewTabPanel(windowId);
   else if (choice === "newFolder") newPinnedFolderWith(windowId);
   else if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice === "clean") s.cleanUpTabs(windowId);

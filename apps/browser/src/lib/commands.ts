@@ -26,6 +26,7 @@ import { captureFullPage, capturePortrait, startCapture } from "../components/ca
 import { canBoost, openBoostEditor, siteBoosts, startPicking, toggleSiteBoosts } from "../components/boosts/editor";
 import { newEasel, openLibrary } from "../components/library/actions";
 import { openSpaceMenu } from "../components/SpaceIndicator";
+import { openThemeEditor } from "../components/spaces/ThemeEditor";
 import { groupOf } from "../store/organize";
 import { shownPeek } from "../store/peeks";
 import { rowPinned } from "../store/splits";
@@ -316,6 +317,10 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
       return void requestAutofill(windowId, arg);
     case "newSpace":
       return void createSpace(windowId).then((id) => id && switchSpace(windowId, id));
+    case "editTheme": {
+      const w = s.windows[windowId];
+      return w && !w.incognito ? openThemeEditor(windowId, w.spaceId) : undefined;
+    }
   }
 }
 

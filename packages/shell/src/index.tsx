@@ -83,6 +83,7 @@ export type BrowserCommand =
   | "nextSpace"
   | "previousSpace"
   | "newSpace"
+  | "editTheme"
   | "openSettings"
   | "importBrowserData"
   | "showHistory"
