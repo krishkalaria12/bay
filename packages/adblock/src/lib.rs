@@ -13,9 +13,10 @@ mod jni_bridge;
 mod preprocess;
 mod tracking;
 
+#[cfg(not(target_os = "android"))]
+pub use blocker::content_blocking_rules;
 pub use blocker::{
-    content_blocking_rules, load_cached, Blocker, Check, FilterList, ListCounts, PageResources,
-    TRUSTED_SCRIPTLETS,
+    load_cached, Blocker, Check, FilterList, ListCounts, PageResources, TRUSTED_SCRIPTLETS,
 };
 pub use preprocess::{preprocess, preprocess_for, Platform};
 pub use tracking::TrackingParams;

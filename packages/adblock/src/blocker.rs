@@ -270,6 +270,7 @@ fn load_engine(
 }
 
 /// WebKit content-blocking rules for the lists, as a JSON array. WebKit compiles them itself.
+#[cfg(not(target_os = "android"))]
 pub fn content_blocking_rules(lists: &str) -> String {
     let mut set = FilterSet::new(true);
     let lists = crate::preprocess_for(lists, crate::Platform::IosWebKit);
