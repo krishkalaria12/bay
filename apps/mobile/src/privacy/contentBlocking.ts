@@ -4,13 +4,13 @@ import { Directory, File, Paths } from "expo-file-system";
 import { useEffect } from "react";
 import { create } from "zustand";
 
-import { FILTER_LISTS, isStale, listVersion, looksLikeFilterList } from "./filterLists";
+import { FILTER_LISTS, isStale, listUnchanged, listVersion, looksLikeFilterList, type ListValidators } from "./filterLists";
 
 // List text never passes through JavaScript: lists download straight to files, their versions come from native MD5
 // digests, and the engines read the files themselves. (7 MB of text on the JS thread made typing drop keystrokes.)
 const directory = new Directory(Paths.document, "filter-lists");
 const metaFile = new File(directory, "lists.json");
-type Meta = Record<string, { fetchedAt: number }>;
+type Meta = Record<string, { fetchedAt: number } & ListValidators>;
 
 const listFile = (id: string): File => new File(directory, `${id}.txt`);
 
@@ -39,6 +39,19 @@ async function looksLikeList(file: File): Promise<boolean> {
   }
 }
 
+/** A list's ETag and Last-Modified from a HEAD request (headers only, no list text), or null if the server didn't answer. */
+async function headValidators(url: string): Promise<ListValidators | null> {
+  try {
+    const response = await fetch(url, { method: "HEAD" });
+    if (!response.ok) return null;
+    const etag = response.headers.get("etag");
+    const lastModified = response.headers.get("last-modified");
+    return { ...(etag ? { etag } : {}), ...(lastModified ? { lastModified } : {}) };
+  } catch {
+    return null;
+  }
+}
+
 /** Downloads stale lists into place; returns true if any changed. A list that fails keeps its cached copy. */
 async function refreshLists(now: number): Promise<boolean> {
   if (!directory.exists) directory.create({ intermediates: true });
@@ -47,7 +60,14 @@ async function refreshLists(now: number): Promise<boolean> {
   await Promise.all(
     FILTER_LISTS.map(async (list) => {
       // A missing file is stale whatever the metadata says.
-      if (!isStale(meta[list.id]?.fetchedAt, now) && listFile(list.id).exists) return;
+      const saved = meta[list.id];
+      if (!isStale(saved?.fetchedAt, now) && listFile(list.id).exists) return;
+      // The lists are 7 MB together: skip the download when the server says the saved copy is current.
+      const validators = await headValidators(list.url);
+      if (saved && validators && listFile(list.id).exists && listUnchanged(saved, validators)) {
+        meta[list.id] = { ...saved, fetchedAt: now };
+        return;
+      }
       const download = new File(directory, `${list.id}.download`);
       try {
         if (download.exists) download.delete();
@@ -59,7 +79,7 @@ async function refreshLists(now: number): Promise<boolean> {
           await download.move(target, { overwrite: true });
           changed = true;
         }
-        meta[list.id] = { fetchedAt: now };
+        meta[list.id] = { fetchedAt: now, ...validators };
       } catch (error) {
         console.warn(`Couldn't update the ${list.title} filter list.`, error);
       } finally {

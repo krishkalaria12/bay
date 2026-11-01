@@ -19,6 +19,18 @@ export function isStale(fetchedAt: number | undefined, now: number): boolean {
   return fetchedAt === undefined || now - fetchedAt >= REFRESH_AFTER || fetchedAt > now;
 }
 
+/** A list's HTTP validators, from its response headers. */
+export interface ListValidators {
+  etag?: string;
+  lastModified?: string;
+}
+
+/** The server's list matches the saved copy: same ETag, or with no ETag on either side, the same Last-Modified. */
+export function listUnchanged(saved: ListValidators, current: ListValidators): boolean {
+  if (saved.etag && current.etag) return saved.etag === current.etag;
+  return Boolean(saved.lastModified && saved.lastModified === current.lastModified);
+}
+
 /** A short name for list text (FNV-1a), so an engine can tell an update from text it has already compiled. */
 export function listVersion(text: string): string {
   let hash = 0x811c9dc5;

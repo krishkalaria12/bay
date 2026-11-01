@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { FILTER_LISTS, isStale, listVersion, looksLikeFilterList, REFRESH_AFTER } from "../src/privacy/filterLists.ts";
+import { FILTER_LISTS, isStale, listUnchanged, listVersion, looksLikeFilterList, REFRESH_AFTER } from "../src/privacy/filterLists.ts";
 
 test("lists refresh daily and when the clock went backwards", () => {
   assert.equal(isStale(undefined, 0), true);
   assert.equal(isStale(1000, 1000 + REFRESH_AFTER - 1), false);
   assert.equal(isStale(1000, 1000 + REFRESH_AFTER), true);
   assert.equal(isStale(5000, 1000), true);
+});
+
+test("a list is current when its ETag, or else its Last-Modified, is unchanged", () => {
+  assert.equal(listUnchanged({ etag: '"a"' }, { etag: '"a"' }), true);
+  assert.equal(listUnchanged({ etag: '"a"', lastModified: "Mon" }, { etag: '"b"', lastModified: "Mon" }), false);
+  assert.equal(listUnchanged({ lastModified: "Mon" }, { etag: '"a"', lastModified: "Mon" }), true);
+  assert.equal(listUnchanged({ lastModified: "Mon" }, { lastModified: "Tue" }), false);
+  assert.equal(listUnchanged({}, {}), false);
 });
 
 test("versions change with the text", () => {
