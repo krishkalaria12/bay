@@ -1,6 +1,6 @@
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { BottomSheet, Typography } from "heroui-native";
-import type { JSX, ReactNode } from "react";
+import { useState, type JSX, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,6 +16,10 @@ export interface PanelSheetProps {
 
 export function PanelSheet({ visible, onClose, title, testID, children, height = "65%", dismissible = true }: PanelSheetProps): JSX.Element {
   const insets = useSafeAreaInsets();
+  // HeroUI renders a closed sheet's content anyway, so every panel's rows would render with the browser. Content
+  // mounts on open and stays until the sheet finishes animating closed.
+  const [shown, setShown] = useState(visible);
+  if (visible && !shown) setShown(true);
   return (
     <BottomSheet
       isOpen={visible}
@@ -33,6 +37,7 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
           // Drag by the handle only: a pan gesture over the content competed with taps on its rows and buttons, and
           // on iOS quick taps were sometimes lost. The sheets are short; Done and tapping outside also close them.
           enableContentPanningGesture={false}
+          onClose={() => setShown(false)}
           contentContainerClassName="h-full"
           backgroundClassName="rounded-t-[28px] bg-background"
         >
@@ -55,7 +60,7 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
             >
-              {children}
+              {visible || shown ? children : null}
             </BottomSheetScrollView>
           </View>
         </BottomSheet.Content>
