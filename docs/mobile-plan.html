@@ -266,7 +266,7 @@
   <body>
     <main>
       <header>
-        <p class="meta">Implementation plan · revised 31 October 2026 · phases 0–3 done on both platforms</p>
+        <p class="meta">Implementation plan · revised 1 November 2026 · phases 0–5 done on both platforms (translation open)</p>
         <h1>Bay for iPhone and Android.<br />One Lens design, WebKit on iOS, Chromium on Android.</h1>
         <p class="lead">
           Build Bay's mobile browser in <code>apps/mobile</code> with Expo and HeroUI Native. Both platforms get the same design, the Lens demo you shared: it
@@ -846,7 +846,16 @@
         <div class="stage">
           <div class="stage-number">5</div>
           <div>
-            <h3>Power tools</h3>
+            <h3>Power tools <span class="done">done</span></h3>
+            <p>
+              Find on page marks matches with the CSS Custom Highlight API and steps through them from a bar above the keyboard. Inspect reuses
+              desktop's Developer Mode element script (<code>ELEMENT_INFO</code> in <code>@bay/core</code>) through the picker, and adds the font
+              identifier: the family that actually renders, whether it's a web font and where its file comes from. Downloads go through
+              <code>WKDownload</code> into Bay's Files folder on iOS and the system DownloadManager on Android, with a toast and a Downloads list.
+              A tab playing media stays loaded and shows a mini player when it's off screen; iOS keeps playing in the background with the
+              playback audio session, and Android runs a media playback service with a media notification. <code>power-tools.yaml</code>,
+              <code>downloads.yaml</code> and <code>mini-player.yaml</code> pass on both devices.
+            </p>
             <ul>
               <li>Web inspector and font identifier (shared page scripts), mini player, downloads, find on page.</li>
             </ul>

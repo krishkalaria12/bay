@@ -60,6 +60,7 @@ Writing e2e tests:
 - Tap rows whose order can change (search suggestions) by their text, not their index.
 - Prove a feature runs, not just that its UI appears: `privacy.yaml` waits for Settings to report "8 lists active" before testing blocking, which is how a bug that deleted every downloaded list was caught.
 - Keep sheets short enough that a flow never scrolls them. Sheets drag by their handle only (`PanelSheet` turns off content panning): a pan gesture over their content made iOS lose quick taps on rows and buttons.
+- Media needs an emulator with audio: with `-no-audio` (how Argent's `boot-device` starts one unless given `sound: true`) audio never starts playing. `scripts/lib/devices.sh` boots it with audio and mutes the media stream. While a page's media controls animate, reading Android's tree can time out; tap them by point.
 - SwiftUI buttons get their handler through `useStableCallback` (`src/chrome`): a handler that changes while a page loads can drop a tap.
 
 The CLI does the same outside MCP: `argent run <tool> --udid <id> ...` (`argent tools` lists them).
