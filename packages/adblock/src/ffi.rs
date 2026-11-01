@@ -233,6 +233,58 @@ pub unsafe extern "C" fn bay_blocker_use_resources(
     (*blocker).use_resources(borrow(json))
 }
 
+/// The engine cached at `cache` for `version`, or one built from the `count` list files (then cached), with the
+/// resources file loaded; null when the lists can't be read. `platform`: 0 desktop, 1 Android, 2 iOS. Free with
+/// `bay_blocker_free`.
+///
+/// # Safety
+/// `files` must point to `count` valid strings; `cache`, `version` must be valid strings; `resources` may be null.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_load(
+    files: *const *const c_char,
+    count: usize,
+    cache: *const c_char,
+    version: *const c_char,
+    resources: *const c_char,
+    platform: u8,
+) -> *mut Blocker {
+    let paths: Vec<String> = (0..count).filter_map(|i| read(*files.add(i))).collect();
+    let platform = match platform {
+        1 => crate::Platform::AndroidWebView,
+        2 => crate::Platform::IosWebKit,
+        _ => crate::Platform::DesktopChromium,
+    };
+    let (Some(cache), Some(version)) = (read(cache), read(version)) else {
+        return std::ptr::null_mut();
+    };
+    let resources = read(resources).map(std::path::PathBuf::from);
+    crate::load_cached(
+        &paths,
+        std::path::Path::new(&cache),
+        &version,
+        platform,
+        resources.as_deref(),
+    )
+    .map_or(std::ptr::null_mut(), |blocker| {
+        Box::into_raw(Box::new(blocker))
+    })
+}
+
+/// The page's scriptlets as one script to run in its main world at document start ("" when none).
+///
+/// # Safety
+/// `blocker` must come from this library and not be freed; `url` must be a valid string.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_scriptlets(
+    blocker: *const Blocker,
+    url: *const c_char,
+) -> *mut c_char {
+    let (Some(blocker), Some(url)) = (blocker.as_ref(), read(url)) else {
+        return give(String::new());
+    };
+    give(blocker.scriptlets(&url))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

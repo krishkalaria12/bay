@@ -14,7 +14,8 @@ mod preprocess;
 mod tracking;
 
 pub use blocker::{
-    content_blocking_rules, load_cached, Blocker, FilterList, ListCounts, PageResources,
+    content_blocking_rules, load_cached, Blocker, Check, FilterList, ListCounts, PageResources,
+    TRUSTED_SCRIPTLETS,
 };
 pub use preprocess::{preprocess, preprocess_for, Platform};
 pub use tracking::TrackingParams;

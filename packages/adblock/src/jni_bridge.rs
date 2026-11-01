@@ -27,16 +27,6 @@ unsafe fn blocker<'a>(handle: jlong) -> &'a Blocker {
     &*(handle as *const Blocker)
 }
 
-#[no_mangle]
-pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeNew(
-    mut env: JNIEnv,
-    _class: JClass,
-    lists: JString,
-) -> jlong {
-    let lists = text(&mut env, &lists);
-    Box::into_raw(Box::new(Blocker::new(&lists))) as jlong
-}
-
 /// The cached engine for `version`, or one built from the list files (then cached); 0 if the files can't be read.
 #[no_mangle]
 pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeLoad(
@@ -45,6 +35,7 @@ pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeLoad(
     files: JObjectArray,
     cache: JString,
     version: JString,
+    resources: JString,
 ) -> jlong {
     let count = env.get_array_length(&files).unwrap_or(0);
     let mut paths = Vec::new();
@@ -54,11 +45,14 @@ pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeLoad(
         }
     }
     let (cache, version) = (text(&mut env, &cache), text(&mut env, &version));
+    let resources = text(&mut env, &resources);
+    let resources = (!resources.is_empty()).then(|| std::path::PathBuf::from(resources));
     match crate::load_cached(
         &paths,
         std::path::Path::new(&cache),
         &version,
         crate::Platform::AndroidWebView,
+        resources.as_deref(),
     ) {
         Ok(blocker) => Box::into_raw(Box::new(blocker)) as jlong,
         Err(_) => 0,
@@ -73,27 +67,6 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeFree(
 ) {
     if handle != 0 {
         drop(Box::from_raw(handle as *mut Blocker));
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeShouldBlock(
-    mut env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    url: JString,
-    source: JString,
-    kind: JString,
-) -> jboolean {
-    let (url, source, kind) = (
-        text(&mut env, &url),
-        text(&mut env, &source),
-        text(&mut env, &kind),
-    );
-    if blocker(handle).should_block(&url, &source, &kind) {
-        JNI_TRUE
-    } else {
-        JNI_FALSE
     }
 }
 
@@ -153,4 +126,40 @@ pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCleanUrl(
 ) -> jstring {
     let url = text(&mut env, &url);
     clean_url(&url).map_or(std::ptr::null_mut(), |clean| give(&mut env, &clean))
+}
+
+/// "" to let the request load, "block", or a `data:` URL to answer it with (`$redirect`).
+#[no_mangle]
+pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCheck(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    url: JString,
+    source: JString,
+    kind: JString,
+) -> jstring {
+    let (url, source, kind) = (
+        text(&mut env, &url),
+        text(&mut env, &source),
+        text(&mut env, &kind),
+    );
+    let answer = match blocker(handle).check(&url, &source, &kind) {
+        crate::Check::Allow => String::new(),
+        crate::Check::Block => "block".to_owned(),
+        crate::Check::Redirect(data_url) => data_url,
+    };
+    give(&mut env, &answer)
+}
+
+/// The page's scriptlets as one script ("" when none).
+#[no_mangle]
+pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeScriptlets(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    url: JString,
+) -> jstring {
+    let url = text(&mut env, &url);
+    let script = blocker(handle).scriptlets(&url);
+    give(&mut env, &script)
 }

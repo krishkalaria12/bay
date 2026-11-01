@@ -10,6 +10,9 @@ Bay builds on and ships third-party software under its own licenses, including:
 - adblock-rust (MPL-2.0), Brave's content blocking engine, in Bay's content blocker (packages/adblock)
 - Filter lists the app bundles and downloads, each under its own license: uBlock Origin's uAssets (GPL-3.0),
   EasyList and EasyPrivacy (GPL-3.0 / CC BY-SA 3.0), Peter Lowe's list and the Online Malicious URL Blocklist
+- Scriptlet and redirect resources the content blocker injects (packages/adblock/resources/resources.json), each under
+  its own license: uBlock Origin's scriptlets and web-accessible resources (GPL-3.0, https://github.com/gorhill/uBlock)
+  and brave/adblock-resources (MPL-2.0)
 - Sparkle (MIT)
 - React Native and React Native macOS (MIT)
 - Zen Browser (MPL-2.0): Boosts' element selector builder (apps/browser/src/components/boosts/pickerScript.ts ›

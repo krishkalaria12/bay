@@ -73,6 +73,7 @@ impl Blocker {
                 crate::preprocess::preprocess_for(list.text, platform).into_owned(),
                 ParseOptions {
                     format,
+                    permissions: list_permissions(list.text),
                     ..ParseOptions::default()
                 },
             );
@@ -141,6 +142,33 @@ impl Blocker {
         }
     }
 
+    /// What to do with a request: let it load, block it, or answer it with a harmless stand-in (`$redirect`, as a
+    /// `data:` URL), which keeps pages that expect an ad script from breaking.
+    pub fn check(&self, url: &str, source_url: &str, kind: &str) -> Check {
+        let Ok(request) = Request::new(url, source_url, kind, "get") else {
+            return Check::Allow;
+        };
+        let result = self.engine().check_network_request(&request);
+        match result.redirect {
+            Some(redirect) if result.should_block() || result.exception.is_none() => {
+                Check::Redirect(redirect)
+            }
+            _ if result.should_block() => Check::Block,
+            _ => Check::Allow,
+        }
+    }
+
+    /// Redirect and scriptlet resources from a file of adblock-rust `Resource` JSON (`resources/resources.json`).
+    pub fn use_resources_file(&self, path: &std::path::Path) -> bool {
+        std::fs::read_to_string(path).is_ok_and(|json| self.use_resources(&json))
+    }
+
+    /// The scriptlets (`##+js(...)`) for a page, as one script to run in its main world at document start; empty when
+    /// it has none.
+    pub fn scriptlets(&self, url: &str) -> String {
+        self.engine().url_cosmetic_resources(url).injected_script
+    }
+
     /// Whether a request should be blocked. `kind` is a resource type such as `script`, `image` or `xhr`.
     pub fn should_block(&self, url: &str, source_url: &str, kind: &str) -> bool {
         let Ok(request) = Request::new(url, source_url, kind, "get") else {
@@ -171,9 +199,45 @@ impl Blocker {
     }
 }
 
+/// A request's fate, from [`Blocker::check`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Check {
+    Allow,
+    Block,
+    /// Answer with this `data:` URL instead.
+    Redirect(String),
+}
+
+/// uBO's "trusted" scriptlets (cookie and storage writers…) may only come from uBO's own lists, as in uBO itself.
+/// Those lists are recognised by their title; resources/resources.json marks trusted scriptlets with this bit.
+pub const TRUSTED_SCRIPTLETS: u8 = 0b1;
+
+fn list_permissions(text: &str) -> adblock::resources::PermissionMask {
+    let ubo = text
+        .lines()
+        .take(12)
+        .any(|line| line.starts_with("! Title: uBlock"));
+    adblock::resources::PermissionMask::from_bits(if ubo { TRUSTED_SCRIPTLETS } else { 0 })
+}
+
 /// Loads the engine cached at `cache` for `version` (a near-instant read), or builds it from the list files and
 /// writes the cache for the next launch. Building parses every rule; loading only maps adblock-rust's binary format.
+/// Resources aren't part of the cache, so `resources` (if given) is loaded either way.
 pub fn load_cached(
+    files: &[String],
+    cache: &std::path::Path,
+    version: &str,
+    platform: crate::Platform,
+    resources: Option<&std::path::Path>,
+) -> std::io::Result<Blocker> {
+    let blocker = load_engine(files, cache, version, platform)?;
+    if let Some(resources) = resources {
+        blocker.use_resources_file(resources);
+    }
+    Ok(blocker)
+}
+
+fn load_engine(
     files: &[String],
     cache: &std::path::Path,
     version: &str,
@@ -345,7 +409,8 @@ mod tests {
         let cache = dir.join("engine.bin");
         std::fs::write(&list, "||ads.example^\n").unwrap();
         let files = vec![list.to_string_lossy().into_owned()];
-        let built = load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView).unwrap();
+        let built =
+            load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView, None).unwrap();
         assert!(built.should_block(
             "https://ads.example/a.js",
             "https://site.example/",
@@ -353,18 +418,65 @@ mod tests {
         ));
         // A cached engine is used even when the lists have changed, until the version does.
         std::fs::write(&list, "||other.example^\n").unwrap();
-        let cached = load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView).unwrap();
+        let cached =
+            load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView, None).unwrap();
         assert!(cached.should_block(
             "https://ads.example/a.js",
             "https://site.example/",
             "script"
         ));
-        let rebuilt = load_cached(&files, &cache, "v2", crate::Platform::AndroidWebView).unwrap();
+        let rebuilt =
+            load_cached(&files, &cache, "v2", crate::Platform::AndroidWebView, None).unwrap();
         assert!(!rebuilt.should_block(
             "https://ads.example/a.js",
             "https://site.example/",
             "script"
         ));
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn redirects_runs_scriptlets_and_trusts_only_ublock_lists() {
+        let resources = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/resources.json"
+        ))
+        .unwrap();
+        let ubo = "! Title: uBlock filters\n||ads.example/ad.js$script,redirect=noop.js\nexample.com##+js(trusted-set-cookie, consent, accepted)\nexample.com##+js(set-constant, adsEnabled, false)\n";
+        let other = "! Title: Another list\nother.example##+js(trusted-set-cookie, consent, accepted)\nother.example##+js(set-constant, adsEnabled, false)\n";
+        let blocker = Blocker::from_lists(&[
+            FilterList {
+                text: ubo,
+                hosts: false,
+            },
+            FilterList {
+                text: other,
+                hosts: false,
+            },
+        ]);
+        assert!(blocker.use_resources(&resources));
+        match blocker.check(
+            "https://ads.example/ad.js",
+            "https://site.example/",
+            "script",
+        ) {
+            Check::Redirect(url) => assert!(url.starts_with("data:application/javascript;base64,")),
+            other => panic!("expected a redirect, got {other:?}"),
+        }
+        assert_eq!(
+            blocker.check(
+                "https://cdn.example/app.js",
+                "https://site.example/",
+                "script"
+            ),
+            Check::Allow
+        );
+        // uBO's own list may use a trusted scriptlet; another list only gets the untrusted one.
+        let trusted = blocker.scriptlets("https://example.com/");
+        assert!(trusted.contains("consent"));
+        assert!(trusted.contains("adsEnabled"));
+        let untrusted = blocker.scriptlets("https://other.example/");
+        assert!(untrusted.contains("adsEnabled"));
+        assert!(!untrusted.contains("consent"));
     }
 }
