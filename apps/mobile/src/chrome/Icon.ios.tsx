@@ -16,6 +16,10 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   private: "eyeglasses",
   lock: "lock",
   shield: "shield",
+  up: "chevron.up",
+  down: "chevron.down",
+  play: "play.fill",
+  pause: "pause.fill",
 };
 
 // An SF Symbol inside React Native layout. The host ignores touches so the surrounding Pressable gets them.

@@ -1,4 +1,4 @@
-import type { ArchivedTab, BrowserData, BrowserPreferences, BrowserTab, HistoryEntry, PinnedSite, TabUpdate } from "./types";
+import type { ArchivedTab, BrowserData, BrowserPreferences, BrowserTab, DownloadItem, HistoryEntry, PinnedSite, TabUpdate } from "./types";
 import type { ReaderSettings } from "../pagescripts/reader.ts";
 
 export const DEFAULT_PREFERENCES: BrowserPreferences = {
@@ -13,6 +13,21 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
 const DAY = 24 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 1000;
 const ARCHIVE_LIMIT = 200;
+const DOWNLOAD_LIMIT = 100;
+const DOWNLOAD_STATES = ["downloading", "finished", "failed", "cancelled"] as const;
+
+/** A download update from the engine (`DownloadUpdate` in @bay/engine). */
+export interface DownloadEvent {
+  id: string;
+  url: string;
+  filename: string;
+  state: "started" | "progress" | "finished" | "failed" | "cancelled";
+  received: number;
+  total: number;
+  path?: string;
+  error?: string;
+  private: boolean;
+}
 
 export function createTab(id: string, now: number, url = "", isPrivate = false): BrowserTab {
   return { id, url, title: "", favicon: null, createdAt: now, lastVisit: now, snapshot: null, ...(isPrivate ? { private: true } : {}) };
@@ -25,6 +40,7 @@ export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFER
     history: [],
     pinnedSites: [],
     archive: [],
+    downloads: [],
     preferences: {
       ...preferences,
       blockingPausedHosts: [...preferences.blockingPausedHosts],
@@ -50,7 +66,10 @@ export type BrowserAction =
   | { type: "pause-blocking"; host: string; paused: boolean }
   | { type: "lock-private-tabs"; enabled: boolean }
   | { type: "reader-settings"; settings: ReaderSettings }
-  | { type: "hidden-elements"; host: string; selectors: string[] };
+  | { type: "hidden-elements"; host: string; selectors: string[] }
+  | { type: "download"; update: DownloadEvent; now: number }
+  | { type: "remove-download"; id: string }
+  | { type: "clear-downloads" };
 
 export function reduceBrowserData(data: BrowserData, action: BrowserAction): BrowserData {
   switch (action.type) {
@@ -157,6 +176,37 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       if (selectors.length) hiddenElements[host] = selectors;
       else delete hiddenElements[host];
       return { ...data, preferences: { ...data.preferences, hiddenElements } };
+    }
+    case "download": {
+      const { update } = action;
+      const previous = data.downloads.find((item) => item.id === update.id);
+      const state = update.state === "started" || update.state === "progress" ? "downloading" : update.state;
+      // The engine says nothing more after a final state; a late progress update can't revive it.
+      if (previous && previous.state !== "downloading") return data;
+      const item: DownloadItem = {
+        id: update.id,
+        url: update.url || previous?.url || "",
+        // The engine knows the real name once the response arrives; a cancelled update may not.
+        filename: update.filename && update.filename !== "download" ? update.filename : (previous?.filename ?? update.filename),
+        state,
+        received: update.received,
+        total: update.total || previous?.total || 0,
+        ...(update.path ? { path: update.path } : previous?.path ? { path: previous.path } : {}),
+        ...(update.error ? { error: update.error } : {}),
+        startedAt: previous?.startedAt ?? action.now,
+        ...(update.private ? { private: true } : {}),
+      };
+      return {
+        ...data,
+        downloads: (previous ? data.downloads.map((entry) => (entry.id === update.id ? item : entry)) : [item, ...data.downloads]).slice(0, DOWNLOAD_LIMIT),
+      };
+    }
+    case "remove-download":
+      return data.downloads.some((item) => item.id === action.id) ? { ...data, downloads: data.downloads.filter((item) => item.id !== action.id) } : data;
+    case "clear-downloads": {
+      // Downloads still running stay listed.
+      const downloads = data.downloads.filter((item) => item.state === "downloading");
+      return downloads.length === data.downloads.length ? data : { ...data, downloads };
     }
     case "archive-stale": {
       if (data.preferences.archiveAfterDays === null) return data;
@@ -306,6 +356,26 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
     const tab = parseTab(entry);
     return tab?.url && isRecord(entry) && isTimestamp(entry.closedAt) ? [{ ...tab, closedAt: entry.closedAt }] : [];
   });
+  const downloads: DownloadItem[] = (Array.isArray(value.downloads) ? value.downloads : []).filter(isRecord).flatMap((entry) => {
+    if (typeof entry.id !== "string" || !entry.id || typeof entry.filename !== "string" || !isTimestamp(entry.startedAt)) return [];
+    if (!DOWNLOAD_STATES.includes(entry.state as DownloadItem["state"])) return [];
+    const bytes = (n: unknown) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0);
+    // A download Bay was running when it quit can't be resumed.
+    const interrupted = entry.state === "downloading";
+    return [
+      {
+        id: entry.id,
+        url: typeof entry.url === "string" ? entry.url : "",
+        filename: entry.filename,
+        state: interrupted ? "failed" : (entry.state as DownloadItem["state"]),
+        received: bytes(entry.received),
+        total: bytes(entry.total),
+        ...(typeof entry.path === "string" && entry.path ? { path: entry.path } : {}),
+        ...(interrupted ? { error: "Bay closed before it finished." } : typeof entry.error === "string" ? { error: entry.error } : {}),
+        startedAt: entry.startedAt,
+      },
+    ];
+  });
   const savedPreferences = isRecord(value.preferences) ? value.preferences : {};
   const preferences: BrowserPreferences = {
     searchEngineId:
@@ -333,14 +403,18 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
     archive: uniqueBy(archive, (entry) => entry.id)
       .sort((a, b) => b.closedAt - a.closedAt)
       .slice(0, ARCHIVE_LIMIT),
+    downloads: uniqueBy(downloads, (entry) => entry.id)
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .slice(0, DOWNLOAD_LIMIT),
     preferences,
   };
 }
 
 /** What is saved: everything except private tabs. When a private tab is current, the newest saved tab is. */
 export function persistedBrowserData(data: BrowserData): BrowserData {
-  if (!data.tabs.some((tab) => tab.private)) return data;
+  const downloads = data.downloads.some((item) => item.private) ? data.downloads.filter((item) => !item.private) : data.downloads;
+  if (!data.tabs.some((tab) => tab.private)) return downloads === data.downloads ? data : { ...data, downloads };
   const tabs = data.tabs.filter((tab) => !tab.private);
   const activeTabId = tabs.some((tab) => tab.id === data.activeTabId) ? data.activeTabId : (tabs[tabs.length - 1]?.id ?? "");
-  return { ...data, tabs, activeTabId };
+  return { ...data, tabs, activeTabId, downloads };
 }

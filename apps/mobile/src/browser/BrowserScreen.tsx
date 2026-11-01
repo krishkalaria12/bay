@@ -13,6 +13,7 @@ import { useThemeColor } from "heroui-native";
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { Surface } from "@/chrome/Surface";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel } from "@/panels";
+import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
 import { newId, useBrowserStore } from "@/store/browser";
 import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
@@ -21,7 +22,12 @@ import { SearchCard, type OpenTarget } from "./SearchCard";
 import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
 import { Wallpaper } from "./Wallpaper";
+import { FindBar } from "./FindBar";
+import { MiniPlayer } from "./MiniPlayer";
+import { DownloadToast, useDownloads } from "./useDownloads";
+import { useFindInPage } from "./useFindInPage";
 import { useReadingTools } from "./useReadingTools";
+import { useTabMedia } from "./useTabMedia";
 
 // Live page views kept in memory; other tabs reload from their address when opened.
 const MAX_LIVE = 4;
@@ -30,7 +36,7 @@ const views = new Map<string, Tab>();
 const visited = new Map<string, string>();
 
 type Overlay = "none" | "search" | "tabs";
-type Panel = "archive" | "settings" | "page" | null;
+type Panel = "archive" | "settings" | "page" | "downloads" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -58,7 +64,12 @@ export function BrowserScreen(): JSX.Element {
   const hasPage = Boolean(active.url);
   const engine = engineFor(data.preferences.searchEngineId);
   const existing = new Set(data.tabs.map((tab) => tab.id));
-  const mounted = [active.id, ...live.filter((id) => id !== active.id && existing.has(id))].slice(0, MAX_LIVE);
+  // A search for a new tab opens over the wallpaper, like the switcher it came from.
+  const showPages = overlay === "none" || (overlay === "search" && !searchInNewTab);
+  const media = useTabMedia({ tabs: data.tabs, views, onScreenTabId: showPages && hasPage ? active.id : null, locked });
+  // A tab playing media stays mounted, so its sound doesn't stop when other tabs are opened.
+  const playing = media.playingTabIds.filter((id) => existing.has(id));
+  const mounted = [...new Set([active.id, ...playing, ...live.filter((id) => existing.has(id))])].slice(0, MAX_LIVE);
   const mountedKey = mounted.join(" ");
   const { blockContent, blockingPausedHosts, lockPrivateTabs } = data.preferences;
   const lockEnabled = lockPrivateTabs && data.tabs.some((tab) => tab.private);
@@ -84,6 +95,11 @@ export function BrowserScreen(): JSX.Element {
   }
 
   useEffect(() => {
+    media.keepOnly(new Set(mountedKey.split(" ")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mountedKey]);
+
+  useEffect(() => {
     setLive(mountedKey.split(" "));
     barHidden.value = withTiming(0);
   }, [mountedKey, barHidden]);
@@ -92,6 +108,8 @@ export function BrowserScreen(): JSX.Element {
     setError({ tabId, message: cause instanceof Error ? cause.message : "Couldn't open this page." });
   }, []);
 
+  const downloads = useDownloads((message) => setError({ tabId: active.id, message }));
+  const find = useFindInPage(views.get(active.id), `${active.id} ${active.url}`);
   const reading = useReadingTools(active, views.get(active.id), page.isLoading, locked && Boolean(active.private), (cause) => fail(active.id, cause));
 
   function capture(tabId: string): void {
@@ -106,6 +124,8 @@ export function BrowserScreen(): JSX.Element {
 
   function onNavigation(tabId: string, state: NavigationState): void {
     setNavigation((previous) => ({ ...previous, [tabId]: state }));
+    // A new document has no media until it reports some.
+    if (state.isLoading && !navigation[tabId]?.isLoading) media.loadStarted(tabId);
     if (!isWebURL(state.url)) return;
     if (state.isLoading) setError((current) => (current?.tabId === tabId ? null : current));
     dispatch({ type: "update-tab", id: tabId, update: { url: state.url, ...(state.title ? { title: state.title } : {}) } });
@@ -216,6 +236,10 @@ export function BrowserScreen(): JSX.Element {
           setOverlay("none");
           return true;
         }
+        if (find.open) {
+          find.done();
+          return true;
+        }
         if (page.canGoBack) {
           views
             .get(active.id)
@@ -226,7 +250,8 @@ export function BrowserScreen(): JSX.Element {
         return false;
       });
       return () => subscription.remove();
-    }, [active.id, overlay, page.canGoBack]),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [active.id, overlay, page.canGoBack, find.open]),
   );
 
   const barStyle = useAnimatedStyle(() => ({
@@ -234,8 +259,7 @@ export function BrowserScreen(): JSX.Element {
     opacity: 1 - barHidden.value,
   }));
 
-  // A search for a new tab opens over the wallpaper, like the switcher it came from.
-  const showPages = overlay === "none" || (overlay === "search" && !searchInNewTab);
+  const player = media.player;
   const tabError = error?.tabId === active.id ? error.message : null;
 
   return (
@@ -253,7 +277,7 @@ export function BrowserScreen(): JSX.Element {
                 visible={visible}
                 hiddenSelectors={reading.selectorsFor(tab)}
                 onPageMessage={(message) => {
-                  if (id === active.id) reading.pageMessage(message);
+                  if (!media.pageMessage(id, message) && id === active.id) reading.pageMessage(message);
                 }}
                 register={(view) => (view ? views.set(id, view) : views.delete(id))}
                 onNavigation={(state) => onNavigation(id, state)}
@@ -304,9 +328,36 @@ export function BrowserScreen(): JSX.Element {
         />
       ) : null}
 
-      {overlay !== "search" ? (
+      {find.open && overlay === "none" && hasPage ? (
+        <FindBar query={find.query} count={find.count} index={find.index} onChange={find.change} onStep={find.step} onDone={find.done} />
+      ) : null}
+
+      {overlay !== "search" && !find.open ? (
         <Animated.View className="absolute inset-x-0 gap-3 px-4" style={[{ bottom: Math.max(insets.bottom, 12) + 4 }, barStyle]} pointerEvents="box-none">
           {hasPage && showPages && !(locked && active.private) ? reading.controls : null}
+          {player ? (
+            <MiniPlayer
+              title={player.title}
+              site={hostOf(player.tab.url)}
+              playing={player.playing}
+              onOpen={() => {
+                setOverlay("none");
+                activate(player.tab.id);
+              }}
+              onToggle={() => media.toggle(player.tab.id)}
+              onClose={() => media.stop(player.tab.id)}
+            />
+          ) : null}
+          {downloads.toast && !(locked && downloads.toast.private) ? (
+            <DownloadToast
+              item={downloads.toast}
+              onOpen={() => downloads.toast && downloads.open(downloads.toast)}
+              onShowAll={() => {
+                downloads.dismissToast();
+                setPanel("downloads");
+              }}
+            />
+          ) : null}
           {tabError && showPages ? (
             <Surface radius={18} style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
               <Text testID="navigation-error" accessibilityRole="alert" style={{ color: muted, fontSize: 14 }}>
@@ -364,6 +415,8 @@ export function BrowserScreen(): JSX.Element {
         onReader={reading.openReader}
         onHideElements={reading.startPicking}
         onCopyMarkdown={reading.copyMarkdown}
+        onFind={find.start}
+        onInspect={reading.startInspecting}
         onToggleBlocking={toggleBlocking}
         onBack={() => run((tab) => tab.goBack())}
         onForward={() => run((tab) => tab.goForward())}
@@ -399,6 +452,17 @@ export function BrowserScreen(): JSX.Element {
         lockPrivateTabs={lockPrivateTabs}
         onLockPrivateTabsChange={(enabled) => void setLockPrivateTabs(enabled)}
         onClearData={wipe}
+        downloadCount={downloads.downloads.length}
+        onDownloads={() => setPanel("downloads")}
+      />
+      <DownloadsPanel
+        visible={panel === "downloads"}
+        onClose={() => closePanel("downloads")}
+        downloads={locked ? downloads.downloads.filter((item) => !item.private) : downloads.downloads}
+        onOpen={downloads.open}
+        onCancel={downloads.cancel}
+        onRemove={downloads.remove}
+        onClear={downloads.clear}
       />
       <LinkMenu
         visible={link !== null}

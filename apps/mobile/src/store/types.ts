@@ -31,6 +31,23 @@ export interface ArchivedTab extends BrowserTab {
   closedAt: number;
 }
 
+export interface DownloadItem {
+  /** The engine's id: a UUID on iOS, the system download id on Android. */
+  id: string;
+  url: string;
+  filename: string;
+  state: "downloading" | "finished" | "failed" | "cancelled";
+  received: number;
+  /** 0 when the size isn't known. */
+  total: number;
+  /** The saved file, once finished: a file:// URL on iOS, a content:// URI on Android. */
+  path?: string;
+  error?: string;
+  startedAt: number;
+  /** From a private tab: kept in memory only. */
+  private?: boolean;
+}
+
 export interface BrowserPreferences {
   searchEngineId: string;
   archiveAfterDays: number | null;
@@ -51,6 +68,8 @@ export interface BrowserData {
   history: HistoryEntry[];
   pinnedSites: PinnedSite[];
   archive: ArchivedTab[];
+  /** Newest first. */
+  downloads: DownloadItem[];
   preferences: BrowserPreferences;
 }
 

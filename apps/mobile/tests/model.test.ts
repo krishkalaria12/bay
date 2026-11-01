@@ -201,3 +201,47 @@ test("restoring hidden element rules rejects malformed hosts and selector values
   assert.equal(data.preferences.reader.size, 19);
   assert.deepEqual(data.preferences.hiddenElements["news.com"], [".ad"]);
 });
+
+test("downloads track an engine's updates and survive a restart as finished or failed", () => {
+  const update = (state: "started" | "progress" | "finished" | "cancelled", extra = {}) => ({
+    id: "d1",
+    url: "https://a.com/file.pdf",
+    filename: "file.pdf",
+    state,
+    received: 0,
+    total: 0,
+    private: false,
+    ...extra,
+  });
+  let data = initialBrowserData(page("a", "https://a.com/"));
+  data = reduceBrowserData(data, { type: "download", update: update("started"), now: 1 });
+  data = reduceBrowserData(data, { type: "download", update: update("progress", { received: 10, total: 100 }), now: 2 });
+  assert.equal(data.downloads[0]?.state, "downloading");
+  assert.equal(data.downloads[0]?.startedAt, 1);
+
+  // Restarting Bay while it's still running can't resume it.
+  const restored = parseBrowserData({ version: 1, ...JSON.parse(JSON.stringify(persistedBrowserData(data))) }, data);
+  assert.equal(restored.downloads[0]?.state, "failed");
+
+  data = reduceBrowserData(data, { type: "download", update: update("finished", { received: 100, total: 100, path: "/x/file.pdf" }), now: 3 });
+  assert.equal(data.downloads[0]?.state, "finished");
+  assert.equal(data.downloads[0]?.path, "/x/file.pdf");
+  // A late update can't revive a finished download.
+  assert.equal(reduceBrowserData(data, { type: "download", update: update("progress", { received: 50 }), now: 4 }), data);
+
+  data = reduceBrowserData(data, { type: "download", update: { ...update("started"), id: "d2", private: true }, now: 5 });
+  assert.deepEqual(
+    data.downloads.map((item) => item.id),
+    ["d2", "d1"],
+  );
+  assert.deepEqual(
+    persistedBrowserData(data).downloads.map((item) => item.id),
+    ["d1"],
+  );
+  // Clearing the list keeps downloads still running.
+  data = reduceBrowserData(data, { type: "clear-downloads" });
+  assert.deepEqual(
+    data.downloads.map((item) => item.id),
+    ["d2"],
+  );
+});

@@ -2,6 +2,7 @@ import { runPageScript, EngineView, type LinkPress, type NavigationState, type P
 import { useEffect, useRef, useState, type JSX } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { WATCH_MEDIA_SCRIPT } from "@/pagescripts/media";
 import { hideElementsScript } from "@/pagescripts/picker";
 
 import type { BrowserTab } from "@/store/types";
@@ -59,7 +60,11 @@ export function TabPage({ tab, visible, register, onNavigation, onError, onScrol
         style={{ flex: 1 }}
         onNavigationStateChange={({ nativeEvent }) => {
           onNavigation(nativeEvent);
+          if (!view.current) return;
           if (!nativeEvent.isLoading) applyHiddenElements(hiddenSelectors);
+          // Media can play before a page finishes loading (a media file streams for as long as it plays), so watching
+          // starts once the document is there; it runs once per document.
+          if (!nativeEvent.isLoading || nativeEvent.progress > 0.1) void runPageScript(view.current, WATCH_MEDIA_SCRIPT).catch(() => {});
         }}
         onPageMessage={({ nativeEvent }) => onPageMessage(nativeEvent.message)}
         onNavigationError={({ nativeEvent }) => onError(nativeEvent.message)}

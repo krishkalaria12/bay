@@ -21,6 +21,8 @@ export interface SettingsPanelProps {
   lockPrivateTabs: boolean;
   onLockPrivateTabsChange: (enabled: boolean) => void;
   onClearData: () => Promise<void>;
+  downloadCount: number;
+  onDownloads: () => void;
 }
 
 const archiveOptions = [
@@ -167,6 +169,13 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           }}
         />
       )}
+      <ActionRow
+        testID="settings-downloads"
+        label="Downloads"
+        detail={props.downloadCount ? `${props.downloadCount} ${props.downloadCount === 1 ? "file" : "files"}` : undefined}
+        disabled={busy}
+        onPress={props.onDownloads}
+      />
       {busy ? (
         <Typography testID="clear-data-busy" className="mt-3 text-sm text-muted">
           Clearing website data…

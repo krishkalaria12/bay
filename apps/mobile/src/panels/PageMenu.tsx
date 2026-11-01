@@ -28,6 +28,8 @@ export interface PageMenuProps {
   onReader: () => void;
   onHideElements: () => void;
   onCopyMarkdown: () => void;
+  onFind: () => void;
+  onInspect: () => void;
   onSettings: () => void;
 }
 
@@ -66,7 +68,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
     action();
   }
   return (
-    <PanelSheet visible={props.visible} onClose={props.onClose} title="Page" testID="page-menu" height="72%">
+    <PanelSheet visible={props.visible} onClose={props.onClose} title="Page" testID="page-menu" height="80%">
       <Typography numberOfLines={2}>{props.title || props.url}</Typography>
       <Typography testID="page-menu-url" className="mt-1 text-sm text-muted" numberOfLines={2}>
         {props.url}
@@ -87,8 +89,13 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
           accessibilityLabel={props.readerActive ? "Reader settings" : "Reader"}
           onPress={() => act(props.onReader)}
         />
+        <NavigationAction id="page-find" label="Find" accessibilityLabel="Find on page" onPress={() => act(props.onFind)} />
+        <NavigationAction id="page-inspect" label="Inspect" accessibilityLabel="Inspect element" onPress={() => act(props.onInspect)} />
+      </View>
+      <View className="mb-2 flex-row gap-2">
         <NavigationAction id="page-hide-elements" label="Hide" accessibilityLabel="Hide elements" onPress={() => act(props.onHideElements)} />
         <NavigationAction id="page-markdown" label="Markdown" accessibilityLabel="Copy as Markdown" onPress={() => act(props.onCopyMarkdown)} />
+        <NavigationAction id="page-share" label="Share" onPress={() => act(props.onShare)} />
       </View>
       <ActionRow testID="page-pin" label={props.isPinned ? "Unpin site" : "Pin site"} onPress={() => act(props.onPin)} />
       {props.blocking !== "off" ? (
@@ -100,7 +107,6 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
         />
       ) : null}
       <ActionRow testID="page-copy" label="Copy link" onPress={() => act(props.onCopy)} />
-      <ActionRow testID="page-share" label="Share" onPress={() => act(props.onShare)} />
       <ActionRow testID="page-settings" label="Settings" onPress={() => act(props.onSettings)} />
       <ActionRow testID="page-close-tab" label="Archive tab" destructive onPress={() => act(props.onCloseTab)} />
     </PanelSheet>

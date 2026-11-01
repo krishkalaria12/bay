@@ -4,9 +4,11 @@ import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Surface } from "@/chrome/Surface";
+import { INSPECT_SCRIPT, type InspectedElement } from "@/pagescripts/inspect";
 import { MARKDOWN_SCRIPT } from "@/pagescripts/markdown";
 import { PICK_PARENT_SCRIPT, START_PICKER_SCRIPT, STOP_PICKER_SCRIPT, type PickedElement } from "@/pagescripts/picker";
 import { CLOSE_READER_SCRIPT, openReaderScript, updateReaderScript, type ReaderSettings } from "@/pagescripts/reader";
+import { InspectPanel } from "@/panels/InspectPanel";
 import { ReaderPanel } from "@/panels/ReaderPanel";
 import { useBrowserStore } from "@/store/browser";
 import type { BrowserTab } from "@/store/types";
@@ -16,6 +18,9 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
   const [readerTab, setReaderTab] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [picking, setPicking] = useState(false);
+  // The picker either hides what's picked or describes it.
+  const [pickMode, setPickMode] = useState<"hide" | "inspect">("hide");
+  const [inspected, setInspected] = useState<InspectedElement | null>(null);
   const [picked, setPicked] = useState<PickedElement | null>(null);
   const [notice, setNotice] = useState("");
   const [privateRules, setPrivateRules] = useState<Record<string, Record<string, string[]>>>({});
@@ -35,6 +40,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     setSettingsOpen(false);
     setPicking(false);
     setPicked(null);
+    setInspected(null);
     setNotice("");
     return () => {
       if (view) {
@@ -71,6 +77,27 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     await script(STOP_PICKER_SCRIPT);
     setPicking(false);
     setPicked(null);
+    setInspected(null);
+  }
+  function startPicking(mode: "hide" | "inspect"): void {
+    task(async () => {
+      if (reader) await script(CLOSE_READER_SCRIPT);
+      setReaderTab(null);
+      const version = context.current;
+      await script(START_PICKER_SCRIPT);
+      if (context.current !== version) return;
+      setPickMode(mode);
+      setPicking(true);
+      setPicked(null);
+      setInspected(null);
+    });
+  }
+  /** Opens the details of the picked element. */
+  function inspect(): void {
+    task(async () => {
+      const element = await script<InspectedElement | null>(INSPECT_SCRIPT);
+      if (element) setInspected(element);
+    });
   }
   function setRules(selectors: string[]): void {
     if (active.private) setPrivateRules((previous) => ({ ...previous, [active.id]: { ...previous[active.id], [host]: selectors } }));
@@ -92,6 +119,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
         typeof value.label === "string"
       ) {
         setPicked({ type: "picked", selector: value.selector, label: value.label.slice(0, 200) });
+        if (pickMode === "inspect") inspect();
       }
     } catch {
       /* A malformed page message has no action. */
@@ -134,16 +162,8 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
         await Clipboard.setStringAsync(result.markdown);
         setNotice("Markdown copied.");
       }),
-    startPicking: () =>
-      task(async () => {
-        if (reader) await script(CLOSE_READER_SCRIPT);
-        setReaderTab(null);
-        const version = context.current;
-        await script(START_PICKER_SCRIPT);
-        if (context.current !== version) return;
-        setPicking(true);
-        setPicked(null);
-      }),
+    startPicking: () => startPicking("hide"),
+    startInspecting: () => startPicking("inspect"),
     controls: (
       <>
         <ReaderPanel
@@ -159,7 +179,34 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
             })
           }
         />
-        {picking ? (
+        <InspectPanel
+          element={picking && pickMode === "inspect" ? inspected : null}
+          onClose={() => setInspected(null)}
+          onParent={() =>
+            task(async () => {
+              if (!(await script<boolean>(PICK_PARENT_SCRIPT))) setNotice("No larger element to select.");
+            })
+          }
+          onCopy={() =>
+            task(async () => {
+              if (!inspected) return;
+              await Clipboard.setStringAsync(inspected.agent);
+              setNotice("Copied for a coding agent.");
+            })
+          }
+        />
+        {picking && pickMode === "inspect" ? (
+          <Surface radius={18} style={{ padding: 12 }}>
+            <Text className="text-foreground" testID="inspect-instructions">
+              {picked ? picked.label : "Tap an element to inspect it."}
+            </Text>
+            <View className="flex-row flex-wrap gap-2">
+              {picked ? <ToolButton id="inspect-open" label="Details" onPress={inspect} /> : null}
+              <ToolButton id="inspect-done" label="Done" onPress={() => task(endPicking)} />
+            </View>
+          </Surface>
+        ) : null}
+        {picking && pickMode === "hide" ? (
           <Surface radius={18} style={{ padding: 12 }}>
             <Text className="text-foreground" testID="hide-instructions">
               {picked ? picked.label : "Tap an element to hide it."}
