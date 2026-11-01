@@ -1,0 +1,46 @@
+// Engines report navigation state dozens of times per load (progress, title, history), for hidden tabs too. Page
+// scripts only need to run when a document appears, so this decides which events run them.
+
+export interface ScriptTiming {
+  /** The last event was loading. Starts true so the first settled event counts as a finished load. */
+  loading: boolean;
+  /** The address the media watcher was installed for during this load, and the progress last seen. */
+  watchedUrl: string | null;
+  progress: number;
+  /** The last hide-elements run applied rules, so the page has some to clear. */
+  hidden: boolean;
+}
+
+export const initialTiming = (): ScriptTiming => ({ loading: true, watchedUrl: null, progress: 0, hidden: false });
+
+/** Updates `timing` for one navigation event and returns the scripts to run on the page. */
+export function scriptsFor(
+  timing: ScriptTiming,
+  state: { url: string; progress: number; isLoading: boolean },
+  hasRules: boolean,
+): { watchMedia: boolean; hideElements: boolean } {
+  let watchMedia = false;
+  let hideElements = false;
+  if (state.isLoading) {
+    // A new load, or progress starting over, is a new document; so is an address change once it commits.
+    if (!timing.loading || state.progress < timing.progress) timing.watchedUrl = null;
+    // Media can play before a page finishes loading (a media file streams for as long as it plays).
+    if (state.progress > 0.1 && state.url !== timing.watchedUrl) {
+      timing.watchedUrl = state.url;
+      watchMedia = true;
+    }
+    timing.progress = state.progress;
+  } else if (timing.loading) {
+    watchMedia = true;
+    hideElements = shouldHide(timing, hasRules);
+  }
+  timing.loading = state.isLoading;
+  return { watchMedia, hideElements };
+}
+
+/** Whether to run hide-elements now; skipped when there's nothing to apply or clear. */
+export function shouldHide(timing: ScriptTiming, hasRules: boolean): boolean {
+  const run = hasRules || timing.hidden;
+  if (run) timing.hidden = hasRules;
+  return run;
+}
