@@ -231,6 +231,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     pageUrl = target
     prepareScriptlets(target)
     webView.loadUrl(target)
+    // WebView reports a start only once the first response arrives, which on a slow network leaves the old page
+    // looking settled for seconds. Report the load now, as WebKit does.
+    loading = true
+    emitState(pending = target)
   }
 
   /**
@@ -413,10 +417,12 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   private fun isWebURL(url: Uri): Boolean = url.scheme?.lowercase() in listOf("http", "https") && !url.host.isNullOrEmpty()
 
-  private fun emitState() {
+  /** `pending` is the address of a load that hasn't committed yet; the current page's URL and title don't apply. */
+  private fun emitState(pending: String? = null) {
     if (disposed) return
     onNavigationStateChange(mapOf(
-      "url" to (webView.url ?: ""), "title" to (webView.title ?: ""), "progress" to webView.progress / 100.0,
+      "url" to (pending ?: webView.url ?: ""), "title" to (if (pending != null) "" else webView.title ?: ""),
+      "progress" to (if (pending != null) 0.0 else webView.progress / 100.0),
       "isLoading" to loading, "canGoBack" to webView.canGoBack(), "canGoForward" to webView.canGoForward()
     ))
   }
