@@ -12,6 +12,8 @@ export type BrowserBarProps = (
       site?: string;
       /** Open tabs, shown on the Tabs button. */
       tabCount?: number;
+      /** The page came over plain http. */
+      insecure?: boolean;
     }
 ) & {
   /** Dark controls over a private page. */
@@ -32,6 +34,11 @@ export function barSite(props: BrowserBarProps): string | undefined {
   return props.mode === "page" && props.site ? props.site.replace(/^www\./, "") : undefined;
 }
 
+/** A page loaded without encryption gets a warning in the capsule. */
+export function barInsecure(props: BrowserBarProps): boolean {
+  return props.mode === "page" && Boolean(props.site) && props.insecure === true;
+}
+
 export function barButtons(props: BrowserBarProps): [BarButton & { icon: "archive" | "tabs" }, BarButton, BarButton & { icon: "settings" | "more" }] {
   return props.mode === "start"
     ? [
@@ -48,7 +55,11 @@ export function barButtons(props: BrowserBarProps): [BarButton & { icon: "archiv
           onLongPress: props.onTabsLongPress,
           badge: props.tabCount,
         },
-        { id: "bar-search", label: props.site ? `Search or enter address, ${props.site}` : "Search", onPress: props.onSearch },
+        {
+          id: "bar-search",
+          label: props.site ? `Search or enter address, ${props.insecure ? "not secure, " : ""}${props.site}` : "Search",
+          onPress: props.onSearch,
+        },
         { id: "bar-more", label: "More", icon: "more", onPress: props.onMore },
       ];
 }

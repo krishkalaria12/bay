@@ -1,9 +1,9 @@
-import { Button, Host, Image, Text } from "@expo/ui/swift-ui";
+import { Button, HStack, Host, Image, Text } from "@expo/ui/swift-ui";
 import { accessibilityLabel, buttonStyle, controlSize, font, frame, tint, truncationMode } from "@expo/ui/swift-ui/modifiers";
 import type { JSX } from "react";
 import { View } from "react-native";
 
-import { barButtons, barSite, type BrowserBarProps } from "./BrowserBar.types";
+import { barButtons, barInsecure, barSite, type BrowserBarProps } from "./BrowserBar.types";
 import { GlassIconButton } from "./GlassIconButton";
 import { TabCount } from "./TabCount";
 import { useStableCallback } from "./useStableCallback";
@@ -15,6 +15,7 @@ const PRIVATE_TINT = "#18181B";
 export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const [left, search, right] = barButtons(props);
   const site = barSite(props);
+  const insecure = barInsecure(props);
   const onSearch = useStableCallback(search.onPress);
   const prominentTint = props.privately ? PRIVATE_TINT : undefined;
   return (
@@ -41,7 +42,10 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
           >
             {site ? (
               // A fixed height keeps the host on one line, truncated.
-              <Text modifiers={[font({ size: 15, weight: "medium" }), truncationMode("tail"), frame({ width: 136, height: 20 })]}>{site}</Text>
+              <HStack spacing={4} modifiers={[frame({ width: 136, height: 20 })]}>
+                {insecure ? <Image systemName="exclamationmark.triangle.fill" color="red" size={13} /> : null}
+                <Text modifiers={[font({ size: 15, weight: "medium" }), truncationMode("tail")]}>{site}</Text>
+              </HStack>
             ) : (
               <Image systemName="magnifyingglass" modifiers={[frame({ width: 92 })]} />
             )}

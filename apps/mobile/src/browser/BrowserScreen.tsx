@@ -455,6 +455,7 @@ export function BrowserScreen(): JSX.Element {
               <BrowserBar
                 mode="page"
                 site={locked && active.private ? undefined : host}
+                insecure={active.url.startsWith("http:")}
                 privately={Boolean(active.private)}
                 onTabs={showTabs}
                 onTabsLongPress={() => setPanel("tabs")}
