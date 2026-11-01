@@ -266,7 +266,7 @@
   <body>
     <main>
       <header>
-        <p class="meta">Implementation plan · revised 31 October 2026 · phases 0, 1 and 2 done on both platforms</p>
+        <p class="meta">Implementation plan · revised 31 October 2026 · phases 0–3 done on both platforms</p>
         <h1>Bay for iPhone and Android.<br />One Lens design, WebKit on iOS, Chromium on Android.</h1>
         <p class="lead">
           Build Bay's mobile browser in <code>apps/mobile</code> with Expo and HeroUI Native. Both platforms get the same design, the Lens demo you shared: it
@@ -412,8 +412,8 @@
               </tr>
               <tr>
                 <td>Blocking</td>
-                <td>Desktop's filter lists converted to content rule lists</td>
-                <td>Request interception (<code>shouldInterceptRequest</code>) plus injected cosmetic CSS, from the same lists</td>
+                <td>Bay's Rust blocker (<code>packages/adblock</code>, Brave's adblock-rust) converts the lists to WebKit content rule lists, compiled once per list version</td>
+                <td>The same Rust blocker checks every request (<code>shouldInterceptRequest</code>) and supplies cosmetic CSS; the built engine is cached per list version</td>
                 <td>Desktop's blocker itself, through <code>//bay/content</code></td>
               </tr>
               <tr>
@@ -556,7 +556,8 @@
               <tr>
                 <td>
                   iOS 26 minimum; Android at the WebView's and later Chromium 154's floor; zustand for state, persisted as one versioned JSON document
-                  with <code>expo-file-system</code>; passwords and keys in <code>expo-secure-store</code>
+                  with <code>expo-file-system</code>; passwords and keys in <code>expo-secure-store</code>; content blocking in Bay's Rust blocker
+                  (<code>packages/adblock</code>, Brave's adblock-rust), shared with desktop
                 </td>
                 <td>
                   Recommended: Liquid Glass needs iOS 26; zustand matches desktop. expo-sqlite 58 doesn't register its native module on Android (its
@@ -800,7 +801,21 @@
         <div class="stage">
           <div class="stage-number">3</div>
           <div>
-            <h3>Privacy and blocking</h3>
+            <h3>Privacy and blocking <span class="done">done</span></h3>
+            <p class="note">
+              Blocking runs on Bay's own Rust blocker (<code>packages/adblock</code>, Brave's adblock-rust), shared with desktop, which now uses it
+              instead of uBlock Origin. Both engines use uBlock Origin's default lists plus EasyList Cookie, downloaded daily straight to files (list
+              text never passes through JavaScript), with uBO's <code>!#if</code> sections resolved per platform. iOS: 178,070 WebKit rules, compiled in
+              about 14 s on first launch in the background and ready in about 25 ms afterwards; adblock.turtlecute.org scores 73% (97 of 132). Android:
+              the engine is built once and loaded from its serialized cache. <code>privacy</code> joins the e2e tests (blocker running with every list,
+              parameter stripping, HTTPS upgrade, per-site pause, private tabs). Scriptlets (<code>##+js</code>) and
+              <code>$redirect</code> stand-ins come from uBlock Origin's resources and Brave's, assembled by
+              <code>packages/adblock/scripts/assemble-resources.mjs</code> and shipped in the app: Android answers redirected requests with the
+              stand-in and registers a page's scriptlets as an origin-scoped document-start script; iOS, whose content rules can't run scripts,
+              also loads the engine (7 ms from cache) and installs them as a user script before each navigation. uBO's trusted scriptlets only
+              run for uBO's own lists. Sheets drag by their handle only, which fixed taps lost in them on iOS. Open: the biometric lock has no
+              e2e test (the simulators have no enrolled biometrics).
+            </p>
             <ul>
               <li>
                 Desktop's filter lists on both: content rule lists on iOS, request interception plus cosmetic CSS on Android. Blocking can be paused per site.
@@ -974,7 +989,7 @@
       </section>
 
       <footer class="note">
-        Bay mobile plan · <code>docs/mobile-plan.html</code> · Phases 0–2 checked on the iPhone 18 Pro simulator (iOS 27) and the bay-pixel emulator
+        Bay mobile plan · <code>docs/mobile-plan.html</code> · Phases 0–3 checked on the iPhone 18 Pro simulator (iOS 27) and the bay-pixel emulator
         (Android 16) on 31 October 2026.
       </footer>
     </main>

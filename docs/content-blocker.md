@@ -52,8 +52,11 @@ The JS API (`packages/nncore/src/contentBlocker.ts`) is unchanged.
 
 ## Not yet
 
-- Scriptlets and redirect resources: `bay_blocker_use_resources` takes adblock-rust's resource JSON, but the app loads
-  none yet, so `##+js()` rules and `$redirect` stand-ins don't apply (redirected requests are blocked instead).
+- Scriptlets and redirect resources on desktop: the resources now exist (`packages/adblock/resources/resources.json`,
+  assembled from uBlock Origin's scriptlets and redirect resources and Brave's by
+  `packages/adblock/scripts/assemble-resources.mjs`; mobile loads them), but desktop doesn't pass them to
+  `bay_blocker_use_resources` yet, and its request filter can only block, not answer with a `$redirect` stand-in
+  (`Blocker::check` returns one).
 - Procedural cosmetic filters (`:has-text()`, `:style()`, `:remove()`) aren't applied.
 - WebSocket connections aren't filtered, and a subresource's redirects aren't checked again.
 - uBO's settings (paused sites, list choices) aren't carried over: the new blocker starts from the defaults.
