@@ -17,8 +17,10 @@ parse_platforms "$@"
 
 build() {
   local platform=$1 log=.expo/logs/native-$1.log
+  # The Rust content blocker first (cargo skips it when nothing changed).
+  bash scripts/adblock "$platform" >"$log" 2>&1 || return 1
   # ios/ and android/ are generated: re-sync them with app.json and the config plugins first.
-  CI=1 npx expo prebuild --platform "$platform" </dev/null >"$log" 2>&1 || return 1
+  CI=1 npx expo prebuild --platform "$platform" </dev/null >>"$log" 2>&1 || return 1
   if [[ $platform == ios ]]; then
     boot_ios >/dev/null && npx expo run:ios --no-bundler --device "$ios_simulator" </dev/null >>"$log" 2>&1
   else

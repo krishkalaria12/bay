@@ -49,6 +49,10 @@ export interface EngineViewProps extends ViewProps {
   ref?: Ref<Tab>;
   /** Opened once when the view is created, so a new tab needs no ref call before it is mounted. Later changes are ignored; navigate through the ref. */
   initialUrl?: string;
+  /** A private page keeps nothing: it uses a separate data store (iOS) or profile (Android), wiped when the last private page closes. Set at creation. */
+  private?: boolean;
+  /** Defaults to true. Hidden tabs pass false so assistive technology skips them. */
+  active?: boolean;
   /** Defaults to true. iOS also supports the native back/forward edge gestures. */
   pullToRefreshEnabled?: boolean;
   onNavigationStateChange?: (event: NativeSyntheticEvent<NavigationState>) => void;
@@ -61,7 +65,35 @@ export interface EngineViewProps extends ViewProps {
 /** Keep mounted while search, start page, or tab chrome overlays it. After `initialUrl`, navigation uses the ref. */
 export const EngineView = requireNativeView<EngineViewProps>("BayEngine");
 
-const nativeEngine = requireNativeModule<{ clearData(): Promise<void> }>("BayEngine");
+const nativeEngine = requireNativeModule<{
+  clearData(): Promise<void>;
+  setContentBlocking(listFiles: string[] | null, version: string): Promise<unknown>;
+  setBlockingPausedHosts(hosts: string[]): void;
+  setTrackingParameters(json: string): boolean;
+  privateBrowsingSupported: boolean;
+}>("BayEngine");
+
+/** False on Android when the installed WebView can't keep a separate profile; private tabs are unavailable then. */
+export const privateBrowsingSupported: boolean = nativeEngine.privateBrowsingSupported;
+
+/**
+ * Blocks with filter list files (`file://` URIs, EasyList syntax), or stops blocking with null. The engines read the
+ * files off the main thread, so list text never passes through JavaScript. `version` names their contents: iOS
+ * compiles WebKit rules once per version and reuses them on later launches. Applies to every page view.
+ */
+export async function setContentBlocking(listFiles: readonly string[] | null, version: string): Promise<void> {
+  await nativeEngine.setContentBlocking(listFiles ? [...listFiles] : null, version);
+}
+
+/** Sites (hosts, matching their subdomains) where blocking is paused. */
+export function setBlockingPausedHosts(hosts: readonly string[]): void {
+  nativeEngine.setBlockingPausedHosts([...hosts]);
+}
+
+/** The tracking-parameter table (`TRACKING_PARAMS` from `@bay/core`) both engines strip from main-frame navigations. */
+export function setTrackingParameters(table: unknown): boolean {
+  return nativeEngine.setTrackingParameters(JSON.stringify(table));
+}
 
 /** Clear cookies, website storage, network cache and tab snapshots. Close page views first to prevent websites writing new data. */
 export function clearData(): Promise<void> {

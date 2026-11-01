@@ -7,7 +7,7 @@ private final class InvalidAddressException: Exception, @unchecked Sendable {
 }
 
 class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate, UIGestureRecognizerDelegate {
-  let webView: WKWebView
+  private(set) var webView: WKWebView
   let onNavigationStateChange = EventDispatcher()
   let onNavigationError = EventDispatcher()
   let onScroll = EventDispatcher()
@@ -19,6 +19,21 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   private var pendingScroll: DispatchWorkItem?
   private var snapshotURL: URL?
   private var startedLoading = false
+  private var pendingInitialURL: String?
+  /// Hosts this view moved from HTTP to HTTPS, with when; an HTTPS page that sends the view straight back keeps HTTP.
+  private var upgradedHosts: [String: Date] = [:]
+
+  /// Private pages use the shared non-persistent store. Set before the first load (React sets props on creation).
+  var isPrivate = false {
+    didSet {
+      if isPrivate != oldValue && !startedLoading { replaceWebView() }
+    }
+  }
+
+  /// Hidden tabs stay mounted; keep them out of VoiceOver.
+  var isActive = true {
+    didSet { webView.accessibilityElementsHidden = !isActive }
+  }
 
   var pullToRefreshEnabled = true {
     didSet {
@@ -28,31 +43,54 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   required init(appContext: AppContext? = nil) {
-    let configuration = WKWebViewConfiguration()
-    configuration.userContentController.addUserScript(WKUserScript(
-      source: """
-        const style = document.createElement('style');
-        style.textContent = 'a[href], a[href] * { -webkit-touch-callout: none !important; -webkit-user-select: none !important; }';
-        document.documentElement.appendChild(style);
-        """,
-      injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: .defaultClient))
-    webView = WKWebView(frame: .zero, configuration: configuration)
+    webView = Self.makeWebView(isPrivate: false)
     super.init(appContext: appContext)
     clipsToBounds = true
+    refreshControl.addTarget(self, action: #selector(refresh), for: .valueChanged)
+    setUpWebView()
+  }
+
+  private static func makeWebView(isPrivate: Bool) -> WKWebView {
+    let configuration = WKWebViewConfiguration()
+    if isPrivate { configuration.websiteDataStore = BayPrivateBrowsing.dataStore() }
+    configuration.userContentController.addUserScript(linkStyle)
+    return WKWebView(frame: .zero, configuration: configuration)
+  }
+
+  // Link long-presses open Bay's link menu (see longPress), so WebKit's callout and link-text selection are off.
+  private static let linkStyle = WKUserScript(
+    source: """
+      const style = document.createElement('style');
+      style.textContent = 'a[href], a[href] * { -webkit-touch-callout: none !important; -webkit-user-select: none !important; }';
+      document.documentElement.appendChild(style);
+      """,
+    injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: .defaultClient)
+
+  /// The page's scriptlets (`##+js`), set before WebKit creates its document so they run in the page's own world ahead
+  /// of its scripts. Replaced on every main-frame navigation.
+  private func applyScriptlets(for url: URL) {
+    let controller = webView.configuration.userContentController
+    controller.removeAllUserScripts()
+    controller.addUserScript(Self.linkStyle)
+    guard let script = BayContentBlocker.shared.scriptlets(for: url) else { return }
+    NSLog("BayContentBlocker: scriptlets for %@: %d chars", url.host ?? "", script.count)
+    controller.addUserScript(WKUserScript(source: "try{\(script)}catch(e){}", injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
+  }
+
+  private func setUpWebView() {
     webView.navigationDelegate = self
     webView.uiDelegate = self
     webView.allowsBackForwardNavigationGestures = true
+    webView.accessibilityElementsHidden = !isActive
     webView.scrollView.delegate = self
     webView.scrollView.contentInsetAdjustmentBehavior = .never
     webView.scrollView.alwaysBounceVertical = true
-    refreshControl.addTarget(self, action: #selector(refresh), for: .valueChanged)
-    webView.scrollView.refreshControl = refreshControl
+    webView.scrollView.refreshControl = pullToRefreshEnabled ? refreshControl : nil
     let press = UILongPressGestureRecognizer(target: self, action: #selector(longPress(_:)))
     press.minimumPressDuration = 0.5
     press.delegate = self
     webView.addGestureRecognizer(press)
     addSubview(webView)
-
     observations = [
       webView.observe(\.url, options: [.new]) { [weak self] _, _ in self?.emitState() },
       webView.observe(\.title, options: [.new]) { [weak self] _, _ in self?.emitState() },
@@ -61,6 +99,24 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
       webView.observe(\.canGoBack, options: [.new]) { [weak self] _, _ in self?.emitState() },
       webView.observe(\.canGoForward, options: [.new]) { [weak self] _, _ in self?.emitState() }
     ]
+    BayContentBlocker.shared.register(self)
+  }
+
+  private func replaceWebView() {
+    observations = []
+    webView.navigationDelegate = nil
+    webView.uiDelegate = nil
+    webView.scrollView.delegate = nil
+    webView.removeFromSuperview()
+    webView = Self.makeWebView(isPrivate: isPrivate)
+    setUpWebView()
+    setNeedsLayout()
+  }
+
+  func applyContentRules(for url: URL?) {
+    let controller = webView.configuration.userContentController
+    controller.removeAllContentRuleLists()
+    for list in BayContentBlocker.shared.rules(for: url) { controller.add(list) }
   }
 
   deinit {
@@ -79,9 +135,15 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   /// Loads once, when the view is created, unless a navigation already started. Invalid addresses are ignored.
+  /// Waits a turn of the run loop so the other initial props (`private` in particular) apply first.
   func loadInitial(_ address: String?) {
     guard !startedLoading, let address, !address.isEmpty else { return }
-    try? load(address)
+    pendingInitialURL = address
+    DispatchQueue.main.async { [weak self] in
+      guard let self, !self.startedLoading, let address = self.pendingInitialURL else { return }
+      self.pendingInitialURL = nil
+      try? self.load(address)
+    }
   }
 
   func stop() {
@@ -178,7 +240,52 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
     // External schemes require an explicit handoff UI in a later phase.
-    decisionHandler(navigationAction.request.url.map(isWebURL) == true ? .allow : .cancel)
+    guard let url = navigationAction.request.url, isWebURL(url) else {
+      decisionHandler(.cancel)
+      return
+    }
+    if navigationAction.targetFrame?.isMainFrame == true {
+      if (navigationAction.request.httpMethod ?? "GET") == "GET", let replacement = BayTracking.clean(url) ?? httpsUpgrade(url) {
+        decisionHandler(.cancel)
+        webView.load(URLRequest(url: replacement))
+        return
+      }
+      applyContentRules(for: url)
+      applyScriptlets(for: url)
+    }
+    decisionHandler(.allow)
+  }
+
+  private func httpsUpgrade(_ url: URL) -> URL? {
+    guard url.scheme?.lowercased() == "http", let host = url.host?.lowercased(), !BayHTTPS.isLocal(host),
+          !BayHTTPS.httpOnlyHosts.contains(host) else { return nil }
+    if let upgraded = upgradedHosts[host], Date().timeIntervalSince(upgraded) < 5 {
+      // The HTTPS page redirected back to HTTP: the site doesn't serve HTTPS properly, so keep HTTP.
+      BayHTTPS.httpOnlyHosts.insert(host)
+      return nil
+    }
+    var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+    components?.scheme = "https"
+    if components?.port == 80 { components?.port = nil }
+    guard let secure = components?.url else { return nil }
+    upgradedHosts[host] = Date()
+    return secure
+  }
+
+  /// Falls back to HTTP when an upgraded HTTPS load can't connect; returns true when it did.
+  private func fallBackToHTTP(after error: NSError) -> Bool {
+    let failing = (error.userInfo[NSURLErrorFailingURLErrorKey] as? URL) ?? webView.url
+    let insecureErrors = [NSURLErrorSecureConnectionFailed, NSURLErrorServerCertificateHasBadDate, NSURLErrorServerCertificateUntrusted,
+                          NSURLErrorServerCertificateHasUnknownRoot, NSURLErrorServerCertificateNotYetValid, NSURLErrorCannotConnectToHost,
+                          NSURLErrorTimedOut, NSURLErrorNetworkConnectionLost]
+    guard let failing, failing.scheme == "https", let host = failing.host?.lowercased(), upgradedHosts[host] != nil,
+          insecureErrors.contains(error.code) else { return false }
+    BayHTTPS.httpOnlyHosts.insert(host)
+    var components = URLComponents(url: failing, resolvingAgainstBaseURL: false)
+    components?.scheme = "http"
+    guard let insecure = components?.url else { return false }
+    webView.load(URLRequest(url: insecure))
+    return true
   }
 
   func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
@@ -217,6 +324,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+    if fallBackToHTTP(after: error as NSError) { return }
     emitError(error)
   }
 

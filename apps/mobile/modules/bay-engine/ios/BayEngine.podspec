@@ -11,5 +11,8 @@ Pod::Spec.new do |s|
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
   s.frameworks = 'WebKit'
-  s.source_files = '**/*.swift'
+  s.source_files = '*.swift'
+  # Built by scripts/adblock from packages/adblock.
+  s.vendored_frameworks = 'BayAdblock.xcframework'
+  s.resources = 'BayAdblockResources/bay-adblock-resources.json'
 end

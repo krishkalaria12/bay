@@ -37,9 +37,28 @@ class BayEngineModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
+    Constant("privateBrowsingSupported") { BayEngineView.privateBrowsingSupported }
+
+    AsyncFunction("setContentBlocking") { files: List<String>?, version: String, promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
+        return@AsyncFunction
+      }
+      BayContentBlocker.apply(files, version, context) { result ->
+        result.fold({ promise.resolve(null) }, { promise.reject("E_CONTENT_BLOCKING", "Couldn't prepare the content blocker.", it) })
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    Function("setBlockingPausedHosts") { hosts: List<String> -> BayContentBlocker.setPausedHosts(hosts) }
+
+    Function("setTrackingParameters") { json: String -> BayAdblock.nativeSetTracking(json) }
+
     View(BayEngineView::class) {
       Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress")
       Prop("pullToRefreshEnabled") { view: BayEngineView, enabled: Boolean -> view.pullToRefreshEnabled = enabled }
+      Prop("private") { view: BayEngineView, isPrivate: Boolean -> view.isPrivate = isPrivate }
+      Prop("active") { view: BayEngineView, active: Boolean -> view.isActive = active }
       Prop("initialUrl") { view: BayEngineView, url: String? -> view.loadInitial(url) }
       AsyncFunction("load") { view: BayEngineView, url: String -> view.load(url) }
       AsyncFunction("goBack") { view: BayEngineView -> view.webView.goBack() }

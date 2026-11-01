@@ -12,13 +12,21 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.SslErrorHandler
+import android.net.http.SslError
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.ProfileStore
+import androidx.webkit.ScriptHandler
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -61,12 +69,46 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     strokeCap = Paint.Cap.ROUND
   }
   var pullToRefreshEnabled = true
+  /** The page this view shows, read on WebView's network threads to judge subresources. */
+  @Volatile private var pageUrl: String? = null
+  /** Hosts this view moved from HTTP to HTTPS, with when; an HTTPS page that sends it straight back keeps HTTP. */
+  private val upgradedHosts = mutableMapOf<String, Long>()
+  private var usesPrivateProfile = false
+  private var scriptlets: ScriptHandler? = null
+
+  /** Private pages use a separate WebView profile, deleted when the last private page closes. Set before the first load. */
+  var isPrivate = false
+    set(value) {
+      if (field == value) return
+      field = value
+      if (!startedLoading) replaceWebView()
+    }
+
+  /** Hidden tabs stay mounted; keep them out of TalkBack. */
+  var isActive = true
+    set(value) {
+      field = value
+      webView.importantForAccessibility = if (value) IMPORTANT_FOR_ACCESSIBILITY_AUTO else IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+    }
   override val shouldUseAndroidLayout = true
   var webView = createWebView()
     private set
 
   private fun createWebView(): WebView = WebView(context).apply {
+    // A profile must be set before anything else touches the WebView.
+    usesPrivateProfile = isPrivate && privateBrowsingSupported
+    if (usesPrivateProfile) {
+      ProfileStore.getInstance().getOrCreateProfile(PRIVATE_PROFILE)
+      WebViewCompat.setProfile(this, PRIVATE_PROFILE)
+      privateViews += 1
+    }
     layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+    importantForAccessibility = if (isActive) IMPORTANT_FOR_ACCESSIBILITY_AUTO else IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+    CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+    addJavascriptInterface(BayContentBlocker.Bridge(), "__bayCosmetic")
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+      WebViewCompat.addDocumentStartJavaScript(this, BayContentBlocker.COSMETIC_SCRIPT, setOf("*"))
+    }
     settings.javaScriptEnabled = true
     settings.domStorageEnabled = true
     settings.allowFileAccess = false
@@ -103,9 +145,32 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     }
     setOnScrollChangeListener { _, _, _, _, _ -> scheduleScroll() }
     webViewClient = object : WebViewClient() {
-      override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !isWebURL(request.url)
+      override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+        if (!isWebURL(request.url)) return true
+        if (!request.isForMainFrame || request.method != "GET") return false
+        val replacement = replacementFor(request.url.toString())
+        if (replacement == null) {
+          prepareScriptlets(request.url.toString())
+          return false
+        }
+        pageUrl = replacement
+        prepareScriptlets(replacement)
+        view.loadUrl(replacement)
+        return true
+      }
+
+      override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+        BayContentBlocker.intercept(request, pageUrl)
+
+      override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+        // Certificate errors are never bypassed; an upgraded page falls back to the HTTP address it came from.
+        handler.cancel()
+        if (fallBackToHttp(error.url)) return
+        onNavigationError(mapOf("url" to error.url, "code" to "ssl-${error.primaryError}", "message" to "This site's security certificate isn't valid."))
+      }
 
       override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+        pageUrl = url
         navigationGeneration += 1
         loading = true
         emitState()
@@ -114,12 +179,17 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) = emitState()
 
       override fun onPageFinished(view: WebView, url: String?) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+          view.evaluateJavascript(BayContentBlocker.COSMETIC_SCRIPT, null)
+        }
         loading = false
         emitState()
       }
 
       override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
         if (!request.isForMainFrame) return
+        val insecure = error.errorCode in listOf(ERROR_CONNECT, ERROR_FAILED_SSL_HANDSHAKE, ERROR_TIMEOUT)
+        if (insecure && fallBackToHttp(request.url.toString())) return
         loading = false
         emitState()
         onNavigationError(mapOf("url" to request.url.toString(), "code" to error.errorCode.toString(),
@@ -131,6 +201,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         navigationGeneration += 1
         removeView(view)
         view.destroy()
+        scriptlets = null
+        releasePrivateProfile()
         webView = createWebView()
         addView(webView)
         loading = false
@@ -155,13 +227,82 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     require(isWebURL(Uri.parse(address))) { "Only HTTP and HTTPS addresses can be opened." }
     recoveryURL = null
     startedLoading = true
-    webView.loadUrl(address)
+    val target = replacementFor(address) ?: address
+    pageUrl = target
+    prepareScriptlets(target)
+    webView.loadUrl(target)
+  }
+
+  /**
+   * Registers the scriptlets for `url`'s page as a document-start script limited to its origin, before it loads, so
+   * they run in the page's main world ahead of its own scripts. Each main-frame navigation replaces them.
+   */
+  private fun prepareScriptlets(url: String) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+    scriptlets?.remove()
+    scriptlets = null
+    val uri = Uri.parse(url)
+    val host = uri.host ?: return
+    val script = runCatching { BayContentBlocker.scriptlets(url) }.getOrDefault("")
+    if (script.isEmpty()) return
+    val origin = "${uri.scheme}://$host" + if (uri.port != -1) ":${uri.port}" else ""
+    scriptlets = WebViewCompat.addDocumentStartJavaScript(webView, "try{$script}catch(e){}", setOf(origin))
+    android.util.Log.d("BayAdblock", "scriptlets for $host: ${script.length} chars")
+  }
+
+  /** The address without tracking parameters, or upgraded to HTTPS; null when it should load as it is. */
+  private fun replacementFor(address: String): String? = BayAdblock.nativeCleanUrl(address) ?: httpsUpgrade(address)
+
+  private fun httpsUpgrade(address: String): String? {
+    val uri = Uri.parse(address)
+    val host = uri.host?.lowercase() ?: return null
+    if (uri.scheme?.lowercase() != "http" || BayHttps.isLocal(host) || host in BayHttps.httpOnlyHosts) return null
+    val upgraded = upgradedHosts[host]
+    if (upgraded != null && SystemClock.uptimeMillis() - upgraded < 5_000) {
+      // The HTTPS page redirected back to HTTP: the site doesn't serve HTTPS properly, so keep HTTP.
+      BayHttps.httpOnlyHosts += host
+      return null
+    }
+    upgradedHosts[host] = SystemClock.uptimeMillis()
+    val authority = if (uri.port == 80) uri.host else uri.encodedAuthority
+    return uri.buildUpon().scheme("https").encodedAuthority(authority).build().toString()
+  }
+
+  /** After an upgraded HTTPS load fails to connect, loads its HTTP address instead; returns true when it did. */
+  private fun fallBackToHttp(address: String): Boolean {
+    val uri = Uri.parse(address)
+    val host = uri.host?.lowercase() ?: return false
+    if (uri.scheme != "https" || host !in upgradedHosts) return false
+    BayHttps.httpOnlyHosts += host
+    val insecure = uri.buildUpon().scheme("http").build().toString()
+    pageUrl = insecure
+    webView.loadUrl(insecure)
+    return true
+  }
+
+  private fun replaceWebView() {
+    scriptlets = null
+    val previous = webView
+    removeView(previous)
+    previous.destroy()
+    releasePrivateProfile()
+    webView = createWebView()
+    addView(webView)
+  }
+
+  private fun releasePrivateProfile() {
+    if (!usesPrivateProfile) return
+    usesPrivateProfile = false
+    privateViews -= 1
+    // The profile's cookies and storage go with it once no private page is left.
+    if (privateViews == 0) runCatching { ProfileStore.getInstance().deleteProfile(PRIVATE_PROFILE) }
   }
 
   /** Loads once, when the view is created, unless a navigation already started. Invalid addresses are ignored. */
   fun loadInitial(address: String?) {
     if (startedLoading || disposed || address.isNullOrEmpty() || !isWebURL(Uri.parse(address))) return
-    load(address)
+    // Wait a turn so the other initial props (`private` in particular) apply first.
+    post { if (!startedLoading && !disposed) load(address) }
   }
 
   fun reload() {
@@ -292,6 +433,14 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     webView.webViewClient = WebViewClient()
     removeView(webView)
     webView.destroy()
+    releasePrivateProfile()
+  }
+
+  companion object {
+    private const val PRIVATE_PROFILE = "bay-private"
+    private var privateViews = 0
+    val privateBrowsingSupported: Boolean
+      get() = WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
   }
 }
 

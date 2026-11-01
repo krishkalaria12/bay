@@ -18,10 +18,44 @@ public class BayEngineModule: Module {
       }
     }.runOnQueue(.main)
 
+    Constant("privateBrowsingSupported") { true }
+
+    AsyncFunction("setContentBlocking") { (files: [String]?, version: String, promise: Promise) in
+      let finish: (Result<Int, Error>) -> Void = { result in
+        switch result {
+        case .success(let rules): promise.resolve(rules)
+        case .failure(let error): promise.reject(error)
+        }
+      }
+      // Read only when this version still has to be compiled.
+      let read: (() -> String?)? = files.map { files in
+        { files.compactMap { URL(string: $0).flatMap { try? String(contentsOf: $0, encoding: .utf8) } }.joined(separator: "\n") }
+      }
+      let paths = files?.compactMap { URL(string: $0)?.path }
+      DispatchQueue.main.async {
+        BayContentBlocker.shared.apply(lists: read, version: version, completion: finish)
+        BayContentBlocker.shared.loadScriptletEngine(paths: paths, version: version)
+      }
+    }
+
+    Function("setBlockingPausedHosts") { (hosts: [String]) in
+      DispatchQueue.main.async { BayContentBlocker.shared.setPausedHosts(hosts) }
+    }
+
+    Function("setTrackingParameters") { (json: String) -> Bool in
+      BayTracking.setParameters(json)
+    }
+
     View(BayEngineView.self) {
       Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress")
       Prop("pullToRefreshEnabled", true) { (view: BayEngineView, enabled: Bool) in
         view.pullToRefreshEnabled = enabled
+      }
+      Prop("private", false) { (view: BayEngineView, isPrivate: Bool) in
+        view.isPrivate = isPrivate
+      }
+      Prop("active", true) { (view: BayEngineView, active: Bool) in
+        view.isActive = active
       }
       Prop("initialUrl") { (view: BayEngineView, url: String?) in
         view.loadInitial(url)
