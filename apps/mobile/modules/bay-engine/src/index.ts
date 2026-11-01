@@ -76,6 +76,7 @@ export const EngineView = requireNativeView<EngineViewProps>("BayEngine");
 
 const nativeEngine = requireNativeModule<{
   clearData(): Promise<void>;
+  pruneSnapshots(keep: string[]): Promise<void>;
   setContentBlocking(listFiles: string[] | null, version: string): Promise<unknown>;
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
@@ -112,6 +113,11 @@ export function setTrackingParameters(table: unknown): boolean {
 /** Clear cookies, website storage, network cache and tab snapshots. Close page views first to prevent websites writing new data. */
 export function clearData(): Promise<void> {
   return nativeEngine.clearData();
+}
+
+/** Deletes tab snapshots that aren't in `keep` (file URIs), except ones written in the last 30 seconds. */
+export function pruneSnapshots(keep: readonly string[]): Promise<void> {
+  return nativeEngine.pruneSnapshots([...keep]);
 }
 
 /** Runs a page script on a tab and resolves with its parsed result; rejects after `timeout` ms (a navigation can drop it). */

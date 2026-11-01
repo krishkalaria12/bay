@@ -1,5 +1,7 @@
 package expo.modules.bayengine
 
+import android.content.Context
+import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import androidx.webkit.WebStorageCompat
@@ -59,6 +61,8 @@ class BayEngineModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
+    AsyncFunction("pruneSnapshots") { keep: List<String> -> appContext.reactContext?.let { pruneSnapshots(it, keep) } }
+
     Constant("privateBrowsingSupported") { BayEngineView.privateBrowsingSupported }
 
     AsyncFunction("setContentBlocking") { files: List<String>?, version: String, promise: Promise ->
@@ -91,5 +95,14 @@ class BayEngineModule : Module() {
       AsyncFunction("evaluate") { view: BayEngineView, script: String, promise: Promise -> view.evaluate(script, promise) }.runOnQueue(Queues.MAIN)
       OnViewDestroys { view: BayEngineView -> view.dispose() }
     }
+  }
+}
+
+/** Deletes snapshots that aren't in `keep` (file URIs). Recent files stay: their tab may not have been told yet. */
+private fun pruneSnapshots(context: Context, keep: List<String>) {
+  val names = keep.mapNotNullTo(HashSet()) { Uri.parse(it).lastPathSegment }
+  val cutoff = System.currentTimeMillis() - 30_000
+  BayEngineSnapshots.directory(context).listFiles()?.forEach { file ->
+    if (file.name !in names && file.lastModified() < cutoff) file.delete()
   }
 }

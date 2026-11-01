@@ -1,3 +1,4 @@
+import { pruneSnapshots } from "@bay/engine";
 import { File, Paths } from "expo-file-system";
 import { AppState } from "react-native";
 import { create } from "zustand";
@@ -6,6 +7,7 @@ import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, 
 import type { BrowserData, BrowserRepository } from "./types";
 
 const SAVE_DELAY = 400;
+const PRUNE_DELAY = 5000;
 
 // One versioned JSON document: the tab model matches desktop's, so sync can map it as a whole. Writes go to a
 // temporary file first and replace the saved one in a single move, so a crash never leaves half a file.
@@ -87,6 +89,19 @@ useBrowserStore.subscribe((state, previous) => {
   if (state.data === previous.data || !state.ready) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, SAVE_DELAY);
+});
+
+// Page views delete only their own previous snapshot, so closed, archived and remounted tabs leave files behind;
+// keep just the ones a tab or archived tab still shows.
+let pruneTimer: ReturnType<typeof setTimeout> | undefined;
+useBrowserStore.subscribe((state, previous) => {
+  if (!state.ready || (previous.ready && state.data.tabs === previous.data.tabs && state.data.archive === previous.data.archive)) return;
+  clearTimeout(pruneTimer);
+  pruneTimer = setTimeout(() => {
+    const { tabs, archive } = useBrowserStore.getState().data;
+    const keep = [...tabs, ...archive].flatMap((tab) => (tab.snapshot ? [tab.snapshot] : []));
+    pruneSnapshots(keep).catch((error: unknown) => console.warn("Couldn't prune tab snapshots.", error));
+  }, PRUNE_DELAY);
 });
 
 AppState.addEventListener("change", (status) => {

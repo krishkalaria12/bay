@@ -35,6 +35,10 @@ public class BayEngineModule: Module {
       }
     }.runOnQueue(.main)
 
+    AsyncFunction("pruneSnapshots") { (keep: [String]) in
+      BayEngineSnapshots.prune(keeping: keep)
+    }
+
     Constant("privateBrowsingSupported") { true }
 
     AsyncFunction("setContentBlocking") { (files: [String]?, version: String, promise: Promise) in
@@ -94,6 +98,18 @@ enum BayEngineSnapshots {
   static var directory: URL? {
     FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
       .appendingPathComponent("bay-engine-snapshots", isDirectory: true)
+  }
+
+  /// Deletes snapshots that aren't in `keep` (file URLs). Recent files stay: their tab may not have been told yet.
+  static func prune(keeping keep: [String]) {
+    guard let directory else { return }
+    let names = Set(keep.compactMap { URL(string: $0)?.lastPathComponent })
+    let cutoff = Date().addingTimeInterval(-30)
+    let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+    for file in files where !names.contains(file.lastPathComponent) {
+      let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantFuture
+      if modified < cutoff { try? FileManager.default.removeItem(at: file) }
+    }
   }
 
   static func clear() throws {

@@ -18,7 +18,6 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
     var filename: String
     var destination: URL?
     var observation: NSKeyValueObservation?
-    var lastProgress: CFTimeInterval = 0
   }
 
   private var entries: [ObjectIdentifier: Entry] = [:]
@@ -33,7 +32,13 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
     let id = UUID().uuidString
     entries[ObjectIdentifier(download)] = Entry(id: id, url: url?.absoluteString ?? "", isPrivate: isPrivate, filename: url?.lastPathComponent ?? "download")
     downloads[id] = download
+    var lastSent: CFTimeInterval = 0
     entries[ObjectIdentifier(download)]?.observation = download.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
+      // KVO fires for every chunk received; report progress at most four times a second. The delegate reports the
+      // final states, so none are dropped.
+      let now = CACurrentMediaTime()
+      guard now - lastSent >= 0.25 else { return }
+      lastSent = now
       DispatchQueue.main.async { self?.report(download, state: "progress", received: progress.completedUnitCount, total: progress.totalUnitCount) }
     }
   }
@@ -80,12 +85,6 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
 
   private func report(_ download: WKDownload, state: String, received: Int64, total: Int64, error: String? = nil) {
     guard let entry = entries[ObjectIdentifier(download)] else { return }
-    // Progress at most four times a second.
-    if state == "progress" {
-      let now = CACurrentMediaTime()
-      if now - entry.lastProgress < 0.25 { return }
-      entries[ObjectIdentifier(download)]?.lastProgress = now
-    }
     var body: [String: Any] = [
       "id": entry.id, "url": entry.url, "filename": entry.filename, "state": state,
       "received": Double(max(received, 0)), "total": Double(max(total, 0)), "private": entry.isPrivate,
