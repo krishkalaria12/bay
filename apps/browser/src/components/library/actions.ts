@@ -1,6 +1,7 @@
 import { confirm, prompt, showMenu } from "@bay/shell";
 import { useBrowser } from "../../store/browser";
-import { resolveWindowId, viewTabIds } from "../../store/model";
+import { isIncognitoSpace, resolveWindowId, viewTabIds } from "../../store/model";
+import type { Tab } from "../../store/types";
 import { showToast } from "../layout/splitActions";
 import { openInternalPage, tabDestination } from "../pages/urls";
 import type { LibraryMedia } from "./model";
@@ -159,4 +160,35 @@ export async function removeEasel(id: string) {
       .filter((t) => easelIdOf(tabDestination(t)) === id)
       .map((t) => t.id),
   );
+}
+
+export async function libraryTabMenu(windowId: string, tab: Tab) {
+  if (!libraryWindow(windowId)) return;
+  const s = useBrowser.getState();
+  const spaces = s.spaceOrder.map((id) => s.spaces[id]).filter((space) => space && !isIncognitoSpace(space.id) && !isIncognitoSpace(space.profileId ?? ""));
+  const choice = await showMenu([
+    { id: "open", title: "Open Tab" },
+    {
+      id: "move",
+      title: "Move to Space",
+      children: spaces.map((space) => ({
+        id: `space:${space!.id}`,
+        title: space!.name,
+        checked: space!.id === tab.spaceId,
+        enabled: space!.id !== tab.spaceId,
+      })),
+    },
+    { separator: true },
+    { id: "close", title: "Close Tab" },
+  ]);
+  if (!choice || !libraryWindow(windowId)) return;
+  const current = useBrowser.getState();
+  const live = current.tabs[tab.id];
+  if (!live || isIncognitoSpace(live.spaceId)) return;
+  if (choice === "open") {
+    current.switchSpace(windowId, live.spaceId);
+    useBrowser.getState().activate(tab.id, windowId);
+  }
+  if (choice.startsWith("space:")) current.moveTabToSpace(tab.id, choice.slice(6));
+  if (choice === "close") current.closeTab(tab.id);
 }

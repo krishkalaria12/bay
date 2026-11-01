@@ -11,25 +11,30 @@ import { downloadsIn } from "../../store/ui";
 import { downloadMenu, downloadStatus, FileIcon } from "../Downloads";
 import { showToast } from "../layout/splitActions";
 import { EmptyState, hostLabel, matchesQuery } from "../pages/PageLayout";
-import { useSidebarOnRight } from "../layout/windowLayout";
+import { useAddressBarInSidebar, useSidebarOnRight } from "../layout/windowLayout";
 import { IconButton, useHover } from "../primitives";
 import { PROFILE_INDICATOR_X } from "../spaces/constants";
 import { SearchField, useFormColors } from "../settings/controls";
+import { ADDRESS_LIGHTS_Y } from "../sidebar/constants";
 import { useSidebarTokens, useSidebarWidth } from "../sidebar/tokens";
 import { newEasel, openLibraryPage } from "./actions";
 import { importMediaFiles, LibrarySectionBody } from "./LibraryPage";
 import { SECTIONS, type Section } from "./sections";
-import { closeLibrarySidebar, showLibrarySidebar, useLibrarySidebar } from "./sidebarState";
+import { closeLibrarySidebar, LIBRARY_RAIL as RAIL, showLibrarySidebar, useLibrarySidebar } from "./sidebarState";
 import { startLibrary, useLibrary } from "./state";
 
 // Arc's Library in the sidebar: a rail of its sections down the left, and the chosen one's list beside it, with the
 // page still showing. Back goes to the tabs; the other button opens it as a page instead.
-const RAIL = 72;
 
 export function LibrarySidebar({ windowId }: { windowId: string }) {
   const colors = useFormColors();
   const width = useSidebarWidth(windowId);
   const right = useSidebarOnRight();
+  // The window buttons sit at the sidebar's top left: over the rail on the left, over the list on the right (where
+  // they show only with the address bar in the sidebar). The field starts after them.
+  const addressInSidebar = useAddressBarInSidebar();
+  const lightsHere = !right || addressInSidebar;
+  const fieldInset = !lightsHere ? 0 : right ? PROFILE_INDICATOR_X - layout.sidebarInset : PROFILE_INDICATOR_X - RAIL;
   const section = useLibrarySidebar((l) => l[windowId]) ?? "media";
   const [query, setQuery] = useState("");
   const [listWidth, setListWidth] = useState(width - RAIL);
@@ -40,11 +45,12 @@ export function LibrarySidebar({ windowId }: { windowId: string }) {
   const current = SECTIONS.find((s) => s.id === section)!;
 
   return (
-    <View style={{ width, height: "100%", flexDirection: "row" }}>
+    // The rail keeps to the window's edge: on the right, everything mirrors.
+    <View style={{ width, height: "100%", flexDirection: right ? "row-reverse" : "row" }}>
       {/* The window moves by the band the window buttons sit in; the search field over it still takes clicks. */}
-      <WindowDragRegion style={{ position: "absolute", top: 0, left: 0, right: 0, height: layout.sidebarHeader }} />
+      <WindowDragRegion style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2 * ADDRESS_LIGHTS_Y }} />
       <View style={{ width: RAIL, paddingTop: layout.sidebarHeader, paddingBottom: layout.cardInset + 4, alignItems: "center" }}>
-        <View style={{ flex: 1, justifyContent: "center", gap: 6 }}>
+        <View style={{ flex: 1, justifyContent: "center", gap: 18 }}>
           {SECTIONS.map((item) => (
             <RailButton
               key={item.id}
@@ -60,10 +66,11 @@ export function LibrarySidebar({ windowId }: { windowId: string }) {
           <IconButton icon="arrow.up.left.and.arrow.down.right" size={12} box={28} tooltip="Open as Page" onPress={() => openLibraryPage(windowId, section)} />
         </View>
       </View>
-      <View style={{ flex: 1, paddingRight: layout.sidebarInset, paddingBottom: layout.cardInset }}>
+      <View style={{ flex: 1, [right ? "paddingLeft" : "paddingRight"]: layout.sidebarInset, paddingBottom: layout.cardInset }}>
         {/* On the left the window buttons sit over the rail's top and a little past it: the field starts after them. */}
-        <View style={{ height: layout.sidebarHeader, flexDirection: "row", alignItems: "center", gap: 4, paddingLeft: right ? 0 : PROFILE_INDICATOR_X - RAIL }}>
-          <SearchField value={query} onChangeText={setQuery} placeholder={`Search ${current.title}…`} style={{ flex: 1 }} />
+        {/* Centred on the window buttons' line, as the sidebar's own header buttons are. */}
+        <View style={{ height: 2 * ADDRESS_LIGHTS_Y, flexDirection: "row", alignItems: "center", gap: 4, paddingLeft: fieldInset }}>
+          <SearchField value={query} onChangeText={setQuery} placeholder={`Search ${current.title}…`} style={{ flex: 1, maxWidth: 320 }} />
           <SectionAction windowId={windowId} section={section} disabled={!loaded || !!error} />
         </View>
         {error ? (

@@ -17,7 +17,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { isIncognitoSpace, spaceTabIds } from "../../store/model";
-import type { Tab, TabSnapshot } from "../../store/types";
+import type { TabSnapshot } from "../../store/types";
 import { openUrl } from "../bookmarks/actions";
 import { showToast } from "../layout/splitActions";
 import { DownloadsPage } from "../pages/DownloadsPage";
@@ -26,10 +26,11 @@ import { Favicon, IconButton, useHover } from "../primitives";
 import { Button, SearchField, useFormColors } from "../settings/controls";
 import { tabTitle } from "../sidebar/actions";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
-import { chooseEasel, easelMenu, libraryWindow, newEasel, openEasel } from "./actions";
+import { chooseEasel, easelMenu, libraryTabMenu, libraryWindow, newEasel, openEasel } from "./actions";
 import type { EaselDocument, LibraryMedia } from "./model";
 import { removeLibraryMedia, saveLibraryMedia, startLibrary, useLibrary } from "./state";
 import { SECTIONS, sectionOf, type Section } from "./sections";
+import { LibrarySpaces } from "./LibrarySpaces";
 import type { Boost } from "../../lib/boosts";
 import { Toggle } from "../layout/controls";
 import { exportBoostFile, openBoostEditor, removeBoost } from "../boosts/editor";
@@ -154,7 +155,8 @@ export function LibrarySectionBody({
 }) {
   const loaded = useLibrary((s) => s.loaded);
   const pad = compact ? 10 : 24;
-  if (section === "spaces") return <SpacesSection windowId={windowId} query={query} pad={pad} />;
+  if (section === "spaces")
+    return compact ? <LibrarySpaces windowId={windowId} query={query} /> : <SpacesSection windowId={windowId} query={query} pad={pad} />;
   if (section === "boosts") return <BoostsSection windowId={windowId} query={query} pad={pad} />;
   if (section === "archive") return <ArchiveSection windowId={windowId} query={query} pad={pad} />;
   if (!loaded) return <EmptyState title="Loading Library…" />;
@@ -627,37 +629,6 @@ async function libraryBoostMenu(windowId: string, b: Boost) {
   if (choice === "edit") editBoostOnSite(windowId, b);
   else if (choice === "export") void exportBoostFile(b.id);
   else if (choice === "delete") void removeBoost(null, b.id);
-}
-
-async function libraryTabMenu(windowId: string, tab: Tab) {
-  if (!libraryWindow(windowId)) return;
-  const s = useBrowser.getState();
-  const spaces = s.spaceOrder.map((id) => s.spaces[id]).filter((space) => space && !isIncognitoSpace(space.id) && !isIncognitoSpace(space.profileId ?? ""));
-  const choice = await showMenu([
-    { id: "open", title: "Open Tab" },
-    {
-      id: "move",
-      title: "Move to Space",
-      children: spaces.map((space) => ({
-        id: `space:${space!.id}`,
-        title: space!.name,
-        checked: space!.id === tab.spaceId,
-        enabled: space!.id !== tab.spaceId,
-      })),
-    },
-    { separator: true },
-    { id: "close", title: "Close Tab" },
-  ]);
-  if (!choice || !libraryWindow(windowId)) return;
-  const current = useBrowser.getState();
-  const live = current.tabs[tab.id];
-  if (!live || isIncognitoSpace(live.spaceId)) return;
-  if (choice === "open") {
-    current.switchSpace(windowId, live.spaceId);
-    useBrowser.getState().activate(tab.id, windowId);
-  }
-  if (choice.startsWith("space:")) current.moveTabToSpace(tab.id, choice.slice(6));
-  if (choice === "close") current.closeTab(tab.id);
 }
 
 type ArchiveEntry = { id: string; title: string; detail: string; at: number; icon: string; cleaned: boolean; small?: boolean; tab?: TabSnapshot };
