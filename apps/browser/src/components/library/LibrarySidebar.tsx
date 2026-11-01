@@ -66,7 +66,7 @@ export function LibrarySidebar({ windowId }: { windowId: string }) {
           <IconButton icon="arrow.up.left.and.arrow.down.right" size={12} box={28} tooltip="Open as Page" onPress={() => openLibraryPage(windowId, section)} />
         </View>
       </View>
-      <View style={{ flex: 1, [right ? "paddingLeft" : "paddingRight"]: layout.sidebarInset, paddingBottom: layout.cardInset }}>
+      <View style={{ flex: 1, paddingLeft: right ? layout.sidebarInset : 0, paddingRight: right ? 0 : layout.sidebarInset, paddingBottom: layout.cardInset }}>
         {/* On the left the window buttons sit over the rail's top and a little past it: the field starts after them. */}
         {/* Centred on the window buttons' line, as the sidebar's own header buttons are. */}
         <View style={{ height: 2 * ADDRESS_LIGHTS_Y, flexDirection: "row", alignItems: "center", gap: 4, paddingLeft: fieldInset }}>

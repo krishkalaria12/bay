@@ -24,6 +24,7 @@ import { withSplitPanes } from "./splits";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { ClosedGroup, ClosedTab, Tab, TabGroup } from "./types";
 import { CLEAN_UP_AFTER_MS, DELETED_GROUP_MS, MAX_CLEANED, MAX_CLOSED_GROUPS, RECENT_TABS } from "./constants";
+import { groupIndex, splitIndex } from "./structure";
 
 export type TabPlacement = {
   // An Essential (a pinned tile).
@@ -75,7 +76,7 @@ export type OrganizeSlice = {
 export const keptDeletedGroups = (list: ClosedGroup[], now = Date.now()) => list.filter((c) => now - c.closedAt < DELETED_GROUP_MS);
 
 export const groupOf = (s: Pick<BrowserState, "groups">, tabId: string | undefined): TabGroup | undefined =>
-  tabId ? Object.values(s.groups).find((g) => g.tabIds.includes(tabId)) : undefined;
+  tabId ? groupIndex(s.groups).get(tabId) : undefined;
 
 export function selectedTabIds(s: BrowserState, windowId: string): string[] {
   const view = viewTabIds(s, windowId);
@@ -349,32 +350,59 @@ export function cleanUpHours(s: Pick<BrowserState, "spaces" | "settings">, space
 
 export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), spaceId?: string): string[] {
   const view = viewTabIds(s, windowId, spaceId);
+  const out = new Set<string>();
+  visitCleanUpCandidates(s, view, windowId, inactiveForMs, now, spaceId, (id) => {
+    out.add(id);
+    return false;
+  });
+  return view.filter((id) => out.has(id));
+}
+
+/** Whether cleanup would remove a tab, stopping at the first eligible one. */
+export function hasCleanUpCandidates(s: BrowserState, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), spaceId?: string): boolean {
+  return visitCleanUpCandidates(s, viewTabIds(s, windowId, spaceId), windowId, inactiveForMs, now, spaceId, () => true);
+}
+
+// Returning true from visit stops the scan. Both queries share protection and duplicate keeper rules.
+function visitCleanUpCandidates(
+  s: BrowserState,
+  view: string[],
+  windowId: string,
+  inactiveForMs: number,
+  now: number,
+  spaceId: string | undefined,
+  visit: (id: string) => boolean,
+): boolean {
+  if (!view.length) return false;
   // The tab any window shows for the space stays.
   const space = spaceId ?? s.windows[windowId]?.spaceId ?? "";
   const shown = new Set(Object.keys(s.windows).map((w) => activeTabId(s, w, space)));
   const active = activeTabId(s, windowId, spaceId);
-  const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
-  const inSplit = new Set(Object.values(s.splits).flatMap((v) => v.tabIds));
+  const grouped = groupIndex(s.groups);
+  const inSplit = splitIndex(s.splits);
   const keep = (t: Tab) => shown.has(t.id) || pinnedPage(t) || t.kept || s.live[t.id]?.playingAudio;
-  const out = new Set<string>();
+  // Clear usually finds an ordinary inactive tab here, without building duplicate buckets.
+  for (const id of view) {
+    const t = s.tabs[id]!;
+    if (keep(t) || grouped.has(id) || inSplit.has(id)) continue;
+    if (now - t.lastActiveAt >= inactiveForMs && visit(id)) return true;
+  }
   const byPage = new Map<string, Tab[]>();
   for (const id of view) {
     const t = s.tabs[id]!;
     if (!t.url) continue;
     const key = t.url.replace(/#.*$/, "");
-    byPage.set(key, [...(byPage.get(key) ?? []), t]);
+    const same = byPage.get(key);
+    if (same) same.push(t);
+    else byPage.set(key, [t]);
   }
   for (const same of byPage.values()) {
     if (same.length < 2) continue;
     const keeper = same.find(pinnedPage) ?? same.find((t) => t.id === active) ?? [...same].sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]!;
-    for (const t of same) if (t !== keeper && !keep(t) && !inSplit.has(t.id)) out.add(t.id);
+    // Group membership protects inactive tabs, but does not protect duplicates.
+    for (const t of same) if (t !== keeper && !keep(t) && !inSplit.has(t.id) && visit(t.id)) return true;
   }
-  for (const id of view) {
-    const t = s.tabs[id]!;
-    if (keep(t) || grouped.has(id) || inSplit.has(id)) continue;
-    if (now - t.lastActiveAt >= inactiveForMs) out.add(id);
-  }
-  return view.filter((id) => out.has(id));
+  return false;
 }
 
 export function abandonedNewTabs(s: BrowserState, windowId: string): string[] {

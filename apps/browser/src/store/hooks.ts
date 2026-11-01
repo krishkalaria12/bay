@@ -1,4 +1,5 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
+import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { isBookmarked } from "./bookmarks";
 import { useBrowser } from "./browser";
@@ -6,6 +7,7 @@ import { activeTabId, bookmarkSpaceId, IDLE_LIVE, spaceFor } from "./model";
 import type { Settings } from "./settings";
 import type { BrowserWindow, FindState, Space, Tab, TabLive } from "./types";
 import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./ui";
+import { findStore, settingsStore, tabLiveStore, tabStore, windowStore, windowUiStore } from "./views";
 
 export const WindowContext = createContext<string | null>(null);
 
@@ -18,10 +20,8 @@ export function useWindowId(): string {
 
 export function useWindowField<T>(select: (w: BrowserWindow) => T, fallback: T): T {
   const id = useWindowId();
-  return useBrowser((s) => {
-    const w = s.windows[id];
-    return w ? select(w) : fallback;
-  });
+  const view = useMemo(() => windowStore(id), [id]);
+  return useStore(view, (w) => (w ? select(w) : fallback));
 }
 
 export const PageSpaceContext = createContext<string | null>(null);
@@ -65,25 +65,33 @@ export function useIsActiveTab(tabId: string): boolean {
   });
 }
 
-export const useTab = (tabId: string | undefined): Tab | undefined => useBrowser((s) => (tabId ? s.tabs[tabId] : undefined));
+export function useTab(tabId: string | undefined): Tab | undefined {
+  const view = useMemo(() => tabStore(tabId ?? ""), [tabId]);
+  return useStore(view);
+}
 
 export function useTabLive(tabId: string | undefined): TabLive;
 export function useTabLive<T>(tabId: string | undefined, select: (live: TabLive) => T): T;
 export function useTabLive<T>(tabId: string | undefined, select?: (live: TabLive) => T) {
-  return useBrowser((s) => {
-    const live = (tabId && s.live[tabId]) || IDLE_LIVE;
+  const view = useMemo(() => tabLiveStore(tabId ?? ""), [tabId]);
+  return useStore(view, (value) => {
+    const live = value ?? IDLE_LIVE;
     return select ? select(live) : live;
   });
 }
 
-export const useFind = (tabId: string | undefined): FindState => useBrowser((s) => (tabId && s.find[tabId]) || CLOSED_FIND);
+export function useFind(tabId: string | undefined): FindState {
+  const view = useMemo(() => findStore(tabId ?? ""), [tabId]);
+  return useStore(view, (find) => find ?? CLOSED_FIND);
+}
 
 export function useWindowUi() {
   const id = useWindowId();
-  return useBrowser((s) => s.windowUi[id] ?? DEFAULT_WINDOW_UI);
+  const view = useMemo(() => windowUiStore(id), [id]);
+  return useStore(view, (ui) => ui ?? DEFAULT_WINDOW_UI);
 }
 
-export const useSettings = <T>(select: (settings: Settings) => T): T => useBrowser((s) => select(s.settings));
+export const useSettings = <T>(select: (settings: Settings) => T): T => useStore(settingsStore, select);
 
 export function useIsBookmarked(url: string): boolean {
   const id = useWindowId();

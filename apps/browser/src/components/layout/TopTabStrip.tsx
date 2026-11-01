@@ -79,6 +79,7 @@ import {
   STRIP_TUCK_FADE_MS,
   TOP_STRIP_HEIGHT,
 } from "./constants";
+import { firstSlotIndexes } from "./stripSlots";
 import { makeRoom, registerSlot, reorderOffsets, settleRoom } from "./stripReorder";
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, setInsert, setInsertResolver, updateTabDrag, useTabDrag } from "./tabDrag";
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type EasedColor, type ToolbarPalette } from "./toolbarColors";
@@ -284,7 +285,8 @@ function StripPage({ spaceId, slot, pageWidth, current, resting }: { spaceId: st
     }),
     STRIP_GAP,
   );
-  const slotOf = (id: string) => top.slots.findIndex((slot) => slot.tabIds[0] === id);
+  const firstSlots = firstSlotIndexes(top.slots);
+  const slotOf = (id: string) => firstSlots.get(id) ?? -1;
   const dockIds = parsed.flatMap((e) => (e.kind === "dock" ? e.ids : []));
   const strip = { top, dock: dockIds.length ? { ids: dockIds, left: -(dockWidth(dockIds.length) + STRIP_DOCK_GAP) } : null };
   const incoming = useIncomingTab(windowId, current, top);

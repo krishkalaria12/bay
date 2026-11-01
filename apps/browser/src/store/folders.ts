@@ -33,10 +33,24 @@ export type FoldersSlice = {
   deletePinnedFolder(id: string): void;
 };
 
+const childMemo = new WeakMap<FolderState["pinnedFolders"], Map<string | null, string[]>>();
+const descendantMemo = new WeakMap<FolderState["pinnedFolders"], Map<string, Set<string>>>();
+const NO_FOLDER_TABS: string[] = [];
+
 export function childFolderIds(s: FolderState, parentId: string | null, spaceId?: string): string[] {
-  return Object.values(s.pinnedFolders)
-    .filter((f) => (f.parentId ?? null) === parentId && (!spaceId || f.spaceId === spaceId))
-    .map((f) => f.id);
+  let children = childMemo.get(s.pinnedFolders);
+  if (!children) {
+    children = new Map();
+    for (const f of Object.values(s.pinnedFolders)) {
+      const parent = f.parentId ?? null;
+      const ids = children.get(parent);
+      if (ids) ids.push(f.id);
+      else children.set(parent, [f.id]);
+    }
+    childMemo.set(s.pinnedFolders, children);
+  }
+  const ids = children.get(parentId) ?? NO_FOLDER_TABS;
+  return spaceId ? ids.filter((id) => s.pinnedFolders[id]?.spaceId === spaceId) : ids;
 }
 
 export function folderDepth(s: FolderState, id: string): number {
@@ -61,6 +75,10 @@ export function folderRootId(s: FolderState, id: string): string | undefined {
 }
 
 function subtreeIds(s: FolderState, id: string): Set<string> {
+  let descendants = descendantMemo.get(s.pinnedFolders);
+  if (!descendants) descendantMemo.set(s.pinnedFolders, (descendants = new Map()));
+  const cached = descendants.get(id);
+  if (cached) return cached;
   const ids = new Set<string>();
   const visit = (at: string) => {
     if (ids.has(at)) return;
@@ -68,6 +86,7 @@ function subtreeIds(s: FolderState, id: string): Set<string> {
     childFolderIds(s, at).forEach(visit);
   };
   if (s.pinnedFolders[id]) visit(id);
+  if (s.pinnedFolders[id]) descendants.set(id, ids);
   return ids;
 }
 
@@ -81,15 +100,45 @@ export function canMoveFolder(s: FolderState, id: string, parentId: string | nul
   return (parent ? folderDepth(s, parent.id) : 0) + height <= MAX_FOLDER_DEPTH;
 }
 
+type FolderMembers = { direct: Map<string, string[]>; recursive: Map<string, string[]> };
+// Weak keys release historical folder/tab/list snapshots. Build membership once per space, rather than
+// rescanning its list and descendants for every folder selector on each store notification.
+const membershipMemo = new WeakMap<
+  FolderState["pinnedFolders"],
+  WeakMap<FolderTabsState["tabs"], WeakMap<FolderTabsState["tabLists"], Map<string, FolderMembers>>>
+>();
+
 /** Rows in list order, including descendants unless recursive is false. */
 export function folderTabIds(s: FolderTabsState, folderId: string, recursive = true): string[] {
   const f = s.pinnedFolders[folderId];
-  if (!f) return [];
-  const folders = recursive ? subtreeIds(s, folderId) : new Set([folderId]);
-  return listIds(s, spaceListKey(s, f.spaceId)).filter((id) => {
-    const t = s.tabs[id];
-    return !!t?.pinnedRow && t.spaceId === f.spaceId && !!t.folderId && folders.has(t.folderId);
-  });
+  if (!f) return NO_FOLDER_TABS;
+  let byTabs = membershipMemo.get(s.pinnedFolders);
+  if (!byTabs) membershipMemo.set(s.pinnedFolders, (byTabs = new WeakMap()));
+  let byLists = byTabs.get(s.tabs);
+  if (!byLists) byTabs.set(s.tabs, (byLists = new WeakMap()));
+  let spaces = byLists.get(s.tabLists);
+  if (!spaces) byLists.set(s.tabLists, (spaces = new Map()));
+  let members = spaces.get(f.spaceId);
+  if (!members) {
+    members = { direct: new Map(), recursive: new Map() };
+    const append = (map: Map<string, string[]>, folder: string, tab: string) => {
+      const ids = map.get(folder);
+      if (ids) ids.push(tab);
+      else map.set(folder, [tab]);
+    };
+    for (const id of listIds(s, spaceListKey(s, f.spaceId))) {
+      const t = s.tabs[id];
+      if (!t?.pinnedRow || t.spaceId !== f.spaceId || !t.folderId) continue;
+      append(members.direct, t.folderId, id);
+      const seen = new Set<string>();
+      for (let at = s.pinnedFolders[t.folderId]; at && !seen.has(at.id); at = at.parentId ? s.pinnedFolders[at.parentId] : undefined) {
+        seen.add(at.id);
+        append(members.recursive, at.id, id);
+      }
+    }
+    spaces.set(f.spaceId, members);
+  }
+  return (recursive ? members.recursive : members.direct).get(folderId) ?? NO_FOLDER_TABS;
 }
 
 /** Where an empty folder receives its first rows, following sibling anchors through empty folders. */

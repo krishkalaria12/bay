@@ -5,6 +5,7 @@ import { listOfTab, newId, pinnedPage, tabListKey, withList } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { SplitView, Tab } from "./types";
 import { MAX_SPLIT_PANES } from "./constants";
+import { splitIndex } from "./structure";
 
 export type SplitsSlice = {
   splits: Record<string, SplitView>;
@@ -58,9 +59,7 @@ function fromSlots(split: SplitView, slots: SplitSlot[], sizes?: number[]): Spli
 }
 
 export function splitOf(s: Pick<BrowserState, "splits">, tabId: string | undefined): SplitView | undefined {
-  if (!tabId) return undefined;
-  for (const v of Object.values(s.splits)) if (v.tabIds.includes(tabId)) return v;
-  return undefined;
+  return tabId ? splitIndex(s.splits).get(tabId)?.[0] : undefined;
 }
 
 export function pinnedSplitOf(s: Pick<BrowserState, "splits" | "tabs">, tabId: string | undefined): SplitView | undefined {

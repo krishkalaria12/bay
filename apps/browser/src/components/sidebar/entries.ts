@@ -2,7 +2,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { childFolderIds, folderRootId, folderTabIds, inFolder } from "../../store/folders";
 import { activeTabId, favoriteTabIds, spaceFolded, viewTabIds } from "../../store/model";
-import { live, profileFolders } from "../../live/store";
+import { live } from "../../live/store";
 import { folderRows } from "../../live/rows";
 import type { SidebarKeyboardRow } from "./keyboardModel";
 import { splitRowTabs } from "../../store/splits";
@@ -216,8 +216,70 @@ function insertEmptyFolders(s: BrowserState, entries: string[], emptyIds: string
   }
 }
 
+const NO_KEYBOARD_ROWS: SidebarKeyboardRow[] = [];
+const NO_KEYBOARD_IDS: string[] = [];
+type KeyboardLiveState = Pick<ReturnType<typeof live>, "folders" | "folderOrder" | "items" | "completing" | "expandedStacks" | "showAll">;
+type KeyboardMemo = { inputs: unknown[]; extensions: SidebarKeyboardRow[]; result: SidebarKeyboardRow[]; ids: string[] };
+// Share work across the mounted space scopes. Bound retained snapshots even after windows/spaces close.
+const keyboardMemo = new Map<string, KeyboardMemo>();
+const keyboardIds = new WeakMap<SidebarKeyboardRow[], string[]>();
+
 /** The settled visible rows, in the same order as SidebarPage, FolderBlock, GroupBlock and LiveFolders. */
-export function sidebarKeyboardRows(s: BrowserState, windowId: string, liveState = live(), extensions: SidebarKeyboardRow[] = []): SidebarKeyboardRow[] {
+export function sidebarKeyboardRows(
+  s: BrowserState,
+  windowId: string,
+  liveState: KeyboardLiveState = live(),
+  extensions: SidebarKeyboardRow[] = NO_KEYBOARD_ROWS,
+): SidebarKeyboardRow[] {
+  const w = s.windows[windowId];
+  if (!w) return NO_KEYBOARD_ROWS;
+  const inputs = [
+    s.tabs,
+    s.tabLists,
+    s.groups,
+    s.splits,
+    s.pinnedFolders,
+    w.spaceId,
+    w.kind,
+    w.incognito,
+    activeTabId(s, windowId),
+    spaceFolded(s, w.spaceId),
+    liveState.folders,
+    liveState.folderOrder,
+    liveState.items,
+    liveState.completing,
+    liveState.expandedStacks,
+    liveState.showAll,
+  ];
+  // Keyboard actions supply a freshly flattened extension array; compare its row references, not the array.
+  const key = `${windowId}|${extensions.length ? "extensions" : "base"}`;
+  const cached = keyboardMemo.get(key);
+  if (
+    cached &&
+    cached.inputs.every((v, i) => v === inputs[i]) &&
+    cached.extensions.length === extensions.length &&
+    cached.extensions.every((row, i) => row === extensions[i])
+  )
+    return cached.result;
+  const result = computeKeyboardRows(s, windowId, liveState, extensions);
+  const ids = stableList(
+    cached?.ids,
+    result.map((row) => row.id),
+  );
+  keyboardIds.set(result, ids);
+  keyboardMemo.delete(key);
+  keyboardMemo.set(key, { inputs, extensions, result, ids });
+  if (keyboardMemo.size > 32) keyboardMemo.delete(keyboardMemo.keys().next().value!);
+  return result;
+}
+
+/** Stable IDs let visibility scopes skip allocation and comparison on progress/UI notifications. */
+export function sidebarKeyboardRowIds(s: BrowserState, windowId: string, liveState: KeyboardLiveState = live()): string[] {
+  const rows = sidebarKeyboardRows(s, windowId, liveState);
+  return keyboardIds.get(rows) ?? NO_KEYBOARD_IDS;
+}
+
+function computeKeyboardRows(s: BrowserState, windowId: string, liveState: KeyboardLiveState, extensions: SidebarKeyboardRow[]): SidebarKeyboardRow[] {
   const w = s.windows[windowId];
   if (!w) return [];
   const active = activeTabId(s, windowId);
@@ -250,7 +312,7 @@ export function sidebarKeyboardRows(s: BrowserState, windowId: string, liveState
     out.push(...extensions);
     pinnedGroups.forEach((id) => append(`g:${id}`));
   }
-  for (const folderId of w.incognito ? [] : profileFolders(liveState, w.spaceId)) {
+  for (const folderId of w.incognito ? [] : liveState.folderOrder.filter((id) => liveState.folders[id]?.spaceId === w.spaceId)) {
     const folder = liveState.folders[folderId]!;
     const header = `livefolder|${folderId}`;
     const items = liveState.items[folderId] ?? [];

@@ -4,7 +4,7 @@ const { useBrowser } = await import("../../store/browser.ts");
 const { DEFAULT_SETTINGS } = await import("../../store/settings.ts");
 const { activeTabId } = await import("../../store/model.ts");
 const { setLive, live } = await import("../../live/store.ts");
-const { sidebarKeyboardRows } = await import("./entries.ts");
+const { sidebarKeyboardRows, sidebarKeyboardRowIds } = await import("./entries.ts");
 const { adjacentKeyboardRow, reconcileKeyboardRow } = await import("./keyboardModel.ts");
 const { sidebarUi, setSidebarUi } = await import("./state.ts");
 const keyboard = await import("./keyboard.ts");
@@ -43,6 +43,99 @@ const moveTo = (w, id) => {
   for (let i = 0; i < 150 && focusId(w) !== id; i++) keyboard.runSidebarKey(w, "ArrowDown");
   assert.equal(focusId(w), id);
 };
+
+test("keyboard rows and IDs are shared across progress, selection and unrelated UI updates", () => {
+  const f = fixture();
+  const rows = sidebarKeyboardRows(S(), f.w);
+  const rowIds = sidebarKeyboardRowIds(S(), f.w);
+  for (let i = 1; i <= 5; i++) {
+    S().updateLive(f.page, { progress: i / 10 });
+    S().setSelection(f.w, [f.page, f.pinned]);
+    S().toggleSidebar(f.w);
+    S().updateSpace("default", { name: `Personal ${i}` });
+    setLive({ status: { lf: { state: "loading", lastFetch: i, error: null } } });
+    // Several mounted scopes select the current window's rows on the same notification.
+    for (let scope = 0; scope < 4; scope++) {
+      assert.strictEqual(sidebarKeyboardRows(S(), f.w), rows);
+      assert.strictEqual(sidebarKeyboardRowIds(S(), f.w), rowIds);
+    }
+  }
+  S().updateTab(f.page, { title: "A new title" });
+  assert.strictEqual(sidebarKeyboardRowIds(S(), f.w), rowIds, "unchanged visible IDs retain identity after recomputation");
+});
+
+test("keyboard row cache invalidates every structural slice and current-window mode", () => {
+  const f = fixture();
+  const state = S();
+  const mutations = [
+    { tabs: { ...state.tabs, [f.page]: { ...state.tabs[f.page], pinned: true } } },
+    { tabLists: { ...state.tabLists, default: [...state.tabLists.default].reverse() } },
+    { groups: { ...state.groups, [f.group]: { ...state.groups[f.group], collapsed: true } } },
+    { splits: { ...state.splits, [f.split]: { ...state.splits[f.split], tabIds: [f.c] } } },
+    { pinnedFolders: { ...state.pinnedFolders, [f.root]: { ...state.pinnedFolders[f.root], collapsed: true } } },
+    { windows: { ...state.windows, [f.w]: { ...state.windows[f.w], activeTabIds: { default: f.leaf } } } },
+    { windows: { ...state.windows, [f.w]: { ...state.windows[f.w], spaceId: "other" } } },
+    { windows: { ...state.windows, [f.w]: { ...state.windows[f.w], kind: "small" } } },
+    { windows: { ...state.windows, [f.w]: { ...state.windows[f.w], incognito: true } } },
+    { spaces: { ...state.spaces, default: { ...state.spaces.default, folded: true } }, settings: { ...state.settings, hideSingleSpaceHeader: false } },
+  ];
+  for (const patch of mutations) {
+    const before = sidebarKeyboardRows(state, f.w);
+    const next = sidebarKeyboardRows({ ...state, ...patch }, f.w);
+    assert.notStrictEqual(next, before, `must invalidate ${Object.keys(patch).join(", ")}`);
+    assert.strictEqual(sidebarKeyboardRows({ ...state, ...patch }, f.w), next);
+  }
+  const folded = {
+    ...state,
+    spaces: { ...state.spaces, default: { ...state.spaces.default, folded: true } },
+    settings: { ...state.settings, hideSingleSpaceHeader: true },
+    spaceOrder: ["default"],
+  };
+  const visible = sidebarKeyboardRows(folded, f.w);
+  assert.ok(visible.some((row) => row.id === `f:${f.root}`));
+  assert.ok(!sidebarKeyboardRows({ ...folded, spaceOrder: ["default", "other"] }, f.w).some((row) => row.id === `f:${f.root}`));
+  assert.deepEqual(sidebarKeyboardRowIds({ ...state, windows: {} }, f.w), []);
+});
+
+test("keyboard rows refresh live item data, folder order, disclosure and extension callbacks", () => {
+  const f = fixture();
+  const item = { id: "item", title: "Before", url: "https://before.example", source: "github", section: "authored" };
+  const base = {
+    ...live(),
+    folders: {
+      one: { id: "one", spaceId: "default", kind: "pullRequests", collapsed: false },
+      two: { id: "two", spaceId: "default", kind: "documents", collapsed: false },
+    },
+    folderOrder: ["one", "two"],
+    items: { one: [item] },
+    completing: {},
+    showAll: {},
+    expandedStacks: {},
+  };
+  const before = sidebarKeyboardRows(S(), f.w, base);
+  const updated = { ...item, title: "After", url: "https://after.example" };
+  const next = sidebarKeyboardRows(S(), f.w, { ...base, items: { one: [updated] } });
+  assert.strictEqual(next.find((row) => row.kind === "liveItem").item, updated);
+  const reordered = sidebarKeyboardRows(S(), f.w, { ...base, folderOrder: ["two", "one"] });
+  assert.deepEqual(
+    reordered.filter((row) => row.kind === "liveFolder").map((row) => row.folderId),
+    ["two", "one"],
+  );
+  for (const patch of [{ folders: { ...base.folders, one: { ...base.folders.one, collapsed: true } } }, { completing: { one: ["item"] } }])
+    assert.ok(!sidebarKeyboardRows(S(), f.w, { ...base, ...patch }).some((row) => row.kind === "liveItem"));
+  for (const patch of [{ showAll: { "one:authored": true } }, { expandedStacks: { stack: false } }]) {
+    assert.notStrictEqual(sidebarKeyboardRows(S(), f.w, { ...base, ...patch }), sidebarKeyboardRows(S(), f.w, base));
+  }
+  const row = { id: "local:one", kind: "local", tabIds: [], open() {} };
+  const extra = sidebarKeyboardRows(S(), f.w, base, [row]);
+  assert.strictEqual(sidebarKeyboardRows(S(), f.w, base, [row]), extra);
+  const changed = { ...row, open() {} };
+  assert.strictEqual(
+    sidebarKeyboardRows(S(), f.w, base, [changed]).find((r) => r.id === row.id),
+    changed,
+  );
+  assert.ok(!before.some((r) => r.id === row.id));
+});
 
 test("visible order covers favorites, pinned rows, nested folders, pinned groups and splits once", () => {
   const f = fixture();

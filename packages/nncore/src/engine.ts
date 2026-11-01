@@ -9,5 +9,9 @@ export async function engineCall<T>(name: string, profile: string, args?: object
 }
 
 // The engine's change events ("<domain>.<what>"); `profile` is the app's engine profile ("" for the default one).
-export const onEngineEvent = (listener: (topic: string, payload: { profile: string } & Record<string, unknown>) => void) =>
-  Cef.addListener("onEngineEvent", (e) => listener(e.topic, JSON.parse(e.payload)));
+// Filter before parsing so subscribers only decode the payloads they use. Omit `topic` to receive every event.
+export const onEngineEvent = (listener: (topic: string, payload: { profile: string } & Record<string, unknown>) => void, topic?: string) =>
+  Cef.addListener("onEngineEvent", (e) => {
+    if (topic !== undefined && e.topic !== topic) return;
+    listener(e.topic, JSON.parse(e.payload));
+  });

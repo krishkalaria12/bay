@@ -101,24 +101,22 @@ NSDictionary *Strip(NNCoreWindowController *controller, NNCoreProfile *profile) 
   NSMutableArray *tabs = [NSMutableArray array];
   NSArray<NNCoreTab *> *live = [window tabsForProfile:profile];
   NNCoreTab *active = [ActiveTabs(controller) objectForKey:profile];
+  const int strip = [window chromeWindowIdForProfile:profile];
+  const bool reportsGroups = ReportsGroups();
+  NSDictionary *groupState = reportsGroups ? Groups()[@(strip)] : nil;
+  NSDictionary *tabGroups = groupState[@"tabs"];
   for (NSUInteger i = 0; i < live.count; i++) {
     NNCoreTab *tab = live[i];
     NSString *key = [NNCoreTabs viewForTab:tab].transferKey;
-    [tabs addObject:@{
-      @"key" : key.length ? key : NSNull.null,
-      @"browser" : @(nncore_host::BrowserId(tab)),
-      @"index" : @(i),
-      @"active" : @(tab == active || (!active && i == 0)),
-      @"pinned" : @([[Pinned() objectForKey:tab] boolValue]),
-    }];
-    if (ReportsGroups()) {
-      NSMutableDictionary *last = [tabs.lastObject mutableCopy];
-      id group = Groups()[@([window chromeWindowIdForProfile:profile])][@"tabs"][@(tab.tabId)];
-      last[@"group"] = group ?: NSNull.null;
-      tabs[tabs.count - 1] = last;
-    }
+    NSMutableDictionary *entry = [NSMutableDictionary dictionaryWithCapacity:reportsGroups ? 6 : 5];
+    entry[@"key"] = key.length ? key : NSNull.null;
+    entry[@"browser"] = @(nncore_host::BrowserId(tab));
+    entry[@"index"] = @(i);
+    entry[@"active"] = @(tab == active || (!active && i == 0));
+    entry[@"pinned"] = @([[Pinned() objectForKey:tab] boolValue]);
+    if (reportsGroups) entry[@"group"] = tabGroups[@(tab.tabId)] ?: NSNull.null;
+    [tabs addObject:entry];
   }
-  const int strip = [window chromeWindowIdForProfile:profile];
   NSString *name = nncore_host::ProfileName(profile);
   Remember(controller, strip, name);
   NSMutableDictionary *state = [@{
@@ -127,9 +125,9 @@ NSDictionary *Strip(NNCoreWindowController *controller, NNCoreProfile *profile) 
     @"profile" : name,
     @"tabs" : tabs,
   } mutableCopy];
-  if (ReportsGroups()) {
-    state[@"groups"] = Groups()[@(strip)][@"groups"] ?: @[];
-    if ([Groups()[@(strip)][@"activePickedOnClose"] boolValue]) state[@"activePickedOnClose"] = @YES;
+  if (reportsGroups) {
+    state[@"groups"] = groupState[@"groups"] ?: @[];
+    if ([groupState[@"activePickedOnClose"] boolValue]) state[@"activePickedOnClose"] = @YES;
   }
   if (NSString *appWindow = AppWindowOf(controller)) state[@"appWindow"] = appWindow;
   return state;

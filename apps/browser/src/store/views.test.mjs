@@ -1,0 +1,131 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { createStore } from "zustand/vanilla";
+import { recordStores, selectStore, tabStore, tabLiveStore, windowStore, settingsStore, appearanceStore } from "./views.ts";
+import { useBrowser } from "./browser.ts";
+
+test("record views share one source subscription and only notify changed mounted IDs", () => {
+  const source = createStore(() => ({ records: Object.fromEntries(Array.from({ length: 1000 }, (_, id) => [String(id), { id }])), other: 0 }));
+  const subscribe = source.subscribe;
+  let connections = 0;
+  source.subscribe = (listener) => {
+    connections++;
+    const stop = subscribe(listener);
+    return () => {
+      connections--;
+      stop();
+    };
+  };
+  const view = recordStores(source, (s) => s.records);
+  let calls = 0;
+  const stops = Array.from({ length: 1000 }, (_, id) => view(String(id)).subscribe(() => calls++));
+  assert.equal(connections, 1);
+  source.setState({ other: 1 });
+  assert.equal(calls, 0);
+  source.setState((s) => ({ records: { ...s.records, 42: { id: 42, title: "changed" } } }));
+  assert.equal(calls, 1, "999 unrelated row selectors should never run");
+  assert.strictEqual(view("42").getState(), source.getState().records[42]);
+  stops.forEach((stop) => stop());
+  assert.equal(connections, 0, "no source listener remains when the views unmount");
+});
+
+test("record views handle creation, deletion, replacement, repeated unsubscribe and remount", () => {
+  const source = createStore(() => ({ records: {} }));
+  const view = recordStores(source, (s) => s.records)("tab");
+  const values = [];
+  const stop = view.subscribe((value) => values.push(value));
+  const tab = { title: "A" };
+  source.setState({ records: { tab } });
+  source.setState({ records: { tab } });
+  source.setState({ records: {} });
+  source.setState({ records: { tab: { title: "B" } } });
+  assert.deepEqual(values, [tab, undefined, { title: "B" }]);
+  assert.equal(view.getInitialState(), undefined);
+  stop();
+  const remounted = view.subscribe((value) => values.push(value));
+  stop();
+  source.setState({ records: { tab } });
+  assert.equal(values.length, 4, "an old unsubscribe must not detach a new consumer of the same ID");
+  remounted();
+});
+
+test("views read the latest source during reentrant updates and respect unsubscription during publication", () => {
+  const source = createStore(() => ({ records: { a: 0, b: 0 } }));
+  const views = recordStores(source, (s) => s.records);
+  const seen = [];
+  let stopB = () => {};
+  const stopA = views("a").subscribe((value) => {
+    if (value === 1) {
+      stopB();
+      source.setState({ records: { a: 2, b: 2 } });
+    }
+    seen.push(views("a").getState());
+  });
+  stopB = views("b").subscribe(() => assert.fail("unsubscribed listener ran"));
+  source.setState({ records: { a: 1, b: 1 } });
+  assert.deepEqual(seen, [2, 2]);
+  stopA();
+});
+
+test("field views share subscriptions and preserve Object.is semantics", () => {
+  const source = createStore(() => ({ field: NaN, other: 0 }));
+  const subscribe = source.subscribe;
+  let connections = 0;
+  source.subscribe = (listener) => {
+    connections++;
+    const stop = subscribe(listener);
+    return () => {
+      connections--;
+      stop();
+    };
+  };
+  const view = selectStore(source, (s) => s.field);
+  const seen = [];
+  const stop = view.subscribe((value) => seen.push(value));
+  const others = Array.from({ length: 1000 }, () => view.subscribe(() => {}));
+  assert.equal(connections, 1);
+  source.setState({ other: 1 });
+  source.setState({ field: NaN });
+  source.setState({ field: 0 });
+  source.setState({ field: -0 });
+  assert.equal(seen.length, 2);
+  assert.ok(Object.is(seen[1], -0));
+  assert.ok(Number.isNaN(view.getInitialState()));
+  stop();
+  others.forEach((stop) => stop());
+  assert.equal(connections, 0);
+});
+
+test("browser views route live reports separately from tab, window, settings and appearance changes", () => {
+  useBrowser.getState().hydrate({});
+  const w = useBrowser.getState().createWindow({ url: "https://one.example" });
+  const id = useBrowser.getState().windows[w].activeTabIds.default;
+  const other = useBrowser.getState().newTab(w, { url: "https://two.example", background: true });
+  const counts = { tab: 0, live: 0, other: 0, window: 0, settings: 0, appearance: 0 };
+  const stops = [
+    tabStore(id).subscribe(() => counts.tab++),
+    tabLiveStore(id).subscribe(() => counts.live++),
+    tabLiveStore(other).subscribe(() => counts.other++),
+    windowStore(w).subscribe(() => counts.window++),
+    settingsStore.subscribe(() => counts.settings++),
+    appearanceStore.subscribe(() => counts.appearance++),
+  ];
+  try {
+    for (let i = 1; i <= 60; i++) useBrowser.getState().updateLive(other, { progress: i / 100 });
+    assert.deepEqual(counts, { tab: 0, live: 0, other: 60, window: 0, settings: 0, appearance: 0 });
+    useBrowser.getState().updateTab(id, { title: "new" });
+    assert.equal(counts.tab, 1);
+    useBrowser.getState().toggleSidebar(w);
+    assert.equal(counts.window, 1);
+    useBrowser.getState().updateSettings({ density: "compact" });
+    assert.equal(counts.settings, 1);
+    useBrowser.getState().setAppDark(!useBrowser.getState().ui.appDark);
+    assert.equal(counts.appearance, 1);
+    useBrowser.getState().hydrate({});
+    assert.equal(tabStore(id).getState(), undefined);
+    assert.equal(tabLiveStore(id).getState(), undefined);
+    assert.equal(windowStore(w).getState(), undefined);
+  } finally {
+    stops.forEach((stop) => stop());
+  }
+});

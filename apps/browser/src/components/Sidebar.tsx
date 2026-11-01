@@ -22,7 +22,7 @@ import { PROFILE_DOTS_HEIGHT, PROFILE_INDICATOR_X } from "./spaces/constants";
 import { usePageStyle, usePagerPages } from "./layout/spacePager";
 import { SpaceSwitcher } from "./spaces/SpaceSwitcher";
 import { SpaceTitle } from "./sidebar/SpaceTitle";
-import { clearableTabs, clearTabs } from "./sidebar/clear";
+import { hasClearableTabs, clearTabs } from "./sidebar/clear";
 import { UPDATE_ROW_HEIGHT, UpdateRow, useUpdateRowShown } from "./sidebar/UpdateRow";
 import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
 import { DragGhost } from "./sidebar/DragGhost";
@@ -460,7 +460,7 @@ function PinnedDivider({ pinned, listed, windowId, spaceId }: { pinned: boolean;
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const controller = useDragController();
-  const clearable = useBrowser((s) => clearableTabs(s, windowId, spaceId).length > 0);
+  const clearable = useBrowser((s) => hasClearableTabs(s, windowId, spaceId));
   const { hovered, hoverProps } = useHover();
   const shown = pinned || listed || clearable;
   // The line and its room come and go with the pinned section folding.

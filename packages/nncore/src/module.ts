@@ -130,10 +130,10 @@ export const cliControlStatus = () => engineCall<CliControlStatus>("nn_cli_contr
 export const setCliControl = (on: boolean) => engineCall<CliControlStatus>("nn_cli_control", "", { on });
 export const setCliActiveTab = (active: number | null) => engineCall<CliControlStatus>("nn_cli_control", "", { active });
 export const onCliControlChanged = (listener: (status: CliControlStatus) => void) =>
-  onEngineEvent((topic, payload) => {
+  onEngineEvent((_topic, payload) => {
     const state = payload.state;
-    if (topic === "cliControl" && (state === "off" || state === "starting" || state === "on" || state === "external")) listener({ ...payload, state });
-  });
+    if (state === "off" || state === "starting" || state === "on" || state === "external") listener({ ...payload, state });
+  }, "cliControl");
 
 export type ChromeWindowState = {
   profile: string;

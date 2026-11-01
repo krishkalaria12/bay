@@ -49,10 +49,10 @@
 //     summary: { lines: { "<scenario>.<metric>": { median, min, max, n } }, detail: { <scenario>: top offenders } } }
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeSeed } from "./seed.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -62,7 +62,8 @@ const defaultOut = process.env.NN_PERF_OUT ?? "/tmp/nn-perf-js";
 // Bump when the seed or bench-app.js scenarios change what the numbers count.
 //   1  until e282ac6e: the seed wrote a favicon index (favicons-default.json) the app deleted at startup
 //   2  e282ac6e: no favicon index
-const BENCH_REVISION = 2;
+//   3  space-owned tab lists in switchTabs, storeUpdate and the render scenarios
+const BENCH_REVISION = 3;
 
 const [command, ...rest] = process.argv.slice(2);
 const flags = {};
@@ -261,7 +262,7 @@ const alive = (pid) => {
 };
 
 export async function launch(app, dataDir, port) {
-  const binary = join(app, "Contents/MacOS/Bay");
+  const binary = realpathSync(join(app, "Contents/MacOS/Bay"));
   if (pidsOf(binary).length) throw new Error(`an instance of ${app} is already running`);
   const launchedAt = Date.now();
   execFileSync("open", ["-g", "-n", "--env", "BAY_BACKGROUND=1", "--env", `BAY_DATA_DIR=${dataDir}`, "--env", `BAY_REMOTE_DEBUGGING_PORT=${port}`, app]);
@@ -559,7 +560,7 @@ function compare(a, b) {
 }
 
 // render-bench.mjs imports the launcher and server from here; the commands run only from the command line.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   if (command === "help" || command === "--help" || command === "-h" || "help" in flags) {
     const lines = readFileSync(fileURLToPath(import.meta.url), "utf8")
       .split("\n")

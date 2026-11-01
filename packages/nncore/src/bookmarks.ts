@@ -31,7 +31,4 @@ export const applyBookmarkOps = (profile: string, ops: BookmarkOp[]) =>
 export const watchBookmarks = (profile: string) => engineCall("nn_bookmarks_watch", profile);
 
 /** Something other than the app (an extension, Chrome's UI) changed the profile's bookmarks. */
-export const onBookmarksChanged = (listener: (profile: string) => void) =>
-  onEngineEvent((topic, p) => {
-    if (topic === "bookmarks.changed") listener(p.profile);
-  });
+export const onBookmarksChanged = (listener: (profile: string) => void) => onEngineEvent((_topic, p) => listener(p.profile), "bookmarks.changed");

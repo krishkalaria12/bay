@@ -25,7 +25,7 @@ export function isLocalDevSite(url: string): boolean {
   return port && /^(10\.\d+|192\.168|172\.(1[6-9]|2\d|3[01]))\.\d+\.\d+$/.test(host);
 }
 
-export function isDeveloperUrl(s: BrowserState, url: string): boolean {
+export function isDeveloperUrl(s: Pick<BrowserState, "settings">, url: string): boolean {
   const site = siteKey(url);
   return !!site && (s.settings.developerSites ?? []).includes(site);
 }

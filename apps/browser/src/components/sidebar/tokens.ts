@@ -2,6 +2,7 @@ import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
+import { useSettings } from "../../store/hooks";
 import type { GroupColor } from "../../store/types";
 import { useSidebarUi } from "./state";
 import { Dimensions } from "react-native";
@@ -127,5 +128,5 @@ export function useSidebarWidth(windowId: string): number {
 }
 
 export function useSidebarMetrics() {
-  return useBrowser((s) => sidebarMetrics(s.settings.density));
+  return useSettings((s) => sidebarMetrics(s.density));
 }

@@ -1,10 +1,11 @@
 import { faviconsFor, fetchFavicon, onHistoryChanged, removeLegacyFavicons } from "@bay/nncore";
 import { iconTheme, readDocument, removeDocument, type IconTheme } from "@bay/shell";
 import { useEffect } from "react";
-import { create } from "zustand";
+import { create, useStore } from "zustand";
 import { batchStoreUpdates, useBrowser, type BrowserState } from "../store/browser";
 import { engineProfile, isIncognitoSpace } from "../store/model";
 import { DEFAULT_SPACE_ID } from "../store/constants";
+import { appearanceStore } from "../store/views";
 import { webviews } from "./webviews";
 import { APPEARANCE_SWAP_MS, FAVICON_FLUSH_MS, FAVICON_LOOKUP_BATCH, FAVICON_LOOKUP_DELAY_MS, MAX_FAVICONS } from "./constants";
 
@@ -239,7 +240,7 @@ export function resolveFavicon(url: string, src?: string | null, spaceId?: strin
 
 // Callers re-render on an appearance change themselves (useAppearanceDark): the lookup reads it for
 // icons that have a light and a dark version.
-export const useAppearanceDark = () => useBrowser((s) => s.ui.appDark);
+export const useAppearanceDark = () => useStore(appearanceStore);
 
 // Whether every profile the lookup reads has Chrome's answer for the page (an icon, or none).
 function answered(url: string, spaceId?: string): boolean {

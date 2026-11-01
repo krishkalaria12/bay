@@ -1,14 +1,14 @@
 import { ActivitySpinner, ContextMenuArea, FadeLabel, MouseArea, Surface, Symbol } from "@bay/shell";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useStore } from "zustand";
 import { Pressable, TextInput, View, type GestureResponderEvent } from "react-native";
 import Animated from "react-native-reanimated";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser, type BrowserState } from "../../store/browser";
-import { activeTabId } from "../../store/model";
+import { useBrowser } from "../../store/browser";
 import { splitRowTabs } from "../../store/splits";
 import type { Tab } from "../../store/types";
-import { useIsActiveTab, usePageSpaceId, useTab, useWindowId } from "../../store/hooks";
+import { useIsActiveTab, usePageSpaceId, useSettings, useTab, useWindowId } from "../../store/hooks";
 import { HoverSlot } from "../HoverSlot";
 import { ActiveHighlight } from "./ActiveHighlight";
 import { IconButton } from "../primitives";
@@ -22,8 +22,9 @@ import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 import { isEscapeKey } from "../../lib/escapeKey";
-import { isDeveloperTab } from "../developer/sites";
+import { isDeveloperUrl } from "../developer/sites";
 import { DEVELOPER_YELLOW } from "../developer/constants";
+import { ACTIVE, SELECTED, PLAYING, LOADING, tabRowStore } from "./rowState";
 
 export const clickMods = (e: GestureResponderEvent) => {
   const n = e.nativeEvent as unknown as { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };
@@ -50,23 +51,6 @@ export const TabRowItem = memo(function TabRowItem({
   );
 });
 
-const ACTIVE = 1;
-const SELECTED = 2;
-const PLAYING = 4;
-const LOADING = 8;
-
-function rowFlags(s: BrowserState, windowId: string, tabId: string): number {
-  const tab = s.tabs[tabId];
-  const live = s.live[tabId];
-  let flags = 0;
-  // The row's window's: another window on the space shows its own tab.
-  if (tab && activeTabId(s, windowId, tab.spaceId) === tabId) flags |= ACTIVE;
-  if (s.selection[windowId]?.includes(tabId)) flags |= SELECTED;
-  if (live?.playingAudio) flags |= PLAYING;
-  if (live?.isLoading) flags |= LOADING;
-  return flags;
-}
-
 // A pinned row isn't closed, only unloaded (Arc's −): it stays, back at its pinned page. Once closed, its × removes
 // it, as Arc's does.
 function closeButton(tab: Pick<Tab, "id" | "pinnedRow" | "unloaded">) {
@@ -81,14 +65,14 @@ export function TabRow({ tabId }: { tabId: string }) {
   const tokens = useSidebarTokens();
   const windowId = useWindowId();
   const tab = useTab(tabId);
-  // The row's flags in one number: a sidebar has hundreds of rows, and each selector runs on every store update.
-  const flags = useBrowser((s) => rowFlags(s, windowId, tabId));
+  const row = useMemo(() => tabRowStore(windowId, tabId), [windowId, tabId]);
+  const flags = useStore(row);
   const active = !!(flags & ACTIVE);
   const selected = !!(flags & SELECTED);
   const playingAudio = !!(flags & PLAYING);
   const loading = !!(flags & LOADING);
   // The shown tab of a site in Developer Mode: outlined, as its bar is hatched.
-  const developer = useBrowser((s) => active && isDeveloperTab(s, tabId));
+  const developer = useSettings((settings) => active && isDeveloperUrl({ settings }, tab?.url ?? ""));
   const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "tab" && u.renaming.id === tabId);
   const { hovered, hoverProps } = useRowHover(windowId, renaming ? null : { kind: "tab", id: tabId });
   if (!tab) return null;

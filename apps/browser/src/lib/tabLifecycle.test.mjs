@@ -135,3 +135,73 @@ test("awake sites survive two idle hours and sleep last only under critical memo
     for (const id of pages.keys()) webviews.delete(id);
   }
 });
+
+test("warning pressure can reclaim a small recent session while keeping active, busy and unsaved pages", async () => {
+  globalThis.__DEV__ = true;
+  lifecycle.startTabLifecycle();
+  await new Promise((resolve) => setImmediate(resolve));
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://active.example" });
+  const active = S().windows[w].activeTabIds.default;
+  const ids = [active];
+  for (const name of ["recent", "idle", "audio", "unsaved", "pinned", "loading"]) ids.push(S().newTab(w, { url: `https://${name}.example`, background: true }));
+  const [shown, recent, idle, audio, unsaved, pinned, loading] = ids;
+  ids.forEach((id, i) => S().updateTab(id, { lastActiveAt: Date.now() - i * 1000 }));
+  S().updateLive(audio, { playingAudio: true });
+  S().updateLive(loading, { isLoading: true });
+  S().pinRows([pinned], true);
+  const pages = new Map(ids.map((id) => [id, fakePage()]));
+  pages.get(unsaved).dirty = true;
+  for (const [id, page] of pages) {
+    page.handle.discard = async () => {
+      page.discarded++;
+      lifecycle.noteDiscarded(id);
+      return "discarded";
+    };
+    webviews.set(id, page.handle);
+    lifecycle.noteReady(id);
+  }
+  try {
+    globalThis.nnLifecycle.simulate({ memoryPressure: "normal" });
+    assert.deepEqual(await lifecycle.sweep(), [], "the ordinary idle policy stays unchanged");
+    globalThis.nnLifecycle.simulate({ memoryPressure: "warning" });
+    assert.deepEqual(await lifecycle.sweep(), [idle], "warning pressure must not reserve the entire recent session");
+    for (const id of [shown, recent, audio, unsaved, pinned, loading]) assert.equal(pages.get(id).discarded, 0);
+    assert.equal(pages.get(unsaved).evaluated, 1, "a candidate still checks unsaved input before discarding");
+  } finally {
+    globalThis.nnLifecycle.simulate(null);
+    globalThis.__DEV__ = false;
+    for (const id of ids) {
+      webviews.delete(id);
+      lifecycle.noteGone(id);
+    }
+  }
+});
+
+test("pending startup preloads stop when memory or power conditions worsen", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  globalThis.__DEV__ = true;
+  lifecycle.startTabLifecycle();
+  await new Promise((resolve) => setImmediate(resolve));
+  globalThis.__DEV__ = false;
+  const sys = { memoryPressure: "normal", physicalMemory: 8 * 2 ** 30, onBattery: false, lowPowerMode: false };
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://shown.example" });
+  const id = S().newTab(w, { url: "https://preload.example", background: true });
+  S().updateTab(id, { navigation: null });
+  try {
+    for (const patch of [{ memoryPressure: "warning" }, { memoryPressure: "critical" }, { onBattery: true }, { lowPowerMode: true }]) {
+      globalThis.nnLifecycle.simulate(sys);
+      assert.deepEqual(lifecycle.reloadRecentTabs(sys), [id]);
+      globalThis.nnLifecycle.simulate(patch);
+      t.mock.timers.tick(2000);
+      assert.equal(S().tabs[id].navigation, null);
+    }
+    globalThis.nnLifecycle.simulate(sys);
+    assert.deepEqual(lifecycle.reloadRecentTabs(sys), [id]);
+    t.mock.timers.tick(2000);
+    assert.ok(S().tabs[id].navigation, "normal conditions still allow the preload");
+  } finally {
+    globalThis.nnLifecycle.simulate(null);
+  }
+});

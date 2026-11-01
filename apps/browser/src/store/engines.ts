@@ -15,15 +15,31 @@ export const otherEngine = (engine: PageEngine): PageEngine => (engine === "webk
 type SettingsState = Pick<BrowserState, "settings">;
 type EngineState = Pick<BrowserState, "tabs" | "settings">;
 
-/** A website rule's key: scheme, host and port (no subdomains), for web pages only. */
-export function siteOf(url: string | undefined | null): string | null {
+type Site = { key: string; host: string };
+// Every tab icon asks on every store update. URL parsing in Hermes otherwise repeats for all rows even when only
+// another page's progress changed. Cache only address-derived facts, so settings and opener changes still apply.
+const sites = new Map<string, Site | null>();
+const MAX_CACHED_SITES = 1024;
+
+function parsedSite(url: string | undefined | null): Site | null {
   if (!url) return null;
+  const cached = sites.get(url);
+  if (cached !== undefined) return cached;
+  let site: Site | null = null;
   try {
     const u = new URL(url);
-    return u.protocol === "http:" || u.protocol === "https:" ? `${u.protocol}//${u.host}`.toLowerCase() : null;
-  } catch {
-    return null;
-  }
+    if (u.protocol === "http:" || u.protocol === "https:") site = { key: `${u.protocol}//${u.host}`.toLowerCase(), host: u.hostname.toLowerCase() };
+  } catch {}
+  // Don't retain unusually large query strings after their tabs close.
+  if (url.length > 4096) return site;
+  if (sites.size >= MAX_CACHED_SITES) sites.delete(sites.keys().next().value!);
+  sites.set(url, site);
+  return site;
+}
+
+/** A website rule's key: scheme, host and port (no subdomains), for web pages only. */
+export function siteOf(url: string | undefined | null): string | null {
+  return parsedSite(url)?.key ?? null;
 }
 
 export const canSwitchEngine = (url: string | undefined | null) => hasWebKit() && !!url && /^(https?|file):/i.test(url);
@@ -56,9 +72,9 @@ export const PROTECTED_VIDEO_SITES: readonly string[] = [
 ];
 
 export function protectedVideoSite(url: string | undefined | null): boolean {
-  const site = siteOf(url);
-  if (!site?.startsWith("https://")) return false;
-  const host = new URL(site).hostname;
+  const site = parsedSite(url);
+  if (!site?.key.startsWith("https://")) return false;
+  const host = site.host;
   return PROTECTED_VIDEO_SITES.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 

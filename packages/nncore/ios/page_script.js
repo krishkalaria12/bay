@@ -857,16 +857,48 @@
     const probe = document.createElement("span");
     probe.style.color = value;
     if (!probe.style.color) return null;
+    // A cached literal must normalize independently of author rules such as `span { color: ... !important }`.
+    if (staticColor(value)) probe.style.setProperty("color", value, "important");
     document.documentElement.appendChild(probe);
     const c = parse(getComputedStyle(probe).color);
     probe.remove();
     return c && c.a > 0 ? hex(c) : null;
   };
+  // Only absolute literals are reusable. Variables, currentColor, system colours and
+  // expressions such as light-dark() must resolve against the page on every sample.
+  const namedColors = new Set(
+    (
+      "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood " +
+      "cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet " +
+      "deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon " +
+      "lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin " +
+      "navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato transparent turquoise violet wheat white whitesmoke yellow yellowgreen"
+    ).split(" "),
+  );
+  const staticColor = (value) => namedColors.has(value.toLowerCase()) || /^(?:#[\da-f]{3,8}|(?:rgba?|hsla?)\([\d\s.,%+/-]+\))$/i.test(value);
+  let normalizedMetaColors = new WeakMap();
+  const themeMedia = new Map();
   const metaColor = () => {
-    for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
+    const metas = document.querySelectorAll('meta[name="theme-color"]');
+    const mediaQueries = new Set(Array.from(metas, (m) => m.getAttribute("media")).filter(Boolean));
+    for (const [media, query] of themeMedia) {
+      if (mediaQueries.has(media)) continue;
+      query.removeEventListener("change", invalidateTheme);
+      themeMedia.delete(media);
+    }
+    for (const media of mediaQueries) {
+      if (themeMedia.has(media)) continue;
+      const query = matchMedia(media);
+      query.addEventListener("change", invalidateTheme);
+      themeMedia.set(media, query);
+    }
+    for (const m of metas) {
       const media = m.getAttribute("media");
-      if (!media || matchMedia(media).matches) {
-        const c = normalize(m.getAttribute("content") || "");
+      if (!media || themeMedia.get(media).matches) {
+        const value = (m.getAttribute("content") || "").trim();
+        const cached = normalizedMetaColors.get(m);
+        const c = cached && cached.value === value ? cached.color : normalize(value);
+        if ((!cached || cached.value !== value) && staticColor(value)) normalizedMetaColors.set(m, { value, color: c });
         if (c) return c;
       }
     }
@@ -902,8 +934,10 @@
     return null;
   };
   let lastTheme;
+  let lastThemeSample = -Infinity;
   const reportTheme = guard(() => {
     if (!document.documentElement) return;
+    lastThemeSample = performance.now();
     let color = metaColor();
     let source = color ? "meta" : null;
     if (!color && document.body) {
@@ -926,32 +960,46 @@
       reportTheme();
     });
   };
+  const invalidateTheme = () => {
+    normalizedMetaColors = new WeakMap();
+    scheduleTheme();
+  };
+  const SCROLL_THEME_INTERVAL = 100;
+  let scrollThemeTimer;
+  const scheduleScrollTheme = () => {
+    if (performance.now() - lastThemeSample >= SCROLL_THEME_INTERVAL) scheduleTheme();
+    clearTimeout(scrollThemeTimer);
+    // Keep a trailing sample even when the last scroll fell inside the interval.
+    scrollThemeTimer = setTimeout(scheduleTheme, SCROLL_THEME_INTERVAL);
+  };
   const startTheme = () => {
     reportTheme();
-    const observer = new MutationObserver(scheduleTheme);
+    const observer = new MutationObserver(invalidateTheme);
     observer.observe(document.head || document.documentElement, {
       childList: true,
       subtree: true,
+      characterData: true,
       attributes: true,
-      attributeFilter: ["content", "media", "name"],
+      attributeFilter: ["content", "media", "name", "href", "rel", "disabled"],
     });
     for (const el of [document.documentElement, document.body])
       if (el) observer.observe(el, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
-    for (const ms of [300, 1000, 3000]) setTimeout(scheduleTheme, ms);
+    for (const ms of [300, 1000, 3000]) setTimeout(invalidateTheme, ms);
   };
   onReady(startTheme);
   // The app forgets a document's colour when another one commits (NNCoreWebView tabDidCommitDocument:): a page back from
   // the back/forward cache, or a prerendered page shown, says again what it last said.
   const resendTheme = () => {
     lastTheme = undefined;
+    normalizedMetaColors = new WeakMap();
     reportTheme();
   };
   addEventListener("pageshow", (e) => e.persisted && resendTheme());
   document.addEventListener("prerenderingchange", resendTheme);
-  addEventListener("load", scheduleTheme);
-  addEventListener("scroll", scheduleTheme, { passive: true, capture: true });
-  addEventListener("resize", scheduleTheme);
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", scheduleTheme);
+  addEventListener("load", invalidateTheme);
+  addEventListener("scroll", scheduleScrollTheme, { passive: true, capture: true });
+  addEventListener("resize", invalidateTheme);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", invalidateTheme);
 
   // MARK: Pinch zoom (visual viewport scale), for the zoom indicator.
   if (window.visualViewport) {

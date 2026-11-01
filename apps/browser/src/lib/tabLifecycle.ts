@@ -179,11 +179,14 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
     const shown = shownTabIds(s);
     const now = activeClock();
     const pressure = currentSystem()?.memoryPressure ?? "normal";
+    // A warning must be able to reclaim a small session too. Keeping ten recent pages alive could otherwise
+    // leave no candidates until pressure became critical. Visible and busy pages have separate protections below.
+    const protectedRecent = pressure === "critical" ? 0 : pressure === "warning" ? Math.min(policy.protectedRecent, 2) : policy.protectedRecent;
     const recent = new Set(
       Object.values(s.tabs)
         .filter((t) => t.url)
         .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
-        .slice(0, pressure === "critical" ? 0 : policy.protectedRecent)
+        .slice(0, protectedRecent)
         .map((t) => t.id),
     );
     const unused = unusedProfiles(s, now, policy.profileIdleMs);
@@ -259,6 +262,8 @@ export function reloadRecentTabs(sys: SystemState) {
   ids.forEach((id, i) =>
     setTimeout(
       () => {
+        const latest = currentSystem() ?? sys;
+        if (latest.onBattery || latest.lowPowerMode || latest.memoryPressure !== "normal") return;
         const t = store().tabs[id];
         if (t?.url && !t.navigation && !t.adoptId) store().updateTab(id, wake(t));
       },

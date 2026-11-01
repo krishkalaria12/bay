@@ -14,6 +14,11 @@ const activeId = () => {
   const w = s.windows[windowId()];
   return w.activeTabIds[w.spaceId];
 };
+const tabsInView = () => {
+  const s = S();
+  const w = s.windows[windowId()];
+  return (s.tabLists[w.kind === "small" ? w.id : w.spaceId] ?? []).filter((id) => s.tabs[id]?.spaceId === w.spaceId);
+};
 
 // The time one batched update takes on the JS thread: store update, selectors, render, commit, layout effects.
 function timed(fn) {
@@ -95,7 +100,7 @@ const scenarios = {
   async switchTabs({ count = 12 } = {}) {
     const w = windowId();
     const s = S();
-    const view = s.windows[w].tabIds.filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId && !s.tabs[id].pinned);
+    const view = tabsInView().filter((id) => !s.tabs[id].pinned);
     const ids = view.slice(30, 30 + count);
     const start = activeId();
     // First pass wakes the tabs (each loads its page); the measured pass switches between loaded tabs.
@@ -235,8 +240,8 @@ const scenarios = {
   async storeUpdate({ count = 60 } = {}) {
     await quiet();
     const s = S();
-    const w = windowId();
-    const bg = s.windows[w].tabIds.find((id) => id !== activeId() && s.live[id] && !s.tabs[id].pinned);
+    const bg = tabsInView().find((id) => id !== activeId() && s.live[id] && !s.tabs[id].pinned);
+    if (!bg) throw new Error("no background tab to update");
     P.reset();
     const steps = [];
     for (let i = 0; i < count; i++) {
@@ -349,11 +354,6 @@ scenarios.traced = function ({ scenario, ...options }) {
 // and reads what rendered until things settle again. The ones a page drives (scrolling, media) are `mark` and
 // `read` around the host's CDP calls.
 function renderScenarios() {
-  const tabsInView = () => {
-    const s = S();
-    const w = s.windows[windowId()];
-    return w.tabIds.filter((id) => s.tabs[id]?.spaceId === w.spaceId);
-  };
   const settle = (ms = 1500) => sleep(ms).then(() => P.read());
   return {
     async mark({ settleMs = 0 } = {}) {
