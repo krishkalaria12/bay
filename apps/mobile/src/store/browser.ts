@@ -2,7 +2,7 @@ import { File, Paths } from "expo-file-system";
 import { AppState } from "react-native";
 import { create } from "zustand";
 
-import { createTab, initialBrowserData, parseBrowserData, reduceBrowserData, type BrowserAction } from "./model";
+import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, reduceBrowserData, type BrowserAction } from "./model";
 import type { BrowserData, BrowserRepository } from "./types";
 
 const SAVE_DELAY = 400;
@@ -18,7 +18,7 @@ const repository: BrowserRepository = {
   },
   async save(data) {
     const draft = new File(Paths.document, `${STATE_FILE}.tmp`);
-    await draft.write(JSON.stringify({ version: 1, ...data }));
+    await draft.write(JSON.stringify({ version: 1, ...persistedBrowserData(data) }));
     await draft.move(new File(Paths.document, STATE_FILE), { overwrite: true });
   },
 };
@@ -30,7 +30,7 @@ interface BrowserStore {
   data: BrowserData;
   dispatch(action: BrowserAction): void;
   load(): Promise<void>;
-  openTab(url: string, background?: boolean): string;
+  openTab(url: string, background?: boolean, isPrivate?: boolean): string;
   closeTab(id: string): void;
   restoreTab(id: string): string;
   /** Forget every tab, page and pin; the preferences stay. */
@@ -57,8 +57,8 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
       set({ ready: true });
     }
   },
-  openTab(url, background = false) {
-    const tab = createTab(newId(), Date.now(), url);
+  openTab(url, background = false, isPrivate = false) {
+    const tab = createTab(newId(), Date.now(), url, isPrivate);
     get().dispatch({ type: "new-tab", tab, background });
     return tab.id;
   },

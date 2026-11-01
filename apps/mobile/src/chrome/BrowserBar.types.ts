@@ -1,7 +1,11 @@
 /** Lens's floating bar: archive, search and settings on the start page and tab switcher; tabs, search and more over a page. */
-export type BrowserBarProps =
+export type BrowserBarProps = (
   | { mode: "start"; onArchive: () => void; onSearch: () => void; onSettings: () => void }
-  | { mode: "page"; onTabs: () => void; onSearch: () => void; onMore: () => void };
+  | { mode: "page"; onTabs: () => void; onSearch: () => void; onMore: () => void }
+) & {
+  /** Dark controls over a private page. */
+  privately?: boolean;
+};
 
 export interface BarButton {
   id: string;

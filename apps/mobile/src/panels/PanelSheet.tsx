@@ -30,6 +30,9 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
           enableDynamicSizing={false}
           enableOverDrag={false}
           enablePanDownToClose={dismissible}
+          // Drag by the handle only: a pan gesture over the content competed with taps on its rows and buttons, and
+          // on iOS quick taps were sometimes lost. The sheets are short; Done and tapping outside also close them.
+          enableContentPanningGesture={false}
           contentContainerClassName="h-full"
           backgroundClassName="rounded-t-[28px] bg-background"
         >
@@ -94,7 +97,7 @@ export function ActionRow({
           {label}
         </Typography>
         {detail ? (
-          <Typography className="text-sm text-muted" numberOfLines={2}>
+          <Typography testID={`${testID}-detail`} className="text-sm text-muted" numberOfLines={2}>
             {detail}
           </Typography>
         ) : null}

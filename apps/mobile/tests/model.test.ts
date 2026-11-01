@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTab, initialBrowserData, parseBrowserData, reduceBrowserData } from "../src/store/model.ts";
+import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, reduceBrowserData } from "../src/store/model.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const page = (id: string, url: string, lastVisit = 0) => ({ ...createTab(id, lastVisit, url), title: id });
@@ -98,7 +98,7 @@ test("saved state is validated and repaired", () => {
   );
   assert.equal(data.activeTabId, "a");
   assert.equal(data.history.length, 1);
-  assert.deepEqual(data.preferences, { searchEngineId: "bing", archiveAfterDays: 7 });
+  assert.deepEqual(data.preferences, { searchEngineId: "bing", archiveAfterDays: 7, blockContent: true, blockingPausedHosts: [], lockPrivateTabs: false });
   assert.throws(() => parseBrowserData({ version: 2 }, fallback));
 });
 
@@ -109,4 +109,41 @@ test("a title that arrives after the visit updates its history entry", () => {
   assert.equal(data.history[0]?.title, "A");
   assert.equal(data.history[0]?.visits, 1);
   assert.equal(reduceBrowserData(data, { type: "page-title", url: "https://a.com/", title: "A" }), data);
+});
+
+test("private tabs are never archived, saved or put away", () => {
+  const now = 10 * DAY;
+  let data = initialBrowserData(page("a", "https://a.com/", 0));
+  data = reduceBrowserData(data, { type: "new-tab", tab: { ...createTab("p", 0, "https://p.com/", true), title: "P" }, background: true });
+  data = reduceBrowserData(data, { type: "archive-stale", now });
+  assert.deepEqual(
+    data.tabs.map((tab) => tab.id),
+    ["a", "p"],
+  );
+
+  data = reduceBrowserData(data, { type: "activate-tab", id: "p", now });
+  assert.deepEqual(
+    persistedBrowserData(data).tabs.map((tab) => tab.id),
+    ["a"],
+  );
+  assert.equal(persistedBrowserData(data).activeTabId, "a");
+
+  data = reduceBrowserData(data, { type: "close-tab", id: "p", now, fallback: createTab("blank", now) });
+  assert.equal(data.archive.length, 0);
+});
+
+test("blocking can be turned off and paused per site", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  assert.equal(data.preferences.blockContent, true);
+  data = reduceBrowserData(data, { type: "pause-blocking", host: "www.News.com", paused: true });
+  assert.deepEqual(data.preferences.blockingPausedHosts, ["news.com"]);
+  assert.equal(reduceBrowserData(data, { type: "pause-blocking", host: "news.com", paused: true }), data);
+  data = reduceBrowserData(data, { type: "pause-blocking", host: "news.com", paused: false });
+  assert.deepEqual(data.preferences.blockingPausedHosts, []);
+  data = reduceBrowserData(data, { type: "block-content", enabled: false });
+  assert.equal(data.preferences.blockContent, false);
+  const saved = parseBrowserData({ version: 1, preferences: { blockingPausedHosts: ["ok.com", "bad host", 4], lockPrivateTabs: "yes" } }, data);
+  assert.deepEqual(saved.preferences.blockingPausedHosts, ["ok.com"]);
+  assert.equal(saved.preferences.lockPrivateTabs, false);
+  assert.equal(saved.preferences.blockContent, true);
 });

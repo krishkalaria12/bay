@@ -6,6 +6,8 @@ export interface BrowserTab {
   createdAt: number;
   lastVisit: number;
   snapshot: string | null;
+  /** Private tabs are never saved, archived or added to history. */
+  private?: boolean;
 }
 
 export interface HistoryEntry {
@@ -30,6 +32,12 @@ export interface ArchivedTab extends BrowserTab {
 export interface BrowserPreferences {
   searchEngineId: string;
   archiveAfterDays: number | null;
+  /** Block ads and trackers with the filter lists. */
+  blockContent: boolean;
+  /** Sites (hosts) where blocking is paused. */
+  blockingPausedHosts: string[];
+  /** Ask for Face ID, Touch ID or the device passcode before showing private tabs again. */
+  lockPrivateTabs: boolean;
 }
 
 export interface BrowserData {

@@ -1,16 +1,29 @@
 import type { ArchivedTab, BrowserData, BrowserPreferences, BrowserTab, HistoryEntry, PinnedSite, TabUpdate } from "./types";
 
-export const DEFAULT_PREFERENCES: BrowserPreferences = { searchEngineId: "google", archiveAfterDays: 7 };
+export const DEFAULT_PREFERENCES: BrowserPreferences = {
+  searchEngineId: "google",
+  archiveAfterDays: 7,
+  blockContent: true,
+  blockingPausedHosts: [],
+  lockPrivateTabs: false,
+};
 const DAY = 24 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 1000;
 const ARCHIVE_LIMIT = 200;
 
-export function createTab(id: string, now: number, url = ""): BrowserTab {
-  return { id, url, title: "", favicon: null, createdAt: now, lastVisit: now, snapshot: null };
+export function createTab(id: string, now: number, url = "", isPrivate = false): BrowserTab {
+  return { id, url, title: "", favicon: null, createdAt: now, lastVisit: now, snapshot: null, ...(isPrivate ? { private: true } : {}) };
 }
 
 export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFERENCES): BrowserData {
-  return { tabs: [tab], activeTabId: tab.id, history: [], pinnedSites: [], archive: [], preferences: { ...preferences } };
+  return {
+    tabs: [tab],
+    activeTabId: tab.id,
+    history: [],
+    pinnedSites: [],
+    archive: [],
+    preferences: { ...preferences, blockingPausedHosts: [...preferences.blockingPausedHosts] },
+  };
 }
 
 export type BrowserAction =
@@ -24,7 +37,10 @@ export type BrowserAction =
   | { type: "pin-site"; tabId: string; pinId: string }
   | { type: "search-engine"; id: string }
   | { type: "archive-days"; days: number | null }
-  | { type: "archive-stale"; now: number };
+  | { type: "archive-stale"; now: number }
+  | { type: "block-content"; enabled: boolean }
+  | { type: "pause-blocking"; host: string; paused: boolean }
+  | { type: "lock-private-tabs"; enabled: boolean };
 
 export function reduceBrowserData(data: BrowserData, action: BrowserAction): BrowserData {
   switch (action.type) {
@@ -67,7 +83,11 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         ...data,
         tabs,
         activeTabId: data.activeTabId === action.id ? tabs[Math.min(index, tabs.length - 1)].id : data.activeTabId,
-        archive: tab.url ? [{ ...tab, closedAt: action.now }, ...data.archive.filter((entry) => entry.id !== tab.id)].slice(0, ARCHIVE_LIMIT) : data.archive,
+        // Private tabs leave nothing behind.
+        archive:
+          tab.url && !tab.private
+            ? [{ ...tab, closedAt: action.now }, ...data.archive.filter((entry) => entry.id !== tab.id)].slice(0, ARCHIVE_LIMIT)
+            : data.archive,
       };
     }
     case "restore-tab": {
@@ -98,11 +118,23 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return [null, 1, 7, 30].includes(action.days) && action.days !== data.preferences.archiveAfterDays
         ? { ...data, preferences: { ...data.preferences, archiveAfterDays: action.days } }
         : data;
+    case "block-content":
+      return action.enabled === data.preferences.blockContent ? data : { ...data, preferences: { ...data.preferences, blockContent: action.enabled } };
+    case "pause-blocking": {
+      const host = action.host.toLowerCase().replace(/^www\./, "");
+      if (!host || data.preferences.blockingPausedHosts.includes(host) === action.paused) return data;
+      const blockingPausedHosts = action.paused
+        ? [...data.preferences.blockingPausedHosts, host]
+        : data.preferences.blockingPausedHosts.filter((entry) => entry !== host);
+      return { ...data, preferences: { ...data.preferences, blockingPausedHosts } };
+    }
+    case "lock-private-tabs":
+      return action.enabled === data.preferences.lockPrivateTabs ? data : { ...data, preferences: { ...data.preferences, lockPrivateTabs: action.enabled } };
     case "archive-stale": {
       if (data.preferences.archiveAfterDays === null) return data;
       const cutoff = action.now - data.preferences.archiveAfterDays * DAY;
       const stale = data.tabs.filter(
-        (tab) => tab.id !== data.activeTabId && tab.url && tab.lastVisit < cutoff && !data.pinnedSites.some((pin) => pin.url === tab.url),
+        (tab) => !tab.private && tab.id !== data.activeTabId && tab.url && tab.lastVisit < cutoff && !data.pinnedSites.some((pin) => pin.url === tab.url),
       );
       if (!stale.length) return data;
       const ids = new Set(stale.map((tab) => tab.id));
@@ -210,6 +242,11 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
     archiveAfterDays: [null, 1, 7, 30].includes(savedPreferences.archiveAfterDays as number | null)
       ? (savedPreferences.archiveAfterDays as number | null)
       : DEFAULT_PREFERENCES.archiveAfterDays,
+    blockContent: typeof savedPreferences.blockContent === "boolean" ? savedPreferences.blockContent : DEFAULT_PREFERENCES.blockContent,
+    blockingPausedHosts: Array.isArray(savedPreferences.blockingPausedHosts)
+      ? [...new Set(savedPreferences.blockingPausedHosts.filter((host): host is string => typeof host === "string" && /^[a-z0-9.-]+$/.test(host)))]
+      : [],
+    lockPrivateTabs: savedPreferences.lockPrivateTabs === true,
   };
   return {
     tabs: tabs.length ? tabs : fallback.tabs,
@@ -223,4 +260,12 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
       .slice(0, ARCHIVE_LIMIT),
     preferences,
   };
+}
+
+/** What is saved: everything except private tabs. When a private tab is current, the newest saved tab is. */
+export function persistedBrowserData(data: BrowserData): BrowserData {
+  if (!data.tabs.some((tab) => tab.private)) return data;
+  const tabs = data.tabs.filter((tab) => !tab.private);
+  const activeTabId = tabs.some((tab) => tab.id === data.activeTabId) ? data.activeTabId : (tabs[tabs.length - 1]?.id ?? "");
+  return { ...data, tabs, activeTabId };
 }

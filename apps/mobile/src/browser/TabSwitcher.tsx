@@ -12,12 +12,14 @@ export interface TabSwitcherProps {
   activeTabId: string;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
+  /** Private pages are hidden while private tabs are locked. */
+  privateLocked: boolean;
 }
 
 const GAP = 14;
 
 /** Lens's switcher: page cards side by side over the wallpaper, each under its site and title. */
-export function TabSwitcher({ tabs, activeTabId, onSelect, onClose }: TabSwitcherProps): JSX.Element {
+export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, privateLocked }: TabSwitcherProps): JSX.Element {
   const { width, height } = useWindowDimensions();
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
@@ -42,12 +44,19 @@ export function TabSwitcher({ tabs, activeTabId, onSelect, onClose }: TabSwitche
       >
         {tabs.map((tab, index) => {
           const title = tab.title || (tab.url ? displayUrl(tab.url) : "New tab");
+          const hidden = Boolean(tab.private && privateLocked);
           return (
             <View key={tab.id} style={{ width: cardWidth }}>
               <View className="mb-2 flex-row items-center gap-2 pl-1">
-                {tab.url ? <SiteIcon url={tab.url} size={18} /> : null}
+                {tab.private ? (
+                  <View testID={`tab-private-${index}`} className="flex-row items-center gap-1 rounded-full bg-neutral-900 px-2 py-0.5">
+                    <Icon name="private" color="#F4F4F5" size={14} />
+                    <Text style={{ color: "#F4F4F5", fontSize: 11, fontWeight: "600" }}>Private</Text>
+                  </View>
+                ) : null}
+                {tab.url && !hidden ? <SiteIcon url={tab.url} size={18} /> : null}
                 <Text numberOfLines={1} className="flex-1" style={{ color: foreground, fontSize: 13, fontWeight: "500" }}>
-                  {title}
+                  {hidden ? "Locked" : title}
                 </Text>
                 <Pressable
                   testID={`tab-close-${index}`}
@@ -65,10 +74,18 @@ export function TabSwitcher({ tabs, activeTabId, onSelect, onClose }: TabSwitche
                 accessibilityLabel={`Open ${title}`}
                 accessibilityState={{ selected: tab.id === activeTabId }}
                 onPress={() => onSelect(tab.id)}
-                className="overflow-hidden rounded-[22px] border border-black/10 bg-white dark:border-white/10 dark:bg-neutral-900"
+                className={
+                  tab.private
+                    ? "overflow-hidden rounded-[22px] border border-white/10 bg-neutral-900"
+                    : "overflow-hidden rounded-[22px] border border-black/10 bg-white dark:border-white/10 dark:bg-neutral-900"
+                }
                 style={{ height: cardHeight, borderWidth: tab.id === activeTabId ? 2 : 1 }}
               >
-                {tab.snapshot ? (
+                {hidden ? (
+                  <View className="flex-1 items-center justify-center">
+                    <Icon name="lock" color="#A1A1AA" size={28} />
+                  </View>
+                ) : tab.snapshot ? (
                   <Image source={{ uri: tab.snapshot }} resizeMode="cover" style={{ width: cardWidth, height: cardHeight }} />
                 ) : (
                   <View className="flex-1 items-center justify-center gap-3">

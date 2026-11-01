@@ -12,6 +12,14 @@ export interface SettingsPanelProps {
   onSearchEngineChange: (id: string) => void;
   archiveAfterDays: number | null;
   onArchiveAfterDaysChange: (days: number | null) => void;
+  blockContent: boolean;
+  /** What the blocker is doing, shown under its switch. */
+  blockerDetail: string;
+  onBlockContentChange: (enabled: boolean) => void;
+  /** Hidden when the engine can't keep private tabs. */
+  privateAvailable: boolean;
+  lockPrivateTabs: boolean;
+  onLockPrivateTabsChange: (enabled: boolean) => void;
   onClearData: () => Promise<void>;
 }
 
@@ -29,6 +37,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   // The engine list stays folded so the rest of Settings fits without scrolling.
   const [choosingEngine, setChoosingEngine] = useState(false);
+  const [choosingArchive, setChoosingArchive] = useState(false);
   const mounted = useRef(true);
   useEffect(
     () => () => {
@@ -40,6 +49,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     if (!props.visible) return;
     setConfirming(false);
     setChoosingEngine(false);
+    setChoosingArchive(false);
     setError(null);
   }, [props.visible]);
 
@@ -85,28 +95,58 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             />
           ))
         : null}
-      <SectionLabel>Archive inactive tabs</SectionLabel>
-      <Typography className="text-sm text-muted">Your current tab stays open. You can restore archived tabs at any time.</Typography>
-      {archiveOptions.map((option) => (
+      <SectionLabel>Privacy</SectionLabel>
+      <ActionRow
+        testID="settings-block-content"
+        label="Block ads and trackers"
+        detail={props.blockerDetail}
+        selected={props.blockContent}
+        disabled={busy}
+        onPress={() => props.onBlockContentChange(!props.blockContent)}
+      />
+      {props.privateAvailable ? (
         <ActionRow
-          key={option.days ?? "never"}
-          testID={`settings-archive-${option.days ?? "never"}`}
-          label={option.label}
-          selected={props.archiveAfterDays === option.days}
+          testID="settings-lock-private"
+          label="Lock private tabs"
+          detail="Face ID, Touch ID or passcode"
+          selected={props.lockPrivateTabs}
           disabled={busy}
-          onPress={() => props.onArchiveAfterDaysChange(option.days)}
+          onPress={() => props.onLockPrivateTabsChange(!props.lockPrivateTabs)}
         />
-      ))}
+      ) : null}
+      <SectionLabel>Tabs</SectionLabel>
+      <ActionRow
+        testID="settings-archive"
+        label="Archive inactive tabs"
+        detail={archiveOptions.find((option) => option.days === props.archiveAfterDays)?.label}
+        disabled={busy}
+        onPress={() => setChoosingArchive((open) => !open)}
+      />
+      {choosingArchive ? (
+        <>
+          <Typography className="text-sm text-muted">Your current tab stays open. You can restore archived tabs at any time.</Typography>
+          {archiveOptions.map((option) => (
+            <ActionRow
+              key={option.days ?? "never"}
+              testID={`settings-archive-${option.days ?? "never"}`}
+              label={option.label}
+              selected={props.archiveAfterDays === option.days}
+              disabled={busy}
+              onPress={() => {
+                props.onArchiveAfterDaysChange(option.days);
+                setChoosingArchive(false);
+              }}
+            />
+          ))}
+        </>
+      ) : null}
       <SectionLabel>Browsing data</SectionLabel>
       {confirming ? (
-        <View testID="clear-data-confirmation" className="rounded-2xl bg-default px-4 pb-2 pt-4">
-          <Typography>Clear browsing data?</Typography>
-          <Typography className="mt-2 text-sm text-muted">
-            This removes open tabs, archived tabs, history, pinned sites, cookies and website data. Your search preference stays.
-          </Typography>
+        <View testID="clear-data-confirmation">
           <ActionRow
             testID="clear-data-confirm"
             label={busy ? "Clearing data…" : "Clear all browsing data"}
+            detail="Tabs, archive, history, pins, cookies and website data. Settings stay."
             destructive
             disabled={busy}
             onPress={() => {

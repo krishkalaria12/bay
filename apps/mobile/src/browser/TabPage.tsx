@@ -39,6 +39,8 @@ export function TabPage({ tab, visible, register, onNavigation, onError, onScrol
       <EngineView
         ref={view}
         initialUrl={initialUrl || undefined}
+        private={tab.private ?? false}
+        active={visible}
         style={{ flex: 1 }}
         onNavigationStateChange={({ nativeEvent }) => onNavigation(nativeEvent)}
         onNavigationError={({ nativeEvent }) => onError(nativeEvent.message)}

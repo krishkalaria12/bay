@@ -13,6 +13,9 @@ export interface PageMenuProps {
   canGoForward: boolean;
   isLoading: boolean;
   isPinned: boolean;
+  /** Ad and tracker blocking on this site; "off" when it's turned off in Settings. */
+  blocking: "on" | "paused" | "off";
+  onToggleBlocking: () => void;
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
@@ -62,6 +65,14 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
         />
       </View>
       <ActionRow testID="page-pin" label={props.isPinned ? "Unpin site" : "Pin site"} onPress={() => act(props.onPin)} />
+      {props.blocking !== "off" ? (
+        <ActionRow
+          testID="page-blocking"
+          label={props.blocking === "paused" ? "Resume blocking on this site" : "Pause blocking on this site"}
+          detail={props.blocking === "paused" ? "Ads and trackers load here until you resume." : "Ads and trackers are blocked."}
+          onPress={() => act(props.onToggleBlocking)}
+        />
+      ) : null}
       <ActionRow testID="page-copy" label="Copy link" onPress={() => act(props.onCopy)} />
       <ActionRow testID="page-share" label="Share" onPress={() => act(props.onShare)} />
       <ActionRow testID="page-settings" label="Settings" onPress={() => act(props.onSettings)} />

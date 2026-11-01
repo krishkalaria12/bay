@@ -1,8 +1,11 @@
-import { clearData, type LinkPress, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
+import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
+import { hostOf } from "@bay/core/src/omnibox.ts";
+import { clearData, privateBrowsingSupported, type LinkPress, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
+import * as LocalAuthentication from "expo-local-authentication";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState, type JSX } from "react";
-import { BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "heroui-native";
@@ -10,8 +13,10 @@ import { useThemeColor } from "heroui-native";
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { Surface } from "@/chrome/Surface";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel } from "@/panels";
+import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
 import { newId, useBrowserStore } from "@/store/browser";
 import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
+import { PrivateLock } from "./PrivateLock";
 import { SearchCard, type OpenTarget } from "./SearchCard";
 import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
@@ -40,6 +45,7 @@ export function BrowserScreen(): JSX.Element {
   const [panel, setPanel] = useState<Panel>(null);
   const [link, setLink] = useState<LinkPress | null>(null);
   const [error, setError] = useState<{ tabId: string; message: string } | null>(null);
+  const [locked, setLocked] = useState(false);
   const barHidden = useSharedValue(0);
 
   useEffect(() => {
@@ -53,6 +59,28 @@ export function BrowserScreen(): JSX.Element {
   const existing = new Set(data.tabs.map((tab) => tab.id));
   const mounted = [active.id, ...live.filter((id) => id !== active.id && existing.has(id))].slice(0, MAX_LIVE);
   const mountedKey = mounted.join(" ");
+  const { blockContent, blockingPausedHosts, lockPrivateTabs } = data.preferences;
+  const lockEnabled = lockPrivateTabs && data.tabs.some((tab) => tab.private);
+
+  useContentBlocking(ready, blockContent, blockingPausedHosts);
+  const blockerStatus = useBlockerStatus((state) => state.status);
+
+  // Private tabs lock as soon as Bay leaves the foreground, which also keeps them out of the app switcher.
+  useEffect(() => {
+    if (!lockEnabled) {
+      setLocked(false);
+      return;
+    }
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") setLocked(true);
+    });
+    return () => subscription.remove();
+  }, [lockEnabled]);
+
+  async function authenticate(): Promise<boolean> {
+    const result = await LocalAuthentication.authenticateAsync({ promptMessage: "Unlock private tabs" });
+    return result.success;
+  }
 
   useEffect(() => {
     setLive(mountedKey.split(" "));
@@ -64,6 +92,8 @@ export function BrowserScreen(): JSX.Element {
   }, []);
 
   function capture(tabId: string): void {
+    // Private pages leave no snapshot files behind.
+    if (data.tabs.find((tab) => tab.id === tabId)?.private) return;
     void views
       .get(tabId)
       ?.snapshot()
@@ -76,6 +106,8 @@ export function BrowserScreen(): JSX.Element {
     if (!isWebURL(state.url)) return;
     if (state.isLoading) setError((current) => (current?.tabId === tabId ? null : current));
     dispatch({ type: "update-tab", id: tabId, update: { url: state.url, ...(state.title ? { title: state.title } : {}) } });
+    // Private pages stay out of history.
+    if (data.tabs.find((tab) => tab.id === tabId)?.private) return;
     if (state.title && visited.get(tabId) === state.url) dispatch({ type: "page-title", url: state.url, title: state.title });
     if (!state.isLoading && visited.get(tabId) !== state.url) {
       visited.set(tabId, state.url);
@@ -103,13 +135,17 @@ export function BrowserScreen(): JSX.Element {
     setOverlay("none");
   }
 
-  function open(target: OpenTarget): void {
+  function open(target: OpenTarget, privately: boolean): void {
     Keyboard.dismiss();
     setOverlay("none");
-    if (target.kind === "tab") activate(target.id);
-    else if (target.kind === "archived") restoreTab(target.id);
-    else if (searchInNewTab && hasPage) openTab(target.url);
-    else navigate(active.id, target.url);
+    if (target.kind === "tab") return activate(target.id);
+    if (target.kind === "archived") return void restoreTab(target.id);
+    // The current tab takes the page unless the search was for a new tab, or private mode changed.
+    const reuse = (!searchInNewTab || !hasPage) && Boolean(active.private) === privately;
+    if (reuse) return navigate(active.id, target.url);
+    const emptyTab = hasPage ? null : active.id;
+    openTab(target.url, false, privately);
+    if (emptyTab) closeTab(emptyTab);
   }
 
   function search(inNewTab: boolean): void {
@@ -132,8 +168,31 @@ export function BrowserScreen(): JSX.Element {
     if (view) command(view).catch((cause: unknown) => fail(active.id, cause));
   }
 
+  // Shared and copied links leave their tracking parameters behind.
   async function share(url: string): Promise<void> {
-    await Share.share(Platform.OS === "ios" ? { url } : { message: url });
+    const clean = cleanUrl(url);
+    await Share.share(Platform.OS === "ios" ? { url: clean } : { message: clean });
+  }
+
+  function copy(url: string): void {
+    void Clipboard.setStringAsync(cleanUrl(url));
+  }
+
+  const host = hostOf(active.url);
+  const pausedEntry = blockingPausedHosts.find((entry) => host === entry || host.endsWith(`.${entry}`));
+  const blocking = !blockContent ? "off" : pausedEntry ? "paused" : "on";
+
+  function toggleBlocking(): void {
+    if (!host) return;
+    dispatch({ type: "pause-blocking", host: pausedEntry ?? host, paused: !pausedEntry });
+    // The change applies to new loads; reload so this page shows it.
+    run((tab) => tab.reload());
+  }
+
+  async function setLockPrivateTabs(enabled: boolean): Promise<void> {
+    // Turning the lock on proves Face ID, Touch ID or the passcode works before relying on it.
+    if (enabled && !(await authenticate())) return;
+    dispatch({ type: "lock-private-tabs", enabled });
   }
 
   async function wipe(): Promise<void> {
@@ -225,8 +284,17 @@ export function BrowserScreen(): JSX.Element {
 
       {overlay === "tabs" ? (
         <View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, paddingBottom: insets.bottom + BAR_HEIGHT + 16 }]}>
-          <TabSwitcher tabs={data.tabs} activeTabId={active.id} onSelect={activate} onClose={closeTab} />
+          <TabSwitcher tabs={data.tabs} activeTabId={active.id} onSelect={activate} onClose={closeTab} privateLocked={locked} />
         </View>
+      ) : null}
+
+      {locked && active.private && overlay === "none" ? (
+        <PrivateLock
+          bottomInset={insets.bottom + BAR_HEIGHT}
+          onUnlock={() => {
+            void authenticate().then((success) => success && setLocked(false));
+          }}
+        />
       ) : null}
 
       {overlay !== "search" ? (
@@ -239,7 +307,7 @@ export function BrowserScreen(): JSX.Element {
             </Surface>
           ) : null}
           {hasPage && showPages ? (
-            <BrowserBar mode="page" onTabs={showTabs} onSearch={() => search(false)} onMore={() => setPanel("page")} />
+            <BrowserBar mode="page" privately={Boolean(active.private)} onTabs={showTabs} onSearch={() => search(false)} onMore={() => setPanel("page")} />
           ) : (
             <BrowserBar
               mode="start"
@@ -256,6 +324,8 @@ export function BrowserScreen(): JSX.Element {
           initialText={searchInNewTab ? "" : active.url}
           engine={engine}
           data={data}
+          privateAvailable={privateBrowsingSupported}
+          initialPrivate={!searchInNewTab && Boolean(active.private)}
           onOpen={open}
           onDismiss={() => {
             Keyboard.dismiss();
@@ -273,13 +343,15 @@ export function BrowserScreen(): JSX.Element {
         canGoForward={page.canGoForward}
         isLoading={page.isLoading}
         isPinned={data.pinnedSites.some((site) => site.url === active.url)}
+        blocking={blocking}
+        onToggleBlocking={toggleBlocking}
         onBack={() => run((tab) => tab.goBack())}
         onForward={() => run((tab) => tab.goForward())}
         onReload={() => run((tab) => tab.reload())}
         onStop={() => run((tab) => tab.stop())}
         onPin={() => dispatch({ type: "pin-site", tabId: active.id, pinId: newId() })}
         onShare={() => void share(active.url)}
-        onCopy={() => void Clipboard.setStringAsync(active.url)}
+        onCopy={() => copy(active.url)}
         onCloseTab={() => closeTab(active.id)}
         onSettings={() => setPanel("settings")}
       />
@@ -300,6 +372,12 @@ export function BrowserScreen(): JSX.Element {
         onSearchEngineChange={(id) => dispatch({ type: "search-engine", id })}
         archiveAfterDays={data.preferences.archiveAfterDays}
         onArchiveAfterDaysChange={(days) => dispatch({ type: "archive-days", days })}
+        blockContent={blockContent}
+        blockerDetail={blockerDetail(blockerStatus)}
+        onBlockContentChange={(enabled) => dispatch({ type: "block-content", enabled })}
+        privateAvailable={privateBrowsingSupported}
+        lockPrivateTabs={lockPrivateTabs}
+        onLockPrivateTabsChange={(enabled) => void setLockPrivateTabs(enabled)}
         onClearData={wipe}
       />
       <LinkMenu
@@ -309,12 +387,25 @@ export function BrowserScreen(): JSX.Element {
         title={link?.title ?? ""}
         onOpenTab={() => link && openTab(link.url)}
         onOpenBackground={() => link && openTab(link.url, true)}
-        onCopy={() => link && void Clipboard.setStringAsync(link.url)}
+        onCopy={() => link && copy(link.url)}
         onShare={() => link && void share(link.url)}
         onResolveDestination={() => resolveDestination(link?.url ?? "")}
       />
     </View>
   );
+}
+
+function blockerDetail(status: BlockerStatus): string {
+  switch (status.state) {
+    case "ready":
+      return `uBlock Origin's lists · ${status.lists} lists active, updated daily`;
+    case "loading":
+      return "Downloading filter lists…";
+    case "failed":
+      return "Filter lists couldn't load. Bay will try again.";
+    case "off":
+      return "uBlock Origin's lists, updated daily";
+  }
 }
 
 /** Follow a link's redirects without opening it, to show where it really goes. */

@@ -30,6 +30,12 @@
           "backgroundColor": "#ffffff"
         }
       ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Bay uses Face ID to unlock your private tabs."
+        }
+      ],
       "expo-status-bar",
       [
         "expo-dev-client",
