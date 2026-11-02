@@ -456,6 +456,20 @@ function findFibers(name: string, limit = 50): Fiber[] {
   return out;
 }
 
+// Hermes' sampling profiler (macos/Bay-macOS/HermesProfiler.mm): js-bench --cpuprofile 1 starts it before a scenario
+// and writes a Chrome trace of the JS thread after it. Null where the app has no profiler (an older build).
+type HermesProfiler = { start(hz: number): boolean; stop(name: string): string | null };
+const cpuProfile = {
+  start(hz = 1000): boolean {
+    return !!profiler()?.start(hz);
+  },
+  /** Writes the samples since `start` to `name` in the data folder; the file's path. */
+  stop(name: string): string | null {
+    return profiler()?.stop(name) ?? null;
+  },
+};
+const profiler = () => (require("react-native") as typeof import("react-native")).NativeModules.NNHermesProfiler as HermesProfiler | undefined;
+
 if (perfProbeEnabled) {
   marks.bundleStart = Date.now();
   installReactHook();
@@ -480,5 +494,6 @@ if (perfProbeEnabled) {
     batch: (fn: () => void) => (require("react-native") as typeof import("react-native")).unstable_batchedUpdates(fn),
     findFibers,
     nameOf,
+    cpuProfile,
   };
 }

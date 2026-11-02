@@ -22,12 +22,22 @@
 //         --probe <options>    the probe's slower options, written into the perf-probe file: selectors (every store
 //                              selector timed by call site), renders (why each component rendered), listeners
 //         --trace 1            names anonymous timer callbacks by call site (slower: for finding, not timing)
+//         --cpuprofile 1       samples the JS thread with Hermes' profiler (1 kHz) and writes one Chrome trace per
+//                              scenario to <out>/profiles/<label>-<run>-<scenario>.trace.json (`profile` reads them).
+//                              Needs a build with macos/Bay-macOS/HermesProfiler.mm; sampling costs some speed.
 //         --options '<json>'   options passed to every scenario (bench-app.js), e.g. '{"seconds":20}'
 //   node js-bench.mjs compare <before.json> <after.json>
 //       Prints a before/after table of medians, after a warning line when the two reports' probe or bench
 //       revisions differ (their numbers count different things).
 //   node js-bench.mjs summary <report.json>
 //       Recomputes a report's summary from its raw results (older reports pick up new lines) and prints it.
+//   node js-bench.mjs profile <trace.json> [--top 30] [--match <regex>] [--callers <regex>] [--map <bundle.js.map>]
+//       Reads a JS CPU profile (`run --cpuprofile 1` writes one per scenario: Hermes' Chrome trace; a DevTools
+//       .cpuprofile also reads) and prints where the JS thread spent its time: by layer (React, Reanimated, the app…),
+//       functions by self time, and the app's functions by total time, located through the bundle's source map (found
+//       beside the bundle, or --map). --match keeps the samples with a frame matching it; --callers lists who calls
+//       the functions matching it. The traces open in Chrome
+//       DevTools' Performance panel, Perfetto (ui.perfetto.dev) and speedscope for a flame chart.
 //
 // The app side is the opt-in probe in src/lib/perfProbe.ts, on only when the data folder holds a
 // `perf-probe` file (the seed writes one).
@@ -51,6 +61,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { SourceMap } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeSeed } from "./seed.mjs";
@@ -261,11 +272,23 @@ const alive = (pid) => {
   }
 };
 
-export async function launch(app, dataDir, port) {
+export async function launch(app, dataDir, port, env = {}) {
   const binary = realpathSync(join(app, "Contents/MacOS/Bay"));
   if (pidsOf(binary).length) throw new Error(`an instance of ${app} is already running`);
   const launchedAt = Date.now();
-  execFileSync("open", ["-g", "-n", "--env", "BAY_BACKGROUND=1", "--env", `BAY_DATA_DIR=${dataDir}`, "--env", `BAY_REMOTE_DEBUGGING_PORT=${port}`, app]);
+  const extra = Object.entries(env).flatMap(([k, v]) => ["--env", `${k}=${v}`]);
+  execFileSync("open", [
+    "-g",
+    "-n",
+    "--env",
+    "BAY_BACKGROUND=1",
+    "--env",
+    `BAY_DATA_DIR=${dataDir}`,
+    "--env",
+    `BAY_REMOTE_DEBUGGING_PORT=${port}`,
+    ...extra,
+    app,
+  ]);
   for (let i = 0; i < 200; i++) {
     const [pid] = pidsOf(binary);
     if (pid) return { pid, launchedAt };
@@ -332,7 +355,10 @@ async function run() {
       writeSeed(dataDir, origin, version);
       // --probe selectors (etc.) turns on the probe's slower options (src/lib/perfProbe.ts).
       if (flags.probe) writeFileSync(join(dataDir, "perf-probe"), flags.probe);
-      const { pid, launchedAt } = await launch(clone, dataDir, 9500 + r + (label.length % 50) * 10);
+      // --cpuprofile 1: Hermes samples the JS thread from launch (BAY_JS_PROFILE), so startup's profile has the bundle's
+      // evaluation and first render; each later scenario gets its own.
+      const profiling = !!flags.cpuprofile;
+      const { pid, launchedAt } = await launch(clone, dataDir, 9500 + r + (label.length % 50) * 10, profiling ? { BAY_JS_PROFILE: "1" } : {});
       const result = { run: r, launchedAt };
       try {
         // The harness ignores a script that was already there when it started; ping until it answers.
@@ -350,7 +376,16 @@ async function run() {
           // --options '{"slowMs":300}' passes scenario options.
           const options = JSON.stringify({ ...(flags.options ? JSON.parse(flags.options) : {}), origin, scenario: name });
           const entry = flags.trace && name !== "startup" ? "traced" : name;
+          if (profiling && name !== "startup") await evaluate(dataDir, pid, "return nnPerf.cpuProfile.start(1000);");
           result[name] = await evaluate(dataDir, pid, `return nnBench.run(${JSON.stringify(entry)}, ${options});`);
+          if (profiling) {
+            const written = await evaluate(dataDir, pid, `return nnPerf.cpuProfile.stop(${JSON.stringify(`${name}.trace.json`)});`);
+            if (!written) throw new Error("--cpuprofile: this build has no Hermes profiler (macos/Bay-macOS/HermesProfiler.mm)");
+            mkdirSync(join(out, "profiles"), { recursive: true });
+            const saved = join(out, "profiles", `${label}-${r}-${name}.trace.json`);
+            cpSync(written, saved);
+            process.stderr.write(`  profile: ${saved}\n`);
+          }
         }
         // Asked last, so startup's counts don't include it. Bundles from before nnPerf.revision: 6232fa43 (revision 2)
         // added commitTasks.
@@ -383,6 +418,135 @@ async function run() {
   writeFileSync(file, JSON.stringify(report, null, 2));
   printSummary(report.summary);
   console.log(`\nwrote ${file}`);
+}
+
+// MARK: Profiles
+
+// Each sample's stack, leaf last: Hermes' Chrome trace (stackFrames + samples) or a DevTools .cpuprofile. A frame is
+// { fn, file, line, column } at its function's start, so a function's samples add up whichever line they were on.
+function profileStacks(file) {
+  const data = JSON.parse(readFileSync(file, "utf8"));
+  const stacks = [];
+  if (data.stackFrames && data.samples) {
+    const frameOf = (f) => {
+      const m = /^(.*?)\((.*):(\d+):(\d+)\)$/.exec(f.name ?? "");
+      return {
+        fn: (m ? m[1] : f.name) || "(anonymous)",
+        file: m?.[2] ?? "",
+        line: Number(f.funcLine ?? m?.[3] ?? 0),
+        column: Number(f.funcColumn ?? m?.[4] ?? 0),
+      };
+    };
+    const memo = new Map();
+    const stackOf = (id) => {
+      if (memo.has(id)) return memo.get(id);
+      const f = data.stackFrames[id];
+      const stack = f ? [...(f.parent !== undefined ? stackOf(f.parent) : []), frameOf(f)] : [];
+      memo.set(id, stack);
+      return stack;
+    };
+    for (const sample of data.samples) stacks.push(sample.sf !== undefined ? stackOf(sample.sf) : []);
+  } else if (data.nodes && data.samples) {
+    const nodes = new Map(data.nodes.map((n) => [n.id, n]));
+    const parent = new Map();
+    for (const n of data.nodes) for (const c of n.children ?? []) parent.set(c, n.id);
+    const frameOf = ({ callFrame: f = {} }) => ({ fn: f.functionName || "(anonymous)", file: f.url ?? "", line: f.lineNumber + 1, column: f.columnNumber + 1 });
+    const stackOf = (id) => {
+      const out = [];
+      for (let at = id; at !== undefined; at = parent.get(at)) out.unshift(frameOf(nodes.get(at)));
+      return out;
+    };
+    for (const id of data.samples) stacks.push(stackOf(id));
+  } else throw new Error(`${file}: not a Chrome trace with stackFrames and samples, or a .cpuprofile`);
+  return stacks;
+}
+
+// Where a bundle's function is in the sources, through the bundle's source map (<bundle>.map, or --map).
+function sourceLookup(mapFile) {
+  const maps = new Map();
+  return (frame) => {
+    const path = mapFile ?? (frame.file ? `${frame.file}.map` : "");
+    if (!path || !frame.line) return null;
+    if (!maps.has(path)) maps.set(path, existsSync(path) ? new SourceMap(JSON.parse(readFileSync(path, "utf8"))) : null);
+    const entry = maps.get(path)?.findEntry(frame.line - 1, frame.column - 1);
+    if (!entry?.originalSource) return null;
+    return { source: entry.originalSource.replace(/^.*?\/(node_modules|apps|packages)\//, "$1/"), line: entry.originalLine + 1 };
+  };
+}
+
+// What part of the app a frame belongs to.
+function layerOf(frame, where) {
+  const { fn } = frame;
+  if (fn.startsWith("[GC")) return "garbage collection";
+  if (fn.startsWith("[Native]")) return "engine builtins";
+  if (fn.startsWith("[HostFunction]")) return "native calls (JSI)";
+  const source = where?.source ?? "";
+  if (/\/react-native-renderer\/|ReactNativeRenderer|ReactFabric/.test(source)) return "React renderer";
+  if (/node_modules\/(.pnpm\/)?.*react-native-reanimated/.test(source)) return "Reanimated";
+  if (/node_modules\/(.pnpm\/)?.*zustand/.test(source)) return "zustand";
+  if (/node_modules\/(.pnpm\/)?.*(react-native|react-native-macos)\//.test(source)) return "React Native";
+  if (/node_modules\/(.pnpm\/)?.*\/react\//.test(source)) return "React";
+  if (/node_modules/.test(source)) return "other packages";
+  if (source) return "the app";
+  return "unknown";
+}
+
+function profile(file, { top = 30, match, map, callers } = {}) {
+  const lookup = sourceLookup(map);
+  const seen = new Map();
+  const describe = (frame) => {
+    const id = `${frame.fn}|${frame.file}|${frame.line}|${frame.column}`;
+    let d = seen.get(id);
+    if (!d) {
+      const where = lookup(frame);
+      d = { id, layer: layerOf(frame, where), label: `${frame.fn}${where ? `  ${where.source}:${where.line}` : frame.line ? `  :${frame.line}` : ""}` };
+      seen.set(id, d);
+    }
+    return d;
+  };
+  const idle = /^(\(root\)|\(idle\)|\(program\)|\[root\]|\[Idle\]|hermes)$/;
+  const all = profileStacks(file);
+  const busy = all.map((stack) => stack.filter((f) => f.fn && !idle.test(f.fn)).map(describe)).filter((stack) => stack.length);
+  const re = match ? new RegExp(match) : null;
+  const stacks = re ? busy.filter((stack) => stack.some((d) => re.test(d.label))) : busy;
+  const self = new Map();
+  const total = new Map();
+  const layers = new Map();
+  for (const stack of stacks) {
+    const leaf = stack[stack.length - 1];
+    self.set(leaf.label, (self.get(leaf.label) ?? 0) + 1);
+    layers.set(leaf.layer, (layers.get(leaf.layer) ?? 0) + 1);
+    for (const label of new Set(stack.map((d) => d.label))) total.set(label, (total.get(label) ?? 0) + 1);
+  }
+  const pct = (n) => `${((100 * n) / stacks.length).toFixed(1).padStart(5)}%`;
+  const list = (m, n = Number(top), keep = () => true) =>
+    [...m]
+      .filter(([label]) => keep(label))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, n)
+      .map(([label, count]) => `  ${pct(count)} ${String(count).padStart(5)}  ${label.length > 130 ? `${label.slice(0, 127)}…` : label}`)
+      .join("\n");
+  const inApp = (label) => /  (apps|packages)\//.test(label);
+  console.log(`${file}\n${all.length} samples, ${busy.length} with JS running${re ? `, ${stacks.length} matching /${match}/` : ""}`);
+  console.log(`\nBy layer (self time):\n${list(layers, 12)}`);
+  console.log(`\nSelf time (the function itself):\n${list(self)}`);
+  console.log(`\nTotal time, the app's functions (with what they called):\n${list(total, Number(top), inApp)}`);
+  if (callers) {
+    // Who calls the functions matching --callers, directly and from the nearest of the app's own functions.
+    const wanted = new RegExp(callers);
+    const direct = new Map();
+    const fromApp = new Map();
+    for (const stack of stacks) {
+      const at = stack.findLastIndex((d) => wanted.test(d.label));
+      if (at < 0) continue;
+      const parent = stack[at - 1]?.label ?? "(top)";
+      direct.set(parent, (direct.get(parent) ?? 0) + 1);
+      const app = stack.slice(0, at).findLast((d) => inApp(d.label) && !/perfProbe/.test(d.label))?.label ?? "(none)";
+      fromApp.set(app, (fromApp.get(app) ?? 0) + 1);
+    }
+    console.log(`\nCallers of /${callers}/:\n${list(direct, 15)}`);
+    console.log(`\nNearest app function above /${callers}/:\n${list(fromApp, 25)}`);
+  }
 }
 
 // MARK: Summary
@@ -574,6 +738,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         .map((l) => l.replace(/^\/\/ ?/, ""))
         .join("\n"),
     );
+  } else if (command === "profile") {
+    if (!positional[0]) throw new Error("profile needs a trace file");
+    profile(positional[0], flags);
   } else if (command === "bundle") bundle(positional[0] ?? join(defaultOut, "bundle"), { profiling: !!flags.profiling });
   else if (command === "run") await run();
   else if (command === "compare") compare(positional[0], positional[1]);
