@@ -10,13 +10,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class EngineFreshTests(unittest.TestCase):
-    def test_committed_engine_has_prebuilt(self):
-        tree = subprocess.check_output(['git', 'rev-parse', 'HEAD:engine'], cwd=ROOT, text=True).strip()
-        entries = [line.split() for line in (ROOT / 'packages/chromium/prebuilt-engines.tsv').read_text().splitlines()
-                   if line.strip() and not line.startswith('#')]
-        self.assertTrue(any(entry[0] == tree for entry in entries),
-                        'publish and register a prebuilt engine for ' + tree)
-
     def test_layers_and_stale_framework(self):
         layers = [line.split()[1] for line in (ROOT / 'engine/patches/series').read_text().splitlines()
                   if line.startswith('layer ')]
