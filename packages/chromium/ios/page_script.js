@@ -836,9 +836,65 @@
     }
   } catch {}
 
+  // MARK: Content blocker — the classes and ids the document uses, each sent once (batched) for the generic cosmetic
+  // filters that hide them (NNCoreContentBlocker.mm), from the moment the browser says the page gets them.
+  let cosmeticOn = false;
+  const installCosmetic = () => {
+    if (cosmeticOn) return;
+    cosmeticOn = true;
+    const seenClasses = new Set();
+    const seenIds = new Set();
+    let classes = [];
+    let ids = [];
+    let queued = false;
+    let sent = 0;
+    const flush = () => {
+      queued = false;
+      if (!classes.length && !ids.length) return;
+      send("cosmetic", { url: location.href, classes, ids });
+      sent += classes.length + ids.length;
+      classes = [];
+      ids = [];
+    };
+    const note = (el) => {
+      const id = el.getAttribute("id");
+      if (id && !seenIds.has(id)) {
+        seenIds.add(id);
+        ids.push(id);
+      }
+      const list = el.classList;
+      for (let i = 0; list && i < list.length; i++) {
+        if (seenClasses.has(list[i])) continue;
+        seenClasses.add(list[i]);
+        classes.push(list[i]);
+      }
+      if (!queued && (classes.length || ids.length)) {
+        queued = true;
+        // The first names at once (the page is painting), then every 100 ms.
+        setTimeout(guard(flush), sent ? 100 : 0);
+      }
+    };
+    const noteTree = (node) => {
+      if (node.nodeType !== 1 || sent > 20000) return;
+      note(node);
+      if (node.firstElementChild) for (const el of node.querySelectorAll("[id],[class]")) note(el);
+    };
+    const observer = new MutationObserver(
+      guard((records) => {
+        for (const record of records) {
+          if (record.type === "attributes") noteTree(record.target);
+          else for (const node of record.addedNodes) noteTree(node);
+        }
+      }),
+    );
+    observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "id"] });
+    if (document.documentElement) noteTree(document.documentElement);
+  };
+
   handlers.config = (config) => {
     blockAutoplay = !!config.blockAutoplay;
     if (config.displayMediaPicker) installDisplayMedia();
+    if (config.cosmetic) installCosmetic();
   };
   send("hello", { top: isTop, url: location.href });
 
