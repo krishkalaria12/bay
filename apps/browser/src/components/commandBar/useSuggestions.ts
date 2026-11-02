@@ -89,7 +89,7 @@ function knownHosts(s: BrowserState, spaceId: string): string[] {
 export function scopeFor(text: string, windowId: string): SearchScope | null {
   const s = useBrowser.getState();
   const spaceId = s.windows[windowId]?.spaceId ?? "";
-  return findScope(text, { engines: searchEngines(s.settings), hosts: knownHosts(s, spaceId) });
+  return findScope(text, { engines: searchEngines(s.settings), hosts: () => knownHosts(s, spaceId) });
 }
 
 function suggestEngine(scope: SearchScope | null, engines: SearchEngine[], fallback: SearchEngine): SearchEngine {

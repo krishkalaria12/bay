@@ -8,6 +8,45 @@ import type { SidebarKeyboardRow } from "./keyboardModel";
 import { splitRowTabs } from "../../store/splits";
 import { splitIndex, stableList } from "../../store/tabIndexes";
 import { useQuietBrowser } from "../../store/hooks";
+import { changedIds } from "../../store/recordDiff";
+
+let entryTabs: BrowserShape["tabs"] | undefined;
+let entryTabLists: BrowserShape["tabLists"] | undefined;
+let entryTabsVersion: object = {};
+
+// These selectors read tab existence, placement, split eligibility and live-item membership, not page metadata.
+// Share the comparison across windows/folders/groups. Advance to every read, including cache hits, so known
+// updateTab deltas stay usable. changedIds also handles replacements and reads of older/arbitrary snapshots.
+function tabsVersion(s: BrowserShape): object {
+  const tabs = s.tabs;
+  const listsChanged = s.tabLists !== entryTabLists;
+  entryTabLists = s.tabLists;
+  if (tabs === entryTabs) return entryTabsVersion;
+  const previous = entryTabs;
+  if (
+    !previous ||
+    // Opening/closing/moving tabs already changes list structure. Avoid a diff that can't save that work.
+    listsChanged ||
+    changedIds(tabs, previous).some((id) => {
+      const a = tabs[id],
+        b = previous[id];
+      return (
+        !a ||
+        !b ||
+        a.spaceId !== b.spaceId ||
+        a.pinned !== b.pinned ||
+        a.pinnedRow !== b.pinnedRow ||
+        a.folderId !== b.folderId ||
+        !!a.liveItem !== !!b.liveItem ||
+        a.liveItem?.folderId !== b.liveItem?.folderId ||
+        a.liveItem?.itemId !== b.liveItem?.itemId
+      );
+    })
+  )
+    entryTabsVersion = {};
+  entryTabs = tabs;
+  return entryTabsVersion;
+}
 
 // The Essentials (tiles), the Pinned section's rows and folders ("t:" and "f:" entries), the pinned groups, and the
 // list.
@@ -16,7 +55,8 @@ export type SidebarEntries = { tiles: string[]; pinned: string[]; pinnedGroups: 
 const memo = new Map<string, { inputs: unknown[]; result: SidebarEntries }>();
 
 export function sidebarEntries(s: BrowserShape, windowId: string, spaceId?: string): SidebarEntries {
-  const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits, s.pinnedFolders];
+  const w = s.windows[windowId];
+  const inputs = [tabsVersion(s), s.tabLists, w?.id, w?.spaceId, w?.kind, s.groups, s.splits, s.pinnedFolders];
   const key = spaceId ? `${windowId}|${spaceId}` : windowId;
   const cached = memo.get(key);
   if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result;
@@ -110,13 +150,14 @@ export function sidebarTabOrder(s: BrowserShape, windowId: string): string[] {
   return [...tiles, ...pinned.flatMap(rowTabs), ...pinnedGroups.flatMap((id) => rowTabs(`g:${id}`)), ...list.flatMap(rowTabs)];
 }
 
-const groupMemo = new WeakMap<object, { tabs: BrowserShape["tabs"]; splits: BrowserShape["splits"]; result: string[] }>();
+const groupMemo = new WeakMap<object, { tabs: object; splits: BrowserShape["splits"]; result: string[] }>();
 
 export function groupEntries(s: BrowserShape, groupId: string): string[] {
   const g = s.groups[groupId];
   if (!g) return [];
+  const tabs = tabsVersion(s);
   const cached = groupMemo.get(g);
-  if (cached && cached.tabs === s.tabs && cached.splits === s.splits) return cached.result;
+  if (cached && cached.tabs === tabs && cached.splits === s.splits) return cached.result;
   const splits = splitIndex(s.splits);
   const seen = new Set<string>();
   const out: string[] = [];
@@ -128,7 +169,7 @@ export function groupEntries(s: BrowserShape, groupId: string): string[] {
     }
   }
   const result = stableList(cached?.result, out);
-  groupMemo.set(g, { tabs: s.tabs, splits: s.splits, result });
+  groupMemo.set(g, { tabs, splits: s.splits, result });
   return result;
 }
 
@@ -148,14 +189,15 @@ export const useGroupEntries = (groupId: string) => useQuietBrowser(useShallow((
 
 const folderMemo = new Map<
   string,
-  { tabs: BrowserShape["tabs"]; lists: BrowserShape["tabLists"]; folders: BrowserShape["pinnedFolders"]; splits: BrowserShape["splits"]; result: string[] }
+  { tabs: object; lists: BrowserShape["tabLists"]; folders: BrowserShape["pinnedFolders"]; splits: BrowserShape["splits"]; result: string[] }
 >();
 
 /** A folder's immediate tabs and child folders in sidebar order. */
 export function folderEntries(s: BrowserShape, folderId: string): string[] {
+  const tabs = tabsVersion(s);
   const cached = folderMemo.get(folderId);
   const folder = s.pinnedFolders[folderId];
-  if (cached && cached.tabs === s.tabs && cached.lists === s.tabLists && cached.folders === s.pinnedFolders && cached.splits === s.splits) return cached.result;
+  if (cached && cached.tabs === tabs && cached.lists === s.tabLists && cached.folders === s.pinnedFolders && cached.splits === s.splits) return cached.result;
   const out: string[] = [];
   if (folder) {
     const children = childFolderIds(s, folderId, folder.spaceId);
@@ -175,7 +217,7 @@ export function folderEntries(s: BrowserShape, folderId: string): string[] {
     );
   }
   const result = stableList(cached?.result, out);
-  if (folder) folderMemo.set(folderId, { tabs: s.tabs, lists: s.tabLists, folders: s.pinnedFolders, splits: s.splits, result });
+  if (folder) folderMemo.set(folderId, { tabs, lists: s.tabLists, folders: s.pinnedFolders, splits: s.splits, result });
   else folderMemo.delete(folderId);
   return result;
 }
@@ -235,7 +277,7 @@ export function sidebarKeyboardRows(
   const w = s.windows[windowId];
   if (!w) return NO_KEYBOARD_ROWS;
   const inputs = [
-    s.tabs,
+    tabsVersion(s),
     s.tabLists,
     s.groups,
     s.splits,
