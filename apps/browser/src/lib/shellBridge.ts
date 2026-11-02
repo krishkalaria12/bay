@@ -41,6 +41,7 @@ import { flushPersistence, resumePersistence } from "./persist";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
+import { subscribeMenuInputs } from "./menuUpdates";
 
 let quitting = false;
 export const isQuitting = () => quitting;
@@ -155,6 +156,8 @@ export function startNativeSync() {
   syncMenu();
   store.subscribe((s, prev) => {
     syncWindows(s, prev);
+  });
+  subscribeMenuInputs(() => {
     menuTimer ??= setTimeout(syncMenu, 120);
   });
   store.subscribe((s, prev) => {

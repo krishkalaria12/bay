@@ -27,10 +27,13 @@ const publicTab = (t: { spaceId: string }) => !isIncognitoSpace(t.spaceId);
 // switch stamps lastActiveAt). Each tab's JSON is kept with its record, so a save stringifies only the tabs that
 // changed: the string is what JSON.stringify of the whole document would write.
 const tabJson = new WeakMap<Tab, string>();
+// Closing a window leaves its tabs in their space. Keep their detached JSON too; a record's owner can disappear
+// or return without changing the record, so neither representation can stand in for the other.
+const detachedTabJson = new WeakMap<Tab, string>();
 function persistedTabJson(t: Tab, detached: boolean): string {
-  if (detached) return JSON.stringify(persistedTab({ ...t, windowId: "" }));
-  let json = tabJson.get(t);
-  if (json === undefined) tabJson.set(t, (json = JSON.stringify(persistedTab(t))));
+  const cache = detached ? detachedTabJson : tabJson;
+  let json = cache.get(t);
+  if (json === undefined) cache.set(t, (json = JSON.stringify(persistedTab(detached ? { ...t, windowId: "" } : t))));
   return json;
 }
 

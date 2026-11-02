@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 await import("../test-native-stub.mjs");
 const { sessionJson } = await import("./persist.ts");
+const { useBrowser } = await import("../store/browserStore.ts");
 const { normalizeLocalFiles } = await import("../store/localFiles.ts");
 
 // session.json as it was written before tabs' JSON was cached: one JSON.stringify of the whole document.
@@ -93,4 +94,109 @@ test("session.json is byte-identical to stringifying the whole document, across 
   s = { ...s, windows };
   assert.equal(sessionJson(s), wholeDocument(s));
   assert.ok(!sessionJson(s).includes("secret"));
+});
+
+// Count actual tab JSON.stringify calls, independently of how persistence caches them.
+function tabSerializations(run) {
+  const stringify = JSON.stringify;
+  const ids = [];
+  JSON.stringify = (value, ...args) => {
+    if (value && typeof value === "object" && typeof value.id === "string" && typeof value.url === "string") ids.push(value.id);
+    return stringify(value, ...args);
+  };
+  try {
+    run();
+  } finally {
+    JSON.stringify = stringify;
+  }
+  return ids;
+}
+
+test("later saves reuse the JSON of shared tabs retained by closeWindow", () => {
+  const S = () => useBrowser.getState();
+  S().hydrate({});
+  const closing = S().createWindow({ url: "https://closed.example/" });
+  const first = S().windows[closing].activeTabIds.default;
+  const second = S().newTab(closing, { url: "https://background.example/", background: true });
+  const keep = S().createWindow({ url: "https://keep.example/" });
+  assert.equal(sessionJson(S()), wholeDocument(S()));
+  S().closeWindow(closing);
+  assert.equal(S().windows[closing], undefined);
+  for (const id of [first, second]) {
+    assert.equal(S().tabs[id].windowId, "");
+    assert.equal(S().tabs[id].unloaded, true);
+    assert.ok(S().tabLists.default.includes(id));
+  }
+  assert.equal(sessionJson(S()), wholeDocument(S()));
+  const sourceTab = S().tabs[first];
+  S().toggleSidebar(keep);
+  const expected = wholeDocument(S());
+  assert.deepEqual(
+    tabSerializations(() => assert.equal(sessionJson(S()), expected)),
+    [],
+  );
+  assert.equal(S().tabs[first], sourceTab);
+
+  // A replacement record with the same id must write its new fields once.
+  S().updateTab(first, { title: 'Changed "title"\n🌊' });
+  assert.notEqual(S().tabs[first], sourceTab);
+  const edited = wholeDocument(S());
+  assert.deepEqual(
+    tabSerializations(() => assert.equal(sessionJson(S()), edited)),
+    [first],
+  );
+  assert.deepEqual(
+    tabSerializations(() => assert.equal(sessionJson(S()), edited)),
+    [],
+  );
+});
+
+test("the same record keeps distinct owned and detached bytes when its owner changes", () => {
+  const s = fixture();
+  // Preserve unusual key order and escaped keys/values through both serialization variants.
+  const sourceTab = {
+    0: "numeric key",
+    id: 'escaped"id',
+    title: 'quote" and slash\\',
+    navigation: null,
+    'odd"key': "line\n🌊",
+    spaceId: "default",
+    url: "https://escaped.example/",
+    windowId: "w1",
+  };
+  s.tabs = { escaped: sourceTab };
+  s.tabLists = { 'default"\\\n': [sourceTab.id] };
+  const owner = s.windows.w1;
+  const owned = wholeDocument(s);
+  assert.deepEqual(
+    tabSerializations(() => assert.equal(sessionJson(s), owned)),
+    [sourceTab.id],
+  );
+  assert.deepEqual(
+    tabSerializations(() => assert.equal(sessionJson(s), owned)),
+    [],
+  );
+  delete s.windows.w1;
+  const detached = wholeDocument(s);
+  assert.notEqual(detached, owned);
+  assert.deepEqual(
+    tabSerializations(() => assert.equal(sessionJson(s), detached)),
+    [sourceTab.id],
+  );
+  assert.deepEqual(
+    tabSerializations(() => assert.equal(sessionJson(s), detached)),
+    [],
+  );
+  s.windows.w1 = owner;
+  assert.deepEqual(
+    tabSerializations(() => assert.equal(sessionJson(s), owned)),
+    [],
+  );
+  delete s.windows.w1;
+  assert.deepEqual(
+    tabSerializations(() => assert.equal(sessionJson(s), detached)),
+    [],
+  );
+  assert.equal(s.tabs.escaped, sourceTab);
+  assert.equal(sourceTab.windowId, "w1");
 });
