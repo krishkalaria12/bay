@@ -75,6 +75,8 @@
 //   samples left out: page couldn't paint   sessionRun  switch/newtab: throttled(), < 5 rAF frames in 250 ms just before
 //   tab switch → shown                      sessionRun  switch: nn.actions.switchToTab → the page's visibilitychange to
 //                                                        visible + 2 rAFs (16 per run, among 20 tabs)
+//   tab switch → page visible               sessionRun  switch: the same, to the visibilitychange alone (the app and Chrome's
+//                                                        part; the rest of "shown" is the page's two frames)
 //   new tab → first paint / first frame     sessionRun  newtab: store newTab → the new page's FCP / first rAF (5 per run)
 //   new window → on screen                  newWindow   nn.actions.openWindow → nnperf newwindow (2 ms polls; ≥ 300×200,
 //                                                        alpha > 0). 3 per session run (newwindow), 8 per windows run
@@ -730,7 +732,17 @@ async function sessionRun(side, i, parts) {
   const has = (part) => parts.has(part);
   const secs = +opt.idle;
   const app = new Instance(side, freshDir(side, `session-${i}`));
-  const r = { memory: {}, idle: {}, tabSwitch: [], newTab: [], newTabFrame: [], newWindow: [], processes: {}, throttled: { tabSwitch: 0, newTab: 0 } };
+  const r = {
+    memory: {},
+    idle: {},
+    tabSwitch: [],
+    tabSwitchVisible: [],
+    newTab: [],
+    newTabFrame: [],
+    newWindow: [],
+    processes: {},
+    throttled: { tabSwitch: 0, newTab: 0 },
+  };
   if (parts.size < SESSION_PARTS.length) r.parts = [...parts];
   try {
     await app.launch();
@@ -761,6 +773,8 @@ async function sessionRun(side, i, parts) {
       const shown = s?.shown.at(-1);
       if (hidden) r.throttled.tabSwitch++;
       r.tabSwitch.push(shown && !hidden ? shown[1] - at : NaN);
+      // The part before the page hears it's visible (the app, the view swap, Chrome's WasShown); the rest is its two frames.
+      r.tabSwitchVisible.push(shown && !hidden ? shown[0] - at : NaN);
       if (process.env.BENCH_DEBUG)
         log("switch", marker, "before", before, "at", at - Date.now(), "state", JSON.stringify((await app.cdp.state(target)) ?? null)?.slice(0, 300));
       await sleep(400);
@@ -1029,6 +1043,11 @@ function summary(res) {
   add(
     "tab switch → shown (median of 16 per run)",
     S.map((r) => median(r.tabSwitch)),
+    "ms",
+  );
+  add(
+    "tab switch → page visible (median of 16 per run)",
+    S.map((r) => median(r.tabSwitchVisible ?? [])),
     "ms",
   );
   add(
