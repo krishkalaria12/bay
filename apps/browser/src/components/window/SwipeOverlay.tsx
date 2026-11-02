@@ -7,9 +7,9 @@ import Animated, {
   cancelAnimation,
   Easing,
   interpolate,
+  makeMutable,
   runOnJS,
   useAnimatedStyle,
-  useSharedValue,
   withDelay,
   withSpring,
   withTiming,
@@ -62,8 +62,24 @@ export function NavigationOverlays({ tabId, windowId, geometry }: { tabId: strin
 
 type Shown = { direction: "back" | "forward"; confirmed: boolean; list: HistoryItem[] | null; selected: number };
 
+type CapsuleValues = Record<"x" | "w" | "h" | "top" | "nudge" | "radius" | "confirm" | "icon" | "list" | "pill" | "fade" | "scale", SharedValue<number>>;
+
+const makeCapsuleValues = (): CapsuleValues => ({
+  x: makeMutable(-CAPSULE_SIZE),
+  w: makeMutable(CAPSULE_SIZE),
+  h: makeMutable(CAPSULE_SIZE),
+  top: makeMutable(0),
+  nudge: makeMutable(0),
+  radius: makeMutable(CAPSULE_SIZE / 2),
+  confirm: makeMutable(0),
+  icon: makeMutable(1),
+  list: makeMutable(0),
+  pill: makeMutable(0),
+  fade: makeMutable(1),
+  scale: makeMutable(1),
+});
+
 export function SwipeOverlay({ tabId }: { tabId: string }) {
-  const theme = useTheme();
   const history = useHistoryAvailability(tabId);
   // Read by the gesture only: no render needs it.
   const areaHeight = useRef(0);
@@ -81,23 +97,22 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     selected: 0,
     idle: undefined as ReturnType<typeof setTimeout> | undefined,
   }).current;
-  const v = {
-    x: useSharedValue(-CAPSULE_SIZE),
-    w: useSharedValue(CAPSULE_SIZE),
-    h: useSharedValue(CAPSULE_SIZE),
-    top: useSharedValue(0),
-    nudge: useSharedValue(0),
-    radius: useSharedValue(CAPSULE_SIZE / 2),
-    confirm: useSharedValue(0),
-    icon: useSharedValue(1),
-    list: useSharedValue(0),
-    pill: useSharedValue(0),
-    fade: useSharedValue(1),
-    scale: useSharedValue(1),
+  // Every shown page has this overlay and almost none is ever swiped: the capsule's values are made at its first
+  // swipe, and its animated styles only while it shows. Made for every page, they cost a tab switch twelve shared
+  // values and six UI-thread styles to set up (and the page left as many to tear down).
+  const values = useRef<CapsuleValues | null>(null);
+  const [capsuleValues, setCapsuleValues] = useState<CapsuleValues | null>(null);
+  const capsule = () => {
+    if (!values.current) {
+      values.current = makeCapsuleValues();
+      setCapsuleValues(values.current);
+    }
+    return values.current;
   };
 
   // A new gesture stops everything the last one left running: its springs, its delayed dismiss and its list timer.
   const resetValues = (direction: "back" | "forward") => {
+    const v = capsule();
     for (const value of Object.values(v)) cancelAnimation(value);
     clearTimeout(g.idle);
     const height = areaHeight.current;
@@ -117,6 +132,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
   };
 
   const layoutTo = (width: number, height: number, top: number, radius: number, response: number, ratio: number) => {
+    const v = capsule();
     g.width = width;
     spring(v.w, width, response, ratio);
     spring(v.h, height, response, ratio);
@@ -125,6 +141,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
   };
 
   const setConfirmed = (confirmed: boolean) => {
+    const v = capsule();
     if (g.confirmed === confirmed) return;
     g.confirmed = confirmed;
     if (confirmed) swipeHaptic("levelChange");
@@ -139,6 +156,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
   };
 
   const presentList = async () => {
+    const v = capsule();
     const gesture = g.items;
     const items = (await gesture) ?? [];
     if (g.items !== gesture || !g.active || g.list || !g.confirmed || items.length < 2) return;
@@ -162,6 +180,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
   };
 
   const select = (dy: number) => {
+    const v = capsule();
     const { index, nudge } = listSelection(dy - g.listY, g.list!.length);
     v.nudge.set(nudge);
     if (index === g.selected) return;
@@ -172,6 +191,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
   };
 
   const dismiss = (delay = 0) => {
+    const v = capsule();
     clearTimeout(g.idle);
     g.active = false;
     const out = (to: number, done?: () => void) =>
@@ -187,6 +207,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
 
   const lastDy = useRef(0);
   const onSwipe = (e: SwipeEvent) => {
+    const v = capsule();
     lastDy.current = e.dy;
     if (e.phase === "began" || e.phase === "swipe") {
       resetValues(e.direction);
@@ -223,20 +244,14 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     else goForward(tabId);
   };
 
-  useEffect(() => () => clearTimeout(g.idle), []);
-  useSwipeDevHandle(tabId, area);
-
-  const back = shown?.direction !== "forward";
-  // Every frame value, the unused side "auto": a value the style stops giving keeps the last one it gave.
-  const frame = useAnimatedStyle(
-    () => ({ left: back ? v.x.get() : "auto", right: back ? "auto" : v.x.get(), top: v.top.get() + v.nudge.get(), width: v.w.get(), height: v.h.get() }),
-    [back],
+  useEffect(
+    () => () => {
+      clearTimeout(g.idle);
+      if (values.current) for (const value of Object.values(values.current)) cancelAnimation(value);
+    },
+    [],
   );
-  const fadeStyle = useAnimatedStyle(() => ({ opacity: v.fade.get(), transform: [{ scale: v.scale.get() }] }));
-  const radiusStyle = useAnimatedStyle(() => ({ borderRadius: v.radius.get() }));
-  const confirmStyle = useAnimatedStyle(() => ({ opacity: v.confirm.get() }));
-  const iconOpacity = useAnimatedStyle(() => ({ opacity: interpolate(v.confirm.get(), [0, 1], [0.5, 1]) * (1 - v.list.get()) }));
-  const iconScale = useAnimatedStyle(() => ({ transform: [{ scale: v.icon.get() }] }));
+  useSwipeDevHandle(tabId, area);
 
   return (
     <>
@@ -251,41 +266,59 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
           areaHeight.current = e.nativeEvent.layout.height;
         }}
       />
-      {shown && (
-        <Animated.View pointerEvents="none" style={[{ position: "absolute" }, frame]}>
-          {/* The dismiss fade and shrink, apart from the frame. */}
-          <Animated.View style={[StyleSheet.absoluteFill, fadeStyle]}>
-            <Surface
-              style={StyleSheet.absoluteFill}
-              cornerRadius={shown.list ? SWIPE_LIST_RADIUS : (shown.confirmed ? CAPSULE_SIZE_CONFIRMED : CAPSULE_SIZE) / 2}
-              shadowColor="#000000"
-              shadowOpacity={theme.dark ? 0.25 : 0.2}
-              shadowRadius={8}
-              shadowOffset={[0, 2]}
-            />
-            <Animated.View style={[StyleSheet.absoluteFill, { overflow: "hidden" }, radiusStyle]}>
-              <VisualEffect material="popover" style={StyleSheet.absoluteFill} />
-              {!theme.dark && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(255,255,255,0.4)" }, confirmStyle]} />}
-              <Animated.View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }, iconOpacity]}>
-                <Animated.View style={iconScale}>
-                  <Symbol
-                    name={back ? "chevron.left" : "chevron.right"}
-                    size={CAPSULE_ICON}
-                    weight="bold"
-                    color={theme.dark ? "#FFFFFFD9" : "#000000D9"}
-                    style={{ width: CAPSULE_ICON + 6, height: CAPSULE_ICON + 6 }}
-                  />
-                </Animated.View>
-              </Animated.View>
-              {shown.list && <DestinationList tabId={tabId} items={shown.list} selected={shown.selected} appear={v.list} pill={v.pill} />}
-            </Animated.View>
-            <Animated.View
-              style={[StyleSheet.absoluteFill, { borderWidth: 1, borderColor: theme.dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.125)" }, radiusStyle]}
-            />
-          </Animated.View>
-        </Animated.View>
-      )}
+      {shown && capsuleValues && <SwipeCapsule tabId={tabId} shown={shown} v={capsuleValues} />}
     </>
+  );
+}
+
+// The capsule while a swipe shows it: its animated styles exist only then.
+function SwipeCapsule({ tabId, shown, v }: { tabId: string; shown: Shown; v: CapsuleValues }) {
+  const theme = useTheme();
+  const back = shown.direction !== "forward";
+  // Every frame value, the unused side "auto": a value the style stops giving keeps the last one it gave.
+  const frame = useAnimatedStyle(
+    () => ({ left: back ? v.x.get() : "auto", right: back ? "auto" : v.x.get(), top: v.top.get() + v.nudge.get(), width: v.w.get(), height: v.h.get() }),
+    [back],
+  );
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: v.fade.get(), transform: [{ scale: v.scale.get() }] }));
+  const radiusStyle = useAnimatedStyle(() => ({ borderRadius: v.radius.get() }));
+  const confirmStyle = useAnimatedStyle(() => ({ opacity: v.confirm.get() }));
+  const iconOpacity = useAnimatedStyle(() => ({ opacity: interpolate(v.confirm.get(), [0, 1], [0.5, 1]) * (1 - v.list.get()) }));
+  const iconScale = useAnimatedStyle(() => ({ transform: [{ scale: v.icon.get() }] }));
+
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: "absolute" }, frame]}>
+      {/* The dismiss fade and shrink, apart from the frame. */}
+      <Animated.View style={[StyleSheet.absoluteFill, fadeStyle]}>
+        <Surface
+          style={StyleSheet.absoluteFill}
+          cornerRadius={shown.list ? SWIPE_LIST_RADIUS : (shown.confirmed ? CAPSULE_SIZE_CONFIRMED : CAPSULE_SIZE) / 2}
+          shadowColor="#000000"
+          shadowOpacity={theme.dark ? 0.25 : 0.2}
+          shadowRadius={8}
+          shadowOffset={[0, 2]}
+        />
+        <Animated.View style={[StyleSheet.absoluteFill, { overflow: "hidden" }, radiusStyle]}>
+          <VisualEffect material="popover" style={StyleSheet.absoluteFill} />
+          {!theme.dark && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(255,255,255,0.4)" }, confirmStyle]} />}
+          <Animated.View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }, iconOpacity]}>
+            <Animated.View style={iconScale}>
+              <Symbol
+                name={back ? "chevron.left" : "chevron.right"}
+                size={CAPSULE_ICON}
+                weight="bold"
+                color={theme.dark ? "#FFFFFFD9" : "#000000D9"}
+                style={{ width: CAPSULE_ICON + 6, height: CAPSULE_ICON + 6 }}
+              />
+            </Animated.View>
+          </Animated.View>
+          {shown.list && <DestinationList tabId={tabId} items={shown.list} selected={shown.selected} appear={v.list} pill={v.pill} />}
+        </Animated.View>
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { borderWidth: 1, borderColor: theme.dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.125)" }, radiusStyle]}
+        />
+      </Animated.View>
+    </Animated.View>
   );
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
+import { useLatched } from "../../lib/useLatched";
 import { useBrowser } from "../../store/browserStore";
 import { engineProfile } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
@@ -93,8 +94,13 @@ function dismiss(capturer: string, tabId: string) {
 }
 
 export function ShareBar({ tabId }: { tabId: string }) {
-  const theme = useTheme();
   const found = useShareFor(tabId);
+  // Mounted with the shown page, so on every tab switch: its height and animation come with the first share.
+  return useLatched(!!found) ? <Bar tabId={tabId} found={found} /> : null;
+}
+
+function Bar({ tabId, found }: { tabId: string; found: ReturnType<typeof useShareFor> }) {
+  const theme = useTheme();
   const height = useSharedValue(0);
   const visible = !!found;
   useEffect(() => {

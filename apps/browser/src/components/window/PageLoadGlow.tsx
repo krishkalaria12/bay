@@ -11,6 +11,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
+import { useLatched } from "../../lib/useLatched";
 import { useTabLive } from "../../store/hooks";
 import { LOAD_GLOW_NARROW, LOAD_GLOW_WIDE } from "./constants";
 
@@ -23,8 +24,14 @@ const SPRING = { mass: 1, damping: 12, stiffness: 230, restDisplacementThreshold
 const FADE = { duration: 220, reduceMotion: ReduceMotion.System };
 
 export function PageLoadGlow({ tabId }: { tabId: string }) {
-  const dark = useTheme().dark;
   const loading = useTabLive(tabId, (l) => l.isLoading);
+  // Mounted with the shown page, so on every tab switch: its shared values, style and settling animations come with
+  // the page's first load, not before (a page at rest had a spring and a fade started for nothing).
+  return useLatched(loading) ? <Glow loading={loading} /> : null;
+}
+
+function Glow({ loading }: { loading: boolean }) {
+  const dark = useTheme().dark;
   const width = useSharedValue(LOAD_GLOW_NARROW);
   const shown = useSharedValue(0);
 

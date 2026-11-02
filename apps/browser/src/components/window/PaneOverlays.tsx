@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
+import { useLatched } from "../../lib/useLatched";
 import { webviews } from "../../lib/webviews";
 import { PromptButton } from "../toolbar/buttons";
 import { patchPage, usePage } from "./pageState";
@@ -11,10 +12,17 @@ import { useBrowser } from "../../store/browserStore";
 import { useQuietBrowser } from "../../store/hooks";
 
 export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: number }) {
-  const theme = useTheme();
   const status = usePage(tabId, (p) => p.status);
+  // Mounted with the shown page, so on every tab switch: its fade comes with the page's first status. One there as
+  // the page shows is shown at once, as before; a later one fades in.
+  const [instant] = useState(!!status);
+  return useLatched(!!status) ? <Bubble status={status} instant={instant} maxWidth={maxWidth} /> : null;
+}
+
+function Bubble({ status, instant, maxWidth }: { status: string; instant: boolean; maxWidth: number }) {
+  const theme = useTheme();
   const [shown, setShown] = useState(status);
-  const opacity = useSharedValue(status ? 1 : 0);
+  const opacity = useSharedValue(instant ? 1 : 0);
   useEffect(() => {
     if (status) {
       setShown(status);
