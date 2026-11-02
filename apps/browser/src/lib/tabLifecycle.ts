@@ -14,12 +14,25 @@ import { webviews } from "./webviews";
 import { LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
 import { siteKeptAwake } from "./keptAwakeSites";
 
+// The policy of a Mac with more than 16 GB; policyFor gives a smaller one's.
 export const POLICY = {
   protectedRecent: 10,
   idleMs: 2 * 60 * 60_000,
   profileIdleMs: 2 * 60 * 60_000,
   perSweep: 6,
 };
+
+/**
+ * Less memory, sooner sleep. Twenty tabs' pages take about 1.2 GB: an 8 GB Mac is swapping (and every app on it lags)
+ * well before macOS reports memory pressure, which is when the sweep otherwise starts reclaiming. Idle time is the
+ * app's active time, so tabs left behind don't sleep while the Mac is away.
+ */
+export function policyFor(physicalMemory: number | undefined): Pick<typeof POLICY, "idleMs" | "protectedRecent"> {
+  const gb = (physicalMemory ?? Infinity) / 2 ** 30;
+  if (gb <= 8) return { idleMs: 30 * 60_000, protectedRecent: 5 };
+  if (gb <= 16) return { idleMs: 60 * 60_000, protectedRecent: 8 };
+  return { idleMs: POLICY.idleMs, protectedRecent: POLICY.protectedRecent };
+}
 
 type Lifecycle = {
   discarded: Record<string, true>;
@@ -174,7 +187,7 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
   sweeping = true;
   const slept: string[] = [];
   try {
-    const policy = { ...POLICY, ...overrides };
+    const policy = { ...POLICY, ...policyFor(currentSystem()?.physicalMemory), ...overrides };
     const s = store();
     const shown = shownTabIds(s);
     const now = activeClock();
