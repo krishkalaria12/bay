@@ -7,7 +7,7 @@ import { activeTabId, bookmarkSpaceId, IDLE_LIVE, spaceFor } from "./model";
 import type { Settings } from "./settings";
 import type { BrowserWindow, FindState, Space, Tab, TabLive } from "./types";
 import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./ui";
-import { findStore, settingsStore, tabLiveStore, tabStore, windowStore, windowUiStore } from "./views";
+import { findStore, settingsStore, spaceHeaderHiddenStore, spaceStore, tabLiveStore, tabStore, windowStore, windowUiStore } from "./views";
 
 export const WindowContext = createContext<string | null>(null);
 
@@ -65,9 +65,18 @@ export function useIsActiveTab(tabId: string): boolean {
   });
 }
 
-export function useTab(tabId: string | undefined): Tab | undefined {
+export function useSpaceFolded(spaceId: string): boolean {
+  const view = useMemo(() => spaceStore(spaceId), [spaceId]);
+  const folded = useStore(view, (space) => !!space?.folded);
+  const headerHidden = useStore(spaceHeaderHiddenStore);
+  return folded && !headerHidden;
+}
+
+export function useTab(tabId: string | undefined): Tab | undefined;
+export function useTab<T>(tabId: string | undefined, select: (tab: Tab | undefined) => T): T;
+export function useTab<T>(tabId: string | undefined, select?: (tab: Tab | undefined) => T) {
   const view = useMemo(() => tabStore(tabId ?? ""), [tabId]);
-  return useStore(view);
+  return useStore(view, (tab) => (select ? select(tab) : tab));
 }
 
 export function useTabLive(tabId: string | undefined): TabLive;

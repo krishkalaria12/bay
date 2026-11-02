@@ -3,12 +3,27 @@
 // 200 tabs costs Hermes ~15 µs (a `for…in` alone costs that), and listeners each made their own on every update.
 
 const NONE: readonly string[] = [];
-const memo = new WeakMap<object, { prev: object; ids: readonly string[] }>();
+// Both versions must be weak keys: a strong predecessor would keep the entire update history alive through `next`.
+const memo = new WeakMap<object, WeakMap<object, readonly string[]>>();
+
+function remember(next: object, prev: object, ids: readonly string[]) {
+  let pairs = memo.get(next);
+  if (!pairs) memo.set(next, (pairs = new WeakMap()));
+  pairs.set(prev, ids);
+}
+
+/** A single-entry update already knows its delta; listeners needn't scan the whole record to rediscover it. */
+export function withChangedEntry<T>(prev: Record<string, T>, id: string, value: T): Record<string, T> {
+  if (prev[id] === value) return prev;
+  const next = { ...prev, [id]: value };
+  remember(next, prev, [id]);
+  return next;
+}
 
 export function changedIds<T>(next: Record<string, T>, prev: Record<string, T>): readonly string[] {
   if (next === prev) return NONE;
-  const hit = memo.get(next);
-  if (hit?.prev === prev) return hit.ids;
+  const hit = memo.get(next)?.get(prev);
+  if (hit) return hit;
   const ids: string[] = [];
   const keys = Object.keys(next);
   let added = 0;
@@ -22,6 +37,6 @@ export function changedIds<T>(next: Record<string, T>, prev: Record<string, T>):
   // Fewer kept ids than `prev` had: some are gone.
   const before = Object.keys(prev);
   if (before.length > keys.length - added) for (const id of before) if (next[id] === undefined) ids.push(id);
-  memo.set(next, { prev, ids });
+  remember(next, prev, ids);
   return ids;
 }

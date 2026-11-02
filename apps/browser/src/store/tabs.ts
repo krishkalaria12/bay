@@ -1,6 +1,7 @@
 import { resolveInput } from "@bay/core";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
+import { withChangedEntry } from "./changes";
 import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
 import {
   activeTabId,
@@ -475,8 +476,8 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     const nextLive = live && livePatch ? merge(live, livePatch) : live;
     if (next === tab && nextLive === live) return;
     set((s) => ({
-      ...(next !== tab ? { tabs: { ...s.tabs, [id]: next } } : {}),
-      ...(nextLive !== live ? { live: { ...s.live, [id]: nextLive! } } : {}),
+      ...(next !== tab ? { tabs: withChangedEntry(s.tabs, id, next) } : {}),
+      ...(nextLive !== live ? { live: withChangedEntry(s.live, id, nextLive!) } : {}),
     }));
   },
 
@@ -484,7 +485,7 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     const live = get().live[id];
     if (!live) return;
     const next = merge(live, patch);
-    if (next !== live) set((s) => ({ live: { ...s.live, [id]: next } }));
+    if (next !== live) set((s) => ({ live: withChangedEntry(s.live, id, next) }));
   },
 
   navigated(id, page, live) {

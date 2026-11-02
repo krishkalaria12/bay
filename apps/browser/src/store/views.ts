@@ -1,6 +1,7 @@
 import type { StoreApi } from "zustand/vanilla";
 import { useBrowser } from "./browser";
 import { changedIds } from "./changes";
+import { spaceHeaderHidden } from "./model";
 
 type ReadStore<T> = Pick<StoreApi<T>, "getState" | "getInitialState" | "subscribe">;
 
@@ -67,6 +68,8 @@ export const windowUiStore = recordStores(useBrowser, (s) => s.windowUi);
 export const findStore = recordStores(useBrowser, (s) => s.find);
 export const splitStore = recordStores(useBrowser, (s) => s.splits);
 export const selectionStore = recordStores(useBrowser, (s) => s.selection);
+export const spaceStore = recordStores(useBrowser, (s) => s.spaces);
+export const spaceHeaderHiddenStore = selectStore(useBrowser, spaceHeaderHidden);
 export const windowsStore = selectStore(useBrowser, (s) => s.windows);
 export const settingsStore = selectStore(useBrowser, (s) => s.settings);
 export const appearanceStore = selectStore(useBrowser, (s) => s.ui.appDark);

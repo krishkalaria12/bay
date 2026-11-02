@@ -1,8 +1,38 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createStore } from "zustand/vanilla";
-import { recordStores, selectStore, tabStore, tabLiveStore, windowStore, settingsStore, appearanceStore } from "./views.ts";
+import { recordStores, selectStore, tabStore, tabLiveStore, windowStore, settingsStore, appearanceStore, spaceStore, spaceHeaderHiddenStore } from "./views.ts";
 import { useBrowser } from "./browser.ts";
+import { spaceFolded } from "./model.ts";
+
+test("space folding inputs skip transient updates and follow single-space header changes", () => {
+  useBrowser.getState().hydrate({});
+  const w = useBrowser.getState().createWindow({ url: "https://example.com" });
+  const id = useBrowser.getState().windows[w].activeTabIds.default;
+  const space = spaceStore("default");
+  let calls = 0;
+  const stops = [space.subscribe(() => calls++), spaceHeaderHiddenStore.subscribe(() => calls++)];
+  const folded = () => !!space.getState()?.folded && !spaceHeaderHiddenStore.getState();
+  try {
+    for (let i = 0; i < 60; i++) useBrowser.getState().updateLive(id, { progress: i / 100 });
+    useBrowser.getState().setSelection(w, [id]);
+    assert.equal(calls, 0);
+    useBrowser.getState().updateSettings({ hideSingleSpaceHeader: true });
+    useBrowser.getState().updateSpace("default", { folded: true });
+    assert.equal(folded(), false, "a hidden header must not hide the section beneath it");
+    const other = useBrowser.getState().createSpace({ name: "Other" });
+    assert.equal(folded(), true, "adding a space restores the header and folding");
+    assert.equal(folded(), spaceFolded(useBrowser.getState(), "default"));
+    const before = calls;
+    useBrowser.getState().updateSpace(other, { color: "plum" });
+    useBrowser.getState().updateSettings({ unreadBadges: false });
+    assert.equal(calls, before, "other spaces and unrelated settings must not notify the row");
+    useBrowser.getState().hydrate({});
+    assert.equal(folded(), spaceFolded(useBrowser.getState(), "default"));
+  } finally {
+    stops.forEach((stop) => stop());
+  }
+});
 
 test("record views share one source subscription and only notify changed mounted IDs", () => {
   const source = createStore(() => ({ records: Object.fromEntries(Array.from({ length: 1000 }, (_, id) => [String(id), { id }])), other: 0 }));
