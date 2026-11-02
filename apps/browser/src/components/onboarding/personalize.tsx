@@ -4,7 +4,7 @@ import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { SPACE_COLORS } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { DEFAULT_SPACE } from "../../store/spaces";
+import { TWILIGHT } from "../../store/spaces";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
 import { useOnboardingColors } from "./ui";
@@ -20,8 +20,7 @@ export const PERSONALIZE_COPY = {
 
 const COLORS = Object.keys(SPACE_COLORS) as SpaceColor[];
 
-// The first space starts on Twilight (store/spaces.ts DEFAULT_SPACE): it leads the choices, and a plain color replaces it.
-const TWILIGHT = DEFAULT_SPACE.theme!;
+// Twilight (the first space's look on macOS: store/spaces.ts DEFAULT_SPACE) leads the choices; a plain color replaces it.
 const isTwilight = (theme: (Readonly<Omit<SpaceTheme, "colors">> & { readonly colors: readonly string[] }) | null | undefined) =>
   !!theme && theme.colors.join() === TWILIGHT.colors.join();
 

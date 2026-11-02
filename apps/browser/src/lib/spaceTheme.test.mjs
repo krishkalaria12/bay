@@ -86,9 +86,8 @@ test("a space's own theme shows over a page with a colour; a preset colour gives
   const S = () => useBrowser.getState();
   S().hydrate({});
   const space = S().settings.defaultSpaceId;
-  // A new install's space has a theme (Twilight); from a preset colour, the page's shows instead.
-  assert.ok(S().spaces[space].theme);
-  S().updateSpace(space, { theme: null });
+  // From a preset colour (a new macOS install's space has Twilight instead), the page's shows.
+  S().updateSpace(space, { color: "purple", theme: null, followSite: undefined });
   const w = S().createWindow({ spaceId: space, url: "https://example.com" });
   const tab = S().windows[w].activeTabIds[space];
   useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor: "#202124" } } });
@@ -106,7 +105,7 @@ test("a page's colour never overrides the user's light or dark", async () => {
   const S = () => useBrowser.getState();
   S().hydrate({});
   const space = S().settings.defaultSpaceId;
-  S().updateSpace(space, { theme: null });
+  S().updateSpace(space, { color: "purple", theme: null, followSite: undefined });
   const w = S().createWindow({ spaceId: space, url: "https://example.com" });
   const tab = S().windows[w].activeTabIds[space];
   const page = (themeColor) => useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor } } });
@@ -150,4 +149,27 @@ test("theme previews stay local and clearing one window keeps another preview", 
     setPreviewLook(a, null);
     setPreviewLook(b, null);
   }
+});
+
+test("a new install's first space: Twilight on macOS, Zen's flat grey on Windows and Linux whatever the page", async () => {
+  const { isMac } = await import("@bay/platform");
+  const { useBrowser } = await import("../store/browser.ts");
+  const { themeKey } = await import("./theme.ts");
+  const S = () => useBrowser.getState();
+  S().hydrate({});
+  const space = S().spaces[S().settings.defaultSpaceId];
+  const w = S().createWindow({ spaceId: space.id, url: "https://example.com" });
+  const tab = S().windows[w].activeTabIds[space.id];
+  useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor: "#3366CC" } } });
+  S().setAppDark(true);
+  if (isMac) {
+    assert.ok(space.theme?.colors.length);
+    return;
+  }
+  assert.equal(space.color, "neutral");
+  assert.equal(themeKey(S(), w, null), "neutral:dark");
+  assert.deepEqual(themeFor("neutral:dark").windowTint, ["#1B1B1B", "#1B1B1B"]);
+  assert.deepEqual(themeFor("neutral:light").windowTint, ["#EBEBEB", "#EBEBEB"]);
+  // Glass shows the desktop through the window, so it keeps its tint.
+  assert.notDeepEqual(themeFor("neutral:dark:glass").windowTint, ["#1B1B1B", "#1B1B1B"]);
 });
