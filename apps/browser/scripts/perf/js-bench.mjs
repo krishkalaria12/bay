@@ -15,6 +15,7 @@
 //         --runs <n>           launches, one per run (default 5)
 //         --scenarios <a,b>    of: startup, persistence, idle, typing, switchTabs, openClose, scroll, pageLoad, hover,
 //                              profileSwipe, storeUpdate, idleLate (default all, in that order; startup must stay first)
+//         Opt-in scenario: paletteOpen measures repeated palette opens on the seeded profile.
 //         --port <n>           the test page server's port (default 47817); instance CDP ports are 9500 + run + …
 //         --out <dir>          default $NN_PERF_OUT or /tmp/nn-perf-js
 //         --append 1           add these runs to an existing <label>.json (to interleave two builds' runs: alternate
@@ -621,6 +622,8 @@ function summarize(results, bundleSize) {
   // JS time the app spent beyond the measured steps themselves (effects, timers, promise work, events).
   const beyond = (stats, steps) => statLine(stats).taskMs - steps.reduce((a, b) => a + b, 0);
   add("typing30.otherJsMs", (r) => beyond(r.typing.stats, r.typing.keys));
+  add("paletteOpen.medianMs", (r) => median(r.paletteOpen.steps));
+  add("paletteOpen.p95Ms", (r) => pct(r.paletteOpen.steps, 0.95));
   add("switch.medianMs", (r) => median(r.switchTabs.steps));
   add("switch12.otherJsMs", (r) => beyond(r.switchTabs.stats, r.switchTabs.steps));
   add("open20.otherJsMs", (r) => beyond(r.openClose.openStats, r.openClose.open));

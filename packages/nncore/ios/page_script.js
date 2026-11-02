@@ -54,8 +54,15 @@
   let active = null;
   let lastPlaying = null;
   const audible = (m) => !m.paused && !m.ended && !m.muted && m.volume > 0 && m.readyState > 2;
+  // Live collections follow DOM additions/removals without rescanning unrelated feed nodes on every media event.
+  const videos = document.getElementsByTagNameNS("*", "video");
+  const audios = document.getElementsByTagNameNS("*", "audio");
+  const anyAudible = (elements) => {
+    for (let i = 0; i < elements.length; i++) if (audible(elements[i])) return true;
+    return false;
+  };
   const reportAudible = () => {
-    const playing = [...document.querySelectorAll("video,audio")].some(audible) || (active && audible(active)) || webAudible();
+    const playing = anyAudible(videos) || anyAudible(audios) || (active && audible(active)) || webAudible();
     if (playing === lastPlaying) return;
     lastPlaying = playing;
     send("media", { frame, playing });

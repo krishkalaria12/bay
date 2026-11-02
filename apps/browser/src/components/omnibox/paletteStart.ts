@@ -26,10 +26,30 @@ export function paletteStart(tabs: Tab[], history: HistoryEntry[], currentTabId:
     .slice(0, 4)
     .map((t) => ({ kind: "page", tabId: t.id, url: t.url, title: t.customTitle || t.title, favicon: t.favicon }));
 
+  const frequent = frequentSites(history);
+  return [
+    ...(recent.length ? [{ id: "recent", title: "Recent Tabs", items: recent }] : []),
+    ...(frequent.length ? [{ id: "frequent", title: "Frequent", items: frequent }] : []),
+  ];
+}
+
+// A visit replaces the history array. Tab changes and new palette mounts can reuse its three frequent sites.
+const frequentCache = new WeakMap<readonly HistoryEntry[], PaletteSuggestion[]>();
+// History writes reuse unchanged rows. Weak keys let deleted rows and their derived hosts go away together.
+const historyHosts = new WeakMap<HistoryEntry, string>();
+
+function frequentSites(history: readonly HistoryEntry[]): PaletteSuggestion[] {
+  const cached = frequentCache.get(history);
+  if (cached) return cached;
   const sites = new Map<string, { visits: number; lastVisit: number; page: HistoryEntry }>();
+  // Metro resolves imported exports at each use; keep that out of the history loop.
+  const hostFor = hostOf;
   for (const page of history) {
-    if (!/^https?:\/\//i.test(page.url)) continue;
-    const host = hostOf(page.url);
+    let host = historyHosts.get(page);
+    if (host === undefined) {
+      host = /^https?:\/\//i.test(page.url) ? hostFor(page.url) : "";
+      historyHosts.set(page, host);
+    }
     if (!host) continue;
     const site = sites.get(host);
     if (!site) sites.set(host, { visits: page.visits, lastVisit: page.lastVisit, page });
@@ -48,8 +68,6 @@ export function paletteStart(tabs: Tab[], history: HistoryEntry[], currentTabId:
       const parts = parseUrl(site.page.url)!;
       return { kind: "page", title: host, host, url: `${parts.scheme}://${parts.host}${parts.port ? `:${parts.port}` : ""}/`, favicon: site.page.favicon };
     });
-  return [
-    ...(recent.length ? [{ id: "recent", title: "Recent Tabs", items: recent }] : []),
-    ...(frequent.length ? [{ id: "frequent", title: "Frequent", items: frequent }] : []),
-  ];
+  frequentCache.set(history, frequent);
+  return frequent;
 }

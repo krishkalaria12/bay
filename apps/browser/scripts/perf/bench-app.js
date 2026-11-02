@@ -74,6 +74,23 @@ const scenarios = {
     return { stats: P.read() };
   },
 
+  // Opt-in: repeated palette opens on a seeded profile, including any background history synchronization.
+  async paletteOpen({ count = 20 } = {}) {
+    const w = windowId();
+    await quiet(1000);
+    S().closePanel(w);
+    await sleep(200);
+    P.reset();
+    const steps = [];
+    for (let i = 0; i < count; i++) {
+      steps.push(timed(() => S().openPanel(w)));
+      await sleep(150);
+      S().closePanel(w);
+      await sleep(150);
+    }
+    return { steps, historyEntries: S().history[S().windows[w].spaceId]?.length ?? 0, stats: P.read() };
+  },
+
   async typing({ query = "github.com/facebook/react/pull", gapMs = 60 } = {}) {
     const w = windowId();
     await quiet();
