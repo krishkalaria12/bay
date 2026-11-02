@@ -2728,7 +2728,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   BayImport: e7f9c76f61adf95710efb440bcf650c73529557e
-  BayNNCore: 30f8c4699afbe674e48bb2d74112bec431caa276
+  BayNNCore: ce17fc7aae5d782f1b40655a4703f2c6dfe1f72a
   BayShaders: 13aef8d6438fa4fbc5f378700c2b4f01e8a3a93e
   BayShell: e2cd0429ddcb5d729f3511f21eb9e51ea6e0c411
   BaySync: 84b8bfd48ed2dcd93c85bf4fb39bd006e34f5f3f
