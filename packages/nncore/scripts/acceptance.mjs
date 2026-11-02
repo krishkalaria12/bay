@@ -32,7 +32,7 @@
 //   launch(log, env, args, opts) · appUp(log)   (re)start the app on the run's data dir; `exited` is set once it's gone
 //   onScreenWindows() · firstPixel(png) · writePopupExtension(opts) · fixtureCrx()
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { basename, join, resolve } from "node:path";
@@ -225,7 +225,9 @@ if (!appArg || !scratchArg) {
   process.exit(64);
 }
 const app = resolve(appArg);
-const scratch = resolve(scratchArg);
+mkdirSync(resolve(scratchArg), { recursive: true });
+// Real, so a copied app's path matches the path its process reports (/tmp is a link to /private/tmp).
+const scratch = realpathSync(resolve(scratchArg));
 const data = join(scratch, "data");
 let port;
 const downloadsDir = join(scratch, "downloads");
@@ -294,9 +296,9 @@ const server = createServer((req, res) => {
     return res.end(fixtureCrx());
   }
   if (url.pathname === "/tone.wav") {
-    // One second of a quiet 440 Hz tone (the tab is muted while it plays).
+    // Six seconds of a quiet 440 Hz tone, past the page script's floor for now playing (the tab is muted while it plays).
     const rate = 8000,
-      n = rate;
+      n = rate * 6;
     const wav = Buffer.alloc(44 + n * 2);
     wav.write("RIFF", 0);
     wav.writeUInt32LE(36 + n * 2, 4);
@@ -860,6 +862,12 @@ const state = () =>
 
 // MARK: Helpers
 
+// In-app expressions for a window, given as a JS expression: the tabs it lists (its space's, a Little Bay's own), and
+// the tab it shows. Windows on a space share its list, so "the window's tab" is the shown one.
+const windowTabsJs = (w) =>
+  `(() => { const s = nn.store.getState(); const w = s.windows[${w}]; return w ? (s.tabLists[w.kind === "small" ? w.id : w.spaceId] ?? []).filter((id) => s.tabs[id]?.spaceId === w.spaceId) : []; })()`;
+const shownTabJs = (w) => `(() => { const w = nn.store.getState().windows[${w}]; return w?.activeTabIds[w.spaceId] ?? null; })()`;
+
 // A tab of the main window at `url`, loaded; foreground or behind.
 const openTab = async (url, title, background = false) => {
   const before = new Set((await state()).tabs.map((t) => t.id));
@@ -975,7 +983,7 @@ async function recoverKept() {
   await until("the kept instance's dev harness", () => evalApp("return true", 3000).catch(() => null), 30000);
   mainWindow = (await state()).windowId;
   recovered.add("boot");
-  const a = await evalApp(`const s = nn.store.getState(); const ids = [...(s.windows[${JSON.stringify(mainWindow)}]?.tabIds ?? []), ...Object.keys(s.tabs)];
+  const a = await evalApp(`const s = nn.store.getState(); const ids = [...${windowTabsJs(JSON.stringify(mainWindow))}, ...Object.keys(s.tabs)];
     const id = ids.find((i) => s.tabs[i]?.url?.startsWith(${JSON.stringify(`${base}/a`)}) && s.tabs[i]?.title === "Page A");
     return id ? { id, url: s.tabs[id].url, title: "Page A" } : null`);
   if (a) {
@@ -1056,7 +1064,7 @@ try {
     // once after their profile's last window closed, and a while after (Chrome destroys an off-the-record profile
     // with its last Browser); a private window's new tab after its last tab closed.
     const home = (await state()).windowId;
-    const titles = (w) => evalApp(`const s = nn.store.getState(); return (s.windows[${JSON.stringify(w)}]?.tabIds ?? []).map((i) => s.tabs[i]?.title)`);
+    const titles = (w) => evalApp(`const s = nn.store.getState(); return ${windowTabsJs(JSON.stringify(w))}.map((i) => s.tabs[i]?.title)`);
     const shows = (w, title) => until(`${title} in ${w}`, async () => ((await titles(w)).includes(title) ? true : null), 15000);
     const cookie = async (urlPart) =>
       (await cdp(await until(urlPart, () => pageTarget(urlPart)), "Runtime.evaluate", { expression: "document.cookie", returnByValue: true })).result.value;
@@ -1075,7 +1083,7 @@ try {
     steps.push("private, reopened at once");
     if ((await cookie("/b?private2")).includes("personal")) throw new Error("the reopened private window sees Personal's cookie");
     // Its last tab closed (Chrome closes its Browser), then a new tab in the same window.
-    await evalApp(`const s = nn.store.getState(); s.closeTabs([...s.windows[${JSON.stringify(p2)}].tabIds]); return true`);
+    await evalApp(`const s = nn.store.getState(); s.closeTabs(${windowTabsJs(JSON.stringify(p2))}); return true`);
     await sleep(2500);
     await evalApp(`nn.store.getState().newTab(${JSON.stringify(p2)}, { url: "${base}/c?private3" }); return true`);
     await shows(p2, "Page C");
@@ -1102,16 +1110,16 @@ try {
     steps.push("private, closed and reopened in one turn (4 rounds)");
     await close(last);
     // A second profile's windows.
-    const id = await evalApp(`return nn.store.getState().createProfile({ name: "Spare" })`);
-    const w1 = await open({ profileId: id, url: `${base}/cookie?spare` });
+    const id = await evalApp(`return nn.store.getState().createSpace({ name: "Spare" })`);
+    const w1 = await open({ spaceId: id, url: `${base}/cookie?spare` });
     await shows(w1, "Cookie");
     await close(w1);
-    const w2 = await open({ profileId: id, url: `${base}/b?spare2` });
+    const w2 = await open({ spaceId: id, url: `${base}/b?spare2` });
     await shows(w2, "Page B");
     steps.push("profile, reopened at once");
     await close(w2);
     await sleep(2500);
-    const w3 = await open({ profileId: id, url: `${base}/c?spare3` });
+    const w3 = await open({ spaceId: id, url: `${base}/c?spare3` });
     await shows(w3, "Page C");
     steps.push("profile, reopened later");
     const spare = await cookie("/c?spare3");
@@ -1122,9 +1130,30 @@ try {
   });
 
   await check("window-size", async () => {
-    // The first window is CEF's 1360 × 860 (frame), centred by AppKit.
+    // AppKit constrains CEF's 1360 × 860 frame to the screen's usable height.
     const frame = await evalApp(`return nn.shell.windowFrame(${JSON.stringify(mainWindow)})`);
-    if (frame?.[2] !== 1360 || frame?.[3] !== 860) throw new Error(`frame ${JSON.stringify(frame)}`);
+    const screens = JSON.parse(
+      execFileSync(
+        "osascript",
+        [
+          "-l",
+          "JavaScript",
+          "-e",
+          `ObjC.import("AppKit");
+      JSON.stringify(ObjC.unwrap($.NSScreen.screens).map(s => {
+        const f = s.frame; return [f.origin.x, f.origin.y, f.size.width, f.size.height, s.visibleFrame.size.height];
+      }));`,
+        ],
+        { encoding: "utf8" },
+      ),
+    );
+    const screen =
+      frame &&
+      screens.find(
+        ([x, y, w, h]) => frame[0] + frame[2] / 2 >= x && frame[0] + frame[2] / 2 <= x + w && frame[1] + frame[3] / 2 >= y && frame[1] + frame[3] / 2 <= y + h,
+      );
+    const height = screen && Math.min(860, screen[4]);
+    if (frame?.[2] !== 1360 || frame?.[3] !== height) throw new Error(`frame ${JSON.stringify(frame)}, expected 1360 × ${height}`);
     return { frame };
   });
 
@@ -1308,14 +1337,19 @@ try {
     const before = s.tabs.length;
     const t = await evalApp(`return nn.shell.devKeyEquivalent("${s.windowId}", { key: "t", keyCode: 17, modifiers: ["command"], focus: "page" })`);
     log("  ⌘T:", JSON.stringify(t));
-    const afterT = await until("a new tab (⌘T)", async () => {
-      const n = await state();
-      return n.tabs.length > before || n.active !== s.active ? n : null;
-    });
+    // ⌘T opens the New Tab palette over the current page; a tab comes when something is chosen.
+    const panelOpen = () => evalApp(`return !!nn.store.getState().windowUi[${JSON.stringify(s.windowId)}]?.panel.open`);
+    await until("the New Tab palette (⌘T)", async () => (await panelOpen()) || null);
+    if ((await state()).active !== s.active) throw new Error("⌘T left the page it opened over");
+    await evalApp(`nn.store.getState().closePanel(${JSON.stringify(s.windowId)}); return true`);
+    await until("the palette closed", async () => !(await panelOpen()));
+    // ⌘W closes the shown tab.
+    const opened = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(s.windowId)}, { url: "${base}/c?cmd-w" })`);
+    await until("the tab to close", async () => (await state()).active === opened || null);
     const w = await evalApp(`return nn.shell.devKeyEquivalent("${s.windowId}", { key: "w", keyCode: 13, modifiers: ["command"], focus: "window" })`);
-    await sleep(800);
+    await until("the tab closed (⌘W)", async () => !(await state()).tabs.some((tab) => tab.id === opened));
     const afterW = await state();
-    return { t, w, tabs: [before, afterT.tabs.length, afterW.tabs.length] };
+    return { t: t.fired?.map((f) => f.command), w: w.fired?.map((f) => f.command), tabs: [before, afterW.tabs.length] };
   });
 
   await check("cmd-l-from-page", async () => {
@@ -2110,7 +2144,7 @@ try {
     };
     const windowCase = async (tag, close) => {
       const w = await evalApp(`return nn.store.getState().createWindow({ url: "${base}/a?${tag}", background: true })`);
-      const tabId = await s(`s.windows["${w}"].tabIds[0]`);
+      const tabId = await evalApp(`return ${shownTabJs(JSON.stringify(w))}`);
       await toB(tabId, tag);
       const windowsBefore = new Set(await s(`Object.keys(s.windows)`));
       await close(w, tabId);
@@ -2123,7 +2157,7 @@ try {
       );
       const again = await until(
         "its tab",
-        async () => s(`s.windows["${reopened}"]?.tabIds.find((id) => s.tabs[id]?.url?.includes("/b?${tag}")) ?? null`),
+        async () => s(`${windowTabsJs(JSON.stringify(reopened))}.find((id) => s.tabs[id]?.url?.includes("/b?${tag}")) ?? null`),
         10000,
       );
       try {
@@ -2140,18 +2174,26 @@ try {
     const results = {};
     try {
       results.appCommand = await windowCase("r1", (w) => evalApp(`nn.store.getState().closeWindow("${w}"); return true`));
-      results.closeWarning = await windowCase("r2", async (w, tabId) => {
-        // Two tabs, so the app asks; its dialog (an AppKit sheet) answers Close All Tabs.
-        await evalApp(
-          `nn.store.getState().newTab("${w}", { url: "${base}/c?r2", background: true }); nn.store.getState().updateSettings({ warnBeforeClosingWindow: true }); return true`,
-        );
+      // Closing a main window doesn't warn, however many tabs it shows: they're its space's and stay. A private window's go.
+      await evalApp(`nn.store.getState().updateSettings({ warnBeforeClosingWindow: true }); return true`);
+      await evalApp(
+        `globalThis.__nnConfirm = ${shell}.confirm; ${shell}.confirm = (o) => { globalThis.__nnAsked = o.title; return Promise.resolve({ confirmed: true, suppressed: false }); }; return true`,
+      );
+      results.noCloseWarning = await windowCase("r2", async (w, tabId) => {
+        await evalApp(`nn.store.getState().newTab("${w}", { url: "${base}/c?r2", background: true }); return true`);
         await sleep(300);
-        await evalApp(
-          `globalThis.__nnConfirm = ${shell}.confirm; ${shell}.confirm = (o) => { globalThis.__nnAsked = o.title; return Promise.resolve({ confirmed: true, suppressed: false }); }; return true`,
-        );
         await closeButton(tabId);
-        await until("the close warning", () => evalApp(`return globalThis.__nnAsked ?? null`), 5000);
       });
+      const asked = await evalApp(`return globalThis.__nnAsked ?? null`);
+      if (asked) throw new Error(`closing a main window asked: ${asked}`);
+      const secret = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${base}/a?private-close" })`);
+      await evalApp(`nn.store.getState().newTab("${secret}", { url: "${base}/c?private-close", background: true }); return true`);
+      const secretTab = await until("the private page", () => evalApp(`return ${shownTabJs(JSON.stringify(secret))}`));
+      await until("its view", () => evalApp(`return !!nn.webviews.get("${secretTab}") || null`), 15000);
+      await sleep(500);
+      await closeButton(secretTab);
+      await until("the private window's close warning", () => evalApp(`return globalThis.__nnAsked ?? null`), 5000);
+      await until("the private window closed", async () => !(await s(`!!s.windows["${secret}"]`)), 10000);
       await evalApp(`${shell}.confirm = globalThis.__nnConfirm; return true`);
       results.nativeClose = await windowCase("r3", async (w, tabId) => {
         await evalApp(`nn.store.getState().updateSettings({ warnBeforeClosingWindow: false }); return true`);
@@ -2164,9 +2206,9 @@ try {
         await toB(tab.id, tag);
         await close(tab);
         await until(`tab ${tag} closed`, async () => !(await s(`!!s.tabs["${tab.id}"]`)), 10000);
-        const before = new Set(await s(`s.windows["${mainWindow}"].tabIds`));
+        const before = new Set(await s(windowTabsJs(JSON.stringify(mainWindow))));
         await evalApp(`nn.store.getState().reopenClosedTab("${mainWindow}"); return true`);
-        const again = await until("the reopened tab", async () => (await s(`s.windows["${mainWindow}"].tabIds`)).find((id) => !before.has(id)), 10000);
+        const again = await until("the reopened tab", async () => (await s(windowTabsJs(JSON.stringify(mainWindow)))).find((id) => !before.has(id)), 10000);
         try {
           return await backReachesA(again, tag);
         } finally {
@@ -2203,9 +2245,9 @@ try {
         const page = await pageTarget(`${base}/b?r5`);
         await closeFromPage(page);
         await until("tab r5 closed", async () => !(await s(`!!s.tabs["${tab.id}"]`)), 10000);
-        const now = new Set(await s(`s.windows["${mainWindow}"].tabIds`));
+        const now = new Set(await s(windowTabsJs(JSON.stringify(mainWindow))));
         await evalApp(`nn.store.getState().reopenClosedTab("${mainWindow}"); return true`);
-        const again = await until("the reopened tab", async () => (await s(`s.windows["${mainWindow}"].tabIds`)).find((id) => !now.has(id)), 10000);
+        const again = await until("the reopened tab", async () => (await s(windowTabsJs(JSON.stringify(mainWindow)))).find((id) => !now.has(id)), 10000);
         try {
           return await backReachesA(again, "r5");
         } finally {
@@ -2507,7 +2549,7 @@ try {
     // old window's profile is still going when it asks (the engine hands out a new one once the old one is gone), and
     // the tab stays (it never lands in the dying profile, which would close it). Every other round waits out
     // Chrome's destruction (≤ 1 s) before checking the tab is still there.
-    const titles = (w) => evalApp(`const s = nn.store.getState(); return (s.windows[${JSON.stringify(w)}]?.tabIds ?? []).map((i) => s.tabs[i]?.title)`);
+    const titles = (w) => evalApp(`const s = nn.store.getState(); return ${windowTabsJs(JSON.stringify(w))}.map((i) => s.tabs[i]?.title)`);
     let last = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${base}/e?churn-start" })`);
     const waits = [];
     try {
@@ -2759,7 +2801,7 @@ try {
     const windowNumber = await evalApp(`return globalThis.expo.modules.BayCEF.devWindowNumber(${browser})`);
     const lights = () => evalApp(`return globalThis.expo.modules.BayCEF.devWindow(${windowNumber}, "lights")`);
     const before = await lights();
-    const id = await evalApp(`return nn.store.getState().createProfile({ name: "Lights" })`);
+    const id = await evalApp(`return nn.store.getState().createSpace({ name: "Lights" })`);
     await evalApp(`nn.actions.switchSpace("${s.windowId}", "${id}"); return true`);
     await until("profile shown", async () => (await state()).profileId === id);
     await sleep(500);
@@ -3100,15 +3142,21 @@ try {
           return nn.extensions.activateExtension(${JSON.stringify(mainWindow)}, ext, { x: 100, y: 40, width: 20, height: 20 }).then(() => !!nn.extensions.useExtensions.getState().popup)`);
         if (!opened) throw new Error("no popup in the app");
         const popup = await until("the popup page", async () => (await targets()).find((t) => t.type === "page" && t.url.includes(`${id}/popup.html`)), 10000);
+        // Its target comes before its page can answer.
         const seen = JSON.parse(
-          (
-            await cdp(popup, "Runtime.evaluate", {
-              expression: `Promise.all([chrome.windows.getCurrent(), chrome.tabs.query({ active: true, currentWindow: true }), chrome.extension.getViews({ type: "popup" }).length])
-            .then(([w, tabs, popups]) => JSON.stringify({ window: w.id, tabs: tabs.map((t) => t.url), popups }))`,
-              awaitPromise: true,
-              returnByValue: true,
-            })
-          ).result.value,
+          await until(
+            "the popup's answer",
+            async () =>
+              (
+                await cdp(popup, "Runtime.evaluate", {
+                  expression: `Promise.all([chrome.windows.getCurrent(), chrome.tabs.query({ active: true, currentWindow: true }), chrome.extension.getViews({ type: "popup" }).length])
+              .then(([w, tabs, popups]) => JSON.stringify({ window: w.id, tabs: tabs.map((t) => t.url), popups }))`,
+                  awaitPromise: true,
+                  returnByValue: true,
+                })
+              ).result.value,
+            5000,
+          ),
         );
         const strip = await mainStrip();
         if (seen.window !== strip?.strip) throw new Error(`the popup's current window is ${seen.window}, the app's is ${strip?.strip}`);
@@ -3271,7 +3319,7 @@ try {
     // had closed it: a crash. The bubble closes with its window.
     const crxPath = join(scratch, "fixture.crx");
     writeFileSync(crxPath, fixtureCrx());
-    const profile = await evalApp(`return nn.store.getState().createProfile({ name: "Installs" })`);
+    const profile = await evalApp(`return nn.store.getState().createSpace({ name: "Installs" })`);
     const opened = [];
     const bubbleIn = async () => {
       for (const w of await cef(`chromeWindows()`)) {
@@ -3282,7 +3330,7 @@ try {
     };
     const profileWindow = async (path) => {
       const before = new Set((await cef(`chromeWindows()`)).map((w) => w.window));
-      const id = await evalApp(`return nn.actions.openWindow({ profileId: ${JSON.stringify(profile)}, url: "${base}${path}" })`);
+      const id = await evalApp(`return nn.actions.openWindow({ spaceId: ${JSON.stringify(profile)}, url: "${base}${path}" })`);
       opened.push(id);
       await until(`${path} shown`, () => pageTarget(path));
       const native = await until("its window", async () => (await cef(`chromeWindows()`)).find((w) => !before.has(w.window))?.window ?? null);
@@ -3443,9 +3491,9 @@ try {
     const firstTag = `first-${tag0}-${Date.now()}`;
     const firstPage = `${origin}/adfirst?${firstTag}`;
     // Another profile's page in a window of its own: closing its only tab in the main window would close that window.
-    const ownWindow = profileId ? await evalApp(`return nn.actions.openWindow({ profileId: ${JSON.stringify(profileId)}, url: "${firstPage}" })`) : null;
+    const ownWindow = profileId ? await evalApp(`return nn.actions.openWindow({ spaceId: ${JSON.stringify(profileId)}, url: "${firstPage}" })`) : null;
     const tab = ownWindow
-      ? await until("the profile's tab", () => evalApp(`return nn.store.getState().windows[${JSON.stringify(ownWindow)}]?.tabIds[0] ?? null`))
+      ? await until("the profile's tab", () => evalApp(`return ${shownTabJs(JSON.stringify(ownWindow))}`))
       : await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${firstPage}" })`);
     try {
       // A profile loaded just now must not show a page before uBlock Origin is ready in it (NNCore holds its
@@ -3528,7 +3576,7 @@ try {
   await check("content-blocker-profile", async () => {
     // The same in a profile made now (the release smoke test's page is in its Work profile): uBO loads into every
     // profile, and must block there from its very first page, and follow Personal's allow-list.
-    const id = await evalApp(`return nn.store.getState().createProfile({ name: "Blocker" })`);
+    const id = await evalApp(`return nn.store.getState().createSpace({ name: "Blocker" })`);
     if (!id) throw new Error("no profile made");
     return { profile: id, ...(await contentBlockerRounds(id)) };
   });
@@ -3539,17 +3587,17 @@ try {
     // once µBlock.isReadyPromise settles, not a timer): it loads after the delay, and none of its ads goes out.
     const delay = 1500;
     await cef(`devContentBlockerDelayNextLoad(${delay})`);
-    const id = await evalApp(`return nn.store.getState().createProfile({ name: "Held" })`);
+    const id = await evalApp(`return nn.store.getState().createSpace({ name: "Held" })`);
     const tag = `held-${Date.now()}`;
     const started = Date.now();
     const w = await evalApp(
-      `return nn.actions.openWindow({ profileId: ${JSON.stringify(id)}, url: "http://adpage.test:${server.address().port}/adfirst?${tag}" })`,
+      `return nn.actions.openWindow({ spaceId: ${JSON.stringify(id)}, url: "http://adpage.test:${server.address().port}/adfirst?${tag}" })`,
     );
     try {
       await until(
         "the held page",
         () =>
-          evalApp(`const s = nn.store.getState(); const t = s.windows[${JSON.stringify(w)}]?.tabIds[0];
+          evalApp(`const s = nn.store.getState(); const t = ${shownTabJs(JSON.stringify(w))};
         return t && s.tabs[t]?.title === "Ad first" && !s.live[t]?.isLoading ? true : null`),
         20000,
       );
@@ -3576,7 +3624,7 @@ try {
         await until(
           `the ${step} private page`,
           () =>
-            evalApp(`const s = nn.store.getState(); const id = s.windows[${JSON.stringify(w)}]?.tabIds[0];
+            evalApp(`const s = nn.store.getState(); const id = ${shownTabJs(JSON.stringify(w))};
           return id && s.tabs[id]?.title === "Ad first" && !s.live[id]?.isLoading ? true : null`),
           20000,
         );
@@ -3600,7 +3648,7 @@ try {
     // panels. A page the user visits does, an extension's page opened as a tab too (an options page: Chrome records
     // chrome-extension: URLs, CanAddURLToHistory, as extension-windows-hidden opens one).
     const userOpened = (u) => /^chrome-extension:\/\/[a-p]{32}\/options\.html/.test(u);
-    const profiles = ["", ...(await evalApp(`return nn.store.getState().profileOrder.filter((p) => p !== "default")`))];
+    const profiles = ["", ...(await evalApp(`return nn.store.getState().spaceOrder.filter((p) => p !== "default")`))];
     await sleep(1500);
     const found = {};
     let pages = 0;
@@ -3866,7 +3914,7 @@ try {
       const update2 = await offerAfter(seen, "the update offer again");
       if (update2.kind !== "updateAddress") throw new Error(`second update offer ${JSON.stringify(update2)}`);
       const s = await state();
-      profileB = await evalApp(`return nn.store.getState().createProfile({ name: "Prompts" })`);
+      profileB = await evalApp(`return nn.store.getState().createSpace({ name: "Prompts" })`);
       await evalApp(`nn.actions.switchSpace(${JSON.stringify(s.windowId)}, ${JSON.stringify(profileB)}); return true`);
       await until("profile B shown", async () => (await state()).profileId === profileB);
       await sleep(1000);
@@ -3908,7 +3956,7 @@ try {
       for (const a of await addresses().catch(() => [])) await cef(`deleteAutofillEntry("", ${JSON.stringify(a.id)})`).catch(() => null);
       for (const c of await cards().catch(() => [])) await cef(`deleteAutofillEntry("", ${JSON.stringify(c.id)})`).catch(() => null);
       if (other) await closeTab(other.id).catch(() => null);
-      if (profileB) await evalApp(`nn.store.getState().deleteProfile(${JSON.stringify(profileB)}); return true`).catch(() => null);
+      if (profileB) await evalApp(`nn.store.getState().deleteSpace(${JSON.stringify(profileB)}); return true`).catch(() => null);
       await backToA();
     }
   });
@@ -4048,7 +4096,7 @@ try {
       async () => (await eventsOf(first.id)).find((x) => x.name === "command" && x.payload?.command === "escape"),
       5000,
     ).catch(async (e) => {
-      const profile = await evalApp(`const s = nn.store.getState(); return s.windows["${s.windowId}"]?.profileId ?? null`);
+      const profile = await evalApp(`const s = nn.store.getState(); return s.windows["${s.windowId}"]?.spaceId ?? null`);
       const pt = await pageFor(first.id, `${base}/a`);
       const vis = (await cdp(pt, "Runtime.evaluate", { expression: "document.visibilityState + '/' + document.hasFocus()", returnByValue: true })).result.value;
       const tx = await evalApp(`return globalThis.expo.modules.BayCEF.tabStrips()`);
@@ -4800,7 +4848,7 @@ try {
       if ((await fsFlag(tab.id)) || (await fsElement(t))) throw new Error("the page came back in full screen");
       // Another Space.
       await fsEnter(tab.id, t);
-      profileB = await evalApp(`return nn.store.getState().createProfile({ name: "Full screen" })`);
+      profileB = await evalApp(`return nn.store.getState().createSpace({ name: "Full screen" })`);
       await evalApp(`nn.actions.switchSpace(${JSON.stringify(s.windowId)}, ${JSON.stringify(profileB)}); return true`);
       await until("the other Space shown", async () => (await state()).profileId === profileB);
       await fsLeft(tab.id, t, "the Space switch ended the page's full screen");
@@ -4825,7 +4873,7 @@ try {
       return out;
     } finally {
       await evalApp(`nn.actions.switchSpace(${JSON.stringify(s.windowId)}, ${JSON.stringify(s.profileId)}); return true`).catch(() => null);
-      if (profileB) await evalApp(`nn.store.getState().deleteProfile(${JSON.stringify(profileB)}); return true`).catch(() => null);
+      if (profileB) await evalApp(`nn.store.getState().deleteSpace(${JSON.stringify(profileB)}); return true`).catch(() => null);
       await closeTab(tab.id);
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     }
@@ -5242,7 +5290,7 @@ try {
       privateWindow = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${favBase}/icon.png?private-page" })`);
       const privateProfile = await until(
         "the private window's profile",
-        () => evalApp(`return nn.store.getState().windows["${privateWindow}"]?.profileId ?? null`),
+        () => evalApp(`return nn.store.getState().windows["${privateWindow}"]?.spaceId ?? null`),
         10000,
       );
       await until("the private page", () => (seen.some((s) => s.path === "/icon.png?private-page") ? true : null), 10000);
@@ -5388,7 +5436,7 @@ try {
 
   await check("second-profile", async () => {
     const s = await state();
-    const id = await evalApp(`return nn.store.getState().createProfile({ name: "Work" })`);
+    const id = await evalApp(`return nn.store.getState().createSpace({ name: "Work" })`);
     if (!id) throw new Error("no profile made");
     await evalApp(`nn.actions.switchSpace("${s.windowId}", "${id}"); return true`);
     await until("profile shown", async () => (await state()).profileId === id);
@@ -5418,7 +5466,7 @@ try {
     const id = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${base}/b?private" })`);
     const t = await until("a private tab", async () => {
       const tabs = await evalApp(
-        `const s = nn.store.getState(); return (s.windows["${id}"]?.tabIds ?? []).map((i) => ({ url: s.tabs[i]?.url, title: s.tabs[i]?.title, profile: s.tabs[i]?.profileId }))`,
+        `const s = nn.store.getState(); return ${windowTabsJs(JSON.stringify(id))}.map((i) => ({ url: s.tabs[i]?.url, title: s.tabs[i]?.title, profile: s.tabs[i]?.spaceId }))`,
       );
       return tabs.find((x) => x.title === "Page B") ?? null;
     });
@@ -5477,14 +5525,15 @@ try {
   });
 
   await check("move-last-tab-slow-mount", async () => {
-    // A window's last tab moved to a new window that mounts late: the old window closes at once, its Browser with it,
-    // and the tab's page still waits for its new view.
-    const tab = await openTab(`${base}/a?last`, "Page A");
+    // A space's last tab moved to a new window that mounts late: its old window has nothing to show, and the tab's page
+    // waits for its new view.
+    const space = await evalApp(`return nn.store.getState().createSpace({ name: "Last tab" })`);
+    const own = await evalApp(`return nn.actions.openWindow({ spaceId: ${JSON.stringify(space)}, url: "${base}/a?last" })`);
+    const tab = { id: await until("its tab", () => evalApp(`return ${shownTabJs(JSON.stringify(own))}`)) };
     try {
-      const own = await evalApp(`return nn.store.getState().moveTabsToWindow(["${tab.id}"], null)`);
       await until(
-        "the tab's view in a window of its own",
-        () => evalApp(`return !!nn.webviews.get("${tab.id}") && nn.store.getState().tabs["${tab.id}"]?.windowId === "${own}"`),
+        "the tab's view in its window",
+        () => evalApp(`const s = nn.store.getState(); return !!nn.webviews.get("${tab.id}") && s.tabs["${tab.id}"]?.title === "Page A"`),
         10000,
       );
       await sleep(500);
@@ -5492,7 +5541,7 @@ try {
       const browser = await browserOf(tab.id);
       const windowId = await slowMount(async () => {
         const id = await evalApp(`return nn.store.getState().moveTabsToWindow(["${tab.id}"], null)`);
-        await until("its first window gone", () => evalApp(`return !nn.store.getState().windows["${own}"]`), 5000);
+        await until("its first window off the tab", () => evalApp(`return ${shownTabJs(JSON.stringify(own))} !== "${tab.id}"`), 5000);
         await sleep(6000);
         return id;
       });
@@ -5510,7 +5559,9 @@ try {
     } finally {
       await closeWindowOf(tab.id);
       await closeTab(tab.id);
-      await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
+      await evalApp(
+        `const s = nn.store.getState(); s.closeWindow(${JSON.stringify(own)}); s.deleteSpace(${JSON.stringify(space)}); nn.actions.switchToTab("${first.id}"); return true`,
+      );
     }
   });
 
@@ -5544,7 +5595,7 @@ try {
     const windowId = await evalApp(`const id = nn.store.getState().moveTabsToWindow(["${first.id}"], null); return id`);
     await until("the tab in the new window", async () =>
       evalApp(
-        `return nn.store.getState().tabs["${first.id}"]?.windowId === "${windowId}" && nn.store.getState().windows["${windowId}"]?.tabIds.includes("${first.id}")`,
+        `return nn.store.getState().tabs["${first.id}"]?.windowId === "${windowId}" && ${windowTabsJs(JSON.stringify(windowId))}.includes("${first.id}")`,
       ),
     );
     await sleep(1500);
@@ -5584,7 +5635,7 @@ try {
       const w = await evalApp(`return Object.values(nn.store.getState().windows).find((w) => w.kind === "small")?.id ?? null`);
       return w;
     });
-    const tabId = await until("its tab", async () => evalApp(`return nn.store.getState().windows["${id}"]?.tabIds[0] ?? null`));
+    const tabId = await until("its tab", async () => evalApp(`return ${shownTabJs(JSON.stringify(id))}`));
     await evalApp(`nn.store.getState().navigate("${tabId}", "${base}/b?small", { userInitiated: true }); return true`);
     await until("Page B in Little Bay", async () => evalApp(`return nn.store.getState().tabs["${tabId}"]?.title === "Page B"`));
     return { window: id, tab: tabId };
@@ -5858,7 +5909,7 @@ process.stdin.on("data", (chunk) => {
     const before = new Set(s.tabs.map((x) => x.id));
     await evalApp(`nn.actions.openUrls(["${base}/cookie?personal"], ${JSON.stringify(mainWindow)}); return true`);
     await until("Personal's cookie page", async () => (await state()).tabs.find((x) => !before.has(x.id) && x.title === "Cookie" && !x.loading), 10000);
-    const play = await evalApp(`return nn.store.getState().createProfile({ name: "Play" })`);
+    const play = await evalApp(`return nn.store.getState().createSpace({ name: "Play" })`);
     await evalApp(`nn.actions.switchSpace("${s.windowId}", "${play}"); return true`);
     await until("Play shown", async () => (await state()).profileId === play);
     await evalApp(`nn.actions.openUrls(["${base}/cookie?play"], ${JSON.stringify(mainWindow)}); return true`);
@@ -6222,7 +6273,7 @@ process.stdin.on("data", (chunk) => {
         return made.result?.value ?? made.exceptionDetails?.exception?.description;
       };
       // Every tab of the window closed: the app keeps the window with a new-tab placeholder (no page).
-      await evalApp(`const s = nn.store.getState(); s.closeTabs([...s.windows["${windowId}"].tabIds]); return true`);
+      await evalApp(`const s = nn.store.getState(); s.closeTabs(${windowTabsJs(JSON.stringify(windowId))}); return true`);
       const empty = await until(
         "the window without pages",
         async () => {

@@ -246,7 +246,15 @@ export function endTabDrag(): boolean {
     return false;
   }
   const asked: { frame: [number, number, number, number] | null } = { frame: null };
-  const moved = dropTabsOutside(tabIds, windowId, x, y, (frame) => (asked.frame = frame), liveFrame);
+  const moved = dropTabsOutside(
+    tabIds,
+    windowId,
+    x,
+    y,
+    (frame) => (asked.frame = frame),
+    liveFrame,
+    insertBefore !== undefined ? (overWindow ?? undefined) : undefined,
+  );
   // A new window: the picture grows into it.
   dragPreview.end(asked.frame ? moved : null, asked.frame);
   // Another window's tab strip made room for it: there.

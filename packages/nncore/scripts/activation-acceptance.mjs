@@ -194,9 +194,9 @@ const browserOf = (tabId) => evalApp(`return Object.entries(nn.pageState.getStat
 const appState = () =>
   evalApp(`const s = nn.store.getState();
   return { focused: s.ui.focusedWindowId, windows: Object.fromEntries(Object.values(s.windows).map((w) => {
-    const shown = w.activeTabIds[w.profileId] ?? null;
+    const shown = w.activeTabIds[w.spaceId] ?? null;
     const split = Object.values(s.splits ?? {}).find((x) => x.tabIds.includes(shown));
-    return [w.id, { profile: w.profileId, shown, url: s.tabs[shown]?.url ?? null, panes: split ? split.tabIds : shown ? [shown] : [] }];
+    return [w.id, { profile: w.spaceId, shown, url: s.tabs[shown]?.url ?? null, panes: split ? split.tabIds : shown ? [shown] : [] }];
   })) };`);
 // Native focus: what the app asked AppKit to make key, and its windows (the key flag, through the app-active seam).
 const activationLog = () => (existsSync(join(data, "activation.log")) ? readFileSync(join(data, "activation.log"), "utf8") : "");
@@ -476,8 +476,8 @@ try {
       await closeTab(ntp);
       // Another Space.
       const personal = (await appState()).windows[mainWindow].profile;
-      const work = await evalApp(`return nn.store.getState().createProfile({ name: "Work" })`);
-      await evalApp(`nn.actions.switchProfile(${JSON.stringify(mainWindow)}, ${JSON.stringify(work)}); return true`);
+      const work = await evalApp(`return nn.store.getState().createSpace({ name: "Work" })`);
+      await evalApp(`nn.actions.switchSpace(${JSON.stringify(mainWindow)}, ${JSON.stringify(work)}); return true`);
       await until("the Work Space shown", async () => (await appState()).windows[mainWindow].profile === work, 10000);
       await until(
         "the call popped out (Space)",
@@ -490,7 +490,7 @@ try {
       await sleep(1200);
       steps.space = { pip: (await pipState(call.t)).pip };
       if (steps.space.pip !== 2) throw new Error(`Space: the handler ran ${steps.space.pip - 1} times`);
-      await evalApp(`nn.actions.switchProfile(${JSON.stringify(mainWindow)}, ${JSON.stringify(personal)}); return true`);
+      await evalApp(`nn.actions.switchSpace(${JSON.stringify(mainWindow)}, ${JSON.stringify(personal)}); return true`);
       await show(call.tab);
       await until("closed on return (Space)", async () => !(await pipState(call.t)).open, 8000);
       return steps;
@@ -625,7 +625,7 @@ try {
       "its tab loaded",
       () =>
         evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(behind)}];
-      const t = w && s.tabs[w.activeTabIds[w.profileId]]; return t?.title === "Behind" && !s.live[t.id]?.isLoading ? t.id : null`),
+      const t = w && s.tabs[w.activeTabIds[w.spaceId]]; return t?.title === "Behind" && !s.live[t.id]?.isLoading ? t.id : null`),
       20000,
     );
     const second = await openTab(`${origin()}/behind2?t=Behind2`, "Behind2", behind);
@@ -652,13 +652,13 @@ try {
     try {
       await verify("made behind");
       const work = await evalApp(
-        `return Object.keys(nn.store.getState().profiles).find((p) => p !== nn.store.getState().windows[${JSON.stringify(mainWindow)}].profileId) ?? nn.store.getState().createProfile({ name: "Work2" })`,
+        `return Object.keys(nn.store.getState().spaces).find((p) => p !== nn.store.getState().windows[${JSON.stringify(mainWindow)}].spaceId) ?? nn.store.getState().createSpace({ name: "Work2" })`,
       );
-      await evalApp(`nn.store.getState().switchProfile(${JSON.stringify(behind)}, ${JSON.stringify(work)}); return true`);
+      await evalApp(`nn.store.getState().switchSpace(${JSON.stringify(behind)}, ${JSON.stringify(work)}); return true`);
       await until("its Space changed", async () => (await appState()).windows[behind]?.profile === work, 10000);
       await verify("Space changed");
       await evalApp(
-        `nn.store.getState().switchProfile(${JSON.stringify(behind)}, nn.store.getState().windows[${JSON.stringify(mainWindow)}].profileId); return true`,
+        `nn.store.getState().switchSpace(${JSON.stringify(behind)}, nn.store.getState().windows[${JSON.stringify(mainWindow)}].spaceId); return true`,
       );
       await sleep(500);
       await closeTab(second);
@@ -682,7 +682,7 @@ try {
       "B's tab",
       () =>
         evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
-      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "BWindow" ? true : null`),
+      return s.tabs[w?.activeTabIds[w?.spaceId]]?.title === "BWindow" ? true : null`),
       20000,
     );
     const bNumber = await until("B's native window", async () => (await nativeWindows()).find((w) => !numbersBefore.has(w.window))?.window ?? null);
@@ -892,7 +892,7 @@ try {
       "B's tab",
       () =>
         evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
-      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "FrontB" ? true : null`),
+      return s.tabs[w?.activeTabIds[w?.spaceId]]?.title === "FrontB" ? true : null`),
       20000,
     );
     const steps = [];
@@ -970,7 +970,7 @@ try {
       "B's tab",
       () =>
         evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
-      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "InactiveB" ? true : null`),
+      return s.tabs[w?.activeTabIds[w?.spaceId]]?.title === "InactiveB" ? true : null`),
       20000,
     );
     const bNumber = await until("B's native window", async () => (await nativeWindows()).find((w) => !numbersBefore.has(w.window))?.window ?? null);
@@ -1017,7 +1017,7 @@ try {
       "C's tab",
       () =>
         evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
-      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "RestoreC" ? true : null`),
+      return s.tabs[w?.activeTabIds[w?.spaceId]]?.title === "RestoreC" ? true : null`),
       20000,
     );
     const rd = await openTab(`${origin()}/restore-d?t=RestoreD`, "RestoreD", other);
