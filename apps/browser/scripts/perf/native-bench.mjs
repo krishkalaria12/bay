@@ -90,8 +90,8 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const appRoot = resolve(here, "../../index");
-const repoRoot = resolve(appRoot, "../../index");
+const appRoot = resolve(here, "../..");
+const repoRoot = resolve(appRoot, "../..");
 const { values: opt } = parseArgs({
   options: {
     app: { type: "string" },
