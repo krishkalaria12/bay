@@ -1,3 +1,4 @@
+import { isMac } from "@bay/platform";
 import type { AreaLightPalette } from "@bay/shaders";
 import { createContext, createElement, useContext, type ReactNode } from "react";
 import { create } from "zustand";
@@ -128,6 +129,53 @@ const light: typeof dark = {
   accent: "#6395FC",
 };
 
+// Windows and Linux wear Zen's default look (zen-browser/desktop, src/zen/common/styles/zen-theme.css): hovers in the
+// window's own ink at 7% (10% pressed; Zen's branding greys #E2E2E2 and #101010), the selected tab a white sheet
+// (Zen's toolbar background) with a hairline shadow, Essentials-style pinned tiles, and Zen's panel greys and shadow.
+const zenDark: Partial<typeof dark> = {
+  tabHover: "rgba(226,226,226,0.07)",
+  tabPressed: "rgba(226,226,226,0.1)",
+  tabSelected: "rgba(255,255,255,0.15)",
+  tabSelectedBorder: ["rgba(255,255,255,0)", "rgba(255,255,255,0)"],
+  tabSelectedShadow: "rgba(0,0,0,0.2)",
+  tabSelectedShadowRadius: 2,
+  pinnedResting: "rgba(255,255,255,0.15)",
+  pinnedSelectedFill: "rgba(255,255,255,0.2)",
+  toolbarHover: "rgba(226,226,226,0.07)",
+  toolbarPressed: "rgba(226,226,226,0.1)",
+  rowHover: "rgba(226,226,226,0.07)",
+  panel: "#1F1F1F",
+  panelShadowOpacity: 0.24,
+};
+
+const zenLight: Partial<typeof dark> = {
+  tabHover: "rgba(16,16,16,0.07)",
+  tabPressed: "rgba(16,16,16,0.1)",
+  tabSelected: "rgba(255,255,255,0.85)",
+  tabSelectedBorder: ["rgba(255,255,255,0)", "rgba(255,255,255,0)"],
+  tabSelectedShadow: "rgba(0,0,0,0.09)",
+  tabSelectedShadowRadius: 2,
+  pinnedResting: "rgba(0,0,0,0.08)",
+  pinnedSelectedFill: "rgba(255,255,255,0.85)",
+  toolbarHover: "rgba(16,16,16,0.07)",
+  toolbarPressed: "rgba(16,16,16,0.1)",
+  rowHover: "rgba(16,16,16,0.07)",
+  panel: "#F4F4F4",
+  panelShadowOpacity: 0.24,
+};
+
+const platformLook = {
+  dark: isMac ? dark : { ...dark, ...zenDark },
+  light: isMac ? light : { ...light, ...zenLight },
+};
+
+// Zen's window (--zen-main-browser-background): flat, one grey for the whole frame. A solid Neutral window on Windows
+// and Linux wears it.
+const ZEN_WINDOW: Record<"dark" | "light", [string, string]> = {
+  dark: ["#1B1B1B", "#1B1B1B"],
+  light: ["#EBEBEB", "#EBEBEB"],
+};
+
 export function hex(color: string): string {
   const m = color.match(/rgba?\(([^)]+)\)/);
   if (!m) return color;
@@ -239,7 +287,7 @@ function customTheme(key: string): Theme {
   const colors = list.split(",");
   const isDark = mode === "dark";
   const solid = material !== "glass";
-  const base = isDark ? dark : light;
+  const look = isDark ? platformLook.dark : platformLook.light;
   const first = colors[0]!;
   const last = colors[colors.length - 1]!;
   // Intensity takes the tint from a whisper (0.08) to well past a preset's (0.36).
@@ -247,7 +295,7 @@ function customTheme(key: string): Theme {
   const top = opaqueTint(backdrop, isDark, solid);
   const windowTint: [string, string] = colors.length > 1 ? [top[0], opaqueTint({ ...backdrop, tintColor: last }, isDark, solid)[0]] : top;
   return {
-    ...base,
+    ...look,
     lightPalette: colors,
     edgeLight: isDark ? `${mix(first, "#FFFFFF", 0.5)}80` : `${first}66`,
     backdrop,
@@ -261,15 +309,19 @@ function customTheme(key: string): Theme {
 function presetTheme(key: string): Theme {
   const [color, mode, material] = key.split(":") as [SpaceColor | "incognito", string, string | undefined];
   const solid = material !== "glass";
-  const base = color === "incognito" ? { ...dark, ...INCOGNITO } : { ...(mode === "dark" ? dark : light), ...profileTheme(color, mode === "dark") };
+  const look =
+    color === "incognito"
+      ? { ...platformLook.dark, ...INCOGNITO }
+      : { ...(mode === "dark" ? platformLook.dark : platformLook.light), ...profileTheme(color, mode === "dark") };
   const spec = color === "incognito" ? null : (SPACE_COLORS[color] ?? SPACE_COLORS.plum);
   // Dia: neutral band 0.502 at 0.65.
   const powerUpColor = !spec ? null : spec.palette ? (spec.powerUp ?? spec.swatch) : "#808080A6";
   const backdrop = backdropTint(spec ? (spec.tint ?? tintForHue(spec.swatch, !spec.palette)) : INCOGNITO_TINT, !spec?.palette);
+  const zen = !isMac && solid && color === "neutral";
   return {
-    ...base,
+    ...look,
     backdrop,
-    windowTint: opaqueTint(backdrop, base.dark, solid),
+    windowTint: zen ? ZEN_WINDOW[look.dark ? "dark" : "light"] : opaqueTint(backdrop, look.dark, solid),
     glass: !solid,
     powerUpColor,
   };
