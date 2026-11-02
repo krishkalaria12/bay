@@ -1,5 +1,5 @@
 // Chrome's password bubble, for the host's own UI: what it would show (JS PasswordPrompt,
-// packages/cefPatches/src/WebView.tsx) and the host's answer, as CEF's GetPasswordPrompt and
+// packages/cef/src/WebView.tsx) and the host's answer, as CEF's GetPasswordPrompt and
 // ResolvePasswordPrompt (cef/libcef/browser/chrome/chrome_browser_host_impl.cc).
 
 #ifndef BAY_CORE_NN_PASSWORD_PROMPT_H_

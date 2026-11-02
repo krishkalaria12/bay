@@ -1,7 +1,7 @@
 // Chrome's own UI (bubbles, dialogs, its WebUI pages, the renderer's error pages) names the
 // product "Chromium", literally in every locale's strings rather than through the branding
 // file. NNCore says Bay instead, as Chrome says Chrome, the way CEF's build did
-// (packages/cefPatches/ios/NNCef.mm, class Strings): one ResourceBundle delegate for every process
+// (packages/cef/ios/NNCef.mm, class Strings): one ResourceBundle delegate for every process
 // that loads Chrome's strings (browser, renderer, utility, GPU).
 
 #ifndef BAY_CORE_NN_STRINGS_H_

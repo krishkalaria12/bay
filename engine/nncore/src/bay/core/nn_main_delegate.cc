@@ -60,9 +60,9 @@
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 
-// The user agent brand hook (engine/chromiumLayer/apply.sh).
+// The user agent brand hook (engine/nncore/apply.sh).
 extern const char* g_bay_user_agent_brand;
-// The idle wakeup hooks (engine/chromiumLayer/apply.sh).
+// The idle wakeup hooks (engine/nncore/apply.sh).
 extern bool g_bay_skip_cpu_health_sampling;
 extern int g_bay_disk_space_check_seconds;
 extern bool g_bay_bluetooth_poll_on_demand;
@@ -471,7 +471,7 @@ void NNMainDelegate::PreSandboxStartup() {
     InstallAppOverrides();
     // Client hints and navigator.userAgentData say "Google Chrome", as Chrome's and Arc's and
     // Dia's do (the user agent string already does): Meet's automatic Picture in Picture, among
-    // others, is offered only there (engine/chromiumLayer/apply.sh's hook).
+    // others, is offered only there (engine/nncore/apply.sh's hook).
     g_bay_user_agent_brand = "Google Chrome";
   }
   ChromeMainDelegate::PreSandboxStartup();

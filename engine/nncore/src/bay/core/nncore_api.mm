@@ -282,7 +282,7 @@ void ApplyAutoPictureInPicture(Profile* profile) {
       g_auto_picture_in_picture ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
 }
 
-// Prefs CEF set on every profile it loaded (packages/cefPatches/ios/NNEngine.mm WhenProfileReady):
+// Prefs CEF set on every profile it loaded (packages/cef/ios/NNEngine.mm WhenProfileReady):
 // a new session starts on a new tab, and the download bubble doesn't open by itself.
 void PrepareProfilePrefs(Profile* profile) {
   if (!profile || profile->IsOffTheRecord()) {
@@ -442,9 +442,9 @@ std::unique_ptr<ActionPopup>& CurrentPopup() {
 
 }  // namespace
 
-// The window-creation hook in Chrome's Browser constructor (engine/chromiumLayer/apply.sh).
+// The window-creation hook in Chrome's Browser constructor (engine/nncore/apply.sh).
 extern BrowserWindow* (*g_bay_browser_window_factory)(Browser*);
-// HistoryTabHelper's eligibility hook (engine/chromiumLayer/apply.sh).
+// HistoryTabHelper's eligibility hook (engine/nncore/apply.sh).
 extern bool (*g_bay_history_eligible)(content::WebContents*);
 
 namespace {
@@ -2116,7 +2116,7 @@ std::optional<bool> RunPageCommand(content::WebContents* contents, int command) 
       icon = action->GetDeclarativeIcon(tab_id);
     }
     NSString* badge = NS(action->GetDisplayBadgeText(tab_id));
-    // JS ActionState (packages/cefPatches/src/extensions.ts), as NNChromeUI.mm shapes it.
+    // JS ActionState (packages/cef/src/extensions.ts), as NNChromeUI.mm shapes it.
     states[extensionId] = @{
       @"title" : NS(action->GetTitle(tab_id)),
       @"badgeText" : [badge hasPrefix:@"<<"] ? @"" : badge,

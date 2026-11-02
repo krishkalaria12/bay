@@ -1,6 +1,6 @@
 // Links to other apps (mailto:, zoommtg:…) from the host's tabs: Chrome decides as always
 // (a blocked scheme, a remembered allow, a missing gesture), and where it would show its
-// "Open <app>?" dialog the host is asked instead, in the wording packages/cefPatches's
+// "Open <app>?" dialog the host is asked instead, in the wording packages/cef's
 // NNExternalApps.mm used (JS ExternalAppRequest). "Open" launches through Chrome.
 
 #include "bay/core/nn_external_apps.h"
@@ -32,7 +32,7 @@
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "content/public/browser/render_frame_host.h"
 
-// The hook in Chrome's external_protocol_dialog.cc (engine/chromiumLayer/apply.sh).
+// The hook in Chrome's external_protocol_dialog.cc (engine/nncore/apply.sh).
 extern bool (*g_bay_external_protocol_dialog)(
     const GURL& url,
     content::WebContents* web_contents,

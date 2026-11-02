@@ -28,7 +28,7 @@ NSURL* RecordURL(const GURL& url) {
 
 }  // namespace
 
-// As CEF's engine (packages/cefPatches/ios/NNCef.mm): Chrome only adds metadata to a
+// As CEF's engine (packages/cef/ios/NNCef.mm): Chrome only adds metadata to a
 // file the system already quarantined (LSFileQuarantineEnabled), which the
 // app's Info.plist doesn't ask for.
 void QuarantineDownload(const base::FilePath& file,

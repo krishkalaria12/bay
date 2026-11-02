@@ -1,7 +1,7 @@
 # NNCore: Bay's own layer over //chrome (the "ArcCore" of Bay).
 #
 # Linked into Chrome's framework through one dep in //chrome:chrome_dll (see
-# engine/chromiumLayer/apply.sh), so the framework that comes out of `chrome_framework`
+# engine/nncore/apply.sh), so the framework that comes out of `chrome_framework`
 # is NNCore: //chrome's services plus our BrowserWindow, window host and ObjC API.
 # A host app links the framework and drives it through public/NNCore.h.
 

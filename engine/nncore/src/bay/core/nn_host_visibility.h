@@ -8,7 +8,7 @@
 // active tab without the strip changing. The host says, per tab, whether it shows it
 // (-[NNCoreTab noteShownByHost:]); a tab the host never reported keeps Chrome's reading.
 //
-// Consumers that follow the host's reading (hooks in engine/chromiumLayer/apply.sh):
+// Consumers that follow the host's reading (hooks in engine/nncore/apply.sh):
 // - automatic Picture in Picture (a call's own window): a shown tab counts as the active one, so
 //   focusing a split's other pane never pops the call out, and leaving a page for one of the
 //   host's own pops it out once;

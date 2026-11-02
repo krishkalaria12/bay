@@ -1,11 +1,11 @@
 # The web engine's native side (Expo modules BayCEF, BayExtensions, BaySwipe, BayChromeUI and
-# BayWebKit, the names the JS in ../src uses), on our own Chromium layer (engine/chromiumLayer), and WebKit
+# BayWebKit, the names the JS in ../src uses), on our own Chromium layer (engine/nncore), and WebKit
 # (WKWebView) for the pages that open there (WebKit*.swift).
 #
-# The engine is Chrome's framework built with engine/chromiumLayer ("Chromium Framework.framework"). The app
+# The engine is Chrome's framework built with engine/nncore ("Chromium Framework.framework"). The app
 # target stages a copy of it (packages/chromium/scripts/stage-framework.sh), links that and embeds it
 # (scripts/embed.sh); this pod only needs NNCore's public header.
-engine_public = File.expand_path('../../../engine/chromiumLayer/src/bay/core/public', __dir__)
+engine_public = File.expand_path('../../../engine/nncore/src/bay/core/public', __dir__)
 
 Pod::Spec.new do |s|
   s.name           = 'BayNNCore'

@@ -5,7 +5,7 @@
 # cef-bay-layer.patch links it into CEF's libcef_static, chromium-bay-layer.patch into
 # Chrome's framework for NNCore). Idempotent; never touches args.gn.
 #
-# The convention, shared with engine/chromiumLayer: engine/<layer>/src mirrors the tree, engine/<layer>/apply.sh
+# The convention, shared with engine/nncore: engine/<layer>/src mirrors the tree, engine/<layer>/apply.sh
 # copies it in (`--check` exits 1 when the tree differs), and the repo copy is the only one to edit.
 #
 #   engine/chromium/apply.sh            copy

@@ -581,7 +581,7 @@ NNCORE_EXPORT
 - (void)setBoostStyle:(nullable NSString*)css;
 
 // Stage 2.
-// JS SecurityInfo (packages/cefPatches/src/WebView.tsx): {level, url, origin, protocol?, certificate?,
+// JS SecurityInfo (packages/cef/src/WebView.tsx): {level, url, origin, protocol?, certificate?,
 // certificateErrors?, mixedContent?, isEV?}.
 @property(readonly) NSDictionary<NSString*, id>* securityInfo;
 // Chrome's per-site zoom (HostZoomMap, as Chrome's menu), 1 = 100 %.

@@ -2,8 +2,8 @@
 //
 // Per-site settings: Chrome's HostContentSettingsMap (what Page Info and
 // chrome://settings/content show), with the type names and values of the JS
-// (packages/cefPatches/src/siteSettings.ts) and CEF's semantics
-// (packages/cefPatches/ios/NNSiteSettings.mm): a site is its http(s) origin, and a
+// (packages/cef/src/siteSettings.ts) and CEF's semantics
+// (packages/cef/ios/NNSiteSettings.mm): a site is its http(s) origin, and a
 // setting is stored with Chrome's default scope for the type, so both engines
 // read the same profile prefs.
 //

@@ -1,6 +1,6 @@
 // The browser side of NNCore's page channel (mojom/nncore.mojom): the page script sent to
 // every renderer, page messages from a tab's frames, and calls into its main frame. Also the
-// bay: scheme rule CEF enforced in packages/cefPatches/ios/NNClient.mm.
+// bay: scheme rule CEF enforced in packages/cef/ios/NNClient.mm.
 
 #ifndef BAY_CORE_NN_PAGE_CHANNEL_H_
 #define BAY_CORE_NN_PAGE_CHANNEL_H_

@@ -273,7 +273,7 @@ bool HostExtensionInstallPrompt(
 void ResolveExtensionInstallPrompt(const std::string& request_id, bool accepted);
 
 // Has declarativeNetRequest report each rule it applies to a tab's request (the hook in
-// extensions' ActionTracker, engine/chromiumLayer/apply.sh) to that tab's TabBridge.
+// extensions' ActionTracker, engine/nncore/apply.sh) to that tab's TabBridge.
 void InstallRuleMatchedHook();
 
 // Starts reporting Chrome's media capture indicator (camera, microphone, screen) per tab.

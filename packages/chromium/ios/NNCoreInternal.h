@@ -1,4 +1,4 @@
-// What the NNCore module's files share. NNCore.h is the engine's API (engine/chromiumLayer/src/bay/core/public);
+// What the NNCore module's files share. NNCore.h is the engine's API (engine/nncore/src/bay/core/public);
 // it stays out of the pod's public headers, so Swift sees only NNCoreHost.h and NNCoreWebView.h.
 #import <AppKit/AppKit.h>
 

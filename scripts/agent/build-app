@@ -65,7 +65,7 @@ native_stamp() {
       apps/browser/macos apps/browser/app.json apps/browser/react-native.config.js \
       'packages/*/ios/*' 'packages/*/expo-module.config.json' packages/desktop/docktile \
       packages/chromium/scripts/embed.sh packages/chromium/scripts/stage-framework.sh packages/chromium/scripts/ubo.sh \
-      packages/chromium/scripts/signing engine/chromiumLayer/src/bay/core/public patches pnpm-lock.yaml
+      packages/chromium/scripts/signing engine/nncore/src/bay/core/public patches pnpm-lock.yaml
     echo apps/browser/macos/Pods/Manifest.lock
   ) | python3 -c '
 import hashlib, os, sys

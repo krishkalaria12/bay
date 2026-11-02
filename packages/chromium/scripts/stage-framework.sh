@@ -1,6 +1,6 @@
 #!/bin/bash
 # Stages NNCore for the app target (apps/browser/macos): a copy of Chrome's framework built with
-# engine/chromiumLayer, signed ad hoc with its helpers. The app links the staged copy and embed.sh clones it into the bundle.
+# engine/nncore, signed ad hoc with its helpers. The app links the staged copy and embed.sh clones it into the bundle.
 #
 # Each build stages into its own NNCORE_STAGE_DIR (the project sets it inside the derived data), so builds running
 # in parallel never replace a framework another one is linking or embedding. The copy is made and signed once per
@@ -38,7 +38,7 @@ if [[ "${1:-}" == --publish ]]; then
   exit 0
 fi
 
-[[ -d "$src" ]] || { echo "error: no NNCore framework at $src (engine/chromiumLayer/apply.sh, then build chrome_framework)" >&2; exit 1; }
+[[ -d "$src" ]] || { echo "error: no NNCore framework at $src (engine/nncore/apply.sh, then build chrome_framework)" >&2; exit 1; }
 # Which engine build: where it is, when it was written and its size.
 key_of() { printf '%s %s' "$1" "$(stat -f '%m %z' "$1/Versions/Current/$name")" | shasum -a 256 | cut -c1-16; }
 stamp="$dest/.stamp"

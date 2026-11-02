@@ -7,7 +7,7 @@
 
 namespace nncore {
 
-// Sets the hook in Chrome's ExtensionInstallUIDesktop (engine/chromiumLayer/apply.sh).
+// Sets the hook in Chrome's ExtensionInstallUIDesktop (engine/nncore/apply.sh).
 void InstallExtensionInstalledHook();
 
 // The app may now show a window for a profile with a bubble waiting (a tab of one came

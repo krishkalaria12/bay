@@ -56,7 +56,7 @@ After that, rebuild only what changed:
 scripts/agent/engine-build -- -j 4 chrome_framework
 ```
 
-`engine-build` copies the repo's engine code (`engine/chromium`, `engine/chromiumLayer`) into the Chromium tree
+`engine-build` copies the repo's engine code (`engine/chromium`, `engine/nncore`) into the Chromium tree
 first. Edit those folders in the repo, never the copies under `~/chromium-build`.
 
 ## 3. Build and open the app

@@ -10,7 +10,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "bay/core/nn_picture_in_picture.h"
 
-// The hooks (engine/chromiumLayer/apply.sh): 1 shown, 0 hidden, -1 the host never said.
+// The hooks (engine/nncore/apply.sh): 1 shown, 0 hidden, -1 the host never said.
 extern int (*g_bay_tab_shown_by_host)(content::WebContents*);
 extern int (*g_bay_permission_tab_shown)(content::WebContents*);
 // Chrome's automatic Picture in Picture reads the tab's state again (apply.sh).

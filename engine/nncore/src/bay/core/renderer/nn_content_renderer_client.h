@@ -1,4 +1,4 @@
-// NNCore's renderer side (what CEF's renderer process handler gave packages/cefPatches): Chrome's
+// NNCore's renderer side (what CEF's renderer process handler gave packages/cef): Chrome's
 // renderer client, plus the page script in every frame's main world and the page channel
 // (bay/core/mojom/nncore.mojom).
 

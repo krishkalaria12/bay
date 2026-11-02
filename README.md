@@ -208,7 +208,7 @@ Chrome's framework (the first build takes a few hours):
 
 ```bash
 engine/chromium/apply.sh
-engine/chromiumLayer/apply.sh
+engine/nncore/apply.sh
 autoninja -C out/Release_GN_arm64 chrome_framework
 ```
 

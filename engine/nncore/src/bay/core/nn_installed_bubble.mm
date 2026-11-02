@@ -23,13 +23,13 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/views/widget/widget.h"
 
-// The hook in Chrome's ExtensionInstallUIDesktop::OnInstallSuccess (engine/chromiumLayer/apply.sh).
+// The hook in Chrome's ExtensionInstallUIDesktop::OnInstallSuccess (engine/nncore/apply.sh).
 extern bool (*g_bay_extension_installed)(
     Profile* profile,
     scoped_refptr<const extensions::Extension> extension,
     const SkBitmap* icon);
 
-// The flag in Chrome's download_crx_util (engine/chromiumLayer/apply.sh).
+// The flag in Chrome's download_crx_util (engine/nncore/apply.sh).
 namespace download_crx_util {
 extern bool g_bay_prompts_without_tab;
 }

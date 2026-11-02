@@ -31,7 +31,7 @@
 #include "bay/core/nn_test_system_permissions.h"
 #include "url/origin.h"
 
-// Set here, defined in Chrome's restore bubble (engine/chromiumLayer/apply.sh).
+// Set here, defined in Chrome's restore bubble (engine/nncore/apply.sh).
 extern bool (*g_bay_file_system_restore_prompt)(
     const FileSystemAccessPermissionRequestManager::RequestData& request,
     base::OnceCallback<void(permissions::PermissionAction)>& callback,
@@ -41,7 +41,7 @@ namespace nncore {
 
 namespace {
 
-// JS PermissionKind (packages/cefPatches/src/nativeModule.ts), as packages/cefPatches/ios/NNCef.mm names them.
+// JS PermissionKind (packages/cef/src/module.ts), as packages/cef/ios/NNCef.mm names them.
 NSString* KindName(permissions::RequestType type) {
   using permissions::RequestType;
   switch (type) {

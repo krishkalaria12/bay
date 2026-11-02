@@ -10,8 +10,8 @@
 # Idempotent. Never touches
 # args.gn; the next autoninja re-runs gn by itself.
 #
-#   engine/chromiumLayer/apply.sh            copy + hook
-#   engine/chromiumLayer/apply.sh --check    exit 1 if the tree differs from the repo
+#   engine/nncore/apply.sh            copy + hook
+#   engine/nncore/apply.sh --check    exit 1 if the tree differs from the repo
 #
 # Build (holding the chromium lock):
 #   scripts/agent/locked chromium -- autoninja -C out/Release_GN_arm64 chrome_framework
@@ -69,7 +69,7 @@ if '"//bay/core"' in s:
 mac = s.index('target(_dll_target_type, "chrome_dll")')
 anchor = '      "//third_party/cld_3/src/src:cld_3",\n'
 at = s.index(anchor, mac) + len(anchor)
-hook = '      "//bay/core",  # Bay: NNCore (engine/chromiumLayer)\n'
+hook = '      "//bay/core",  # Bay: NNCore (engine/nncore)\n'
 open(path, "w").write(s[:at] + hook + s[at:])
 print("hooked //chrome:chrome_dll")
 PY
@@ -86,7 +86,7 @@ old = """#else  // BUILDFLAG(IS_WIN)
   ChromeMainDelegate chrome_main_delegate(
       {.exe_entry_point_ticks = base::TimeTicks::Now()});"""
 new = """#else  // BUILDFLAG(IS_WIN)
-  // Bay: NNCore's delegate (engine/chromiumLayer), a ChromeMainDelegate.
+  // Bay: NNCore's delegate (engine/nncore), a ChromeMainDelegate.
   nncore::NNMainDelegate chrome_main_delegate(
       {.exe_entry_point_ticks = base::TimeTicks::Now()});"""
 inc_old = '#if BUILDFLAG(IS_MAC)\n#include "chrome/app/chrome_main_mac.h"\n'
@@ -114,7 +114,7 @@ old1 = """void BrowserWindowFeatures::InitPostTabModelConstruction(
 new1 = """void BrowserWindowFeatures::InitPostTabModelConstruction(
     BrowserWindowInterface* interface) {
   auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
-  // Bay: NNCore's Browsers have no BrowserView (engine/chromiumLayer).
+  // Bay: NNCore's Browsers have no BrowserView (engine/nncore).
   if (!browser_view) {
     return;
   }
@@ -125,7 +125,7 @@ old2 = """  auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface
   if (auto cef_delegate = browser_view->browser()->cef_delegate()) {
     cef_delegate->OnWebContentsCreated(target_contents);
   }"""
-new2 = """  // Bay: NNCore's Browsers have no BrowserView (engine/chromiumLayer).
+new2 = """  // Bay: NNCore's Browsers have no BrowserView (engine/nncore).
   if (auto cef_delegate = interface->cef_delegate()) {
     cef_delegate->OnWebContentsCreated(target_contents);
   }"""
@@ -219,7 +219,7 @@ s = open(path).read()
 if "g_bay_browser_window_factory" in s:
     sys.exit(0)
 old_ctor = "Browser::Browser(BrowserWindowCreateParams params)\n"
-decl = ("// Bay: NNCore (engine/chromiumLayer) supplies the window of a Browser it hosts.\n"
+decl = ("// Bay: NNCore (engine/nncore) supplies the window of a Browser it hosts.\n"
         "BrowserWindow* (*g_bay_browser_window_factory)(Browser*) = nullptr;\n\n")
 old = """  features_->Init(this);
 
@@ -262,7 +262,7 @@ old = """  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(bro
   DCHECK(browser_view);
 """
 new = """  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  // Bay: NNCore's Browsers have no BrowserView (engine/chromiumLayer).
+  // Bay: NNCore's Browsers have no BrowserView (engine/nncore).
   if (!browser_view) {
     return nullptr;
   }
@@ -284,7 +284,7 @@ s = open(path).read()
 if "bay_alive" in s:
     sys.exit(0)
 old_fn = "void AutofillPopupControllerImpl::Show(\n"
-decl = ("// Bay: NNCore (engine/chromiumLayer) hears of each dropdown shown.\n"
+decl = ("// Bay: NNCore (engine/nncore) hears of each dropdown shown.\n"
         "void (*g_bay_autofill_suggestions_shown)(\n"
         "    content::WebContents* web_contents,\n"
         "    base::span<const Suggestion> suggestions) = nullptr;\n\n")
@@ -337,7 +337,7 @@ s = open(path).read()
 if "g_bay_opacity_from_default_color" in s:
     sys.exit(0)
 old_fn = "void RenderWidgetHostViewBase::CopyBackgroundColorIfPresentFrom(\n"
-decl = ("// Bay: NNCore (engine/chromiumLayer) has a translucent page background.\n"
+decl = ("// Bay: NNCore (engine/nncore) has a translucent page background.\n"
         "bool g_bay_opacity_from_default_color = false;\n\n")
 old = """  bool was_opaque = IsBackgroundColorOpaque();
   content_background_color_ = other_base.content_background_color_;
@@ -378,7 +378,7 @@ if "g_bay_external_protocol_dialog" in s:
     sys.exit(0)
 old_fn = "\nnamespace {\n"
 decl = """
-// Bay: NNCore (engine/chromiumLayer) shows this dialog itself for the tabs it hosts.
+// Bay: NNCore (engine/nncore) shows this dialog itself for the tabs it hosts.
 bool (*g_bay_external_protocol_dialog)(
     const GURL& url,
     content::WebContents* web_contents,
@@ -416,7 +416,7 @@ s = open(path).read()
 if "g_bay_history_eligible" in s:
     sys.exit(0)
 old_fn = "bool HistoryTabHelper::IsEligibleTab(\n"
-decl = ("// Bay: NNCore (engine/chromiumLayer) keeps its own pages out of history.\n"
+decl = ("// Bay: NNCore (engine/nncore) keeps its own pages out of history.\n"
         "bool (*g_bay_history_eligible)(content::WebContents*) = nullptr;\n\n")
 old = """  if (force_eligible_tab_for_testing_) {
     return true;
@@ -448,7 +448,7 @@ s = open(path).read()
 if "g_bay_dnr_rule_matched" in s:
     sys.exit(0)
 old_ns = "namespace extensions::declarative_net_request {\n"
-decl = ("// Bay: NNCore (engine/chromiumLayer) counts what extensions' rules did to a tab's requests.\n"
+decl = ("// Bay: NNCore (engine/nncore) counts what extensions' rules did to a tab's requests.\n"
         "void (*g_bay_dnr_rule_matched)(\n"
         "    content::BrowserContext* browser_context,\n"
         "    int tab_id,\n"
@@ -485,7 +485,7 @@ s = open(path).read()
 if "g_bay_dnr_rulesets_in_force" in s:
     sys.exit(0)
 old_ns = "namespace extensions {\nnamespace declarative_net_request {\n"
-decl = ("// Bay: NNCore (engine/chromiumLayer) holds a profile's navigations until a content blocker's\n"
+decl = ("// Bay: NNCore (engine/nncore) holds a profile's navigations until a content blocker's\n"
         "// rulesets are in force.\n"
         "void (*g_bay_dnr_rulesets_in_force)(\n"
         "    content::BrowserContext* browser_context,\n"
@@ -593,7 +593,7 @@ s = open(path).read()
 if "g_bay_extension_installed" in s:
     sys.exit(0)
 old_ns = "using content::BrowserThread;\n"
-decl = ("// Bay: NNCore (engine/chromiumLayer) shows the post-install UI for the windows it hosts.\n"
+decl = ("// Bay: NNCore (engine/nncore) shows the post-install UI for the windows it hosts.\n"
         "bool (*g_bay_extension_installed)(\n"
         "    Profile* profile,\n"
         "    scoped_refptr<const extensions::Extension> extension,\n"
@@ -624,7 +624,7 @@ s = open(path).read()
 if "g_bay_prompts_without_tab" in s:
     sys.exit(0)
 old_ns = "namespace download_crx_util {\n"
-decl = ("// Bay: NNCore (engine/chromiumLayer) shows the install prompt itself, without a tab.\n"
+decl = ("// Bay: NNCore (engine/nncore) shows the install prompt itself, without a tab.\n"
         "bool g_bay_prompts_without_tab = false;\n\n")
 old = """  if (!web_contents) {
     BrowserWindowInterface* browser =
@@ -654,7 +654,7 @@ s = open(path).read()
 if "g_bay_user_agent_brand" in s:
     sys.exit(0)
 old_ns = "namespace embedder_support {\n"
-decl = ("// Bay: NNCore (engine/chromiumLayer) reports Chrome's brand.\n"
+decl = ("// Bay: NNCore (engine/nncore) reports Chrome's brand.\n"
         "const char* g_bay_user_agent_brand = nullptr;\n\n")
 old = """#if !BUILDFLAG(CHROMIUM_BRANDING)
   brand = version_info::GetProductName();
@@ -672,7 +672,7 @@ print("hooked the user agent brand")
 PY2
 
 # Chrome's automatic Picture in Picture (a call's own window) follows the tab strip's active tab.
-# The host shows more and less than that (engine/chromiumLayer nn_host_visibility.h): both panes of a split
+# The host shows more and less than that (engine/nncore nn_host_visibility.h): both panes of a split
 # (focusing the other pane made Chrome take the call as left), and its own pages over the strip's
 # active tab (New Tab, another Space: the strip doesn't change). With the hook set, a tab the host
 # reported reads as activated exactly while the host shows it, and the host's changes reach the
@@ -702,7 +702,7 @@ s = open(path).read()
 if "g_bay_tab_shown_by_host" in s:
     sys.exit(0)
 old_fn = "// static\nstd::unique_ptr<AutoPictureInPictureTabObserverHelperBase>\n"
-decl = """// Bay: NNCore (engine/chromiumLayer) shows tabs itself: 1 shown, 0 hidden, -1 the strip decides.
+decl = """// Bay: NNCore (engine/nncore) shows tabs itself: 1 shown, 0 hidden, -1 the strip decides.
 int (*g_bay_tab_shown_by_host)(content::WebContents*) = nullptr;
 
 namespace {
@@ -785,7 +785,7 @@ PY2
 
 # Permission prompts follow the tab strip's active tab: a split's other pane (shown, not the strip's
 # active tab) couldn't prompt until focused, and a page under the host's own page (New Tab, another
-# Space) could. With the hook set, a tab the host reported (engine/chromiumLayer nn_host_visibility.h) can
+# Space) could. With the hook set, a tab the host reported (engine/nncore nn_host_visibility.h) can
 # prompt exactly while the host shows it; an open prompt stays with its page (NNCore's prompts keep
 # alive across switches), and NNCore tells the manager of each change through OnVisibilityChanged.
 # Only NNCore sets the hook.
@@ -796,7 +796,7 @@ s = open(path).read()
 if "g_bay_permission_tab_shown" in s:
     sys.exit(0)
 old_ns = "namespace permissions {\n"
-decl = """// Bay: NNCore (engine/chromiumLayer) shows tabs itself: 1 shown, 0 hidden, -1 the strip decides.
+decl = """// Bay: NNCore (engine/nncore) shows tabs itself: 1 shown, 0 hidden, -1 the strip decides.
 int (*g_bay_permission_tab_shown)(content::WebContents*) = nullptr;
 
 """
@@ -865,7 +865,7 @@ old = """void ShowFileSystemAccessRestorePermissionDialog(
     base::OnceCallback<void(permissions::PermissionAction)> callback,
     content::WebContents* web_contents) {
 """
-decl = """// Bay: NNCore (engine/chromiumLayer) asks its host; it takes `callback` when it does.
+decl = """// Bay: NNCore (engine/nncore) asks its host; it takes `callback` when it does.
 bool (*g_bay_file_system_restore_prompt)(
     const FileSystemAccessPermissionRequestManager::RequestData& request,
     base::OnceCallback<void(permissions::PermissionAction)>& callback,
@@ -886,7 +886,7 @@ PY2
 # Chrome's tab-modal dialogs (TabDialogManager: FedCM's "Sign in with", Ask before HTTP) show while
 # their tab is the strip's active one; the host's own pages (New Tab) cover that tab without the
 # strip changing, so a dialog stayed up over them, and focusing a split's other pane hid it. With the
-# hook set, a tab the host reported (engine/chromiumLayer nn_host_visibility.h) shows its dialog exactly
+# hook set, a tab the host reported (engine/nncore nn_host_visibility.h) shows its dialog exactly
 # while the host shows the tab (a split's other pane too), and NNCore asks the manager again on each
 # change. Only NNCore sets the hook (it is defined with auto Picture in Picture's, above).
 python3 - "$src/chrome/browser/ui/tabs/tab_dialog_manager.cc" <<'PY2'
@@ -896,7 +896,7 @@ s = open(path).read()
 if "g_bay_tab_shown_by_host" in s:
     sys.exit(0)
 old_ns = "namespace tabs {\n\nclass TabDialogWidgetObserver"
-decl = """// Bay: NNCore (engine/chromiumLayer) shows tabs itself: 1 shown, 0 hidden, -1 the strip decides.
+decl = """// Bay: NNCore (engine/nncore) shows tabs itself: 1 shown, 0 hidden, -1 the strip decides.
 extern int (*g_bay_tab_shown_by_host)(content::WebContents*);
 
 """
@@ -947,7 +947,7 @@ s = open(path).read()
 if "g_bay_skip_cpu_health_sampling" in s:
     sys.exit(0)
 at = "namespace performance_manager::user_tuning {\n"
-decl = """// Bay: NNCore (engine/chromiumLayer) shows no performance-intervention button.
+decl = """// Bay: NNCore (engine/nncore) shows no performance-intervention button.
 bool g_bay_skip_cpu_health_sampling = false;
 
 """
@@ -972,7 +972,7 @@ s = open(path).read()
 if "g_bay_disk_space_check_seconds" in s:
     sys.exit(0)
 at = "namespace memory_pressure::mac {\n"
-decl = """// Bay: NNCore (engine/chromiumLayer) checks free disk less often while there's plenty.
+decl = """// Bay: NNCore (engine/nncore) checks free disk less often while there's plenty.
 int g_bay_disk_space_check_seconds = 0;
 
 namespace {
@@ -1062,7 +1062,7 @@ edits = [
     ("""namespace device::cablev2 {
 
 namespace {
-""", """// Bay: NNCore (engine/chromiumLayer) scans for a phone only while a phone sheet shows.
+""", """// Bay: NNCore (engine/nncore) scans for a phone only while a phone sheet shows.
 bool g_bay_hybrid_scan_on_demand = false;
 
 namespace device::cablev2 {
@@ -1183,7 +1183,7 @@ path = sys.argv[1]
 s = open(path).read()
 if "BaySetHybridUiShown" in s:
     sys.exit(0)
-decl = """// Bay: NNCore (engine/chromiumLayer): the hybrid discovery scans only while a phone
+decl = """// Bay: NNCore (engine/nncore): the hybrid discovery scans only while a phone
 // step shows (device/fido/cable/v2_discovery.cc).
 extern bool g_bay_hybrid_scan_on_demand;
 void BaySetHybridUiShown(const void* model, bool shown);
@@ -1281,7 +1281,7 @@ s = open(path).read()
 if "g_bay_bluetooth_poll_on_demand" in s:
     sys.exit(0)
 at = "namespace device {\n"
-decl = """// Bay: NNCore (engine/chromiumLayer) polls the adapter only while discovering, else on demand.
+decl = """// Bay: NNCore (engine/nncore) polls the adapter only while discovering, else on demand.
 bool g_bay_bluetooth_poll_on_demand = false;
 
 """

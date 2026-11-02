@@ -30,7 +30,7 @@
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
-// The hook at the end of RulesMonitorService's initial ruleset load (engine/chromiumLayer/apply.sh).
+// The hook at the end of RulesMonitorService's initial ruleset load (engine/nncore/apply.sh).
 extern void (*g_bay_dnr_rulesets_in_force)(
     content::BrowserContext* browser_context,
     const extensions::ExtensionId& extension_id,

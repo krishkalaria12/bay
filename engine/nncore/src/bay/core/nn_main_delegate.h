@@ -1,5 +1,5 @@
 // NNCore's ContentMainDelegate: Chrome's, for every process (ChromeMain makes this one
-// instead of ChromeMainDelegate; engine/chromiumLayer/apply.sh adds that hook). In the browser
+// instead of ChromeMainDelegate; engine/nncore/apply.sh adds that hook). In the browser
 // process it gives Chrome a content client whose main parts run Chromium's own message
 // loop for the app, the way Chrome does, and tell the host when the engine is up.
 //

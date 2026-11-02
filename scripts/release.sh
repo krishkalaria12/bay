@@ -223,7 +223,7 @@ fi
 
 # The engine must be built from this checkout's engine/ (scripts/lib/engine-fresh.sh); a prebuilt engine names the
 # engine/ tree it was built from instead.
-[ -d "$framework_src" ] || die "no NNCore framework at $framework_src (engine/chromiumLayer/apply.sh, then build chrome_framework)"
+[ -d "$framework_src" ] || die "no NNCore framework at $framework_src (engine/nncore/apply.sh, then build chrome_framework)"
 [ "$phase" = sign ] || [[ " $(lipo -archs "$framework_src/Versions/Current/Chromium Framework" 2>/dev/null) " == *" arm64 "* ]] \
   || die "the NNCore framework at $framework_src has no arm64 slice"
 if [ "$phase" = sign ]; then
