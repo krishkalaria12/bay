@@ -46,3 +46,31 @@ test("a cloned tab's badge follows its source even when the clone itself is unch
   assert.strictEqual(S().tabs[clone], tab);
   assert.equal(engineMark(useEngineView.getState(), clone), null);
 });
+
+test("engine selectors skip a tab switch's stamp and titles, and follow what selection reads", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://one.example" });
+  const one = S().windows[w].activeTabIds.default;
+  const two = S().newTab(w, { url: "https://two.example", background: true });
+  let calls = 0;
+  const stop = useEngineView.subscribe(() => calls++);
+  try {
+    S().activate(two);
+    S().activate(one);
+    S().updateTab(two, { title: "Another title" });
+    assert.equal(calls, 0);
+    S().updateTab(two, { url: "https://three.example" });
+    assert.equal(calls, 1);
+    assert.equal(useEngineView.getState().tabs[two].url, "https://three.example");
+    S().updateTab(two, { openerId: one });
+    assert.equal(calls, 2);
+    S().updateTab(one, { engine: "webkit" });
+    assert.equal(calls, 3);
+    assert.equal(engineMark(useEngineView.getState(), two), "webkit", "a tab follows its opener's engine");
+    S().closeTab(two);
+    assert.equal(calls, 4);
+    assert.equal(useEngineView.getState().tabs[two], undefined);
+  } finally {
+    stop();
+  }
+});

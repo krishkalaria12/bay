@@ -1,19 +1,24 @@
 import { setAutoPictureInPicture, setDisplayMediaPicker } from "@bay/nncore";
 import { useState } from "react";
 import { useBrowser } from "../../store/browser";
+import { useSettings, useTab, useTabLive } from "../../store/hooks";
 import { usePage } from "../layout/pageState";
 import { startCast } from "./cast";
 import { startTabShareCleanup } from "./ShareBar";
 import { cancelDisplayMediaOnNavigation } from "./SharePicker";
-import { autoPictureInPictureFor } from "./state";
+import { autoPictureInPictureAt } from "./state";
 
 // Whether a tab's WebView pops its video out when the user leaves it. The native view decides when the user left
 // (NNCoreWebView seenByUser: a tab switch, or the window covered or left for another app, never the window's own
 // full-screen transition), opens Picture in Picture, and closes it, however it opened, when the user is back. A muted
 // tab's video stays in its page, as Arc's does (the engine still calls it playing audio); a call pops out regardless.
 export function useAutoPictureInPicture(tabId: string, visible: boolean): boolean {
-  const enabled = useBrowser((s) => autoPictureInPictureFor(s, tabId));
-  const audible = useBrowser((s) => !!s.live[tabId]?.playingAudio && !s.tabs[tabId]?.muted);
+  // Every mounted page has this: it follows its own tab and the settings, not every store update (each parsed the URL).
+  const url = useTab(tabId, (tab) => tab?.url ?? "");
+  const muted = useTab(tabId, (tab) => !!tab?.muted);
+  const playing = useTabLive(tabId, (live) => !!live.playingAudio);
+  const enabled = useSettings((settings) => autoPictureInPictureAt(settings, url));
+  const audible = playing && !muted;
   const capturing = usePage(tabId, (p) => !!p.mediaAccess);
   // Decided while the tab is shown, and kept once it isn't (the native view acts on it then).
   const wants = enabled && (audible || capturing);

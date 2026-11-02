@@ -20,6 +20,7 @@ import { maybeStartOnboarding, openVideoTour, startOnboarding, startToolTour } f
 import { trackAppVersion } from "../components/ntp/releaseNotes";
 import { openTaskManager } from "../components/taskManager/window";
 import { useBrowser, type BrowserState } from "../store/browser";
+import { changedIds } from "../store/changes";
 import { activeTabId, listIds, resolveWindowId, viewTabIds, windowListKey, windowTitle } from "../store/model";
 import { focus, openUrls, openWindow, switchSpace, switchToTab } from "./actions";
 import { openReleaseNotesAfterUpdate, openReleaseNotesPage } from "./releaseNotesPage";
@@ -176,7 +177,9 @@ function startScripting() {
   };
   let timer: ReturnType<typeof setTimeout> | undefined;
   useBrowser.subscribe((s, prev) => {
-    if (s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows && s.live === prev.live && s.spaces === prev.spaces) return;
+    // Of `live` the state has only whether a tab is loading: a page's progress doesn't build it again (it's all the tabs).
+    const loading = s.live !== prev.live && changedIds(s.live, prev.live).some((id) => !!s.live[id]?.isLoading !== !!prev.live[id]?.isLoading);
+    if (s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows && !loading && s.spaces === prev.spaces) return;
     timer ??= setTimeout(() => {
       timer = undefined;
       void push();

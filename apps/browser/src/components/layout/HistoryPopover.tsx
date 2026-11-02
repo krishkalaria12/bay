@@ -2,20 +2,34 @@ import { MouseArea, Symbol } from "@bay/shell";
 import { useEffect } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
 import { openModeFor, openUrl } from "../bookmarks/actions";
 import { openInternalPage } from "../pages/urls";
 import { Favicon, NewTabIcon, useHover } from "../primitives";
 import { modifiersOf, Popover, PopoverSeparator } from "./controls";
-import { closeHistoryMenu, goToHistoryItem, useHistoryFavicons, useHistoryMenu, type HistoryItem } from "./history";
+import { closeHistoryMenu, goToHistoryItem, useHistoryFavicons, useHistoryMenu, type HistoryItem, type HistoryMenu } from "./history";
 import { HISTORY_POPOVER_WIDTH } from "./constants";
+import { useQuietBrowser } from "../../store/hooks";
 
 export function HistoryPopover({ tabId, windowId, anchors }: { tabId: string; windowId: string; anchors: { back: number; forward: number } }) {
   const menu = useHistoryMenu((s) => (s.menu?.tabId === tabId ? s.menu : null));
-  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
-  const favicons = useHistoryFavicons(spaceId, menu?.items ?? []);
   useEffect(() => () => void (useHistoryMenu.getState().menu?.tabId === tabId && closeHistoryMenu()), [tabId]);
-  if (!menu) return null;
+  // Every pane has this and almost none has a menu: the history is looked through only for an open one.
+  return menu ? <OpenHistoryMenu tabId={tabId} windowId={windowId} anchors={anchors} menu={menu} /> : null;
+}
+
+function OpenHistoryMenu({
+  tabId,
+  windowId,
+  anchors,
+  menu,
+}: {
+  tabId: string;
+  windowId: string;
+  anchors: { back: number; forward: number };
+  menu: HistoryMenu;
+}) {
+  const spaceId = useQuietBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
+  const favicons = useHistoryFavicons(spaceId, menu.items);
 
   const open = (item: HistoryItem, e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => {
     const mode = openModeFor(e);
