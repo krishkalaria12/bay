@@ -1,4 +1,4 @@
-import type { WebViewHandle } from "@bay/nncore";
+import type { WebViewHandle } from "@bay/chromium";
 
 export const webviews = new Map<string, WebViewHandle>();
 

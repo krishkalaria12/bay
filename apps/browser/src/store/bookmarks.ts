@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { engineProfile, without } from "./model";
 import type { BookmarkFolder, BookmarkNode, Bookmarks } from "./types";
 

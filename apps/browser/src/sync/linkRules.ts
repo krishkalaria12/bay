@@ -1,6 +1,6 @@
 import type { Adapter } from "@bay/sync";
 import { normalizeExternalLinkRules, type ExternalLinkRule } from "../lib/externalLinkRules";
-import { useBrowser } from "../store/browser";
+import { useBrowser } from "../store/browserStore";
 
 type ProfileLinks = Record<string, { syncId: string }>;
 type SyncedRule = Omit<ExternalLinkRule, "destination"> & {

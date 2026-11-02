@@ -3,10 +3,10 @@
 // The engine side gives a download its URL, the page that started it (tabUrl) and its referrer. This module turns
 // those, and the name the server sent, into a shorter name a person would choose: IMG_20261024_8812.pdf on a page
 // called "Q3 2026 Report" becomes "Q3 2026 Report.pdf". It never renames anything itself; the app offers the name and
-// applies it only when the person accepts (components/Downloads.tsx).
+// applies it only when the person accepts (downloads/DownloadRow.tsx).
 //
 // It is deterministic on purpose. A local cleaner runs in a millisecond, on every Mac, and the on-device model in
-// packages/shell/ios/TidyNamesModule.swift refines the answer where Apple Intelligence has one. Neither sends the
+// packages/desktop/ios/TidyNamesModule.swift refines the answer where Apple Intelligence has one. Neither sends the
 // name or the page anywhere.
 
 export type TidyNameInput = {

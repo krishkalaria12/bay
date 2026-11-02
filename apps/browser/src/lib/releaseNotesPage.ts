@@ -1,4 +1,4 @@
-import { systemInfo } from "@bay/shell";
+import { systemInfo } from "@bay/desktop";
 import { openUrls } from "./actions";
 
 export function releaseNotesUrl(version = systemInfo().appVersion): string | null {

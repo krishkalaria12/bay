@@ -1,4 +1,4 @@
-import { hapticTick, LocalFilesArea } from "@bay/shell";
+import { hapticTick, LocalFilesArea } from "@bay/desktop";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { PanResponder, Text, type ScrollView, type View } from "react-native";
 import Animated, {
@@ -17,15 +17,15 @@ import { armSidebarMoveUndo } from "../../lib/folderUndo";
 import { useTheme } from "../../lib/theme";
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useWindowId } from "../../store/hooks";
 import { spaceFolded } from "../../store/model";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { canMoveFolder, folderDepth } from "../../store/folders";
-import type { TabPlacement } from "../../store/organize";
-import { STRIP_SLIDE } from "../layout/constants";
-import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, updateTabDrag, useTabDrag } from "../layout/tabDrag";
-import { folderDragItemVisible } from "./geometry";
+import type { TabPlacement } from "../../store/tabTidying";
+import { STRIP_SLIDE } from "../window/constants";
+import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, updateTabDrag, useTabDrag } from "../tabStrip/tabStripDrag";
+import { folderDragItemVisible } from "./rowGeometry";
 import { suppressHover } from "./hover";
 import { DRAG_SCROLL_EDGE, PINNED_TILE_GAP } from "./constants";
 

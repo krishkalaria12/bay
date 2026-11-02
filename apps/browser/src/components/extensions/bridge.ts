@@ -6,14 +6,14 @@ import {
   resolveExtensionInstallPrompt,
   webStoreExtensionId,
   type TabsRequest,
-} from "@bay/nncore";
+} from "@bay/chromium";
 import { AppState } from "react-native";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browser";
-import { changedIds } from "../../store/changes";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { changedIds } from "../../store/recordDiff";
 import { activeTabId, engineProfile } from "../../store/model";
-import { tabForBrowser, usePages } from "../layout/pageState";
+import { tabForBrowser, usePages } from "../window/pageState";
 import { refreshActionStates } from "./actions";
 import { startExtensionSearchEngines } from "./searchEngines";
 import * as state from "./state";

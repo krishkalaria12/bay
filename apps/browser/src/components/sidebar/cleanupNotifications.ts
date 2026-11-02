@@ -1,5 +1,5 @@
-import { useBrowser } from "../../store/browser";
-import { changedIds } from "../../store/changes";
+import { useBrowser } from "../../store/browserStore";
+import { changedIds } from "../../store/recordDiff";
 import { isIncognitoSpace } from "../../store/model";
 import type { ClosedTab } from "../../store/types";
 

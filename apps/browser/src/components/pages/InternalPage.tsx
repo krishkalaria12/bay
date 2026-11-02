@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { bookmarkSpaceId } from "../../store/model";
 import { LibraryPage } from "../library/LibraryPage";
 import { EaselPage } from "../library/EaselPage";
@@ -9,7 +9,7 @@ import { useLibrary } from "../library/state";
 import { BookmarksPage } from "./BookmarksPage";
 import { DownloadsPage } from "./DownloadsPage";
 import { HistoryPage } from "./HistoryPage";
-import { INTERNAL_PAGES, internalPageOf, internalQuery, tabDestination } from "./urls";
+import { INTERNAL_PAGES, internalPageOf, internalQuery, tabDestination } from "./pageUrls";
 
 export function InternalPage({ tabId }: { tabId: string }) {
   const url = useBrowser((s) => {

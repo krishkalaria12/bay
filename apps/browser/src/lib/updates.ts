@@ -1,8 +1,8 @@
-import { installPendingUpdate, onUpdatePending, updaterState, type PendingUpdate } from "@bay/shell";
+import { installPendingUpdate, onUpdatePending, updaterState, type PendingUpdate } from "@bay/desktop";
 import { create } from "zustand";
 import { APP_NAME } from "./constants";
 
-// The update waiting for the user (packages/shell's Updater.swift): the sidebar's Update row and the + menu show it.
+// The update waiting for the user (packages/desktop's Updater.swift): the sidebar's Update row and the + menu show it.
 
 export const usePendingUpdate = create<{ pending: PendingUpdate | null }>(() => ({ pending: null }));
 

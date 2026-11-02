@@ -1,4 +1,4 @@
-import type { LiveItem } from "../../live/types";
+import type { LiveItem } from "../../activity/types";
 
 /** Stable, namespaced row identity; never the tab selection. Extension rows use their own prefix. */
 export type SidebarKeyboardRow = {

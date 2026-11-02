@@ -1,5 +1,5 @@
 import type { ImportKind } from "@bay/import";
-import { tensionSpring } from "../../lib/springs";
+import { tensionSpring } from "../../lib/springPresets";
 
 export const KINDS: { kind: ImportKind; title: string; icon: string }[] = [
   { kind: "bookmarks", title: "Bookmarks", icon: "bookmark" },

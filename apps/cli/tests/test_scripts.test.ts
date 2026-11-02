@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import * as urlmatch from "../src/urlmatch.ts";
 import { build, defaultUrl, Meta, parseMeta, urlRuns } from "../src/userscript.ts";
-import { Store } from "../src/scripts_store.ts";
+import { Store } from "../src/scriptsStore.ts";
 import { main } from "../src/cli.ts";
 import { VERSION } from "../src/version.ts";
 

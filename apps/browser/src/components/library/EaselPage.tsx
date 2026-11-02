@@ -1,4 +1,4 @@
-import { WebView, type WebViewHandle } from "@bay/nncore";
+import { WebView, type WebViewHandle } from "@bay/chromium";
 import {
   EaselCanvas,
   isEaselWebSharingEnabled,
@@ -9,15 +9,15 @@ import {
   type EaselCanvasHandle,
   type EaselState,
   type EaselTool,
-} from "@bay/shell";
+} from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { engineProfile } from "../../store/model";
 import { engineIdOf } from "../../store/spaces";
-import { showToast } from "../layout/splitActions";
-import { IconButton } from "../primitives";
+import { showToast } from "../split/splitActions";
+import { IconButton } from "../ui/primitives";
 import { Button } from "../settings/controls";
 import { openLibrary, renameEasel, removeEasel } from "./actions";
 import { writeEaselHTML, writeEaselPNG } from "./export";

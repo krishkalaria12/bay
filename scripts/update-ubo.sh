@@ -7,12 +7,12 @@
 #
 # It checks the release's chromium zip against the SHA-256 digest GitHub records for the asset and against the
 # manifest inside (its version must be the tag's, MV2 with webRequestBlocking), then rewrites the pin (UBO_VERSION,
-# UBO_SHA256) in packages/nncore/scripts/ubo.sh and installs it into packages/nncore/vendor/ubo. Commit ubo.sh
+# UBO_SHA256) in packages/chromium/scripts/ubo.sh and installs it into packages/chromium/vendor/ubo. Commit ubo.sh
 # afterwards; the next build (or a release) bundles it.
 set -euo pipefail
 
 root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-pin="$root/packages/nncore/scripts/ubo.sh"
+pin="$root/packages/chromium/scripts/ubo.sh"
 repo="gorhill/uBlock"
 current="$(sed -n 's/^UBO_VERSION="\(.*\)"$/\1/p' "$pin")"
 [ -n "$current" ] || { echo "error: no UBO_VERSION in $pin" >&2; exit 1; }
@@ -31,7 +31,7 @@ print(r["tag_name"], a["browser_download_url"], digest or "-")
 
 if [ "$latest" = "$current" ]; then
   echo "uBO $current is the latest release"
-  "$root/packages/nncore/scripts/ubo.sh"
+  "$root/packages/chromium/scripts/ubo.sh"
   exit 0
 fi
 if [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" != "$latest" ]; then
@@ -44,7 +44,7 @@ if [ "${1:-}" = "--check" ]; then
 fi
 [ "$digest" != "-" ] || { echo "error: GitHub gives no digest for $url; not updating" >&2; exit 1; }
 
-ubo="$root/packages/nncore/vendor/ubo"
+ubo="$root/packages/chromium/vendor/ubo"
 zip="$ubo/uBlock0_$latest.chromium.zip"
 mkdir -p "$ubo"
 echo "Downloading $url"
@@ -66,7 +66,7 @@ mv "$zip.part" "$zip"
 old_pin="$(cat "$pin")"
 restore_pin() { printf '%s\n' "$old_pin" > "$pin"; echo "error: uBO $latest didn't install; the pin stays at $current" >&2; exit 1; }
 sed -i '' "s/^UBO_VERSION=\".*\"$/UBO_VERSION=\"$latest\"/; s/^UBO_SHA256=\".*\"$/UBO_SHA256=\"$sha\"/" "$pin"
-"$root/packages/nncore/scripts/ubo.sh" || restore_pin
+"$root/packages/chromium/scripts/ubo.sh" || restore_pin
 [ "$(cut -d- -f1 "$ubo/.version")" = "$latest" ] || { echo "error: vendor/ubo didn't install $latest" >&2; exit 1; }
 echo "uBO $current -> $latest (sha256 $sha)"
-echo "Commit it: git add packages/nncore/scripts/ubo.sh && git commit -m \"chore(content-blocker): ublock origin $latest\""
+echo "Commit it: git add packages/chromium/scripts/ubo.sh && git commit -m \"chore(content-blocker): ublock origin $latest\""

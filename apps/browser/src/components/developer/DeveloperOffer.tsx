@@ -1,9 +1,9 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { useEffect, useRef } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { Popover } from "../layout/controls";
-import { useHover } from "../primitives";
+import { Popover } from "../toolbar/buttons";
+import { useHover } from "../ui/primitives";
 import { answerDeveloperOffer, useDeveloperOffer } from "./devMode";
 import { DEVELOPER_OFFER_WIDTH, DEVELOPER_YELLOW } from "./constants";
 

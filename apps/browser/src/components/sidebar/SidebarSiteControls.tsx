@@ -1,6 +1,6 @@
 import { useActiveTabId, useSidebarOpen, useWindowId } from "../../store/hooks";
-import { useSidebarFieldShown, useUrlAnchors, sidebarSiteControlsGeometry } from "../layout/windowLayout";
-import { usePopover } from "../layout/pageState";
+import { useSidebarFieldShown, useUrlAnchors, sidebarSiteControlsGeometry } from "../window/layout";
+import { usePopover } from "../window/pageState";
 import { SiteControls } from "../site/SiteControls";
 
 export function SidebarSiteControls({ windowWidth, windowHeight }: { windowWidth: number; windowHeight: number }) {

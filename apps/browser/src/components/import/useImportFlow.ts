@@ -1,9 +1,9 @@
 import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportKind, ImportResult, SpaceSummary } from "@bay/import";
-import { closeWindow, confirm } from "@bay/shell";
+import { closeWindow, confirm } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { APP_NAME } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import type { SpaceColor } from "../../store/types";
 import { IMPORT_WINDOW_ID, useImportRequest } from "../settings/windows";
 import {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const { viewTabIds } = await import("./model.ts");
 const S = () => useBrowser.getState();
 function setup() {
@@ -260,7 +260,7 @@ test("undo close repairs active mappings in every affected window", () => {
 test("live-folder names and icons respect explicit window ownership", async () => {
   const { w } = setup();
   const { withSidebarUndoWindow } = await import("./sidebarUndo.ts");
-  const { setLive, updateFolder, live } = await import("../live/store.ts");
+  const { setLive, updateFolder, live } = await import("../activity/activityStore.ts");
   const other = S().createWindow();
   setLive({
     folders: {

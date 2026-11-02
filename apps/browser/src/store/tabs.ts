@@ -1,6 +1,6 @@
 import { resolveInput } from "@bay/core";
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
 import {
   activeTabId,
@@ -26,10 +26,10 @@ import {
   wake,
   without,
 } from "./model";
-import { forgetOpeners, insertionIndex, openerSuccessor, switchKeepsOpeners } from "./openers";
-import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./organize";
+import { forgetOpeners, insertionIndex, openerSuccessor, switchKeepsOpeners } from "./openerOrder";
+import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./tabTidying";
 import { searchUrlPrefix } from "./settings";
-import { mainWindowFor } from "./small";
+import { mainWindowFor } from "./littleBay";
 import { tabEngine, typedNavigationEngine } from "./engines";
 import { pinnedSplitOf, removeFromSplits, splitOf } from "./splits";
 import type { BrowserWindow, ClosedTab, Tab, TabLive, TabSnapshot } from "./types";

@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { leaveGroups, syncGroupOrder } from "./groups";
 import { listOfTab, newId, pinnedPage, tabListKey, withList } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";

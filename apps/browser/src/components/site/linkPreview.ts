@@ -1,8 +1,8 @@
 import { create } from "zustand";
-import { copyText } from "@bay/shell";
+import { copyText } from "@bay/desktop";
 
-import { useBrowser } from "../../store/browser";
-import { showToast } from "../layout/splitActions";
+import { useBrowser } from "../../store/browserStore";
+import { showToast } from "../split/splitActions";
 
 export type LinkPreviewData = { url: string; rect: { x: number; y: number; width: number; height: number } };
 

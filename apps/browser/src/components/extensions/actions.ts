@@ -1,5 +1,5 @@
-import { extensionActionStates } from "@bay/nncore";
-import { useBrowser } from "../../store/browser";
+import { extensionActionStates } from "@bay/chromium";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { browserIdOf, useExtensions, windowExtensions } from "./store";
 

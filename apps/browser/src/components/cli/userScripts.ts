@@ -1,6 +1,6 @@
-import { installExtension, listExtensions, reloadExtension, uninstallExtension, type InstalledExtension } from "@bay/nncore";
-import { onUserScriptsChange, readUserScripts, userScriptsAvailable, watchUserScripts, writeUserScriptsStatus, type UserScriptsFolder } from "@bay/shell";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { installExtension, listExtensions, reloadExtension, uninstallExtension, type InstalledExtension } from "@bay/chromium";
+import { onUserScriptsChange, readUserScripts, userScriptsAvailable, watchUserScripts, writeUserScriptsStatus, type UserScriptsFolder } from "@bay/desktop";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { engineProfile, isIncognitoSpace } from "../../store/model";
 
 export type ScriptsOutcome = { ok: true } | { disabled: true } | { removed: true } | { error: string };

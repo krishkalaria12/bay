@@ -1,14 +1,14 @@
-import { permissionWarnings, WebView, type InstalledExtension, type WebViewHandle } from "@bay/nncore";
-import { Surface } from "@bay/shell";
+import { permissionWarnings, WebView, type InstalledExtension, type WebViewHandle } from "@bay/chromium";
+import { Surface } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { useWindowId } from "../../store/hooks";
-import { openFromPage, pageSpaceId } from "../layout/openFromPage";
-import { PromptButton } from "../layout/controls";
+import { openFromPage, pageSpaceId } from "../window/openFromPage";
+import { PromptButton } from "../toolbar/buttons";
 import { Checkbox } from "../settings/controls";
 import { extensionPopupGeometry } from "./geometry";
 import {

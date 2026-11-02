@@ -1,0 +1,262 @@
+import { ContextMenuArea, Surface, Symbol, VisualEffect, type SymbolProps } from "@bay/desktop";
+import { useEffect, type ReactNode } from "react";
+import { Pressable, StyleSheet, Text, View, type GestureResponderEvent, type ViewStyle } from "react-native";
+import Animated, { Easing, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { hex, useTheme } from "../../lib/theme";
+import { useHover } from "../ui/primitives";
+import type { ToolbarPalette } from "./colors";
+
+export type ClickModifiers = { metaKey: boolean; altKey: boolean; shiftKey: boolean };
+export function modifiersOf(e: GestureResponderEvent | undefined): ClickModifiers {
+  const n = (e?.nativeEvent ?? {}) as Partial<ClickModifiers>;
+  return { metaKey: !!n.metaKey, altKey: !!n.altKey, shiftKey: !!n.shiftKey };
+}
+
+export function ToolbarButton({
+  icon,
+  onPress,
+  onLongPress,
+  onContextMenu,
+  disabled,
+  size = 15,
+  box = 30,
+  radius = 7,
+  weight = "regular",
+  tooltip,
+  palette,
+  color,
+  style,
+}: {
+  icon: string;
+  onPress?: (modifiers: ClickModifiers) => void;
+  onLongPress?: () => void;
+  onContextMenu?: () => void;
+  disabled?: boolean;
+  size?: number;
+  box?: number;
+  radius?: number;
+  weight?: SymbolProps["weight"];
+  tooltip?: string;
+  palette: Pick<ToolbarPalette, "icon" | "iconDisabled" | "hover" | "pressed">;
+  color?: string;
+  style?: ViewStyle;
+}) {
+  const { hovered, hoverProps } = useHover();
+  const button = (
+    <Pressable onPress={(e) => onPress?.(modifiersOf(e))} onLongPress={onLongPress} delayLongPress={450} disabled={disabled}>
+      {({ pressed }) => (
+        <View
+          style={{
+            width: box,
+            height: box,
+            borderRadius: radius,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: disabled ? undefined : pressed ? palette.pressed : hovered ? palette.hover : undefined,
+          }}
+        >
+          <Symbol
+            name={icon}
+            size={size}
+            weight={weight}
+            color={color ?? (disabled ? palette.iconDisabled : palette.icon)}
+            style={{ width: box, height: box }}
+          />
+        </View>
+      )}
+    </Pressable>
+  );
+  return (
+    <View tooltip={tooltip} style={style} {...hoverProps}>
+      {onContextMenu && !disabled ? <ContextMenuArea onContextMenu={onContextMenu}>{button}</ContextMenuArea> : button}
+    </View>
+  );
+}
+
+export function Popover({
+  width,
+  top,
+  right,
+  left,
+  onDismiss,
+  children,
+  modal = true,
+}: {
+  width: number;
+  top: number;
+  right?: number;
+  left?: number;
+  onDismiss?: () => void;
+  children: ReactNode;
+  modal?: boolean;
+}) {
+  const theme = useTheme();
+  const appear = useSharedValue(0);
+  useEffect(() => {
+    appear.set(withTiming(1, { duration: 170, easing: Easing.out(Easing.cubic) }));
+  }, []);
+  const appearStyle = useAnimatedStyle(() => ({
+    opacity: appear.get(),
+    transform: [{ scale: interpolate(appear.get(), [0, 1], [0.94, 1]) }, { translateY: interpolate(appear.get(), [0, 1], [-4, 0]) }],
+  }));
+  const origin = right !== undefined ? "top right" : "top left";
+  return (
+    <>
+      {modal && onDismiss && <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />}
+      <Animated.View style={[{ position: "absolute", top, right, left, width, transformOrigin: origin }, appearStyle]}>
+        <Surface
+          fill={hex(theme.dark ? "rgba(38,36,37,0.94)" : "rgba(252,251,252,0.96)")}
+          cornerRadius={12}
+          borderColor={hex(theme.dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)")}
+          borderWidth={0.5}
+          shadowColor="#000000"
+          shadowOpacity={theme.dark ? 0.45 : 0.16}
+          shadowRadius={18}
+          shadowOffset={[0, 8]}
+        >
+          <VisualEffect material="menu" cornerRadius={12} style={StyleSheet.absoluteFill} />
+          <View style={{ ...StyleSheet.absoluteFillObject, borderRadius: 12, backgroundColor: theme.dark ? "rgba(38,36,37,0.72)" : "rgba(252,251,252,0.7)" }} />
+          {children}
+        </Surface>
+      </Animated.View>
+    </>
+  );
+}
+
+export function PopoverRow({
+  icon,
+  iconColor,
+  title,
+  detail,
+  accessory,
+  onPress,
+  disabled,
+  destructive,
+}: {
+  icon?: string;
+  iconColor?: string;
+  title: string;
+  detail?: string;
+  accessory?: ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  const theme = useTheme();
+  const { hovered, hoverProps } = useHover();
+  const tint = destructive ? "#FF6B63" : theme.textPrimary;
+  const content = (pressed: boolean) => (
+    <View
+      style={{
+        minHeight: 32,
+        marginHorizontal: 5,
+        paddingHorizontal: 8,
+        borderRadius: 7,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 9,
+        opacity: disabled ? 0.45 : 1,
+        backgroundColor:
+          onPress && !disabled && (pressed || hovered)
+            ? theme.dark
+              ? `rgba(255,255,255,${pressed ? 0.12 : 0.07})`
+              : `rgba(0,0,0,${pressed ? 0.1 : 0.06})`
+            : undefined,
+      }}
+    >
+      {icon ? <Symbol name={icon} size={13} color={iconColor ?? (destructive ? tint : theme.icon)} style={{ width: 18, height: 18 }} /> : null}
+      <View style={{ flex: 1, paddingVertical: 6 }}>
+        <Text numberOfLines={1} style={{ fontSize: 13, color: tint }}>
+          {title}
+        </Text>
+        {detail ? (
+          <Text numberOfLines={2} style={{ fontSize: 11, color: theme.textSecondary, marginTop: 1 }}>
+            {detail}
+          </Text>
+        ) : null}
+      </View>
+      {accessory}
+    </View>
+  );
+  if (!onPress) return <View {...hoverProps}>{content(false)}</View>;
+  return (
+    <View {...hoverProps}>
+      <Pressable onPress={onPress} disabled={disabled}>
+        {({ pressed }) => content(pressed)}
+      </Pressable>
+    </View>
+  );
+}
+
+export function PopoverSeparator() {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        height: StyleSheet.hairlineWidth,
+        marginVertical: 5,
+        marginHorizontal: 13,
+        backgroundColor: theme.dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)",
+      }}
+    />
+  );
+}
+
+export function PromptButton({ title, onPress, primary, flex }: { title: string; onPress: () => void; primary?: boolean; flex?: boolean }) {
+  const theme = useTheme();
+  const { hovered, hoverProps } = useHover();
+  return (
+    <View {...hoverProps} style={flex ? { flex: 1 } : undefined}>
+      <Pressable onPress={onPress}>
+        {({ pressed }) => (
+          <View
+            style={{
+              height: 28,
+              paddingHorizontal: 12,
+              borderRadius: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: primary
+                ? theme.dark
+                  ? pressed
+                    ? "#C9B8C5"
+                    : hovered
+                      ? "#E6D8E2"
+                      : theme.goButton
+                  : pressed
+                    ? "#26314A"
+                    : hovered
+                      ? "#1B2640"
+                      : theme.goButton
+                : theme.dark
+                  ? `rgba(255,255,255,${pressed ? 0.18 : hovered ? 0.14 : 0.1})`
+                  : `rgba(0,0,0,${pressed ? 0.12 : hovered ? 0.09 : 0.06})`,
+            }}
+          >
+            <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "500", color: primary ? theme.goButtonText : theme.textPrimary }}>
+              {title}
+            </Text>
+          </View>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+export function Toggle({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
+  const theme = useTheme();
+  const x = useSharedValue(value ? 1 : 0);
+  useEffect(() => {
+    x.set(withTiming(value ? 1 : 0, { duration: 150, easing: Easing.out(Easing.quad) }));
+  }, [value]);
+  const off = theme.dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)";
+  const track = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(x.get(), [0, 1], [off, "#3478F6"]) }), [off]);
+  const knob = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() * 13 }] }));
+  return (
+    <Pressable onPress={() => onChange(!value)} hitSlop={6}>
+      <Animated.View style={[{ width: 30, height: 17, borderRadius: 9, padding: 1.5 }, track]}>
+        <Animated.View style={[{ width: 14, height: 14, borderRadius: 7, backgroundColor: "#FFFFFF" }, knob]} />
+      </Animated.View>
+    </Pressable>
+  );
+}

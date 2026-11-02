@@ -1,11 +1,11 @@
 import { createContext, useContext } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { isBookmarked } from "./bookmarks";
-import { useBrowser } from "./browser";
+import { useBrowser } from "./browserStore";
 import { activeTabId, bookmarkSpaceId, IDLE_LIVE, spaceFor } from "./model";
 import type { Settings } from "./settings";
 import type { BrowserWindow, FindState, Space, Tab, TabLive } from "./types";
-import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./ui";
+import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./windowUi";
 
 export const WindowContext = createContext<string | null>(null);
 

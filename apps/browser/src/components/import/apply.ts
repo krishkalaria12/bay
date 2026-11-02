@@ -1,4 +1,4 @@
-import { savePassword } from "@bay/nncore";
+import { savePassword } from "@bay/chromium";
 import type {
   BookmarkNode as ImportedNode,
   Credential,
@@ -11,7 +11,7 @@ import type {
   SpaceSuggestion,
 } from "@bay/import";
 import type { BookmarkDraft } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { engineProfile, isIncognitoSpace, listIds, plural, tabListKey } from "../../store/model";
 import { withNewTab } from "../../store/tabs";
 import type { SpaceColor } from "../../store/types";

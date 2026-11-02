@@ -1,4 +1,4 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { useState } from "react";
 import { Image } from "react-native";
 

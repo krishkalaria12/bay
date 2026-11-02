@@ -4,7 +4,7 @@
 // The bench writes `bench-cmd.js` (first line `// <id>`) into BAY_DATA_DIR; the body gets `nn` and its
 // return value (or promise) lands in `bench-result.json`. Polling stops while the bench measures idle
 // (`nn.pause(ms)`), so the channel adds no wakeups to what it measures.
-import "../../index";
+import "../..";
 import { answerWithSkew, nativeApiSkew } from "../../src/nativeApi";
 
 // The channel drives the app, which index.js loads only on the native build this bundle was written for.

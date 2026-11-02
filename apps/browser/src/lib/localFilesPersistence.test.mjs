@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const stub = await import("../test-native-stub.mjs");
-const { useBrowser } = await import("../store/browser.ts");
+const { useBrowser } = await import("../store/browserStore.ts");
 const { startPersistence, flushPersistence, loadSession } = await import("./persist.ts");
 const S = () => useBrowser.getState();
 

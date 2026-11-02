@@ -1,8 +1,8 @@
-import { hapticTick } from "@bay/shell";
+import { hapticTick } from "@bay/desktop";
 import { useLayoutEffect, useState } from "react";
 import { PanResponder } from "react-native";
 import { Easing, makeMutable, withTiming, type SharedValue } from "react-native-reanimated";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 
 // Arc's space reordering: drag a space along its list (the sidebar's icons or dots, the settings rows), the spaces it
 // passes make room, and let go, the store reorders them.

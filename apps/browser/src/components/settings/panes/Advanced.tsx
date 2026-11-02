@@ -1,14 +1,14 @@
-import { engineInfo, listComponents, WIDEVINE_COMPONENT_ID, type EngineComponent, type EngineInfo } from "@bay/nncore";
+import { engineInfo, listComponents, WIDEVINE_COMPONENT_ID, type EngineComponent, type EngineInfo } from "@bay/chromium";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
-import { openInternalPage } from "../../pages/urls";
+import { useBrowser } from "../../../store/browserStore";
+import { openInternalPage } from "../../pages/pageUrls";
 import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { setBoostsOn, startBoosts, useBoosts } from "../../boosts/state";
 import { openLibrary } from "../../library/actions";
-import { describeCliControl, describeCliInstall, installCliInBackground, useCli } from "../../cli/control";
+import { describeCliControl, describeCliInstall, installCliInBackground, useCli } from "../../cli/driverControl";
 
 export function AdvancedPane() {
   const theme = useTheme();

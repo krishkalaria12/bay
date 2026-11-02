@@ -1,9 +1,9 @@
-import { setSidebarKeyboard } from "@bay/shell";
-import { useBrowser } from "../../store/browser";
+import { setSidebarKeyboard } from "@bay/desktop";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
-import { dismissPeek } from "../layout/peekDismiss";
-import { live, setLive, updateFolder } from "../../live/store";
-import { sidebarKeyboardRows } from "./entries";
+import { dismissPeek } from "../linkOverlay/peekDismiss";
+import { live, setLive, updateFolder } from "../../activity/activityStore";
+import { sidebarKeyboardRows } from "./sidebarEntries";
 import { adjacentKeyboardRow, reconcileKeyboardRow, type SidebarKeyboardRow } from "./keyboardModel";
 import { setSidebarUi, sidebarUi } from "./state";
 

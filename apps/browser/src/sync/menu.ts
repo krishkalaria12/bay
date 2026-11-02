@@ -1,5 +1,5 @@
-import type { MenuItem } from "@bay/shell";
-import { useBrowser } from "../store/browser";
+import type { MenuItem } from "@bay/desktop";
+import { useBrowser } from "../store/browserStore";
 import { useSync, type RemoteTabs } from "./engine";
 
 export function syncedDevicesMenuItem(spaceId: string): MenuItem | null {

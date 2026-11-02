@@ -1,6 +1,6 @@
-import { cancelShortcutRecording, menuShortcuts, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/shell";
+import { cancelShortcutRecording, menuShortcuts, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import type { LittleBayShortcut } from "../../../store/settings";
 import { DEFAULT_LITTLE_BAY_SHORTCUT, useLittleBayAccess } from "../../littleBay/access";
 import { Group, PopUp, Row, SectionHeader, SettingToggle, Toggle } from "../controls";

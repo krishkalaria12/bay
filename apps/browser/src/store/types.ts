@@ -1,4 +1,4 @@
-import type { PageEngine } from "@bay/nncore";
+import type { PageEngine } from "@bay/chromium";
 
 export type Frame = [number, number, number, number];
 
@@ -41,7 +41,7 @@ export type Space = {
   folded?: boolean;
 };
 
-// A window shows one space at a time; its tabs are the space's (store/model.ts tab lists), as Arc's: every window
+// A window shows one space at a time; its tabs are the space's (store/selectors.ts tab lists), as Arc's: every window
 // showing the space lists them, and a tab's page is in the window that last showed it (`Tab.windowId`).
 export type BrowserWindow = {
   id: string;
@@ -52,7 +52,7 @@ export type BrowserWindow = {
   tabLayout?: "sidebar" | "top";
   frame: Frame | null;
   createdAt: number;
-  // Little Bay (Arc's Little Arc): one page, no sidebar, never saved with the session (store/small.ts).
+  // Little Bay (Arc's Little Arc): one page, no sidebar, never saved with the session (store/littleBay.ts).
   kind?: "small";
 };
 
@@ -80,7 +80,7 @@ export type Tab = {
   navigation: { url: string; seq: number; userInitiated?: boolean } | null;
   adoptId?: string;
   openerId: string | null;
-  // What a tab that hasn't loaded adopts when first shown (store/model.ts wake): a reopened window's tab
+  // What a tab that hasn't loaded adopts when first shown (store/selectors.ts wake): a reopened window's tab
   // "restore:<closed tab>" (its back/forward list, from Chrome's TabRestoreService).
   wakeAdoptId?: string;
   liveItem?: { folderId: string; itemId: string };

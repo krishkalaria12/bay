@@ -1,9 +1,9 @@
-import { ContextMenuArea, Surface, Symbol } from "@bay/shell";
+import { ContextMenuArea, Surface, Symbol } from "@bay/desktop";
 import { Pressable, Text, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
-import { useHover } from "../primitives";
+import { useBrowser } from "../../store/browserStore";
+import { useHover } from "../ui/primitives";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
 import { openSpaceMenu } from "../spaces/SpaceSwitcher";
 import { useFold } from "./Fold";

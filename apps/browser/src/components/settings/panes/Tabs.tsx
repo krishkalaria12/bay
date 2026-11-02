@@ -1,13 +1,13 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, TextField, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { CLEAN_UP_CHOICES } from "../constants";
-import { updateCalendarSettings, useLive } from "../../../live/store";
-import { normalizeAwakeSite } from "../../../lib/awakeSites";
+import { updateCalendarSettings, useLive } from "../../../activity/activityStore";
+import { normalizeAwakeSite } from "../../../lib/keptAwakeSites";
 
 export function TabsPane() {
   const settings = useBrowser((s) => s.settings);

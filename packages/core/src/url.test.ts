@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { domainToASCII } from "node:url";
 import { cleanUrl } from "./cleanUrl.ts";
 import { displayHost, hostSpoofReason, punycodeEncode } from "./idn.ts";
-import { breadcrumb, fixupUrl, resolveInput, urlForDisplay } from "./omnibox.ts";
+import { breadcrumb, fixupUrl, resolveInput, urlForDisplay } from "./input.ts";
 import { displayUrl } from "./suggest.ts";
 
 test("resolveInput turns typed text into a URL", () => {
