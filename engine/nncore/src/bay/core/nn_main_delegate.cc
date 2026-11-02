@@ -53,6 +53,7 @@
 #include "bay/core/nn_navigation_hold.h"
 #include "bay/core/nn_page_channel.h"
 #include "bay/core/nn_peek_links.h"
+#include "bay/core/nn_request_filter.h"
 #include "bay/core/nn_strings.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "bay/core/renderer/nn_content_renderer_client.h"
@@ -354,6 +355,35 @@ class NNContentBrowserClient : public ChromeContentBrowserClient {
     AddAppSchemeThrottle(registry);
     MaybeAddNavigationHoldThrottle(registry);
     MaybeAddPeekLinksThrottle(registry);
+    MaybeAddRequestFilterThrottle(registry);
+  }
+  // The host's request filter (nn_request_filter.h) sees a page's requests first, so what it
+  // blocks never reaches Chrome's own interceptors (extensions' webRequest).
+  void WillCreateURLLoaderFactory(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* frame,
+      int render_process_id,
+      URLLoaderFactoryType type,
+      const url::Origin& request_initiator,
+      const net::IsolationInfo& isolation_info,
+      std::optional<int64_t> navigation_id,
+      ukm::SourceIdObj ukm_source_id,
+      network::URLLoaderFactoryBuilder& factory_builder,
+      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
+          header_client,
+      bool* bypass_redirect_checks,
+      bool* disable_secure_dns,
+      network::mojom::URLLoaderFactoryOverridePtr* factory_override,
+      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
+      bool is_for_network_service) override {
+    MaybeFilterURLLoaderFactory(type, request_initiator, isolation_info,
+                                factory_builder);
+    ChromeContentBrowserClient::WillCreateURLLoaderFactory(
+        browser_context, frame, render_process_id, type, request_initiator,
+        isolation_info, navigation_id, ukm_source_id, factory_builder,
+        header_client, bypass_redirect_checks, disable_secure_dns,
+        factory_override, std::move(navigation_response_task_runner),
+        is_for_network_service);
   }
   // The spare renderer that replaces one a navigation took starts a moment later, not
   // within that navigation's own start: its RenderProcessHostImpl::Init held the UI
