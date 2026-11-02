@@ -46,6 +46,11 @@ std::string OriginURL(const url::Origin& origin) {
 
 // adblock-rust's request types (packages/adblock), by what the request is for.
 const char* TypeOf(const network::ResourceRequest& request) {
+  // Fetch remains XHR even with keepalive set; only non-fetch keepalive traffic
+  // such as sendBeacon is a ping (as in Chrome's webRequest classification).
+  if (request.is_fetch_like_api) {
+    return "xmlhttprequest";
+  }
   using Destination = network::mojom::RequestDestination;
   switch (request.destination) {
     case Destination::kScript:
