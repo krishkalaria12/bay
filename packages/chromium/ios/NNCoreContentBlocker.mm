@@ -425,37 +425,25 @@ Built Build(NSArray<NSString *> *ids, BOOL useCache) {
   return built;
 }
 
-// Builds the engine for the current selection (downloading lists it doesn't have yet) and puts it in force.
-// completion(missing) on the main thread once it is (or a newer build replaced it): the selected lists it has no copy
-// of (none could be downloaded).
+// Builds from the available files first, then rebuilds once missing lists have downloaded. Bundled rules must
+// already block while an optional regional list is downloading. completion(missing) runs on the main thread.
 void Rebuild(BOOL useCache, void (^_Nullable completion)(NSArray<NSString *> *missing)) {
   completion = [completion copy];
   const NSUInteger generation = ++gGeneration;
   NSArray<NSString *> *ids = SelectedInOrder();
   const double delayMs = std::exchange(gDelayNextLoadMs, 0);
   dispatch_async(Work(), ^{
-    dispatch_group_t group = dispatch_group_create();
-    for (NSString *listId in ids) {
-      SeedFromBundle(listId);
-      if ([NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) continue;
-      NSDictionary *list = CatalogueList(listId);
-      if (!list) continue;
-      dispatch_group_enter(group);
-      Download(list, 0, ^(BOOL) { dispatch_group_leave(group); });
-    }
-    dispatch_group_notify(group, Work(), ^{
-      NSMutableArray<NSString *> *missing = [NSMutableArray array];
-      for (NSString *listId in ids)
-        if (![NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) [missing addObject:listId];
-      // A newer selection is on its way: this one would be replaced at once.
+    for (NSString *listId in ids) SeedFromBundle(listId);
+    void (^buildAndPublish)(BOOL, NSArray<NSString *> *) = ^(BOOL finished, NSArray<NSString *> *missing) {
       if (generation != gGeneration.load()) {
-        if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(missing); });
+        if (finished && completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(@[]); });
         return;
       }
       auto built = std::make_shared<Built>(Build(ids, useCache));
       NSLog(@"[blocker] %lu lists in %.0f ms", (unsigned long)built->counts.count, built->ms);
       void (^apply)(void) = ^{
-        if (generation == gGeneration.load()) {
+        const BOOL current = generation == gGeneration.load();
+        if (current) {
           gEngine = built->engine;
           gParseMs = built->ms;
           gCounts = built->counts;
@@ -463,12 +451,28 @@ void Rebuild(BOOL useCache, void (^_Nullable completion)(NSArray<NSString *> *mi
           PublishLive();
           Emit();
         }
-        if (completion) completion(missing);
+        if (finished && completion) completion(current ? missing : @[]);
       };
       if (delayMs > 0)
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), apply);
       else
         dispatch_async(dispatch_get_main_queue(), apply);
+    };
+    NSMutableArray<NSString *> *absent = [NSMutableArray array];
+    for (NSString *listId in ids)
+      if (![NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) [absent addObject:listId];
+    buildAndPublish(absent.count == 0, @[]);
+    if (!absent.count) return;
+    dispatch_group_t group = dispatch_group_create();
+    for (NSString *listId in absent) {
+      dispatch_group_enter(group);
+      Download(CatalogueList(listId), 0, ^(BOOL) { dispatch_group_leave(group); });
+    }
+    dispatch_group_notify(group, Work(), ^{
+      NSMutableArray<NSString *> *missing = [NSMutableArray array];
+      for (NSString *listId in ids)
+        if (![NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) [missing addObject:listId];
+      buildAndPublish(YES, missing);
     });
   });
 }
