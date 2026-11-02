@@ -82,7 +82,7 @@
 //   new window → first paint / first frame  newWindow   the window's page's FCP / first rAF
 // Also printed: "Hidden tabs" (throttleRun), the browser process after each churn round, main-thread sample summaries.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -444,10 +444,13 @@ class Instance {
     this.seq = 0;
   }
   async launch() {
-    const exe = join(
-      this.app,
-      "Contents/MacOS",
-      execFileSync("defaults", ["read", join(this.app, "Contents/Info.plist"), "CFBundleExecutable"], { encoding: "utf8" }).trim(),
+    // Its real path: the process reports that one (an app under /tmp runs from /private/tmp), so pgrep finds it.
+    const exe = realpathSync(
+      join(
+        this.app,
+        "Contents/MacOS",
+        execFileSync("defaults", ["read", join(this.app, "Contents/Info.plist"), "CFBundleExecutable"], { encoding: "utf8" }).trim(),
+      ),
     );
     const main = `^${exe.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`;
     if (spawnSync("pgrep", ["-f", main]).status === 0) throw new Error("a bench instance is still running");
