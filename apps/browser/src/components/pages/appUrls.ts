@@ -1,5 +1,5 @@
 import { appUrlRoute } from "@bay/core";
-import { handleSharedCollectionUrl } from "../../lib/collectionSharing";
+import { handleSharedCollectionUrl } from "../../lib/sharedLinkEncoding";
 import { openNewTabPanel } from "../../lib/newTab";
 import { setAppUrlOpener } from "../../store/tabs";
 import { openSettings, type SettingsPane } from "../settings/windows";

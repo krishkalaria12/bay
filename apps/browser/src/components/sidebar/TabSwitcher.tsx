@@ -1,11 +1,11 @@
-import { FadeLabel, Surface } from "@bay/shell";
+import { FadeLabel, Surface } from "@bay/desktop";
 import { Pressable, Text, View } from "react-native";
 import { displayUrl } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { tabTitle } from "./actions";
 import { useSidebarUi } from "./state";
-import { commitSwitcher, focusSwitcherRow } from "./switcher";
+import { commitSwitcher, focusSwitcherRow } from "./spaceSwitcher";
 import { TabIcon } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";
 import { SWITCHER_ROW, SWITCHER_WIDTH } from "./constants";

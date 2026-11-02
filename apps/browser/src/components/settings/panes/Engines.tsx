@@ -1,12 +1,12 @@
-import type { PageEngine } from "@bay/nncore";
+import type { PageEngine } from "@bay/chromium";
 import { resolveInput } from "@bay/core";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { setWebsiteEngine } from "../../../lib/engines";
+import { setWebsiteEngine } from "../../../lib/pageEngines";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { defaultEngine, ENGINE_NAMES, PROTECTED_VIDEO_SITES, RECOMMENDED_ENGINE, siteOf } from "../../../store/engines";
-import { Favicon, IconButton } from "../../primitives";
+import { Favicon, IconButton } from "../../ui/primitives";
 import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Sheet, TextField } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";

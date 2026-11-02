@@ -31,7 +31,7 @@ class Canvas;
 inline constexpr int kBayPipButtonMargin = 12;
 inline constexpr int kBayPipButtonSize = 28;
 // The app's speed button beside back to tab and its subtitles button beside
-// close (packages/nncore/ios/NNCorePictureInPicture.mm), with the 6 pt gap
+// close (packages/chromium/ios/NNCorePictureInPicture.mm), with the 6 pt gap
 // before each: the origin keeps clear of the wider of them.
 inline constexpr int kBayPipAppButtonsWidth = 6 + 42;
 

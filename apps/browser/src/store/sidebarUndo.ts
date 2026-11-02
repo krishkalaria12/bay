@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { IDLE_LIVE, isIncognitoSpace, pinnedPage, tabListKey, tabToShow } from "./model";
 import { prunePinnedFolders } from "./folders";
 import { sanitizeSplits } from "./splits";

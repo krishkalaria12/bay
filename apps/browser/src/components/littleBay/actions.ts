@@ -1,9 +1,9 @@
 import { focus, openWindow } from "../../lib/actions";
-import { handleSharedCollectionUrl } from "../../lib/collectionSharing";
+import { handleSharedCollectionUrl } from "../../lib/sharedLinkEncoding";
 import { defaultLinkDestination, matchingLinkRule } from "../../lib/externalLinkRules";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId, viewTabIds } from "../../store/model";
-import { isSmall, mainWindowFor, mostRecentSpace } from "../../store/small";
+import { isSmall, mainWindowFor, mostRecentSpace } from "../../store/littleBay";
 
 const store = () => useBrowser.getState();
 

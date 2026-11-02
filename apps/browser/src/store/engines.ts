@@ -1,5 +1,5 @@
-import { hasWebKit, type PageEngine } from "@bay/nncore";
-import type { BrowserState } from "./browser";
+import { hasWebKit, type PageEngine } from "@bay/chromium";
+import type { BrowserState } from "./browserStore";
 import type { Tab } from "./types";
 
 // Which engine a tab's page runs in. Chromium is Bay's engine; it has no Widevine, so streaming sites (Netflix,

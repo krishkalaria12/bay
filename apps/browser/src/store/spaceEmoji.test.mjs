@@ -1,7 +1,7 @@
 // Every space shows an emoji: a new one gets a free one, an older session's without one gets one, and none is cleared.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const { SPACE_EMOJI } = await import("./spaces.ts");
 const S = () => useBrowser.getState();
 const space = (id, icon) => ({ id, name: id, color: "blue", icon, createdAt: 0 });

@@ -8,8 +8,8 @@
 # Steps, stopping at the first that fails (it names the step and exits with its status):
 #   1. take the chromium lock (scripts/agent/locked chromium; with --as WHO, inside WHO's --take if there is one,
 #      as is NN_LOCKED_AS; a call nested in one that already holds chromium runs straight through);
-#   2. engine/chromium/apply.sh, then engine/nncore/apply.sh (copy our code and hooks in);
-#   3. engine/chromium/apply.sh --check and engine/nncore/apply.sh --check (the tree matches the repo);
+#   2. engine/chromium/apply.sh, then engine/chromiumLayer/apply.sh (copy our code and hooks in);
+#   3. engine/chromium/apply.sh --check and engine/chromiumLayer/apply.sh --check (the tree matches the repo);
 #   4. engine/patches/series.py check (the patch series reproduces the tree; ~5 s, no writes outside a scratch
 #      dir; --no-series-check skips it while you're remaking a patch);
 #   5. autoninja -C out/Release_GN_arm64 <target…> in ~/chromium-build/chromium_git/chromium/src, with
@@ -83,9 +83,9 @@ step() {
 
 [[ -d "$src/$out" ]] || { echo "engine-build: FAILED: no $src/$out (this script only builds incrementally)" >&2; exit 1; }
 step "engine/chromium/apply.sh" "$repo/engine/chromium/apply.sh"
-step "engine/nncore/apply.sh" "$repo/engine/nncore/apply.sh"
+step "engine/chromiumLayer/apply.sh" "$repo/engine/chromiumLayer/apply.sh"
 step "engine/chromium/apply.sh --check" "$repo/engine/chromium/apply.sh" --check
-step "engine/nncore/apply.sh --check" "$repo/engine/nncore/apply.sh" --check
+step "engine/chromiumLayer/apply.sh --check" "$repo/engine/chromiumLayer/apply.sh" --check
 if [[ -n "$series_check" ]]; then
   step "engine/patches/series.py check" python3 "$repo/engine/patches/series.py" check
 fi

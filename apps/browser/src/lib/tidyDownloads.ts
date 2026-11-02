@@ -1,14 +1,14 @@
 import { create } from "zustand";
 import { useEffect } from "react";
 import { isUserNamedDownload, tidyDownloadName, tidyNameFor, type TidyName } from "@bay/core";
-import { renameFile, tidyNames } from "@bay/shell";
-import { onDownload } from "@bay/nncore";
-import type { Download } from "@bay/nncore";
-import { showToast } from "../components/layout/splitActions";
-import { downloadsIn } from "../store/ui";
+import { renameFile, tidyNames } from "@bay/desktop";
+import { onDownload } from "@bay/chromium";
+import type { Download } from "@bay/chromium";
+import { showToast } from "../components/split/splitActions";
+import { downloadsIn } from "../store/windowUi";
 import { engineProfile } from "../store/model";
-import { useBrowser, type BrowserState } from "../store/browser";
-import { isInternalTab } from "../components/pages/urls";
+import { useBrowser, type BrowserState } from "../store/browserStore";
+import { isInternalTab } from "../components/pages/pageUrls";
 
 // MARK: Page context
 

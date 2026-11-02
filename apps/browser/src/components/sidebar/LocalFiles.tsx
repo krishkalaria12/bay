@@ -9,13 +9,13 @@ import {
   type LocalFileAccess,
   type LocalFileEntry,
   type LocalFileListing,
-} from "@bay/shell";
+} from "@bay/desktop";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { closeLocalFileTab, localFileStatusText, openLocalFile, peekLocalFile, reconnectLocalFile } from "../../lib/localFiles";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { usePageSpaceId } from "../../store/hooks";
 import { localFilePins } from "../../store/localFiles";
 import { spaceFolded } from "../../store/model";

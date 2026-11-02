@@ -1,5 +1,5 @@
-import { localFiles, type LocalFileAccess } from "@bay/shell";
-import { useBrowser } from "../store/browser";
+import { localFiles, type LocalFileAccess } from "@bay/desktop";
+import { useBrowser } from "../store/browserStore";
 import { activeTabId } from "../store/model";
 
 /** Resolves native access before opening anything. Synced paths alone never authorize a file. */

@@ -1,18 +1,18 @@
 // Private windows, incognito data and profile deletion: what must never reach disk, and what must leave it.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
-const { cleanedTabsFor } = await import("./organize.ts");
+const { cleanedTabsFor } = await import("./tabTidying.ts");
 const { flushPersistence, loadSession, startPersistence } = await import("../lib/persist.ts");
-const drop = await import("../components/layout/windowDrop.ts");
+const drop = await import("../components/window/windowDrop.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.
 (await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
 const tabLists = await import("./model.ts");
-// A window's list: its space's tabs, in sidebar order (store/model.ts).
+// A window's list: its space's tabs, in sidebar order (store/selectors.ts).
 const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const HOUR = 3_600_000;
 const OLD = () => Date.now() - 13 * HOUR;

@@ -1,11 +1,11 @@
-import { showMenu, Surface, Symbol, type MenuItem } from "@bay/shell";
+import { showMenu, Surface, Symbol, type MenuItem } from "@bay/desktop";
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme, type Theme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import type { Settings } from "../../store/settings";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
 import { useSettingsNav } from "./windows";
 import type { SettingId } from "./definitions";

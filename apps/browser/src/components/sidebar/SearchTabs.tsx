@@ -1,10 +1,10 @@
 import { displayUrl, fuzzyScore } from "@bay/core";
-import { FadeLabel, Surface, Symbol } from "@bay/shell";
+import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { switchToTab } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { tabLabel } from "../../store/model";
 import { tabTitle } from "./actions";
 import { setSidebarUi, useSidebarUi } from "./state";

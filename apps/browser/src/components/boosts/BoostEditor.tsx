@@ -1,13 +1,13 @@
 import { useShallow } from "zustand/react/shallow";
-import { fontFamilies, showMenu, Surface, Symbol, type MenuItem } from "@bay/shell";
+import { fontFamilies, showMenu, Surface, Symbol, type MenuItem } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PanResponder, Pressable, ScrollView, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { BOOST_CASES, BOOST_FONTS, BOOST_SIZES, DEFAULT_BOOST_COLOR, tintEnds, type Boost, type BoostColor, type BoostTextCase } from "../../lib/boosts";
 import { hex, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { webviews } from "../../lib/webviews";
-import { Toggle } from "../layout/controls";
-import { IconButton, useHover } from "../primitives";
+import { Toggle } from "../toolbar/buttons";
+import { IconButton, useHover } from "../ui/primitives";
 import { ColorField } from "../spaces/ThemeEditor";
 import {
   closeBoostEditor,

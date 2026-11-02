@@ -1,10 +1,10 @@
-import type { SystemCalendar } from "@bay/shell";
+import type { SystemCalendar } from "@bay/desktop";
 import { Linking, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { connectCalendar, setCalendarHidden, useCalendar } from "../../../live/calendar";
-import { ALERT_LEADS } from "../../../live/meetings";
-import { updateCalendarSettings, useLive } from "../../../live/store";
-import { useBrowser } from "../../../store/browser";
+import { connectCalendar, setCalendarHidden, useCalendar } from "../../../activity/calendar";
+import { ALERT_LEADS } from "../../../activity/meetings";
+import { updateCalendarSettings, useLive } from "../../../activity/activityStore";
+import { useBrowser } from "../../../store/browserStore";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 

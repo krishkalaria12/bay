@@ -1,9 +1,9 @@
-import { setLittleBayHotKey, setLittleBayMenuBarItem, type HotKeyStatus } from "@bay/shell";
+import { setLittleBayHotKey, setLittleBayMenuBarItem, type HotKeyStatus } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import type { LittleBayShortcut } from "../../store/settings";
 
-// Little Bay from any app (packages/shell LittleBayAccess.swift), as Little Arc's: a shortcut and a menu bar button,
+// Little Bay from any app (packages/desktop LittleBayAccess.swift), as Little Arc's: a shortcut and a menu bar button,
 // each opening a Little Bay ready to type with Bay in the background or not. Settings › Links turns them on.
 
 /** Arc's ⌥⌘N, as the shortcut starts when it's turned on: "n" is key code 45 (kVK_ANSI_N). */

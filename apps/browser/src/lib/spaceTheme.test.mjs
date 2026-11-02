@@ -81,7 +81,7 @@ test("a solid window over a page with a colour fills with it, in the look that r
 });
 
 test("a space's own theme shows over a page with a colour; a preset colour gives way to the page", async () => {
-  const { useBrowser } = await import("../store/browser.ts");
+  const { useBrowser } = await import("../store/browserStore.ts");
   const { themeKey } = await import("./theme.ts");
   const S = () => useBrowser.getState();
   S().hydrate({});
@@ -100,7 +100,7 @@ test("a space's own theme shows over a page with a colour; a preset colour gives
 // 1.0.0: a light page (Bay's site, #EDEEF1) turned a dark-mode window light, and a dark one (apple.com) a light-mode
 // window dark. Light or dark is the user's; the page's colour is fitted to it, keeping its hue.
 test("a page's colour never overrides the user's light or dark", async () => {
-  const { useBrowser } = await import("../store/browser.ts");
+  const { useBrowser } = await import("../store/browserStore.ts");
   const { themeKey, themeFor } = await import("./theme.ts");
   const { isLightColor } = await import("./windowTint.ts");
   const S = () => useBrowser.getState();

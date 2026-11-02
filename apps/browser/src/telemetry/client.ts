@@ -1,5 +1,5 @@
-import { engineInfo } from "@bay/nncore";
-import { launchEnvironment, readDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/shell";
+import { engineInfo } from "@bay/chromium";
+import { launchEnvironment, readDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/desktop";
 import { create } from "zustand";
 import {
   BATCH_SIZE,

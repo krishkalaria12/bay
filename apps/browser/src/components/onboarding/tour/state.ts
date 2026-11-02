@@ -1,9 +1,9 @@
-import { systemInfo } from "@bay/shell";
+import { systemInfo } from "@bay/desktop";
 import { create } from "zustand";
 import { openUrls } from "../../../lib/actions";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { resolveWindowId } from "../../../store/model";
-import { closeReleaseNotes } from "../../ntp/releaseNotes";
+import { closeReleaseNotes } from "../../newTab/releaseNotes";
 import { locateAnchor, type TourAnchor } from "./anchors";
 
 export type TourStop = {

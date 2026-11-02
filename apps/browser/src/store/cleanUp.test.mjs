@@ -2,8 +2,8 @@
 // the one on screen), each space after its own time if it has one.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
-const { cleanUpHours } = await import("./organize.ts");
+const { useBrowser } = await import("./browserStore.ts");
+const { cleanUpHours } = await import("./tabTidying.ts");
 const model = await import("./model.ts");
 
 const S = () => useBrowser.getState();

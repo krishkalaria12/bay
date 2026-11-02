@@ -1,13 +1,13 @@
-import type { PagePoint } from "@bay/nncore";
+import type { PagePoint } from "@bay/chromium";
 import type { StateCreator } from "zustand";
 import { matchingLinkRule } from "../lib/externalLinkRules";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { IDLE_LIVE, activeTabId, findLast, listIds, makeTab, pinnedFirst, pinnedPage, spaceListKey, withList } from "./model";
-import { insertionIndex } from "./openers";
-import { groupWithOpener } from "./organize";
+import { insertionIndex } from "./openerOrder";
+import { groupWithOpener } from "./tabTidying";
 import { splitOf } from "./splits";
 import { activated, apply, removeTabs } from "./tabs";
-import { mainWindowFor, mostRecentSpace } from "./small";
+import { mainWindowFor, mostRecentSpace } from "./littleBay";
 
 // Arc's Peek: a link from a pinned tab or a favourite opens over that tab's page, in a card, instead of as a tab of its
 // own. The peek's page is a store tab (a page, live state, an engine browser) that no list holds, marked `peekOf` its

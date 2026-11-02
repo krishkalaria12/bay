@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dataRoot, EndpointError, explicitDataRoot, resolveEndpoint } from "./endpoint.ts";
 import { drainOutput, installOutputRedaction } from "./redact.ts";
 import * as runner from "./runner.ts";
-import { runScriptsCommand } from "./scripts_cli.ts";
+import { runScriptsCommand } from "./scriptsCli.ts";
 import { install as installSkills, TARGETS } from "./skills.ts";
 import { VERSION } from "./version.ts";
 import { ArgumentError, numericOption, parseArguments } from "./args.ts";

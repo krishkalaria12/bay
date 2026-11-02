@@ -1,9 +1,9 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { Text, View } from "react-native";
 import { SPACE_COLORS } from "../../lib/theme";
 import type { Space } from "../../store/types";
 import { SYMBOL_PREFIX } from "../../lib/constants";
-import type { IconChoice } from "../IconGrid";
+import type { IconChoice } from "../iconPicker/IconGrid";
 
 // Arc's space icons: a set of glyphs, filled, to tell spaces apart at a glance in the switcher. [symbol, title, words]
 const SPACE_SET: [string, string, string][] = [

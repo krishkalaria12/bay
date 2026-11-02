@@ -1,6 +1,6 @@
-import type { IntroMusicCues } from "@bay/shell";
+import type { IntroMusicCues } from "@bay/desktop";
 import { APP_NAME } from "../../lib/constants";
-import { tensionSpring } from "../../lib/springs";
+import { tensionSpring } from "../../lib/springPresets";
 
 // Onboarding's constants: the intro's timeline, the steps' card, and the tool tour.
 

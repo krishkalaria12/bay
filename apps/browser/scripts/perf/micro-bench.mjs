@@ -11,10 +11,10 @@
 //   suggest-seed   omnibox keystrokes on js-bench's seed profile (seed.mjs: 5000 history entries, 200 tabs, 1000
 //                  bookmarks); `suggest-seed=<query>` types another query. js-bench `typing` is what a key costs in the app.
 
-const { useBrowser } = await import("../../src/store/browser.ts");
-const { sidebarEntries, groupEntries } = await import("../../src/components/sidebar/entries.ts");
-const { groupLabel } = await import("../../src/store/organize.ts");
-const strip = await import("../../src/components/layout/stripGroups.ts");
+const { useBrowser } = await import("../../src/store/browserStore.ts");
+const { sidebarEntries, groupEntries } = await import("../../src/components/sidebar/sidebarEntries.ts");
+const { groupLabel } = await import("../../src/store/tabTidying.ts");
+const strip = await import("../../src/components/tabStrip/tabStripGroups.ts");
 await import("../../src/test-native-stub.mjs");
 const core = await import("../../../../packages/core/src/index.ts");
 const { buildSeed } = await import("./seed.mjs");

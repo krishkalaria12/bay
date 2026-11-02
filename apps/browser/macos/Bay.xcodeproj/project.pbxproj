@@ -310,7 +310,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$PROJECT_DIR/../../../packages/nncore/scripts/stage-framework.sh\"\n";
+			shellScript = "\"$PROJECT_DIR/../../../packages/chromium/scripts/stage-framework.sh\"\n";
 		};
 		D0C71E5E2E9A4B1D00D0C001 /* Build Dock Tile Plug-in, embed NNCore */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -329,7 +329,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$PROJECT_DIR/../../../packages/shell/docktile/build.sh\" && \"$PROJECT_DIR/../../../packages/nncore/scripts/embed.sh\" && \"$PROJECT_DIR/../../../packages/shell/scripts/bundle-cli-installer.sh\"\n";
+			shellScript = "\"$PROJECT_DIR/../../../packages/desktop/docktile/build.sh\" && \"$PROJECT_DIR/../../../packages/chromium/scripts/embed.sh\" && \"$PROJECT_DIR/../../../packages/desktop/scripts/bundle-cli-installer.sh\"\n";
 		};
 		F2B782290948FD07702EBCEC /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -338,7 +338,7 @@
 			);
 			inputPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Bay-macOS/Pods-Bay-macOS-resources.sh",
-				"${PODS_ROOT}/../../../../packages/nncore/ios/page_script.js",
+				"${PODS_ROOT}/../../../../packages/chromium/ios/page_script.js",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem_privacy.bundle",

@@ -1,4 +1,4 @@
-import { hasWebKit } from "@bay/nncore";
+import { hasWebKit } from "@bay/chromium";
 import { SETTINGS, type SettingEntry } from "./definitions";
 
 export type { SettingEntry } from "./definitions";

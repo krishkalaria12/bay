@@ -3,7 +3,7 @@
 // External apps' "always allow" choices: Chrome's own per-profile pref
 // (protocol_handler.allowed_origin_protocol_pairs, {origin: {scheme: true}}),
 // which Chrome's ExternalProtocolHandler and CEF's engine
-// (packages/cef/ios/NNExternalApps.mm) both read and write.
+// (packages/cefPatches/ios/NNExternalApps.mm) both read and write.
 //
 //   nn_external_apps_allowances {} -> {allowances: [{origin, scheme,
 //       app: <name> | null, icon: <PNG data: URI> | null}]}: sorted by origin

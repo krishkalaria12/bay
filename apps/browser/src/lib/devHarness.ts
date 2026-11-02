@@ -1,13 +1,13 @@
-import * as shell from "@bay/shell";
-import { readDocument, writeDocument } from "@bay/shell";
-import { omniboxDrivers } from "../components/omnibox/devDriver";
+import * as shell from "@bay/desktop";
+import { readDocument, writeDocument } from "@bay/desktop";
+import { omniboxDrivers } from "../components/commandBar/devDriver";
 import { pagesDrivers } from "../components/pages/devDrivers";
-import { usePages } from "../components/layout/pageState";
+import { usePages } from "../components/window/pageState";
 import { openSettings } from "../components/settings/windows";
 import { useSidebarUi } from "../components/sidebar/state";
-import { useBrowser } from "../store/browser";
+import { useBrowser } from "../store/browserStore";
 import * as actions from "./actions";
-import { runCommand } from "./commands";
+import { runCommand } from "./appCommands";
 import * as favicons from "./favicons";
 import { probeStore } from "./perfProbe";
 import { useLifecycle } from "./tabLifecycle";
@@ -46,15 +46,15 @@ export function startDevHarness() {
     webviews,
     shell,
     omnibox: omniboxDrivers,
-    get bangs(): typeof import("../components/omnibox/bangs") {
-      return require("../components/omnibox/bangs");
+    get bangs(): typeof import("../components/commandBar/bangs") {
+      return require("../components/commandBar/bangs");
     },
     pages: pagesDrivers,
     pageState: usePages,
     openSettings,
     favicons,
-    get checkIn(): typeof import("./defaultBrowserCheckIn") {
-      return require("./defaultBrowserCheckIn");
+    get checkIn(): typeof import("./defaultBrowserPrompt") {
+      return require("./defaultBrowserPrompt");
     },
     get media(): typeof import("../components/media/state").useMedia {
       return require("../components/media/state").useMedia;
@@ -62,19 +62,19 @@ export function startDevHarness() {
     get permissions(): typeof import("../components/site/permissions") {
       return require("../components/site/permissions");
     },
-    get translate(): typeof import("../components/site/translate") {
-      return require("../components/site/translate");
+    get translate(): typeof import("../components/site/translateState") {
+      return require("../components/site/translateState");
     },
-    get toasts(): typeof import("../components/layout/splitActions").useToasts {
-      return require("../components/layout/splitActions").useToasts;
+    get toasts(): typeof import("../components/split/splitActions").useToasts {
+      return require("../components/split/splitActions").useToasts;
     },
     get extensions(): typeof import("../components/extensions/state") {
       return require("../components/extensions/state");
     },
     // The ⌃Tab switcher: a test ends it as the user does (Esc cancels, releasing ⌃ commits), which a hidden instance
     // can't send.
-    get switcher(): typeof import("../components/sidebar/switcher") {
-      return require("../components/sidebar/switcher");
+    get switcher(): typeof import("../components/sidebar/spaceSwitcher") {
+      return require("../components/sidebar/spaceSwitcher");
     },
     // The sidebar's actions: menus a test can't click open what these do (the icon picker, renaming).
     get sidebar(): typeof import("../components/sidebar/actions") {
@@ -89,27 +89,27 @@ export function startDevHarness() {
       return require("../components/onboarding/state");
     },
     // The sidebar's Clear (and its rows breaking up), which a test runs without the click.
-    get clear(): typeof import("../components/sidebar/clear") {
-      return require("../components/sidebar/clear");
+    get clear(): typeof import("../components/sidebar/clearTabs") {
+      return require("../components/sidebar/clearTabs");
     },
     // Split View's actions: the sidebar's + › Split View, its edge cases included.
-    get splits(): typeof import("../components/layout/splitActions") {
-      return require("../components/layout/splitActions");
+    get splits(): typeof import("../components/split/splitActions") {
+      return require("../components/split/splitActions");
     },
     // The sidebar's menus, which a test opens to see them (a hidden instance can't right-click).
-    get menus(): typeof import("../components/sidebar/menus") {
-      return require("../components/sidebar/menus");
+    get menus(): typeof import("../components/sidebar/contextMenus") {
+      return require("../components/sidebar/contextMenus");
     },
     // Nested-folder acceptance tests inspect the same tree and geometry the sidebar renders.
     get folders(): {
       model: typeof import("../store/folders");
-      entries: typeof import("../components/sidebar/entries");
-      geometry: typeof import("../components/sidebar/geometry");
+      entries: typeof import("../components/sidebar/sidebarEntries");
+      geometry: typeof import("../components/sidebar/rowGeometry");
     } {
       return {
         model: require("../store/folders"),
-        entries: require("../components/sidebar/entries"),
-        geometry: require("../components/sidebar/geometry"),
+        entries: require("../components/sidebar/sidebarEntries"),
+        geometry: require("../components/sidebar/rowGeometry"),
       };
     },
     // The update waiting for the user: a test shows the sidebar's Update row without a feed.
@@ -128,8 +128,8 @@ export function startDevHarness() {
     get themeEditor(): typeof import("../components/spaces/ThemeEditor") {
       return require("../components/spaces/ThemeEditor");
     },
-    get toolbarAutoHide(): typeof import("../components/layout/toolbarAutoHide") {
-      return require("../components/layout/toolbarAutoHide");
+    get toolbarAutoHide(): typeof import("../components/toolbar/autoHide") {
+      return require("../components/toolbar/autoHide");
     },
     // Developer Mode: a test serving its pages from a local server turns it off for that server, or its offer covers
     // the pages (and takes the keyboard).
@@ -161,22 +161,22 @@ export function startDevHarness() {
     get capture(): typeof import("../components/capture/state") {
       return require("../components/capture/state");
     },
-    // Arc's small habits (scripts/arc-gaps-test.mjs): unread counts, Little Bay from any app and put away, ⌃⌘J.
+    // Arc's small habits (scripts/interaction-habits-test.mjs): unread counts, Little Bay from any app and put away, ⌃⌘J.
     get arcGaps(): {
       unread: typeof import("./unreadBadges");
       littleBayAccess: typeof import("../components/littleBay/access");
       putAway: typeof import("../components/littleBay/putAway");
-      alerts: typeof import("../live/alerts");
-      calendar: typeof import("../live/calendar").useCalendar;
-      menuState: typeof import("./native").menuState;
+      alerts: typeof import("../activity/meetingAlerts");
+      calendar: typeof import("../activity/calendar").useCalendar;
+      menuState: typeof import("./shellBridge").menuState;
     } {
       return {
         unread: require("./unreadBadges"),
         littleBayAccess: require("../components/littleBay/access"),
         putAway: require("../components/littleBay/putAway"),
-        alerts: require("../live/alerts"),
-        calendar: require("../live/calendar").useCalendar,
-        menuState: require("./native").menuState,
+        alerts: require("../activity/meetingAlerts"),
+        calendar: require("../activity/calendar").useCalendar,
+        menuState: require("./shellBridge").menuState,
       };
     },
     // Hovering moves nothing but a HoverSlot's contents (scripts/hover-shift-test.mjs).
@@ -184,8 +184,8 @@ export function startDevHarness() {
       return require("./hoverShift");
     },
     // Live folders without a service: a test makes a folder and hands it items.
-    get live(): { store: typeof import("../live/store"); engine: typeof import("../live/engine") } {
-      return { store: require("../live/store"), engine: require("../live/engine") };
+    get live(): { store: typeof import("../activity/activityStore"); engine: typeof import("../activity/activityEngine") } {
+      return { store: require("../activity/activityStore"), engine: require("../activity/activityEngine") };
     },
   };
   (globalThis as { nn?: typeof nn }).nn = nn;

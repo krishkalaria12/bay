@@ -1,28 +1,28 @@
-import { ActivitySpinner, ContextMenuArea, FadeLabel, MouseArea, Surface, Symbol } from "@bay/shell";
+import { ActivitySpinner, ContextMenuArea, FadeLabel, MouseArea, Surface, Symbol } from "@bay/desktop";
 import { memo, useEffect, useRef, useState } from "react";
 import { Pressable, TextInput, View, type GestureResponderEvent } from "react-native";
 import Animated from "react-native-reanimated";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { splitRowTabs } from "../../store/splits";
 import type { Tab } from "../../store/types";
 import { useIsActiveTab, usePageSpaceId, useTab, useWindowId } from "../../store/hooks";
-import { HoverSlot } from "../HoverSlot";
+import { HoverSlot } from "../ui/HoverSlot";
 import { ActiveHighlight } from "./ActiveHighlight";
-import { IconButton } from "../primitives";
+import { IconButton } from "../ui/primitives";
 import { clickTab, commitRename, endRename, startRename, tabTitle } from "./actions";
 import { useDragItem } from "./dnd";
 import { dismissHover, useRowHover } from "./hover";
-import { openTabMenu } from "./menus";
+import { openTabMenu } from "./contextMenus";
 import { SidebarKeyboardRowView } from "./keyboardFocus";
 import { useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 import { isEscapeKey } from "../../lib/escapeKey";
-import { isDeveloperTab } from "../developer/sites";
+import { isDeveloperTab } from "../developer/localDevSites";
 import { DEVELOPER_YELLOW } from "../developer/constants";
 
 export const clickMods = (e: GestureResponderEvent) => {

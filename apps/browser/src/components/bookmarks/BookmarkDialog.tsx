@@ -1,15 +1,15 @@
-import { prompt, Surface } from "@bay/shell";
+import { prompt, Surface } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkDialog, type BookmarkDialogState } from "./actions";
 import { FolderTree } from "./FolderTree";
-import { useSidebarFieldShown, useSidebarOnRight } from "../layout/windowLayout";
-import { SIDEBAR_FIELD } from "../layout/constants";
+import { useSidebarFieldShown, useSidebarOnRight } from "../window/layout";
+import { SIDEBAR_FIELD } from "../window/constants";
 import { useSidebarMetrics, useSidebarWidth } from "../sidebar/tokens";
 
 export function BookmarkDialog() {

@@ -3,11 +3,11 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { switchToTab } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useTab } from "../../store/hooks";
-import { Popover, PromptButton } from "../layout/controls";
-import { useSidebarOnRight } from "../layout/windowLayout";
-import { Favicon, IconButton, useHover } from "../primitives";
+import { Popover, PromptButton } from "../toolbar/buttons";
+import { useSidebarOnRight } from "../window/layout";
+import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { hostOf, isPlaying, mediaCommand, pauseAllMedia, toggleMediaTabMute, useMedia, useSession } from "./state";
 
 export function useWindowMediaTabs(windowId: string): string[] {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const { folderTabIds, folderDepth, folderRootId, canMoveFolder, childFolderIds } = await import("./folders.ts");
 const { listIds } = await import("./model.ts");
 const S = () => useBrowser.getState();

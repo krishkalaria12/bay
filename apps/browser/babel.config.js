@@ -1,5 +1,5 @@
 // The React Compiler's output calls the global Symbol (`Symbol.for("react.memo_cache_sentinel")`), but most of our
-// files import @bay/shell's `Symbol` icon, which shadows it there: `Symbol.for` was undefined and the app crashed on
+// files import @bay/desktop's `Symbol` icon, which shadows it there: `Symbol.for` was undefined and the app crashed on
 // its first render. This points those calls back at the global.
 function compilerGlobalSymbol({ types: t }) {
   return {

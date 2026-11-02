@@ -76,7 +76,7 @@ try {
         ? {status:304,headers:{get:()=>null}}
         : {ok:true,json:()=>Promise.resolve(["",[]])});
     };
-    const id=[...globalThis.__r.getModules()].find(([,m])=>m.verboseName?.endsWith("omnibox/bangPlatform.ts"))[0];
+    const id=[...globalThis.__r.getModules()].find(([,m])=>m.verboseName?.endsWith("commandBar/bangPlatform.ts"))[0];
     globalThis.bangTestPlatform=globalThis.__r(id);
     globalThis.bangTestLoad=globalThis.bangTestPlatform.loadBundledBangs;return true;`);
 

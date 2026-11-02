@@ -1,12 +1,12 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useTab } from "../../store/hooks";
-import { Popover, PromptButton, ToolbarButton } from "../layout/controls";
-import { setPopover, usePages } from "../layout/pageState";
-import type { ToolbarPalette } from "../layout/toolbarColors";
-import { useHover } from "../primitives";
+import { Popover, PromptButton, ToolbarButton } from "../toolbar/buttons";
+import { setPopover, usePages } from "../window/pageState";
+import type { ToolbarPalette } from "../toolbar/colors";
+import { useHover } from "../ui/primitives";
 
 // Chrome's zoom icon: in the address field whenever the page isn't at 100%, opening − / + / Reset.
 export function ZoomIndicator({ tabId, zoom, palette, onFocus }: { tabId: string; zoom: number; palette: ToolbarPalette; onFocus: () => void }) {

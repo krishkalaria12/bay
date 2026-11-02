@@ -1,13 +1,13 @@
-import { MarkupCanvas, MouseArea, Surface, Symbol, type MarkupCanvasHandle, type MarkupState, type MarkupTool } from "@bay/shell";
+import { MarkupCanvas, MouseArea, Surface, Symbol, type MarkupCanvasHandle, type MarkupState, type MarkupTool } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
-import { bouncySpring } from "../../lib/springs";
+import { bouncySpring } from "../../lib/springPresets";
 import { hex, useTheme } from "../../lib/theme";
-import { PromptButton } from "../layout/controls";
-import { IconButton, useHover } from "../primitives";
+import { PromptButton } from "../toolbar/buttons";
+import { IconButton, useHover } from "../ui/primitives";
 import { CAPTURE_BAR_HEIGHT, MARKUP_COLORS, MARKUP_WIDTHS } from "./constants";
-import { placeCapture, type Box } from "./geometry";
+import { placeCapture, type Box } from "./regionGeometry";
 import {
   applyMarkup,
   captureToLibrary,

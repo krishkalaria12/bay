@@ -1,4 +1,4 @@
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId, viewTabIds } from "../../store/model";
 import type { HistoryEntry } from "../../store/types";
 

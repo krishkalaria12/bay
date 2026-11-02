@@ -17,7 +17,7 @@
 //       (Chrome's history entry; the file stays).
 //   Each control replies {error: "no such download"} for an unknown id.
 //
-// Download, the JS `Download` (packages/nncore/src/module.ts) without profile:
+// Download, the JS `Download` (packages/chromium/src/module.ts) without profile:
 //   {id, url, suggestedFilename, filename, path, referrer, tabUrl, state:
 //    "downloading"|"finished"|"failed"|"cancelled", paused, received, total
 //    (-1 when unknown), speed (bytes/s), mimeType, dangerous, error (Chrome's

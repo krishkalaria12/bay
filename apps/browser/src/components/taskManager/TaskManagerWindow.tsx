@@ -1,15 +1,15 @@
-import { killTask, listTasks, type EngineTask } from "@bay/nncore";
-import { Symbol, WindowDragRegion } from "@bay/shell";
+import { killTask, listTasks, type EngineTask } from "@bay/chromium";
+import { Symbol, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { switchToTab } from "../../lib/actions";
 import { APP_NAME } from "../../lib/constants";
 import { APP_ICON } from "../../lib/assets";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import type { Tab } from "../../store/types";
-import { usePages } from "../layout/pageState";
-import { Favicon, useHover } from "../primitives";
+import { usePages } from "../window/pageState";
+import { Favicon, useHover } from "../ui/primitives";
 import { Button, useFormColors } from "../settings/controls";
 import { TASK_POLL_MS, TASK_ROW_HEIGHT, TASK_TOOLBAR_HEIGHT } from "./constants";
 

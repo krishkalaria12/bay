@@ -20,15 +20,15 @@ import {
   type SiteSettings,
   type SiteSettingType,
   type SiteSettingValue,
-} from "@bay/nncore";
-import { confirm } from "@bay/shell";
+} from "@bay/chromium";
+import { confirm } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Image, ScrollView, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
-import { Favicon } from "../../primitives";
+import { Favicon } from "../../ui/primitives";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Sheet, Toggle } from "../controls";
 import { SETTINGS, type SettingId } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";

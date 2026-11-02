@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks that a Chromium Framework was built from this checkout's own Chromium code, NNCore's (engine/nncore) and the
+# Checks that a Chromium Framework was built from this checkout's own Chromium code, NNCore's (engine/chromiumLayer) and the
 # services it calls (engine/chromium): each apply.sh puts its copy in the tree and gives a changed file a new mtime, so
 # a framework older than the tree's copy is stale. (The patches in engine/patches aren't checked here: they change only
 # at a rebuild.)

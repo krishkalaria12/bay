@@ -1,10 +1,10 @@
 import { engineHost, type SearchEngine } from "@bay/core";
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { searchEngines, type Settings } from "../../store/settings";
-import { Favicon } from "../primitives";
+import { Favicon } from "../ui/primitives";
 import { nextStep } from "./state";
 import { QUARTER_TILE, StepLayout } from "./steps";
 import { CheckRow, Reveal, SectionLabel, SelectTile, StepActions, StepTitle, useOnboardingColors } from "./ui";

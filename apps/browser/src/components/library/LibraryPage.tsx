@@ -9,20 +9,20 @@ import {
   shareCaptureImage,
   showMenu,
   Symbol,
-} from "@bay/shell";
+} from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
 import { LegendList } from "@legendapp/list/react-native";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { isIncognitoSpace, spaceTabIds } from "../../store/model";
 import type { Tab, TabSnapshot } from "../../store/types";
 import { openUrl } from "../bookmarks/actions";
-import { showToast } from "../layout/splitActions";
+import { showToast } from "../split/splitActions";
 import { DownloadsPage } from "../pages/DownloadsPage";
 import { EmptyState, hostLabel, matchesQuery } from "../pages/PageLayout";
-import { Favicon, IconButton, useHover } from "../primitives";
+import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { Button, SearchField, useFormColors } from "../settings/controls";
 import { tabTitle } from "../sidebar/actions";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
@@ -30,7 +30,7 @@ import { chooseEasel, easelMenu, libraryWindow, newEasel, openEasel } from "./ac
 import type { EaselDocument, LibraryMedia } from "./model";
 import { removeLibraryMedia, saveLibraryMedia, startLibrary, useLibrary } from "./state";
 import type { Boost } from "../../lib/boosts";
-import { Toggle } from "../layout/controls";
+import { Toggle } from "../toolbar/buttons";
 import { exportBoostFile, openBoostEditor, removeBoost } from "../boosts/editor";
 import { setBoostsOn, startBoosts, updateBoost, useBoosts } from "../boosts/state";
 

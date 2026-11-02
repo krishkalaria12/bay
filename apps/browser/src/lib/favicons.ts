@@ -1,8 +1,8 @@
-import { faviconsFor, fetchFavicon, onHistoryChanged, removeLegacyFavicons } from "@bay/nncore";
-import { iconTheme, readDocument, removeDocument, type IconTheme } from "@bay/shell";
+import { faviconsFor, fetchFavicon, onHistoryChanged, removeLegacyFavicons } from "@bay/chromium";
+import { iconTheme, readDocument, removeDocument, type IconTheme } from "@bay/desktop";
 import { useEffect } from "react";
 import { create } from "zustand";
-import { batchStoreUpdates, useBrowser, type BrowserState } from "../store/browser";
+import { batchStoreUpdates, useBrowser, type BrowserState } from "../store/browserStore";
 import { engineProfile, isIncognitoSpace } from "../store/model";
 import { DEFAULT_SPACE_ID } from "../store/constants";
 import { webviews } from "./webviews";

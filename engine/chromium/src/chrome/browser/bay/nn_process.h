@@ -13,7 +13,7 @@
 //   nn_components_list {} -> {components: [EngineComponent]}: the component
 //       updater's components (Widevine is "oimompecagnajdejgnnjijobebaeigek").
 //
-// EngineTask, the JS type (packages/cef/src/module.ts) with tab ids for
+// EngineTask, the JS type (packages/cefPatches/src/module.ts) with tab ids for
 // browser ids: {id, type, title, killable, cpu (% of one core), processors,
 // memory, gpuMemory (bytes), tabIds: [chrome.tabs id…], browserIds: []}; the
 // app maps tabIds to its browser ids.

@@ -17,11 +17,11 @@
     "test": "node --no-warnings --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\""
   },
   "dependencies": {
+    "@bay/chromium": "workspace:*",
     "@bay/core": "workspace:*",
+    "@bay/desktop": "workspace:*",
     "@bay/import": "workspace:*",
-    "@bay/nncore": "workspace:*",
     "@bay/shaders": "workspace:*",
-    "@bay/shell": "workspace:*",
     "@bay/sync": "workspace:*",
     "@legendapp/list": "^3.6.0",
     "expo": "~54.0.37",

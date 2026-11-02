@@ -4,7 +4,7 @@ import { parseCurrency, type CurrencyAnswer } from "./currency.ts";
 import { findEmoji } from "./emoji.ts";
 import { BUILT_IN_ENGINES, searchUrl, type SearchEngine } from "./engines.ts";
 import { matchActions, type ActionCandidate } from "./fuzzy.ts";
-import { fixupUrl, hostOf, urlForDisplay } from "./omnibox.ts";
+import { fixupUrl, hostOf, urlForDisplay } from "./input.ts";
 import { matchQuickCreate } from "./quickCreate.ts";
 import { scopedSearchUrl, type SearchScope } from "./siteSearch.ts";
 

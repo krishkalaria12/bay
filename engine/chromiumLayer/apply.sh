@@ -1,0 +1,1374 @@
+#!/usr/bin/env bash
+# Puts NNCore into the Chromium tree: copies src/bay/ to //bay and adds its hooks:
+# a dep of the macOS //chrome:chrome_dll on //bay/core (Chrome's framework then links
+# our layer), ChromeMain making NNCore's main delegate, Browser asking NNCore for the window of a
+# Browser Chrome makes itself, HistoryTabHelper asking NNCore which tabs are history,
+# declarativeNetRequest telling it which rules matched a tab's requests and when an extension's
+# rulesets are in force, fewer idle wakeups (CPU sampling, the disk check, Bluetooth polling and the
+# phone scan for passkeys), and four
+# CHECKs made tolerant of Browsers without a BrowserView (CEF's and Chrome's behaviour unchanged).
+# Idempotent. Never touches
+# args.gn; the next autoninja re-runs gn by itself.
+#
+#   engine/chromiumLayer/apply.sh            copy + hook
+#   engine/chromiumLayer/apply.sh --check    exit 1 if the tree differs from the repo
+#
+# Build (holding the chromium lock):
+#   scripts/agent/locked chromium -- autoninja -C out/Release_GN_arm64 chrome_framework
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+src=${CHROMIUM_SRC:-$HOME/chromium-build/chromium_git/chromium/src}
+
+if [[ "${1:-}" == --check ]]; then
+  diff -r "$here/src/bay" "$src/bay" >/dev/null &&
+    grep -q 'bay_alive' "$src/chrome/browser/ui/autofill/autofill_popup_controller_impl.cc" &&
+    grep -q 'g_bay_opacity_from_default_color' "$src/content/browser/renderer_host/render_widget_host_view_base.cc" &&
+    grep -q '"//bay/core"' "$src/chrome/BUILD.gn" &&
+    grep -q 'g_bay_browser_window_factory(this)' "$src/chrome/browser/ui/browser.cc" &&
+    grep -q 'Bay: NNCore' "$src/chrome/browser/ui/sad_tab_controller.cc" &&
+    grep -q 'g_bay_external_protocol_dialog(' "$src/chrome/browser/external_protocol/external_protocol_handler.cc" &&
+    grep -q 'nncore::NNMainDelegate' "$src/chrome/app/chrome_main.cc" &&
+    grep -q 'Bay: NNCore' "$src/chrome/browser/ui/browser_window/internal/browser_window_features.cc" &&
+    grep -q 'Bay: NNCore' "$src/chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc" &&
+    grep -q 'Bay: NNCore' "$src/chrome/browser/ui/toasts/toast_controller.cc" &&
+    grep -q 'Bay: NNCore shows no toast' "$src/chrome/browser/ui/toasts/toast_controller.cc" &&
+    grep -q 'g_bay_history_eligible(' "$src/chrome/browser/history/history_tab_helper.cc" &&
+    grep -q 'g_bay_dnr_rule_matched(' "$src/extensions/browser/api/declarative_net_request/action_tracker.cc" &&
+    grep -q 'g_bay_dnr_rulesets_in_force(' "$src/extensions/browser/api/declarative_net_request/rules_monitor_service.cc" &&
+    grep -q 'Bay: NNCore. A component extension' "$src/extensions/browser/api/declarative_net_request/rules_monitor_service.cc" &&
+    grep -q 'Bay: NNCore' "$src/chrome/browser/extensions/browser_window_util.cc" &&
+    grep -q 'g_bay_extension_installed(' "$src/chrome/browser/ui/extensions/extension_install_ui_desktop.cc" &&
+    grep -q 'g_bay_prompts_without_tab' "$src/chrome/browser/download/download_crx_util.cc" &&
+    grep -q 'g_bay_tab_shown_by_host' "$src/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_strip_observer_helper.cc" &&
+    grep -q 'g_bay_permission_tab_shown' "$src/components/permissions/permission_request_manager.cc" &&
+    grep -q 'g_bay_file_system_restore_prompt' "$src/chrome/browser/ui/views/file_system_access/file_system_access_restore_permission_bubble_view.cc" &&
+    grep -q 'g_bay_tab_shown_by_host' "$src/chrome/browser/ui/tabs/tab_dialog_manager.cc" &&
+    grep -q 'g_bay_skip_cpu_health_sampling' "$src/chrome/browser/performance_manager/user_tuning/cpu_health_tracker.cc" &&
+    grep -q 'g_bay_disk_space_check_seconds' "$src/components/memory_pressure/system_memory_pressure_evaluator_mac.cc" &&
+    grep -q 'SetHybridUiShown' "$src/device/fido/cable/v2_discovery.h" &&
+    grep -q 'g_bay_hybrid_scan_on_demand' "$src/device/fido/cable/v2_discovery.cc" &&
+    grep -q 'BaySetHybridUiShown' "$src/chrome/browser/webauthn/authenticator_request_dialog_model.cc" &&
+    grep -q 'OnLowEnergyCentralManagerStateUpdated' "$src/device/bluetooth/bluetooth_low_energy_adapter_apple.h" &&
+    grep -q 'OnLowEnergyCentralManagerStateUpdated' "$src/device/bluetooth/bluetooth_low_energy_adapter_apple.mm" &&
+    grep -q 'PollAdapterOnDemand' "$src/device/bluetooth/bluetooth_adapter_mac.h" &&
+    grep -q 'g_bay_bluetooth_poll_on_demand' "$src/device/bluetooth/bluetooth_adapter_mac.mm"
+  exit
+fi
+
+mkdir -p "$src/bay"
+# No -t: a changed file gets a new mtime, so ninja always sees it (a restored older copy too).
+rsync -r --delete --checksum "$here/src/bay/" "$src/bay/"
+
+python3 - "$src/chrome/BUILD.gn" <<'PY'
+import re, sys
+path = sys.argv[1]
+s = open(path).read()
+if '"//bay/core"' in s:
+    sys.exit(0)
+# The macOS chrome_dll (the source_set the framework links): its deps end with cld_3.
+mac = s.index('target(_dll_target_type, "chrome_dll")')
+anchor = '      "//third_party/cld_3/src/src:cld_3",\n'
+at = s.index(anchor, mac) + len(anchor)
+hook = '      "//bay/core",  # Bay: NNCore (engine/chromiumLayer)\n'
+open(path, "w").write(s[:at] + hook + s[at:])
+print("hooked //chrome:chrome_dll")
+PY
+
+# ChromeMain (chrome/app/chrome_main.cc, compiled only into Chrome's framework, never by
+# CEF) makes NNCore's delegate, a ChromeMainDelegate, for every process.
+python3 - "$src/chrome/app/chrome_main.cc" <<'PY'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "nncore::NNMainDelegate" in s:
+    sys.exit(0)
+old = """#else  // BUILDFLAG(IS_WIN)
+  ChromeMainDelegate chrome_main_delegate(
+      {.exe_entry_point_ticks = base::TimeTicks::Now()});"""
+new = """#else  // BUILDFLAG(IS_WIN)
+  // Bay: NNCore's delegate (engine/chromiumLayer), a ChromeMainDelegate.
+  nncore::NNMainDelegate chrome_main_delegate(
+      {.exe_entry_point_ticks = base::TimeTicks::Now()});"""
+inc_old = '#if BUILDFLAG(IS_MAC)\n#include "chrome/app/chrome_main_mac.h"\n'
+inc_new = inc_old + '#include "bay/core/nn_main_delegate.h"  // nogncheck\n'
+assert old in s and inc_old in s
+s = s.replace(old, new).replace(inc_old, inc_new)
+open(path, "w").write(s)
+print("hooked ChromeMain")
+PY
+
+# Two CEF-added functions in Chrome's BrowserWindowFeatures CHECK that every Browser has a
+# BrowserView; ours don't. Without one they now do nothing (CEF's Browsers always have one,
+# so CEF behaves as before).
+python3 - "$src/chrome/browser/ui/browser_window/internal/browser_window_features.cc" <<'PY'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "Bay: NNCore" in s:
+    sys.exit(0)
+old1 = """void BrowserWindowFeatures::InitPostTabModelConstruction(
+    BrowserWindowInterface* interface) {
+  auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
+  CHECK(browser_view);
+"""
+new1 = """void BrowserWindowFeatures::InitPostTabModelConstruction(
+    BrowserWindowInterface* interface) {
+  auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
+  // Bay: NNCore's Browsers have no BrowserView (engine/chromiumLayer).
+  if (!browser_view) {
+    return;
+  }
+"""
+old2 = """  auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
+  CHECK(browser_view);
+
+  if (auto cef_delegate = browser_view->browser()->cef_delegate()) {
+    cef_delegate->OnWebContentsCreated(target_contents);
+  }"""
+new2 = """  // Bay: NNCore's Browsers have no BrowserView (engine/chromiumLayer).
+  if (auto cef_delegate = interface->cef_delegate()) {
+    cef_delegate->OnWebContentsCreated(target_contents);
+  }"""
+assert old1 in s and old2 in s
+s = s.replace(old1, new1).replace(old2, new2)
+open(path, "w").write(s)
+print("hooked BrowserWindowFeatures")
+PY
+
+# Reading mode's side panel controller CHECKs that only tests have a Browser without a side
+# panel UI. A viewless Browser has none (until NNCore implements SidePanelUI, as Dia does).
+python3 - "$src/chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc" <<'PY'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "Bay: NNCore" in s:
+    sys.exit(0)
+old = """    if (!webui_browser::IsWebUIBrowserEnabled()) {
+      CHECK_IS_TEST();
+    }"""
+new = """    // Bay: NNCore's Browsers have no BrowserView, so no side panel UI.
+    // (Every Browser has a delegate under NNCore; CEF's always have a side panel.)
+    if (!webui_browser::IsWebUIBrowserEnabled() &&
+        !browser_window_interface->cef_delegate()) {
+      CHECK_IS_TEST();
+    }"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+print("hooked ReadAnythingSidePanelController")
+PY
+
+# Chrome's toasts ("Image copied", "Link copied") anchor to a BrowserView, and without an anchor
+# ToastController CHECKs that it's a test: right-click > Copy Image aborted the app. A viewless
+# Browser shows none.
+python3 - "$src/chrome/browser/ui/toasts/toast_controller.cc" <<'PY'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "Bay: NNCore" in s:
+    sys.exit(0)
+old = """    if (!webui_browser::IsWebUIBrowserEnabled()) {
+      CHECK_IS_TEST();
+    }"""
+new = """    // Bay: NNCore's Browsers have no BrowserView to anchor a toast to.
+    // (Every Browser has a delegate under NNCore; CEF's always have a view.)
+    if (!webui_browser::IsWebUIBrowserEnabled() &&
+        !(browser_window_interface_ &&
+          browser_window_interface_->cef_delegate())) {
+      CHECK_IS_TEST();
+    }"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+print("hooked ToastController")
+PY
+
+# And a viewless Browser turns every toast down up front: ShowToast marks the toast as showing
+# and starts its timer before CreateToast finds no anchor, and with no widget to close nothing
+# ever cleared it, so every later toast queued behind it forever.
+python3 - "$src/chrome/browser/ui/toasts/toast_controller.cc" <<'PY'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "Bay: NNCore shows no toast" in s:
+    sys.exit(0)
+old = """bool ToastController::MaybeShowToast(ToastParams params) {
+  if (!CanShowToast(params.toast_id)) {"""
+new = """bool ToastController::MaybeShowToast(ToastParams params) {
+  // Bay: NNCore shows no toast without an anchor, before any state is set.
+  if (browser_window_interface_ && browser_window_interface_->cef_delegate()) {
+    const ToastSpecification* spec =
+        toast_registry_->GetToastSpecification(params.toast_id);
+    if (!spec || !GetAnchorView(spec->is_global_scope())) {
+      RecordToastFailedToShow(params.toast_id);
+      return false;
+    }
+  }
+  if (!CanShowToast(params.toast_id)) {"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+print("hooked ToastController::MaybeShowToast")
+PY
+
+# A Browser Chrome makes itself (chrome.windows.create, an incognito window, undocked DevTools,
+# document Picture in Picture) asks NNCore for its window before Chrome builds a BrowserView:
+# NNCore may host it in one of the app's windows. The factory is only ever set by NNCore, so
+# CEF (which compiles this file too) behaves as before.
+python3 - "$src/chrome/browser/ui/browser.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_browser_window_factory" in s:
+    sys.exit(0)
+old_ctor = "Browser::Browser(BrowserWindowCreateParams params)\n"
+decl = ("// Bay: NNCore (engine/chromiumLayer) supplies the window of a Browser it hosts.\n"
+        "BrowserWindow* (*g_bay_browser_window_factory)(Browser*) = nullptr;\n\n")
+old = """  features_->Init(this);
+
+  window_ =
+      custom_window
+          ? std::unique_ptr<BrowserWindow, BrowserWindowDeleter>(custom_window)
+          : BrowserWindow::CreateBrowserWindow(this, user_gesture,
+                                               in_tab_dragging);
+"""
+new = """  features_->Init(this);
+
+  // Bay: NNCore may host a Browser Chrome makes itself.
+  BrowserWindow* const hosted_window =
+      !custom_window && g_bay_browser_window_factory
+          ? g_bay_browser_window_factory(this)
+          : nullptr;
+  window_ =
+      custom_window || hosted_window
+          ? std::unique_ptr<BrowserWindow, BrowserWindowDeleter>(
+                custom_window ? custom_window : hosted_window)
+          : BrowserWindow::CreateBrowserWindow(this, user_gesture,
+                                               in_tab_dragging);
+"""
+assert s.count(old_ctor) == 1 and s.count(old) == 1
+s = s.replace(old_ctor, decl + old_ctor).replace(old, new)
+open(path, "w").write(s)
+print("hooked Browser window creation")
+PY2
+
+# A renderer crash shows Chrome's sad tab in the tab's ContentsWebView, found through the
+# Browser's BrowserView; NNCore's Browsers have none (the host shows its own, from
+# tab:rendererGone:code:). Without one the sad tab stays unattached, as in unit tests.
+python3 - "$src/chrome/browser/ui/sad_tab_controller.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "Bay: NNCore" in s:
+    sys.exit(0)
+old = """  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  DCHECK(browser_view);
+"""
+new = """  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  // Bay: NNCore's Browsers have no BrowserView (engine/chromiumLayer).
+  if (!browser_view) {
+    return nullptr;
+  }
+"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+print("hooked SadTabController")
+PY2
+
+# Chrome's autofill dropdown tells NNCore each time it shows, whoever filled it: addresses and
+# entries (BrowserAutofillManager), saved passwords (PasswordAutofillManager, the manual
+# fallback), so the host hears of all of them (tab:didShowAutofillSuggestions:); also when its
+# search bar couldn't take focus in an app that isn't active (Chrome then doesn't count it
+# shown, though it is on screen). Only NNCore sets the hook, so CEF behaves as before.
+python3 - "$src/chrome/browser/ui/autofill/autofill_popup_controller_impl.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "bay_alive" in s:
+    sys.exit(0)
+old_fn = "void AutofillPopupControllerImpl::Show(\n"
+decl = ("// Bay: NNCore (engine/chromiumLayer) hears of each dropdown shown.\n"
+        "void (*g_bay_autofill_suggestions_shown)(\n"
+        "    content::WebContents* web_contents,\n"
+        "    base::span<const Suggestion> suggestions) = nullptr;\n\n")
+old = """  delegate_->OnSuggestionsShown(
+      non_filtered_suggestions_,
+"""
+new = """  // Bay: NNCore
+  if (g_bay_autofill_suggestions_shown && IsRootPopup() && web_contents_) {
+    g_bay_autofill_suggestions_shown(web_contents_.get(),
+                                           non_filtered_suggestions_);
+  }
+""" + old
+# A dropdown with a search bar (the saved passwords) counts as shown only once its window
+# takes focus, which it can't in an app that isn't active: on screen all the same.
+old2 = """    if (!view_->Show(autoselect_first_suggestion)) {
+      return;
+    }
+"""
+new2 = """    auto bay_alive = GetWeakPtr();
+    if (!view_->Show(autoselect_first_suggestion)) {
+      // Bay: NNCore hears of a dropdown on screen whose search bar couldn't
+      // take focus (an app that isn't active), which Chrome doesn't count as shown.
+      if (bay_alive && view_ && g_bay_autofill_suggestions_shown &&
+          IsRootPopup() && web_contents_) {
+        g_bay_autofill_suggestions_shown(web_contents_.get(),
+                                               non_filtered_suggestions_);
+      }
+      return;
+    }
+"""
+if "g_bay_autofill_suggestions_shown" not in s:
+    assert s.count(old_fn) == 1 and s.count(old) == 1
+    s = s.replace(old_fn, decl + old_fn).replace(old, new)
+assert s.count(old2) == 1
+s = s.replace(old2, new2)
+open(path, "w").write(s)
+print("hooked AutofillPopupControllerImpl")
+PY2
+
+# A new document's view takes over the last page's background (CopyBackgroundColorIfPresentFrom)
+# and, when that background isn't opaque, tells the renderer to paint the page on a transparent
+# base: with NNCore's translucent page background (the host's pageBackgroundColor), every
+# navigation that swapped views after the last page reported its background lost it. With the
+# hook set, the opacity follows the colours the embedder set, as SetBackgroundColor's does.
+# Only NNCore sets the hook, so CEF behaves as before.
+python3 - "$src/content/browser/renderer_host/render_widget_host_view_base.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_opacity_from_default_color" in s:
+    sys.exit(0)
+old_fn = "void RenderWidgetHostViewBase::CopyBackgroundColorIfPresentFrom(\n"
+decl = ("// Bay: NNCore (engine/chromiumLayer) has a translucent page background.\n"
+        "bool g_bay_opacity_from_default_color = false;\n\n")
+old = """  bool was_opaque = IsBackgroundColorOpaque();
+  content_background_color_ = other_base.content_background_color_;
+  default_background_color_ = other_base.default_background_color_;
+  UpdateBackgroundColor();
+  bool opaque = IsBackgroundColorOpaque();
+"""
+new = """  bool was_opaque = IsBackgroundColorOpaque();
+  // Bay: NNCore
+  const auto bay_opaque = [this] {
+    return !default_background_color_ ||
+           SkColorGetA(*default_background_color_) == SK_AlphaOPAQUE;
+  };
+  if (g_bay_opacity_from_default_color) {
+    was_opaque = bay_opaque();
+  }
+  content_background_color_ = other_base.content_background_color_;
+  default_background_color_ = other_base.default_background_color_;
+  UpdateBackgroundColor();
+  bool opaque = g_bay_opacity_from_default_color ? bay_opaque()
+                                                       : IsBackgroundColorOpaque();
+"""
+assert s.count(old_fn) == 1 and s.count(old) == 1
+s = s.replace(old_fn, decl + old_fn).replace(old, new)
+open(path, "w").write(s)
+print("hooked RenderWidgetHostViewBase")
+PY2
+
+# Chrome's "Open <app>?" dialog for a link to another app (mailto: aside, which Chrome opens
+# unasked) asks NNCore first, before the Mac's "no app for this scheme" check: for the host's
+# tabs the host shows its own (and launches through Chrome on "open"). Only NNCore sets the
+# hook, so CEF behaves as before.
+python3 - "$src/chrome/browser/external_protocol/external_protocol_handler.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_external_protocol_dialog" in s:
+    sys.exit(0)
+old_fn = "\nnamespace {\n"
+decl = """
+// Bay: NNCore (engine/chromiumLayer) shows this dialog itself for the tabs it hosts.
+bool (*g_bay_external_protocol_dialog)(
+    const GURL& url,
+    content::WebContents* web_contents,
+    const std::optional<url::Origin>& initiating_origin,
+    content::WeakDocumentPtr initiator_document,
+    const std::u16string& program_name) = nullptr;
+"""
+old = """  DCHECK(web_contents);
+  if (delegate) {
+    delegate->RunExternalProtocolDialog(url, web_contents, page_transition,"""
+new = """  DCHECK(web_contents);
+  // Bay: NNCore
+  if (!delegate && g_bay_external_protocol_dialog &&
+      g_bay_external_protocol_dialog(url, web_contents, initiating_origin,
+                                           initiator_document, program_name)) {
+    return;
+  }
+  if (delegate) {
+    delegate->RunExternalProtocolDialog(url, web_contents, page_transition,"""
+assert s.count(old) == 1
+at = s.index(old_fn)  # the first anonymous namespace: the hook stays out of it
+s = s[:at] + decl + s[at:]
+s = s.replace(old, new)
+open(path, "w").write(s)
+print("hooked external protocol dialog")
+PY2
+
+# HistoryTabHelper asks NNCore whether a tab's navigations are history: the host's own pages
+# (the content blocker's hidden extension page, extension popups and side panels) never are,
+# as CEF's Alloy browsers never were. Only NNCore sets the hook, so CEF behaves as before.
+python3 - "$src/chrome/browser/history/history_tab_helper.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_history_eligible" in s:
+    sys.exit(0)
+old_fn = "bool HistoryTabHelper::IsEligibleTab(\n"
+decl = ("// Bay: NNCore (engine/chromiumLayer) keeps its own pages out of history.\n"
+        "bool (*g_bay_history_eligible)(content::WebContents*) = nullptr;\n\n")
+old = """  if (force_eligible_tab_for_testing_) {
+    return true;
+  }
+"""
+new = """  if (force_eligible_tab_for_testing_) {
+    return true;
+  }
+  // Bay: NNCore
+  if (g_bay_history_eligible && web_contents() &&
+      !g_bay_history_eligible(web_contents())) {
+    return false;
+  }
+"""
+assert s.count(old_fn) == 1 and s.count(old) == 1
+s = s.replace(old_fn, decl + old_fn).replace(old, new)
+open(path, "w").write(s)
+print("hooked HistoryTabHelper")
+PY2
+
+# declarativeNetRequest's ActionTracker tells NNCore of each rule an extension's ruleset applied
+# to a tab's request (block, redirect…), as it counts them for the action's badge: the host's
+# blocked count follows what was stopped, redirects to a stand-in included. Only NNCore sets
+# the hook, so CEF behaves as before.
+python3 - "$src/extensions/browser/api/declarative_net_request/action_tracker.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_dnr_rule_matched" in s:
+    sys.exit(0)
+old_ns = "namespace extensions::declarative_net_request {\n"
+decl = ("// Bay: NNCore (engine/chromiumLayer) counts what extensions' rules did to a tab's requests.\n"
+        "void (*g_bay_dnr_rule_matched)(\n"
+        "    content::BrowserContext* browser_context,\n"
+        "    int tab_id,\n"
+        "    const extensions::declarative_net_request::RequestAction& action,\n"
+        "    const extensions::WebRequestInfo& request) = nullptr;\n\n")
+old = """  const int tab_id =
+      GetTabIdForMatchedRule(browser_context_, request_info.frame_data.tab_id);
+"""
+new = old + """  // Bay: NNCore
+  if (g_bay_dnr_rule_matched) {
+    g_bay_dnr_rule_matched(browser_context_, tab_id, request_action,
+                                 request_info);
+  }
+"""
+assert s.count(old_ns) == 1 and s.count(old) == 1
+s = s.replace(old_ns, decl + old_ns).replace(old, new)
+open(path, "w").write(s)
+print("hooked declarativeNetRequest's ActionTracker")
+PY2
+
+# declarativeNetRequest's RulesMonitorService loads a component extension's enabled static
+# rulesets with the extension, and tells NNCore when the rulesets an extension had as it loaded
+# are in force (read from disk on another sequence, a moment after the load): NNCore holds a
+# profile's navigations until its content blocker's are (nn_navigation_hold.mm). A component
+# extension is never installed, so nothing indexed its rulesets and recorded their checksums:
+# Chrome skipped them all as "checksum not found" and the content blocker had no rules in a new
+# profile until its service worker turned its lists on again. Now they're indexed on that first
+# load (as Chrome indexes a ruleset enabled after install) and their checksums kept. Only NNCore
+# loads component extensions with rulesets and sets the hook, so CEF behaves as before.
+python3 - "$src/extensions/browser/api/declarative_net_request/rules_monitor_service.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_dnr_rulesets_in_force" in s:
+    sys.exit(0)
+old_ns = "namespace extensions {\nnamespace declarative_net_request {\n"
+decl = ("// Bay: NNCore (engine/chromiumLayer) holds a profile's navigations until a content blocker's\n"
+        "// rulesets are in force.\n"
+        "void (*g_bay_dnr_rulesets_in_force)(\n"
+        "    content::BrowserContext* browser_context,\n"
+        "    const extensions::ExtensionId& extension_id,\n"
+        "    bool all_loaded) = nullptr;\n\n")
+old = """  update_dynamic_or_session_rules_queue_map_[load_data.extension_id]
+      .SetReadyToExecuteApiCalls();
+}
+
+void RulesMonitorService::OnNewStaticRulesetsLoaded(
+"""
+new = """  update_dynamic_or_session_rules_queue_map_[load_data.extension_id]
+      .SetReadyToExecuteApiCalls();
+
+  // Bay: NNCore
+  if (g_bay_dnr_rulesets_in_force) {
+    g_bay_dnr_rulesets_in_force(
+        context_, load_data.extension_id,
+        !notify_ruleset_failed_to_load && !global_rule_limit_exceeded);
+  }
+}
+
+void RulesMonitorService::OnNewStaticRulesetsLoaded(
+"""
+old_load = """      if (!helper.GetStaticRulesetChecksum(extension->id(), source.id(),
+                                           expected_ruleset_checksum)) {
+        // This might happen on prefs corruption.
+        LogLoadRulesetResult(LoadRulesetResult::kErrorChecksumNotFound);
+        ruleset_failed_to_load = true;
+        continue;
+      }
+
+      RulesetInfo static_ruleset(std::move(source));
+      static_ruleset.set_expected_checksum(expected_ruleset_checksum);
+      load_data.rulesets.push_back(std::move(static_ruleset));
+"""
+new_load = """      const bool indexed = helper.GetStaticRulesetChecksum(
+          extension->id(), source.id(), expected_ruleset_checksum);
+      // Bay: NNCore. A component extension was never installed, so
+      // nothing indexed its rulesets: index them now, as for a ruleset
+      // enabled after install (no expected checksum), and keep the checksum.
+      if (!indexed &&
+          !Manifest::IsComponentLocation(extension->location())) {
+        // This might happen on prefs corruption.
+        LogLoadRulesetResult(LoadRulesetResult::kErrorChecksumNotFound);
+        ruleset_failed_to_load = true;
+        continue;
+      }
+
+      RulesetInfo static_ruleset(std::move(source));
+      if (indexed) {
+        static_ruleset.set_expected_checksum(expected_ruleset_checksum);
+      }
+      load_data.rulesets.push_back(std::move(static_ruleset));
+"""
+assert s.count(old_ns) == 1 and s.count(old) == 1 and s.count(old_load) == 1
+s = s.replace(old_ns, decl + old_ns).replace(old, new).replace(old_load, new_load)
+open(path, "w").write(s)
+print("hooked declarativeNetRequest's RulesMonitorService")
+PY2
+
+# The Browser extensions get for their windows when nothing names one (a popup's window.open,
+# a private tab.create's parent) skips the host's own hidden pages, as chrome.windows' current
+# window does (chromium-hidden-window-current-window.patch): their windows are never shown.
+python3 - "$src/chrome/browser/extensions/browser_window_util.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "Bay: NNCore" in s:
+    sys.exit(0)
+old_inc = '#include "components/tabs/public/tab_interface.h"\n'
+new_inc = old_inc + ('\n#include "cef/libcef/features/features.h"\n'
+                     '#if BUILDFLAG(ENABLE_CEF)\n'
+                     '#include "cef/libcef/browser/chrome/hidden_from_extensions.h"  // nogncheck\n'
+                     '#endif\n')
+old = """  if (restrict_to_normal_browsers &&
+      browser.GetType() != BrowserWindowInterface::TYPE_NORMAL) {
+    return false;
+  }
+"""
+new = old + """
+#if BUILDFLAG(ENABLE_CEF)
+  // Bay: NNCore. The host's own hidden pages are no extension's window.
+  if (cef::IsHiddenFromExtensions(&browser)) {
+    return false;
+  }
+#endif
+"""
+assert s.count(old_inc) == 1 and s.count(old) == 1
+s = s.replace(old_inc, new_inc).replace(old, new)
+open(path, "w").write(s)
+print("hooked extensions' browser_window_util")
+PY2
+
+# Chrome's post-install UI ("<name> has been added") asks NNCore first. Chrome's finds or makes
+# a tabbed Browser for it (a hidden window of ours, given none of the app's), adds a tab when
+# the Browser has none, and reads that Browser's active tab later through a raw pointer (the
+# host had closed the tab, or the window: a crash), then reaches for its BrowserView's
+# toolbar when the bubble closes (ours have none). NNCore shows the bubble over a window the
+# app shows for the profile, later if there is none yet. Only NNCore sets the hook.
+python3 - "$src/chrome/browser/ui/extensions/extension_install_ui_desktop.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_extension_installed" in s:
+    sys.exit(0)
+old_ns = "using content::BrowserThread;\n"
+decl = ("// Bay: NNCore (engine/chromiumLayer) shows the post-install UI for the windows it hosts.\n"
+        "bool (*g_bay_extension_installed)(\n"
+        "    Profile* profile,\n"
+        "    scoped_refptr<const extensions::Extension> extension,\n"
+        "    const SkBitmap* icon) = nullptr;\n\n")
+old = """  // Extensions aren't enabled by default in incognito so we confirm
+  // the install in a normal window.
+"""
+new = """  // Bay: NNCore
+  if (g_bay_extension_installed &&
+      g_bay_extension_installed(profile(), extension, icon)) {
+    return;
+  }
+
+""" + old
+assert s.count(old_ns) == 1 and s.count(old) == 1
+s = s.replace(old_ns, decl + old_ns).replace(old, new)
+open(path, "w").write(s)
+print("hooked the extension post-install UI")
+PY2
+
+# A downloaded .crx whose tab has gone asks without a tab under NNCore (its install prompt is
+# the app's): Chrome would find a Browser, or make one (a hidden window of ours), and read its
+# active tab, which a Browser of the app's need not have. Only NNCore sets the flag.
+python3 - "$src/chrome/browser/download/download_crx_util.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_prompts_without_tab" in s:
+    sys.exit(0)
+old_ns = "namespace download_crx_util {\n"
+decl = ("// Bay: NNCore (engine/chromiumLayer) shows the install prompt itself, without a tab.\n"
+        "bool g_bay_prompts_without_tab = false;\n\n")
+old = """  if (!web_contents) {
+    BrowserWindowInterface* browser =
+"""
+new = """  // Bay: NNCore
+  if (!web_contents && g_bay_prompts_without_tab) {
+    return std::make_unique<ExtensionInstallPrompt>(
+        profile, gfx::NativeWindow(),
+        std::make_unique<extensions::InstallPromptData>(
+            extensions::InstallPromptData::UNSET_PROMPT_TYPE));
+  }
+""" + old
+assert s.count(old_ns) == 1 and s.count(old) == 1
+s = s.replace(old_ns, old_ns + "\n" + decl, 1).replace(old, new)
+open(path, "w").write(s)
+print("hooked download_crx_util's install prompt")
+PY2
+
+# Client hints and navigator.userAgentData name the browser by its product name, which a
+# Chromium-branded build leaves out ("Chromium" and the GREASE brand only). Meet and other sites
+# gate features on a "Google Chrome" brand, which Chrome-based browsers (Arc, Dia) report. With
+# the hook set, the brand list is Chrome's. Only NNCore sets the hook, so CEF behaves as before.
+python3 - "$src/components/embedder_support/user_agent_utils.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_user_agent_brand" in s:
+    sys.exit(0)
+old_ns = "namespace embedder_support {\n"
+decl = ("// Bay: NNCore (engine/chromiumLayer) reports Chrome's brand.\n"
+        "const char* g_bay_user_agent_brand = nullptr;\n\n")
+old = """#if !BUILDFLAG(CHROMIUM_BRANDING)
+  brand = version_info::GetProductName();
+#endif
+"""
+new = old + """  // Bay: NNCore
+  if (g_bay_user_agent_brand) {
+    brand = g_bay_user_agent_brand;
+  }
+"""
+assert s.count(old_ns) >= 1 and s.count(old) == 1
+s = s.replace(old_ns, decl + old_ns, 1).replace(old, new)
+open(path, "w").write(s)
+print("hooked the user agent brand")
+PY2
+
+# Chrome's automatic Picture in Picture (a call's own window) follows the tab strip's active tab.
+# The host shows more and less than that (engine/chromiumLayer nn_host_visibility.h): both panes of a split
+# (focusing the other pane made Chrome take the call as left), and its own pages over the strip's
+# active tab (New Tab, another Space: the strip doesn't change). With the hook set, a tab the host
+# reported reads as activated exactly while the host shows it, and the host's changes reach the
+# observer (BayAutoPictureInPictureHostVisibilityChanged) as the strip's do. Only NNCore sets
+# the hook.
+python3 - "$src/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_strip_observer_helper.h" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "BayHostVisibilityChanged" in s:
+    sys.exit(0)
+old = """ private:
+  void UpdateIsTabActivated(const TabStripModel* tab_strip_model);
+"""
+new = """  // Bay: NNCore's host showed or hid `contents`: if it is this helper's tab, read it
+  // again, as on a strip change (true).
+  bool BayHostVisibilityChanged(content::WebContents* contents);
+
+""" + old
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+PY2
+python3 - "$src/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_strip_observer_helper.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_tab_shown_by_host" in s:
+    sys.exit(0)
+old_fn = "// static\nstd::unique_ptr<AutoPictureInPictureTabObserverHelperBase>\n"
+decl = """// Bay: NNCore (engine/chromiumLayer) shows tabs itself: 1 shown, 0 hidden, -1 the strip decides.
+int (*g_bay_tab_shown_by_host)(content::WebContents*) = nullptr;
+
+namespace {
+// Bay: NNCore: the helpers observing a strip, to tell of the host's changes.
+std::set<AutoPictureInPictureTabStripObserverHelper*>& BayObserving() {
+  static base::NoDestructor<std::set<AutoPictureInPictureTabStripObserverHelper*>> helpers;
+  return *helpers;
+}
+}  // namespace
+
+// Bay: NNCore
+void BayAutoPictureInPictureHostVisibilityChanged(
+    content::WebContents* contents) {
+  for (AutoPictureInPictureTabStripObserverHelper* helper : BayObserving()) {
+    if (helper->BayHostVisibilityChanged(contents)) {
+      return;
+    }
+  }
+}
+
+bool AutoPictureInPictureTabStripObserverHelper::BayHostVisibilityChanged(
+    content::WebContents* contents) {
+  if (!is_observing_ || GetObservedWebContents() != contents) {
+    return false;
+  }
+  const bool old_is_tab_activated = is_tab_activated_;
+  UpdateIsTabActivated(GetCurrentTabStripModel());
+  if (is_tab_activated_ != old_is_tab_activated) {
+    RunCallback(is_tab_activated_);
+  }
+  return true;
+}
+
+"""
+include = '#include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_strip_observer_helper.h"\n'
+includes = include + "\n#include <set>\n\n#include \"base/no_destructor.h\"\n"
+start_old = """  is_observing_ = true;
+"""
+start_new = start_old + """  BayObserving().insert(this);  // Bay: NNCore
+"""
+stop_old = """  is_observing_ = false;
+"""
+stop_new = stop_old + """  BayObserving().erase(this);  // Bay: NNCore
+"""
+update_old = """  if (tab_strip_model) {
+    // If there is not currently a selected tab, then the tabstrip is still
+"""
+update_new = """  if (tab_strip_model) {
+    // Bay: NNCore (a split's other pane is shown, a tab under the host's own page isn't)
+    const int shown = g_bay_tab_shown_by_host
+                          ? g_bay_tab_shown_by_host(GetObservedWebContents())
+                          : -1;
+    if (shown >= 0) {
+      is_tab_activated_ = shown == 1;
+      return;
+    }
+    // If there is not currently a selected tab, then the tabstrip is still
+"""
+# The tab a switch went to, told it became active (and so to close its own window): never one the
+# host hides (leaving a split hides both panes; the strip's active one isn't where the user went).
+active_old = """  return observed_tab_strip_model_->GetActiveWebContents();
+}
+"""
+active_new = """  content::WebContents* active = observed_tab_strip_model_->GetActiveWebContents();
+  // Bay: NNCore (a tab the host hides isn't the one the user went to)
+  if (active && g_bay_tab_shown_by_host &&
+      g_bay_tab_shown_by_host(active) == 0) {
+    return nullptr;
+  }
+  return active;
+}
+"""
+for old in (old_fn, include, start_old, stop_old, update_old, active_old):
+    assert s.count(old) == 1, old
+s = (s.replace(include, includes).replace(old_fn, decl + old_fn).replace(start_old, start_new)
+      .replace(stop_old, stop_new).replace(update_old, update_new).replace(active_old, active_new))
+open(path, "w").write(s)
+print("hooked auto picture-in-picture's tab strip observer")
+PY2
+
+# Permission prompts follow the tab strip's active tab: a split's other pane (shown, not the strip's
+# active tab) couldn't prompt until focused, and a page under the host's own page (New Tab, another
+# Space) could. With the hook set, a tab the host reported (engine/chromiumLayer nn_host_visibility.h) can
+# prompt exactly while the host shows it; an open prompt stays with its page (NNCore's prompts keep
+# alive across switches), and NNCore tells the manager of each change through OnVisibilityChanged.
+# Only NNCore sets the hook.
+python3 - "$src/components/permissions/permission_request_manager.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_permission_tab_shown" in s:
+    sys.exit(0)
+old_ns = "namespace permissions {\n"
+decl = """// Bay: NNCore (engine/chromiumLayer) shows tabs itself: 1 shown, 0 hidden, -1 the strip decides.
+int (*g_bay_permission_tab_shown)(content::WebContents*) = nullptr;
+
+"""
+helper = """
+namespace {
+// Bay: NNCore: whether a tab can prompt, as the host shows it (or `chrome_says`).
+bool BayTabActive(content::WebContents* contents, bool chrome_says) {
+  const int shown = g_bay_permission_tab_shown && contents
+                        ? g_bay_permission_tab_shown(contents)
+                        : -1;
+  return shown < 0 ? chrome_says : shown == 1;
+}
+}  // namespace
+"""
+vis_old = """  // If `tab_subscriptions_` isn't empty, defer to those listeners instead.
+  if (!tab_subscriptions_.empty()) {
+    return;
+  }
+  bool prior_tab_is_active_ = tab_is_active_;
+  tab_is_active_ = visibility != content::Visibility::HIDDEN;
+"""
+vis_new = """  // If `tab_subscriptions_` isn't empty, defer to those listeners instead.
+  // Bay: NNCore (unless the host says)
+  const bool host_says =
+      g_bay_permission_tab_shown &&
+      g_bay_permission_tab_shown(web_contents()) >= 0;
+  if (!tab_subscriptions_.empty() && !host_says) {
+    return;
+  }
+  bool prior_tab_is_active_ = tab_is_active_;
+  tab_is_active_ = BayTabActive(
+      web_contents(), visibility != content::Visibility::HIDDEN);
+"""
+adopt_old = """  tab_is_active_ = tab_interface->IsActivated();
+"""
+adopt_new = """  tab_is_active_ =
+      BayTabActive(web_contents(), tab_interface->IsActivated());  // Bay: NNCore
+"""
+status_old = """  const bool prior_tab_is_active_ = tab_is_active_;
+  tab_is_active_ = is_active;
+"""
+status_new = """  const bool prior_tab_is_active_ = tab_is_active_;
+  tab_is_active_ = BayTabActive(web_contents(), is_active);  // Bay: NNCore
+"""
+for old in (old_ns, vis_old, adopt_old, status_old):
+    assert s.count(old) == 1, old
+s = (s.replace(old_ns, decl + old_ns + helper, 1).replace(vis_old, vis_new)
+      .replace(adopt_old, adopt_new).replace(status_old, status_new))
+open(path, "w").write(s)
+print("hooked the permission request manager's tab activation")
+PY2
+
+# A site asking again for files it kept handles to (IndexedDB) gets Chrome's restore prompt, a bubble
+# anchored to the toolbar's page info icon: with no BrowserView that segfaulted
+# (bubble_anchor_util::GetPageInfoAnchorConfiguration). With the hook set, NNCore asks its host
+# instead, as for every other permission, and takes the callback; it declines the Browsers it doesn't
+# host, which keep Chrome's bubble. Only NNCore sets the hook.
+python3 - "$src/chrome/browser/ui/views/file_system_access/file_system_access_restore_permission_bubble_view.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_file_system_restore_prompt" in s:
+    sys.exit(0)
+old = """void ShowFileSystemAccessRestorePermissionDialog(
+    const FileSystemAccessPermissionRequestManager::RequestData& request,
+    base::OnceCallback<void(permissions::PermissionAction)> callback,
+    content::WebContents* web_contents) {
+"""
+decl = """// Bay: NNCore (engine/chromiumLayer) asks its host; it takes `callback` when it does.
+bool (*g_bay_file_system_restore_prompt)(
+    const FileSystemAccessPermissionRequestManager::RequestData& request,
+    base::OnceCallback<void(permissions::PermissionAction)>& callback,
+    content::WebContents* web_contents) = nullptr;
+
+"""
+new = decl + old + """  // Bay: NNCore
+  if (g_bay_file_system_restore_prompt &&
+      g_bay_file_system_restore_prompt(request, callback, web_contents)) {
+    return;
+  }
+"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+print("hooked the File System Access restore prompt")
+PY2
+
+# Chrome's tab-modal dialogs (TabDialogManager: FedCM's "Sign in with", Ask before HTTP) show while
+# their tab is the strip's active one; the host's own pages (New Tab) cover that tab without the
+# strip changing, so a dialog stayed up over them, and focusing a split's other pane hid it. With the
+# hook set, a tab the host reported (engine/chromiumLayer nn_host_visibility.h) shows its dialog exactly
+# while the host shows the tab (a split's other pane too), and NNCore asks the manager again on each
+# change. Only NNCore sets the hook (it is defined with auto Picture in Picture's, above).
+python3 - "$src/chrome/browser/ui/tabs/tab_dialog_manager.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_tab_shown_by_host" in s:
+    sys.exit(0)
+old_ns = "namespace tabs {\n\nclass TabDialogWidgetObserver"
+decl = """// Bay: NNCore (engine/chromiumLayer) shows tabs itself: 1 shown, 0 hidden, -1 the strip decides.
+extern int (*g_bay_tab_shown_by_host)(content::WebContents*);
+
+"""
+old = """  return GetWidgetVisibility(
+      tab_interface_->IsVisible(),
+      tab_interface_->GetBrowserWindowInterface()->GetWindow()->IsMinimized(),
+      params_->should_show_callback);
+"""
+new = """  // Bay: NNCore (the host's reading, when it gave one)
+  const int shown =
+      g_bay_tab_shown_by_host
+          ? g_bay_tab_shown_by_host(tab_interface_->GetContents())
+          : -1;
+  return GetWidgetVisibility(
+      shown < 0 ? tab_interface_->IsVisible() : shown == 1,
+      tab_interface_->GetBrowserWindowInterface()->GetWindow()->IsMinimized(),
+      params_->should_show_callback);
+"""
+# And a page the host still shows keeps its dialog when the strip's active tab moves off it
+# (focusing a split's other pane: the host's splits aren't Chrome's).
+bg_old = """void TabDialogManager::TabWillEnterBackground(TabInterface* tab_interface) {
+  if (widget_) {
+"""
+bg_new = """void TabDialogManager::TabWillEnterBackground(TabInterface* tab_interface) {
+  // Bay: NNCore
+  if (widget_ && g_bay_tab_shown_by_host &&
+      g_bay_tab_shown_by_host(tab_interface_->GetContents()) == 1) {
+    return;
+  }
+  if (widget_) {
+"""
+assert s.count(old_ns) == 1 and s.count(old) == 1 and s.count(bg_old) == 1
+s = s.replace(old_ns, decl + old_ns).replace(old, new).replace(bg_old, bg_new)
+open(path, "w").write(s)
+print("hooked TabDialogManager's visibility")
+PY2
+
+# Idle wakeups. Chrome's own periodic work in an idle browser process: CpuHealthTracker samples the
+# system's and every page's CPU every 15 s, only for the performance-intervention toolbar button Bay
+# doesn't show; the macOS memory pressure evaluator checks free disk every 5 s. With the hooks set,
+# the tracker gets no CpuProbe, and free disk is checked every g_bay_disk_space_check_seconds while
+# more than 20 GiB are free (Chrome's 5 s otherwise, so a critical vote under 250 MiB still comes in
+# time). Only NNCore sets them (nn_main_delegate.cc).
+python3 - "$src/chrome/browser/performance_manager/user_tuning/cpu_health_tracker.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_skip_cpu_health_sampling" in s:
+    sys.exit(0)
+at = "namespace performance_manager::user_tuning {\n"
+decl = """// Bay: NNCore (engine/chromiumLayer) shows no performance-intervention button.
+bool g_bay_skip_cpu_health_sampling = false;
+
+"""
+old = """  std::unique_ptr<system_cpu::CpuProbe> cpu_probe =
+      system_cpu::CpuProbe::Create();
+  if (cpu_probe) {"""
+new = """  std::unique_ptr<system_cpu::CpuProbe> cpu_probe =
+      g_bay_skip_cpu_health_sampling ? nullptr
+                                     : system_cpu::CpuProbe::Create();
+  if (cpu_probe) {"""
+assert s.count(at) == 1 and s.count(old) == 1
+i = s.index(at)
+s = s[:i] + decl + s[i:].replace(old, new)
+open(path, "w").write(s)
+print("hooked CpuHealthTracker's sampling")
+PY2
+
+python3 - "$src/components/memory_pressure/system_memory_pressure_evaluator_mac.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_disk_space_check_seconds" in s:
+    sys.exit(0)
+at = "namespace memory_pressure::mac {\n"
+decl = """// Bay: NNCore (engine/chromiumLayer) checks free disk less often while there's plenty.
+int g_bay_disk_space_check_seconds = 0;
+
+namespace {
+constexpr base::ByteSize kBayRelaxedDiskSpace = base::GiB(20);
+}
+
+"""
+old = """  if (disk_pressure_vote_ != new_disk_vote) {
+    disk_pressure_vote_ = new_disk_vote;
+    UpdatePressureAndManageNotifications();
+  }
+"""
+new = old + """
+  // Bay: NNCore
+  if (g_bay_disk_space_check_seconds > 0) {
+    const base::TimeDelta period =
+        disk_space_info.has_value() &&
+                disk_space_info->available > kBayRelaxedDiskSpace
+            ? base::Seconds(g_bay_disk_space_check_seconds)
+            : kDiskSpaceCheckPeriod;
+    if (disk_space_check_timer_.GetCurrentDelay() != period) {
+      disk_space_check_timer_.Start(
+          FROM_HERE, period,
+          base::BindRepeating(&SystemMemoryPressureEvaluator::CheckDiskSpace,
+                              weak_ptr_factory_.GetWeakPtr()));
+    }
+  }
+"""
+assert s.count(at) == 1 and s.count(old) == 1
+i = s.index(at)
+s = s[:i] + decl + s[i:].replace(old, new)
+open(path, "w").write(s)
+print("hooked the disk space check's period")
+PY2
+
+# Bluetooth stays quiet while a page merely holds a WebAuthn request. A sign-in page that offers
+# passkeys (Google's makes a conditional-mediation get) starts Chrome's hybrid (phone) discovery,
+# which keeps a BLE scan running and the Mac adapter polling bluetoothd every 500 ms for as long as
+# the tab is open, once the app has the Bluetooth grant. With the hooks set:
+# - the hybrid discovery scans only while some request's sheet shows the phone steps (QR code,
+#   connecting, connected: every phone path goes through the QR sheet), or while it has contacted a
+#   linked phone. The dialog model reports its step (BaySetHybridUiShown);
+# - the adapter polls every 500 ms only while discovering. Otherwise a poll runs on demand, one at a
+#   time and no sooner than 500 ms after the last: when anything uses the adapter, and when
+#   CoreBluetooth reports a central state change (one that comes during a poll gets a fresh poll
+#   after it, so a power toggle at the WebAuthn power sheet lands).
+# Only NNCore sets them (nn_main_delegate.cc).
+python3 - "$src/device/fido/cable/v2_discovery.h" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "SetHybridUiShown" in s:
+    sys.exit(0)
+edits = [
+    ("""  void StartInternal() override;
+
+""", """  void StartInternal() override;
+
+  // Bay: NNCore. Whether `model`'s sheet shows the phone steps.
+  static void SetHybridUiShown(const void* model, bool shown);
+
+"""),
+    ("""  bool device_committed_ = false;
+""", """  bool device_committed_ = false;
+  // Bay: NNCore. A scan was asked for; it runs while a phone sheet shows.
+  bool scan_wanted_ = false;
+"""),
+]
+for old, _ in edits:
+    assert s.count(old) == 1, old
+for old, new in edits:
+    s = s.replace(old, new)
+open(path, "w").write(s)
+PY2
+
+python3 - "$src/device/fido/cable/v2_discovery.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_hybrid_scan_on_demand" in s:
+    sys.exit(0)
+edits = [
+    ("""#include "base/metrics/histogram_functions.h"
+""", """#include "base/metrics/histogram_functions.h"
+#include "base/no_destructor.h"
+"""),
+    ("""namespace device::cablev2 {
+
+namespace {
+""", """// Bay: NNCore (engine/chromiumLayer) scans for a phone only while a phone sheet shows.
+bool g_bay_hybrid_scan_on_demand = false;
+
+namespace device::cablev2 {
+
+namespace {
+
+// Bay: NNCore. The dialog models showing a phone step.
+base::flat_set<const void*>& ModelsShowingHybrid() {
+  static base::NoDestructor<base::flat_set<const void*>> models;
+  return *models;
+}
+
+// Bay: NNCore. Discoveries that asked for a scan.
+std::vector<base::WeakPtr<Discovery>>& ScanWaiters() {
+  static base::NoDestructor<std::vector<base::WeakPtr<Discovery>>> waiters;
+  return *waiters;
+}
+"""),
+    ("""      event_callback_));
+}
+
+void Discovery::PairingIsInvalid(""", """      event_callback_));
+  // Bay: NNCore. A linked phone was contacted: listen for its advert.
+  if (g_bay_hybrid_scan_on_demand && scan_wanted_ && !discovery_session_) {
+    StartCableDiscovery();
+  }
+}
+
+void Discovery::PairingIsInvalid("""),
+    ("""void Discovery::StartCableDiscovery() {
+""", """// static
+void Discovery::SetHybridUiShown(const void* model, bool shown) {
+  base::flat_set<const void*>& models = ModelsShowingHybrid();
+  const bool was_shown = !models.empty();
+  if (shown) {
+    models.insert(model);
+  } else {
+    models.erase(model);
+  }
+  if (was_shown == !models.empty()) {
+    return;
+  }
+  std::vector<base::WeakPtr<Discovery>> live;
+  for (const base::WeakPtr<Discovery>& waiter : ScanWaiters()) {
+    if (waiter) {
+      live.push_back(waiter);
+    }
+  }
+  ScanWaiters() = live;
+  for (const base::WeakPtr<Discovery>& discovery : live) {
+    if (!discovery) {
+      continue;
+    }
+    if (!models.empty()) {
+      discovery->StartCableDiscovery();
+    } else if (discovery->tunnels_pending_advert_.empty()) {
+      discovery->discovery_session_.reset();
+    }
+  }
+}
+
+void Discovery::StartCableDiscovery() {
+  // Bay: NNCore
+  if (g_bay_hybrid_scan_on_demand) {
+    if (!scan_wanted_) {
+      scan_wanted_ = true;
+      std::erase_if(ScanWaiters(), [](const base::WeakPtr<Discovery>& waiter) {
+        return !waiter;
+      });
+      ScanWaiters().push_back(weak_factory_.GetWeakPtr());
+    }
+    if (ModelsShowingHybrid().empty() && tunnels_pending_advert_.empty()) {
+      return;
+    }
+  }
+"""),
+    ("""  FIDO_LOG(DEBUG) << "Discovery session started.";
+  SetDiscoverySession(std::move(session));
+""", """  FIDO_LOG(DEBUG) << "Discovery session started.";
+  // Bay: NNCore. The sheet closed while the session started.
+  if (g_bay_hybrid_scan_on_demand && ModelsShowingHybrid().empty() &&
+      tunnels_pending_advert_.empty()) {
+    return;
+  }
+  SetDiscoverySession(std::move(session));
+"""),
+    ("""Discovery::~Discovery() {
+  if (adapter_) {
+""", """Discovery::~Discovery() {
+  // Bay: NNCore
+  if (scan_wanted_) {
+    std::erase_if(ScanWaiters(), [this](const base::WeakPtr<Discovery>& waiter) {
+      return !waiter || waiter.get() == this;
+    });
+  }
+  if (adapter_) {
+"""),
+    ("""}  // namespace device::cablev2
+""", """}  // namespace device::cablev2
+
+// Bay: NNCore (the WebAuthn dialog model reports its step).
+void BaySetHybridUiShown(const void* model, bool shown) {
+  device::cablev2::Discovery::SetHybridUiShown(model, shown);
+}
+"""),
+]
+for old, _ in edits:
+    assert s.count(old) == 1, old
+for old, new in edits:
+    s = s.replace(old, new)
+open(path, "w").write(s)
+print("hooked the hybrid discovery's scan")
+PY2
+
+python3 - "$src/chrome/browser/webauthn/authenticator_request_dialog_model.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "BaySetHybridUiShown" in s:
+    sys.exit(0)
+decl = """// Bay: NNCore (engine/chromiumLayer): the hybrid discovery scans only while a phone
+// step shows (device/fido/cable/v2_discovery.cc).
+extern bool g_bay_hybrid_scan_on_demand;
+void BaySetHybridUiShown(const void* model, bool shown);
+
+"""
+edits = [
+    ("""AuthenticatorRequestDialogModel::~AuthenticatorRequestDialogModel() {
+""", decl + """AuthenticatorRequestDialogModel::~AuthenticatorRequestDialogModel() {
+  BaySetHybridUiShown(this, false);
+"""),
+    ("""  const StepUIType previous_ui_type = step_ui_type(step_);
+  step_ = step;
+""", """  const StepUIType previous_ui_type = step_ui_type(step_);
+  step_ = step;
+  // Bay: NNCore
+  if (g_bay_hybrid_scan_on_demand) {
+    BaySetHybridUiShown(this, step_ == Step::kCableV2QRCode ||
+                                  step_ == Step::kCableV2Connecting ||
+                                  step_ == Step::kCableV2Connected);
+  }
+"""),
+]
+for old, _ in edits:
+    assert s.count(old) == 1, old
+for old, new in edits:
+    s = s.replace(old, new)
+open(path, "w").write(s)
+print("hooked the WebAuthn dialog's phone steps")
+PY2
+
+python3 - "$src/device/bluetooth/bluetooth_low_energy_adapter_apple.h" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "OnLowEnergyCentralManagerStateUpdated" in s:
+    sys.exit(0)
+old = """  virtual void TriggerSystemPermissionPrompt() = 0;
+"""
+new = old + """  // Bay: NNCore. CoreBluetooth's central manager changed state.
+  virtual void OnLowEnergyCentralManagerStateUpdated() {}
+"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+PY2
+
+python3 - "$src/device/bluetooth/bluetooth_low_energy_adapter_apple.mm" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "OnLowEnergyCentralManagerStateUpdated" in s:
+    sys.exit(0)
+old = """        device_mac->DidDisconnectPeripheral(nullptr);
+      }
+    }
+  }
+}
+"""
+new = """        device_mac->DidDisconnectPeripheral(nullptr);
+      }
+    }
+  }
+  // Bay: NNCore
+  OnLowEnergyCentralManagerStateUpdated();
+}
+"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+PY2
+
+python3 - "$src/device/bluetooth/bluetooth_adapter_mac.h" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "PollAdapterOnDemand" in s:
+    sys.exit(0)
+old = """  void PollAdapter();
+  void OnBackgroundPollComplete(AdapterState state);
+"""
+new = old + """  // Bay: NNCore. Polls only while discovering, else on demand.
+  void PollAdapterOnDemand();
+  void OnLowEnergyCentralManagerStateUpdated() override;
+
+  bool poll_pending_ = false;
+  bool poll_dirty_ = false;
+  base::TimeTicks last_poll_completed_;
+"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+PY2
+
+python3 - "$src/device/bluetooth/bluetooth_adapter_mac.mm" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_bluetooth_poll_on_demand" in s:
+    sys.exit(0)
+at = "namespace device {\n"
+decl = """// Bay: NNCore (engine/chromiumLayer) polls the adapter only while discovering, else on demand.
+bool g_bay_bluetooth_poll_on_demand = false;
+
+"""
+edits = [
+    ("""void BluetoothAdapterMac::LazyInitialize() {
+  if (lazy_initialized_)
+    return;
+""", """void BluetoothAdapterMac::LazyInitialize() {
+  if (lazy_initialized_) {
+    // Bay: NNCore. Someone uses the adapter: let them see its state.
+    if (g_bay_bluetooth_poll_on_demand) {
+      PollAdapterOnDemand();
+    }
+    return;
+  }
+"""),
+    ("""void BluetoothAdapterMac::PollAdapter() {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+""", """void BluetoothAdapterMac::PollAdapter() {
+  poll_pending_ = true;
+  poll_dirty_ = false;
+  base::ThreadPool::PostTaskAndReplyWithResult(
+"""),
+    ("""  RemoveTimedOutDevices();
+
+  ui_task_runner_->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&BluetoothAdapterMac::PollAdapter,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::Milliseconds(kPollIntervalMs));
+""", """  RemoveTimedOutDevices();
+
+  // Bay: NNCore
+  if (g_bay_bluetooth_poll_on_demand && !IsDiscovering()) {
+    poll_pending_ = false;
+    last_poll_completed_ = base::TimeTicks::Now();
+    if (poll_dirty_) {
+      PollAdapterOnDemand();
+    }
+  } else {
+    ui_task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&BluetoothAdapterMac::PollAdapter,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::Milliseconds(kPollIntervalMs));
+  }
+"""),
+    ("""void BluetoothAdapterMac::OnConnectedDeviceStateRetrieved(
+""", """void BluetoothAdapterMac::PollAdapterOnDemand() {
+  if (poll_pending_) {
+    return;
+  }
+  poll_pending_ = true;
+  const base::TimeDelta wait = last_poll_completed_ +
+                               base::Milliseconds(kPollIntervalMs) -
+                               base::TimeTicks::Now();
+  if (wait.is_positive()) {
+    ui_task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&BluetoothAdapterMac::PollAdapter,
+                       weak_ptr_factory_.GetWeakPtr()),
+        wait);
+    return;
+  }
+  PollAdapter();
+}
+
+void BluetoothAdapterMac::OnLowEnergyCentralManagerStateUpdated() {
+  if (!g_bay_bluetooth_poll_on_demand || !lazy_initialized_) {
+    return;
+  }
+  if (poll_pending_) {
+    poll_dirty_ = true;
+    return;
+  }
+  PollAdapterOnDemand();
+}
+
+void BluetoothAdapterMac::OnConnectedDeviceStateRetrieved(
+"""),
+]
+for old, _ in edits:
+    assert s.count(old) == 1, old
+i = s.index(at)
+s = s[:i] + decl + s[i:]
+for old, new in edits:
+    s = s.replace(old, new)
+open(path, "w").write(s)
+print("hooked the Bluetooth adapter's polling")
+PY2
