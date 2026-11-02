@@ -1,8 +1,9 @@
 import { displayUrl, suggestionKey, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol } from "@bay/shell";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
+import { shallow } from "zustand/shallow";
 import { useTheme } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
 import { tourAnchorRef } from "../onboarding/tour/anchors";
@@ -95,6 +96,17 @@ export function PaletteContent({
   const presence = useMenuPresence(menu);
   // Selection rerenders rebuild sections; only changed results should reset pointer tracking.
   const hover = usePointerHover(JSON.stringify(sections));
+  // Rows reach the palette's latest handlers through one object made once, so a row whose suggestion is unchanged as
+  // the query grows doesn't render again (with its native views), and still acts on the palette as it is now.
+  const handlers = useRef({ hover, onHover, onChoose, onRowMenu });
+  useLayoutEffect(() => {
+    handlers.current = { hover, onHover, onChoose, onRowMenu };
+  });
+  const [rowActions] = useState<RowActions>(() => ({
+    hover: (event, index) => handlers.current.hover(event, () => handlers.current.onHover(index)),
+    choose: (suggestion, disposition) => handlers.current.onChoose(suggestion, disposition),
+    menu: (suggestion) => handlers.current.onRowMenu(suggestion),
+  }));
   const keepSelectedVisible = () => {
     const row = rows.current.get(selectedIndex);
     const visible = viewport.current;
@@ -181,12 +193,11 @@ export function PaletteContent({
                   <PaletteResultRow
                     key={`${suggestionKey(suggestion)}:${rowIndex}`}
                     suggestion={suggestion}
+                    index={rowIndex}
                     pageContext={pageContext}
                     selected={rowIndex === selectedIndex}
                     colors={rowIndex === selectedIndex ? selectionColors : null}
-                    onHover={(e) => hover(e, () => onHover(rowIndex))}
-                    onChoose={(disposition) => onChoose(suggestion, disposition)}
-                    onMenu={() => onRowMenu(suggestion)}
+                    actions={rowActions}
                   />
                 );
               })}
@@ -239,23 +250,31 @@ export function PaletteContent({
   );
 }
 
-function PaletteResultRow({
-  suggestion: s,
-  pageContext,
-  selected,
-  onHover,
-  onChoose,
-  onMenu,
-  colors,
-}: {
+type RowActions = {
+  hover(event: PointerHoverEvent, index: number): void;
+  choose(suggestion: Suggestion, disposition: Disposition): void;
+  menu(suggestion: Suggestion): void;
+};
+
+type RowProps = {
   suggestion: PaletteSuggestion;
+  index: number;
   pageContext: boolean;
   selected: boolean;
-  onHover(event: PointerHoverEvent): void;
-  onChoose(disposition: Disposition): void;
-  onMenu(): void;
   colors?: ScopeColors | null;
-}) {
+  actions: RowActions;
+};
+
+// Each keystroke builds its suggestions afresh; a row renders again only when what it shows changed.
+const sameRow = (a: RowProps, b: RowProps) =>
+  a.index === b.index &&
+  a.pageContext === b.pageContext &&
+  a.selected === b.selected &&
+  a.actions === b.actions &&
+  shallow(a.colors, b.colors) &&
+  shallow(a.suggestion, b.suggestion);
+
+const PaletteResultRow = memo(function PaletteResultRow({ suggestion: s, index, pageContext, selected, colors, actions }: RowProps) {
   const theme = useTheme();
   const title =
     s.kind === "page" ? s.title || displayUrl(s.url) : s.kind === "search" ? s.query : s.kind === "calc" ? s.value : s.kind === "emoji" ? s.name : s.title;
@@ -264,13 +283,13 @@ function PaletteResultRow({
   const engine = s.kind === "search" && !s.suggested ? s.engine : "";
   const detail = s.kind === "calc" ? s.expression : (s.detail ?? (engine || (shownUrl !== title ? shownUrl : "")));
   return (
-    <View onMouseEnter={onHover}>
-      <ContextMenuArea onContextMenu={onMenu}>
+    <View onMouseEnter={(e: PointerHoverEvent) => actions.hover(e, index)}>
+      <ContextMenuArea onContextMenu={() => actions.menu(s)}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${title}${s.kind === "page" && s.tabId ? ", switch to tab" : s.kind === "page" && s.cleanedId ? ", restore tab" : s.kind === "emoji" ? ", copy emoji" : s.kind === "calc" ? `, ${s.expression}, copy answer` : ""}`}
           accessibilityState={{ selected }}
-          onPress={(e) => onChoose(dispositionFor(modifiersOf(e)))}
+          onPress={(e) => actions.choose(s, dispositionFor(modifiersOf(e)))}
         >
           <View
             style={{
@@ -329,7 +348,7 @@ function PaletteResultRow({
       </ContextMenuArea>
     </View>
   );
-}
+}, sameRow);
 
 export function FooterButton({ label, icon, hint, onPress, round }: { label: string; icon?: string; hint?: string; onPress(): void; round?: boolean }) {
   const theme = useTheme();
