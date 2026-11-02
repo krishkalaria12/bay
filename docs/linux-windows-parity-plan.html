@@ -1,0 +1,1506 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bay: Linux and Windows parity with macOS</title>
+    <style>
+      :root {
+        --bg: #fbfaf8;
+        --surface: #ffffff;
+        --sunken: #f3f1ed;
+        --ink: #1d1c1a;
+        --muted: #5f5b54;
+        --faint: #8a857c;
+        --line: #e4e0d8;
+        --accent: #2f5bd3;
+        --accent-soft: #e8eefc;
+        --ok: #1f7a4d;
+        --ok-soft: #e3f3ea;
+        --warn: #9a5b00;
+        --warn-soft: #fbf0dc;
+        --risk: #b0362c;
+        --risk-soft: #fbe7e4;
+        --mac: #6b4fbb;
+        --mac-soft: #efeafb;
+        --lnx: #a8481a;
+        --lnx-soft: #fbeadf;
+        --win: #1f6fa8;
+        --win-soft: #e2effa;
+        --radius: 10px;
+        --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Inter", "Cantarell", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #151514;
+          --surface: #1c1c1b;
+          --sunken: #232321;
+          --ink: #ecebe7;
+          --muted: #b1ada4;
+          --faint: #85817a;
+          --line: #34332f;
+          --accent: #8aa8ff;
+          --accent-soft: #1f2a46;
+          --ok: #6fd1a0;
+          --ok-soft: #173327;
+          --warn: #f0b45c;
+          --warn-soft: #3a2c14;
+          --risk: #f08a80;
+          --risk-soft: #3d1d1a;
+          --mac: #b7a2f5;
+          --mac-soft: #2a2340;
+          --lnx: #f4a77c;
+          --lnx-soft: #3d2416;
+          --win: #86c3f0;
+          --win-soft: #16293a;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15.5px/1.6 var(--sans);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.86em;
+        background: var(--sunken);
+        padding: 0.06em 0.34em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.4rem;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.8rem;
+      }
+      h3 {
+        font-size: 1.06rem;
+        margin: 1.5rem 0 0.5rem;
+      }
+      p {
+        margin: 0 0 0.9rem;
+      }
+      ul,
+      ol {
+        margin: 0 0 1rem;
+        padding-left: 1.3rem;
+      }
+      li {
+        margin: 0.2rem 0;
+      }
+
+      .page {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 2.5rem;
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem 5rem;
+      }
+      nav.toc {
+        position: sticky;
+        top: 1.5rem;
+        align-self: start;
+        font-size: 0.88rem;
+      }
+      nav.toc strong {
+        display: block;
+        color: var(--faint);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.5rem;
+      }
+      nav.toc ol {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        counter-reset: toc;
+      }
+      nav.toc li {
+        margin: 0;
+      }
+      nav.toc a {
+        display: block;
+        padding: 0.28rem 0.5rem;
+        color: var(--muted);
+        text-decoration: none;
+        border-left: 2px solid var(--line);
+      }
+      nav.toc a:hover {
+        color: var(--ink);
+        border-left-color: var(--accent);
+      }
+      main {
+        min-width: 0;
+      }
+      section {
+        padding-top: 2.4rem;
+        margin-top: 2.4rem;
+        border-top: 1px solid var(--line);
+      }
+      header + section {
+        border-top: 0;
+        margin-top: 1.6rem;
+        padding-top: 0;
+      }
+      .prose {
+        max-width: 72ch;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 1.05rem;
+        max-width: 72ch;
+        margin-top: 0.8rem;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 1.1rem;
+      }
+      .ref {
+        font: 0.8rem/1.3 var(--mono);
+        padding: 0.32rem 0.55rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+      .ref b {
+        font-family: var(--sans);
+        font-weight: 600;
+        margin-right: 0.35rem;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 0.75rem;
+        margin: 1.2rem 0 0.4rem;
+      }
+      .stat {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 0.85rem 1rem;
+      }
+      .stat .n {
+        font-size: 1.55rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      .stat .l {
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.4;
+      }
+
+      .callout {
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        margin: 1rem 0;
+        max-width: 80ch;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+        background: var(--warn-soft);
+      }
+      .callout.risk {
+        border-left-color: var(--risk);
+        background: var(--risk-soft);
+      }
+      .callout p:last-child,
+      .callout ul:last-child {
+        margin-bottom: 0;
+      }
+
+      .tag {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0.28rem 0.45rem;
+        border-radius: 999px;
+        white-space: nowrap;
+        vertical-align: 0.1em;
+      }
+      .t-port {
+        background: var(--risk-soft);
+        color: var(--risk);
+      }
+      .t-wire {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .t-replace {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .t-drop {
+        background: var(--sunken);
+        color: var(--muted);
+      }
+      .t-verify {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+      .t-done {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+      .p-mac {
+        background: var(--mac-soft);
+        color: var(--mac);
+      }
+      .p-win {
+        background: var(--win-soft);
+        color: var(--win);
+      }
+      .p-lnx {
+        background: var(--lnx-soft);
+        color: var(--lnx);
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        margin: 0.8rem 0 1.2rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.88rem;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 0.6rem 0.75rem;
+        border-bottom: 1px solid var(--line);
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        background: var(--sunken);
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      td.methods {
+        font: 0.78rem/1.5 var(--mono);
+        color: var(--muted);
+        max-width: 30ch;
+      }
+      td.num {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      tr.group td {
+        background: var(--sunken);
+        font-weight: 650;
+        font-size: 0.8rem;
+        letter-spacing: 0.02em;
+        color: var(--muted);
+      }
+      tr[hidden] {
+        display: none;
+      }
+
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+        margin: 0.6rem 0 0;
+      }
+      .filters span {
+        color: var(--faint);
+        font-size: 0.82rem;
+        margin-right: 0.3rem;
+      }
+      .filters button {
+        font: inherit;
+        font-size: 0.82rem;
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .filters button[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--bg);
+        border-color: var(--ink);
+      }
+
+      .phases {
+        list-style: none;
+        padding: 0;
+        margin: 1rem 0;
+        counter-reset: ph;
+      }
+      .phase {
+        position: relative;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 1.05rem 1.15rem 0.6rem 3.4rem;
+        margin-bottom: 0.9rem;
+      }
+      .phase::before {
+        counter-increment: ph;
+        content: counter(ph, decimal-leading-zero);
+        position: absolute;
+        left: 1rem;
+        top: 1.02rem;
+        font: 600 0.9rem var(--mono);
+        color: var(--faint);
+      }
+      .phase h3 {
+        margin: 0 0 0.3rem;
+      }
+      .phase .why {
+        color: var(--muted);
+        margin-bottom: 0.6rem;
+      }
+      .phase .exit {
+        font-size: 0.88rem;
+        border-top: 1px dashed var(--line);
+        padding-top: 0.55rem;
+        margin-top: 0.4rem;
+        color: var(--muted);
+      }
+      .phase .exit b {
+        color: var(--ink);
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        margin: 0.6rem 0;
+      }
+      summary {
+        cursor: pointer;
+        padding: 0.6rem 0.9rem;
+        font-weight: 600;
+      }
+      details > div {
+        padding: 0 0.9rem 0.8rem;
+      }
+      .small {
+        font-size: 0.86rem;
+        color: var(--muted);
+      }
+
+      @media (max-width: 900px) {
+        .page {
+          grid-template-columns: 1fr;
+          gap: 1rem;
+          padding-top: 1.5rem;
+        }
+        nav.toc {
+          position: static;
+        }
+        nav.toc ol {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.3rem;
+        }
+        nav.toc a {
+          border: 1px solid var(--line);
+          border-radius: 999px;
+          padding: 0.2rem 0.65rem;
+        }
+        .phase {
+          padding-left: 1.1rem;
+          padding-top: 2.2rem;
+        }
+        .phase::before {
+          top: 0.8rem;
+        }
+      }
+      @media print {
+        nav.toc,
+        .filters {
+          display: none;
+        }
+        .page {
+          display: block;
+        }
+        tr[hidden] {
+          display: table-row;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="toc" aria-label="Contents">
+        <strong>Contents</strong>
+        <ol>
+          <li><a href="#summary">Summary</a></li>
+          <li><a href="#sync">1. Bring main in</a></li>
+          <li><a href="#matrix">2. Gap matrix</a></li>
+          <li><a href="#events">3. Page events</a></li>
+          <li><a href="#ui">4. UI capabilities</a></li>
+          <li><a href="#diff">5. Windows vs Linux</a></li>
+          <li><a href="#order">6. Order of work</a></li>
+          <li><a href="#runtime">7. Runtime acceptance</a></li>
+          <li><a href="#questions">8. Open questions</a></li>
+          <li><a href="#method">How this was measured</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <header>
+          <h1>Linux and Windows parity with macOS</h1>
+          <p class="lede">
+            What macOS Bay does on <code>main</code> that <code>feat/windows</code> and <code>feat/linux</code> do not do yet, and the order to close it in.
+            Linux is <code>feat/windows</code> plus Linux-only work, so nearly every gap below applies to both ports. The few differences are in section 5.
+          </p>
+          <div class="meta">
+            <span class="ref"><b>main</b>b5a6fbb1 (local; origin b55f7f19)</span>
+            <span class="ref"><b>feat/windows</b>cc8e93a1 · 31 Oct</span>
+            <span class="ref"><b>feat/linux</b>0abbfb1c · 31 Oct</span>
+            <span class="ref"><b>written</b>2 Nov 2026</span>
+          </div>
+        </header>
+
+        <section id="summary" aria-labelledby="summary-h">
+          <h2 id="summary-h">Summary</h2>
+          <div class="stats">
+            <div class="stat">
+              <div class="n">34</div>
+              <div class="l">commits on <code>main</code> missing from both ports (25 pushed, 9 local only)</div>
+            </div>
+            <div class="stat">
+              <div class="n">309</div>
+              <div class="l">
+                merge conflicts if <code>main</code> merges into <code>feat/linux</code> today (270 content, 38 file location, 1 modify/delete)
+              </div>
+            </div>
+            <div class="stat">
+              <div class="n">160 / 309</div>
+              <div class="l">native methods the macOS UI calls that have no Linux host route (Windows: 154)</div>
+            </div>
+            <div class="stat">
+              <div class="n">18 / 35</div>
+              <div class="l">page events the Mac <code>WebView</code> emits that the Linux and Windows host never sends</div>
+            </div>
+            <div class="stat">
+              <div class="n">0</div>
+              <div class="l">Linux runtime acceptance steps run so far (T1–T8 are all open)</div>
+            </div>
+          </div>
+          <div class="prose">
+            <p>The gaps fall into four groups. Each needs different work:</p>
+            <ol>
+              <li>
+                <strong>The ports are behind <code>main</code>.</strong> Main's file rename (<code>b1ba0b2c</code>) moved the directories that the ports add
+                files to. Merge it first; every later item depends on it.
+              </li>
+              <li>
+                <strong>Features that look present but do nothing.</strong> The UI shows the control, but the host never registers the method, so the call fails
+                or quietly does nothing. Examples: download pause, resume and cancel; Boost export and import; Copy File; the font list. These are the most
+                urgent because users can see them.
+              </li>
+              <li>
+                <strong>Mac-only features with no port.</strong> These are whole modules: content blocker, permission and password prompts, local files, user
+                scripts, the CLI installer, capture, Little Bay's hotkey, cast and device pickers.
+              </li>
+              <li>
+                <strong>Gaps already decided as "drop" or "replace"</strong> in the <a href="linux-port-plan.html">Linux port plan</a>: glass, Dock, menu bar,
+                AppleScript, Handoff, Apple Translation and EventKit. They're listed only so they aren't mistaken for missed work.
+              </li>
+            </ol>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>Priority:</strong> native methods (section 2) and page events (section 3) come first, right after the merge with <code>main</code>, which
+              they depend on. See the <a href="#order">order of work</a>.
+            </p>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>Legend.</strong> <span class="tag t-wire">Wire</span> the engine or shared code already does it; only the host route is missing ·
+              <span class="tag t-port">Port</span> needs a new implementation · <span class="tag t-replace">Replace</span> a different mechanism on
+              Linux/Windows · <span class="tag t-verify">Verify</span> may already work through another route; confirm before writing code ·
+              <span class="tag t-drop">Drop</span> decided out of scope.
+            </p>
+          </div>
+        </section>
+
+        <section id="sync" aria-labelledby="sync-h">
+          <h2 id="sync-h">1. Bring <code>main</code> into the ports</h2>
+          <div class="prose">
+            <p>
+              The ports branched from <code>main</code> at <code>6b9fe151</code> on 31 Oct. Since then <code>main</code> has gained 34 commits, mostly JS
+              performance work plus three features. The ports get these for free once merged; nothing extra needs porting.
+            </p>
+            <ul>
+              <li><code>fed1dbbc</code> Library lays spaces out in columns and mirrors the library sidebar on the right</li>
+              <li><code>02cad526</code> Library opens in the sidebar by default, with a page option</li>
+              <li><code>0f627355</code> Edit a space's theme from the sidebar menu and the palette</li>
+              <li><code>d3661ab4</code>, <code>9cb88c6b</code>, <code>2f168682</code>: omnibox ranking, the trimmed tab menu, tab-transfer fixes</li>
+              <li>
+                About 20 <code>perf</code> commits: store views, sidebar row rendering, session JSON reuse, favicon batching, palette rows, plus the Hermes
+                profiler
+              </li>
+              <li>
+                <code>248a6f05</code>, <code>be4084d1</code>, <code>7dffcf34</code>: release engine layout and prebuilt engine checks. These touch 75 native
+                files.
+              </li>
+            </ul>
+            <p>
+              Following the existing workflow, <strong>merge, don't rebase</strong>: <code>main</code> into <code>feat/windows</code>, then
+              <code>feat/windows</code> into <code>feat/linux</code>. The rename moves these directories, and both ports added files inside them:
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Before (ports)</th>
+                  <th>After (main)</th>
+                  <th>Port files to move</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>packages/shell</code></td>
+                  <td><code>packages/desktop</code></td>
+                  <td>
+                    13 web files: <code>*.web.ts(x)</code>, <code>easelDraw</code>, <code>easelEditor</code>, <code>imageFiles</code>, <code>nativeViews</code>,
+                    <code>webNativeViews</code>, <code>lucide-symbols.mjs</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>packages/nncore</code></td>
+                  <td><code>packages/chromium</code></td>
+                  <td><code>NativeWebView.web.tsx</code>, <code>NativeWebView.tsx</code>, <code>pageEvents.ts</code></td>
+                </tr>
+                <tr>
+                  <td><code>components/layout</code></td>
+                  <td><code>components/window</code></td>
+                  <td>
+                    <code>CaptionButtons</code>, <code>SpaceSwipeGesture(.web)</code>, <code>captionStateSync</code>, <code>webSpaceGestures</code>,
+                    <code>windowButtons</code>, <code>windowDrop</code> tests. Git reports <code>WindowProfile.tsx</code> as deleted, but it moved to
+                    <code>window/</code>; carry the port's edits over.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>components/omnibox</code></td>
+                  <td><code>components/commandBar</code></td>
+                  <td><code>suggestFetch</code>, <code>writeInline(.web)</code>, <code>menuActions</code> test</td>
+                </tr>
+                <tr>
+                  <td><code>src/live</code></td>
+                  <td><code>src/activity</code></td>
+                  <td>Five tests: alerts, calendar, engine, meetingGroups, store</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              266 of the 270 content conflicts are in <code>apps/browser</code>, mostly import paths and the perf rewrites of the store and sidebar. After
+              resolving, update <code>@bay/shell</code> → <code>@bay/desktop</code> and <code>@bay/nncore</code> → <code>@bay/chromium</code> in the port-only
+              files. Then re-run <code>scripts/native-contracts.mjs</code>, because the contract <code>source</code> paths change, and run the full JS, platform
+              and native runtime test sets. Push local <code>main</code>'s 9 commits first, so the ports merge the same <code>main</code> everyone else sees.
+            </p>
+          </div>
+        </section>
+
+        <section id="matrix" aria-labelledby="matrix-h">
+          <h2 id="matrix-h">2. Gap matrix: native modules</h2>
+          <p class="prose">
+            The table lists every native module the shared UI calls whose methods have no Linux or Windows route. "Missing" counts those methods out of the
+            module's total. Modules that are complete on both ports aren't listed: <code>BayWebView</code>, <code>BayKeychain</code>, and
+            <code>BaySync</code> (except <code>shareRecoveryKit</code>).
+          </p>
+          <div class="filters" role="group" aria-label="Filter rows by decision">
+            <span>Show</span>
+            <button type="button" data-filter="all" aria-pressed="true">All</button>
+            <button type="button" data-filter="wire" aria-pressed="false">Wire</button>
+            <button type="button" data-filter="port" aria-pressed="false">Port</button>
+            <button type="button" data-filter="replace" aria-pressed="false">Replace</button>
+            <button type="button" data-filter="verify" aria-pressed="false">Verify</button>
+            <button type="button" data-filter="drop" aria-pressed="false">Drop</button>
+          </div>
+          <div class="table-wrap">
+            <table id="gaps">
+              <thead>
+                <tr>
+                  <th>Feature</th>
+                  <th>Missing</th>
+                  <th>Methods with no route</th>
+                  <th>What the user sees</th>
+                  <th>macOS source</th>
+                  <th>Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="group">
+                  <td colspan="6">Engine and browser (BayCEF, BayChromeUI, BayExtensions)</td>
+                </tr>
+                <tr data-kind="wire">
+                  <td><strong>Download controls</strong></td>
+                  <td class="num">3 / 67</td>
+                  <td class="methods">pauseDownload resumeDownload cancelDownload</td>
+                  <td>Pause, Resume and Cancel in the downloads panel, page and menu fail.</td>
+                  <td><code>nn_downloads.cc</code> (shared)</td>
+                  <td>
+                    <span class="tag t-wire">Wire</span> <code>nn_downloads_pause/resume/cancel</code> are already exported and in <code>nn_dispatch.cc</code>;
+                    add facades to <code>EngineServices::kMethods</code>. S
+                  </td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Content blocker</strong></td>
+                  <td class="num">5</td>
+                  <td class="methods">
+                    getContentBlocker setContentBlockerEnabled setFilterListEnabled isContentBlockerAllowed setContentBlockerAllowed (+ onContentBlocked)
+                  </td>
+                  <td>The content blocker settings and per-site toggle don't work; no blocked count.</td>
+                  <td><code>NNCoreContentBlocker.mm</code> (691 lines; drives the bundled uBlock extension with scripts)</td>
+                  <td><span class="tag t-port">Port</span> The extension is portable; rewrite the Obj‑C++ glue as shared C++ in <code>webui/</code>. M–L</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Profile data cleanup</strong></td>
+                  <td class="num">2</td>
+                  <td class="methods">deleteProfileData releaseProfile</td>
+                  <td>Deleting a space can leave its Chrome profile on disk.</td>
+                  <td><code>NNCoreProfileData.swift</code></td>
+                  <td><span class="tag t-port">Port</span> Shared C++ using <code>ProfileManager</code>. M</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Screen-share picker</strong></td>
+                  <td class="num">2</td>
+                  <td class="methods">displayMediaSources setDisplayMediaPicker (+ onDisplayMediaRequest)</td>
+                  <td>Bay's own picker never appears for <code>getDisplayMedia</code>.</td>
+                  <td><code>nn_desktop_capture.mm</code></td>
+                  <td>
+                    <span class="tag t-port">Port</span> On Windows, the DesktopMediaList sources. On Linux Wayland, the PipeWire portal picks the source
+                    itself, so either hand off to it or <span class="tag t-replace">Replace</span>. M
+                  </td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Cast dialog and device chooser</strong></td>
+                  <td class="num">7</td>
+                  <td class="methods">startCasting stopCasting closeCastDialog selectDevice cancelDeviceChooser refreshDeviceChooser openBluetoothSettings</td>
+                  <td>Cast, plus WebUSB, WebHID, serial and Bluetooth device pickers, have no Bay UI.</td>
+                  <td><code>nn_cast_dialog.mm</code>, <code>nn_device_chooser.mm</code></td>
+                  <td><span class="tag t-port">Port</span> Hook Chrome's chooser controllers in shared C++. M</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Extension install prompt</strong></td>
+                  <td class="num">1</td>
+                  <td class="methods">resolveInstallPrompt</td>
+                  <td>Bay's install confirmation can't be answered.</td>
+                  <td><code>nn_installed_bubble.mm</code></td>
+                  <td><span class="tag t-port">Port</span> S</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Smaller engine calls</strong></td>
+                  <td class="num">8</td>
+                  <td class="methods">
+                    setAutoPictureInPicture setSearchEngineName fetchFavicon removeLegacyFavicons systemState resolvePermission resolveExternalApp
+                  </td>
+                  <td>Auto-PiP setting, renaming search engines and favicon refetch do nothing.</td>
+                  <td><code>NNCoreServices.mm</code>, <code>NNCoreFavicons.mm</code>, <code>nn_permissions.mm</code></td>
+                  <td>
+                    <span class="tag t-port">Port</span> <code>resolvePermission</code> and <code>resolveExternalApp</code> go with their prompts in section 3.
+                    S each
+                  </td>
+                </tr>
+                <tr data-kind="drop">
+                  <td><strong>Chrome tab-strip mirror</strong></td>
+                  <td class="num">2</td>
+                  <td class="methods">tabStrips tabStripCommand</td>
+                  <td>None. Already listed as a known limit in the Windows status doc.</td>
+                  <td><code>NNCoreTabStrip.mm</code></td>
+                  <td><span class="tag t-drop">Drop</span> unless extensions need it</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Dev and tracing hooks</strong></td>
+                  <td class="num">4</td>
+                  <td class="methods">devWindow beginTracing endTracing isTracing</td>
+                  <td>Developer-only: <code>scripts/perf</code> traces and dev windows.</td>
+                  <td>NNCore</td>
+                  <td><span class="tag t-port">Port</span> before T8 performance runs. S</td>
+                </tr>
+
+                <tr class="group">
+                  <td colspan="6">Shell and system (BayShell, BaySystem, BayApp)</td>
+                </tr>
+                <tr data-kind="wire">
+                  <td><strong>File actions</strong></td>
+                  <td class="num">2 / 19</td>
+                  <td class="methods">copyFile renameFile</td>
+                  <td>"Copy File" on a download fails; Tidy Downloads can't rename.</td>
+                  <td><code>System.swift</code></td>
+                  <td><span class="tag t-wire">Wire</span> Add to <code>ShellFiles</code> (clipboard file list, <code>base::Move</code>). S</td>
+                </tr>
+                <tr data-kind="wire">
+                  <td><strong>Text file dialogs</strong></td>
+                  <td class="num">2 / 44</td>
+                  <td class="methods">saveTextFile openTextFile</td>
+                  <td>Boost export and import resolve to <code>false</code>/<code>null</code>, so the buttons do nothing.</td>
+                  <td><code>ShellModule.swift</code></td>
+                  <td><span class="tag t-wire">Wire</span> <code>ShellUI</code> already runs file dialogs (<code>pickFiles</code>). S</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Font list</strong></td>
+                  <td class="num">1</td>
+                  <td class="methods">fontFamilies</td>
+                  <td>The Boost editor's font menu is empty.</td>
+                  <td><code>ShellModule.swift</code></td>
+                  <td><span class="tag t-port">Port</span> Use fontconfig on Linux and DirectWrite on Windows, or Chrome's font list service. S</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Shortcut recording</strong></td>
+                  <td class="num">3</td>
+                  <td class="methods">recordShortcut cancelRecording menuShortcuts</td>
+                  <td>You can't rebind shortcuts in Settings → Shortcuts or Little Bay.</td>
+                  <td><code>Menus.swift</code></td>
+                  <td><span class="tag t-port">Port</span> as a JS key capture in the web host, since keys already reach the WebUI. S–M</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Little Bay global access</strong></td>
+                  <td class="num">2</td>
+                  <td class="methods">setLittleBayHotKey setLittleBayMenuBarItem</td>
+                  <td>No system-wide hotkey or tray item opens Little Bay.</td>
+                  <td><code>LittleBayAccess.swift</code></td>
+                  <td>
+                    <span class="tag t-port">Port</span> Use <code>RegisterHotKey</code> and a tray icon on Windows. On Linux, use the GlobalShortcuts portal
+                    and StatusNotifierItem; some compositors have neither. M
+                  </td>
+                </tr>
+                <tr data-kind="verify">
+                  <td><strong>Sidebar keyboard</strong></td>
+                  <td class="num">3</td>
+                  <td class="methods">focusSidebarRow setSidebarKeyboard setSidebarMoveUndo</td>
+                  <td>Keyboard row focus and the Undo for sidebar moves.</td>
+                  <td><code>Windows.swift</code></td>
+                  <td><span class="tag t-verify">Verify</span> whether the DOM focus path covers them; if so, mark them optional in the contract.</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Ctrl‑Tab switcher capture</strong></td>
+                  <td class="num">1</td>
+                  <td class="methods">setSwitcherCapture</td>
+                  <td>The switcher may not commit when the modifier is released over a page.</td>
+                  <td><code>ShellModule.swift</code></td>
+                  <td><span class="tag t-port">Port</span> Key-up capture in the host's key filter. S</td>
+                </tr>
+                <tr data-kind="verify">
+                  <td><strong>Tab drag previews</strong></td>
+                  <td class="num">7</td>
+                  <td class="methods">dragPreviewBegin/Page/Update/Cancel/Placeholder/End raiseView</td>
+                  <td>Floating previews when tearing tabs out into new windows.</td>
+                  <td><code>Windows.swift</code></td>
+                  <td>
+                    <span class="tag t-verify">Verify</span> the web <code>windowDrop</code> path. On Wayland there are no global coordinates, so tear-off is
+                    size-only (K3).
+                  </td>
+                </tr>
+                <tr data-kind="replace">
+                  <td><strong>Menu bar state</strong></td>
+                  <td class="num">2</td>
+                  <td class="methods">setMenuState setMenuBookmarks</td>
+                  <td>No global menu bar.</td>
+                  <td><code>Menus.swift</code></td>
+                  <td><span class="tag t-replace">Replace</span> with the in-window app menu (Alt/F10), already decided</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Clear animation</strong></td>
+                  <td class="num">1</td>
+                  <td class="methods">disintegrate</td>
+                  <td>Clearing tabs doesn't animate; it already falls back silently.</td>
+                  <td><code>Disintegrate.swift</code></td>
+                  <td><span class="tag t-port">Port</span> as a WebGL or CSS effect over the captured rects. S, optional</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Intro music</strong></td>
+                  <td class="num">4</td>
+                  <td class="methods">playIntroMusic setIntroMusicMuted stopIntroMusic devRenderIntroMusic</td>
+                  <td>Onboarding is silent.</td>
+                  <td><code>IntroMusic.swift</code></td>
+                  <td><span class="tag t-port">Port</span> with an <code>&lt;audio&gt;</code> element in the WebUI; this doesn't need native code. S</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Crash reports</strong></td>
+                  <td class="num">2</td>
+                  <td class="methods">crashReports devCrash</td>
+                  <td>Telemetry sends no crash list.</td>
+                  <td><code>AppModule.swift</code></td>
+                  <td><span class="tag t-port">Port</span> Read Crashpad's database, which is shared code. S</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Test harness hooks</strong></td>
+                  <td class="num">5</td>
+                  <td class="methods">devSnapshotWindow devMenuCommand devTypeKeys devKeyEquivalent devRunAppleScript</td>
+                  <td>Developer-only: the <code>apps/browser/scripts/*-test.mjs</code> suites can't drive the app.</td>
+                  <td><code>AppModule.swift</code>, <code>Scripting.swift</code></td>
+                  <td><span class="tag t-port">Port</span> everything except AppleScript; T4 needs these. M</td>
+                </tr>
+                <tr data-kind="drop">
+                  <td><strong>Dock, app icons, share sheet, Handoff, AppleScript, haptics, dictation</strong></td>
+                  <td class="num">14</td>
+                  <td class="methods">
+                    isInDock addToDock appIcons appIcon setAppIcon share setWindowActivity setScriptState replyToScript hapticTick startDictation
+                    setTrafficLightsCenter setTrafficLightsMode BaySystem.appIcon
+                  </td>
+                  <td>None; these are already hidden by capability flags.</td>
+                  <td>various</td>
+                  <td><span class="tag t-drop">Drop</span> per the Linux plan's out-of-scope list. The <code>bay</code> CLI covers scripting.</td>
+                </tr>
+
+                <tr class="group">
+                  <td colspan="6">Whole feature modules</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Local files</strong> (<code>BayLocalFiles</code>)</td>
+                  <td class="num">6 / 6</td>
+                  <td class="methods">inspect list open reconnect devDrop devUpload</td>
+                  <td>Local folders in the sidebar don't work.</td>
+                  <td><code>LocalFiles.swift</code> (395)</td>
+                  <td><span class="tag t-port">Port</span> Shared C++ with inotify and <code>ReadDirectoryChangesW</code>. M</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>User scripts</strong> (<code>BayUserScripts</code>)</td>
+                  <td class="num">4 / 4</td>
+                  <td class="methods">watch read readStatus writeStatus</td>
+                  <td>Userscripts written with the <code>bay</code> CLI don't load.</td>
+                  <td><code>UserScripts.swift</code> (240)</td>
+                  <td>
+                    <span class="tag t-port">Port</span> Shared C++ with a directory watcher. The engine side (<code>nn_scripts_policy</code>) is already
+                    shared. M
+                  </td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>CLI installer</strong> (<code>BayCli</code>)</td>
+                  <td class="num">2 / 2</td>
+                  <td class="methods">installedVersion install</td>
+                  <td>Settings can't install the <code>bay</code> command.</td>
+                  <td><code>CliInstaller.swift</code> (197)</td>
+                  <td><span class="tag t-port">Port</span> Use <code>~/.local/bin</code> on Linux; deb/rpm can ship it. On Windows, user PATH. S–M</td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Capture</strong> (<code>BayCapture</code>)</td>
+                  <td class="num">6 / 6</td>
+                  <td class="methods">copyImage saveImage shareImage portraitImage copyQuote shareQuote</td>
+                  <td>The screenshot and quote-card tools can't copy, save or render.</td>
+                  <td><code>Capture.swift</code> (553), <code>QuoteCard.swift</code></td>
+                  <td>
+                    <span class="tag t-port">Port</span> copy and save through <code>ShellClipboard</code> and <code>ShellFiles</code>; render quote cards in a
+                    canvas. Share and Mark Up: <span class="tag t-drop">Drop</span>. M
+                  </td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Easel sharing and export</strong></td>
+                  <td class="num">3 / 10</td>
+                  <td class="methods">retainLibraryImage exportEaselHTML createEaselShareIdentity</td>
+                  <td>Easel's web sharing is off (the snapshot is hard-coded <code>false</code>) and HTML export fails.</td>
+                  <td><code>Easel.swift</code>, <code>EaselSharing.swift</code></td>
+                  <td><span class="tag t-port">Port</span> M</td>
+                </tr>
+                <tr data-kind="replace">
+                  <td><strong>Trackpad swipe</strong> (<code>BaySwipe</code>)</td>
+                  <td class="num">7 / 7</td>
+                  <td class="methods">haptic switchPager stepPager selectPager pagerState devPagerState devSimulate</td>
+                  <td>Covered: <code>SpaceSwipeGesture.web.tsx</code> and Chrome's overscroll handle it.</td>
+                  <td><code>NNSwipe.mm</code></td>
+                  <td><span class="tag t-done">Replaced</span> Mark the module optional in the contract.</td>
+                </tr>
+                <tr data-kind="verify">
+                  <td><strong>Translation</strong> (<code>BayTranslate</code>)</td>
+                  <td class="num">8 / 8</td>
+                  <td class="methods">userLanguages languageName detect status supportedLanguages prepare translate translateBlocks</td>
+                  <td>No page translation.</td>
+                  <td><code>TranslateModule.swift</code> (Apple Translation)</td>
+                  <td>
+                    <span class="tag t-drop">Drop</span> in the plan. Two possible replacements: Chrome's own translate, or Bergamot as on mobile. See
+                    <a href="#questions">questions</a>.
+                  </td>
+                </tr>
+                <tr data-kind="verify">
+                  <td><strong>Calendar</strong> (<code>BayCalendar</code>)</td>
+                  <td class="num">4 / 4</td>
+                  <td class="methods">authorizationStatus requestAccess calendars events</td>
+                  <td>No meeting alerts or calendar in Live; 23 UI call sites are gated off.</td>
+                  <td><code>Calendar.swift</code> (EventKit)</td>
+                  <td><span class="tag t-drop">Drop</span> in the plan. A Google or CalDAV source is possible; see <a href="#questions">questions</a>.</td>
+                </tr>
+                <tr data-kind="drop">
+                  <td><strong>On-device AI</strong> (<code>BayTidyNames</code>, <code>BayInlineCompletion</code>)</td>
+                  <td class="num">2 / 2</td>
+                  <td class="methods">suggest complete</td>
+                  <td>No tidy download names or inline completion.</td>
+                  <td>Apple <code>FoundationModels</code></td>
+                  <td><span class="tag t-drop">Drop</span> unless a cross-platform model is chosen</td>
+                </tr>
+                <tr data-kind="drop">
+                  <td><strong>WebKit engine</strong> (<code>BayWebKit</code>)</td>
+                  <td class="num">13 / 13</td>
+                  <td class="methods">prepareTransfer … info</td>
+                  <td>No second engine. The engine UI stays hidden through <code>hasWebKit()</code>.</td>
+                  <td><code>WebKit*.swift</code></td>
+                  <td><span class="tag t-drop">Drop</span> on Linux and Windows; macOS keeps WKWebView</td>
+                </tr>
+                <tr data-kind="drop">
+                  <td><strong>Glass, Dock selection</strong></td>
+                  <td class="num">2</td>
+                  <td class="methods">isLiquidGlass iconTheme</td>
+                  <td>Solid or Mica background instead</td>
+                  <td>BayGlassEffect, DockSelection</td>
+                  <td><span class="tag t-drop">Drop</span></td>
+                </tr>
+                <tr data-kind="drop">
+                  <td><strong>Safari and Dia import</strong></td>
+                  <td class="num">10 / 23</td>
+                  <td class="methods">importSafari* safariHasFullDiskAccess openFullDiskAccessSettings dia* openDia readDiaTabs listInstalledBrowsers</td>
+                  <td>Those browsers don't exist on these platforms.</td>
+                  <td><code>packages/import/ios</code></td>
+                  <td><span class="tag t-drop">Drop</span></td>
+                </tr>
+                <tr data-kind="port">
+                  <td><strong>Recovery kit sharing</strong></td>
+                  <td class="num">1 / 25</td>
+                  <td class="methods">shareRecoveryKit</td>
+                  <td>No share button; copying and saving the kit already work.</td>
+                  <td><code>packages/sync/ios</code></td>
+                  <td><span class="tag t-drop">Drop</span> (no share sheet)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small">Sizes use the work-split scale: S = 1, M = 2, L = 3. They are rough.</p>
+        </section>
+
+        <section id="events" aria-labelledby="events-h">
+          <h2 id="events-h">3. Page events with no Linux or Windows emitter</h2>
+          <p class="prose">
+            On the Mac, NNCore reports these from each page; the shared UI shows Bay's own prompt or state for them. <code>page_observer.cc</code> emits the
+            other 17 events (navigation, progress, favicon, media, find, zoom, crash and so on). For each event below, first check whether Chrome's built-in UI
+            already appears in the hosted page. That is acceptable for a beta, but it doesn't match the Mac.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Mac feature</th>
+                  <th>macOS source</th>
+                  <th>Priority</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>onMediaAccess</code> + <code>resolvePermission</code></td>
+                  <td>Camera, microphone, location and notification permission prompts</td>
+                  <td><code>nn_permissions.mm</code> (498)</td>
+                  <td><span class="tag t-port">P1</span></td>
+                </tr>
+                <tr>
+                  <td><code>onPasswordPrompt</code></td>
+                  <td>Save and update password offers</td>
+                  <td><code>nn_password_prompt.mm</code></td>
+                  <td><span class="tag t-port">P1</span></td>
+                </tr>
+                <tr>
+                  <td><code>onAutofillPrompt</code></td>
+                  <td>Save address and card offers; Bay's suggestion popup</td>
+                  <td><code>nn_autofill_prompt/trigger.mm</code></td>
+                  <td><span class="tag t-port">P1</span></td>
+                </tr>
+                <tr>
+                  <td><code>onDisplayMediaRequest</code></td>
+                  <td>Screen-share picker</td>
+                  <td><code>nn_desktop_capture.mm</code></td>
+                  <td><span class="tag t-port">P1</span></td>
+                </tr>
+                <tr>
+                  <td><code>onExternalApp</code> + <code>resolveExternalApp</code></td>
+                  <td>"Open in Zoom / Slack?" prompts</td>
+                  <td><code>nn_external_apps.mm</code>; the Linux and Windows engine siblings exist</td>
+                  <td><span class="tag t-wire">P1</span></td>
+                </tr>
+                <tr>
+                  <td><code>onPopupBlocked</code></td>
+                  <td>Blocked-popup notice with "Open"</td>
+                  <td>NNCore content hooks</td>
+                  <td><span class="tag t-port">P2</span></td>
+                </tr>
+                <tr>
+                  <td><code>onStatus</code></td>
+                  <td>Link-hover status text</td>
+                  <td><code>NNCoreWebView.mm</code></td>
+                  <td><span class="tag t-port">P2</span></td>
+                </tr>
+                <tr>
+                  <td><code>onPeekLink</code></td>
+                  <td>Arc-style Peek for cross-site links</td>
+                  <td><code>nn_peek_links.mm</code> (89)</td>
+                  <td><span class="tag t-port">P2</span></td>
+                </tr>
+                <tr>
+                  <td><code>onPictureInPicture</code>, <code>onNowPlaying</code></td>
+                  <td>PiP state and the sidebar's now-playing card</td>
+                  <td><code>NNCorePictureInPicture.mm</code></td>
+                  <td><span class="tag t-port">P2</span></td>
+                </tr>
+                <tr>
+                  <td><code>onNotification</code>, <code>onNotificationClose</code></td>
+                  <td>Page notifications routed through Bay</td>
+                  <td><code>NNCoreWebView.mm</code></td>
+                  <td><span class="tag t-verify">Verify</span> The OS notification bridge may cover them</td>
+                </tr>
+                <tr>
+                  <td><code>onOpenWindow</code>, <code>onActivateRequest</code>, <code>onReady</code></td>
+                  <td>Popups and <code>window.open</code>, tab focus requests, the browser id handshake</td>
+                  <td>NNCore</td>
+                  <td><span class="tag t-verify">Verify</span> The tab broker's page-offer route may replace them</td>
+                </tr>
+                <tr>
+                  <td><code>onPageMessage</code>, <code>onHost</code></td>
+                  <td>Bay's in-page script channel</td>
+                  <td><code>nn_page_channel.mm</code></td>
+                  <td><span class="tag t-verify">Verify</span> Needed by Boosts and the content blocker</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="ui" aria-labelledby="ui-h">
+          <h2 id="ui-h">4. UI capabilities that are Mac-only</h2>
+          <p class="prose">
+            From <code>packages/platform/src/capabilities.ts</code> on <code>feat/linux</code>. These aren't native modules, but they turn off view behaviour on
+            the web host, so the app looks and feels different from the Mac:
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Capability</th>
+                  <th>macOS</th>
+                  <th>Windows</th>
+                  <th>Linux</th>
+                  <th>Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>tooltips</code></td>
+                  <td>yes</td>
+                  <td>no</td>
+                  <td>no</td>
+                  <td><span class="tag t-port">Port</span> as DOM tooltips in <code>views.web.tsx</code>. Many icon buttons have no other label. S</td>
+                </tr>
+                <tr>
+                  <td><code>keyDownEvents</code></td>
+                  <td>yes</td>
+                  <td>no</td>
+                  <td>no</td>
+                  <td><span class="tag t-port">Port</span> Keys a view takes before the page does (omnibox, find, sidebar). Phase 5 item. M</td>
+                </tr>
+                <tr>
+                  <td><code>focusRing</code></td>
+                  <td>yes</td>
+                  <td>no</td>
+                  <td>no</td>
+                  <td><span class="tag t-port">Port</span> as <code>:focus-visible</code> rings, except in text fields (Windows rule). S</td>
+                </tr>
+                <tr>
+                  <td><code>nativeDrag</code></td>
+                  <td>yes</td>
+                  <td>no</td>
+                  <td>no</td>
+                  <td><span class="tag t-port">Port</span> Dragging downloads and files out of Bay (OLE and XDND). M</td>
+                </tr>
+                <tr>
+                  <td><code>windowMoveByView</code></td>
+                  <td>yes</td>
+                  <td>no</td>
+                  <td>no</td>
+                  <td><span class="tag t-verify">Verify</span> CSS drag regions may already cover the sidebar header</td>
+                </tr>
+                <tr>
+                  <td><code>globalWindowCoordinates</code></td>
+                  <td>yes</td>
+                  <td>yes</td>
+                  <td>no</td>
+                  <td><span class="tag t-drop">By design</span> Wayland has no global coordinates (K3)</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>captureMarkup</code>, <code>shareSheet</code>, <code>handoff</code>, <code>dock</code>, <code>menuBar</code>,
+                    <code>appleScript</code>, <code>liquidGlass</code>, <code>vibrancy</code>
+                  </td>
+                  <td>yes</td>
+                  <td>no</td>
+                  <td>no</td>
+                  <td><span class="tag t-drop">Drop</span> / <span class="tag t-replace">Replace</span> as already decided</td>
+                </tr>
+                <tr>
+                  <td><code>shaders</code>, <code>hover</code>, <code>windowBackdrop</code>, <code>notifications</code>, <code>keychain</code></td>
+                  <td>yes</td>
+                  <td>yes</td>
+                  <td>yes</td>
+                  <td><span class="tag t-done">Done</span> WebGL2, DOM hover, Mica or solid, OS notifications, Credential Manager / libsecret</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="diff" aria-labelledby="diff-h">
+          <h2 id="diff-h">5. Where Windows and Linux differ</h2>
+          <p class="prose">
+            Git history-wise, <code>feat/linux</code> contains all of <code>feat/windows</code> (0 commits behind, 217 ahead). The feature differences are
+            small:
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Feature</th>
+                  <th><span class="tag p-win">Windows</span></th>
+                  <th><span class="tag p-lnx">Linux</span></th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>In-app updater (<code>checkForUpdates</code>, <code>installPendingUpdate</code>, auto-check and download)</td>
+                  <td>yes (<code>updater_service_win.cc</code>)</td>
+                  <td>no</td>
+                  <td>
+                    Linux by design: the package manager updates, and tarball/AppImage get a notice. Hide the update settings on Linux. Neither port has
+                    <code>setUpdateChannel</code>, so nightly vs stable can't be chosen.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Notification permission (<code>notificationPermission</code>, <code>request…</code>, <code>openNotificationSettings</code>)</td>
+                  <td>yes</td>
+                  <td>no</td>
+                  <td>Linux: report "granted" from the D-Bus server's presence and open the desktop's settings. S</td>
+                </tr>
+                <tr>
+                  <td>Import file chooser (<code>chooseImportFile</code>)</td>
+                  <td>yes</td>
+                  <td>refused</td>
+                  <td>Linux returns "unavailable"; route it through <code>ShellUI</code>'s picker. S</td>
+                </tr>
+                <tr>
+                  <td>Caption buttons</td>
+                  <td>drawn (top right)</td>
+                  <td>none; desktop layout snapshot</td>
+                  <td>As decided on 31 Oct</td>
+                </tr>
+                <tr>
+                  <td>Secret storage warning (<code>BayCEF.secretStorage</code>)</td>
+                  <td>n/a</td>
+                  <td>yes</td>
+                  <td>Linux-only, as intended</td>
+                </tr>
+                <tr>
+                  <td>Native build and runtime</td>
+                  <td>not yet built or run</td>
+                  <td>not yet built or run</td>
+                  <td>Both ports are verified at source level only (see section 7)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="order" aria-labelledby="order-h">
+          <h2 id="order-h">6. Order of work</h2>
+          <p class="prose">
+            <strong>Priority: native methods and page events first.</strong> The merge with <code>main</code> stays as step zero because it's a prerequisite:
+            every method below lands in files that the rename moved, so doing it first avoids redoing work. After that, the native gaps from sections 2 and 3
+            come before anything else. As before, write and check code on the Mac, put shared host code on <code>feat/windows</code> and Linux-only code on
+            <code>feat/linux</code>, and land each by merge.
+          </p>
+          <ol class="phases">
+            <li class="phase">
+              <h3>Step zero: sync with main</h3>
+              <p class="why">This is a prerequisite, not a feature. Keep it short.</p>
+              <ul>
+                <li>Push local <code>main</code> (9 perf commits).</li>
+                <li>Merge <code>main</code> → <code>feat/windows</code>, then resolve the moves in section 1.</li>
+                <li>Merge <code>feat/windows</code> → <code>feat/linux</code>.</li>
+                <li>Regenerate contracts. Run the JS, platform and native runtime tests and both web exports.</li>
+              </ul>
+              <p class="exit"><b>Done when</b> both ports contain <code>main</code> and their tests pass at the same counts as before the merge.</p>
+            </li>
+            <li class="phase">
+              <h3>Native methods</h3>
+              <p class="why">
+                The first priority. Every <span class="tag t-wire">Wire</span> and <span class="tag t-port">Port</span> row in section 2, in this order: what
+                users already see failing first, then the engine, then shell and system, then whole modules.
+              </p>
+              <ol>
+                <li>
+                  <strong>Wire:</strong> download pause, resume and cancel; <code>copyFile</code>, <code>renameFile</code>; <code>saveTextFile</code>,
+                  <code>openTextFile</code>; <code>chooseImportFile</code> and notification permission on Linux.
+                </li>
+                <li>
+                  <strong>Engine (shared C++):</strong> content blocker, profile data delete and release, cast dialog and device chooser, extension install
+                  prompt, auto-PiP, renaming search engines, favicon refetch, <code>systemState</code>, tracing and dev windows.
+                </li>
+                <li>
+                  <strong>Shell and system:</strong> <code>fontFamilies</code>, shortcut recording, Little Bay hotkey and tray item, switcher capture, intro
+                  music, crash reports, test harness hooks, the clear animation.
+                </li>
+                <li><strong>Modules:</strong> user scripts and the CLI installer, local files, Capture, and Easel export and sharing.</li>
+                <li>
+                  <strong>Mark the rest optional:</strong> mark every <span class="tag t-drop">Drop</span> method optional in the contract, so the UI hides it
+                  rather than calling it. Mark <code>BaySwipe</code> optional because it's replaced.
+                </li>
+              </ol>
+              <p class="exit">
+                <b>Done when</b> every non-dropped contract method is in each host's <code>optionalMethods</code> and has a C++ test against the pinned
+                Chromium. Sync and import already meet this.
+              </p>
+            </li>
+            <li class="phase">
+              <h3>Page events</h3>
+              <p class="why">
+                Also first priority, and partly the same work, since several events share their resolve method with a native method above. All 18 events in
+                section 3.
+              </p>
+              <ol>
+                <li>
+                  <strong>P1:</strong> permissions (<code>onMediaAccess</code> + <code>resolvePermission</code>), password and autofill offers, the screen-share
+                  picker, external app prompts.
+                </li>
+                <li><strong>P2:</strong> link-hover status, popup blocked, Peek links, PiP and now-playing.</li>
+                <li>
+                  <strong>Verify, then fill the gaps:</strong> notifications, <code>onOpenWindow</code>/<code>onActivateRequest</code>/<code>onReady</code>
+                  against the tab broker's page-offer route, and <code>onPageMessage</code>/<code>onHost</code>, which Boosts and the content blocker need.
+                </li>
+              </ol>
+              <p class="exit">
+                <b>Done when</b> <code>page_observer.cc</code> (or the broker) emits all 35 <code>WebViewProps</code> events, Bay's own prompt replaces Chrome's
+                bubble for each P1 event, and C++ tests cover emit and resolve.
+              </p>
+            </li>
+            <li class="phase">
+              <h3>Feel: view behaviour</h3>
+              <p class="why">After the methods and events. The app works without these, but it doesn't feel like the Mac app yet.</p>
+              <ul>
+                <li><code>tooltips</code>, <code>focusRing</code>, <code>keyDownEvents</code>, <code>nativeDrag</code> on the web host</li>
+                <li>Tab tear-off previews (verify), sidebar keyboard (verify)</li>
+              </ul>
+              <p class="exit"><b>Done when</b> the Mac shortcut, tab-drag and command-bar test scripts run against the web host in the local preview.</p>
+            </li>
+            <li class="phase">
+              <h3>Stage 2: Linux and Windows runtime</h3>
+              <p class="why">Nothing native has been linked or run yet. This step is unchanged from the work split.</p>
+              <p class="exit"><b>Done when</b> T1–T8 and A4 pass (see section 7).</p>
+            </li>
+          </ol>
+        </section>
+
+        <section id="runtime" aria-labelledby="runtime-h">
+          <h2 id="runtime-h">7. Runtime acceptance still open</h2>
+          <p class="prose">
+            From <a href="linux-work-split.md">docs/linux-work-split.md</a>. All stage 1 code items (K1–K4, K8, K9, D1, A2, A3) are source-complete. Every stage
+            2 item is unchecked:
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Step</th>
+                  <th>Owner</th>
+                  <th>What</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>T1</td>
+                  <td>D</td>
+                  <td>Engine build on Arch: <code>engine.py --platform linux prepare/build/archive</code>, glibc floor</td>
+                </tr>
+                <tr>
+                  <td>T2</td>
+                  <td>D</td>
+                  <td>Hosting gate: SurfaceEmbed on Wayland and X11, GNOME and KDE; go/no-go record</td>
+                </tr>
+                <tr>
+                  <td>T3</td>
+                  <td>D</td>
+                  <td>Link and run the native tests; Phase 3 acceptance (tabs, splits, popups, extensions, PiP, DevTools)</td>
+                </tr>
+                <tr>
+                  <td>T4</td>
+                  <td>A</td>
+                  <td>App boot from Metro and the packed bundle; port the <code>*-test.mjs</code> suites to xvfb and Weston</td>
+                </tr>
+                <tr>
+                  <td>T5</td>
+                  <td>A</td>
+                  <td>Snapping, GPUs, fractional scaling, IME, touch</td>
+                </tr>
+                <tr>
+                  <td>T6</td>
+                  <td>D</td>
+                  <td>Import fixtures, shared sync vault, keyring import, folder sync</td>
+                </tr>
+                <tr>
+                  <td>T7</td>
+                  <td>A</td>
+                  <td>Packages on the VM matrix; namespace sandbox</td>
+                </tr>
+                <tr>
+                  <td>T8</td>
+                  <td>A</td>
+                  <td>Orca and keyboard-only use; performance against the Mac numbers</td>
+                </tr>
+                <tr>
+                  <td>A4</td>
+                  <td>A</td>
+                  <td>CI: app build from the archived engine, distro smoke launches</td>
+                </tr>
+                <tr>
+                  <td>K6</td>
+                  <td>K</td>
+                  <td>Fixes for failures in K's areas</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="prose">
+            Windows has the same hole: no Windows Chromium build or hosting run has passed (<a href="windows-implementation-status.md">status doc</a>).
+          </p>
+        </section>
+
+        <section id="questions" aria-labelledby="questions-h">
+          <h2 id="questions-h">8. Open questions</h2>
+          <div class="prose">
+            <ol>
+              <li>
+                <strong>Translation.</strong> Keep it dropped, use Chrome's built-in translate, or reuse the Bergamot work parked on
+                <code>feat/mobile-translation</code>? Bergamot would give the same feature on all three desktops.
+              </li>
+              <li>
+                <strong>Calendar.</strong> Meeting alerts and the Live calendar are a large Mac feature (23 gated call sites). Is a Google Calendar or CalDAV
+                source in scope for the ports, or does it stay Mac-only?
+              </li>
+              <li>
+                <strong>DRM.</strong> Without WebKit, Netflix and other DRM sites have no engine on the ports. Should Chromium on both ports fetch the Widevine
+                CDM through the component updater? Windows also needs Verified Media Path (VMP) signing before streaming services accept it.
+              </li>
+              <li>
+                <strong>On-device AI.</strong> Tidy names and inline completion need Apple's model. Drop them, or pick a local model for the other platforms?
+              </li>
+              <li>
+                <strong>Chrome's own prompts.</strong> For the P1 events, is Chrome's built-in bubble acceptable for a first beta, so Bay's prompts can follow
+                later?
+              </li>
+            </ol>
+          </div>
+        </section>
+
+        <section id="method" aria-labelledby="method-h">
+          <h2 id="method-h">How this was measured</h2>
+          <div class="prose">
+            <ul>
+              <li>
+                <strong>Methods:</strong> every method in <code>packages/platform/src/nativeContracts.ts</code> (23 modules, 309 methods) was checked against
+                the <code>feat/linux</code> host sources in <code>chrome/browser/bay/</code>. The check excluded the generated
+                <code>native_contracts.g.h</code>, tests, and the other platform's <code>_win</code>/<code>_linux</code> files and
+                <code>BUILDFLAG</code> blocks. It also used the import and sync <code>MethodNames()</code> lists. A method counts as routed if the host names
+                it. This is a text match, so it can miss a method that is built from strings at runtime; the <span class="tag t-verify">Verify</span> rows are
+                where that's most likely.
+              </li>
+              <li><strong>Events:</strong> the <code>on*</code> props of <code>WebViewProps</code> were compared with the event names the host emits.</li>
+              <li><strong>Merge:</strong> <code>git merge-tree --write-tree origin/feat/linux main</code>. Nothing was merged.</li>
+              <li>
+                <strong>Side branches:</strong> every local <code>t3/linux-*</code> branch is already in <code>feat/linux</code> by patch. Only
+                <code>feat/linux-k-engine</code> has one unmerged commit, a docs note.
+              </li>
+            </ul>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script>
+      (() => {
+        const buttons = document.querySelectorAll(".filters button");
+        const rows = document.querySelectorAll("#gaps tbody tr");
+        buttons.forEach((button) =>
+          button.addEventListener("click", () => {
+            const kind = button.dataset.filter;
+            buttons.forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+            rows.forEach((row) => {
+              if (row.classList.contains("group")) {
+                row.hidden = false;
+                return;
+              }
+              row.hidden = kind !== "all" && row.dataset.kind !== kind;
+            });
+            // Hide group headings whose rows are all filtered out.
+            document.querySelectorAll("#gaps tr.group").forEach((group) => {
+              let next = group.nextElementSibling;
+              let any = false;
+              while (next && !next.classList.contains("group")) {
+                if (!next.hidden) any = true;
+                next = next.nextElementSibling;
+              }
+              group.hidden = !any;
+            });
+          }),
+        );
+      })();
+    </script>
+  </body>
+</html>
