@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 
 const S = () => useBrowser.getState();
 const groupOfTab = (id) => Object.values(S().groups).find((g) => g.tabIds.includes(id));

@@ -1,10 +1,10 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { bookmarkAncestors, folderChildren } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
-import { useHover } from "../primitives";
+import { useBrowser } from "../../store/browserStore";
+import { useHover } from "../ui/primitives";
 import { useFormColors } from "../settings/controls";
 
 type FolderRow = { id: string; title: string; depth: number; hasChildren: boolean };

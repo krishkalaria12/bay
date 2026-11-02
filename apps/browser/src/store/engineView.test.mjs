@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { useBrowser } from "./browser.ts";
+import { useBrowser } from "./browserStore.ts";
 import { useEngineView } from "./engineView.ts";
 import { engineMark } from "./engines.ts";
 

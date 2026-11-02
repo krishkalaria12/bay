@@ -1,13 +1,13 @@
-import type { PagePoint } from "@bay/nncore";
+import type { PagePoint } from "@bay/chromium";
 import type { StateCreator } from "zustand";
 import { matchingLinkRule } from "../lib/externalLinkRules";
-import type { BrowserState, BrowserShape } from "./browser";
+import type { BrowserState, BrowserShape } from "./browserStore";
 import { IDLE_LIVE, activeTabId, findLast, listIds, makeTab, pinnedFirst, pinnedPage, spaceListKey, withList } from "./model";
-import { insertionIndex } from "./openers";
-import { groupWithOpener } from "./organize";
+import { insertionIndex } from "./openerOrder";
+import { groupWithOpener } from "./tabTidying";
 import { splitOf } from "./splits";
 import { activated, apply, removeTabs } from "./tabs";
-import { mainWindowFor, mostRecentSpace } from "./small";
+import { mainWindowFor, mostRecentSpace } from "./littleBay";
 
 // Arc's Peek: a link from a pinned tab or a favourite opens over that tab's page, in a card, instead of as a tab of its
 // own. The peek's page is a store tab (a page, live state, an engine browser) that no list holds, marked `peekOf` its
@@ -15,7 +15,7 @@ import { mainWindowFor, mostRecentSpace } from "./small";
 // after its opener as any link's tab, and splitting it lists it and pairs it with its opener. One per window, as Arc's:
 // another link replaces it.
 
-// `at`: where in the window its link was clicked, for the card to open out of (layout/PeekLayer.tsx).
+// `at`: where in the window its link was clicked, for the card to open out of (linkOverlay/PeekLayer.tsx).
 export type Peek = { tabId: string; fromId: string; at?: PagePoint };
 
 // The last peek a window closed, for Reopen Closed Tab (⌘⇧T) to bring back, as Arc's.

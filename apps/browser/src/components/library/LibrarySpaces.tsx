@@ -1,15 +1,15 @@
-import { ContextMenuArea, Symbol } from "@bay/shell";
+import { ContextMenuArea, Symbol } from "@bay/desktop";
 import type { ReactNode } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { createSpace, switchSpace } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { childFolderIds } from "../../store/folders";
 import { spaceTabIds } from "../../store/model";
 import type { Tab } from "../../store/types";
 import { EmptyState, matchesQuery } from "../pages/PageLayout";
-import { Favicon, IconButton, useHover } from "../primitives";
+import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { tabTitle } from "../sidebar/actions";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";

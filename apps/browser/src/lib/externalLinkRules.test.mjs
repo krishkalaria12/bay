@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { defaultLinkDestination, matchingLinkRule, normalizeExternalLinkRules, validateLinkPattern } from "./externalLinkRules.ts";
-import { mostRecentSpace } from "../store/small.ts";
-import { useBrowser } from "../store/browser.ts";
+import { mostRecentSpace } from "../store/littleBay.ts";
+import { useBrowser } from "../store/browserStore.ts";
 import { flushPersistence, loadSession, startPersistence } from "./persist.ts";
 import { docs } from "../test-native-stub.mjs";
 

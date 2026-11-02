@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Clock, emptyScope, syncScope } from "@bay/sync";
-import { useBrowser } from "../store/browser.ts";
+import { useBrowser } from "../store/browserStore.ts";
 import { localFilesAdapter } from "./localFiles.ts";
 
 const S = () => useBrowser.getState();

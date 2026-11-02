@@ -12,7 +12,7 @@ One feed, `appcast.xml` on the latest stable GitHub release (`SUFeedURL`, `bay.k
 there). A stable item has no channel; a nightly's carries `<sparkle:channel>nightly</sparkle:channel>`
 (`generate_appcast --channel nightly`). Sparkle skips an item on a channel the app doesn't allow and allows none by
 default, so every copy on Stable, and every build shipped before channels existed, only sees stable items. A copy on
-Nightly allows `nightly` (`allowedChannels(for:)` in `packages/shell/ios/Updater.swift`) and gets the newest of both.
+Nightly allows `nightly` (`allowedChannels(for:)` in `packages/desktop/ios/Updater.swift`) and gets the newest of both.
 
 - **Which channel a copy is on.** Settings › General › Update channel, kept in the defaults key `NNUpdateChannel`.
   Until the user picks, it's the channel of the build that first ran (`BayUpdateChannel` in Info.plist, which
@@ -64,7 +64,7 @@ A nightly by hand: `gh workflow run release.yml` (`-f force=true` even if nothin
 - **checks**: format, lint, types and the JavaScript tests.
 - **build**, on `macos-26` with the newest released Xcode, with no secrets: fetches the engine for this exact
   `engine/` tree, installs (pnpm, Pods), runs `scripts/release.sh <version> --channel <channel> --phase build` (the
-  archive, signed ad hoc) and uploads it. Before the archive, `packages/shell/scripts/test-updater.py` checks channel
+  archive, signed ad hoc) and uploads it. Before the archive, `packages/desktop/scripts/test-updater.py` checks channel
   selection and the pending-install guard against Sparkle's development framework from Pods.
 - **sign** restores no cache and installs nothing but Sparkle's own pinned tools, so no dependency code runs next to
   the keys, and treats the build as untrusted (`.github/release/unpack-build.py`). `.github/release/signing.sh` puts
@@ -102,5 +102,5 @@ scripts/publish-engine.sh
 
 packs it unstripped (the symbols' copy; `release.sh` strips the app's), uploads it to the prerelease
 `engine-<engine tree:12>` (never latest) and appends `<tree> engine-<tree:12> <sha256>` to
-`packages/nncore/prebuilt-engines.tsv`: commit and push that line. Until then, releases of a commit whose `engine/`
+`packages/chromium/prebuilt-engines.tsv`: commit and push that line. Until then, releases of a commit whose `engine/`
 changed fail in **plan**, saying so; `engine/` must be committed and pushed first.

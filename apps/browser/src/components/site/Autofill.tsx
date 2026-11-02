@@ -1,7 +1,7 @@
-import { showAutofillSuggestions, type CardNetwork } from "@bay/nncore";
-import { Symbol } from "@bay/shell";
+import { showAutofillSuggestions, type CardNetwork } from "@bay/chromium";
+import { Symbol } from "@bay/desktop";
 import { Text, View } from "react-native";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
 import { openSettings } from "../settings/windows";

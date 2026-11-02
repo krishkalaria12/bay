@@ -1,13 +1,13 @@
 import { cleanUrl } from "@bay/core";
-import { confirm, ContextMenuArea, copyText, MouseArea, showMenu, Symbol } from "@bay/shell";
+import { confirm, ContextMenuArea, copyText, MouseArea, showMenu, Symbol } from "@bay/desktop";
 import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import type { HistoryEntry } from "../../store/types";
 import { openModeFor, openUrl } from "../bookmarks/actions";
-import { Favicon, IconButton, useHover } from "../primitives";
+import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { Button, Checkbox, useFormColors } from "../settings/controls";
 import { ClearDataDialog, useClearDataRequest } from "./ClearDataDialog";
 import { dayLabel, dayStart, EmptyState, hostLabel, matchesQuery, PageHeader, timeLabel } from "./PageLayout";

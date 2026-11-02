@@ -14,11 +14,11 @@ import {
   type ExtensionInstallPrompt,
   type ExtensionPackage,
   type InstalledExtension,
-} from "@bay/nncore";
-import { confirm, showMenu } from "@bay/shell";
+} from "@bay/chromium";
+import { confirm, showMenu } from "@bay/desktop";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId, engineProfile } from "../../store/model";
 import { openSettings } from "../settings/windows";
 import { closeSidePanelsOf, toggleSidePanel } from "./sidePanels";

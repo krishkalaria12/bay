@@ -1,8 +1,8 @@
-import { confirm } from "@bay/shell";
+import { confirm } from "@bay/desktop";
 import { create } from "zustand";
 import { focus, openWindow } from "../../lib/actions";
 import { folderLinks } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId, bookmarkSpaceId, listIds, resolveWindowId, viewTabIds, windowListKey } from "../../store/model";
 
 export type OpenMode = "current" | "background" | "foreground" | "window" | "incognito" | "split";

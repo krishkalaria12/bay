@@ -1,5 +1,5 @@
 import { engineHost, searchUrl, type SearchEngine } from "./engines.ts";
-import { hostOf, searchUrlFor } from "./omnibox.ts";
+import { hostOf, searchUrlFor } from "./input.ts";
 
 export type SiteSearch = { host: string; name: string; url: string; keyword?: string };
 

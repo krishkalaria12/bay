@@ -1,5 +1,5 @@
 import { DIA_SPECTRUM, PowerUp } from "@bay/shaders";
-import { playIntroMusic, setIntroMusicMuted, stopIntroMusic, Symbol } from "@bay/shell";
+import { playIntroMusic, setIntroMusicMuted, stopIntroMusic, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -15,7 +15,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { introMusicMuted, saveIntroMusicMuted } from "./state";
 import { SecondaryButton, useOnboardingColors } from "./ui";
 import { APP_NAME } from "../../lib/constants";

@@ -1,5 +1,5 @@
 import { appUrlOrigin, displayHost } from "@bay/core";
-import type { BrowserState, BrowserShape } from "./browser";
+import type { BrowserState, BrowserShape } from "./browserStore";
 import { DEFAULT_SPACE_ID } from "./constants";
 import type { BrowserWindow, Space, Tab, TabLive, TabSnapshot } from "./types";
 
@@ -222,7 +222,7 @@ export function bookmarkSpaceId(s: BrowserShape, window: BrowserWindow | undefin
 
 export function resolveWindowId(s: BrowserShape, id?: string | null): string | undefined {
   if (id && s.windows[id]) return id;
-  // Without a window named, never pick a Little Bay: it holds one page (store/small.ts).
+  // Without a window named, never pick a Little Bay: it holds one page (store/littleBay.ts).
   const main = (w: string) => !!s.windows[w] && s.windows[w]!.kind !== "small";
   return s.ui.focusOrder.find(main) ?? s.windowOrder.find(main);
 }

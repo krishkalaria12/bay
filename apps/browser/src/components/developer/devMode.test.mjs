@@ -4,16 +4,16 @@ import { test } from "node:test";
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "@bay/shell" && context.parentURL?.endsWith("/developer/devMode.ts")) {
+    if (specifier === "@bay/desktop" && context.parentURL?.endsWith("/developer/devMode.ts")) {
       return { url: "data:text/javascript,export const copyText = () => {}", shortCircuit: true };
     }
-    if (specifier === "../layout/splitActions" && context.parentURL?.endsWith("/developer/devMode.ts")) {
+    if (specifier === "../split/splitActions" && context.parentURL?.endsWith("/developer/devMode.ts")) {
       return { url: "data:text/javascript,export const showToast = () => {}", shortCircuit: true };
     }
     return next(specifier, context);
   },
 });
-const { useBrowser } = await import("../../store/browser.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
 const { webviews } = await import("../../lib/webviews.ts");
 const dev = await import("./devMode.ts");
 const { JSON_VIEWER_SCRIPT } = await import("./jsonViewerScript.ts");
@@ -93,7 +93,7 @@ test("a progress update never reads unrelated loading records", async () => {
     },
   );
   useBrowser.setState({ live });
-  const { withChangedEntry } = await import("../../store/changes.ts");
+  const { withChangedEntry } = await import("../../store/recordDiff.ts");
   const next = withChangedEntry(live, id, { ...live[id], progress: 0.6 });
   unrelatedReads = 0;
   useBrowser.setState({ live: next });

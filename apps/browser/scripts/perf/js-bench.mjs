@@ -68,8 +68,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeSeed } from "./seed.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const appDir = resolve(here, "../..");
-const repo = resolve(appDir, "../..");
+const appDir = resolve(here, "../../index");
+const repo = resolve(appDir, "../../index");
 const defaultOut = process.env.NN_PERF_OUT ?? "/tmp/nn-perf-js";
 // Bump when the seed or bench-app.js scenarios change what the numbers count.
 //   1  until e282ac6e: the seed wrote a favicon index (favicons-default.json) the app deleted at startup

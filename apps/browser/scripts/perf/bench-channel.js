@@ -1,11 +1,11 @@
 // The benchmark's command channel (bench-entry.js loads it once the app has loaded).
-import * as shell from "@bay/shell";
-import { readDocument, writeDocument } from "@bay/shell";
+import * as shell from "@bay/desktop";
+import { readDocument, writeDocument } from "@bay/desktop";
 import * as actions from "../../src/lib/actions";
-import { runCommand } from "../../src/lib/commands";
+import { runCommand } from "../../src/lib/appCommands";
 import { webviews } from "../../src/lib/webviews";
-import { usePages } from "../../src/components/layout/pageState";
-import { useBrowser } from "../../src/store/browser";
+import { usePages } from "../../src/components/window/pageState";
+import { useBrowser } from "../../src/store/browserStore";
 
 writeDocument("bench-boot.json", JSON.stringify({ jsStart: Date.now() }));
 

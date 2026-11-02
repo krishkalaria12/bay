@@ -2,12 +2,12 @@ import { createContext, useContext, useMemo } from "react";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { isBookmarked } from "./bookmarks";
-import { useBrowser, type BrowserShape } from "./browser";
+import { useBrowser, type BrowserShape } from "./browserStore";
 import { activeTabId, bookmarkSpaceId, IDLE_LIVE, spaceFor } from "./model";
 import type { Settings } from "./settings";
 import type { BrowserWindow, FindState, Space, Tab, TabLive } from "./types";
-import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./ui";
-import { findStore, quietStore, settingsStore, spaceHeaderHiddenStore, spaceStore, tabLiveStore, tabStore, windowStore, windowUiStore } from "./views";
+import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./windowUi";
+import { findStore, quietStore, settingsStore, spaceHeaderHiddenStore, spaceStore, tabLiveStore, tabStore, windowStore, windowUiStore } from "./derivedStores";
 
 export const WindowContext = createContext<string | null>(null);
 
@@ -100,7 +100,7 @@ export function useWindowUi() {
   return useStore(view, (ui) => ui ?? DEFAULT_WINDOW_UI);
 }
 
-/** `useBrowser` for a selector that reads nothing of `live`: it doesn't run on a page's progress (store/views.ts). */
+/** `useBrowser` for a selector that reads nothing of `live`: it doesn't run on a page's progress (store/derivedStores.ts). */
 export const useQuietBrowser = <T>(select: (s: BrowserShape) => T): T => useStore(quietStore, select);
 
 export const useSettings = <T>(select: (settings: Settings) => T): T => useStore(settingsStore, select);

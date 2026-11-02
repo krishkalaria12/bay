@@ -1,10 +1,10 @@
-import { Surface } from "@bay/shell";
+import { Surface } from "@bay/desktop";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
 import Animated from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
-import { useSwitchSlide } from "../layout/switchMotion";
+import { useSwitchSlide } from "../spaces/switchMotion";
 import { ROW_SLIDE } from "./constants";
 
 /**

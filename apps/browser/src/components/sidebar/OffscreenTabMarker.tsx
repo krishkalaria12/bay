@@ -1,7 +1,7 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { Pressable, View } from "react-native";
 import { useTheme, useWindowTint } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { TabIcon } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";

@@ -1,18 +1,18 @@
-import type { CapturedImage } from "@bay/nncore";
-import { copyCaptureImage, portraitCaptureImage, revealFile, saveCaptureImage, shareCaptureImage } from "@bay/shell";
+import type { CapturedImage } from "@bay/chromium";
+import { copyCaptureImage, portraitCaptureImage, revealFile, saveCaptureImage, shareCaptureImage } from "@bay/desktop";
 import { PixelRatio } from "react-native";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
-import { showToast } from "../layout/splitActions";
-import { isInternalTab } from "../pages";
+import { useBrowser } from "../../store/browserStore";
+import { showToast } from "../split/splitActions";
+import { isInternalTab } from "../pages/index";
 import { saveLibraryMedia } from "../library/state";
 import { chooseEasel, libraryWindow } from "../library/actions";
 import { webLink } from "../library/model";
 import { engineProfile } from "../../store/model";
 import { themeFor, themeKey } from "../../lib/theme";
 import { captureScript } from "./captureScript";
-import { captureName } from "./geometry";
+import { captureName } from "./regionGeometry";
 
 // Capture, as Arc's (⇧⌘2, the command bar, Site Controls, or ⌘⇧ and a drag on the page): pick a block of the page or
 // drag over an area (captureScript.ts, in the page), then copy, save, share or mark up the picture over the page

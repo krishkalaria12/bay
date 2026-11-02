@@ -1,13 +1,13 @@
-import { copyText } from "@bay/shell";
+import { copyText } from "@bay/desktop";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
-import { changedIds } from "../../store/changes";
+import { useBrowser } from "../../store/browserStore";
+import { changedIds } from "../../store/recordDiff";
 import { activeTabId } from "../../store/model";
-import { showToast } from "../layout/splitActions";
+import { showToast } from "../split/splitActions";
 import { inspectorScript } from "./inspectorScript";
 import { JSON_VIEWER_SCRIPT } from "./jsonViewerScript";
-import { isDeveloperUrl, isLocalDevSite, siteKey } from "./sites";
+import { isDeveloperUrl, isLocalDevSite, siteKey } from "./localDevSites";
 
 // Developer Mode, as Arc and yab have it: a site you build gets its whole address over the page, an inspector and
 // one-click DevTools. Turned on per site (its host and port); a local server is offered it the first time it's shown.

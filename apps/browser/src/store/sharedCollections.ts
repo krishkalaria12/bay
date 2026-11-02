@@ -1,6 +1,6 @@
 import { decodeSharedCollection, encodeSharedCollection, type SharedCollection, type SharedItem } from "@bay/core";
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { MAX_FOLDER_DEPTH } from "./folders";
 import { orderSections } from "./groups";
 import { IDLE_LIVE, isIncognitoSpace, listIds, makeTab, newId, spaceListKey } from "./model";

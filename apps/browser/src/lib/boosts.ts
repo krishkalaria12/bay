@@ -1,5 +1,5 @@
 import { parseUrl } from "@bay/core";
-import type { EngineBoost, EngineBoostStyle } from "@bay/nncore";
+import type { EngineBoost, EngineBoostStyle } from "@bay/chromium";
 import { hexFromHsl, hslOf } from "./windowTint";
 
 // Boosts, as Arc's (2022, v2 2023) and Zen's: a site's own look, made without code and with it if you like. Colours

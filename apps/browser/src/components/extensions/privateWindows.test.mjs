@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const native = await import("../../test-native-stub.mjs");
-const { useBrowser } = await import("../../store/browser.ts");
-const { usePages } = await import("../layout/pageState.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
+const { usePages } = await import("../window/pageState.ts");
 const { extensionProfile, pageProfile, shownIn, useExtensions, windowExtensions } = await import("./store.ts");
 const { closeSidePanel, openSidePanel } = await import("./sidePanels.ts");
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { test } from "node:test";
-const script = readFileSync(new URL("../../../../packages/nncore/ios/page_script.js", import.meta.url), "utf8");
+const script = readFileSync(new URL("../../../../packages/chromium/ios/page_script.js", import.meta.url), "utf8");
 const start = script.indexOf("  const audible =");
 const end = script.indexOf("  const session =", start);
 assert.ok(start > 0 && end > start);

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-// page_script.js › Protected video: when Chromium tells the app a page needs DRM it can't play (lib/engines.ts).
+// page_script.js › Protected video: when Chromium tells the app a page needs DRM it can't play (lib/pageEngines.ts).
 
-const script = readFileSync(new URL("../../../../packages/nncore/ios/page_script.js", import.meta.url), "utf8");
+const script = readFileSync(new URL("../../../../packages/chromium/ios/page_script.js", import.meta.url), "utf8");
 const start = script.indexOf("    const NavigatorType = window.Navigator;\n");
 const end = script.indexOf("  } catch {}\n", start);
 assert.ok(start > 0 && end > start, "page_script.js has the DRM block");

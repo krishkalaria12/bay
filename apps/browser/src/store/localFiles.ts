@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { isIncognitoSpace, newId } from "./model";
 import type { LocalFilePin } from "./types";
 

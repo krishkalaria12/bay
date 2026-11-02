@@ -1,12 +1,12 @@
-import { FadeLabel, Surface, Symbol } from "@bay/shell";
+import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useShallow } from "zustand/react/shallow";
 import { useState, type ComponentProps } from "react";
 import { Image, Pressable, View } from "react-native";
 import { switchToTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useTab } from "../../store/hooks";
-import { Favicon, IconButton, useHover } from "../primitives";
+import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { useArtwork } from "./artwork";
 import { LiveLabel, SeekBar } from "./MiniPlayer";

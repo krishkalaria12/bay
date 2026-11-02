@@ -1,5 +1,5 @@
-import { setSidebarMoveUndo } from "@bay/shell";
-import { useBrowser } from "../store/browser";
+import { setSidebarMoveUndo } from "@bay/desktop";
+import { useBrowser } from "../store/browserStore";
 
 /** The drag or menu is finished; the sidebar can now own Undo. */
 export function armSidebarMoveUndo(windowId: string) {

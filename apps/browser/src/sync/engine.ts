@@ -1,5 +1,5 @@
 import { ownsProfileData } from "../store/spaces";
-import { readDocument, saveDocument, writeDocument } from "@bay/shell";
+import { readDocument, saveDocument, writeDocument } from "@bay/desktop";
 import {
   Clock,
   emptyScope,
@@ -16,7 +16,7 @@ import {
   type ScopeState,
 } from "@bay/sync";
 import { create } from "zustand";
-import { useBrowser } from "../store/browser";
+import { useBrowser } from "../store/browserStore";
 import { isIncognitoSpace } from "../store/model";
 import { DEFAULT_SPACE_ID } from "../store/constants";
 import type { Space } from "../store/types";

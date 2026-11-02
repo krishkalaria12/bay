@@ -1,5 +1,5 @@
-import { confirm, onWindowEvent } from "@bay/shell";
-import { useBrowser } from "../store/browser";
+import { confirm, onWindowEvent } from "@bay/desktop";
+import { useBrowser } from "../store/browserStore";
 import { inPinnedContainer, listIds, plural, spaceFor, viewTabIds, windowListKey } from "../store/model";
 import { CLOSE_WARNING_MIN_TABS } from "./constants";
 

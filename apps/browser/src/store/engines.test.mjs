@@ -13,7 +13,7 @@ import {
   visitRecorder,
 } from "./engines.ts";
 import { makeTab, snapshotTab } from "./model.ts";
-import { setWebKitAvailable } from "@bay/nncore";
+import { setWebKitAvailable } from "@bay/chromium";
 
 const tab = (id, patch = {}) => ({ id, url: "", navigation: null, openerId: null, ...patch });
 const state = (tabs, settings = {}) => ({

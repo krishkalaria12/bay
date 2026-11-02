@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { useBrowser } from "../../store/browser.ts";
+import { useBrowser } from "../../store/browserStore.ts";
 import { ACTIVE, SELECTED, PLAYING, LOADING, rowFlags, tabRowStore } from "./rowState.ts";
 
 const S = () => useBrowser.getState();

@@ -1,11 +1,11 @@
-import { hasWebKit } from "@bay/nncore";
-import { Symbol, WindowDragRegion } from "@bay/shell";
+import { hasWebKit } from "@bay/chromium";
+import { Symbol, WindowDragRegion } from "@bay/desktop";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { trackSettingsSection } from "../../telemetry/track";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { Button, SettingsScroll } from "./controls";
 import { AdvancedPane } from "./panes/Advanced";
 import { AppearancePane } from "./panes/Appearance";

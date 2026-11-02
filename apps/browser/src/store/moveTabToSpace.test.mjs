@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 await import("../test-native-stub.mjs");
-const { useBrowser } = await import("./browser.ts");
-const { dropTabsOutside } = await import("../components/layout/windowDrop.ts");
+const { useBrowser } = await import("./browserStore.ts");
+const { dropTabsOutside } = await import("../components/window/windowDrop.ts");
 
 const S = () => useBrowser.getState();
 const shown = (w) => S().windows[w].activeTabIds[S().windows[w].spaceId];

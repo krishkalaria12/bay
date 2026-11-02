@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("../../store/browser.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
 const { startCleanupNotifications } = await import("./cleanupNotifications.ts");
 
 const S = () => useBrowser.getState();

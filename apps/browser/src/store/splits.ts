@@ -1,11 +1,11 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { leaveGroups, syncGroupOrder } from "./groups";
 import { listOfTab, newId, pinnedPage, tabListKey, withList } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { SplitView, Tab } from "./types";
 import { MAX_SPLIT_PANES } from "./constants";
-import { splitIndex } from "./structure";
+import { splitIndex } from "./tabIndexes";
 
 export type SplitsSlice = {
   splits: Record<string, SplitView>;

@@ -1,14 +1,14 @@
-import { WebView } from "@bay/nncore";
+import { WebView } from "@bay/chromium";
 import { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useWindowId } from "../../store/hooks";
-import { openFromPage, pageSpaceId } from "../layout/openFromPage";
-import { useResizeDrag } from "../layout/useResizeDrag";
-import { IconButton } from "../primitives";
+import { openFromPage, pageSpaceId } from "../window/openFromPage";
+import { useResizeDrag } from "../sidebar/useResizeDrag";
+import { IconButton } from "../ui/primitives";
 import { closeSidePanel, findExtension, showExtensionMenu, useExtensions, type SidePanel } from "./state";
 import { SIDE_PANEL_HEADER, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH } from "./constants";
 

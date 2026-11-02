@@ -1,14 +1,14 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { memo } from "react";
 import { Text, View } from "react-native";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { engineMark, ENGINE_NAMES, ENGINE_SYMBOLS } from "../../store/engines";
 import { useEngineView } from "../../store/engineView";
-import { Favicon } from "../primitives";
+import { Favicon } from "../ui/primitives";
 import { SYMBOL_PREFIX } from "../../lib/constants";
-import { iconColor } from "../symbolColors";
+import { iconColor } from "../iconPicker/symbolColors";
 import { useSidebarMetrics } from "./tokens";
 import { SLEEPING_OPACITY } from "./constants";
 

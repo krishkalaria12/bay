@@ -1,6 +1,6 @@
-import { onAppEvent, onWindowEvent } from "@bay/shell";
-import { everySlowly } from "../../lib/slowTimers";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { onAppEvent, onWindowEvent } from "@bay/desktop";
+import { everySlowly } from "../../lib/throttledTimers";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { PUT_AWAY_SWEEP_MS } from "./constants";
 

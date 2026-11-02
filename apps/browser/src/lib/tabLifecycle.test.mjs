@@ -8,12 +8,12 @@ globalThis.__DEV__ = false;
 // The internal pages pull in the whole UI: a stand-in for them, and for the engine's task and system calls.
 const nncore = new URL("../test-native-stub.mjs", import.meta.url).href;
 const stubs = {
-  "@bay/nncore": `export * from ${JSON.stringify(nncore)};
+  "@bay/chromium": `export * from ${JSON.stringify(nncore)};
     export const listTasks = async () => [];
     export const onSystemState = () => ({ remove() {} });
     export const systemState = async () => ({ memoryPressure: "normal", physicalMemory: 8 * 2 ** 30, onBattery: false, lowPowerMode: false });
     export const releaseProfile = async () => {};`,
-  "../components/pages": "export const isInternalTab = (t) => !/^https?:/.test(t.url ?? '');",
+  "../components/pages/index": "export const isInternalTab = (t) => !/^https?:/.test(t.url ?? '');",
 };
 registerHooks({
   resolve(specifier, context, next) {
@@ -22,7 +22,7 @@ registerHooks({
   },
 });
 
-const { useBrowser } = await import("../store/browser.ts");
+const { useBrowser } = await import("../store/browserStore.ts");
 const { webviews } = await import("./webviews.ts");
 const lifecycle = await import("./tabLifecycle.ts");
 

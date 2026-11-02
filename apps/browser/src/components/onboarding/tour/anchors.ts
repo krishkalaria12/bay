@@ -1,12 +1,12 @@
 import type { View } from "react-native";
 import { layout } from "../../../lib/constants";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { activeTabId } from "../../../store/model";
 import { splitOf } from "../../../store/splits";
-import { toolbarGeometry, type Rect } from "../../layout/geometry";
-import { sidebarOnRight, useUrlAnchors } from "../../layout/windowLayout";
+import { toolbarGeometry, type Rect } from "../../window/geometry";
+import { sidebarOnRight, useUrlAnchors } from "../../window/layout";
 import { measureRow } from "../../sidebar/state";
-import { TOOLBAR_BUTTON_MID } from "../../layout/constants";
+import { TOOLBAR_BUTTON_MID } from "../../window/constants";
 
 export type TourAnchor = "commandBar" | "page" | "tabs" | "sidebarButton";
 

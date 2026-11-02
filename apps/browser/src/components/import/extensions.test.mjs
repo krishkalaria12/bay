@@ -23,7 +23,7 @@ globalThis.nnTestNativeModules = {
   },
 };
 
-const { useBrowser } = await import("../../store/browser.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
 const { engineProfile, setSpaceProfiles } = await import("../../store/model.ts");
 const { importExtensions } = await import("./apply.ts");
 const extension = (id) => ({ id, name: id, enabled: true, pinned: false });

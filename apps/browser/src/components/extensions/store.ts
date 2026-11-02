@@ -1,9 +1,9 @@
-import type { ActionState, ExtensionInstallPrompt, ExtensionPackage, InstalledExtension } from "@bay/nncore";
+import type { ActionState, ExtensionInstallPrompt, ExtensionPackage, InstalledExtension } from "@bay/chromium";
 
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId, engineProfile } from "../../store/model";
-import { usePages } from "../layout/pageState";
+import { usePages } from "../window/pageState";
 
 export type Anchor = { x: number; y: number; width: number; height: number };
 

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 await import("../test-native-stub.mjs");
-const { useBrowser } = await import("./browser.ts");
-const { hasClearableTabs } = await import("./organize.ts");
+const { useBrowser } = await import("./browserStore.ts");
+const { hasClearableTabs } = await import("./tabTidying.ts");
 
 test("Clear follows audio, lists and switches but skips progress reports", async () => {
   const S = () => useBrowser.getState();

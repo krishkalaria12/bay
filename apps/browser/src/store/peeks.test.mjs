@@ -2,7 +2,7 @@
 // or put beside its opener in a split.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const { opensInPeek, shownPeek, siteOf } = await import("./peeks.ts");
 const { splitOf } = await import("./splits.ts");

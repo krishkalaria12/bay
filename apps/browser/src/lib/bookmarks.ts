@@ -1,7 +1,7 @@
-import { applyBookmarkOps, bookmarkTree, onBookmarksChanged, watchBookmarks, type BookmarkOp, type EngineBookmark } from "@bay/nncore";
-import { readDocument, removeDocument, writeDocument } from "@bay/shell";
+import { applyBookmarkOps, bookmarkTree, onBookmarksChanged, watchBookmarks, type BookmarkOp, type EngineBookmark } from "@bay/chromium";
+import { readDocument, removeDocument, writeDocument } from "@bay/desktop";
 import { bookmarkUuidFor, isBookmarkUuid, rootIdsFor } from "../store/bookmarks";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { useBrowser, type BrowserState } from "../store/browserStore";
 import { engineProfile, isIncognitoSpace } from "../store/model";
 import type { BookmarkFolder, BookmarkNode, Bookmarks } from "../store/types";
 import { BOOKMARKS_CACHE_FILE, BOOKMARKS_CACHE_SAVE_MS, LEGACY_BOOKMARKS_FILE, LEGACY_BOOKMARKS_KEPT_MS } from "./constants";

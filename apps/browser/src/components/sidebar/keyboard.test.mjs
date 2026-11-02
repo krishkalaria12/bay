@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("../../store/browser.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
 const { DEFAULT_SETTINGS } = await import("../../store/settings.ts");
 const { activeTabId } = await import("../../store/model.ts");
-const { setLive, live } = await import("../../live/store.ts");
-const { sidebarKeyboardRows, sidebarKeyboardRowIds } = await import("./entries.ts");
+const { setLive, live } = await import("../../activity/activityStore.ts");
+const { sidebarKeyboardRows, sidebarKeyboardRowIds } = await import("./sidebarEntries.ts");
 const { adjacentKeyboardRow, reconcileKeyboardRow } = await import("./keyboardModel.ts");
 const { sidebarUi, setSidebarUi } = await import("./state.ts");
 const keyboard = await import("./keyboard.ts");

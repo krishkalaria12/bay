@@ -1,9 +1,9 @@
-import { confirm, prompt, showMenu } from "@bay/shell";
-import { useBrowser } from "../../store/browser";
+import { confirm, prompt, showMenu } from "@bay/desktop";
+import { useBrowser } from "../../store/browserStore";
 import { isIncognitoSpace, resolveWindowId, viewTabIds } from "../../store/model";
 import type { Tab } from "../../store/types";
-import { showToast } from "../layout/splitActions";
-import { openInternalPage, tabDestination } from "../pages/urls";
+import { showToast } from "../split/splitActions";
+import { openInternalPage, tabDestination } from "../pages/pageUrls";
 import type { LibraryMedia } from "./model";
 import { addMediaToEasel, createEasel, deleteEasel, duplicateEasel, startLibrary, updateEasel, useLibrary } from "./state";
 import { startEaselShares, stopSharingEasel, useEaselShares } from "./sharing";

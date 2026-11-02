@@ -1,7 +1,7 @@
 import type { StoreApi } from "zustand/vanilla";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
-import { selectionStore, tabLiveStore, tabStore, windowsStore } from "../../store/views";
+import { selectionStore, tabLiveStore, tabStore, windowsStore } from "../../store/derivedStores";
 
 export const ACTIVE = 1;
 export const SELECTED = 2;

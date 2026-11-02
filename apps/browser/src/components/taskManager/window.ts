@@ -1,4 +1,4 @@
-import { openWindow } from "@bay/shell";
+import { openWindow } from "@bay/desktop";
 
 export const TASK_MANAGER_WINDOW_ID = "task-manager";
 

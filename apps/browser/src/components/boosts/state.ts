@@ -1,10 +1,10 @@
-import { setBoosts as setEngineBoosts, type EngineBoostStyle } from "@bay/nncore";
-import { readDocument, writeDocument } from "@bay/shell";
+import { setBoosts as setEngineBoosts, type EngineBoostStyle } from "@bay/chromium";
+import { readDocument, writeDocument } from "@bay/desktop";
 import { create } from "zustand";
 import { engineBoosts, newBoost, normalizeBoost, normalizeScript, tabBoostStyle, type Boost, type BoostPalette, type BoostScript } from "../../lib/boosts";
 import { hex, SPACE_COLORS, spaceThemeKey, themeFor } from "../../lib/theme";
 import { onWebviewAttached, webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { newId } from "../../store/model";
 import { DEFAULT_SPACE } from "../../store/spaces";
 

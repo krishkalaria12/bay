@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { ARTWORK_CACHE_ENTRIES, ARTWORK_MAX_PIXELS } from "./constants";
 
 // Keep artwork in memory only; incognito images must not reach disk or another context.

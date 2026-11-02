@@ -1,18 +1,18 @@
-import { listTasks, onSystemState, releaseProfile, systemState, type SystemState, type WebViewHandle } from "@bay/nncore";
-import { onAppEvent, onWindowEvent } from "@bay/shell";
+import { listTasks, onSystemState, releaseProfile, systemState, type SystemState, type WebViewHandle } from "@bay/chromium";
+import { onAppEvent, onWindowEvent } from "@bay/desktop";
 import { create } from "zustand";
-import { pageOf } from "../components/layout/pageState";
+import { pageOf } from "../components/window/pageState";
 import { useMedia } from "../components/media/state";
-import { isInternalTab } from "../components/pages";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { isInternalTab } from "../components/pages/index";
+import { useBrowser, type BrowserState } from "../store/browserStore";
 import { activeTabId, engineProfile, inPinnedContainer, isIncognitoSpace, wake } from "../store/model";
 import { shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
-import { applyHeldReports } from "./nativeEvents";
-import { everySlowly } from "./slowTimers";
+import { applyHeldReports } from "./bridgeEvents";
+import { everySlowly } from "./throttledTimers";
 import { webviews } from "./webviews";
 import { LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
-import { siteKeptAwake } from "./awakeSites";
+import { siteKeptAwake } from "./keptAwakeSites";
 
 export const POLICY = {
   protectedRecent: 10,

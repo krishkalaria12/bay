@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { orderSections, syncGroupOrder, leaveGroups } from "./groups";
 import {
   findLast,
@@ -22,8 +22,8 @@ import {
   withList,
   without,
 } from "./model";
-import { restoringGroup } from "./organize";
-import { isSmall, isSmallWindow, mainWindowFor, littleBayProfile } from "./small";
+import { restoringGroup } from "./tabTidying";
+import { isSmall, isSmallWindow, mainWindowFor, littleBayProfile } from "./littleBay";
 import { removeFromSplits } from "./splits";
 import { activated, apply, removeTabs, successors, withNewTab } from "./tabs";
 import type { BrowserWindow, ClosedTab, ClosedWindow, Frame, Tab, TabGroup } from "./types";
@@ -100,7 +100,7 @@ function withoutWindows(s: BrowserState, ids: string[]): BrowserState {
   };
 }
 
-/** The tab's page moves to the window (lib/tabPages.ts hands it over); a loaded one loads there. */
+/** The tab's page moves to the window (lib/tabNavigation.ts hands it over); a loaded one loads there. */
 function pageTo(t: Tab, windowId: string): Tab {
   if (t.windowId === windowId) return t;
   const { adoptId, ...rest } = t;

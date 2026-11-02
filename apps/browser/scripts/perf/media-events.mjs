@@ -18,7 +18,7 @@ if (existsSync(clone)) throw new Error(`Use a fresh output directory: ${clone} a
 const sourceApp = realpathSync(resolve(appArg));
 execFileSync("cp", ["-cR", sourceApp, clone]);
 if (!lstatSync(clone).isDirectory() || realpathSync(clone) === sourceApp) throw new Error("App clone is not independent");
-const pageScript = scriptArg ? resolve(scriptArg) : fileURLToPath(new URL("../../../../packages/nncore/ios/page_script.js", import.meta.url));
+const pageScript = scriptArg ? resolve(scriptArg) : fileURLToPath(new URL("../../../../packages/chromium/ios/page_script.js", import.meta.url));
 const resource = realpathSync(join(clone, "Contents/Resources/page_script.js"));
 if (!resource.startsWith(realpathSync(clone) + "/")) throw new Error("Page-script resource escapes the app clone");
 cpSync(pageScript, resource);

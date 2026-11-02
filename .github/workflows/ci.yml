@@ -40,5 +40,7 @@ jobs:
         run: |
           pnpm turbo run test --filter=@bay/core --filter=@bay/browser
           pnpm --filter @bay/sync exec node --test "src/**/*.test.ts"
+      - name: Engine freshness checks
+        run: python3 scripts/tests/test-engine-fresh.py
       - name: React Compiler
         run: pnpm compiler:check

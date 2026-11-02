@@ -4,7 +4,7 @@ import { openImport, openSettings, useSettingsNav } from "../settings/windows";
 import { useBookmarkDialog } from "../bookmarks/actions";
 import { useBookmarkEditor } from "../bookmarks/edit";
 import { useClearDataRequest } from "./ClearDataDialog";
-import { openInternalPage } from "./urls";
+import { openInternalPage } from "./pageUrls";
 
 export const pagesDrivers = {
   openInternalPage,

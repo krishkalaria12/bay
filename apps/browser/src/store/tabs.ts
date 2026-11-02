@@ -1,7 +1,7 @@
 import { resolveInput } from "@bay/core";
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
-import { withChangedEntry } from "./changes";
+import type { BrowserState } from "./browserStore";
+import { withChangedEntry } from "./recordDiff";
 import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
 import {
   activeTabId,
@@ -27,10 +27,10 @@ import {
   wake,
   without,
 } from "./model";
-import { forgetOpeners, insertionIndex, openerSuccessor, switchKeepsOpeners } from "./openers";
-import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./organize";
+import { forgetOpeners, insertionIndex, openerSuccessor, switchKeepsOpeners } from "./openerOrder";
+import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./tabTidying";
 import { searchUrlPrefix } from "./settings";
-import { mainWindowFor } from "./small";
+import { mainWindowFor } from "./littleBay";
 import { tabEngine, typedNavigationEngine } from "./engines";
 import { pinnedSplitOf, removeFromSplits, splitOf } from "./splits";
 import type { BrowserWindow, ClosedTab, Tab, TabLive, TabSnapshot } from "./types";
@@ -444,7 +444,7 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
       if (current?.open && current.sessionId === panel?.sessionId) get().closePanel(tab.windowId);
       return;
     }
-    // A new address supersedes a link the tab kept to load when shown (the engine drops it: lib/chromeTabs.ts).
+    // A new address supersedes a link the tab kept to load when shown (the engine drops it: lib/engineTabs.ts).
     const { unloaded: _, wakeAdoptId: _kept, ...rest } = tab;
     // Typing an address starts a new task (a New Tab page gets one lookup first, as in Chrome).
     const base = userInitiated && tab.url ? forgetOpeners(s, tabListKey(s, tab)) : s;

@@ -1,8 +1,8 @@
-import { setAutoPictureInPicture, setDisplayMediaPicker } from "@bay/nncore";
+import { setAutoPictureInPicture, setDisplayMediaPicker } from "@bay/chromium";
 import { useState } from "react";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useSettings, useTab, useTabLive } from "../../store/hooks";
-import { usePage } from "../layout/pageState";
+import { usePage } from "../window/pageState";
 import { startCast } from "./cast";
 import { startTabShareCleanup } from "./ShareBar";
 import { cancelDisplayMediaOnNavigation } from "./SharePicker";

@@ -1,6 +1,6 @@
 import type { AreaLightPalette } from "@bay/shaders";
 import { createContext, createElement, useContext, type ReactNode } from "react";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { useBrowser, type BrowserState } from "../store/browserStore";
 import { PageSpaceContext, WindowContext } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { DEFAULT_SPACE } from "../store/spaces";

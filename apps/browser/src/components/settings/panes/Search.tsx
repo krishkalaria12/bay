@@ -1,12 +1,12 @@
 import { engineHost, POPULAR_SITE_SEARCHES, validateEngine, type EngineInput, type SearchEngine } from "@bay/core";
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { controllingSearchExtension, defaultSearchEngine, searchEngines } from "../../../store/settings";
 import { setEnabled } from "../../extensions/state";
-import { Favicon, IconButton } from "../../primitives";
+import { Favicon, IconButton } from "../../ui/primitives";
 import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";

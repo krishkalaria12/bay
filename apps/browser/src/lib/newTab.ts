@@ -1,6 +1,6 @@
-import { focusWindow } from "@bay/shell";
-import { useBrowser } from "../store/browser";
-import { mainWindowFor } from "../store/small";
+import { focusWindow } from "@bay/desktop";
+import { useBrowser } from "../store/browserStore";
+import { mainWindowFor } from "../store/littleBay";
 
 /** User-facing New Tab requests keep the current page underneath the palette. */
 export function openNewTabPanel(windowId: string, groupId?: string) {

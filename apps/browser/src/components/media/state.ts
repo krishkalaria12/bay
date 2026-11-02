@@ -1,9 +1,9 @@
-import type { DisplayMediaRequest, MediaCommand, NowPlaying, PictureInPictureState } from "@bay/nncore";
+import type { DisplayMediaRequest, MediaCommand, NowPlaying, PictureInPictureState } from "@bay/chromium";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
-import type { BrowserState } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
+import type { BrowserState } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { splitOf } from "../../store/splits";
 

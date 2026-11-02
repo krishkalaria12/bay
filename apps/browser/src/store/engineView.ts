@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "./browser";
-import { changedIds } from "./changes";
+import { useBrowser, type BrowserState } from "./browserStore";
+import { changedIds } from "./recordDiff";
 import type { Tab } from "./types";
 
 type EngineView = Pick<BrowserState, "tabs" | "settings">;

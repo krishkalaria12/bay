@@ -1,6 +1,6 @@
-import { cancelDownload, endWebKitPrivateSession, type Download } from "@bay/nncore";
-import { readDocument, writeDocument } from "@bay/shell";
-import { useBrowser, type BrowserState, type HydrateData } from "../store/browser";
+import { cancelDownload, endWebKitPrivateSession, type Download } from "@bay/chromium";
+import { readDocument, writeDocument } from "@bay/desktop";
+import { useBrowser, type BrowserState, type HydrateData } from "../store/browserStore";
 import { inPinnedContainer, isIncognitoSpace, newId, snapshotTab } from "../store/model";
 import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
 import { isolateSavedSpaces } from "../store/spaces";
@@ -10,7 +10,7 @@ import { startBoosts } from "../components/boosts/state";
 import { startFavicons } from "./favicons";
 import { startBookmarks } from "./bookmarks";
 import { startHistory } from "./history";
-import { startProfileDataCleanup } from "./profileData";
+import { startProfileDataCleanup } from "./profileCleanup";
 import { PERSIST_VERSION, SAVE_DELAY_MS } from "./constants";
 
 type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };

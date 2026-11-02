@@ -1,8 +1,8 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
 import { listIds, newId, pinnedPage, spaceListKey, withList, without } from "./model";
-import { placing } from "./organize";
+import { placing } from "./tabTidying";
 import { withSplitPanes } from "./splits";
 import type { PinnedFolder, Tab, TabGroup } from "./types";
 

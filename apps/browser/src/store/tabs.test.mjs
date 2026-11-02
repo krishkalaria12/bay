@@ -1,9 +1,9 @@
 // Where tabs open, which tab shows when one closes, and the structures that must stay whole (groups, splits).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
-const organize = await import("./organize.ts");
+const organize = await import("./tabTidying.ts");
 const { controllingSearchExtension, defaultSearchEngine, searchUrlPrefix } = await import("./settings.ts");
 const media = await import("../components/media/state.ts");
 
@@ -16,7 +16,7 @@ const short = (url) => url.replace(/^https:\/\/|\.com$/g, "");
 const hosts = (w) => tabsOf(w).map((id) => short(S().tabs[id].url));
 const shown = (w) => short(S().tabs[model.activeTabId(S(), w)].url);
 
-// Chrome's opener rules (store/openers.ts).
+// Chrome's opener rules (store/openerOrder.ts).
 const reset = (settings = {}) => {
   S().hydrate({});
   S().updateSettings({ cmdClickCreatesTabGroup: false, newTabPosition: "bottom", ...settings });

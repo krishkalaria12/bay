@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { localFileAnswers } from "../test-native-stub.mjs";
-import { useBrowser } from "../store/browser.ts";
+import { useBrowser } from "../store/browserStore.ts";
 import { closeLocalFileTab, openLocalFile, peekLocalFile, reconnectLocalFile, localFileStatusText } from "./localFiles.ts";
 
 const S = () => useBrowser.getState();
