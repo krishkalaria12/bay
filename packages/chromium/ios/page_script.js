@@ -850,8 +850,10 @@
     let sent = 0;
     const flush = () => {
       queued = false;
-      if (!classes.length && !ids.length) return;
-      send("cosmetic", { url: location.href, classes, ids });
+      // Match NNCoreWebView's limit per message, so every discovered name reaches the host.
+      for (let offset = 0; offset < Math.max(classes.length, ids.length); offset += 4000) {
+        send("cosmetic", { url: location.href, classes: classes.slice(offset, offset + 4000), ids: ids.slice(offset, offset + 4000) });
+      }
       sent += classes.length + ids.length;
       classes = [];
       ids = [];
@@ -882,7 +884,7 @@
     const observer = new MutationObserver(
       guard((records) => {
         for (const record of records) {
-          if (record.type === "attributes") noteTree(record.target);
+          if (record.type === "attributes") note(record.target);
           else for (const node of record.addedNodes) noteTree(node);
         }
       }),
