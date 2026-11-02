@@ -1,4 +1,5 @@
 import { Surface } from "@bay/shell";
+import { useState } from "react";
 import { StyleSheet } from "react-native";
 import Animated from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
@@ -11,6 +12,15 @@ import { ROW_SLIDE } from "./constants";
  * switched to takes it from that side, so the selection reads as moving from one to the other.
  */
 export function ActiveHighlight({ active, tabIds, borderWidth }: { active: boolean; tabIds: string[]; borderWidth: number }) {
+  // Most rows are never the shown one: until a row is, it holds no slide (four shared values and a UI-thread style per
+  // row, made for every row of a long list as it mounts). It mounts in the render that first makes the row active,
+  // where a mounted one would have started its slide in.
+  const [ever, setEver] = useState(active);
+  if (active && !ever) setEver(true);
+  return ever ? <SlidingHighlight active={active} tabIds={tabIds} borderWidth={borderWidth} /> : null;
+}
+
+function SlidingHighlight({ active, tabIds, borderWidth }: { active: boolean; tabIds: string[]; borderWidth: number }) {
   const slide = useSwitchSlide(useWindowId(), tabIds, active, ROW_SLIDE);
   if (!active && !slide) return null;
   return (

@@ -20,6 +20,7 @@ import {
   without,
   type TabList,
 } from "./model";
+import { playingAudioVersion } from "./changes";
 import { withSplitPanes } from "./splits";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { ClosedGroup, ClosedTab, Tab, TabGroup } from "./types";
@@ -356,6 +357,23 @@ export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveFor
     return false;
   });
   return view.filter((id) => out.has(id));
+}
+
+// The Clear button's selector runs on every store update. With no idle threshold the answer depends on the lists,
+// groups, splits, windows and which tabs play audio, not on a page's progress: it's worked out again only when those change.
+const clearable = new Map<string, { inputs: unknown[]; result: boolean }>();
+
+/** Whether Clear would put a tab away: the window's space has a tab besides the shown, pinned, kept, playing, grouped and split. */
+export function hasClearableTabs(s: BrowserState, windowId: string, spaceId?: string): boolean {
+  const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits, playingAudioVersion(s.live)];
+  const key = `${windowId}|${spaceId ?? ""}`;
+  const cached = clearable.get(key);
+  if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result;
+  const result = hasCleanUpCandidates(s, windowId, 0, Date.now(), spaceId);
+  clearable.delete(key);
+  clearable.set(key, { inputs, result });
+  if (clearable.size > 16) clearable.delete(clearable.keys().next().value!);
+  return result;
 }
 
 /** Whether cleanup would remove a tab, stopping at the first eligible one. */

@@ -40,3 +40,19 @@ export function changedIds<T>(next: Record<string, T>, prev: Record<string, T>):
   remember(next, prev, ids);
   return ids;
 }
+
+type Audible = { playingAudio?: boolean };
+let audioOf: Record<string, Audible> | null = null;
+let audioVersion: object = {};
+
+/**
+ * A value that changes only when a tab starts or stops playing audio. A selector that reads no more of `live` than
+ * that compares this instead of `live`, which every page's progress report replaces.
+ */
+export function playingAudioVersion(live: Record<string, Audible>): object {
+  if (live === audioOf) return audioVersion;
+  const was = audioOf;
+  if (!was || changedIds(live, was).some((id) => !!live[id]?.playingAudio !== !!was[id]?.playingAudio)) audioVersion = {};
+  audioOf = live;
+  return audioVersion;
+}

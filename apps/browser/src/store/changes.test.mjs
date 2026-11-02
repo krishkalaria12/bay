@@ -69,3 +69,18 @@ test("known deltas apply only to their exact predecessor, including chained upda
   assert.deepEqual(changedIds(replaced, removed), ["d", "c"]);
   assert.deepEqual(changedIds(replaced, replaced), []);
 });
+
+test("the audio version changes only when a tab starts or stops playing", async () => {
+  const { playingAudioVersion } = await import("./changes.ts");
+  let live = { a: { progress: 0 }, b: { progress: 0, playingAudio: false } };
+  const first = playingAudioVersion(live);
+  live = withChangedEntry(live, "a", { progress: 0.5 });
+  assert.strictEqual(playingAudioVersion(live), first, "progress keeps it");
+  live = withChangedEntry(live, "b", { progress: 0, playingAudio: true });
+  const playing = playingAudioVersion(live);
+  assert.notStrictEqual(playing, first);
+  live = withChangedEntry(live, "b", { progress: 1, playingAudio: true });
+  assert.strictEqual(playingAudioVersion(live), playing);
+  const { b: _, ...rest } = live;
+  assert.notStrictEqual(playingAudioVersion(rest), playing, "a playing tab closing changes it");
+});

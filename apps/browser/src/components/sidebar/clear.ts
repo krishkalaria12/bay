@@ -1,7 +1,7 @@
 import { disintegrate } from "@bay/shell";
 import { reduceMotion } from "../../lib/reduceMotion";
 import { useBrowser } from "../../store/browser";
-import { cleanUpCandidates, hasCleanUpCandidates } from "../../store/organize";
+import { cleanUpCandidates } from "../../store/organize";
 import { measureRow, type Anchor } from "./state";
 import { CLEAR_MAX_ROWS } from "./constants";
 
@@ -11,9 +11,6 @@ import { CLEAR_MAX_ROWS } from "./constants";
 /** The tabs Clear would put away in the window's space: all but the shown one, the pinned, kept, playing, grouped and split. */
 export const clearableTabs = (s: ReturnType<typeof useBrowser.getState>, windowId: string, spaceId?: string) =>
   cleanUpCandidates(s, windowId, 0, Date.now(), spaceId);
-
-export const hasClearableTabs = (s: ReturnType<typeof useBrowser.getState>, windowId: string, spaceId?: string) =>
-  hasCleanUpCandidates(s, windowId, 0, Date.now(), spaceId);
 
 export async function clearTabs(windowId: string) {
   const ids = clearableTabs(useBrowser.getState(), windowId);

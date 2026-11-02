@@ -88,6 +88,13 @@ class DragController {
   root: View | null = null;
   scroll: ScrollView | null = null;
   scrollY = 0;
+  /** The current page's list, and where it's scrolled to: a drag near its edges scrolls it. */
+  follow(scroll: ScrollView | null) {
+    this.scroll = scroll;
+  }
+  scrolled(y: number) {
+    this.scrollY = y;
+  }
   // What the items show while a drag goes on, each item reading only its own part: a drag's start or end
   // re-renders the items it hides or shows, not the whole list.
   marks = create<Marks>()(() => NO_MARKS);

@@ -9,9 +9,9 @@ import { layout } from "../lib/constants";
 import { everySlowly } from "../lib/slowTimers";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { useBrowser } from "../store/browser";
-import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId } from "../store/hooks";
+import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId, useQuietBrowser } from "../store/hooks";
 import { activeTabId, listIds, spaceFolded, spaceHeaderHidden, windowListKey } from "../store/model";
-import { cleanUpCandidates } from "../store/organize";
+import { cleanUpCandidates, hasClearableTabs } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
 import { listTopGap, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "./layout/windowLayout";
 import { SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS } from "./layout/constants";
@@ -22,7 +22,7 @@ import { PROFILE_DOTS_HEIGHT, PROFILE_INDICATOR_X } from "./spaces/constants";
 import { usePageStyle, usePagerPages } from "./layout/spacePager";
 import { SpaceSwitcher } from "./spaces/SpaceSwitcher";
 import { SpaceTitle } from "./sidebar/SpaceTitle";
-import { hasClearableTabs, clearTabs } from "./sidebar/clear";
+import { clearTabs } from "./sidebar/clear";
 import { UPDATE_ROW_HEIGHT, UpdateRow, useUpdateRowShown } from "./sidebar/UpdateRow";
 import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
 import { DragGhost } from "./sidebar/DragGhost";
@@ -100,7 +100,7 @@ export function Sidebar() {
   // An update waiting: its row over the footer.
   const update = useUpdateRowShown();
   const footer = PROFILE_DOTS_HEIGHT + (update ? UPDATE_ROW_HEIGHT : 0);
-  const nothingPinned = useBrowser((s) => sidebarEntries(s, windowId, current).tiles.length === 0);
+  const nothingPinned = useQuietBrowser((s) => sidebarEntries(s, windowId, current).tiles.length === 0);
 
   useSidebarKeyboard(windowId, scroll, scrollY, glowRoom);
   useRevealTabs(windowId, scroll, scrollY, geometry, glowRoom);
@@ -111,6 +111,16 @@ export function Sidebar() {
   }, [windowId, offscreen.side, offscreen.reveal]);
   // A card anchored to a row of the page paging away would stay where the row was.
   useEffect(() => dismissHover(), [current]);
+  // The pages' callbacks are made here, not in the drag provider's render function (which makes new ones on every
+  // render, and every page and its rows rendered again whenever the sidebar did: the offscreen marker showing, a resize).
+  const onScrollView = useEffectEvent((v: ScrollView | null) => {
+    scroll.current = v;
+  });
+  const onScrollY = useEffectEvent((y: number) => {
+    scrollY.current = y;
+    dismissHover();
+    offscreen.check();
+  });
 
   return (
     <DragProvider>
@@ -149,16 +159,8 @@ export function Sidebar() {
                   rows={page.id === current ? undefined : Math.ceil(available / (metrics.rowHeight + layout.rowGap)) + 1}
                   geometryRef={page.id === current ? geometry : undefined}
                   onListHeight={onListHeight}
-                  onScrollView={(v) => {
-                    scroll.current = v;
-                    controller.scroll = v;
-                  }}
-                  onScrollY={(y) => {
-                    scrollY.current = y;
-                    controller.scrollY = y;
-                    dismissHover();
-                    offscreen.check();
-                  }}
+                  onScrollView={onScrollView}
+                  onScrollY={onScrollY}
                 />
               ))}
               {offscreen.side ? <OffscreenTabMarker windowId={windowId} side={offscreen.side} top={glowRoom} onPress={offscreen.reveal} /> : null}
@@ -250,9 +252,9 @@ type PageProps = {
 function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom, rows, geometryRef, onListHeight, onScrollView, onScrollY }: PageProps) {
   const windowId = useWindowId();
   const metrics = useSidebarMetrics();
-  const folded = useBrowser((s) => spaceFolded(s, spaceId));
-  const headerHidden = useBrowser(spaceHeaderHidden);
-  const hasLocalFiles = useBrowser((s) => Object.values(s.localFiles).some((pin) => pin.spaceId === spaceId));
+  const folded = useQuietBrowser((s) => spaceFolded(s, spaceId));
+  const headerHidden = useQuietBrowser(spaceHeaderHidden);
+  const hasLocalFiles = useQuietBrowser((s) => Object.values(s.localFiles).some((pin) => pin.spaceId === spaceId));
   const { tiles, pinned, pinnedGroups, list: all } = useSidebarEntries(windowId, spaceId);
   // A page's first render mounts only the rows a screen can show; the rest follow in chunks, one per frame, so a
   // long sidebar neither holds up the window's first frame nor mounts in one long task after it.
@@ -278,7 +280,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
   const listed = limit === undefined ? motion.rows : list;
   // Rows still to mount hold their room (rows are fixed-height): the list is as tall as it will be, so a tab revealed
   // early scrolls to its place, and the New Tab row docks once.
-  const pending = useBrowser((s) => (growing ? entriesHeight(s, windowId, spaceId, all.slice(mountedRows)) : 0));
+  const pending = useQuietBrowser((s) => (growing ? entriesHeight(s, windowId, spaceId, all.slice(mountedRows)) : 0));
   const topGap = listTopGap(useSidebarFieldShown());
   const preferNewTabsAtTop = useSettings((s) => s.newTabPosition === "top");
   const singleTab = all.length === 1 && all[0]!.startsWith("t:");
@@ -297,7 +299,16 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
   // must never show there, under the traffic lights and the profile name. The viewport's top edge follows the
   // first row down to the header's foot as the list scrolls (outer view moves the clip, inner one cancels it).
   const scrollY = useSharedValue(0);
-  const tellScroll = useEffectEvent(onScrollY);
+  // The sidebar's drag (DragProvider, above every page) scrolls the current page's list as a drag nears its edges.
+  const drag = useDragController();
+  const setScrollView = useEffectEvent((view: ScrollView | null) => {
+    onScrollView(view);
+    drag?.follow(view);
+  });
+  const tellScroll = useEffectEvent((y: number) => {
+    drag?.scrolled(y);
+    onScrollY(y);
+  });
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.set(e.contentOffset.y);
     runOnJS(tellScroll)(e.contentOffset.y);
@@ -323,7 +334,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                   <Animated.View style={[{ flex: 1, overflow: "hidden" }, clip]}>
                     <Animated.View style={[{ flex: 1 }, unclip]}>
                       <Animated.ScrollView
-                        ref={current ? onScrollView : undefined}
+                        ref={current ? setScrollView : undefined}
                         onLayout={
                           geometryRef
                             ? (e) => {
@@ -401,9 +412,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                             ) : null}
                             {listed.map((row) =>
                               typeof row === "string" ? (
-                                <OpeningRow key={row} entry={row} opening={motion.opening.has(row)} onOpened={motion.opened}>
-                                  <ListEntry entry={row} />
-                                </OpeningRow>
+                                <ListRow key={row} entry={row} opening={motion.opening.has(row)} onOpened={motion.opened} />
                               ) : (
                                 <ClosingTabRow key={`closing:${row.tab.id}`} row={row} onGone={motion.gone} />
                               ),
@@ -440,6 +449,16 @@ function PageContent({ children }: { children: (controller: ReturnType<typeof us
 
 // Rows are memoized by id: the sidebar re-renders on layout and profile changes, and each row
 // subscribes to its own tab.
+// A list row in its opening wrapper. The page renders again when its list or its callbacks change (a tab opening,
+// the offscreen marker showing); each row's wrapper and its animated view render only when its own props change.
+const ListRow = memo(function ListRow({ entry, opening, onOpened }: { entry: string; opening: boolean; onOpened: (entry: string) => void }) {
+  return (
+    <OpeningRow entry={entry} opening={opening} onOpened={onOpened}>
+      <ListEntry entry={entry} />
+    </OpeningRow>
+  );
+});
+
 const ListEntry = memo(function ListEntry({ entry }: { entry: string }) {
   const id = entry.slice(2);
   if (entry.startsWith("g:")) return <GroupBlock groupId={id} section="list" />;
@@ -682,7 +701,7 @@ function CleanUpUpsell({ windowId }: { windowId: string }) {
   const tokens = useSidebarTokens();
   const [count, setCount] = useState(0);
   const [hidden, setHidden] = useState(upsellDeclined);
-  const daily = useBrowser((s) => s.settings.cleanUpInactiveTabsAfterHours !== null);
+  const daily = useQuietBrowser((s) => s.settings.cleanUpInactiveTabsAfterHours !== null);
   useEffect(() => {
     const check = () => setCount(cleanUpCandidates(useBrowser.getState(), windowId).length);
     check();

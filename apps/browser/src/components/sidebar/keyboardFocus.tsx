@@ -1,5 +1,5 @@
 import { focusSidebarRow, prompt } from "@bay/shell";
-import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { findNodeHandle, StyleSheet, View, type ScrollView, type ViewProps } from "react-native";
 import { closeTab } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
@@ -7,18 +7,22 @@ import { webviews } from "../../lib/webviews";
 import { openLiveItem } from "../../live/engine";
 import { live, updateFolder, useLive } from "../../live/store";
 import { useShallow } from "zustand/react/shallow";
-import { useStore } from "zustand";
+import { createStore, useStore, type StoreApi } from "zustand";
 import { sidebarKeyboardRowIds } from "./entries";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
-import { usePageSpaceId, useSpaceFolded, useWindowField, useWindowId } from "../../store/hooks";
+import { usePageSpaceId, useSpaceFolded, useWindowField, useWindowId, useQuietBrowser } from "../../store/hooks";
 import { splitStore } from "../../store/views";
 import { clickTab, startRename } from "./actions";
 import { dismissHover } from "./hover";
 import { blurSidebar, focusSidebar, reconcileSidebarKeyboard, registerSidebarKeyboardActions, type SidebarKeyboardRow } from "./keyboard";
 import { measureRow, registerRow, setSidebarUi, useSidebarUi } from "./state";
 
-const VisibleRows = createContext<Set<string> | null>(null);
+// The scope's visible rows, as a store each row reads its own entry of: a tab opening or closing changes the set, and
+// with the set itself in context every row of the list rendered again; now only the rows whose visibility changed do.
+type VisibleRowsStore = StoreApi<{ rows: ReadonlySet<string> | null }>;
+const VisibleRows = createContext<VisibleRowsStore | null>(null);
+const ALL_VISIBLE: VisibleRowsStore = createStore(() => ({ rows: null }));
 
 export function SidebarKeyboardScope({ children }: { children: ReactNode }) {
   const windowId = useWindowId();
@@ -32,9 +36,12 @@ export function SidebarKeyboardScope({ children }: { children: ReactNode }) {
       showAll: s.showAll,
     })),
   );
-  const ids = useBrowser((s) => sidebarKeyboardRowIds(s, windowId, liveState));
+  const ids = useQuietBrowser((s) => sidebarKeyboardRowIds(s, windowId, liveState));
   const visible = useMemo(() => new Set(ids), [ids]);
-  return <VisibleRows.Provider value={visible}>{children}</VisibleRows.Provider>;
+  const [store] = useState<VisibleRowsStore>(() => createStore(() => ({ rows: visible })));
+  // Before paint: a row added or removed in this commit reads its visibility before it's drawn.
+  useLayoutEffect(() => store.setState({ rows: visible }), [store, visible]);
+  return <VisibleRows.Provider value={store}>{children}</VisibleRows.Provider>;
 }
 
 const revealers = new Map<string, (view: View) => void>();
@@ -43,11 +50,11 @@ const revealers = new Map<string, (view: View) => void>();
 export function SidebarKeyboardRowView({ rowId, legacyId, label, children, ...props }: ViewProps & { rowId: string; legacyId?: string; label?: string }) {
   const windowId = useWindowId();
   const spaceId = usePageSpaceId();
-  const visibleRows = useContext(VisibleRows);
+  const listed = useStore(useContext(VisibleRows) ?? ALL_VISIBLE, (s) => !s.rows || s.rows.has(rowId));
   const current = useWindowField((w) => w.spaceId === spaceId, false);
   const extension = !/^(t:|s:|g:|f:|livefolder\||live\||stack\||more\|)/.test(rowId);
   const folded = useSpaceFolded(spaceId);
-  const visible = current && (extension ? !folded : !visibleRows || visibleRows.has(rowId));
+  const visible = current && (extension ? !folded : listed);
   const renameId = useSidebarUi((s) => (s.renaming?.windowId === windowId ? s.renaming.id : null));
   const split = useMemo(() => splitStore(rowId.startsWith("s:") ? rowId.slice(2) : ""), [rowId]);
   const renaming = useStore(split, (s) => !!renameId && (renameId === legacyId || !!s?.tabIds.includes(renameId)));
