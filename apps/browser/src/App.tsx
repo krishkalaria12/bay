@@ -34,7 +34,7 @@ import { LittleBayWindow } from "./components/littleBay/LittleBayWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
 import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
-import { hex, ThemeScope, useTheme } from "./lib/theme";
+import { hex, ThemeScope, useTheme, useWindowTint } from "./lib/theme";
 import { layout } from "./lib/constants";
 import { useEffectEvent } from "./lib/useEffectEvent";
 import { useBrowser } from "./store/browser";
@@ -77,7 +77,8 @@ function BrowserWindow() {
   const addressInSidebar = useAddressBarInSidebar();
   const [peekOut, setPeekOut] = useState(false);
   const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, topTabs, peekOut });
-  const lightsColor = theme.windowTint[0];
+  const windowTint = useWindowTint();
+  const lightsColor = windowTint[0];
   useEffect(() => {
     void setTrafficLightsMode(windowId, lights, lightsColor);
   }, [windowId, lights, lightsColor]);
@@ -108,7 +109,7 @@ function BrowserWindow() {
 
   return (
     <View style={{ flex: 1, flexDirection: right ? "row-reverse" : "row" }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <WindowProfile />
       <SpaceTint />
       {!topTabs && (
@@ -202,6 +203,7 @@ if (__DEV__) {
 
 function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boolean; onOut: (out: boolean) => void }) {
   const theme = useTheme();
+  const windowTint = useWindowTint();
   const windowId = useWindowId();
   const sidebarWidth = useSidebarWidth(windowId);
   const { slide, live, show, hide } = usePeek(enabled);
@@ -276,7 +278,7 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
         ]}
       >
         <Surface
-          fill={hex(theme.windowTint[0])}
+          fill={hex(windowTint[0])}
           cornerRadius={12}
           borderColor={hex(theme.panelBorder)}
           borderWidth={0.5}

@@ -2,7 +2,7 @@ import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface,
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
 import { findNodeHandle, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { closeTab, toggleMute } from "../../lib/actions";
-import { hex, ThemeScope, useTheme } from "../../lib/theme";
+import { hex, ThemeScope, useTheme, useWindowTint } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowser, type BrowserState } from "../../store/browser";
@@ -814,6 +814,7 @@ type Fill = string | EasedColor;
 // does at rest and the tab it passes doesn't show through.
 function SelectedTab({ width, band, opaque = false }: { width: number; band: Fill | null; opaque?: boolean }) {
   const theme = useTheme();
+  const windowTint = useWindowTint();
   const floating = useContext(FloatingStrip);
   if (floating) {
     const card = {
@@ -826,7 +827,7 @@ function SelectedTab({ width, band, opaque = false }: { width: number; band: Fil
     };
     return (
       <>
-        {opaque && <View pointerEvents="none" style={{ ...card, backgroundColor: theme.windowTint[0] }} />}
+        {opaque && <View pointerEvents="none" style={{ ...card, backgroundColor: windowTint[0] }} />}
         <View
           pointerEvents="none"
           style={{
@@ -840,7 +841,7 @@ function SelectedTab({ width, band, opaque = false }: { width: number; band: Fil
     );
   }
   const body = width - 1;
-  const fills: Fill[] = [...(opaque ? [theme.windowTint[0]] : []), theme.card, ...(band ? [band] : [])];
+  const fills: Fill[] = [...(opaque ? [windowTint[0]] : []), theme.card, ...(band ? [band] : [])];
   return (
     <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width, height: TOP_STRIP_HEIGHT }}>
       {fills.map((fill, i) => (
@@ -1382,6 +1383,7 @@ function NewTabButton({ windowId }: { windowId: string }) {
 
 export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; enabled: boolean }) {
   const theme = useTheme();
+  const windowTint = useWindowTint();
   const { slide, live, show, hide } = usePeek(enabled);
   const slideStyle = useAnimatedStyle(() => {
     "worklet";
@@ -1412,7 +1414,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
         ]}
       >
         <Surface
-          fill={hex(theme.windowTint[0])}
+          fill={hex(windowTint[0])}
           cornerRadius={12}
           borderColor={hex(theme.panelBorder)}
           borderWidth={STRIP_PEEK_BORDER}

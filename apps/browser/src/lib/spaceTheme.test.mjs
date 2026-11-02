@@ -127,3 +127,35 @@ test("a page's colour never overrides the user's light or dark", async () => {
   page("#FFFFFF");
   assert.match(themeKey(S(), w, null), /:light@#FFFFFF$/, "a light page shows as it is");
 });
+
+// Switching between differently coloured sites changes only the window's fill: the theme every row, icon and badge
+// reads stays the same object, so they don't all render again.
+test("a page's colour reaches the window's fill without replacing the theme rows read", async () => {
+  const { useBrowser } = await import("../store/browser.ts");
+  const { themeKey, themeFor, spaceKeyOf } = await import("./theme.ts");
+  const S = () => useBrowser.getState();
+  S().hydrate({});
+  const space = S().settings.defaultSpaceId;
+  S().updateSpace(space, { theme: null });
+  const w = S().createWindow({ spaceId: space, url: "https://example.com" });
+  const tab = S().windows[w].activeTabIds[space];
+  const page = (themeColor) => {
+    useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor } } });
+    const key = themeKey(S(), w, null);
+    return { theme: themeFor(spaceKeyOf(key)), windowTint: themeFor(key).windowTint, shown: themeFor(key) };
+  };
+  const plain = page(null);
+  const red = page("#AA2222");
+  const blue = page("#2244AA");
+  assert.strictEqual(red.theme, plain.theme);
+  assert.strictEqual(blue.theme, plain.theme);
+  assert.strictEqual(red.windowTint, red.shown.windowTint);
+  assert.strictEqual(blue.windowTint, blue.shown.windowTint);
+  assert.notDeepEqual(red.windowTint, blue.windowTint);
+  assert.deepEqual(plain.windowTint, plain.theme.windowTint, "without a page colour the fill is the space's");
+  // The page-coloured theme differs from its space's only in the fill.
+  const { windowTint: _a, ...tinted } = blue.shown;
+  const { windowTint: _b, ...own } = plain.theme;
+  assert.deepEqual(tinted, own);
+  assert.strictEqual(page("#2244AA").windowTint, blue.windowTint);
+});

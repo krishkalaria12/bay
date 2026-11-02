@@ -299,12 +299,29 @@ function siteColor(s: BrowserState, windowId: string, spaceId: string): string |
  * A window's theme key for a space (its own by default): a solid one takes its page's colour, glass its space's. A
  * space's own theme (the theme editor's) always shows, as Arc's and Zen's do: only a preset colour gives way to the page.
  */
+// Every ThemeScope (each window, sidebar page and strip) and the space swipe's backdrops ask on every store update;
+// the key is worked out again only when what it reads changed, not on another page's progress.
+const keys = new Map<string, { inputs: unknown[]; key: string }>();
+
 export function themeKey(s: BrowserState, windowId: string | null, page: string | null): string {
   const id = windowId ?? s.ui.focusedWindowId ?? "";
   const w = s.windows[id];
+  const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
+  const active = w ? activeTabId(s, id, spaceId) : undefined;
+  const inputs = [w, s.settings, s.spaces[spaceId], s.ui.previewLooks?.[id], s.ui.appDark, active && s.tabs[active]?.url, active && s.live[active]?.themeColor];
+  const memo = `${id}|${spaceId}`;
+  const cached = keys.get(memo);
+  if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.key;
+  const key = computeThemeKey(s, id, w, spaceId);
+  keys.delete(memo);
+  keys.set(memo, { inputs, key });
+  if (keys.size > 32) keys.delete(keys.keys().next().value!);
+  return key;
+}
+
+function computeThemeKey(s: BrowserState, id: string, w: BrowserState["windows"][string] | undefined, spaceId: string): string {
   const glass = s.settings.windowMaterial === "glass";
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
-  const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
   // A look being chosen for this window (the new space panel's) shows on its space meanwhile.
   const preview = w && spaceId === w.spaceId ? s.ui.previewLooks?.[id] : undefined;
   const space = { ...(s.spaces[spaceId] ?? DEFAULT_SPACE), ...preview };
@@ -334,12 +351,32 @@ export function setPreviewLook(windowId: string, look: Pick<Space, "color" | "th
 export function ThemeScope({ children }: { children: ReactNode }) {
   const windowId = useContext(WindowContext);
   const page = useContext(PageSpaceContext);
-  const key = useBrowser((s) => themeKey(s, windowId, page));
+  const key = useBrowser((s) => spaceKeyOf(themeKey(s, windowId, page)));
   return createElement(ThemeContext.Provider, { value: themeFor(key) }, children);
+}
+
+/**
+ * The space's theme in a window's theme key. A page's colour changes only the window's fill (`useWindowTint`), so the
+ * context keeps its value on a switch between differently coloured sites: a new value re-rendered every row, icon and
+ * badge that reads the theme, and even with few of them React walks the whole window to find them.
+ */
+export function spaceKeyOf(key: string): string {
+  const site = key.indexOf(SITE);
+  return site >= 0 ? key.slice(0, site) : key;
 }
 
 // Outside a ThemeScope (nothing renders there today) the theme is read once, not followed.
 const unscopedTheme = () => themeFor(themeKey(useBrowser.getState(), null, null));
+
+/**
+ * The window's fill as it's shown: its page's colour when the window follows its page. `useTheme().windowTint` is
+ * its space's own; the backdrop and what is painted with the window's colour read this, from the store.
+ */
+export function useWindowTint(): Theme["windowTint"] {
+  const windowId = useContext(WindowContext);
+  const page = useContext(PageSpaceContext);
+  return useBrowser((s) => themeFor(themeKey(s, windowId, page)).windowTint);
+}
 
 export function useTheme(): Theme {
   const scoped = useContext(ThemeContext);

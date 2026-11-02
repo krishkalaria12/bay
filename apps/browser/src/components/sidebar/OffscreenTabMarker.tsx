@@ -1,6 +1,6 @@
 import { Symbol } from "@bay/shell";
 import { Pressable, View } from "react-native";
-import { useTheme } from "../../lib/theme";
+import { useTheme, useWindowTint } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { TabIcon } from "./TabIcon";
@@ -13,6 +13,7 @@ import { OFFSCREEN_MARKER_HEIGHT, OFFSCREEN_MARKER_INSET } from "./constants";
  */
 export function OffscreenTabMarker({ windowId, side, top, onPress }: { windowId: string; side: "above" | "below"; top: number; onPress: () => void }) {
   const theme = useTheme();
+  const windowTint = useWindowTint();
   const tokens = useSidebarTokens();
   const tab = useBrowser((s) => {
     const id = activeTabId(s, windowId);
@@ -42,7 +43,7 @@ export function OffscreenTabMarker({ windowId, side, top, onPress }: { windowId:
               paddingHorizontal: 7,
               borderRadius: OFFSCREEN_MARKER_HEIGHT / 2,
               // Solid, over the rows it floats on.
-              backgroundColor: theme.windowTint[0],
+              backgroundColor: windowTint[0],
               opacity: pressed ? 0.7 : 1,
               borderWidth: 0.5,
               borderColor: tokens.separator,

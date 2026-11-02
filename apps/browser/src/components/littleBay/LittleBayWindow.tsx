@@ -4,7 +4,7 @@ import { ContextMenuArea, FadeLabel, setTrafficLightsCenter, Symbol, WindowDragR
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { useTheme } from "../../lib/theme";
+import { useTheme, useWindowTint } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useActiveTab, useTabLive, useWindowId, useWindowUi } from "../../store/hooks";
 import type { Tab } from "../../store/types";
@@ -27,7 +27,7 @@ export function LittleBayWindow() {
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={useWindowTint()} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <View
         style={{
           flex: 1,
