@@ -13,6 +13,8 @@ mod jni_bridge;
 mod preprocess;
 mod tracking;
 
-pub use blocker::{content_blocking_rules, Blocker, FilterList, ListCounts, PageResources};
+pub use blocker::{
+    content_blocking_rules, Blocker, FilterList, ListCounts, PageResources, RequestMatch,
+};
 pub use preprocess::preprocess;
 pub use tracking::TrackingParams;

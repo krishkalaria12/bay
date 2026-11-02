@@ -1292,6 +1292,7 @@ const char kPageReportsKey = 0;
       NSMutableDictionary *config = [NSMutableDictionary dictionary];
       if (blockAutoplay) config[@"blockAutoplay"] = @YES;
       if (genericHiding) config[@"cosmetic"] = @YES;
+      if ([cosmetic[@"procedural"] count]) config[@"procedural"] = cosmetic[@"procedural"];
       // The app's screen-share picker, when the engine can grant the picked source to getUserMedia (CEF's
       // site::AllowDesktopCapture).
       if (gDisplayMediaPicker && [NNCoreEngine respondsToSelector:@selector(allowDesktopCapture:tab:frame:origin:)])

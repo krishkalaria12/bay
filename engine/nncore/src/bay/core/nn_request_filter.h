@@ -15,9 +15,11 @@
 
 namespace content {
 class NavigationThrottleRegistry;
+struct GlobalRenderFrameHostId;
 }
 namespace net {
 class IsolationInfo;
+class SiteForCookies;
 }
 namespace network {
 class URLLoaderFactoryBuilder;
@@ -32,22 +34,34 @@ namespace nncore {
 // tab's page (its origin for subresources). type: an adblock resource type ("script",
 // "image", "stylesheet", "font", "media", "subdocument", "xmlhttprequest", "ping", "object",
 // "other"). Called on any thread, so it must be thread-safe and quick. true blocks.
+// redirect is null for frames/WebSockets; otherwise the host may set it to a malloc-allocated
+// data URL for a blocked request. The engine owns and frees the returned string.
 using RequestFilter = bool (*)(const char* url,
                                const char* source,
                                const char* top,
                                const char* type,
-                               const char* method);
+                               const char* method,
+                               char** redirect);
 
 // nullptr (the default) filters nothing; factories made before a filter was set pass their
 // requests to the one current when each request starts.
 void SetRequestFilter(RequestFilter filter);
+bool HasRequestFilter();
+bool ShouldBlockWebSocket(content::RenderFrameHost* frame,
+                         const GURL& url,
+                         const net::SiteForCookies& site_for_cookies);
+
+// On the UI thread, count a successful local stand-in using the tab's canonical accounting.
+void NoteContentBlockerRedirect(content::GlobalRenderFrameHostId frame,
+                               const GURL& url);
 
 // From NNContentBrowserClient::WillCreateURLLoaderFactory, before Chrome's own interceptors.
 void MaybeFilterURLLoaderFactory(
     content::ContentBrowserClient::URLLoaderFactoryType type,
     const url::Origin& request_initiator,
     const net::IsolationInfo& isolation_info,
-    network::URLLoaderFactoryBuilder& factory_builder);
+    network::URLLoaderFactoryBuilder& factory_builder,
+    content::RenderFrameHost* frame);
 
 // From NNContentBrowserClient::CreateThrottlesForNavigation.
 void MaybeAddRequestFilterThrottle(content::NavigationThrottleRegistry& registry);

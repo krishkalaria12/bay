@@ -27,12 +27,15 @@ NS_ASSUME_NONNULL_BEGIN
 // "stylesheet", "font", "media", "subdocument", "xmlhttprequest", "ping", "object", "other");
 // method: the HTTP request method ("GET", "POST", ...).
 // true blocks it: it fails with ERR_BLOCKED_BY_CLIENT (tab:didBlockRequests:lastURL: counts
-// it) and a blocked frame collapses.
+// it) and a blocked frame collapses. If redirect is non-null, the host may return a
+// malloc-allocated data URL in *redirect as a local stand-in. The engine frees it.
+// redirect is null for subframe navigations and WebSocket handshakes.
 typedef bool (*NNCoreRequestFilter)(const char* url,
                                     const char* source,
                                     const char* top,
                                     const char* type,
-                                    const char* method);
+                                    const char* method,
+                                    char* _Nullable* _Nullable redirect);
 
 // --- Engine -----------------------------------------------------------------------------
 

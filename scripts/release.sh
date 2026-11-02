@@ -282,6 +282,7 @@ if [ "$phase" != sign ]; then
   echo "==> Content blocker"
   # The default filter lists, which embed.sh copies into the app (the blocker itself builds with the BayNNCore pod).
   "$nncore/scripts/filter-lists.sh" --strict
+  "$nncore/scripts/blocker-resources.sh"
 
   # Without the team's development profile (CI, or an export by hand), the archive is signed ad hoc and the export
   # signs it for real.
@@ -427,6 +428,7 @@ done
 [ -d "$app/Contents/PlugIns/BayDockTile.plugin" ] || die "no dock tile plug-in"
 [ -f "$app/Contents/embedded.provisionprofile" ] || die "no Developer ID provisioning profile (keychain groups need it)"
 [ -f "$app/Contents/Resources/FilterLists/easylist.txt" ] || die "no bundled filter lists in the app"
+[ -s "$app/Contents/Resources/ContentBlocker/blocker-resources.json" ] || die "no bundled scriptlet and redirect resources"
 [ ! -e "$app/Contents/Resources/Extensions/ublock" ] || die "the app still bundles uBlock Origin"
 designated="$(codesign -d -r- "$app" 2>&1 | sed -n 's/^designated => //p')"
 [[ "$designated" == *"identifier \"$bundle_id\""* && "$designated" == *"subject.OU] = $team"* ]] \

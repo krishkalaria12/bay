@@ -265,6 +265,10 @@ const server = createServer((req, res) => {
     res.writeHead(200, { "content-type": "image/png" });
     return res.end(png);
   }
+  if (url.pathname === "/redirect-ad") {
+    res.writeHead(302, { location: `http://ib.adnxs.com/ut/v3${url.search}` });
+    return res.end();
+  }
   if (url.pathname === "/file.bin") {
     res.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": 'attachment; filename="nncore-test.bin"' });
     return res.end(Buffer.alloc(64 * 1024, 7));
@@ -490,6 +494,12 @@ const server = createServer((req, res) => {
     return res.end(page("Saved", "saved"));
   }
   return res.end(page(url.pathname, url.pathname));
+});
+// Record WebSocket handshakes independently from ordinary HTTP requests. An allowed handshake reaches this fixture;
+// blocked handshakes must fail before the server sees them. No real WebSocket peer or external network is needed.
+server.on("upgrade", (req, socket) => {
+  adServed.push(`${req.headers.host}${req.url}`);
+  socket.end("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
 });
 // A kept instance's switches name the fixture's ports (host rules, the Web Store URL): the same ports again.
 const listen = (srv, at) =>
@@ -3542,21 +3552,39 @@ try {
           ).result.value;
           return { script: r, reached: adServed.slice(before).some((s) => s.startsWith("pagead2.")) };
         };
+        const extraRequest = async (kind) => {
+          const before = adServed.length;
+          const expression =
+            kind === "redirect"
+              ? `fetch("http://adpage.test:${server.address().port}/redirect-ad?${tag}", { mode: "no-cors" }).then(() => "loaded", () => "failed")`
+              : `new Promise((resolve) => { const socket = new WebSocket("ws://ib.adnxs.com/ut/v3?${tag}");
+                socket.onopen = () => { socket.close(); resolve("opened"); }; socket.onerror = () => resolve("failed"); })`;
+          const outcome = (await cdp(t, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
+          return { outcome, reached: adServed.slice(before).some((s) => s.startsWith("ib.adnxs.com") && s.endsWith(`?${tag}`)) };
+        };
         return {
           adnxs: await reached(`http://ib.adnxs.com/ut/v3?${tag}`),
           gpt: await reached(`http://securepubads.g.doubleclick.net/tag/js/gpt.js?${tag}`),
           adsbygoogle: await script(),
+          redirect: await extraRequest("redirect"),
+          websocket: await extraRequest("websocket"),
         };
       };
       const stopped = (r) =>
-        !r.adnxs.reached && !r.gpt.reached && r.adnxs.fetch === "failed" && !r.adsbygoogle.reached && ["stand-in", "failed"].includes(r.adsbygoogle.script);
+        !r.adnxs.reached &&
+        !r.gpt.reached &&
+        r.adnxs.fetch === "failed" &&
+        !r.adsbygoogle.reached &&
+        r.adsbygoogle.script === "stand-in" &&
+        !r.redirect.reached &&
+        !r.websocket.reached;
       const blocked = await round("blocked");
       await cef(`setContentBlockerAllowed("adpage.test", true)`);
       const allowed = await round("allowed");
       await cef(`setContentBlockerAllowed("adpage.test", false)`);
       const again = await round("again");
       if (!stopped(blocked)) throw new Error(`not blocked: ${JSON.stringify(blocked)}`);
-      if (!allowed.adnxs.reached || !allowed.gpt.reached || !allowed.adsbygoogle.reached)
+      if (!allowed.adnxs.reached || !allowed.gpt.reached || !allowed.adsbygoogle.reached || !allowed.redirect.reached || !allowed.websocket.reached)
         throw new Error(`allowing the site let nothing through: ${JSON.stringify(allowed)}`);
       if (!stopped(again)) throw new Error(`blocked again? ${JSON.stringify(again)}`);
       return { firstPage: "blocked", blocked, allowed, again };

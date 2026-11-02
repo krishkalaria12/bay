@@ -42,10 +42,13 @@ fi
 # Resources/FilterLists, so a new install blocks from its first page. uBlock Origin, which the app once bundled under
 # Resources/Extensions, goes.
 "$here/filter-lists.sh"
+"$here/blocker-resources.sh"
 lists="$repo/packages/chromium/vendor/filter-lists"
 if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]; then
   resources="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
   rm -rf "$resources/Extensions"
   mkdir -p "$resources/FilterLists"
   rsync -a --delete --include '*.txt' --exclude '*' "$lists/" "$resources/FilterLists/"
+  mkdir -p "$resources/ContentBlocker"
+  rsync -a --delete "$repo/packages/chromium/vendor/blocker-resources/" "$resources/ContentBlocker/"
 fi

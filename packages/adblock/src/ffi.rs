@@ -102,10 +102,29 @@ pub unsafe extern "C" fn bay_blocker_new(
     hosts: *const bool,
     count: usize,
 ) -> *mut Blocker {
+    bay_blocker_new_with_permissions(lists, hosts, std::ptr::null(), count)
+}
+
+/// Builds lists with explicit scriptlet permissions. A null permissions array grants none.
+///
+/// # Safety
+/// Same as `bay_blocker_new`; `permissions` must point to `count` bytes or be null.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_new_with_permissions(
+    lists: *const *const c_char,
+    hosts: *const bool,
+    permissions: *const u8,
+    count: usize,
+) -> *mut Blocker {
     let lists: Vec<FilterList> = (0..count)
         .map(|i| FilterList {
             text: borrow(*lists.add(i)),
             hosts: !hosts.is_null() && *hosts.add(i),
+            permissions: if permissions.is_null() {
+                0
+            } else {
+                *permissions.add(i)
+            },
         })
         .collect();
     Box::into_raw(Box::new(Blocker::from_lists(&lists)))
@@ -183,8 +202,37 @@ pub unsafe extern "C" fn bay_blocker_should_block(
     )
 }
 
+/// A matched request, optionally with a replacement resource. Free `redirect` with `bay_string_free`.
+#[repr(C)]
+pub struct BayBlockerMatch {
+    pub blocked: bool,
+    pub redirect: *mut c_char,
+}
+
+/// # Safety
+/// `blocker` must be live; the strings must be valid NUL-terminated strings.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_match(
+    blocker: *const Blocker,
+    url: *const c_char,
+    source_url: *const c_char,
+    kind: *const c_char,
+    method: *const c_char,
+) -> BayBlockerMatch {
+    let result = (*blocker).match_request(
+        borrow(url),
+        borrow(source_url),
+        borrow(kind),
+        borrow(method),
+    );
+    BayBlockerMatch {
+        blocked: result.blocked,
+        redirect: result.redirect.map_or(std::ptr::null_mut(), give),
+    }
+}
+
 /// A page's cosmetic resources as JSON: `{"hide": [selector], "exceptions": [selector], "generichide": bool,
-/// "script": scriptlet code}`.
+/// "script": scriptlet code, "procedural": [parsed procedural/action AST]}`.
 ///
 /// # Safety
 /// `blocker` must be live; `url` a valid NUL-terminated string.
@@ -343,6 +391,28 @@ mod tests {
                     expected,
                 );
             }
+            bay_blocker_free(blocker);
+        }
+    }
+
+    #[test]
+    fn c_abi_returns_and_frees_redirect_resources() {
+        unsafe {
+            let list = c"||ads.example^$script,redirect=noopjs";
+            let blocker = bay_blocker_new([list.as_ptr()].as_ptr(), std::ptr::null(), 1);
+            assert!(bay_blocker_use_resources(blocker, c"[{\"name\":\"noop.js\",\"aliases\":[\"noopjs\"],\"kind\":{\"mime\":\"application/javascript\"},\"content\":\"Lyogbm9vcCAqLw==\"}]".as_ptr()));
+            let result = bay_blocker_match(
+                blocker,
+                c"https://ads.example/a.js".as_ptr(),
+                c"https://site.example/".as_ptr(),
+                c"script".as_ptr(),
+                c"GET".as_ptr(),
+            );
+            assert!(result.blocked);
+            assert_eq!(
+                take(result.redirect),
+                "data:application/javascript;base64,Lyogbm9vcCAqLw=="
+            );
             bay_blocker_free(blocker);
         }
     }

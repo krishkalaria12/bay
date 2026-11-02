@@ -44,3 +44,16 @@ jobs:
         run: python3 scripts/tests/test-engine-fresh.py
       - name: React Compiler
         run: pnpm compiler:check
+      - name: Rust content blocker
+        run: |
+          cargo fmt --check --manifest-path packages/adblock/Cargo.toml
+          cargo test --locked --manifest-path packages/adblock/Cargo.toml
+
+  content-blocker-native:
+    name: Native content blocker
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Native state and download regression tests
+        run: python3 packages/chromium/scripts/test-content-blocker.py

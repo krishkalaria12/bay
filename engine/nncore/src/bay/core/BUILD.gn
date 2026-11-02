@@ -128,6 +128,7 @@ source_set("core") {
     "//ipc",
     "//media",
     "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
     "//bay/core/mojom",
     "//third_party/blink/public:blink",
     "//third_party/blink/public/common",

@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use adblock::lists::{FilterFormat, FilterSet, ParseOptions};
 use adblock::request::Request;
+use adblock::resources::{InMemoryResourceStorage, PermissionMask};
 use adblock::Engine;
 use serde::Serialize;
 
@@ -26,6 +27,8 @@ pub struct CosmeticResources {
 pub struct FilterList<'a> {
     pub text: &'a str,
     pub hosts: bool,
+    /// Permission bit 1 allows uBO's trusted scriptlets; grant only to Bay's uAssets catalogue entries.
+    pub permissions: u8,
 }
 
 /// How many rules of each kind a list gave the engine, in [`Blocker::from_lists`] order.
@@ -44,6 +47,15 @@ pub struct PageResources {
     pub generichide: bool,
     /// Scriptlet code to run in the page's main world; empty without resources ([`Blocker::use_resources`]).
     pub script: String,
+    /// Parsed procedural/action filters for the page's content script.
+    pub procedural: Vec<serde_json::Value>,
+}
+
+#[derive(Default)]
+pub struct RequestMatch {
+    pub blocked: bool,
+    /// A replacement resource as a data URL. Applies only when `blocked` is true.
+    pub redirect: Option<String>,
 }
 
 impl Blocker {
@@ -68,6 +80,7 @@ impl Blocker {
                 crate::preprocess::preprocess(list.text).into_owned(),
                 ParseOptions {
                     format,
+                    permissions: PermissionMask::from_bits(list.permissions),
                     ..ParseOptions::default()
                 },
             );
@@ -117,7 +130,14 @@ impl Blocker {
         let Ok(resources) = serde_json::from_str::<Vec<adblock::resources::Resource>>(json) else {
             return false;
         };
-        self.engine().use_resources(resources);
+        // Engine::use_resources silently ignores bad entries; reject the bundle whole instead.
+        let mut storage = InMemoryResourceStorage::default();
+        for resource in resources {
+            if storage.add_resource(resource).is_err() {
+                return false;
+            }
+        }
+        self.engine().use_resource_storage(storage);
         true
     }
 
@@ -128,20 +148,51 @@ impl Blocker {
         hide.sort();
         let mut exceptions: Vec<String> = resources.exceptions.into_iter().collect();
         exceptions.sort();
+        let mut procedural: Vec<String> = resources.procedural_actions.into_iter().collect();
+        procedural.sort();
+        let script = if resources.injected_script.is_empty() {
+            String::new()
+        } else {
+            // uBO's function resources read this object; keep it scoped to this document's injection.
+            format!(
+                "(function() {{\nconst scriptletGlobals = Object.create(null);\n{}\n}})();",
+                resources.injected_script
+            )
+        };
         PageResources {
             hide,
             exceptions,
             generichide: resources.generichide,
-            script: resources.injected_script,
+            script,
+            procedural: procedural
+                .into_iter()
+                .filter_map(|rule| serde_json::from_str(&rule).ok())
+                .collect(),
         }
     }
 
     /// Whether a request should be blocked. `kind` is a resource type such as `script`, `image` or `xhr`.
     pub fn should_block(&self, url: &str, source_url: &str, kind: &str, method: &str) -> bool {
+        self.match_request(url, source_url, kind, method).blocked
+    }
+
+    pub fn match_request(
+        &self,
+        url: &str,
+        source_url: &str,
+        kind: &str,
+        method: &str,
+    ) -> RequestMatch {
         let Ok(request) = Request::new(url, source_url, kind, method) else {
-            return false;
+            return RequestMatch::default();
         };
-        self.engine().check_network_request(&request).should_block()
+        let result = self.engine().check_network_request(&request);
+        let blocked = result.should_block();
+        RequestMatch {
+            blocked,
+            // A redirect-rule without a matching block must not redirect an allowed request.
+            redirect: if blocked { result.redirect } else { None },
+        }
     }
 
     pub fn cosmetic_resources(&self, url: &str) -> CosmeticResources {
@@ -226,10 +277,12 @@ mod tests {
             FilterList {
                 text: LIST,
                 hosts: false,
+                permissions: 0,
             },
             FilterList {
                 text: "# hosts\n127.0.0.1 localhost\n0.0.0.0 tracker.example\n",
                 hosts: true,
+                permissions: 0,
             },
         ]);
         assert_eq!(
@@ -258,6 +311,7 @@ mod tests {
         let blocker = Blocker::from_lists(&[FilterList {
             text: LIST,
             hosts: false,
+            permissions: 0,
         }]);
         let copy = Blocker::deserialize(&blocker.serialize()).expect("deserializes");
         assert!(copy.should_block(
@@ -279,6 +333,7 @@ mod tests {
         let blocker = Blocker::from_lists(&[FilterList {
             text: "example.com##+js(bay-test)\n",
             hosts: false,
+            permissions: 0,
         }]);
         assert!(blocker
             .page_resources("https://example.com/")
@@ -291,6 +346,75 @@ mod tests {
             .script
             .contains("console.log(1)"));
         assert!(!blocker.use_resources("{"));
+        assert!(!blocker.use_resources(r#"[{"name":"broken.js","kind":{"mime":"application/javascript"},"content":"not base64!"}]"#));
+        assert!(blocker
+            .page_resources("https://example.com/")
+            .script
+            .contains("console.log(1)"));
+    }
+
+    #[test]
+    fn returns_procedural_actions_and_respects_site_exceptions() {
+        let blocker = Blocker::new(
+            "example.com##div:has-text(Sponsored):remove()\nexample.com##.notice:style(color: red)\n\
+             except.example.com#@#div:has-text(Sponsored):remove()\n",
+        );
+        let rules = blocker.page_resources("https://example.com/").procedural;
+        assert!(rules.iter().any(|rule| rule["action"]["type"] == "remove"));
+        assert!(
+            rules
+                .iter()
+                .any(|rule| rule["action"]["type"] == "style"
+                    && rule["action"]["arg"] == "color: red")
+        );
+        assert!(!blocker
+            .page_resources("https://except.example.com/")
+            .procedural
+            .iter()
+            .any(|rule| rule["action"]["type"] == "remove"));
+    }
+
+    #[test]
+    fn trusted_scriptlets_require_list_permission() {
+        let resource = r#"[{"name":"trusted-probe.js","kind":{"mime":"application/javascript"},"content":"Y29uc29sZS5sb2coMSk=","permission":1}]"#;
+        for permissions in [0, 1] {
+            let blocker = Blocker::from_lists(&[FilterList {
+                text: "example.com##+js(trusted-probe)",
+                hosts: false,
+                permissions,
+            }]);
+            assert!(blocker.use_resources(resource));
+            let script = blocker.page_resources("https://example.com/").script;
+            assert_eq!(!script.is_empty(), permissions == 1);
+        }
+    }
+
+    #[test]
+    fn redirects_only_a_blocked_request_and_never_an_exception() {
+        let blocker = Blocker::new(
+            "||ads.example^$script,redirect=noopjs\n@@||ads.example/allowed^\n\
+             ||cdn.example^$script,redirect-rule=noopjs\n",
+        );
+        assert!(blocker.use_resources(r#"[{"name":"noop.js","aliases":["noopjs"],"kind":{"mime":"application/javascript"},"content":"Lyogbm9vcCAqLw=="}]"#));
+        let blocked = blocker.match_request(
+            "https://ads.example/ad.js",
+            "https://site.example/",
+            "script",
+            "GET",
+        );
+        assert!(blocked.blocked);
+        assert_eq!(
+            blocked.redirect.as_deref(),
+            Some("data:application/javascript;base64,Lyogbm9vcCAqLw==")
+        );
+        for url in [
+            "https://ads.example/allowed/script.js",
+            "https://cdn.example/ad.js",
+        ] {
+            let allowed = blocker.match_request(url, "https://site.example/", "script", "GET");
+            assert!(!allowed.blocked);
+            assert!(allowed.redirect.is_none());
+        }
     }
 
     #[test]

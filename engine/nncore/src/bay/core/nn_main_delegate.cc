@@ -46,8 +46,10 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "extensions/common/switches.h"
+#include "net/base/net_errors.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/websocket.mojom.h"
 #include "bay/core/nn_lifetime.h"
 #include "bay/core/nn_context_menu.h"
 #include "bay/core/nn_navigation_hold.h"
@@ -377,7 +379,7 @@ class NNContentBrowserClient : public ChromeContentBrowserClient {
       scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
       bool is_for_network_service) override {
     MaybeFilterURLLoaderFactory(type, request_initiator, isolation_info,
-                                factory_builder);
+                                factory_builder, frame);
     ChromeContentBrowserClient::WillCreateURLLoaderFactory(
         browser_context, frame, render_process_id, type, request_initiator,
         isolation_info, navigation_id, ukm_source_id, factory_builder,
@@ -385,6 +387,41 @@ class NNContentBrowserClient : public ChromeContentBrowserClient {
         factory_override, std::move(navigation_response_task_runner),
         is_for_network_service);
   }
+  bool WillInterceptWebSocket(content::RenderFrameHost* frame) override {
+    return HasRequestFilter() ||
+           ChromeContentBrowserClient::WillInterceptWebSocket(frame);
+  }
+
+  void CreateWebSocket(
+      content::RenderFrameHost* frame,
+      WebSocketFactory factory,
+      const GURL& url,
+      const net::SiteForCookies& site_for_cookies,
+      const std::optional<std::string>& user_agent,
+      mojo::PendingRemote<network::mojom::WebSocketHandshakeClient> client,
+      WebSocketOptions options) override {
+    if (ShouldBlockWebSocket(frame, url, site_for_cookies)) {
+      mojo::Remote<network::mojom::WebSocketHandshakeClient>(std::move(client))
+          ->OnFailure("Blocked by Bay's content blocker",
+                      net::ERR_BLOCKED_BY_CLIENT, 0);
+      return;
+    }
+    if (ChromeContentBrowserClient::WillInterceptWebSocket(frame)) {
+      ChromeContentBrowserClient::CreateWebSocket(
+          frame, std::move(factory), url, site_for_cookies, user_agent,
+          std::move(client), std::move(options));
+      return;
+    }
+    // Chrome only proxies frames with extension webRequest listeners. Workers
+    // and other sockets still need the ordinary network factory when allowed.
+    std::vector<network::mojom::HttpHeaderPtr> headers;
+    if (user_agent) {
+      headers.push_back(network::mojom::HttpHeader::New("User-Agent", *user_agent));
+    }
+    std::move(factory).Run(url, std::move(headers), std::move(client),
+                          mojo::NullRemote(), std::move(options.header_client));
+  }
+
   // The spare renderer that replaces one a navigation took starts a moment later, not
   // within that navigation's own start: its RenderProcessHostImpl::Init held the UI
   // thread ~7 ms inside a new tab's creation, which in a new window is the middle of

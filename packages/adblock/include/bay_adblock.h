@@ -20,6 +20,9 @@ typedef struct BayBlocker BayBlocker;
 
 // From `count` filter lists: lists[i] is a list's text, hosts[i] true for a hosts file (hosts may be NULL). Never NULL.
 BayBlocker *bay_blocker_new(const char *const *lists, const bool *hosts, size_t count);
+// Per-list permissions: bit 1 allows trusted uBO scriptlets. NULL grants none.
+BayBlocker *bay_blocker_new_with_permissions(const char *const *lists, const bool *hosts, const uint8_t *permissions,
+                                           size_t count);
 // From bay_blocker_serialize's bytes; NULL when they're damaged or from another adblock-rust.
 BayBlocker *bay_blocker_deserialize(const uint8_t *data, size_t length);
 uint8_t *bay_blocker_serialize(const BayBlocker *blocker, size_t *length);
@@ -29,7 +32,15 @@ void bay_blocker_free(BayBlocker *blocker);
 // xmlhttprequest, ping, websocket, object, other. method: the HTTP request method.
 bool bay_blocker_should_block(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
                               const char *method);
-// {"hide": [selector], "exceptions": [selector], "generichide": bool, "script": scriptlet code}
+typedef struct {
+  bool blocked;
+  // Replacement data URL, only for blocked requests. Free with bay_string_free; NULL means cancel outright.
+  char *redirect;
+} BayBlockerMatch;
+BayBlockerMatch bay_blocker_match(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
+                                 const char *method);
+// {"hide": [selector], "exceptions": [selector], "generichide": bool, "script": scriptlet code,
+//  "procedural": [parsed adblock-rust procedural/action AST]}
 char *bay_blocker_cosmetic(const BayBlocker *blocker, const char *url);
 // query {"classes": [name], "ids": [name], "exceptions": [selector]} → [selector]
 char *bay_blocker_hidden_selectors(const BayBlocker *blocker, const char *query);

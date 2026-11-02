@@ -12,13 +12,18 @@ Every request a web page makes is put to the blocker before it starts, in the en
   `ContentBrowserClient::WillCreateURLLoaderFactory` puts an interceptor in front of each `URLLoaderFactory` it makes
   for them (`engine/nncore/src/bay/core/nn_request_filter.cc`), the way Chrome's webRequest proxies requests. The
   interceptor runs on one background sequence; a blocked request is answered at once with `ERR_BLOCKED_BY_CLIENT`,
-  any other is handed to the next factory untouched (its loader and client pass straight through, so a request costs
-  one check). It goes in before Chrome's own interceptors, so extensions never see what was blocked.
+  allowed requests continue through the next factory, with redirects checked again before they are followed. A blocked
+  request with a redirect resource receives the bundled stand-in through a data pipe without contacting the ad host.
+  It goes in before Chrome's own interceptors, so extensions never see what was blocked.
 - **Subframe navigations** (iframes, frames, fenced frames) go through a `NavigationThrottle` on start and on each
   redirect, which blocks and collapses the frame. Main-frame navigations are never blocked.
+- **WebSockets** go through the browser client's handshake hook before the network connection starts. A paused site
+  allows its handshakes too; worker handshakes use the available cookie-site origin when there is no frame.
+  While a filter is set, handshakes no extension intercepts are opened by Bay, so DevTools' extra request headers
+  aren't added to them.
 
 The engine only asks; the host decides. `+[NNCoreEngine setRequestFilter:]` takes a C function
-(`NNCoreRequestFilter`: url, source, top, type, method → block), which the app's native core
+(`NNCoreRequestFilter`: url, source, top, type, method → block, optional data-URL stand-in), which the app's native core
 (`packages/chromium/ios/NNCoreContentBlocker.mm`) implements over the Rust engine. Blocked requests are counted by the
 engine's existing `ERR_BLOCKED_BY_CLIENT` accounting (`tab:didBlockRequests:lastURL:`).
 
@@ -32,7 +37,9 @@ but it is compiled into Chrome's framework, so it needs an engine build.
 answers with the site's hiding rules as a user-origin style sheet for that frame
 (`-[NNCoreTab insertUserStyle:frame:origin:]`, `mojom::NNPage::InsertUserStyle`; the renderer inserts it only if the
 frame still shows a document of that origin), runs any scriptlets in its main world, and turns on the page script's
-survey of classes and ids, whose reports get the generic rules that hide them.
+survey of classes and ids, whose bounded reports get the generic rules that hide them. Procedural rules use
+adblock-rust's selector/action AST in the page script, including text/style matching, ancestor/XPath selection,
+removal, attribute/class removal, and style actions. DOM mutations schedule batched re-evaluation.
 
 ## Lists, settings and the engine cache
 
@@ -43,17 +50,37 @@ survey of classes and ids, whose reports get the generic rules that hide them.
   install blocks offline from its first page. Lists download into `<app support>/Content Blocker/lists` and update
   when their `! Expires:` header says (checked a minute after launch, then every 3 hours).
 - uBO's `!#if` preprocessor blocks are resolved as uBO resolves them on Chromium (`packages/adblock/src/preprocess.rs`).
-- The compiled engine is cached (`engine.dat`, about 25 MB for the defaults) and loads in about 15 ms at launch; it is
-  rebuilt (about 0.4 s for the defaults) when a list or the selection changes.
+- The compiled engine is cached (`engine.dat`) and rebuilt when a list, the selection, or the engine format changes.
+  Bundled and cached lists apply before optional missing lists download, so a slow regional download does not disable
+  the available rules.
 - `settings.json` holds on/off, the selected lists and the hosts it's paused on; they apply to every profile, private
   ones included. A pause covers the host's subdomains.
 
 The JS API (`packages/chromium/src/contentBlocker.ts`) is unchanged.
 
-## Not yet
+## Scriptlets and redirect resources
 
-- Scriptlets and redirect resources: `bay_blocker_use_resources` takes adblock-rust's resource JSON, but the app loads
-  none yet, so `##+js()` rules and `$redirect` stand-ins don't apply (redirected requests are blocked instead).
-- Procedural cosmetic filters (`:has-text()`, `:style()`, `:remove()`) aren't applied.
-- WebSocket connections aren't filtered, and a subresource's redirects aren't checked again.
-- uBO's settings (paused sites, list choices) aren't carried over: the new blocker starts from the defaults.
+`packages/chromium/scripts/blocker-resources.sh` verifies the pinned uBlock Origin release archive by SHA-256 and
+converts its exported scriptlet/redirect registries into adblock-rust resources. The app bundles that JSON with its
+license and provenance in `Resources/ContentBlocker`, and reloads it for cached engines as well as new ones.
+Only uBO's own `ublock-*` lists may invoke trusted scriptlets; other catalogue lists receive no privileged permission.
+Redirect rules return local stand-ins while allow/exception rules continue to take precedence.
+
+The filter syntax is interpreted by adblock-rust, rather than uBO's JavaScript filtering engine. Procedural execution
+covers the AST operators and actions that the pinned crate exposes; this is not a claim of identical handling of every
+uBO syntax extension.
+
+## Existing settings
+
+uBO's settings (paused sites, list choices, enabled state) are not carried over. The new blocker starts from its defaults.
+
+## Verification
+
+`cargo test --locked --manifest-path packages/adblock/Cargo.toml` checks rule matching, redirects, scriptlets,
+permissions and procedural resources. `python3 packages/chromium/scripts/test-content-blocker.py` runs the actual native
+implementation against the Rust library with temporary storage and controlled offline downloads. The browser's JavaScript
+suite exercises cosmetic batching and procedural actions from the real page script. CI runs all three.
+
+After building the matching engine and app, run the `content-blocker`, `content-blocker-blocks`, `content-blocker-profile`,
+`content-blocker-private`, and `content-blocker-restored` acceptance checks. The blocked/allowed rounds also check redirect
+stand-ins, redirected requests and WebSocket handshakes against local fixtures.

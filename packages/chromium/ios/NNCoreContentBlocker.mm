@@ -97,13 +97,17 @@ bool PausedOn(const Live &live, const std::string &host) {
 }
 
 // NNCoreRequestFilter: on the engine's threads.
-bool Filter(const char *url, const char *source, const char *top, const char *type, const char *method) {
+bool Filter(const char *url, const char *source, const char *top, const char *type, const char *method,
+            char **redirect) {
+  if (redirect) *redirect = nullptr;
   std::shared_ptr<const Live> live = CurrentLive();
   if (!live->enabled || !live->engine) return false;
   if (PausedOn(*live, HostOf(top && *top ? top : source))) return false;
   const auto start = std::chrono::steady_clock::now();
-  const bool block =
-      bay_blocker_should_block(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET");
+  BayBlockerMatch match =
+      bay_blocker_match(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET");
+  if (redirect && match.redirect) *redirect = strdup(match.redirect);
+  bay_string_free(match.redirect);
   const uint64_t nanos =
       (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
   gLookups.fetch_add(1, std::memory_order_relaxed);
@@ -111,14 +115,14 @@ bool Filter(const char *url, const char *source, const char *top, const char *ty
   uint64_t max = gMaxLookupNanos.load(std::memory_order_relaxed);
   while (nanos > max && !gMaxLookupNanos.compare_exchange_weak(max, nanos, std::memory_order_relaxed)) {
   }
-  return block;
+  return match.blocked;
 }
 
 // MARK: The catalogue
 
 NSString *const kVersion = @"adblock-rust 0.13.5";
 // Bump with a change to how lists compile (the crate, its features): the cached engine is rebuilt.
-NSString *const kEngineFormat = @"bay-adblock 1";
+NSString *const kEngineFormat = @"bay-adblock 2";
 
 NSArray<NSDictionary *> *Catalogue() {
   static NSArray<NSDictionary *> *lists;
@@ -383,14 +387,17 @@ NSDictionary *CountsFor(BayBlocker *blocker, NSArray<NSString *> *ids) {
 BayBlocker *Compile(NSArray<NSString *> *ids) {
   std::vector<std::string> texts;
   std::unique_ptr<bool[]> hosts(new bool[ids.count + 1]);
+  std::vector<uint8_t> permissions;
   for (NSUInteger i = 0; i < ids.count; i++) {
     NSData *data = [NSData dataWithContentsOfFile:ListPath(ids[i])];
     texts.emplace_back((const char *)data.bytes, data.length);
     hosts[i] = [CatalogueList(ids[i])[@"hosts"] boolValue];
+    // As in uBO, only its own uAssets lists may invoke privileged scriptlets.
+    permissions.push_back([ids[i] hasPrefix:@"ublock-"] ? 1 : 0);
   }
   std::vector<const char *> pointers;
   for (const std::string &text : texts) pointers.push_back(text.c_str());
-  return bay_blocker_new(pointers.data(), hosts.get(), pointers.size());
+  return bay_blocker_new_with_permissions(pointers.data(), hosts.get(), permissions.data(), pointers.size());
 }
 
 Built Build(NSArray<NSString *> *ids, BOOL useCache) {
@@ -419,6 +426,13 @@ Built Build(NSArray<NSString *> *ids, BOOL useCache) {
     }
     bay_bytes_free(bytes, length);
   }
+  // Resource storage is separate from adblock-rust's serialized filter engine. Load the pinned resources for both
+  // new and cached engines, so scriptlets and redirect stand-ins work on every launch.
+  NSString *resourcesPath =
+      [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"ContentBlocker/blocker-resources.json"];
+  NSString *resources = [NSString stringWithContentsOfFile:resourcesPath encoding:NSUTF8StringEncoding error:nil];
+  if (!resources || !bay_blocker_use_resources(blocker, resources.UTF8String))
+    NSLog(@"[blocker] missing or invalid bundled scriptlet/redirect resources");
   built.engine = std::make_shared<Engine>(blocker);
   built.ms = (CACurrentMediaTime() - start) * 1000;
   built.counts = CountsFor(blocker, present);
@@ -623,6 +637,7 @@ NSDictionary *ContentBlockerCosmetics(NSString *frameURL, NSString *pageURL) {
   answer[@"css"] = StyleFor([resources[@"hide"] isKindOfClass:NSArray.class] ? resources[@"hide"] : @[]);
   if ([resources[@"script"] isKindOfClass:NSString.class] && [resources[@"script"] length]) answer[@"script"] = resources[@"script"];
   answer[@"generic"] = @(![resources[@"generichide"] boolValue]);
+  if ([resources[@"procedural"] isKindOfClass:NSArray.class]) answer[@"procedural"] = resources[@"procedural"];
   return answer;
 }
 
