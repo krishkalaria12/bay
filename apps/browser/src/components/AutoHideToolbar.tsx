@@ -5,8 +5,7 @@ import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTi
 import { reduceMotion } from "../lib/reduceMotion";
 import { useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
-import { useBrowser } from "../store/browser";
-import { useSettings, useTabLive } from "../store/hooks";
+import { useSettings, useTab, useTabLive, useQuietBrowser } from "../store/hooks";
 import type { ToolbarGeometry } from "./layout/geometry";
 import { toolbarPalette, useEasedColor, useEasedColorStyle } from "./layout/toolbarColors";
 import { useHistoryMenu } from "./layout/history";
@@ -40,9 +39,9 @@ const SHOW_EASING = Easing.out(Easing.cubic);
 export function useToolbarMode(tabId: string, windowId: string, enabled: boolean): ToolbarMode {
   const scrolledDown = useToolbarAutoHide((s) => !!s.scrolledDown[tabId]);
   const peek = useToolbarAutoHide((s) => !!s.peek[tabId]);
-  const hasPage = useBrowser((s) => !!s.tabs[tabId]?.url);
+  const hasPage = useTab(tabId, (tab) => !!tab?.url);
   // Only asked while the bar is down, so a closed panel or find bar elsewhere doesn't re-render every pane.
-  const appNeedsBar = useBrowser((s) => enabled && scrolledDown && needsBar(s, tabId, windowId));
+  const appNeedsBar = useQuietBrowser((s) => enabled && scrolledDown && needsBar(s, tabId, windowId));
   const popover = usePages((s) => enabled && scrolledDown && !!s.popover[tabId]);
   const historyMenu = useHistoryMenu((m) => enabled && scrolledDown && m.menu?.tabId === tabId);
   return toolbarMode({ enabled, hasPage, scrolledDown, peek, needsBar: appNeedsBar || popover || historyMenu });
@@ -164,7 +163,7 @@ export function AutoHideToolbar({
   motion: ToolbarMotion;
 }) {
   const theme = useTheme();
-  const url = useBrowser((s) => s.tabs[tabId]?.url ?? "");
+  const url = useQuietBrowser((s) => s.tabs[tabId]?.url ?? "");
   const themeColor = useTabLive(tabId, (l) => l.themeColor);
   const extendColor = useSettings((s) => s.extendWebsiteColor);
   const palette = toolbarPalette(theme, extendColor && url ? themeColor : null);

@@ -1,5 +1,5 @@
 import type { StoreApi } from "zustand/vanilla";
-import { useBrowser } from "./browser";
+import { useBrowser, type BrowserShape } from "./browser";
 import { changedIds } from "./changes";
 import { spaceHeaderHidden } from "./model";
 
@@ -71,5 +71,38 @@ export const selectionStore = recordStores(useBrowser, (s) => s.selection);
 export const spaceStore = recordStores(useBrowser, (s) => s.spaces);
 export const spaceHeaderHiddenStore = selectStore(useBrowser, spaceHeaderHidden);
 export const windowsStore = selectStore(useBrowser, (s) => s.windows);
+
+// The store without `live`, which every page's progress replaces (the most frequent update there is). A selector that
+// reads nothing of it follows this and doesn't run then; `BrowserShape` has no `live`, so one that does won't compile.
+function withoutLive(): ReadStore<BrowserShape> {
+  const listeners = new Set<(state: BrowserShape, prev: BrowserShape) => void>();
+  let stop: (() => void) | undefined;
+  return {
+    getState: useBrowser.getState,
+    getInitialState: useBrowser.getInitialState,
+    subscribe(listener) {
+      listeners.add(listener);
+      stop ??= useBrowser.subscribe((s, prev) => {
+        for (const key in s) {
+          if (key !== "live" && s[key as keyof typeof s] !== prev[key as keyof typeof s]) {
+            for (const each of listeners) each(s, prev);
+            return;
+          }
+        }
+      });
+      return () => {
+        listeners.delete(listener);
+        if (!listeners.size) {
+          stop?.();
+          stop = undefined;
+        }
+      };
+    },
+  };
+}
+export const quietStore = withoutLive();
+
+export const spaceOrderStore = selectStore(useBrowser, (s) => s.spaceOrder);
+export const spacesStore = selectStore(useBrowser, (s) => s.spaces);
 export const settingsStore = selectStore(useBrowser, (s) => s.settings);
 export const appearanceStore = selectStore(useBrowser, (s) => s.ui.appDark);

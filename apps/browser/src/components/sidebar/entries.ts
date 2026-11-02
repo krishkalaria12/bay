@@ -1,5 +1,5 @@
 import { useShallow } from "zustand/react/shallow";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import type { BrowserShape } from "../../store/browser";
 import { childFolderIds, folderRootId, folderTabIds, inFolder } from "../../store/folders";
 import { activeTabId, favoriteTabIds, spaceFolded, viewTabIds } from "../../store/model";
 import { live } from "../../live/store";
@@ -7,6 +7,7 @@ import { folderRows } from "../../live/rows";
 import type { SidebarKeyboardRow } from "./keyboardModel";
 import { splitRowTabs } from "../../store/splits";
 import { splitIndex, stableList } from "../../store/structure";
+import { useQuietBrowser } from "../../store/hooks";
 
 // The Essentials (tiles), the Pinned section's rows and folders ("t:" and "f:" entries), the pinned groups, and the
 // list.
@@ -14,7 +15,7 @@ export type SidebarEntries = { tiles: string[]; pinned: string[]; pinnedGroups: 
 
 const memo = new Map<string, { inputs: unknown[]; result: SidebarEntries }>();
 
-export function sidebarEntries(s: BrowserState, windowId: string, spaceId?: string): SidebarEntries {
+export function sidebarEntries(s: BrowserShape, windowId: string, spaceId?: string): SidebarEntries {
   const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits, s.pinnedFolders];
   const key = spaceId ? `${windowId}|${spaceId}` : windowId;
   const cached = memo.get(key);
@@ -37,7 +38,7 @@ export function sidebarEntries(s: BrowserState, windowId: string, spaceId?: stri
   return result;
 }
 
-function computeEntries(s: BrowserState, windowId: string, spaceId?: string): SidebarEntries {
+function computeEntries(s: BrowserShape, windowId: string, spaceId?: string): SidebarEntries {
   // Favourites are shared by the spaces with this space's profile: theirs show here too.
   const tiles = favoriteTabIds(s, windowId, spaceId);
   const pinned: string[] = [];
@@ -78,7 +79,7 @@ function computeEntries(s: BrowserState, windowId: string, spaceId?: string): Si
   return { tiles, pinned, pinnedGroups, list };
 }
 
-export function numberedTabs(s: BrowserState, windowId: string): string[] {
+export function numberedTabs(s: BrowserShape, windowId: string): string[] {
   const { tiles, pinned, pinnedGroups, list } = sidebarEntries(s, windowId);
   const active = activeTabId(s, windowId);
   const rowTab = (entry: string): string[] => {
@@ -98,7 +99,7 @@ export function numberedTabs(s: BrowserState, windowId: string): string[] {
  * Every tab the sidebar lists, top to bottom: the favourites, then each row's (a folder's or a group's members, a
  * split's panes).
  */
-export function sidebarTabOrder(s: BrowserState, windowId: string): string[] {
+export function sidebarTabOrder(s: BrowserShape, windowId: string): string[] {
   const { tiles, pinned, pinnedGroups, list } = sidebarEntries(s, windowId);
   const rowTabs = (entry: string): string[] => {
     const id = entry.slice(2);
@@ -109,9 +110,9 @@ export function sidebarTabOrder(s: BrowserState, windowId: string): string[] {
   return [...tiles, ...pinned.flatMap(rowTabs), ...pinnedGroups.flatMap((id) => rowTabs(`g:${id}`)), ...list.flatMap(rowTabs)];
 }
 
-const groupMemo = new WeakMap<object, { tabs: BrowserState["tabs"]; splits: BrowserState["splits"]; result: string[] }>();
+const groupMemo = new WeakMap<object, { tabs: BrowserShape["tabs"]; splits: BrowserShape["splits"]; result: string[] }>();
 
-export function groupEntries(s: BrowserState, groupId: string): string[] {
+export function groupEntries(s: BrowserShape, groupId: string): string[] {
   const g = s.groups[groupId];
   if (!g) return [];
   const cached = groupMemo.get(g);
@@ -131,7 +132,7 @@ export function groupEntries(s: BrowserState, groupId: string): string[] {
   return result;
 }
 
-function splitEntry(s: BrowserState, tabId: string, splits = splitIndex(s.splits)): string {
+function splitEntry(s: BrowserShape, tabId: string, splits = splitIndex(s.splits)): string {
   for (const v of splits.get(tabId) ?? []) {
     const panes = splitRowTabs(s, v);
     if (panes.length >= 2 && panes.includes(tabId)) return `s:${v.id}`;
@@ -140,18 +141,18 @@ function splitEntry(s: BrowserState, tabId: string, splits = splitIndex(s.splits
 }
 
 export function useSidebarEntries(windowId: string, spaceId?: string): SidebarEntries {
-  return useBrowser((s) => sidebarEntries(s, windowId, spaceId));
+  return useQuietBrowser((s) => sidebarEntries(s, windowId, spaceId));
 }
 
-export const useGroupEntries = (groupId: string) => useBrowser(useShallow((s) => groupEntries(s, groupId)));
+export const useGroupEntries = (groupId: string) => useQuietBrowser(useShallow((s) => groupEntries(s, groupId)));
 
 const folderMemo = new Map<
   string,
-  { tabs: BrowserState["tabs"]; lists: BrowserState["tabLists"]; folders: BrowserState["pinnedFolders"]; splits: BrowserState["splits"]; result: string[] }
+  { tabs: BrowserShape["tabs"]; lists: BrowserShape["tabLists"]; folders: BrowserShape["pinnedFolders"]; splits: BrowserShape["splits"]; result: string[] }
 >();
 
 /** A folder's immediate tabs and child folders in sidebar order. */
-export function folderEntries(s: BrowserState, folderId: string): string[] {
+export function folderEntries(s: BrowserShape, folderId: string): string[] {
   const cached = folderMemo.get(folderId);
   const folder = s.pinnedFolders[folderId];
   if (cached && cached.tabs === s.tabs && cached.lists === s.tabLists && cached.folders === s.pinnedFolders && cached.splits === s.splits) return cached.result;
@@ -179,10 +180,10 @@ export function folderEntries(s: BrowserState, folderId: string): string[] {
   return result;
 }
 
-export const useFolderEntries = (folderId: string) => useBrowser((s) => folderEntries(s, folderId));
+export const useFolderEntries = (folderId: string) => useQuietBrowser((s) => folderEntries(s, folderId));
 
 /** Resolve an empty folder's stored anchor to an immediate entry in its parent. */
-function insertEmptyFolders(s: BrowserState, entries: string[], emptyIds: string[]) {
+function insertEmptyFolders(s: BrowserShape, entries: string[], emptyIds: string[]) {
   const pending = new Set(emptyIds);
   const keys = new Set([...entries, ...emptyIds.map((id) => `f:${id}`)]);
   const anchorOf = (id: string): string | null => {
@@ -226,7 +227,7 @@ const keyboardIds = new WeakMap<SidebarKeyboardRow[], string[]>();
 
 /** The settled visible rows, in the same order as SidebarPage, FolderBlock, GroupBlock and LiveFolders. */
 export function sidebarKeyboardRows(
-  s: BrowserState,
+  s: BrowserShape,
   windowId: string,
   liveState: KeyboardLiveState = live(),
   extensions: SidebarKeyboardRow[] = NO_KEYBOARD_ROWS,
@@ -274,12 +275,12 @@ export function sidebarKeyboardRows(
 }
 
 /** Stable IDs let visibility scopes skip allocation and comparison on progress/UI notifications. */
-export function sidebarKeyboardRowIds(s: BrowserState, windowId: string, liveState: KeyboardLiveState = live()): string[] {
+export function sidebarKeyboardRowIds(s: BrowserShape, windowId: string, liveState: KeyboardLiveState = live()): string[] {
   const rows = sidebarKeyboardRows(s, windowId, liveState);
   return keyboardIds.get(rows) ?? NO_KEYBOARD_IDS;
 }
 
-function computeKeyboardRows(s: BrowserState, windowId: string, liveState: KeyboardLiveState, extensions: SidebarKeyboardRow[]): SidebarKeyboardRow[] {
+function computeKeyboardRows(s: BrowserShape, windowId: string, liveState: KeyboardLiveState, extensions: SidebarKeyboardRow[]): SidebarKeyboardRow[] {
   const w = s.windows[windowId];
   if (!w) return [];
   const active = activeTabId(s, windowId);

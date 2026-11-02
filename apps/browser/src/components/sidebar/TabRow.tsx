@@ -8,7 +8,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { splitRowTabs } from "../../store/splits";
 import type { Tab } from "../../store/types";
-import { useIsActiveTab, usePageSpaceId, useSettings, useTab, useWindowId } from "../../store/hooks";
+import { useIsActiveTab, usePageSpaceId, useSettings, useTab, useWindowId, useQuietBrowser } from "../../store/hooks";
 import { HoverSlot } from "../HoverSlot";
 import { ActiveHighlight } from "./ActiveHighlight";
 import { IconButton } from "../primitives";
@@ -80,6 +80,49 @@ export function TabRow({ tabId }: { tabId: string }) {
   // The active row's fill is its ActiveHighlight's, under it.
   const fill = active ? "rgba(0,0,0,0)" : selected ? tokens.multiSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
   const border = selected && !active ? 0.5 : 0;
+  // What hovering and pressing don't change is made here, outside the press render function (which makes everything
+  // in it anew): hovering a row renders its fill and its slot again, not its icon, badges, label and highlight.
+  const highlight = <ActiveHighlight active={active} tabIds={[tabId]} borderWidth={0.5} />;
+  const icon = (
+    <View>
+      <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} spaceId={tab.spaceId} />
+      <TabBadges tabId={tab.id} />
+    </View>
+  );
+  const mute =
+    playingAudio || tab.muted ? (
+      <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: 6 }} tooltip={tab.muted ? "Unmute Site" : "Mute Site"}>
+        <Symbol name={tab.muted ? "speaker.slash" : "speaker.wave.2"} size={12} color={theme.textTab} style={{ width: 18, height: 16 }} />
+      </Pressable>
+    ) : null;
+  const label = renaming ? (
+    <RenameField
+      initial={tab.customTitle ?? tab.title}
+      placeholder={tab.title || "Tab name"}
+      color={active ? theme.tabSelectedText : theme.textPrimary}
+      onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
+    />
+  ) : (
+    <FadeLabel text={title} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 18, marginLeft: 5 }} />
+  );
+  const closeControl = <IconButton {...closeButton(tab)} size={10} weight="semibold" box={22} radius={6} />;
+  const spinner = loading ? <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} /> : null;
+  const outline = developer ? (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        borderStyle: "dashed",
+        borderColor: DEVELOPER_YELLOW,
+      }}
+    />
+  ) : null;
 
   return (
     <SidebarKeyboardRowView
@@ -104,7 +147,7 @@ export function TabRow({ tabId }: { tabId: string }) {
           >
             {({ pressed }) => (
               <View>
-                <ActiveHighlight active={active} tabIds={[tabId]} borderWidth={0.5} />
+                {highlight}
                 <Surface
                   fill={hex(!active && pressed ? theme.tabPressed : fill)}
                   cornerRadius={10}
@@ -112,54 +155,14 @@ export function TabRow({ tabId }: { tabId: string }) {
                   borderColor={border ? hex(tokens.multiSelectedStroke) : undefined}
                   style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
                 >
-                  <View>
-                    <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} spaceId={tab.spaceId} />
-                    <TabBadges tabId={tab.id} />
-                  </View>
-                  {(playingAudio || tab.muted) && (
-                    <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: 6 }} tooltip={tab.muted ? "Unmute Site" : "Mute Site"}>
-                      <Symbol name={tab.muted ? "speaker.slash" : "speaker.wave.2"} size={12} color={theme.textTab} style={{ width: 18, height: 16 }} />
-                    </Pressable>
-                  )}
-                  {renaming ? (
-                    <RenameField
-                      initial={tab.customTitle ?? tab.title}
-                      placeholder={tab.title || "Tab name"}
-                      color={active ? theme.tabSelectedText : theme.textPrimary}
-                      onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
-                    />
-                  ) : (
-                    <FadeLabel
-                      text={title}
-                      fontSize={13}
-                      color={active ? theme.tabSelectedText : theme.textTab}
-                      style={{ flex: 1, height: 18, marginLeft: 5 }}
-                    />
-                  )}
-                  <HoverSlot
-                    hovered={hovered && !renaming}
-                    width={22}
-                    hover={<IconButton {...closeButton(tab)} size={10} weight="semibold" box={22} radius={6} />}
-                  >
-                    {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} />}
+                  {icon}
+                  {mute}
+                  {label}
+                  <HoverSlot hovered={hovered && !renaming} width={22} hover={closeControl}>
+                    {spinner}
                   </HoverSlot>
                 </Surface>
-                {developer ? (
-                  <View
-                    pointerEvents="none"
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      borderRadius: 10,
-                      borderWidth: 1.5,
-                      borderStyle: "dashed",
-                      borderColor: DEVELOPER_YELLOW,
-                    }}
-                  />
-                ) : null}
+                {outline}
               </View>
             )}
           </Pressable>
@@ -227,15 +230,15 @@ export const SplitRowItem = memo(function SplitRowItem({
 }) {
   const metrics = useSidebarMetrics();
   const windowId = useWindowId();
-  const tabIds = useBrowser((s) => (s.splits[splitId] ? splitRowTabs(s, s.splits[splitId]).join(",") : ""))
+  const tabIds = useQuietBrowser((s) => (s.splits[splitId] ? splitRowTabs(s, s.splits[splitId]).join(",") : ""))
     .split(",")
     .filter(Boolean);
   const { ref, style, handle } = useDragItem(`s:${splitId}`, { kind: "split", tabIds, section, parentGroup });
   const theme = useTheme();
   const spaceId = usePageSpaceId();
-  const active = useBrowser((s) => tabIds.includes(s.windows[windowId]?.activeTabIds[spaceId] ?? ""));
+  const active = useQuietBrowser((s) => tabIds.includes(s.windows[windowId]?.activeTabIds[spaceId] ?? ""));
   const { hovered, hoverProps } = useRowHover(windowId, null);
-  const title = useBrowser((s) => tabIds.map((id) => (s.tabs[id] ? tabTitle(s.tabs[id]!) : "")).join(", "));
+  const title = useQuietBrowser((s) => tabIds.map((id) => (s.tabs[id] ? tabTitle(s.tabs[id]!) : "")).join(", "));
   if (tabIds.length < 2) return null;
   return (
     <Animated.View ref={ref} style={style} {...handle}>

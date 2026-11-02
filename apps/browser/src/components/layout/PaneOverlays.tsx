@@ -8,6 +8,7 @@ import { webviews } from "../../lib/webviews";
 import { PromptButton } from "./controls";
 import { patchPage, usePage } from "./pageState";
 import { useBrowser } from "../../store/browser";
+import { useQuietBrowser } from "../../store/hooks";
 
 export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: number }) {
   const theme = useTheme();
@@ -64,7 +65,7 @@ function displayUrl(url: string) {
 /** The tab's page is in another window (as Arc's, a space's tab shows in one window at a time): Show Here brings it. */
 export function OpenElsewhere({ tabId, windowId }: { tabId: string; windowId: string }) {
   const theme = useTheme();
-  const elsewhere = useBrowser((s) => {
+  const elsewhere = useQuietBrowser((s) => {
     const shownIn = s.tabs[tabId]?.windowId;
     return !!shownIn && shownIn !== windowId && !!s.windows[shownIn];
   });

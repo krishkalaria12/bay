@@ -69,7 +69,7 @@ export function toolbarMode(i: ToolbarModeInput): ToolbarMode {
   return i.peek ? "peek" : "collapsed";
 }
 
-export function needsBar(s: BrowserState, tabId: string, windowId: string): boolean {
+export function needsBar(s: Pick<BrowserState, "windowUi" | "find">, tabId: string, windowId: string): boolean {
   return !!(s.windowUi[windowId] ?? DEFAULT_WINDOW_UI).panel.open || !!s.find[tabId]?.open;
 }
 

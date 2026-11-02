@@ -1,19 +1,22 @@
 import { WindowProfile as NativeWindowProfile } from "@bay/shell";
-import { useShallow } from "zustand/react/shallow";
-import { useBrowser } from "../../store/browser";
-import { useWindowId } from "../../store/hooks";
-import { engineProfile } from "../../store/model";
+import { useStore } from "zustand";
+import { DEFAULT_SPACE_ID } from "../../store/constants";
+import { useWindowField } from "../../store/hooks";
+import { engineIdOf } from "../../store/spaces";
+import { spaceOrderStore, spacesStore } from "../../store/views";
 
 export function WindowProfile() {
-  const windowId = useWindowId();
-  const [profile, neighbours] = useBrowser(
-    useShallow((s) => {
-      const w = s.windows[windowId];
-      if (!w) return ["", "[]"];
-      const at = w.incognito ? -1 : s.spaceOrder.indexOf(w.spaceId);
-      const next = at < 0 ? [] : [s.spaceOrder[at - 1], s.spaceOrder[at + 1]].filter((p): p is string => !!p).map(engineProfile);
-      return [engineProfile(w.spaceId), JSON.stringify(next)];
-    }),
-  );
-  return <NativeWindowProfile profile={profile} neighbours={JSON.parse(neighbours) as string[]} style={{ position: "absolute", width: 0, height: 0 }} />;
+  // The window's space, the spaces and their order, each followed on its own: a page's progress or title runs none.
+  const spaceId = useWindowField((w) => w.spaceId, "");
+  const incognito = useWindowField((w) => !!w.incognito, false);
+  const order = useStore(spaceOrderStore);
+  const spaces = useStore(spacesStore);
+  // engineProfile's, from the spaces themselves.
+  const profileOf = (id: string) => {
+    if (spaces[id]) return engineIdOf(spaces[id]);
+    return id === DEFAULT_SPACE_ID ? "" : id;
+  };
+  const at = !spaceId || incognito ? -1 : order.indexOf(spaceId);
+  const neighbours = at < 0 ? [] : [order[at - 1], order[at + 1]].filter((p): p is string => !!p).map(profileOf);
+  return <NativeWindowProfile profile={spaceId ? profileOf(spaceId) : ""} neighbours={neighbours} style={{ position: "absolute", width: 0, height: 0 }} />;
 }

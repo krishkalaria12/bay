@@ -93,6 +93,9 @@ const batched =
     return creator(batchedSet, get, api);
   };
 
+/** The store's state without `live`: what a selector on the quiet view reads (store/views.ts). */
+export type BrowserShape = Omit<BrowserState, "live">;
+
 export const useBrowser = create<BrowserState>()(
   batched((...a) =>
     withSidebarUndoActions(

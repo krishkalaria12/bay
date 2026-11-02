@@ -15,7 +15,8 @@ import { noteDiscarded, noteGone, noteReady } from "../lib/tabLifecycle";
 import { clearEngineOffer, followSiteChoice, noteWebKitPage, offerWebKit, persistEngine } from "../lib/engines";
 import { webviewRef, webviews } from "../lib/webviews";
 import { useBrowser } from "../store/browser";
-import { useActiveTabId, useSidebarOpen, useWindowId } from "../store/hooks";
+import { useActiveTabId, useSidebarOpen, useTab, useWindowId, useQuietBrowser } from "../store/hooks";
+import { useEngineView } from "../store/engineView";
 import { activeTabId, engineProfile, viewTabIds, wake, windowTabIds } from "../store/model";
 import { removeTabs } from "../store/tabs";
 import { peeksLinks, shownPeek } from "../store/peeks";
@@ -116,7 +117,7 @@ function successorOf(windowId: string, leaving: string[]): string | undefined {
 export function ContentCard() {
   const windowId = useWindowId();
   const activeId = useActiveTabId();
-  const split = useBrowser((s) => splitOf(s, activeId));
+  const split = useQuietBrowser((s) => splitOf(s, activeId));
   const fullscreenTab = useFullscreenTab(windowId);
   const sidebarOpen = useSidebarOpen();
   const tabLayout = useTabLayout();
@@ -124,8 +125,8 @@ export function ContentCard() {
   // The sidebar on the right leaves the window buttons over the page's top-left corner, open or not.
   const sidebarRight = useSidebarOnRight();
   // Little Bay draws its own bar above the card (components/littleBay).
-  const small = useBrowser((s) => isSmallWindow(s.windows[windowId]));
-  const hideWhileScrolling = useBrowser((s) => s.settings.hideToolbarWhileScrolling);
+  const small = useQuietBrowser((s) => isSmallWindow(s.windows[windowId]));
+  const hideWhileScrolling = useQuietBrowser((s) => s.settings.hideToolbarWhileScrolling);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
   const container = useRef<View>(null);
@@ -140,7 +141,7 @@ export function ContentCard() {
   // The tabs whose page is in this window. Recomputed only when tabs change, not on every store update (page
   // progress, say).
   const mountedMemo = useRef<{ lists?: object; tabs?: object; ids: string[] }>({ ids: [] });
-  const mounted = useBrowser(
+  const mounted = useQuietBrowser(
     useShallow((s) => {
       const memo = mountedMemo.current;
       if (memo.lists === s.tabLists && memo.tabs === s.tabs) return memo.ids;
@@ -172,7 +173,7 @@ export function ContentCard() {
   const successor = leaving ? successorOf(windowId, leaving) : undefined;
   // Keep adjacent profile pages painting so a swipe doesn't reveal an unpainted page, and the successor of tabs being
   // dragged out so the drop shows it at once.
-  const warm = useBrowser(
+  const warm = useQuietBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
       const shown = w?.activeTabIds[w.spaceId];
@@ -184,11 +185,11 @@ export function ContentCard() {
       return successor && s.tabs[successor]?.windowId === windowId && !ids.includes(successor) ? [...ids, successor] : ids;
     }),
   );
-  const warmSplits = useBrowser(useShallow((s) => warm.map((id) => splitOf(s, id)).filter((v): v is SplitView => !!v)));
+  const warmSplits = useQuietBrowser(useShallow((s) => warm.map((id) => splitOf(s, id)).filter((v): v is SplitView => !!v)));
   const warmPanes = warmPaneRects(warm, warmSplits, size.width, size.height);
 
   const shownMemo = useRef<{ mounted?: string[]; panes?: object; tabs?: object; keys: string[] }>({ keys: [] });
-  const shown = useBrowser(
+  const shown = useQuietBrowser(
     useShallow((s) => {
       const memo = shownMemo.current;
       if (memo.mounted === mounted && memo.panes === framed && memo.tabs === s.tabs) return memo.keys;
@@ -218,7 +219,7 @@ export function ContentCard() {
   };
 
   // A link's peek over the pane of the tab it came from (layout/PeekLayer.tsx).
-  const peek = useBrowser(useShallow((s) => shownPeek(s, windowId)));
+  const peek = useQuietBrowser(useShallow((s) => shownPeek(s, windowId)));
   const peekRect = peek && !fullscreenTab ? panes[peek.fromId] : undefined;
 
   const focusedRect = activeId ? panes[activeId] : undefined;
@@ -325,13 +326,13 @@ const TabPane = memo(function TabPane({
 }) {
   const theme = useTheme();
   const visible = !!rect;
-  const isNewTab = useBrowser((s) => !s.tabs[tabId]?.url);
-  const zoom = useBrowser((s) => s.tabs[tabId]?.zoom ?? 1);
+  const isNewTab = useTab(tabId, (tab) => !tab?.url);
+  const zoom = useTab(tabId, (tab) => tab?.zoom ?? 1);
   const popover = usePopover(tabId);
   const addressInSidebar = useAddressBarInSidebar();
   const sidebarOpen = useSidebarOpen();
   const newTabShown = usePage(tabId, (p) => !!p.newTabShown);
-  const inSomeSplit = useBrowser((s) => !!warm && !!splitOf(s, tabId));
+  const inSomeSplit = useQuietBrowser((s) => !!warm && !!splitOf(s, tabId));
   const inSplit = visible ? inActiveSplit : inSomeSplit;
   const frame = rect ?? warm ?? { x: 0, y: 0, width: fullWidth, height: fullHeight };
   useEffect(() => {
@@ -342,7 +343,7 @@ const TabPane = memo(function TabPane({
   const hideBar = autoHide && visible && !fullscreen && !devBar;
   const mode = useToolbarMode(tabId, windowId, hideBar);
   const bookmarksBar = useBookmarksBarShown(tabId) && !fullscreen && !inSplit && !small;
-  const doc = useBrowser((s) => pageKey(s.tabs[tabId]?.url ?? ""));
+  const doc = useTab(tabId, (tab) => pageKey(tab?.url ?? ""));
   // The page placed by the toolbar's motion, shown or not, so switching tabs keeps its size.
   const autoLayout = autoHide && toolbar && !fullscreen && !devBar;
   // The page's own popovers open under the bar's end (inside a sidebar toggle there), or under the sidebar's field at
@@ -463,21 +464,21 @@ type TabWebViewProps = { tabId: string; visible: boolean; warm: boolean };
 // The tab's page in its engine's view (store/engines.ts): moving it to the other engine mounts that one's view, which
 // loads the page again.
 function TabWebView(props: TabWebViewProps) {
-  const engine = useBrowser((s) => tabEngine(s, props.tabId));
+  const engine = useEngineView((s) => tabEngine(s, props.tabId));
   return <EngineWebView key={engine} engine={engine} {...props} />;
 }
 
 function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { engine: PageEngine }) {
-  const navigation = useBrowser((s) => s.tabs[tabId]?.navigation);
-  const adoptId = useBrowser((s) => s.tabs[tabId]?.adoptId);
-  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
+  const navigation = useTab(tabId, (t) => t?.navigation);
+  const adoptId = useTab(tabId, (t) => t?.adoptId);
+  const spaceId = useTab(tabId, (t) => t?.spaceId ?? "");
   const tab = () => useBrowser.getState().tabs[tabId];
   const store = () => useBrowser.getState();
   // One for the view's life (its tab never changes): it keeps the handle it registered, to unregister only that.
   const [ref] = useState(() => webviewRef(tabId));
   const autoPictureInPicture = useAutoPictureInPicture(tabId, visible);
   // A pinned tab's or a favourite's: a link the user clicks to another site comes back as onPeekLink (store/peeks.ts).
-  const peekLinks = useBrowser((s) => peeksLinks(s, tabId));
+  const peekLinks = useQuietBrowser((s) => peeksLinks(s, tabId));
 
   const lastPage = useRef<string | null>(null);
   const pending = useRef<string | null>(navigation?.url ?? (adoptId ? (tab()?.url ?? null) : null));

@@ -1,5 +1,6 @@
-import { useBrowser, type BrowserState } from "../../store/browser";
+import type { BrowserState, BrowserShape } from "../../store/browser";
 import { activeTabId } from "../../store/model";
+import { useQuietBrowser } from "../../store/hooks";
 
 // Which sites are in Developer Mode (devMode.ts), without the app's UI: the window's layout asks.
 
@@ -30,14 +31,14 @@ export function isDeveloperUrl(s: Pick<BrowserState, "settings">, url: string): 
   return !!site && (s.settings.developerSites ?? []).includes(site);
 }
 
-export function isDeveloperTab(s: BrowserState, tabId: string | undefined): boolean {
+export function isDeveloperTab(s: BrowserShape, tabId: string | undefined): boolean {
   const url = tabId ? s.tabs[tabId]?.url : undefined;
   return !!url && isDeveloperUrl(s, url);
 }
 
-export const useIsDeveloperTab = (tabId: string | undefined) => useBrowser((s) => isDeveloperTab(s, tabId));
+export const useIsDeveloperTab = (tabId: string | undefined) => useQuietBrowser((s) => isDeveloperTab(s, tabId));
 
 /** The window's shown tab is in Developer Mode: its address is over its page, not in the sidebar. */
-export function developerTabShown(s: BrowserState, windowId: string): boolean {
+export function developerTabShown(s: BrowserShape, windowId: string): boolean {
   return isDeveloperTab(s, activeTabId(s, windowId));
 }

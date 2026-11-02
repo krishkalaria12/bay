@@ -159,3 +159,25 @@ test("browser views route live reports separately from tab, window, settings and
     stops.forEach((stop) => stop());
   }
 });
+
+test("the quiet view skips live updates and follows everything else", async () => {
+  const { quietStore } = await import("./views.ts");
+  useBrowser.getState().hydrate({});
+  const w = useBrowser.getState().createWindow({ url: "https://example.com" });
+  const id = useBrowser.getState().windows[w].activeTabIds.default;
+  let calls = 0;
+  const stop = quietStore.subscribe(() => calls++);
+  try {
+    for (let i = 0; i < 20; i++) useBrowser.getState().updateLive(id, { progress: i / 100 });
+    assert.equal(calls, 0);
+    assert.strictEqual(quietStore.getState(), useBrowser.getState());
+    useBrowser.getState().updateTab(id, { title: "New" }, { progress: 0.5 });
+    assert.equal(calls, 1, "a change with live in it still notifies");
+    useBrowser.getState().setSelection(w, [id]);
+    assert.equal(calls, 2);
+    useBrowser.getState().updateSettings({ unreadBadges: false });
+    assert.equal(calls, 3);
+  } finally {
+    stop();
+  }
+});

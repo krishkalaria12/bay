@@ -2,12 +2,12 @@ import { createContext, useContext, useMemo } from "react";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { isBookmarked } from "./bookmarks";
-import { useBrowser } from "./browser";
+import { useBrowser, type BrowserShape } from "./browser";
 import { activeTabId, bookmarkSpaceId, IDLE_LIVE, spaceFor } from "./model";
 import type { Settings } from "./settings";
 import type { BrowserWindow, FindState, Space, Tab, TabLive } from "./types";
 import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./ui";
-import { findStore, settingsStore, spaceHeaderHiddenStore, spaceStore, tabLiveStore, tabStore, windowStore, windowUiStore } from "./views";
+import { findStore, quietStore, settingsStore, spaceHeaderHiddenStore, spaceStore, tabLiveStore, tabStore, windowStore, windowUiStore } from "./views";
 
 export const WindowContext = createContext<string | null>(null);
 
@@ -38,19 +38,19 @@ export const useWindowSpaceId = () => useWindowField((w) => w.spaceId, "");
 
 export function useWindowSpace(): Space {
   const spaceId = useWindowSpaceId();
-  return useBrowser((s) => spaceFor(s, spaceId));
+  return useQuietBrowser((s) => spaceFor(s, spaceId));
 }
 
-export const useSpaces = (): Space[] => useBrowser(useShallow((s) => s.spaceOrder.map((id) => s.spaces[id]!)));
+export const useSpaces = (): Space[] => useQuietBrowser(useShallow((s) => s.spaceOrder.map((id) => s.spaces[id]!)));
 
 export function useActiveTabId(): string | undefined {
   const id = useWindowId();
-  return useBrowser((s) => activeTabId(s, id));
+  return useQuietBrowser((s) => activeTabId(s, id));
 }
 
 export function useActiveTab(): Tab | undefined {
   const id = useWindowId();
-  return useBrowser((s) => {
+  return useQuietBrowser((s) => {
     const active = activeTabId(s, id);
     return active ? s.tabs[active] : undefined;
   });
@@ -59,7 +59,7 @@ export function useActiveTab(): Tab | undefined {
 /** Whether the window it's drawn in (every window on its space lists it) shows the tab. */
 export function useIsActiveTab(tabId: string): boolean {
   const windowId = useWindowId();
-  return useBrowser((s) => {
+  return useQuietBrowser((s) => {
     const tab = s.tabs[tabId];
     return !!tab && activeTabId(s, windowId || tab.windowId, tab.spaceId) === tabId;
   });
@@ -100,9 +100,12 @@ export function useWindowUi() {
   return useStore(view, (ui) => ui ?? DEFAULT_WINDOW_UI);
 }
 
+/** `useBrowser` for a selector that reads nothing of `live`: it doesn't run on a page's progress (store/views.ts). */
+export const useQuietBrowser = <T>(select: (s: BrowserShape) => T): T => useStore(quietStore, select);
+
 export const useSettings = <T>(select: (settings: Settings) => T): T => useStore(settingsStore, select);
 
 export function useIsBookmarked(url: string): boolean {
   const id = useWindowId();
-  return useBrowser((s) => isBookmarked(s.bookmarks, bookmarkSpaceId(s, s.windows[id]), url));
+  return useQuietBrowser((s) => isBookmarked(s.bookmarks, bookmarkSpaceId(s, s.windows[id]), url));
 }

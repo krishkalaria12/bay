@@ -5,14 +5,14 @@ import { useTheme } from "../../lib/theme";
 import { useCalendar, useNow } from "../../live/calendar";
 import { badgeText, isCalendarUrl } from "../../live/meetings";
 import { useLive } from "../../live/store";
-import { useBrowser } from "../../store/browser";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { useLiveColors } from "./colors";
 import { MEETING_BADGE_IN, MEETING_BADGE_OUT } from "./constants";
+import { useQuietBrowser } from "../../store/hooks";
 
 export function NextMeetingBadge({ tabId }: { tabId: string }) {
   // The URL, not the check: the selector runs on every store update, the regex only when it changes.
-  const pinnedUrl = useBrowser((s) => {
+  const pinnedUrl = useQuietBrowser((s) => {
     const t = s.tabs[tabId];
     return t?.pinned ? (t.pinnedUrl ?? t.url) : null;
   });

@@ -2,7 +2,7 @@
 // it mounts or lays out. GroupBlock and Fold draw groups by these numbers; revealing a tab scrolls by them.
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
-import type { BrowserState } from "../../store/browser";
+import type { BrowserShape } from "../../store/browser";
 import { folderTabIds } from "../../store/folders";
 import { activeTabId, spaceFolded } from "../../store/model";
 import { GROUP_BORDER, GROUP_PAD, NEW_TAB_GAP } from "./constants";
@@ -13,7 +13,7 @@ const GAP = layout.rowGap;
 export type Section = "pinned" | "pinnedGroups" | "list";
 
 // The entry of a group that holds the window's active tab: it stays out while the group is collapsed.
-export function keptEntry(s: BrowserState, windowId: string, spaceId: string, entries: string[]): string | null {
+export function keptEntry(s: BrowserShape, windowId: string, spaceId: string, entries: string[]): string | null {
   const active = activeTabId(s, windowId, spaceId);
   if (!active) return null;
   return (
@@ -27,7 +27,7 @@ export function keptEntry(s: BrowserState, windowId: string, spaceId: string, en
 }
 
 // A group's members: every row open; only the kept one collapsed (none: nothing, its padding included).
-function membersHeight(s: BrowserState, windowId: string, spaceId: string, groupId: string): number {
+function membersHeight(s: BrowserShape, windowId: string, spaceId: string, groupId: string): number {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
   const entries = groupEntries(s, groupId);
   if (!s.groups[groupId]?.collapsed) return entries.length ? entries.length * ROW + (entries.length - 1) * GAP + GROUP_PAD : GROUP_PAD;
@@ -36,7 +36,7 @@ function membersHeight(s: BrowserState, windowId: string, spaceId: string, group
 
 // A pinned folder's rows below its header: every row open, each after a gap (an open empty one: its "Drag tabs here"
 // line); only the kept one collapsed.
-function folderMembersHeight(s: BrowserState, windowId: string, spaceId: string, folderId: string): number {
+function folderMembersHeight(s: BrowserShape, windowId: string, spaceId: string, folderId: string): number {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
   const entries = folderEntries(s, folderId);
   if (!s.pinnedFolders[folderId]?.collapsed) return entries.length ? entriesHeight(s, windowId, spaceId, entries) + GAP : ROW + GAP;
@@ -44,7 +44,7 @@ function folderMembersHeight(s: BrowserState, windowId: string, spaceId: string,
 }
 
 /** A list entry's height: a tab or split row, a pinned folder (its header and rows), or a group block (its border, header and members). */
-export function entryHeight(s: BrowserState, windowId: string, spaceId: string, entry: string): number {
+export function entryHeight(s: BrowserShape, windowId: string, spaceId: string, entry: string): number {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
   if (entry.startsWith("f:")) return ROW + folderMembersHeight(s, windowId, spaceId, entry.slice(2));
   if (!entry.startsWith("g:")) return ROW;
@@ -52,7 +52,7 @@ export function entryHeight(s: BrowserState, windowId: string, spaceId: string, 
 }
 
 /** The room `entries` take in a list (gaps between them included). */
-export function entriesHeight(s: BrowserState, windowId: string, spaceId: string, entries: string[]): number {
+export function entriesHeight(s: BrowserShape, windowId: string, spaceId: string, entries: string[]): number {
   return entries.reduce((sum, e) => sum + entryHeight(s, windowId, spaceId, e) + GAP, 0) - (entries.length ? GAP : 0);
 }
 
@@ -61,7 +61,7 @@ export function entriesHeight(s: BrowserState, windowId: string, spaceId: string
  * `newTabAtTop`: the list starts with the New Tab row.
  */
 export function rowSpan(
-  s: BrowserState,
+  s: BrowserShape,
   windowId: string,
   spaceId: string,
   tabId: string,
@@ -101,7 +101,7 @@ export function rowSpan(
 }
 
 // Follow the same nested rows that FolderBlock renders. A hidden leaf reveals its nearest closed header.
-function folderRowSpan(s: BrowserState, windowId: string, spaceId: string, folderId: string, tabId: string, top: number): { top: number; height: number } {
+function folderRowSpan(s: BrowserShape, windowId: string, spaceId: string, folderId: string, tabId: string, top: number): { top: number; height: number } {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
   const entries = folderEntries(s, folderId);
   const kept = keptEntry(s, windowId, spaceId, entries);
@@ -130,7 +130,7 @@ export function offscreenSide(row: { y: number; height: number }, top: number, v
 }
 
 /** Closed folders can keep selected children mounted; their measured frames are not visible drop targets. */
-export function folderDragItemVisible(s: BrowserState, windowId: string, item: { kind: string; parentGroup?: string; tabIds: readonly string[] }): boolean {
+export function folderDragItemVisible(s: BrowserShape, windowId: string, item: { kind: string; parentGroup?: string; tabIds: readonly string[] }): boolean {
   let parent = item.parentGroup ? s.pinnedFolders[item.parentGroup] : undefined;
   while (parent) {
     if (parent.collapsed) {

@@ -9,7 +9,7 @@ import { useTileTheme, type TileTheme } from "../../lib/tileTheme";
 import { GlassFill, useLiquidGlass } from "../glass";
 import { listTopGap, useSidebarFieldShown } from "../layout/windowLayout";
 import { useBrowser } from "../../store/browser";
-import { useIsActiveTab, useTab, useTabLive, useWindowId } from "../../store/hooks";
+import { useIsActiveTab, useTab, useTabLive, useWindowId, useQuietBrowser } from "../../store/hooks";
 import { awayFromPin } from "../../store/organize";
 import { NextMeetingBadge } from "../live/NextMeetingBadge";
 import { clickTab, startRename, tabTitle } from "./actions";
@@ -92,7 +92,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   const windowId = useWindowId();
   const tab = useTab(tabId);
   const active = useIsActiveTab(tabId);
-  const selected = useBrowser((s) => (s.selection[windowId] ?? []).includes(tabId));
+  const selected = useQuietBrowser((s) => (s.selection[windowId] ?? []).includes(tabId));
   const playing = useTabLive(tabId, (l) => l.playingAudio);
   const { hovered, hoverProps } = useRowHover(windowId, { kind: "tab", id: tabId });
   const { ref, style, handle } = useDragItem(

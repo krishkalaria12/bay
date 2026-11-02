@@ -1,4 +1,5 @@
 import { SwipeArea, swipeHaptic, type SwipeAreaHandle, type SwipeEvent } from "@bay/nncore";
+import { useQuietBrowser } from "../../store/hooks";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -15,7 +16,6 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
 import { Favicon, NewTabIcon } from "../primitives";
 import { HistoryPopover } from "./HistoryPopover";
 import {
@@ -303,7 +303,7 @@ function DestinationList({
   pill: SharedValue<number>;
 }) {
   const theme = useTheme();
-  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
+  const spaceId = useQuietBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
   const favicons = useHistoryFavicons(spaceId, items);
   const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ scale: interpolate(appear.get(), [0, 1], [0.9, 1]) }] }));
   const pillStyle = useAnimatedStyle(() => ({ transform: [{ translateY: pill.get() }] }));

@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
-import { usePageSpaceId, useWindowId } from "../../store/hooks";
+import { usePageSpaceId, useWindowId, useQuietBrowser } from "../../store/hooks";
 import { groupLabel } from "../../store/organize";
 import { MeetingTimeLabel, useMeetingCountdown } from "../live/MeetingCountdown";
 import { HoverSlot } from "../HoverSlot";
@@ -29,17 +29,17 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
   const metrics = useSidebarMetrics();
   const windowId = useWindowId();
   const tokens = useSidebarTokens();
-  const collapsed = useBrowser((s) => !!s.groups[groupId]?.collapsed);
-  const color = useBrowser((s) => s.groups[groupId]?.color ?? null);
-  const tabIds = useBrowser((s) => s.groups[groupId]?.tabIds.join(",") ?? "");
+  const collapsed = useQuietBrowser((s) => !!s.groups[groupId]?.collapsed);
+  const color = useQuietBrowser((s) => s.groups[groupId]?.color ?? null);
+  const tabIds = useQuietBrowser((s) => s.groups[groupId]?.tabIds.join(",") ?? "");
   const entries = useGroupEntries(groupId);
-  const selectedInside = useBrowser((s) => {
+  const selectedInside = useQuietBrowser((s) => {
     const selection = s.selection[windowId];
     return !!selection?.length && !!s.groups[groupId]?.tabIds.some((id) => selection.includes(id));
   });
   const spaceId = usePageSpaceId();
   // The window's active tab, when it's a member: it stays out while the group is collapsed, as in Arc and Dia.
-  const activeEntry = useBrowser((s) => keptEntry(s, windowId, spaceId, entries));
+  const activeEntry = useQuietBrowser((s) => keptEntry(s, windowId, spaceId, entries));
   const { ref, style, handle, headerRef } = useDragItem(`g:${groupId}`, {
     kind: "group",
     tabIds: tabIds.split(",").filter(Boolean),
@@ -93,10 +93,10 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
   const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
-  const group = useBrowser((s) => s.groups[groupId]);
-  const label = useBrowser((s) => (s.groups[groupId] ? groupLabel(s, s.groups[groupId]!) : ""));
+  const group = useQuietBrowser((s) => s.groups[groupId]);
+  const label = useQuietBrowser((s) => (s.groups[groupId] ? groupLabel(s, s.groups[groupId]!) : ""));
   // The first tab's icon fields only: its title, loading and bookkeeping changes don't re-render the header.
-  const firstTab = useBrowser(
+  const firstTab = useQuietBrowser(
     useShallow((s) => {
       const t = s.tabs[s.groups[groupId]?.tabIds[0] ?? ""];
       return t && { url: t.url, favicon: t.favicon, customIcon: t.customIcon, spaceId: t.spaceId };
