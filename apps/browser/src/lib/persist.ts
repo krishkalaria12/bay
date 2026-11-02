@@ -23,6 +23,67 @@ const serialized =
 const persistedTab = ({ navigation: _n, adoptId: _a, wakeAdoptId: _w, ...t }: Tab) => t;
 const publicTab = (t: { spaceId: string }) => !isIncognitoSpace(t.spaceId);
 
+// Tabs are almost all of session.json (~65 KB of 70 KB with 200 tabs), and a save follows most interactions (a tab
+// switch stamps lastActiveAt). Each tab's JSON is kept with its record, so a save stringifies only the tabs that
+// changed: the string is what JSON.stringify of the whole document would write.
+const tabJson = new WeakMap<Tab, string>();
+function persistedTabJson(t: Tab, detached: boolean): string {
+  if (detached) return JSON.stringify(persistedTab({ ...t, windowId: "" }));
+  let json = tabJson.get(t);
+  if (json === undefined) tabJson.set(t, (json = JSON.stringify(persistedTab(t))));
+  return json;
+}
+
+/** An object's JSON from its fields' JSON, in order; a field whose JSON is undefined is left out, as JSON.stringify does. */
+function objectJson(fields: [string, string | undefined][]): string {
+  return `{${fields
+    .filter((f): f is [string, string] => f[1] !== undefined)
+    .map(([key, json]) => `${JSON.stringify(key)}:${json}`)
+    .join(",")}}`;
+}
+
+/** session.json's document. */
+export function sessionJson(s: BrowserState): string {
+  // Private windows, Little Bay and peeks aren't restored: closing (or quitting) throws their pages away.
+  const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
+  const kept = new Set(windows.map((w) => w.id));
+  const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small" && !t.peekOf;
+  const tabs = Object.values(s.tabs).filter(own);
+  const saved = new Set(tabs.map((t) => t.id));
+  const json = (value: unknown) => JSON.stringify(value) as string | undefined;
+  return objectJson([
+    ["version", json(PERSIST_VERSION)],
+    ["spaces", json(s.spaces)],
+    ["spaceOrder", json(s.spaceOrder)],
+    ["orphanedProfileData", json(s.orphanedProfileData)],
+    ["settings", json(s.settings)],
+    ["windows", json(windows)],
+    ["windowOrder", json(s.windowOrder.filter((id) => kept.has(id)))],
+    ["focusedWindowId", json(s.ui.focusOrder.find((id) => kept.has(id)) ?? null)],
+    ["tabs", `[${tabs.map((t) => persistedTabJson(t, !kept.has(t.windowId))).join(",")}]`],
+    [
+      "tabLists",
+      json(
+        Object.fromEntries(
+          Object.entries(s.tabLists)
+            .map(([key, ids]) => [key, ids.filter((id) => saved.has(id))])
+            .filter(([, ids]) => ids!.length),
+        ),
+      ),
+    ],
+    ["groups", json(Object.values(s.groups).filter((g) => !isIncognitoSpace(g.spaceId)))],
+    ["pinnedFolders", json(Object.values(s.pinnedFolders))],
+    ["localFiles", json(Object.values(normalizeLocalFiles(s.localFiles, s.spaces)))],
+    ["splits", json(Object.values(s.splits).filter((v) => v.tabIds.every((id) => saved.has(id))))],
+    // The store keeps private windows out of these lists; filter again so nothing private is ever written.
+    ["closedTabs", json(s.closedTabs.filter((c) => publicTab(c.tab)))],
+    ["closedWindows", json(s.closedWindows.filter((c) => c.tabs.every(publicTab)))],
+    ["closedGroups", json(s.closedGroups.filter((c) => c.tabs.every(publicTab)))],
+    ["deletedGroups", json(s.deletedGroups.filter((c) => c.tabs.every(publicTab)))],
+    ["cleanedTabs", json(s.cleanedTabs.filter((c) => publicTab(c.tab)))],
+  ]);
+}
+
 const DOCS: Doc[] = [
   {
     name: "downloads.json",
@@ -54,40 +115,7 @@ const DOCS: Doc[] = [
       s.deletedGroups,
       s.cleanedTabs,
     ],
-    json: serialized((s) => {
-      // Private windows, Little Bay and peeks aren't restored: closing (or quitting) throws their pages away.
-      const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
-      const kept = new Set(windows.map((w) => w.id));
-      const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small" && !t.peekOf;
-      const tabs = Object.values(s.tabs).filter(own);
-      const saved = new Set(tabs.map((t) => t.id));
-      return {
-        version: PERSIST_VERSION,
-        spaces: s.spaces,
-        spaceOrder: s.spaceOrder,
-        orphanedProfileData: s.orphanedProfileData,
-        settings: s.settings,
-        windows,
-        windowOrder: s.windowOrder.filter((id) => kept.has(id)),
-        focusedWindowId: s.ui.focusOrder.find((id) => kept.has(id)) ?? null,
-        tabs: tabs.map((t) => persistedTab(kept.has(t.windowId) ? t : { ...t, windowId: "" })),
-        tabLists: Object.fromEntries(
-          Object.entries(s.tabLists)
-            .map(([key, ids]) => [key, ids.filter((id) => saved.has(id))])
-            .filter(([, ids]) => ids!.length),
-        ),
-        groups: Object.values(s.groups).filter((g) => !isIncognitoSpace(g.spaceId)),
-        pinnedFolders: Object.values(s.pinnedFolders),
-        localFiles: Object.values(normalizeLocalFiles(s.localFiles, s.spaces)),
-        splits: Object.values(s.splits).filter((v) => v.tabIds.every((id) => saved.has(id))),
-        // The store keeps private windows out of these lists; filter again so nothing private is ever written.
-        closedTabs: s.closedTabs.filter((c) => publicTab(c.tab)),
-        closedWindows: s.closedWindows.filter((c) => c.tabs.every(publicTab)),
-        closedGroups: s.closedGroups.filter((c) => c.tabs.every(publicTab)),
-        deletedGroups: s.deletedGroups.filter((c) => c.tabs.every(publicTab)),
-        cleanedTabs: s.cleanedTabs.filter((c) => publicTab(c.tab)),
-      };
-    }),
+    json: sessionJson,
   },
 ];
 
