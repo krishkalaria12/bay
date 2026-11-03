@@ -1053,8 +1053,10 @@
                   <td>The screenshot and quote-card tools can't copy, save or render.</td>
                   <td><code>Capture.swift</code> (553), <code>QuoteCard.swift</code></td>
                   <td>
-                    <span class="tag t-port">Port</span> copy and save through <code>ShellClipboard</code> and <code>ShellFiles</code>; render quote cards in a
-                    canvas. Share and Mark Up: <span class="tag t-drop">Drop</span>. M
+                    <span class="tag t-done">Source-complete 3 Nov</span> Image copy, save and portrait preparation reuse <code>imageFiles.web.ts</code>,
+                    <code>LibraryFiles</code> and <code>ShellClipboard</code>. Quote cards render locally at 2x in a canvas; one clipboard write carries both
+                    the PNG and its HTTP(S) source link. The quote toast hides its unsupported share action. Share sheets and Mark Up remain
+                    <span class="tag t-drop">Drop</span>. Linux and Windows runtime checks pending.
                   </td>
                 </tr>
                 <tr data-kind="port">
@@ -1447,6 +1449,10 @@
               only. Reconnecting picks a file or a folder by the pin's kind, as GTK's dialog can't offer both.
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
+            <li>
+              <strong>Capture:</strong> quote cards use system fonts and canvas text shaping. Check long passages, mixed-direction text and PNG/link pasting in
+              real Linux and Windows applications. Native share sheets and Mark Up remain excluded.
+            </li>
             <li>
               <strong>Shortcuts:</strong> a key taken off its command is swallowed rather than reaching the page, as it does on macOS. The catalog lists macOS's
               whole menu, including modules not ported yet, so binding one of those may do little. <code>previewTransport</code> doesn't answer

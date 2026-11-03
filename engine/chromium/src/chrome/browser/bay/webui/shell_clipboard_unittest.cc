@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
@@ -20,6 +21,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/clipboard/clipboard_url_info.h"
 #include "ui/base/clipboard/file_info.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/gfx/codec/jpeg_codec.h"
@@ -180,6 +182,36 @@ TEST_F(ShellClipboardTest, WritesJpegPixelsThroughTheFallbackDecoder) {
   EXPECT_EQ(copied.width(), expected.width());
   EXPECT_EQ(copied.height(), expected.height());
   EXPECT_EQ(copied.getColor(0, 0), expected.getColor(0, 0));
+}
+
+TEST_F(ShellClipboardTest, WritesQuotePixelsAndSourceLinkInOneClipboardItem) {
+  SkBitmap image;
+  image.allocN32Pixels(2, 1);
+  image.eraseColor(SK_ColorBLUE);
+  const auto png = gfx::PNGCodec::EncodeBGRASkBitmap(image, false);
+  ASSERT_TRUE(png);
+  const std::string url = "https://example.test/page#:~:text=quoted%20words";
+  EXPECT_EQ(Invoke("copyImage", base::ListValue()
+                                   .Append(base::Base64Encode(*png))
+                                   .Append(url)),
+            R"({"value":true})");
+  EXPECT_EQ(ReadText(), base::UTF8ToUTF16(url));
+  base::test::TestFuture<ui::ClipboardUrlInfo> source;
+  ui::Clipboard::GetForCurrentThread()->ReadURL(std::nullopt,
+                                               source.GetCallback());
+  EXPECT_EQ(source.Get().url.spec(), url);
+  const auto copied = ReadImage();
+  ASSERT_FALSE(copied.isNull());
+  EXPECT_EQ(copied.getColor(0, 0), SK_ColorBLUE);
+}
+
+TEST_F(ShellClipboardTest, RejectsNonWebQuoteSourcesWithoutReplacingClipboard) {
+  Copy("copyText", "keep");
+  for (const char* url : {"", "file:///tmp/image.png", "javascript:alert(1)",
+                         "https://", "not a url"}) {
+    ExpectInvalid(Invoke("copyImage", base::ListValue().Append("").Append(url)));
+  }
+  ExpectInvalid(Invoke("copyImage", base::ListValue().Append("").Append(7)));
 }
 
 TEST_F(ShellClipboardTest, CommitsBeforeTheResponseAndAllowsAReentrantWrite) {

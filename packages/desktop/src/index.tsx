@@ -280,7 +280,7 @@ const Shell = requireNativeModule<{
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
   showMenu(items: MenuItem[]): Promise<string | null>;
   copyText(text: string): void;
-  copyImage(base64: string): boolean;
+  copyImage(base64: string, sourceURL?: string): boolean;
   setSwitcherCapture(active: boolean): Promise<void>;
   startDictation(): void;
   pickFiles(): Promise<string[]>;

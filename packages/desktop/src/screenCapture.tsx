@@ -1,6 +1,7 @@
 import { requireNativeModule } from "@bay/platform/native";
 import { requireNativeViewManager } from "./nativeViews";
 import { imageFiles } from "./imageFiles";
+import { quoteCards } from "./quoteCard";
 import type { Ref } from "react";
 import type { ViewProps } from "@bay/platform";
 
@@ -18,7 +19,8 @@ const Capture = () =>
 
 export type QuoteCard = { text: string; title: string; url: string; colors: string[]; dark: boolean };
 /** A locally rendered quote card and its text-fragment link in one clipboard item. */
-export const copyQuoteCard = async ({ text, title, url, colors, dark }: QuoteCard) => Capture().copyQuote(text, title, url, colors, dark);
+export const copyQuoteCard = async (card: QuoteCard) =>
+  quoteCards ? quoteCards.copy(card) : Capture().copyQuote(card.text, card.title, card.url, card.colors, card.dark);
 /** Share the card image together with the link to its source passage. */
 export const shareQuoteCard = async ({ text, title, url, colors, dark }: QuoteCard, windowId: string) =>
   Capture().shareQuote(text, title, url, colors, dark, windowId);

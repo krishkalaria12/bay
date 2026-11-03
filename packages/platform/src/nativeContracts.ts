@@ -58,8 +58,8 @@ export const nativeContracts = {
           "async": true,
           "optional": false,
           "minArgs": 1,
-          "maxArgs": 1,
-          "signature": "copyImage(base64: string): Promise<boolean>;"
+          "maxArgs": 2,
+          "signature": "copyImage(base64: string, sourceURL?: string): Promise<boolean>;"
         },
         "setSwitcherCapture": {
           "async": true,

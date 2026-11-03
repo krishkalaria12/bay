@@ -12,10 +12,12 @@
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/clipboard/clipboard_url_info.h"
 #include "ui/base/clipboard/file_info.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "url/gurl.h"
 
 namespace bay {
 namespace {
@@ -65,6 +67,21 @@ bool ShellClipboard::Dispatch(const std::string& module,
     return true;
   }
 
+  // Quote cards carry their source passage beside the pixels in one clipboard
+  // commit. Validate before decoding or replacing the previous clipboard.
+  GURL source_url;
+  if (args.size() > 1) {
+    if (!args[1].is_string()) {
+      std::move(callback).Run(InvalidArguments());
+      return true;
+    }
+    source_url = GURL(args[1].GetString());
+    if (!source_url.is_valid() || !source_url.SchemeIsHTTPOrHTTPS() ||
+        source_url.host().empty()) {
+      std::move(callback).Run(InvalidArguments());
+      return true;
+    }
+  }
   std::string bytes;
   if (!base::Base64Decode(text, &bytes)) {
     std::move(callback).Run(InvalidArguments());
@@ -78,6 +95,11 @@ bool ShellClipboard::Dispatch(const std::string& module,
   if (!bitmap.isNull()) {
     ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
     writer.WriteImage(bitmap);
+    if (!source_url.is_empty()) {
+      writer.WriteText(base::UTF8ToUTF16(source_url.spec()));
+      writer.WriteURL(ui::ClipboardUrlInfo{
+          source_url, base::UTF8ToUTF16(source_url.spec())});
+    }
   }
   std::move(callback).Run(Success(base::Value(!bitmap.isNull())));
   return true;

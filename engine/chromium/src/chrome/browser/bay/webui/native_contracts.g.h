@@ -19,7 +19,7 @@ inline constexpr Method methods[] = {
   {"BayWebView", "unmount", true, 1, 1},
   {"BayShell", "showMenu", true, 1, 1},
   {"BayShell", "copyText", true, 1, 1},
-  {"BayShell", "copyImage", true, 1, 1},
+  {"BayShell", "copyImage", true, 1, 2},
   {"BayShell", "setSwitcherCapture", true, 1, 1},
   {"BayShell", "startDictation", true, 0, 0},
   {"BayShell", "pickFiles", true, 0, 0},
