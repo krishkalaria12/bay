@@ -16,6 +16,7 @@
 #include "bay/core/nn_page_channel.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/download_controls.h"
+#include "chrome/browser/bay/webui/display_media_picker.h"
 #include "chrome/browser/bay/webui/profile_data.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -578,7 +579,7 @@ base::ListValue EngineServices::SupportedMethods() const {
        {"getPasswordAutofill", "setPasswordAutofill", "getAutofillSettings",
         "setAutofillSettings", "exportPasswords", "setBoosts", "listDownloads",
         "pauseDownload", "resumeDownload", "cancelDownload", "deleteProfileData",
-        "releaseProfile"})
+        "releaseProfile", "displayMediaSources", "setDisplayMediaPicker"})
     methods.Append(std::string("BayCEF.") + method);
   methods.Append("BayChromeUI.changeCaptureSource");
   methods.Append("BayChromeUI.showAutofillSuggestions");
@@ -607,6 +608,24 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
     std::move(response).Run(
         Failure("invalid_args", "Invalid engine facade arguments"));
   };
+  if (module == "BayCEF" && method == "setDisplayMediaPicker") {
+    const auto* enabled = At(args, 0);
+    if (args.size() != 1 || !enabled || !enabled->is_bool()) {
+      invalid();
+      return true;
+    }
+    DisplayMediaPicker::SetEnabled(enabled->GetBool());
+    std::move(response).Run(Success());
+    return true;
+  }
+  if (module == "BayCEF" && method == "displayMediaSources") {
+    if (!args.empty()) {
+      invalid();
+      return true;
+    }
+    std::move(response).Run(Success(base::Value(DisplayMediaPicker::Sources(context_))));
+    return true;
+  }
   if (module == "BayChromeUI" && (method == "changeCaptureSource" ||
                                   method == "showAutofillSuggestions")) {
     const auto* first = At(args, 0);

@@ -64,6 +64,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   base::WeakPtr<NativeHost> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
  private:
+  static bool EmitDisplayMediaRequest(content::WebContents* contents,
+                                      base::DictValue request);
   void InvokeView(const std::string& method,
                   const base::ListValue& args,
                   InvokeCallback callback);

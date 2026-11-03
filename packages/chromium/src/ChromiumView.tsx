@@ -119,7 +119,7 @@ export type DisplayMediaSource = {
   width: number;
   height: number;
 };
-export type DisplayMediaRequest = { id: string; origin: string; audio: boolean; sources: DisplayMediaSource[] };
+export type DisplayMediaRequest = { id: string; origin: string; audio: boolean; sources: DisplayMediaSource[]; cancelled?: boolean };
 
 export type ZoomState = { zoom: number; host: string; isDefault: boolean; pinchScale: number };
 export type ContentBlockedState = { count: number; url: string };

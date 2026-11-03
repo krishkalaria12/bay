@@ -32,6 +32,15 @@ type Pending = DisplayMediaRequest & { pageUrl: string };
 
 export function requestDisplayMedia(tabId: string, request: DisplayMediaRequest) {
   const pending = useMedia.getState().displayRequests[tabId];
+  if (request.cancelled) {
+    if (pending?.id === request.id)
+      useMedia.setState((m) => {
+        const displayRequests = { ...m.displayRequests };
+        delete displayRequests[tabId];
+        return { displayRequests };
+      });
+    return;
+  }
   if (pending) void webviews.get(tabId)?.resolveDisplayMedia(pending.id, null);
   const pageUrl = useBrowser.getState().tabs[tabId]?.url ?? "";
   useMedia.setState((m) => ({ displayRequests: { ...m.displayRequests, [tabId]: { ...request, pageUrl } as Pending } }));

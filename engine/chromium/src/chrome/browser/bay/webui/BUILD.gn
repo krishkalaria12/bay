@@ -29,6 +29,8 @@ source_set("impl") {
     "bay_webui.cc",
     "browser_services.cc",
     "browser_services.h",
+    "display_media_picker.cc",
+    "display_media_picker.h",
     "download_controls.cc",
     "download_controls.h",
     "engine_services.cc",

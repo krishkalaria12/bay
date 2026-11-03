@@ -2627,7 +2627,7 @@ export const nativeContracts = {
       "PictureInPictureState": "{ kind: \"video\" | \"document\"; active: boolean }",
       "ActivateRequest": "{ reason: \"pictureInPicture\" }",
       "DisplayMediaSource": "{\n  id: string;\n  kind: \"screen\" | \"window\";\n  name: string;\n  app?: string;\n  pid?: number;\n  width: number;\n  height: number;\n}",
-      "DisplayMediaRequest": "{ id: string; origin: string; audio: boolean; sources: DisplayMediaSource[] }",
+      "DisplayMediaRequest": "{ id: string; origin: string; audio: boolean; sources: DisplayMediaSource[]; cancelled?: boolean }",
       "ZoomState": "{ zoom: number; host: string; isDefault: boolean; pinchScale: number }",
       "ContentBlockedState": "{ count: number; url: string }",
       "PasswordPrompt": "{\n  state: \"save\" | \"update\" | \"saved\";\n  origin: string;\n  username: string;\n  passwordLength: number;\n  federation: string;\n  usernames: string[];\n}",
