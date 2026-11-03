@@ -1,3 +1,4 @@
+import { startChromeTabs } from "./engineTabs";
 import { onDownload, releaseProfile } from "@bay/chromium";
 import { capabilities, isMac } from "@bay/platform";
 import {
@@ -68,6 +69,8 @@ export function startNativeSync({
   const stops: (() => void)[] = [];
   let disposed = false;
   if (!store.getState().windowOrder.length) store.getState().createWindow();
+
+  if (shared) stops.push(startChromeTabs({ store, shared: true })!);
 
   if (!shared) {
     const commands = onCommand(runCommand);

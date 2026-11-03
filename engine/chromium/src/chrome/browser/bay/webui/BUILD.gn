@@ -69,6 +69,8 @@ source_set("impl") {
     "runtime_state.h",
     "tab_broker.cc",
     "tab_broker.h",
+    "tab_strip_mirror.cc",
+    "tab_strip_mirror.h",
     "window_registry.cc",
     "window_registry.h",
   ]
@@ -108,6 +110,8 @@ source_set("impl") {
     "//components/media_router/browser",
     "//components/media_router/common",
     "//components/sessions",
+    "//components/tab_groups",
+    "//components/tabs:public",
     "//components/surface_embed/common",
     "//components/version_info",
     "//components/viz/common",
@@ -661,6 +665,7 @@ if (is_linux) {
     sources = [
       "native_host_unittest.cc",
       "display_media_picker_unittest.cc",
+      "tab_strip_mirror_unittest.cc",
     ]
     deps = [
       ":impl",
@@ -673,6 +678,9 @@ if (is_linux) {
       "//chrome/browser/lifetime",
       "//chrome/browser/media/webrtc",
       "//chrome/browser/ui:test_support",
+      "//chrome/browser/ui/tabs:tab_model",
+      "//components/tab_groups",
+      "//components/tabs:public",
       "//chrome/common:constants",
       "//chrome/test:test_support_unit",
       "//components/keep_alive_registry",

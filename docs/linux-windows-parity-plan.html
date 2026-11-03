@@ -776,13 +776,18 @@
                     S each
                   </td>
                 </tr>
-                <tr data-kind="drop">
+                <tr data-kind="verify">
                   <td><strong>Chrome tab-strip mirror</strong></td>
                   <td class="num">2</td>
                   <td class="methods">tabStrips tabStripCommand</td>
-                  <td>None. Already listed as a known limit in the Windows status doc.</td>
+                  <td>Chrome or extension tab changes need to reach Bay's workspace and stay ordered.</td>
                   <td><code>NNCoreTabStrip.mm</code></td>
-                  <td><span class="tag t-drop">Drop</span> unless extensions need it</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/tab_strip_mirror.cc</code> reports revisioned transactions with command
+                    causes, profile/window identity, pins, groups and closed strips. Activate, arrange and group commands validate stable keys and acknowledge
+                    stale commands. Shared runtime mirroring belongs to the coordinator and disposes with its store. Native execution on Linux and Windows is
+                    pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Dev and tracing hooks</strong></td>
@@ -1280,6 +1285,11 @@
 
         <section id="order" aria-labelledby="order-h">
           <h2 id="order-h">6. Order of work</h2>
+          <p class="prose">
+            Native module progress, 3 Nov: profile cleanup, screen sharing, Chrome tab-strip mirroring and extension install prompts are implemented in the
+            shared host source on <code>feat/linux</code>. The source checks and JavaScript tests run on this Mac; native tests are written for the Linux host
+            target. These changes have not yet been copied to <code>feat/windows</code> or run in the native Linux/Windows app.
+          </p>
           <p class="prose">
             <strong>Priority: native methods and page events first.</strong> The merge with <code>main</code> stays as step zero because it's a prerequisite:
             every method below lands in files that the rename moved, so doing it first avoids redoing work. After that, the native gaps from sections 2 and 3

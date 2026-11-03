@@ -16,6 +16,7 @@
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/display_media_picker.h"
 #include "chrome/browser/bay/webui/page_observer.h"
+#include "chrome/browser/bay/webui/tab_strip_mirror.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/browser_close_manager.h"
@@ -234,6 +235,7 @@ void TabBroker::Attach(Entry& entry, BrowserWindowInterface* browser) {
 }
 TabBroker::Result TabBroker::Mount(BrowserWindowInterface* window,
                                    const base::DictValue& props) {
+  TabStripMirror::AppChange strip_change;
   PruneDestroyed();
   if (!window || shutting_down_ || g_browser_process->IsShuttingDown())
     return {.error = "The browser is shutting down"};
@@ -353,6 +355,7 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* window,
   entry->lease = ++next_lease_;
   CHECK_NE(entry->lease, 0u);
   entry->ObserveFacts(native_profile);
+  TabStripMirror::Get().Refresh();
   if (!adopt_id.empty() && AppRuntime::Enabled()) {
     if (auto* runtime = AppRuntime::GetIfStarted())
       runtime->PageOpenMounted(adopt_id, key);
@@ -360,6 +363,7 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* window,
   return {entry->contents.get(), entry->lease, reused, {}};
 }
 std::optional<std::string> TabBroker::PrepareTransfer(const std::string& key) {
+  TabStripMirror::AppChange strip_change;
   PruneDestroyed();
   auto* entry = ByKey(key);
   if (!entry)
@@ -370,6 +374,7 @@ std::optional<std::string> TabBroker::PrepareTransfer(const std::string& key) {
   return std::nullopt;
 }
 void TabBroker::ReleaseTransfer(const std::string& key) {
+  TabStripMirror::AppChange strip_change;
   PruneDestroyed();
   if (auto* entry = ByKey(key)) {
     entry->prepared = false;
@@ -379,6 +384,7 @@ void TabBroker::ReleaseTransfer(const std::string& key) {
 }
 void TabBroker::PreserveTransfers(const base::DictValue* previous,
                                   const base::DictValue& next) {
+  TabStripMirror::AppChange strip_change;
   PruneDestroyed();
   if (!previous)
     return;
@@ -411,6 +417,7 @@ void TabBroker::PreserveTransfers(const base::DictValue* previous,
     ReleaseTransfer(key);
 }
 void TabBroker::Unmount(content::WebContents* contents, uint64_t lease) {
+  TabStripMirror::AppChange strip_change;
   PruneDestroyed();
   auto it = entries_.find(contents);
   if (it == entries_.end() || !lease || it->second->lease != lease)
@@ -439,6 +446,7 @@ bool TabBroker::UsesProfile(Profile* profile) const {
   return false;
 }
 bool TabBroker::PrepareForQuit() {
+  TabStripMirror::AppChange strip_change;
   if (browser_shutdown::ShouldIgnoreUnloadHandlers()) {
     Shutdown();
     return true;
@@ -482,6 +490,7 @@ bool TabBroker::PrepareForQuit() {
   return true;
 }
 TabBroker::OfferResult TabBroker::Offer(content::WebContents* contents, bool park) {
+  TabStripMirror::AppChange strip_change;
   PruneDestroyed();
   if (!contents)
     return {.error = "A real Chrome tab is required"};
@@ -504,11 +513,16 @@ bool TabBroker::HasPageKey(content::WebContents* contents) const {
   const auto it = entries_.find(contents);
   return it != entries_.end() && !it->second->key.empty();
 }
+std::string TabBroker::KeyFor(content::WebContents* contents) const {
+  const auto it = entries_.find(contents);
+  return it == entries_.end() ? std::string() : it->second->key;
+}
 bool TabBroker::Tracks(content::WebContents* contents) {
   PruneDestroyed();
   return entries_.contains(contents);
 }
 void TabBroker::ReleaseOffer(const std::string& adopt_id) {
+  TabStripMirror::AppChange strip_change;
   PruneDestroyed();
   if (auto* entry = ByOffer(adopt_id))
     Close(*entry);
@@ -538,6 +552,7 @@ void TabBroker::SetProfileReleasedCallback(
   profile_released_ = std::move(callback);
 }
 void TabBroker::Shutdown() {
+  TabStripMirror::AppChange strip_change;
   shutting_down_ = true;
   // Attached tabs remain owned by Chrome's normal shutdown path. Destroy parked
   // tabs before dropping their profile/process keep-alives.
