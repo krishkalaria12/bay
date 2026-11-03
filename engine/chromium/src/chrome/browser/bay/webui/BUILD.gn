@@ -190,6 +190,8 @@ source_set("impl") {
       "//chrome/app/theme:chrome_unscaled_resources_grit",
       "//chrome/browser/bay/data:data_services",
       "//chrome/browser/status_icons",
+      "//ui/compositor",
+      "//ui/snapshot",
       "//components/crash/core/app",
       "//third_party/crashpad/crashpad/client",
       "//third_party/crashpad/crashpad/snapshot",

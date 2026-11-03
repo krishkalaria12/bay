@@ -275,4 +275,14 @@ TEST_F(DevWindowTest, InputActionsNeedAnIsolatedInstanceAndAWindowSurface) {
   ExpectError(Act("hit:1"), "invalid_args");
   ExpectError(Act("windowDrags"), "unsupported_action");
 }
+
+TEST(DevHarnessTest, HooksNeedAnIsolatedInstance) {
+  {
+    base::ScopedEnvironmentVariableOverride no_data_dir("BAY_DATA_DIR");
+    EXPECT_FALSE(DevHarnessAllowed());
+  }
+  base::ScopedEnvironmentVariableOverride data_dir("BAY_DATA_DIR",
+                                                   "/tmp/bay-dev-test");
+  EXPECT_TRUE(DevHarnessAllowed());
+}
 }  // namespace bay

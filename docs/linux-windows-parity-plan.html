@@ -982,7 +982,13 @@
                   <td class="methods">devSnapshotWindow devMenuCommand devTypeKeys devKeyEquivalent devRunAppleScript</td>
                   <td>Developer-only: the <code>apps/browser/scripts/*-test.mjs</code> suites can't drive the app.</td>
                   <td><code>AppModule.swift</code>, <code>Scripting.swift</code></td>
-                  <td><span class="tag t-port">Port</span> everything except AppleScript; T4 needs these. M</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> All four in <code>webui/dev_window.cc</code> and the host, each only in an isolated
+                    <code>BAY_DATA_DIR</code> instance as macOS's are only in DEBUG builds. <code>devSnapshotWindow</code> writes the window as it is on screen,
+                    <code>devTypeKeys</code> types through the platform's event path and times each key to the next presented frame,
+                    <code>devKeyEquivalent</code> sends the key and reports the window shortcuts it matched, and <code>devMenuCommand</code> runs a command in
+                    the focused window. <code>devRunAppleScript</code> answers that it's macOS only. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="drop">
                   <td><strong>Dock, app icons, share sheet, Handoff, AppleScript, haptics, dictation</strong></td>
@@ -1405,6 +1411,12 @@
             <li>
               <strong>Intro music:</strong> the reverb is a generated impulse, close to but not AVAudioUnitReverb's large hall. <code>devRenderIntroMusic</code>
               (writing the piece to a file for videos) is macOS only.
+            </li>
+            <li>
+              <strong>Test harness hooks:</strong> <code>devKeyEquivalent</code> infers what fired from the window's key shortcuts rather than watching a menu
+              fire, and ignores <code>focus</code>, <code>settle</code> and <code>wait</code>. <code>devSnapshotWindow</code> ignores <code>transparent</code>.
+              The <code>apps/browser/scripts/*-test.mjs</code> suites still drive macOS with AppleScript and <code>cliclick</code> in places, so porting a suite
+              means replacing those steps.
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
             <li>

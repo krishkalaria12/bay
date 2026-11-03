@@ -21,6 +21,8 @@
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_util.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
@@ -34,6 +36,7 @@
 #include "chrome/browser/bay/webui/cast_dialogs.h"
 #include "chrome/browser/bay/webui/clear_specks.h"
 #include "chrome/browser/bay/webui/context_search.h"
+#include "chrome/browser/bay/webui/dev_window.h"
 #include "chrome/browser/bay/webui/device_choosers.h"
 #include "chrome/browser/bay/webui/external_app_prompts.h"
 #include "chrome/browser/bay/webui/page_menu.h"
@@ -473,6 +476,129 @@ void NativeHost::CancelQuit() {
       host->Emit("BayShell", "onAppEvent",
                  base::Value(base::DictValue().Set("type", "quitCancelled")));
   }
+}
+void NativeHost::DevHarness(const std::string& method,
+                            const base::ListValue& args,
+                            InvokeCallback callback) {
+  if (!DevHarnessAllowed()) {
+    std::move(callback).Run(Failure(
+        "permission_denied",
+        "Test harness hooks require an isolated BAY_DATA_DIR instance"));
+    return;
+  }
+  if (method == "devMenuCommand") {
+    // As macOS's menu runs it: in the window that has focus.
+    auto* frame = DevHarnessFrame(context_, "key");
+    for (const auto& [owner, host] : Hosts()) {
+      if (!host || host->is_coordinator() ||
+          (frame && host->browser() != frame)) {
+        continue;
+      }
+      host->Emit(
+          "BayShell", "onCommand",
+          base::Value(base::DictValue()
+                          .Set("command", Text(args, 0))
+                          .Set("arg", At(args, 1) && At(args, 1)->is_string()
+                                          ? base::Value(Text(args, 1))
+                                          : base::Value())
+                          .Set("windowId",
+                               frame ? base::Value(
+                                           WindowRegistry::Get().IdFor(frame))
+                                     : base::Value())));
+      break;
+    }
+    std::move(callback).Run(Success());
+    return;
+  }
+  auto* frame = DevHarnessFrame(context_, Text(args, 0));
+  if (!frame) {
+    std::move(callback).Run(
+        Failure("no_window", "This host does not own that Bay window"));
+    return;
+  }
+  if (method == "devSnapshotWindow") {
+    DevSnapshotWindow(frame, base::FilePath::FromUTF8Unsafe(Text(args, 1)),
+                      base::BindOnce(
+                          [](InvokeCallback callback, bool saved) {
+                            std::move(callback).Run(
+                                Success(base::Value(saved)));
+                          },
+                          std::move(callback)));
+    return;
+  }
+  if (method == "devTypeKeys") {
+    const auto* interval = At(args, 2);
+    DevTypeKeys(frame, base::UTF8ToUTF16(Text(args, 1)),
+                interval && interval->GetIfDouble() ? *interval->GetIfDouble()
+                                                    : 0,
+                base::BindOnce(
+                    [](InvokeCallback callback, base::Value times) {
+                      std::move(callback).Run(Success(std::move(times)));
+                    },
+                    std::move(callback)));
+    return;
+  }
+  // devKeyEquivalent: the key goes in as real input; what it matched is the
+  // window's key shortcuts, which the host runs ahead of the page.
+  const auto* press = At(args, 1) ? At(args, 1)->GetIfDict() : nullptr;
+  const auto* key = press ? press->FindString("key") : nullptr;
+  if (!key) {
+    std::move(callback).Run(Failure("invalid_args", "A key press is required"));
+    return;
+  }
+  // NSEvent's modifier flags, which the dev input actions read.
+  int flags = 0;
+  if (const auto* modifiers = press->FindList("modifiers")) {
+    for (const auto& modifier : *modifiers) {
+      const std::string name = modifier.is_string() ? modifier.GetString() : "";
+      if (name == "command")
+        flags |= 1 << 20;
+      else if (name == "control")
+        flags |= 1 << 18;
+      else if (name == "option")
+        flags |= 1 << 19;
+      else if (name == "shift")
+        flags |= 1 << 17;
+    }
+  }
+  const auto* characters = press->FindString("characters");
+  std::string action = base::StringPrintf(
+      "keys:%d:%s", flags, characters ? characters->c_str() : key->c_str());
+  if (const auto key_code = press->FindInt("keyCode"))
+    action += ":" + base::NumberToString(*key_code);
+  const auto step = DevPressKey(frame, action);
+  if (!step) {
+    std::move(callback).Run(Success(base::Value(
+        base::DictValue().Set("error", "The key can't be sent to this window"))));
+    return;
+  }
+  base::ListValue matched;
+  for (const auto& [owner, host] : Hosts()) {
+    if (!host || host->is_coordinator() || host->browser() != frame)
+      continue;
+    for (const auto& shortcut : host->key_shortcuts()) {
+      if (shortcut.key_code != step->key ||
+          shortcut.ctrl != !!(step->flags & ui::EF_CONTROL_DOWN) ||
+          shortcut.shift != !!(step->flags & ui::EF_SHIFT_DOWN) ||
+          shortcut.alt != !!(step->flags & ui::EF_ALT_DOWN)) {
+        continue;
+      }
+      auto item = base::DictValue()
+                      .Set("title", shortcut.command)
+                      .Set("action", "onCommand")
+                      .Set("command", shortcut.command)
+                      .Set("enabled", !shortcut.command.empty());
+      if (shortcut.arg)
+        item.Set("arg", *shortcut.arg);
+      matched.Append(std::move(item));
+    }
+  }
+  const bool handled = !matched.empty();
+  auto result = base::DictValue().Set("handledBy", handled ? "window" : "none");
+  if (handled)
+    result.Set("fired", matched.Clone());
+  result.Set("matched", std::move(matched));
+  std::move(callback).Run(Success(base::Value(std::move(result))));
 }
 // The coordinator opens it: it lives as long as Bay does, and there is only one.
 static void OpenLittleBayFromAnyApp() {
@@ -1370,15 +1496,24 @@ void NativeHost::Invoke(const std::string& module,
                          std::move(callback)));
     return;
   }
+  if (module == "BayApp" &&
+      (method == "devSnapshotWindow" || method == "devTypeKeys" ||
+       method == "devKeyEquivalent" || method == "devMenuCommand")) {
+    DevHarness(method, args, std::move(callback));
+    return;
+  }
+  if (module == "BayApp" && method == "devRunAppleScript") {
+    std::move(callback).Run(Success(base::Value(
+        base::DictValue()
+            .Set("ok", false)
+            .Set("error", "AppleScript is macOS only; use the bay CLI"))));
+    return;
+  }
   if (module == "BayApp" && method == "devCrash") {
     // Telemetry's crash test, as macOS's debug builds have it: only in an
     // isolated developer instance, so a stray call can't take Bay down.
-    const bool isolated = !base::Environment::Create()
-                               ->GetVar("BAY_DATA_DIR")
-                               .value_or("")
-                               .empty();
     std::move(callback).Run(Success());
-    if (isolated) {
+    if (DevHarnessAllowed()) {
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce([] { base::ImmediateCrash(); }));
     }

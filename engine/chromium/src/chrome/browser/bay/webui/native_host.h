@@ -151,6 +151,10 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   std::map<int, std::unique_ptr<TabObserver>> tabs_;
   std::vector<KeyShortcut> key_shortcuts_;
   void FinishShortcutRecording(base::Value result);
+  // BayApp's test harness hooks (dev_window.h).
+  void DevHarness(const std::string& method,
+                  const base::ListValue& args,
+                  InvokeCallback callback);
   InvokeCallback shortcut_recording_;
   std::map<uintptr_t, std::pair<bool, InvokeCallback>> pending_;
   // View tags whose mount waits for its profile to load.

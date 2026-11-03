@@ -9,6 +9,10 @@
 #include <vector>
 
 #include "base/environment.h"
+#include "base/files/file_util.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/task/thread_pool.h"
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
@@ -30,11 +34,14 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/base_window.h"
+#include "ui/snapshot/snapshot.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "components/viz/common/frame_timing_details.h"
+#include "ui/compositor/compositor.h"
 #endif
 
 namespace bay {
@@ -406,10 +413,7 @@ bool DevWindow::Dispatch(const HostContext& context,
     invalid();
     return true;
   }
-  if (!ReadOnly(*action) && base::Environment::Create()
-                                ->GetVar("BAY_DATA_DIR")
-                                .value_or("")
-                                .empty()) {
+  if (!ReadOnly(*action) && !DevHarnessAllowed()) {
     std::move(response).Run(Failure("permission_denied",
                                     "Developer window mutations require an "
                                     "isolated BAY_DATA_DIR instance"));
@@ -451,5 +455,146 @@ bool DevWindow::Dispatch(const HostContext& context,
   }
   std::move(response).Run(Reply(base::Value(std::move(result))));
   return true;
+}
+
+bool DevHarnessAllowed() {
+  return !base::Environment::Create()
+              ->GetVar("BAY_DATA_DIR")
+              .value_or("")
+              .empty();
+}
+BrowserWindowInterface* DevHarnessFrame(const HostContext& context,
+                                        const std::string& window_id) {
+  auto& windows = WindowRegistry::Get();
+  BrowserWindowInterface* frame = nullptr;
+  if (window_id == "key") {
+    for (const auto& id : windows.Ids()) {
+      auto* candidate = windows.Find(id.GetString());
+      if (candidate && candidate->GetWindow() &&
+          candidate->GetWindow()->IsActive()) {
+        frame = candidate;
+      }
+    }
+  } else {
+    frame = windows.Find(window_id);
+  }
+  if (!frame || (context.is_window() && frame != context.window()))
+    return nullptr;
+  return frame;
+}
+void DevSnapshotWindow(BrowserWindowInterface* frame,
+                       const base::FilePath& path,
+                       base::OnceCallback<void(bool)> done) {
+  auto* widget = WidgetOf(frame);
+  if (!widget || !path.IsAbsolute()) {
+    std::move(done).Run(false);
+    return;
+  }
+  ui::GrabWindowSnapshotAsPNG(
+      widget->GetNativeWindow(),
+      gfx::Rect(widget->GetWindowBoundsInScreen().size()),
+      base::BindOnce(
+          [](base::FilePath path, base::OnceCallback<void(bool)> done,
+             scoped_refptr<base::RefCountedMemory> png) {
+            if (!png) {
+              std::move(done).Run(false);
+              return;
+            }
+            base::ThreadPool::PostTaskAndReplyWithResult(
+                FROM_HERE, {base::MayBlock()},
+                base::BindOnce(
+                    [](base::FilePath path,
+                       scoped_refptr<base::RefCountedMemory> png) {
+                      return base::WriteFile(path, *png);
+                    },
+                    path, png),
+                std::move(done));
+          },
+          path, std::move(done)));
+}
+namespace {
+struct TypingRun {
+  base::WeakPtr<BrowserWindowInterface> frame;
+  std::vector<std::vector<DevKeyStep>> keys;
+  double start = 0;
+  double interval = 0;
+  base::ListValue times;
+  size_t drawn = 0;
+  base::OnceCallback<void(base::Value)> done;
+};
+double NowMs() {
+  return base::Time::Now().InMillisecondsFSinceUnixEpoch();
+}
+void FinishTyping(std::shared_ptr<TypingRun> run) {
+  if (++run->drawn == run->keys.size() && run->done)
+    std::move(run->done).Run(base::Value(std::move(run->times)));
+}
+void TypeKey(std::shared_ptr<TypingRun> run, size_t index) {
+  auto* host = run->frame ? HostOf(run->frame.get()) : nullptr;
+  const double handled = NowMs();
+  if (host) {
+    for (const auto& step : run->keys[index])
+      SendDevKey(host, step);
+  }
+  run->times.Append(base::DictValue()
+                        .Set("due", run->start + run->interval * index)
+                        .Set("handled", handled)
+                        .Set("drawn", handled));
+#if defined(USE_AURA)
+  if (host && host->compositor()) {
+    host->compositor()->RequestSuccessfulPresentationTimeForNextFrame(
+        base::BindOnce(
+            [](std::shared_ptr<TypingRun> run, size_t index,
+               const viz::FrameTimingDetails&) {
+              run->times[index].GetDict().Set("drawn", NowMs());
+              FinishTyping(run);
+            },
+            run, index));
+  } else {
+    FinishTyping(run);
+  }
+#else
+  FinishTyping(run);
+#endif
+  if (index + 1 < run->keys.size()) {
+    const double due = run->start + run->interval * (index + 1);
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, base::BindOnce(&TypeKey, run, index + 1),
+        base::Milliseconds(std::max(0.0, due - NowMs())));
+  }
+}
+}  // namespace
+void DevTypeKeys(BrowserWindowInterface* frame,
+                 const std::u16string& text,
+                 double interval,
+                 base::OnceCallback<void(base::Value)> done) {
+  auto run = std::make_shared<TypingRun>();
+  run->frame = frame->GetWeakPtr();
+  run->interval = std::max(0.0, interval);
+  for (const char16_t character : text) {
+    auto steps = ParseDevKeyAction(
+        "type:" + base::UTF16ToUTF8(std::u16string(1, character)));
+    if (steps && !steps->empty())
+      run->keys.push_back(std::move(*steps));
+  }
+  if (run->keys.empty()) {
+    std::move(done).Run(base::Value(base::ListValue()));
+    return;
+  }
+  run->done = std::move(done);
+  run->start = NowMs();
+  TypeKey(run, 0);
+}
+std::optional<DevKeyStep> DevPressKey(BrowserWindowInterface* frame,
+                                      const std::string& action) {
+  const auto steps = ParseDevKeyAction(action);
+  if (!steps || steps->empty() || !HostOf(frame))
+    return std::nullopt;
+  PostKeys(frame, *steps);
+  for (const auto& step : *steps) {
+    if (step.type == ui::EventType::kKeyPressed)
+      return step;
+  }
+  return steps->front();
 }
 }  // namespace bay
