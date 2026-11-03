@@ -369,3 +369,14 @@ export const readUserScripts = async () => ({ state: "empty" });
 export const readUserScriptsStatus = async () => null;
 export const writeUserScriptsStatus = async () => {};
 export const onUserScriptsChange = () => ({ remove() {} });
+
+// Permission prompts (components/site/permissions.ts): a test fires what the host sends.
+const permissionListeners = new Map();
+const permissionListener = (name) => (listener) => {
+  permissionListeners.set(name, listener);
+  return { remove: () => permissionListeners.delete(name) };
+};
+export const onPermission = permissionListener("onPermission");
+export const onPermissionDismissed = permissionListener("onPermissionDismissed");
+export const permissionEvents = { fire: (name, value) => permissionListeners.get(name)?.(value) };
+export const resolvePermission = () => Promise.resolve();
