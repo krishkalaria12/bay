@@ -899,7 +899,12 @@
                   <td class="methods">focusSidebarRow setSidebarKeyboard setSidebarMoveUndo</td>
                   <td>Keyboard row focus and the Undo for sidebar moves.</td>
                   <td><code>Windows.swift</code></td>
-                  <td><span class="tag t-verify">Verify</span> whether the DOM focus path covers them; if so, mark them optional in the contract.</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> It didn't: the arrow keys only ever came from macOS's responder, so on the web host
+                    Focus Sidebar lit a row and no key moved it. <code>sidebar/webKeyboard.ts</code> now holds focus in the window's document while a row has
+                    keyboard focus or a sidebar edit can be undone, reads the same keys, and ends on a click or focus moving away. Rows take DOM focus, so
+                    screen readers follow. The three native methods stay optional, as they already were. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Ctrl‑Tab switcher capture</strong></td>
