@@ -31,6 +31,7 @@
 #include "chrome/browser/bay/webui/browser_services.h"
 #include "chrome/browser/bay/webui/download_controls.h"
 #include "chrome/browser/bay/webui/engine_services.h"
+#include "chrome/browser/bay/webui/install_prompts.h"
 #include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
@@ -53,6 +54,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
@@ -302,6 +304,48 @@ void EmitDownload(base::DictValue download) {
       host->Emit("BayCEF", "onDownload", payload.Clone());
   }
 }
+// The window that asks about an extension install: the one showing the tab
+// that asked, else the one used last. One host only, so the prompt is answered
+// once; with the shared runtime a window, as windows show the prompts.
+base::WeakPtr<NativeHost> PromptWindow(content::WebContents* parent,
+                                       base::DictValue prompt) {
+  auto window_host = [](BrowserWindowInterface* frame) -> NativeHost* {
+    for (const auto& [raw, host] : Hosts()) {
+      if (host && frame && host->browser() == frame &&
+          (!AppRuntime::Enabled() || !host->is_coordinator()))
+        return host.get();
+    }
+    return nullptr;
+  };
+  NativeHost* target = nullptr;
+  if (parent) {
+    if (auto* browser =
+            GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(parent))
+      target = window_host(WindowRegistry::Get().FrameOf(browser));
+  }
+  if (!target) {
+    GlobalBrowserCollection::GetInstance()->ForEach(
+        [&](BrowserWindowInterface* browser) {
+          target = window_host(browser);
+          return !target;
+        },
+        BrowserCollection::Order::kActivation);
+  }
+  // The single-renderer runtime: its one document shows every window.
+  if (!target && !AppRuntime::Enabled()) {
+    for (const auto& [raw, host] : Hosts()) {
+      if (host) {
+        target = host.get();
+        break;
+      }
+    }
+  }
+  if (!target)
+    return nullptr;
+  target->Emit("BayExtensions", "onInstallPrompt",
+               base::Value(std::move(prompt)));
+  return target->GetWeakPtr();
+}
 void EngineEvent(void*, const char* topic, const char* json) {
   // The NN engine guarantees UI-thread delivery. Hosts and Mojo remotes are
   // deliberately UI-thread confined; a background event source must post here.
@@ -367,6 +411,9 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   // Every Bay profile reports its downloads from now on (macOS NNCoreHost
   // watchDownloads), whichever host asks first.
   DownloadControls::Get().Start(base::BindRepeating(&EmitDownload));
+  // Chrome's extension install prompts are Bay's (macOS nncore
+  // HostExtensionInstallPrompt).
+  InstallPrompts::Get().Start(base::BindRepeating(&PromptWindow));
   browser_services_ = std::make_unique<BrowserServices>(
       context_,
       base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()),
@@ -402,6 +449,7 @@ content::WebContents* NativeHost::document_contents() const {
   return content::WebContents::FromRenderFrameHost(&render_frame_host());
 }
 NativeHost::~NativeHost() {
+  InstallPrompts::Get().HostGone(this);
 #if BUILDFLAG(IS_WIN)
   if (PendingQuit().owner.get() == this)
     CompleteQuitPreparation(false);
