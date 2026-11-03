@@ -471,6 +471,7 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
   EXPECT_TRUE(modules->contains("BaySystem"));
   EXPECT_TRUE(methods->contains("BayShell.prompt"));
   EXPECT_FALSE(methods->contains("BayShell.pickFiles"));
+  EXPECT_TRUE(methods->contains("BayShell.fontFamilies"));
   EXPECT_FALSE(methods->contains("BayShell.saveTextFile"));
   EXPECT_FALSE(methods->contains("BayShell.openTextFile"));
   EXPECT_FALSE(methods->contains("BayShell.showMenu"));
@@ -1726,6 +1727,32 @@ TEST_F(TextFileDialogTest, ChoiceBeforeClosingStillReachesTheDisk) {
   EXPECT_EQ(results.size(), 1u);
   EXPECT_TRUE(base::PathExists(In("chosen.json")));
 }
+TEST_F(FilePickerTest, FontFamiliesShareOneLoadAndSettleOnTeardown) {
+  base::test::TestFuture<const std::string&> first;
+  base::test::TestFuture<const std::string&> second;
+  auto first_callback = first.GetCallback();
+  auto second_callback = second.GetCallback();
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "fontFamilies", {}, first_callback));
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "fontFamilies", {},
+                               second_callback));
+  EXPECT_EQ(first.Get(), second.Get());
+  auto families = base::JSONReader::ReadDict(first.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(families);
+  ASSERT_TRUE(families->FindList("value"));
+  for (const auto& family : *families->FindList("value"))
+    EXPECT_TRUE(family.is_string());
+
+  base::test::TestFuture<const std::string&> closing;
+  auto closing_callback = closing.GetCallback();
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "fontFamilies", {},
+                               closing_callback));
+  shell_.reset();
+  EXPECT_EQ(closing.Get(), R"({"value":[]})");
+}
+
 TEST_F(TextFileDialogTest, CoordinatorAndBadArgumentsOpenNoDialog) {
   base::test::TestFuture<const std::string&> coordinator;
   auto callback = coordinator.GetCallback();

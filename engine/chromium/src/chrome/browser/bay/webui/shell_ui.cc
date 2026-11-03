@@ -25,6 +25,7 @@
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/font_list_async.h"
 #include "net/base/filename_util.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -86,7 +87,7 @@ std::string ConfirmResult(bool confirmed, bool suppressed) {
                                                 .Set("suppressed", suppressed)))
       .value_or("{}");
 }
-std::string SelectedFiles(base::ListValue files) {
+std::string ListResult(base::ListValue files) {
   return base::WriteJson(base::DictValue().Set("value", std::move(files)))
       .value_or("{\"value\":[]}");
 }
@@ -278,7 +279,7 @@ struct ShellFilePickerRequest {
   std::optional<ui::SelectFileDialog::FileTypeInfo> file_types;
   int file_type_index = 0;
   base::FilePath::StringType default_extension;
-  std::string cancelled = SelectedFiles({});
+  std::string cancelled = ListResult({});
   // Turns the chosen file into the answer, off the UI thread. Without it, the
   // answer is the chosen files' URLs.
   base::OnceCallback<std::string(const base::FilePath&)> disk_work;
@@ -369,7 +370,7 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
     if (!response_ || on_disk_)
       return;
     if (!request_.disk_work) {
-      Complete(SelectedFiles(base::ListValue().Append(
+      Complete(ListResult(base::ListValue().Append(
           net::FilePathToFileURL(file.path()).spec())));
       return;
     }
@@ -388,7 +389,7 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
     base::ListValue files;
     for (const auto& file : selected)
       files.Append(net::FilePathToFileURL(file.path()).spec());
-    Complete(SelectedFiles(std::move(files)));
+    Complete(ListResult(std::move(files)));
   }
   void FileSelectionCanceled() override { Complete(request_.cancelled); }
 
@@ -563,6 +564,9 @@ ShellUI::~ShellUI() {
   auto icons = std::exchange(icons_, {});
   for (auto& [token, icon] : icons)
     std::move(icon->callback).Run(Success(std::nullopt));
+  auto fonts = std::exchange(font_requests_, {});
+  for (auto& request : fonts)
+    std::move(request).Run(ListResult({}));
 }
 
 void ShellUI::PickImportFile(const HostContext& context,
@@ -687,6 +691,14 @@ bool ShellUI::Dispatch(const HostContext& context,
                callback, MakeDialog<ConfirmDialog>(*options));
     return true;
   }
+  if (module == "BayShell" && method == "fontFamilies") {
+    font_requests_.push_back(std::move(callback));
+    if (font_requests_.size() == 1) {
+      content::GetFontListAsync(base::BindOnce(&ShellUI::FontsLoaded,
+                                               weak_factory_.GetWeakPtr()));
+    }
+    return true;
+  }
   if (module == "BaySystem" && method == "fileIcon") {
     auto request = ParseShellFileIconArgs(args);
     if (!request) {
@@ -796,6 +808,14 @@ void ShellUI::DialogFinished(uint64_t token, std::string response) {
   auto pending = std::move(found->second);
   dialogs_.erase(found);
   std::move(pending->callback).Run(response);
+}
+void ShellUI::FontsLoaded(base::ListValue fonts) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  const std::string families = ListResult(FontFamiliesFromFontList(fonts));
+  // A response may delete this owner. No member access follows.
+  auto requests = std::exchange(font_requests_, {});
+  for (auto& request : requests)
+    std::move(request).Run(families);
 }
 void ShellUI::IconLoaded(uint64_t token, int pixels, const gfx::Image& image) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

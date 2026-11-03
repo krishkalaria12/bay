@@ -221,12 +221,15 @@ function Look({ tabId, boost, session }: { tabId: string; boost: Boost; session:
   );
 }
 
+// The web host's menus end at 1000 items, and two go to the site's font and a separator.
+const MAX_FONT_ITEMS = 998;
+
 function Fonts({ boost }: { boost: Boost }) {
   const theme = useTheme();
   const shown = ["", ...BOOST_FONTS.slice(0, 4)];
   const custom = boost.font && !shown.includes(boost.font) ? boost.font : null;
   const more = async () => {
-    const families = fontFamilies();
+    const families = (await fontFamilies()).slice(0, MAX_FONT_ITEMS);
     const items: MenuItem[] = [
       { id: "font:", title: "Site's Font", checked: !boost.font },
       { separator: true },

@@ -70,6 +70,8 @@ std::optional<ShellSaveTextRequest> ParseShellSaveTextArgs(
 // BayShell.openTextFile's extensions, as the file dialog takes them.
 std::optional<std::vector<base::FilePath::StringType>> ParseShellOpenTextArgs(
     const base::ListValue& args);
+// The families in Chrome's font list, whose rows are [family, display name].
+base::ListValue FontFamiliesFromFontList(const base::ListValue& fonts);
 // Matches the macOS shell: accepting whitespace-only text is cancellation.
 std::optional<std::string> NormalizeShellPromptText(std::u16string_view text);
 }  // namespace bay

@@ -213,6 +213,16 @@ std::optional<std::vector<base::FilePath::StringType>> ParseShellOpenTextArgs(
   }
   return extensions;
 }
+base::ListValue FontFamiliesFromFontList(const base::ListValue& fonts) {
+  base::ListValue families;
+  for (const auto& font : fonts) {
+    if (font.is_list() && !font.GetList().empty() &&
+        font.GetList()[0].is_string()) {
+      families.Append(font.GetList()[0].GetString());
+    }
+  }
+  return families;
+}
 std::optional<std::string> NormalizeShellPromptText(std::u16string_view text) {
   const auto trimmed = base::TrimWhitespace(text, base::TRIM_ALL);
   if (trimmed.empty())

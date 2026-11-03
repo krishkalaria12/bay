@@ -858,7 +858,11 @@
                   <td class="methods">fontFamilies</td>
                   <td>The Boost editor's font menu is empty.</td>
                   <td><code>ShellModule.swift</code></td>
-                  <td><span class="tag t-port">Port</span> Use fontconfig on Linux and DirectWrite on Windows, or Chrome's font list service. S</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/shell_ui.cc</code> asks Chrome's font list service off the UI thread,
+                    which is fontconfig on Linux and DirectWrite on Windows, and callers waiting together share one load. The Boost editor now awaits the list
+                    instead of falling back to its built-in fonts, and the menu stops at the host's 1000 items. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Shortcut recording</strong></td>

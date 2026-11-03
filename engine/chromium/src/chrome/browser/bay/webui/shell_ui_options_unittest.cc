@@ -300,4 +300,14 @@ TEST(ShellUIOptionsTest, OpenTextTakesPlainExtensions) {
   EXPECT_FALSE(
       ParseShellOpenTextArgs(base::ListValue().Append(std::move(too_many))));
 }
+TEST(ShellUIOptionsTest, FontFamiliesAreTheFirstColumnOfChromesList) {
+  auto fonts = base::ListValue()
+                   .Append(base::ListValue().Append("Noto Sans").Append("Noto"))
+                   .Append(base::ListValue().Append("Inter").Append("Inter"))
+                   .Append(base::ListValue())
+                   .Append("not a row")
+                   .Append(base::ListValue().Append(1));
+  EXPECT_EQ(FontFamiliesFromFontList(fonts),
+            base::ListValue().Append("Noto Sans").Append("Inter"));
+}
 }  // namespace bay

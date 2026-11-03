@@ -708,6 +708,7 @@ base::DictValue NativeHost::Info() const {
     engine_methods.Append("BayShell.openTextFile");
     engine_methods.Append("BayShell.showMenu");
   }
+  engine_methods.Append("BayShell.fontFamilies");
   engine_methods.Append("BaySystem.fileIcon");
   for (auto& method : SecretStorage::SupportedMethods())
     engine_methods.Append(std::move(method));

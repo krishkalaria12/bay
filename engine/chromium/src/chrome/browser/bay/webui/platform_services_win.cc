@@ -227,6 +227,7 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayShell.pickFiles",
                      "BayShell.saveTextFile",
                      "BayShell.openTextFile",
+                     "BayShell.fontFamilies",
                      "BayShell.confirm",
                      "BayShell.prompt",
                      "BaySystem.fileIcon",

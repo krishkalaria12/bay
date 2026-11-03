@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
@@ -39,8 +40,8 @@ class ShellUI {
   ShellUI& operator=(const ShellUI&) = delete;
   // False leaves callback untouched. The only handled methods are
   // BayShell.prompt, BayShell.confirm, BayShell.showMenu, BayShell.pickFiles,
-  // BayShell.saveTextFile, BayShell.openTextFile and BaySystem.fileIcon, with
-  // normal native wire envelopes.
+  // BayShell.saveTextFile, BayShell.openTextFile, BayShell.fontFamilies and
+  // BaySystem.fileIcon, with normal native wire envelopes.
   bool Dispatch(const HostContext& context,
                 const std::string& module,
                 const std::string& method,
@@ -76,6 +77,7 @@ class ShellUI {
   void ContextMenuFinished();
   void FilePickerFinished(FilePicker* picker);
   void DialogFinished(uint64_t token, std::string response);
+  void FontsLoaded(base::ListValue fonts);
   void IconLoaded(uint64_t token, int pixels, const gfx::Image& image);
   void IconFinished(uint64_t token, std::optional<std::string> image);
 
@@ -84,6 +86,8 @@ class ShellUI {
   scoped_refptr<FilePicker> file_picker_;
   std::map<uint64_t, std::unique_ptr<PendingDialog>> dialogs_;
   std::map<uint64_t, std::unique_ptr<PendingIcon>> icons_;
+  // Everyone asking while the system's slow font list loads shares one answer.
+  std::vector<Response> font_requests_;
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<ShellUI> weak_factory_{this};
 };
