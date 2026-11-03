@@ -77,6 +77,8 @@ source_set("impl") {
     "native_host.cc",
     "page_observer.cc",
     "page_observer.h",
+    "page_media_events.cc",
+    "page_media_events.h",
     "page_security.cc",
     "page_security.h",
     "page_services.cc",
@@ -808,6 +810,7 @@ if (is_linux) {
       "../nn_scripts_policy_unittest.cc",
       "easel_sharing_unittest.cc",
       "cli_installer_unittest.cc",
+      "page_media_events_unittest.cc",
     ]
     deps = [
       ":impl",

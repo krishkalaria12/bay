@@ -3,6 +3,7 @@
 #define CHROME_BROWSER_BAY_WEBUI_PAGE_OBSERVER_H_
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -19,6 +20,7 @@
 
 namespace bay {
 class NativeHost;
+class PageMediaEvents;
 
 // View observers follow a mount lease. Broker-owned fact observers follow the
 // WebContents through parking and transfers without retaining a renderer host.
@@ -106,6 +108,7 @@ class TabObserver final : public content::WebContentsObserver,
   FactCallback facts_;
   std::optional<std::string> requested_url_;
   base::WeakPtr<NativeHost> host_;
+  std::unique_ptr<PageMediaEvents> media_events_;
   base::ScopedObservation<favicon::FaviconDriver,
                           favicon::FaviconDriverObserver>
       favicon_observation_{this};
