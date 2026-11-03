@@ -14,6 +14,8 @@
   },
   // Default deployment needs no R2 account or bucket and exposes no shared Easels.
   "vars": { "BAY_EASEL_WEB_SHARING": "false" },
+  // Branch previews use the public site without shared Easel storage.
+  "previews": { "vars": { "BAY_EASEL_WEB_SHARING": "false" } },
   "env": {
     "easels": {
       "name": "bay-web",

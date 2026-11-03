@@ -1,6 +1,6 @@
 import { useLibrary } from "../components/library/state";
 import type { LocationCommandEffects } from "./locationCommands";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import { isIncognitoSpace, wake } from "../store/model";
 import { INTERNAL_PAGES, internalPageOf, tabDestination } from "../store/internalPages";
 import type { NewTabOptions } from "../store/tabs";

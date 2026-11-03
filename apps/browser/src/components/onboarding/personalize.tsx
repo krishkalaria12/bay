@@ -6,7 +6,7 @@ import { SPACE_COLORS } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { TWILIGHT } from "../../store/spaces";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { useOnboardingColors } from "./ui";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { toggleTabLayout } from "../../runtime/splitActions";

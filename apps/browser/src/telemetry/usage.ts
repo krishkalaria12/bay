@@ -1,6 +1,6 @@
-import { listTasks, onExtensionsChanged } from "@bay/nncore";
-import { useTranslate } from "../components/site/translate";
-import { useBrowser } from "../store/browser";
+import { listTasks, onExtensionsChanged } from "@bay/chromium";
+import { useTranslate } from "../components/site/translateState";
+import { useBrowser } from "../store/browserStore";
 import { useSync } from "../sync/engine";
 import { capture, endSession, flush, isSharing, resumeClientAfterQuit, startClient, stopClient } from "./client";
 import { reportNativeCrashes } from "./errors";

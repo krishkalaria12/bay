@@ -13,7 +13,7 @@ import { useLibrary } from "../library/state";
 import { BookmarksPage } from "./BookmarksPage";
 import { DownloadsPage } from "./DownloadsPage";
 import { HistoryPage } from "./HistoryPage";
-import { internalPageOf, internalQuery, tabDestination } from "./urls";
+import { internalPageOf, internalQuery, tabDestination } from "./pageUrls";
 
 export function InternalPage({ tabId }: { tabId: string }) {
   const url = useBrowser((s) => {

@@ -5,7 +5,7 @@ import { test } from "node:test";
 // The editor only needs showToast from the layout actions. Loading the rest would pull in native UI.
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "../layout/splitActions" && context.parentURL?.endsWith("/boosts/editor.ts")) {
+    if (specifier === "../split/splitActions" && context.parentURL?.endsWith("/boosts/editor.ts")) {
       return { url: "data:text/javascript,export const showToast = (...args) => globalThis.boostTestToasts.push(args)", shortCircuit: true };
     }
     return next(specifier, context);
@@ -13,7 +13,7 @@ registerHooks({
 });
 globalThis.boostTestToasts = [];
 const native = await import("../../test-native-stub.mjs");
-const { useBrowser } = await import("../../store/browser.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
 const { webviews } = await import("../../lib/webviews.ts");
 const { exportBoost, newBoost } = await import("../../lib/boosts.ts");
 const { useBoosts, startBoosts } = await import("./state.ts");

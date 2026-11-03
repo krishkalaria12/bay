@@ -1,10 +1,10 @@
 import { Pressable, View } from "@bay/platform";
-import { Surface, Symbol } from "@bay/shell";
+import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { copyLinkPreview, fetchLinkSummary, openLinkPreview, peekLinkPreview, setLinkPreview, useLinkPreview } from "./linkPreview";
 
 export function LinkPreview({ tabId, zoom }: { tabId: string; zoom: number }) {

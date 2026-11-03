@@ -1,4 +1,4 @@
-import { cancelShortcutRecording, menuShortcuts, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/shell";
+import { cancelShortcutRecording, menuShortcuts, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { useBrowserRead as useBrowser } from "../../../store/read";
 import { updateSettings } from "../../../runtime/settingsActions";

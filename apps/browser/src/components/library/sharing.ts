@@ -1,4 +1,12 @@
-import { createEaselShareIdentity, isEaselWebSharingEnabled, keychainDelete, keychainGet, keychainSet, readEaselShareRecords, saveDocument } from "@bay/shell";
+import {
+  createEaselShareIdentity,
+  isEaselWebSharingEnabled,
+  keychainDelete,
+  keychainGet,
+  keychainSet,
+  readEaselShareRecords,
+  saveDocument,
+} from "@bay/desktop";
 import { create } from "zustand";
 
 const ORIGIN = "https://bay.krishkalaria.in";

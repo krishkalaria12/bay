@@ -1,15 +1,16 @@
 import { View } from "@bay/platform";
-import { changeCaptureSource, stopCapture } from "@bay/nncore";
-import { Symbol } from "@bay/shell";
+import { changeCaptureSource, stopCapture } from "@bay/chromium";
+import { Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
+import { useLatched } from "../../lib/useLatched";
 import { engineProfile } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
-import { PromptButton } from "../layout/controls";
-import { usePages } from "../layout/pageState";
+import { PromptButton } from "../toolbar/buttons";
+import { usePages } from "../window/pageState";
 import { useMedia, type TabShare } from "./state";
 import { CAPTURE_RED } from "./tokens";
 import { SHARE_BAR_HEIGHT, SHARE_END_MS } from "./constants";
@@ -94,8 +95,13 @@ function dismiss(capturer: string, tabId: string) {
 }
 
 export function ShareBar({ tabId }: { tabId: string }) {
-  const theme = useTheme();
   const found = useShareFor(tabId);
+  // Mounted with the shown page, so on every tab switch: its height and animation come with the first share.
+  return useLatched(!!found) ? <Bar tabId={tabId} found={found} /> : null;
+}
+
+function Bar({ tabId, found }: { tabId: string; found: ReturnType<typeof useShareFor> }) {
+  const theme = useTheme();
   const height = useSharedValue(0);
   const visible = !!found;
   useEffect(() => {

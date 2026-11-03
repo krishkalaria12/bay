@@ -1,4 +1,4 @@
-import { setSidebarMoveUndo } from "@bay/shell";
+import { setSidebarMoveUndo } from "@bay/desktop";
 import { reportBrowserCommand } from "../runtime/commands";
 import { useBrowserRead as useBrowser } from "../store/read";
 import { browserRead } from "../store/read";

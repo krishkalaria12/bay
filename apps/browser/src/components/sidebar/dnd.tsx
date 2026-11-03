@@ -1,6 +1,6 @@
 import { type ScrollView, type View } from "@bay/platform";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
-import { hapticTick, LocalFilesArea } from "@bay/shell";
+import { hapticTick, LocalFilesArea } from "@bay/desktop";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { PanResponder, Text } from "react-native";
 import Animated, {
@@ -25,10 +25,10 @@ import { useWindowId } from "../../store/hooks";
 import { spaceFolded } from "../../store/model";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { canMoveFolder, folderDepth } from "../../store/folders";
-import type { TabPlacement } from "../../store/organize";
-import { STRIP_SLIDE } from "../layout/constants";
-import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, updateTabDrag, useTabDrag } from "../layout/tabDrag";
-import { folderDragItemVisible } from "./geometry";
+import type { TabPlacement } from "../../store/tabTidying";
+import { STRIP_SLIDE } from "../window/constants";
+import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, updateTabDrag, useTabDrag } from "../tabStrip/tabStripDrag";
+import { folderDragItemVisible } from "./rowGeometry";
 import { suppressHover } from "./hover";
 import { DRAG_SCROLL_EDGE, PINNED_TILE_GAP } from "./constants";
 
@@ -91,6 +91,13 @@ class DragController {
   root: View | null = null;
   scroll: ScrollView | null = null;
   scrollY = 0;
+  /** The current page's list, and where it's scrolled to: a drag near its edges scrolls it. */
+  follow(scroll: ScrollView | null) {
+    this.scroll = scroll;
+  }
+  scrolled(y: number) {
+    this.scrollY = y;
+  }
   // What the items show while a drag goes on, each item reading only its own part: a drag's start or end
   // re-renders the items it hides or shows, not the whole list.
   marks = create<Marks>()(() => NO_MARKS);

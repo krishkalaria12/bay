@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, View } from "@bay/platform";
 import type { BrowserSource, SpaceSummary } from "@bay/import";
-import { Symbol, VisualEffect, WindowDragRegion } from "@bay/shell";
+import { Symbol, VisualEffect, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "@bay/platform/motion";
@@ -8,7 +8,7 @@ import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { useSpaces } from "../../store/hooks";
 import { plural } from "../../store/model";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { Button, Checkbox, PopUp, useFormColors } from "../settings/controls";
 import { CHECK_SPRING, SUCCESS_SPRING } from "./constants";
 import type { Status } from "./useImportFlow";

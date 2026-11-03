@@ -1,5 +1,5 @@
-import { onAppEvent, onWindowEvent } from "@bay/shell";
-import { everySlowly } from "../../lib/slowTimers";
+import { onAppEvent, onWindowEvent } from "@bay/desktop";
+import { everySlowly } from "../../lib/throttledTimers";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { BrowserProjection } from "../../runtime/projection";
 import { reportBrowserCommand } from "../../runtime/commands";

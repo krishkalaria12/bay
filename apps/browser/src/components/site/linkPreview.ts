@@ -1,11 +1,11 @@
 import { create } from "zustand";
-import { copyText } from "@bay/shell";
+import { copyText } from "@bay/desktop";
 
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { navigate } from "../../runtime/tabActions";
 import { openPeek } from "../../runtime/splitActions";
-import { showToast } from "../layout/splitActions";
+import { showToast } from "../split/splitActions";
 
 export type LinkPreviewData = { url: string; rect: { x: number; y: number; width: number; height: number } };
 

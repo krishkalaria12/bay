@@ -1,9 +1,9 @@
-import { onAppEvent } from "@bay/shell";
+import { onAppEvent } from "@bay/desktop";
 import { createBrowserPersistence, type PersistenceOwner } from "../lib/persist";
 import { AUTO_CLEAN_EVERY_MS } from "../lib/constants";
-import { startLive } from "../live/index";
-import { flushLivePersistence, resumeLivePersistence, startLivePersistence } from "../live/store";
-import type { BrowserStore } from "../store/browser";
+import { startLive } from "../activity/index";
+import { flushLivePersistence, resumeLivePersistence, startLivePersistence } from "../activity/activityStore";
+import type { BrowserStore } from "../store/browserStore";
 
 const owners = new WeakMap<BrowserStore, PersistenceOwner>();
 

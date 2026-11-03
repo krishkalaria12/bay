@@ -1,5 +1,5 @@
 import { Pressable, View, capabilities } from "@bay/platform";
-import { appIcons, currentAppIcon, setAppIcon, Symbol, type AppIcon } from "@bay/shell";
+import { appIcons, currentAppIcon, setAppIcon, Symbol, type AppIcon } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Image, Text } from "react-native";
 import { reportBrowserCommand } from "../../../runtime/commands";
@@ -7,7 +7,7 @@ import { updateSettings } from "../../../runtime/settingsActions";
 import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
 import type { Settings } from "../../../store/settings";
-import { useHover } from "../../primitives";
+import { useHover } from "../../ui/primitives";
 import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { APP_ICON_CHOICE_SIZE } from "../constants";

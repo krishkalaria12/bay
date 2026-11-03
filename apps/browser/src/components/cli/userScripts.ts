@@ -1,5 +1,5 @@
-import { installExtension, listExtensions, reloadExtension, uninstallExtension, type InstalledExtension } from "@bay/nncore";
-import { onUserScriptsChange, readUserScripts, userScriptsAvailable, watchUserScripts, writeUserScriptsStatus, type UserScriptsFolder } from "@bay/shell";
+import { installExtension, listExtensions, reloadExtension, uninstallExtension, type InstalledExtension } from "@bay/chromium";
+import { onUserScriptsChange, readUserScripts, userScriptsAvailable, watchUserScripts, writeUserScriptsStatus, type UserScriptsFolder } from "@bay/desktop";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { engineProfile, isIncognitoSpace } from "../../store/model";

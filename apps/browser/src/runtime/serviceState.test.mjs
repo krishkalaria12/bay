@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 globalThis.__DEV__ = false;
-const { createBrowserStore, useBrowser } = await import("../store/browser.ts");
+const { createBrowserStore, useBrowser } = await import("../store/browserStore.ts");
 const { startServiceStateOwner, installServiceState } = await import("./serviceState.ts");
 const { executeServiceCommand } = await import("./serviceExecutor.ts");
 const { parseServiceCommand } = await import("./serviceCommands.ts");
-const { live, setLive, setLiveView } = await import("../live/store.ts");
+const { live, setLive, setLiveView } = await import("../activity/activityStore.ts");
 const command = (action, args = []) => parseServiceCommand({ method: "serviceAction", action, args });
 test("coordinator snapshots detach remote mirrors and stop publishing", () => {
   const browser = createBrowserStore();

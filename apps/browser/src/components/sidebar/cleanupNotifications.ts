@@ -1,5 +1,5 @@
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { changedIds } from "../../store/changes";
+import { changedIds } from "../../store/recordDiff";
 import { isIncognitoSpace } from "../../store/model";
 import type { DeepReadonly } from "../../runtime/projection";
 type ClosedTab = DeepReadonly<import("../../store/types").ClosedTab>;

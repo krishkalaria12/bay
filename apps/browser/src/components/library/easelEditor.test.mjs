@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { contentBounds, EaselEditor, safeUrl } from "../../../../../packages/shell/src/easelEditor.ts";
+import { contentBounds, EaselEditor, safeUrl } from "../../../../../packages/desktop/src/easelEditor.ts";
 
 const none = { shift: false, option: false, command: false };
 const click = { ...none, button: 0, clickCount: 1 };

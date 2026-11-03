@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { executeSpaceCommand, parseSpaceCommand, SPACE_COMMAND_METHODS } from "./spaceCommands.ts";
 import { browserCommandResultKind } from "./userCommands.ts";
 

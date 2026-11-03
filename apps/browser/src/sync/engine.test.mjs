@@ -37,8 +37,8 @@ globalThis.nnTestNativeModules = {
   },
 };
 
-const shell = await import("@bay/shell");
-const { useBrowser } = await import("../store/browser.ts");
+const shell = await import("@bay/desktop");
+const { useBrowser } = await import("../store/browserStore.ts");
 const S = () => useBrowser.getState();
 // Bookmarks are the store's alone here (lib/bookmarks.ts, which reads Chrome's, isn't running).
 const reset = () => (S().hydrate({}), useBrowser.setState({ bookmarksReady: { default: true } }));

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseServiceCommand, parseServiceResult } from "./serviceCommands.ts";
 import { installServiceClient } from "./serviceClient.ts";
-import { live, setLive, updateFolder, setLiveView, markUnread } from "../live/store.ts";
+import { live, setLive, updateFolder, setLiveView, markUnread } from "../activity/activityStore.ts";
 const command = (action, args = []) => parseServiceCommand({ method: "serviceAction", action, args });
 test("service commands reject arbitrary data and internal identity patches", () => {
   for (const value of [

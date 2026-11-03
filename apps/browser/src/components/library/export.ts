@@ -1,5 +1,5 @@
-import { exportEaselHTML, revealFile, saveCaptureImage, shareCaptureImage, type EaselCanvasHandle } from "@bay/shell";
-import { showToast } from "../layout/splitActions";
+import { exportEaselHTML, revealFile, saveCaptureImage, shareCaptureImage, type EaselCanvasHandle } from "@bay/desktop";
+import { showToast } from "../split/splitActions";
 import type { EaselDocument } from "./model";
 import { revealTitle } from "./words";
 

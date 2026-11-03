@@ -1,5 +1,5 @@
 import { formatShortcut, virtualKeyCode, WINDOWS_SHORTCUTS, type ShortcutStroke } from "@bay/platform";
-import { type BrowserCommand, type KeyShortcut } from "@bay/shell";
+import { type BrowserCommand, type KeyShortcut } from "@bay/desktop";
 
 // Commands in the table the app doesn't run itself yet: their keys stay Chrome's.
 const LEFT_TO_CHROME = new Set(["closeAllTabs", "searchTabs", "tabSwitcher", "taskManager", "showOnboarding", "returnToPinnedUrl"]);

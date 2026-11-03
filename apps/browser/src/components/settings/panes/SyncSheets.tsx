@@ -1,5 +1,5 @@
 import { TextInput, View } from "@bay/platform";
-import { showMenu, Symbol } from "@bay/shell";
+import { showMenu, Symbol } from "@bay/desktop";
 import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, StyleSheet, Text } from "react-native";

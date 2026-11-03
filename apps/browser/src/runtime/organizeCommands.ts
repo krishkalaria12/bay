@@ -1,7 +1,7 @@
 import { decodeSharedCollection } from "@bay/core";
-import type { BrowserState, BrowserStore } from "../store/browser";
+import type { BrowserState, BrowserStore } from "../store/browserStore";
 import { isIncognitoSpace } from "../store/model";
-import type { GroupPlacement, TabPlacement } from "../store/organize";
+import type { GroupPlacement, TabPlacement } from "../store/tabTidying";
 import type { GroupColor, PinnedFolder, TabGroup } from "../store/types";
 import {
   commandBoolean,

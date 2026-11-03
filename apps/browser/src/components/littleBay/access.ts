@@ -1,4 +1,4 @@
-import { setLittleBayHotKey, setLittleBayMenuBarItem, type HotKeyStatus } from "@bay/shell";
+import { setLittleBayHotKey, setLittleBayMenuBarItem, type HotKeyStatus } from "@bay/desktop";
 import { create } from "zustand";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { LittleBayShortcut } from "../../store/settings";

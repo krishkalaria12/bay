@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const { viewTabIds } = await import("./model.ts");
 const S = () => useBrowser.getState();
 function setup() {
@@ -260,7 +260,7 @@ test("undo close repairs active mappings in every affected window", () => {
 test("live-folder names and icons respect explicit window ownership", async () => {
   const { w } = setup();
   const { withSidebarUndoWindow } = await import("./sidebarUndo.ts");
-  const { setLive, updateFolder, live } = await import("../live/store.ts");
+  const { setLive, updateFolder, live } = await import("../activity/activityStore.ts");
   const other = S().createWindow();
   setLive({
     folders: {
@@ -275,10 +275,10 @@ test("live-folder names and icons respect explicit window ownership", async () =
 });
 
 test("live-folder undo stays with the authority and its snapshot contains only JSON data", async () => {
-  const { createBrowserStore, useBrowser } = await import("./browser.ts");
+  const { createBrowserStore, useBrowser } = await import("./browserStore.ts");
   const { createBrowserProjector } = await import("../runtime/projection.ts");
-  const { bindLiveBrowser } = await import("../live/engine.ts");
-  const { setLive, updateFolder, useLive } = await import("../live/store.ts");
+  const { bindLiveBrowser } = await import("../activity/activityEngine.ts");
+  const { setLive, updateFolder, useLive } = await import("../activity/activityStore.ts");
   const owner = createBrowserStore();
   const windowId = owner.getState().createWindow();
   const legacy = useBrowser.getState();
@@ -303,9 +303,9 @@ test("live-folder undo stays with the authority and its snapshot contains only J
 });
 
 test("live-folder undo still works after the authority recovers from JSON", async () => {
-  const { createBrowserStore } = await import("./browser.ts");
-  const { bindLiveBrowser } = await import("../live/engine.ts");
-  const { setLive, updateFolder, useLive } = await import("../live/store.ts");
+  const { createBrowserStore } = await import("./browserStore.ts");
+  const { bindLiveBrowser } = await import("../activity/activityEngine.ts");
+  const { setLive, updateFolder, useLive } = await import("../activity/activityStore.ts");
   const owner = createBrowserStore();
   const windowId = owner.getState().createWindow();
   const previous = useLive.getState();
@@ -331,7 +331,7 @@ test("live-folder undo still works after the authority recovers from JSON", asyn
 
 for (const kind of ["automatic", "action"]) {
   test(`${kind} undo entries retain distinct serializable transaction IDs at the stack limit`, async () => {
-    const { createBrowserStore } = await import("./browser.ts");
+    const { createBrowserStore } = await import("./browserStore.ts");
     const browser = createBrowserStore();
     const windowId = browser.getState().createWindow({ url: "https://example.test" });
     const tabId = viewTabIds(browser.getState(), windowId)[0];

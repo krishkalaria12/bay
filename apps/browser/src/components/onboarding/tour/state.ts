@@ -1,10 +1,10 @@
 import { shortcutForCommand, shortcutLabel, capabilities } from "@bay/platform";
-import { systemInfo } from "@bay/shell";
+import { systemInfo } from "@bay/desktop";
 import { create } from "zustand";
 import { openUrls } from "../../../lib/actions";
 import { useBrowserRead as useBrowser } from "../../../store/read";
 import { resolveWindowId } from "../../../store/model";
-import { closeReleaseNotes } from "../../ntp/releaseNotes";
+import { closeReleaseNotes } from "../../newTab/releaseNotes";
 import { locateAnchor, type TourAnchor } from "./anchors";
 
 export type TourStop = {

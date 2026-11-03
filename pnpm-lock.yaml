@@ -28,24 +28,24 @@ importers:
 
   apps/browser:
     dependencies:
+      '@bay/chromium':
+        specifier: workspace:*
+        version: link:../../packages/chromium
       '@bay/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@bay/desktop':
+        specifier: workspace:*
+        version: link:../../packages/desktop
       '@bay/import':
         specifier: workspace:*
         version: link:../../packages/import
-      '@bay/nncore':
-        specifier: workspace:*
-        version: link:../../packages/nncore
       '@bay/platform':
         specifier: workspace:*
         version: link:../../packages/platform
       '@bay/shaders':
         specifier: workspace:*
         version: link:../../packages/shaders
-      '@bay/shell':
-        specifier: workspace:*
-        version: link:../../packages/shell
       '@bay/sync':
         specifier: workspace:*
         version: link:../../packages/sync
@@ -117,6 +117,15 @@ importers:
         specifier: ~5.9.2
         version: 5.9.3
 
+  packages/chromium:
+    dependencies:
+      '@bay/core':
+        specifier: workspace:*
+        version: link:../core
+      '@bay/platform':
+        specifier: workspace:*
+        version: link:../platform
+
   packages/core:
     dependencies:
       lz-string:
@@ -127,17 +136,14 @@ importers:
         specifier: ^24.13.6
         version: 24.13.6
 
-  packages/import:
+  packages/desktop:
     dependencies:
       '@bay/platform':
         specifier: workspace:*
         version: link:../platform
 
-  packages/nncore:
+  packages/import:
     dependencies:
-      '@bay/core':
-        specifier: workspace:*
-        version: link:../core
       '@bay/platform':
         specifier: workspace:*
         version: link:../platform
@@ -149,12 +155,6 @@ importers:
         version: 24.13.6
 
   packages/shaders:
-    dependencies:
-      '@bay/platform':
-        specifier: workspace:*
-        version: link:../platform
-
-  packages/shell:
     dependencies:
       '@bay/platform':
         specifier: workspace:*

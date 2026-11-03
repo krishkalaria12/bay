@@ -1,5 +1,5 @@
 import { Pressable, View } from "@bay/platform";
-import { Surface } from "@bay/shell";
+import { Surface } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, {
@@ -18,8 +18,8 @@ import Animated, {
 } from "@bay/platform/motion";
 import { hex, useTheme } from "../../../lib/theme";
 import { useWindowId } from "../../../store/hooks";
-import type { Rect } from "../../layout/geometry";
-import { useHover } from "../../primitives";
+import type { Rect } from "../../window/geometry";
+import { useHover } from "../../ui/primitives";
 import { useOnboardingColors } from "../ui";
 import { locateAnchor } from "./anchors";
 import { endToolTour, openVideoTour, stepToolTour, useTour, videoTourUrl, type TourStop } from "./state";

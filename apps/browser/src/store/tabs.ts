@@ -1,7 +1,8 @@
 import { resolveInput } from "@bay/core";
 import type { StateCreator } from "zustand";
 import type { BrowserProjection } from "../runtime/projection";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
+import { withChangedEntry } from "./recordDiff";
 import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
 import {
   activeTabId,
@@ -27,10 +28,10 @@ import {
   wake,
   without,
 } from "./model";
-import { forgetOpeners, insertionIndex, openerSuccessor, switchKeepsOpeners } from "./openers";
-import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./organize";
+import { forgetOpeners, insertionIndex, openerSuccessor, switchKeepsOpeners } from "./openerOrder";
+import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./tabTidying";
 import { searchUrlPrefix } from "./settings";
-import { mainWindowFor } from "./small";
+import { mainWindowFor } from "./littleBay";
 import { tabEngine, typedNavigationEngine } from "./engines";
 import { pinnedSplitOf, removeFromSplits, splitOf } from "./splits";
 import type { BrowserWindow, ClosedTab, Tab, TabLive, TabSnapshot } from "./types";
@@ -485,8 +486,8 @@ export const createTabsSlice =
       const nextLive = live && livePatch ? merge(live, livePatch) : live;
       if (next === tab && nextLive === live) return;
       set((s) => ({
-        ...(next !== tab ? { tabs: { ...s.tabs, [id]: next } } : {}),
-        ...(nextLive !== live ? { live: { ...s.live, [id]: nextLive! } } : {}),
+        ...(next !== tab ? { tabs: withChangedEntry(s.tabs, id, next) } : {}),
+        ...(nextLive !== live ? { live: withChangedEntry(s.live, id, nextLive!) } : {}),
       }));
     },
 
@@ -494,7 +495,7 @@ export const createTabsSlice =
       const live = get().live[id];
       if (!live) return;
       const next = merge(live, patch);
-      if (next !== live) set((s) => ({ live: { ...s.live, [id]: next } }));
+      if (next !== live) set((s) => ({ live: withChangedEntry(s.live, id, next) }));
     },
 
     navigated(id, page, live) {

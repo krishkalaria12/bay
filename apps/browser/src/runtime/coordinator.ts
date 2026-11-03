@@ -1,12 +1,12 @@
 import type { CoordinatorRuntimeTransport, RuntimeResolution } from "@bay/platform/runtimeTransport";
-import type { BrowserState, BrowserStore } from "../store/browser";
+import type { BrowserState, BrowserStore } from "../store/browserStore";
 import { createBrowserAuthority, type BrowserCommand, type BrowserCommit, type CommandRequest } from "./authority";
 import { decodeBrowserCommit } from "./client";
 import type { BrowserProjection } from "./projection";
 import type { LocationCommandEffects } from "./locationCommands";
 import type { PersistenceOwner } from "../lib/persist";
 import { startCoordinatorServices } from "./services";
-import { finishPageOpen, onPageEvent, onPageOpen, startPageEvents, stopPageEvents } from "@bay/nncore";
+import { finishPageOpen, onPageEvent, onPageOpen, startPageEvents, stopPageEvents } from "@bay/chromium";
 import { createPageFactConsumer } from "./pageFacts";
 import { applyPageOpen, parsePageOpen } from "./pageOpen";
 

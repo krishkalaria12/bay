@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { activeTabId, engineProfileFor } from "../store/model.ts";
 import { createPageFactConsumer } from "./pageFacts.ts";
 

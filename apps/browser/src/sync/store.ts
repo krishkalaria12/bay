@@ -1,4 +1,4 @@
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 
 let owner: BrowserStore | undefined;
 let generation = 0;

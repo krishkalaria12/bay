@@ -1,8 +1,8 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { iconColor } from "../symbolColors";
+import { iconColor } from "../iconPicker/symbolColors";
 import { profileSymbol } from "./icons";
 
 /** A space's icon as the sidebar draws it: its symbol (in its color), its emoji, or its name's initial. */

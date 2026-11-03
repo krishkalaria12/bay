@@ -1,5 +1,5 @@
 import { engineHost, searchUrl, type SearchEngine } from "./engines.ts";
-import { hostOf, searchUrlFor } from "./omnibox.ts";
+import { hostOf, searchUrlFor } from "./input.ts";
 
 export type SiteSearch = { host: string; name: string; url: string; keyword?: string };
 
@@ -40,7 +40,8 @@ export type SearchScope = {
 export type ScopeSources = {
   engines: readonly SearchEngine[];
   sites?: readonly SiteSearch[];
-  hosts?: readonly string[];
+  // Collecting a large history's hosts is only needed for the final hostname fallback.
+  hosts?: readonly string[] | (() => readonly string[]);
 };
 
 function normalize(text: string): string {
@@ -80,7 +81,7 @@ export function findScope(text: string, { engines, sites = POPULAR_SITE_SEARCHES
       return { kind: "site", name: s.name, host: s.host, url: s.url };
     }
   }
-  if (host.includes(".") && hosts.includes(host)) return { kind: "history", name: host, host, url: "" };
+  if (host.includes(".") && (typeof hosts === "function" ? hosts() : hosts).includes(host)) return { kind: "history", name: host, host, url: "" };
   return null;
 }
 

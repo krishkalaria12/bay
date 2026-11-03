@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore, useBrowser } from "../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../store/browserStore.ts";
 import { listIds, spaceListKey } from "../store/model.ts";
 import { executeImportCommand, parseImportCommand, validateImportReply, IMPORT_PAYLOAD_CHARS } from "./importCommands.ts";
 

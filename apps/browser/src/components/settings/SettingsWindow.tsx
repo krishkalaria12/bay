@@ -1,13 +1,13 @@
 import { Pressable, ScrollView, TextInput, View, capabilities, isWindows } from "@bay/platform";
 import { getNativeHostInfo } from "@bay/platform/nativeBridge";
-import { hasWebKit } from "@bay/nncore";
-import { onWindowEvent, Symbol, WindowDragRegion, type OpenWindowOptions } from "@bay/shell";
+import { hasWebKit } from "@bay/chromium";
+import { onWindowEvent, Symbol, WindowDragRegion, type OpenWindowOptions } from "@bay/desktop";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { trackSettingsSection } from "../../telemetry/track";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { Button, SettingsScroll } from "./controls";
 import { AdvancedPane } from "./panes/Advanced";
 import { AppearancePane } from "./panes/Appearance";

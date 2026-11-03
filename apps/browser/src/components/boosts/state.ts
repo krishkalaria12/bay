@@ -1,5 +1,5 @@
-import { setBoosts as setEngineBoosts, type EngineBoostStyle } from "@bay/nncore";
-import { readDocument, writeDocument } from "@bay/shell";
+import { setBoosts as setEngineBoosts, type EngineBoostStyle } from "@bay/chromium";
+import { readDocument, writeDocument } from "@bay/desktop";
 import { create } from "zustand";
 import { hasServiceClient } from "../../runtime/serviceClient";
 import { engineBoosts, newBoost, normalizeBoost, normalizeScript, tabBoostStyle, type Boost, type BoostPalette, type BoostScript } from "../../lib/boosts";

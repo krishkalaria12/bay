@@ -4,8 +4,8 @@ import { useShallow } from "zustand/react/shallow";
 import { switchSpace } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/spacePager";
-import { useHover } from "../primitives";
+import { usePagerOpacity, usePagerPages, type PagerPage } from "./pager";
+import { useHover } from "../ui/primitives";
 import { useSpaceDrag, useSpaceReorder, type SpaceReorder } from "./reorder";
 import { DOT_HOVERED_OPACITY, DOT_IDLE_OPACITY, DOT_SELECTED_OPACITY, DOTS_BAND, DOTS_CELL, DOTS_DOT, PROFILE_DOTS_HEIGHT } from "./constants";
 

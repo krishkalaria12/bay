@@ -5,6 +5,8 @@ packages:
   - "!apps/web"
   # The CLI is a standalone Bun tool (apps/cli).
   - "!apps/cli"
+  # The release videos are a standalone Remotion project (apps/videos).
+  - "!apps/videos"
 
 # React Native + CocoaPods expect a flat node_modules (the Podfile and Metro
 # resolve react-native-macos by path), so hoist instead of pnpm's symlink store.

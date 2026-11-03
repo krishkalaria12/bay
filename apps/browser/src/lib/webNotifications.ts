@@ -1,4 +1,4 @@
-import type { WebNotification } from "@bay/nncore";
+import type { WebNotification } from "@bay/chromium";
 import {
   confirm,
   notificationPermission,
@@ -7,7 +7,7 @@ import {
   removeNotifications,
   requestNotificationPermission,
   type NotificationResponse,
-} from "@bay/shell";
+} from "@bay/desktop";
 import { useBrowserRead as useBrowser } from "../store/read";
 import { focus, switchToTab } from "./actions";
 import { webviews } from "./webviews";

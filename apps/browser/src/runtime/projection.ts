@@ -1,4 +1,4 @@
-import type { BrowserState } from "../store/browser";
+import type { BrowserState } from "../store/browserStore";
 
 export type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } : T;
 type DataKey = { [K in keyof BrowserState]: BrowserState[K] extends (...args: never[]) => unknown ? never : K }[keyof BrowserState];

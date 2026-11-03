@@ -1,4 +1,4 @@
-import { confirm, onWindowEvent } from "@bay/shell";
+import { confirm, onWindowEvent } from "@bay/desktop";
 import { browserRead } from "../store/read";
 import { closeWindow } from "../runtime/windowActions";
 import { reportBrowserCommand } from "../runtime/commands";

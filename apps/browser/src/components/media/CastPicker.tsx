@@ -1,12 +1,12 @@
 import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
-import { CastMode, preferredCastMode, startCasting, stopCasting, type CastSink } from "@bay/nncore";
-import { openExternalURL, showMenu, Symbol } from "@bay/shell";
+import { CastMode, preferredCastMode, startCasting, stopCasting, type CastSink } from "@bay/chromium";
+import { openExternalURL, showMenu, Symbol } from "@bay/desktop";
 import { useState } from "react";
 import { ActivityIndicator, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { Popover, PromptButton } from "../layout/controls";
-import { useHover } from "../primitives";
+import { Popover, PromptButton } from "../toolbar/buttons";
+import { useHover } from "../ui/primitives";
 import { closeCastPicker, useCast } from "./cast";
 import { CAST_PICKER_WIDTH } from "./constants";
 import { useResetOn } from "../../lib/useResetOn";

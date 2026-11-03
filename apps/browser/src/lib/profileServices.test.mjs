@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bookmarkUuidFor } from "../store/bookmarks.ts";
-import { createBrowserStore, useBrowser } from "../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../store/browserStore.ts";
 import { createBrowserAuthority } from "../runtime/authority.ts";
 import { MAX_HISTORY } from "../store/constants.ts";
 import { activeTabId } from "../store/model.ts";
 import { createHistoryService } from "./history.ts";
 import { createBookmarksService } from "./bookmarks.ts";
 import { createFaviconService } from "./favicons.ts";
-import { createProfileDataCleanup } from "./profileData.ts";
+import { createProfileDataCleanup } from "./profileCleanup.ts";
 import * as native from "../test-native-stub.mjs";
 
 const settle = async () => {

@@ -1,4 +1,4 @@
-import type { BrowserState, BrowserStore } from "../store/browser";
+import type { BrowserState, BrowserStore } from "../store/browserStore";
 import type { BookmarkDraft } from "../store/bookmarks";
 import { isIncognitoSpace } from "../store/model";
 import {

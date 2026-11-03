@@ -1,7 +1,7 @@
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as settingsCommands from "../../runtime/settingsActions";
 import { View } from "@bay/platform";
-import { WebView } from "@bay/nncore";
+import { WebView } from "@bay/chromium";
 import { useEffect, useState } from "react";
 import { Image, StyleSheet, Text } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
@@ -9,9 +9,9 @@ import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
-import { openFromPage, pageSpaceId } from "../layout/openFromPage";
-import { useResizeDrag } from "../layout/useResizeDrag";
-import { IconButton } from "../primitives";
+import { openFromPage, pageSpaceId } from "../window/openFromPage";
+import { useResizeDrag } from "../sidebar/useResizeDrag";
+import { IconButton } from "../ui/primitives";
 import { closeSidePanel, findExtension, showExtensionMenu, useExtensions, type SidePanel } from "./state";
 import { SIDE_PANEL_HEADER, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH } from "./constants";
 

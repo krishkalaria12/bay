@@ -1,14 +1,15 @@
 import { View } from "@bay/platform";
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { memo } from "react";
 import { Text } from "react-native";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineMark, ENGINE_NAMES, ENGINE_SYMBOLS } from "../../store/engines";
-import { Favicon } from "../primitives";
+import { useEngineView } from "../../store/engineView";
+import { Favicon } from "../ui/primitives";
 import { SYMBOL_PREFIX } from "../../lib/constants";
-import { iconColor } from "../symbolColors";
+import { iconColor } from "../iconPicker/symbolColors";
 import { useSidebarMetrics } from "./tokens";
 import { SLEEPING_OPACITY } from "./constants";
 
@@ -47,7 +48,7 @@ export const TabIcon = memo(function TabIcon({
 // A tab whose page runs in the other engine (store/engines.ts) wears that engine's mark on its icon.
 function EngineMark({ tabId, size }: { tabId: string; size: number }) {
   const theme = useTheme();
-  const mark = useBrowser((s) => engineMark(s, tabId));
+  const mark = useEngineView((s) => engineMark(s, tabId));
   if (!mark) return null;
   const box = Math.round(size * 0.6);
   return (

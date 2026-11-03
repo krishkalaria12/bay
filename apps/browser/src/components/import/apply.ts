@@ -1,4 +1,4 @@
-import { savePassword } from "@bay/nncore";
+import { savePassword } from "@bay/chromium";
 import type { Credential, ImportedExtension, ImportKind, ImportResult, SafariExport, SpaceSuggestion } from "@bay/import";
 import { browserRead } from "../../store/read";
 import { isIncognitoSpace, plural } from "../../store/model";

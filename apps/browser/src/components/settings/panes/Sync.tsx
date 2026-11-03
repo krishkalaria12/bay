@@ -1,5 +1,5 @@
 import { View, isMac } from "@bay/platform";
-import { showMenu, Symbol } from "@bay/shell";
+import { showMenu, Symbol } from "@bay/desktop";
 import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState } from "react";
 import { Linking, Text } from "react-native";

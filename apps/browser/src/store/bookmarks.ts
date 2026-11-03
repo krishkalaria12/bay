@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import type { DeepReadonly } from "../runtime/projection";
 import { engineProfile, engineProfileFor, newId, without } from "./model";
 import type { BookmarkFolder, BookmarkNode, Bookmarks, Space } from "./types";

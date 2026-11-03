@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { docs } from "@bay/shell";
+import { docs } from "@bay/desktop";
 import { installServiceClient } from "../../runtime/serviceClient.ts";
 import { addBoost, boostsAvailable, createBoost, ensureBoostsLoaded, setBoostsOn, startBoosts, useBoosts } from "./state.ts";
 import { newBoost } from "../../lib/boosts.ts";

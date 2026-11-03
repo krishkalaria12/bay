@@ -1,6 +1,6 @@
-import { deleteHistoryUrls, importHistoryRows } from "@bay/nncore";
+import { deleteHistoryUrls, importHistoryRows } from "@bay/chromium";
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { engineProfileFor, isIncognitoSpace } from "./model";
 import type { HistoryEntry } from "./types";
 import { MAX_HISTORY } from "./constants";

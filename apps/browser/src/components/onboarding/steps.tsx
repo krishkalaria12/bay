@@ -4,7 +4,7 @@ import { updateSettings } from "../../runtime/settingsActions";
 import { updateSpace } from "../../runtime/spaceActions";
 import { toggleTabLayout } from "../../runtime/splitActions";
 import { Pressable, View, shortcutForCommand, capabilities, isMac, shortcutLabel } from "@bay/platform";
-import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
+import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, StyleSheet, Text } from "react-native";
 import { interpolateColor } from "@bay/platform/motion";
@@ -12,7 +12,7 @@ import { SPACE_COLORS, spaceThemeKey, themeFor, useTheme } from "../../lib/theme
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { Settings } from "../../store/settings";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
-import { Favicon, useHover } from "../primitives";
+import { Favicon, useHover } from "../ui/primitives";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "./personalize";
 import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
 import { finishOnboarding, nextStep, recordDefaultBrowserTrial, skipStep, STEPS, useOnboarding } from "./state";

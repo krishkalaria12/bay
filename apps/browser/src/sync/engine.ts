@@ -1,5 +1,5 @@
 import { ownsProfileData } from "../store/spaces";
-import { readDocument, saveDocument, writeDocument } from "@bay/shell";
+import { readDocument, saveDocument, writeDocument } from "@bay/desktop";
 import {
   Clock,
   emptyScope,
@@ -17,7 +17,7 @@ import {
   type Transport,
 } from "@bay/sync";
 import { create } from "zustand";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import { assertSyncGeneration, configureSyncStore, syncGeneration, syncStore } from "./store";
 import { hasServiceClient, requestService } from "../runtime/serviceClient";
 import { isIncognitoSpace } from "../store/model";

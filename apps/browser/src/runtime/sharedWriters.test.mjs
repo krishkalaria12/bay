@@ -15,27 +15,27 @@ const ALLOWED = {
   "lib/devHarness.ts": "development only",
   // Coordinator-owned services (runtime/coordinatorEntry.ts, runtime/services.ts).
   "runtime/coordinatorEntry.ts": "the coordinator's authority store",
-  "lib/native.ts": "coordinator native sync",
+  "lib/shellBridge.ts": "coordinator native sync",
   "lib/persist.ts": "coordinator persistence",
   "lib/history.ts": "coordinator history service",
   "lib/bookmarks.ts": "coordinator bookmark service",
   "lib/favicons.ts": "coordinator favicon service",
-  "lib/profileData.ts": "coordinator profile data service",
-  "live/index.ts": "coordinator Live services",
-  "live/engine.ts": "coordinator Live services",
-  "live/alerts.ts": "coordinator meeting alerts",
-  "live/meetingGroups.ts": "coordinator meeting groups",
-  "live/store.ts": "coordinator Live folder undo; window mutations dispatch liveUpdate service",
+  "lib/profileCleanup.ts": "coordinator profile data service",
+  "activity/index.ts": "coordinator Live services",
+  "activity/activityEngine.ts": "coordinator Live services",
+  "activity/meetingAlerts.ts": "coordinator meeting alerts",
+  "activity/meetingGroups.ts": "coordinator meeting groups",
+  "activity/activityStore.ts": "coordinator Live folder undo; window mutations dispatch liveUpdate service",
   "telemetry/usage.ts": "coordinator telemetry",
   "components/extensions/searchEngines.ts": "store parameter defaults to the legacy singleton",
   // Window modules whose writes run only without the shared runtime (pageFactsInCoordinator).
-  "components/ContentCard.tsx": "legacy page facts",
+  "components/window/TabPageCard.tsx": "legacy page facts",
   "components/extensions/bridge.ts": "legacy page adoption",
-  "components/layout/openFromPage.ts": "legacy page adoption",
-  "components/layout/splitActions.ts": "legacy page adoption",
-  "lib/chromeTabs.ts": "legacy tab strip mirror",
+  "components/window/openFromPage.ts": "legacy page adoption",
+  "components/split/splitActions.ts": "legacy page adoption",
+  "lib/engineTabs.ts": "legacy tab strip mirror",
   // WebKit is macOS's alone, and macOS runs the legacy entry: without it (hasWebKit()) these never write.
-  "lib/engines.ts": "WebKit page engine moves",
+  "lib/pageEngines.ts": "WebKit page engine moves",
 };
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -46,7 +46,7 @@ function* sources(dir) {
     else if (/\.tsx?$/.test(entry.name)) yield path;
   }
 }
-const writable = /import\s*\{[^}]*\buseBrowser\b[^}]*\}\s*from\s*"(?:\.{1,2}\/)+(?:store\/)?browser"/;
+const writable = /import\s*\{[^}]*\buseBrowser\b[^}]*\}\s*from\s*"(?:\.{1,2}\/)+(?:store\/)?browserStore"/;
 
 test("only coordinator services and legacy-guarded modules import the writable browser store", () => {
   const found = [];

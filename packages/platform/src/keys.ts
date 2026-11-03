@@ -125,7 +125,7 @@ export function relabelShortcuts(text: string, os: PlatformOS): string {
 }
 
 /**
- * Bay's Windows shortcut table, by `BrowserCommand` id (packages/shell). Where Chrome on Windows has
+ * Bay's Windows shortcut table, by `BrowserCommand` id (packages/desktop). Where Chrome on Windows has
  * a convention (chrome://settings/shortcuts), it wins; where Bay's macOS binding has no Windows
  * counterpart, the same key with Ctrl is kept. Conflicts with Chrome's own bindings are called out:
  * the app's menu model decides which one runs (Phase 5).

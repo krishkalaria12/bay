@@ -1,15 +1,15 @@
 // Imported only after the authenticated mirror and command clients are installed.
-import "../lib/nativeEvents";
-import { onCommand } from "@bay/shell";
-import { quietLaunchTabs } from "../components/BlankTabSurface";
+import "../lib/bridgeEvents";
+import { onCommand } from "@bay/desktop";
+import { quietLaunchTabs } from "../components/window/BlankTabSurface";
 import { registerWindowApplication } from "../windowEntry";
-import { startTranslate } from "../components/site/translate";
-import { startAppIntegration } from "../lib/appIntegration";
+import { startTranslate } from "../components/site/translateState";
+import { startAppIntegration } from "../lib/appMenuIntegration";
 import { startTabLifecycle } from "../lib/tabLifecycle";
-import { startTabPages } from "../lib/tabPages";
+import { startTabPages } from "../lib/tabNavigation";
 import { startWindowCloseGuard } from "../lib/windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
-import { runCommand } from "../lib/commands";
+import { runCommand } from "../lib/appCommands";
 import { startWebShortcuts } from "../lib/webShortcuts";
 import { installErrorReporting } from "../telemetry";
 

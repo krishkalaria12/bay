@@ -38,7 +38,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayShell": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "methods": {
         "showMenu": {
           "async": true,
@@ -351,7 +351,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayGlassEffect": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "methods": {
         "isLiquidGlass": {
           "async": true,
@@ -365,7 +365,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayDockSelection": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "methods": {
         "iconTheme": {
           "async": true,
@@ -379,7 +379,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayInlineCompletion": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "methods": {
         "complete": {
           "async": true,
@@ -393,7 +393,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayTranslate": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "methods": {
         "userLanguages": {
           "async": true,
@@ -458,7 +458,7 @@ export const nativeContracts = {
       }
     },
     "BayTidyNames": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "methods": {
         "suggest": {
           "async": true,
@@ -474,7 +474,7 @@ export const nativeContracts = {
       }
     },
     "BayApp": {
-      "source": "shell/src/app.ts",
+      "source": "desktop/src/appMenu.ts",
       "methods": {
         "updaterState": {
           "async": true,
@@ -732,7 +732,7 @@ export const nativeContracts = {
       }
     },
     "BaySystem": {
-      "source": "shell/src/system.tsx",
+      "source": "desktop/src/system.tsx",
       "methods": {
         "isDefaultBrowser": {
           "async": true,
@@ -872,7 +872,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayCalendar": {
-      "source": "shell/src/live.ts",
+      "source": "desktop/src/liveActivity.ts",
       "methods": {
         "authorizationStatus": {
           "async": true,
@@ -909,7 +909,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayKeychain": {
-      "source": "shell/src/live.ts",
+      "source": "desktop/src/liveActivity.ts",
       "methods": {
         "get": {
           "async": true,
@@ -937,7 +937,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayCapture": {
-      "source": "shell/src/capture.tsx",
+      "source": "desktop/src/screenCapture.tsx",
       "methods": {
         "copyImage": {
           "async": true,
@@ -986,7 +986,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayEasel": {
-      "source": "shell/src/easel.tsx",
+      "source": "desktop/src/easel.tsx",
       "methods": {
         "isEaselWebSharingEnabled": {
           "async": true,
@@ -1063,7 +1063,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayCli": {
-      "source": "shell/src/cli.ts",
+      "source": "desktop/src/cli.ts",
       "methods": {
         "installedVersion": {
           "async": true,
@@ -1086,7 +1086,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayUserScripts": {
-      "source": "shell/src/userScripts.ts",
+      "source": "desktop/src/userScripts.ts",
       "methods": {
         "watch": {
           "async": true,
@@ -1123,7 +1123,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayLocalFiles": {
-      "source": "shell/src/localFiles.tsx",
+      "source": "desktop/src/localFiles.tsx",
       "methods": {
         "inspect": {
           "async": true,
@@ -1172,7 +1172,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayCEF": {
-      "source": "nncore/src/native.ts",
+      "source": "chromium/src/native.ts",
       "methods": {
         "startPageEvents": {
           "async": true,
@@ -1651,7 +1651,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayChromeUI": {
-      "source": "nncore/src/chromeUI.ts",
+      "source": "chromium/src/chromeDialogs.ts",
       "methods": {
         "selectDevice": {
           "async": true,
@@ -1768,7 +1768,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayExtensions": {
-      "source": "nncore/src/extensions.ts",
+      "source": "chromium/src/extensions.ts",
       "methods": {
         "resolveInstallPrompt": {
           "async": true,
@@ -1849,7 +1849,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BaySwipe": {
-      "source": "nncore/src/swipe.tsx",
+      "source": "chromium/src/swipe.tsx",
       "methods": {
         "haptic": {
           "async": true,
@@ -1905,7 +1905,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayWebKit": {
-      "source": "nncore/src/webkit.ts",
+      "source": "chromium/src/webkit.ts",
       "methods": {
         "prepareTransfer": {
           "async": true,
@@ -2361,71 +2361,71 @@ export const nativeContracts = {
   },
   "views": {
     "BayWindowProfile": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "WindowProfileProps"
     },
     "BayShell": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "ViewProps"
     },
     "BaySymbol": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "SymbolProps"
     },
     "BayFadeLabel": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "FadeLabelProps"
     },
     "BayActivitySpinner": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "ViewProps"
     },
     "BayContextMenuArea": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "Omit<ContextMenuAreaProps, \"onContextMenu\"> & { onContextMenu?: () => void }"
     },
     "BaySurface": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "NativeSurfaceProps"
     },
     "BayVisualEffect": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "VisualEffectProps"
     },
     "BayGlassEffect": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "GlassEffectProps"
     },
     "BayDockSelection": {
-      "source": "shell/src/index.tsx",
+      "source": "desktop/src/index.tsx",
       "props": "DockSelectionProps"
     },
     "BayFileDrag": {
-      "source": "shell/src/system.tsx",
+      "source": "desktop/src/system.tsx",
       "props": "NativeMouseAreaProps"
     },
     "BayCapture": {
-      "source": "shell/src/capture.tsx",
+      "source": "desktop/src/screenCapture.tsx",
       "props": "NativeMarkupProps"
     },
     "BayEasel": {
-      "source": "shell/src/easel.tsx",
+      "source": "desktop/src/easel.tsx",
       "props": "NativeEaselProps"
     },
     "BayLocalFiles": {
-      "source": "shell/src/localFiles.tsx",
+      "source": "desktop/src/localFiles.tsx",
       "props": "LocalFilesAreaProps"
     },
     "BaySwipe": {
-      "source": "nncore/src/swipe.tsx",
+      "source": "chromium/src/swipe.tsx",
       "props": "NativeProps"
     },
     "BayCEF": {
-      "source": "nncore/src/NativeWebView.tsx",
+      "source": "chromium/src/NativeWebView.tsx",
       "props": "NativeProps"
     },
     "BayWebKit": {
-      "source": "nncore/src/NativeWebView.tsx",
+      "source": "chromium/src/NativeWebView.tsx",
       "props": "NativeProps"
     },
     "BayAreaLight": {
@@ -2452,8 +2452,8 @@ export const nativeContracts = {
       "EmbeddedViewEvent": "{ tag: number; event: string; payload: unknown }",
       "WebViewHost": "{\n  mount(tag: number, windowId: string, props: EmbeddedTabProps): Promise<EmbeddedTab>;\n  update(tag: number, props: EmbeddedTabProps): Promise<void>;\n  call(tag: number, method: string, args: unknown[]): Promise<unknown>;\n  unmount(tag: number): Promise<void>;\n}"
     },
-    "shell/src/index.tsx": {
-      "BrowserCommand": "| \"focusSidebar\"\n  | \"sidebarKey\"\n  | \"sidebarBlur\"\n  | \"undoPinnedFolderMove\"\n  | \"openLibrary\"\n  | \"newEasel\"\n  | \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newLittleBay\"\n  | \"joinMeeting\"\n  | \"capturePortrait\"\n  | \"toggleOpenLinksInLittleBay\"\n  | \"removeFromSplit\"\n  | \"togglePinRow\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToSpace\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"togglePageEngine\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchSpace\"\n  | \"nextSpace\"\n  | \"previousSpace\"\n  | \"newSpace\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"clearCookiesAndCache\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"tidyTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"capture\"\n  | \"captureFullPage\"\n  | \"newBoost\"\n  | \"editBoost\"\n  | \"zapElements\"\n  | \"toggleSiteBoosts\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openSpaceMenu\"",
+    "desktop/src/index.tsx": {
+      "BrowserCommand": "| \"focusSidebar\"\n  | \"sidebarKey\"\n  | \"sidebarBlur\"\n  | \"undoPinnedFolderMove\"\n  | \"openLibrary\"\n  | \"newEasel\"\n  | \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newLittleBay\"\n  | \"joinMeeting\"\n  | \"capturePortrait\"\n  | \"toggleOpenLinksInLittleBay\"\n  | \"removeFromSplit\"\n  | \"togglePinRow\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToSpace\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"togglePageEngine\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchSpace\"\n  | \"nextSpace\"\n  | \"previousSpace\"\n  | \"newSpace\"\n  | \"editTheme\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"clearCookiesAndCache\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"tidyTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"capture\"\n  | \"captureFullPage\"\n  | \"newBoost\"\n  | \"editBoost\"\n  | \"zapElements\"\n  | \"toggleSiteBoosts\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openSpaceMenu\"",
       "CommandEvent": "{\n  command: BrowserCommand;\n  arg: string | null;\n  windowId: string | null;\n}",
       "WindowEvent": "| { type: \"focus\"; id: string }\n  | { type: \"close\"; id: string }\n  | { type: \"frame\"; id: string; frame: [number, number, number, number] }\n  | { type: \"closeRequest\"; id: string }\n  // Windows' shared runtime: openWindow named this open utility window again, with these options.\n  | { type: \"opened\"; id: string; options: OpenWindowOptions }\n  | ({ type: \"state\"; id: string } & WindowState)",
       "WindowState": "{ maximized: boolean; fullscreen: boolean }",
@@ -2488,7 +2488,7 @@ export const nativeContracts = {
       "TranslationModule": "{\n  readonly available: boolean;\n  userLanguages(): string[];\n  languageName(identifier: string): string;\n  detect(text: string): Promise<string | null>;\n  status(source: string, target: string): Promise<\"installed\" | \"supported\" | \"unsupported\">;\n  supportedLanguages(): Promise<string[]>;\n  prepare(source: string, target: string): Promise<void>;\n  translate(source: string, target: string, texts: string[]): Promise<string[]>;\n  translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;\n}",
       "TidyNamesModule": "{\n  readonly available: boolean;\n  suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;\n}"
     },
-    "shell/src/app.ts": {
+    "desktop/src/appMenu.ts": {
       "UpdaterState": "| { available: false }\n  | {\n      available: true;\n      configured: boolean;\n      automaticChecks: boolean;\n      automaticDownloads: boolean;\n      canCheck: boolean;\n      sessionInProgress: boolean;\n      feedURL: string | null;\n      lastCheck: number | null;\n      version: string;\n      channel: UpdateChannel;\n      pending: PendingUpdate | null;\n    }",
       "UpdateChannel": "\"stable\" | \"nightly\"",
       "PendingUpdate": "{ version: string; ready: boolean; downloading?: boolean }",
@@ -2507,7 +2507,7 @@ export const nativeContracts = {
       "KeyPress": "{\n  key: string;\n  keyCode: number;\n  modifiers?: (\"command\" | \"shift\" | \"option\" | \"control\" | \"function\")[];\n  characters?: string;\n  focus?: \"window\" | \"page\" | \"devtools\";\n  asKey?: boolean;\n  settle?: number;\n  wait?: number;\n  dry?: boolean;\n}",
       "KeyPressResult": "{\n  handledBy?: \"page\" | \"window\" | \"menu\" | \"none\";\n  firstResponder?: string;\n  fired?: { title: string; action: string; command?: string; arg?: string; dry?: boolean }[];\n  matched?: { title: string; action: string; command?: string; arg?: string; enabled: boolean }[];\n  error?: string;\n}"
     },
-    "shell/src/system.tsx": {
+    "desktop/src/system.tsx": {
       "MenuShortcut": "{\n  id: string;\n  title: string;\n  path: string[];\n  key: string;\n  modifiers: ShortcutModifier[];\n  defaultKey: string;\n  defaultModifiers: ShortcutModifier[];\n  remappable: boolean;\n}",
       "ShortcutModifier": "\"control\" | \"option\" | \"shift\" | \"command\" | \"function\"",
       "LaunchAtLoginStatus": "\"enabled\" | \"requiresApproval\" | \"notRegistered\" | \"notFound\"",
@@ -2518,13 +2518,13 @@ export const nativeContracts = {
       "MouseAreaProps": "ViewProps & {\n  path?: string | null;\n  onMiddleClick?: (e: MiddleClickEvent) => void;\n  /** A mouse's side buttons (3 and 4) released over the area or anything in it that doesn't take them. */\n  onSideButton?: (button: SideButton) => void;\n}",
       "NativeMouseAreaProps": "Omit<MouseAreaProps, \"onMiddleClick\" | \"onSideButton\"> & {\n  onMiddleClick?: (e: { nativeEvent: MiddleClickEvent }) => void;\n  onSideButton?: (e: { nativeEvent: { button: SideButton } }) => void;\n  hearsSideButtons?: boolean;\n}"
     },
-    "shell/src/live.ts": {
+    "desktop/src/liveActivity.ts": {
       "CalendarAuthorization": "\"fullAccess\" | \"writeOnly\" | \"denied\" | \"restricted\" | \"notDetermined\"",
       "SystemCalendar": "{\n  id: string;\n  title: string;\n  color: string;\n  account: string;\n  accountType: \"local\" | \"exchange\" | \"calDAV\" | \"subscribed\" | \"birthdays\" | \"other\";\n  owned: boolean;\n}",
       "CalendarParticipant": "{ name: string; email: string; status: \"accepted\" | \"declined\" | \"tentative\" | \"pending\"; me: boolean }",
       "SystemCalendarEvent": "{\n  id: string;\n  occurrence: string;\n  calendarId: string;\n  color: string;\n  title: string;\n  start: number;\n  end: number;\n  allDay: boolean;\n  location: string;\n  notes: string;\n  url: string;\n  cancelled: boolean;\n  declined: boolean;\n  organizer: CalendarParticipant | null;\n  attendees: CalendarParticipant[];\n}"
     },
-    "shell/src/capture.tsx": {
+    "desktop/src/screenCapture.tsx": {
       "QuoteCard": "{ text: string; title: string; url: string; colors: string[]; dark: boolean }",
       "MarkupTool": "\"pen\" | \"highlighter\" | \"arrow\" | \"rect\" | \"oval\" | \"text\"",
       "MarkupState": "{ canUndo: boolean; canRedo: boolean; marks: number }",
@@ -2532,7 +2532,7 @@ export const nativeContracts = {
       "MarkupCanvasProps": "ViewProps & {\n  ref?: Ref<MarkupCanvasHandle>;\n  path: string;\n  tool: MarkupTool;\n  color: string;\n  /** The pen's width in points. */\n  lineWidth: number;\n  onChange?: (state: MarkupState) => void;\n}",
       "NativeMarkupProps": "Omit<MarkupCanvasProps, \"onChange\"> & { onMarkupChange?: (e: { nativeEvent: MarkupState }) => void }"
     },
-    "shell/src/easel.tsx": {
+    "desktop/src/easel.tsx": {
       "EaselSource": "{\n  url: string;\n  title: string;\n  clip?: number[];\n  viewportWidth?: number;\n  viewportHeight?: number;\n  profileId?: string;\n  [key: string]: unknown;\n}",
       "EaselItem": "{\n  id: string;\n  kind: \"image\" | \"text\" | \"link\" | \"pen\" | \"rect\" | \"ellipse\" | \"arrow\";\n  x: number;\n  y: number;\n  width: number;\n  height: number;\n  color?: string;\n  lineWidth?: number;\n  fontSize?: number;\n  text?: string;\n  url?: string;\n  path?: string;\n  /** Pen and arrow points relative to the item's top-left, in world units. */\n  points?: number[][];\n  source?: EaselSource;\n  live?: boolean;\n  [key: string]: unknown;\n}",
       "EaselDocument": "{\n  id: string;\n  title: string;\n  background: string;\n  items: EaselItem[];\n  createdAt: number;\n  updatedAt: number;\n  spaceId: string;\n  nativeEditId?: string;\n  [key: string]: unknown;\n}",
@@ -2543,15 +2543,15 @@ export const nativeContracts = {
       "EaselCanvasProps": "ViewProps & {\n  ref?: Ref<EaselCanvasHandle>;\n  document: string;\n  tool: EaselTool;\n  color: string;\n  lineWidth: number;\n  dark: boolean;\n  onChange?: (state: EaselState) => void;\n  onOpenLink?: (url: string) => void;\n}",
       "NativeEaselProps": "Omit<EaselCanvasProps, \"onChange\" | \"onOpenLink\"> & {\n  onEaselChange?: (event: { nativeEvent: EaselState }) => void;\n  onEaselOpenLink?: (event: { nativeEvent: { url: string } }) => void;\n}"
     },
-    "shell/src/cli.ts": {
+    "desktop/src/cli.ts": {
       "CliInstallResult": "{\n  ok: boolean;\n  appVersion: string;\n  binPath?: string;\n  version?: string;\n  rcFile?: string;\n  error?: string;\n  installedVersion?: string | null;\n  lines: string[];\n}",
       "CliNative": "{\n  installedVersion(): string | null;\n  install(): Promise<CliInstallResult>;\n  addListener(name: \"onInstallLine\", listener: (event: { line: string }) => void): EventSubscription;\n}"
     },
-    "shell/src/userScripts.ts": {
+    "desktop/src/userScripts.ts": {
       "UserScriptsFolder": "{ token?: string } & (\n  | { state: \"empty\" | \"busy\" | \"pending\"; generation?: number }\n  | { state: \"absent\"; generation: number; path: string }\n  | { state: \"invalid\"; generation?: number; error: string; path?: string }\n  | { state: \"ready\"; generation: number; path: string }\n)",
       "UserScriptsNative": "{\n  watch(on: boolean): void;\n  read(): Promise<UserScriptsFolder>;\n  readStatus(): Promise<string | null>;\n  writeStatus(json: string): Promise<void>;\n  addListener(name: \"onChange\", listener: () => void): EventSubscription;\n}"
     },
-    "shell/src/localFiles.tsx": {
+    "desktop/src/localFiles.tsx": {
       "LocalFileDescriptor": "{ path: string; name: string; kind: \"file\" | \"folder\" }",
       "LocalFileStatus": "\"available\" | \"missing\" | \"inaccessible\"",
       "LocalFileAccess": "{\n  status: LocalFileStatus;\n  path?: string;\n  name?: string;\n  kind?: \"file\" | \"folder\";\n  url?: string;\n  browserReadable?: boolean;\n}",
@@ -2559,12 +2559,12 @@ export const nativeContracts = {
       "LocalFileListing": "{ access: LocalFileAccess; entries: LocalFileEntry[] }",
       "LocalFilesAreaProps": "ViewProps & {\n  dropEnabled?: boolean;\n  rootPath?: string;\n  relativePath?: string;\n  onFilesDropped?: (event: { nativeEvent: { files: LocalFileDescriptor[] } }) => void;\n  onFilesDropError?: (event: { nativeEvent: { message: string } }) => void;\n  onDropActive?: (event: { nativeEvent: { active: boolean } }) => void;\n  /** A click that did not become a drag, or VoiceOver's press. */\n  onActivate?: () => void;\n  onContextMenu?: () => void;\n}"
     },
-    "nncore/src/native.ts": {
+    "chromium/src/native.ts": {
       "Result": "T | { error: string }",
       "EngineBoost": "{ host: string; userCss: string; css: string; script: string; scriptInPrivate: boolean; invert: boolean }",
       "EngineBoostStyle": "{ palette: string; sites: Record<string, string> }"
     },
-    "nncore/src/chromeUI.ts": {
+    "chromium/src/chromeDialogs.ts": {
       "DeviceChooser": "{\n  id: number;\n  browserId: number;\n  open: boolean;\n  title: string;\n  okLabel: string;\n  cancelLabel: string;\n  noOptionsText: string;\n  scanningText: string;\n  refreshing: boolean;\n  canRefresh: boolean;\n  adapterOff: boolean;\n  unauthorized: boolean;\n  bothButtonsEnabled: boolean;\n  showSignal: boolean;\n  options: { name: string; connected: boolean; paired: boolean; signal: number }[];\n}",
       "CastSink": "{\n  id: string;\n  name: string;\n  status: string;\n  state: \"available\" | \"connecting\" | \"connected\" | \"disconnecting\" | \"unavailable\";\n  icon: number;\n  modes: number;\n  routeId: string;\n  issue: string;\n}",
       "CastDialog": "{\n  id: number;\n  browserId: number;\n  open: boolean;\n  header: string;\n  permissionRejected: boolean;\n  castingStarted: boolean;\n  sinks: CastSink[];\n}",
@@ -2573,7 +2573,7 @@ export const nativeContracts = {
       "NativeChromeUI": "{\n  addListener(name: \"onDeviceChooser\", listener: (e: DeviceChooser) => void): EventSubscription;\n  addListener(name: \"onCastDialog\", listener: (e: CastDialog) => void): EventSubscription;\n  addListener(name: \"onCastRoutes\", listener: (e: { profile: string; routes: CastRoute[] }) => void): EventSubscription;\n  addListener(name: \"onSidePanel\", listener: (e: SidePanelRequest) => void): EventSubscription;\n  selectDevice(id: number, index: number): Promise<void>;\n  cancelDeviceChooser(id: number): Promise<void>;\n  refreshDeviceChooser(id: number): Promise<void>;\n  openBluetoothSettings(id: number): Promise<void>;\n  showCastDialog(browserId: number): Promise<boolean>;\n  startCasting(id: number, sink: string, mode: number): Promise<void>;\n  stopCasting(id: number, route: string): Promise<void>;\n  closeCastDialog(id: number): Promise<void>;\n  watchCastRoutes(profile: string): Promise<void>;\n  terminateCastRoute(route: string): Promise<void>;\n  actionStates(browserId: number, ids: string[]): Promise<Record<string, NativeActionState>>;\n  sidePanelURL(browserId: number, extensionId: string): Promise<string | null>;\n  changeCaptureSource(capturer: number, target: number): Promise<boolean>;\n  stopCapture(capturer: number): Promise<boolean>;\n  showAutofillSuggestions(browserId: number, passwords: boolean): Promise<boolean>;\n}",
       "NativeActionState": "{\n  title: string;\n  badgeText: string;\n  badgeColor: string | null;\n  badgeTextColor: string | null;\n  popup: string;\n  enabled: boolean;\n  icon: string;\n}"
     },
-    "nncore/src/extensions.ts": {
+    "chromium/src/extensions.ts": {
       "SiteAccess": "\"ON_ALL_SITES\" | \"ON_SPECIFIC_SITES\" | \"ON_CLICK\"",
       "InstalledExtension": "{\n  id: string;\n  name: string;\n  version: string;\n  description: string;\n  enabled: boolean;\n  blockedByPolicy?: boolean;\n  state: \"ENABLED\" | \"DISABLED\" | \"TERMINATED\" | \"BLOCKLISTED\";\n  icon: string;\n  permissions: string[];\n  siteAccess: SiteAccess | null;\n  sites: string[];\n  optionsUrl: string | null;\n  pinned: boolean;\n  incognito: boolean;\n  /** Whether Chrome allows this extension to be enabled in private windows. */\n  incognitoAllowed?: boolean;\n  /** \"incognito\": \"split\": its pages can run in a private window's own profile. */\n  incognitoSplit?: boolean;\n  fileAccess: boolean;\n  mayModify: boolean;\n  errors: string[];\n  location: string;\n  path: string | null;\n  fromWebStore: boolean;\n  webStoreUrl: string | null;\n  homepageUrl: string | null;\n  hasAction?: boolean;\n  popup?: string | null;\n  actionTitle?: string | null;\n  actionIcon?: string | null;\n  sidePanel?: string | null;\n}",
       "ExtensionPackage": "{\n  id?: string;\n  name: string;\n  shortName?: string | null;\n  version: string;\n  description: string;\n  manifestVersion: number;\n  icon: string | null;\n  permissions: string[];\n  optionalPermissions: string[];\n  hostPermissions: string[];\n  hasAction: boolean;\n  popup: string | null;\n  optionsPage: string | null;\n  sidePanel: string | null;\n  path: string;\n}",
@@ -2584,7 +2584,7 @@ export const nativeContracts = {
       "Result": "T | { error: string }",
       "NativeExtensions": "{\n  addListener(name: \"onChanged\", listener: (e: ExtensionsChange) => void): EventSubscription;\n  addListener(name: \"onTabs\", listener: (e: TabsRequest) => void): EventSubscription;\n  addListener(name: \"onInstallPrompt\", listener: (e: ExtensionInstallPrompt) => void): EventSubscription;\n  resolveInstallPrompt(requestId: string, accepted: boolean): Promise<void>;\n  list(profile: string): Promise<Result<{ extensions: InstalledExtension[] }>>;\n  inspectUnpacked(path: string): Promise<Result<ExtensionPackage>>;\n  install(path: string, profile: string): Promise<Result<{ id: string }>>;\n  setEnabled(id: string, profile: string, enabled: boolean): Promise<Result<{ ok: true }>>;\n  uninstall(id: string, profile: string): Promise<Result<{ ok: true }>>;\n  reload(id: string, profile: string): Promise<Result<{ ok: true }>>;\n  configure(id: string, profile: string, options: Record<string, unknown>): Promise<Result<{ ok: true }>>;\n  searchEngineList(profile: string): Promise<Result<{ list: unknown }>>;\n  chooseFolder(): Promise<string | null>;\n}"
     },
-    "nncore/src/swipe.tsx": {
+    "chromium/src/swipe.tsx": {
       "SwipeEvent": "{\n  phase: \"began\" | \"changed\" | \"ended\" | \"cancelled\" | \"swipe\" | \"wheel\";\n  direction: \"back\" | \"forward\";\n  distance: number;\n  dy: number;\n  velocity: number;\n  available: boolean;\n  width: number;\n}",
       "SwipeStep": "{\n  phase: \"began\" | \"changed\" | \"ended\" | \"cancelled\" | \"momentum\" | \"momentumBegan\" | \"momentumEnded\" | \"mayBegin\" | \"swipe\" | \"wheel\";\n  dx?: number;\n  dy?: number;\n  shift?: boolean;\n  delayMs?: number;\n}",
       "NativePagerConfig": "{ key: string; selected: number; count: number; width?: number; ack?: number; order?: string }",
@@ -2597,7 +2597,7 @@ export const nativeContracts = {
       "SwipeModule": "{\n  haptic(pattern: string): void;\n  switchPager(key: string, index: number, order?: string): Promise<boolean>;\n  stepPager(key: string, delta: number, wrap: boolean, order?: string): Promise<boolean>;\n  selectPager(key: string, profileId: string, order: string): Promise<boolean>;\n  pagerState(key: string): PagerSnapshot | null;\n  devPagerState(key: string): Promise<unknown>;\n  devSimulate(x: number, y: number, windowNumber: number, steps: SwipeStep[], ignorePreference: boolean): Promise<unknown>;\n}",
       "NativeComponent": "React.ComponentType<NativeProps & { ref?: React.Ref<NativeHandle> }>"
     },
-    "nncore/src/WebView.tsx": {
+    "chromium/src/ChromiumView.tsx": {
       "NavigationState": "{\n  url: string;\n  title: string;\n  canGoBack: boolean;\n  canGoForward: boolean;\n  isLoading: boolean;\n  themeColor: string | null;\n  themeColorSource: \"meta\" | \"header\" | \"background\" | null;\n  /** The page the view has committed to (WebKit only): differs from `url` while a navigation is pending. */\n  committedUrl?: string;\n}",
       "MediaState": "{ playing: boolean; muted: boolean }",
       "NowPlaying": "{\n  title: string;\n  artist: string;\n  album: string;\n  artwork: string | null;\n  playbackState: \"playing\" | \"paused\" | \"none\";\n  position: number;\n  duration: number | null;\n  playbackRate: number;\n  timestamp: number;\n  hasVideo: boolean;\n  actions: string[];\n  /** An endless video, or one whose seekable end keeps moving (a live stream that can be rewound). */\n  live: boolean;\n  /** Seconds behind a live stream's end, at `timestamp`. */\n  liveBehind: number;\n}",
@@ -2639,10 +2639,10 @@ export const nativeContracts = {
       "NativeProps": "Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> }",
       "NativeHandle": "Omit<WebViewHandle, \"evaluate\" | \"loadUrl\" | \"downloadFavicon\" | \"resolvePasswordPrompt\" | \"discard\" | \"setBoostStyle\"> & {\n  setBoostStyle?(descriptor: string): Promise<void>;\n  evaluate(code: string): Promise<string | null>;\n  downloadFavicon(url: string): Promise<FaviconImage | null>;\n  loadUrl(url: string, userInitiated?: boolean): Promise<void>;\n  resolvePasswordPrompt(answer: string, username: string | null, password: string | null): Promise<void>;\n  discard(unload: boolean): Promise<DiscardOutcome>;\n}"
     },
-    "nncore/src/NativeWebView.tsx": {
+    "chromium/src/NativeWebView.tsx": {
       "NativeView": "ComponentType<NativeProps & RefAttributes<NativeHandle>>"
     },
-    "nncore/src/webkit.ts": {
+    "chromium/src/webkit.ts": {
       "PageEngine": "\"chromium\" | \"webkit\"",
       "WebKitNative": "{\n  addListener(name: \"onDownload\", listener: (d: Download) => void): EventSubscription;\n  addListener(name: \"onPermission\", listener: (p: PermissionRequest) => void): EventSubscription;\n  addListener(name: \"onPermissionDismissed\", listener: (p: { id: string }) => void): EventSubscription;\n  prepareTransfer(key: string): void;\n  releaseTransfer(key: string): void;\n  resolvePermission(id: string, result: PermissionResult, remember: boolean): Promise<void>;\n  downloadCommand(action: \"cancel\" | \"pause\" | \"resume\", id: string): Promise<void>;\n  endPrivateSession(session: string): Promise<void>;\n  sitePermissions(profile: string, origin: string): Promise<Partial<SiteSettings>>;\n  setSitePermission(profile: string, origin: string, kind: string, value: string): Promise<void>;\n  resolveExternalApp(id: string, open: boolean, remember: boolean): Promise<void>;\n  externalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;\n  removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;\n  clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;\n  deleteProfileData(profile: string): Promise<boolean>;\n  info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;\n}"
     },

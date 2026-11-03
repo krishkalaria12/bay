@@ -1,5 +1,5 @@
 import type { AppRuntimeTransport } from "@bay/platform/runtimeTransport";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import type { BrowserProjection } from "./projection";
 import type { BrowserCommand } from "./userCommands";
 

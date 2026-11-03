@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
-const { DEFAULT_AWAKE_SITES } = await import("../lib/awakeSites.ts");
+const { useBrowser } = await import("./browserStore.ts");
+const { DEFAULT_AWAKE_SITES } = await import("../lib/keptAwakeSites.ts");
 const { sidebarMetrics } = await import("../lib/sidebarDensity.ts");
-const { sidebarEntries } = await import("../components/sidebar/entries.ts");
-const { entryHeight, entriesHeight, rowSpan } = await import("../components/sidebar/geometry.ts");
+const { sidebarEntries } = await import("../components/sidebar/sidebarEntries.ts");
+const { entryHeight, entriesHeight, rowSpan } = await import("../components/sidebar/rowGeometry.ts");
 const { flushPersistence, loadSession, startPersistence } = await import("../lib/persist.ts");
 const { settingsAdapter, profilesAdapter } = await import("../sync/adapters.ts");
 const stub = await import("../test-native-stub.mjs");

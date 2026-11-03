@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { registerHooks } from "node:module";
 import { viewTabIds } from "../store/model.ts";
-import { createBrowserStore, useBrowser } from "../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../store/browserStore.ts";
 import { browserRead, createBrowserReader, createLocalBrowserReadSource, createClientBrowserReadSource } from "../store/read.ts";
 import { createBrowserAuthority } from "./authority.ts";
 import { createBrowserClient } from "./client.ts";
@@ -19,8 +19,8 @@ const nativeStub = new URL("../test-native-stub.mjs", import.meta.url).href;
 registerHooks({
   resolve(specifier, context, next) {
     if (context.parentURL?.endsWith("/lib/actions.ts")) {
-      if (["../components/layout/spacePager", "../components/spaces/CreateSpace"].includes(specifier)) return { url: unavailableView, shortCircuit: true };
-      if (specifier === "@bay/nncore")
+      if (["../components/spaces/pager", "../components/spaces/CreateSpace"].includes(specifier)) return { url: unavailableView, shortCircuit: true };
+      if (specifier === "@bay/chromium")
         return {
           url: "data:text/javascript," + encodeURIComponent(`export * from ${JSON.stringify(nativeStub)}; export const listExtensions = async () => [];`),
           shortCircuit: true,
@@ -29,7 +29,7 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { openFromBar, openInBackground, switchFromBar } = await import("../components/omnibox/open.ts");
+const { openFromBar, openInBackground, switchFromBar } = await import("../components/commandBar/open.ts");
 import { openNewTabPanel } from "../lib/newTab.ts";
 
 const tick = () => new Promise(setImmediate);

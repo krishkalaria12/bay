@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { executeSettingsCommand, parseSettingsCommand } from "./settingsCommands.ts";
 
@@ -24,6 +24,7 @@ test("settings parser accepts every editable serialized default and preference f
     density: ["comfortable", "compact"],
     windowMaterial: ["solid", "glass"],
     addressBar: ["toolbar", "sidebar"],
+    libraryIn: ["sidebar", "page"],
     cleanUpInactiveTabsAfterHours: [null, 0, 12, 24],
     shortcuts: [{}, { newTab: ["t", "command"], disabled: [""] }],
     neverTranslateSites: [{}, { default: ["example.com"] }],
@@ -89,6 +90,7 @@ test("settings parser rejects malformed patches and authority-owned engine array
     { windowMaterial: "transparent" },
     { density: "large" },
     { addressBar: "floating" },
+    { libraryIn: "window" },
     { cleanUpInactiveTabsAfterHours: -1 },
     { cleanUpInactiveTabsAfterHours: "24" },
     { sidebarWidth: NaN },

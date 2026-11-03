@@ -1,14 +1,15 @@
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as settingsCommands from "../../runtime/settingsActions";
-import { copyText } from "@bay/shell";
+import { copyText } from "@bay/desktop";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
+import { changedIds } from "../../store/recordDiff";
 import { activeTabId } from "../../store/model";
-import { showToast } from "../layout/splitActions";
+import { showToast } from "../split/splitActions";
 import { inspectorScript } from "./inspectorScript";
 import { JSON_VIEWER_SCRIPT } from "./jsonViewerScript";
-import { isDeveloperUrl, isLocalDevSite, siteKey } from "./sites";
+import { isDeveloperUrl, isLocalDevSite, siteKey } from "./localDevSites";
 
 // Developer Mode, as Arc and yab have it: a site you build gets its whole address over the page, an inspector and
 // one-click DevTools. Turned on per site (its host and port); a local server is offered it the first time it's shown.
@@ -109,24 +110,30 @@ export function startDeveloperMode() {
   useBrowser.subscribe((s, prev) => {
     if (s.windows === prev.windows && s.tabs === prev.tabs && s.live === prev.live && s.settings === prev.settings) return;
     const ui = useDeveloperUi.getState();
-    const offers: Record<string, string> = {};
-    for (const [tabId, site] of Object.entries(ui.offers)) if (siteKey(s.tabs[tabId]?.url ?? "") === site && !declined.has(site)) offers[tabId] = site;
-    for (const w of Object.values(s.windows)) {
-      const id = activeTabId(s, w.id);
-      const url = id ? s.tabs[id]?.url : undefined;
-      if (!id || !url || offers[id] || !isLocalDevSite(url) || isDeveloperUrl(s, url)) continue;
-      const site = siteKey(url);
-      // One offer per site at a time, on the tab it was first shown on.
-      if (!declined.has(site) && !Object.values(offers).includes(site)) offers[id] = site;
+    const sitesChanged = s.settings.developerSites !== prev.settings.developerSites;
+    // Progress, audio and security updates cannot change which local server is offered Developer Mode.
+    if (s.windows !== prev.windows || s.tabs !== prev.tabs || sitesChanged) {
+      const offers: Record<string, string> = {};
+      for (const [tabId, site] of Object.entries(ui.offers)) if (siteKey(s.tabs[tabId]?.url ?? "") === site && !declined.has(site)) offers[tabId] = site;
+      for (const w of Object.values(s.windows)) {
+        const id = activeTabId(s, w.id);
+        const url = id ? s.tabs[id]?.url : undefined;
+        if (!id || !url || offers[id] || !isLocalDevSite(url) || isDeveloperUrl(s, url)) continue;
+        const site = siteKey(url);
+        // One offer per site at a time, on the tab it was first shown on.
+        if (!declined.has(site) && !Object.values(offers).includes(site)) offers[id] = site;
+      }
+      const keys = Object.keys(offers);
+      if (keys.length !== Object.keys(ui.offers).length || keys.some((k) => ui.offers[k] !== offers[k])) useDeveloperUi.setState({ offers });
     }
-    const keys = Object.keys(offers);
-    if (keys.length !== Object.keys(ui.offers).length || keys.some((k) => ui.offers[k] !== offers[k])) useDeveloperUi.setState({ offers });
 
     // A JSON response on a site in Developer Mode is shown as a tree (jsonViewerScript.ts): once loaded, or once its
     // site is turned on. Other tabs are left as they are.
-    const sitesChanged = s.settings.developerSites !== prev.settings.developerSites;
     if (s.live !== prev.live || sitesChanged) {
-      for (const [tabId, live] of Object.entries(s.live)) {
+      const ids = sitesChanged ? Object.keys(s.live) : changedIds(s.live, prev.live);
+      for (const tabId of ids) {
+        const live = s.live[tabId];
+        if (!live) continue;
         const loaded = prev.live[tabId]?.isLoading && !live.isLoading;
         const turnedOn = sitesChanged && !live.isLoading && !isDeveloperUrl(prev, s.tabs[tabId]?.url ?? "");
         if ((loaded || turnedOn) && isDeveloperUrl(s, s.tabs[tabId]?.url ?? "")) void webviews.get(tabId)?.evaluate(JSON_VIEWER_SCRIPT);

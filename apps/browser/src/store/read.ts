@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { useBrowser, type BrowserStore } from "./browser";
+import { useBrowser, type BrowserStore } from "./browserStore";
 import { createBrowserProjector, type BrowserProjection } from "../runtime/projection";
 import type { createBrowserClient } from "../runtime/client";
 
@@ -104,6 +104,7 @@ function useRead<T>(select: (state: BrowserProjection) => T): T {
 /** Window code gets data and subscriptions, never reducer methods. */
 export const useBrowserRead = Object.assign(useRead, {
   getState: browserRead.getState,
+  getInitialState: browserRead.getState,
   subscribe(listener: (state: BrowserProjection, previous: BrowserProjection) => void) {
     let previous = browserRead.getState();
     return browserRead.subscribe(() => {

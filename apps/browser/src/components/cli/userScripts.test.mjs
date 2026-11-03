@@ -29,7 +29,7 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
       existing.map((x) => ({ ...x })),
     );
   const mocks = {
-    "@bay/nncore": {
+    "@bay/chromium": {
       listExtensions: async (profile) => installed.get(profile) ?? [],
       installExtension: async ({ path }, profile) => {
         calls.push(["install", profile, path]);
@@ -47,7 +47,7 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
         );
       },
     },
-    "@bay/shell": {
+    "@bay/desktop": {
       onUserScriptsChange: (callback) => {
         notice = callback;
         return { remove() {} };

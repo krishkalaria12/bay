@@ -6,7 +6,7 @@ import sys
 root = Path(__file__).resolve().parents[2]
 source = root / 'engine/chromium/src/chrome/browser/bay'
 names = sorted({name for header in source.iterdir() if header.suffix in ('.h', '.cc') and header.name != 'nn_dispatch.cc' for name in re.findall(r'^NN_ENGINE_CALL\((nn_[a-z0-9_]+)\)', header.read_text(), re.M)})
-web_facade = root / 'packages/nncore/ios/NNCoreEngineCalls.swift'
+web_facade = root / 'packages/chromium/ios/NNCoreEngineCalls.swift'
 web_names = sorted(set(re.findall(r'"(nn_[a-z0-9_]+)"', web_facade.read_text())))
 if not web_names or not set(web_names).issubset(names):
     raise SystemExit('Invalid shared JavaScript engine call allowlist')

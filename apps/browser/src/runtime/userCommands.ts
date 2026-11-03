@@ -8,7 +8,7 @@ import {
   type ImportCommandResult,
 } from "./importCommands";
 import { parseServiceCommand, parseServiceResult, type ServiceCommand, type ServiceResult } from "./serviceCommands";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import { executeLocationCommand, parseLocationCommand, type LocationCommand, type LocationCommandEffects } from "./locationCommands";
 import { executeTabCommand, parseTabCommand, TAB_COMMAND_METHODS, type TabCommand } from "./tabCommands";
 import { executeWindowCommand, parseWindowCommand, WINDOW_COMMAND_METHODS, type WindowCommand } from "./windowCommands";

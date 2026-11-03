@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { activeTabId } from "../store/model.ts";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { createNativeWindowReconciler } from "./nativeWindows.ts";
 
 const settle = async () => {

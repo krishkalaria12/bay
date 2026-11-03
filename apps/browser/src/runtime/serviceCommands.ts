@@ -1,7 +1,7 @@
 import type * as sync from "../sync/engine";
 import { commandBoolean as boolean, commandFields, commandIds, commandNullableText, commandObject, commandText, invalidCommand } from "./commandValidation";
-import type { CalendarSettings, LiveConfig } from "../live/store";
-import type { LiveFolder, LiveFolderKind, LiveSourceId } from "../live/types";
+import type { CalendarSettings, LiveConfig } from "../activity/activityStore";
+import type { LiveFolder, LiveFolderKind, LiveSourceId } from "../activity/types";
 
 export type ServiceArgs = {
   liveCreate: [string, LiveFolderKind];

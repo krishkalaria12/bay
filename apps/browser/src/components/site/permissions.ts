@@ -1,7 +1,7 @@
-import { onPermission, onPermissionDismissed, resolvePermission, type PermissionKind, type PermissionRequest, type PermissionResult } from "@bay/nncore";
+import { onPermission, onPermissionDismissed, resolvePermission, type PermissionKind, type PermissionRequest, type PermissionResult } from "@bay/chromium";
 import { ensureNotificationPermission } from "../../lib/webNotifications";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { patchPage, pageOf, tabForBrowser, usePages } from "../layout/pageState";
+import { patchPage, pageOf, tabForBrowser, usePages } from "../window/pageState";
 import { startDeviceChoosers } from "./DeviceChooser";
 
 const queues = new Map<string, PermissionRequest[]>();

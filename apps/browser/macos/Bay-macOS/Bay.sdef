@@ -3,7 +3,7 @@
 <!--
   Bay's AppleScript dictionary. Terms and codes follow Dia's (and Chrome's for reload,
   go back/forward and execute), so scripts and launchers written for those work here too.
-  Implemented in packages/shell/ios/Scripting.swift against the JS store.
+  Implemented in packages/desktop/ios/Scripting.swift against the JS store.
 -->
 <dictionary title="Bay Terminology" xmlns:xi="http://www.w3.org/2003/XInclude">
   <suite name="Standard Suite" code="core" description="Common classes and commands for all applications.">

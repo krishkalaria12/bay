@@ -1,14 +1,14 @@
-import type { PagePoint } from "@bay/nncore";
+import type { PagePoint } from "@bay/chromium";
 import type { StateCreator } from "zustand";
-import type { BrowserProjection } from "../runtime/projection";
+import type { DeepReadonly } from "../runtime/projection";
 import { matchingLinkRule } from "../lib/externalLinkRules";
-import type { BrowserState } from "./browser";
+import type { BrowserState, BrowserShape } from "./browserStore";
 import { IDLE_LIVE, activeTabId, findLast, listIds, makeTab, pinnedFirst, pinnedPage, spaceListKey, withList } from "./model";
-import { insertionIndex } from "./openers";
-import { groupWithOpener } from "./organize";
+import { insertionIndex } from "./openerOrder";
+import { groupWithOpener } from "./tabTidying";
 import { splitOf } from "./splits";
 import { activated, apply, removeTabs } from "./tabs";
-import { mainWindowFor, mostRecentSpace } from "./small";
+import { mainWindowFor, mostRecentSpace } from "./littleBay";
 
 // Arc's Peek: a link from a pinned tab or a favourite opens over that tab's page, in a card, instead of as a tab of its
 // own. The peek's page is a store tab (a page, live state, an engine browser) that no list holds, marked `peekOf` its
@@ -16,7 +16,7 @@ import { mainWindowFor, mostRecentSpace } from "./small";
 // after its opener as any link's tab, and splitting it lists it and pairs it with its opener. One per window, as Arc's:
 // another link replaces it.
 
-// `at`: where in the window its link was clicked, for the card to open out of (layout/PeekLayer.tsx).
+// `at`: where in the window its link was clicked, for the card to open out of (linkOverlay/PeekLayer.tsx).
 export type Peek = { tabId: string; fromId: string; at?: PagePoint };
 
 // The last peek a window closed, for Reopen Closed Tab (⌘⇧T) to bring back, as Arc's.
@@ -75,7 +75,7 @@ export function siteOf(host: string): string {
 const hostOf = (url: string) => url.match(/^https?:\/\/([^/?#:]*)/i)?.[1] ?? "";
 
 /** Whether `fromId` peeks its links: a pinned tab or a favourite in a main window, with the setting on. */
-export function peeksLinks(s: BrowserState | BrowserProjection, fromId: string): boolean {
+export function peeksLinks(s: BrowserShape, fromId: string): boolean {
   const from = s.tabs[fromId];
   if (!s.settings.peekLinksFromPinnedTabs || !from || isPeek(from) || !pinnedPage(from)) return false;
   const w = s.windows[from.windowId];
@@ -83,20 +83,20 @@ export function peeksLinks(s: BrowserState | BrowserProjection, fromId: string):
 }
 
 /** Whether a link `fromId` opens goes to a peek: one to another site, from a tab that peeks its links (Arc's rule). */
-export function opensInPeek(s: BrowserState | BrowserProjection, fromId: string, url: string): boolean {
+export function opensInPeek(s: BrowserShape, fromId: string, url: string): boolean {
   const host = hostOf(url);
   return !!host && peeksLinks(s, fromId) && siteOf(host) !== siteOf(hostOf(s.tabs[fromId]!.url));
 }
 
 /** The window's peek while it's on screen: its opener is the shown tab, or a pane of the shown split. */
-export function shownPeek(s: BrowserState | BrowserProjection, windowId: string): Peek | undefined {
+export function shownPeek(s: BrowserShape, windowId: string): DeepReadonly<Peek> | undefined {
   const peek = s.peeks[windowId];
   if (!peek || !s.tabs[peek.tabId]) return undefined;
   const shown = activeTabId(s, windowId);
   return shown === peek.fromId || splitOf(s, shown)?.tabIds.includes(peek.fromId) ? peek : undefined;
 }
 
-const lastClosedTab = (s: BrowserState, windowId: string) => findLast(s.closedTabs, (c) => c.windowId === windowId)?.id ?? null;
+const lastClosedTab = (s: BrowserShape, windowId: string) => findLast(s.closedTabs, (c) => c.windowId === windowId)?.id ?? null;
 
 const withoutPeek = (s: BrowserState, windowId: string): BrowserState => {
   const { [windowId]: _, ...peeks } = s.peeks;

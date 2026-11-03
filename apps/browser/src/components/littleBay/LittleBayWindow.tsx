@@ -1,23 +1,23 @@
 import { Pressable, View } from "@bay/platform";
 import { breadcrumb } from "@bay/core";
 import { WindowBackdrop } from "@bay/shaders";
-import { ContextMenuArea, FadeLabel, setTrafficLightsCenter, Symbol, WindowDragRegion } from "@bay/shell";
+import { ContextMenuArea, FadeLabel, setTrafficLightsCenter, Symbol, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
-import { useTheme } from "../../lib/theme";
+import { useTheme, useWindowTint } from "../../lib/theme";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { useActiveTab, useTabLive, useWindowId, useWindowUi } from "../../store/hooks";
 import type { Tab } from "../../store/types";
-import { CommandPanel } from "../CommandPanel";
-import { ContentCard } from "../ContentCard";
-import { DownloadsPanel } from "../DownloadsPanel";
-import { CaptionButtons } from "../layout/CaptionButtons";
-import { usePage } from "../layout/pageState";
-import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../layout/windowButtons";
-import { setUrlAnchor } from "../layout/windowLayout";
-import { showUrlBarMenu } from "../omnibox/paste";
-import { Favicon, IconButton, useHover } from "../primitives";
+import { CommandPanel } from "../commandBar/CommandBarPanel";
+import { ContentCard } from "../window/TabPageCard";
+import { DownloadsPanel } from "../downloads/DownloadsPanel";
+import { CaptionButtons } from "../window/CaptionButtons";
+import { usePage } from "../window/pageState";
+import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../window/windowButtons";
+import { setUrlAnchor } from "../window/layout";
+import { showUrlBarMenu } from "../commandBar/paste";
+import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { copyPageUrl } from "../site/selection";
 import { openInMainWindow } from "./actions";
 import { SMALL_BAR_HEIGHT, SMALL_BAR_INSET, SMALL_BAR_MID, SMALL_BUTTON, SMALL_FIELD_HEIGHT, SMALL_FIELD_LEFT, SMALL_LIGHTS_CENTER } from "./constants";
@@ -35,7 +35,7 @@ export function LittleBayWindow() {
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={useWindowTint()} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <View
         style={{
           flex: 1,

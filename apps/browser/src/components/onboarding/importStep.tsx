@@ -1,7 +1,7 @@
 import { listInstalledBrowsers, type BrowserSource } from "@bay/import";
 import { isMac, Pressable, View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
-import { fileIcon, hapticTick, Surface, Symbol } from "@bay/shell";
+import { fileIcon, hapticTick, Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Image, PanResponder, StyleSheet, Text, type ImageSourcePropType } from "react-native";
 import Animated, {
@@ -26,7 +26,7 @@ import { plural } from "../../store/model";
 import { importedSummary } from "../import/apply";
 import { KINDS } from "../import/constants";
 import { useImportFlow, type ImportFlow, type Status } from "../import/useImportFlow";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { openImport } from "../settings/windows";
 import {
   BAY_GLOW,

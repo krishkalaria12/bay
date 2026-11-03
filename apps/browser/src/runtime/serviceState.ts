@@ -1,14 +1,14 @@
-import { startAccountRequests } from "../live/sources";
+import { startAccountRequests } from "../activity/sources";
 import { stopServiceCommands } from "./serviceExecutor";
 import type { DeepReadonly } from "./projection";
 import { useTelemetry } from "../telemetry/client";
-import type { BrowserStore } from "../store/browser";
-import { useLive, type LiveState } from "../live/store";
-import { useCalendar, type CalendarData } from "../live/calendar";
-import { useMeetingAlert } from "../live/alerts";
+import type { BrowserStore } from "../store/browserStore";
+import { useLive, type LiveState } from "../activity/activityStore";
+import { useCalendar, type CalendarData } from "../activity/calendar";
+import { useMeetingAlert } from "../activity/meetingAlerts";
 import { useSync, type SyncUi } from "../sync/engine";
-import { bindLiveBrowser } from "../live/engine";
-import { bindGoogleBrowser } from "../live/googleAuth";
+import { bindLiveBrowser } from "../activity/activityEngine";
+import { bindGoogleBrowser } from "../activity/googleAuth";
 
 /** UI state only. OAuth tokens and the sync document never enter this value. */
 export type ServiceState = {

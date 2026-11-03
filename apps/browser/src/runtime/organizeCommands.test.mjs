@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { encodeSharedCollection } from "@bay/core";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { activeTabId } from "../store/model.ts";
 import { createBrowserAuthority } from "./authority.ts";
 import { executeOrganizeCommand, ORGANIZE_COMMAND_METHODS, parseOrganizeCommand } from "./organizeCommands.ts";

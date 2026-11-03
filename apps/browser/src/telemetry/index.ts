@@ -1,4 +1,4 @@
-import { devCrash } from "@bay/shell";
+import { devCrash } from "@bay/desktop";
 import { createElement } from "react";
 import { devState, flush, requestLog, setSharing, useTelemetry } from "./client";
 import { captureException, installErrorReporting, reportNativeCrashes } from "./errors";

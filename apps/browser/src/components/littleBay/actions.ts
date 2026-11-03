@@ -5,8 +5,8 @@ import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/comm
 import { navigate, newTab } from "../../runtime/tabActions";
 import { closeWindow, createWindow } from "../../runtime/windowActions";
 import { viewTabIds } from "../../store/model";
-import { isSmall, mainWindowFor, mostRecentSpace } from "../../store/small";
-import { handleSharedCollectionUrl } from "../../lib/collectionSharing";
+import { isSmall, mainWindowFor, mostRecentSpace } from "../../store/littleBay";
+import { handleSharedCollectionUrl } from "../../lib/sharedLinkEncoding";
 
 const store = () => browserRead.getState();
 

@@ -1,14 +1,14 @@
 import { Pressable, TextInput, View } from "@bay/platform";
-import { setDialogPresenter, Surface, type ConfirmOptions, type ConfirmResult, type PromptOptions } from "@bay/shell";
+import { setDialogPresenter, Surface, type ConfirmOptions, type ConfirmResult, type PromptOptions } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, Text } from "react-native";
 import { create } from "zustand";
 import { APP_ICON } from "../lib/assets";
 import { useTheme } from "../lib/theme";
 import { browserRead } from "../store/read";
-import { useHover } from "./primitives";
+import { useHover } from "./ui/primitives";
 
-// Dia's alert, for every confirm and prompt (@bay/shell's): in the window, the app's icon over a bold title and its
+// Dia's alert, for every confirm and prompt (@bay/desktop's): in the window, the app's icon over a bold title and its
 // message, then "Always …" where it can stop asking, Cancel (esc) and the action (↩), red when it destroys something.
 
 type Request =

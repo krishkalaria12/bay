@@ -12,8 +12,8 @@ import {
   unlockPasswords,
   updatePassword,
   type SavedPassword,
-} from "@bay/nncore";
-import { confirm, copyText, Symbol, systemInfo } from "@bay/shell";
+} from "@bay/chromium";
+import { confirm, copyText, Symbol, systemInfo } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { browserRead } from "../../../store/read";
@@ -22,7 +22,7 @@ import { useSpaces } from "../../../store/hooks";
 import { engineProfile, plural } from "../../../store/model";
 import { importModule } from "../../import/module";
 import { hostLabel, matchesQuery } from "../../pages/PageLayout";
-import { Favicon, IconButton } from "../../primitives";
+import { Favicon, IconButton } from "../../ui/primitives";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, Sheet, TextField, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";

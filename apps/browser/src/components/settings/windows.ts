@@ -1,5 +1,5 @@
 import { capabilities } from "@bay/platform";
-import { openWindow } from "@bay/shell";
+import { openWindow } from "@bay/desktop";
 import { create } from "zustand";
 import { TASK_MANAGER_WINDOW_ID } from "../taskManager/window";
 import type { SettingId } from "./definitions";

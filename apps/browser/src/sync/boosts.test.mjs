@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { docs, engineBoostCalls } from "@bay/shell";
+import { docs, engineBoostCalls } from "@bay/desktop";
 import { engineBoosts, newBoost, DEFAULT_BOOST_COLOR } from "../lib/boosts.ts";
 import { addBoost, setBoostScript, startBoosts, useBoosts } from "../components/boosts/state.ts";
-import { useBrowser } from "../store/browser.ts";
+import { useBrowser } from "../store/browserStore.ts";
 import { webviewRef } from "../lib/webviews.ts";
 import { boostsAdapter } from "./boosts.ts";
 

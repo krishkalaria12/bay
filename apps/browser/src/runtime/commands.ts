@@ -1,5 +1,5 @@
-import { focusWindow } from "@bay/shell";
-import { useBrowser, type BrowserStore } from "../store/browser";
+import { focusWindow } from "@bay/desktop";
+import { useBrowser, type BrowserStore } from "../store/browserStore";
 import type { LocationCommandEffects } from "./locationCommands";
 import { executeBrowserCommand, parseBrowserCommand, type BrowserCommand, type BrowserCommandValue } from "./userCommands";
 import type { createBrowserClient } from "./client";

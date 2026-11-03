@@ -1,21 +1,20 @@
 import { Pressable, View } from "@bay/platform";
-import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/shell";
+import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { memo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Text } from "react-native";
 import Animated, { useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { layout, SYMBOL_PREFIX } from "../../lib/constants";
-import { useBrowserRead as useBrowser } from "../../store/read";
-import { usePageSpaceId, useWindowId } from "../../store/hooks";
+import { usePageSpaceId, useWindowId, useQuietBrowser } from "../../store/hooks";
 import { commitRename, endRename, startRename } from "./actions";
 import { useDragItem, useDropInto } from "./dnd";
 import { Fold, useFold } from "./Fold";
-import { entryHeight, keptEntry } from "./geometry";
+import { entryHeight, keptEntry } from "./rowGeometry";
 import { FOLDER_INDENT } from "./constants";
-import { folderEntries, useFolderEntries } from "./entries";
+import { folderEntries, useFolderEntries } from "./sidebarEntries";
 import { dismissHover, useRowHover } from "./hover";
-import { openFolderMenu } from "./menus";
+import { openFolderMenu } from "./contextMenus";
 import { SidebarKeyboardRowView } from "./keyboardFocus";
 import { useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
@@ -33,25 +32,25 @@ export const FolderBlock = memo(function PinnedFolderBlock({ folderId }: { folde
   const metrics = useSidebarMetrics();
   const windowId = useWindowId();
   const spaceId = usePageSpaceId();
-  const collapsed = useBrowser((s) => !!s.pinnedFolders[folderId]?.collapsed);
+  const collapsed = useQuietBrowser((s) => !!s.pinnedFolders[folderId]?.collapsed);
   const entries = useFolderEntries(folderId);
-  const parentId = useBrowser((s) => s.pinnedFolders[folderId]?.parentId);
-  const depth = useBrowser((s) => folderDepth(s, folderId));
-  const heights = useBrowser(useShallow((s) => entries.map((entry) => entryHeight(s, windowId, spaceId, entry))));
-  const activeFolderId = useBrowser((s) => {
+  const parentId = useQuietBrowser((s) => s.pinnedFolders[folderId]?.parentId);
+  const depth = useQuietBrowser((s) => folderDepth(s, folderId));
+  const heights = useQuietBrowser(useShallow((s) => entries.map((entry) => entryHeight(s, windowId, spaceId, entry))));
+  const activeFolderId = useQuietBrowser((s) => {
     const id = s.windows[windowId]?.activeTabIds[spaceId];
     return id ? s.tabs[id]?.folderId : undefined;
   });
-  const activeTab = useBrowser((s) => {
+  const activeTab = useQuietBrowser((s) => {
     const id = s.windows[windowId]?.activeTabIds[spaceId];
     return id && folderTabIds(s, folderId).includes(id) ? id : undefined;
   });
-  const selectedInside = useBrowser((s) => {
+  const selectedInside = useQuietBrowser((s) => {
     const selection = s.selection[windowId];
     return !!selection?.length && folderTabIds(s, folderId).some((id) => selection.includes(id));
   });
-  const activeEntry = useBrowser((s) => keptEntry(s, windowId, spaceId, entries));
-  const tabIds = useBrowser(useShallow((s) => folderTabIds(s, folderId)));
+  const activeEntry = useQuietBrowser((s) => keptEntry(s, windowId, spaceId, entries));
+  const tabIds = useQuietBrowser(useShallow((s) => folderTabIds(s, folderId)));
   const { ref, style, handle, headerRef } = useDragItem(`f:${folderId}`, {
     kind: "folder",
     tabIds,
@@ -119,8 +118,8 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
   const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
-  const folder = useBrowser((s) => s.pinnedFolders[folderId]);
-  const empty = useBrowser((s) => !folderEntries(s, folderId).length);
+  const folder = useQuietBrowser((s) => s.pinnedFolders[folderId]);
+  const empty = useQuietBrowser((s) => !folderEntries(s, folderId).length);
   const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "folder" && u.renaming.id === folderId);
   const dropInto = useDropInto() === folderId;
   // A closed folder peeks its tabs on hover (Arc's folder previews); an open one shows them already.

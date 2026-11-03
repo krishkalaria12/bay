@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
-import { clearBrowsingData, type BrowsingDataType } from "@bay/nncore";
-import { Surface } from "@bay/shell";
+import { clearBrowsingData, type BrowsingDataType } from "@bay/chromium";
+import { Surface } from "@bay/desktop";
 import { useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { create } from "zustand";

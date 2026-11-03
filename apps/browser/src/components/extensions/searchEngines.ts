@@ -1,6 +1,6 @@
-import { searchEngineList } from "@bay/nncore";
+import { searchEngineList } from "@bay/chromium";
 import { extensionEnginesFromChrome } from "@bay/core";
-import { useBrowser, type BrowserStore } from "../../store/browser";
+import { useBrowser, type BrowserStore } from "../../store/browserStore";
 import { useExtensions } from "./state";
 
 export function startExtensionSearchEngines(store: BrowserStore = useBrowser) {

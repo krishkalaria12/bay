@@ -1,4 +1,4 @@
-import { installPendingUpdate, onUpdatePending, updaterState, type PendingUpdate } from "@bay/shell";
+import { installPendingUpdate, onUpdatePending, updaterState, type PendingUpdate } from "@bay/desktop";
 import { create } from "zustand";
 import { APP_NAME } from "./constants";
 

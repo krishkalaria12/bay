@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { createBrowserAuthority } from "./authority.ts";
 import { BOOKMARK_COMMAND_METHODS, executeBookmarkCommand, parseBookmarkCommand } from "./bookmarkCommands.ts";
 import { executeHistoryCommand, HISTORY_COMMAND_METHODS, parseHistoryCommand } from "./historyCommands.ts";

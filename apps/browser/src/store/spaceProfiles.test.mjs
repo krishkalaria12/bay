@@ -1,7 +1,7 @@
 // Every sidebar space has its own native browser profile. Older shared profiles split on hydration.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const S = () => useBrowser.getState();
 const space = (id, profileId) => ({ id, name: id, color: "blue", icon: null, createdAt: 0, ...(profileId ? { profileId } : {}) });

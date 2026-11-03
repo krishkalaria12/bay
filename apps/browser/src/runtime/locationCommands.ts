@@ -1,6 +1,6 @@
-import type { BrowserState, BrowserStore } from "../store/browser";
+import type { BrowserState, BrowserStore } from "../store/browserStore";
 import { activeTabId, isIncognitoSpace, tabListKey } from "../store/model";
-import { mainWindowFor } from "../store/small";
+import { mainWindowFor } from "../store/littleBay";
 
 export type LocationCommand =
   | { method: "openLocation"; sourceTabId: string; url: string; disposition: "current" | "newTab" | "backgroundTab" | "newWindow" }

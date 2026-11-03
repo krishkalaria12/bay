@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { afterEach, beforeEach, test } from "node:test";
 import { docs, heldSaves, writeDocument } from "../test-native-stub.mjs";
-import { useBrowser } from "../store/browser.ts";
+import { useBrowser } from "../store/browserStore.ts";
 
 globalThis.nnTelemetryTestWriteDocument = writeDocument;
 const shell = new URL("../test-native-stub.mjs", import.meta.url).href;
@@ -14,14 +14,14 @@ const shellWithControlledWrites = `
 // Usage's quit accounting is real; only unrelated UI/sync observers and the
 // native crash reporter are stubbed to avoid loading React Native UI in Node.
 const observers = {
-  "@bay/nncore": "export async function listTasks() { return []; } export function onExtensionsChanged() {}",
-  "../components/site/translate": "export const useTranslate = { subscribe() {} };",
+  "@bay/chromium": "export async function listTasks() { return []; } export function onExtensionsChanged() {}",
+  "../components/site/translateState": "export const useTranslate = { subscribe() {} };",
   "../sync/engine": "export const useSync = { getState: () => ({ status: 'off' }), subscribe() {} };",
   "./errors": "export async function reportNativeCrashes() {}",
 };
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (context.parentURL?.endsWith("/telemetry/client.ts") && specifier === "@bay/shell") {
+    if (context.parentURL?.endsWith("/telemetry/client.ts") && specifier === "@bay/desktop") {
       return { url: `data:text/javascript,${encodeURIComponent(shellWithControlledWrites)}`, shortCircuit: true };
     }
     if (context.parentURL?.endsWith("/telemetry/usage.ts") && specifier in observers) {

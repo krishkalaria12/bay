@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { sidebarMoveUndoCalls } from "../../test-native-stub.mjs";
-import { createBrowserStore, useBrowser } from "../../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../../store/browserStore.ts";
 import { activeTabId } from "../../store/model.ts";
 import { browserRead, createClientBrowserReadSource } from "../../store/read.ts";
 import { createBrowserAuthority } from "../../runtime/authority.ts";
@@ -17,18 +17,18 @@ const shell = "data:text/javascript," + encodeURIComponent(`export * from ${JSON
 registerHooks({
   resolve(specifier, context, next) {
     if (context.parentURL?.endsWith("/lib/actions.ts")) {
-      if (["../components/layout/spacePager", "../components/spaces/CreateSpace"].includes(specifier)) return { url: unavailableView, shortCircuit: true };
-      if (specifier === "@bay/nncore") return { url: nncore, shortCircuit: true };
+      if (["../components/spaces/pager", "../components/spaces/CreateSpace"].includes(specifier)) return { url: unavailableView, shortCircuit: true };
+      if (specifier === "@bay/chromium") return { url: nncore, shortCircuit: true };
     }
-    if (specifier === "@bay/shell" && context.parentURL?.endsWith("/layout/splitActions.ts")) return { url: shell, shortCircuit: true };
+    if (specifier === "@bay/desktop" && context.parentURL?.endsWith("/split/splitActions.ts")) return { url: shell, shortCircuit: true };
     return next(specifier, context);
   },
 });
 const { newGroupWithSelection, newPinnedFolderWith } = await import("./actions.ts");
 const { sidebarUi } = await import("./state.ts");
 const { withFolderMoveUndo } = await import("../../lib/folderUndo.ts");
-const { openSplitPane, useToasts } = await import("../layout/splitActions.ts");
-const { restoreFromBar } = await import("../omnibox/open.ts");
+const { openSplitPane, useToasts } = await import("../split/splitActions.ts");
+const { restoreFromBar } = await import("../commandBar/open.ts");
 const { movePinnedFolder } = await import("../../runtime/organizeActions.ts");
 const tick = () => new Promise(setImmediate);
 

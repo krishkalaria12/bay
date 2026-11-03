@@ -2464,9 +2464,9 @@ PODS:
 
 DEPENDENCIES:
   - BayImport (from `../../../packages/import/ios`)
-  - BayNNCore (from `../../../packages/nncore/ios`)
+  - BayNNCore (from `../../../packages/chromium/ios`)
   - BayShaders (from `../../../packages/shaders/ios`)
-  - BayShell (from `../../../packages/shell/ios`)
+  - BayShell (from `../../../packages/desktop/ios`)
   - BaySync (from `../../../packages/sync/ios`)
   - boost (from `../../../node_modules/react-native-macos/third-party-podspecs/boost.podspec`)
   - DoubleConversion (from `../../../node_modules/react-native-macos/third-party-podspecs/DoubleConversion.podspec`)
@@ -2559,11 +2559,11 @@ EXTERNAL SOURCES:
   BayImport:
     :path: "../../../packages/import/ios"
   BayNNCore:
-    :path: "../../../packages/nncore/ios"
+    :path: "../../../packages/chromium/ios"
   BayShaders:
     :path: "../../../packages/shaders/ios"
   BayShell:
-    :path: "../../../packages/shell/ios"
+    :path: "../../../packages/desktop/ios"
   BaySync:
     :path: "../../../packages/sync/ios"
   boost:
@@ -2728,7 +2728,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   BayImport: e7f9c76f61adf95710efb440bcf650c73529557e
-  BayNNCore: 678211383db200bd82df8022072abb2e5365ccf2
+  BayNNCore: ce17fc7aae5d782f1b40655a4703f2c6dfe1f72a
   BayShaders: 13aef8d6438fa4fbc5f378700c2b4f01e8a3a93e
   BayShell: e2cd0429ddcb5d729f3511f21eb9e51ea6e0c411
   BaySync: 84b8bfd48ed2dcd93c85bf4fb39bd006e34f5f3f

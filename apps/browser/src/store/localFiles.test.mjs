@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { useBrowser } from "./browser.ts";
+import { useBrowser } from "./browserStore.ts";
 import { localFilePath, localFilePins, normalizeLocalFiles } from "./localFiles.ts";
 
 const S = () => useBrowser.getState();

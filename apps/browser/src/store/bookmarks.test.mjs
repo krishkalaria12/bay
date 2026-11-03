@@ -1,7 +1,7 @@
 // Bookmarks are Chrome's (BookmarkModel): the store's tree and Chrome's stay alike, and bookmarks.json moved in once.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const { bookmarkUuidFor } = await import("./bookmarks.ts");
 const { migrateBookmarksFile, reloadBookmarks, startBookmarks } = await import("../lib/bookmarks.ts");
 const stub = await import("../test-native-stub.mjs");

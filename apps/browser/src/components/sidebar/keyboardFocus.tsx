@@ -1,6 +1,6 @@
 import { View, type ScrollView, type ViewProps } from "@bay/platform";
-import { focusSidebarRow, prompt } from "@bay/shell";
-import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
+import { focusSidebarRow, prompt } from "@bay/desktop";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { StyleSheet } from "react-native";
 import { nodeTag } from "../../lib/nodeTag";
 import { reportBrowserCommand } from "../../runtime/commands";
@@ -8,26 +8,44 @@ import { openPeek } from "../../runtime/splitActions";
 import { closeTab } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
-import { openLiveItem } from "../../live/engine";
-import { live, updateFolder, useLive } from "../../live/store";
+import { openLiveItem } from "../../activity/activityEngine";
+import { live, updateFolder, useLive } from "../../activity/activityStore";
 import { useShallow } from "zustand/react/shallow";
-import { sidebarKeyboardRows } from "./entries";
+import { createStore, useStore, type StoreApi } from "zustand";
+import { sidebarKeyboardRowIds } from "./sidebarEntries";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { activeTabId, spaceFolded } from "../../store/model";
-import { usePageSpaceId, useWindowId } from "../../store/hooks";
+import { activeTabId } from "../../store/model";
+import { usePageSpaceId, useSpaceFolded, useWindowField, useWindowId, useQuietBrowser } from "../../store/hooks";
+import { splitStore } from "../../store/derivedStores";
 import { clickTab, startRename } from "./actions";
 import { dismissHover } from "./hover";
 import { blurSidebar, focusSidebar, reconcileSidebarKeyboard, registerSidebarKeyboardActions, type SidebarKeyboardRow } from "./keyboard";
 import { measureRow, registerRow, setSidebarUi, useSidebarUi } from "./state";
 
-const VisibleRows = createContext<Set<string> | null>(null);
+// The scope's visible rows, as a store each row reads its own entry of: a tab opening or closing changes the set, and
+// with the set itself in context every row of the list rendered again; now only the rows whose visibility changed do.
+type VisibleRowsStore = StoreApi<{ rows: ReadonlySet<string> | null }>;
+const VisibleRows = createContext<VisibleRowsStore | null>(null);
+const ALL_VISIBLE: VisibleRowsStore = createStore(() => ({ rows: null }));
 
 export function SidebarKeyboardScope({ children }: { children: ReactNode }) {
   const windowId = useWindowId();
-  const liveState = useLive();
-  const ids = useBrowser(useShallow((s) => sidebarKeyboardRows(s, windowId, liveState).map((row) => row.id)));
+  const liveState = useLive(
+    useShallow((s) => ({
+      folders: s.folders,
+      folderOrder: s.folderOrder,
+      items: s.items,
+      completing: s.completing,
+      expandedStacks: s.expandedStacks,
+      showAll: s.showAll,
+    })),
+  );
+  const ids = useQuietBrowser((s) => sidebarKeyboardRowIds(s, windowId, liveState));
   const visible = useMemo(() => new Set(ids), [ids]);
-  return <VisibleRows.Provider value={visible}>{children}</VisibleRows.Provider>;
+  const [store] = useState<VisibleRowsStore>(() => createStore(() => ({ rows: visible })));
+  // Before paint: a row added or removed in this commit reads its visibility before it's drawn.
+  useLayoutEffect(() => store.setState({ rows: visible }), [store, visible]);
+  return <VisibleRows.Provider value={store}>{children}</VisibleRows.Provider>;
 }
 
 const revealers = new Map<string, (view: View) => void>();
@@ -36,15 +54,14 @@ const revealers = new Map<string, (view: View) => void>();
 export function SidebarKeyboardRowView({ rowId, legacyId, label, children, ...props }: ViewProps & { rowId: string; legacyId?: string; label?: string }) {
   const windowId = useWindowId();
   const spaceId = usePageSpaceId();
-  const visibleRows = useContext(VisibleRows);
-  const current = useBrowser((s) => s.windows[windowId]?.spaceId === spaceId);
+  const listed = useStore(useContext(VisibleRows) ?? ALL_VISIBLE, (s) => !s.rows || s.rows.has(rowId));
+  const current = useWindowField((w) => w.spaceId === spaceId, false);
   const extension = !/^(t:|s:|g:|f:|livefolder\||live\||stack\||more\|)/.test(rowId);
-  const folded = useBrowser((s) => spaceFolded(s, spaceId));
-  const visible = current && (extension ? !folded : !visibleRows || visibleRows.has(rowId));
+  const folded = useSpaceFolded(spaceId);
+  const visible = current && (extension ? !folded : listed);
   const renameId = useSidebarUi((s) => (s.renaming?.windowId === windowId ? s.renaming.id : null));
-  const renaming = useBrowser(
-    (s) => !!renameId && (renameId === legacyId || (rowId.startsWith("s:") && !!s.splits[rowId.slice(2)]?.tabIds.includes(renameId))),
-  );
+  const split = useMemo(() => splitStore(rowId.startsWith("s:") ? rowId.slice(2) : ""), [rowId]);
+  const renaming = useStore(split, (s) => !!renameId && (renameId === legacyId || !!s?.tabIds.includes(renameId)));
   const focused = useSidebarUi((s) => current && !!s.keyboard[windowId]?.active && s.keyboard[windowId]?.rowId === rowId);
   const theme = useTheme();
   const ref = useRef<View>(null);

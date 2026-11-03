@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fileExists } from "@bay/shell";
+import { fileExists } from "@bay/desktop";
 
 /** Reads a file's current native state, discarding results for an old path or unmounted row. */
 export function useFileExists(path: string | undefined, enabled = true): boolean | null {

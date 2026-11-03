@@ -1,10 +1,10 @@
-import "../lib/nativeEvents";
+import "../lib/bridgeEvents";
 import { batchedUpdates } from "@bay/platform";
-import { focusWindow } from "@bay/shell";
-import { onExtensionsChanged } from "@bay/nncore";
-import { setStoreBatching, useBrowser, type BrowserState } from "../store/browser";
+import { focusWindow } from "@bay/desktop";
+import { onExtensionsChanged } from "@bay/chromium";
+import { setStoreBatching, useBrowser, type BrowserState } from "../store/browserStore";
 import { restoreBrowserSession } from "../lib/persist";
-import { startNativeSync } from "../lib/native";
+import { startNativeSync } from "../lib/shellBridge";
 import { startSync } from "../sync/engine";
 import { prepareCoordinatorStore } from "./startup";
 import { startCoordinatorServices } from "./services";
@@ -15,7 +15,7 @@ import { startExtensionSearchEngines } from "../components/extensions/searchEngi
 import { refreshExtensions } from "../components/extensions/state";
 import { engineProfile } from "../store/model";
 import { installErrorReporting, startTelemetry } from "../telemetry";
-import { startApplicationLifecycle } from "../lib/appIntegration";
+import { startApplicationLifecycle } from "../lib/appMenuIntegration";
 
 export async function startCoordinatorEntry(transport: BrowserCoordinatorTransport, onError: (error: Error) => void) {
   const store = useBrowser;
