@@ -5136,7 +5136,9 @@ try {
       const clicked = await until("the dropdown on a click", async () => shownSince(count, "Springfield"), 6000);
       await sleep(300);
       await key(t, "ArrowDown");
-      await sleep(300);
+      // Chrome ignores an accept until the dropdown has been up for 500 ms and its main thread has been idle since
+      // (AutofillPopupControllerImpl::AcceptSuggestion), which takes longer in a busy app: well past that.
+      await sleep(1500);
       await key(t, "Enter");
       const picked = await until("the picked entry in the field", async () => ((await value(t)) === "Springfield" ? true : null), 4000).catch(async (e) => {
         throw new Error(`${e.message}; field "${await value(t)}"`);
