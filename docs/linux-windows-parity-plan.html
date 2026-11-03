@@ -956,7 +956,13 @@
                   <td class="methods">playIntroMusic setIntroMusicMuted stopIntroMusic devRenderIntroMusic</td>
                   <td>Onboarding is silent.</td>
                   <td><code>IntroMusic.swift</code></td>
-                  <td><span class="tag t-port">Port</span> with an <code>&lt;audio&gt;</code> element in the WebUI; this doesn't need native code. S</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> The music is synthesized, not a file, so there was nothing for an
+                    <code>&lt;audio&gt;</code> element to play. <code>desktop/src/introMusicSynth.ts</code> ports the synthesis note for note and
+                    <code>webIntroMusic.ts</code> plays it through Web Audio with a convolution hall, muting and fading as macOS does. A hidden test instance
+                    stays silent. Chrome gives WebUI no autoplay exception, so <code>chromium-bay-document-autoplay.patch</code> lets
+                    <code>chrome://bay</code> play without a click. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Crash reports</strong></td>
@@ -1395,6 +1401,10 @@
             <li>
               <strong>Crash reports:</strong> minidumps carry no symbols, so a report has one frame (module and offset) where macOS's has the stack. They're
               empty unless the build runs Crashpad, which a non-branded Chromium build may not. Page and GPU process crashes aren't reported, as on macOS.
+            </li>
+            <li>
+              <strong>Intro music:</strong> the reverb is a generated impulse, close to but not AVAudioUnitReverb's large hall. <code>devRenderIntroMusic</code>
+              (writing the piece to a file for videos) is macOS only.
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
             <li>

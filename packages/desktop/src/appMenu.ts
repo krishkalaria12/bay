@@ -1,5 +1,6 @@
 import { requireNativeModule, nativeSnapshot, type EventSubscription } from "@bay/platform/native";
 import { capabilities } from "@bay/platform";
+import { playWebIntroMusic, setWebIntroMusicMuted, stopWebIntroMusic } from "./webIntroMusic";
 
 export type UpdaterState =
   | { available: false; managedBy?: "packageManager" }
@@ -214,14 +215,20 @@ export type IntroMusicCues = {
   exit: number;
   end: number;
 };
+// A hidden test instance never makes a sound on the owner's computer (IntroMusic.swift); BAY_ALLOW_AUDIO=1 allows it.
+const quietInstance = () => launchEnvironment("BAY_BACKGROUND") === "1" && launchEnvironment("BAY_ALLOW_AUDIO") !== "1";
+const hasWebAudio = () => typeof AudioContext === "function";
 export const playIntroMusic = (cues: IntroMusicCues, muted: boolean) => {
   if (capabilities.introMusic) void App.playIntroMusic(cues, muted);
+  else if (hasWebAudio() && !quietInstance()) playWebIntroMusic(cues, muted);
 };
 export const setIntroMusicMuted = (muted: boolean) => {
   if (capabilities.introMusic) void App.setIntroMusicMuted(muted);
+  else if (hasWebAudio()) setWebIntroMusicMuted(muted);
 };
 export const stopIntroMusic = (fade = 0.4) => {
   if (capabilities.introMusic) void App.stopIntroMusic(fade);
+  else if (hasWebAudio()) stopWebIntroMusic(fade);
 };
 export const devRenderIntroMusic = (cues: IntroMusicCues, path: string) => App.devRenderIntroMusic(cues, path);
 export const launchEnvironment = (name: string) => nativeSnapshot("BayApp", "launchEnvironment", [name], () => App.launchEnvironment(name));
