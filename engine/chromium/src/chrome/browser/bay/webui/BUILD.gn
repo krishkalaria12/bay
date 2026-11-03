@@ -59,6 +59,8 @@ source_set("impl") {
     "page_security.h",
     "page_services.cc",
     "page_services.h",
+    "page_menu.cc",
+    "page_menu.h",
     "permission_prompts.cc",
     "permission_prompts.h",
     "profile_data.cc",

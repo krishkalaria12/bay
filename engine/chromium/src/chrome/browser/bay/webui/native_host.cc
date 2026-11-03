@@ -29,6 +29,7 @@
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/context_search.h"
 #include "chrome/browser/bay/webui/external_app_prompts.h"
+#include "chrome/browser/bay/webui/page_menu.h"
 #include "chrome/browser/bay/webui/permission_prompts.h"
 #include "chrome/browser/bay/webui/system_state.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
@@ -450,6 +451,7 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   PermissionPrompts::Start(base::BindRepeating(&EmitPermissionEvent));
   ExternalAppPrompts::Start(base::BindRepeating(&NativeHost::EmitToView));
   ContextSearch::Start(base::BindRepeating(&NativeHost::EmitToView));
+  PageMenu::Start();
   SystemState::Get().Start(base::BindRepeating(&EmitSystemState));
   browser_services_ = std::make_unique<BrowserServices>(
       context_,
