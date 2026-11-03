@@ -96,7 +96,7 @@ chromium all chromium-injected-author-sheet-order.patch
 chromium mac chromium-devtools-control-token.patch
 chromium mac chromium-devtools-background-target.patch
 
-chromium mac chromium-scripts-policy.patch
+chromium all chromium-scripts-policy.patch
 
 layer all engine/chromium
 layer all engine/nncore

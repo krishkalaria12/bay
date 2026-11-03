@@ -43,6 +43,7 @@ class DefaultBrowser;
 class Autostart;
 class AppServicesLinux;
 class WindowButtonLayoutLinux;
+class UserScripts;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -153,6 +154,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   // Reconnecting a pin's file asks in its own picker (shell_ui.h).
   std::unique_ptr<ShellUI> local_files_ui_;
+  std::unique_ptr<UserScripts> user_scripts_;
 #endif
   void FinishShortcutRecording(base::Value result);
   // The dragged tab's floating preview (drag_preview.h).

@@ -70,12 +70,22 @@ const applied = new Map<string, { generation: number; wanted: Wanted; outcome: S
 let lastStatus: string | null = null;
 let running: Promise<void> | null = null;
 let again = false;
+let retry: ReturnType<typeof setTimeout> | null = null;
 
 async function reconcile() {
   if (!enabled()) return;
   const folder: UserScriptsFolder = await readUserScripts();
   if (!enabled() || again) return;
-  if (folder.state === "empty" || folder.state === "busy" || folder.state === "pending") return;
+  if (folder.state === "busy" || folder.state === "pending") {
+    // A watcher can fire before the CLI releases its publication lock. A
+    // Windows directory exchange also briefly has no canonical extension.
+    retry = setTimeout(() => {
+      retry = null;
+      if (enabled()) schedule();
+    }, 100);
+    return;
+  }
+  if (folder.state === "empty") return;
   const generation = folder.generation ?? 0;
   const targets = scriptsTargets(useBrowser.getState());
   const outcomes = new Map<string, ScriptsOutcome>();
@@ -111,6 +121,10 @@ async function reconcile() {
 }
 
 function schedule() {
+  if (retry !== null) {
+    clearTimeout(retry);
+    retry = null;
+  }
   if (running) {
     again = true;
     return;

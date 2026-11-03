@@ -99,6 +99,8 @@ source_set("impl") {
     "tab_strip_mirror.h",
     "tracing_session.cc",
     "tracing_session.h",
+    "user_scripts.cc",
+    "user_scripts.h",
     "window_registry.cc",
     "window_registry.h",
   ]
@@ -797,6 +799,8 @@ if (is_linux) {
       "tab_strip_mirror_unittest.cc",
       "dev_window_unittest.cc",
       "tracing_session_unittest.cc",
+      "user_scripts_unittest.cc",
+      "../nn_scripts_policy_unittest.cc",
     ]
     deps = [
       ":impl",

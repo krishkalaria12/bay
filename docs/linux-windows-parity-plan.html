@@ -1034,8 +1034,10 @@
                   <td>Userscripts written with the <code>bay</code> CLI don't load.</td>
                   <td><code>UserScripts.swift</code> (240)</td>
                   <td>
-                    <span class="tag t-port">Port</span> Shared C++ with a directory watcher. The engine side (<code>nn_scripts_policy</code>) is already
-                    shared. M
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/user_scripts.cc</code> provides folder/status reads, atomic status writes
+                    and directory watching. Reads take the same shared OS lock as the CLI; the coordinator retries a busy or incomplete publication. The CLI
+                    uses Linux <code>flock</code>/<code>renameat2</code> and Windows byte locks with recoverable directory exchanges. The content-script-only
+                    engine policy and extension-page blocking now cover both desktop hosts. Runtime checks pending.
                   </td>
                 </tr>
                 <tr data-kind="port">
@@ -1449,6 +1451,11 @@
               only. Reconnecting picks a file or a folder by the pin's kind, as GTK's dialog can't offer both.
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
+            <li>
+              <strong>User scripts:</strong> an interrupted Windows directory exchange leaves a journal. Bay waits for the next <code>bay scripts</code> command
+              to recover it rather than loading a partial copy. Linux <code>renameat2</code>, Windows locking/reparse checks, watcher delivery and actual
+              extension execution still need the native runtime pass.
+            </li>
             <li>
               <strong>Capture:</strong> quote cards use system fonts and canvas text shaping. Check long passages, mixed-direction text and PNG/link pasting in
               real Linux and Windows applications. Native share sheets and Mark Up remain excluded.

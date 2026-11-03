@@ -51,6 +51,7 @@
 #include "chrome/browser/bay/webui/engine_services.h"
 #include "chrome/browser/bay/webui/install_prompts.h"
 #include "chrome/browser/bay/webui/library_files.h"
+#include "chrome/browser/bay/webui/user_scripts.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/shortcut_recorder.h"
@@ -849,6 +850,12 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
       base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()));
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   InstallCloseHooks();
+  user_scripts_ = std::make_unique<UserScripts>(
+      UserScripts::DefaultDirectory(),
+      base::BindRepeating([](base::WeakPtr<NativeHost> host) {
+        if (host)
+          host->Emit("BayUserScripts", "onChange", base::Value(base::DictValue()));
+      }, GetWeakPtr()));
 #endif
 #if BUILDFLAG(IS_WIN)
   AppUpdater().Prepare(
@@ -943,6 +950,7 @@ base::DictValue NativeHost::Info() const {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   modules.Append("BayKeychain");
   modules.Append("BayLocalFiles");
+  modules.Append("BayUserScripts");
   for (const auto& module : data::ModuleNames())
     modules.Append(module);
 #endif
@@ -1168,6 +1176,10 @@ base::DictValue NativeHost::Info() const {
   }
   for (auto& method : LibraryFiles::SupportedMethods())
     host_methods->Append(std::move(method));
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  for (auto& method : UserScripts::SupportedMethods())
+    host_methods->Append(std::move(method));
+#endif
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
@@ -1672,6 +1684,8 @@ void NativeHost::Invoke(const std::string& module,
     return;
   }
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  if (user_scripts_->Dispatch(module, method, args, callback))
+    return;
   if (module == "BayLocalFiles") {
     LocalFilesCall(method, args, std::move(callback));
     return;
