@@ -241,6 +241,7 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   taskManager: { key: "Escape", shift: true },
   showOnboarding: { key: "F1" },
   keyboardShortcuts: { key: "/", mod: true },
+  showAppMenu: { key: "F10" }, // the desktop's own key for an app's menus
   openFile: { key: "O", mod: true },
   newLittleBay: { key: "N", mod: true, alt: true },
   openSpaceMenu: { key: "P", mod: true, shift: true },

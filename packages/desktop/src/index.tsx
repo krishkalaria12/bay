@@ -117,6 +117,8 @@ export type BrowserCommand =
   | "share"
   | "sendFeedback"
   | "keyboardShortcuts"
+  // The Chrome-hosted desktop's in-window app menu (F10).
+  | "showAppMenu"
   | "copyDiagnostics"
   | "recordPerformanceIssue"
   | "toolTour"

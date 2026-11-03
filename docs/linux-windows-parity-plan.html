@@ -939,7 +939,12 @@
                   <td class="methods">setMenuState setMenuBookmarks</td>
                   <td>No global menu bar.</td>
                   <td><code>Menus.swift</code></td>
-                  <td><span class="tag t-replace">Replace</span> with the in-window app menu (Alt/F10), already decided</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> There was no in-window menu yet. F10 now opens macOS's menus
+                    (<code>lib/appMenu.ts</code>), built from the same action list as Settings › Shortcuts, with the state the menu bar would show (enabled,
+                    checked, titles), each item's current shortcut, and the Bookmarks, Recently Closed and Spaces lists. <code>setMenuState</code> and
+                    <code>setMenuBookmarks</code> stay macOS only. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Clear animation</strong></td>
@@ -1425,6 +1430,10 @@
               <strong>Tab drag previews:</strong> the card shows the page's own picture or the whole window, where macOS lays the page into the window's
               picture; the placeholder shows the title without the favicon. The card fades as soon as it reaches the new window rather than waiting for its
               content. Wayland has no preview at all, and X11 has none either while <code>globalWindowCoordinates</code> stays off on Linux.
+            </li>
+            <li>
+              <strong>App menu:</strong> only F10 opens it; Alt alone doesn't, so a page keeps its Alt key. It opens at the pointer, as a context menu does, not
+              under a menu bar. The Window menu's list of windows, the Extensions menu and Services aren't in it.
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
             <li>
