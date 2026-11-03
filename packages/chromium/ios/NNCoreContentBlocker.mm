@@ -641,7 +641,8 @@ NSDictionary *ContentBlockerCosmetics(NSString *frameURL, NSString *pageURL) {
   return answer;
 }
 
-NSString *ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSArray *classes, NSArray *ids) {
+NSString *ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSArray<NSString *> *classes,
+                                     NSArray<NSString *> *ids) {
   NSDictionary *resources;
   std::shared_ptr<Engine> engine = CosmeticEngine(frameURL, pageURL, &resources);
   if (!engine || [resources[@"generichide"] boolValue]) return nil;
