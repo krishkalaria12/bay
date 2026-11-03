@@ -124,6 +124,8 @@ test("picker handles touch taps directly, suppresses page actions and lets a dra
   assert.equal(f.messages.length, 1);
   assert.equal(f.messages[0].type, "picked");
   assert.match(f.messages[0].selector, /a/);
+  assert.equal(f.messages[0].label, "Link “Next”");
+  assert.equal(f.messages[0].tag, "<a>");
   f.event("click");
   assert.equal(f.messages.length, 1, "compatibility click must not pick twice");
   f.event("touchstart", { touches: [point] });
@@ -132,7 +134,7 @@ test("picker handles touch taps directly, suppresses page actions and lets a dra
   assert.equal(f.event("touchend", { changedTouches: [point] }).prevented, false);
   assert.equal(f.messages.length, 1, "a drag must not pick");
   assert.equal(f.run(PICK_PARENT_SCRIPT), true);
-  assert.match(f.messages[1].label, /section/);
+  assert.equal(f.messages[1].label, "Section “Next”");
   assert.equal(f.run(PICK_PARENT_SCRIPT), false);
   const picker = f.window[Symbol.for("bay.picker")];
   f.run(STOP_PICKER_SCRIPT);
@@ -146,6 +148,16 @@ test("picker handles touch taps directly, suppresses page actions and lets a dra
   f.run(START_PICKER_SCRIPT);
   f.event("click");
   assert.equal(f.messages.length, 3, "picker can restart after cleanup");
+});
+
+test("the picker describes elements in words, with whitespace collapsed", () => {
+  const f = fixture('<section id="card"><a id="link" href="/past">  past\n   stories </a></section>');
+  f.run(START_PICKER_SCRIPT);
+  const point = { clientX: 20, clientY: 30 };
+  f.event("touchstart", { touches: [point] });
+  f.event("touchend", { changedTouches: [point] });
+  assert.equal(f.messages[0].label, "Link “past stories”");
+  f.run(STOP_PICKER_SCRIPT);
 });
 
 test("replacing hidden rules supports undo and ignores invalid selectors", () => {

@@ -7,16 +7,31 @@ import { SELECTOR_FOR } from "@bay/core/src/selectorFor.ts";
 export interface PickedElement {
   type: "picked";
   selector: string;
-  /** A short description: tag, id and first classes. */
+  /** What it is, in words: its kind and its text (Link “Pricing”). */
   label: string;
+  /** Its tag, as <a>. */
+  tag: string;
+  width: number;
+  height: number;
 }
 
 const PICKER = `
 const state = (window[Symbol.for("bay.picker")] ??= {});
 ${SELECTOR_FOR}
+const KINDS = { a: "Link", button: "Button", img: "Image", picture: "Image", svg: "Icon", video: "Video", audio: "Audio",
+  iframe: "Embedded page", input: "Field", textarea: "Text field", select: "Menu", h1: "Heading", h2: "Heading", h3: "Heading",
+  h4: "Heading", h5: "Heading", h6: "Heading", p: "Paragraph", ul: "List", ol: "List", li: "List item", nav: "Navigation",
+  header: "Header", footer: "Footer", aside: "Sidebar", form: "Form", table: "Table", section: "Section", article: "Article",
+  main: "Main content", label: "Label", figure: "Figure", blockquote: "Quote", code: "Code", pre: "Code block", dialog: "Dialog" };
+const ROLES = { button: "Button", link: "Link", dialog: "Dialog", navigation: "Navigation", img: "Image", heading: "Heading", menu: "Menu", tab: "Tab" };
+// "Link “Pricing”": its role or tag in words, and the words a person sees or hears for it.
 const describe = (el) => {
-  const classes = Array.from(el.classList).slice(0, 2).map((c) => "." + c).join("");
-  return el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + classes;
+  const tag = el.tagName.toLowerCase();
+  const kind = ROLES[el.getAttribute("role")] || KINDS[tag] || (el.children.length ? "Block" : "Text");
+  const words = (el.getAttribute("aria-label") || el.getAttribute("alt") || el.getAttribute("title") || el.getAttribute("placeholder") || el.textContent || "")
+    .replace(/\\s+/g, " ")
+    .trim();
+  return words ? kind + " “" + (words.length > 48 ? words.slice(0, 47) + "…" : words) + "”" : kind;
 };
 const outline = () => {
   if (!state.box) {
@@ -44,7 +59,8 @@ const pick = (el) => {
   state.current = el;
   outline();
   const selector = selectorFor(el, 0);
-  if (selector) post({ type: "picked", selector, label: describe(el) });
+  const rect = el.getBoundingClientRect();
+  if (selector) post({ type: "picked", selector, label: describe(el), tag: "<" + el.tagName.toLowerCase() + ">", width: Math.round(rect.width), height: Math.round(rect.height) });
 };
 `;
 

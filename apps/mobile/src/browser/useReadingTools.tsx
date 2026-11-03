@@ -1,8 +1,11 @@
 import { hostOf } from "@bay/core/src/omnibox.ts";
 import { runPageScript, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
-import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Platform, Pressable, Text, useColorScheme, View } from "react-native";
+import { useThemeColor } from "heroui-native";
+import { Icon } from "@/chrome/Icon";
+import type { IconName } from "@/chrome/Icon.types";
 import { Surface } from "@/chrome/Surface";
 import { Toast } from "./Toast";
 import { INSPECT_SCRIPT, type InspectedElement } from "@/pagescripts/inspect";
@@ -100,6 +103,11 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
       if (element) setInspected(element);
     });
   }
+  function parent(): void {
+    task(async () => {
+      if (!(await script<boolean>(PICK_PARENT_SCRIPT))) setNotice("No larger element to select.");
+    });
+  }
   function setRules(selectors: string[]): void {
     if (active.private) setPrivateRules((previous) => ({ ...previous, [active.id]: { ...previous[active.id], [host]: selectors } }));
     else dispatch({ type: "hidden-elements", host, selectors });
@@ -119,7 +127,10 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
         "label" in value &&
         typeof value.label === "string"
       ) {
-        setPicked({ type: "picked", selector: value.selector, label: value.label.slice(0, 200) });
+        const fields = value as Record<string, unknown>;
+        const size = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.round(n) : 0);
+        const tag = typeof fields.tag === "string" ? fields.tag.slice(0, 40) : "";
+        setPicked({ type: "picked", selector: value.selector, label: value.label.slice(0, 200), tag, width: size(fields.width), height: size(fields.height) });
         if (pickMode === "inspect") inspect();
       }
     } catch {
@@ -190,12 +201,9 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
         />
         <InspectPanel
           element={picking && pickMode === "inspect" ? inspected : null}
+          title={picked?.label}
           onClose={() => setInspected(null)}
-          onParent={() =>
-            task(async () => {
-              if (!(await script<boolean>(PICK_PARENT_SCRIPT))) setNotice("No larger element to select.");
-            })
-          }
+          onParent={parent}
           onCopy={() =>
             task(async () => {
               if (!inspected) return;
@@ -205,55 +213,95 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
           }
         />
         {picking && pickMode === "inspect" ? (
-          <Surface radius={18} style={{ padding: 12 }}>
-            <Text className="text-foreground" testID="inspect-instructions">
-              {picked ? picked.label : "Tap an element to inspect it."}
-            </Text>
-            <View className="flex-row flex-wrap gap-2">
-              {picked ? <ToolButton id="inspect-open" label="Details" onPress={inspect} /> : null}
-              <ToolButton id="inspect-done" label="Done" onPress={() => task(endPicking)} />
-            </View>
-          </Surface>
+          <PickerCard testID="inspect-instructions" icon="inspect" picked={picked} hint="Tap an element to inspect it.">
+            {picked ? <ToolButton id="inspect-parent-pick" label="Parent" icon="up" onPress={parent} /> : null}
+            {picked ? <ToolButton id="inspect-open" label="Details" primary onPress={inspect} /> : null}
+            <ToolButton id="inspect-done" label="Done" onPress={() => task(endPicking)} />
+          </PickerCard>
         ) : null}
         {picking && pickMode === "hide" ? (
-          <Surface radius={18} style={{ padding: 12 }}>
-            <Text className="text-foreground" testID="hide-instructions">
-              {picked ? picked.label : "Tap an element to hide it."}
-            </Text>
-            <View className="flex-row flex-wrap gap-2">
-              {picked ? (
-                <ToolButton
-                  id="hide-zap"
-                  label="Zap"
-                  onPress={() => {
-                    setRules([...new Set([...rules, picked.selector])]);
-                    setPicked(null);
-                  }}
-                />
-              ) : null}
-              {picked ? (
-                <ToolButton
-                  id="hide-parent"
-                  label="Parent"
-                  onPress={() =>
-                    task(async () => {
-                      if (!(await script<boolean>(PICK_PARENT_SCRIPT))) setNotice("No larger element to select.");
-                    })
-                  }
-                />
-              ) : null}
-              <ToolButton id="hide-undo" label="Undo" disabled={!rules.length} onPress={() => setRules(rules.slice(0, -1))} />
-              <ToolButton id="hide-reset" label="Reset site" disabled={!rules.length} onPress={() => setRules([])} />
-              <ToolButton id="hide-done" label="Done" onPress={() => task(endPicking)} />
-            </View>
-          </Surface>
+          <PickerCard testID="hide-instructions" icon="hide" picked={picked} hint="Tap an element to hide it.">
+            {picked ? <ToolButton id="hide-parent" label="Parent" icon="up" onPress={parent} /> : null}
+            {picked ? (
+              <ToolButton
+                id="hide-zap"
+                label="Hide"
+                primary
+                onPress={() => {
+                  setRules([...new Set([...rules, picked.selector])]);
+                  setPicked(null);
+                }}
+              />
+            ) : (
+              <>
+                <ToolButton id="hide-undo" label="Undo" disabled={!rules.length} onPress={() => setRules(rules.slice(0, -1))} />
+                <ToolButton id="hide-reset" label="Reset site" disabled={!rules.length} onPress={() => setRules([])} />
+              </>
+            )}
+            <ToolButton id="hide-done" label="Done" onPress={() => task(endPicking)} />
+          </PickerCard>
         ) : null}
         {notice ? <Toast key={notice} text={notice} testID="reading-notice" /> : null}
       </>
     ),
   };
 }
-function ToolButton({ id, label, disabled, onPress }: { id: string; label: string; disabled?: boolean; onPress: () => void }) {
+/** The picker's floating card: what's picked, in words, with its tag and size, over a row of actions. */
+function PickerCard({
+  testID,
+  icon,
+  picked,
+  hint,
+  children,
+}: {
+  testID: string;
+  icon: IconName;
+  picked: PickedElement | null;
+  hint: string;
+  children: ReactNode;
+}) {
+  const foreground = useThemeColor("foreground");
+  const muted = useThemeColor("muted");
+  const accent = useThemeColor("accent");
+  // Android's surfaces are translucent; over page text that hurts reading, so this card is solid there.
+  const solid = useColorScheme() === "dark" ? "#171717" : "#FFFFFF";
+  return (
+    <Surface radius={26} style={[{ padding: 14, gap: 12 }, Platform.OS === "android" && { backgroundColor: solid }]}>
+      <View className="flex-row items-center gap-3">
+        <View className="h-10 w-10 items-center justify-center rounded-full bg-accent/15">
+          <Icon name={icon} color={accent} size={20} />
+        </View>
+        <View className="flex-1">
+          <Text testID={testID} numberOfLines={1} style={{ color: foreground, fontSize: 15.5, fontWeight: "500" }}>
+            {picked ? picked.label : hint}
+          </Text>
+          <Text numberOfLines={1} style={{ color: muted, fontSize: 12.5, marginTop: 1 }}>
+            {picked ? `${picked.tag} · ${picked.width} × ${picked.height}` : "Links don't open while you pick."}
+          </Text>
+        </View>
+      </View>
+      <View className="flex-row gap-2">{children}</View>
+    </Surface>
+  );
+}
+
+function ToolButton({
+  id,
+  label,
+  icon,
+  primary,
+  disabled,
+  onPress,
+}: {
+  id: string;
+  label: string;
+  icon?: IconName;
+  primary?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const foreground = useThemeColor("foreground");
+  const accentForeground = useThemeColor("accent-foreground");
   return (
     <Pressable
       testID={id}
@@ -262,10 +310,17 @@ function ToolButton({ id, label, disabled, onPress }: { id: string; label: strin
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      className="min-h-11 min-w-11 items-center justify-center rounded-xl bg-default px-3"
+      className={
+        primary
+          ? "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-accent px-3 active:opacity-80"
+          : "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-default px-3 active:opacity-70"
+      }
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
-      <Text className="text-foreground">{label}</Text>
+      {icon ? <Icon name={icon} color={primary ? accentForeground : foreground} size={18} /> : null}
+      <Text numberOfLines={1} style={{ color: primary ? accentForeground : foreground, fontSize: 15, fontWeight: primary ? "600" : "400" }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

@@ -10,20 +10,32 @@ const MONOSPACE = Platform.select({ ios: "Menlo", default: "monospace" });
 
 export interface InspectPanelProps {
   element: InspectedElement | null;
+  /** The picked element in words (Link “Pricing”). */
+  title?: string;
   onClose: () => void;
   onParent: () => void;
   onCopy: () => void;
 }
 
 /** What the picked element is: its font first (the font identifier), then size, colours and the CSS that matches. */
-export function InspectPanel({ element, onClose, onParent, onCopy }: InspectPanelProps): JSX.Element {
+export function InspectPanel({ element, title, onClose, onParent, onCopy }: InspectPanelProps): JSX.Element {
   const font = element?.font;
   return (
     <PanelSheet visible={element !== null} onClose={onClose} title="Inspect" testID="inspect-panel" height="62%">
       {element && font ? (
         <>
+          {title ? (
+            <Typography testID="inspect-title" numberOfLines={2} className="mb-1 text-lg font-semibold">
+              {title}
+            </Typography>
+          ) : null}
           <View className="flex-row items-baseline justify-between gap-3">
-            <Typography testID="inspect-name" numberOfLines={1} className="flex-1 font-semibold" style={{ fontFamily: MONOSPACE }}>
+            <Typography
+              testID="inspect-name"
+              numberOfLines={1}
+              className={title ? "flex-1 text-sm text-muted" : "flex-1 font-semibold"}
+              style={{ fontFamily: MONOSPACE }}
+            >
               {element.name}
             </Typography>
             <Typography testID="inspect-size" className="text-sm text-muted">
