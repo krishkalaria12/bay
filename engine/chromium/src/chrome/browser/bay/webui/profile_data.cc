@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
@@ -16,13 +15,12 @@
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
+#include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/delete_profile_helper.h"
 #include "chrome/browser/profiles/nuke_profile_directory_utils.h"
-#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/common/chrome_paths.h"
@@ -43,10 +41,9 @@ std::string Remaining(const std::vector<std::string>& labels) {
   base::ListValue remaining;
   for (const auto& label : labels)
     remaining.Append(label);
-  return base::WriteJson(
-             base::DictValue().Set(
-                 "value", base::DictValue().Set("remaining",
-                                                std::move(remaining))))
+  return base::WriteJson(base::DictValue().Set(
+                             "value", base::DictValue().Set(
+                                          "remaining", std::move(remaining))))
       .value_or("{}");
 }
 
@@ -124,8 +121,8 @@ class DefaultClear : public base::RefCounted<DefaultClear> {
       std::move(response_).Run(Remaining(remaining_));
       return;
     }
-    Done done = base::BindOnce(&DefaultClear::Cleared, base::WrapRefCounted(this),
-                               step_);
+    Done done = base::BindOnce(&DefaultClear::Cleared,
+                               base::WrapRefCounted(this), step_);
     switch (step_) {
       case 0:
         // History, cookies, cache and the download list: Chrome's own clear,
@@ -138,8 +135,12 @@ class DefaultClear : public base::RefCounted<DefaultClear> {
                                    .Append("cache")
                                    .Append("downloads"))
                  .Set("since", 0),
-             base::BindOnce([](Done done, Result) { std::move(done).Run(true); },
-                            std::move(done)));
+             base::BindOnce(
+                 [](Done done, Result result) {
+                   const auto* dict = result ? result->GetIfDict() : nullptr;
+                   std::move(done).Run(dict && dict->FindBool("ok") == true);
+                 },
+                 std::move(done)));
         return;
       case 1:
         // As Chrome's Delete Browsing Data dialog: form data is autofill plus
@@ -221,15 +222,14 @@ class DefaultClear : public base::RefCounted<DefaultClear> {
     }
     base::DictValue args = std::move(calls.back());
     calls.pop_back();
-    Call(name, std::move(args),
-         base::BindOnce(
-             [](scoped_refptr<DefaultClear> self, std::string name,
-                std::vector<base::DictValue> calls, base::OnceClosure done,
-                Result) {
-               self->Each(name, std::move(calls), std::move(done));
-             },
-             base::WrapRefCounted(this), name, std::move(calls),
-             std::move(done)));
+    Call(
+        name, std::move(args),
+        base::BindOnce(
+            [](scoped_refptr<DefaultClear> self, std::string name,
+               std::vector<base::DictValue> calls, base::OnceClosure done,
+               Result) { self->Each(name, std::move(calls), std::move(done)); },
+            base::WrapRefCounted(this), name, std::move(calls),
+            std::move(done)));
   }
 
   // Lists |key| with |list|, clears every item |pick| takes with |clear|, then
@@ -240,8 +240,8 @@ class DefaultClear : public base::RefCounted<DefaultClear> {
                  Pick pick,
                  Done done) {
     Call(list, base::DictValue(),
-         base::BindOnce(&DefaultClear::Listed, base::WrapRefCounted(this),
-                        list, key, clear, std::move(pick), std::move(done)));
+         base::BindOnce(&DefaultClear::Listed, base::WrapRefCounted(this), list,
+                        key, clear, std::move(pick), std::move(done)));
   }
   void Listed(std::string list,
               std::string key,
@@ -260,25 +260,25 @@ class DefaultClear : public base::RefCounted<DefaultClear> {
         calls.push_back(std::move(*args));
     }
     Each(clear, std::move(calls),
-         base::BindOnce(&DefaultClear::Call, base::WrapRefCounted(this), list,
-                        base::DictValue(),
-                        base::BindOnce(
-                            [](std::string key, Pick pick, Done done,
-                               Result again) {
-                              const auto* left = ListIn(again, key);
-                              if (!left) {
-                                std::move(done).Run(false);
-                                return;
-                              }
-                              for (const auto& item : *left) {
-                                if (pick.Run(item)) {
-                                  std::move(done).Run(false);
-                                  return;
-                                }
-                              }
-                              std::move(done).Run(true);
-                            },
-                            key, pick, std::move(done))));
+         base::BindOnce(
+             &DefaultClear::Call, base::WrapRefCounted(this), list,
+             base::DictValue(),
+             base::BindOnce(
+                 [](std::string key, Pick pick, Done done, Result again) {
+                   const auto* left = ListIn(again, key);
+                   if (!left) {
+                     std::move(done).Run(false);
+                     return;
+                   }
+                   for (const auto& item : *left) {
+                     if (pick.Run(item)) {
+                       std::move(done).Run(false);
+                       return;
+                     }
+                   }
+                   std::move(done).Run(true);
+                 },
+                 key, pick, std::move(done))));
   }
 
   // The saved passwords went: now the sites they're never saved for.
@@ -362,7 +362,8 @@ void ProfileData::Delete(const EngineInvoker& engine,
   base::FilePath root;
   auto* manager =
       g_browser_process ? g_browser_process->profile_manager() : nullptr;
-  if (!ValidProfileId(profile) || !manager ||
+  if (!ValidProfileId(profile) ||
+      base::EqualsCaseInsensitiveASCII(profile, "Default") || !manager ||
       !base::PathService::Get(chrome::DIR_USER_DATA, &root)) {
     std::move(response).Run(Remaining({"data"}));
     return;
@@ -373,35 +374,41 @@ void ProfileData::Delete(const EngineInvoker& engine,
     std::move(response).Run(Remaining({}));
     return;
   }
-  if (manager->GetProfileByPath(path) ||
-      manager->GetProfileAttributesStorage().GetProfileAttributesWithPath(
-          path)) {
-    // Chrome closes the profile's browsers and deletes its folder once it has
-    // unloaded; a deletion it couldn't finish completes at the next launch.
-    manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
-        path, base::DoNothing(), ProfileMetrics::DELETE_PROFILE_SETTINGS);
-    std::move(response).Run(Remaining({}));
+  // A first load may own an in-progress Profile even before it has profile
+  // attributes. Wait for its initialization instead of deleting under its IO.
+  if (!manager->GetProfileByPath(path) &&
+      !manager->GetKeepAlivesByPath(path).empty()) {
+    manager->CreateProfileAsync(
+        path, base::BindOnce(
+                  [](EngineInvoker engine, std::string profile,
+                     Response response, Profile* loaded) {
+                    if (!loaded) {
+                      std::move(response).Run(Remaining({"data"}));
+                      return;
+                    }
+                    ProfileData::Delete(engine, profile, std::move(response));
+                  },
+                  engine, profile, std::move(response)));
     return;
   }
-  // Chrome never knew it (or has forgotten it): its folder alone. Loading it
-  // to delete it would make it anew.
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(
-          [](const base::FilePath& path) {
-            base::DeletePathRecursively(path);
-            return !base::PathExists(path);
-          },
-          path),
-      base::BindOnce(
-          [](Response response, bool deleted) {
-            std::move(response).Run(
-                Remaining(deleted ? std::vector<std::string>()
-                                  : std::vector<std::string>{"files"}));
-          },
-          std::move(response)));
+  // Use Chrome's deletion lifecycle even for an unregistered on-disk profile.
+  // It prevents a concurrent/reentrant load from recreating the directory.
+  // The callback can be discarded on beforeunload cancellation or an early
+  // success path. In both cases inspect the durable marker before replying.
+  base::ScopedClosureRunner reply(base::BindOnce(
+      [](base::FilePath path, Response response) {
+        std::move(response).Run(
+            Remaining(IsProfileDirectoryMarkedForDeletion(path)
+                          ? std::vector<std::string>()
+                          : std::vector<std::string>{"data"}));
+      },
+      path, std::move(response)));
+  manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
+      path,
+      base::BindOnce([](base::ScopedClosureRunner reply,
+                        Profile*) { reply.RunAndReset(); },
+                     std::move(reply)),
+      ProfileMetrics::DELETE_PROFILE_SETTINGS);
 }
 
 }  // namespace bay
