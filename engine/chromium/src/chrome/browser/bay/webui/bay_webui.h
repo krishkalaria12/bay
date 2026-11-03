@@ -51,6 +51,12 @@ void BindAppRuntime(content::WebUI* web_ui,
                     mojo::PendingReceiver<mojom::AppRuntime> receiver);
 void EmitWindowCommand(BrowserWindowInterface* browser, const char* command);
 
+// A key down while the window is recording a shortcut, which is its answer
+// (BaySystem.recordShortcut). True when recording took the key: it comes ahead
+// of every other use of a key, as Chrome's reserved accelerators would close
+// the window instead of being recorded.
+bool RecordWindowShortcut(BrowserWindowInterface* browser,
+                          const input::NativeWebKeyboardEvent& event);
 // One of the window's key shortcuts (NativeHost::KeyShortcut) for a key down:
 // with a page focused its command runs, as macOS's menu runs it first; with
 // Bay's own document focused the key goes there, where a field's own keys come

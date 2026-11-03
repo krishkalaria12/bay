@@ -416,8 +416,8 @@ export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFr
 export const windowIds = () => Shell.windowIds();
 
 /** A key the window's host runs as an app command (onCommand) rather than Chrome's: `keyCode` is the key's virtual-key
- *  code, as Chromium's key events carry it. */
-export type KeyShortcut = { command: BrowserCommand; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean };
+ *  code, as Chromium's key events carry it. An empty command runs nothing, which keeps the key from Chrome. */
+export type KeyShortcut = { command: BrowserCommand | ""; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean };
 /** Hands the host the window's key shortcuts (hosts whose menus don't carry them: the Chrome-hosted desktop). */
 export const setKeyShortcuts = (shortcuts: KeyShortcut[]) => Shell.setKeyShortcuts?.(shortcuts) ?? Promise.resolve();
 

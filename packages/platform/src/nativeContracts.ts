@@ -2503,7 +2503,7 @@ export const nativeContracts = {
       "TrafficLightsMode": "\"shown\" | \"hover\" | \"hidden\"",
       "Rect4": "[number, number, number, number]",
       "DragPreviewShape": "\"hidden\" | \"pill\" | \"card\"",
-      "KeyShortcut": "{ command: BrowserCommand; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean }",
+      "KeyShortcut": "{ command: BrowserCommand | \"\"; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean }",
       "MenuBookmarkKey": "\"bookmarkFolders\" | \"recentBookmarks\" | \"bookmarksBar\" | \"otherBookmarks\"",
       "ConfirmResult": "{ confirmed: boolean; suppressed: boolean }",
       "DialogPresenter": "{\n  confirm(options: ConfirmOptions): Promise<ConfirmResult> | null;\n  prompt(options: PromptOptions): Promise<string | null> | null;\n}",

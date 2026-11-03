@@ -110,6 +110,55 @@ export function menuShortcutStroke(key: string, modifiers: readonly ("command" |
   };
 }
 
+// AppKit's characters for keys without a letter, which the menus' `key` and a recorded shortcut use. Where two
+// characters are one key, the first is what a recording gives.
+const MENU_KEY_NAMES: Record<string, string> = {
+  "\t": "Tab",
+  "\r": "Enter",
+  "\u0003": "Enter",
+  "\u007f": "Backspace",
+  "\u0008": "Backspace",
+  "\u001b": "Escape",
+  " ": "Space",
+  "\uf700": "Up",
+  "\uf701": "Down",
+  "\uf702": "Left",
+  "\uf703": "Right",
+  "\uf728": "Delete",
+  "\uf729": "Home",
+  "\uf72b": "End",
+  "\uf72c": "PageUp",
+  "\uf72d": "PageDown",
+};
+const F1_MENU_KEY = 0xf704;
+
+/** A menu's `key` by the name strokes use it by: "\uf700" is "Up", "\uf704" is "F1", and a letter stays itself. */
+export function menuKeyName(key: string): string {
+  const name = MENU_KEY_NAMES[key];
+  if (name) return name;
+  const f = key.charCodeAt(0) - F1_MENU_KEY + 1;
+  return key.length === 1 && f >= 1 && f <= 20 ? `F${f}` : key;
+}
+
+/** A stroke's key as menus spell it: "Up" is "\uf700", "F1" is "\uf704", and "T" is "t". */
+export function menuKeyOf(name: string): string {
+  const lower = name.toLowerCase();
+  const special = Object.entries(MENU_KEY_NAMES).find(([, known]) => known.toLowerCase() === lower);
+  if (special) return special[0];
+  const f = /^f([1-9]|1[0-9]|20)$/.exec(lower);
+  return f ? String.fromCharCode(F1_MENU_KEY + Number(f[1]) - 1) : lower;
+}
+
+/** A stroke's modifiers as menus spell them. `mod` is "command", the name they share across platforms. */
+export function menuModifiersOf(stroke: ShortcutStroke): ("control" | "option" | "shift" | "command")[] {
+  return [
+    ...(stroke.ctrl ? (["control"] as const) : []),
+    ...(stroke.alt ? (["option"] as const) : []),
+    ...(stroke.shift ? (["shift"] as const) : []),
+    ...(stroke.mod ? (["command"] as const) : []),
+  ];
+}
+
 /** A macOS hint ("⇧⌘C") as a stroke. Unknown keys pass through as they are. */
 export function parseShortcut(hint: string): ShortcutStroke {
   const stroke: ShortcutStroke = { key: "" };
@@ -216,11 +265,16 @@ export const LINUX_SHORTCUTS: Record<string, ShortcutStroke> = {
 
 // Windows virtual-key codes, which Chromium's key events carry on every desktop (ui::KeyboardCode).
 const VIRTUAL_KEYS: Record<string, number> = {
+  backspace: 0x08,
   tab: 0x09,
   enter: 0x0d,
   escape: 0x1b,
   esc: 0x1b,
   space: 0x20,
+  pageup: 0x21,
+  pagedown: 0x22,
+  end: 0x23,
+  home: 0x24,
   left: 0x25,
   up: 0x26,
   right: 0x27,
@@ -232,15 +286,17 @@ const VIRTUAL_KEYS: Record<string, number> = {
   "-": 0xbd,
   ".": 0xbe,
   "/": 0xbf,
+  "`": 0xc0,
   "[": 0xdb,
   "\\": 0xdc,
   "]": 0xdd,
+  "'": 0xde,
 };
 
 /** A table key's virtual-key code (a letter's or digit's is its capital ASCII), or null for a key it doesn't know. */
 export function virtualKeyCode(key: string): number | null {
   if (/^[a-z0-9]$/i.test(key)) return key.toUpperCase().charCodeAt(0);
-  const f = /^F([1-9]|1[0-2])$/i.exec(key);
+  const f = /^F([1-9]|1[0-9]|20)$/i.exec(key);
   if (f) return 0x6f + Number(f[1]);
   return VIRTUAL_KEYS[key.toLowerCase()] ?? null;
 }

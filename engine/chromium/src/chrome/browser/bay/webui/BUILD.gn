@@ -83,6 +83,8 @@ source_set("impl") {
     "permission_prompts.h",
     "profile_data.cc",
     "profile_data.h",
+    "shortcut_recorder.cc",
+    "shortcut_recorder.h",
     "profile_window.cc",
     "profile_window.h",
     "runtime_state.cc",
@@ -645,6 +647,20 @@ test("page_security_unittests") {
     "//content/public/browser",
     "//net",
     "//testing/gtest",
+  ]
+}
+
+test("shortcut_recorder_unittests") {
+  sources = [
+    "shortcut_recorder.cc",
+    "shortcut_recorder.h",
+    "shortcut_recorder_unittest.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//testing/gtest",
+    "//ui/events:events_base",
   ]
 }
 

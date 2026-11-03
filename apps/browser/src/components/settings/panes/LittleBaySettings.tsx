@@ -1,5 +1,6 @@
-import { cancelShortcutRecording, menuShortcuts, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/desktop";
-import { useEffect, useState } from "react";
+import { cancelShortcutRecording, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/desktop";
+import { useEffect, useRef, useState } from "react";
+import { menuShortcuts } from "../../../lib/keyBindings";
 import { useBrowserRead as useBrowser } from "../../../store/read";
 import { updateSettings } from "../../../runtime/settingsActions";
 import { reportBrowserCommand } from "../../../runtime/commands";
@@ -27,6 +28,7 @@ export function LittleBaySettings() {
   const overrides = useBrowser((s) => s.settings.shortcuts);
   const update = (patch: Partial<Settings>) => reportBrowserCommand(updateSettings(patch));
   const [recording, setRecording] = useState(false);
+  const latestRecording = useRef(0);
   const [menus, setMenus] = useState<MenuShortcut[]>([]);
   useEffect(() => {
     void menuShortcuts().then(setMenus);
@@ -34,9 +36,11 @@ export function LittleBaySettings() {
   }, []);
 
   const record = async () => {
+    const run = ++latestRecording.current;
     setRecording(true);
     const combo = await recordShortcut();
-    setRecording(false);
+    // A later recording replaced this one, and its field stays lit.
+    if (run === latestRecording.current) setRecording(false);
     // A global shortcut needs ⌘, ⌥ or ⌃: a bare key or ⇧ and a key would take typing from every app.
     const modifiers = (combo?.modifiers ?? []).filter((m): m is LittleBayShortcut["modifiers"][number] => m !== "function");
     if (!combo || !modifiers.some((m) => m !== "shift")) return;

@@ -1,7 +1,8 @@
-import { Pressable, View, shortcutLabel } from "@bay/platform";
-import { cancelShortcutRecording, menuShortcuts, recordShortcut, Symbol, type MenuShortcut } from "@bay/desktop";
-import { useEffect, useState } from "react";
+import { formatShortcut as formatStroke, isMac, menuKeyName, menuShortcutStroke, platformOS, Pressable, View, shortcutLabel } from "@bay/platform";
+import { cancelShortcutRecording, recordShortcut, Symbol, type MenuShortcut } from "@bay/desktop";
+import { useEffect, useRef, useState } from "react";
 import { Text } from "react-native";
+import { menuShortcuts } from "../../../lib/keyBindings";
 import { reportBrowserCommand } from "../../../runtime/commands";
 import { updateSettings } from "../../../runtime/settingsActions";
 import { useBrowserRead, browserRead } from "../../../store/read";
@@ -36,6 +37,7 @@ const KEY_NAMES: Record<string, string> = {
 
 export function formatShortcut({ key, modifiers }: Combo): string {
   if (!key) return "";
+  if (!isMac) return formatStroke(menuShortcutStroke(menuKeyName(key), modifiers as Parameters<typeof menuShortcutStroke>[1]), platformOS);
   const mods = MOD_ORDER.filter((m) => modifiers.includes(m))
     .map((m) => MOD_GLYPH[m])
     .join("");
@@ -53,6 +55,7 @@ export function ShortcutsPane() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [recording, setRecording] = useState<string | null>(null);
+  const latestRecording = useRef(0);
 
   useEffect(() => {
     void menuShortcuts().then(setItems);
@@ -79,9 +82,11 @@ export function ShortcutsPane() {
   };
 
   const record = async (item: MenuShortcut) => {
+    const run = ++latestRecording.current;
     setRecording(item.id);
     const combo = await recordShortcut();
-    setRecording(null);
+    // A later recording replaced this one, and its field stays lit.
+    if (run === latestRecording.current) setRecording(null);
     if (!combo) return;
     const isDefault = combo.key === item.defaultKey && comboId(combo) === comboId({ key: item.defaultKey, modifiers: item.defaultModifiers });
     setShortcut(item.id, isDefault ? null : combo);

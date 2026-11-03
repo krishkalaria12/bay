@@ -43,6 +43,7 @@
 #include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
+#include "chrome/browser/bay/webui/shortcut_recorder.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/tab_strip_mirror.h"
 #include "chrome/browser/bay/webui/window_placement.h"
@@ -575,6 +576,7 @@ content::WebContents* NativeHost::document_contents() const {
   return content::WebContents::FromRenderFrameHost(&render_frame_host());
 }
 NativeHost::~NativeHost() {
+  FinishShortcutRecording(base::Value());
   InstallPrompts::Get().HostGone(this);
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   appearance_.reset();
@@ -1330,6 +1332,21 @@ void NativeHost::Invoke(const std::string& module,
     std::move(callback).Run(Success());
     return;
   }
+  if (module == "BaySystem" && method == "recordShortcut") {
+    if (!context_.is_window()) {
+      std::move(callback).Run(
+          Failure("window_required", "Recording needs a window to take keys"));
+      return;
+    }
+    FinishShortcutRecording(base::Value());
+    shortcut_recording_ = std::move(callback);
+    return;
+  }
+  if (module == "BaySystem" && method == "cancelRecording") {
+    FinishShortcutRecording(base::Value());
+    std::move(callback).Run(Success());
+    return;
+  }
   if (module == "BayShell" && method == "setKeyShortcuts") {
     const auto* list = At(args, 0);
     if (!context_.is_window() || !list || !list->is_list() ||
@@ -1345,7 +1362,7 @@ void NativeHost::Invoke(const std::string& module,
       const auto key_code =
           shortcut ? shortcut->FindInt("keyCode") : std::nullopt;
       const auto* arg = shortcut ? shortcut->Find("arg") : nullptr;
-      if (!command || command->empty() || command->size() > 64 || !key_code ||
+      if (!command || command->size() > 64 || !key_code ||
           *key_code <= 0 || *key_code > 0xff || !arg ||
           !(arg->is_none() || arg->is_string())) {
         std::move(callback).Run(
@@ -1739,6 +1756,37 @@ void BindNativeHost(content::WebUI* web_ui,
   new NativeHost(*frame, HostContext::ForWindow(*window->browser()),
                  std::move(receiver));
 }
+bool NativeHost::RecordShortcutKey(
+    const input::NativeWebKeyboardEvent& event) {
+  if (!shortcut_recording_)
+    return false;
+  const int modifiers = event.GetModifiers();
+  auto result =
+      RecordedShortcutFor(event.windows_key_code,
+                          modifiers & blink::WebInputEvent::kControlKey,
+                          modifiers & blink::WebInputEvent::kShiftKey,
+                          modifiers & blink::WebInputEvent::kAltKey,
+                          modifiers & blink::WebInputEvent::kMetaKey);
+  if (result)
+    FinishShortcutRecording(std::move(*result));
+  return true;
+}
+void NativeHost::FinishShortcutRecording(base::Value result) {
+  if (shortcut_recording_)
+    std::move(shortcut_recording_).Run(Success(std::move(result)));
+}
+bool RecordWindowShortcut(BrowserWindowInterface* browser,
+                          const input::NativeWebKeyboardEvent& event) {
+  if (event.GetType() != blink::WebInputEvent::Type::kRawKeyDown)
+    return false;
+  for (const auto& [owner, host] : Hosts()) {
+    if (host && !host->is_coordinator() && host->browser() == browser &&
+        host->RecordShortcutKey(event)) {
+      return true;
+    }
+  }
+  return false;
+}
 WindowShortcut RunWindowShortcut(BrowserWindowInterface* browser,
                                  const input::NativeWebKeyboardEvent& event) {
   if (event.GetType() != blink::WebInputEvent::Type::kRawKeyDown)
@@ -1766,6 +1814,8 @@ WindowShortcut RunWindowShortcut(BrowserWindowInterface* browser,
           content::WebContents::FromRenderFrameHost(focused) == document) {
         return WindowShortcut::kForDocument;
       }
+      if (shortcut.command.empty())
+        return WindowShortcut::kRan;
       host->Emit("BayShell", "onCommand",
                  base::Value(base::DictValue()
                                  .Set("command", shortcut.command)

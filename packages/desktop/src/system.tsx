@@ -1,4 +1,4 @@
-import { View } from "@bay/platform";
+import { isMac, View } from "@bay/platform";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
 import { requireNativeModule, nativeSnapshot } from "@bay/platform/native";
@@ -67,7 +67,20 @@ export const fileIcon = (path: string, size = 32) => System.fileIcon(path, size)
 export const runningAppIcon = (pid: number, size = 32) => System.appIcon(pid, size);
 export const hapticTick = () => System.hapticTick();
 export const menuShortcuts = () => System.menuShortcuts();
-export const recordShortcut = () => System.recordShortcut();
+/** The next key press as a shortcut, or null when cancelled. As on macOS a click cancels; the web host only sees keys,
+ *  so its document watches for clicks, and for focus leaving it for a page or another window. */
+export const recordShortcut = async (): Promise<RecordedShortcut | null> => {
+  if (isMac) return System.recordShortcut();
+  const cancel = () => void System.cancelRecording();
+  window.addEventListener("pointerdown", cancel, true);
+  window.addEventListener("blur", cancel);
+  try {
+    return await System.recordShortcut();
+  } finally {
+    window.removeEventListener("pointerdown", cancel, true);
+    window.removeEventListener("blur", cancel);
+  }
+};
 export const cancelShortcutRecording = () => System.cancelRecording();
 /** Little Bay's menu bar button (Settings › Links), opening one from any app. */
 export const setLittleBayMenuBarItem = (on: boolean) => System.setLittleBayMenuBarItem(on);

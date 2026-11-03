@@ -48,6 +48,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "components/prefs/pref_service.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
@@ -65,6 +66,7 @@
 #include "ui/linux/fake_linux_ui.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/linux/window_button_order_observer.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
 #include "ui/shell_dialogs/select_file_policy.h"
@@ -1751,6 +1753,76 @@ TEST_F(FilePickerTest, FontFamiliesShareOneLoadAndSettleOnTeardown) {
                                closing_callback));
   shell_.reset();
   EXPECT_EQ(closing.Get(), R"({"value":[]})");
+}
+
+class ShortcutRecordingTest : public FilePickerTest {
+ protected:
+  void SetUp() override {
+    FilePickerTest::SetUp();
+    WindowHost();
+  }
+  bool Press(int key_code, int modifiers = 0) {
+    input::NativeWebKeyboardEvent event(
+        blink::WebInputEvent::Type::kRawKeyDown, modifiers, base::TimeTicks());
+    event.windows_key_code = key_code;
+    return host_->RecordShortcutKey(event);
+  }
+};
+
+TEST_F(ShortcutRecordingTest, TakesKeysOnlyWhileRecordingAndAnswersTheFirst) {
+  EXPECT_FALSE(Press(ui::VKEY_T, blink::WebInputEvent::kControlKey));
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BaySystem", "recordShortcut", "[]", result.GetCallback());
+  // A modifier and a Super chord are taken, and recording goes on.
+  EXPECT_TRUE(Press(ui::VKEY_SHIFT, blink::WebInputEvent::kShiftKey));
+  EXPECT_TRUE(Press(ui::VKEY_T, blink::WebInputEvent::kMetaKey));
+  EXPECT_FALSE(result.IsReady());
+  EXPECT_TRUE(Press(ui::VKEY_T, blink::WebInputEvent::kControlKey |
+                                    blink::WebInputEvent::kShiftKey));
+  EXPECT_EQ(
+      result.Get(),
+      R"({"value":{"key":"t","keyCode":84,"modifiers":["shift","command"]}})");
+  EXPECT_FALSE(Press(ui::VKEY_T, blink::WebInputEvent::kControlKey));
+}
+TEST_F(ShortcutRecordingTest, EscapeCancelCloseAndANewRecordingAnswerNull) {
+  base::test::TestFuture<const std::string&> escaped;
+  host_->Invoke("BaySystem", "recordShortcut", "[]", escaped.GetCallback());
+  EXPECT_TRUE(Press(ui::VKEY_ESCAPE));
+  EXPECT_EQ(escaped.Get(), R"({"value":null})");
+
+  base::test::TestFuture<const std::string&> replaced;
+  host_->Invoke("BaySystem", "recordShortcut", "[]", replaced.GetCallback());
+  base::test::TestFuture<const std::string&> cancelled;
+  host_->Invoke("BaySystem", "recordShortcut", "[]", cancelled.GetCallback());
+  EXPECT_EQ(replaced.Get(), R"({"value":null})");
+  EXPECT_FALSE(cancelled.IsReady());
+  EXPECT_NE(Invoke("BaySystem", "cancelRecording", "[]").find("value"),
+            std::string::npos);
+  EXPECT_EQ(cancelled.Get(), R"({"value":null})");
+  EXPECT_FALSE(Press(ui::VKEY_T));
+
+  std::vector<std::string> closed;
+  host_->Invoke("BaySystem", "recordShortcut", "[]",
+                base::BindLambdaForTesting([&](const std::string& result) {
+                  closed.push_back(result);
+                }));
+  host_->ResetAndDeleteThis();
+  ASSERT_EQ(closed.size(), 1u);
+  EXPECT_EQ(closed[0], R"({"value":null})");
+}
+TEST_F(ShortcutRecordingTest, CoordinatorCannotRecordAndWindowsReleaseKeys) {
+  EXPECT_EQ(Invoke("BayShell", "setKeyShortcuts",
+                   R"([[{"command":"","arg":null,"keyCode":84,"ctrl":true}]])"),
+            R"({"value":null})");
+  ASSERT_EQ(host_->key_shortcuts().size(), 1u);
+  EXPECT_TRUE(host_->key_shortcuts()[0].command.empty());
+  host_->ResetAndDeleteThis();
+  remote_.reset();
+  auto* host = new NativeHost(*main_rfh(),
+                              HostContext::ForCoordinator(*profile()),
+                              remote_.BindNewPipeAndPassReceiver());
+  host_ = host->GetWeakPtr();
+  ExpectError(Invoke("BaySystem", "recordShortcut", "[]"), "window_required");
 }
 
 TEST_F(TextFileDialogTest, CoordinatorAndBadArgumentsOpenNoDialog) {

@@ -23,6 +23,9 @@ namespace content {
 class WebContents;
 class WebUI;
 }  // namespace content
+namespace input {
+struct NativeWebKeyboardEvent;
+}  // namespace input
 
 namespace bay {
 class TabObserver;
@@ -61,6 +64,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   // The Bay document this host serves.
   content::WebContents* document_contents() const;
   // A key the window's document runs as its command (BayShell.setKeyShortcuts).
+  // No command: a key taken off its command. Nothing runs, so it doesn't go
+  // back to being Chrome's accelerator.
   struct KeyShortcut {
     int key_code;
     bool ctrl;
@@ -69,6 +74,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
     std::string command;
     std::optional<std::string> arg;
   };
+  // Takes a key down while BaySystem.recordShortcut waits for one.
+  bool RecordShortcutKey(const input::NativeWebKeyboardEvent& event);
   const std::vector<KeyShortcut>& key_shortcuts() const {
     return key_shortcuts_;
   }
@@ -143,6 +150,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   mojo::Remote<mojom::NativeHostClient> client_;
   std::map<int, std::unique_ptr<TabObserver>> tabs_;
   std::vector<KeyShortcut> key_shortcuts_;
+  void FinishShortcutRecording(base::Value result);
+  InvokeCallback shortcut_recording_;
   std::map<uintptr_t, std::pair<bool, InvokeCallback>> pending_;
   // View tags whose mount waits for its profile to load.
   std::set<int> loading_mounts_;

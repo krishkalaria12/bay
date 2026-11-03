@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   formatShortcut,
   LINUX_SHORTCUTS,
+  menuKeyName,
+  menuKeyOf,
+  menuModifiersOf,
   menuShortcutStroke,
   parseShortcut,
   relabelShortcuts,
@@ -129,4 +132,68 @@ test("every Windows and Linux shortcut key has the virtual-key code Chromium's k
   assert.equal(virtualKeyCode("="), 0xbb);
   assert.equal(virtualKeyCode("Pause"), null);
   for (const [command, stroke] of Object.entries(LINUX_SHORTCUTS)) assert.notEqual(virtualKeyCode(stroke.key), null, command);
+});
+
+test("menu keys and stroke names read each other", () => {
+  for (const [key, name] of [
+    ["\uf700", "Up"],
+    ["\uf702", "Left"],
+    ["\uf704", "F1"],
+    ["\uf717", "F20"],
+    ["\uf728", "Delete"],
+    ["\uf72c", "PageUp"],
+    ["\t", "Tab"],
+    ["\r", "Enter"],
+    ["\u007f", "Backspace"],
+    [" ", "Space"],
+    ["t", "t"],
+    ["[", "["],
+  ]) {
+    assert.equal(menuKeyName(key), name);
+    assert.equal(menuKeyOf(name), key);
+  }
+  assert.equal(menuKeyOf("T"), "t");
+  assert.equal(menuKeyName("\u0008"), "Backspace");
+  assert.equal(menuKeyName("\uf727"), "\uf727", "a key strokes have no name for stays itself");
+});
+
+test("every key the recorder can give has a virtual key and a label", () => {
+  for (const key of [
+    "\uf700",
+    "\uf703",
+    "\uf704",
+    "\uf717",
+    "\uf728",
+    "\uf729",
+    "\uf72b",
+    "\uf72c",
+    "\uf72d",
+    "\t",
+    "\r",
+    "\u007f",
+    " ",
+    "a",
+    "0",
+    ";",
+    "=",
+    ",",
+    "-",
+    ".",
+    "/",
+    "`",
+    "[",
+    "\\",
+    "]",
+    "'",
+  ]) {
+    assert.notEqual(virtualKeyCode(menuKeyName(key)), null, JSON.stringify(key));
+    assert.ok(formatShortcut({ key: menuKeyName(key), mod: true }, "linux").startsWith("Ctrl+"));
+  }
+  assert.equal(formatShortcut(menuShortcutStroke(menuKeyName("\uf700"), ["shift", "command"]), "linux"), "Ctrl+Shift+Up");
+  assert.equal(formatShortcut(menuShortcutStroke(menuKeyName("\uf709")), "linux"), "F6");
+});
+
+test("a stroke's modifiers spell as menus spell them", () => {
+  assert.deepEqual(menuModifiersOf({ key: "t", mod: true, shift: true, alt: true, ctrl: true }), ["control", "option", "shift", "command"]);
+  assert.deepEqual(menuModifiersOf({ key: "F6" }), []);
 });

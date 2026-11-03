@@ -89,6 +89,8 @@ void BayWebUIBrowserWindow::SetFocusToLocationBar(bool is_user_initiated) {
 content::KeyboardEventProcessingResult
 BayWebUIBrowserWindow::PreHandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
+  if (RecordWindowShortcut(browser(), event))
+    return content::KeyboardEventProcessingResult::HANDLED;
 #if BUILDFLAG(IS_LINUX)
   // Ahead of the page, as Chrome's reserved shortcuts are. Quitting is
   // Chrome's own user exit, so Bay's close preflight (native_host.cc) still

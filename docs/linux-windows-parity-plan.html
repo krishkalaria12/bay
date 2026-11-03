@@ -870,7 +870,14 @@
                   <td class="methods">recordShortcut cancelRecording menuShortcuts</td>
                   <td>You can't rebind shortcuts in Settings → Shortcuts or Little Bay.</td>
                   <td><code>Menus.swift</code></td>
-                  <td><span class="tag t-port">Port</span> as a JS key capture in the web host, since keys already reach the WebUI. S–M</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> Recording is native rather than a JS capture:
+                    <code>webui/shortcut_recorder.cc</code> runs ahead of Chrome's accelerators, which would otherwise close a window on Ctrl+Shift+W instead of
+                    recording it. A click or focus leaving cancels, as on macOS. <code>lib/shortcutCatalog.ts</code> mirrors macOS's menu by the same ids, with
+                    a test against <code>Menus.swift</code>, and <code>lib/keyBindings.ts</code> now applies what Settings saved. A key taken off a command
+                    stays Bay's, so it doesn't turn back into Chrome's accelerator. Little Bay can record, but its global hotkey is still its own row. Linux run
+                    pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Little Bay global access</strong></td>
