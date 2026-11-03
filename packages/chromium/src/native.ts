@@ -70,6 +70,10 @@ export const Cef = requireNativeModule<{
   killTask(id: number): Promise<boolean>;
   systemState(): Promise<SystemState>;
 
+  /** Every download the loaded profiles hold, as `onDownload` reports them: what a listener missed before it
+   *  subscribed (at launch, or in a replacement coordinator). The web desktop host has it; macOS NNCore replays
+   *  them itself as each profile loads. */
+  listDownloads?(): Promise<Download[]>;
   cancelDownload(id: string): Promise<void>;
   pauseDownload(id: string): Promise<void>;
   resumeDownload(id: string): Promise<void>;

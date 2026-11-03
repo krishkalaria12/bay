@@ -183,6 +183,7 @@ inline constexpr Method methods[] = {
   {"BayCEF", "listTasks", true, 0, 0},
   {"BayCEF", "killTask", true, 1, 1},
   {"BayCEF", "systemState", true, 0, 0},
+  {"BayCEF", "listDownloads", true, 0, 0},
   {"BayCEF", "cancelDownload", true, 1, 1},
   {"BayCEF", "pauseDownload", true, 1, 1},
   {"BayCEF", "resumeDownload", true, 1, 1},

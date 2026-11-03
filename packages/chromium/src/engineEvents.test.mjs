@@ -35,3 +35,49 @@ test("each engine's dismissed prompt reaches the app once", () => {
 test("each engine's download reaches the app once", () => {
   assert.deepEqual(received(onDownload, "onDownload", ["d1", "wk-download-1"]), ["d1", "wk-download-1"]);
 });
+
+// The web host lists what a listener missed before it subscribed (BayCEF.listDownloads).
+const cef = globalThis.nnTestNativeModules.BayCEF;
+const listing = () => {
+  let resolve, reject;
+  cef.listDownloads = () => new Promise((yes, no) => ((resolve = yes), (reject = no)));
+  return { resolve: (list) => resolve(list), reject: (error) => reject(error) };
+};
+const settle = () => new Promise((done) => setTimeout(done, 0));
+
+test("a host's download list reaches a new listener, unless an event already reported that download", async (t) => {
+  t.after(() => delete cef.listDownloads);
+  const list = listing();
+  const seen = [];
+  const subscription = onDownload((d) => seen.push(`${d.id}:${d.state}`));
+  fire("onDownload", { id: "d1", state: "finished" });
+  list.resolve([
+    { id: "d1", state: "downloading" },
+    { id: "d2", state: "finished" },
+  ]);
+  await settle();
+  fire("onDownload", { id: "d2", state: "finished" });
+  subscription.remove();
+  assert.deepEqual(seen, ["d1:finished", "d2:finished", "d2:finished"]);
+});
+
+test("a removed listener gets no download list, and a failed list is quiet", async (t) => {
+  t.after(() => delete cef.listDownloads);
+  const removed = listing();
+  const seen = [];
+  onDownload((d) => seen.push(d.id)).remove();
+  removed.resolve([{ id: "d1" }]);
+  await settle();
+  const failed = listing();
+  const subscription = onDownload((d) => seen.push(d.id));
+  failed.reject(new Error("host went away"));
+  await settle();
+  fire("onDownload", { id: "d2" });
+  subscription.remove();
+  assert.deepEqual(seen, ["d2"]);
+});
+
+test("a host without a download list leaves listeners to events", () => {
+  assert.equal(cef.listDownloads, undefined);
+  assert.deepEqual(received(onDownload, "onDownload", ["d3"]), ["d3"]);
+});

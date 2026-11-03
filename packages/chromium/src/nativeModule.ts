@@ -217,7 +217,31 @@ const bothEngines = <T extends { id: string }>(
 };
 const webKitDownload = (action: "cancel" | "pause" | "resume", id: string) => WebKit?.downloadCommand(action, id) ?? Promise.resolve();
 
-export const onDownload = (listener: (d: Download) => void) => bothEngines("onDownload", isWebKitDownload, listener);
+export function onDownload(listener: (d: Download) => void) {
+  // A host that has the list gives it after subscribing, so nothing reported before is lost. An event can overtake
+  // the list's reply: the event is newer, so the list's copy of that download is dropped.
+  let reported: Set<string> | null = new Set<string>();
+  const subscription = bothEngines<Download>("onDownload", isWebKitDownload, (d) => {
+    reported?.add(d.id);
+    listener(d);
+  });
+  let removed = false;
+  const listed = Cef.listDownloads?.();
+  if (!listed) reported = null;
+  void listed?.then(
+    (downloads) => {
+      if (!removed) for (const d of downloads) if (!reported?.has(d.id)) listener(d);
+      reported = null;
+    },
+    () => (reported = null),
+  );
+  return {
+    remove: () => {
+      removed = true;
+      subscription.remove();
+    },
+  };
+}
 export const cancelDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("cancel", id) : Cef.cancelDownload(id));
 export const pauseDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("pause", id) : Cef.pauseDownload(id));
 export const resumeDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("resume", id) : Cef.resumeDownload(id));

@@ -14,6 +14,8 @@
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "bay/core/nn_page_channel.h"
+#include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/download_controls.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
@@ -573,7 +575,8 @@ base::ListValue EngineServices::SupportedMethods() const {
     methods.Append(std::string("BayCEF.") + method.facade);
   for (const char* method :
        {"getPasswordAutofill", "setPasswordAutofill", "getAutofillSettings",
-        "setAutofillSettings", "exportPasswords", "setBoosts"})
+        "setAutofillSettings", "exportPasswords", "setBoosts", "listDownloads",
+        "pauseDownload", "resumeDownload", "cancelDownload"})
     methods.Append(std::string("BayCEF.") + method);
   methods.Append("BayChromeUI.changeCaptureSource");
   methods.Append("BayChromeUI.showAutofillSuggestions");
@@ -695,6 +698,31 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
                        weak_factory_.GetWeakPtr()));
     password_export_picker_->Show(
         context_.window()->GetWindow()->GetNativeWindow());
+    return true;
+  }
+  if (method == "listDownloads") {
+    // Download events reach the coordinator only, so a shared-runtime window
+    // has nothing to catch up on.
+    if (AppRuntime::Enabled() && context_.is_window()) {
+      std::move(response).Run(Success(base::Value(base::ListValue())));
+      return true;
+    }
+    DownloadControls::Get().List(engine_, std::move(response));
+    return true;
+  }
+  if (method == "pauseDownload" || method == "resumeDownload" ||
+      method == "cancelDownload") {
+    const auto* id = Text(args, 0);
+    if (!id) {
+      invalid();
+      return true;
+    }
+    std::string command = "cancel";
+    if (method == "pauseDownload")
+      command = "pause";
+    else if (method == "resumeDownload")
+      command = "resume";
+    DownloadControls::Get().Command(engine_, command, *id, std::move(response));
     return true;
   }
   if (method == "getPasswordAutofill" || method == "setPasswordAutofill" ||
