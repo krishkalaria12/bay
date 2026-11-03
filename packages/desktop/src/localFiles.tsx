@@ -21,6 +21,8 @@ const Native = () =>
     list(rootPath: string, relativePath: string): Promise<LocalFileListing>;
     open(rootPath: string, relativePath: string): Promise<LocalFileAccess>;
     reconnect(rootPath: string, kind: "file" | "folder" | null): Promise<LocalFileDescriptor | null>;
+    // The Chrome-hosted desktop: grants what the desktop just dropped on this window (never paths the page names).
+    acceptDrop?(): Promise<{ files: LocalFileDescriptor[]; errors: string[] }>;
     devDrop?(windowId: string, paths: string[]): Promise<Record<string, unknown>>;
     devUpload?(windowId: string, rootPath: string, relativePath: string, x: number, y: number): Promise<Record<string, unknown>>;
   }>("BayLocalFiles");
@@ -31,6 +33,7 @@ export const localFiles = {
   list: async (rootPath: string, relativePath = "") => Native().list(rootPath, relativePath),
   open: async (rootPath: string, relativePath = "") => Native().open(rootPath, relativePath),
   reconnect: async (rootPath: string, kind?: "file" | "folder") => Native().reconnect(rootPath, kind ?? null),
+  acceptDrop: async () => (await Native().acceptDrop?.()) ?? { files: [], errors: ["Dropping files is unavailable in this Bay host."] },
   /** Native acceptance hooks reject all work outside a BAY_BACKGROUND=1 instance. */
   devDrop: async (windowId: string, paths: string[]) => Native().devDrop?.(windowId, paths) ?? Promise.resolve({ error: "native hook unavailable" }),
   devUpload: async (windowId: string, rootPath: string, relativePath: string, x: number, y: number) =>

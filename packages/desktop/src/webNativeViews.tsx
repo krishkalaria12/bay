@@ -14,7 +14,7 @@ import { Image, Text, type TextStyle } from "react-native";
 import { View, type ViewProps } from "@bay/platform";
 import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEffectProps, SurfaceProps, SymbolProps, VisualEffectProps } from "./index";
 import type { MiddleClickEvent, MouseAreaProps } from "./system";
-import type { LocalFilesAreaProps } from "./localFiles";
+import { localFiles, type LocalFilesAreaProps } from "./localFiles";
 import { fluentSymbol, svgSymbol } from "./symbols.web";
 import { WebActivitySpinner } from "./WebActivitySpinner";
 import { EaselCanvasWeb } from "./EaselCanvas.web";
@@ -301,7 +301,7 @@ function LocalFilesArea({
   dropEnabled,
   rootPath: _rootPath,
   relativePath: _relativePath,
-  onFilesDropped: _onFilesDropped,
+  onFilesDropped,
   onFilesDropError,
   onDropActive,
   onActivate,
@@ -324,12 +324,12 @@ function LocalFilesArea({
         event.stopPropagation();
         onContextMenu();
       };
-      // Browser File objects carry no native access grant. A picker can reconnect a
-      // file; a drop must not turn untrusted path metadata into a native grant.
+      // A page's File objects carry no path or access grant: the host grants what the desktop itself dropped
+      // (BayLocalFiles.acceptDrop), never path metadata from here.
       const over = (event: DragEvent) => {
-        if (!dropEnabled) return;
+        if (!dropEnabled || !event.dataTransfer?.types.includes("Files")) return;
         event.preventDefault();
-        if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+        event.dataTransfer.dropEffect = "copy";
         onDropActive?.({ nativeEvent: { active: true } });
       };
       const leave = () => onDropActive?.({ nativeEvent: { active: false } });
@@ -338,7 +338,13 @@ function LocalFilesArea({
         event.preventDefault();
         event.stopPropagation();
         leave();
-        onFilesDropError?.({ nativeEvent: { message: "Dropping local files is unavailable in this Bay host. Use the file picker to reconnect." } });
+        void localFiles.acceptDrop().then(
+          ({ files, errors }) => {
+            for (const message of errors) onFilesDropError?.({ nativeEvent: { message } });
+            if (files.length) onFilesDropped?.({ nativeEvent: { files } });
+          },
+          () => onFilesDropError?.({ nativeEvent: { message: "Couldn't pin the dropped files. Try again." } }),
+        );
       };
       element.addEventListener("click", click);
       element.addEventListener("keydown", key);
@@ -355,10 +361,9 @@ function LocalFilesArea({
         element.removeEventListener("drop", drop);
       };
     },
-    [dropEnabled, onFilesDropError, onDropActive, onActivate, onContextMenu],
+    [dropEnabled, onFilesDropped, onFilesDropError, onDropActive, onActivate, onContextMenu],
   );
-  // Rendering and keyboard activation work with the native LocalFiles commands.
-  // Native drag grants require a separate host adapter, so no fake file URL is emitted.
+  // Dragging a pinned file out to other apps is macOS only: no file URL is put on a web drag.
   return <Box {...props} configure={configure} />;
 }
 

@@ -179,6 +179,8 @@ source_set("impl") {
       "drag_preview.h",
       "little_bay_access.cc",
       "little_bay_access.h",
+      "local_files.cc",
+      "local_files.h",
       "shell_ui.cc",
       "shell_ui_options.cc",
     ]
@@ -686,6 +688,24 @@ if (is_win || is_linux) {
       "//third_party/crashpad/crashpad/snapshot",
       "//third_party/crashpad/crashpad/snapshot:test_support",
       "//third_party/crashpad/crashpad/util",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  test("local_files_unittests") {
+    sources = [
+      "local_files.cc",
+      "local_files.h",
+      "local_files_unittest.cc",
+    ]
+    deps = [
+      "//base",
+      "//base/test:run_all_unittests",
+      "//chrome/common:constants",
+      "//net",
+      "//testing/gtest",
+      "//url",
     ]
   }
 }

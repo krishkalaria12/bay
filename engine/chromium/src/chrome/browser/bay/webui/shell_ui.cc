@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/bay/webui/host_context.h"
+#include "chrome/browser/bay/webui/local_files.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/icon_loader.h"
 #include "chrome/browser/profiles/profile.h"
@@ -321,6 +322,25 @@ ShellFilePickerRequest SaveTextRequest(const HostContext& context,
   request.disk_work = base::BindOnce(&WriteTextFile, std::move(save.contents));
   return request;
 }
+ShellFilePickerRequest LocalFileGrantRequest(const std::string& root,
+                                            bool folder) {
+  ShellFilePickerRequest request;
+  request.type = folder ? ui::SelectFileDialog::SELECT_FOLDER
+                        : ui::SelectFileDialog::SELECT_OPEN_FILE;
+  request.title = u"Allow Access";
+  request.default_path = base::FilePath::FromUTF8Unsafe(root).DirName();
+  request.cancelled = Success(std::nullopt);
+  request.disk_work = base::BindOnce(
+      [](std::string root, const base::FilePath& path) {
+        auto pin = LocalFileGrants::Get().Grant(path, root);
+        return pin ? base::WriteJson(base::DictValue().Set("value",
+                                                           std::move(*pin)))
+                         .value_or("{\"value\":null}")
+                   : Success(std::nullopt);
+      },
+      root);
+  return request;
+}
 ShellFilePickerRequest OpenTextRequest(
     std::vector<base::FilePath::StringType> extensions) {
   ShellFilePickerRequest request;
@@ -573,6 +593,13 @@ void ShellUI::PickImportFile(const HostContext& context,
                              ImportFileKind kind,
                              Response callback) {
   StartFilePicker(context, ImportFileRequest(kind), std::move(callback));
+}
+void ShellUI::PickLocalFileGrant(const HostContext& context,
+                                 const std::string& root,
+                                 bool folder,
+                                 Response callback) {
+  StartFilePicker(context, LocalFileGrantRequest(root, folder),
+                  std::move(callback));
 }
 void ShellUI::StartFilePicker(const HostContext& context,
                               ShellFilePickerRequest request,

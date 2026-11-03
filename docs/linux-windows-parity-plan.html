@@ -1019,7 +1019,13 @@
                   <td class="methods">inspect list open reconnect devDrop devUpload</td>
                   <td>Local folders in the sidebar don't work.</td>
                   <td><code>LocalFiles.swift</code> (395)</td>
-                  <td><span class="tag t-port">Port</span> Shared C++ with inotify and <code>ReadDirectoryChangesW</code>. M</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/local_files.cc</code> keeps macOS's security model: a path grants nothing,
+                    only a native picker (<code>reconnect</code>) or a desktop drop does, and reads never leave the granted folder by <code>..</code> or a
+                    symlink. Grants persist in a private file. A drop's paths come from the browser's own record of the drag
+                    (<code>chromium-bay-document-file-drop.patch</code>, <code>BayLocalFiles.acceptDrop</code>), never from the page. Files a tab can't show
+                    open in their app. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>User scripts</strong> (<code>BayUserScripts</code>)</td>
@@ -1434,6 +1440,11 @@
             <li>
               <strong>App menu:</strong> only F10 opens it; Alt alone doesn't, so a page keeps its Alt key. It opens at the pointer, as a context menu does, not
               under a menu bar. The Window menu's list of windows, the Extensions menu and Services aren't in it.
+            </li>
+            <li>
+              <strong>Local files:</strong> folders aren't watched (no inotify or <code>ReadDirectoryChangesW</code>); a listing refreshes when the sidebar asks
+              again, as on macOS. Dragging a pinned file out to another app, and the <code>devDrop</code>/<code>devUpload</code> acceptance hooks, are macOS
+              only. Reconnecting picks a file or a folder by the pin's kind, as GTK's dialog can't offer both.
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
             <li>

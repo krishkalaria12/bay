@@ -150,9 +150,17 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   mojo::Remote<mojom::NativeHostClient> client_;
   std::map<int, std::unique_ptr<TabObserver>> tabs_;
   std::vector<KeyShortcut> key_shortcuts_;
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  // Reconnecting a pin's file asks in its own picker (shell_ui.h).
+  std::unique_ptr<ShellUI> local_files_ui_;
+#endif
   void FinishShortcutRecording(base::Value result);
   // The dragged tab's floating preview (drag_preview.h).
   void DragPreviewCall(const std::string& method, const base::ListValue& args);
+  // BayLocalFiles (local_files.h).
+  void LocalFilesCall(const std::string& method,
+                      const base::ListValue& args,
+                      InvokeCallback callback);
   // BayApp's test harness hooks (dev_window.h).
   void DevHarness(const std::string& method,
                   const base::ListValue& args,

@@ -53,6 +53,13 @@ class ShellUI {
   void PickImportFile(const HostContext& context,
                       ImportFileKind kind,
                       Response callback);
+  // BayLocalFiles.reconnect: the file or folder the user picks is granted
+  // (local_files.h), under `root` too, so its pin stays valid. Answers the
+  // pin's descriptor, or null when cancelled.
+  void PickLocalFileGrant(const HostContext& context,
+                          const std::string& root,
+                          bool folder,
+                          Response callback);
 
  private:
   void StartFilePicker(const HostContext& context,

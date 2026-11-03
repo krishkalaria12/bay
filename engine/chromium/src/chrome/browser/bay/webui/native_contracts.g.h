@@ -161,6 +161,7 @@ inline constexpr Method methods[] = {
   {"BayLocalFiles", "list", true, 2, 2},
   {"BayLocalFiles", "open", true, 2, 2},
   {"BayLocalFiles", "reconnect", true, 2, 2},
+  {"BayLocalFiles", "acceptDrop", true, 0, 0},
   {"BayLocalFiles", "devDrop", true, 2, 2},
   {"BayLocalFiles", "devUpload", true, 5, 5},
   {"BayCEF", "startPageEvents", true, 0, 0},

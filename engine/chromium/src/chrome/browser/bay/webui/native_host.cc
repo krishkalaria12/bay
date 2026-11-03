@@ -65,6 +65,14 @@
 #include "chrome/browser/bay/webui/notifications.h"
 #include "chrome/browser/bay/webui/crash_reports.h"
 #include "chrome/browser/bay/webui/little_bay_access.h"
+#include "chrome/browser/bay/webui/local_files.h"
+#include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/platform_util.h"
+#include "content/public/common/drop_data.h"
+
+// chromium-bay-document-file-drop.patch.
+extern void (*g_bay_document_drag_enter)(content::WebContents* source,
+                                         const content::DropData& data);
 #include "chrome/browser/bay/webui/shell_appearance.h"
 #endif
 #if BUILDFLAG(IS_LINUX)
@@ -529,6 +537,124 @@ void NativeHost::DragPreviewCall(const std::string& method,
     preview.Cancel();
   }
 }
+// Files the document was last dragged over with (chromium-bay-document-file-
+// drop.patch): the browser's own record of a desktop drag, so a drop on a
+// pinned-files area grants what was really dropped, never paths a page names.
+struct DocumentDrag {
+  base::TimeTicks at;
+  std::vector<base::FilePath> files;
+};
+std::map<const content::WebContents*, DocumentDrag>& DocumentDrags() {
+  static base::NoDestructor<std::map<const content::WebContents*, DocumentDrag>>
+      drags;
+  return *drags;
+}
+void RecordDocumentDrag(content::WebContents* source,
+                        const content::DropData& data) {
+  auto& drag = DocumentDrags()[source];
+  drag.at = base::TimeTicks::Now();
+  drag.files.clear();
+  for (const auto& file : data.filenames)
+    drag.files.push_back(file.path);
+}
+void NativeHost::LocalFilesCall(const std::string& method,
+                                const base::ListValue& args,
+                                InvokeCallback callback) {
+  const std::string root = Text(args, 0);
+  const std::string relative = Text(args, 1);
+  const base::TaskTraits disk = {base::MayBlock(),
+                                 base::TaskPriority::USER_VISIBLE};
+  if (method == "reconnect") {
+    if (!local_files_ui_)
+      local_files_ui_ = std::make_unique<ShellUI>();
+    const auto* kind = At(args, 1);
+    local_files_ui_->PickLocalFileGrant(
+        context_, root,
+        kind && kind->is_string() && kind->GetString() == "folder",
+        std::move(callback));
+    return;
+  }
+  auto reply = base::BindOnce(
+      [](InvokeCallback callback, base::Value value) {
+        std::move(callback).Run(Success(std::move(value)));
+      },
+      std::move(callback));
+  if (method == "acceptDrop") {
+    // Only once, and only soon after the drag came in.
+    std::vector<base::FilePath> files;
+    auto& drags = DocumentDrags();
+    if (const auto found = drags.find(document_contents());
+        context_.is_window() && found != drags.end()) {
+      if (base::TimeTicks::Now() - found->second.at < base::Minutes(2))
+        files = std::move(found->second.files);
+      drags.erase(found);
+    }
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, disk,
+        base::BindOnce(
+            [](std::vector<base::FilePath> files) {
+              base::ListValue pins;
+              base::ListValue errors;
+              for (const auto& file : files) {
+                if (auto pin = LocalFileGrants::Get().Grant(file, std::nullopt))
+                  pins.Append(std::move(*pin));
+                else
+                  errors.Append("Could not pin " +
+                                file.BaseName().AsUTF8Unsafe());
+              }
+              return base::Value(base::DictValue()
+                                     .Set("files", std::move(pins))
+                                     .Set("errors", std::move(errors)));
+            },
+            std::move(files)),
+        std::move(reply));
+    return;
+  }
+  if (method == "inspect" || method == "list") {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, disk,
+        base::BindOnce(
+            [](bool list, std::string root, std::string relative) {
+              auto& grants = LocalFileGrants::Get();
+              return base::Value(list ? grants.List(root, relative)
+                                      : grants.Inspect(root, relative));
+            },
+            method == "list", root, relative),
+        std::move(reply));
+    return;
+  }
+  if (method == "open") {
+    // A tab shows what it can read; anything else opens in its own app.
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, disk,
+        base::BindOnce(&LocalFileGrants::Inspect,
+                       base::Unretained(&LocalFileGrants::Get()), root,
+                       relative),
+        base::BindOnce(
+            [](base::WeakPtr<NativeHost> host,
+               base::OnceCallback<void(base::Value)> reply,
+               base::DictValue access) {
+              const auto* status = access.FindString("status");
+              const auto* path = access.FindString("path");
+              const auto* kind = access.FindString("kind");
+              Profile* profile = host ? host->context_.profile() : nullptr;
+              if (profile && status && *status == "available" && path &&
+                  !access.FindBool("browserReadable").value_or(false)) {
+                platform_util::OpenItem(
+                    profile, base::FilePath::FromUTF8Unsafe(*path),
+                    kind && *kind == "folder" ? platform_util::OPEN_FOLDER
+                                              : platform_util::OPEN_FILE,
+                    base::DoNothing());
+              }
+              std::move(reply).Run(base::Value(std::move(access)));
+            },
+            GetWeakPtr(), std::move(reply)));
+    return;
+  }
+  // devDrop and devUpload drive AppKit's drag destinations.
+  std::move(reply).Run(base::Value(
+      base::DictValue().Set("error", "This local files hook is macOS only")));
+}
 void NativeHost::DevHarness(const std::string& method,
                             const base::ListValue& args,
                             InvokeCallback callback) {
@@ -666,6 +792,9 @@ static void OpenLittleBayFromAnyApp() {
 }
 void NativeHost::InstallCloseHooks() {
   static const bool installed = [] {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+    g_bay_document_drag_enter = &RecordDocumentDrag;
+#endif
     // The broker installs a detached-tab-only fallback on Linux. Construct it
     // first, then replace that fallback with the full renderer handshake so it
     // cannot overwrite these hooks when the first tab is used.
@@ -774,6 +903,9 @@ content::WebContents* NativeHost::document_contents() const {
 }
 NativeHost::~NativeHost() {
   FinishShortcutRecording(base::Value());
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  DocumentDrags().erase(document_contents());
+#endif
   InstallPrompts::Get().HostGone(this);
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   appearance_.reset();
@@ -810,6 +942,7 @@ base::DictValue NativeHost::Info() const {
     modules.Append(module.Clone());
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   modules.Append("BayKeychain");
+  modules.Append("BayLocalFiles");
   for (const auto& module : data::ModuleNames())
     modules.Append(module);
 #endif
@@ -1539,6 +1672,10 @@ void NativeHost::Invoke(const std::string& module,
     return;
   }
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  if (module == "BayLocalFiles") {
+    LocalFilesCall(method, args, std::move(callback));
+    return;
+  }
   if (module == "BayApp" && method == "crashReports") {
     const auto* value = At(args, 0);
     const auto since = value ? value->GetIfDouble() : std::nullopt;
