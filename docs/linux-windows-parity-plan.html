@@ -926,8 +926,11 @@
                   <td>Floating previews when tearing tabs out into new windows.</td>
                   <td><code>Windows.swift</code></td>
                   <td>
-                    <span class="tag t-verify">Verify</span> the web <code>windowDrop</code> path. On Wayland there are no global coordinates, so tear-off is
-                    size-only (K3).
+                    <span class="tag t-done">Source-complete 3 Nov</span> The drop itself worked, but no preview showed: Windows has global coordinates, so the
+                    tab strip asked for one, and the host implemented none of the calls. <code>webui/drag_preview.cc</code> is a floating, click-through widget:
+                    the tab's pill over a tab list, a card of its page elsewhere, growing into the new window on a drop, with macOS's timings. The dragged tab
+                    now also draws over its neighbours in the strip (<code>raiseView</code> as CSS stacking). On Wayland there are no global coordinates, so
+                    tear-off stays size-only with no preview (K3). Linux run pending.
                   </td>
                 </tr>
                 <tr data-kind="replace">
@@ -1417,6 +1420,11 @@
               fire, and ignores <code>focus</code>, <code>settle</code> and <code>wait</code>. <code>devSnapshotWindow</code> ignores <code>transparent</code>.
               The <code>apps/browser/scripts/*-test.mjs</code> suites still drive macOS with AppleScript and <code>cliclick</code> in places, so porting a suite
               means replacing those steps.
+            </li>
+            <li>
+              <strong>Tab drag previews:</strong> the card shows the page's own picture or the whole window, where macOS lays the page into the window's
+              picture; the placeholder shows the title without the favicon. The card fades as soon as it reaches the new window rather than waiting for its
+              content. Wayland has no preview at all, and X11 has none either while <code>globalWindowCoordinates</code> stays off on Linux.
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
             <li>

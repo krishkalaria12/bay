@@ -151,6 +151,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   std::map<int, std::unique_ptr<TabObserver>> tabs_;
   std::vector<KeyShortcut> key_shortcuts_;
   void FinishShortcutRecording(base::Value result);
+  // The dragged tab's floating preview (drag_preview.h).
+  void DragPreviewCall(const std::string& method, const base::ListValue& args);
   // BayApp's test harness hooks (dev_window.h).
   void DevHarness(const std::string& method,
                   const base::ListValue& args,

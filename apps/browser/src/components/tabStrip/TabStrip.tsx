@@ -3,7 +3,7 @@ import { ScrollView } from "@bay/platform";
 import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/desktop";
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
-import { PanResponder, StyleSheet, Text } from "react-native";
+import { PanResponder, Platform, StyleSheet, Text } from "react-native";
 import { nodeTag } from "../../lib/nodeTag";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, ThemeScope, useTheme, useWindowTint } from "../../lib/theme";
@@ -105,6 +105,12 @@ type Entry = { kind: "dock"; ids: string[] } | GroupEntry | Member;
 // `width`: the window's (the peek's, floating), from its parent, so a strip mounting again lays its tabs out right on its
 // first frame. `hidden`: page full screen keeps the strip mounted out of view, and gives the traffic lights back.
 // `swipe`: the strip pages profiles; a hidden peek's doesn't, or switching profiles would wait on its pager.
+// raiseView on the Chrome-hosted desktop, which has no native view tags: the element, and `levels` of its ancestors,
+// over their siblings, as a later sibling would otherwise draw over the dragged tab.
+function raiseElement(element: HTMLElement | null, levels: number, raised: boolean) {
+  for (let level = 0; element && level <= levels; level++, element = element.parentElement) element.style.zIndex = raised ? "1" : "";
+}
+
 export function TopTabStrip({
   width,
   floating = false,
@@ -482,6 +488,7 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
   // Drawn over the row while dragged and settling (a group's member over the group's other members).
   let raised: number | null = null;
   const raise = (on: boolean) => {
+    if (Platform.OS === "web") return raiseElement(view as unknown as HTMLElement | null, current().groupId ? 1 : 0, on);
     const tag = on ? nodeTag(view) : raised;
     raiseView(tag, current().groupId ? 1 : 0, on);
     raised = on ? tag : null;

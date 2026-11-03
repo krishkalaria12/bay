@@ -175,6 +175,8 @@ source_set("impl") {
       "data_bridge.h",
       "crash_reports.cc",
       "crash_reports.h",
+      "drag_preview.cc",
+      "drag_preview.h",
       "little_bay_access.cc",
       "little_bay_access.h",
       "shell_ui.cc",

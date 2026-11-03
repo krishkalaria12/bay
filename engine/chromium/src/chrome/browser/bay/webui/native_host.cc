@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/base64.h"
 #include "base/environment.h"
 #include "base/immediate_crash.h"
 #include "base/task/sequenced_task_runner.h"
@@ -37,6 +38,7 @@
 #include "chrome/browser/bay/webui/clear_specks.h"
 #include "chrome/browser/bay/webui/context_search.h"
 #include "chrome/browser/bay/webui/dev_window.h"
+#include "chrome/browser/bay/webui/drag_preview.h"
 #include "chrome/browser/bay/webui/device_choosers.h"
 #include "chrome/browser/bay/webui/external_app_prompts.h"
 #include "chrome/browser/bay/webui/page_menu.h"
@@ -475,6 +477,56 @@ void NativeHost::CancelQuit() {
     if (host)
       host->Emit("BayShell", "onAppEvent",
                  base::Value(base::DictValue().Set("type", "quitCancelled")));
+  }
+}
+namespace {
+// `count` numbers at args[index], rounded: a rect or a point.
+std::optional<std::vector<int>> Numbers(const base::ListValue& args,
+                                        size_t index,
+                                        size_t count) {
+  const auto* list = index < args.size() ? args[index].GetIfList() : nullptr;
+  if (!list || list->size() != count)
+    return std::nullopt;
+  std::vector<int> numbers;
+  for (const auto& value : *list) {
+    const auto number = value.GetIfDouble();
+    if (!number || !std::isfinite(*number))
+      return std::nullopt;
+    numbers.push_back(static_cast<int>(std::round(*number)));
+  }
+  return numbers;
+}
+gfx::Rect RectOf(const std::vector<int>& n) {
+  return gfx::Rect(n[0], n[1], n[2], n[3]);
+}
+}  // namespace
+void NativeHost::DragPreviewCall(const std::string& method,
+                                 const base::ListValue& args) {
+  auto& preview = DragPreview::Get();
+  if (method == "dragPreviewBegin") {
+    auto* frame = WindowRegistry::Get().Find(Text(args, 0));
+    const auto chip = Numbers(args, 1, 4);
+    const auto grab = Numbers(args, 2, 2);
+    // A window's document drags only its own tabs.
+    if (frame && chip && grab &&
+        (!context_.is_window() || frame == context_.window())) {
+      preview.Begin(frame, RectOf(*chip), gfx::Point((*grab)[0], (*grab)[1]));
+    }
+  } else if (method == "dragPreviewPage") {
+    std::string jpeg;
+    if (base::Base64Decode(Text(args, 0), &jpeg))
+      preview.SetPage(jpeg);
+  } else if (method == "dragPreviewPlaceholder") {
+    preview.SetPlaceholder(base::UTF8ToUTF16(Text(args, 0)));
+  } else if (method == "dragPreviewUpdate") {
+    if (const auto point = Numbers(args, 1, 2))
+      preview.Update(Text(args, 0), gfx::Point((*point)[0], (*point)[1]));
+  } else if (method == "dragPreviewEnd") {
+    const auto frame = Numbers(args, 1, 4);
+    preview.End(WindowRegistry::Get().Find(Text(args, 0)),
+                frame ? std::make_optional(RectOf(*frame)) : std::nullopt);
+  } else {
+    preview.Cancel();
   }
 }
 void NativeHost::DevHarness(const std::string& method,
@@ -973,6 +1025,13 @@ base::DictValue NativeHost::Info() const {
   if (context_.is_window()) {
     host_methods->Append("BayShell.setKeyShortcuts");
     host_methods->Append("BayApp.documentSpecks");
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+    for (const char* method :
+         {"BayShell.dragPreviewBegin", "BayShell.dragPreviewPage",
+          "BayShell.dragPreviewUpdate", "BayShell.dragPreviewCancel",
+          "BayShell.dragPreviewPlaceholder", "BayShell.dragPreviewEnd"})
+      host_methods->Append(method);
+#endif
   }
   for (auto& method : LibraryFiles::SupportedMethods())
     host_methods->Append(std::move(method));
@@ -1494,6 +1553,11 @@ void NativeHost::Invoke(const std::string& module,
                                Success(std::move(reports)));
                          },
                          std::move(callback)));
+    return;
+  }
+  if (module == "BayShell" && method.starts_with("dragPreview")) {
+    DragPreviewCall(method, args);
+    std::move(callback).Run(Success());
     return;
   }
   if (module == "BayApp" &&
