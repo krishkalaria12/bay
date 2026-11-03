@@ -9,6 +9,7 @@ import {
   webStoreExtensionId,
   type TabsRequest,
 } from "@bay/chromium";
+import { getNativeHostInfo } from "@bay/platform/nativeBridge";
 import { AppState } from "react-native";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
@@ -58,7 +59,7 @@ export function startExtensionsBridge({ sharedWindow = false } = {}) {
 
   startActionStates();
   startSidePanels();
-  startWebStoreIntegration();
+  startWebStoreIntegration(sharedWindow);
   if (__DEV__) Object.assign(globalThis, { nnExtensionsApp: { ...state, bridge: { openExtensionFromMenu } } });
 }
 
@@ -205,11 +206,13 @@ else store.waiting = (id) => post("result", JSON.stringify(id));
 
 const isStorePage = (url: string | undefined) => !!url && url.startsWith("https://chromewebstore.google.com/");
 
-function startWebStoreIntegration() {
+function startWebStoreIntegration(sharedWindow: boolean) {
   onExtensionInstallPrompt((prompt) => {
     const s = useBrowser.getState();
     const tabId = prompt.browserId ? tabForBrowser(prompt.browserId) : undefined;
-    const windowId = (tabId && s.tabs[tabId]?.windowId) || s.ui.focusedWindowId || s.windowOrder[0];
+    // The web host asks one window, the one this document shows: the prompt is its own.
+    const own = sharedWindow ? getNativeHostInfo().constants.BayShell?.windowId : undefined;
+    const windowId = (typeof own === "string" && own) || (tabId && s.tabs[tabId]?.windowId) || s.ui.focusedWindowId || s.windowOrder[0];
     if (windowId) showInstallPrompt(windowId, prompt);
     else void resolveExtensionInstallPrompt(prompt.requestId, false);
   });

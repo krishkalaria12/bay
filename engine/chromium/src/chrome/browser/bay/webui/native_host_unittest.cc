@@ -23,6 +23,7 @@
 #include "base/test/test_future.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/download_controls.h"
+#include "chrome/browser/bay/webui/install_prompts.h"
 #include "chrome/browser/bay/webui/profile_data.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
@@ -37,6 +38,8 @@
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/install_prompt_data.h"
+#include "extensions/common/extension_builder.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/filename_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -2033,6 +2036,39 @@ TEST(ProfileDataTest, DefaultProfileClearsEveryStoreAndReportsWhatStayed) {
             calls.end());
   // Zoom is listed until its levels are gone.
   EXPECT_EQ(lists["nn_zoom_list"], 3);
+}
+
+// Chrome's install prompt reaches the app as macOS sends it, and the app's
+// answer for a prompt that's gone (answered, or its window closed) is ignored.
+TEST_F(NativeHostTest, ExtensionInstallPromptsAreDescribedAndAnswered) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayExtensions.resolveInstallPrompt"));
+
+  auto extension = extensions::ExtensionBuilder("Shiny").Build();
+  extensions::InstallPromptData prompt(
+      extensions::InstallPromptData::PERMISSIONS_PROMPT);
+  prompt.set_extension(extension.get());
+  const auto described =
+      InstallPrompts::Describe("install7", profile(), 42, prompt);
+  EXPECT_EQ(*described.FindString("requestId"), "install7");
+  EXPECT_EQ(*described.FindString("id"), extension->id());
+  EXPECT_EQ(*described.FindString("name"), "Shiny");
+  EXPECT_EQ(*described.FindString("type"), "permissions");
+  EXPECT_EQ(*described.FindString("icon"), "");
+  EXPECT_EQ(described.FindInt("browserId"), 42);
+  ASSERT_TRUE(described.FindList("permissions"));
+
+  EXPECT_EQ(Invoke("BayExtensions", "resolveInstallPrompt",
+                   R"(["install999",true])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayExtensions", "resolveInstallPrompt",
+                     R"(["install999","yes"])"),
+              "invalid_args");
+  ExpectError(
+      Invoke("BayExtensions", "resolveInstallPrompt", R"([7,true])"),
+      "invalid_args");
 }
 
 }  // namespace bay

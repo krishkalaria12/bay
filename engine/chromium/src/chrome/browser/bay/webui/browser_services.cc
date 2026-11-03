@@ -19,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "chrome/browser/bay/webui/install_prompts.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
@@ -67,7 +68,8 @@ using Response = BrowserServices::Response;
 using EventSink = BrowserServices::EventSink;
 constexpr const char* kExtensionMethods[] = {
     "list",   "inspectUnpacked", "install",          "setEnabled",  "uninstall",
-    "reload", "configure",       "searchEngineList", "chooseFolder"};
+    "reload", "configure",       "searchEngineList", "chooseFolder",
+    "resolveInstallPrompt"};
 constexpr const char* kChromeMethods[] = {
     "actionStates",    "sidePanelURL",       "showCastDialog",
     "watchCastRoutes", "terminateCastRoute", "stopCapture"};
@@ -435,6 +437,17 @@ bool BrowserServices::DispatchExtensions(const std::string& method,
         base::BindOnce(&BrowserServices::FolderPickerFinished,
                        weak_factory_.GetWeakPtr()));
     folder_picker_->Show(context_.window()->GetWindow()->GetNativeWindow());
+    return true;
+  }
+  if (method == "resolveInstallPrompt") {
+    const auto* request_id = Text(args, 0);
+    const auto* accepted = At(args, 1);
+    if (!request_id || !accepted || !accepted->is_bool()) {
+      invalid();
+      return true;
+    }
+    InstallPrompts::Get().Resolve(*request_id, accepted->GetBool());
+    std::move(response).Run(Success());
     return true;
   }
   if (method == "inspectUnpacked") {

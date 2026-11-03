@@ -751,9 +751,14 @@
                   <td><strong>Extension install prompt</strong></td>
                   <td class="num">1</td>
                   <td class="methods">resolveInstallPrompt</td>
-                  <td>Bay's install confirmation can't be answered.</td>
-                  <td><code>nn_installed_bubble.mm</code></td>
-                  <td><span class="tag t-port">Port</span> S</td>
+                  <td>Chrome's own "Add extension?" dialog shows instead of Bay's, and Bay's confirmation can't be answered.</td>
+                  <td><code>nncore_api.mm</code> (<code>HostExtensionInstallPrompt</code>)</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> The existing install-prompt hook is CEF-only, so
+                    <code>chromium-extension-install-prompt-webui.patch</code> adds a handler for the web host. <code>webui/install_prompts.cc</code>
+                    sends each prompt to one window (the one showing the asking tab, else the one used last) and holds Chrome's answer until
+                    <code>resolveInstallPrompt</code>; a closing window cancels its prompts, and with no window Chrome's dialog shows. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Smaller engine calls</strong></td>

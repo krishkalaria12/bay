@@ -48,6 +48,8 @@ source_set("impl") {
     "engine_services.cc",
     "engine_services.h",
     "host_context.cc",
+    "install_prompts.cc",
+    "install_prompts.h",
     "library_files.cc",
     "library_files.h",
     "native_host.cc",
