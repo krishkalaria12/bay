@@ -35,6 +35,7 @@ source_set("bay") {
     "nn_extensions.h",
     "nn_external_apps.cc",
     "nn_external_apps.h",
+    "nn_external_apps_platform.h",
     "nn_favicons.cc",
     "nn_history.cc",
     "nn_passwords.cc",

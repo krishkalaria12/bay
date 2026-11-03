@@ -1,5 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/nn_external_apps.h"
+#include "chrome/browser/bay/nn_external_apps_platform.h"
 
 #include <utility>
 
@@ -8,7 +9,6 @@
 #include "components/prefs/scoped_user_pref_update.h"
 
 namespace bay {
-base::DictValue AppForScheme(const std::string& scheme);
 namespace {
 const char* const kPairs = prefs::kProtocolHandlerPerOriginAllowedProtocols;
 }  // namespace
