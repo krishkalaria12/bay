@@ -8,15 +8,19 @@
 
 #include "base/base64.h"
 #include "base/containers/span.h"
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/clipboard/file_info.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -192,6 +196,28 @@ TEST_F(ShellClipboardTest, CommitsBeforeTheResponseAndAllowsAReentrantWrite) {
   EXPECT_EQ(ReadText(), u"second");
   tasks_.RunUntilIdle();
   EXPECT_EQ(calls, 1);
+}
+
+TEST_F(ShellClipboardTest, WritesAFileThatFileManagersCanPaste) {
+#if BUILDFLAG(IS_WIN)
+  const base::FilePath path(FILE_PATH_LITERAL("C:\\Downloads\\Q3 Report.pdf"));
+#else
+  const base::FilePath path(FILE_PATH_LITERAL("/Downloads/Q3 Report.pdf"));
+#endif
+  ShellClipboard::WriteFilePath(path);
+  base::test::TestFuture<std::vector<ui::FileInfo>> files;
+  ui::Clipboard::GetForCurrentThread()->ReadFilenames(kBuffer, std::nullopt,
+                                                      files.GetCallback());
+  ASSERT_EQ(files.Get().size(), 1u);
+  EXPECT_EQ(files.Get()[0].path, path);
+#if BUILDFLAG(IS_LINUX)
+  base::test::TestFuture<std::string> copied;
+  ui::Clipboard::GetForCurrentThread()->ReadData(
+      ui::ClipboardFormatType::CustomPlatformType(
+          "x-special/gnome-copied-files"),
+      std::nullopt, copied.GetCallback());
+  EXPECT_EQ(copied.Get(), "copy\nfile:///Downloads/Q3%20Report.pdf");
+#endif
 }
 
 }  // namespace

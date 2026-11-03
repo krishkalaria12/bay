@@ -345,6 +345,7 @@ if (is_win || is_linux) {
       "//base",
     ]
     deps = [
+      ":shell_clipboard",
       "//chrome/browser:primitives",
       "//chrome/common:constants",
     ]
@@ -372,6 +373,7 @@ if (is_linux) {
       "//chrome/test:test_support_unit",
       "//content/test:test_support",
       "//testing/gtest",
+      "//ui/base/clipboard:clipboard_test_support",
     ]
   }
 }
@@ -423,6 +425,8 @@ if (is_win || is_linux) {
       "//base",
       "//skia",
       "//ui/base/clipboard",
+      "//ui/base/clipboard:clipboard_types",
+      "//ui/base/clipboard:file_info",
       "//ui/gfx/codec",
     ]
   }

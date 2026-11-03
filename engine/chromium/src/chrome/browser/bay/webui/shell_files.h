@@ -55,7 +55,9 @@ class ShellFiles {
   void Prepared(base::Value downloads_folder);
   void Open(uint64_t request, base::FilePath path, ItemType type);
   void Reveal(uint64_t request, base::FilePath path, ItemType type);
+  void CopyToClipboard(uint64_t request, base::FilePath path, bool exists);
   void Complete(uint64_t request, bool result);
+  void CompleteWithValue(uint64_t request, base::Value result);
   // Answers and forgets a pending request.
   void Settle(uint64_t request, std::string response);
 

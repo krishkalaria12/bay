@@ -476,6 +476,7 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
           name == "BaySystem.fileIcon" || name == "BaySystem.fileExists" ||
           name == "BaySystem.downloadsFolder" || name == "BaySystem.openFile" ||
           name == "BaySystem.revealFile" || name == "BaySystem.moveToTrash" ||
+          name == "BaySystem.copyFile" || name == "BaySystem.renameFile" ||
           name == "BaySystem.isDefaultBrowser" ||
           name == "BaySystem.setAsDefaultBrowser" ||
           name == "BaySystem.launchAtLoginStatus" ||
@@ -520,17 +521,22 @@ TEST_F(NativeHostTest,
 TEST_F(NativeHostTest,
        FileContractsRejectArityBeforeReadinessAndTypesAfterReadiness) {
   for (const char* method :
-       {"fileExists", "openFile", "revealFile", "moveToTrash"}) {
+       {"fileExists", "openFile", "revealFile", "moveToTrash", "copyFile"}) {
     for (const char* args : {"{}", "[]", R"(["/tmp/a",1])"})
       ExpectError(Invoke("BaySystem", method, args), "invalid_args");
   }
+  for (const char* args : {"{}", "[]", R"(["/tmp/a"])", R"(["/tmp/a","b",1])"})
+    ExpectError(Invoke("BaySystem", "renameFile", args), "invalid_args");
   HostInfo();
   for (const char* method :
-       {"fileExists", "openFile", "revealFile", "moveToTrash"}) {
+       {"fileExists", "openFile", "revealFile", "moveToTrash", "copyFile"}) {
     for (const char* args :
          {"[null]", "[1]", R"(["relative"])", R"(["/tmp/a\u0000b"])"})
       ExpectError(Invoke("BaySystem", method, args), "invalid_args");
   }
+  for (const char* args : {R"([null,"b"])", R"(["relative","b"])",
+                           R"(["/tmp/a",1])", R"(["/tmp/a",null])"})
+    ExpectError(Invoke("BaySystem", "renameFile", args), "invalid_args");
   ExpectError(Invoke("BaySystem", "downloadsFolder", "[1]"), "invalid_args");
   ExpectError(Invoke("BaySystem", "isDefaultBrowser", "[1]"), "invalid_args");
 }
@@ -1090,7 +1096,8 @@ TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesFileMethods) {
   ASSERT_TRUE(methods);
   for (const char* method :
        {"BaySystem.fileExists", "BaySystem.downloadsFolder",
-        "BaySystem.openFile", "BaySystem.revealFile", "BaySystem.moveToTrash"})
+        "BaySystem.openFile", "BaySystem.revealFile", "BaySystem.moveToTrash",
+        "BaySystem.copyFile", "BaySystem.renameFile"})
     EXPECT_TRUE(methods->contains(method));
   EXPECT_EQ(
       Invoke("BaySystem", "fileExists",

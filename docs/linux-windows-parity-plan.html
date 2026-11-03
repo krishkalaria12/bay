@@ -831,7 +831,13 @@
                   <td class="methods">copyFile renameFile</td>
                   <td>"Copy File" on a download fails; Tidy Downloads can't rename.</td>
                   <td><code>System.swift</code></td>
-                  <td><span class="tag t-wire">Wire</span> Add to <code>ShellFiles</code> (clipboard file list, <code>base::Move</code>). S</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/shell_files.cc</code> does both off the UI thread. "Copy File" writes a
+                    file list to the clipboard, plus <code>x-special/gnome-copied-files</code> on Linux because Nemo, Thunar and Caja don't paste from
+                    <code>text/uri-list</code> alone, and a missing file leaves the clipboard alone. <code>renameFile</code> never replaces a file:
+                    <code>renameat2</code> with <code>RENAME_NOREPLACE</code>, a hard link where the filesystem lacks it, and <code>MoveFileExW</code> on
+                    Windows; a taken name gets " (n)". Tidy Downloads now reads filenames from Windows paths. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="wire">
                   <td><strong>Text file dialogs</strong></td>
@@ -1323,7 +1329,7 @@
           <p class="prose">
             Native module progress, 3 Nov: profile cleanup, screen sharing, Chrome tab-strip mirroring and extension install prompts are implemented in the
             shared host source on <code>feat/linux</code>. The source checks and JavaScript tests run on this Mac; native tests are written for the Linux host
-            target. These changes have not yet been copied to <code>feat/windows</code> or run in the native Linux/Windows app.
+            target. Shared host code is copied to <code>feat/windows</code> as each feature lands; none of it has been run in the native Linux/Windows app yet.
           </p>
           <p class="prose">
             <strong>Priority: native methods and page events first.</strong> The merge with <code>main</code> stays as step zero because it's a prerequisite:
@@ -1335,13 +1341,13 @@
             <li class="phase">
               <h3>Step zero: sync with main</h3>
               <p class="why">
-                Progress on 3 Nov 2026: all nine local main commits are pushed through <code>b5a6fbb1</code>. Main is integrated directly into
-                <code>feat/linux</code>, with package moves, contracts and runtime commands reconciled. The <code>feat/windows</code> integration remains
-                pending. Counts elsewhere describe the original audit snapshot.
+                Done on 3 Nov 2026: all nine local main commits are pushed through <code>b5a6fbb1</code>, and main is integrated into both
+                <code>feat/windows</code> and <code>feat/linux</code>, with package moves, contracts and runtime commands reconciled. Counts elsewhere describe
+                the original audit snapshot.
               </p>
               <ul>
                 <li>Done: push local <code>main</code> (9 perf commits).</li>
-                <li>Merge <code>main</code> → <code>feat/windows</code>, then resolve the moves in section 1.</li>
+                <li>Done: merge <code>main</code> → <code>feat/windows</code>, then resolve the moves in section 1.</li>
                 <li>Done for Linux: merge <code>main</code> → <code>feat/linux</code> directly. Merge future shared Windows changes into Linux as usual.</li>
                 <li>Regenerate contracts. Run the JS, platform and native runtime tests and both web exports.</li>
               </ul>

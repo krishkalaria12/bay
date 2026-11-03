@@ -2,12 +2,17 @@
 #include "chrome/browser/bay/webui/shell_clipboard.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/containers/span.h"
 #include "base/json/json_writer.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/clipboard/file_info.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -76,6 +81,24 @@ bool ShellClipboard::Dispatch(const std::string& module,
   }
   std::move(callback).Run(Success(base::Value(!bitmap.isNull())));
   return true;
+}
+
+// static
+void ShellClipboard::WriteFilePath(const base::FilePath& path) {
+  ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
+  writer.WriteFilenames(
+      ui::FileInfosToURIList({ui::FileInfo(path, base::FilePath())}));
+#if BUILDFLAG(IS_LINUX)
+  // Chromium offers only text/uri-list, but Nemo, Thunar and Caja paste files
+  // from this format. It needs its exact name and bytes, and this is the only
+  // writer that keeps both; WriteData renames custom formats.
+  const std::string copied =
+      base::StrCat({"copy\n", ui::FilePathToFileURL(path)});
+  writer.WriteRawDataForTest(
+      ui::ClipboardFormatType::CustomPlatformType(
+          "x-special/gnome-copied-files"),
+      std::vector<uint8_t>(copied.begin(), copied.end()));
+#endif
 }
 
 }  // namespace bay

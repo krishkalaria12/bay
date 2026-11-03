@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/values.h"
 
@@ -22,6 +23,8 @@ class ShellClipboard {
                        const std::string& method,
                        const base::ListValue& args,
                        Response& callback);
+  // Puts a file on the clipboard, to paste into a file manager or a message.
+  static void WriteFilePath(const base::FilePath& path);
 };
 
 }  // namespace bay

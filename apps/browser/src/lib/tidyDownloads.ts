@@ -120,7 +120,7 @@ async function updateDownloadFile(id: string, patch: { filename: string; path: s
 }
 
 // The name renameFile settled on, which gains " (1)" when the suggestion was taken.
-const baseName = (path: string) => path.split("/").pop() ?? path;
+const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
 export async function applyTidyName(d: Download, suggestion: TidyName, store?: BrowserStore): Promise<string | null> {
   if (d.state !== "finished" || !d.path) return null;

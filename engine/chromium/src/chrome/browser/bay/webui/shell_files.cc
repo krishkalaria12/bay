@@ -1,6 +1,7 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/shell_files.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/files/file_util.h"
@@ -8,11 +9,16 @@
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
+#include "chrome/browser/bay/webui/shell_clipboard.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/common/chrome_paths.h"
 
@@ -21,8 +27,12 @@
 
 #include <shellapi.h>
 #else
+#include <errno.h>
+#include <fcntl.h>
 #include <gio/gio.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 #include "ui/base/glib/scoped_gobject.h"
 #endif
 
@@ -89,6 +99,142 @@ bool Trash(const base::FilePath& path) {
   return g_file_trash(file.get(), nullptr, nullptr);
 #endif
 }
+base::FilePath PathFromUtf8(const std::string& path) {
+#if BUILDFLAG(IS_LINUX)
+  // The contract uses UTF-8 native bytes, independently of the process locale.
+  return base::FilePath(path);
+#else
+  return base::FilePath::FromUTF8Unsafe(path);
+#endif
+}
+std::string Utf8FromPath(const base::FilePath& path) {
+#if BUILDFLAG(IS_LINUX)
+  return path.value();
+#else
+  return path.AsUTF8Unsafe();
+#endif
+}
+#if BUILDFLAG(IS_WIN)
+// Windows refuses these whatever extension follows them.
+bool IsDeviceName(const std::string& name) {
+  const std::string stem = base::ToUpperASCII(name.substr(0, name.find('.')));
+  if (stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL")
+    return true;
+  return stem.size() == 4 &&
+         (stem.starts_with("COM") || stem.starts_with("LPT")) &&
+         stem[3] >= '1' && stem[3] <= '9';
+}
+#endif
+// The name a person or Tidy Downloads asked for, or nothing when no platform
+// Bay runs on should take it.
+std::optional<std::string> UsableFileName(const std::string& name) {
+  std::u16string trimmed;
+  base::TrimWhitespace(base::UTF8ToUTF16(name), base::TRIM_ALL, &trimmed);
+  const std::string clean = base::UTF16ToUTF8(trimmed);
+  if (clean.empty() || clean.size() > 200 || clean.front() == '.' ||
+      clean.back() == '.' || clean.find_first_of("/\\:") != std::string::npos)
+    return std::nullopt;
+  for (const char c : clean) {
+    if (static_cast<unsigned char>(c) < 0x20 || c == 0x7f)
+      return std::nullopt;
+  }
+#if BUILDFLAG(IS_WIN)
+  if (clean.find_first_of("<>\"|?*") != std::string::npos ||
+      IsDeviceName(clean))
+    return std::nullopt;
+#endif
+  return clean;
+}
+enum class MoveResult { kMoved, kNameTaken, kFailed };
+// base::Move replaces whatever holds the target name. This never does, and it
+// asks in one atomic step, so nothing can take the name after a check.
+MoveResult MoveWithoutReplacing(const base::FilePath& from,
+                                const base::FilePath& to) {
+#if BUILDFLAG(IS_WIN)
+  // A case-only change of the same file succeeds here.
+  if (::MoveFileExW(from.value().c_str(), to.value().c_str(), 0))
+    return MoveResult::kMoved;
+  const DWORD error = ::GetLastError();
+  return error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS
+             ? MoveResult::kNameTaken
+             : MoveResult::kFailed;
+#else
+  // A direct syscall: the glibc Chromium targets may not wrap renameat2.
+  constexpr unsigned int kRenameNoReplace = 1;
+  const char* source = from.value().c_str();
+  const char* target = to.value().c_str();
+  if (syscall(SYS_renameat2, AT_FDCWD, source, AT_FDCWD, target,
+              kRenameNoReplace) == 0)
+    return MoveResult::kMoved;
+  if (errno == EEXIST)
+    return MoveResult::kNameTaken;
+  if (errno != EINVAL && errno != ENOSYS)
+    return MoveResult::kFailed;
+  // NFS and many FUSE mounts lack the flag. A hard link refuses a taken name
+  // just as strictly.
+  if (link(source, target) != 0)
+    return errno == EEXIST ? MoveResult::kNameTaken : MoveResult::kFailed;
+  if (unlink(source) != 0) {
+    unlink(target);
+    return MoveResult::kFailed;
+  }
+  return MoveResult::kMoved;
+#endif
+}
+#if !BUILDFLAG(IS_WIN)
+bool IsSameEntry(const base::FilePath& a, const base::FilePath& b) {
+  struct stat first, second;
+  return lstat(a.value().c_str(), &first) == 0 &&
+         lstat(b.value().c_str(), &second) == 0 &&
+         first.st_dev == second.st_dev && first.st_ino == second.st_ino;
+}
+// A case-only rename on a case-insensitive volume needs a temporary stop: the
+// target "exists" because it is the source. A hard link under the target name
+// stays taken, and the file goes back.
+MoveResult MoveThroughTemporaryName(const base::FilePath& from,
+                                    const base::FilePath& to) {
+  const base::FilePath temporary = from.DirName().Append(PathFromUtf8(
+      ".bay-rename-" + base::Uuid::GenerateRandomV4().AsLowercaseString()));
+  if (MoveWithoutReplacing(from, temporary) != MoveResult::kMoved)
+    return MoveResult::kFailed;
+  const MoveResult result = MoveWithoutReplacing(temporary, to);
+  if (result != MoveResult::kMoved &&
+      MoveWithoutReplacing(temporary, from) != MoveResult::kMoved)
+    return MoveResult::kFailed;
+  return result;
+}
+#endif
+// Tidy Downloads: a new name beside the file, with Chromium's " (n)" when it's
+// taken, so twice-tidied files don't replace each other. The new path, or null.
+base::Value RenameBeside(const base::FilePath& source,
+                         const std::string& name) {
+  const std::optional<std::string> clean = UsableFileName(name);
+  if (!clean || !base::PathExists(source))
+    return {};
+  const size_t dot = clean->rfind('.');
+  const std::string stem = clean->substr(0, dot);
+  const std::string extension =
+      dot == std::string::npos ? std::string() : clean->substr(dot);
+  const base::FilePath folder = source.DirName();
+  for (int copy = 0; copy < 1000; ++copy) {
+    const base::FilePath destination = folder.Append(PathFromUtf8(
+        copy == 0 ? *clean
+                  : base::StrCat({stem, " (", base::NumberToString(copy), ")",
+                                  extension})));
+    if (destination == source)
+      return base::Value(Utf8FromPath(source));
+    MoveResult result = MoveWithoutReplacing(source, destination);
+#if !BUILDFLAG(IS_WIN)
+    if (result == MoveResult::kNameTaken && IsSameEntry(source, destination))
+      result = MoveThroughTemporaryName(source, destination);
+#endif
+    if (result == MoveResult::kFailed)
+      return {};
+    if (result == MoveResult::kMoved)
+      return base::Value(Utf8FromPath(destination));
+  }
+  return {};
+}
 }  // namespace
 
 ShellFiles::ShellFiles(HostContext context)
@@ -134,7 +280,9 @@ base::ListValue ShellFiles::SupportedMethods() {
       .Append("BaySystem.downloadsFolder")
       .Append("BaySystem.openFile")
       .Append("BaySystem.revealFile")
-      .Append("BaySystem.moveToTrash");
+      .Append("BaySystem.moveToTrash")
+      .Append("BaySystem.copyFile")
+      .Append("BaySystem.renameFile");
 }
 void ShellFiles::Prepare(base::OnceClosure ready) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -170,7 +318,8 @@ bool ShellFiles::Dispatch(const std::string& module,
   if (module != "BaySystem" ||
       (method != "fileExists" && method != "downloadsFolder" &&
        method != "openFile" && method != "revealFile" &&
-       method != "moveToTrash"))
+       method != "moveToTrash" && method != "copyFile" &&
+       method != "renameFile"))
     return false;
   if (!context_.profile()) {
     std::move(callback).Run(Failure("profile_unavailable",
@@ -197,29 +346,30 @@ bool ShellFiles::Dispatch(const std::string& module,
         Failure("invalid_args", "Invalid native method arguments"));
     return true;
   }
-#if BUILDFLAG(IS_LINUX)
-  // The contract uses UTF-8 native bytes, independently of the process locale.
-  auto path = base::FilePath(*name);
-#else
-  auto path = base::FilePath::FromUTF8Unsafe(*name);
-#endif
-  if (!path.IsAbsolute()) {
+  auto path = PathFromUtf8(*name);
+  const std::string* new_name = method == "renameFile" && args.size() > 1
+                                    ? args[1].GetIfString()
+                                    : nullptr;
+  const bool bad_name = method == "renameFile" &&
+                        (!new_name || !base::IsStringUTF8(*new_name));
+  if (bad_name || !path.IsAbsolute()) {
     std::move(callback).Run(
         Failure("invalid_args", "Invalid native method arguments"));
     return true;
   }
 #if BUILDFLAG(IS_LINUX)
-  if (method == "moveToTrash") {
+  if (method == "moveToTrash" || method == "renameFile") {
     // GIO canonicalizes lexically. Dot components or a trailing directory
     // marker could change which entry the kernel resolves across symlinks, or
     // turn an ENOTDIR path into a deletable regular file. Never realpath the
-    // final entry: trashing a symlink must trash the link, not its target.
+    // final entry: trashing or renaming a symlink must act on the link, not
+    // its target.
     bool ambiguous = path.value().back() == '/';
     for (const auto& component : path.GetComponents())
       ambiguous |= component == "." || component == "..";
     if (ambiguous) {
       std::move(callback).Run(Failure(
-          "invalid_args", "Trash paths must not contain directory markers"));
+          "invalid_args", "These paths must not contain directory markers"));
       return true;
     }
   }
@@ -249,6 +399,17 @@ bool ShellFiles::Dispatch(const std::string& module,
   } else if (method == "moveToTrash") {
     TrashRunner()->PostTaskAndReplyWithResult(
         FROM_HERE, base::BindOnce(operations_.trash, path), std::move(done));
+  } else if (method == "copyFile") {
+    // Checked first so a removed download leaves the clipboard alone.
+    DiskRunner()->PostTaskAndReplyWithResult(
+        FROM_HERE, base::BindOnce(&base::PathExists, path),
+        base::BindOnce(&ShellFiles::CopyToClipboard, weak_factory_.GetWeakPtr(),
+                       request, path));
+  } else if (method == "renameFile") {
+    DiskRunner()->PostTaskAndReplyWithResult(
+        FROM_HERE, base::BindOnce(&RenameBeside, path, *new_name),
+        base::BindOnce(&ShellFiles::CompleteWithValue,
+                       weak_factory_.GetWeakPtr(), request));
   } else {
 #if BUILDFLAG(IS_LINUX)
     // DownloadsPanel opens the downloads directory with openFile(). Resolve
@@ -313,8 +474,19 @@ void ShellFiles::Reveal(uint64_t request, base::FilePath path, ItemType type) {
   if (weak)
     weak->Complete(request, true);
 }
+void ShellFiles::CopyToClipboard(uint64_t request,
+                                 base::FilePath path,
+                                 bool exists) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (exists)
+    ShellClipboard::WriteFilePath(path);
+  Complete(request, exists);
+}
 void ShellFiles::Complete(uint64_t request, bool result) {
   Settle(request, Success(base::Value(result)));
+}
+void ShellFiles::CompleteWithValue(uint64_t request, base::Value result) {
+  Settle(request, Success(std::move(result)));
 }
 void ShellFiles::Settle(uint64_t request, std::string response) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

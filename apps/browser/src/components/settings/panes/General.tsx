@@ -169,14 +169,10 @@ function UpdatesSection() {
   const lastCheck = state.lastCheck
     ? `Last checked ${new Date(state.lastCheck).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
     : "Not checked yet.";
+  const localCleaner = isMac ? "Bay cleans the name on this Mac. Nothing leaves it." : "Bay cleans the name on your computer. Nothing leaves it.";
   return (
     <>
-      <SectionHeader
-        title="Downloads"
-        description={
-          tidyNames ? "Apple's on-device model writes the suggested name. Nothing leaves this Mac." : "Bay cleans the name on this Mac. Nothing leaves it."
-        }
-      />
+      <SectionHeader title="Downloads" description={tidyNames ? "Apple's on-device model writes the suggested name. Nothing leaves this Mac." : localCleaner} />
       <Group>
         <SettingToggle
           setting="tidyDownloads"

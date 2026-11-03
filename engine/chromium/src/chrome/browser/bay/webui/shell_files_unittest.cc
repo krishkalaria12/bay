@@ -3,16 +3,22 @@
 
 #include <clocale>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <sys/stat.h>
+#include <unistd.h>
 
+#include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_path_override.h"
 #include "base/test/test_future.h"
@@ -21,6 +27,9 @@
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/browser/browser_thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/file_info.h"
+#include "ui/base/clipboard/test/test_clipboard.h"
 
 namespace bay {
 namespace {
@@ -33,6 +42,7 @@ class ShellFilesTest : public ChromeRenderViewHostTestHarness {
  protected:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
+    ui::TestClipboard::CreateForCurrentThread();
     ASSERT_TRUE(temp_.CreateUniqueTempDir());
     downloads_ = std::make_unique<base::ScopedPathOverride>(
         chrome::DIR_DEFAULT_DOWNLOADS, temp_.GetPath().Append("下载 café"),
@@ -77,6 +87,7 @@ class ShellFilesTest : public ChromeRenderViewHostTestHarness {
     files_.reset();
     task_environment()->RunUntilIdle();
     downloads_.reset();
+    ui::Clipboard::DestroyClipboardForCurrentThread();
     ChromeRenderViewHostTestHarness::TearDown();
   }
   void Prepare() {
@@ -99,6 +110,25 @@ class ShellFilesTest : public ChromeRenderViewHostTestHarness {
   std::string PathCall(const char* method, const base::FilePath& path) {
     return Invoke(method, base::ListValue().Append(path.value()));
   }
+  std::string Rename(const base::FilePath& path, const std::string& name) {
+    return Invoke("renameFile",
+                  base::ListValue().Append(path.value()).Append(name));
+  }
+  std::string Renamed(const base::FilePath& path) {
+    return base::WriteJson(base::DictValue().Set("value", path.value()))
+        .value_or("");
+  }
+  std::string Contents(const base::FilePath& path) {
+    std::string contents;
+    EXPECT_TRUE(base::ReadFileToString(path, &contents));
+    return contents;
+  }
+  std::vector<ui::FileInfo> ClipboardFiles() {
+    base::test::TestFuture<std::vector<ui::FileInfo>> files;
+    ui::Clipboard::GetForCurrentThread()->ReadFilenames(
+        ui::ClipboardBuffer::kCopyPaste, std::nullopt, files.GetCallback());
+    return files.Get();
+  }
   void ExpectError(const std::string& response, const char* code) {
     auto value = base::JSONReader::ReadDict(response, base::JSON_PARSE_RFC);
     ASSERT_TRUE(value);
@@ -116,7 +146,7 @@ class ShellFilesTest : public ChromeRenderViewHostTestHarness {
 };
 
 TEST_F(ShellFilesTest, CatalogIsBoundedAndUnhandledCallbackIsUntouched) {
-  EXPECT_EQ(ShellFiles::SupportedMethods().size(), 5u);
+  EXPECT_EQ(ShellFiles::SupportedMethods().size(), 7u);
   base::test::TestFuture<const std::string&> result;
   auto callback = result.GetCallback();
   for (const char* method :
@@ -150,8 +180,8 @@ TEST_F(ShellFilesTest, InvalidDownloadsProduceExplicitNull) {
 }
 TEST_F(ShellFilesTest, RejectsInvalidPathsWithoutExternalEffects) {
   Prepare();
-  for (const char* method :
-       {"fileExists", "openFile", "revealFile", "moveToTrash"}) {
+  for (const char* method : {"fileExists", "openFile", "revealFile",
+                             "moveToTrash", "copyFile", "renameFile"}) {
     for (const auto& value :
          {base::Value(), base::Value(1), base::Value(false), base::Value(""),
           base::Value("relative"), base::Value(std::string("/tmp/a\0b", 8)),
@@ -160,6 +190,7 @@ TEST_F(ShellFilesTest, RejectsInvalidPathsWithoutExternalEffects) {
                   "invalid_args");
   }
   EXPECT_EQ(opens_ + reveals_ + trashes_, 0);
+  EXPECT_TRUE(ClipboardFiles().empty());
 }
 TEST_F(ShellFilesTest, ExistenceFollowsLinksAndAllowsNativeFilenameBytes) {
   Prepare();
@@ -242,27 +273,128 @@ TEST_F(ShellFilesTest, TrashRunsOffUiAndFalseDoesNotDeleteTheFile) {
   EXPECT_TRUE(
       base::PathExists(File()));  // Fake backend never trashes anything.
 }
+TEST_F(ShellFilesTest, CopyPutsAnExistingFileOnTheClipboard) {
+  Prepare();
+  ASSERT_TRUE(base::WriteFile(File(), "safe"));
+  EXPECT_EQ(PathCall("copyFile", File()), R"({"value":true})");
+  const auto files = ClipboardFiles();
+  ASSERT_EQ(files.size(), 1u);
+  EXPECT_EQ(files[0].path, File());
+}
+TEST_F(ShellFilesTest, CopyOfAMissingFileLeavesTheClipboardAlone) {
+  Prepare();
+  ASSERT_TRUE(base::WriteFile(File(), "safe"));
+  ASSERT_EQ(PathCall("copyFile", File()), R"({"value":true})");
+  EXPECT_EQ(PathCall("copyFile", temp_.GetPath().Append("missing")),
+            R"({"value":false})");
+  const auto files = ClipboardFiles();
+  ASSERT_EQ(files.size(), 1u);
+  EXPECT_EQ(files[0].path, File());
+}
+TEST_F(ShellFilesTest, RenameMovesTheFileBesideItself) {
+  Prepare();
+  ASSERT_TRUE(base::WriteFile(File(), "safe"));
+  const auto target = temp_.GetPath().Append("Q3 Réport.pdf");
+  EXPECT_EQ(Rename(File(), "  Q3 Réport.pdf \n"), Renamed(target));
+  EXPECT_FALSE(base::PathExists(File()));
+  EXPECT_EQ(Contents(target), "safe");
+  // Asking for the name it has is a success that moves nothing.
+  EXPECT_EQ(Rename(target, "Q3 Réport.pdf"), Renamed(target));
+  EXPECT_EQ(Contents(target), "safe");
+}
+TEST_F(ShellFilesTest, RenameNeverReplacesAnotherFile) {
+  Prepare();
+  const auto kept = temp_.GetPath().Append("Report.tar.gz");
+  ASSERT_TRUE(base::WriteFile(kept, "kept"));
+  ASSERT_TRUE(base::WriteFile(temp_.GetPath().Append("a"), "first"));
+  ASSERT_TRUE(base::WriteFile(temp_.GetPath().Append("b"), "second"));
+  const auto one = temp_.GetPath().Append("Report.tar (1).gz");
+  const auto two = temp_.GetPath().Append("Report.tar (2).gz");
+  EXPECT_EQ(Rename(temp_.GetPath().Append("a"), "Report.tar.gz"), Renamed(one));
+  EXPECT_EQ(Rename(temp_.GetPath().Append("b"), "Report.tar.gz"), Renamed(two));
+  EXPECT_EQ(Contents(kept), "kept");
+  EXPECT_EQ(Contents(one), "first");
+  EXPECT_EQ(Contents(two), "second");
+}
+TEST_F(ShellFilesTest, RenameKeepsBothNamesOfAHardLink) {
+  Prepare();
+  const auto first = temp_.GetPath().Append("first");
+  const auto second = temp_.GetPath().Append("second");
+  ASSERT_TRUE(base::WriteFile(first, "safe"));
+  ASSERT_EQ(link(first.value().c_str(), second.value().c_str()), 0);
+  const auto copy = temp_.GetPath().Append("second (1)");
+  EXPECT_EQ(Rename(first, "second"), Renamed(copy));
+  EXPECT_TRUE(base::PathExists(second));
+  EXPECT_TRUE(base::PathExists(copy));
+  // The temporary stop for a case change doesn't leave anything behind.
+  base::FileEnumerator names(temp_.GetPath(), false,
+                             base::FileEnumerator::FILES);
+  int count = 0;
+  for (auto name = names.Next(); !name.empty(); name = names.Next())
+    ++count;
+  EXPECT_EQ(count, 2);
+}
+TEST_F(ShellFilesTest, RenameActsOnALinkAndNotItsTarget) {
+  Prepare();
+  ASSERT_TRUE(base::WriteFile(File(), "safe"));
+  const auto link_path = temp_.GetPath().Append("link");
+  ASSERT_TRUE(base::CreateSymbolicLink(File(), link_path));
+  const auto renamed = temp_.GetPath().Append("renamed");
+  EXPECT_EQ(Rename(link_path, "renamed"), Renamed(renamed));
+  EXPECT_TRUE(base::IsLink(renamed));
+  EXPECT_EQ(Contents(File()), "safe");
+}
+TEST_F(ShellFilesTest, RenameAnswersNullForUnusableNamesAndMissingFiles) {
+  Prepare();
+  ASSERT_TRUE(base::WriteFile(File(), "safe"));
+  for (const std::string& name :
+       {std::string(""), std::string(" \n"), std::string(".hidden"),
+        std::string("trailing."), std::string("a/b.pdf"),
+        std::string("../b.pdf"), std::string("a\\b.pdf"),
+        std::string("a:b.pdf"), std::string("a\nb.pdf"),
+        std::string("a\0b.pdf", 7), std::string(201, 'a')}) {
+    EXPECT_EQ(Rename(File(), name), R"({"value":null})") << name;
+    EXPECT_EQ(Contents(File()), "safe");
+  }
+  EXPECT_EQ(Rename(temp_.GetPath().Append("missing"), "b.pdf"),
+            R"({"value":null})");
+  EXPECT_NE(Rename(File(), std::string(200, 'a')), R"({"value":null})");
+}
+TEST_F(ShellFilesTest, RenameRejectsBadArgumentsBeforeTouchingTheFile) {
+  Prepare();
+  ASSERT_TRUE(base::WriteFile(File(), "safe"));
+  ExpectError(Invoke("renameFile",
+                     base::ListValue().Append(File().value()).Append(1)),
+              "invalid_args");
+  ExpectError(Rename(File(), std::string("\xff", 1)), "invalid_args");
+  for (const auto& suffix : {"/../victim", "/.", "/", "/./child"})
+    ExpectError(Rename(base::FilePath(File().value() + suffix), "b.pdf"),
+                "invalid_args");
+  EXPECT_EQ(Contents(File()), "safe");
+}
 TEST_F(ShellFilesTest, ClosingBeforeWorkersReplySettlesEveryRequestOnce) {
   Prepare();
   ASSERT_TRUE(base::WriteFile(File(), "safe"));
   int calls = 0;
-  for (const char* method :
-       {"fileExists", "openFile", "revealFile", "moveToTrash"}) {
+  for (const char* method : {"fileExists", "openFile", "revealFile",
+                             "moveToTrash", "copyFile", "renameFile"}) {
     ShellFiles::Response callback =
         base::BindLambdaForTesting([this, &calls](const std::string& response) {
           ++calls;
           ExpectError(response, "host_closed");
         });
-    EXPECT_TRUE(files_->Dispatch("BaySystem", method,
-                                 base::ListValue().Append(File().value()),
-                                 callback));
+    auto args = base::ListValue().Append(File().value());
+    if (std::string_view(method) == "renameFile")
+      args.Append("renamed");
+    EXPECT_TRUE(files_->Dispatch("BaySystem", method, args, callback));
   }
   EXPECT_EQ(calls, 0);
   files_.reset();
-  EXPECT_EQ(calls, 4);
+  EXPECT_EQ(calls, 6);
   task_environment()->RunUntilIdle();
-  EXPECT_EQ(calls, 4);
+  EXPECT_EQ(calls, 6);
   EXPECT_EQ(opens_ + reveals_, 0);
+  EXPECT_TRUE(ClipboardFiles().empty());
 }
 TEST_F(ShellFilesTest, OpenCompletionAndResponseCanReenterOrCloseOwner) {
   Prepare();
