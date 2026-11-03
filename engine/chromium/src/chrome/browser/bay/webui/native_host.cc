@@ -37,6 +37,8 @@
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/bay/webui/tab_strip_mirror.h"
+#include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/data/data_services.h"
@@ -298,6 +300,13 @@ std::vector<base::WeakPtr<NativeHost>> EventHosts() {
   }
   return hosts;
 }
+void EmitTabStrip(base::DictValue transaction) {
+  const base::Value payload(std::move(transaction));
+  for (const auto& host : EventHosts()) {
+    if (host)
+      host->Emit("BayCEF", "onTabStrip", payload.Clone());
+  }
+}
 void EmitDownload(base::DictValue download) {
   const base::Value payload(std::move(download));
   for (const auto& host : EventHosts()) {
@@ -412,6 +421,7 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   // Every Bay profile reports its downloads from now on (macOS NNCoreHost
   // watchDownloads), whichever host asks first.
   DownloadControls::Get().Start(base::BindRepeating(&EmitDownload));
+  TabStripMirror::Get().Start(base::BindRepeating(&EmitTabStrip));
   // Chrome's extension install prompts are Bay's (macOS nncore
   // HostExtensionInstallPrompt).
   InstallPrompts::Get().Start(base::BindRepeating(&PromptWindow));
@@ -1092,6 +1102,7 @@ void ActivateInBrowser(content::WebContents* contents) {
 void NativeHost::InvokeView(const std::string& method,
                             const base::ListValue& args,
                             InvokeCallback callback) {
+  TabStripMirror::AppChange app_change;
   if (!context_.window()) {
     std::move(callback).Run(
         Failure("window_required", "Native views require a window host"));
