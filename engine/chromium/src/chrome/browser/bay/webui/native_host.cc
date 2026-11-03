@@ -30,6 +30,7 @@
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/browser_services.h"
 #include "chrome/browser/bay/webui/download_controls.h"
+#include "chrome/browser/bay/webui/display_media_picker.h"
 #include "chrome/browser/bay/webui/engine_services.h"
 #include "chrome/browser/bay/webui/install_prompts.h"
 #include "chrome/browser/bay/webui/library_files.h"
@@ -464,6 +465,7 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   // Chrome's extension install prompts are Bay's (macOS nncore
   // HostExtensionInstallPrompt).
   InstallPrompts::Get().Start(base::BindRepeating(&PromptWindow));
+  DisplayMediaPicker::Start(base::BindRepeating(&NativeHost::EmitDisplayMediaRequest));
   browser_services_ = std::make_unique<BrowserServices>(
       context_,
       base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()),
@@ -875,6 +877,20 @@ void NativeHost::Emit(const char* module,
                       base::Value payload) {
   if (client_)
     client_->OnNativeEvent(module, event, JSON(payload));
+}
+bool NativeHost::EmitDisplayMediaRequest(content::WebContents* contents,
+                                         base::DictValue request) {
+  for (const auto& [raw, host] : Hosts()) {
+    if (!host || !host->client_)
+      continue;
+    for (const auto& [tag, observer] : host->tabs_) {
+      if (observer->current() && observer->contents() == contents) {
+        host->ViewEvent(tag, "onDisplayMediaRequest", std::move(request));
+        return true;
+      }
+    }
+  }
+  return false;
 }
 void NativeHost::ViewEvent(int tag,
                            const char* event,
@@ -1509,6 +1525,23 @@ void NativeHost::InvokeView(const std::string& method,
   const auto* values = raw && raw->is_list() ? &raw->GetList() : nullptr;
   const base::ListValue empty;
   const auto& params = values ? *values : empty;
+  if (command == "mediaCaptureSourceId") {
+    std::move(callback).Run(Success(base::Value(DisplayMediaPicker::CaptureId(contents))));
+    return;
+  }
+  if (command == "resolveDisplayMedia") {
+    const auto* request = At(params, 0);
+    const auto* source = At(params, 1);
+    if (params.size() != 2 || !request || !request->is_string() ||
+        !source || (!source->is_none() && !source->is_string()) ||
+        !DisplayMediaPicker::Resolve(contents, request->GetString(),
+            source->is_none() ? std::nullopt : std::make_optional(source->GetString()))) {
+      std::move(callback).Run(Failure("invalid_args", "Unknown capture request or unavailable source"));
+      return;
+    }
+    std::move(callback).Run(Success());
+    return;
+  }
   if (command == "loadUrl" || command == "loadURL" || command == "navigate") {
     const GURL url(Text(params, 0));
     if (!url.is_valid() || url.SchemeIs("javascript") || url.SchemeIs("bay")) {

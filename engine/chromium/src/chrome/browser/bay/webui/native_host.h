@@ -83,6 +83,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   static void CancelQuit();
   static void InstallCloseHooks();
 #endif
+  static bool EmitDisplayMediaRequest(content::WebContents* contents,
+                                      base::DictValue request);
   void InvokeView(const std::string& method,
                   const base::ListValue& args,
                   InvokeCallback callback);

@@ -14,6 +14,7 @@
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/display_media_picker.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/browser_process.h"
@@ -208,6 +209,7 @@ std::optional<std::string> TabBroker::Park(Entry& entry) {
     return "The tab profile is scheduled for deletion";
   auto process_keep_alive = std::make_unique<ScopedKeepAlive>(
       KeepAliveOrigin::BROWSER, KeepAliveRestartOption::DISABLED);
+  DisplayMediaPicker::CancelForContents(entry.contents.get());
   DetachSurface(entry.contents);
   entry.source_type = browser->GetType();
   entry.parked = strip->DetachTabAtForInsertion(index);
@@ -333,6 +335,7 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* window,
       if (auto error = Park(*entry))
         return {.error = *error};
     }
+    DisplayMediaPicker::CancelForContents(entry->contents.get());
     DetachSurface(entry->contents);
     if (entry->parked) {
       Attach(*entry, browser);
@@ -412,6 +415,7 @@ void TabBroker::Unmount(content::WebContents* contents, uint64_t lease) {
   auto it = entries_.find(contents);
   if (it == entries_.end() || !lease || it->second->lease != lease)
     return;
+  DisplayMediaPicker::CancelForContents(contents);
   it->second->lease = 0;
   if (!it->second->prepared)
     Close(*it->second);
@@ -513,6 +517,7 @@ void TabBroker::Close(Entry& entry) {
   auto profile = entry.profile;
   const bool was_parked = !!entry.parked;
   auto* contents = entry.contents.get();
+  DisplayMediaPicker::CancelForContents(contents);
   DetachSurface(contents);
   if (entry.parked) {
     entries_.erase(contents);

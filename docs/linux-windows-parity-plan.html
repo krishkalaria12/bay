@@ -735,8 +735,10 @@
                   <td>Bay's own picker never appears for <code>getDisplayMedia</code>.</td>
                   <td><code>nn_desktop_capture.mm</code></td>
                   <td>
-                    <span class="tag t-port">Port</span> On Windows, the DesktopMediaList sources. On Linux Wayland, the PipeWire portal picks the source
-                    itself, so either hand off to it or <span class="tag t-replace">Replace</span>. M
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/display_media_picker.cc</code> uses Chrome's policy-filtered live source
+                    lists for Bay's picker and resolves only a listed source for the asking page. Tab capture IDs, navigation/transfer cancellation and
+                    stale-source rejection are wired. Delegated PipeWire sources retain Chrome's portal picker. Native execution on Linux and Windows is
+                    pending.
                   </td>
                 </tr>
                 <tr data-kind="port">
@@ -1077,8 +1079,8 @@
                 <tr>
                   <td><code>onDisplayMediaRequest</code></td>
                   <td>Screen-share picker</td>
-                  <td><code>nn_desktop_capture.mm</code></td>
-                  <td><span class="tag t-port">P1</span></td>
+                  <td><code>webui/display_media_picker.cc</code></td>
+                  <td><span class="tag t-done">Source-complete</span> Includes cancellation; native runtime verification pending.</td>
                 </tr>
                 <tr>
                   <td><code>onExternalApp</code> + <code>resolveExternalApp</code></td>

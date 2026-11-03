@@ -43,6 +43,8 @@ source_set("impl") {
     "bay_webui.cc",
     "browser_services.cc",
     "browser_services.h",
+    "display_media_picker.cc",
+    "display_media_picker.h",
     "download_controls.cc",
     "download_controls.h",
     "engine_services.cc",
@@ -656,7 +658,10 @@ if (is_linux) {
 if (is_linux) {
   # Reuse Chrome's unit-test runner and platform IconLoader implementation.
   test("native_host_unittests") {
-    sources = [ "native_host_unittest.cc" ]
+    sources = [
+      "native_host_unittest.cc",
+      "display_media_picker_unittest.cc",
+    ]
     deps = [
       ":impl",
       ":webui",
@@ -666,6 +671,7 @@ if (is_linux) {
       "//bay/core:engine_api",
       "//chrome/browser:platform_util_internal",
       "//chrome/browser/lifetime",
+      "//chrome/browser/media/webrtc",
       "//chrome/browser/ui:test_support",
       "//chrome/common:constants",
       "//chrome/test:test_support_unit",

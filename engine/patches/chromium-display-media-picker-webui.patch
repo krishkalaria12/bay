@@ -1,0 +1,52 @@
+--- a/chrome/browser/media/webrtc/desktop_media_picker_factory_impl.h
++++ b/chrome/browser/media/webrtc/desktop_media_picker_factory_impl.h
+@@ -28,6 +28,12 @@
+   // Get the lazy initialized instance of the factory.
+   static DesktopMediaPickerFactoryImpl* GetInstance();
+ 
++  // Bay's web desktop host shows its own picker for the pages it hosts: the
++  // factory returns nullptr for a request it leaves to Chrome's picker.
++  using BayPickerFactory = std::unique_ptr<DesktopMediaPicker> (*)(
++      const content::MediaStreamRequest* request);
++  static void SetBayPickerFactory(BayPickerFactory factory);
++
+   // DesktopMediaPickerFactory implementation
+   // Can return |nullptr| if platform doesn't support DesktopMediaPicker.
+   std::unique_ptr<DesktopMediaPicker> CreatePicker(
+--- a/chrome/browser/media/webrtc/desktop_media_picker_factory_impl.cc
++++ b/chrome/browser/media/webrtc/desktop_media_picker_factory_impl.cc
+@@ -22,6 +22,10 @@
+ #include "chrome/browser/media/webrtc/thumbnail_capturer_mac.h"
+ #endif
+ 
++namespace {
++DesktopMediaPickerFactoryImpl::BayPickerFactory g_bay_picker_factory = nullptr;
++}  // namespace
++
+ #if !BUILDFLAG(IS_ANDROID)
+ namespace {
+ #if !BUILDFLAG(IS_CHROMEOS)
+@@ -68,6 +72,12 @@
+ DesktopMediaPickerFactoryImpl::~DesktopMediaPickerFactoryImpl() = default;
+ 
+ // static
++void DesktopMediaPickerFactoryImpl::SetBayPickerFactory(
++    BayPickerFactory factory) {
++  g_bay_picker_factory = factory;
++}
++
++// static
+ DesktopMediaPickerFactoryImpl* DesktopMediaPickerFactoryImpl::GetInstance() {
+   static base::NoDestructor<DesktopMediaPickerFactoryImpl> impl;
+   return impl.get();
+@@ -75,6 +85,10 @@
+ 
+ std::unique_ptr<DesktopMediaPicker> DesktopMediaPickerFactoryImpl::CreatePicker(
+     const content::MediaStreamRequest* request) {
++  if (g_bay_picker_factory) {
++    if (auto picker = g_bay_picker_factory(request))
++      return picker;
++  }
+   // DesktopMediaPicker is implemented only for Windows, OSX, Aura Linux, and
+   // desktop Android builds.
+ #if defined(TOOLKIT_VIEWS)
