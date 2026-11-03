@@ -27,7 +27,9 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bay/nn_dispatch.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/cast_dialogs.h"
 #include "chrome/browser/bay/webui/context_search.h"
+#include "chrome/browser/bay/webui/device_choosers.h"
 #include "chrome/browser/bay/webui/external_app_prompts.h"
 #include "chrome/browser/bay/webui/page_menu.h"
 #include "chrome/browser/bay/webui/permission_prompts.h"
@@ -452,6 +454,8 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   ExternalAppPrompts::Start(base::BindRepeating(&NativeHost::EmitToView));
   ContextSearch::Start(base::BindRepeating(&NativeHost::EmitToView));
   PageMenu::Start();
+  DeviceChoosers::Start(base::BindRepeating(&NativeHost::EmitChromeUI));
+  CastDialogs::Start(base::BindRepeating(&NativeHost::EmitChromeUI));
   SystemState::Get().Start(base::BindRepeating(&EmitSystemState));
   browser_services_ = std::make_unique<BrowserServices>(
       context_,
@@ -715,20 +719,36 @@ bool NativeHost::EmitDisplayMediaRequest(content::WebContents* contents,
                                          base::DictValue request) {
   return EmitToView(contents, "onDisplayMediaRequest", std::move(request));
 }
-bool NativeHost::EmitToView(content::WebContents* contents,
-                            const char* event,
-                            base::DictValue payload) {
+NativeHost* NativeHost::HostShowing(content::WebContents* contents, int* tag) {
   for (const auto& [raw, host] : Hosts()) {
     if (!host || !host->client_)
       continue;
-    for (const auto& [tag, observer] : host->tabs_) {
+    for (const auto& [view, observer] : host->tabs_) {
       if (observer->current() && observer->contents() == contents) {
-        host->ViewEvent(tag, event, std::move(payload));
-        return true;
+        *tag = view;
+        return host.get();
       }
     }
   }
-  return false;
+  return nullptr;
+}
+bool NativeHost::EmitChromeUI(content::WebContents* contents,
+                              const char* event,
+                              base::DictValue payload) {
+  int tag = 0;
+  auto* host = HostShowing(contents, &tag);
+  if (host)
+    host->Emit("BayChromeUI", event, base::Value(std::move(payload)));
+  return host != nullptr;
+}
+bool NativeHost::EmitToView(content::WebContents* contents,
+                            const char* event,
+                            base::DictValue payload) {
+  int tag = 0;
+  auto* host = HostShowing(contents, &tag);
+  if (host)
+    host->ViewEvent(tag, event, std::move(payload));
+  return host != nullptr;
 }
 void NativeHost::ViewEvent(int tag,
                            const char* event,
