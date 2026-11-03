@@ -15,10 +15,16 @@
 #include "base/task/sequenced_task_runner.h"
 #include "bay/core/nn_page_channel.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/auto_picture_in_picture.h"
+#include "chrome/browser/bay/webui/context_search.h"
 #include "chrome/browser/bay/webui/dev_window.h"
 #include "chrome/browser/bay/webui/display_media_picker.h"
 #include "chrome/browser/bay/webui/download_controls.h"
+#include "chrome/browser/bay/webui/external_app_prompts.h"
+#include "chrome/browser/bay/webui/icon_fetch.h"
+#include "chrome/browser/bay/webui/permission_prompts.h"
 #include "chrome/browser/bay/webui/profile_data.h"
+#include "chrome/browser/bay/webui/system_state.h"
 #include "chrome/browser/bay/webui/tab_strip_mirror.h"
 #include "chrome/browser/bay/webui/tracing_session.h"
 #include "chrome/browser/bay/webui/window_registry.h"
@@ -590,7 +596,11 @@ base::ListValue EngineServices::SupportedMethods() const {
                              "tabStrips",           "tabStripCommand",
                              "devWindow",           "devWindowNumber",
                              "chromeWindows",       "beginTracing",
-                             "endTracing",          "isTracing"})
+                             "endTracing",          "isTracing",
+                             "setAutoPictureInPicture",
+                             "setSearchEngineName", "fetchFavicon",
+                             "removeLegacyFavicons", "systemState",
+                             "resolvePermission",   "resolveExternalApp"})
     methods.Append(std::string("BayCEF.") + method);
   methods.Append("BayChromeUI.changeCaptureSource");
   methods.Append("BayChromeUI.showAutofillSuggestions");
@@ -622,6 +632,77 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
   if (module == "BayCEF" &&
       DevWindow::Dispatch(context_, method, args, response))
     return true;
+  if (module == "BayCEF" && method == "systemState") {
+    std::move(response).Run(
+        Success(base::Value(SystemState::Get().Snapshot())));
+    return true;
+  }
+  if (module == "BayCEF" && method == "setAutoPictureInPicture") {
+    const auto* enabled = At(args, 0);
+    if (!enabled || !enabled->is_bool()) {
+      invalid();
+      return true;
+    }
+    AutoPictureInPicture::Get().SetEnabled(enabled->GetBool());
+    std::move(response).Run(Success());
+    return true;
+  }
+  if (module == "BayCEF" && method == "setSearchEngineName") {
+    const auto* name = Text(args, 0);
+    if (!name || name->size() > 256) {
+      invalid();
+      return true;
+    }
+    ContextSearch::SetEngineName(*name);
+    std::move(response).Run(Success());
+    return true;
+  }
+  if (module == "BayCEF" && method == "fetchFavicon") {
+    const auto* url = Text(args, 0);
+    const auto* profile = Text(args, 1);
+    if (!url || !profile) {
+      invalid();
+      return true;
+    }
+    FetchIcon(*url, *profile,
+              base::BindOnce(
+                  [](Response response, base::Value image) {
+                    std::move(response).Run(Success(std::move(image)));
+                  },
+                  std::move(response)));
+    return true;
+  }
+  // The folder macOS's older builds kept icons in never existed on this host.
+  if (module == "BayCEF" && method == "removeLegacyFavicons") {
+    std::move(response).Run(Success());
+    return true;
+  }
+  if (module == "BayCEF" && method == "resolvePermission") {
+    const auto* id = Text(args, 0);
+    const auto* result = Text(args, 1);
+    const auto* remember = At(args, 2);
+    if (!id || !result || (remember && !remember->is_bool())) {
+      invalid();
+      return true;
+    }
+    PermissionPrompts::Resolve(*id, *result, remember && remember->GetBool());
+    std::move(response).Run(Success());
+    return true;
+  }
+  if (module == "BayCEF" && method == "resolveExternalApp") {
+    const auto* id = Text(args, 0);
+    const auto* open = At(args, 1);
+    const auto* remember = At(args, 2);
+    if (!id || !open || !open->is_bool() ||
+        (remember && !remember->is_bool())) {
+      invalid();
+      return true;
+    }
+    ExternalAppPrompts::Resolve(*id, open->GetBool(),
+                                remember && remember->GetBool());
+    std::move(response).Run(Success());
+    return true;
+  }
   if (module == "BayCEF" &&
       (method == "beginTracing" || method == "isTracing")) {
     if (!args.empty()) {

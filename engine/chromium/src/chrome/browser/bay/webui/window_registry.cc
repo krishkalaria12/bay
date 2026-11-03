@@ -192,6 +192,13 @@ std::string WindowRegistry::IdFor(BrowserWindowInterface* browser) const {
   auto it = entries_.find(FrameOf(browser));
   return it == entries_.end() ? std::string() : it->second->id;
 }
+bool WindowRegistry::HoldsTab(content::WebContents* contents) const {
+  auto* browser =
+      contents
+          ? GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(contents)
+          : nullptr;
+  return browser && !IdFor(browser).empty();
+}
 content::WebContents* WindowRegistry::DocumentOf(
     BrowserWindowInterface* frame) const {
   for (const auto& [host, state] : hosts_) {

@@ -765,15 +765,25 @@
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Smaller engine calls</strong></td>
-                  <td class="num">8</td>
+                  <td class="num">7</td>
                   <td class="methods">
                     setAutoPictureInPicture setSearchEngineName fetchFavicon removeLegacyFavicons systemState resolvePermission resolveExternalApp
                   </td>
-                  <td>Auto-PiP setting, renaming search engines and favicon refetch do nothing.</td>
-                  <td><code>NNCoreServices.mm</code>, <code>NNCoreFavicons.mm</code>, <code>nn_permissions.mm</code></td>
                   <td>
-                    <span class="tag t-port">Port</span> <code>resolvePermission</code> and <code>resolveExternalApp</code> go with their prompts in section 3.
-                    S each
+                    The Auto-PiP setting did nothing, tab sleeping had no system state, icons for pages without a tab failed, and permission and "open in app"
+                    prompts were Chrome's.
+                  </td>
+                  <td>
+                    <code>nn_permissions.mm</code>, <code>nn_external_apps.mm</code>, <code>nn_icon_fetch.mm</code>, <code>nn_context_menu.mm</code>,
+                    <code>CefModule.swift</code>
+                  </td>
+                  <td>
+                    <span class="tag t-done">Source-complete 4 Nov</span> <code>webui/permission_prompts.cc</code> and <code>external_app_prompts.cc</code> port
+                    the macOS prompts over the same Chrome hooks; <code>icon_fetch.cc</code> fetches without cookies and decodes in the sandboxed decoder (SVG
+                    icons come back null); <code>system_state.cc</code> reports power and memory (Linux has no battery level or power-saver signal);
+                    <code>auto_picture_in_picture.cc</code> sets the content setting per profile. <code>context_search.cc</code> and
+                    <code>chromium-context-search-webui.patch</code> put the app's search engine in the page menu. <code>removeLegacyFavicons</code> resolves,
+                    as on macOS. Linux run pending.
                   </td>
                 </tr>
                 <tr data-kind="verify">
@@ -1072,9 +1082,18 @@
               </thead>
               <tbody>
                 <tr>
-                  <td><code>onMediaAccess</code> + <code>resolvePermission</code></td>
+                  <td><code>onPermission</code>, <code>onPermissionDismissed</code> + <code>resolvePermission</code></td>
                   <td>Camera, microphone, location and notification permission prompts</td>
                   <td><code>nn_permissions.mm</code> (498)</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 4 Nov</span> Sent to every window, so a tab that moves still asks. The tab strip decides when a tab
+                    can prompt, so a split pane that isn't the active tab waits.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>onMediaAccess</code></td>
+                  <td>The page's camera and microphone in-use state</td>
+                  <td><code>NNCoreWebView.mm</code></td>
                   <td><span class="tag t-port">P1</span></td>
                 </tr>
                 <tr>
@@ -1099,7 +1118,9 @@
                   <td><code>onExternalApp</code> + <code>resolveExternalApp</code></td>
                   <td>"Open in Zoom / Slack?" prompts</td>
                   <td><code>nn_external_apps.mm</code>; the Linux and Windows engine siblings exist</td>
-                  <td><span class="tag t-wire">P1</span></td>
+                  <td>
+                    <span class="tag t-done">Source-complete 4 Nov</span> The prompt names the desktop's handler; app icons aren't available on these hosts.
+                  </td>
                 </tr>
                 <tr>
                   <td><code>onPopupBlocked</code></td>
@@ -1358,8 +1379,8 @@
               </p>
               <ol>
                 <li>
-                  <strong>P1:</strong> permissions (<code>onMediaAccess</code> + <code>resolvePermission</code>), password and autofill offers, the screen-share
-                  picker, external app prompts.
+                  <strong>P1:</strong> the in-use state (<code>onMediaAccess</code>), password and autofill offers, the screen-share picker, external app
+                  prompts.
                 </li>
                 <li><strong>P2:</strong> link-hover status, popup blocked, Peek links, PiP and now-playing.</li>
                 <li>

@@ -27,6 +27,10 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bay/nn_dispatch.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/context_search.h"
+#include "chrome/browser/bay/webui/external_app_prompts.h"
+#include "chrome/browser/bay/webui/permission_prompts.h"
+#include "chrome/browser/bay/webui/system_state.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/browser_services.h"
 #include "chrome/browser/bay/webui/download_controls.h"
@@ -256,6 +260,24 @@ void EmitTabStrip(base::DictValue transaction) {
       host->Emit("BayCEF", "onTabStrip", payload.Clone());
   }
 }
+// A permission request goes to every window, as macOS's one document hears it:
+// the window showing the tab asks, and one the tab moves to later still can. The
+// coordinator shows no prompts.
+void EmitPermissionEvent(const char* event, base::DictValue payload) {
+  const base::Value value(std::move(payload));
+  for (const auto& [raw, host] : Hosts()) {
+    if (host && (!AppRuntime::Enabled() || !host->is_coordinator()))
+      host->Emit("BayCEF", event, value.Clone());
+  }
+}
+// Tab sleeping runs in window documents.
+void EmitSystemState(base::DictValue state) {
+  const base::Value value(std::move(state));
+  for (const auto& [raw, host] : Hosts()) {
+    if (host)
+      host->Emit("BayCEF", "onSystemState", value.Clone());
+  }
+}
 void EmitDownload(base::DictValue download) {
   const base::Value payload(std::move(download));
   for (const auto& host : EventHosts()) {
@@ -475,6 +497,10 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   // HostExtensionInstallPrompt).
   InstallPrompts::Get().Start(base::BindRepeating(&PromptWindow));
   DisplayMediaPicker::Start(base::BindRepeating(&NativeHost::EmitDisplayMediaRequest));
+  PermissionPrompts::Start(base::BindRepeating(&EmitPermissionEvent));
+  ExternalAppPrompts::Start(base::BindRepeating(&NativeHost::EmitToView));
+  ContextSearch::Start(base::BindRepeating(&NativeHost::EmitToView));
+  SystemState::Get().Start(base::BindRepeating(&EmitSystemState));
   browser_services_ = std::make_unique<BrowserServices>(
       context_,
       base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()),
@@ -889,12 +915,17 @@ void NativeHost::Emit(const char* module,
 }
 bool NativeHost::EmitDisplayMediaRequest(content::WebContents* contents,
                                          base::DictValue request) {
+  return EmitToView(contents, "onDisplayMediaRequest", std::move(request));
+}
+bool NativeHost::EmitToView(content::WebContents* contents,
+                            const char* event,
+                            base::DictValue payload) {
   for (const auto& [raw, host] : Hosts()) {
     if (!host || !host->client_)
       continue;
     for (const auto& [tag, observer] : host->tabs_) {
       if (observer->current() && observer->contents() == contents) {
-        host->ViewEvent(tag, "onDisplayMediaRequest", std::move(request));
+        host->ViewEvent(tag, event, std::move(payload));
         return true;
       }
     }

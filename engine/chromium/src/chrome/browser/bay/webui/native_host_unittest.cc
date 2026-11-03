@@ -22,6 +22,10 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/context_search.h"
+#include "chrome/browser/bay/webui/external_app_prompts.h"
+#include "chrome/browser/bay/webui/icon_fetch.h"
+#include "chrome/browser/bay/webui/permission_prompts.h"
 #include "chrome/browser/bay/webui/download_controls.h"
 #include "chrome/browser/bay/webui/install_prompts.h"
 #include "chrome/browser/bay/webui/profile_data.h"
@@ -2102,6 +2106,118 @@ TEST_F(NativeHostTest, ExtensionInstallPromptsAreDescribedAndAnswered) {
               "invalid_args");
   ExpectError(Invoke("BayExtensions", "resolveInstallPrompt", R"([7,true])"),
               "invalid_args");
+}
+
+TEST_F(NativeHostTest, SmallerEngineCallsAreAdvertisedAndValidated) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BayCEF.setAutoPictureInPicture", "BayCEF.setSearchEngineName",
+        "BayCEF.fetchFavicon", "BayCEF.removeLegacyFavicons",
+        "BayCEF.systemState", "BayCEF.resolvePermission",
+        "BayCEF.resolveExternalApp"}) {
+    EXPECT_TRUE(methods->contains(method)) << method;
+  }
+  EXPECT_EQ(Invoke("BayCEF", "removeLegacyFavicons", R"([""])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayCEF", "setAutoPictureInPicture", "[false]"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayCEF", "setAutoPictureInPicture", R"(["on"])"),
+              "invalid_args");
+  ExpectError(Invoke("BayCEF", "setSearchEngineName", "[7]"), "invalid_args");
+  // An answer to a prompt that has gone is dropped.
+  EXPECT_EQ(Invoke("BayCEF", "resolvePermission", R"(["p999","accept",true])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayCEF", "resolvePermission", R"(["p999","dismiss"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayCEF", "resolvePermission", R"(["p1","accept","yes"])"),
+              "invalid_args");
+  EXPECT_EQ(Invoke("BayCEF", "resolveExternalApp", R"(["x999",true,false])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayCEF", "resolveExternalApp", R"(["x1","open",false])"),
+              "invalid_args");
+  // Only http(s) and image data are ever fetched.
+  EXPECT_EQ(Invoke("BayCEF", "fetchFavicon", R"(["file:///etc/passwd",""])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayCEF", "fetchFavicon",
+                   R"(["data:text/html,<b>x</b>",""])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayCEF", "fetchFavicon",
+                   R"(["https://a.test/i.png","incognito:gone"])"),
+            R"({"value":null})");
+}
+
+TEST_F(NativeHostTest, SystemStateReportsTheFieldsTabSleepingReads) {
+  const auto reply = base::JSONReader::ReadDict(
+      Invoke("BayCEF", "systemState", "[]"), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(reply);
+  const auto* state = reply->FindDict("value");
+  ASSERT_TRUE(state);
+  EXPECT_TRUE(state->FindBool("onBattery"));
+  EXPECT_TRUE(state->FindBool("lowPowerMode"));
+  EXPECT_EQ(*state->FindString("memoryPressure"), "normal");
+  EXPECT_GT(state->FindDouble("physicalMemory").value_or(0), 0);
+  EXPECT_TRUE(state->contains("batteryLevel"));
+}
+
+TEST(ContextSearchTest, TitleNamesTheEngineAndEscapesTheMenu) {
+  ContextSearch::SetEngineName("Kagi");
+  EXPECT_EQ(ContextSearch::Title(u"  red\n\tpanda "),
+            u"Search Kagi for “red panda”");
+  EXPECT_EQ(ContextSearch::Title(u"salt & pepper"),
+            u"Search Kagi for “salt && pepper”");
+  const std::u16string long_title = ContextSearch::Title(
+      u"the quick brown fox jumps over the lazy dog and keeps on running");
+  EXPECT_NE(long_title.find(u"…”"), std::u16string::npos);
+  EXPECT_LT(long_title.size(), 80u);
+  ContextSearch::SetEngineName("");
+  EXPECT_EQ(ContextSearch::Title(u"a"), u"Search Google for “a”");
+  const auto modifiers =
+      ContextSearch::Modifiers(ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN);
+  EXPECT_EQ(modifiers.FindBool("metaKey"), true);
+  EXPECT_EQ(modifiers.FindBool("shiftKey"), false);
+  EXPECT_EQ(modifiers.FindBool("altKey"), true);
+}
+
+TEST(ExternalAppPromptsTest, DescribesAPromptAsMacOsWordsIt) {
+  const base::Value no_icon;
+  auto open = ExternalAppPrompts::Describe(
+      "x1", "zoommtg://join", "zoommtg", "https://zoom.us", "Zoom", no_icon,
+      true);
+  EXPECT_EQ(*open.FindString("title"), "Open “Zoom”?");
+  EXPECT_EQ(*open.FindString("message"),
+            "https://zoom.us wants to open this application.");
+  EXPECT_EQ(*open.FindString("remember"),
+            "Always allow https://zoom.us to open links of this type in Zoom");
+  auto plain = ExternalAppPrompts::Describe(
+      "x2", "zoommtg://join", "zoommtg", std::nullopt, "Zoom", no_icon, false);
+  EXPECT_EQ(*plain.FindString("message"),
+            "This page wants to open this application.");
+  EXPECT_TRUE(plain.Find("remember")->is_none());
+  auto missing = ExternalAppPrompts::Describe(
+      "x3", "foo:bar", "foo", std::nullopt, "", no_icon, false);
+  EXPECT_TRUE(missing.Find("app")->is_none());
+  EXPECT_EQ(*missing.FindString("title"),
+            "No application is set to open this link");
+}
+
+TEST(IconFetchTest, OnlyWhatChromeDecodesAsAFaviconPasses) {
+  EXPECT_FALSE(IsIconBody(""));
+  EXPECT_FALSE(IsIconBody("<!doctype html><html></html>"));
+  EXPECT_TRUE(IsIconBody(std::string_view("\x89PNG\r\n\x1a\n", 8)));
+  EXPECT_TRUE(IsIconBody(std::string_view("\x00\x00\x01\x00\x01\x00", 6)));
+  EXPECT_TRUE(IsIconBody(std::string_view("\x00\x00\x02\x00\x01\x00", 6)));
+}
+
+TEST(PermissionPromptsTest, KindsAreTheAppsNames) {
+  using permissions::RequestType;
+  EXPECT_STREQ(PermissionPrompts::KindName(RequestType::kCameraStream),
+               "camera");
+  EXPECT_STREQ(PermissionPrompts::KindName(RequestType::kGeolocation),
+               "location");
+  EXPECT_STREQ(PermissionPrompts::KindName(RequestType::kLoopbackNetwork),
+               "localNetwork");
 }
 
 }  // namespace bay

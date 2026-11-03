@@ -193,8 +193,7 @@ export type SystemState = {
 export const systemState = () => Cef.systemState();
 export const onSystemState = (listener: (state: SystemState) => void) => Cef.addListener("onSystemState", listener);
 
-// These settings control the macOS native picker and selection menu. Web hosts
-// keep Chromium's defaults unless they advertise the corresponding integration.
+// These settings control the screen-share picker and the page menu's search item.
 export const setDisplayMediaPicker = (enabled: boolean) => Cef.setDisplayMediaPicker?.(enabled) ?? Promise.resolve();
 // Chrome's automatic Picture in Picture (a call's own document PiP on a tab switch) follows the app's setting. (Builds
 // before it have no such function: Chrome's default, its prompt, stays.)

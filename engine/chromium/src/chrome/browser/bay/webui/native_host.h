@@ -85,6 +85,10 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
 #endif
   static bool EmitDisplayMediaRequest(content::WebContents* contents,
                                       base::DictValue request);
+  // Sends |event| to the view showing |contents|; false when none does.
+  static bool EmitToView(content::WebContents* contents,
+                         const char* event,
+                         base::DictValue payload);
   void InvokeView(const std::string& method,
                   const base::ListValue& args,
                   InvokeCallback callback);
