@@ -45,6 +45,7 @@ class AppServicesLinux;
 class WindowButtonLayoutLinux;
 class UserScripts;
 class EaselSharing;
+class CliInstallerService;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -157,6 +158,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   std::unique_ptr<ShellUI> local_files_ui_;
   std::unique_ptr<UserScripts> user_scripts_;
   std::unique_ptr<EaselSharing> easel_sharing_;
+  std::unique_ptr<CliInstallerService> cli_installer_;
 #endif
   void FinishShortcutRecording(base::Value result);
   // The dragged tab's floating preview (drag_preview.h).

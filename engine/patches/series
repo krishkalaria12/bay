@@ -93,7 +93,7 @@ chromium win,linux chromium-bay-native-widget.patch
 chromium linux chromium-bay-window-identity-linux.patch
 chromium all chromium-injected-author-sheet-order.patch
 
-chromium mac chromium-devtools-control-token.patch
+chromium all chromium-devtools-control-token.patch
 chromium mac chromium-devtools-background-target.patch
 
 chromium all chromium-scripts-policy.patch

@@ -490,7 +490,7 @@
           <li><a href="#events">3. Page events</a></li>
           <li><a href="#ui">4. UI capabilities</a></li>
           <li><a href="#diff">5. Windows vs Linux</a></li>
-          <li><a href="#gaps">Known gaps in finished rows</a></li>
+          <li><a href="#known-gaps">Known gaps in finished rows</a></li>
           <li><a href="#order">6. Order of work</a></li>
           <li><a href="#runtime">7. Runtime acceptance</a></li>
           <li><a href="#questions">8. Open questions</a></li>
@@ -514,7 +514,11 @@
         </header>
 
         <section id="summary" aria-labelledby="summary-h">
-          <h2 id="summary-h">Summary</h2>
+          <h2 id="summary-h">Original audit snapshot</h2>
+          <p class="prose">
+            Counts below describe the 2 Nov branch comparison. Main has since been merged, and the native-module rows now record implementation progress. See
+            <a href="#order">current progress</a> and <a href="#known-gaps">remaining limits</a> before choosing the next task.
+          </p>
           <div class="stats">
             <div class="stat">
               <div class="n">34</div>
@@ -661,9 +665,9 @@
         <section id="matrix" aria-labelledby="matrix-h">
           <h2 id="matrix-h">2. Gap matrix: native modules</h2>
           <p class="prose">
-            The table lists every native module the shared UI calls whose methods have no Linux or Windows route. "Missing" counts those methods out of the
-            module's total. Modules that are complete on both ports aren't listed: <code>BayWebView</code>, <code>BayKeychain</code>, and
-            <code>BaySync</code> (except <code>shareRecoveryKit</code>).
+            The table lists native modules that lacked Linux or Windows routes in the original audit. "Missing" is the original count out of the module's total;
+            the final column records the current implementation or decision. Modules complete at the time aren't listed: <code>BayWebView</code>,
+            <code>BayKeychain</code>, and <code>BaySync</code> (except <code>shareRecoveryKit</code>).
           </p>
           <div class="filters" role="group" aria-label="Filter rows by decision">
             <span>Show</span>
@@ -679,11 +683,11 @@
               <thead>
                 <tr>
                   <th>Feature</th>
-                  <th>Missing</th>
-                  <th>Methods with no route</th>
-                  <th>What the user sees</th>
+                  <th>Originally missing</th>
+                  <th>Audited methods</th>
+                  <th>Original missing behavior</th>
                   <th>macOS source</th>
-                  <th>Plan</th>
+                  <th>Current status</th>
                 </tr>
               </thead>
               <tbody>
@@ -890,7 +894,7 @@
                     <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/little_bay_access.cc</code> uses Chromium's own cross-platform pieces:
                     <code>GlobalAcceleratorListener</code> (<code>RegisterHotKey</code> on Windows, an X11 grab or the XDG portal on Linux) and
                     <code>StatusTray</code> (Windows' tray, StatusNotifierItem on Linux). The coordinator opens Little Bay, since it lives as long as Bay does.
-                    See <a href="#gaps">known gaps</a>. Linux run pending.
+                    See <a href="#known-gaps">known gaps</a>. Linux run pending.
                   </td>
                 </tr>
                 <tr data-kind="verify">
@@ -1046,7 +1050,12 @@
                   <td class="methods">installedVersion install</td>
                   <td>Settings can't install the <code>bay</code> command.</td>
                   <td><code>CliInstaller.swift</code> (197)</td>
-                  <td><span class="tag t-port">Port</span> Use <code>~/.local/bin</code> on Linux; deb/rpm can ship it. On Windows, user PATH. S–M</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> Apps bundle a standalone CLI and checksum manifest. Settings installs that verified
+                    binary into <code>~/.local/bin</code> on Linux or Bay's user CLI folder on Windows, updates login-shell/user PATH settings and refuses
+                    foreign commands. Terminal control now runs on both hosts, with authenticated loopback access and a private control file. The CLI uses each
+                    desktop's actual data/document paths. Native runtime checks pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Capture</strong> (<code>BayCapture</code>)</td>
@@ -1397,8 +1406,8 @@
           </div>
         </section>
 
-        <section id="gaps" aria-labelledby="gaps-h">
-          <h2 id="gaps-h">Known gaps in finished rows</h2>
+        <section id="known-gaps" aria-labelledby="known-gaps-h">
+          <h2 id="known-gaps-h">Known gaps in finished rows</h2>
           <p class="prose">
             What a Source-complete row still leaves open, kept with the code: each feature commit adds what it couldn't finish, and whichever commit closes a
             gap removes it. Nothing on this list blocks the row's main path.
@@ -1458,6 +1467,11 @@
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
             <li>
+              <strong>CLI installer:</strong> an unfamiliar Linux login shell requires manual PATH setup; a running Windows CLI may need to exit before its
+              executable can be upgraded. Windows token-file ACLs, user PATH updates and authenticated native control still need the runtime pass. Bundled Linux
+              and Windows commands were cross-compiled and checksum-verified on this Mac, not executed here.
+            </li>
+            <li>
               <strong>Easel sharing:</strong> publishing remains opt-in through <code>BAY_EASEL_WEB_SHARING=true</code>, as on macOS, and needs the existing
               website's sharing endpoint enabled. Live publication, revocation, secure storage and cross-window registry locking still need the native runtime
               pass. OS share sheets remain excluded; Copy Link works.
@@ -1489,9 +1503,10 @@
         <section id="order" aria-labelledby="order-h">
           <h2 id="order-h">6. Order of work</h2>
           <p class="prose">
-            Native module progress, 3 Nov: profile cleanup, screen sharing, Chrome tab-strip mirroring and extension install prompts are implemented in the
-            shared host source on <code>feat/linux</code>. The source checks and JavaScript tests run on this Mac; native tests are written for the Linux host
-            target. Shared host code is copied to <code>feat/windows</code> as each feature lands; none of it has been run in the native Linux/Windows app yet.
+            Native module progress, 3 Nov: all planned native-module rows except the content blocker now have source implementations or existing web
+            replacements on <code>feat/linux</code>. Previously dropped platform features remain dropped. The latest shared changes still need syncing to
+            <code>feat/windows</code>. JavaScript checks run on this Mac; native tests are written for the Linux host target. No native Linux/Windows app
+            runtime verification has run yet. Known limits are recorded above.
           </p>
           <p class="prose">
             <strong>Priority: native methods and page events first.</strong> The merge with <code>main</code> stays as step zero because it's a prerequisite:

@@ -35,7 +35,8 @@ Examples:
 `;
 
 export const EXEC_EPILOG = `Endpoint: --ws, else --port (plain DevTools servers only), else $BAY_CDP_URL, else
-<data dir>/Chromium/BayControl.json with --data-dir or $BAY_DATA_DIR, else the installed Bay's.
+<data dir>/BayControl.json on Linux and Windows, or <data dir>/Chromium/BayControl.json on macOS,
+with --data-dir or $BAY_DATA_DIR, else the installed Bay's native data directory.
 `;
 
 export const SKILLS_DESCRIPTION = `Install the bay agent skill (SKILL.md) so coding agents know how to drive Bay.

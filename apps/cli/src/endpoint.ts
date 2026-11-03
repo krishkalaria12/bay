@@ -2,11 +2,20 @@ import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { addSecret } from "./redact.ts";
+import { checkControlFile } from "./controlFileSecurity.ts";
 import { expandHome, isRecord } from "./util.ts";
 
 export const NOT_REACHABLE = 'Bay isn\'t running, or "Let the bay command control Bay" is off in Settings.';
 export const CONTROL_FILE = "BayControl.json";
-export const INSTALLED_DATA_DIR = join(homedir(), "Library", "Application Support", "in.krishkalaria.bay");
+export function installedDataDir(platform: NodeJS.Platform = process.platform, environment: NodeJS.ProcessEnv = process.env, home = homedir()): string {
+  if (platform === "win32") return join(environment.LOCALAPPDATA || join(home, "AppData", "Local"), "Bay", "User Data");
+  if (platform === "linux") return join(environment.XDG_CONFIG_HOME || join(home, ".config"), "bay");
+  return join(home, "Library", "Application Support", "in.krishkalaria.bay");
+}
+export const INSTALLED_DATA_DIR = installedDataDir();
+export const chromiumRoot = (root: string, platform: NodeJS.Platform = process.platform): string => (platform === "darwin" ? join(root, "Chromium") : root);
+export const documentsRoot = (root: string, platform: NodeJS.Platform = process.platform): string =>
+  platform === "darwin" ? root : join(root, "BayDocuments");
 const BROWSER_PATH = /^\/devtools\/browser\/[0-9A-Za-z-]{1,128}$/;
 const TOKEN = /^[\x21-\x7e]{16,1024}$/;
 const MAX_CONTROL_FILE = 64 * 1024;
@@ -29,7 +38,7 @@ export async function resolveEndpoint(choice: EndpointChoice = {}): Promise<Endp
   if (choice.port !== undefined) return fromPort(choice.port);
   const envWs = process.env.BAY_CDP_URL;
   if (envWs) return fromWs(envWs, "BAY_CDP_URL");
-  return fromControlFile(join(dataRoot(choice.dataDir), "Chromium", CONTROL_FILE));
+  return fromControlFile(join(chromiumRoot(dataRoot(choice.dataDir)), CONTROL_FILE));
 }
 
 export function dataRoot(dataDir?: string): string {
@@ -43,7 +52,7 @@ export function explicitDataRoot(dataDir?: string): string | null {
 }
 
 export function requireControl(root: string): Endpoint {
-  return fromControlFile(join(root, "Chromium", CONTROL_FILE));
+  return fromControlFile(join(chromiumRoot(root), CONTROL_FILE));
 }
 
 function fromWs(url: string, source: string): Endpoint {
@@ -90,10 +99,7 @@ export function fromControlFile(path: string): Endpoint {
   try {
     const info = fstatSync(fd);
     if (!info.isFile()) throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} isn't a regular file)`);
-    if (typeof process.getuid === "function" && info.uid !== process.getuid()) {
-      throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} belongs to another user)`);
-    }
-    if ((info.mode & 0o777) !== 0o600) throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} must be mode 0600)`);
+    checkControlFile(path, fd);
     if (info.size > MAX_CONTROL_FILE) throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} is too big)`);
     raw = readFileSync(fd, { encoding: "utf8" });
   } catch (error) {

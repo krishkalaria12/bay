@@ -49,6 +49,8 @@ source_set("impl") {
     "cast_dialogs.h",
     "context_search.cc",
     "context_search.h",
+    "cli_installer.cc",
+    "cli_installer.h",
     "dev_window.cc",
     "dev_window.h",
     "dev_window_input.cc",
@@ -155,6 +157,7 @@ source_set("impl") {
     "//components/version_info",
     "//components/viz/common",
     "//components/zoom",
+    "//crypto",
     "//extensions/browser",
     "//extensions/common",
     "//net",
@@ -804,6 +807,7 @@ if (is_linux) {
       "user_scripts_unittest.cc",
       "../nn_scripts_policy_unittest.cc",
       "easel_sharing_unittest.cc",
+      "cli_installer_unittest.cc",
     ]
     deps = [
       ":impl",
@@ -824,6 +828,7 @@ if (is_linux) {
       "//chrome/test:test_support_unit",
       "//components/keep_alive_registry",
       "//content/test:test_support",
+      "//crypto",
       "//net",
       "//testing/gmock",
       "//testing/gtest",

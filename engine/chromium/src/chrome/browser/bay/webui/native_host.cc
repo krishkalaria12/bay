@@ -53,6 +53,7 @@
 #include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/user_scripts.h"
 #include "chrome/browser/bay/webui/easel_sharing.h"
+#include "chrome/browser/bay/webui/cli_installer.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/shortcut_recorder.h"
@@ -860,6 +861,16 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   easel_sharing_ = std::make_unique<EaselSharing>(context_.profile());
   easel_sharing_->Prepare(
       base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
+  cli_installer_ = std::make_unique<CliInstallerService>(
+      context_, base::BindRepeating(
+          [](base::WeakPtr<NativeHost> host, const char* module,
+             const char* event, base::DictValue payload) {
+            if (host)
+              host->Emit(module, event, base::Value(std::move(payload)));
+          }, GetWeakPtr()),
+      base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
+  cli_installer_->Prepare(
+      base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
 #endif
 #if BUILDFLAG(IS_WIN)
   AppUpdater().Prepare(
@@ -955,6 +966,7 @@ base::DictValue NativeHost::Info() const {
   modules.Append("BayKeychain");
   modules.Append("BayLocalFiles");
   modules.Append("BayUserScripts");
+  modules.Append("BayCli");
   for (const auto& module : data::ModuleNames())
     modules.Append(module);
 #endif
@@ -1163,6 +1175,7 @@ base::DictValue NativeHost::Info() const {
   // Set last: a platform's services replace the snapshots above.
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   info.FindDict("snapshots")->Set("BayEasel", easel_sharing_->snapshots());
+  info.FindDict("snapshots")->Set("BayCli", cli_installer_->Snapshot());
 #endif
   // Window features this host routes itself, on every desktop it runs on.
   auto* host_methods = info.FindList("optionalMethods");
@@ -1184,6 +1197,8 @@ base::DictValue NativeHost::Info() const {
     host_methods->Append(std::move(method));
   for (auto& method : EaselSharing::SupportedMethods())
     host_methods->Append(std::move(method));
+  host_methods->Append("BayCli.installedVersion");
+  host_methods->Append("BayCli.install");
 #endif
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
@@ -1213,6 +1228,8 @@ void NativeHost::PublishHostInfo() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 void NativeHost::PlatformReady() {
   if (!easel_sharing_ || !easel_sharing_->ready())
+    return;
+  if (!cli_installer_ || !cli_installer_->ready())
     return;
 #if BUILDFLAG(IS_WIN)
   if (!platform_services_ || !platform_services_->ready())
@@ -1698,6 +1715,8 @@ void NativeHost::Invoke(const std::string& module,
   if (user_scripts_->Dispatch(module, method, args, callback))
     return;
   if (easel_sharing_->Dispatch(module, method, args, callback))
+    return;
+  if (cli_installer_->Dispatch(module, method, args, callback))
     return;
   if (module == "BayLocalFiles") {
     LocalFilesCall(method, args, std::move(callback));

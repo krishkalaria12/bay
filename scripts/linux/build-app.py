@@ -21,6 +21,9 @@ spec.loader.exec_module(fetch)
 engine = fetch.engine
 web_artifacts = engine.web_artifacts
 REPO = engine.REPO
+cli_spec = importlib.util.spec_from_file_location("build_cli", HERE.parent / "build-cli.py")
+cli_bundle = importlib.util.module_from_spec(cli_spec)
+cli_spec.loader.exec_module(cli_bundle)
 REQUIRED = ("bay", "chrome_sandbox", "chrome_crashpad_handler", "resources.pak", "icudtl.dat", "xdg-settings",
             "bay-ui/" + web_artifacts.MOJO_ENTRY)
 EXPANDED_LIMIT = 16 * 1024**3
@@ -60,7 +63,7 @@ def unresolved_libraries(directory):
     return missing
 
 
-def stage(engine_directory, web_directory, destination):
+def stage(engine_directory, web_directory, destination, cli_directory=None):
     manifest = fetch.verify(engine_directory, engine.artifact_id("linux"), platform="linux")
     runtime = engine_directory / "runtime"
     for name in REQUIRED:
@@ -68,6 +71,8 @@ def stage(engine_directory, web_directory, destination):
             raise ValueError(f"Linux engine runtime is missing {name}")
     web_artifacts.validate_entrypoint(web_directory)
     web_artifacts.mojo_files(runtime / "bay-ui")
+    if cli_directory is not None:
+        cli_bundle.validate(cli_directory, "linux")
     if destination.exists():
         raise ValueError(f"{destination} already exists; use a fresh output directory to avoid stale runtime files")
     # All verification finishes before creating the app directory.
@@ -80,6 +85,8 @@ def stage(engine_directory, web_directory, destination):
     shutil.copytree(runtime / "bay-ui", destination / "bay-ui", dirs_exist_ok=True)
     shutil.copy2(REPO / "packaging/linux/bay-wrapper", destination / "bay-wrapper")
     shutil.copy2(engine_directory / "manifest.json", destination / "engine-manifest.json")
+    if cli_directory is not None:
+        cli_bundle.stage(cli_directory, destination / "bay-cli", "linux")
     missing = unresolved_libraries(destination)
     if missing:
         shutil.rmtree(destination)
@@ -96,6 +103,8 @@ def main():
     parser.add_argument("--web-directory", type=pathlib.Path, default=REPO / "apps/browser/dist")
     parser.add_argument("--output", type=pathlib.Path, default=REPO / "dist/linux-app")
     parser.add_argument("--skip-web-build", action="store_true", help="stage an existing web export")
+    parser.add_argument("--cli-directory", type=pathlib.Path, help="reuse a verified CLI bundle instead of compiling it")
+    parser.add_argument("--cli-version", help="CLI version, default: apps/cli/package.json")
     args = parser.parse_args()
     if args.verify:
         web_artifacts.verify_manifest(args.verify.resolve())
@@ -108,8 +117,13 @@ def main():
     if not args.skip_web_build:
         subprocess.run(["pnpm", "--filter", "@bay/browser", "build:web"], cwd=REPO, check=True)
     with tempfile.TemporaryDirectory(prefix="bay-linux-engine-") as directory:
-        extract(args.engine_archive.resolve(), directory)
-        stage(pathlib.Path(directory), args.web_directory.resolve(), args.output.resolve())
+        work = pathlib.Path(directory)
+        cli = args.cli_directory.resolve() if args.cli_directory else work / "cli"
+        if not args.cli_directory:
+            cli_bundle.build(cli, "linux", args.cli_version)
+        extracted = work / "engine"
+        extract(args.engine_archive.resolve(), extracted)
+        stage(extracted, args.web_directory.resolve(), args.output.resolve(), cli)
     print(args.output)
 
 
