@@ -5,11 +5,15 @@ import IOKit.ps
 // (packages/cefPatches/src) runs unchanged. What NNCore doesn't do yet answers the way an empty engine would (no
 // downloads, no saved passwords…).
 public class CefModule: Module {
+  // JS runtimes this process has started: this module is made once per runtime, so a later one is a JS reload.
+  private static var runtimes = 0
+
   public func definition() -> ModuleDefinition {
     Name("BayCEF")
     Events("onDownload", "onPermission", "onPermissionDismissed", "onContentBlocker", "onSystemState", "onEngineEvent", "onTabStrip")
 
     OnCreate {
+      CefModule.runtimes += 1
       NNCoreEngineBridge.setEventHandler { [weak self] topic, json in self?.sendEvent("onEngineEvent", ["topic": topic, "payload": json]) }
       NNCoreTabStrip.setHandler { [weak self] tx in self?.sendEvent("onTabStrip", tx) }
       NNCoreServices.downloadsHandler = { [weak self] download in self?.sendEvent("onDownload", download) }
@@ -26,6 +30,7 @@ public class CefModule: Module {
       SystemState.shared.start()
     }
 
+    Function("isJsReload") { CefModule.runtimes > 1 }
     AsyncFunction("engineInfo") { NNCoreHost.engineInfo }.runOnQueue(.main)
     AsyncFunction("chromeWindows") { NNCoreHost.chromeWindows }.runOnQueue(.main)
     AsyncFunction("devExternalLaunches") { NNCoreHost.testExternalLaunches() }.runOnQueue(.main)

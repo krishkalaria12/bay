@@ -79,6 +79,7 @@ export const Cef = requireNativeModule<{
   releaseProfile(profile: string): Promise<void>;
   deleteProfileData(profile: string): Promise<{ remaining: string[] }>;
 
+  isJsReload(): boolean;
   getContentBlocker(): Promise<ContentBlockerState>;
   setContentBlockerEnabled(enabled: boolean): Promise<void>;
   setFilterListEnabled(id: string, enabled: boolean): Promise<void>;

@@ -131,6 +131,26 @@ test("a session keeps each space's tabs in order, and none of a private window's
   assert.equal(S().windowOrder.length, 2);
 });
 
+test("a JS reload keeps each window on the tab it showed, and its other tabs, whatever a launch would do", () => {
+  stub.docs.clear();
+  const stop = startPersistence();
+  const { one } = setup();
+  const b = Object.values(S().tabs).find((t) => short(t.id) === "b").id;
+  S().activate(b, one);
+  S().updateSettings({ restoreSession: false });
+  flushPersistence();
+  stop();
+  stub.jsReload.on = true;
+  try {
+    S().hydrate(loadSession());
+    assert.equal(model.activeTabId(S(), one), b, "not a blank tab");
+    assert.deepEqual(listed(one).filter(Boolean), ["a", "b", "c"], "restoreSession closes nothing");
+  } finally {
+    stub.jsReload.on = false;
+    S().updateSettings({ restoreSession: true });
+  }
+});
+
 test("a launch starts each window on a blank tab, and the next launch reuses it", () => {
   stub.docs.clear();
   const stop = startPersistence();
