@@ -2,6 +2,7 @@
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/native_contracts.g.h"
 
+#include <array>
 #include <cmath>
 #include <optional>
 #include <utility>
@@ -28,6 +29,7 @@
 #include "chrome/browser/bay/nn_dispatch.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/cast_dialogs.h"
+#include "chrome/browser/bay/webui/clear_specks.h"
 #include "chrome/browser/bay/webui/context_search.h"
 #include "chrome/browser/bay/webui/device_choosers.h"
 #include "chrome/browser/bay/webui/external_app_prompts.h"
@@ -838,8 +840,10 @@ base::DictValue NativeHost::Info() const {
                             .Set("readEaselShareRecords", base::Value()));
   // Window features this host routes itself, on every desktop it runs on.
   auto* host_methods = info.FindList("optionalMethods");
-  if (context_.is_window())
+  if (context_.is_window()) {
     host_methods->Append("BayShell.setKeyShortcuts");
+    host_methods->Append("BayApp.documentSpecks");
+  }
   for (auto& method : LibraryFiles::SupportedMethods())
     host_methods->Append(std::move(method));
   if (AppRuntime::Enabled() && is_coordinator()) {
@@ -1374,6 +1378,42 @@ void NativeHost::Invoke(const std::string& module,
     return;
   }
 #endif
+  if (module == "BayApp" && method == "documentSpecks") {
+    const auto* list = At(args, 0);
+    std::vector<gfx::RectF> rows;
+    bool valid = context_.is_window() && list && list->is_list() &&
+                 list->GetList().size() <= 64;
+    if (valid) {
+      for (const auto& item : list->GetList()) {
+        const auto* rect = item.GetIfList();
+        if (!rect || rect->size() != 4) {
+          valid = false;
+          break;
+        }
+        std::array<float, 4> values = {};
+        for (size_t i = 0; i < 4; ++i) {
+          const auto value = (*rect)[i].GetIfDouble();
+          valid &= value && std::isfinite(*value);
+          values[i] = value ? static_cast<float>(*value) : 0;
+        }
+        valid &= values[2] > 0 && values[3] > 0;
+        rows.emplace_back(values[0], values[1], values[2], values[3]);
+      }
+    }
+    if (!valid) {
+      std::move(callback).Run(
+          Failure("invalid_args", "A window's row rects are required"));
+      return;
+    }
+    CaptureRowSpecks(
+        document_contents(), std::move(rows),
+        base::BindOnce(
+            [](InvokeCallback callback, base::Value specks) {
+              std::move(callback).Run(Success(std::move(specks)));
+            },
+            std::move(callback)));
+    return;
+  }
   if (module == "BaySystem" && method == "recordShortcut") {
     if (!context_.is_window()) {
       std::move(callback).Run(

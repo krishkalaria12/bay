@@ -77,6 +77,7 @@ inline constexpr Method methods[] = {
   {"BayApp", "checkForUpdates", true, 0, 0},
   {"BayApp", "installPendingUpdate", true, 0, 0},
   {"BayApp", "disintegrate", true, 2, 2},
+  {"BayApp", "documentSpecks", true, 1, 1},
   {"BayApp", "setAutomaticUpdateChecks", true, 1, 1},
   {"BayApp", "setAutomaticUpdateDownloads", true, 1, 1},
   {"BayApp", "setUpdateChannel", true, 1, 1},

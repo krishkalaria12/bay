@@ -944,7 +944,11 @@
                   <td class="methods">disintegrate</td>
                   <td>Clearing tabs doesn't animate; it already falls back silently.</td>
                   <td><code>Disintegrate.swift</code></td>
-                  <td><span class="tag t-port">Port</span> as a WebGL or CSS effect over the captured rects. S, optional</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> A document can't read its own pixels, so the host copies the rows from the window's
+                    surface and picks the specks as macOS does (<code>webui/clear_specks.cc</code>, <code>BayApp.documentSpecks</code>).
+                    <code>sidebar/webDisintegrate.ts</code> then plays macOS's drift-and-scatter on a canvas over the window. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Intro music</strong></td>
@@ -1383,6 +1387,7 @@
               focus reaches the document (a very quick tap from a page), the switcher commits on the next key or click instead. A click inside a page doesn't
               cancel it, because the page's events don't reach the document.
             </li>
+            <li><strong>Clear animation:</strong> the canvas draws on the main thread, so a busy window may drop frames where Core Animation wouldn't.</li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
             <li>
               <strong>Shortcuts:</strong> a key taken off its command is swallowed rather than reaching the page, as it does on macOS. The catalog lists macOS's

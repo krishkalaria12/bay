@@ -120,6 +120,8 @@ type AppModule = {
   checkForUpdates(): Promise<void>;
   installPendingUpdate(): Promise<void>;
   disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;
+  // The Chrome-hosted desktop: the rows' own pixels, for the document to animate (clear_specks.cc).
+  documentSpecks?(rects: [number, number, number, number][]): Promise<number[][]>;
   setAutomaticUpdateChecks(on: boolean): Promise<void>;
   setAutomaticUpdateDownloads(on: boolean): Promise<void>;
   setUpdateChannel(channel: UpdateChannel): Promise<void>;
@@ -165,6 +167,9 @@ export const disintegrate = (windowId: string, rects: { x: number; y: number; wi
     windowId,
     rects.map((r) => [r.x, r.y, r.width, r.height]),
   );
+/** Each row's specks as `[x, y, r, g, b, a]` runs, in window points; empty where the host can't read the window. */
+export const documentSpecks = (rects: { x: number; y: number; width: number; height: number }[]): Promise<number[][]> =>
+  App.documentSpecks?.(rects.map((r) => [r.x, r.y, r.width, r.height])) ?? Promise.resolve([]);
 export const onUpdatePending = (listener: (pending: PendingUpdate | null) => void) => App.addListener("onUpdatePending", (e) => listener(e.pending ?? null));
 export const setAutomaticUpdateChecks = (on: boolean) => App.setAutomaticUpdateChecks(on);
 export const setAutomaticUpdateDownloads = (on: boolean) => App.setAutomaticUpdateDownloads(on);

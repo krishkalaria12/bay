@@ -1,3 +1,4 @@
+import { isMac } from "@bay/platform";
 import { disintegrate } from "@bay/desktop";
 import { reduceMotion } from "../../lib/reduceMotion";
 import { cleanUpTabs } from "../../runtime/organizeActions";
@@ -6,6 +7,7 @@ import { browserRead } from "../../store/read";
 import { cleanUpCandidates } from "../../store/tabTidying";
 import { measureRow, type Anchor } from "./state";
 import { CLEAR_MAX_ROWS } from "./constants";
+import { webDisintegrate } from "./webDisintegrate";
 
 // yab's Clear: every tab but the one on screen goes (put away, as Clean Up does: Recently Cleaned has them), and
 // their rows break into their own pixels, which blow away (packages/shell's Disintegrate.swift) as the rows close.
@@ -19,7 +21,7 @@ export async function clearTabs(windowId: string) {
   if (!reduceMotion()) {
     const rects = (await Promise.all(ids.slice(0, CLEAR_MAX_ROWS).map((id) => measureRow(windowId, id)))).filter((r): r is Anchor => !!r);
     // The rows are drawn while they're snapshot, before they go.
-    if (rects.length) await disintegrate(windowId, rects).catch(() => {});
+    if (rects.length) await (isMac ? disintegrate(windowId, rects) : webDisintegrate(rects)).catch(() => {});
   }
   await cleanUpTabs(windowId, { inactiveForMs: 0 });
 }

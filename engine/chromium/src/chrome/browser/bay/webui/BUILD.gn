@@ -77,6 +77,8 @@ source_set("impl") {
     "page_security.h",
     "page_services.cc",
     "page_services.h",
+    "clear_specks.cc",
+    "clear_specks.h",
     "page_menu.cc",
     "page_menu.h",
     "permission_prompts.cc",
@@ -655,6 +657,17 @@ test("page_security_unittests") {
     "//content/public/browser",
     "//net",
     "//testing/gtest",
+  ]
+}
+
+test("clear_specks_unittests") {
+  sources = [ "clear_specks_unittest.cc" ]
+  deps = [
+    ":webui",
+    "//base/test:run_all_unittests",
+    "//skia",
+    "//testing/gtest",
+    "//ui/gfx/geometry",
   ]
 }
 
