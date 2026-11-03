@@ -29,6 +29,7 @@
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/browser_services.h"
+#include "chrome/browser/bay/webui/download_controls.h"
 #include "chrome/browser/bay/webui/engine_services.h"
 #include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/page_observer.h"
@@ -233,6 +234,24 @@ bool Boolean(const base::ListValue& values,
   const auto* value = At(values, index);
   return value && value->is_bool() ? value->GetBool() : fallback;
 }
+// The hosts that get the engine's events: every one, or with the shared
+// runtime only the coordinator.
+std::vector<base::WeakPtr<NativeHost>> EventHosts() {
+  std::vector<base::WeakPtr<NativeHost>> hosts;
+  for (const auto& entry : Hosts()) {
+    if (entry.second &&
+        (!AppRuntime::Enabled() || entry.second->is_coordinator()))
+      hosts.push_back(entry.second);
+  }
+  return hosts;
+}
+void EmitDownload(base::DictValue download) {
+  const base::Value payload(std::move(download));
+  for (const auto& host : EventHosts()) {
+    if (host)
+      host->Emit("BayCEF", "onDownload", payload.Clone());
+  }
+}
 void EngineEvent(void*, const char* topic, const char* json) {
   // The NN engine guarantees UI-thread delivery. Hosts and Mojo remotes are
   // deliberately UI-thread confined; a background event source must post here.
@@ -250,24 +269,23 @@ void EngineEvent(void*, const char* topic, const char* json) {
     parsed->Set("profile", name == "Default" ? "" : name);
   }
   const std::string normalized_json = JSON(*parsed);
-  std::vector<base::WeakPtr<NativeHost>> hosts;
-  for (const auto& entry : Hosts())
-    hosts.push_back(entry.second);
-  for (const auto& host : hosts) {
-    if (!host || (AppRuntime::Enabled() && !host->is_coordinator()))
-      continue;
-    host->Emit("BayCEF", "onEngineEvent",
-               base::Value(base::DictValue()
-                               .Set("topic", topic)
-                               .Set("payload", normalized_json)));
-    if (std::string_view(topic) == "downloads.changed") {
-      if (const auto* download = parsed->FindDict("download")) {
-        auto value = download->Clone();
-        if (const auto* profile = parsed->FindString("profile"))
-          value.Set("profile", *profile);
-        host->Emit("BayCEF", "onDownload", base::Value(std::move(value)));
-      }
-    }
+  for (const auto& host : EventHosts()) {
+    if (host)
+      host->Emit("BayCEF", "onEngineEvent",
+                 base::Value(base::DictValue()
+                                 .Set("topic", topic)
+                                 .Set("payload", normalized_json)));
+  }
+  // Downloads also keep the profile they're in, for their controls.
+  const std::string_view name(topic ? topic : "");
+  const auto* profile = parsed->FindString("profile");
+  if (name == "downloads.changed") {
+    if (const auto* download = parsed->FindDict("download"))
+      EmitDownload(
+          DownloadControls::Get().Adopt(*download, profile ? *profile : ""));
+  } else if (name == "downloads.removed") {
+    if (const auto* id = parsed->FindString("id"))
+      DownloadControls::Get().Forget(*id);
   }
 }
 int TabId(content::WebContents* contents) {
@@ -396,6 +414,9 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   Hosts()[this] = GetWeakPtr();
   if (Hosts().size() == 1)
     nn_engine_set_event_sink(&EngineEvent, nullptr);
+  // Every Bay profile reports its downloads from now on (macOS NNCoreHost
+  // watchDownloads), whichever host asks first.
+  DownloadControls::Get().Start(base::BindRepeating(&EmitDownload));
   browser_services_ = std::make_unique<BrowserServices>(
       context_,
       base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()),

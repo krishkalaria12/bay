@@ -1337,6 +1337,13 @@ export const nativeContracts = {
           "maxArgs": 0,
           "signature": "systemState(): Promise<SystemState>;"
         },
+        "listDownloads": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "listDownloads?(): Promise<Download[]>;"
+        },
         "cancelDownload": {
           "async": true,
           "optional": false,

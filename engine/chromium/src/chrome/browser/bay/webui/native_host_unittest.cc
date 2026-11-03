@@ -20,6 +20,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/download_controls.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_placement.h"
@@ -1853,6 +1854,106 @@ TEST_F(NativeHostQuitTest, LastWindowClosePostsOneQuitAndHonorsSaveFailure) {
   EXPECT_EQ(client_.events,
             (std::vector<std::string>{"willQuit", "quitCancelled"}));
   EXPECT_FALSE(browser_shutdown::IsTryingToQuit());
+}
+
+// The download controls are BayCEF methods on the web host. With no Bay
+// profile loaded there is nothing to list, and a control for a download no
+// profile holds resolves, as on macOS.
+TEST_F(NativeHostTest, DownloadControlsAdvertisedAndResolveWithoutProfiles) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BayCEF.listDownloads", "BayCEF.pauseDownload",
+        "BayCEF.resumeDownload", "BayCEF.cancelDownload"})
+    EXPECT_TRUE(methods->contains(method)) << method;
+  EXPECT_EQ(Invoke("BayCEF", "listDownloads", "[]"), R"({"value":[]})");
+  for (const char* method :
+       {"pauseDownload", "resumeDownload", "cancelDownload"}) {
+    EXPECT_EQ(Invoke("BayCEF", method, R"(["unknown-guid"])"),
+              R"({"value":null})")
+        << method;
+    ExpectError(Invoke("BayCEF", method, "[]"), "invalid_args");
+    ExpectError(Invoke("BayCEF", method, "[7]"), "invalid_args");
+    ExpectError(Invoke("BayCEF", method, R"([""])"), "invalid_args");
+  }
+}
+
+// A control goes to the profile whose event named the download, then tries
+// the next profile while the engine answers "no such download".
+TEST(DownloadControlsTest, CommandsGoToTheReportingProfile) {
+  base::test::SingleThreadTaskEnvironment task_environment;
+  auto& controls = DownloadControls::Get();
+  const auto adopted = controls.Adopt(
+      base::DictValue().Set("id", "guid-work").Set("state", "downloading"),
+      "work");
+  EXPECT_EQ(*adopted.FindString("profile"), "work");
+  EXPECT_EQ(*adopted.FindString("state"), "downloading");
+
+  std::vector<std::string> calls;
+  std::string reply = R"({"value":{"ok":true}})";
+  DownloadControls::EngineInvoker engine = base::BindLambdaForTesting(
+      [&](const std::string& name, const std::string& profile,
+          base::DictValue args, DownloadControls::Response response) {
+        calls.push_back(name + " " + profile + " " +
+                        *args.FindString("id"));
+        std::move(response).Run(reply);
+      });
+  base::test::TestFuture<const std::string&> paused;
+  controls.Command(engine, "pause", "guid-work", paused.GetCallback());
+  EXPECT_EQ(paused.Get(), R"({"value":null})");
+  EXPECT_EQ(calls,
+            (std::vector<std::string>{"nn_downloads_pause work guid-work"}));
+
+  // Gone from that profile, and no other is loaded: it still resolves.
+  calls.clear();
+  reply =
+      R"({"error":{"code":"engine_error","message":"no such download"}})";
+  base::test::TestFuture<const std::string&> cancelled;
+  controls.Command(engine, "cancel", "guid-work", cancelled.GetCallback());
+  EXPECT_EQ(cancelled.Get(), R"({"value":null})");
+  EXPECT_EQ(calls,
+            (std::vector<std::string>{"nn_downloads_cancel work guid-work"}));
+
+  // The engine's refusal to resume is the download's state, not an error.
+  calls.clear();
+  reply = R"({"error":{"code":"engine_error","message":"can't resume"}})";
+  base::test::TestFuture<const std::string&> resumed;
+  controls.Command(engine, "resume", "guid-work", resumed.GetCallback());
+  EXPECT_EQ(resumed.Get(), R"({"value":null})");
+  EXPECT_EQ(calls.size(), 1u);
+
+  // Removed from Chrome's list: no profile is known for it any more.
+  controls.Forget("guid-work");
+  calls.clear();
+  base::test::TestFuture<const std::string&> forgotten;
+  controls.Command(engine, "pause", "guid-work", forgotten.GetCallback());
+  EXPECT_EQ(forgotten.Get(), R"({"value":null})");
+  EXPECT_TRUE(calls.empty());
+
+  base::test::TestFuture<const std::string&> invalid;
+  controls.Command(engine, "delete", "guid-work", invalid.GetCallback());
+  EXPECT_NE(invalid.Get().find("invalid_args"), std::string::npos);
+  EXPECT_TRUE(calls.empty());
+}
+
+// nn_downloads_list's reply becomes onDownload payloads that name the
+// profile, and remembers each download's profile for its controls.
+TEST(DownloadControlsTest, ListedDownloadsNameTheirProfile) {
+  auto& controls = DownloadControls::Get();
+  auto result = base::JSONReader::Read(
+      R"({"downloads":[{"id":"guid-a","state":"finished"},7,
+                       {"id":"guid-b","state":"downloading"}]})",
+      base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  const auto downloads = controls.Downloads(*result, "");
+  ASSERT_EQ(downloads.size(), 2u);
+  EXPECT_EQ(*downloads[0].FindString("id"), "guid-a");
+  EXPECT_EQ(*downloads[0].FindString("profile"), "");
+  EXPECT_EQ(*downloads[1].FindString("id"), "guid-b");
+  EXPECT_TRUE(controls.Downloads(base::Value(), "").empty());
+  controls.Forget("guid-a");
+  controls.Forget("guid-b");
 }
 
 }  // namespace bay

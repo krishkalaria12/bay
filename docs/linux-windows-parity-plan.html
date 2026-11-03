@@ -693,11 +693,16 @@
                   <td><strong>Download controls</strong></td>
                   <td class="num">3 / 67</td>
                   <td class="methods">pauseDownload resumeDownload cancelDownload</td>
-                  <td>Pause, Resume and Cancel in the downloads panel, page and menu fail.</td>
-                  <td><code>nn_downloads.cc</code> (shared)</td>
                   <td>
-                    <span class="tag t-wire">Wire</span> <code>nn_downloads_pause/resume/cancel</code> are already exported and in <code>nn_dispatch.cc</code>;
-                    add facades to <code>EngineServices::kMethods</code>. S
+                    Pause, Resume and Cancel in the downloads panel, page and menu fail. Downloads also never reached the UI: nothing ran
+                    <code>nn_downloads_list</code>, which starts a profile's events and turns off Chrome's "Ask where to save" default.
+                  </td>
+                  <td><code>nn_downloads.cc</code> (shared), <code>NNCoreServices.mm</code></td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/download_controls.cc</code> lists every Bay profile as it loads (macOS
+                    <code>watchDownloads</code>), sends each control to the profile that reported the download, and adds an optional
+                    <code>BayCEF.listDownloads</code> that a new <code>onDownload</code> listener replays (launch, replaced coordinator). Native tests in
+                    <code>native_host_unittest.cc</code>; Linux run pending.
                   </td>
                 </tr>
                 <tr data-kind="port">
