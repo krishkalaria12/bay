@@ -19,6 +19,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "chrome/browser/bay/webui/cast_dialogs.h"
+#include "chrome/browser/bay/webui/device_choosers.h"
 #include "chrome/browser/bay/webui/install_prompts.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/browser_process.h"
@@ -71,8 +73,13 @@ constexpr const char* kExtensionMethods[] = {
     "reload", "configure",       "searchEngineList", "chooseFolder",
     "resolveInstallPrompt"};
 constexpr const char* kChromeMethods[] = {
-    "actionStates",    "sidePanelURL",       "showCastDialog",
-    "watchCastRoutes", "terminateCastRoute", "stopCapture"};
+    "actionStates",        "sidePanelURL",
+    "showCastDialog",      "watchCastRoutes",
+    "terminateCastRoute",  "stopCapture",
+    "selectDevice",        "cancelDeviceChooser",
+    "refreshDeviceChooser", "openBluetoothSettings",
+    "startCasting",        "stopCasting",
+    "closeCastDialog"};
 
 template <size_t N>
 bool Contains(const char* const (&methods)[N], const std::string& method) {
@@ -537,9 +544,63 @@ bool BrowserServices::DispatchExtensions(const std::string& method,
   return true;
 }
 
+bool BrowserServices::DispatchDialogAnswer(const std::string& method,
+                                           const base::ListValue& args,
+                                           Response& response) {
+  auto invalid = [&] {
+    std::move(response).Run(Failure("invalid_args", "Invalid dialog arguments"));
+  };
+  const auto* id = At(args, 0);
+  if (!id || !id->is_int()) {
+    invalid();
+    return true;
+  }
+  if (method == "selectDevice") {
+    const auto* index = At(args, 1);
+    if (!index || !index->is_int()) {
+      invalid();
+      return true;
+    }
+    DeviceChoosers::Select(id->GetInt(), index->GetInt());
+  } else if (method == "cancelDeviceChooser") {
+    DeviceChoosers::Cancel(id->GetInt());
+  } else if (method == "refreshDeviceChooser") {
+    DeviceChoosers::Refresh(id->GetInt());
+  } else if (method == "openBluetoothSettings") {
+    DeviceChoosers::OpenSettings(id->GetInt());
+  } else if (method == "startCasting") {
+    const auto* sink = Text(args, 1);
+    const auto* mode = At(args, 2);
+    if (!sink || !mode || !mode->is_int() ||
+        !CastDialogs::StartCasting(id->GetInt(), *sink, mode->GetInt())) {
+      invalid();
+      return true;
+    }
+  } else if (method == "stopCasting") {
+    const auto* route = Text(args, 1);
+    if (!route) {
+      invalid();
+      return true;
+    }
+    CastDialogs::StopCasting(id->GetInt(), *route);
+  } else {
+    CastDialogs::Close(id->GetInt());
+  }
+  std::move(response).Run(Success());
+  return true;
+}
+
 bool BrowserServices::DispatchChromeUI(const std::string& method,
                                        const base::ListValue& args,
                                        Response& response) {
+  // Device choosers and Cast dialogs answer by their own id: one that has gone
+  // is ignored.
+  if (method == "selectDevice" || method == "cancelDeviceChooser" ||
+      method == "refreshDeviceChooser" || method == "openBluetoothSettings" ||
+      method == "startCasting" || method == "stopCasting" ||
+      method == "closeCastDialog") {
+    return DispatchDialogAnswer(method, args, response);
+  }
   if (method == "watchCastRoutes") {
     const auto* profile = Text(args, 0);
     if (profile && profile->starts_with("incognito:") && !context_.window()) {

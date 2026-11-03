@@ -745,9 +745,14 @@
                   <td><strong>Cast dialog and device chooser</strong></td>
                   <td class="num">7</td>
                   <td class="methods">startCasting stopCasting closeCastDialog selectDevice cancelDeviceChooser refreshDeviceChooser openBluetoothSettings</td>
-                  <td>Cast, plus WebUSB, WebHID, serial and Bluetooth device pickers, have no Bay UI.</td>
+                  <td>Cast, plus WebUSB, WebHID, serial and Bluetooth device pickers, had no Bay UI.</td>
                   <td><code>nn_cast_dialog.mm</code>, <code>nn_device_chooser.mm</code></td>
-                  <td><span class="tag t-port">Port</span> Hook Chrome's chooser controllers in shared C++. M</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 4 Nov</span> The existing hooks are CEF-only, so
+                    <code>chromium-chrome-dialogs-webui.patch</code> adds web-host ones. <code>webui/device_choosers.cc</code> and
+                    <code>cast_dialogs.cc</code> port macOS over Chrome's own controllers, tell only the window showing the tab, and cancel when no window does,
+                    so a page never waits on a prompt nobody can see. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Extension install prompt</strong></td>

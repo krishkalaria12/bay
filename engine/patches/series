@@ -48,6 +48,7 @@ chromium win,linux chromium-extension-install-prompt-webui.patch
 chromium win,linux chromium-display-media-picker-webui.patch
 chromium win,linux chromium-context-search-webui.patch
 chromium win,linux chromium-context-menu-items-webui.patch
+chromium win,linux chromium-chrome-dialogs-webui.patch
 chromium all chromium-extension-updates.patch
 chromium all chromium-extension-import.patch
 chromium all chromium-extension-window-hidden.patch

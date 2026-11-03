@@ -15,6 +15,7 @@
 #include "base/json/json_writer.h"
 #include "base/observer_list.h"
 #include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_command_line.h"
@@ -23,7 +24,9 @@
 #include "base/test/test_future.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/cast_dialogs.h"
 #include "chrome/browser/bay/webui/context_search.h"
+#include "chrome/browser/bay/webui/device_choosers.h"
 #include "chrome/browser/bay/webui/external_app_prompts.h"
 #include "chrome/browser/bay/webui/icon_fetch.h"
 #include "chrome/browser/bay/webui/page_menu.h"
@@ -43,6 +46,8 @@
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "chrome/browser/ui/media_router/ui_media_sink.h"
+#include "components/permissions/chooser_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/install_prompt_data.h"
 #include "extensions/common/extension_builder.h"
@@ -2243,6 +2248,155 @@ TEST(PageMenuTest, RemovesViewlessItemsAndTheSeparatorsTheyLeave) {
   EXPECT_EQ(menu.GetCommandIdAt(0), IDC_CONTENT_CONTEXT_COPY);
   EXPECT_EQ(menu.GetTypeAt(1), ui::MenuModel::TYPE_SEPARATOR);
   EXPECT_EQ(menu.GetCommandIdAt(2), IDC_VIEW_SOURCE);
+}
+
+namespace {
+// A chooser with two devices that records what the page would hear.
+class FakeChooser : public permissions::ChooserController {
+ public:
+  explicit FakeChooser(std::vector<std::string>* heard)
+      : ChooserController(u"Pick a device"), heard_(heard) {}
+  std::u16string GetNoOptionsText() const override { return u"None"; }
+  std::u16string GetOkButtonLabel() const override { return u"Connect"; }
+  std::pair<std::u16string, std::u16string> GetThrobberLabelAndTooltip()
+      const override {
+    return {u"Scanning", u"Scanning"};
+  }
+  size_t NumOptions() const override { return 2; }
+  std::u16string GetOption(size_t index) const override {
+    return index ? u"Keyboard" : u"Mouse";
+  }
+  void Select(const std::vector<size_t>& indices) override {
+    heard_->push_back("selected " + base::NumberToString(indices[0]));
+  }
+  void Cancel() override { heard_->push_back("cancelled"); }
+  void Close() override { heard_->push_back("closed"); }
+  void OpenHelpCenterUrl() const override {}
+
+ private:
+  raw_ptr<std::vector<std::string>> heard_;
+};
+}  // namespace
+
+class DeviceChoosersTest : public NativeHostTest {
+ protected:
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    contents_ = CreateTestWebContents();
+    DeviceChoosers::Start(base::BindLambdaForTesting(
+        [this](content::WebContents*, const char* event,
+               base::DictValue state) {
+          EXPECT_STREQ(event, "onDeviceChooser");
+          states_.push_back(std::move(state));
+          return window_shows_tab_;
+        }));
+  }
+  int Adopt() {
+    const int id = DeviceChoosers::Adopt(std::make_unique<FakeChooser>(&heard_),
+                                         contents_.get());
+    task_environment()->RunUntilIdle();
+    return id;
+  }
+  std::unique_ptr<content::WebContents> contents_;
+  std::vector<base::DictValue> states_;
+  std::vector<std::string> heard_;
+  bool window_shows_tab_ = true;
+};
+
+TEST_F(DeviceChoosersTest, TheAppSeesTheDevicesAndItsAnswerReachesThePageOnce) {
+  const int id = Adopt();
+  ASSERT_EQ(states_.size(), 1u);
+  EXPECT_EQ(states_[0].FindInt("id"), id);
+  EXPECT_EQ(states_[0].FindBool("open"), true);
+  EXPECT_EQ(*states_[0].FindString("title"), "Pick a device");
+  EXPECT_EQ(*states_[0].FindString("okLabel"), "Connect");
+  EXPECT_EQ(*states_[0].FindString("scanningText"), "Scanning");
+  const auto* options = states_[0].FindList("options");
+  ASSERT_TRUE(options);
+  ASSERT_EQ(options->size(), 2u);
+  EXPECT_EQ(*(*options)[1].GetDict().FindString("name"), "Keyboard");
+  EXPECT_EQ((*options)[1].GetDict().FindInt("signal"), -1);
+
+  // Out of range is no choice for a chooser that needs one.
+  DeviceChoosers::Select(id, 9);
+  EXPECT_TRUE(heard_.empty());
+  DeviceChoosers::Select(id, 1);
+  EXPECT_EQ(heard_, std::vector<std::string>{"selected 1"});
+  EXPECT_EQ(states_.back().FindBool("open"), false);
+  EXPECT_TRUE(states_.back().FindList("options")->empty());
+  // A second answer finds nothing.
+  DeviceChoosers::Cancel(id);
+  task_environment()->RunUntilIdle();
+  DeviceChoosers::Select(id, 0);
+  EXPECT_EQ(heard_.size(), 1u);
+}
+
+TEST_F(DeviceChoosersTest, CancelAndChromeClosingEachFinishIt) {
+  const int cancelled = Adopt();
+  DeviceChoosers::Cancel(cancelled);
+  EXPECT_EQ(heard_, std::vector<std::string>{"cancelled"});
+  const int closed = Adopt();
+  DeviceChoosers::CloseFromChrome(closed);
+  task_environment()->RunUntilIdle();
+  // The page's request already went: nothing more is said to it.
+  EXPECT_EQ(heard_, std::vector<std::string>{"cancelled"});
+  EXPECT_EQ(states_.back().FindBool("open"), false);
+}
+
+// Nobody can answer a chooser no window shows, and the page must not wait on it.
+TEST_F(DeviceChoosersTest, AChooserNoWindowShowsIsCancelled) {
+  window_shows_tab_ = false;
+  Adopt();
+  EXPECT_EQ(heard_, std::vector<std::string>{"cancelled"});
+}
+
+TEST_F(NativeHostTest, DeviceAndCastAnswersAreAdvertisedAndValidated) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BayChromeUI.selectDevice", "BayChromeUI.cancelDeviceChooser",
+        "BayChromeUI.refreshDeviceChooser", "BayChromeUI.openBluetoothSettings",
+        "BayChromeUI.startCasting", "BayChromeUI.stopCasting",
+        "BayChromeUI.closeCastDialog"}) {
+    EXPECT_TRUE(methods->contains(method)) << method;
+  }
+  // One that has gone is ignored.
+  EXPECT_EQ(Invoke("BayChromeUI", "selectDevice", "[999,0]"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayChromeUI", "cancelDeviceChooser", "[999]"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayChromeUI", "startCasting", R"([999,"sink",2])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayChromeUI", "stopCasting", R"([999,"route"])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayChromeUI", "closeCastDialog", "[999]"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayChromeUI", "selectDevice", R"(["a",0])"),
+              "invalid_args");
+  ExpectError(Invoke("BayChromeUI", "selectDevice", R"([1,"a"])"),
+              "invalid_args");
+  // Only the modes Chrome casts with.
+  ExpectError(Invoke("BayChromeUI", "startCasting", R"([1,"sink",3])"),
+              "invalid_args");
+  ExpectError(Invoke("BayChromeUI", "stopCasting", "[1,7]"), "invalid_args");
+}
+
+TEST(CastDialogsTest, DescribesASinkAsTheAppReadsIt) {
+  media_router::UIMediaSink sink(media_router::mojom::MediaRouteProviderId::CAST);
+  sink.id = "sink-1";
+  sink.friendly_name = u"Living room";
+  sink.state = media_router::UIMediaSinkState::AVAILABLE;
+  sink.cast_modes = {media_router::MediaCastMode::TAB_MIRROR,
+                     media_router::MediaCastMode::DESKTOP_MIRROR};
+  const auto described = CastDialogs::DescribeSink(sink);
+  EXPECT_EQ(*described.FindString("id"), "sink-1");
+  EXPECT_EQ(*described.FindString("name"), "Living room");
+  EXPECT_EQ(*described.FindString("state"), "available");
+  // JS CastMode: tab 2, screen 4.
+  EXPECT_EQ(described.FindInt("modes"), 6);
+  EXPECT_EQ(*described.FindString("routeId"), "");
+  EXPECT_EQ(*described.FindString("issue"), "");
 }
 
 }  // namespace bay

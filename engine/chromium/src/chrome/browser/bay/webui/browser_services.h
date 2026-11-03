@@ -51,6 +51,9 @@ class BrowserServices {
   bool DispatchChromeUI(const std::string& method,
                         const base::ListValue& args,
                         Response& response);
+  bool DispatchDialogAnswer(const std::string& method,
+                            const base::ListValue& args,
+                            Response& response);
 
   const HostContext context_;
   EngineInvoker engine_;
