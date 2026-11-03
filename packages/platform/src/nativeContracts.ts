@@ -1253,6 +1253,13 @@ export const nativeContracts = {
           "maxArgs": 2,
           "signature": "devWindow(windowNumber: number, action: string): Promise<string>;"
         },
+        "devWindowNumber": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "devWindowNumber(browserId: number): Promise<number>;"
+        },
         "components": {
           "async": true,
           "optional": false,

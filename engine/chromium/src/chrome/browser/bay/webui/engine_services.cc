@@ -15,11 +15,13 @@
 #include "base/task/sequenced_task_runner.h"
 #include "bay/core/nn_page_channel.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
-#include "chrome/browser/bay/webui/download_controls.h"
+#include "chrome/browser/bay/webui/dev_window.h"
 #include "chrome/browser/bay/webui/display_media_picker.h"
+#include "chrome/browser/bay/webui/download_controls.h"
 #include "chrome/browser/bay/webui/profile_data.h"
-#include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/bay/webui/tab_strip_mirror.h"
+#include "chrome/browser/bay/webui/tracing_session.h"
+#include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -561,7 +563,9 @@ class EngineServices::PasswordExportPicker final
 
 EngineServices::EngineServices(HostContext context, EngineInvoker engine)
     : context_(std::move(context)), engine_(std::move(engine)) {}
-EngineServices::~EngineServices() = default;
+EngineServices::~EngineServices() {
+  TracingSession::Get().OwnerGone(this);
+}
 void EngineServices::PasswordExportPickerFinished() {
   password_export_picker_.reset();
 }
@@ -576,12 +580,17 @@ base::ListValue EngineServices::SupportedMethods() const {
   base::ListValue methods;
   for (const auto& method : kMethods)
     methods.Append(std::string("BayCEF.") + method.facade);
-  for (const char* method :
-       {"getPasswordAutofill", "setPasswordAutofill", "getAutofillSettings",
-        "setAutofillSettings", "exportPasswords", "setBoosts", "listDownloads",
-        "pauseDownload", "resumeDownload", "cancelDownload", "deleteProfileData",
-        "releaseProfile", "displayMediaSources", "setDisplayMediaPicker",
-        "tabStrips", "tabStripCommand"})
+  for (const char* method : {"getPasswordAutofill", "setPasswordAutofill",
+                             "getAutofillSettings", "setAutofillSettings",
+                             "exportPasswords",     "setBoosts",
+                             "listDownloads",       "pauseDownload",
+                             "resumeDownload",      "cancelDownload",
+                             "deleteProfileData",   "releaseProfile",
+                             "displayMediaSources", "setDisplayMediaPicker",
+                             "tabStrips",           "tabStripCommand",
+                             "devWindow",           "devWindowNumber",
+                             "chromeWindows",       "beginTracing",
+                             "endTracing",          "isTracing"})
     methods.Append(std::string("BayCEF.") + method);
   methods.Append("BayChromeUI.changeCaptureSource");
   methods.Append("BayChromeUI.showAutofillSuggestions");
@@ -610,7 +619,44 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
     std::move(response).Run(
         Failure("invalid_args", "Invalid engine facade arguments"));
   };
-  if (module == "BayCEF" && TabStripMirror::Get().Dispatch(context_, method, args, response))
+  if (module == "BayCEF" &&
+      DevWindow::Dispatch(context_, method, args, response))
+    return true;
+  if (module == "BayCEF" &&
+      (method == "beginTracing" || method == "isTracing")) {
+    if (!args.empty()) {
+      invalid();
+      return true;
+    }
+    if (method == "isTracing")
+      std::move(response).Run(
+          Success(base::Value(TracingSession::Get().IsTracing())));
+    else
+      TracingSession::Get().Begin(
+          this, base::BindOnce(
+                    [](Response response, bool started) {
+                      std::move(response).Run(Success(base::Value(started)));
+                    },
+                    std::move(response)));
+    return true;
+  }
+  if (module == "BayCEF" && method == "endTracing") {
+    if (args.size() != 1 || !args[0].is_bool()) {
+      invalid();
+      return true;
+    }
+    TracingSession::Get().End(
+        this, args[0].GetBool(),
+        base::BindOnce(
+            [](Response response, std::optional<base::FilePath> path) {
+              std::move(response).Run(Success(
+                  path ? base::Value(path->AsUTF8Unsafe()) : base::Value()));
+            },
+            std::move(response)));
+    return true;
+  }
+  if (module == "BayCEF" &&
+      TabStripMirror::Get().Dispatch(context_, method, args, response))
     return true;
   if (module == "BayCEF" && method == "setDisplayMediaPicker") {
     const auto* enabled = At(args, 0);

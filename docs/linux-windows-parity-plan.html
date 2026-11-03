@@ -792,10 +792,18 @@
                 <tr data-kind="port">
                   <td><strong>Dev and tracing hooks</strong></td>
                   <td class="num">4</td>
-                  <td class="methods">devWindow beginTracing endTracing isTracing</td>
-                  <td>Developer-only: <code>scripts/perf</code> traces and dev windows.</td>
-                  <td>NNCore</td>
-                  <td><span class="tag t-port">Port</span> before T8 performance runs. S</td>
+                  <td class="methods">devWindow devWindowNumber chromeWindows beginTracing endTracing isTracing</td>
+                  <td>Help's "Record a performance issue" does nothing, and the test scripts can't inspect or drive a window.</td>
+                  <td><code>nncore_api.mm</code>, <code>NNCoreChromeWindow.mm</code></td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/tracing_session.cc</code> records to Downloads with Chrome's default
+                    categories, streams to disk, never stops a trace it didn't start, and discards when its window closes.
+                    <code>webui/dev_window.cc</code> reports real window state; <code>click:</code>, <code>mouse:</code>, <code>drag:</code>,
+                    <code>keys:</code> and <code>type:</code> are real input through the Aura host (<code>dev_window_input.cc</code>), <code>hit:</code> asks
+                    the document, and everything that changes a window needs an isolated <code>BAY_DATA_DIR</code>. <code>windowDrags</code> and AppKit-only
+                    simulations (<code>style:</code>, occlusion, <code>ax</code>) answer <code>unsupported_action</code>, so ported scripts must choose a
+                    replacement. Linux run pending.
+                  </td>
                 </tr>
 
                 <tr class="group">

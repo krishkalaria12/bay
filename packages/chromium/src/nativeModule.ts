@@ -67,7 +67,7 @@ export type EngineInfo = {
   chromiumVersion: string;
   liveBrowsers: number;
   popupWindows: number;
-  chromeWindows: number;
+  chromeWindows?: number;
 };
 
 export type EngineComponent = {
@@ -139,23 +139,32 @@ export type ChromeWindowState = {
   profile: string;
   window: number;
   frame: string;
-  alpha: number;
+  /** Desktop-host geometry and state; AppKit-only fields below are optional. */
+  appWindow?: string;
+  bounds?: [number, number, number, number];
+  globalCoordinates?: boolean;
+  minimized?: boolean;
+  maximized?: boolean;
+  fullScreen?: boolean;
+  pageFullScreen?: boolean;
+  alpha?: number;
   key: boolean;
-  canBecomeKey: boolean;
+  canBecomeKey?: boolean;
   visible: boolean;
-  parentWindow: number;
-  chromeWindows: number;
-  anchorBrowserId: number;
+  parentWindow?: number;
+  chromeWindows?: number;
+  anchorBrowserId?: number;
   anyTabBrowserId: number;
   ready: boolean;
   active: boolean;
-  pageInsets: [number, number, number, number];
+  pageInsets?: [number, number, number, number];
   hosting: boolean;
-  group: string;
+  group?: string;
   hasRoot: boolean;
-  translucent: boolean;
+  translucent?: boolean;
 };
 export const chromeWindows = () => Cef.chromeWindows();
+export const devWindowNumber = (browserId: number) => Cef.devWindowNumber(browserId);
 export const devWindowAction = (windowNumber: number, action: string) => Cef.devWindow(windowNumber, action);
 // Whichever engine the tab's page is in keeps it for the tab's next view.
 export const prepareTabTransfer = (transferKey: string) => {

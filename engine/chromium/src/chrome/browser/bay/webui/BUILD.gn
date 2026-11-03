@@ -43,6 +43,10 @@ source_set("impl") {
     "bay_webui.cc",
     "browser_services.cc",
     "browser_services.h",
+    "dev_window.cc",
+    "dev_window.h",
+    "dev_window_input.cc",
+    "dev_window_input.h",
     "display_media_picker.cc",
     "display_media_picker.h",
     "download_controls.cc",
@@ -71,6 +75,8 @@ source_set("impl") {
     "tab_broker.h",
     "tab_strip_mirror.cc",
     "tab_strip_mirror.h",
+    "tracing_session.cc",
+    "tracing_session.h",
     "window_registry.cc",
     "window_registry.h",
   ]
@@ -149,6 +155,8 @@ source_set("impl") {
       "//chrome/browser/bay/data:data_services",
       "//components/constrained_window",
       "//ui/base/mojom:ui_base_types",
+      "//ui/aura",
+      "//ui/events",
       "//ui/menus",
     ]
   }
@@ -666,6 +674,8 @@ if (is_linux) {
       "native_host_unittest.cc",
       "display_media_picker_unittest.cc",
       "tab_strip_mirror_unittest.cc",
+      "dev_window_unittest.cc",
+      "tracing_session_unittest.cc",
     ]
     deps = [
       ":impl",

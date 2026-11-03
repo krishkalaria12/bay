@@ -62,6 +62,8 @@ class WindowRegistry final : public BrowserCollectionObserver {
   // or with null if it can't be loaded.
   void LoadProfile(const std::string& name,
                    base::OnceCallback<void(Profile*)> done);
+  // The document of Bay window `frame`, while a host shows it.
+  content::WebContents* DocumentOf(BrowserWindowInterface* frame) const;
   // Regular profile `name` ("" is Default's) if it is loaded, else null.
   Profile* LoadedProfile(const std::string& name) const;
   // The Chrome Browser holding `profile`'s tabs in Bay window `frame`: the
