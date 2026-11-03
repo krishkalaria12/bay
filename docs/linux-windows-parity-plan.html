@@ -720,8 +720,13 @@
                   <td class="num">2</td>
                   <td class="methods">deleteProfileData releaseProfile</td>
                   <td>Deleting a space can leave its Chrome profile on disk.</td>
-                  <td><code>NNCoreProfileData.swift</code></td>
-                  <td><span class="tag t-port">Port</span> Shared C++ using <code>ProfileManager</code>. M</td>
+                  <td><code>NNCoreProfileData.swift</code>, <code>NNCoreHost.mm</code></td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/profile_data.cc</code>: a space's profile goes through Chrome's
+                    <code>DeleteProfileHelper</code> (a folder Chrome never knew is removed directly); the Default profile, which stays loaded, is cleared store
+                    by store as on macOS and each store listed again. <code>releaseProfile</code> resolves: Chrome unloads a profile once its last Browser
+                    closes. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Screen-share picker</strong></td>

@@ -16,6 +16,7 @@
 #include "bay/core/nn_page_channel.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/download_controls.h"
+#include "chrome/browser/bay/webui/profile_data.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
@@ -576,7 +577,8 @@ base::ListValue EngineServices::SupportedMethods() const {
   for (const char* method :
        {"getPasswordAutofill", "setPasswordAutofill", "getAutofillSettings",
         "setAutofillSettings", "exportPasswords", "setBoosts", "listDownloads",
-        "pauseDownload", "resumeDownload", "cancelDownload"})
+        "pauseDownload", "resumeDownload", "cancelDownload", "deleteProfileData",
+        "releaseProfile"})
     methods.Append(std::string("BayCEF.") + method);
   methods.Append("BayChromeUI.changeCaptureSource");
   methods.Append("BayChromeUI.showAutofillSuggestions");
@@ -708,6 +710,21 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
       return true;
     }
     DownloadControls::Get().List(engine_, std::move(response));
+    return true;
+  }
+  if (method == "deleteProfileData" || method == "releaseProfile") {
+    const auto* profile = Text(args, 0);
+    if (!profile) {
+      invalid();
+      return true;
+    }
+    // Nothing on this host holds a profile the app has finished with: Chrome
+    // unloads one once its last Browser closes, and a private window's goes
+    // with its window (WindowRegistry).
+    if (method == "releaseProfile")
+      std::move(response).Run(Success());
+    else
+      ProfileData::Delete(engine_, *profile, std::move(response));
     return true;
   }
   if (method == "pauseDownload" || method == "resumeDownload" ||

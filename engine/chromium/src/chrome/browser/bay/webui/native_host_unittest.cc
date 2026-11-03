@@ -1,6 +1,8 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/native_host.h"
 
+#include <algorithm>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -21,6 +23,7 @@
 #include "base/test/test_future.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/download_controls.h"
+#include "chrome/browser/bay/webui/profile_data.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_placement.h"
@@ -1954,6 +1957,82 @@ TEST(DownloadControlsTest, ListedDownloadsNameTheirProfile) {
   EXPECT_TRUE(controls.Downloads(base::Value(), "").empty());
   controls.Forget("guid-a");
   controls.Forget("guid-b");
+}
+
+// A private window's profile goes with its window, and an id that can't be a
+// Bay profile is never deleted. Nothing holds a released profile.
+TEST_F(NativeHostTest, ProfileDataDeletionKeepsToBayProfiles) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayCEF.deleteProfileData"));
+  EXPECT_TRUE(methods->contains("BayCEF.releaseProfile"));
+  EXPECT_EQ(Invoke("BayCEF", "deleteProfileData", R"(["incognito:w1"])"),
+            R"({"value":{"remaining":[]}})");
+  EXPECT_EQ(Invoke("BayCEF", "deleteProfileData", R"(["../Default"])"),
+            R"({"value":{"remaining":["data"]}})");
+  EXPECT_EQ(Invoke("BayCEF", "releaseProfile", R"(["work"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayCEF", "deleteProfileData", "[7]"), "invalid_args");
+}
+
+// The Default profile stays loaded: each store is cleared through the engine
+// and listed again; a store that fails or keeps something is reported.
+TEST(ProfileDataTest, DefaultProfileClearsEveryStoreAndReportsWhatStayed) {
+  base::test::SingleThreadTaskEnvironment task_environment{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+  std::vector<std::string> calls;
+  std::map<std::string, int> lists;
+  ProfileData::EngineInvoker engine = base::BindLambdaForTesting(
+      [&](const std::string& name, const std::string& profile,
+          base::DictValue args, ProfileData::Response response) {
+        EXPECT_EQ(profile, "");
+        const int seen = lists[name]++;
+        std::string value = R"({"ok":true})";
+        if (name == "nn_passwords_list") {
+          value = seen ? R"({"passwords":[]})"
+                       : R"({"passwords":[{"origin":"https://a.test","username":"me"}]})";
+        } else if (name == "nn_passwords_exceptions") {
+          value = seen ? R"({"origins":[]})" : R"({"origins":["https://b.test"]})";
+        } else if (name == "nn_autofill_addresses") {
+          value = R"({"addresses":[]})";
+        } else if (name == "nn_autofill_cards") {
+          std::move(response).Run(
+              R"({"error":{"code":"engine_error","message":"locked"}})");
+          return;
+        } else if (name == "nn_extensions_list") {
+          value = seen ? R"({"extensions":[{"id":"e1","enabled":false},{"id":"e2","enabled":true,"mayModify":false}]})"
+                       : R"({"extensions":[{"id":"e1","enabled":true,"mayModify":true},{"id":"e2","enabled":true,"mayModify":false}]})";
+        } else if (name == "nn_site_settings_origins") {
+          value = R"({"origins":[]})";
+        } else if (name == "nn_zoom_list") {
+          value = seen >= 2 ? R"({"levels":{}})" : R"({"levels":{"c.test":1.5}})";
+        }
+        std::string detail = name;
+        if (const auto* id = args.FindString("id"))
+          detail += " " + *id;
+        if (const auto* origin = args.FindString("origin"))
+          detail += " " + *origin;
+        if (const auto* host = args.FindString("host"))
+          detail += " " + *host;
+        calls.push_back(detail);
+        std::move(response).Run(R"({"value":)" + value + "}");
+      });
+  base::test::TestFuture<const std::string&> result;
+  ProfileData::Delete(engine, "", result.GetCallback());
+  task_environment.FastForwardUntilNoTasksRemain();
+  EXPECT_EQ(result.Get(), R"({"value":{"remaining":["cards"]}})");
+  for (const char* call :
+       {"nn_passwords_remove https://a.test", "nn_passwords_allow https://b.test",
+        "nn_extensions_set_enabled e1", "nn_zoom_set c.test"}) {
+    EXPECT_NE(std::find(calls.begin(), calls.end(), call), calls.end())
+        << call;
+  }
+  EXPECT_EQ(std::find(calls.begin(), calls.end(),
+                      std::string("nn_extensions_set_enabled e2")),
+            calls.end());
+  // Zoom is listed until its levels are gone.
+  EXPECT_EQ(lists["nn_zoom_list"], 3);
 }
 
 }  // namespace bay
