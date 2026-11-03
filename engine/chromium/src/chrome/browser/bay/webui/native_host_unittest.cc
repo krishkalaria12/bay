@@ -1869,9 +1869,8 @@ TEST_F(NativeHostTest, DownloadControlsAdvertisedAndResolveWithoutProfiles) {
   const auto info = HostInfo();
   const auto* methods = info.FindList("optionalMethods");
   ASSERT_TRUE(methods);
-  for (const char* method :
-       {"BayCEF.listDownloads", "BayCEF.pauseDownload",
-        "BayCEF.resumeDownload", "BayCEF.cancelDownload"})
+  for (const char* method : {"BayCEF.listDownloads", "BayCEF.pauseDownload",
+                             "BayCEF.resumeDownload", "BayCEF.cancelDownload"})
     EXPECT_TRUE(methods->contains(method)) << method;
   EXPECT_EQ(Invoke("BayCEF", "listDownloads", "[]"), R"({"value":[]})");
   for (const char* method :
@@ -1901,8 +1900,7 @@ TEST(DownloadControlsTest, CommandsGoToTheReportingProfile) {
   DownloadControls::EngineInvoker engine = base::BindLambdaForTesting(
       [&](const std::string& name, const std::string& profile,
           base::DictValue args, DownloadControls::Response response) {
-        calls.push_back(name + " " + profile + " " +
-                        *args.FindString("id"));
+        calls.push_back(name + " " + profile + " " + *args.FindString("id"));
         std::move(response).Run(reply);
       });
   base::test::TestFuture<const std::string&> paused;
@@ -1913,8 +1911,7 @@ TEST(DownloadControlsTest, CommandsGoToTheReportingProfile) {
 
   // Gone from that profile, and no other is loaded: it still resolves.
   calls.clear();
-  reply =
-      R"({"error":{"code":"engine_error","message":"no such download"}})";
+  reply = R"({"error":{"code":"engine_error","message":"no such download"}})";
   base::test::TestFuture<const std::string&> cancelled;
   controls.Command(engine, "cancel", "guid-work", cancelled.GetCallback());
   EXPECT_EQ(cancelled.Get(), R"({"value":null})");
@@ -1977,6 +1974,8 @@ TEST_F(NativeHostTest, ProfileDataDeletionKeepsToBayProfiles) {
   EXPECT_EQ(Invoke("BayCEF", "releaseProfile", R"(["work"])"),
             R"({"value":null})");
   ExpectError(Invoke("BayCEF", "deleteProfileData", "[7]"), "invalid_args");
+  EXPECT_EQ(Invoke("BayCEF", "deleteProfileData", R"(["Default"])"),
+            R"({"value":{"remaining":["data"]}})");
 }
 
 // The Default profile stays loaded: each store is cleared through the engine
@@ -1993,10 +1992,13 @@ TEST(ProfileDataTest, DefaultProfileClearsEveryStoreAndReportsWhatStayed) {
         const int seen = lists[name]++;
         std::string value = R"({"ok":true})";
         if (name == "nn_passwords_list") {
-          value = seen ? R"({"passwords":[]})"
-                       : R"({"passwords":[{"origin":"https://a.test","username":"me"}]})";
+          value =
+              seen
+                  ? R"({"passwords":[]})"
+                  : R"({"passwords":[{"origin":"https://a.test","username":"me"}]})";
         } else if (name == "nn_passwords_exceptions") {
-          value = seen ? R"({"origins":[]})" : R"({"origins":["https://b.test"]})";
+          value =
+              seen ? R"({"origins":[]})" : R"({"origins":["https://b.test"]})";
         } else if (name == "nn_autofill_addresses") {
           value = R"({"addresses":[]})";
         } else if (name == "nn_autofill_cards") {
@@ -2004,12 +2006,15 @@ TEST(ProfileDataTest, DefaultProfileClearsEveryStoreAndReportsWhatStayed) {
               R"({"error":{"code":"engine_error","message":"locked"}})");
           return;
         } else if (name == "nn_extensions_list") {
-          value = seen ? R"({"extensions":[{"id":"e1","enabled":false},{"id":"e2","enabled":true,"mayModify":false}]})"
-                       : R"({"extensions":[{"id":"e1","enabled":true,"mayModify":true},{"id":"e2","enabled":true,"mayModify":false}]})";
+          value =
+              seen
+                  ? R"({"extensions":[{"id":"e1","enabled":false},{"id":"e2","enabled":true,"mayModify":false}]})"
+                  : R"({"extensions":[{"id":"e1","enabled":true,"mayModify":true},{"id":"e2","enabled":true,"mayModify":false}]})";
         } else if (name == "nn_site_settings_origins") {
           value = R"({"origins":[]})";
         } else if (name == "nn_zoom_list") {
-          value = seen >= 2 ? R"({"levels":{}})" : R"({"levels":{"c.test":1.5}})";
+          value =
+              seen >= 2 ? R"({"levels":{}})" : R"({"levels":{"c.test":1.5}})";
         }
         std::string detail = name;
         if (const auto* id = args.FindString("id"))
@@ -2026,16 +2031,45 @@ TEST(ProfileDataTest, DefaultProfileClearsEveryStoreAndReportsWhatStayed) {
   task_environment.FastForwardUntilNoTasksRemain();
   EXPECT_EQ(result.Get(), R"({"value":{"remaining":["cards"]}})");
   for (const char* call :
-       {"nn_passwords_remove https://a.test", "nn_passwords_allow https://b.test",
-        "nn_extensions_set_enabled e1", "nn_zoom_set c.test"}) {
-    EXPECT_NE(std::find(calls.begin(), calls.end(), call), calls.end())
-        << call;
+       {"nn_passwords_remove https://a.test",
+        "nn_passwords_allow https://b.test", "nn_extensions_set_enabled e1",
+        "nn_zoom_set c.test"}) {
+    EXPECT_NE(std::find(calls.begin(), calls.end(), call), calls.end()) << call;
   }
   EXPECT_EQ(std::find(calls.begin(), calls.end(),
                       std::string("nn_extensions_set_enabled e2")),
             calls.end());
   // Zoom is listed until its levels are gone.
   EXPECT_EQ(lists["nn_zoom_list"], 3);
+}
+
+// Failed clearing must retain the deletion retry, including an engine error.
+TEST(ProfileDataTest, FailedBrowsingDataRemainsQueued) {
+  base::test::SingleThreadTaskEnvironment task_environment;
+  for (const std::string failure :
+       {R"({"value":{"ok":false}})", R"({"error":{"code":"failed"}})"}) {
+    ProfileData::EngineInvoker engine = base::BindLambdaForTesting(
+        [&](const std::string& name, const std::string&, base::DictValue args,
+            ProfileData::Response response) {
+          if (name == "nn_browsing_data_clear") {
+            std::move(response).Run(failure);
+            return;
+          }
+          base::DictValue result;
+          for (const char* key :
+               {"passwords", "origins", "addresses", "cards", "extensions"})
+            result.Set(key, base::ListValue());
+          result.Set("levels", base::DictValue());
+          std::move(response).Run(
+              base::WriteJson(base::DictValue().Set("value", std::move(result)))
+                  .value());
+        });
+    base::test::TestFuture<const std::string&> reply;
+    ProfileData::Delete(engine, "", reply.GetCallback());
+    EXPECT_EQ(
+        reply.Get(),
+        R"({"value":{"remaining":["history, cookies and cache","autocomplete entries"]}})");
+  }
 }
 
 // Chrome's install prompt reaches the app as macOS sends it, and the app's
