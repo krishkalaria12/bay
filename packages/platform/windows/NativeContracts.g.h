@@ -171,6 +171,7 @@ inline constexpr Method methods[] = {
   {"BayCEF", "tabStripCommand", true, 2, 2},
   {"BayCEF", "tabStrips", true, 0, 0},
   {"BayCEF", "devWindow", true, 2, 2},
+  {"BayCEF", "devWindowNumber", true, 1, 1},
   {"BayCEF", "components", true, 0, 0},
   {"BayCEF", "beginTracing", true, 0, 0},
   {"BayCEF", "endTracing", true, 1, 1},

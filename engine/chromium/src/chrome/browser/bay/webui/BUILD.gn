@@ -29,6 +29,10 @@ source_set("impl") {
     "bay_webui.cc",
     "browser_services.cc",
     "browser_services.h",
+    "dev_window.cc",
+    "dev_window.h",
+    "dev_window_input.cc",
+    "dev_window_input.h",
     "display_media_picker.cc",
     "display_media_picker.h",
     "download_controls.cc",
@@ -57,6 +61,8 @@ source_set("impl") {
     "tab_broker.h",
     "tab_strip_mirror.cc",
     "tab_strip_mirror.h",
+    "tracing_session.cc",
+    "tracing_session.h",
     "window_registry.cc",
     "window_registry.h",
   ]
@@ -123,6 +129,8 @@ source_set("impl") {
     deps += [
       ":platform_services_win",
       "//chrome/browser/bay/data:data_services",
+      "//ui/aura",
+      "//ui/events",
     ]
   }
 }

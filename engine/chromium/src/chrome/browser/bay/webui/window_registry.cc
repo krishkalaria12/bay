@@ -178,6 +178,14 @@ std::string WindowRegistry::IdFor(BrowserWindowInterface* browser) const {
   auto it = entries_.find(FrameOf(browser));
   return it == entries_.end() ? std::string() : it->second->id;
 }
+content::WebContents* WindowRegistry::DocumentOf(
+    BrowserWindowInterface* frame) const {
+  for (const auto& [host, state] : hosts_) {
+    if (host->browser() == frame)
+      return host->document_contents();
+  }
+  return nullptr;
+}
 BrowserWindowInterface* WindowRegistry::FrameOf(
     BrowserWindowInterface* browser) const {
   auto it = held_.find(browser);

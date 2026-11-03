@@ -57,6 +57,7 @@ export const Cef = requireNativeModule<{
   tabStripCommand(id: number, command: TabStripCommand): Promise<void>;
   tabStrips(): Promise<TabStripTransaction>;
   devWindow(windowNumber: number, action: string): Promise<string>;
+  devWindowNumber(browserId: number): Promise<number>;
   components(): Promise<EngineComponent[]>;
   beginTracing(): Promise<boolean>;
   endTracing(keep: boolean): Promise<string | null>;

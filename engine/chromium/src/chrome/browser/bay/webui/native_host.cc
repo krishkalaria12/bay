@@ -38,7 +38,6 @@
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/tab_strip_mirror.h"
-#include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/data/data_services.h"
