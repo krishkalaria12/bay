@@ -31,7 +31,8 @@ import { isUtilityWindowId } from "../components/settings/windows";
 import { isInternalTab } from "../components/pages/pageUrls";
 import { sidebarMenuState } from "../components/sidebar/sidebarCommands";
 import { openWindow as createWindow } from "./actions";
-import { openExternalUrls } from "../components/littleBay/actions";
+import { reportBrowserCommand } from "../runtime/commands";
+import { openExternalUrls, openLittleBay } from "../components/littleBay/actions";
 import { startLittleBayAccess } from "../components/littleBay/access";
 import { startLittleBayPutAway } from "../components/littleBay/putAway";
 import { meetingToJoin } from "../activity/meetingAlerts";
@@ -70,7 +71,18 @@ export function startNativeSync({
   let disposed = false;
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
-  if (shared) stops.push(startChromeTabs({ store, shared: true })!);
+  if (shared) {
+    stops.push(startChromeTabs({ store, shared: true })!);
+    // On the Chrome-hosted desktop the coordinator is the one document that lives as long as Bay does, so the shortcut
+    // and tray icon are its.
+    if (!isMac) {
+      startLittleBayAccess();
+      const opens = onCommand((e) => {
+        if (e.command === "newLittleBay") reportBrowserCommand(openLittleBay());
+      });
+      stops.push(() => opens.remove());
+    }
+  }
 
   if (!shared) {
     const commands = onCommand(runCommand);

@@ -490,6 +490,7 @@
           <li><a href="#events">3. Page events</a></li>
           <li><a href="#ui">4. UI capabilities</a></li>
           <li><a href="#diff">5. Windows vs Linux</a></li>
+          <li><a href="#gaps">Known gaps in finished rows</a></li>
           <li><a href="#order">6. Order of work</a></li>
           <li><a href="#runtime">7. Runtime acceptance</a></li>
           <li><a href="#questions">8. Open questions</a></li>
@@ -886,8 +887,10 @@
                   <td>No system-wide hotkey or tray item opens Little Bay.</td>
                   <td><code>LittleBayAccess.swift</code></td>
                   <td>
-                    <span class="tag t-port">Port</span> Use <code>RegisterHotKey</code> and a tray icon on Windows. On Linux, use the GlobalShortcuts portal
-                    and StatusNotifierItem; some compositors have neither. M
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/little_bay_access.cc</code> uses Chromium's own cross-platform pieces:
+                    <code>GlobalAcceleratorListener</code> (<code>RegisterHotKey</code> on Windows, an X11 grab or the XDG portal on Linux) and
+                    <code>StatusTray</code> (Windows' tray, StatusNotifierItem on Linux). The coordinator opens Little Bay, since it lives as long as Bay does.
+                    See <a href="#gaps">known gaps</a>. Linux run pending.
                   </td>
                 </tr>
                 <tr data-kind="verify">
@@ -1338,6 +1341,47 @@
               </tbody>
             </table>
           </div>
+        </section>
+
+        <section id="gaps" aria-labelledby="gaps-h">
+          <h2 id="gaps-h">Known gaps in finished rows</h2>
+          <p class="prose">
+            What a Source-complete row still leaves open, kept with the code: each feature commit adds what it couldn't finish, and whichever commit closes a
+            gap removes it. Nothing on this list blocks the row's main path.
+          </p>
+          <ul>
+            <li>
+              <strong>Everything native:</strong> nothing has been compiled or run on Linux or Windows. Source is syntax-checked against Chromium 154 with a Mac
+              config, the native tests are written but unrun, and Windows-only branches aren't checked at all.
+            </li>
+            <li>
+              <strong>Dev hooks:</strong> <code>windowDrags</code> and AppKit-only actions answer <code>unsupported_action</code>, so ported scripts must choose
+              a replacement.
+            </li>
+            <li><strong>Icon fetch:</strong> SVG favicons return null.</li>
+            <li>
+              <strong>Copy File:</strong> <code>x-special/gnome-copied-files</code> is written because Nemo, Thunar and Caja are expected to need it; try
+              pasting in each. It goes through <code>ScopedClipboardWriter::WriteRawDataForTest</code>, the only writer that keeps the format's exact name; a
+              small Chromium patch could add a properly named one.
+            </li>
+            <li>
+              <strong>Text file dialogs:</strong> Save starts in Downloads where macOS reopens the last folder. A second dialog while one is open rejects with
+              <code>dialog_busy</code>, which the Boost code doesn't catch. A failed save tells nobody, as on macOS.
+            </li>
+            <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
+            <li>
+              <strong>Shortcuts:</strong> a key taken off its command is swallowed rather than reaching the page, as it does on macOS. The catalog lists macOS's
+              whole menu, including modules not ported yet, so binding one of those may do little. <code>previewTransport</code> doesn't answer
+              <code>recordShortcut</code>, so a field stays on "Type Shortcut" in the browser preview.
+            </li>
+            <li>
+              <strong>Little Bay global access:</strong> Bay only listens while it runs, and on Linux it quits with its last window, so neither the shortcut nor
+              the tray icon can wake it the way macOS's stay-open app does. GNOME on Wayland gives Chromium no global shortcut listener, so Settings says
+              "unavailable" there. Under the XDG portal the desktop picks the final key and never reports a clash. Without a StatusNotifierItem host (stock
+              GNOME) the tray icon doesn't appear. Hiding and showing all Little Bays (macOS's Dock menu) has no equivalent, and Little Bay's put-away timer
+              (<code>startLittleBayPutAway</code>) still doesn't start in the shared runtime, though Settings offers it.
+            </li>
+          </ul>
         </section>
 
         <section id="order" aria-labelledby="order-h">

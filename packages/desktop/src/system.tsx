@@ -45,7 +45,7 @@ const System = requireNativeModule<{
 /** A shortcut as typed: its character, its modifiers and the key's code (for a global shortcut). */
 export type RecordedShortcut = { key: string; modifiers: ShortcutModifier[]; keyCode: number };
 /** A global shortcut's registration: "taken" when another app holds the key, or macOS refused it. */
-export type HotKeyStatus = "ok" | "off" | "taken";
+export type HotKeyStatus = "ok" | "off" | "taken" | "unavailable";
 
 export const isDefaultBrowser = () => System.isDefaultBrowser();
 export const setAsDefaultBrowser = () => System.setAsDefaultBrowser();

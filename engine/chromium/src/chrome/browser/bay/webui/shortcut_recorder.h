@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "base/values.h"
+#include "ui/base/accelerators/accelerator.h"
 
 namespace bay {
 // What a key press answers BaySystem.recordShortcut with, in the menus'
@@ -17,5 +18,12 @@ std::optional<base::Value> RecordedShortcutFor(int key_code,
                                                bool shift,
                                                bool alt,
                                                bool meta);
+// The accelerator for a global shortcut's `keyCode` (a virtual key) and
+// menu-spelled modifiers. Nothing for a key no system takes globally: one
+// outside virtual-key range, or without Ctrl or Alt, which would take typing
+// from every app.
+std::optional<ui::Accelerator> GlobalShortcutAccelerator(
+    int key_code,
+    const base::ListValue& modifiers);
 }  // namespace bay
 #endif  // CHROME_BROWSER_BAY_WEBUI_SHORTCUT_RECORDER_H_

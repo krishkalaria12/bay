@@ -53,6 +53,7 @@
 #include "chrome/browser/bay/webui/data_bridge.h"
 #include "chrome/browser/bay/webui/keychain.h"
 #include "chrome/browser/bay/webui/notifications.h"
+#include "chrome/browser/bay/webui/little_bay_access.h"
 #include "chrome/browser/bay/webui/shell_appearance.h"
 #endif
 #if BUILDFLAG(IS_LINUX)
@@ -465,6 +466,18 @@ void NativeHost::CancelQuit() {
     if (host)
       host->Emit("BayShell", "onAppEvent",
                  base::Value(base::DictValue().Set("type", "quitCancelled")));
+  }
+}
+// The coordinator opens it: it lives as long as Bay does, and there is only one.
+static void OpenLittleBayFromAnyApp() {
+  for (const auto& [owner, host] : Hosts()) {
+    if (host && host->is_coordinator()) {
+      host->Emit("BayShell", "onCommand",
+                 base::Value(base::DictValue()
+                                 .Set("command", "newLittleBay")
+                                 .Set("arg", base::Value())
+                                 .Set("windowId", base::Value())));
+    }
   }
 }
 void NativeHost::InstallCloseHooks() {
@@ -1332,6 +1345,35 @@ void NativeHost::Invoke(const std::string& module,
     std::move(callback).Run(Success());
     return;
   }
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  if (module == "BaySystem" && method == "setLittleBayHotKey") {
+    const auto* key = At(args, 0);
+    const auto* modifiers = At(args, 1);
+    if (!key || !(key->is_none() || key->is_int()) || !modifiers ||
+        !modifiers->is_list()) {
+      std::move(callback).Run(Failure("invalid_args", "Invalid hot key"));
+      return;
+    }
+    auto& access = LittleBayAccess::Get();
+    access.SetOpenHandler(base::BindRepeating(&OpenLittleBayFromAnyApp));
+    std::move(callback).Run(Success(base::Value(access.SetHotKey(
+        key->is_int() ? std::make_optional(key->GetInt()) : std::nullopt,
+        modifiers->GetList()))));
+    return;
+  }
+  if (module == "BaySystem" && method == "setLittleBayMenuBarItem") {
+    const auto* on = At(args, 0);
+    if (!on || !on->is_bool()) {
+      std::move(callback).Run(Failure("invalid_args", "A boolean is required"));
+      return;
+    }
+    auto& access = LittleBayAccess::Get();
+    access.SetOpenHandler(base::BindRepeating(&OpenLittleBayFromAnyApp));
+    access.SetMenuBarItem(on->GetBool());
+    std::move(callback).Run(Success());
+    return;
+  }
+#endif
   if (module == "BaySystem" && method == "recordShortcut") {
     if (!context_.is_window()) {
       std::move(callback).Run(

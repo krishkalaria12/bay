@@ -2544,7 +2544,7 @@ export const nativeContracts = {
       "ShortcutModifier": "\"control\" | \"option\" | \"shift\" | \"command\" | \"function\"",
       "LaunchAtLoginStatus": "\"enabled\" | \"requiresApproval\" | \"notRegistered\" | \"notFound\"",
       "RecordedShortcut": "{ key: string; modifiers: ShortcutModifier[]; keyCode: number }",
-      "HotKeyStatus": "\"ok\" | \"off\" | \"taken\"",
+      "HotKeyStatus": "\"ok\" | \"off\" | \"taken\" | \"unavailable\"",
       "MiddleClickEvent": "{ shiftKey: boolean; altKey: boolean; metaKey: boolean }",
       "SideButton": "\"back\" | \"forward\"",
       "MouseAreaProps": "ViewProps & {\n  path?: string | null;\n  onMiddleClick?: (e: MiddleClickEvent) => void;\n  /** A mouse's side buttons (3 and 4) released over the area or anything in it that doesn't take them. */\n  onSideButton?: (button: SideButton) => void;\n}",

@@ -4,6 +4,7 @@
 #include <string>
 
 #include "base/strings/utf_string_conversions.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 namespace bay {
@@ -100,5 +101,26 @@ std::optional<base::Value> RecordedShortcutFor(int key_code,
                          .Set("key", key)
                          .Set("modifiers", std::move(modifiers))
                          .Set("keyCode", key_code));
+}
+std::optional<ui::Accelerator> GlobalShortcutAccelerator(
+    int key_code,
+    const base::ListValue& modifiers) {
+  if (key_code <= 0 || key_code > 0xff)
+    return std::nullopt;
+  int flags = ui::EF_NONE;
+  for (const auto& modifier : modifiers) {
+    const auto* name = modifier.GetIfString();
+    if (!name)
+      return std::nullopt;
+    if (*name == "command" || *name == "control")
+      flags |= ui::EF_CONTROL_DOWN;
+    else if (*name == "option")
+      flags |= ui::EF_ALT_DOWN;
+    else if (*name == "shift")
+      flags |= ui::EF_SHIFT_DOWN;
+  }
+  if (!(flags & (ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)))
+    return std::nullopt;
+  return ui::Accelerator(static_cast<ui::KeyboardCode>(key_code), flags);
 }
 }  // namespace bay

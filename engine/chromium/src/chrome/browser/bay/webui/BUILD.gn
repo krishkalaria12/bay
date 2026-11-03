@@ -171,6 +171,8 @@ source_set("impl") {
     sources += [
       "data_bridge.cc",
       "data_bridge.h",
+      "little_bay_access.cc",
+      "little_bay_access.h",
       "shell_ui.cc",
       "shell_ui_options.cc",
     ]
@@ -181,10 +183,13 @@ source_set("impl") {
       ":shell_files",
       "//cc/paint",
       "//chrome/browser:icon_loader",
+      "//chrome/app/theme:chrome_unscaled_resources_grit",
       "//chrome/browser/bay/data:data_services",
+      "//chrome/browser/status_icons",
       "//chrome/common:constants",
       "//components/constrained_window",
       "//components/prefs",
+      "//ui/base/accelerators/global_accelerator_listener",
       "//ui/base/mojom:ui_base_types",
       "//ui/aura",
       "//ui/events",
@@ -211,7 +216,10 @@ source_set("impl") {
     ]
   }
   if (is_win) {
-    deps += [ ":platform_services_win" ]
+    deps += [
+      ":platform_services_win",
+      "//chrome/browser/win",
+    ]
   }
 }
 
@@ -660,6 +668,7 @@ test("shortcut_recorder_unittests") {
     "//base",
     "//base/test:run_all_unittests",
     "//testing/gtest",
+    "//ui/base",
     "//ui/events:events_base",
   ]
 }

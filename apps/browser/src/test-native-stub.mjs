@@ -110,6 +110,8 @@ export const getWebKitSiteSettings = () => Promise.resolve({});
 export const setWebKitSiteSetting = () => Promise.resolve();
 export const renameFile = (path, _name) => Promise.resolve(path);
 export const menuShortcuts = () => Promise.resolve([]);
+export const setLittleBayHotKey = () => Promise.resolve("off");
+export const setLittleBayMenuBarItem = () => Promise.resolve();
 export const onDownload = () => ({ remove() {} });
 export const deletedProfileData = [];
 export const profileDataLeft = new Map();

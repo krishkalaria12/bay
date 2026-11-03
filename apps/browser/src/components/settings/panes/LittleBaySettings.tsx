@@ -1,3 +1,4 @@
+import { isMac } from "@bay/platform";
 import { cancelShortcutRecording, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { menuShortcuts } from "../../../lib/keyBindings";
@@ -81,7 +82,7 @@ export function LittleBaySettings() {
           setting="littleBayMenuBarItem"
           settingId={SETTINGS.littleBayMenuBarItem.id}
           title={SETTINGS.littleBayMenuBarItem.title}
-          description="A button in the menu bar that opens Little Bay."
+          description={isMac ? "A button in the menu bar that opens Little Bay." : "An icon in the system tray that opens Little Bay."}
         />
         <Row
           settingId={SETTINGS.littleBayPutAwayAfterHours.id}
@@ -103,7 +104,8 @@ export function LittleBaySettings() {
 function shortcutDescription(shortcut: LittleBayShortcut | null, status: HotKeyStatus, clash: MenuShortcut | undefined): string {
   if (!shortcut) return "A shortcut that opens Little Bay ready to type, even when Bay is in the background.";
   const keys = formatShortcut(shortcut);
-  if (status === "taken") return `${keys} is taken by another app or by macOS. Choose another.`;
+  if (status === "taken") return `${keys} is taken by another app or by ${isMac ? "macOS" : "your desktop"}. Choose another.`;
+  if (status === "unavailable") return "Your desktop doesn't let apps use a shortcut from anywhere. Use the tray icon, or the shortcut inside Bay.";
   if (clash) return `Also Bay's ${clash.title}: in Bay, ${keys} opens Little Bay instead.`;
   return `${keys} opens Little Bay ready to type, from any app.`;
 }

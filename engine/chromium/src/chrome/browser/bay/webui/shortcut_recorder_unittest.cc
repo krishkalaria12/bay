@@ -5,6 +5,7 @@
 
 #include "base/json/json_writer.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 namespace bay {
@@ -54,6 +55,28 @@ TEST(ShortcutRecorderTest, ModifiersAloneAndSuperKeepWaiting) {
     EXPECT_EQ(Recorded(key_code, true), "waiting") << key_code;
   EXPECT_FALSE(RecordedShortcutFor(ui::VKEY_T, true, false, false, true));
   EXPECT_FALSE(RecordedShortcutFor(ui::VKEY_ESCAPE, false, false, false, true));
+}
+TEST(ShortcutRecorderTest, GlobalShortcutModifiersSpellAsMenusSpellThem) {
+  const auto accelerator = GlobalShortcutAccelerator(
+      ui::VKEY_N, base::ListValue().Append("option").Append("command"));
+  ASSERT_TRUE(accelerator);
+  EXPECT_EQ(accelerator->key_code(), ui::VKEY_N);
+  EXPECT_EQ(accelerator->modifiers(), ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN);
+  const auto shifted = GlobalShortcutAccelerator(
+      ui::VKEY_K, base::ListValue().Append("control").Append("shift"));
+  ASSERT_TRUE(shifted);
+  EXPECT_EQ(shifted->modifiers(), ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+}
+TEST(ShortcutRecorderTest, AGlobalShortcutNeedsCtrlOrAltAndAVirtualKey) {
+  EXPECT_FALSE(GlobalShortcutAccelerator(ui::VKEY_N, base::ListValue()));
+  EXPECT_FALSE(
+      GlobalShortcutAccelerator(ui::VKEY_N, base::ListValue().Append("shift")));
+  EXPECT_FALSE(
+      GlobalShortcutAccelerator(0, base::ListValue().Append("command")));
+  EXPECT_FALSE(
+      GlobalShortcutAccelerator(0x100, base::ListValue().Append("option")));
+  EXPECT_FALSE(
+      GlobalShortcutAccelerator(ui::VKEY_N, base::ListValue().Append(1)));
 }
 }  // namespace
 }  // namespace bay
