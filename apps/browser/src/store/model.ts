@@ -1,5 +1,5 @@
 import { appUrlOrigin, displayHost } from "@bay/core";
-import type { BrowserState } from "./browser";
+import type { BrowserState, BrowserShape } from "./browserStore";
 import type { DeepReadonly } from "../runtime/projection";
 import { DEFAULT_SPACE_ID } from "./constants";
 import type { BrowserWindow, Space, Tab, TabLive, TabSnapshot } from "./types";
@@ -30,7 +30,7 @@ export const engineProfileFor = (spaceId: string, spaces: Readonly<Record<string
   return id === DEFAULT_SPACE_ID ? "" : id;
 };
 
-type ReadonlyModelState = DeepReadonly<Pick<BrowserState, "spaces" | "windows" | "tabs" | "groups" | "tabLists" | "ui" | "windowOrder" | "settings">>;
+type ReadonlyModelState = BrowserShape;
 
 export const INCOGNITO_SPACE: Space = { id: "incognito", name: "Incognito", color: "neutral", icon: null, createdAt: 0 };
 
@@ -257,7 +257,7 @@ export function bookmarkSpaceId(s: ReadonlyModelState, window: BrowserWindow | D
 
 export function resolveWindowId(s: ReadonlyModelState, id?: string | null): string | undefined {
   if (id && s.windows[id]) return id;
-  // Without a window named, never pick a Little Bay: it holds one page (store/small.ts).
+  // Without a window named, never pick a Little Bay: it holds one page (store/littleBay.ts).
   const main = (w: string) => !!s.windows[w] && s.windows[w]!.kind !== "small";
   return s.ui.focusOrder.find(main) ?? s.windowOrder.find(main);
 }

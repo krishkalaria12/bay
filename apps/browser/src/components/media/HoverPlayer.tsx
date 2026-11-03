@@ -1,7 +1,7 @@
-import { Surface } from "@bay/shell";
+import { Surface } from "@bay/desktop";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
+import { besideRow, useSidebarOnRight } from "../window/layout";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { clickTab } from "../sidebar/actions";
 import { dismissHover, hoverLeave, keepHover } from "../sidebar/hover";

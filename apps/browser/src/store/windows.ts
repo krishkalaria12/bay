@@ -1,6 +1,6 @@
 import { capabilities } from "@bay/platform";
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { orderSections, syncGroupOrder, leaveGroups } from "./groups";
 import {
   findLast,
@@ -23,8 +23,8 @@ import {
   withList,
   without,
 } from "./model";
-import { restoringGroup } from "./organize";
-import { isSmall, isSmallWindow, mainWindowFor, littleBayProfile } from "./small";
+import { restoringGroup } from "./tabTidying";
+import { isSmall, isSmallWindow, mainWindowFor, littleBayProfile } from "./littleBay";
 import { removeFromSplits } from "./splits";
 import { activated, apply, removeTabs, successors, withNewTab } from "./tabs";
 import type { BrowserWindow, ClosedTab, ClosedWindow, Frame, Tab, TabGroup, WindowPlacement, WindowSize } from "./types";
@@ -63,7 +63,8 @@ export type WindowsSlice = {
   switchSpace(windowId: string, spaceId: string): void;
   /** Shows the tabs in the window (a new one for null): their pages move there. */
   moveTabsToWindow(tabIds: string[], windowId: string | null): string | undefined;
-  moveTabToSpace(tabId: string, spaceId: string): void;
+  /** The tab joins the space, shown in `windowId` (by default the window it's in, which goes to that space with it). */
+  moveTabToSpace(tabId: string, spaceId: string, windowId?: string): void;
   /** The other main windows close; their pages move into this one. */
   mergeAllWindows(windowId: string): void;
   reopenClosed(windowId?: string | null): void;
@@ -104,7 +105,7 @@ function withoutWindows(s: BrowserState, ids: string[]): BrowserState {
   };
 }
 
-/** The tab's page moves to the window (lib/tabPages.ts hands it over); a loaded one loads there. */
+/** The tab's page moves to the window (lib/tabNavigation.ts hands it over); a loaded one loads there. */
 function pageTo(t: Tab, windowId: string): Tab {
   if (t.windowId === windowId) return t;
   const { adoptId, ...rest } = t;
@@ -152,6 +153,12 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
     const from = tabListKey(next, next.tabs[tab.id]!);
     next = withList(withList(next, { key: from, tabIds: listIds(next, from).filter((id) => id !== tab.id) }), { key: targetId, tabIds: [tab.id] });
     next = { ...next, groups: leaveGroups(next.groups, movingIds), splits: removeFromSplits(next.splits, movingIds) };
+  } else {
+    // A whole split travels together; panes pulled out leave the split behind.
+    const detached = new Set<string>();
+    for (const split of Object.values(next.splits))
+      if (!split.tabIds.every((id) => movingIds.has(id))) for (const id of split.tabIds) if (movingIds.has(id)) detached.add(id);
+    next = { ...next, splits: removeFromSplits(next.splits, detached) };
   }
 
   const tabs = { ...next.tabs };
@@ -313,7 +320,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     return windowId;
   },
 
-  moveTabToSpace(tabId, spaceId) {
+  moveTabToSpace(tabId, spaceId, windowId) {
     const s = get();
     const tab = s.tabs[tabId];
     if (!tab || isIncognitoSpace(tab.spaceId) || !s.spaces[spaceId] || tab.spaceId === spaceId) return;
@@ -344,7 +351,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     next = withList(next, { key: from, tabIds: fromList });
     const toList = from === to ? fromList : listIds(next, to);
     next = withList(next, { key: to, tabIds: orderSections([tabId, ...toList], tabs, next.groups, next.pinnedFolders) });
-    set(apply(next, activated(next, tabId, s.windows[tab.windowId] ? tab.windowId : undefined)));
+    set(apply(next, activated(next, tabId, windowId ?? (s.windows[tab.windowId] ? tab.windowId : undefined))));
   },
 
   mergeAllWindows(windowId) {

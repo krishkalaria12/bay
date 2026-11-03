@@ -1,6 +1,6 @@
 import { isMac, strokeMatches } from "@bay/platform";
-import { setKeyShortcuts } from "@bay/shell";
-import { runCommand } from "./commands";
+import { setKeyShortcuts } from "@bay/desktop";
+import { runCommand } from "./appCommands";
 import { keyBindings, keyShortcuts } from "./keyBindings";
 
 /** The Chrome-hosted desktop has no app menu to carry Bay's keys. Its host runs them while a page has focus and hands

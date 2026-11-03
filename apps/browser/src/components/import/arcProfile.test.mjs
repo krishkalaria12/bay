@@ -17,7 +17,7 @@ globalThis.nnTestNativeModules = {
     discardImported: (token) => tokens.delete(token),
   },
 };
-const { useBrowser } = await import("../../store/browser.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
 const { engineProfile, favoriteTabIds } = await import("../../store/model.ts");
 const { applyArcProfile } = await import("./apply.ts");
 const S = () => useBrowser.getState();

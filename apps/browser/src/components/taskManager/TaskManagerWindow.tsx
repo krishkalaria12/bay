@@ -1,7 +1,7 @@
 import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
-import { killTask, listTasks, type EngineTask } from "@bay/nncore";
-import { Symbol, WindowDragRegion } from "@bay/shell";
+import { killTask, listTasks, type EngineTask } from "@bay/chromium";
+import { Symbol, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, Text } from "react-native";
 import { switchToTab } from "../../lib/actions";
@@ -10,8 +10,8 @@ import { APP_ICON } from "../../lib/assets";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { Tab } from "../../store/types";
-import { usePages } from "../layout/pageState";
-import { Favicon, useHover } from "../primitives";
+import { usePages } from "../window/pageState";
+import { Favicon, useHover } from "../ui/primitives";
 import { Button, useFormColors } from "../settings/controls";
 import { TASK_POLL_MS, TASK_ROW_HEIGHT, TASK_TOOLBAR_HEIGHT } from "./constants";
 

@@ -1,4 +1,4 @@
-import type { BrowserState } from "../store/browser";
+import type { BrowserState } from "../store/browserStore";
 import { isIncognitoSpace, tabListKey } from "../store/model";
 
 export class BrowserCommandError extends Error {

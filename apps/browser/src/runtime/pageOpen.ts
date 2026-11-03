@@ -1,5 +1,5 @@
 import { toAppUrl } from "@bay/core";
-import type { BrowserState, BrowserStore } from "../store/browser";
+import type { BrowserState, BrowserStore } from "../store/browserStore";
 import { MAX_SPLIT_PANES } from "../store/constants";
 import { activeTabId, engineProfileFor, isIncognitoSpace, tabListKey } from "../store/model";
 import { opensInPeek } from "../store/peeks";

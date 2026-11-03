@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { listOfTab, newId, pinnedPage, withList, type TabList } from "./model";
-import { closingGroup } from "./organize";
+import { closingGroup } from "./tabTidying";
 import type { GroupColor, PinnedFolder, Tab, TabGroup } from "./types";
 
 export type GroupsSlice = {

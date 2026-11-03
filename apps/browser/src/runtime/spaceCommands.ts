@@ -1,5 +1,5 @@
 import { SPACE_SWATCHES } from "../lib/spaceSwatches";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import type { Space, SpaceColor, SpaceTheme } from "../store/types";
 import {
   commandBoolean,

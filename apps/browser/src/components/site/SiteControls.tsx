@@ -18,9 +18,9 @@ import {
   type SiteSettings,
   type InstalledExtension,
   type ActionState,
-} from "@bay/nncore";
+} from "@bay/chromium";
 import { cleanUrl, displayHost, markdownLink } from "@bay/core";
-import { confirm, copyText, sharePage, showMenu, Symbol, translation, type MenuItem } from "@bay/shell";
+import { confirm, copyText, sharePage, showMenu, Symbol, translation, type MenuItem } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
@@ -29,20 +29,20 @@ import { useBrowserRead as useBrowser } from "../../store/read";
 import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
 import { bookmarkSpaceId, engineProfile, isIncognitoSpace, tabLabel } from "../../store/model";
 import { canSwitchEngine, defaultEngine, ENGINE_NAMES, engineForUrl, otherEngine, recommendedEngineFor, ruleFor, tabEngine } from "../../store/engines";
-import { openPageIn, setWebsiteEngine, togglePageEngine } from "../../lib/engines";
-import { Favicon, useHover } from "../primitives";
-import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../layout/controls";
+import { openPageIn, setWebsiteEngine, togglePageEngine } from "../../lib/pageEngines";
+import { Favicon, useHover } from "../ui/primitives";
+import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../toolbar/buttons";
 import { toggleDeveloperMode } from "../developer/devMode";
 import { captureFullPage, capturePortrait, startCapture } from "../capture/state";
-import { useIsDeveloperTab } from "../developer/sites";
-import { patchPage, setPopover, usePage, usePages } from "../layout/pageState";
-import { showToast } from "../layout/splitActions";
+import { useIsDeveloperTab } from "../developer/localDevSites";
+import { patchPage, setPopover, usePage, usePages } from "../window/pageState";
+import { showToast } from "../split/splitActions";
 import { toggleCastPicker } from "../media/cast";
 import { autoPictureInPictureFor, setAutoPictureInPictureForSite, useMedia, usePictureInPicture } from "../media/state";
 import { TranslateRows } from "./TranslateControls";
 import { ZoomStepper } from "./ZoomControls";
 import { activateExtension, loadUnpacked, openManageExtensions, openWebStore, useExtensions, useWindowExtensions, type Anchor } from "../extensions/state";
-import { defaultTarget, languageName, toggleTranslation, useTranslateState } from "./translate";
+import { defaultTarget, languageName, toggleTranslation, useTranslateState } from "./translateState";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { toggleBookmark } from "../../runtime/bookmarkActions";
 import { browserRead } from "../../store/read";

@@ -8,7 +8,7 @@ import { defaultLinkDestination, validateLinkPattern, type ExternalLinkRule, typ
 import { useTheme } from "../../../lib/theme";
 import { useSpaces } from "../../../store/hooks";
 import { newId } from "../../../store/model";
-import { IconButton } from "../../primitives";
+import { IconButton } from "../../ui/primitives";
 import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";

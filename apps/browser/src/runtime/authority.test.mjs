@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore, useBrowser } from "../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../store/browserStore.ts";
 import { engineProfile, engineProfileFor, IDLE_LIVE, viewTabIds } from "../store/model.ts";
 import { DEFAULT_SPACE } from "../store/spaces.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";

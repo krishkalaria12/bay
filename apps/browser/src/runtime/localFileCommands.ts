@@ -1,4 +1,4 @@
-import type { BrowserState, BrowserStore } from "../store/browser";
+import type { BrowserState, BrowserStore } from "../store/browserStore";
 import { sidebarUndoWindow } from "../store/sidebarUndo";
 import { localFilePath } from "../store/localFiles";
 import type { LocalFilePin } from "../store/types";

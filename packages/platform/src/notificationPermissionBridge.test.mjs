@@ -4,13 +4,13 @@ import { test } from "node:test";
 import { installNativeTransport } from "./nativeBridge.ts";
 
 // Resolve the web adapters and real shell facade without loading native views.
-const appURL = new URL("../../shell/src/app.ts", import.meta.url).href;
+const appURL = new URL("../../desktop/src/appMenu.ts", import.meta.url).href;
 const shellURL = `data:text/javascript,${encodeURIComponent(`export * from ${JSON.stringify(appURL)}; export const confirm = async () => { throw new Error("Unexpected permission prompt"); };`)}`;
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@bay/platform") return { url: new URL("./os.web.ts", import.meta.url).href, shortCircuit: true };
     if (specifier === "@bay/platform/native") return { url: new URL("./native.web.ts", import.meta.url).href, shortCircuit: true };
-    if (specifier === "@bay/shell") return { url: shellURL, shortCircuit: true };
+    if (specifier === "@bay/desktop") return { url: shellURL, shortCircuit: true };
     return next(specifier, context);
   },
 });

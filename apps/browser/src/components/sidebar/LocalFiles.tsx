@@ -10,7 +10,7 @@ import {
   type LocalFileAccess,
   type LocalFileEntry,
   type LocalFileListing,
-} from "@bay/shell";
+} from "@bay/desktop";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
@@ -18,7 +18,7 @@ import { closeLocalFileTab, localFileStatusText, openLocalFile, peekLocalFile, r
 import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { usePageSpaceId } from "../../store/hooks";
+import { usePageSpaceId, useQuietBrowser } from "../../store/hooks";
 import { localFilePins } from "../../store/localFiles";
 import { spaceFolded } from "../../store/model";
 import type { LocalFilePin } from "../../store/types";
@@ -62,9 +62,9 @@ const FileKeyboardContext = createContext<ReturnType<typeof fileKeyboardRegistry
 export function LocalFiles({ windowId, spaceId: requestedSpace }: { windowId: string; spaceId?: string }) {
   const page = usePageSpaceId();
   const spaceId = requestedSpace ?? page;
-  const privateWindow = useBrowser((s) => !!s.windows[windowId]?.incognito);
-  const folded = useBrowser((s) => spaceFolded(s, spaceId));
-  const pins = useBrowser(useShallow((s) => localFilePins(s, spaceId)));
+  const privateWindow = useQuietBrowser((s) => !!s.windows[windowId]?.incognito);
+  const folded = useQuietBrowser((s) => spaceFolded(s, spaceId));
+  const pins = useQuietBrowser(useShallow((s) => localFilePins(s, spaceId)));
   const registry = useMemo(() => fileKeyboardRegistry(windowId, spaceId, !folded && !privateWindow), [windowId, spaceId, folded, privateWindow]);
   useEffect(() => () => registry.dispose(), [registry]);
   const [revision, refresh] = useState(0);

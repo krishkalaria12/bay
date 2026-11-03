@@ -3,7 +3,7 @@ import * as windowCommands from "../../runtime/windowActions";
 import { ScrollView } from "@bay/platform";
 import { Pressable, TextInput, View } from "@bay/platform";
 import { displayUrl, fuzzyScore } from "@bay/core";
-import { FadeLabel, Surface, Symbol } from "@bay/shell";
+import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useRef, useState } from "react";
 import { Text } from "react-native";
 import { switchToTab } from "../../lib/actions";

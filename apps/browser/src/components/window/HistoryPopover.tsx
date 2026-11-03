@@ -1,0 +1,131 @@
+import { Pressable, View } from "@bay/platform";
+import { MouseArea, Symbol } from "@bay/desktop";
+import { useEffect } from "react";
+import { Text } from "react-native";
+import { useTheme } from "../../lib/theme";
+import { openModeFor, openUrl } from "../bookmarks/actions";
+import { openInternalPage } from "../pages/pageUrls";
+import { Favicon, NewTabIcon, useHover } from "../ui/primitives";
+import { modifiersOf, Popover, PopoverSeparator } from "../toolbar/buttons";
+import { closeHistoryMenu, goToHistoryItem, useHistoryFavicons, useHistoryMenu, type HistoryItem, type HistoryMenu } from "./historyMenu";
+import { HISTORY_POPOVER_WIDTH } from "./constants";
+import { useQuietBrowser } from "../../store/hooks";
+
+export function HistoryPopover({ tabId, windowId, anchors }: { tabId: string; windowId: string; anchors: { back: number; forward: number } }) {
+  const menu = useHistoryMenu((s) => (s.menu?.tabId === tabId ? s.menu : null));
+  useEffect(() => () => void (useHistoryMenu.getState().menu?.tabId === tabId && closeHistoryMenu()), [tabId]);
+  // Every pane has this and almost none has a menu: the history is looked through only for an open one.
+  return menu ? <OpenHistoryMenu tabId={tabId} windowId={windowId} anchors={anchors} menu={menu} /> : null;
+}
+
+function OpenHistoryMenu({
+  tabId,
+  windowId,
+  anchors,
+  menu,
+}: {
+  tabId: string;
+  windowId: string;
+  anchors: { back: number; forward: number };
+  menu: HistoryMenu;
+}) {
+  const spaceId = useQuietBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
+  const favicons = useHistoryFavicons(spaceId, menu.items);
+
+  const open = (item: HistoryItem, e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => {
+    const mode = openModeFor(e);
+    if (mode === "current" || mode === "split" || !item.url) {
+      closeHistoryMenu();
+      return void goToHistoryItem(tabId, item);
+    }
+    if (mode !== "background") closeHistoryMenu();
+    openUrl(item.url, windowId, mode);
+  };
+
+  return (
+    <Popover width={HISTORY_POPOVER_WIDTH} top={2} left={Math.max(6, (menu.direction < 0 ? anchors.back : anchors.forward) - 15)} onDismiss={closeHistoryMenu}>
+      <View style={{ paddingVertical: 5 }}>
+        {menu.items.map((item) => (
+          <Row key={item.key} item={item} favicon={favicons.get(item.url) ?? null} onOpen={(e) => open(item, e)} />
+        ))}
+        <PopoverSeparator />
+        <ActionRow
+          icon="clock"
+          title="Show Full History"
+          onPress={() => {
+            closeHistoryMenu();
+            openInternalPage("history", windowId);
+          }}
+        />
+      </View>
+    </Popover>
+  );
+}
+
+function RowFrame({ children, hovered, pressed }: { children: React.ReactNode; hovered: boolean; pressed: boolean }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        height: 30,
+        marginHorizontal: 5,
+        paddingHorizontal: 8,
+        borderRadius: 7,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 9,
+        backgroundColor: pressed || hovered ? (theme.dark ? `rgba(255,255,255,${pressed ? 0.12 : 0.07})` : `rgba(0,0,0,${pressed ? 0.1 : 0.06})`) : undefined,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function Row({
+  item,
+  favicon,
+  onOpen,
+}: {
+  item: HistoryItem;
+  favicon: string | null;
+  onOpen: (e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => void;
+}) {
+  const theme = useTheme();
+  const { hovered, hoverProps } = useHover();
+  return (
+    <View {...hoverProps} tooltip={item.url || undefined}>
+      <MouseArea onMiddleClick={(e) => onOpen({ ...e, middle: true })}>
+        <Pressable onPress={(e) => onOpen(modifiersOf(e))}>
+          {({ pressed }) => (
+            <RowFrame hovered={hovered} pressed={pressed}>
+              {item.offset === "newTab" ? <NewTabIcon size={16} /> : <Favicon url={item.url} favicon={favicon} size={16} />}
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
+                {item.title}
+              </Text>
+            </RowFrame>
+          )}
+        </Pressable>
+      </MouseArea>
+    </View>
+  );
+}
+
+function ActionRow({ icon, title, onPress }: { icon: string; title: string; onPress: () => void }) {
+  const theme = useTheme();
+  const { hovered, hoverProps } = useHover();
+  return (
+    <View {...hoverProps}>
+      <Pressable onPress={onPress}>
+        {({ pressed }) => (
+          <RowFrame hovered={hovered} pressed={pressed}>
+            <Symbol name={icon} size={13} color={theme.icon} style={{ width: 16, height: 16 }} />
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
+              {title}
+            </Text>
+          </RowFrame>
+        )}
+      </Pressable>
+    </View>
+  );
+}

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore, useBrowser } from "../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../store/browserStore.ts";
 import { startCoordinatorServices } from "./services.ts";
 import { AUTO_CLEAN_EVERY_MS } from "../lib/constants.ts";
-import { live, updateConfig } from "../live/store.ts";
+import { live, updateConfig } from "../activity/activityStore.ts";
 import { appEventListeners, windowEventListeners, calendarChangedListeners, docs, emitAppEvent, heldSaves } from "../test-native-stub.mjs";
 
 const tick = () => new Promise(setImmediate);

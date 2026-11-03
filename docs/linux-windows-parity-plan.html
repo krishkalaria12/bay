@@ -1271,11 +1271,15 @@
           <ol class="phases">
             <li class="phase">
               <h3>Step zero: sync with main</h3>
-              <p class="why">This is a prerequisite, not a feature. Keep it short.</p>
+              <p class="why">
+                Progress on 3 Nov 2026: all nine local main commits are pushed through <code>b5a6fbb1</code>. Main is integrated directly into
+                <code>feat/linux</code>, with package moves, contracts and runtime commands reconciled. The <code>feat/windows</code> integration remains
+                pending. Counts elsewhere describe the original audit snapshot.
+              </p>
               <ul>
-                <li>Push local <code>main</code> (9 perf commits).</li>
+                <li>Done: push local <code>main</code> (9 perf commits).</li>
                 <li>Merge <code>main</code> → <code>feat/windows</code>, then resolve the moves in section 1.</li>
-                <li>Merge <code>feat/windows</code> → <code>feat/linux</code>.</li>
+                <li>Done for Linux: merge <code>main</code> → <code>feat/linux</code> directly. Merge future shared Windows changes into Linux as usual.</li>
                 <li>Regenerate contracts. Run the JS, platform and native runtime tests and both web exports.</li>
               </ul>
               <p class="exit"><b>Done when</b> both ports contain <code>main</code> and their tests pass at the same counts as before the merge.</p>

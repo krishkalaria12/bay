@@ -1,4 +1,4 @@
-import type { MenuItem } from "@bay/shell";
+import type { MenuItem } from "@bay/desktop";
 import { newTab } from "../runtime/tabActions";
 import { useSync, type RemoteTabs } from "./engine";
 

@@ -1,7 +1,7 @@
 import { modKey } from "@bay/platform";
 import { cleanUrl, markdownLink } from "@bay/core";
-import { copyText, prompt } from "@bay/shell";
-import { updateFolder } from "../../live/store";
+import { copyText, prompt } from "@bay/desktop";
+import { updateFolder } from "../../activity/activityStore";
 import { reportBrowserCommand } from "../../runtime/commands";
 import {
   addTabsToGroup,
@@ -16,7 +16,7 @@ import {
 import { activate, updateTabDetails } from "../../runtime/tabActions";
 import { browserRead } from "../../store/read";
 import { activeTabId, bookmarkSpaceId, pinnedPage, viewTabIds } from "../../store/model";
-import { groupOf, selectedTabIds } from "../../store/organize";
+import { groupOf, selectedTabIds } from "../../store/tabTidying";
 import { folderDepth, MAX_FOLDER_DEPTH } from "../../store/folders";
 import { withSidebarUndoWindow } from "../../store/sidebarUndo";
 import type { Tab } from "../../store/types";

@@ -8,17 +8,17 @@ import {
   resolveExtensionInstallPrompt,
   webStoreExtensionId,
   type TabsRequest,
-} from "@bay/nncore";
+} from "@bay/chromium";
 import { AppState } from "react-native";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
-import { useBrowser as legacyBrowser } from "../../store/browser";
-import { changedIds } from "../../store/changes";
+import { useBrowser as legacyBrowser } from "../../store/browserStore";
+import { changedIds } from "../../store/recordDiff";
 import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
 import { activeTabId, engineProfile } from "../../store/model";
-import { tabForBrowser, usePages } from "../layout/pageState";
+import { tabForBrowser, usePages } from "../window/pageState";
 import { refreshActionStates } from "./actions";
 import { startExtensionSearchEngines } from "./searchEngines";
 import * as state from "./state";

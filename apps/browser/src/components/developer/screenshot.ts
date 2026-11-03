@@ -1,7 +1,7 @@
-import { copyImage } from "@bay/shell";
+import { copyImage } from "@bay/desktop";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { showToast } from "../layout/splitActions";
+import { showToast } from "../split/splitActions";
 
 /** The page as it's shown, on the clipboard: a PNG at the screen's scale. */
 export async function copyScreenshot(tabId: string) {

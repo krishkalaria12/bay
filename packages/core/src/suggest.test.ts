@@ -149,16 +149,30 @@ test("a newer request aborts the one in flight, which never answers", async () =
   }
 });
 
-test("remoteFirst lists the engine's suggestions before matching pages, the best one aside", () => {
+test("pagesAhead lists visited pages before the engine's suggestions, as the palette shows them", () => {
   const remote = Array.from({ length: 10 }, (_, i) => `what is the best ${i}`);
   const hist = [
     { url: "https://blog.example/what-is-the-best-editor", title: "What is the best editor", favicon: null, visits: 2, lastVisit: now - 1000 },
     { url: "https://news.example/what-is-the-best-phone", title: "What is the best phone", favicon: null, visits: 1, lastVisit: now - 5000 },
   ];
-  const list = rows(buildSuggestions("what is the best", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 10, remoteFirst: true }).items);
-  assert.equal(list.filter((r) => r.startsWith("suggest:")).length, 10);
+  const list = rows(buildSuggestions("what is the best", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 8, pagesAhead: 8 }).items);
+  assert.equal(list.filter((r) => r.startsWith("suggest:")).length, 8);
   assert.equal(list[0], "https://blog.example/what-is-the-best-editor");
-  assert.ok(list.indexOf("suggest:what is the best 9") < list.indexOf("https://news.example/what-is-the-best-phone"));
+  assert.ok(list.indexOf("https://news.example/what-is-the-best-phone") < list.indexOf("suggest:what is the best 0"));
+});
+
+test("a site's visited pages come before the engine's suggestions in the palette", () => {
+  const remote = ["github desktop", "github download", "gitanjali raman", "git commands", "gitlab"];
+  const hist = [
+    { url: "https://github.com/me", title: "me (Me)", favicon: null, visits: 20, lastVisit: now - 1000 },
+    { url: "https://github.com/me?tab=repositories", title: "Your Repositories", favicon: null, visits: 8, lastVisit: now - 2000 },
+    { url: "https://github.com/me/musico", title: "me/musico", favicon: null, visits: 5, lastVisit: now - 3000 },
+  ];
+  const list = rows(buildSuggestions("git", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 8, pagesAhead: 8 }).items);
+  const firstSuggest = list.indexOf("suggest:github desktop");
+  assert.ok(firstSuggest > 0);
+  for (const url of ["https://github.com/me", "https://github.com/me?tab=repositories", "https://github.com/me/musico"])
+    assert.ok(list.indexOf(url) >= 0 && list.indexOf(url) < firstSuggest, url);
 });
 
 test("remoteLimit raises how many engine suggestions show, history pages still come first", () => {
@@ -183,7 +197,7 @@ test("a word that starts sites' addresses lists each site once, ahead of the eng
     { url: "https://dashboard.convex.dev/t/me/app", title: "Convex Dashboard", favicon: null, visits: 2, lastVisit: now - DAY * 2 },
     { url: "https://example.com/dashboards", title: "Example", favicon: null, visits: 1, lastVisit: now - DAY * 3 },
   ];
-  const list = rows(buildSuggestions("dash", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 10, remoteFirst: true }).items);
+  const list = rows(buildSuggestions("dash", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 10, pagesAhead: 4 }).items);
   const firstSuggest = list.indexOf("suggest:dash 0");
   // The best site completes inline and comes first; the others follow the search row, before the engine's suggestions.
   assert.equal(list[0], "https://dash.cloudflare.com/");

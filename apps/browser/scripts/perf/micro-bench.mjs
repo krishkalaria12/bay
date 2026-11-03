@@ -7,14 +7,17 @@
 // Cases (all of them when no name is given):
 //   entries        sidebar, strip and group entries of 500/1000-tab windows after a title or progress update
 //   groupNames     a big group's automatic name after a progress or title update
+//   sidebar-selectors shared keyboard rows/IDs and nested folder membership on progress/UI notifications
+//   cleanup        cleanup enumeration and boolean query on progress updates and grouped duplicates
 //   suggest        omnibox pool rebuilds after a visit, with 25k/50k bookmarks (the longest 4 ms slice)
 //   suggest-seed   omnibox keystrokes on js-bench's seed profile (seed.mjs: 5000 history entries, 200 tabs, 1000
 //                  bookmarks); `suggest-seed=<query>` types another query. js-bench `typing` is what a key costs in the app.
 
-const { useBrowser } = await import("../../src/store/browser.ts");
-const { sidebarEntries, groupEntries } = await import("../../src/components/sidebar/entries.ts");
-const { groupLabel } = await import("../../src/store/organize.ts");
-const strip = await import("../../src/components/layout/stripGroups.ts");
+const { useBrowser } = await import("../../src/store/browserStore.ts");
+const { sidebarEntries, groupEntries, sidebarKeyboardRows, sidebarKeyboardRowIds } = await import("../../src/components/sidebar/sidebarEntries.ts");
+const { folderTabIds } = await import("../../src/store/folders.ts");
+const { groupLabel, cleanUpCandidates, hasCleanUpCandidates } = await import("../../src/store/tabTidying.ts");
+const strip = await import("../../src/components/tabStrip/tabStripGroups.ts");
 await import("../../src/test-native-stub.mjs");
 const core = await import("../../../../packages/core/src/index.ts");
 const { buildSeed } = await import("./seed.mjs");
@@ -109,6 +112,84 @@ function bigSession(count, bigGroup = 0) {
 }
 
 const benches = {
+  cleanup() {
+    for (const count of [200, 1000]) {
+      const ids = bigSession(count);
+      // bigSession staggers timestamps into the future; Clear must see genuinely inactive tabs.
+      const lastActiveAt = Date.now() - 60_000;
+      useBrowser.setState({ tabs: Object.fromEntries(ids.map((id) => [id, { ...S().tabs[id], lastActiveAt }])) });
+      for (const [name, select] of [
+        ["enumerate", (s) => cleanUpCandidates(s, "w", 0).length > 0],
+        ["boolean", (s) => hasCleanUpCandidates(s, "w", 0)],
+      ]) {
+        report(
+          `cleanup ${name}, ${count} tabs, 61 progress updates`,
+          time((run) => {
+            for (let i = 0; i < 61; i++) {
+              S().updateLive(ids[count - 1], { progress: ((run + i) % 10) / 10 });
+              if (!select(S())) throw new Error("expected clearable tabs");
+            }
+          }),
+        );
+      }
+      // All grouped: inactivity cannot qualify; duplicate detection must still find a removable member.
+      const s = S();
+      const grouped = {
+        ...s,
+        groups: { all: { ...Object.values(s.groups)[0], tabIds: ids } },
+        splits: {},
+        tabs: Object.fromEntries(ids.map((id) => [id, { ...s.tabs[id], url: "https://duplicate.test" }])),
+      };
+      for (const [name, select] of [
+        ["enumerate", (s) => cleanUpCandidates(s, "w", 0).length > 0],
+        ["boolean", (s) => hasCleanUpCandidates(s, "w", 0)],
+      ])
+        report(
+          `cleanup ${name}, ${count} grouped duplicates`,
+          time(() => {
+            if (!select(grouped)) throw new Error("expected grouped duplicates");
+          }, 100),
+        );
+    }
+  },
+
+  "sidebar-selectors"() {
+    for (const count of [200, 1000]) {
+      const ids = bigSession(count);
+      const folders = [];
+      for (let i = 0; i < 10; i++) {
+        const root = S().newPinnedFolder("w", { name: `Root ${i}`, tabIds: ids.slice(i * 10, i * 10 + 5) });
+        const child = S().newPinnedFolder("w", { name: `Child ${i}`, parentId: root, tabIds: ids.slice(i * 10 + 5, i * 10 + 10) });
+        folders.push(root, child);
+      }
+      const rows = sidebarKeyboardRows(S(), "w");
+      const rowIds = sidebarKeyboardRowIds(S(), "w");
+      const members = folders.map((id) => folderTabIds(S(), id));
+      const select = () => {
+        for (let page = 0; page < 4; page++) {
+          if (sidebarKeyboardRows(S(), "w") !== rows || sidebarKeyboardRowIds(S(), "w") !== rowIds) throw new Error("keyboard cache missed");
+          folders.forEach((id, i) => {
+            if (folderTabIds(S(), id) !== members[i]) throw new Error("folder cache missed");
+          });
+        }
+      };
+      report(
+        `sidebar selectors, ${count} tabs, progress, four scopes`,
+        time((i) => {
+          S().updateLive(ids[count - 1], { progress: (i % 10) / 10 });
+          select();
+        }, 100),
+      );
+      report(
+        `sidebar selectors, ${count} tabs, window UI, four scopes`,
+        time(() => {
+          S().toggleSidebar("w");
+          select();
+        }, 100),
+      );
+    }
+  },
+
   entries() {
     for (const count of [500, 1000]) {
       const ids = bigSession(count);

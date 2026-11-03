@@ -1,14 +1,14 @@
 import { reportBrowserCommand } from "../../../runtime/commands";
 import * as tabCommands from "../../../runtime/tabActions";
 import { View } from "@bay/platform";
-import { copyText, focusWindow } from "@bay/shell";
+import { copyText, focusWindow } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
 import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../../lib/theme";
-import { deleteLiveFolder, refreshFolder, statusText } from "../../../live/engine";
-import { connectGoogleDrive } from "../../../live/googleAuth";
-import { isMocked } from "../../../live/net";
+import { deleteLiveFolder, refreshFolder, statusText } from "../../../activity/activityEngine";
+import { connectGoogleDrive } from "../../../activity/googleAuth";
+import { isMocked } from "../../../activity/net";
 import {
   connectBitbucket,
   connectConfluence,
@@ -18,11 +18,11 @@ import {
   SOURCES,
   startGithubDeviceFlow,
   type DeviceFlow,
-} from "../../../live/sources";
-import { live, updateConfig, useLive } from "../../../live/store";
-import type { LiveAccount, LiveSourceId } from "../../../live/types";
+} from "../../../activity/sources";
+import { live, updateConfig, useLive } from "../../../activity/activityStore";
+import type { LiveAccount, LiveSourceId } from "../../../activity/types";
 import { useBrowserRead as useBrowser } from "../../../store/read";
-import { Favicon } from "../../primitives";
+import { Favicon } from "../../ui/primitives";
 import { Button, Group, Row, SectionHeader, Sheet, TextField } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";

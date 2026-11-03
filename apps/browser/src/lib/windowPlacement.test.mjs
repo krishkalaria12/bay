@@ -23,7 +23,7 @@ if (!process.env.BAY_PLACEMENT_CHILD) {
   }
 } else {
   const { capabilities } = await import("../test-platform-stub.mjs");
-  const { createBrowserStore } = await import("../store/browser.ts");
+  const { createBrowserStore } = await import("../store/browserStore.ts");
   const { activeTabId } = await import("../store/model.ts");
   const { nativeWindowPlacement, restorableWindow, restorableClosedWindow, restoredWindowPlacement } = await import("../store/windowPlacement.ts");
   const { createPersistence, loadSession } = await import("./persist.ts");

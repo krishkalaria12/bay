@@ -30,7 +30,7 @@
 # SPARKLE_ACCOUNT       keychain account of the Sparkle key (default bay); SPARKLE_KEY_FILE a key file instead
 # SPARKLE_BIN           Sparkle's tools (default the pod's)
 # NNCORE_FRAMEWORK      another Chromium Framework.framework than out/Release_GN_arm64's (a prebuilt engine:
-#                       packages/nncore/scripts/fetch-engine.sh), with NNCORE_FRAMEWORK_ENGINE the engine/ tree it was built from
+#                       packages/chromium/scripts/fetch-engine.sh), with NNCORE_FRAMEWORK_ENGINE the engine/ tree it was built from
 # RELEASE_BUILD_DIR     the derived data folder (default apps/browser/build-release)
 # RELEASE_BUILD_SETTINGS more xcodebuild settings (CI's compilation cache)
 # RELEASE_PROVISIONING_PROFILE  the Developer ID profile: export by hand (scripts/lib/export-developer-id.sh) instead of Xcode
@@ -72,7 +72,7 @@ fi
 root="$(cd "$(dirname "$0")/.." && pwd -P)"
 app_dir="$root/apps/browser"
 macos="$app_dir/macos"
-nncore="$root/packages/nncore"
+nncore="$root/packages/chromium"
 repo="krishkalaria12/bay"
 bundle_id="in.krishkalaria.bay"
 team="GP328GJT66"
@@ -527,7 +527,7 @@ else
 fi
 channel_args=()
 [ "$channel" = nightly ] && channel_args=(--channel nightly)
-# --full-release-notes-url: "You're up to date" › Version History (packages/shell/ios/Updater.swift).
+# --full-release-notes-url: "You're up to date" › Version History (packages/desktop/ios/Updater.swift).
 "$sparkle/generate_appcast" --ed-key-file "$key" ${channel_args[@]+"${channel_args[@]}"} \
   --download-url-prefix "https://github.com/$repo/releases/download/v$version/" \
   --embed-release-notes --full-release-notes-url "$notes_page" \

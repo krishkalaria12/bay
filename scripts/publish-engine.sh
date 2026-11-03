@@ -2,7 +2,7 @@
 # Publishes this checkout's arm64 engine for CI releases, which can't build Chromium: packs the local Chromium
 # Framework as built (unstripped: release.sh strips the app's copy, and this stays the symbols' copy), uploads it to
 # the GitHub prerelease engine-<engine tree:12> (never latest, so the feed and the download links never move to it)
-# and appends the tree's line to packages/nncore/prebuilt-engines.tsv. Run it after building an engine whose engine/
+# and appends the tree's line to packages/chromium/prebuilt-engines.tsv. Run it after building an engine whose engine/
 # changed, then commit and push that line: a release whose engine/ tree has no line fails its build at once.
 #
 #   scripts/publish-engine.sh [--dry-run] [<Chromium Framework.framework>]
@@ -14,7 +14,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd -P)"
 repo="krishkalaria12/bay"
-table="$root/packages/nncore/prebuilt-engines.tsv"
+table="$root/packages/chromium/prebuilt-engines.tsv"
 chromium_src="${CHROMIUM_SRC:-$HOME/chromium-build/chromium_git/chromium/src}"
 die() { echo "error: $*" >&2; exit 1; }
 dry=0 framework=""
@@ -59,7 +59,7 @@ echo "$sha  $(basename "$archive")" >"$archive.sha256"
 line="$(printf '%s\t%s\t%s' "$tree" "$tag" "$sha")"
 
 echo "==> Publish"
-notes="Bay's engine (NNCore's Chromium Framework, unstripped) for engine/ tree $tree (commit $commit), for release builds without a Chromium tree (packages/nncore/scripts/fetch-engine.sh). Not an app release."
+notes="Bay's engine (NNCore's Chromium Framework, unstripped) for engine/ tree $tree (commit $commit), for release builds without a Chromium tree (packages/chromium/scripts/fetch-engine.sh). Not an app release."
 if [ "$dry" = 1 ] || ! gh release view "$tag" -R "$repo" >/dev/null 2>&1; then
   run gh release create "$tag" -R "$repo" --prerelease --latest=false --target "$commit" --title "Engine $short" --notes "$notes"
 fi
@@ -70,6 +70,6 @@ if [ "$dry" = 1 ]; then
 else
   [ "$(gh release view "$tag" -R "$repo" --json isPrerelease -q .isPrerelease)" = true ] || die "$tag isn't a prerelease"
   printf '%s\n' "$line" >>"$table"
-  echo "Published $tag. Commit and push packages/nncore/prebuilt-engines.tsv (appended: $line)."
+  echo "Published $tag. Commit and push packages/chromium/prebuilt-engines.tsv (appended: $line)."
 fi
 du -sh "$archive"

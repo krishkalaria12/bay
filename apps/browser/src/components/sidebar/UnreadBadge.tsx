@@ -2,16 +2,16 @@ import { View } from "@bay/platform";
 import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { unreadFromTitle, unreadLabel } from "../../lib/unreadBadges";
-import { useBrowserRead as useBrowser } from "../../store/read";
+import { useSettings, useTab } from "../../store/hooks";
 import { UNREAD_BADGE_RED } from "./constants";
 
 /** A favorite's unread count (or dot) from its page's title, in the tile's top corner, as Arc's Favorites had it. */
 export function UnreadBadge({ tabId, corner }: { tabId: string; corner: "left" | "right" }) {
   const theme = useTheme();
-  // The label ("" for a dot), not the parse: the selector runs on every store change, and a string compares by value.
-  const label = useBrowser((s) => {
-    const tab = s.tabs[tabId];
-    if (!tab || !s.settings.unreadBadges) return null;
+  const enabled = useSettings((s) => s.unreadBadges);
+  // Follow this tab and the setting, so other pages' progress never parses this title again.
+  const label = useTab(tabId, (tab) => {
+    if (!tab || !enabled) return null;
     const unread = unreadFromTitle(tab.url, tab.title);
     if (!unread) return null;
     return "count" in unread ? unreadLabel(unread.count) : "";

@@ -1,4 +1,4 @@
-import { hapticTick } from "@bay/shell";
+import { hapticTick } from "@bay/desktop";
 import { useLayoutEffect, useState } from "react";
 import { PanResponder } from "react-native";
 import { Easing, makeMutable, withTiming, type SharedValue } from "@bay/platform/motion";

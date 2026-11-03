@@ -106,7 +106,7 @@ async function start() {
     return;
   }
   await import("./src/main");
-  const [{ AppRegistry }, { useBrowser }] = await Promise.all([import("react-native"), import("./src/store/browser")]);
+  const [{ AppRegistry }, { useBrowser }] = await Promise.all([import("react-native"), import("./src/store/browserStore")]);
   const hostId = getNativeHostInfo().constants.BayShell?.windowId;
   const windowId = typeof hostId === "string" ? hostId : useBrowser.getState().windowOrder[0];
   if (!windowId) throw new Error("The host did not provide a window to render");

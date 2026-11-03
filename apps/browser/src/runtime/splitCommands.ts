@@ -1,5 +1,5 @@
 import type { LocationCommandEffects } from "./locationCommands";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import { MAX_SPLIT_PANES } from "../store/constants";
 import { isIncognitoSpace } from "../store/model";
 import type { OpenPaneOptions, SplitSide } from "../store/splits";

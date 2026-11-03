@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
-import { createBrowserStore, useBrowser } from "../../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../../store/browserStore.ts";
 import { viewTabIds } from "../../store/model.ts";
 import { browserRead, createClientBrowserReadSource, createLocalBrowserReadSource } from "../../store/read.ts";
 import { createBrowserAuthority } from "../../runtime/authority.ts";
@@ -18,8 +18,8 @@ const nativeStub = new URL("../../test-native-stub.mjs", import.meta.url).href;
 registerHooks({
   resolve(specifier, context, next) {
     if (context.parentURL?.endsWith("/lib/actions.ts")) {
-      if (["../components/layout/spacePager", "../components/spaces/CreateSpace"].includes(specifier)) return { url: unavailableView, shortCircuit: true };
-      if (specifier === "@bay/nncore")
+      if (["../components/spaces/pager", "../components/spaces/CreateSpace"].includes(specifier)) return { url: unavailableView, shortCircuit: true };
+      if (specifier === "@bay/chromium")
         return {
           url: "data:text/javascript," + encodeURIComponent(`export * from ${JSON.stringify(nativeStub)}; export const listExtensions = async () => [];`),
           shortCircuit: true,

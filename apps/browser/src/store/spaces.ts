@@ -1,7 +1,7 @@
 import type { DeepReadonly } from "../runtime/projection";
 import type { StateCreator } from "zustand";
 import { isMac } from "@bay/platform";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { bookmarkRoots, engineRoots, removeBookmarkTree } from "./bookmarks";
 import { newId, setSpaceProfiles, tabToShow, viewTabIds, without } from "./model";
 import { DEFAULT_GRAIN, DEFAULT_INTENSITY } from "../lib/constants";
@@ -14,7 +14,7 @@ import type { Space, SpaceColor, SpaceTheme } from "./types";
 export type SpacesSlice = {
   spaces: Record<string, Space>;
   spaceOrder: string[];
-  // Engine spaces whose data a deleted profile left behind, until it's gone (lib/profileData.ts).
+  // Engine spaces whose data a deleted profile left behind, until it's gone (lib/profileCleanup.ts).
   orphanedProfileData: string[];
 
   /** Without a colour or theme, the space gets a look no other space has (unusedSpaceLook). */

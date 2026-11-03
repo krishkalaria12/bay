@@ -1,4 +1,4 @@
-import type { PageEngine } from "@bay/nncore";
+import type { PageEngine } from "@bay/chromium";
 
 export type Frame = [number, number, number, number];
 export type WindowSize = [number, number];
@@ -57,7 +57,7 @@ export type BrowserWindow = {
   size?: WindowSize;
   maximized?: boolean;
   createdAt: number;
-  // Little Bay (Arc's Little Arc): one page, no sidebar, never saved with the session (store/small.ts).
+  // Little Bay (Arc's Little Arc): one page, no sidebar, never saved with the session (store/littleBay.ts).
   kind?: "small";
 };
 

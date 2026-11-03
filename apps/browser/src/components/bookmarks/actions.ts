@@ -1,5 +1,5 @@
 import { modKey } from "@bay/platform";
-import { confirm } from "@bay/shell";
+import { confirm } from "@bay/desktop";
 import { create } from "zustand";
 import { focus, openWindow } from "../../lib/actions";
 import { folderLinks } from "../../store/bookmarks";

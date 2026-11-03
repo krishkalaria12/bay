@@ -1,7 +1,7 @@
 import type { LocationCommandEffects } from "./locationCommands";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import { activeTabId, isIncognitoSpace, resolveWindowId } from "../store/model";
-import { mainWindowFor } from "../store/small";
+import { mainWindowFor } from "../store/littleBay";
 import type { Frame } from "../store/types";
 import { validWindowSize } from "../store/windowPlacement";
 import type { CreateWindowOptions } from "../store/windows";
@@ -23,7 +23,7 @@ export type WindowCommand =
   | { method: "closeWindow" | "toggleSidebar" | "mergeAllWindows" | "focusWindow" | "openInMainWindow"; windowId: string }
   | { method: "switchSpace"; windowId: string; spaceId: string }
   | { method: "moveTabsToWindow"; tabIds: string[]; windowId: string | null }
-  | { method: "moveTabToSpace"; tabId: string; spaceId: string }
+  | { method: "moveTabToSpace"; tabId: string; spaceId: string; windowId?: string }
   | { method: "reopenClosed" | "reopenClosedTab"; windowId?: string | null }
   | { method: "reopenClosedWindow" }
   | { method: "restoreClosed"; entryId: string; windowId?: string | null };
@@ -96,8 +96,8 @@ export function parseWindowCommand(value: unknown): WindowCommand {
       fields("tabIds", "windowId");
       return { method: c.method, tabIds: commandIds(c.tabIds), windowId: c.windowId === null ? null : windowId() };
     case "moveTabToSpace":
-      fields("tabId", "spaceId");
-      return { method: c.method, tabId: commandText(c.tabId), spaceId: commandText(c.spaceId) };
+      fields("tabId", "spaceId", "windowId");
+      return { method: c.method, tabId: commandText(c.tabId), spaceId: commandText(c.spaceId), ...(c.windowId !== undefined ? { windowId: windowId() } : {}) };
     case "reopenClosed":
     case "reopenClosedTab":
       fields("windowId");
@@ -157,7 +157,11 @@ export function executeWindowCommand(store: BrowserStore, command: WindowCommand
     case "moveTabToSpace":
       if (isIncognitoSpace(requireCommandTab(s, command.tabId).spaceId)) return invalidCommand("private tabs cannot change spaces");
       requireCommandSpace(s, command.spaceId);
-      s.moveTabToSpace(command.tabId, command.spaceId);
+      if (command.windowId !== undefined) {
+        const target = requireCommandWindow(s, command.windowId);
+        if (target.incognito || target.kind === "small") return invalidCommand("window cannot receive a tab from another space");
+      }
+      s.moveTabToSpace(command.tabId, command.spaceId, command.windowId);
       break;
     case "switchSpace": {
       const window = requireCommandWindow(s, command.windowId);

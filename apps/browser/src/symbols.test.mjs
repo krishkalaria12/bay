@@ -5,8 +5,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
-const symbols = readFileSync(new URL("../../../packages/shell/src/symbols.web.tsx", import.meta.url), "utf8");
-const generated = readFileSync(new URL("../../../packages/shell/src/lucideSymbols.web.ts", import.meta.url), "utf8");
+const symbols = readFileSync(new URL("../../../packages/desktop/src/symbols.web.tsx", import.meta.url), "utf8");
+const generated = readFileSync(new URL("../../../packages/desktop/src/lucideSymbols.web.ts", import.meta.url), "utf8");
 const aliasTable = symbols.match(/const aliases: Record<string, string> = \{([^}]+)\}/)?.[1] ?? "";
 const paths = new Set([...generated.matchAll(/^ {2}"([\w.]+)": \[/gm)].map((match) => match[1]));
 const aliases = Object.fromEntries([...aliasTable.matchAll(/"?([\w.]+)"?: "([\w.]+)"/g)].map((match) => [match[1], match[2]]));
@@ -26,7 +26,7 @@ const symbolName = /(?:^|[?:|]\s*)"([a-z][a-z0-9]*(?:\.[a-z0-9]+)*)"/g;
 const PICKERS = [
   ["components/sidebar/IconPicker.tsx", /const SYMBOLS: IconChoice\[\] = \[([^\]]+)\]/, /"([^"]+)"/g],
   ["components/spaces/icons.tsx", /const SPACE_SET[^=]+= \[([\s\S]+?)\n\];/, /\["([^"]+)"/g],
-  ["components/symbolColors.ts", /const BY_COLOR[^=]+= \[([\s\S]+?)\n\];/, /"([^"]+)"/g],
+  ["components/iconPicker/symbolColors.ts", /const BY_COLOR[^=]+= \[([\s\S]+?)\n\];/, /"([^"]+)"/g],
 ];
 
 // Linux draws SF Symbol names from the Lucide icons in lucideSymbols.web.ts. A name with none falls back to

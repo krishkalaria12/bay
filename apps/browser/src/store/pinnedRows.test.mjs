@@ -2,10 +2,10 @@
 // groups: a group never holds one, and a folder stays when it's emptied.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const { folderTabIds } = await import("./folders.ts");
-const { folderEntries, numberedTabs, sidebarEntries, sidebarKeyboardRows } = await import("../components/sidebar/entries.ts");
+const { folderEntries, numberedTabs, sidebarEntries, sidebarKeyboardRows } = await import("../components/sidebar/sidebarEntries.ts");
 
 const S = () => useBrowser.getState();
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.

@@ -1,5 +1,5 @@
-import type { WebNotification } from "@bay/nncore";
-import { postNotification, removeNotifications, type NotificationResponse } from "@bay/shell";
+import type { WebNotification } from "@bay/chromium";
+import { postNotification, removeNotifications, type NotificationResponse } from "@bay/desktop";
 import { useBrowserRead as useBrowser } from "../store/read";
 import { focus, switchToTab } from "./actions";
 import { webviews } from "./webviews";

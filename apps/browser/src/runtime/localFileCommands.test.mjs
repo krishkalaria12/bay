@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { parseLocalFileCommand } from "./localFileCommands.ts";
 import { executeBrowserCommand, parseBrowserCommand, validateBrowserCommandResult } from "./userCommands.ts";
 import { createBrowserAuthority } from "./authority.ts";

@@ -1,11 +1,11 @@
-import { confirm, openTextFile, prompt, saveTextFile } from "@bay/shell";
+import { confirm, openTextFile, prompt, saveTextFile } from "@bay/desktop";
 import { create } from "zustand";
 import { boostChanges, boostHost, cleanSelector, exportBoost, importBoost, newBoost, shuffledBoost, type Boost } from "../../lib/boosts";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { newId } from "../../store/model";
-import { setPopover } from "../layout/pageState";
-import { showToast } from "../layout/splitActions";
+import { setPopover } from "../window/pageState";
+import { showToast } from "../split/splitActions";
 import { countScript, pickerScript, previewScript, type PickerMode } from "./pickerScript";
 import { addBoost, addSelector, boostsAvailable, boostsForHost, createBoost, deleteBoost, setBoostScript, startBoosts, updateBoost, useBoosts } from "./state";
 

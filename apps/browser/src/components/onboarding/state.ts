@@ -1,5 +1,5 @@
 import { capabilities } from "@bay/platform";
-import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/shell";
+import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/desktop";
 import { create } from "zustand";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { resolveWindowId } from "../../store/model";

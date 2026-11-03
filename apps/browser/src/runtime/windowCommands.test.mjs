@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { activeTabId } from "../store/model.ts";
 import { executeWindowCommand, parseWindowCommand, WINDOW_COMMAND_METHODS } from "./windowCommands.ts";
 
@@ -36,6 +36,7 @@ test("window parser accepts bounded user options and rejects native facts", () =
     { method: "switchSpace", windowId: "w", spaceId: "s" },
     { method: "moveTabsToWindow", tabIds: ["t"], windowId: null },
     { method: "moveTabToSpace", tabId: "t", spaceId: "s" },
+    { method: "moveTabToSpace", tabId: "t", spaceId: "s", windowId: "w" },
     { method: "reopenClosed", windowId: null },
     { method: "reopenClosedTab", windowId: "w" },
     { method: "reopenClosedWindow" },
@@ -72,6 +73,17 @@ test("window parser accepts bounded user options and rejects native facts", () =
     { method: "reopenClosedWindow", windowId: "w" },
   ])
     assert.throws(() => parseWindowCommand(command), { code: "invalid_request" });
+});
+
+test("moving a tab to a space activates the receiving window", () => {
+  const { store, windowId, tabId } = setup({ url: "first.com" });
+  const spaceId = store.getState().createSpace({ name: "Work" });
+  const target = store.getState().createWindow({ spaceId, background: true });
+  const sourceActive = activeTabId(store.getState(), windowId);
+  run(store, { method: "moveTabToSpace", tabId, spaceId, windowId: target });
+  assert.equal(activeTabId(store.getState(), target), tabId);
+  assert.notEqual(activeTabId(store.getState(), windowId), sourceActive);
+  assert.equal(store.getState().windows[windowId].spaceId, "default");
 });
 
 test("window commands create, move, switch and merge through the existing reducers", () => {
@@ -149,6 +161,7 @@ test("window commands reject invalid and private references before any changes",
     { method: "moveTabsToWindow", tabIds: [tabId], windowId: small },
     { method: "moveTabToSpace", tabId: privateTab, spaceId: "default" },
     { method: "moveTabToSpace", tabId, spaceId: "missing" },
+    ...["missing", privateWindow, small].map((target) => ({ method: "moveTabToSpace", tabId, spaceId: "default", windowId: target })),
     { method: "switchSpace", windowId: privateWindow, spaceId: "default" },
     { method: "closeWindow", windowId: "missing" },
     { method: "restoreClosed", entryId: "missing", windowId },

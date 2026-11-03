@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore, useBrowser } from "../../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../../store/browserStore.ts";
 import { createLocalBrowserReadSource, installBrowserReadSource } from "../../store/read.ts";
 import { createLocalBrowserCommands, installBrowserCommands } from "../../runtime/commands.ts";
 import { listIds, spaceListKey } from "../../store/model.ts";
 import { importTabs, importBookmarks, importArcSpace, destinationProfile } from "./commands.ts";
-import { sidebarEntries, folderEntries } from "../sidebar/entries.ts";
+import { sidebarEntries, folderEntries } from "../sidebar/sidebarEntries.ts";
 
 function setup(t) {
   const store = createBrowserStore();

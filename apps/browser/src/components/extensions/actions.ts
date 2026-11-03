@@ -1,4 +1,4 @@
-import { extensionActionStates } from "@bay/nncore";
+import { extensionActionStates } from "@bay/chromium";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId } from "../../store/model";
 import { browserIdOf, useExtensions, windowExtensions } from "./store";

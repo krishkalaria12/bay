@@ -3,7 +3,7 @@ import { getNativeHostInfo, invokeNative, subscribeNativeEvent } from "@bay/plat
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "@bay/platform/motion";
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { WebView, type WebViewHandle } from "../../../../packages/nncore/src/WebView";
+import { WebView, type WebViewHandle } from "../../../../packages/chromium/src/ChromiumView";
 
 const button: React.CSSProperties = {
   padding: "7px 10px",

@@ -1,5 +1,5 @@
 import { withSidebarUndoWindow } from "../store/sidebarUndo";
-import { createBrowserStore, type BrowserStore } from "../store/browser";
+import { createBrowserStore, type BrowserStore } from "../store/browserStore";
 import { createBrowserProjector, type BrowserProjection } from "./projection";
 import type { LocationCommandEffects } from "./locationCommands";
 import { executeBrowserCommand, parseBrowserCommand, type BrowserCommand } from "./userCommands";

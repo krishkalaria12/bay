@@ -1,9 +1,9 @@
 import { View } from "@bay/platform";
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { memo } from "react";
 
 import { hex } from "../../lib/theme";
-import { usePage } from "../layout/pageState";
+import { usePage } from "../window/pageState";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { useMedia } from "./state";
 import { CAPTURE_RED } from "./tokens";

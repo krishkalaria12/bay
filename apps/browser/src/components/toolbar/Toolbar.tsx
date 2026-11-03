@@ -1,0 +1,427 @@
+import * as windowCommands from "../../runtime/windowActions";
+import * as tabCommands from "../../runtime/tabActions";
+import { Pressable, View, shortcutForCommand, modKey } from "@bay/platform";
+import { useSidebarMetrics } from "../sidebar/tokens";
+import { breadcrumb, urlForDisplay } from "@bay/core";
+import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/desktop";
+import { useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { StyleSheet, Text, type ViewStyle } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
+import { useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
+import { webviews } from "../../lib/webviews";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { useIsBookmarked, useSettings, useTabLive } from "../../store/hooks";
+import { bookmarkSpaceId } from "../../store/model";
+import type { Tab } from "../../store/types";
+import { ToolbarButton, type ClickModifiers } from "./buttons";
+import { toolbarEndRoom, type ToolbarGeometry } from "../window/geometry";
+import { SIDEBAR_FIELD, TOOLBAR_BUTTON_MID, TOOLBAR_BUTTON_TOP } from "../window/constants";
+import { setPopover, usePage, usePages } from "../window/pageState";
+import { closeHistoryMenu, goBack, goForward, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryMenu } from "../window/historyMenu";
+import { openModeFor, openUrl } from "../bookmarks/actions";
+import { closePane, openSplitPane, showSplitMenu } from "../split/splitActions";
+import { toolbarPalette, useEasedColor, useEasedColorStyle, type ToolbarPalette } from "./colors";
+import { useSidebarSymbol } from "../window/layout";
+import { showUrlBarMenu } from "../commandBar/paste";
+import { CAPTURE_RED } from "../media/tokens";
+import { useHover } from "../ui/primitives";
+import { ToolbarExtensions, useToolbarExtensionsWidth } from "../extensions/ToolbarExtensions";
+import { GlassFill, useLiquidGlass } from "../ui/glass";
+import { TranslateButton } from "../site/TranslateControls";
+import { ZoomIndicator } from "../site/ZoomControls";
+import { copyPageUrl } from "../site/selection";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { toggleBookmark as togglePageBookmark } from "../../runtime/bookmarkActions";
+import { browserRead } from "../../store/read";
+import { openCommandPanel } from "../../runtime/windowUiActions";
+
+// What the toolbar shows of its tab: the page's favicon and the tab's bookkeeping (last active, …) don't re-render it.
+type ToolbarTab = Pick<Tab, "id" | "url" | "title" | "windowId" | "zoom">;
+const toolbarTab = (t: Tab | undefined): ToolbarTab | undefined => t && { id: t.id, url: t.url, title: t.title, windowId: t.windowId, zoom: t.zoom };
+
+// Where the toolbar's buttons sit, each centred on its place along the bar.
+function buttonPlaces(geometry: ToolbarGeometry) {
+  const place = (center: number | null) => ({ position: "absolute" as const, top: TOOLBAR_BUTTON_TOP, left: (center ?? 0) - layout.toolbarButton / 2 });
+  return { sidebarButton: place(geometry.sidebarButton), back: place(geometry.back), forward: place(geometry.forward), reload: place(geometry.reload) };
+}
+
+// bare: no band or divider of its own (AutoHideToolbar draws them, so the controls can fade over a band that doesn't).
+
+export function Toolbar({
+  tabId,
+  geometry,
+  windowId,
+  inSplit,
+  focused,
+  bare,
+}: {
+  tabId: string;
+  geometry: ToolbarGeometry;
+  windowId: string;
+  inSplit: boolean;
+  focused: boolean;
+  bare?: boolean;
+}) {
+  const theme = useTheme();
+  const tab = useBrowser(useShallow((s) => toolbarTab(s.tabs[tabId])));
+  // Narrow on purpose: a loading page reports progress many times a second, and only the bar below shows it.
+  const isLoading = useTabLive(tabId, (l) => l.isLoading);
+  const themeColor = useTabLive(tabId, (l) => l.themeColor);
+  const extendColor = useSettings((s) => s.extendWebsiteColor);
+  const website = extendColor && tab?.url ? themeColor : null;
+  const palette = toolbarPalette(theme, website);
+  const band = useEasedColorStyle(useEasedColor(palette.background), "backgroundColor");
+  const history = useHistoryAvailability(tabId);
+  const extensionsWidth = useToolbarExtensionsWidth(windowId);
+  const dim = useSharedValue(focused ? 1 : 0.5);
+  const dimmedFor = useRef(focused);
+  useEffect(() => {
+    // Mounting starts at the right value; only a change of focus animates.
+    if (dimmedFor.current === focused) return;
+    dimmedFor.current = focused;
+    dim.set(withTiming(focused ? 1 : 0.5, { duration: 160, easing: Easing.out(Easing.quad) }));
+  }, [focused]);
+  const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }));
+  // Kept stable by the compiler, as are the buttons' elements: a loading or history change re-renders only theirs.
+  const focus = () => {
+    if (!focused) reportBrowserCommand(tabCommands.activate(tabId));
+  };
+  const at = buttonPlaces(geometry);
+  // A toggle at the end (the sidebar on the right) is outermost but for the caption buttons: the split buttons,
+  // extensions and field move in for them.
+  const end = toolbarEndRoom(geometry);
+  const toggleRight = 8 + geometry.captionRoom;
+  const right = (inSplit ? 12 + 2 * 28 : 12) + extensionsWidth + end;
+  const urlStyle = { position: "absolute" as const, left: geometry.urlLeft, right, top: TOOLBAR_BUTTON_MID - 15 };
+  if (!tab) return <View style={{ height: layout.toolbarHeight }} />;
+
+  return (
+    <View style={{ height: layout.toolbarHeight }}>
+      {!bare && <Animated.View style={[StyleSheet.absoluteFill, band]} />}
+      <WindowDragRegion style={StyleSheet.absoluteFill} />
+      <Animated.View style={[StyleSheet.absoluteFill, dimStyle]} pointerEvents="box-none">
+        {geometry.sidebarButton !== null && <SidebarToggle style={at.sidebarButton} palette={palette} windowId={windowId} />}
+        {geometry.sidebarButtonEnd && (
+          <SidebarToggle style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: toggleRight }} palette={palette} windowId={windowId} />
+        )}
+        <HistoryButton style={at.back} tab={tab} direction={-1} disabled={!history.back} palette={palette} onFocus={focus} />
+        <HistoryButton style={at.forward} tab={tab} direction={1} disabled={!history.forward} palette={palette} onFocus={focus} />
+        <ReloadButton style={at.reload} tab={tab} loading={isLoading} palette={palette} onFocus={focus} />
+        <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={TOOLBAR_BUTTON_MID - 14} right={(inSplit ? 8 + 60 : 8) + end} />
+        {tab.url ? <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={focus} style={urlStyle} /> : null}
+        {inSplit && (
+          <View style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: 8 + end, flexDirection: "row", gap: -2 }}>
+            <ToolbarButton palette={palette} icon="rectangle.split.2x1" size={14} box={30} onPress={() => showSplitMenu(tab.id)} tooltip="Split View" />
+            <ToolbarButton palette={palette} icon="xmark" size={12} weight="medium" box={30} onPress={() => closePane(tab.id)} tooltip="Close Pane" />
+          </View>
+        )}
+      </Animated.View>
+
+      {tab.url && !bare ? (
+        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }} />
+      ) : null}
+      {isLoading && <TabProgressBar tabId={tabId} color={palette.background ? palette.icon : theme.accent} />}
+    </View>
+  );
+}
+
+function SidebarToggle({ style, palette, windowId }: { style: ViewStyle; palette: ToolbarPalette; windowId: string }) {
+  const icon = useSidebarSymbol();
+  return (
+    <ToolbarButton
+      style={style}
+      palette={palette}
+      icon={icon}
+      onPress={() => reportBrowserCommand(windowCommands.toggleSidebar(windowId))}
+      tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
+    />
+  );
+}
+
+export function ReloadButton({
+  tab,
+  loading,
+  palette,
+  style,
+  onFocus,
+}: {
+  tab: Pick<Tab, "id" | "url" | "windowId">;
+  loading: boolean;
+  palette: ToolbarPalette;
+  style?: ViewStyle;
+  onFocus: () => void;
+}) {
+  const web = () => webviews.get(tab.id);
+  return (
+    <ToolbarButton
+      style={style}
+      palette={palette}
+      icon={loading ? "xmark" : "arrow.clockwise"}
+      size={14}
+      disabled={!tab.url}
+      onPress={(m) => {
+        onFocus();
+        if (loading) return void web()?.stopLoading();
+        if (modKey(m)) return void reportBrowserCommand(tabCommands.newTab(tab.windowId, { url: tab.url, background: true, openerId: tab.id }));
+        void (m.shiftKey ? web()?.forceReload() : web()?.reload());
+      }}
+      tooltip={loading ? "Stop Loading This Page" : "Refresh (⌘R)"}
+    />
+  );
+}
+
+export function TabProgressBar({ tabId, color }: { tabId: string; color: string }) {
+  return <ProgressBar progress={useTabLive(tabId, (l) => l.progress)} color={color} />;
+}
+
+function ProgressBar({ progress, color }: { progress: number; color: string }) {
+  const width = useSharedValue(Math.max(progress, 0.08));
+  const shownFor = useRef(Math.max(progress, 0.08));
+  useEffect(() => {
+    const to = Math.max(progress, 0.08);
+    if (shownFor.current === to) return;
+    shownFor.current = to;
+    // Its width, not a scaleX: a scaleX version loses its transform when it mounts on macOS (it draws full width until
+    // it animates).
+    width.set(withTiming(to, { duration: 200, easing: Easing.out(Easing.quad) }));
+  }, [progress]);
+  const widthStyle = useAnimatedStyle(() => ({ width: `${width.get() * 100}%` }));
+  return <Animated.View style={[{ position: "absolute", left: 0, bottom: 0, height: 1.5, backgroundColor: color, opacity: 0.85 }, widthStyle]} />;
+}
+
+export function HistoryButton({
+  tab,
+  direction,
+  disabled,
+  palette,
+  style,
+  onFocus,
+}: {
+  tab: Pick<Tab, "id" | "windowId">;
+  direction: -1 | 1;
+  disabled: boolean;
+  palette: ToolbarPalette;
+  style?: object;
+  onFocus: () => void;
+}) {
+  const openMenu = () => {
+    onFocus();
+    const open = useHistoryMenu.getState().menu;
+    if (open?.tabId === tab.id && open.direction === direction) return closeHistoryMenu();
+    void openHistoryMenu(tab.id, direction);
+  };
+  const onPress = async (m: ClickModifiers & { middle?: boolean }) => {
+    onFocus();
+    closeHistoryMenu();
+    const mode = openModeFor(m);
+    if (mode === "current" || mode === "split") return direction < 0 ? goBack(tab.id) : goForward(tab.id);
+    const [target] = await historyItems(tab.id, direction, 1);
+    if (target?.url) openUrl(target.url, tab.windowId, mode);
+  };
+  return (
+    <MouseArea style={style} onMiddleClick={(e) => !disabled && void onPress({ ...e, middle: true })}>
+      <ToolbarButton
+        palette={palette}
+        icon={direction < 0 ? "chevron.left" : "chevron.right"}
+        size={14}
+        disabled={disabled}
+        onPress={onPress}
+        onLongPress={openMenu}
+        onContextMenu={openMenu}
+        tooltip={direction < 0 ? `Go Back (${shortcutForCommand("back", "⌘[")})` : `Go Forward (${shortcutForCommand("forward", "⌘]")})`}
+      />
+    </MouseArea>
+  );
+}
+
+export function UrlField({
+  tab,
+  palette,
+  windowId,
+  inSplit,
+  onFocus,
+  style,
+  sidebar,
+}: {
+  tab: ToolbarTab;
+  palette: ToolbarPalette;
+  windowId: string;
+  inSplit: boolean;
+  onFocus: () => void;
+  style?: ViewStyle;
+  // In the sidebar, the page shows its load (PageLoadGlow).
+  sidebar?: { height: number };
+}) {
+  const metrics = useSidebarMetrics();
+  const fieldHeight = sidebar?.height ?? metrics.toolbarAddressHeight;
+  const theme = useTheme();
+  const glass = useLiquidGlass();
+  const showFullUrl = useSettings((s) => s.showFullUrl);
+  const bookmarked = useIsBookmarked(tab.url);
+  const insecure = usePage(tab.id, (p) =>
+    p.security && (p.security.level === "insecure" || p.security.level === "certificateError") ? p.security.level : null,
+  );
+  const popups = usePage(tab.id, (p) => p.popups.length);
+  const capture = usePage(tab.id, (p) => p.mediaAccess);
+  const controlsOpen = usePages((s) => s.popover[tab.id] === "siteControls");
+  const openPanel = (text: string) => {
+    onFocus();
+    reportBrowserCommand(openCommandPanel(windowId, text));
+  };
+  const toggleBookmark = () => {
+    const s = browserRead.getState();
+    // The whole tab (its favicon too) as it is now; the field itself follows only what it shows.
+    const page = s.tabs[tab.id];
+    if (page) reportBrowserCommand(togglePageBookmark(bookmarkSpaceId(s, s.windows[windowId]), page));
+  };
+  const toggleSiteControls = () => {
+    onFocus();
+    setPopover(tab.id, currentPopover(tab.id) === "siteControls" ? null : "siteControls");
+  };
+  const { hovered, hoverProps } = useHover();
+  const isFile = tab.url.startsWith("file:");
+  const host = isFile ? "File" : breadcrumb(tab.url).host;
+  const full = isFile ? ` ${safeDecode(tab.url.slice("file://".length))}` : urlForDisplay(tab.url);
+  const path = !isFile && full.startsWith(host) ? full.slice(host.length) : full;
+  const web = /^https?:/i.test(tab.url);
+  const trail = hovered ? path : showFullUrl ? path.replace(/\/$/, "") : !web && tab.title ? ` / ${tab.title}` : "";
+
+  return (
+    <View
+      {...hoverProps}
+      style={[
+        style,
+        { flexDirection: "row", alignItems: "center" },
+        sidebar
+          ? {
+              height: sidebar.height,
+              borderRadius: SIDEBAR_FIELD.radius,
+              borderWidth: StyleSheet.hairlineWidth * 2,
+              borderColor: glass ? "transparent" : theme.pinnedRestingStroke,
+              backgroundColor: glass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
+              overflow: "hidden",
+            }
+          : { height: fieldHeight, borderRadius: 8, backgroundColor: hovered && !glass ? palette.pill : undefined },
+      ]}
+    >
+      {glass ? (
+        sidebar ? (
+          <GlassFill radius={SIDEBAR_FIELD.radius} border={StyleSheet.hairlineWidth * 2} fill={hovered ? theme.tabHover : theme.pinnedResting} />
+        ) : (
+          <GlassFill radius={8} fill={hovered ? palette.pressed : palette.pill} dark={palette.background ? palette.text.startsWith("#FFFFFF") : undefined} />
+        )
+      ) : null}
+      {insecure && (
+        <Pressable onPress={toggleSiteControls} style={{ paddingLeft: 7 }} tooltip="Connection is not secure">
+          <Symbol
+            name="lock.open.trianglebadge.exclamationmark.fill"
+            size={12}
+            color={insecure === "certificateError" ? "#FF5F57" : palette.secondary}
+            style={{ width: 18, height: fieldHeight }}
+          />
+        </Pressable>
+      )}
+      <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => void showUrlBarMenu(tab)}>
+        <Pressable
+          onPress={() => openPanel(tab.url)}
+          style={{ flex: 1, height: fieldHeight, justifyContent: "center", paddingLeft: insecure ? 3 : sidebar ? 10 : 8 }}
+        >
+          {sidebar ? (
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 13, fontWeight: "500", color: palette.text }}>
+                {host}
+              </Text>
+              <FadeLabel text={trail} fontSize={13} color={palette.secondary} fadeWidth={14} style={{ flex: 1, height: 18, marginLeft: -2 }} />
+            </View>
+          ) : (
+            <Text numberOfLines={1} style={{ fontSize: 13, color: palette.text }}>
+              <Text style={{ fontWeight: "500" }}>{host}</Text>
+              {trail ? <Text style={{ color: palette.secondary }}>{trail}</Text> : null}
+            </Text>
+          )}
+        </Pressable>
+      </ContextMenuArea>
+      <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 3 }}>
+        {capture && <CaptureIndicator camera={capture.camera} microphone={capture.microphone} screen={capture.screen} onPress={toggleSiteControls} />}
+        <TranslateButton tabId={tab.id} palette={palette} onFocus={onFocus} />
+        <ZoomIndicator tabId={tab.id} zoom={tab.zoom} palette={palette} onFocus={onFocus} />
+        {popups > 0 && (
+          <ToolbarButton
+            palette={palette}
+            icon="macwindow.badge.plus"
+            size={13}
+            box={24}
+            radius={6}
+            onPress={() => {
+              onFocus();
+              setPopover(tab.id, currentPopover(tab.id) === "popups" ? null : "popups");
+            }}
+            tooltip="Pop-ups blocked on this page"
+          />
+        )}
+        {hovered && !sidebar && (
+          <>
+            <ToolbarButton
+              palette={palette}
+              icon={bookmarked ? "bookmark.fill" : "bookmark"}
+              size={13}
+              box={24}
+              radius={6}
+              onPress={toggleBookmark}
+              tooltip={bookmarked ? "Remove Bookmark" : "Bookmark This Page (⌘D)"}
+            />
+            {!inSplit && (
+              <ToolbarButton
+                palette={palette}
+                icon="rectangle.split.2x1"
+                size={13}
+                box={24}
+                radius={6}
+                onPress={() => reportBrowserCommand(openSplitPane(windowId, { anchorTabId: tab.id }))}
+                tooltip="Open Split View (⌃⇧=)"
+              />
+            )}
+            <ToolbarButton palette={palette} icon="slider.horizontal.3" size={13} box={24} radius={6} onPress={toggleSiteControls} tooltip="Site Controls" />
+          </>
+        )}
+        {sidebar ? (
+          <>
+            <ToolbarButton palette={palette} icon="link" size={14} box={26} radius={6} onPress={() => void copyPageUrl(tab.id)} tooltip="Copy Link" />
+            <ToolbarButton
+              palette={palette}
+              icon="slider.horizontal.3"
+              size={15}
+              box={28}
+              radius={7}
+              style={{ borderRadius: 7, backgroundColor: controlsOpen ? palette.pressed : undefined }}
+              onPress={toggleSiteControls}
+              tooltip="Site Controls"
+            />
+          </>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function CaptureIndicator({ camera, microphone, screen, onPress }: { camera: boolean; microphone: boolean; screen: boolean; onPress: () => void }) {
+  const icon = screen ? "rectangle.inset.filled.on.rectangle" : camera ? "video.fill" : "mic.fill";
+  const what = [camera && "camera", microphone && "microphone", screen && "screen"].filter(Boolean).join(" and ");
+  return (
+    <Pressable onPress={onPress} tooltip={`This page is using your ${what}`} style={{ width: 24, height: 24, alignItems: "center", justifyContent: "center" }}>
+      <Symbol name={icon} size={12} color={CAPTURE_RED} style={{ width: 18, height: 18 }} />
+    </Pressable>
+  );
+}
+
+const currentPopover = (tabId: string) => usePages.getState().popover[tabId] ?? null;
+
+function safeDecode(s: string) {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}

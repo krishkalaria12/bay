@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { activeTabId } from "../store/model.ts";
 import { executeTabCommand, parseTabCommand } from "./tabCommands.ts";
 import { executeBrowserCommand, parseBrowserCommand } from "./userCommands.ts";

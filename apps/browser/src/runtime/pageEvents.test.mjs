@@ -32,7 +32,7 @@ const connection = installNativeTransport({
   },
 });
 after(() => connection.remove());
-const { onPageEvent, onPageOpen, finishPageOpen, startPageEvents, stopPageEvents } = await import("../../../../packages/nncore/src/pageEvents.ts");
+const { onPageEvent, onPageOpen, finishPageOpen, startPageEvents, stopPageEvents } = await import("../../../../packages/chromium/src/pageEvents.ts");
 
 test("coordinator page startup requires advertised native support and subscribes before replay", async () => {
   await assert.rejects(startPageEvents(), /not supported/);

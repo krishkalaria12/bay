@@ -1,5 +1,5 @@
 import { capabilities } from "@bay/platform";
-import { confirm, hasNotificationPermissionQuery, notificationPermission, openNotificationSettings, requestNotificationPermission } from "@bay/shell";
+import { confirm, hasNotificationPermissionQuery, notificationPermission, openNotificationSettings, requestNotificationPermission } from "@bay/desktop";
 
 let asked = false;
 

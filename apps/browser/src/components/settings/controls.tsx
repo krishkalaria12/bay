@@ -1,5 +1,5 @@
 import { Pressable, TextInput, View } from "@bay/platform";
-import { showMenu, Surface, Symbol, type MenuItem } from "@bay/shell";
+import { showMenu, Surface, Symbol, type MenuItem } from "@bay/desktop";
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
@@ -8,7 +8,7 @@ import { updateSettings } from "../../runtime/settingsActions";
 import { useBrowserRead } from "../../store/read";
 import { hex, useTheme, type Theme } from "../../lib/theme";
 import type { Settings } from "../../store/settings";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
 import { useSettingsNav } from "./windows";
 import type { SettingId } from "./definitions";

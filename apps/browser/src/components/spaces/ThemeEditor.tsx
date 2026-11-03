@@ -1,7 +1,7 @@
 import * as settingsCommands from "../../runtime/settingsActions";
 import * as windowCommands from "../../runtime/windowActions";
 import { Pressable, View } from "@bay/platform";
-import { hapticTick, Surface, Symbol } from "@bay/shell";
+import { hapticTick, Surface, Symbol } from "@bay/desktop";
 import { WindowBackdrop } from "@bay/shaders";
 import { useEffect, useRef, useState } from "react";
 import { Image, PanResponder, StyleSheet, Text, type GestureResponderEvent } from "react-native";
@@ -25,10 +25,10 @@ import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import { withSidebarUndoWindow } from "../../store/sidebarUndo";
 import type { Settings } from "../../store/settings";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { Toggle } from "../settings/controls";
 import { useSidebarWidth } from "../sidebar/tokens";
-import { useSidebarOnRight } from "../layout/windowLayout";
+import { useSidebarOnRight } from "../window/layout";
 import {
   THEME_DIAL,
   THEME_DIAL_STEPS,

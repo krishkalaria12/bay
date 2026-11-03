@@ -1,6 +1,6 @@
 import type { BookmarkNode as ImportedNode, ImportedTab } from "@bay/import";
 import type { BookmarkDraft } from "../store/bookmarks";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import type { BrowserProjection } from "./projection";
 import { listIds, tabListKey } from "../store/model";
 import { withNewTab } from "../store/tabs";

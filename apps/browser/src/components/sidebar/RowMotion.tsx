@@ -1,6 +1,6 @@
 import { View } from "@bay/platform";
 import { useSidebarMetrics } from "./tokens";
-import { FadeLabel } from "@bay/shell";
+import { FadeLabel } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
 
 import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
@@ -124,26 +124,50 @@ export function OpeningRow({
   onOpened: (entry: string) => void;
   children: ReactNode;
 }) {
-  const metrics = useSidebarMetrics();
+  // Decided for the row's life: a row that mounts whole never grows, and a long list holds no animated style (a
+  // UI-thread mapper and its shared value) per row for it.
   const [grows] = useState(opening);
-  const progress = useSharedValue(grows ? 0 : 1);
-  useEffect(() => {
-    if (grows) progress.set(play(() => onOpened(entry)));
-  }, []);
-  const growing = grows && opening;
-  // Every value, "auto" at rest: a value the style stops giving keeps the last one it gave.
-  const style = useAnimatedStyle(() => {
-    const p = growing ? progress.get() : 1;
-    return {
-      height: growing ? p * metrics.rowHeight : "auto",
-      marginBottom: (p - 1) * layout.rowGap,
-      opacity: interpolate(p, [0.25, 1], [0, 1], Extrapolation.CLAMP),
-      overflow: growing ? "hidden" : "visible",
-    };
-  }, [growing, metrics.rowHeight]);
   // Dragged, its entry closes up inside this wrapper: the wrapper takes back the list's gap after it, or the rows
   // below moved down by it as a drag began.
   const dragged = useDragSource(entry);
+  if (grows) {
+    return (
+      <GrowingRow entry={entry} opening={opening} onOpened={onOpened} dragged={dragged}>
+        {children}
+      </GrowingRow>
+    );
+  }
+  return <View style={dragged ? { marginBottom: -layout.rowGap } : null}>{children}</View>;
+}
+
+function GrowingRow({
+  entry,
+  opening,
+  onOpened,
+  dragged,
+  children,
+}: {
+  entry: string;
+  opening: boolean;
+  onOpened: (entry: string) => void;
+  dragged: boolean;
+  children: ReactNode;
+}) {
+  const metrics = useSidebarMetrics();
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.set(play(() => onOpened(entry)));
+  }, []);
+  // Every value, "auto" at rest: a value the style stops giving keeps the last one it gave.
+  const style = useAnimatedStyle(() => {
+    const p = opening ? progress.get() : 1;
+    return {
+      height: opening ? p * metrics.rowHeight : "auto",
+      marginBottom: (p - 1) * layout.rowGap,
+      opacity: interpolate(p, [0.25, 1], [0, 1], Extrapolation.CLAMP),
+      overflow: opening ? "hidden" : "visible",
+    };
+  }, [opening, metrics.rowHeight]);
   return <Animated.View style={[style, dragged ? { marginBottom: -layout.rowGap } : null]}>{children}</Animated.View>;
 }
 

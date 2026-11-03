@@ -1,4 +1,4 @@
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import { commandObject, commandText, commandTimestamp, commandUrl, invalidCommand, requireCommandSpace } from "./commandValidation";
 
 export type HistoryCommand = { method: "removeHistory"; spaceId: string; urls: string[] } | { method: "clearHistory"; spaceId: string; since?: number };

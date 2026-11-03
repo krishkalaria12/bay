@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { startSharedRuntime, prepareCoordinatorStore } from "./startup.ts";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { createBrowserProjector } from "./projection.ts";
 
 test("browser-assigned window startup never invokes coordinator services", async () => {

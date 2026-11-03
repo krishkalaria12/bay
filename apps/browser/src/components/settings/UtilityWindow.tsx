@@ -1,6 +1,6 @@
 import { View } from "@bay/platform";
 import { ImportWindow } from "../import/ImportWindow";
-import { CaptionButtons } from "../layout/CaptionButtons";
+import { CaptionButtons } from "../window/CaptionButtons";
 import { TaskManagerWindow } from "../taskManager/TaskManagerWindow";
 import { TASK_MANAGER_WINDOW_ID } from "../taskManager/window";
 import { SettingsWindow } from "./SettingsWindow";

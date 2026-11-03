@@ -1,5 +1,5 @@
 import { engineHost, type SearchEngine } from "@bay/core";
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { useState, type ReactNode } from "react";
 import { View } from "@bay/platform";
 import { StyleSheet, Text } from "react-native";
@@ -7,7 +7,7 @@ import { reportBrowserCommand } from "../../runtime/commands";
 import { setSearchEngine, updateSettings } from "../../runtime/settingsActions";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { searchEngines, type Settings } from "../../store/settings";
-import { Favicon } from "../primitives";
+import { Favicon } from "../ui/primitives";
 import { nextStep } from "./state";
 import { QUARTER_TILE, StepLayout } from "./steps";
 import { CheckRow, Reveal, SectionLabel, SelectTile, StepActions, StepTitle, useOnboardingColors } from "./ui";

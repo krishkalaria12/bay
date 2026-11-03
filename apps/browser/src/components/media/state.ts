@@ -1,5 +1,5 @@
 import * as settingsCommands from "../../runtime/settingsActions";
-import type { DisplayMediaRequest, MediaCommand, NowPlaying, PictureInPictureState } from "@bay/nncore";
+import type { DisplayMediaRequest, MediaCommand, NowPlaying, PictureInPictureState } from "@bay/chromium";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
@@ -204,8 +204,12 @@ export function playerTabFor(m: Pick<Store, "sessions" | "dismissed">, tabIds: s
 
 /** Whether a tab's video floats out when you leave it: on in Settings, and not turned off for its site. */
 export function autoPictureInPictureFor(s: Pick<BrowserState, "settings" | "tabs">, tabId: string): boolean {
-  const host = hostOf(s.tabs[tabId]?.url ?? "");
-  return (s.settings.autoPictureInPicture ?? true) && !(host && (s.settings.noAutoPictureInPictureSites ?? []).includes(host));
+  return autoPictureInPictureAt(s.settings, s.tabs[tabId]?.url ?? "");
+}
+
+export function autoPictureInPictureAt(settings: BrowserState["settings"], url: string): boolean {
+  const host = hostOf(url);
+  return (settings.autoPictureInPicture ?? true) && !(host && (settings.noAutoPictureInPictureSites ?? []).includes(host));
 }
 
 /** Turns automatic Picture in Picture on or off for a tab's site. */

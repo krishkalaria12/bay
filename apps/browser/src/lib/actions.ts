@@ -1,8 +1,8 @@
 import { sidebarUndoWindow, withSidebarUndoWindow } from "../store/sidebarUndo";
-import * as cef from "@bay/nncore";
-import { listExtensions } from "@bay/nncore";
-import { confirm } from "@bay/shell";
-import { pageToSpace } from "../components/layout/spacePager";
+import * as cef from "@bay/chromium";
+import { listExtensions } from "@bay/chromium";
+import { confirm } from "@bay/desktop";
+import { pageToSpace } from "../components/spaces/pager";
 import { requestCreateSpace, type CreateSpacePreset } from "../components/spaces/CreateSpace";
 import { useBrowserRead as useBrowser } from "../store/read";
 import { browserRead } from "../store/read";
@@ -12,7 +12,7 @@ import { updateSettings } from "../runtime/settingsActions";
 import type { UserCreateWindowOptions } from "../runtime/windowCommands";
 import { closesWindow, isIncognitoSpace, resolveWindowId } from "../store/model";
 import { engineIdOf } from "../store/spaces";
-import { applyHeldReports } from "./nativeEvents";
+import { applyHeldReports } from "./bridgeEvents";
 import { webviews } from "./webviews";
 import { closeWindowDialog } from "./windowClose";
 import { setSiteMuted } from "../runtime/organizeActions";
@@ -73,12 +73,12 @@ export async function deleteSpace(spaceId: string, windowId?: string) {
     windowId,
   });
   if (!confirmed) return;
-  // The store queues its engine data for deletion (lib/profileData.ts).
+  // The store queues its engine data for deletion (lib/profileCleanup.ts).
   await spaceActions.deleteSpace(spaceId);
 }
 
 // Chrome won't remove the original profile's extensions without asking, so they're only turned off
-// (packages/nncore/ios/NNCoreProfileData.swift); say so.
+// (packages/chromium/ios/NNCoreProfileData.swift); say so.
 async function keptExtensionsNote(): Promise<string> {
   const names = await listExtensions("").then(
     (list) => list.filter((e) => e.mayModify).map((e) => e.name),

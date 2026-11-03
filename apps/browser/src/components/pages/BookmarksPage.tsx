@@ -1,7 +1,7 @@
 import { ScrollView } from "@bay/platform";
 import { Pressable, View, modKey } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
-import { ContextMenuArea, copyText, MouseArea, showMenu, Symbol, type MenuItem } from "@bay/shell";
+import { ContextMenuArea, copyText, MouseArea, showMenu, Symbol, type MenuItem } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { PanResponder, StyleSheet, Text } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
@@ -15,7 +15,7 @@ type BookmarkNode = DeepReadonly<import("../../store/types").BookmarkNode>;
 import { openFolder, openUrl } from "../bookmarks/actions";
 import { editBookmark } from "../bookmarks/edit";
 import { FolderTree } from "../bookmarks/FolderTree";
-import { Favicon, IconButton, useHover } from "../primitives";
+import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { Button, useFormColors } from "../settings/controls";
 import { openImport } from "../settings/windows";
 import { DropTargets } from "./dropTargets";

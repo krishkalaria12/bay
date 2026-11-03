@@ -1,4 +1,4 @@
-import { setSidebarKeyboard } from "@bay/shell";
+import { setSidebarKeyboard } from "@bay/desktop";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { toggleTabLayout } from "../../runtime/splitActions";
@@ -6,9 +6,9 @@ import { toggleSidebar } from "../../runtime/windowActions";
 import { dismissCommandPanel } from "../../runtime/windowUiActions";
 import { updatePinnedFolder, updateGroup } from "../../runtime/organizeActions";
 import { activeTabId } from "../../store/model";
-import { dismissPeek } from "../layout/peekDismiss";
-import { live, setLive, updateFolder } from "../../live/store";
-import { sidebarKeyboardRows } from "./entries";
+import { dismissPeek } from "../linkOverlay/peekDismiss";
+import { live, setLive, updateFolder } from "../../activity/activityStore";
+import { sidebarKeyboardRows } from "./sidebarEntries";
 import { adjacentKeyboardRow, reconcileKeyboardRow, type SidebarKeyboardRow } from "./keyboardModel";
 import { setSidebarUi, sidebarUi } from "./state";
 

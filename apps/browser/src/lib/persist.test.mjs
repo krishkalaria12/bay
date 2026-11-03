@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore, useBrowser } from "../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../store/browserStore.ts";
 import { activeTabId } from "../store/model.ts";
 import { bookmarkDbs, docs, heldSaves, historyWatches } from "../test-native-stub.mjs";
 import { createPersistence, flushPersistence, resumePersistence, startPersistence } from "./persist.ts";

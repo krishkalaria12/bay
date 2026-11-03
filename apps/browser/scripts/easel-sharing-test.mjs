@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const scratch = mkdtempSync(join(tmpdir(), "bay-easel-sharing-"));
-const easel = readFileSync(join(root, "packages/shell/ios/Easel.swift"), "utf8");
-const shell = readFileSync(join(root, "packages/shell/ios/ShellModule.swift"), "utf8");
+const easel = readFileSync(join(root, "packages/desktop/ios/Easel.swift"), "utf8");
+const shell = readFileSync(join(root, "packages/desktop/ios/ShellModule.swift"), "utf8");
 const files = easel.slice(easel.indexOf("enum EaselFiles {"), easel.indexOf("final class EaselCanvasView:"));
 const colors = shell.slice(shell.indexOf("extension NSColor {"), shell.indexOf("let installTextFieldSelectAll:"));
 assert.ok(files.includes("enum EaselDrawing"));
@@ -106,7 +106,7 @@ import AppKit
 );
 execFileSync(
   "swiftc",
-  [join(scratch, "Support.swift"), join(root, "packages/shell/ios/EaselSharing.swift"), join(scratch, "Main.swift"), "-o", join(scratch, "check")],
+  [join(scratch, "Support.swift"), join(root, "packages/desktop/ios/EaselSharing.swift"), join(scratch, "Main.swift"), "-o", join(scratch, "check")],
   { stdio: "inherit" },
 );
 execFileSync(join(scratch, "check"), [scratch], { stdio: "inherit" });

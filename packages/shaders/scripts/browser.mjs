@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const src = fileURLToPath(new URL("../src/", import.meta.url));
+const src = fileURLToPath(new URL("../src", import.meta.url));
 const pages = fileURLToPath(new URL("../tests/web/", import.meta.url));
 
 export function findChromium(explicit) {

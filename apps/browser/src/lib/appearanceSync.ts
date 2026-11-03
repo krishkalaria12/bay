@@ -1,4 +1,4 @@
-import { isDarkAppearance, onAppEvent } from "@bay/shell";
+import { isDarkAppearance, onAppEvent } from "@bay/desktop";
 
 // Query replies and appearance events can arrive on different native pipes.
 // Once an event arrives, it takes precedence over the bootstrap query.

@@ -1,5 +1,5 @@
 import { Pressable, TextInput, View } from "@bay/platform";
-import { Surface, Symbol } from "@bay/shell";
+import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
@@ -9,8 +9,8 @@ import { hex, setPreviewLook, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId, pinnedPage } from "../../store/model";
 import { unusedSpaceLook } from "../../store/spaces";
-import { useSidebarOnRight } from "../layout/windowLayout";
-import { useHover } from "../primitives";
+import { useSidebarOnRight } from "../window/layout";
+import { useHover } from "../ui/primitives";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { SPACE_EMOJI, unusedSpaceIcon } from "./icons";
 import { ThemeControls, type Look } from "./ThemeEditor";

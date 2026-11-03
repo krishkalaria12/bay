@@ -1,5 +1,5 @@
 import { APP_PAGE_HOSTS, toAppUrl } from "@bay/core";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import { engineProfileFor, viewTabIds } from "../store/model";
 import type { TabLive } from "../store/types";
 

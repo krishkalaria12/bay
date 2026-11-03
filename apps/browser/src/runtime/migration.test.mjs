@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore, useBrowser } from "../store/browser.ts";
+import { createBrowserStore, useBrowser } from "../store/browserStore.ts";
 import { browserRead, createClientBrowserReadSource, installBrowserReadSource } from "../store/read.ts";
 import { activeTabId } from "../store/model.ts";
 import { docs } from "../test-native-stub.mjs";

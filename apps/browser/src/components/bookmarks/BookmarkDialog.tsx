@@ -1,6 +1,6 @@
 import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
-import { prompt, Surface } from "@bay/shell";
+import { prompt, Surface } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
@@ -10,8 +10,8 @@ import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkDialog, type BookmarkDialogState } from "./actions";
 import { FolderTree } from "./FolderTree";
-import { useSidebarFieldShown, useSidebarOnRight } from "../layout/windowLayout";
-import { SIDEBAR_FIELD } from "../layout/constants";
+import { useSidebarFieldShown, useSidebarOnRight } from "../window/layout";
+import { SIDEBAR_FIELD } from "../window/constants";
 import { useSidebarMetrics, useSidebarWidth } from "../sidebar/tokens";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { addBookmarkFolder, addBookmarkTree, moveBookmark, removeBookmark, updateBookmark } from "../../runtime/bookmarkActions";

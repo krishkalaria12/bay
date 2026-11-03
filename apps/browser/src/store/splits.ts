@@ -1,11 +1,12 @@
 import type { StateCreator } from "zustand";
 import type { BrowserProjection } from "../runtime/projection";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { leaveGroups, syncGroupOrder } from "./groups";
 import { listOfTab, newId, pinnedPage, tabListKey, withList } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { SplitView, Tab } from "./types";
 import { MAX_SPLIT_PANES } from "./constants";
+import { splitIndex } from "./tabIndexes";
 
 export type SplitsSlice = {
   splits: Record<string, SplitView>;
@@ -63,8 +64,7 @@ export function splitOf<S extends Pick<BrowserState, "splits"> | Pick<BrowserPro
   tabId: string | undefined,
 ): S["splits"][string] | undefined {
   if (!tabId) return undefined;
-  for (const v of Object.values(s.splits) as S["splits"][string][]) if (v.tabIds.includes(tabId)) return v;
-  return undefined;
+  return splitIndex(s.splits).get(tabId)?.[0] as S["splits"][string] | undefined;
 }
 
 export function pinnedSplitOf<S extends Pick<BrowserProjection, "splits" | "tabs">>(s: S, tabId: string | undefined): S["splits"][string] | undefined {

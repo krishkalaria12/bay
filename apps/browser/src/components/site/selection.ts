@@ -1,14 +1,14 @@
-import { setSearchEngineName } from "@bay/nncore";
+import { setSearchEngineName } from "@bay/chromium";
 import { chooseTextFragment, cleanUrl, searchUrl, withTextFragment, type SelectionContext } from "@bay/core";
-import { copyQuoteCard, copyText, shareQuoteCard, type QuoteCard } from "@bay/shell";
+import { copyQuoteCard, copyText, shareQuoteCard, type QuoteCard } from "@bay/desktop";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { spaceThemeKey, themeFor } from "../../lib/theme";
 import { defaultSearchEngine } from "../../store/settings";
-import { showToast } from "../layout/splitActions";
+import { showToast } from "../split/splitActions";
 import { openModeFor } from "../bookmarks/actions";
-import { openFromPage } from "../layout/openFromPage";
+import { openFromPage } from "../window/openFromPage";
 
 export type PageSelection = { text: string; rect: { x: number; y: number; width: number; height: number } };
 

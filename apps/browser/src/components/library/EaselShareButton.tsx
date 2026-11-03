@@ -1,8 +1,8 @@
-import { confirm, copyText, sharePage, showMenu, type EaselCanvasHandle } from "@bay/shell";
+import { confirm, copyText, sharePage, showMenu, type EaselCanvasHandle } from "@bay/desktop";
 import { useEffect, type RefObject } from "react";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { newTab } from "../../runtime/tabActions";
-import { showToast } from "../layout/splitActions";
+import { showToast } from "../split/splitActions";
 import { Button } from "../settings/controls";
 import type { EaselDocument } from "./model";
 import { easelShareURL, publishEasel, startEaselShares, stopSharingEasel, useEaselShares } from "./sharing";

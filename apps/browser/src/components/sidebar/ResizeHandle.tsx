@@ -3,8 +3,8 @@ import * as settingsCommands from "../../runtime/settingsActions";
 import { View } from "@bay/platform";
 import { layout } from "../../lib/constants";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { useResizeDrag } from "../layout/useResizeDrag";
-import { useSidebarOnRight } from "../layout/windowLayout";
+import { useResizeDrag } from "./useResizeDrag";
+import { useSidebarOnRight } from "../window/layout";
 import { setSidebarUi, sidebarUi } from "./state";
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./constants";
 

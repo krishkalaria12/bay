@@ -1,4 +1,4 @@
-import { localFiles, type LocalFileAccess } from "@bay/shell";
+import { localFiles, type LocalFileAccess } from "@bay/desktop";
 import { browserRead } from "../store/read";
 import { activate, closeTabs, newTab, updateTabDetails } from "../runtime/tabActions";
 import { closePeek, openPeek } from "../runtime/splitActions";

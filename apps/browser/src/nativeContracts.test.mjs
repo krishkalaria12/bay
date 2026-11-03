@@ -6,7 +6,7 @@ import { assertNativeStub } from "./test-native-stub.mjs";
 
 test("every registered desktop native module and view has a written contract", () => {
   const registered = new Set();
-  for (const name of ["shell", "nncore", "shaders", "import", "sync"]) {
+  for (const name of ["desktop", "chromium", "shaders", "import", "sync"]) {
     const directory = new URL(`../../../packages/${name}/ios/`, import.meta.url);
     const config = JSON.parse(readFileSync(new URL(`../../../packages/${name}/expo-module.config.json`, import.meta.url), "utf8"));
     assert.deepEqual(config.platforms, ["apple"]);

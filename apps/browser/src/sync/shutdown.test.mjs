@@ -33,9 +33,9 @@ const native = Object.fromEntries(
   ]),
 );
 globalThis.nnTestNativeModules = { BaySync: native };
-const shell = await import("@bay/shell");
+const shell = await import("@bay/desktop");
 const { emptyScope } = await import("@bay/sync");
-const { useBrowser } = await import("../store/browser.ts");
+const { useBrowser } = await import("../store/browserStore.ts");
 const tick = () => new Promise(setImmediate);
 let instance = 0;
 const types = () => ({ bookmarks: true, history: true, tabs: true, pinned: true, passwords: true, settings: true });
@@ -311,13 +311,13 @@ test("cancelling quit without native sync support preserves existing sync docume
     import assert from "node:assert/strict";
     globalThis.__DEV__ = false;
     globalThis.nnTestNativeModules = {};
-    const shell = await import("@bay/shell");
+    const shell = await import("@bay/desktop");
     shell.docs.set("sync.json", '{"v":1,"enabled":true}');
     shell.docs.set("sync-state.nns", "existing-ciphertext");
     shell.docs.set("sync-journal.nns", "existing-journal");
     const before = new Map(shell.docs);
     const engine = await import("./src/sync/engine.ts");
-    engine.startSync((await import("./src/store/browser.ts")).useBrowser);
+    engine.startSync((await import("./src/store/browserStore.ts")).useBrowser);
     await engine.prepareSyncForQuit();
     engine.resumeSyncAfterQuit();
     await new Promise(setImmediate);

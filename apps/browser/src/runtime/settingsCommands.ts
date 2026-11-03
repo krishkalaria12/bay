@@ -1,5 +1,5 @@
 import type { EngineInput } from "@bay/core";
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import { DEFAULT_SETTINGS, searchEngines, type Settings } from "../store/settings";
 import { normalizeExternalLinkRules } from "../lib/externalLinkRules";
 
@@ -45,6 +45,7 @@ const choices: Partial<Record<keyof Settings, readonly string[]>> = {
   density: ["comfortable", "compact"],
   windowMaterial: ["solid", "glass"],
   addressBar: ["toolbar", "sidebar"],
+  libraryIn: ["sidebar", "page"],
   pageEngine: ["chromium", "webkit"],
 };
 

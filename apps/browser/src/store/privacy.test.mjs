@@ -1,11 +1,11 @@
 // Private windows, incognito data and profile deletion: what must never reach disk, and what must leave it.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
-const { cleanedTabsFor } = await import("./organize.ts");
+const { cleanedTabsFor } = await import("./tabTidying.ts");
 const { flushPersistence, loadSession, startPersistence } = await import("../lib/persist.ts");
-const drop = await import("../components/layout/windowDrop.ts");
+const drop = await import("../components/window/windowDrop.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();

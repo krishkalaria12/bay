@@ -1,4 +1,4 @@
-import type { GroupPlacement, TabPlacement } from "../store/organize";
+import type { GroupPlacement, TabPlacement } from "../store/tabTidying";
 import type { GroupColor } from "../store/types";
 import { dispatchBrowserCommand } from "./commands";
 import type { FolderPatch, GroupPatch, NewFolderOptions } from "./organizeCommands";

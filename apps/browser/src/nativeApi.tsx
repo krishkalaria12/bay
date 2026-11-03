@@ -2,7 +2,7 @@ import { View } from "@bay/platform";
 import { requireNativeModule, requireOptionalNativeModule } from "@bay/platform/native";
 import { AppRegistry, Text } from "react-native";
 
-// The JS/native contract. Bump it together with `apiVersion` in packages/shell/ios/AppModule.swift whenever JS
+// The JS/native contract. Bump it together with `apiVersion` in packages/desktop/ios/AppModule.swift whenever JS
 // starts needing native code an older build lacks (a module, function, view, event or field), so JS never has to
 // guard for older builds. Metro serves the working tree to every dev instance, built before or after a native
 // change; a Release build embeds its own bundle, so there a mismatch can only be a broken build.

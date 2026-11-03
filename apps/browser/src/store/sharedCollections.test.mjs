@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decodeSharedCollection, encodeSharedCollection } from "@bay/core";
-const { useBrowser } = await import("./browser.ts");
+const { useBrowser } = await import("./browserStore.ts");
 const { folderTabIds, childFolderIds } = await import("./folders.ts");
 const S = () => useBrowser.getState();
 const link = (n) => ({ kind: "link", title: `Page ${n} 日本語`, url: `https://example.com/page/${n}` });

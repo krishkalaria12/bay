@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
-import { confirm, ContextMenuArea, copyText, MouseArea, showMenu, Symbol } from "@bay/shell";
+import { confirm, ContextMenuArea, copyText, MouseArea, showMenu, Symbol } from "@bay/desktop";
 import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text } from "react-native";
@@ -9,7 +9,7 @@ import { useBrowserRead as useBrowser } from "../../store/read";
 import type { DeepReadonly } from "../../runtime/projection";
 type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 import { openModeFor, openUrl } from "../bookmarks/actions";
-import { Favicon, IconButton, useHover } from "../primitives";
+import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { Button, Checkbox, useFormColors } from "../settings/controls";
 import { ClearDataDialog, useClearDataRequest } from "./ClearDataDialog";
 import { dayLabel, dayStart, EmptyState, hostLabel, matchesQuery, PageHeader, timeLabel } from "./PageLayout";

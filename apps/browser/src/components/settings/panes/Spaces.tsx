@@ -1,4 +1,4 @@
-import { ContextMenuArea, showMenu, Symbol } from "@bay/shell";
+import { ContextMenuArea, showMenu, Symbol } from "@bay/desktop";
 import { useState } from "react";
 import { Pressable, View } from "@bay/platform";
 import { StyleSheet, Text } from "react-native";
@@ -12,8 +12,8 @@ import { useSpaces } from "../../../store/hooks";
 import { plural, resolveWindowId } from "../../../store/model";
 import type { SpaceColor } from "../../../store/types";
 import { ClearDataDialog } from "../../pages/ClearDataDialog";
-import { useHover } from "../../primitives";
-import { IconGrid } from "../../IconGrid";
+import { useHover } from "../../ui/primitives";
+import { IconGrid } from "../../iconPicker/IconGrid";
 import { SpaceBadge, SPACE_SYMBOLS, spaceIconTitle } from "../../spaces/icons";
 import { useSpaceDrag, useSpaceReorder, type SpaceReorder } from "../../spaces/reorder";
 import { openThemeEditor } from "../../spaces/ThemeEditor";

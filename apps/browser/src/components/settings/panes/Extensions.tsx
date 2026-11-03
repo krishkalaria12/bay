@@ -1,7 +1,7 @@
 import { reportBrowserCommand } from "../../../runtime/commands";
 import * as tabCommands from "../../../runtime/tabActions";
 import { View } from "@bay/platform";
-import { reloadExtension, type InstalledExtension } from "@bay/nncore";
+import { reloadExtension, type InstalledExtension } from "@bay/chromium";
 import { useEffect, useState } from "react";
 import { Image, Text } from "react-native";
 import { browserRead } from "../../../store/read";

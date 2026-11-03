@@ -1,4 +1,4 @@
-import type { SecretStorageKind } from "@bay/nncore";
+import type { SecretStorageKind } from "@bay/chromium";
 
 type PlatformOS = (typeof import("@bay/platform"))["platformOS"];
 

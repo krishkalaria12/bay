@@ -1,9 +1,9 @@
 // An Arc space's pinned tabs and folders land in the Pinned section, not the Essentials or the bookmarks.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("../../store/browser.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
 const { importArcSpace, importWarningNotes } = await import("./apply.ts");
-const { sidebarEntries, folderEntries } = await import("../sidebar/entries.ts");
+const { sidebarEntries, folderEntries } = await import("../sidebar/sidebarEntries.ts");
 const { folderDepth, folderTabIds } = await import("../../store/folders.ts");
 
 const S = () => useBrowser.getState();

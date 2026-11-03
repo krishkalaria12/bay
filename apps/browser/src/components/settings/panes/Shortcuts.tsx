@@ -1,12 +1,12 @@
 import { Pressable, View, shortcutLabel } from "@bay/platform";
-import { cancelShortcutRecording, menuShortcuts, recordShortcut, Symbol, type MenuShortcut } from "@bay/shell";
+import { cancelShortcutRecording, menuShortcuts, recordShortcut, Symbol, type MenuShortcut } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { reportBrowserCommand } from "../../../runtime/commands";
 import { updateSettings } from "../../../runtime/settingsActions";
 import { useBrowserRead, browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { IconButton, useHover } from "../../primitives";
+import { IconButton, useHover } from "../../ui/primitives";
 import { matchesQuery } from "../../pages/PageLayout";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, useFormColors } from "../controls";
 

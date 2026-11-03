@@ -1,7 +1,7 @@
 import { sendService } from "../runtime/serviceClient";
 import { isMac } from "@bay/platform";
-import { engineInfo } from "@bay/nncore";
-import { launchEnvironment, readDocument, saveDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/shell";
+import { engineInfo } from "@bay/chromium";
+import { launchEnvironment, readDocument, saveDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/desktop";
 import { create } from "zustand";
 import {
   BATCH_SIZE,

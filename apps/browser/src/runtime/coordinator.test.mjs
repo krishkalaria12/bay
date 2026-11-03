@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { viewTabIds } from "../store/model.ts";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { createBrowserAuthority } from "./authority.ts";
 import { createBrowserCoordinator as createCoordinator } from "./coordinator.ts";
 import { emitPageEvent, emitPageOpen, finishedPageOpens, pageOpenListeners, pageEventListeners, pageEventSource } from "../test-native-stub.mjs";

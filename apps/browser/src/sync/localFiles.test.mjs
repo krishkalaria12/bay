@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Clock, emptyScope, syncScope } from "@bay/sync";
-import { useBrowser } from "../store/browser.ts";
+import { useBrowser } from "../store/browserStore.ts";
 import { localFilesAdapter } from "./localFiles.ts";
 import { configureSyncStore } from "./store.ts";
 
@@ -143,7 +143,7 @@ test("two Macs converge on file paths, order, rename and deletion without transf
 });
 
 test("file sync mutates only its configured coordinator store", async () => {
-  const { createBrowserStore } = await import("../store/browser.ts");
+  const { createBrowserStore } = await import("../store/browserStore.ts");
   const owner = createBrowserStore();
   const legacy = useBrowser.getState();
   const release = configureSyncStore(owner);

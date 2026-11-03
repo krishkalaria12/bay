@@ -16,8 +16,8 @@ import {
   type ExtensionInstallPrompt,
   type ExtensionPackage,
   type InstalledExtension,
-} from "@bay/nncore";
-import { confirm, showMenu } from "@bay/shell";
+} from "@bay/chromium";
+import { confirm, showMenu } from "@bay/desktop";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";

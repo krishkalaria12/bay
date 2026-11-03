@@ -36,8 +36,8 @@ globalThis.nnTestNativeModules = {
     folderInfo: async (path) => ({ path }),
   },
 };
-const { createBrowserStore, useBrowser } = await import("../store/browser.ts");
-const shell = await import("@bay/shell");
+const { createBrowserStore, useBrowser } = await import("../store/browserStore.ts");
+const shell = await import("@bay/desktop");
 const { installServiceClient } = await import("../runtime/serviceClient.ts");
 const engine = await import("./engine.ts");
 const { settingsAdapter } = await import("./adapters.ts");

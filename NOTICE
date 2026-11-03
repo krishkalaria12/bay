@@ -7,7 +7,7 @@ Bay builds on and ships third-party software under its own licenses, including:
 - Chromium (BSD-3-Clause and others; see chrome://credits in the app)
 - Chromium Embedded Framework (BSD-3-Clause)
 - ungoogled-chromium (BSD-3-Clause)
-- uBlock Origin (GPL-3.0), bundled as a separate extension, with the changes packages/nncore/scripts/ubo.sh makes
+- uBlock Origin (GPL-3.0), bundled as a separate extension, with the changes packages/chromium/scripts/ubo.sh makes
 - Sparkle (MIT)
 - React Native, React Native macOS and React Native Web (MIT)
 - nlohmann/json (MIT; Windows native import/sync and test tools)

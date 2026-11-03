@@ -1,7 +1,7 @@
-import type { BrowserStore } from "../store/browser";
+import type { BrowserStore } from "../store/browserStore";
 import type { FindState } from "../store/types";
 import { sidebarUndoWindow } from "../store/sidebarUndo";
-import { downloadVisibleIn } from "../store/ui";
+import { downloadVisibleIn } from "../store/windowUi";
 import {
   commandBoolean,
   commandFields,

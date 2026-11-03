@@ -1,4 +1,4 @@
-import { extensionSidePanelUrl } from "@bay/nncore";
+import { extensionSidePanelUrl } from "@bay/chromium";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeBrowserId, extensionProfile, isPrivate, pageProfile, shownIn, useExtensions } from "./store";
 

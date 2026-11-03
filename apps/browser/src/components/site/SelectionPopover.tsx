@@ -1,12 +1,12 @@
 import { Pressable, View } from "@bay/platform";
-import { Surface, Symbol, VisualEffect } from "@bay/shell";
+import { Surface, Symbol, VisualEffect } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { defaultSearchEngine } from "../../store/settings";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { searchSelection, setPageSelection, shareSelectionQuote, usePageSelection, type ClickModifiers, type PageSelection } from "./selection";
 import { SELECTION_POPOVER_GAP, SELECTION_POPOVER_HEIGHT, SELECTION_SHOW_DELAY_MS } from "./constants";
 

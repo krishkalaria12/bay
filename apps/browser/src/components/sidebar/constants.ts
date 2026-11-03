@@ -1,6 +1,6 @@
 import { layout } from "../../lib/constants";
-import { bouncySpring } from "../../lib/springs";
-import type { SlideOptions } from "../layout/switchMotion";
+import { bouncySpring } from "../../lib/springPresets";
+import type { SlideOptions } from "../spaces/switchMotion";
 
 // The sidebar's constants: its list and rows, pinned tiles, groups and live folders, its address bar, and the
 // cards and panels it opens.

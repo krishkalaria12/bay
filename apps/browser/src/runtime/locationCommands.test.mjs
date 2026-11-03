@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserStore } from "../store/browser.ts";
+import { createBrowserStore } from "../store/browserStore.ts";
 import { activeTabId, viewTabIds } from "../store/model.ts";
 import { executeLocationCommand, parseLocationCommand } from "./locationCommands.ts";
 

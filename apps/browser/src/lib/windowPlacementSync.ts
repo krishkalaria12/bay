@@ -1,6 +1,6 @@
 import { capabilities } from "@bay/platform";
-import { onWindowEvent, windowState, type WindowState } from "@bay/shell";
-import type { BrowserStore } from "../store/browser";
+import { onWindowEvent, windowState, type WindowState } from "@bay/desktop";
+import type { BrowserStore } from "../store/browserStore";
 import { validWindowSize } from "../store/windowPlacement";
 
 /** Subscribe before opening/querying. A native event wins over the bootstrap reply. */

@@ -1,16 +1,16 @@
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as tabCommands from "../../runtime/tabActions";
 import { Pressable, View } from "@bay/platform";
-import { FadeLabel, Symbol } from "@bay/shell";
+import { FadeLabel, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
-import { ago } from "../../live/meetings";
+import { ago } from "../../activity/meetings";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { HoverSurface, SmallButton } from "../live/LiveItemCard";
-import { useHover } from "../primitives";
+import { HoverSurface, SmallButton } from "../activity/LiveItemCard";
+import { useHover } from "../ui/primitives";
 import { dismissHover } from "../sidebar/hover";
 import type { Anchor } from "../sidebar/state";
 import {
@@ -30,7 +30,7 @@ import {
   type PreviewSite,
   type Pull,
   type Review,
-} from "./sites";
+} from "./knownSites";
 
 const FRESH_MS = 60_000;
 // A page that never answers (its policy stopped the request) shows as one that didn't, not as loading forever.
