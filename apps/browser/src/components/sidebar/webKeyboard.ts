@@ -1,3 +1,5 @@
+import { createFocusHolder } from "./focusHolder";
+
 // The sidebar's keyboard on the Chrome-hosted desktop, which has no AppKit responder (SidebarMoveUndoView in
 // Menus.swift) to take keys for it. While a row has keyboard focus, or a sidebar edit can be undone, this document
 // holds focus and reads the keys itself. A text field or a page keeps its keys, as on macOS.
@@ -42,11 +44,7 @@ const isUndo = (event: KeyboardEvent) => event.key.toLowerCase() === "z" && even
 export function startWebSidebarKeyboard(sidebar: WebSidebarKeyboard, host: Host = { document }) {
   const doc = host.document;
   // Holds focus until a row is drawn focused, so the first keys after Focus Sidebar aren't lost to the page.
-  const holder = doc.createElement("div");
-  holder.tabIndex = -1;
-  holder.setAttribute("aria-hidden", "true");
-  Object.assign(holder.style, { position: "fixed", width: "0", height: "0", overflow: "hidden", outline: "none" });
-  doc.body.append(holder);
+  const holder = createFocusHolder(doc);
   const rows = new WeakSet<Element>();
   const owns = (element: Element | null) => !!element && (element === holder || rows.has(element));
   const take = () => {

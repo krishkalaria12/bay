@@ -1,12 +1,35 @@
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as tabCommands from "../../runtime/tabActions";
+import { isMac } from "@bay/platform";
 import { setSwitcherCapture } from "@bay/desktop";
+import { webviews } from "../../lib/webviews";
+import { activeTabId } from "../../store/model";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { recentTabIds } from "../../store/tabTidying";
 import { setSidebarUi, sidebarUi } from "./state";
 import { SWITCHER_SHOW_AFTER_MS } from "./constants";
+import { startWebSwitcherCapture } from "./webSwitcher";
 
 let showTimer: ReturnType<typeof setTimeout> | undefined;
+let webCapture: ReturnType<typeof startWebSwitcherCapture> | null = null;
+
+function startCapture() {
+  if (isMac) return setSwitcherCapture(true);
+  webCapture?.stop();
+  webCapture = startWebSwitcherCapture({ move: moveSwitcher, cancel: cancelSwitcher, commit: () => commitSwitcher() });
+}
+/** Whether the switcher was opened from a page, whose focus it took. */
+function stopCapture(): boolean {
+  if (isMac) {
+    setSwitcherCapture(false);
+    return false;
+  }
+  const fromPage = !!webCapture?.fromPage;
+  webCapture?.stop();
+  webCapture = null;
+  return fromPage;
+}
+const focusPage = (tabId: string | null | undefined) => void (tabId ? webviews.get(tabId)?.focus() : undefined);
 
 export function switcherStep(windowId: string, backward: boolean) {
   const current = sidebarUi().switcher;
@@ -14,7 +37,7 @@ export function switcherStep(windowId: string, backward: boolean) {
   const ids = recentTabIds(useBrowser.getState(), windowId);
   if (ids.length < 2) return;
   setSidebarUi({ switcher: { windowId, ids, index: backward ? ids.length - 1 : 1, visible: false } });
-  setSwitcherCapture(true);
+  startCapture();
   clearTimeout(showTimer);
   showTimer = setTimeout(() => {
     const s = sidebarUi().switcher;
@@ -37,17 +60,22 @@ export function focusSwitcherRow(index: number) {
 export function commitSwitcher(index?: number) {
   const s = sidebarUi().switcher;
   if (!s) return;
-  endSwitcher();
+  const fromPage = endSwitcher();
   const id = s.ids[index ?? s.index];
-  if (id && useBrowser.getState().tabs[id]) reportBrowserCommand(tabCommands.activate(id, s.windowId));
+  if (id && useBrowser.getState().tabs[id]) {
+    const activated = tabCommands.activate(id, s.windowId);
+    reportBrowserCommand(fromPage ? activated.then(() => focusPage(id)) : activated);
+  } else if (fromPage) focusPage(activeTabId(useBrowser.getState(), s.windowId));
 }
 
 export function cancelSwitcher() {
-  if (sidebarUi().switcher) endSwitcher();
+  const s = sidebarUi().switcher;
+  if (s && endSwitcher()) focusPage(activeTabId(useBrowser.getState(), s.windowId));
 }
 
-function endSwitcher() {
+function endSwitcher(): boolean {
   clearTimeout(showTimer);
-  setSwitcherCapture(false);
+  const fromPage = stopCapture();
   setSidebarUi({ switcher: null });
+  return fromPage;
 }

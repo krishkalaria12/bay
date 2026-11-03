@@ -14,16 +14,23 @@ import { menuShortcuts as nativeMenuShortcuts, type BrowserCommand, type KeyShor
 import { SHORTCUT_ACTIONS } from "./shortcutCatalog";
 
 // Commands in the table the app doesn't run itself yet: their keys stay Chrome's.
-const LEFT_TO_CHROME = new Set(["closeAllTabs", "searchTabs", "tabSwitcher", "taskManager", "showOnboarding", "returnToPinnedUrl"]);
+const LEFT_TO_CHROME = new Set(["closeAllTabs", "searchTabs", "taskManager", "showOnboarding", "returnToPinnedUrl"]);
 
 /** No command: a key taken off its command, which stays taken so it doesn't go back to being Chrome's. */
 export type KeyBinding = { command: BrowserCommand | ""; arg: string | null; stroke: ShortcutStroke };
 export type ShortcutOverrides = Readonly<Record<string, readonly string[]>>;
 
-// The table names selectTab's first key: Ctrl+1…8 select those tabs.
+// The table names selectTab's first key: Ctrl+1…8 select those tabs. The switcher's key goes forward, with Shift back.
 const TAB_NUMBERS = ["1", "2", "3", "4", "5", "6", "7", "8"];
-const strokesFor = (command: string, stroke: ShortcutStroke): { stroke: ShortcutStroke; arg: string | null }[] =>
-  command === "selectTab" ? TAB_NUMBERS.map((n) => ({ stroke: { ...stroke, key: n }, arg: n })) : [{ stroke, arg: null }];
+function strokesFor(command: string, stroke: ShortcutStroke): { stroke: ShortcutStroke; arg: string | null }[] {
+  if (command === "selectTab") return TAB_NUMBERS.map((n) => ({ stroke: { ...stroke, key: n }, arg: n }));
+  if (command === "tabSwitcher")
+    return [
+      { stroke, arg: "forward" },
+      { stroke: { ...stroke, shift: true }, arg: "backward" },
+    ];
+  return [{ stroke, arg: null }];
+}
 
 const labelOf = (stroke: ShortcutStroke) => formatShortcut(stroke, "windows");
 const idOf = (command: string, arg: string | null) => (arg ? `${command}:${arg}` : command);

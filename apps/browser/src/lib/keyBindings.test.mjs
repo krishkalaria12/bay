@@ -131,3 +131,23 @@ test("the catalog has the visible actions of macOS's menu", () => {
   }
   assert.deepEqual(missing, []);
 });
+
+test("Ctrl+Tab opens the recent-tab switcher, as on macOS, and Ctrl+PageDown and PageUp step through tabs", () => {
+  const shortcuts = keyShortcuts(keyBindings());
+  assert.deepEqual(
+    find(shortcuts, 0x09, { ctrl: true }).map((s) => [s.command, s.arg]),
+    [["tabSwitcher", "forward"]],
+  );
+  assert.deepEqual(
+    find(shortcuts, 0x09, { ctrl: true, shift: true }).map((s) => [s.command, s.arg]),
+    [["tabSwitcher", "backward"]],
+  );
+  assert.deepEqual(
+    find(shortcuts, 0x22, { ctrl: true }).map((s) => s.command),
+    ["nextTab"],
+  );
+  assert.deepEqual(
+    find(shortcuts, 0x21, { ctrl: true }).map((s) => s.command),
+    ["previousTab"],
+  );
+});

@@ -226,8 +226,9 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   zoomReset: { key: "0", mod: true },
   back: { key: "Left", alt: true },
   forward: { key: "Right", alt: true },
-  nextTab: { key: "Tab", mod: true },
-  previousTab: { key: "Tab", mod: true, shift: true },
+  // Ctrl+Tab is the recent-tab switcher, as on macOS; these are Chrome's other keys for the next and previous tab.
+  nextTab: { key: "PageDown", mod: true },
+  previousTab: { key: "PageUp", mod: true },
   selectTab: { key: "1", mod: true }, // Ctrl+1 … Ctrl+8, arg names the index
   selectLastTab: { key: "9", mod: true },
   focusNextPane: { key: "F6" },
@@ -236,7 +237,7 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   openSettings: { key: ",", mod: true }, // VS Code and Office use Ctrl+Comma; no Chrome convention
   searchTabs: { key: "A", mod: true, shift: true }, // Chrome: Ctrl+Shift+A
   toggleSidebar: { key: "B", mod: true }, // no Chrome convention; Ctrl+Shift+B stays the bookmarks bar
-  tabSwitcher: { key: "Tab", mod: true },
+  tabSwitcher: { key: "Tab", mod: true }, // Shift for backward; the switcher stays while Ctrl is down
   taskManager: { key: "Escape", shift: true },
   showOnboarding: { key: "F1" },
   keyboardShortcuts: { key: "/", mod: true },

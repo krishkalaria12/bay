@@ -912,7 +912,12 @@
                   <td class="methods">setSwitcherCapture</td>
                   <td>The switcher may not commit when the modifier is released over a page.</td>
                   <td><code>ShellModule.swift</code></td>
-                  <td><span class="tag t-port">Port</span> Key-up capture in the host's key filter. S</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> The host's key filter never sees key-ups, so <code>sidebar/webSwitcher.ts</code> moves
+                    focus into the window's document while the switcher is open, where Ctrl's release, the arrows and Escape arrive; a page gets its focus back
+                    after. The switcher also wasn't reachable: Ctrl+Tab was Chrome's next tab. It's now the switcher, as on macOS, with Shift for backward, and
+                    next and previous tab move to Ctrl+PageDown and Ctrl+PageUp, Chrome's other keys for them. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="verify">
                   <td><strong>Tab drag previews</strong></td>
@@ -1372,6 +1377,11 @@
             <li>
               <strong>Text file dialogs:</strong> Save starts in Downloads where macOS reopens the last folder. A second dialog while one is open rejects with
               <code>dialog_busy</code>, which the Boost code doesn't catch. A failed save tells nobody, as on macOS.
+            </li>
+            <li>
+              <strong>Ctrl‑Tab switcher:</strong> Ctrl+Tab no longer steps to the next tab as it does in Chrome; that's Ctrl+PageDown. If Ctrl comes up before
+              focus reaches the document (a very quick tap from a page), the switcher commits on the next key or click instead. A click inside a page doesn't
+              cancel it, because the page's events don't reach the document.
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
             <li>
