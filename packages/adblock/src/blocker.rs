@@ -11,7 +11,13 @@ use serde::Serialize;
 pub struct Blocker {
     // The engine's default single-thread build is not `Sync`; matching takes microseconds, so a lock is cheap.
     engine: Mutex<Engine>,
+    /// The lists' `$removeparam` exceptions as plain rules (crate::removeparam): a request one matches isn't rewritten.
+    keep_params: Mutex<Engine>,
 }
+
+/// [`Blocker::serialize`]'s format: this tag, the main engine's length (u64, little-endian), the main engine, then the
+/// `$removeparam` exceptions' engine.
+const SERIALIZED_TAG: &[u8; 4] = b"BAY2";
 
 #[derive(Serialize)]
 pub struct CosmeticResources {
@@ -56,6 +62,8 @@ pub struct RequestMatch {
     pub blocked: bool,
     /// A replacement resource as a data URL. Applies only when `blocked` is true.
     pub redirect: Option<String>,
+    /// The URL to load instead, without the parameters `$removeparam` rules strip. Only when `blocked` is false.
+    pub rewrite: Option<String>,
 }
 
 impl Blocker {
@@ -63,21 +71,29 @@ impl Blocker {
     pub fn new(lists: &str) -> Self {
         let mut set = FilterSet::new(false);
         set.add_filter_list(lists.to_owned(), ParseOptions::default());
-        Self::from_engine(Engine::new_with_filter_set(set))
+        Self::from_engines(
+            Engine::new_with_filter_set(set),
+            keep_params_engine(&crate::removeparam::exceptions(lists)),
+        )
     }
 
     /// Builds an engine from separate lists, so each list's rule count can be read back ([`Blocker::list_counts`]).
     /// uBO's `!#if` blocks are resolved as uBO resolves them on Chromium.
     pub fn from_lists(lists: &[FilterList]) -> Self {
         let mut set = FilterSet::new(false);
+        let mut keep_params = String::new();
         for list in lists {
             let format = if list.hosts {
                 FilterFormat::Hosts
             } else {
                 FilterFormat::Standard
             };
+            let text = crate::preprocess::preprocess(list.text).into_owned();
+            if !list.hosts {
+                keep_params.push_str(&crate::removeparam::exceptions(&text));
+            }
             set.add_filter_list(
-                crate::preprocess::preprocess(list.text).into_owned(),
+                text,
                 ParseOptions {
                     format,
                     permissions: PermissionMask::from_bits(list.permissions),
@@ -85,31 +101,49 @@ impl Blocker {
                 },
             );
         }
-        Self::from_engine(Engine::new_with_filter_set(set))
+        Self::from_engines(
+            Engine::new_with_filter_set(set),
+            keep_params_engine(&keep_params),
+        )
     }
 
-    fn from_engine(engine: Engine) -> Self {
+    fn from_engines(engine: Engine, keep_params: Engine) -> Self {
         Self {
             engine: Mutex::new(engine),
+            keep_params: Mutex::new(keep_params),
         }
     }
 
     fn engine(&self) -> std::sync::MutexGuard<'_, Engine> {
-        self.engine
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        lock(&self.engine)
     }
 
     /// The engine in adblock-rust's binary format, to cache and load with [`Blocker::deserialize`].
     pub fn serialize(&self) -> Vec<u8> {
-        self.engine().serialize()
+        let main = self.engine().serialize();
+        let keep = lock(&self.keep_params).serialize();
+        let mut data = Vec::with_capacity(SERIALIZED_TAG.len() + 8 + main.len() + keep.len());
+        data.extend_from_slice(SERIALIZED_TAG);
+        data.extend_from_slice(&(main.len() as u64).to_le_bytes());
+        data.extend_from_slice(&main);
+        data.extend_from_slice(&keep);
+        data
     }
 
     /// An engine [`Blocker::serialize`] wrote, or `None` when the data is damaged or from another adblock-rust.
     pub fn deserialize(data: &[u8]) -> Option<Self> {
+        let rest = data.strip_prefix(SERIALIZED_TAG)?;
+        let (length, rest) = rest.split_first_chunk::<8>()?;
+        let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
+        if length > rest.len() {
+            return None;
+        }
+        let (main, keep) = rest.split_at(length);
         let mut engine = Engine::default();
-        engine.deserialize(data).ok()?;
-        Some(Self::from_engine(engine))
+        engine.deserialize(main).ok()?;
+        let mut keep_params = Engine::default();
+        keep_params.deserialize(keep).ok()?;
+        Some(Self::from_engines(engine, keep_params))
     }
 
     /// Each list's rule counts, in the order the lists were given (kept through serialization).
@@ -171,6 +205,11 @@ impl Blocker {
         }
     }
 
+    /// Only the page's scriptlet code ([`Blocker::page_resources`]'s `script`), for a document about to start.
+    pub fn scriptlets(&self, url: &str) -> String {
+        self.page_resources(url).script
+    }
+
     /// Whether a request should be blocked. `kind` is a resource type such as `script`, `image` or `xhr`.
     pub fn should_block(&self, url: &str, source_url: &str, kind: &str, method: &str) -> bool {
         self.match_request(url, source_url, kind, method).blocked
@@ -192,6 +231,13 @@ impl Blocker {
             blocked,
             // A redirect-rule without a matching block must not redirect an allowed request.
             redirect: if blocked { result.redirect } else { None },
+            // adblock-rust ignores `$removeparam` exceptions: one that matches keeps the URL as it is.
+            rewrite: result.rewritten_url.filter(|_| {
+                !blocked
+                    && !lock(&self.keep_params)
+                        .check_network_request(&request)
+                        .should_block()
+            }),
         }
     }
 
@@ -215,6 +261,18 @@ impl Blocker {
         self.engine()
             .hidden_class_id_selectors(classes, ids, &exceptions)
     }
+}
+
+fn lock(engine: &Mutex<Engine>) -> std::sync::MutexGuard<'_, Engine> {
+    engine
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn keep_params_engine(rules: &str) -> Engine {
+    let mut set = FilterSet::new(false);
+    set.add_filter_list(rules.to_owned(), ParseOptions::default());
+    Engine::new_with_filter_set(set)
 }
 
 /// WebKit content-blocking rules for the lists, as a JSON array. WebKit compiles them itself.
@@ -351,6 +409,65 @@ mod tests {
             .page_resources("https://example.com/")
             .script
             .contains("console.log(1)"));
+    }
+
+    #[test]
+    fn removes_tracking_parameters_from_allowed_documents_only() {
+        let blocker = Blocker::new(
+            "$removeparam=fbclid\n||ads.example^$document\n@@||keep.example^$removeparam\n",
+        );
+        let document = |url: &str| blocker.match_request(url, url, "document", "GET");
+        assert_eq!(
+            document("https://news.example/story?id=1&fbclid=abc")
+                .rewrite
+                .as_deref(),
+            Some("https://news.example/story?id=1")
+        );
+        assert!(document("https://news.example/story?id=1")
+            .rewrite
+            .is_none());
+        assert!(document("https://keep.example/?fbclid=abc")
+            .rewrite
+            .is_none());
+        let blocked = document("https://ads.example/?fbclid=abc");
+        assert!(blocked.blocked && blocked.rewrite.is_none());
+    }
+
+    #[test]
+    fn removeparam_exceptions_survive_serialization() {
+        let blocker = Blocker::from_lists(&[FilterList {
+            text: "$removeparam=fbclid\n@@||web.archive.org/*/http$removeparam\n",
+            hosts: false,
+            permissions: 0,
+        }]);
+        let copy = Blocker::deserialize(&blocker.serialize()).expect("deserializes");
+        let archived = "https://web.archive.org/web/2020/https://site.example/?fbclid=abc";
+        for engine in [&blocker, &copy] {
+            assert!(engine
+                .match_request(archived, archived, "document", "GET")
+                .rewrite
+                .is_none());
+            let page = "https://site.example/?fbclid=abc";
+            assert_eq!(
+                engine
+                    .match_request(page, page, "document", "GET")
+                    .rewrite
+                    .as_deref(),
+                Some("https://site.example/")
+            );
+        }
+        assert!(Blocker::deserialize(b"BAY2").is_none());
+        assert!(Blocker::deserialize(&[1, 2, 3]).is_none());
+    }
+
+    #[test]
+    fn scriptlets_are_only_the_page_script() {
+        let blocker = Blocker::new("example.com##+js(bay-test)\n");
+        assert!(blocker.use_resources(r#"[{"name":"bay-test.js","kind":{"mime":"application/javascript"},"content":"Y29uc29sZS5sb2coMSk="}]"#));
+        assert!(blocker
+            .scriptlets("https://example.com/")
+            .contains("console.log(1)"));
+        assert!(blocker.scriptlets("https://other.example/").is_empty());
     }
 
     #[test]

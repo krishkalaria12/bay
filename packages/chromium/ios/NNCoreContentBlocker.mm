@@ -1,9 +1,11 @@
 // The built-in content blocker: Bay's own (packages/adblock, Brave's adblock-rust).
 //
 // The engine asks it about every web request a page makes (NNCoreRequestFilter: subresources on a background
-// sequence, subframe navigations on the main thread) and fails the blocked ones with ERR_BLOCKED_BY_CLIENT. Cosmetic
-// filters go into each frame as a user-origin sheet when its page script says hello (NNCoreWebView), and again for the
-// classes and ids the page script finds in it (generic hiding).
+// sequence, subframe navigations on the main thread) and fails the blocked ones with ERR_BLOCKED_BY_CLIENT, or answers
+// them with a stand-in; an allowed one may load without its tracking parameters instead ($removeparam). Scriptlets
+// reach each document as it starts, before its own scripts (NNCoreScriptletSource). Cosmetic filters go into each frame
+// as a user-origin sheet when its page script says hello (NNCoreWebView), and again for the classes and ids the page
+// script finds in it (generic hiding).
 //
 // The filter lists are uBO's default catalogue (filter_lists.json): each one on or off, downloaded into
 // <app support>/Content Blocker/lists and updated when its `! Expires:` says so. The default lists are bundled
@@ -106,8 +108,11 @@ bool Filter(const char *url, const char *source, const char *top, const char *ty
   const auto start = std::chrono::steady_clock::now();
   BayBlockerMatch match =
       bay_blocker_match(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET");
-  if (redirect && match.redirect) *redirect = strdup(match.redirect);
+  // A blocked request's stand-in, or an allowed one's URL without its tracking parameters.
+  const char *answer = match.blocked ? match.redirect : match.rewrite;
+  if (redirect && answer) *redirect = strdup(answer);
   bay_string_free(match.redirect);
+  bay_string_free(match.rewrite);
   const uint64_t nanos =
       (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
   gLookups.fetch_add(1, std::memory_order_relaxed);
@@ -118,11 +123,26 @@ bool Filter(const char *url, const char *source, const char *top, const char *ty
   return match.blocked;
 }
 
+// NNCoreScriptletSource: on a background sequence, while the document's renderer waits.
+char *Scriptlets(const char *frameURL, const char *topOrigin) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(topOrigin && *topOrigin ? topOrigin : frameURL))) return nullptr;
+  char *script = bay_blocker_scriptlets(live->engine->blocker, frameURL);
+  char *copy = script ? strdup(script) : nullptr;
+  bay_string_free(script);
+  return copy;
+}
+
+// The engine runs scriptlets itself, before a document's own scripts (setScriptletSource:); an older one gets them
+// with the frame's cosmetic filters, once its page script says hello.
+BOOL gEngineRunsScriptlets = NO;
+
 // MARK: The catalogue
 
 NSString *const kVersion = @"adblock-rust 0.13.5";
 // Bump with a change to how lists compile (the crate, its features): the cached engine is rebuilt.
-NSString *const kEngineFormat = @"bay-adblock 2";
+NSString *const kEngineFormat = @"bay-adblock 3";
 
 NSArray<NSDictionary *> *Catalogue() {
   static NSArray<NSDictionary *> *lists;
@@ -452,6 +472,8 @@ void Rebuild(BOOL useCache, void (^_Nullable completion)(NSArray<NSString *> *mi
   dispatch_async(Work(), ^{
     for (NSString *listId in ids) SeedFromBundle(listId);
     void (^buildAndPublish)(BOOL, NSArray<NSString *> *) = ^(BOOL finished, NSArray<NSString *> *missing) {
+      // A newer selection is on its way: this one would be replaced at once. Nothing counts as missing, so a stale
+      // failure can't turn off a list a newer selection has on.
       if (generation != gGeneration.load()) {
         if (finished && completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(@[]); });
         return;
@@ -623,6 +645,10 @@ void PrepareContentBlocker() {
     PublishLive();
     if ([NNCoreEngine respondsToSelector:@selector(setRequestFilter:)]) [NNCoreEngine setRequestFilter:Filter];
     else NSLog(@"[blocker] this engine has no request filter: nothing is blocked");
+    if ([NNCoreEngine respondsToSelector:@selector(setScriptletSource:)]) {
+      [NNCoreEngine setScriptletSource:Scriptlets];
+      gEngineRunsScriptlets = YES;
+    }
     Rebuild(YES, nil);
     ScheduleUpdates(kFirstUpdateSeconds);
     // Copies of uBlock Origin, the blocker before this one, from before 0.1.1.
@@ -638,7 +664,8 @@ NSDictionary *ContentBlockerCosmetics(NSString *frameURL, NSString *pageURL) {
   if (!CosmeticEngine(frameURL, pageURL, &resources)) return nil;
   NSMutableDictionary *answer = [NSMutableDictionary dictionary];
   answer[@"css"] = StyleFor([resources[@"hide"] isKindOfClass:NSArray.class] ? resources[@"hide"] : @[]);
-  if ([resources[@"script"] isKindOfClass:NSString.class] && [resources[@"script"] length]) answer[@"script"] = resources[@"script"];
+  if (!gEngineRunsScriptlets && [resources[@"script"] isKindOfClass:NSString.class] && [resources[@"script"] length])
+    answer[@"script"] = resources[@"script"];
   answer[@"generic"] = @(![resources[@"generichide"] boolValue]);
   if ([resources[@"procedural"] isKindOfClass:NSArray.class]) answer[@"procedural"] = resources[@"procedural"];
   return answer;

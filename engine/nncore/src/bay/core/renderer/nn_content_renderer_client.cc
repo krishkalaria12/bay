@@ -26,12 +26,14 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "bay/core/mojom/nncore.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_isolated_world_info.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_css_origin.h"
@@ -62,6 +64,30 @@ std::string& PageScript() {
 blink::WebScriptSource Source(const std::string& code, const char* url) {
   return blink::WebScriptSource(blink::WebString::FromUtf8(code),
                                 blink::WebURL(GURL(url)));
+}
+
+// The content blocker's scriptlets for the document starting in `frame`, run in its main world
+// before any of its own scripts, as an extension's document_start script would be: a sync call
+// to the browser (mojom::NNScriptlets), since the page's first inline script can run as soon
+// as this returns.
+void RunScriptlets(blink::WebLocalFrame* frame) {
+  const GURL url(frame->GetDocument().Url());
+  if (!url.SchemeIsHTTPOrHTTPS()) {
+    return;
+  }
+  static base::NoDestructor<mojo::Remote<mojom::NNScriptlets>> scriptlets;
+  if (!scriptlets->is_bound()) {
+    content::RenderThread::Get()->BindHostReceiver(
+        scriptlets->BindNewPipeAndPassReceiver());
+  }
+  const url::Origin top = frame->Top()->GetSecurityOrigin();
+  std::string script;
+  if (!(*scriptlets)->Get(url.spec(), top.opaque() ? std::string() : top.GetURL().spec(),
+                          &script) ||
+      script.empty()) {
+    return;
+  }
+  frame->ExecuteScript(Source(script, "bay://scriptlets"));
 }
 
 // Boosts (mojom::NNBoost): every one that's on, from the browser; empty until it sends them.
@@ -240,17 +266,21 @@ class NNPageObserver : public content::RenderFrameObserver,
 
   void DidCreateScriptContext(v8::Local<v8::Context> context,
                               int32_t world_id) override {
-    if (world_id != content::ISOLATED_WORLD_ID_GLOBAL || PageScript().empty()) {
+    if (world_id != content::ISOLATED_WORLD_ID_GLOBAL) {
       return;
     }
     blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
+    // Script can remove this frame (and this observer) synchronously, e.g. a same-origin
+    // parent removing the iframe: check after every call into it.
+    base::WeakPtr<NNPageObserver> alive = weak_factory_.GetWeakPtr();
+    RunScriptlets(frame);
+    if (!alive || PageScript().empty()) {
+      return;
+    }
     v8::Isolate* isolate = frame->GetAgentGroupScheduler()->Isolate();
     v8::HandleScope handle_scope(isolate);
     v8::Context::Scope context_scope(context);
     receive_.Reset();
-    // Script can remove this frame (and this observer) synchronously, e.g. a same-origin
-    // parent removing the iframe: check after every call into it.
-    base::WeakPtr<NNPageObserver> alive = weak_factory_.GetWeakPtr();
     // Before the page's own scripts: the document's first script context.
     v8::Local<v8::Value> install = frame->ExecuteScriptAndReturnValue(
         Source(PageScript(), "bay://page-script"));

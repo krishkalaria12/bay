@@ -17,13 +17,18 @@ Every request a web page makes is put to the blocker before it starts, in the en
   It goes in before Chrome's own interceptors, so extensions never see what was blocked.
 - **Subframe navigations** (iframes, frames, fenced frames) go through a `NavigationThrottle` on start and on each
   redirect, which blocks and collapses the frame. Main-frame navigations are never blocked.
+- **Tracking parameters** (`$removeparam`): navigations, main frames included, pass through the same interceptor, which
+  only rewrites. A request the lists rewrite gets a redirect to the cleaned URL (an internal 307, or the server's own
+  redirect pointed there) and starts again there, as Chrome's webRequest answers an extension's redirect. Subresources
+  are rewritten the same way. A paused site keeps its parameters.
 - **WebSockets** go through the browser client's handshake hook before the network connection starts. A paused site
   allows its handshakes too; worker handshakes use the available cookie-site origin when there is no frame.
   While a filter is set, handshakes no extension intercepts are opened by Bay, so DevTools' extra request headers
   aren't added to them.
 
 The engine only asks; the host decides. `+[NNCoreEngine setRequestFilter:]` takes a C function
-(`NNCoreRequestFilter`: url, source, top, type, method → block, optional data-URL stand-in), which the app's native core
+(`NNCoreRequestFilter`: url, source, top, type, method → block, plus a data-URL stand-in for a blocked request or a
+cleaned URL for an allowed one), which the app's native core
 (`packages/chromium/ios/NNCoreContentBlocker.mm`) implements over the Rust engine. Blocked requests are counted by the
 engine's existing `ERR_BLOCKED_BY_CLIENT` accounting (`tab:didBlockRequests:lastURL:`).
 
@@ -36,10 +41,15 @@ but it is compiled into Chrome's framework, so it needs an engine build.
 **Cosmetic filtering**: the page script (`page_script.js`) says hello from every frame at document start; the host
 answers with the site's hiding rules as a user-origin style sheet for that frame
 (`-[NNCoreTab insertUserStyle:frame:origin:]`, `mojom::NNPage::InsertUserStyle`; the renderer inserts it only if the
-frame still shows a document of that origin), runs any scriptlets in its main world, and turns on the page script's
+frame still shows a document of that origin), and turns on the page script's
 survey of classes and ids, whose bounded reports get the generic rules that hide them. Procedural rules use
 adblock-rust's selector/action AST in the page script, including text/style matching, ancestor/XPath selection,
 removal, attribute/class removal, and style actions. DOM mutations schedule batched re-evaluation.
+
+**Scriptlets** must run before the page's own scripts (a `set-constant` or `json-prune` that comes later is too late),
+so they don't wait for hello. As a document's main world starts, its renderer asks the browser synchronously
+(`mojom::NNScriptlets`, answered on a background sequence by `+[NNCoreEngine setScriptletSource:]`'s C function) and
+runs the answer before anything else, as Brave does and as an extension's `document_start` script would run.
 
 ## Lists, settings and the engine cache
 
@@ -66,9 +76,23 @@ license and provenance in `Resources/ContentBlocker`, and reloads it for cached 
 Only uBO's own `ublock-*` lists may invoke trusted scriptlets; other catalogue lists receive no privileged permission.
 Redirect rules return local stand-ins while allow/exception rules continue to take precedence.
 
+adblock-rust drops `$removeparam` exceptions (`@@||web.archive.org/*/http$removeparam`), so its rewrites alone would
+strip parameters uBO keeps (an archived URL's own query). `packages/adblock/src/removeparam.rs` collects them as plain
+rules for a second engine, cached with the first; a request one matches isn't rewritten. An exception naming one
+parameter keeps all of them, so Bay can keep more than uBO, never less.
+
 The filter syntax is interpreted by adblock-rust, rather than uBO's JavaScript filtering engine. Procedural execution
 covers the AST operators and actions that the pinned crate exposes; this is not a claim of identical handling of every
 uBO syntax extension.
+
+## Known gaps
+
+- `$removeparam` with a regular expression, or with no value (remove every parameter), isn't supported by adblock-rust,
+  so those rules do nothing. Named parameters (`fbclid`, `gclid`…) are removed.
+- Scriptlets don't run in `about:blank` and `srcdoc` frames (uBO's `match_about_blank`).
+- HTML filtering (`##^`) and `$csp`/`$permissions` response rules aren't applied; uBO on Chromium has no HTML filtering
+  either.
+- WebSocket handshakes that Bay opens itself don't get DevTools' extra request headers.
 
 ## Existing settings
 
@@ -81,6 +105,8 @@ permissions and procedural resources. `python3 packages/chromium/scripts/test-co
 implementation against the Rust library with temporary storage and controlled offline downloads. The browser's JavaScript
 suite exercises cosmetic batching and procedural actions from the real page script. CI runs all three.
 
-After building the matching engine and app, run the `content-blocker`, `content-blocker-blocks`, `content-blocker-profile`,
-`content-blocker-private`, and `content-blocker-restored` acceptance checks. The blocked/allowed rounds also check redirect
-stand-ins, redirected requests and WebSocket handshakes against local fixtures.
+After building the matching engine and the Debug app, start Metro and run the `content-blocker`,
+`content-blocker-fails-closed`, `content-blocker-blocks`, `content-blocker-profile`, `content-blocker-private`, and
+`content-blocker-restored` acceptance checks. The blocked/allowed rounds also check redirect stand-ins, redirected
+requests, WebSocket handshakes, a tracked link's cleaned navigation, and that a scriptlet runs before a page's first
+inline script, against local fixtures.

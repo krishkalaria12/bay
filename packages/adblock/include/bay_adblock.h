@@ -36,9 +36,14 @@ typedef struct {
   bool blocked;
   // Replacement data URL, only for blocked requests. Free with bay_string_free; NULL means cancel outright.
   char *redirect;
+  // The URL to load instead, without the parameters $removeparam rules strip: only for allowed requests. Free with
+  // bay_string_free; NULL for none.
+  char *rewrite;
 } BayBlockerMatch;
 BayBlockerMatch bay_blocker_match(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
                                  const char *method);
+// The page's scriptlet code for its main world, or NULL for none. Free with bay_string_free.
+char *bay_blocker_scriptlets(const BayBlocker *blocker, const char *url);
 // {"hide": [selector], "exceptions": [selector], "generichide": bool, "script": scriptlet code,
 //  "procedural": [parsed adblock-rust procedural/action AST]}
 char *bay_blocker_cosmetic(const BayBlocker *blocker, const char *url);

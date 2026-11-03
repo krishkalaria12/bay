@@ -6,12 +6,18 @@
 // interceptor the browser process puts in front of the network service for each factory
 // (NNContentBrowserClient::WillCreateURLLoaderFactory, as Chrome's webRequest does), on a
 // background sequence. Subframe navigations go through a NavigationThrottle on the UI thread,
-// which blocks and collapses the frame. Main-frame navigations are never filtered.
+// which blocks and collapses the frame. Main-frame navigations are never blocked; navigations
+// (main frames and subframes) pass through the same interceptor only so a filter's rewrite
+// ($removeparam) can apply, as an internal redirect.
+//
+// The blocker's scriptlets reach a document synchronously as its main world starts
+// (mojom::NNScriptlets, answered on a background sequence by the host's ScriptletSource).
 
 #ifndef BAY_CORE_NN_REQUEST_FILTER_H_
 #define BAY_CORE_NN_REQUEST_FILTER_H_
 
 #include "content/public/browser/content_browser_client.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace content {
 class NavigationThrottleRegistry;
@@ -33,9 +39,12 @@ namespace nncore {
 // url: the request. source: the URL (or origin) of the document or worker asking. top: the
 // tab's page (its origin for subresources). type: an adblock resource type ("script",
 // "image", "stylesheet", "font", "media", "subdocument", "xmlhttprequest", "ping", "object",
-// "other"). Called on any thread, so it must be thread-safe and quick. true blocks.
-// redirect is null for frames/WebSockets; otherwise the host may set it to a malloc-allocated
-// data URL for a blocked request. The engine owns and frees the returned string.
+// "other", and "document" for a navigation). Called on any thread, so it must be thread-safe
+// and quick. true blocks.
+// redirect is null for subframe throttling and WebSockets. Otherwise the host may set it to a
+// malloc-allocated URL, which the engine frees: for a blocked request, a data URL answered in
+// its place (a stand-in); for an allowed one, a URL of the same origin to load instead (the
+// request with tracking parameters removed). Anything else is ignored.
 using RequestFilter = bool (*)(const char* url,
                                const char* source,
                                const char* top,
@@ -47,6 +56,14 @@ using RequestFilter = bool (*)(const char* url,
 // requests to the one current when each request starts.
 void SetRequestFilter(RequestFilter filter);
 bool HasRequestFilter();
+
+// The host's scriptlets for a document (frame_url) in a tab at top_origin: malloc-allocated
+// JavaScript for its main world, freed by the engine; null or "" for none. Called on a
+// background sequence while the document's renderer waits, so it must be thread-safe and quick.
+using ScriptletSource = char* (*)(const char* frame_url, const char* top_origin);
+void SetScriptletSource(ScriptletSource source);
+// From NNContentBrowserClient::ExposeInterfacesToRenderer: mojom::NNScriptlets for a renderer.
+void ExposeScriptlets(service_manager::BinderRegistry* registry);
 bool ShouldBlockWebSocket(content::RenderFrameHost* frame,
                          const GURL& url,
                          const net::SiteForCookies& site_for_cookies);

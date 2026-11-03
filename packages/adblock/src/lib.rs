@@ -11,6 +11,7 @@ mod ffi;
 #[cfg(target_os = "android")]
 mod jni_bridge;
 mod preprocess;
+mod removeparam;
 mod tracking;
 
 pub use blocker::{

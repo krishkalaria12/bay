@@ -103,8 +103,9 @@ NSArray<NNCoreProfile *> *LoadedProfiles();
 // loading in the background. At launch, before the engine starts.
 void PrepareContentBlocker();
 // A frame's cosmetic filters, for its document at `frameURL` in a tab showing `pageURL`: {css (a user sheet, if any),
-// script (scriptlets for its main world, if any), generic (whether to look for its classes and ids)}; nil when the
-// blocker is off, paused on the page, or not for the document.
+// script (scriptlets for its main world, only for an engine that can't run them itself), generic (whether to look for
+// its classes and ids), procedural (rules for the page script)}; nil when the blocker is off, paused on the page, or not
+// for the document.
 NSDictionary *_Nullable ContentBlockerCosmetics(NSString *frameURL, NSString *pageURL);
 // Generic hiding for classes and ids a frame's page script found: a user sheet, or nil when nothing hides.
 NSString *_Nullable ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSArray<NSString *> *classes,

@@ -9,7 +9,9 @@
 #include "base/byte_size.h"
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -26,11 +28,14 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe_producer.h"
 #include "mojo/public/cpp/system/string_data_source.h"
+#include "bay/core/mojom/nncore.mojom.h"
 #include "net/base/data_url.h"
 #include "net/base/isolation_info.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/http/http_response_headers.h"
+#include "net/http/http_status_code.h"
+#include "net/http/http_util.h"
 #include "net/url_request/redirect_info.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
@@ -86,6 +91,8 @@ const char* TypeOf(const network::ResourceRequest& request) {
     case Destination::kVideo:
     case Destination::kTrack:
       return "media";
+    case Destination::kDocument:
+      return "document";
     case Destination::kFrame:
     case Destination::kIframe:
     case Destination::kFencedframe:
@@ -105,6 +112,8 @@ const char* TypeOf(const network::ResourceRequest& request) {
 
 struct Decision {
   bool blocked = false;
+  // For a blocked request, a data URL answered in its place (a stand-in); for an allowed
+  // one, a URL of its origin to load instead (its tracking parameters removed).
   std::string redirect;
 };
 
@@ -121,7 +130,12 @@ Decision Match(const network::ResourceRequest& request,
   if (source.empty()) {
     source = factory_source;
   }
-  const std::string& top = factory_top.empty() ? source : factory_top;
+  std::string top = factory_top.empty() ? source : factory_top;
+  // A top-level document is its own context, as uBO judges a main_frame request.
+  if (request.destination == network::mojom::RequestDestination::kDocument) {
+    source = request.url.spec();
+    top = source;
+  }
   char* redirect = nullptr;
   Decision result;
   result.blocked = filter(request.url.spec().c_str(), source.c_str(), top.c_str(),
@@ -131,6 +145,20 @@ Decision Match(const network::ResourceRequest& request,
     free(redirect);
   }
   return result;
+}
+
+// The URL an allowed request loads instead (a $removeparam rewrite): a web URL of the same
+// origin that differs from `url`; empty for none.
+GURL RewriteOf(const Decision& decision, const GURL& url) {
+  if (decision.blocked || decision.redirect.empty()) {
+    return GURL();
+  }
+  GURL rewritten(decision.redirect);
+  if (!rewritten.is_valid() || !rewritten.SchemeIsHTTPOrHTTPS() || rewritten == url ||
+      !url::IsSameOriginWith(rewritten, url)) {
+    return GURL();
+  }
+  return rewritten;
 }
 
 // An in-browser stand-in, as an extension's redirect resource would answer the
@@ -199,40 +227,54 @@ void CompleteBlocked(
                base::BindOnce(&ResourceWritten, std::move(response)));
 }
 
+class FilteringFactory;
+
 // Keeps the browser between the network service and the renderer until completion.
 // A redirect is checked before the renderer can follow it, including an override
 // passed through FollowRedirect. Closing either endpoint cancels the request.
+//
+// A rewrite ($removeparam) is answered as Chrome's webRequest answers an extension's
+// redirect: the client gets a redirect to the new URL (an internal 307, or the server's
+// redirect pointed there), the network request is dropped, and a new one starts when the
+// client follows. A navigation's loader only rewrites: subframes are blocked by
+// RequestFilterThrottle, main frames never.
 class FilteringLoader : public network::mojom::URLLoader,
                         public network::mojom::URLLoaderClient {
  public:
-  FilteringLoader(
-      mojo::PendingReceiver<network::mojom::URLLoader> loader,
-      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
-      network::ResourceRequest request,
-      std::string source,
-      std::string top,
-      std::optional<content::GlobalRenderFrameHostId> frame)
-      : receiver_(this, std::move(loader)),
+  FilteringLoader(base::WeakPtr<FilteringFactory> factory,
+                  mojo::PendingReceiver<network::mojom::URLLoader> loader,
+                  mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+                  const network::ResourceRequest& request,
+                  int32_t request_id,
+                  uint32_t options,
+                  const net::MutableNetworkTrafficAnnotationTag& annotation,
+                  std::string source,
+                  std::string top,
+                  std::optional<content::GlobalRenderFrameHostId> frame,
+                  bool navigation)
+      : factory_(std::move(factory)),
+        receiver_(this, std::move(loader)),
         client_(std::move(client)),
-        request_(std::move(request)),
+        request_(request),
+        request_id_(request_id),
+        options_(options),
+        annotation_(annotation),
         source_(std::move(source)),
         top_(std::move(top)),
-        frame_(frame) {
+        frame_(frame),
+        navigation_(navigation) {
     receiver_.set_disconnect_handler(
         base::BindOnce(&FilteringLoader::Destroy, base::Unretained(this)));
     client_.set_disconnect_handler(
         base::BindOnce(&FilteringLoader::Destroy, base::Unretained(this)));
   }
 
-  void Start(network::mojom::URLLoaderFactory* factory,
-             int32_t request_id,
-             uint32_t options,
-             const net::MutableNetworkTrafficAnnotationTag& annotation) {
-    factory->CreateLoaderAndStart(
-        target_.BindNewPipeAndPassReceiver(), request_id, options, request_,
-        network_client_.BindNewPipeAndPassRemote(), annotation);
-    network_client_.set_disconnect_handler(
-        base::BindOnce(&FilteringLoader::NetworkGone, base::Unretained(this)));
+  // Starts the request, or first redirects its client to `rewrite` when that is valid.
+  void Start(const GURL& rewrite) {
+    if (rewrite.is_valid()) {
+      return InternalRedirect(rewrite);
+    }
+    StartNetwork();
   }
 
   void FollowRedirect(
@@ -240,6 +282,24 @@ class FilteringLoader : public network::mojom::URLLoader,
       const std::optional<GURL>& new_url) override {
     if (new_url) {
       request_.url = *new_url;
+    }
+    if (restart_pending_) {
+      // The client followed a redirect this loader made: the request starts again there.
+      restart_pending_ = false;
+      for (const std::string& header : headers.removed_headers) {
+        request_.headers.RemoveHeader(header);
+      }
+      request_.headers.MergeFrom(headers.modified_headers);
+      request_.cors_exempt_headers.MergeFrom(headers.modified_cors_exempt_headers);
+      if (!navigation_) {
+        const Decision decision = Match(request_, source_, top_);
+        if (decision.blocked) {
+          return Block(decision);
+        }
+      }
+      return StartNetwork();
+    }
+    if (new_url && !navigation_) {
       const Decision decision = Match(request_, source_, top_);
       if (decision.blocked) {
         return Block(decision);
@@ -250,7 +310,9 @@ class FilteringLoader : public network::mojom::URLLoader,
 
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override {
-    target_->SetPriority(priority, intra_priority_value);
+    if (target_) {
+      target_->SetPriority(priority, intra_priority_value);
+    }
   }
 
   void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr hints) override {
@@ -266,12 +328,23 @@ class FilteringLoader : public network::mojom::URLLoader,
 
   void OnReceiveRedirect(const net::RedirectInfo& redirect,
                          network::mojom::URLResponseHeadPtr head) override {
-    request_.url = redirect.new_url;
-    request_.method = redirect.new_method;
-    const Decision decision = Match(request_, source_, top_);
-    if (decision.blocked) {
+    network::ResourceRequest next = request_;
+    next.url = redirect.new_url;
+    next.method = redirect.new_method;
+    const Decision decision = Match(next, source_, top_);
+    if (decision.blocked && !navigation_) {
+      request_.url = redirect.new_url;
       return Block(decision);
     }
+    const GURL rewrite =
+        rewrites_ < kMaxRewrites ? RewriteOf(decision, redirect.new_url) : GURL();
+    if (rewrite.is_valid()) {
+      net::RedirectInfo rewritten = redirect;
+      rewritten.new_url = rewrite;
+      return RedirectClient(rewritten, std::move(head));
+    }
+    request_.url = redirect.new_url;
+    request_.method = redirect.new_method;
     client_->OnReceiveRedirect(redirect, std::move(head));
   }
 
@@ -291,7 +364,51 @@ class FilteringLoader : public network::mojom::URLLoader,
   }
 
  private:
+  // Each rewrite removes parameters, so a chain ends; this bounds one a server keeps redirecting.
+  static constexpr int kMaxRewrites = 3;
+
   ~FilteringLoader() override = default;
+
+  void StartNetwork();
+
+  // An internal redirect to `url`, as Chrome's webRequest makes one for an extension.
+  void InternalRedirect(const GURL& url) {
+    constexpr int kStatus = net::HTTP_TEMPORARY_REDIRECT;
+    const net::RedirectInfo info = net::RedirectInfo::ComputeRedirectInfo(
+        request_.method, request_.url, request_.site_for_cookies,
+        request_.update_first_party_url_on_redirect
+            ? net::RedirectInfo::FirstPartyURLPolicy::UPDATE_URL_ON_REDIRECT
+            : net::RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL,
+        request_.referrer_policy, request_.referrer.spec(), request_.request_initiator,
+        kStatus, url, /*referrer_policy_header=*/std::nullopt,
+        /*insecure_scheme_was_upgraded=*/false, /*copy_fragment=*/false,
+        /*is_signed_exchange_fallback_redirect=*/false);
+    auto head = network::mojom::URLResponseHead::New();
+    head->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+        net::HttpUtil::AssembleRawHeaders(base::StringPrintf(
+            "HTTP/1.1 %i Internal Redirect\n"
+            "Location: %s\n"
+            "Non-Authoritative-Reason: Bay content blocker\n\n",
+            kStatus, url.spec().c_str())));
+    head->encoded_data_length = 0;
+    RedirectClient(info, std::move(head));
+  }
+
+  // Sends the client a redirect this loader answers itself: the network request goes, and
+  // FollowRedirect starts a new one at the redirect's URL.
+  void RedirectClient(const net::RedirectInfo& info,
+                      network::mojom::URLResponseHeadPtr head) {
+    ++rewrites_;
+    network_client_.reset();
+    target_.reset();
+    request_.url = info.new_url;
+    request_.method = info.new_method;
+    request_.site_for_cookies = info.new_site_for_cookies;
+    request_.referrer = GURL(info.new_referrer);
+    request_.referrer_policy = info.new_referrer_policy;
+    restart_pending_ = true;
+    client_->OnReceiveRedirect(info, std::move(head));
+  }
 
   void Block(const Decision& decision) {
     CompleteBlocked(client_.Unbind(), decision, frame_, request_.url);
@@ -305,19 +422,27 @@ class FilteringLoader : public network::mojom::URLLoader,
 
   void Destroy() { delete this; }
 
+  const base::WeakPtr<FilteringFactory> factory_;
   mojo::Receiver<network::mojom::URLLoader> receiver_;
   mojo::Remote<network::mojom::URLLoaderClient> client_;
   mojo::Remote<network::mojom::URLLoader> target_;
   mojo::Receiver<network::mojom::URLLoaderClient> network_client_{this};
   network::ResourceRequest request_;
+  const int32_t request_id_;
+  const uint32_t options_;
+  const net::MutableNetworkTrafficAnnotationTag annotation_;
   const std::string source_;
   const std::string top_;
   const std::optional<content::GlobalRenderFrameHostId> frame_;
+  const bool navigation_;
+  bool restart_pending_ = false;
+  int rewrites_ = 0;
 };
 
 // One URLLoaderFactory's interceptor: a blocked request is answered at once (an error or a
-// stand-in); any other goes to the next factory through a FilteringLoader. Owns itself: it
-// goes when its last receiver or its target does.
+// stand-in); any other goes to the next factory through a FilteringLoader. A navigation's
+// factory never blocks, only rewrites. Owns itself: it goes when its last receiver or its
+// target does.
 class FilteringFactory : public network::mojom::URLLoaderFactory {
  public:
   static void Create(
@@ -325,13 +450,16 @@ class FilteringFactory : public network::mojom::URLLoaderFactory {
       mojo::PendingRemote<network::mojom::URLLoaderFactory> target,
       std::string source,
       std::string top,
-      std::optional<content::GlobalRenderFrameHostId> frame) {
+      std::optional<content::GlobalRenderFrameHostId> frame,
+      bool navigation) {
     new FilteringFactory(std::move(receiver), std::move(target), std::move(source),
-                         std::move(top), frame);
+                         std::move(top), frame, navigation);
   }
 
   FilteringFactory(const FilteringFactory&) = delete;
   FilteringFactory& operator=(const FilteringFactory&) = delete;
+
+  network::mojom::URLLoaderFactory* target() { return target_.get(); }
 
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> loader,
@@ -341,12 +469,13 @@ class FilteringFactory : public network::mojom::URLLoaderFactory {
       mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       const net::MutableNetworkTrafficAnnotationTag& annotation) override {
     const Decision decision = Match(request, source_, top_);
-    if (decision.blocked) {
+    if (decision.blocked && !navigation_) {
       return CompleteBlocked(std::move(client), decision, frame_, request.url);
     }
-    auto* proxy = new FilteringLoader(std::move(loader), std::move(client),
-                                      request, source_, top_, frame_);
-    proxy->Start(target_.get(), request_id, options, annotation);
+    auto* proxy = new FilteringLoader(weak_factory_.GetWeakPtr(), std::move(loader),
+                                      std::move(client), request, request_id, options,
+                                      annotation, source_, top_, frame_, navigation_);
+    proxy->Start(RewriteOf(decision, request.url));
   }
 
   void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
@@ -360,11 +489,13 @@ class FilteringFactory : public network::mojom::URLLoaderFactory {
       mojo::PendingRemote<network::mojom::URLLoaderFactory> target,
       std::string source,
       std::string top,
-      std::optional<content::GlobalRenderFrameHostId> frame)
+      std::optional<content::GlobalRenderFrameHostId> frame,
+      bool navigation)
       : target_(std::move(target)),
         source_(std::move(source)),
         top_(std::move(top)),
-        frame_(frame) {
+        frame_(frame),
+        navigation_(navigation) {
     receivers_.Add(this, std::move(receiver));
     receivers_.set_disconnect_handler(base::BindRepeating(
         &FilteringFactory::OnReceiverGone, base::Unretained(this)));
@@ -388,7 +519,21 @@ class FilteringFactory : public network::mojom::URLLoaderFactory {
   const std::string source_;
   const std::string top_;
   const std::optional<content::GlobalRenderFrameHostId> frame_;
+  const bool navigation_;
+  base::WeakPtrFactory<FilteringFactory> weak_factory_{this};
 };
+
+void FilteringLoader::StartNetwork() {
+  if (!factory_) {
+    // The factory's document went while a rewrite waited for its client.
+    return NetworkGone();
+  }
+  factory_->target()->CreateLoaderAndStart(
+      target_.BindNewPipeAndPassReceiver(), request_id_, options_, request_,
+      network_client_.BindNewPipeAndPassRemote(), annotation_);
+  network_client_.set_disconnect_handler(
+      base::BindOnce(&FilteringLoader::NetworkGone, base::Unretained(this)));
+}
 
 // Every interceptor runs here: off the UI thread, one sequence for all (a check takes
 // microseconds).
@@ -429,7 +574,52 @@ class RequestFilterThrottle : public content::NavigationThrottle {
   }
 };
 
+std::atomic<ScriptletSource> g_scriptlet_source{nullptr};
+
+// The scriptlet lookups' own sequence: a renderer waits on each, so they don't queue behind
+// the request filter's checks.
+scoped_refptr<base::SequencedTaskRunner> ScriptletTaskRunner() {
+  static base::NoDestructor<scoped_refptr<base::SequencedTaskRunner>> runner(
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::TaskPriority::USER_BLOCKING,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
+  return *runner;
+}
+
+// mojom::NNScriptlets for every renderer, on ScriptletTaskRunner().
+class ScriptletsHost : public mojom::NNScriptlets {
+ public:
+  static void Bind(mojo::PendingReceiver<mojom::NNScriptlets> receiver) {
+    static base::NoDestructor<ScriptletsHost> host;
+    host->receivers_.Add(host.get(), std::move(receiver));
+  }
+
+  void Get(const std::string& frame_url,
+           const std::string& top_origin,
+           GetCallback callback) override {
+    ScriptletSource source = g_scriptlet_source.load(std::memory_order_acquire);
+    const GURL url(frame_url);
+    char* script = source && url.SchemeIsHTTPOrHTTPS()
+                       ? source(url.spec().c_str(), top_origin.c_str())
+                       : nullptr;
+    std::move(callback).Run(script ? std::string(script) : std::string());
+    free(script);
+  }
+
+ private:
+  mojo::ReceiverSet<mojom::NNScriptlets> receivers_;
+};
+
 }  // namespace
+
+void SetScriptletSource(ScriptletSource source) {
+  g_scriptlet_source.store(source, std::memory_order_release);
+}
+
+void ExposeScriptlets(service_manager::BinderRegistry* registry) {
+  registry->AddInterface<mojom::NNScriptlets>(
+      base::BindRepeating(&ScriptletsHost::Bind), ScriptletTaskRunner());
+}
 
 bool HasRequestFilter() {
   return g_filter.load(std::memory_order_acquire) != nullptr;
@@ -468,7 +658,12 @@ void MaybeFilterURLLoaderFactory(
     network::URLLoaderFactoryBuilder& factory_builder,
     content::RenderFrameHost* frame) {
   using Type = content::ContentBrowserClient::URLLoaderFactoryType;
+  bool navigation = false;
   switch (type) {
+    case Type::kNavigation:
+      // Only for rewrites ($removeparam): navigations are blocked by RequestFilterThrottle.
+      navigation = true;
+      break;
     case Type::kDocumentSubResource:
     case Type::kWorkerMainResource:
     case Type::kWorkerSubResource:
@@ -476,13 +671,13 @@ void MaybeFilterURLLoaderFactory(
     case Type::kServiceWorkerSubResource:
       break;
     default:
-      // Navigations (subframes go through RequestFilterThrottle), downloads, prefetches,
-      // DevTools and early hints.
+      // Downloads, prefetches, DevTools and early hints.
       return;
   }
   // Only web pages' requests: an extension's, or one of Chrome's pages', aren't the blocker's.
+  // A navigation is, wherever it starts (the app's address bar included).
   const GURL initiator = request_initiator.GetURL();
-  if (!request_initiator.opaque() && !initiator.SchemeIsHTTPOrHTTPS()) {
+  if (!navigation && !request_initiator.opaque() && !initiator.SchemeIsHTTPOrHTTPS()) {
     return;
   }
   std::string top;
@@ -495,7 +690,8 @@ void MaybeFilterURLLoaderFactory(
       base::BindOnce(&FilteringFactory::Create, std::move(receiver), std::move(target),
                      OriginURL(request_initiator), std::move(top),
                      frame ? std::make_optional(frame->GetGlobalId())
-                           : std::nullopt));
+                           : std::nullopt,
+                     navigation));
 }
 
 void MaybeAddRequestFilterThrottle(content::NavigationThrottleRegistry& registry) {

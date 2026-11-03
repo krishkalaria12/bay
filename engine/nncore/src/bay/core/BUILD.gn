@@ -119,6 +119,7 @@ source_set("core") {
     "//printing/buildflags",
     "//services/network/public/cpp",
     "//services/network/public/mojom",
+    "//services/service_manager/public/cpp",
     "//content/public/browser",
     "//chrome/renderer",
     "//content/public/renderer",

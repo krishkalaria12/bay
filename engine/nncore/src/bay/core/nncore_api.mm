@@ -1044,6 +1044,10 @@ void WatchTracingStart(std::shared_ptr<TracingStart> start, int checks_left) {
   nncore::SetRequestFilter(filter);
 }
 
++ (void)setScriptletSource:(NNCoreScriptletSource)source {
+  nncore::SetScriptletSource(source);
+}
+
 + (void)setAutoPictureInPicture:(BOOL)enabled {
   g_auto_picture_in_picture = enabled;
   for (Profile* profile : g_browser_process->profile_manager()->GetLoadedProfiles()) {

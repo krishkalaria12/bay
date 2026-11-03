@@ -137,5 +137,37 @@ int main(int argc, char **argv) {
     Respond(@"/german", @"||german.example^\n! Expires: 4 days\n");
     Until(^BOOL { return newDone && Blocks("https://german.example/pixel"); }, "newer download applies after stale failure");
     puts("PASS: an older failed download cannot overwrite a newer list selection");
+
+    // A download is a list by its bytes: a decoded prefix can end inside a multibyte character, as Croatian and
+    // Vietnamese lists' first 512 bytes do.
+    NSMutableData *list = [[@"! Title: " dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
+    while (list.length < 511) [list appendBytes:"a" length:1];
+    [list appendData:[@"Lọc quảng cáo\n||ads.example^\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    Require(LooksLikeList(list), "a list whose first 512 bytes end inside a character is a list");
+    Require(!LooksLikeList([@"\xef\xbb\xbf  <!doctype html><p>error page</p>" dataUsingEncoding:NSUTF8StringEncoding]),
+            "an HTML error page isn't a list");
+    puts("PASS: downloads are recognised as lists by their bytes");
+
+    // Rewrites ($removeparam) and scriptlets, from the live engine.
+    const char *rules = "$removeparam=fbclid\nnews.example##+js(bay-probe)\n";
+    BayBlocker *blocker = bay_blocker_new(&rules, nullptr, 1);
+    Require(bay_blocker_use_resources(blocker, "[{\"name\":\"bay-probe.js\",\"kind\":{\"mime\":\"application/javascript\"},"
+                                               "\"content\":\"Y29uc29sZS5sb2coMSk=\"}]"),
+            "scriptlet resources load");
+    gEngine = std::make_shared<Engine>(blocker);
+    PublishLive();
+    const char *tracked = "https://news.example/story?id=1&fbclid=abc";
+    char *rewrite = nullptr;
+    Require(!Filter(tracked, tracked, tracked, "document", "GET", &rewrite), "a tracked document isn't blocked");
+    Require(rewrite && !strcmp(rewrite, "https://news.example/story?id=1"), "it loads without its tracking parameter");
+    free(rewrite);
+    char *script = Scriptlets("https://news.example/story", "https://news.example");
+    Require(script && strstr(script, "console.log(1)"), "a document gets its site's scriptlets");
+    free(script);
+    [NNCoreContentBlocker setAllowed:YES onHost:@"news.example" completion:^(NSString *error) { Require(!error, "pause succeeds"); }];
+    rewrite = nullptr;
+    Filter(tracked, tracked, tracked, "document", "GET", &rewrite);
+    Require(!rewrite && !Scriptlets("https://news.example/story", "https://news.example"), "a paused site gets neither");
+    puts("PASS: allowed documents lose tracking parameters and get scriptlets, except where paused");
   }
 }

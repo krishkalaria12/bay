@@ -57,3 +57,12 @@ interface NNPage {
   // the content blocker's cosmetic filters. It goes with the document.
   InsertUserStyle(string css, string origin);
 };
+
+// A renderer → the browser (process-wide): the content blocker's scriptlets for a document,
+// asked synchronously as its main world starts, so they run before the page's own scripts
+// (as an extension's document_start content script would). frame_url: the document's URL;
+// top_origin: its tab's top-level origin (the blocker's per-site pause). Empty: none.
+interface NNScriptlets {
+  [Sync]
+  Get(string frame_url, string top_origin) => (string script);
+};

@@ -360,6 +360,12 @@ const server = createServer((req, res) => {
   if (url.pathname === "/blocking") return res.end(page("Blocking", `<img src="/nnblock-1.png"><img src="/nnblock-2.png"><img src="/icon.png">`));
   // A page whose own markup asks for ads as it loads, each request tagged with the page's query (the content
   // blocker's first page in a profile, a restored tab at launch).
+  // The content blocker's scriptlet probe: uBO's unbreak list sets UOLPD on biologianet.com (mapped here), so a script
+  // in the head sees it only if the blocker's scriptlets ran before the page's own first script.
+  if (url.pathname === "/scriptlet-probe")
+    return res.end(page("Scriptlet probe", "probe", `<script>document.title = "probe " + typeof window.UOLPD;</script>`));
+  // A page linked with tracking parameters: the request records which reached the server.
+  if (url.pathname === "/tracked") return res.end(page("Tracked", "tracked"));
   if (url.pathname === "/adfirst") {
     const tag = url.search.slice(1);
     return res.end(
@@ -566,6 +572,7 @@ process.env.BAY_CHROMIUM_SWITCHES += ` --host-resolver-rules=${[
   "securepubads.g.doubleclick.net",
   "pagead2.googlesyndication.com",
   "adpage.test",
+  "biologianet.com",
 ]
   .map((host) => `MAP ${host} 127.0.0.1:${server.address().port}`)
   .join(", ")}`;
@@ -3562,13 +3569,27 @@ try {
           const outcome = (await cdp(t, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
           return { outcome, reached: adServed.slice(before).some((s) => s.startsWith("ib.adnxs.com") && s.endsWith(`?${tag}`)) };
         };
-        return {
+        // Pages the tab opens itself, last: a tracked link (fbclid and gclid are uBO privacy list $removeparam rules) and
+        // the scriptlet probe. Both are navigations of the tab, not fetches of the page.
+        const open = async (url, title) => {
+          await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+          return until(`${title} (${tag})`, () =>
+            evalApp(`const s = nn.store.getState(); const t = s.tabs[${JSON.stringify(tab)}];
+            return t?.title?.startsWith(${JSON.stringify(title)}) && !s.live[${JSON.stringify(tab)}]?.isLoading ? { url: t.url, title: t.title } : null`),
+          );
+        };
+        const results = {
           adnxs: await reached(`http://ib.adnxs.com/ut/v3?${tag}`),
           gpt: await reached(`http://securepubads.g.doubleclick.net/tag/js/gpt.js?${tag}`),
           adsbygoogle: await script(),
           redirect: await extraRequest("redirect"),
           websocket: await extraRequest("websocket"),
         };
+        const trackedTab = await open(`${origin}/tracked?id=${tag}&fbclid=IwAR0bay&gclid=Cj0bay`, "Tracked");
+        const trackedServed = served.has(`/tracked?id=${tag}`);
+        results.tracked = { url: trackedTab.url, served: trackedServed, cleaned: trackedServed && !trackedTab.url.includes("fbclid") };
+        results.scriptlet = (await open(`http://biologianet.com:${server.address().port}/scriptlet-probe?${tag}`, "probe")).title;
+        return results;
       };
       const stopped = (r) =>
         !r.adnxs.reached &&
@@ -3577,14 +3598,24 @@ try {
         !r.adsbygoogle.reached &&
         r.adsbygoogle.script === "stand-in" &&
         !r.redirect.reached &&
-        !r.websocket.reached;
+        !r.websocket.reached &&
+        r.tracked.cleaned &&
+        r.scriptlet === "probe object";
       const blocked = await round("blocked");
       await cef(`setContentBlockerAllowed("adpage.test", true)`);
       const allowed = await round("allowed");
       await cef(`setContentBlockerAllowed("adpage.test", false)`);
       const again = await round("again");
       if (!stopped(blocked)) throw new Error(`not blocked: ${JSON.stringify(blocked)}`);
-      if (!allowed.adnxs.reached || !allowed.gpt.reached || !allowed.adsbygoogle.reached || !allowed.redirect.reached || !allowed.websocket.reached)
+      if (
+        !allowed.adnxs.reached ||
+        !allowed.gpt.reached ||
+        !allowed.adsbygoogle.reached ||
+        !allowed.redirect.reached ||
+        !allowed.websocket.reached ||
+        allowed.tracked.cleaned ||
+        !allowed.tracked.url.includes("fbclid")
+      )
         throw new Error(`allowing the site let nothing through: ${JSON.stringify(allowed)}`);
       if (!stopped(again)) throw new Error(`blocked again? ${JSON.stringify(again)}`);
       return { firstPage: "blocked", blocked, allowed, again };

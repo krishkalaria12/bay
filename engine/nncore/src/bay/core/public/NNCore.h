@@ -27,15 +27,25 @@ NS_ASSUME_NONNULL_BEGIN
 // "stylesheet", "font", "media", "subdocument", "xmlhttprequest", "ping", "object", "other");
 // method: the HTTP request method ("GET", "POST", ...).
 // true blocks it: it fails with ERR_BLOCKED_BY_CLIENT (tab:didBlockRequests:lastURL: counts
-// it) and a blocked frame collapses. If redirect is non-null, the host may return a
-// malloc-allocated data URL in *redirect as a local stand-in. The engine frees it.
-// redirect is null for subframe navigations and WebSocket handshakes.
+// it) and a blocked frame collapses. type is "document" for a navigation, which is never
+// blocked here (a subframe's is asked again as "subdocument").
+// If redirect is non-null, the host may set *redirect to a malloc-allocated URL, which the
+// engine frees: for a blocked request, a data URL answered in its place (a stand-in); for an
+// allowed one, a URL of the same origin to load instead (its tracking parameters removed,
+// $removeparam), followed as an internal redirect. redirect is null for subframe blocking
+// checks and WebSocket handshakes.
 typedef bool (*NNCoreRequestFilter)(const char* url,
                                     const char* source,
                                     const char* top,
                                     const char* type,
                                     const char* method,
                                     char* _Nullable* _Nullable redirect);
+
+// The host's scriptlets for a document: malloc-allocated JavaScript the engine runs in its main
+// world before the page's own scripts, and frees; NULL for none. frameURL: the document's URL;
+// topOrigin: its tab's top-level origin. Called on a background sequence while the document's
+// renderer waits, so it must be thread-safe and quick.
+typedef char* _Nullable (*NNCoreScriptletSource)(const char* frameURL, const char* topOrigin);
 
 // --- Engine -----------------------------------------------------------------------------
 
@@ -162,6 +172,8 @@ NNCORE_EXPORT
 // The content blocker (NNCoreRequestFilter); NULL (the default) blocks nothing. Requests
 // starting from now on see the new one.
 + (void)setRequestFilter:(nullable NNCoreRequestFilter)filter;
+// The content blocker's scriptlets (NNCoreScriptletSource); NULL (the default) runs none.
++ (void)setScriptletSource:(nullable NNCoreScriptletSource)source;
 // Device choosers (engine:deviceChooser:tab:). index: an option, or -1 for a scanning
 // prompt's OK.
 + (void)selectDevice:(int)chooserId index:(int)index;

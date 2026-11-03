@@ -206,11 +206,13 @@ pub unsafe extern "C" fn bay_blocker_should_block(
     )
 }
 
-/// A matched request, optionally with a replacement resource. Free `redirect` with `bay_string_free`.
+/// A matched request: for a blocked one optionally a replacement resource (`redirect`, a data URL), for an allowed one
+/// optionally the URL to load instead (`rewrite`, its `$removeparam` parameters gone). Free both with `bay_string_free`.
 #[repr(C)]
 pub struct BayBlockerMatch {
     pub blocked: bool,
     pub redirect: *mut c_char,
+    pub rewrite: *mut c_char,
 }
 
 /// # Safety
@@ -232,6 +234,24 @@ pub unsafe extern "C" fn bay_blocker_match(
     BayBlockerMatch {
         blocked: result.blocked,
         redirect: result.redirect.map_or(std::ptr::null_mut(), give),
+        rewrite: result.rewrite.map_or(std::ptr::null_mut(), give),
+    }
+}
+
+/// The page's scriptlet code, or null when it has none. Free with `bay_string_free`.
+///
+/// # Safety
+/// `blocker` must be live; `url` a valid NUL-terminated string.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_scriptlets(
+    blocker: *const Blocker,
+    url: *const c_char,
+) -> *mut c_char {
+    let script = (*blocker).scriptlets(borrow(url));
+    if script.is_empty() {
+        std::ptr::null_mut()
+    } else {
+        give(script)
     }
 }
 
@@ -395,6 +415,36 @@ mod tests {
                     expected,
                 );
             }
+            bay_blocker_free(blocker);
+        }
+    }
+
+    #[test]
+    fn c_abi_reads_lists_that_are_not_utf8_and_returns_rewrites() {
+        unsafe {
+            // A Latin-1 byte in a comment must not cost the list its rules.
+            let list = b"! caf\xe9\n||ads.example^\n$removeparam=fbclid\n\0";
+            let lists = [list.as_ptr().cast::<c_char>()];
+            let blocker = bay_blocker_new(lists.as_ptr(), std::ptr::null(), 1);
+            let page = c"https://site.example/";
+            assert!(bay_blocker_should_block(
+                blocker,
+                c"https://ads.example/a.js".as_ptr(),
+                page.as_ptr(),
+                c"script".as_ptr(),
+                c"GET".as_ptr(),
+            ));
+            let url = c"https://news.example/?a=1&fbclid=x";
+            let result = bay_blocker_match(
+                blocker,
+                url.as_ptr(),
+                url.as_ptr(),
+                c"document".as_ptr(),
+                c"GET".as_ptr(),
+            );
+            assert!(!result.blocked && result.redirect.is_null());
+            assert_eq!(take(result.rewrite), "https://news.example/?a=1");
+            assert!(bay_blocker_scriptlets(blocker, page.as_ptr()).is_null());
             bay_blocker_free(blocker);
         }
     }

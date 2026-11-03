@@ -387,6 +387,16 @@ class NNContentBrowserClient : public ChromeContentBrowserClient {
         factory_override, std::move(navigation_response_task_runner),
         is_for_network_service);
   }
+  void ExposeInterfacesToRenderer(
+      service_manager::BinderRegistry* registry,
+      blink::AssociatedInterfaceRegistry* associated_registry,
+      content::RenderProcessHost* render_process_host) override {
+    ChromeContentBrowserClient::ExposeInterfacesToRenderer(
+        registry, associated_registry, render_process_host);
+    // The content blocker's scriptlets, which each document asks for as it starts.
+    ExposeScriptlets(registry);
+  }
+
   bool WillInterceptWebSocket(content::RenderFrameHost* frame) override {
     return HasRequestFilter() ||
            ChromeContentBrowserClient::WillInterceptWebSocket(frame);
