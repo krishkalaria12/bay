@@ -31,7 +31,12 @@ Pod::Spec.new do |s|
     'HEADER_SEARCH_PATHS' => "\"#{engine_public}\" \"#{adblock}/include\"",
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
   }
-  s.user_target_xcconfig = { 'OTHER_LDFLAGS' => "\"#{adblock}/target/desktop/libbay_adblock.a\"" }
+  # A search path and -l, not the archive's path in OTHER_LDFLAGS: CocoaPods drops the quotes when it merges that, and the
+  # checkout's path may have spaces in it.
+  s.user_target_xcconfig = {
+    'LIBRARY_SEARCH_PATHS' => "\"#{adblock}/target/desktop\"",
+    'OTHER_LDFLAGS' => '-l"bay_adblock"',
+  }
   s.script_phases = [{
     :name => 'Build the content blocker (packages/adblock)',
     :script => "\"#{File.expand_path('../scripts/adblock.sh', __dir__)}\"",
