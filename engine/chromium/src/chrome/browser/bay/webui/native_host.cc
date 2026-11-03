@@ -12,6 +12,9 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/environment.h"
+#include "base/immediate_crash.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
@@ -55,6 +58,7 @@
 #include "chrome/browser/bay/webui/data_bridge.h"
 #include "chrome/browser/bay/webui/keychain.h"
 #include "chrome/browser/bay/webui/notifications.h"
+#include "chrome/browser/bay/webui/crash_reports.h"
 #include "chrome/browser/bay/webui/little_bay_access.h"
 #include "chrome/browser/bay/webui/shell_appearance.h"
 #endif
@@ -1350,6 +1354,36 @@ void NativeHost::Invoke(const std::string& module,
     return;
   }
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  if (module == "BayApp" && method == "crashReports") {
+    const auto* value = At(args, 0);
+    const auto since = value ? value->GetIfDouble() : std::nullopt;
+    if (!since || !std::isfinite(*since)) {
+      std::move(callback).Run(Failure("invalid_args", "A time is required"));
+      return;
+    }
+    ListCrashReports(*since,
+                     base::BindOnce(
+                         [](InvokeCallback callback, base::Value reports) {
+                           std::move(callback).Run(
+                               Success(std::move(reports)));
+                         },
+                         std::move(callback)));
+    return;
+  }
+  if (module == "BayApp" && method == "devCrash") {
+    // Telemetry's crash test, as macOS's debug builds have it: only in an
+    // isolated developer instance, so a stray call can't take Bay down.
+    const bool isolated = !base::Environment::Create()
+                               ->GetVar("BAY_DATA_DIR")
+                               .value_or("")
+                               .empty();
+    std::move(callback).Run(Success());
+    if (isolated) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce([] { base::ImmediateCrash(); }));
+    }
+    return;
+  }
   if (module == "BaySystem" && method == "setLittleBayHotKey") {
     const auto* key = At(args, 0);
     const auto* modifiers = At(args, 1);

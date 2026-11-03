@@ -964,7 +964,11 @@
                   <td class="methods">crashReports devCrash</td>
                   <td>Telemetry sends no crash list.</td>
                   <td><code>AppModule.swift</code></td>
-                  <td><span class="tag t-port">Port</span> Read Crashpad's database, which is shared code. S</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/crash_reports.cc</code> reads the last five browser-process minidumps from
+                    Crashpad's database: the signal or Windows exception, and the module and offset it crashed at, which telemetry's existing sanitising takes
+                    as is. <code>devCrash</code> crashes only an isolated <code>BAY_DATA_DIR</code> instance. Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Test harness hooks</strong></td>
@@ -1388,6 +1392,10 @@
               cancel it, because the page's events don't reach the document.
             </li>
             <li><strong>Clear animation:</strong> the canvas draws on the main thread, so a busy window may drop frames where Core Animation wouldn't.</li>
+            <li>
+              <strong>Crash reports:</strong> minidumps carry no symbols, so a report has one frame (module and offset) where macOS's has the stack. They're
+              empty unless the build runs Crashpad, which a non-branded Chromium build may not. Page and GPU process crashes aren't reported, as on macOS.
+            </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
             <li>
               <strong>Shortcuts:</strong> a key taken off its command is swallowed rather than reaching the page, as it does on macOS. The catalog lists macOS's

@@ -173,6 +173,8 @@ source_set("impl") {
     sources += [
       "data_bridge.cc",
       "data_bridge.h",
+      "crash_reports.cc",
+      "crash_reports.h",
       "little_bay_access.cc",
       "little_bay_access.h",
       "shell_ui.cc",
@@ -188,6 +190,10 @@ source_set("impl") {
       "//chrome/app/theme:chrome_unscaled_resources_grit",
       "//chrome/browser/bay/data:data_services",
       "//chrome/browser/status_icons",
+      "//components/crash/core/app",
+      "//third_party/crashpad/crashpad/client",
+      "//third_party/crashpad/crashpad/snapshot",
+      "//third_party/crashpad/crashpad/util",
       "//chrome/common:constants",
       "//components/constrained_window",
       "//components/prefs",
@@ -658,6 +664,26 @@ test("page_security_unittests") {
     "//net",
     "//testing/gtest",
   ]
+}
+
+if (is_win || is_linux) {
+  test("crash_reports_unittests") {
+    sources = [
+      "crash_reports.cc",
+      "crash_reports.h",
+      "crash_reports_unittest.cc",
+    ]
+    deps = [
+      "//base",
+      "//base/test:run_all_unittests",
+      "//components/crash/core/app",
+      "//testing/gtest",
+      "//third_party/crashpad/crashpad/client",
+      "//third_party/crashpad/crashpad/snapshot",
+      "//third_party/crashpad/crashpad/snapshot:test_support",
+      "//third_party/crashpad/crashpad/util",
+    ]
+  }
 }
 
 test("clear_specks_unittests") {
