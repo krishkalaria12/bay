@@ -845,7 +845,12 @@
                   <td class="methods">saveTextFile openTextFile</td>
                   <td>Boost export and import resolve to <code>false</code>/<code>null</code>, so the buttons do nothing.</td>
                   <td><code>ShellModule.swift</code></td>
-                  <td><span class="tag t-wire">Wire</span> <code>ShellUI</code> already runs file dialogs (<code>pickFiles</code>). S</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> <code>webui/shell_ui.cc</code> runs both through the <code>pickFiles</code> picker, so
+                    they share its busy slot and teardown, and each opens only in its own window. Save suggests the name in the Downloads folder and writes
+                    atomically, keeping the permissions of a replaced file. Open applies the extension filter and takes up to a megabyte of UTF-8, as on macOS,
+                    and refuses anything but a regular file. Native tests in <code>native_host_unittest.cc</code>; Linux run pending.
+                  </td>
                 </tr>
                 <tr data-kind="port">
                   <td><strong>Font list</strong></td>

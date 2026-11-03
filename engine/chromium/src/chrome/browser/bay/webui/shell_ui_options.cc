@@ -186,6 +186,33 @@ std::optional<ShellIconRequest> ParseShellFileIconArgs(
   return ShellIconRequest{std::move(path),
                           static_cast<int>(std::round(*points * 2))};
 }
+std::optional<ShellSaveTextRequest> ParseShellSaveTextArgs(
+    const base::ListValue& args) {
+  if (args.size() != 2 || !args[0].is_string() || !args[1].is_string())
+    return std::nullopt;
+  const auto& name = args[0].GetString();
+  if (name.empty() || name == "." || name == ".." ||
+      name.find_first_of(std::string_view("/\\\0", 3)) != std::string::npos ||
+      !base::IsStringUTF8(name))
+    return std::nullopt;
+  return ShellSaveTextRequest{base::FilePath::FromUTF8Unsafe(name),
+                              args[1].GetString()};
+}
+std::optional<std::vector<base::FilePath::StringType>> ParseShellOpenTextArgs(
+    const base::ListValue& args) {
+  if (args.size() != 1 || !args[0].is_list() || args[0].GetList().size() > 32)
+    return std::nullopt;
+  std::vector<base::FilePath::StringType> extensions;
+  for (const auto& extension : args[0].GetList()) {
+    if (!extension.is_string() || extension.GetString().empty() ||
+        !std::ranges::all_of(extension.GetString(),
+                             base::IsAsciiAlphaNumeric<char>))
+      return std::nullopt;
+    extensions.push_back(
+        base::FilePath::FromUTF8Unsafe(extension.GetString()).value());
+  }
+  return extensions;
+}
 std::optional<std::string> NormalizeShellPromptText(std::u16string_view text) {
   const auto trimmed = base::TrimWhitespace(text, base::TRIM_ALL);
   if (trimmed.empty())

@@ -5,18 +5,25 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/files/file_util.h"
+#include "base/files/important_file_writer.h"
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ref_counted.h"
+#include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/icon_loader.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/common/pref_names.h"
 #include "components/constrained_window/constrained_window_views.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/filename_util.h"
 #include "skia/ext/image_operations.h"
@@ -49,6 +56,10 @@
 #include "ui/views/window/dialog_delegate.h"
 #include "url/gurl.h"
 
+#if !BUILDFLAG(IS_WIN)
+#include <sys/stat.h>
+#endif
+
 namespace bay {
 namespace {
 std::string Success(std::optional<std::string> value) {
@@ -63,6 +74,10 @@ std::string Failure(const char* code, const char* message) {
                  "error",
                  base::DictValue().Set("code", code).Set("message", message)))
       .value_or("{}");
+}
+std::string SavedResult(bool saved) {
+  return base::WriteJson(base::DictValue().Set("value", saved))
+      .value_or("{\"value\":false}");
 }
 std::string ConfirmResult(bool confirmed, bool suppressed) {
   return base::WriteJson(
@@ -220,6 +235,106 @@ MakeDialog(const Options& options) {
       },
       options);
 }
+
+// A Boost's export, say: true once it's on disk.
+std::string WriteTextFile(const std::string& contents,
+                          const base::FilePath& path) {
+#if !BUILDFLAG(IS_WIN)
+  // The atomic writer's temporary file is private, and it replaces the target.
+  // Keep the mode of the file being replaced, or the usual one for a new file.
+  int mode = 0644;
+  base::GetPosixFilePermissions(path, &mode);
+#endif
+  const bool written =
+      base::ImportantFileWriter::WriteFileAtomically(path, contents);
+#if !BUILDFLAG(IS_WIN)
+  if (written)
+    base::SetPosixFilePermissions(path, mode);
+#endif
+  return SavedResult(written);
+}
+// A Boost to import, up to a megabyte. Null when unreadable or not UTF-8.
+std::string ReadTextFile(const base::FilePath& path) {
+#if !BUILDFLAG(IS_WIN)
+  // Opening a FIFO would wait for a writer that may never come.
+  struct stat info;
+  if (stat(path.value().c_str(), &info) != 0 || !S_ISREG(info.st_mode))
+    return Success(std::nullopt);
+#endif
+  std::string text;
+  if (!base::ReadFileToStringWithMaxSize(path, &text, 1000000) ||
+      !base::IsStringUTF8AllowingNoncharacters(text))
+    return Success(std::nullopt);
+  return Success(std::move(text));
+}
+}  // namespace
+
+// What a file picker opens as, and how it answers.
+struct ShellFilePickerRequest {
+  ui::SelectFileDialog::Type type =
+      ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE;
+  std::u16string title = u"Open files";
+  base::FilePath default_path;
+  std::optional<ui::SelectFileDialog::FileTypeInfo> file_types;
+  int file_type_index = 0;
+  base::FilePath::StringType default_extension;
+  std::string cancelled = SelectedFiles({});
+  // Turns the chosen file into the answer, off the UI thread. Without it, the
+  // answer is the chosen files' URLs.
+  base::OnceCallback<std::string(const base::FilePath&)> disk_work;
+};
+
+namespace {
+ShellFilePickerRequest ImportFileRequest(ShellUI::ImportFileKind kind) {
+  ShellFilePickerRequest request;
+  request.type = ui::SelectFileDialog::SELECT_OPEN_FILE;
+  request.title = u"Choose import file";
+  request.file_type_index = 1;
+  auto& types = request.file_types.emplace();
+  const bool csv = kind == ShellUI::ImportFileKind::kPasswordsCSV;
+  types.extensions =
+      csv ? std::vector<
+                std::vector<base::FilePath::StringType>>{{FILE_PATH_LITERAL(
+                "csv")}}
+          : std::vector<std::vector<base::FilePath::StringType>>{
+                {FILE_PATH_LITERAL("html"), FILE_PATH_LITERAL("htm")}};
+  types.extension_description_overrides = {csv ? u"Password CSV"
+                                               : u"Bookmarks HTML"};
+  types.include_all_files = false;
+  return request;
+}
+ShellFilePickerRequest SaveTextRequest(const HostContext& context,
+                                       ShellSaveTextRequest save) {
+  ShellFilePickerRequest request;
+  request.type = ui::SelectFileDialog::SELECT_SAVEAS_FILE;
+  request.title = u"Save File";
+  // Native dialogs read a relative path against the browser's working folder.
+  base::FilePath folder;
+  if (Profile* profile = context.profile())
+    folder = profile->GetPrefs()->GetFilePath(prefs::kDownloadDefaultDirectory);
+  request.default_path = folder.Append(save.name);
+  const auto extension = save.name.FinalExtension();
+  if (!extension.empty())
+    request.default_extension = extension.substr(1);
+  request.cancelled = SavedResult(false);
+  request.disk_work = base::BindOnce(&WriteTextFile, std::move(save.contents));
+  return request;
+}
+ShellFilePickerRequest OpenTextRequest(
+    std::vector<base::FilePath::StringType> extensions) {
+  ShellFilePickerRequest request;
+  request.type = ui::SelectFileDialog::SELECT_OPEN_FILE;
+  request.title = u"Open File";
+  if (!extensions.empty()) {
+    auto& types = request.file_types.emplace();
+    types.extensions = {std::move(extensions)};
+    types.include_all_files = false;
+    request.file_type_index = 1;
+  }
+  request.cancelled = Success(std::nullopt);
+  request.disk_work = base::BindOnce(&ReadTextFile);
+  return request;
+}
 }  // namespace
 
 // SelectFile may run a nested loop or complete synchronously. Keep the listener
@@ -230,20 +345,8 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
   FilePicker(Response response, base::OnceCallback<void(FilePicker*)> done)
       : response_(std::move(response)), done_(std::move(done)) {}
 
-  void Show(gfx::NativeWindow parent, std::optional<ImportFileKind> kind) {
-    if (kind) {
-      file_types_.emplace();
-      const bool csv = *kind == ImportFileKind::kPasswordsCSV;
-      file_types_->extensions =
-          csv ? std::vector<
-                    std::vector<base::FilePath::StringType>>{{FILE_PATH_LITERAL(
-                    "csv")}}
-              : std::vector<std::vector<base::FilePath::StringType>>{
-                    {FILE_PATH_LITERAL("html"), FILE_PATH_LITERAL("htm")}};
-      file_types_->extension_description_overrides = {csv ? u"Password CSV"
-                                                          : u"Bookmarks HTML"};
-      file_types_->include_all_files = false;
-    }
+  void Show(gfx::NativeWindow parent, ShellFilePickerRequest request) {
+    request_ = std::move(request);
     auto dialog = ui::SelectFileDialog::Create(this, nullptr);
     // A factory can re-enter and destroy the owner before returning.
     if (!response_) {
@@ -256,17 +359,29 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
       return;
     }
     dialog_ = dialog;
-    dialog->SelectFile(kind ? ui::SelectFileDialog::SELECT_OPEN_FILE
-                            : ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE,
-                       kind ? u"Choose import file" : u"Open files",
-                       base::FilePath(), file_types_ ? &*file_types_ : nullptr,
-                       kind ? 1 : 0, base::FilePath::StringType(), parent,
-                       nullptr);
+    dialog->SelectFile(request_.type, request_.title, request_.default_path,
+                       request_.file_types ? &*request_.file_types : nullptr,
+                       request_.file_type_index, request_.default_extension,
+                       parent, nullptr);
   }
 
   void FileSelected(const ui::SelectedFileInfo& file, int) override {
-    Complete(SelectedFiles(
-        base::ListValue().Append(net::FilePathToFileURL(file.path()).spec())));
+    if (!response_ || on_disk_)
+      return;
+    if (!request_.disk_work) {
+      Complete(SelectedFiles(base::ListValue().Append(
+          net::FilePathToFileURL(file.path()).spec())));
+      return;
+    }
+    // The busy slot stays taken until the disk answers. If the owner closes
+    // first it answers as cancelled, and the accepted work still finishes.
+    on_disk_ = true;
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE,
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+         base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
+        base::BindOnce(std::move(request_.disk_work), file.path()),
+        base::BindOnce(&FilePicker::Complete, scoped_refptr<FilePicker>(this)));
   }
   void MultiFilesSelected(
       const std::vector<ui::SelectedFileInfo>& selected) override {
@@ -275,7 +390,7 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
       files.Append(net::FilePathToFileURL(file.path()).spec());
     Complete(SelectedFiles(std::move(files)));
   }
-  void FileSelectionCanceled() override { Complete(SelectedFiles({})); }
+  void FileSelectionCanceled() override { Complete(request_.cancelled); }
 
  private:
   friend class base::RefCounted<FilePicker>;
@@ -309,7 +424,8 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
                          std::move(keep_alive), std::move(done)));
   }
 
-  std::optional<ui::SelectFileDialog::FileTypeInfo> file_types_;
+  ShellFilePickerRequest request_;
+  bool on_disk_ = false;
   scoped_refptr<ui::SelectFileDialog> dialog_;
   Response response_;
   base::OnceCallback<void(FilePicker*)> done_;
@@ -452,10 +568,10 @@ ShellUI::~ShellUI() {
 void ShellUI::PickImportFile(const HostContext& context,
                              ImportFileKind kind,
                              Response callback) {
-  StartFilePicker(context, kind, std::move(callback));
+  StartFilePicker(context, ImportFileRequest(kind), std::move(callback));
 }
 void ShellUI::StartFilePicker(const HostContext& context,
-                              std::optional<ImportFileKind> kind,
+                              ShellFilePickerRequest request,
                               Response callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -476,7 +592,7 @@ void ShellUI::StartFilePicker(const HostContext& context,
       std::move(callback),
       base::BindOnce(&ShellUI::FilePickerFinished, weak_factory_.GetWeakPtr()));
   file_picker_ = picker;
-  picker->Show(window->GetWindow()->GetNativeWindow(), kind);
+  picker->Show(window->GetWindow()->GetNativeWindow(), std::move(request));
 }
 bool ShellUI::Dispatch(const HostContext& context,
                        const std::string& module,
@@ -491,7 +607,29 @@ bool ShellUI::Dispatch(const HostContext& context,
           Failure("invalid_args", "The file picker takes no arguments"));
       return true;
     }
-    StartFilePicker(context, std::nullopt, std::move(callback));
+    StartFilePicker(context, ShellFilePickerRequest(), std::move(callback));
+    return true;
+  }
+  if (module == "BayShell" && method == "saveTextFile") {
+    auto save = ParseShellSaveTextArgs(args);
+    if (!save) {
+      std::move(callback).Run(
+          Failure("invalid_args", "Invalid file name or contents"));
+      return true;
+    }
+    StartFilePicker(context, SaveTextRequest(context, std::move(*save)),
+                    std::move(callback));
+    return true;
+  }
+  if (module == "BayShell" && method == "openTextFile") {
+    auto extensions = ParseShellOpenTextArgs(args);
+    if (!extensions) {
+      std::move(callback).Run(
+          Failure("invalid_args", "Invalid file extensions"));
+      return true;
+    }
+    StartFilePicker(context, OpenTextRequest(std::move(*extensions)),
+                    std::move(callback));
     return true;
   }
   if (module == "BayShell" && method == "showMenu") {

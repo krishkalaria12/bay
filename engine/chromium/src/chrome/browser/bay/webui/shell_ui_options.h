@@ -48,6 +48,10 @@ struct ShellIconRequest {
   base::FilePath path;
   int pixels;
 };
+struct ShellSaveTextRequest {
+  base::FilePath name;
+  std::string contents;
+};
 std::optional<ShellPromptOptions> ParseShellPromptOptions(
     const base::DictValue& options);
 std::optional<ShellConfirmOptions> ParseShellConfirmOptions(
@@ -59,6 +63,12 @@ std::optional<std::vector<ShellMenuItem>> ParseShellMenuArgs(
 // "#RRGGBB" or "#RRGGBBAA", with or without the "#", as macOS reads swatches.
 std::optional<uint32_t> ParseShellSwatch(std::string_view hex);
 std::optional<ShellIconRequest> ParseShellFileIconArgs(
+    const base::ListValue& args);
+// BayShell.saveTextFile's name and contents. The name is a single file name.
+std::optional<ShellSaveTextRequest> ParseShellSaveTextArgs(
+    const base::ListValue& args);
+// BayShell.openTextFile's extensions, as the file dialog takes them.
+std::optional<std::vector<base::FilePath::StringType>> ParseShellOpenTextArgs(
     const base::ListValue& args);
 // Matches the macOS shell: accepting whitespace-only text is cancellation.
 std::optional<std::string> NormalizeShellPromptText(std::u16string_view text);

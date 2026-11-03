@@ -9,7 +9,10 @@
 #include <utility>
 #include <vector>
 
+#include <sys/stat.h>
+
 #include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -43,7 +46,9 @@
 #include "chrome/browser/platform_util_internal.h"
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/prefs/pref_service.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "chrome/browser/ui/media_router/ui_media_sink.h"
@@ -466,6 +471,8 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
   EXPECT_TRUE(modules->contains("BaySystem"));
   EXPECT_TRUE(methods->contains("BayShell.prompt"));
   EXPECT_FALSE(methods->contains("BayShell.pickFiles"));
+  EXPECT_FALSE(methods->contains("BayShell.saveTextFile"));
+  EXPECT_FALSE(methods->contains("BayShell.openTextFile"));
   EXPECT_FALSE(methods->contains("BayShell.showMenu"));
   EXPECT_TRUE(methods->contains("BaySystem.fileIcon"));
   EXPECT_TRUE(methods->contains("BayCEF.secretStorage"));
@@ -893,6 +900,9 @@ class FakeFileDialog : public ui::SelectFileDialog {
   Type selection_type = SELECT_NONE;
   std::optional<FileTypeInfo> types;
   std::u16string dialog_title;
+  base::FilePath suggested_path;
+  base::FilePath::StringType suggested_extension;
+  int type_index = 0;
   std::shared_ptr<FileDialogLifetime> lifetime =
       std::make_shared<FileDialogLifetime>();
 
@@ -910,7 +920,12 @@ class FakeFileDialog : public ui::SelectFileDialog {
     dialog_title = title;
     if (file_types)
       types.emplace(*file_types);
-    if (type == SELECT_OPEN_MULTI_FILE) {
+    suggested_path = default_path;
+    suggested_extension = default_extension;
+    type_index = file_type_index;
+    if (title == u"Save File" || title == u"Open File") {
+      // Text files: their tests check the choices.
+    } else if (type == SELECT_OPEN_MULTI_FILE) {
       EXPECT_EQ(title, u"Open files");
       EXPECT_FALSE(file_types);
       EXPECT_EQ(file_type_index, 0);
@@ -1247,6 +1262,8 @@ TEST_F(FilePickerTest, WindowHostAdvertisesFilePicking) {
   const auto* methods = info.FindList("optionalMethods");
   ASSERT_TRUE(methods);
   EXPECT_TRUE(methods->contains("BayShell.pickFiles"));
+  EXPECT_TRUE(methods->contains("BayShell.saveTextFile"));
+  EXPECT_TRUE(methods->contains("BayShell.openTextFile"));
   EXPECT_TRUE(methods->contains("BayShell.showMenu"));
 }
 
@@ -1548,6 +1565,183 @@ TEST_F(FilePickerTest, CoordinatorCannotBorrowAWindowEvenWhenPickerIsBusy) {
                                "BayShell", "pickFiles", {}, callback));
   ExpectError(result.Get(), "window_required");
   EXPECT_EQ(factory_->dialogs.size(), 1u);
+}
+
+class TextFileDialogTest : public FilePickerTest {
+ protected:
+  void SetUp() override {
+    FilePickerTest::SetUp();
+    ASSERT_TRUE(temp_.CreateUniqueTempDir());
+    profile()->GetPrefs()->SetFilePath(prefs::kDownloadDefaultDirectory,
+                                       temp_.GetPath());
+  }
+  void Call(const char* method, base::ListValue args, ShellUI::Response done) {
+    EXPECT_TRUE(shell_->Dispatch(HostContext::ForWindow(window_), "BayShell",
+                                 method, args, done));
+  }
+  std::string Save(const base::FilePath& path, const std::string& contents) {
+    base::test::TestFuture<const std::string&> result;
+    Call("saveTextFile",
+         base::ListValue().Append("Boost.json").Append(contents),
+         result.GetCallback());
+    factory_->dialogs.back()->Select(ui::SelectedFileInfo(path));
+    const std::string answer = result.Get();
+    task_environment()->RunUntilIdle();
+    return answer;
+  }
+  std::string Open(const base::FilePath& path) {
+    base::test::TestFuture<const std::string&> result;
+    Call("openTextFile", base::ListValue().Append(base::ListValue()),
+         result.GetCallback());
+    factory_->dialogs.back()->Select(ui::SelectedFileInfo(path));
+    const std::string answer = result.Get();
+    task_environment()->RunUntilIdle();
+    return answer;
+  }
+  base::FilePath In(const char* name) { return temp_.GetPath().Append(name); }
+  base::ScopedTempDir temp_;
+};
+
+TEST_F(TextFileDialogTest, SaveSuggestsTheNameInDownloads) {
+  base::test::TestFuture<const std::string&> result;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       result.GetCallback());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->selection_type, ui::SelectFileDialog::SELECT_SAVEAS_FILE);
+  EXPECT_EQ(dialog->parent, root_window());
+  EXPECT_EQ(dialog->suggested_path, In("Boost.json"));
+  EXPECT_EQ(dialog->suggested_extension, "json");
+  EXPECT_FALSE(dialog->types);
+  dialog->Cancel();
+  EXPECT_EQ(result.Get(), R"({"value":false})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(dialog->detach_count, 1);
+  EXPECT_FALSE(base::PathExists(In("Boost.json")));
+}
+TEST_F(TextFileDialogTest, SaveWritesTheChosenFileWithUsualPermissions) {
+  EXPECT_EQ(Save(In("chosen.json"), "{\"é\":1}"), R"({"value":true})");
+  std::string written;
+  ASSERT_TRUE(base::ReadFileToString(In("chosen.json"), &written));
+  EXPECT_EQ(written, "{\"é\":1}");
+  int mode = 0;
+  ASSERT_TRUE(base::GetPosixFilePermissions(In("chosen.json"), &mode));
+  EXPECT_EQ(mode, 0644);
+}
+TEST_F(TextFileDialogTest, SaveReplacesAFileAndKeepsItsPermissions) {
+  ASSERT_TRUE(base::WriteFile(In("kept.json"), "old contents"));
+  ASSERT_TRUE(base::SetPosixFilePermissions(In("kept.json"), 0640));
+  EXPECT_EQ(Save(In("kept.json"), "new"), R"({"value":true})");
+  std::string written;
+  ASSERT_TRUE(base::ReadFileToString(In("kept.json"), &written));
+  EXPECT_EQ(written, "new");
+  int mode = 0;
+  ASSERT_TRUE(base::GetPosixFilePermissions(In("kept.json"), &mode));
+  EXPECT_EQ(mode, 0640);
+}
+TEST_F(TextFileDialogTest, SaveThatCannotWriteAnswersFalse) {
+  EXPECT_EQ(Save(In("missing/chosen.json"), "text"), R"({"value":false})");
+}
+TEST_F(TextFileDialogTest, OpenFiltersOnTheExtensionsAndReturnsTheText) {
+  ASSERT_TRUE(base::WriteFile(In("boost.json"), "{\"é\":1}"));
+  base::test::TestFuture<const std::string&> result;
+  Call("openTextFile",
+       base::ListValue().Append(base::ListValue().Append("json")),
+       result.GetCallback());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->selection_type, ui::SelectFileDialog::SELECT_OPEN_FILE);
+  ASSERT_TRUE(dialog->types);
+  ASSERT_EQ(dialog->types->extensions.size(), 1u);
+  EXPECT_EQ(dialog->types->extensions[0],
+            std::vector<base::FilePath::StringType>{"json"});
+  EXPECT_FALSE(dialog->types->include_all_files);
+  EXPECT_EQ(dialog->type_index, 1);
+  dialog->Select(ui::SelectedFileInfo(In("boost.json")));
+  auto value = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(value);
+  EXPECT_EQ(*value->FindString("value"), "{\"é\":1}");
+}
+TEST_F(TextFileDialogTest, OpenWithoutExtensionsShowsEveryFile) {
+  base::test::TestFuture<const std::string&> result;
+  Call("openTextFile", base::ListValue().Append(base::ListValue()),
+       result.GetCallback());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_FALSE(dialog->types);
+  EXPECT_EQ(dialog->type_index, 0);
+  dialog->Cancel();
+  EXPECT_EQ(result.Get(), R"({"value":null})");
+}
+TEST_F(TextFileDialogTest, OpenTakesUpToAMegabyteOfUtf8) {
+  ASSERT_TRUE(base::WriteFile(In("fits"), std::string(1000000, 'a')));
+  EXPECT_NE(Open(In("fits")), R"({"value":null})");
+  ASSERT_TRUE(base::WriteFile(In("large"), std::string(1000001, 'a')));
+  EXPECT_EQ(Open(In("large")), R"({"value":null})");
+  ASSERT_TRUE(base::WriteFile(In("binary"), std::string("\xff\xfe", 2)));
+  EXPECT_EQ(Open(In("binary")), R"({"value":null})");
+  EXPECT_EQ(Open(In("missing")), R"({"value":null})");
+}
+TEST_F(TextFileDialogTest, OpenRefusesWhatIsNotARegularFile) {
+  EXPECT_EQ(Open(temp_.GetPath()), R"({"value":null})");
+  ASSERT_EQ(mkfifo(In("fifo").value().c_str(), 0600), 0);
+  EXPECT_EQ(Open(In("fifo")), R"({"value":null})");
+}
+TEST_F(TextFileDialogTest, TheDiskWorkKeepsThePickerBusy) {
+  base::test::TestFuture<const std::string&> save;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       save.GetCallback());
+  factory_->dialogs.back()->Select(ui::SelectedFileInfo(In("chosen.json")));
+  base::test::TestFuture<const std::string&> second;
+  Call("openTextFile", base::ListValue().Append(base::ListValue()),
+       second.GetCallback());
+  ExpectError(second.Get(), "dialog_busy");
+  EXPECT_EQ(factory_->dialogs.size(), 1u);
+  EXPECT_EQ(save.Get(), R"({"value":true})");
+  // A dialog that reports twice doesn't write or answer twice.
+  factory_->dialogs.back()->Select(ui::SelectedFileInfo(In("second.json")));
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(base::PathExists(In("second.json")));
+}
+TEST_F(TextFileDialogTest, ClosingAnswersOnceAndALateChoiceWritesNothing) {
+  std::vector<std::string> results;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       base::BindLambdaForTesting(
+           [&](const std::string& result) { results.push_back(result); }));
+  auto dialog = factory_->dialogs.back();
+  shell_.reset();
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results[0], R"({"value":false})");
+  dialog->Select(ui::SelectedFileInfo(In("late.json")));
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_FALSE(base::PathExists(In("late.json")));
+}
+TEST_F(TextFileDialogTest, ChoiceBeforeClosingStillReachesTheDisk) {
+  std::vector<std::string> results;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       base::BindLambdaForTesting(
+           [&](const std::string& result) { results.push_back(result); }));
+  factory_->dialogs.back()->Select(ui::SelectedFileInfo(In("chosen.json")));
+  shell_.reset();
+  ASSERT_EQ(results.size(), 1u);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_TRUE(base::PathExists(In("chosen.json")));
+}
+TEST_F(TextFileDialogTest, CoordinatorAndBadArgumentsOpenNoDialog) {
+  base::test::TestFuture<const std::string&> coordinator;
+  auto callback = coordinator.GetCallback();
+  auto args = base::ListValue().Append("Boost.json").Append("text");
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "saveTextFile", args, callback));
+  ExpectError(coordinator.Get(), "window_required");
+  base::test::TestFuture<const std::string&> name;
+  Call("saveTextFile", base::ListValue().Append("../a.json").Append("text"),
+       name.GetCallback());
+  ExpectError(name.Get(), "invalid_args");
+  base::test::TestFuture<const std::string&> extension;
+  Call("openTextFile", base::ListValue().Append(base::ListValue().Append("*")),
+       extension.GetCallback());
+  ExpectError(extension.Get(), "invalid_args");
+  EXPECT_TRUE(factory_->dialogs.empty());
 }
 
 TEST_F(FilePickerTest, NullFactoryResultIsAnErrorAndReleasesBusySlot) {

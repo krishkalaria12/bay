@@ -704,6 +704,8 @@ base::DictValue NativeHost::Info() const {
   engine_methods.Append("BayShell.confirm");
   if (context_.is_window()) {
     engine_methods.Append("BayShell.pickFiles");
+    engine_methods.Append("BayShell.saveTextFile");
+    engine_methods.Append("BayShell.openTextFile");
     engine_methods.Append("BayShell.showMenu");
   }
   engine_methods.Append("BaySystem.fileIcon");

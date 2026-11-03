@@ -257,4 +257,47 @@ TEST(ShellUIOptionsTest, RejectsInvalidIconSizeOrWireShape) {
         base::ListValue().Append("file.bin").Append(size)))
         << size;
 }
+TEST(ShellUIOptionsTest, SaveTextTakesASingleFileNameAndAnyContents) {
+  auto parsed = ParseShellSaveTextArgs(
+      base::ListValue().Append("Bôost.json").Append("{\"name\":1}\n"));
+  ASSERT_TRUE(parsed);
+  EXPECT_EQ(parsed->name.AsUTF8Unsafe(), "Bôost.json");
+  EXPECT_EQ(parsed->contents, "{\"name\":1}\n");
+  EXPECT_TRUE(ParseShellSaveTextArgs(base::ListValue().Append("a").Append("")));
+  for (const std::string& name :
+       {std::string(""), std::string("."), std::string(".."),
+        std::string("a/b.json"), std::string("../b.json"),
+        std::string("a\\b.json"), std::string("a\0b.json", 8)})
+    EXPECT_FALSE(
+        ParseShellSaveTextArgs(base::ListValue().Append(name).Append("text")))
+        << name;
+  EXPECT_FALSE(ParseShellSaveTextArgs(base::ListValue().Append("a")));
+  EXPECT_FALSE(ParseShellSaveTextArgs(base::ListValue().Append("a").Append(1)));
+  EXPECT_FALSE(ParseShellSaveTextArgs(base::ListValue().Append(1).Append("a")));
+}
+TEST(ShellUIOptionsTest, OpenTextTakesPlainExtensions) {
+  auto parsed = ParseShellOpenTextArgs(base::ListValue().Append(
+      base::ListValue().Append("json").Append("txt")));
+  ASSERT_TRUE(parsed);
+  ASSERT_EQ(parsed->size(), 2u);
+  EXPECT_EQ((*parsed)[0], FILE_PATH_LITERAL("json"));
+  EXPECT_EQ((*parsed)[1], FILE_PATH_LITERAL("txt"));
+  auto none =
+      ParseShellOpenTextArgs(base::ListValue().Append(base::ListValue()));
+  ASSERT_TRUE(none);
+  EXPECT_TRUE(none->empty());
+  for (const char* extension : {"", ".json", "*", "a/b", "a b"})
+    EXPECT_FALSE(ParseShellOpenTextArgs(
+        base::ListValue().Append(base::ListValue().Append(extension))))
+        << extension;
+  EXPECT_FALSE(ParseShellOpenTextArgs(base::ListValue()));
+  EXPECT_FALSE(ParseShellOpenTextArgs(base::ListValue().Append("json")));
+  EXPECT_FALSE(ParseShellOpenTextArgs(
+      base::ListValue().Append(base::ListValue().Append(1))));
+  base::ListValue too_many;
+  for (int i = 0; i < 33; ++i)
+    too_many.Append("json");
+  EXPECT_FALSE(
+      ParseShellOpenTextArgs(base::ListValue().Append(std::move(too_many))));
+}
 }  // namespace bay

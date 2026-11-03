@@ -23,6 +23,7 @@ class DialogDelegate;
 }
 namespace bay {
 class HostContext;
+struct ShellFilePickerRequest;
 
 // UI-sequence owner for native shell dialogs, context menus and icon requests.
 // Destroying the owning NativeHost dismisses dialogs and menus and settles each
@@ -37,8 +38,9 @@ class ShellUI {
   ShellUI(const ShellUI&) = delete;
   ShellUI& operator=(const ShellUI&) = delete;
   // False leaves callback untouched. The only handled methods are
-  // BayShell.prompt, BayShell.confirm, BayShell.showMenu, BayShell.pickFiles
-  // and BaySystem.fileIcon, with normal native wire envelopes.
+  // BayShell.prompt, BayShell.confirm, BayShell.showMenu, BayShell.pickFiles,
+  // BayShell.saveTextFile, BayShell.openTextFile and BaySystem.fileIcon, with
+  // normal native wire envelopes.
   bool Dispatch(const HostContext& context,
                 const std::string& module,
                 const std::string& method,
@@ -53,7 +55,7 @@ class ShellUI {
 
  private:
   void StartFilePicker(const HostContext& context,
-                       std::optional<ImportFileKind> kind,
+                       ShellFilePickerRequest request,
                        Response callback);
   class ContextMenu;
   class FilePicker;

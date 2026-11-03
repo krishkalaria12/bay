@@ -225,6 +225,8 @@ base::ListValue PlatformServices::SupportedMethods() const {
   base::ListValue methods;
   for (auto* name : {"BayShell.showMenu",
                      "BayShell.pickFiles",
+                     "BayShell.saveTextFile",
+                     "BayShell.openTextFile",
                      "BayShell.confirm",
                      "BayShell.prompt",
                      "BaySystem.fileIcon",
@@ -265,7 +267,9 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
                                     "The host profile is no longer available"));
     return true;
   }
-  if (module == "BayShell" && (method == "showMenu" || method == "pickFiles") &&
+  if (module == "BayShell" &&
+      (method == "showMenu" || method == "pickFiles" ||
+       method == "saveTextFile" || method == "openTextFile") &&
       !context_.window()) {
     std::move(callback).Run(
         Failure("window_required", "This operation requires a window host"));
