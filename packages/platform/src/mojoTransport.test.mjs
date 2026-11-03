@@ -377,3 +377,36 @@ test("only notification responses retain events and delivered responses do not r
   assert.deepEqual(received, ["delivered"]);
   transport.dispose();
 });
+
+test("install prompts arriving before extension bridge subscription are retained in order", async () => {
+  const native = endpoints();
+  const transport = await createMojoTransport(native);
+  native.emit("event", "BayExtensions", "onInstallPrompt", '{"requestId":"first"}');
+  native.emit("event", "BayExtensions", "onInstallPrompt", '{"requestId":"second"}');
+  const seen = [];
+  const subscription = transport.subscribe("BayExtensions", "onInstallPrompt", (prompt) => seen.push(prompt.requestId));
+  assert.deepEqual(seen, []);
+  await Promise.resolve();
+  assert.deepEqual(seen, ["first", "second"]);
+  subscription.remove();
+  const removed = transport.subscribe("BayExtensions", "onInstallPrompt", () => assert.fail("removed subscriber"));
+  removed.remove();
+  native.emit("event", "BayExtensions", "onInstallPrompt", '{"requestId":"third"}');
+  transport.subscribe("BayExtensions", "onInstallPrompt", (prompt) => seen.push(prompt.requestId));
+  await Promise.resolve();
+  assert.deepEqual(seen, ["first", "second", "third"]);
+  transport.dispose();
+});
+
+test("install prompt queue overflow explicitly cancels the excess native callback", async () => {
+  const native = endpoints();
+  const transport = await createMojoTransport(native);
+  for (let id = 0; id < 33; id++) native.emit("event", "BayExtensions", "onInstallPrompt", JSON.stringify({ requestId: String(id) }));
+  await Promise.resolve();
+  assert.deepEqual(native.calls.at(-1), ["BayExtensions", "resolveInstallPrompt", '["32",false]']);
+  const seen = [];
+  transport.subscribe("BayExtensions", "onInstallPrompt", (prompt) => seen.push(prompt.requestId));
+  await Promise.resolve();
+  assert.equal(seen.length, 32);
+  transport.dispose();
+});

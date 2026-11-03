@@ -45,6 +45,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   void ViewEvent(int tag, const char* event, base::DictValue payload);
   void PublishHostInfo();
   BrowserWindowInterface* browser() const { return context_.window(); }
+  bool can_receive_events() const { return client_.is_bound(); }
   // The Bay document this host serves.
   content::WebContents* document_contents() const;
   // A key the window's document runs as its command (BayShell.setKeyShortcuts).

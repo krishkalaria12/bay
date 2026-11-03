@@ -6,6 +6,7 @@
 
 #include "base/base64.h"
 #include "base/containers/span.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bay/webui/download_controls.h"
@@ -78,13 +79,11 @@ base::DictValue InstallPrompts::Describe(const std::string& request_id,
   }
   return base::DictValue()
       .Set("requestId", request_id)
-      .Set("profile",
-           DownloadControls::ProfileId(profile->GetOriginalProfile())
-               .value_or(""))
+      .Set("profile", DownloadControls::ProfileId(profile->GetOriginalProfile())
+                          .value_or(""))
       .Set("id", extension ? extension->id() : std::string())
       .Set("name", extension ? extension->name() : std::string())
-      .Set("version",
-           extension ? extension->VersionString() : std::string())
+      .Set("version", extension ? extension->VersionString() : std::string())
       .Set("type", TypeName(prompt.type()))
       .Set("icon", icon)
       .Set("permissions", std::move(permissions))
