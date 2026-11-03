@@ -51,6 +51,8 @@ export const easelSharingAnswers = {
 export const createEaselShareIdentity = () => easelSharingAnswers.identity();
 export const isEaselWebSharingEnabled = () => easelSharingAnswers.enabled;
 export const readEaselShareRecords = () => easelSharingAnswers.readRecords();
+export const readCurrentEaselShareRecords = async () => easelSharingAnswers.readRecords();
+export const requestEaselShare = (...args) => easelSharingAnswers.request?.(...args) ?? null;
 export const shellDialogAnswers = {
   confirm: async () => ({ confirmed: false, suppressed: false }),
   openTextFile: async () => null,

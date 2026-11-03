@@ -148,6 +148,7 @@ inline constexpr Method methods[] = {
   {"BayEasel", "exportEaselHTML", true, 1, 1},
   {"BayEasel", "createEaselShareIdentity", true, 0, 0},
   {"BayEasel", "readEaselShareRecords", true, 0, 0},
+  {"BayEasel", "requestShare", true, 4, 4},
   {"BayEasel", "readImage", true, 1, 1},
   {"BayEasel", "storeImage", true, 2, 2},
   {"BayEasel", "saveDownload", true, 3, 3},

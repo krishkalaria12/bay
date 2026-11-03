@@ -44,6 +44,7 @@ class Autostart;
 class AppServicesLinux;
 class WindowButtonLayoutLinux;
 class UserScripts;
+class EaselSharing;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -155,6 +156,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   // Reconnecting a pin's file asks in its own picker (shell_ui.h).
   std::unique_ptr<ShellUI> local_files_ui_;
   std::unique_ptr<UserScripts> user_scripts_;
+  std::unique_ptr<EaselSharing> easel_sharing_;
 #endif
   void FinishShortcutRecording(base::Value result);
   // The dragged tab's floating preview (drag_preview.h).

@@ -34,6 +34,7 @@ class PlatformServices {
   PlatformServices& operator=(const PlatformServices&) = delete;
 
   void Prepare(base::OnceClosure ready);
+  bool ready() const { return ready_; }
   bool DispatchPlatformModule(const std::string& module,
                               const std::string& method,
                               const base::ListValue& args,

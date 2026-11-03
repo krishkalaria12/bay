@@ -60,6 +60,8 @@ source_set("impl") {
     "download_controls.cc",
     "download_controls.h",
     "engine_services.cc",
+    "easel_sharing.cc",
+    "easel_sharing.h",
     "engine_services.h",
     "external_app_prompts.cc",
     "external_app_prompts.h",
@@ -801,6 +803,7 @@ if (is_linux) {
       "tracing_session_unittest.cc",
       "user_scripts_unittest.cc",
       "../nn_scripts_policy_unittest.cc",
+      "easel_sharing_unittest.cc",
     ]
     deps = [
       ":impl",
@@ -827,6 +830,7 @@ if (is_linux) {
       "//ui/base:test_support",
       "//ui/base/clipboard:clipboard_test_support",
       "//ui/linux:test_support",
+      "//services/network:test_support",
       "//ui/shell_dialogs",
       "//ui/views",
       "//url",

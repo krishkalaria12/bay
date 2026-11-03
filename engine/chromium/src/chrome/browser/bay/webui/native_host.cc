@@ -52,6 +52,7 @@
 #include "chrome/browser/bay/webui/install_prompts.h"
 #include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/user_scripts.h"
+#include "chrome/browser/bay/webui/easel_sharing.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/shortcut_recorder.h"
@@ -856,6 +857,9 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
         if (host)
           host->Emit("BayUserScripts", "onChange", base::Value(base::DictValue()));
       }, GetWeakPtr()));
+  easel_sharing_ = std::make_unique<EaselSharing>(context_.profile());
+  easel_sharing_->Prepare(
+      base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
 #endif
 #if BUILDFLAG(IS_WIN)
   AppUpdater().Prepare(
@@ -1157,10 +1161,9 @@ base::DictValue NativeHost::Info() const {
       info.FindList("optionalMethods")->Append(module + "." + method);
 #endif
   // Set last: a platform's services replace the snapshots above.
-  info.FindDict("snapshots")
-      ->Set("BayEasel", base::DictValue()
-                            .Set("isEaselWebSharingEnabled", false)
-                            .Set("readEaselShareRecords", base::Value()));
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  info.FindDict("snapshots")->Set("BayEasel", easel_sharing_->snapshots());
+#endif
   // Window features this host routes itself, on every desktop it runs on.
   auto* host_methods = info.FindList("optionalMethods");
   if (context_.is_window()) {
@@ -1178,6 +1181,8 @@ base::DictValue NativeHost::Info() const {
     host_methods->Append(std::move(method));
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   for (auto& method : UserScripts::SupportedMethods())
+    host_methods->Append(std::move(method));
+  for (auto& method : EaselSharing::SupportedMethods())
     host_methods->Append(std::move(method));
 #endif
   if (AppRuntime::Enabled() && is_coordinator()) {
@@ -1207,6 +1212,12 @@ void NativeHost::PublishHostInfo() {
 }
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 void NativeHost::PlatformReady() {
+  if (!easel_sharing_ || !easel_sharing_->ready())
+    return;
+#if BUILDFLAG(IS_WIN)
+  if (!platform_services_ || !platform_services_->ready())
+    return;
+#endif
 #if BUILDFLAG(IS_LINUX)
   if (!documents_ready_ || !files_->ready() || !app_services_->ready())
     return;
@@ -1685,6 +1696,8 @@ void NativeHost::Invoke(const std::string& module,
   }
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (user_scripts_->Dispatch(module, method, args, callback))
+    return;
+  if (easel_sharing_->Dispatch(module, method, args, callback))
     return;
   if (module == "BayLocalFiles") {
     LocalFilesCall(method, args, std::move(callback));

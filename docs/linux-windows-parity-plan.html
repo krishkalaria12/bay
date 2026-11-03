@@ -1067,7 +1067,13 @@
                   <td class="methods">retainLibraryImage exportEaselHTML createEaselShareIdentity</td>
                   <td>Easel's web sharing is off (the snapshot is hard-coded <code>false</code>) and HTML export fails.</td>
                   <td><code>Easel.swift</code>, <code>EaselSharing.swift</code></td>
-                  <td><span class="tag t-port">Port</span> M</td>
+                  <td>
+                    <span class="tag t-done">Source-complete 3 Nov</span> Retention and HTML export reuse <code>imageFiles.web.ts</code> and
+                    <code>LibraryFiles</code>. Sharing uses the existing opt-in environment flag, secure random identities and secure storage for management
+                    keys. A rendered snapshot excludes local paths, and native requests publish or revoke only at Bay's sharing endpoint, without cookies or
+                    redirects. Registry reads preserve failures; web windows lock and refresh the durable registry before changing a publication. Native runtime
+                    checks pending.
+                  </td>
                 </tr>
                 <tr data-kind="replace">
                   <td><strong>Trackpad swipe</strong> (<code>BaySwipe</code>)</td>
@@ -1451,6 +1457,11 @@
               only. Reconnecting picks a file or a folder by the pin's kind, as GTK's dialog can't offer both.
             </li>
             <li><strong>Font list:</strong> the Boost font menu stops at 998 families, because host menus end at 1000 items.</li>
+            <li>
+              <strong>Easel sharing:</strong> publishing remains opt-in through <code>BAY_EASEL_WEB_SHARING=true</code>, as on macOS, and needs the existing
+              website's sharing endpoint enabled. Live publication, revocation, secure storage and cross-window registry locking still need the native runtime
+              pass. OS share sheets remain excluded; Copy Link works.
+            </li>
             <li>
               <strong>User scripts:</strong> an interrupted Windows directory exchange leaves a journal. Bay waits for the next <code>bay scripts</code> command
               to recover it rather than loading a partial copy. Linux <code>renameat2</code>, Windows locking/reparse checks, watcher delivery and actual

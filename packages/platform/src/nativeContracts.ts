@@ -1053,6 +1053,13 @@ export const nativeContracts = {
           "maxArgs": 0,
           "signature": "readEaselShareRecords(): Promise<string | null>;"
         },
+        "requestShare": {
+          "async": true,
+          "optional": true,
+          "minArgs": 4,
+          "maxArgs": 4,
+          "signature": "requestShare?(id: string, key: string, method: string, body: string): Promise<{ status: number }>;"
+        },
         "readImage": {
           "async": true,
           "optional": true,

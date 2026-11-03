@@ -1,5 +1,6 @@
 import { confirm, copyText, sharePage, showMenu, type EaselCanvasHandle } from "@bay/desktop";
 import { useEffect, type RefObject } from "react";
+import { capabilities } from "@bay/platform";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { newTab } from "../../runtime/tabActions";
 import { showToast } from "../split/splitActions";
@@ -51,7 +52,7 @@ async function openEaselSharing(doc: EaselDocument, canvas: RefObject<EaselCanva
     const choice = await showMenu([
       { id: "copy", title: "Copy Easel Link", enabled: current.publishedAt !== null },
       { id: "open", title: "Open Shared Page", enabled: current.publishedAt !== null },
-      { id: "share", title: "Share Link Via…", enabled: current.publishedAt !== null },
+      ...(capabilities.shareSheet ? [{ id: "share", title: "Share Link Via…", enabled: current.publishedAt !== null }] : []),
       { separator: true },
       { id: "update", title: current.publishedAt === null ? "Retry Publishing and Copy Link" : "Update Shared Page and Copy Link" },
       { id: "stop", title: "Stop Sharing…" },
