@@ -757,7 +757,8 @@
                     <span class="tag t-done">Source-complete 3 Nov</span> The existing install-prompt hook is CEF-only, so
                     <code>chromium-extension-install-prompt-webui.patch</code> adds a handler for the web host. <code>webui/install_prompts.cc</code>
                     sends each prompt to one window (the one showing the asking tab, else the one used last) and holds Chrome's answer until
-                    <code>resolveInstallPrompt</code>; a closing window cancels its prompts, and with no window Chrome's dialog shows. Linux run pending.
+                    <code>resolveInstallPrompt</code>; a closing window cancels its prompts. Unconnected windows keep Chrome's dialog; the transport retains
+                    prompts until the extension bridge subscribes and cancels queue overflow explicitly. Native execution on Linux and Windows is pending.
                   </td>
                 </tr>
                 <tr data-kind="port">

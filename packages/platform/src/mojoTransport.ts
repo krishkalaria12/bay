@@ -98,6 +98,55 @@ export async function createMojoTransport({
     notificationBytes += bytes;
     scheduleNotificationDrain();
   };
+  // A native install prompt owns Chrome's pending callback. Retain it across
+  // bootstrap until the window's extension bridge subscribes, or cancel it
+  // explicitly if the bounded queue cannot keep it.
+  const installPrompts: { payload: unknown; bytes: number }[] = [];
+  let installBytes = 0;
+  let installDrainScheduled = false;
+  let drainingInstalls = false;
+  const installListeners = () => listeners.get("BayExtensions")?.get("onInstallPrompt");
+  const scheduleInstallDrain = () => {
+    if (disposed || failure || installDrainScheduled || drainingInstalls || !installPrompts.length || !installListeners()?.size) return;
+    installDrainScheduled = true;
+    queueMicrotask(() => {
+      installDrainScheduled = false;
+      if (disposed || failure) return;
+      drainingInstalls = true;
+      try {
+        const count = installPrompts.length;
+        for (let i = 0; i < count && installPrompts.length; i++) {
+          const callbacks = [...(installListeners() ?? [])];
+          if (!callbacks.length) break;
+          const prompt = installPrompts.shift()!;
+          installBytes -= prompt.bytes;
+          for (const subscription of callbacks) {
+            try {
+              subscription.listener(prompt.payload);
+            } catch (error) {
+              onProtocolError(error instanceof Error ? error : new Error(String(error)));
+            }
+          }
+        }
+      } finally {
+        drainingInstalls = false;
+        scheduleInstallDrain();
+      }
+    });
+  };
+  const retainInstall = (json: string, payload: unknown) => {
+    const maximumBytes = 1024 * 1024;
+    const bytes = json.length > maximumBytes ? maximumBytes + 1 : encoder.encode(json).byteLength;
+    if (installPrompts.length >= 32 || installBytes + bytes > maximumBytes) {
+      if (payload && typeof payload === "object" && "requestId" in payload && typeof payload.requestId === "string") {
+        void remote.invoke("BayExtensions", "resolveInstallPrompt", JSON.stringify([payload.requestId, false])).catch(onProtocolError);
+      }
+      return;
+    }
+    installPrompts.push({ payload, bytes });
+    installBytes += bytes;
+    scheduleInstallDrain();
+  };
   const parseInfo = (json: string): NativeHostInfo => {
     const parsed: unknown = JSON.parse(json);
     validateNativeHostInfo(parsed);
@@ -114,6 +163,8 @@ export async function createMojoTransport({
     listeners.clear();
     notificationResponses.length = 0;
     notificationBytes = 0;
+    installPrompts.length = 0;
+    installBytes = 0;
     client.$.close?.();
     remote.$?.close?.();
   };
@@ -148,6 +199,14 @@ export async function createMojoTransport({
           (!notificationListeners()?.size || notificationResponses.length || notificationDrainScheduled || drainingNotifications)
         ) {
           retainNotification(json, payload);
+          return;
+        }
+        if (
+          module === "BayExtensions" &&
+          event === "onInstallPrompt" &&
+          (!installListeners()?.size || installPrompts.length || installDrainScheduled || drainingInstalls)
+        ) {
+          retainInstall(json, payload);
           return;
         }
         // oxlint-disable-next-line unicorn/no-useless-spread -- Snapshot subscribers so changes during delivery affect the next event.
@@ -195,6 +254,7 @@ export async function createMojoTransport({
         const entry = { listener };
         callbacks.add(entry);
         if (module === "BayApp" && event === "onNotificationResponse") scheduleNotificationDrain();
+        if (module === "BayExtensions" && event === "onInstallPrompt") scheduleInstallDrain();
         let removed = false;
         return {
           remove() {

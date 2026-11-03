@@ -2094,15 +2094,14 @@ TEST_F(NativeHostTest, ExtensionInstallPromptsAreDescribedAndAnswered) {
   EXPECT_EQ(described.FindInt("browserId"), 42);
   ASSERT_TRUE(described.FindList("permissions"));
 
-  EXPECT_EQ(Invoke("BayExtensions", "resolveInstallPrompt",
-                   R"(["install999",true])"),
-            R"({"value":null})");
+  EXPECT_EQ(
+      Invoke("BayExtensions", "resolveInstallPrompt", R"(["install999",true])"),
+      R"({"value":null})");
   ExpectError(Invoke("BayExtensions", "resolveInstallPrompt",
                      R"(["install999","yes"])"),
               "invalid_args");
-  ExpectError(
-      Invoke("BayExtensions", "resolveInstallPrompt", R"([7,true])"),
-      "invalid_args");
+  ExpectError(Invoke("BayExtensions", "resolveInstallPrompt", R"([7,true])"),
+              "invalid_args");
 }
 
 }  // namespace bay

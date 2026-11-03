@@ -261,7 +261,7 @@ base::WeakPtr<NativeHost> PromptWindow(content::WebContents* parent,
                                        base::DictValue prompt) {
   auto window_host = [](BrowserWindowInterface* frame) -> NativeHost* {
     for (const auto& [raw, host] : Hosts()) {
-      if (host && frame && host->browser() == frame &&
+      if (host && host->can_receive_events() && frame && host->browser() == frame &&
           (!AppRuntime::Enabled() || !host->is_coordinator()))
         return host.get();
     }
@@ -284,7 +284,7 @@ base::WeakPtr<NativeHost> PromptWindow(content::WebContents* parent,
   // The single-renderer runtime: its one document shows every window.
   if (!target && !AppRuntime::Enabled()) {
     for (const auto& [raw, host] : Hosts()) {
-      if (host) {
+      if (host && host->can_receive_events()) {
         target = host.get();
         break;
       }
