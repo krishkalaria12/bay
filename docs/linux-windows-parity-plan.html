@@ -782,8 +782,9 @@
                     the macOS prompts over the same Chrome hooks; <code>icon_fetch.cc</code> fetches without cookies and decodes in the sandboxed decoder (SVG
                     icons come back null); <code>system_state.cc</code> reports power and memory (Linux has no battery level or power-saver signal);
                     <code>auto_picture_in_picture.cc</code> sets the content setting per profile. <code>context_search.cc</code> and
-                    <code>chromium-context-search-webui.patch</code> put the app's search engine in the page menu. <code>removeLegacyFavicons</code> resolves,
-                    as on macOS. Linux run pending.
+                    <code>chromium-context-search-webui.patch</code> put the app's search engine in the page menu. <code>page_menu.cc</code> and
+                    <code>chromium-context-menu-items-webui.patch</code> remove the items these windows have no UI for (QR code, Send to your devices, Reading
+                    mode, Lens), as macOS does. <code>removeLegacyFavicons</code> resolves, as on macOS. Linux run pending.
                   </td>
                 </tr>
                 <tr data-kind="verify">

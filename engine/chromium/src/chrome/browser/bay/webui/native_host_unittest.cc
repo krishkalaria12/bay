@@ -21,10 +21,12 @@
 #include "base/test/scoped_path_override.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/context_search.h"
 #include "chrome/browser/bay/webui/external_app_prompts.h"
 #include "chrome/browser/bay/webui/icon_fetch.h"
+#include "chrome/browser/bay/webui/page_menu.h"
 #include "chrome/browser/bay/webui/permission_prompts.h"
 #include "chrome/browser/bay/webui/download_controls.h"
 #include "chrome/browser/bay/webui/install_prompts.h"
@@ -51,6 +53,7 @@
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/base/test/mock_base_window.h"
 #include "ui/linux/fake_linux_ui.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/linux/window_button_order_observer.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
@@ -2218,6 +2221,28 @@ TEST(PermissionPromptsTest, KindsAreTheAppsNames) {
                "location");
   EXPECT_STREQ(PermissionPrompts::KindName(RequestType::kLoopbackNetwork),
                "localNetwork");
+}
+
+// Items for UI Bay's windows don't have never show: on macOS, picking Create QR
+// Code in one crashed on the missing toolbar.
+TEST(PageMenuTest, RemovesViewlessItemsAndTheSeparatorsTheyLeave) {
+  ui::SimpleMenuModel menu(nullptr);
+  menu.AddItem(IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE, u"Reading mode");
+  menu.AddSeparator(ui::NORMAL_SEPARATOR);
+  menu.AddItem(IDC_CONTENT_CONTEXT_COPY, u"Copy");
+  menu.AddSeparator(ui::NORMAL_SEPARATOR);
+  menu.AddItem(IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, u"Create QR Code");
+  menu.AddItem(IDC_SEND_TAB_TO_SELF, u"Send to your devices");
+  menu.AddSeparator(ui::NORMAL_SEPARATOR);
+  menu.AddItem(IDC_VIEW_SOURCE, u"View source");
+  menu.AddItem(IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE, u"Reading mode");
+  menu.AddSeparator(ui::NORMAL_SEPARATOR);
+  menu.AddItem(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH, u"Lens");
+  PageMenu::RemoveViewlessItems(menu);
+  ASSERT_EQ(menu.GetItemCount(), 3u);
+  EXPECT_EQ(menu.GetCommandIdAt(0), IDC_CONTENT_CONTEXT_COPY);
+  EXPECT_EQ(menu.GetTypeAt(1), ui::MenuModel::TYPE_SEPARATOR);
+  EXPECT_EQ(menu.GetCommandIdAt(2), IDC_VIEW_SOURCE);
 }
 
 }  // namespace bay
