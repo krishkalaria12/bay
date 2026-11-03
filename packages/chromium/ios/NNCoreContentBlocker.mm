@@ -298,13 +298,16 @@ NSTimeInterval ExpiresAfter(NSString *text) {
   return MIN(MAX(n * (hours ? 3600 : 86400), 12 * 3600), 7 * 86400);
 }
 
-// A filter list, not an error page: text that doesn't start like HTML.
+// A filter list, not an error page: text that doesn't start like HTML. Bytes, not a decoded prefix: a prefix can end
+// inside a multibyte character (as Croatian and Vietnamese lists' do at 512 bytes), which wouldn't decode.
 BOOL LooksLikeList(NSData *data) {
   if (data.length < 16 || data.length > 32 * 1024 * 1024) return NO;
-  NSString *start = [[NSString alloc] initWithData:[data subdataWithRange:NSMakeRange(0, MIN(data.length, (NSUInteger)512))]
-                                          encoding:NSUTF8StringEncoding];
-  NSString *trimmed = [start stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-  return trimmed.length && ![trimmed hasPrefix:@"<"];
+  const unsigned char *bytes = (const unsigned char *)data.bytes;
+  NSUInteger at = 0;
+  // A UTF-8 byte order mark, then whitespace.
+  if (data.length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) at = 3;
+  while (at < data.length && isspace(bytes[at])) at++;
+  return at < data.length && bytes[at] != '<';
 }
 
 NSURLSession *Session() {

@@ -116,9 +116,13 @@ pub unsafe extern "C" fn bay_blocker_new_with_permissions(
     permissions: *const u8,
     count: usize,
 ) -> *mut Blocker {
+    // Lossy, so a list with a stray byte that isn't UTF-8 still gives its rules (a strict read would give none).
+    let texts: Vec<String> = (0..count)
+        .map(|i| read(*lists.add(i)).unwrap_or_default())
+        .collect();
     let lists: Vec<FilterList> = (0..count)
         .map(|i| FilterList {
-            text: borrow(*lists.add(i)),
+            text: &texts[i],
             hosts: !hosts.is_null() && *hosts.add(i),
             permissions: if permissions.is_null() {
                 0
