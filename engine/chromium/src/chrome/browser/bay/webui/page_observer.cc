@@ -6,11 +6,13 @@
 #include <utility>
 
 #include "base/strings/stringprintf.h"
+#include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/page_services.h"
+#include "chrome/browser/bay/webui/page_media_events.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -112,6 +114,10 @@ void TabObserver::Emit(const char* event, base::DictValue payload) {
 void TabObserver::EnsureObservers() {
   if (!web_contents())
     return;
+  if (!media_events_)
+    media_events_ = std::make_unique<PageMediaEvents>(
+        web_contents(), base::BindRepeating(&TabObserver::Emit,
+                                            base::Unretained(this)));
   if (!favicon_observation_.IsObserving()) {
     if (auto* driver =
             favicon::ContentFaviconDriver::FromWebContents(web_contents()))
@@ -166,6 +172,7 @@ void TabObserver::State() {
                            ? web_contents()->GetLastCommittedURL()
                            : visible));
   if (!std::exchange(initial_state_sent_, true)) {
+    media_events_->Replay();
     LoadProgressChanged(web_contents()->GetLoadProgress());
     Favicon();
     Zoom();

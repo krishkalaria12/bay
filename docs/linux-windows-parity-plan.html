@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bay: remaining Linux and Windows parity work</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fbfaf8;
+        --surface: #fff;
+        --ink: #1d1c1a;
+        --muted: #5f5b54;
+        --line: #e4e0d8;
+        --accent: #2f5bd3;
+        --sunken: #f3f1ed;
+        --warn: #9a5b00;
+        --warn-soft: #fbf0dc;
+        --radius: 10px;
+        --sans: -apple-system, BlinkMacSystemFont, "Inter", "Cantarell", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+        --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #151514;
+          --surface: #1c1c1b;
+          --ink: #ecebe7;
+          --muted: #b1ada4;
+          --line: #34332f;
+          --accent: #8aa8ff;
+          --sunken: #232321;
+          --warn: #f0b45c;
+          --warn-soft: #3a2c14;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15.5px/1.6 var(--sans);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      code {
+        font: 0.86em var(--mono);
+        background: var(--sunken);
+        padding: 0.06em 0.34em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.4rem;
+        margin-bottom: 0.8rem;
+      }
+      h3 {
+        font-size: 1.05rem;
+        margin: 1.4rem 0 0.5rem;
+      }
+      p {
+        margin: 0 0 0.9rem;
+      }
+      ul,
+      ol {
+        margin: 0 0 1rem;
+        padding-left: 1.3rem;
+      }
+      li {
+        margin: 0.35rem 0;
+      }
+      .page {
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 2.5rem;
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem 5rem;
+      }
+      nav {
+        position: sticky;
+        top: 1.5rem;
+        align-self: start;
+        font-size: 0.88rem;
+      }
+      nav strong {
+        display: block;
+        margin-bottom: 0.6rem;
+        color: var(--muted);
+      }
+      nav ol {
+        list-style: none;
+        padding: 0;
+      }
+      nav a {
+        display: block;
+        padding: 0.3rem 0.5rem;
+        border-left: 2px solid var(--line);
+        text-decoration: none;
+        color: var(--muted);
+      }
+      nav a:hover {
+        color: var(--ink);
+        border-color: var(--accent);
+      }
+      main {
+        min-width: 0;
+      }
+      section {
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--line);
+        scroll-margin-top: 1rem;
+      }
+      .lede,
+      .prose {
+        max-width: 74ch;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 1.05rem;
+        margin-top: 0.8rem;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .table-wrap {
+        max-width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.88rem;
+      }
+      th,
+      td {
+        padding: 0.7rem 0.85rem;
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        background: var(--sunken);
+        font-size: 0.8rem;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td:first-child {
+        min-width: 135px;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 0.72rem;
+        line-height: 1.2;
+        border-radius: 999px;
+        padding: 0.22rem 0.45rem;
+        background: var(--sunken);
+        white-space: nowrap;
+      }
+      .t-port {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .callout {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        margin: 1rem 0;
+      }
+      .callout p:last-child {
+        margin: 0;
+      }
+      @media (max-width: 800px) {
+        .page {
+          grid-template-columns: 1fr;
+          gap: 1.5rem;
+          padding: 1.5rem 1rem 3rem;
+        }
+        nav {
+          position: static;
+        }
+        nav ol {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.3rem;
+        }
+        nav a {
+          border: 1px solid var(--line);
+          border-radius: 999px;
+          padding: 0.2rem 0.65rem;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      @media print {
+        nav {
+          display: none;
+        }
+        .page {
+          display: block;
+          padding: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <nav aria-label="Contents">
+        <strong>Remaining work</strong>
+        <ol>
+          <li><a href="#events">1. Page events</a></li>
+          <li><a href="#ui">2. View behaviour</a></li>
+          <li><a href="#followups">3. Implementation follow-ups</a></li>
+          <li><a href="#sync">4. Branch sync</a></li>
+          <li><a href="#runtime">5. Runtime acceptance</a></li>
+          <li><a href="#decisions">6. Open decisions</a></li>
+        </ol>
+      </nav>
+      <main>
+        <header>
+          <h1>Remaining Linux and Windows parity work</h1>
+          <p class="lede">
+            Page events first, then view behaviour and the implementation follow-ups below. Run native acceptance on Linux and Windows after the source work.
+          </p>
+          <p class="meta">
+            Updated 3 Nov 2026. Implementation status is based on <code>feat/linux</code>; the latest shared changes still need syncing to
+            <code>feat/windows</code>.
+          </p>
+        </header>
+        <section id="events" aria-labelledby="events-h">
+          <h2 id="events-h">1. Page events</h2>
+          <p class="prose">
+            Verify the existing Chrome UI and host routes before adding an emitter. For each missing event, connect the page state or prompt to Bay's shared UI
+            and cover emission, resolution and cancellation.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Feature</th>
+                  <th>macOS reference</th>
+                  <th>Priority</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>onPasswordPrompt</code></td>
+                  <td>Save and update password offers</td>
+                  <td><code>nn_password_prompt.mm</code></td>
+                  <td><span class="tag t-port">P1</span></td>
+                </tr>
+                <tr>
+                  <td><code>onAutofillPrompt</code></td>
+                  <td>Save address and card offers; Bay's suggestion popup</td>
+                  <td><code>nn_autofill_prompt/trigger.mm</code></td>
+                  <td><span class="tag t-port">P1</span></td>
+                </tr>
+                <tr>
+                  <td><code>onPopupBlocked</code></td>
+                  <td>Blocked-popup notice with "Open"</td>
+                  <td>NNCore content hooks</td>
+                  <td><span class="tag t-port">P2</span></td>
+                </tr>
+                <tr>
+                  <td><code>onStatus</code></td>
+                  <td>Link-hover status text</td>
+                  <td><code>NNCoreWebView.mm</code></td>
+                  <td><span class="tag t-port">P2</span></td>
+                </tr>
+                <tr>
+                  <td><code>onPeekLink</code></td>
+                  <td>Arc-style Peek for cross-site links</td>
+                  <td><code>nn_peek_links.mm</code> (89)</td>
+                  <td><span class="tag t-port">P2</span></td>
+                </tr>
+                <tr>
+                  <td><code>onNowPlaying</code></td>
+                  <td>The sidebar's now-playing card</td>
+                  <td><code>NNCorePictureInPicture.mm</code></td>
+                  <td><span class="tag t-port">P2</span></td>
+                </tr>
+                <tr>
+                  <td><code>onNotification</code>, <code>onNotificationClose</code></td>
+                  <td>Page notifications routed through Bay</td>
+                  <td><code>NNCoreWebView.mm</code></td>
+                  <td><span class="tag t-verify">Verify</span> The OS notification bridge may cover them</td>
+                </tr>
+                <tr>
+                  <td><code>onOpenWindow</code>, <code>onActivateRequest</code>, <code>onReady</code></td>
+                  <td>Popups and <code>window.open</code>, tab focus requests, the browser id handshake</td>
+                  <td>NNCore</td>
+                  <td><span class="tag t-verify">Verify</span> The tab broker's page-offer route may replace them</td>
+                </tr>
+                <tr>
+                  <td><code>onPageMessage</code>, <code>onHost</code></td>
+                  <td>Bay's in-page script channel</td>
+                  <td><code>nn_page_channel.mm</code></td>
+                  <td><span class="tag t-verify">Verify</span> Verify the channel used by Boosts</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section id="ui" aria-labelledby="ui-h">
+          <h2 id="ui-h">2. View behaviour</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Capability</th>
+                  <th>Remaining work</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>tooltips</code></td>
+                  <td>Add DOM tooltips in <code>views.web.tsx</code>, including icon buttons without another label.</td>
+                </tr>
+                <tr>
+                  <td><code>keyDownEvents</code></td>
+                  <td>Check which command-bar, find and sidebar interactions still need view-level key interception beyond the existing web handlers.</td>
+                </tr>
+                <tr>
+                  <td><code>focusRing</code></td>
+                  <td>Add <code>:focus-visible</code> rings and follow the platform's text-field conventions.</td>
+                </tr>
+                <tr>
+                  <td><code>nativeDrag</code></td>
+                  <td>Support dragging downloads and pinned files from Bay into other apps through OLE and XDND.</td>
+                </tr>
+                <tr>
+                  <td><code>windowMoveByView</code></td>
+                  <td>Verify that CSS drag regions cover the sidebar header and do not swallow interactive controls.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section id="followups" aria-labelledby="followups-h">
+          <h2 id="followups-h">3. Implementation follow-ups</h2>
+          <p class="prose">These are the unresolved behaviours from earlier feature work.</p>
+          <ul>
+            <li>Support SVG responses in favicon fetching.</li>
+            <li>Handle <code>dialog_busy</code> and failed saves in the text-file dialog callers. Consider remembering the last save folder.</li>
+            <li>Fix Ctrl-Tab release before focus reaches the document, and cancellation when the user clicks inside an embedded page.</li>
+            <li>Check Clear animation under main-thread load and address dropped frames if needed.</li>
+            <li>Ensure release builds enable Crashpad and assess symbolication for useful crash stacks.</li>
+            <li>
+              Port the acceptance scripts' input and window assertions. Define replacements for unsupported <code>windowDrags</code> checks; handle the test
+              hooks' ignored timing and transparency options.
+            </li>
+            <li>
+              Improve tab-drag previews: composite page content, include favicons, and wait for destination content before fading. Investigate Linux preview
+              support within each window system's constraints.
+            </li>
+            <li>Add the Window menu's window list and the Extensions menu to the in-window app menu. Evaluate Alt activation and menu placement.</li>
+            <li>Add web-preview support for <code>recordShortcut</code> and audit shortcut actions that still lack an effective target.</li>
+            <li>
+              Keep Little Bay accessible after the last Linux window closes, and start its put-away timer in the shared runtime. Validate global-shortcut and
+              tray availability across desktops.
+            </li>
+            <li>Add external-app icons to the open-in-app prompt where the desktop exposes them.</li>
+          </ul>
+        </section>
+        <section id="sync" aria-labelledby="sync-h">
+          <h2 id="sync-h">4. Branch sync</h2>
+          <ol>
+            <li>
+              Copy the remaining shared host changes from <code>feat/linux</code> to <code>feat/windows</code>, preserving Linux-only services, tests and
+              documentation.
+            </li>
+            <li>Regenerate native contracts and run each branch's JavaScript, type, format and build checks.</li>
+            <li>Merge Windows back into Linux and verify the intended platform differences before pushing both branches.</li>
+          </ol>
+        </section>
+        <section id="runtime" aria-labelledby="runtime-h">
+          <h2 id="runtime-h">5. Runtime acceptance</h2>
+          <p class="prose">
+            The native Linux and Windows applications still need linking and execution. The acceptance assignments below come from
+            <a href="linux-work-split.md">linux-work-split.md</a>.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Step</th>
+                  <th>Owner</th>
+                  <th>Acceptance work</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>T1</td>
+                  <td>D</td>
+                  <td>Engine build on Arch: <code>engine.py --platform linux prepare/build/archive</code>, glibc floor</td>
+                </tr>
+                <tr>
+                  <td>T2</td>
+                  <td>D</td>
+                  <td>Hosting gate: SurfaceEmbed on Wayland and X11, GNOME and KDE; go/no-go record</td>
+                </tr>
+                <tr>
+                  <td>T3</td>
+                  <td>D</td>
+                  <td>Link and run the native tests; Phase 3 acceptance (tabs, splits, popups, extensions, PiP, DevTools)</td>
+                </tr>
+                <tr>
+                  <td>T4</td>
+                  <td>A</td>
+                  <td>App boot from Metro and the packed bundle; port the <code>*-test.mjs</code> suites to xvfb and Weston</td>
+                </tr>
+                <tr>
+                  <td>T5</td>
+                  <td>A</td>
+                  <td>Snapping, GPUs, fractional scaling, IME, touch</td>
+                </tr>
+                <tr>
+                  <td>T6</td>
+                  <td>D</td>
+                  <td>Import fixtures, shared sync vault, keyring import, folder sync</td>
+                </tr>
+                <tr>
+                  <td>T7</td>
+                  <td>A</td>
+                  <td>Packages on the VM matrix; namespace sandbox</td>
+                </tr>
+                <tr>
+                  <td>T8</td>
+                  <td>A</td>
+                  <td>Orca and keyboard-only use; performance against the Mac numbers</td>
+                </tr>
+                <tr>
+                  <td>A4</td>
+                  <td>A</td>
+                  <td>CI: app build from the archived engine, distro smoke launches</td>
+                </tr>
+                <tr>
+                  <td>K6</td>
+                  <td>K</td>
+                  <td>Fixes for failures in K's areas</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Feature checks</h3>
+          <ul>
+            <li>Exercise downloads, profile deletion, screen sharing, extension prompts, tab mirroring and tracing across multiple spaces and windows.</li>
+            <li>Paste copied files into Nemo, Thunar and Caja, and verify image-plus-link pasting in Linux and Windows apps.</li>
+            <li>Test text dialogs through GTK, the XDG portal and Windows, including overwrite, cancellation and failed writes.</li>
+            <li>Test user-script publication, watcher delivery, lock contention, Windows exchange recovery and actual script execution.</li>
+            <li>Install and upgrade the CLI, test login-shell/user PATH changes, and verify token-file permissions and authenticated terminal control.</li>
+            <li>Test Easel publication, updates and revocation, including secure storage, failed requests and concurrent windows.</li>
+            <li>Check quote-card fonts, long passages and mixed-direction text.</li>
+            <li>Run Windows build and hosting acceptance using <a href="windows-implementation-status.md">the Windows status document</a>.</li>
+          </ul>
+        </section>
+        <section id="decisions" aria-labelledby="decisions-h">
+          <h2 id="decisions-h">6. Open decisions</h2>
+          <ul>
+            <li>Choose the Chromium DRM playback and distribution approach for Linux and Windows, then verify protected playback on the target builds.</li>
+            <li>Decide whether Chrome's built-in password and autofill prompts are acceptable for a first beta while Bay's prompt events are being ported.</li>
+            <li>Decide whether the ports should expose stable/nightly update-channel selection.</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
