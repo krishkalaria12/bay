@@ -1,6 +1,5 @@
 import type { DeepReadonly } from "../runtime/projection";
 import type { StateCreator } from "zustand";
-import { isMac } from "@bay/platform";
 import type { BrowserState } from "./browserStore";
 import { bookmarkRoots, engineRoots, removeBookmarkTree } from "./bookmarks";
 import { newId, setSpaceProfiles, tabToShow, viewTabIds, without } from "./model";
@@ -32,17 +31,16 @@ function presetTheme(name: string): SpaceTheme {
   return { colors: [...THEME_PRESETS.find((p) => p.name === name)!.colors], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN };
 }
 
-// Arc's best-loved look: the Twilight gradient (violet into fuchsia), with grain.
-export const TWILIGHT = presetTheme("Twilight");
+// Bay's own look: a new install's first space on every platform.
+export const BAY_THEME: SpaceTheme = { colors: ["#3A6073", "#733A43", "#736A3A"], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN };
 
-// A new install's first space wears Twilight on macOS; Windows and Linux start on Zen's flat grey window (Neutral,
-// untinted by pages: lib/theme.ts ZEN_WINDOW).
 export const DEFAULT_SPACE: Space = {
   id: DEFAULT_SPACE_ID,
   name: "Personal",
   icon: "🏠",
   createdAt: 0,
-  ...(isMac ? { color: "purple", theme: presetTheme("Twilight") } : { color: "neutral", followSite: false }),
+  color: "purple",
+  theme: BAY_THEME,
 };
 
 const COLORS: SpaceColor[] = ["blue", "green", "orange", "purple", "red", "yellow", "pink"];

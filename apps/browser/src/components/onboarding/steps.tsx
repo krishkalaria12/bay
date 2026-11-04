@@ -107,7 +107,7 @@ export function PersonalizeStep() {
 
   const done = () => {
     const look = lookOf(windowId);
-    const theme = look.theme ? "Twilight" : look.color ? SPACE_COLORS[look.color]?.name : undefined;
+    const theme = look.theme ? "Bay" : look.color ? SPACE_COLORS[look.color]?.name : undefined;
     const appearance = APPEARANCES.find((a) => a.value === look.appearance)?.picked;
     nextStep([
       ...(theme ? [`${theme} theme`] : []),

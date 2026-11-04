@@ -86,7 +86,7 @@ test("a space's own theme shows over a page with a colour; a preset colour gives
   const S = () => useBrowser.getState();
   S().hydrate({});
   const space = S().settings.defaultSpaceId;
-  // From a preset colour (a new macOS install's space has Twilight instead), the page's shows.
+  // From a preset colour (a new install's space has its own theme instead), the page's shows.
   S().updateSpace(space, { color: "purple", theme: null, followSite: undefined });
   const w = S().createWindow({ spaceId: space, url: "https://example.com" });
   const tab = S().windows[w].activeTabIds[space];
@@ -151,27 +151,19 @@ test("theme previews stay local and clearing one window keeps another preview", 
   }
 });
 
-test("a new install's first space: Twilight on macOS, Zen's flat grey on Windows and Linux whatever the page", async () => {
-  const { isMac } = await import("@bay/platform");
+test("a new install's first space wears Bay's theme whatever the page, on every platform", async () => {
   const { useBrowser } = await import("../store/browserStore.ts");
   const { themeKey } = await import("./theme.ts");
   const S = () => useBrowser.getState();
   S().hydrate({});
   const space = S().spaces[S().settings.defaultSpaceId];
+  assert.deepEqual(space.theme, { colors: ["#3A6073", "#733A43", "#736A3A"], intensity: 0.5, grain: 0.3 });
   const w = S().createWindow({ spaceId: space.id, url: "https://example.com" });
   const tab = S().windows[w].activeTabIds[space.id];
   useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor: "#3366CC" } } });
   S().setAppDark(true);
-  if (isMac) {
-    assert.ok(space.theme?.colors.length);
-    return;
-  }
-  assert.equal(space.color, "neutral");
-  assert.equal(themeKey(S(), w, null), "neutral:dark");
-  assert.deepEqual(themeFor("neutral:dark").windowTint, ["#1B1B1B", "#1B1B1B"]);
-  assert.deepEqual(themeFor("neutral:light").windowTint, ["#EBEBEB", "#EBEBEB"]);
-  // Glass shows the desktop through the window, so it keeps its tint.
-  assert.notDeepEqual(themeFor("neutral:dark:glass").windowTint, ["#1B1B1B", "#1B1B1B"]);
+  assert.equal(themeKey(S(), w, null), "custom|#3A6073,#733A43,#736A3A|0.50|0.30:dark");
+  assert.equal(themeFor(themeKey(S(), w, null)).grain, 0.036);
 });
 
 // Switching between differently coloured sites changes only the window's fill: the theme every row, icon and badge
