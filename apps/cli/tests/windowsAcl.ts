@@ -18,6 +18,9 @@ const PRIVATE_ACL = `
   [IO.File]::SetAccessControl($env:BAY_TEST_ACL_PATH, $acl)
 `;
 
+/** For a test that makes a control file private: powershell.exe can take over five seconds to start on a CI runner. */
+export const CONTROL_FILE_TIMEOUT = 60_000;
+
 /**
  * On Windows, the owner and DACL the browser publishes its control file with: only the current user, who also owns it.
  * An elevated runner's new files belong to Administrators. Elsewhere, the fixture's mode 0600 already says this.
