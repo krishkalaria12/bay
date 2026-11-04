@@ -3,7 +3,16 @@
 // oxlint-disable-next-line no-unused-expressions
 (function (post) {
   "use strict";
-  if (!/^(https?|file):$/.test(location.protocol)) return () => {};
+  // An about:blank or srcdoc frame has no URL of its own, and a sandboxed frame has an opaque origin: the page they
+  // run for is the one whose base URL they inherit. Match the content blocker's rules on that, as uBO does, or the
+  // blank frame is a way around its scriptlets and cosmetic filters.
+  const documentURL = () => {
+    if (/^(https?|file):/.test(location.protocol) && location.origin !== "null") return location.href;
+    const base = document.baseURI || "";
+    return /^(https?|file):/.test(base) ? base : "";
+  };
+  const url = documentURL();
+  if (!url) return () => {};
   const isTop = window === window.top;
   const handlers = Object.create(null);
   // Page code runs after this and can replace any global or prototype method:
@@ -852,7 +861,7 @@
       queued = false;
       // Match NNCoreWebView's limit per message, so every discovered name reaches the host.
       for (let offset = 0; offset < Math.max(classes.length, ids.length); offset += 4000) {
-        send("cosmetic", { url: location.href, classes: classes.slice(offset, offset + 4000), ids: ids.slice(offset, offset + 4000) });
+        send("cosmetic", { url, classes: classes.slice(offset, offset + 4000), ids: ids.slice(offset, offset + 4000) });
       }
       sent += classes.length + ids.length;
       classes = [];
@@ -1083,7 +1092,7 @@
     if (config.cosmetic) installCosmetic();
     installProcedural(config.procedural);
   };
-  send("hello", { top: isTop, url: location.href });
+  send("hello", { top: isTop, url });
 
   const receive = (kind, json) => {
     const handler = handlers[kind];

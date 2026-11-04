@@ -71,12 +71,14 @@ blink::WebScriptSource Source(const std::string& code, const char* url) {
 // to the browser (mojom::NNScriptlets), since the page's first inline script can run as soon
 // as this returns.
 void RunScriptlets(blink::WebLocalFrame* frame) {
-  GURL url(frame->GetDocument().Url());
-  // An about:blank or srcdoc frame runs as its creator's origin, and is a known way around a
-  // blocker's scriptlets: the frame's page gets a clean window from one. An opaque origin
-  // (sandboxed) has no URL to ask about.
-  if (url.IsAboutBlank() || url.IsAboutSrcdoc()) {
-    url = url::Origin(frame->GetSecurityOrigin()).GetURL();
+  blink::WebDocument document = frame->GetDocument();
+  GURL url(document.Url());
+  // An about:blank or srcdoc frame has no URL of its own, and a sandboxed frame has an opaque
+  // origin: both are known ways around a blocker's scriptlets, since the frame's page gets a
+  // clean window from one. They run for the page whose base URL they inherit.
+  if (url.IsAboutBlank() || url.IsAboutSrcdoc() ||
+      url::Origin::Create(url).opaque()) {
+    url = GURL(document.BaseURL());
   }
   if (!url.SchemeIsHTTPOrHTTPS()) {
     return;
@@ -335,9 +337,16 @@ class NNPageObserver : public content::RenderFrameObserver,
 
   void InsertUserStyle(const std::string& css, const std::string& origin) override {
     blink::WebDocument document = render_frame()->GetWebFrame()->GetDocument();
-    if (css.empty() || document.IsNull() ||
-        url::Origin::Create(GURL(document.Url())) !=
-            url::Origin::Create(GURL(origin))) {
+    if (css.empty() || document.IsNull()) {
+      return;
+    }
+    // A blank or sandboxed frame's own origin is opaque and can't be compared. Its base URL
+    // names the page it runs for, which is what the browser matched the sheet against.
+    GURL document_url(document.Url());
+    const url::Origin document_origin = url::Origin::Create(document_url);
+    const GURL expected =
+        document_origin.opaque() ? GURL(document.BaseURL()) : document_url;
+    if (url::Origin::Create(expected) != url::Origin::Create(GURL(origin))) {
       return;
     }
     document.InsertStyleSheet(blink::WebString::FromUtf8(css), nullptr,
