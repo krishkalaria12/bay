@@ -1,21 +1,30 @@
 #include "bay/core/nn_request_filter.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/byte_size.h"
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_routing_id.h"
@@ -24,13 +33,17 @@
 #include "content/public/browser/navigation_throttle_registry.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/data_pipe_producer.h"
+#include "mojo/public/cpp/system/simple_watcher.h"
 #include "mojo/public/cpp/system/string_data_source.h"
 #include "bay/core/mojom/nncore.mojom.h"
 #include "base/json/json_writer.h"
@@ -38,6 +51,11 @@
 #include "net/base/ip_address.h"
 #include "net/base/isolation_info.h"
 #include "net/base/net_errors.h"
+#include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_access_result.h"
+#include "net/cookies/cookie_options.h"
+#include "net/cookies/cookie_partition_key_collection.h"
+#include "net/cookies/cookie_util.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
@@ -46,6 +64,7 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/cpp/url_loader_factory_builder.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
@@ -61,6 +80,18 @@ namespace {
 std::atomic<RequestFilter> g_filter{nullptr};
 std::atomic<ContentSecurityPolicySource> g_csp_source{nullptr};
 std::atomic<ResponseFilter> g_response_filter{nullptr};
+std::atomic<BodyFilterGate> g_body_filter_gate{nullptr};
+std::atomic<BodyFilter> g_body_filter{nullptr};
+std::atomic<RequestHeaderNames> g_request_header_names{nullptr};
+std::atomic<RequestHeaderFilter> g_request_header_filter{nullptr};
+std::atomic<CnameFilter> g_cname_filter{nullptr};
+
+// As uBO: past this, a response isn't held, only passed along.
+constexpr size_t kMaxBodyToFilter = 10 * 1024 * 1024;
+// The most read from or written to a pipe at a time.
+constexpr size_t kBodyChunk = 64 * 1024;
+// The pipe a held body is written to; the network service's own default.
+constexpr uint32_t kBodyPipeCapacity = 512 * 1024;
 
 bool IsWeb(const GURL& url) {
   return url.SchemeIsHTTPOrHTTPS() || url.SchemeIsWSOrWSS();
@@ -279,16 +310,20 @@ void AddContentSecurityPolicy(const network::ResourceRequest& request,
   head.parsed_headers.reset();
 }
 
-// The response's headers as [["Name", "value"], ...], for the host's response rules.
+// Headers as [["Name", "value"], ...], for the host's rules.
+void AppendHeader(base::ListValue& list, std::string_view name, std::string_view value) {
+  base::ListValue pair;
+  pair.Append(name);
+  pair.Append(value);
+  list.Append(std::move(pair));
+}
+
 std::string HeadersJSON(const net::HttpResponseHeaders& headers) {
   base::ListValue list;
   size_t at = 0;
   std::string name, value;
   while (headers.EnumerateHeaderLines(&at, &name, &value)) {
-    base::ListValue pair;
-    pair.Append(name);
-    pair.Append(value);
-    list.Append(std::move(pair));
+    AppendHeader(list, name, value);
   }
   return base::WriteJson(list).value_or("[]");
 }
@@ -299,16 +334,28 @@ std::string RemoteAddress(const network::mojom::URLResponseHead& head) {
   return address.IsValid() && !address.IsZero() ? address.ToString() : std::string();
 }
 
-// Applies the host's response rules ($header, $ipaddress, $permissions, ##^responseheader). True
-// blocks the response. Changes are made on a copy of the headers, then parsed headers are cleared
-// so Chrome parses them again (as for a webRequest extension's changes).
-bool ApplyResponseFilter(const network::ResourceRequest& request,
-                         const std::string& factory_source,
-                         const std::string& factory_top,
-                         network::mojom::URLResponseHead& head) {
+// What the host's response rules did to a response.
+struct ResponseVerdict {
+  bool blocked = false;
+  // For a blocked response, a data URL answered in its place.
+  std::string stand_in;
+  // Whether ##^responseheader(location) took the redirect's target.
+  bool removed_location = false;
+  // Whether ##^responseheader(set-cookie) applies.
+  bool removes_cookies = false;
+};
+
+// Applies the host's response rules ($header, $ipaddress, $permissions, ##^responseheader). Changes are
+// made on a copy of the headers, then parsed headers are cleared so Chrome parses them again (as for a
+// webRequest extension's changes).
+ResponseVerdict ApplyResponseFilter(const network::ResourceRequest& request,
+                                    const std::string& factory_source,
+                                    const std::string& factory_top,
+                                    network::mojom::URLResponseHead& head) {
+  ResponseVerdict verdict;
   ResponseFilter filter = g_response_filter.load(std::memory_order_acquire);
   if (!filter || !head.headers || !request.url.SchemeIsHTTPOrHTTPS()) {
-    return false;
+    return verdict;
   }
   const RequestContext context = ContextOf(request, factory_source, factory_top);
   const std::string ip = RemoteAddress(head);
@@ -317,26 +364,40 @@ bool ApplyResponseFilter(const network::ResourceRequest& request,
                         context.top.c_str(), TypeOf(request), request.method.c_str(),
                         ip.empty() ? nullptr : ip.c_str(), headers.c_str());
   if (!answer) {
-    return false;
+    return verdict;
   }
   std::optional<base::DictValue> result =
       base::JSONReader::ReadDict(answer, base::JSON_PARSE_RFC);
   free(answer);
   if (!result) {
-    return false;
+    return verdict;
   }
   if (result->FindBool("blocked").value_or(false)) {
-    return true;
+    verdict.blocked = true;
+    if (const std::string* redirect = result->FindString("redirect")) {
+      verdict.stand_in = *redirect;
+    }
+    return verdict;
   }
   bool changed = false;
   auto updated =
       base::MakeRefCounted<net::HttpResponseHeaders>(head.headers->raw_headers());
   if (const base::ListValue* remove = result->FindList("remove")) {
     for (const base::Value& name : *remove) {
-      if (name.is_string() && updated->HasHeader(name.GetString())) {
-        updated->RemoveHeader(name.GetString());
-        changed = true;
+      if (!name.is_string()) {
+        continue;
       }
+      // Never in these headers: they cross Mojo without cookies, after the network service stored them.
+      if (base::EqualsCaseInsensitiveASCII(name.GetString(), "set-cookie")) {
+        verdict.removes_cookies = true;
+        continue;
+      }
+      if (!updated->HasHeader(name.GetString())) {
+        continue;
+      }
+      verdict.removed_location |= base::EqualsCaseInsensitiveASCII(name.GetString(), "location");
+      updated->RemoveHeader(name.GetString());
+      changed = true;
     }
   }
   if (const base::ListValue* add = result->FindList("add")) {
@@ -356,7 +417,92 @@ bool ApplyResponseFilter(const network::ResourceRequest& request,
     head.headers = std::move(updated);
     head.parsed_headers.reset();
   }
-  return false;
+  return verdict;
+}
+
+// ##^responseheader(set-cookie): the cookies a response stored, which is every HTTP cookie for its URL
+// written since its request started. The header itself is out of reach (ResponseVerdict), and the
+// store only deletes a cookie it handed out. On the UI thread.
+void DeleteStoredCookies(content::GlobalRenderFrameHostId frame, const GURL& url, base::Time since) {
+  content::RenderFrameHost* host = content::RenderFrameHost::FromID(frame);
+  if (!host) {
+    return;
+  }
+  host->GetStoragePartition()->GetCookieManagerForBrowserProcess()->GetCookieList(
+      url, net::CookieOptions::MakeAllInclusive(), net::CookiePartitionKeyCollection::ContainsAll(),
+      base::BindOnce(
+          [](content::GlobalRenderFrameHostId frame, base::Time since,
+             const net::CookieAccessResultList& cookies, const net::CookieAccessResultList&) {
+            content::RenderFrameHost* host = content::RenderFrameHost::FromID(frame);
+            if (!host) {
+              return;
+            }
+            network::mojom::CookieManager* manager =
+                host->GetStoragePartition()->GetCookieManagerForBrowserProcess();
+            for (const net::CookieWithAccessResult& entry : cookies) {
+              if (entry.cookie.SourceType() == net::CookieSourceType::kHTTP &&
+                  entry.cookie.LastUpdateDate() >= since) {
+                manager->DeleteCanonicalCookie(entry.cookie, base::DoNothing());
+              }
+            }
+          },
+          frame, since));
+}
+
+// The Cookie header a request will carry, which the network service only adds after this interceptor:
+// the cookies Chrome would send for the URL, as a site's own requests get them. On the UI thread;
+// `done` always runs, with "" when the frame has gone.
+void ReadCookies(content::GlobalRenderFrameHostId frame,
+                 const GURL& url,
+                 const net::SiteForCookies& site_for_cookies,
+                 base::OnceCallback<void(std::string)> done) {
+  content::RenderFrameHost* host = content::RenderFrameHost::FromID(frame);
+  if (!host) {
+    return std::move(done).Run(std::string());
+  }
+  net::CookieOptions options;
+  options.set_include_httponly();
+  options.set_same_site_cookie_context(net::cookie_util::ComputeSameSiteContextForSubresource(
+      url, site_for_cookies, /*force_ignore_site_for_cookies=*/false));
+  host->GetStoragePartition()->GetCookieManagerForBrowserProcess()->GetCookieList(
+      url, options, net::CookiePartitionKeyCollection(),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(
+              [](base::OnceCallback<void(std::string)> done,
+                 const net::CookieAccessResultList& included,
+                 const net::CookieAccessResultList&) {
+                std::move(done).Run(net::CanonicalCookie::BuildCookieLine(included));
+              },
+              std::move(done)),
+          net::CookieAccessResultList(), net::CookieAccessResultList()));
+}
+
+// A response body on its way to the host's body filter, away from the filter's sequence: rewriting one
+// takes far longer than the checks that sequence is meant for.
+struct BodyJob {
+  BodyFilter filter;
+  std::string url;
+  std::string source;
+  std::string top;
+  std::string type;
+  std::string method;
+  std::string content_type;
+  std::string body;
+  // Set when the body changed.
+  std::optional<std::string> filtered;
+};
+
+BodyJob RunBodyFilter(BodyJob job) {
+  size_t length = 0;
+  uint8_t* filtered =
+      job.filter(job.url.c_str(), job.source.c_str(), job.top.c_str(), job.type.c_str(),
+                 job.method.c_str(), job.content_type.c_str(),
+                 reinterpret_cast<const uint8_t*>(job.body.data()), job.body.size(), &length);
+  if (filtered) {
+    job.filtered.emplace(reinterpret_cast<const char*>(filtered), length);
+    free(filtered);
+  }
+  return job;
 }
 
 class FilteringFactory;
@@ -370,6 +516,10 @@ class FilteringFactory;
 // redirect pointed there), the network request is dropped, and a new one starts when the
 // client follows. A navigation's loader only rewrites: subframes are blocked by
 // RequestFilterThrottle, main frames never.
+//
+// A response the host's body rules match ($replace, HTML ##^) stays here until its body has arrived,
+// as its headers and every byte depend on the result: the client gets nothing, then the response on a
+// new pipe. Past kMaxBodyToFilter, what's held goes to the client unchanged and the rest follows.
 class FilteringLoader : public network::mojom::URLLoader,
                         public network::mojom::URLLoaderClient {
  public:
@@ -406,7 +556,8 @@ class FilteringLoader : public network::mojom::URLLoader,
     if (rewrite.is_valid()) {
       return InternalRedirect(rewrite);
     }
-    StartNetwork();
+    CheckRequestHeaders(base::BindOnce(&FilteringLoader::StartNetwork,
+                                       weak_factory_.GetWeakPtr()));
   }
 
   void FollowRedirect(
@@ -429,7 +580,8 @@ class FilteringLoader : public network::mojom::URLLoader,
           return Block(decision);
         }
       }
-      return StartNetwork();
+      return CheckRequestHeaders(base::BindOnce(&FilteringLoader::StartNetwork,
+                                                weak_factory_.GetWeakPtr()));
     }
     if (new_url && !navigation_) {
       const Decision decision = Match(request_, source_, top_);
@@ -437,7 +589,9 @@ class FilteringLoader : public network::mojom::URLLoader,
         return Block(decision);
       }
     }
-    target_->FollowRedirect(std::move(headers), new_url);
+    CheckRequestHeaders(base::BindOnce(&FilteringLoader::FollowTargetRedirect,
+                                       weak_factory_.GetWeakPtr(), std::move(headers),
+                                       new_url));
   }
 
   void SetPriority(net::RequestPriority priority,
@@ -454,11 +608,19 @@ class FilteringLoader : public network::mojom::URLLoader,
   void OnReceiveResponse(network::mojom::URLResponseHeadPtr head,
                          mojo::ScopedDataPipeConsumerHandle body,
                          std::optional<mojo_base::BigBuffer> metadata) override {
-    if (ApplyResponseFilter(request_, source_, top_, *head)) {
-      return BlockResponse();
+    if (BlockedByCname(*head)) {
+      return Block({.blocked = true});
     }
+    const ResponseVerdict verdict = ApplyResponseFilter(request_, source_, top_, *head);
+    if (verdict.blocked) {
+      return Block({.blocked = true, .redirect = verdict.stand_in});
+    }
+    NoteRemovedCookies(verdict);
     if (navigation_) {
       AddContentSecurityPolicy(request_, source_, top_, *head);
+    }
+    if (body.is_valid() && WantsBody(*head)) {
+      return HoldBody(std::move(head), std::move(body), std::move(metadata));
     }
     client_->OnReceiveResponse(std::move(head), std::move(body),
                                std::move(metadata));
@@ -466,9 +628,17 @@ class FilteringLoader : public network::mojom::URLLoader,
 
   void OnReceiveRedirect(const net::RedirectInfo& redirect,
                          network::mojom::URLResponseHeadPtr head) override {
+    if (BlockedByCname(*head)) {
+      return Block({.blocked = true});
+    }
     // uBO checks a redirect's headers too: a $header rule can stop a redirect tracker.
-    if (ApplyResponseFilter(request_, source_, top_, *head)) {
-      return BlockResponse();
+    const ResponseVerdict verdict = ApplyResponseFilter(request_, source_, top_, *head);
+    if (verdict.blocked) {
+      return Block({.blocked = true, .redirect = verdict.stand_in});
+    }
+    NoteRemovedCookies(verdict);
+    if (verdict.removed_location) {
+      return EndAtRedirect(std::move(head));
     }
     network::ResourceRequest next = request_;
     next.url = redirect.new_url;
@@ -497,12 +667,27 @@ class FilteringLoader : public network::mojom::URLLoader,
   }
 
   void OnTransferSizeUpdated(int32_t delta) override {
-    client_->OnTransferSizeUpdated(delta);
+    // A client hears of these after its response, and a held one hasn't got it yet.
+    if (head_) {
+      held_transfer_size_ += delta;
+    } else {
+      client_->OnTransferSizeUpdated(delta);
+    }
   }
 
   void OnComplete(const network::URLLoaderCompletionStatus& status) override {
-    client_->OnComplete(status);
-    Destroy();
+    if (!holding_body_) {
+      client_->OnComplete(status);
+      return Destroy();
+    }
+    // The body may still be arriving, or on its way to the client.
+    completion_ = status;
+    network_client_.set_disconnect_handler(base::DoNothing());
+    if (!body_source_.is_valid() && !writing_ && !filtering_) {
+      FilterHeldBody();
+    } else if (writing_ && !producer_.is_valid()) {
+      Finish();
+    }
   }
 
  private:
@@ -512,6 +697,293 @@ class FilteringLoader : public network::mojom::URLLoader,
   ~FilteringLoader() override = default;
 
   void StartNetwork();
+
+  void FollowTargetRedirect(network::HttpRequestHeadersUpdateParams headers,
+                            const std::optional<GURL>& new_url) {
+    target_->FollowRedirect(std::move(headers), new_url);
+  }
+
+  // $requestheader: runs `next` unless the request's headers are refused. Cookie isn't among them
+  // yet (the network service adds it), so a rule that reads it waits for the cookie store.
+  void CheckRequestHeaders(base::OnceClosure next) {
+    RequestHeaderNames names = g_request_header_names.load(std::memory_order_acquire);
+    if (!names || navigation_ || !request_.url.SchemeIsHTTPOrHTTPS()) {
+      return std::move(next).Run();
+    }
+    const RequestContext context = ContextOf(request_, source_, top_);
+    char* wanted = names(request_.url.spec().c_str(), context.source.c_str(), context.top.c_str(),
+                         TypeOf(request_), request_.method.c_str());
+    if (!wanted) {
+      return std::move(next).Run();
+    }
+    const bool reads_cookie = std::string_view(wanted).find("\"cookie\"") != std::string::npos;
+    free(wanted);
+    if (!reads_cookie || !frame_ ||
+        request_.credentials_mode == network::mojom::CredentialsMode::kOmit) {
+      return FinishRequestHeaders(std::move(next), std::string());
+    }
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ReadCookies, *frame_, request_.url, request_.site_for_cookies,
+                       base::BindPostTaskToCurrentDefault(base::BindOnce(
+                           &FilteringLoader::FinishRequestHeaders,
+                           weak_factory_.GetWeakPtr(), std::move(next)))));
+  }
+
+  void FinishRequestHeaders(base::OnceClosure next, std::string cookie) {
+    RequestHeaderFilter filter = g_request_header_filter.load(std::memory_order_acquire);
+    if (!filter) {
+      return std::move(next).Run();
+    }
+    base::ListValue headers;
+    for (const net::HttpRequestHeaders* set : {&request_.headers, &request_.cors_exempt_headers}) {
+      for (const net::HttpRequestHeaders::HeaderKeyValuePair& header : set->GetHeaderVector()) {
+        AppendHeader(headers, header.key, header.value);
+      }
+    }
+    if (request_.referrer.is_valid()) {
+      AppendHeader(headers, "Referer", request_.referrer.spec());
+    }
+    if (!cookie.empty()) {
+      AppendHeader(headers, "Cookie", cookie);
+    }
+    const RequestContext context = ContextOf(request_, source_, top_);
+    const std::string json = base::WriteJson(headers).value_or("[]");
+    if (filter(request_.url.spec().c_str(), context.source.c_str(), context.top.c_str(),
+               TypeOf(request_), request_.method.c_str(), json.c_str())) {
+      return Block({.blocked = true});
+    }
+    std::move(next).Run();
+  }
+
+  // Whether what the request's hostname is a CNAME of is blocked: uBO's uncloaking, but only from the
+  // answer the network stack got, so once the request has gone.
+  bool BlockedByCname(const network::mojom::URLResponseHead& head) {
+    CnameFilter filter = g_cname_filter.load(std::memory_order_acquire);
+    if (!filter || head.dns_aliases.empty() || !request_.url.SchemeIsHTTPOrHTTPS()) {
+      return false;
+    }
+    const RequestContext context = ContextOf(request_, source_, top_);
+    for (const std::string& alias : head.dns_aliases) {
+      if (filter(request_.url.spec().c_str(), alias.c_str(), context.source.c_str(),
+                 context.top.c_str(), TypeOf(request_), request_.method.c_str())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void NoteRemovedCookies(const ResponseVerdict& verdict) {
+    if (frame_ && verdict.removes_cookies) {
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE,
+          base::BindOnce(&DeleteStoredCookies, *frame_, request_.url, network_started_));
+    }
+  }
+
+  // ##^responseheader(location) took a redirect's target, which the network stack has already read:
+  // the redirect ends here, as a response of its own, as it would had the header not been there.
+  void EndAtRedirect(network::mojom::URLResponseHeadPtr head) {
+    network_client_.reset();
+    target_.reset();
+    mojo::ScopedDataPipeProducerHandle producer;
+    mojo::ScopedDataPipeConsumerHandle consumer;
+    if (mojo::CreateDataPipe(nullptr, producer, consumer) != MOJO_RESULT_OK) {
+      client_->OnComplete(
+          network::URLLoaderCompletionStatus(net::ERR_INSUFFICIENT_RESOURCES));
+      return Destroy();
+    }
+    // A navigation without a type would be a download.
+    if (head->mime_type.empty()) {
+      head->mime_type = "text/html";
+    }
+    head->content_length = 0;
+    client_->OnReceiveResponse(std::move(head), std::move(consumer), std::nullopt);
+    client_->OnComplete(network::URLLoaderCompletionStatus(net::OK));
+    Destroy();
+  }
+
+  // Whether the host's body rules want this response. A body the renderer would decode itself isn't
+  // readable text here, and that's an off-by-default feature of Chrome's.
+  bool WantsBody(const network::mojom::URLResponseHead& head) {
+    BodyFilterGate gate = g_body_filter_gate.load(std::memory_order_acquire);
+    if (!gate || !g_body_filter.load(std::memory_order_acquire) || !head.headers ||
+        !request_.url.SchemeIsHTTPOrHTTPS() ||
+        !head.client_side_content_decoding_types.empty()) {
+      return false;
+    }
+    const RequestContext context = ContextOf(request_, source_, top_);
+    const std::string disposition =
+        head.headers->GetNormalizedHeader("Content-Disposition").value_or(std::string());
+    return gate(request_.url.spec().c_str(), context.source.c_str(), context.top.c_str(),
+                TypeOf(request_), request_.method.c_str(), head.headers->response_code(),
+                ContentTypeOf(head).c_str(), disposition.c_str());
+  }
+
+  static std::string ContentTypeOf(const network::mojom::URLResponseHead& head) {
+    return head.headers->GetNormalizedHeader("Content-Type").value_or(head.mime_type);
+  }
+
+  void HoldBody(network::mojom::URLResponseHeadPtr head,
+                mojo::ScopedDataPipeConsumerHandle body,
+                std::optional<mojo_base::BigBuffer> metadata) {
+    holding_body_ = true;
+    head_ = std::move(head);
+    metadata_ = std::move(metadata);
+    body_source_ = std::move(body);
+    source_watcher_.Watch(
+        body_source_.get(), MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+        base::BindRepeating(&FilteringLoader::OnPipeReady, base::Unretained(this)));
+    Pump();
+  }
+
+  void OnPipeReady(MojoResult result) {
+    if (result != MOJO_RESULT_CANCELLED) {
+      Pump();
+    }
+  }
+
+  // Moves the body along: while held, from the network's pipe into `pending_`; while writing, from
+  // `pending_` to the client's pipe, reading more only as that drains.
+  void Pump() {
+    while (true) {
+      if (writing_ && written_ < pending_.size()) {
+        const auto rest = base::as_byte_span(pending_).subspan(written_);
+        size_t count = 0;
+        const MojoResult result = producer_->WriteData(rest.first(std::min(rest.size(), kBodyChunk)),
+                                                       MOJO_WRITE_DATA_FLAG_NONE, count);
+        if (result == MOJO_RESULT_SHOULD_WAIT) {
+          producer_watcher_.ArmOrNotify();
+          return;
+        }
+        if (result != MOJO_RESULT_OK) {
+          // The client stopped reading. It can still hear how the request ended.
+          pending_.clear();
+          written_ = 0;
+          source_watcher_.Cancel();
+          body_source_.reset();
+          continue;
+        }
+        written_ += count;
+        continue;
+      }
+      if (!body_source_.is_valid()) {
+        if (!writing_) {
+          return FilterHeldBody();
+        }
+        producer_watcher_.Cancel();
+        producer_.reset();
+        return Finish();
+      }
+      if (writing_) {
+        pending_.clear();
+        written_ = 0;
+      }
+      const size_t held = pending_.size();
+      pending_.resize(held + kBodyChunk);
+      size_t count = 0;
+      const MojoResult result = body_source_->ReadData(
+          MOJO_READ_DATA_FLAG_NONE,
+          base::as_writable_byte_span(pending_).subspan(held), count);
+      pending_.resize(held + (result == MOJO_RESULT_OK ? count : 0));
+      if (result == MOJO_RESULT_SHOULD_WAIT) {
+        source_watcher_.ArmOrNotify();
+        return;
+      }
+      if (result != MOJO_RESULT_OK) {
+        source_watcher_.Cancel();
+        body_source_.reset();
+        continue;
+      }
+      if (!writing_ && pending_.size() > kMaxBodyToFilter && !ReleaseResponse()) {
+        return;
+      }
+    }
+  }
+
+  // Once all of a held body and the request's outcome are in: a response that failed goes as it came.
+  void FilterHeldBody() {
+    if (!completion_) {
+      return;
+    }
+    BodyFilter filter = g_body_filter.load(std::memory_order_acquire);
+    if (!filter || completion_->error_code != net::OK) {
+      if (ReleaseResponse()) {
+        Pump();
+      }
+      return;
+    }
+    filtering_ = true;
+    const RequestContext context = ContextOf(request_, source_, top_);
+    BodyJob job{.filter = filter,
+                .url = request_.url.spec(),
+                .source = context.source,
+                .top = context.top,
+                .type = TypeOf(request_),
+                .method = request_.method,
+                .content_type = ContentTypeOf(*head_),
+                .body = std::move(pending_)};
+    pending_.clear();
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE,
+        {base::TaskPriority::USER_BLOCKING, base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(&RunBodyFilter, std::move(job)),
+        base::BindOnce(&FilteringLoader::OnBodyFiltered, weak_factory_.GetWeakPtr()));
+  }
+
+  void OnBodyFiltered(BodyJob job) {
+    filtering_ = false;
+    if (job.filtered) {
+      pending_ = std::move(*job.filtered);
+      // The network service's Content-Encoding is long undone, and its length is the old body's.
+      auto updated =
+          base::MakeRefCounted<net::HttpResponseHeaders>(head_->headers->raw_headers());
+      updated->RemoveHeader("Content-Length");
+      head_->headers = std::move(updated);
+      head_->content_length = pending_.size();
+      // Code cached from the old text: V8 only compares a script's length.
+      metadata_.reset();
+      completion_->decoded_body_length = base::ByteSize(pending_.size());
+    } else {
+      pending_ = std::move(job.body);
+    }
+    if (ReleaseResponse()) {
+      Pump();
+    }
+  }
+
+  // Gives the client its response, on a new pipe for what's in `pending_`. False when the loader went.
+  bool ReleaseResponse() {
+    const MojoCreateDataPipeOptions options{sizeof(MojoCreateDataPipeOptions),
+                                            MOJO_CREATE_DATA_PIPE_FLAG_NONE, 1,
+                                            kBodyPipeCapacity};
+    mojo::ScopedDataPipeConsumerHandle consumer;
+    if (mojo::CreateDataPipe(&options, producer_, consumer) != MOJO_RESULT_OK) {
+      client_->OnComplete(
+          network::URLLoaderCompletionStatus(net::ERR_INSUFFICIENT_RESOURCES));
+      Destroy();
+      return false;
+    }
+    producer_watcher_.Watch(
+        producer_.get(), MOJO_HANDLE_SIGNAL_WRITABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+        base::BindRepeating(&FilteringLoader::OnPipeReady, base::Unretained(this)));
+    writing_ = true;
+    written_ = 0;
+    client_->OnReceiveResponse(std::move(head_), std::move(consumer), std::move(metadata_));
+    if (held_transfer_size_) {
+      client_->OnTransferSizeUpdated(held_transfer_size_);
+      held_transfer_size_ = 0;
+    }
+    return true;
+  }
+
+  // The body is with the client: the request ends when the network says how.
+  void Finish() {
+    if (completion_) {
+      client_->OnComplete(*completion_);
+      Destroy();
+    }
+  }
 
   // An internal redirect to `url`, as Chrome's webRequest makes one for an extension.
   void InternalRedirect(const GURL& url) {
@@ -557,13 +1029,6 @@ class FilteringLoader : public network::mojom::URLLoader,
     Destroy();
   }
 
-  // A response rule refused the response ($header, $ipaddress): complete as a blocked request.
-  void BlockResponse() {
-    client_->OnComplete(
-        network::URLLoaderCompletionStatus(net::ERR_BLOCKED_BY_CLIENT));
-    Destroy();
-  }
-
   void NetworkGone() {
     client_->OnComplete(network::URLLoaderCompletionStatus(net::ERR_FAILED));
     Destroy();
@@ -586,6 +1051,25 @@ class FilteringLoader : public network::mojom::URLLoader,
   const bool navigation_;
   bool restart_pending_ = false;
   int rewrites_ = 0;
+  base::Time network_started_;
+
+  // A held response (HoldBody). `head_` and `metadata_` wait until ReleaseResponse; `pending_` is the
+  // whole body until then, and after it what's next to write, of which `written_` have gone.
+  bool holding_body_ = false;
+  bool filtering_ = false;
+  bool writing_ = false;
+  network::mojom::URLResponseHeadPtr head_;
+  std::optional<mojo_base::BigBuffer> metadata_;
+  int32_t held_transfer_size_ = 0;
+  std::string pending_;
+  size_t written_ = 0;
+  std::optional<network::URLLoaderCompletionStatus> completion_;
+  mojo::ScopedDataPipeConsumerHandle body_source_;
+  mojo::ScopedDataPipeProducerHandle producer_;
+  mojo::SimpleWatcher source_watcher_{FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL};
+  mojo::SimpleWatcher producer_watcher_{FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL};
+
+  base::WeakPtrFactory<FilteringLoader> weak_factory_{this};
 };
 
 // One URLLoaderFactory's interceptor: a blocked request is answered at once (an error or a
@@ -677,6 +1161,7 @@ void FilteringLoader::StartNetwork() {
     // The factory's document went while a rewrite waited for its client.
     return NetworkGone();
   }
+  network_started_ = base::Time::Now();
   factory_->target()->CreateLoaderAndStart(
       target_.BindNewPipeAndPassReceiver(), request_id_, options_, request_,
       network_client_.BindNewPipeAndPassRemote(), annotation_);
@@ -832,6 +1317,20 @@ void SetScriptletSource(ScriptletSource source) {
 
 void SetResponseFilter(ResponseFilter filter) {
   g_response_filter.store(filter, std::memory_order_release);
+}
+
+void SetBodyFilter(BodyFilterGate gate, BodyFilter filter) {
+  g_body_filter.store(filter, std::memory_order_release);
+  g_body_filter_gate.store(gate, std::memory_order_release);
+}
+
+void SetRequestHeaderFilter(RequestHeaderNames names, RequestHeaderFilter filter) {
+  g_request_header_filter.store(filter, std::memory_order_release);
+  g_request_header_names.store(names, std::memory_order_release);
+}
+
+void SetCnameFilter(CnameFilter filter) {
+  g_cname_filter.store(filter, std::memory_order_release);
 }
 
 void ExposeScriptlets(service_manager::BinderRegistry* registry) {

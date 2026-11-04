@@ -13,11 +13,17 @@
 // ($removeparam) can apply, as an internal redirect, and the host's Content-Security-Policy
 // ($csp) can be added to their responses.
 //
+// A response goes through the same interceptor: the host's response rules see its headers, what its
+// hostname is a CNAME of can still block it, and body rules ($replace, HTML ##^) rewrite its body.
+//
 // The blocker's scriptlets reach a document synchronously as its main world starts
 // (mojom::NNScriptlets, answered on a background sequence by the host's ScriptletSource).
 
 #ifndef BAY_CORE_NN_REQUEST_FILTER_H_
 #define BAY_CORE_NN_REQUEST_FILTER_H_
+
+#include <stddef.h>
+#include <stdint.h>
 
 #include "content/public/browser/content_browser_client.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
@@ -75,8 +81,9 @@ void SetContentSecurityPolicySource(ContentSecurityPolicySource source);
 
 // The response rules for a request ($header, $ipaddress, $permissions, ##^responseheader). `headers_json` is
 // [["Name","value"], ...]; `ip` is the remote address or null. Returns malloc-allocated JSON
-// {"blocked": bool, "add": [[name, value]], "remove": [name]}, which the engine frees; null for no change. Called on
-// a background sequence before the response reaches the renderer, so it must be thread-safe and quick.
+// {"blocked": bool, "redirect": data URL answered in a blocked response's place, "add": [[name, value]],
+// "remove": [name]}, which the engine frees; null for no change. Called on a background sequence before the response
+// reaches the renderer, so it must be thread-safe and quick.
 using ResponseFilter = char* (*)(const char* url,
                                  const char* source,
                                  const char* top,
@@ -85,6 +92,58 @@ using ResponseFilter = char* (*)(const char* url,
                                  const char* ip,
                                  const char* headers_json);
 void SetResponseFilter(ResponseFilter filter);
+
+// Whether the host's body rules ($replace, HTML ##^) want a response's body. status is its HTTP status;
+// content_type and content_disposition its headers, or "". Called on a background sequence for every
+// response while a filter is set, so it must be thread-safe and quick.
+using BodyFilterGate = bool (*)(const char* url,
+                                const char* source,
+                                const char* top,
+                                const char* type,
+                                const char* method,
+                                int status,
+                                const char* content_type,
+                                const char* content_disposition);
+// A body the gate asked for, whole, with any Content-Encoding removed: a malloc-allocated replacement of
+// *out_length bytes, which the engine frees, or null to leave it. Called on a thread pool, so it must be
+// thread-safe, but it may take its time.
+using BodyFilter = uint8_t* (*)(const char* url,
+                                const char* source,
+                                const char* top,
+                                const char* type,
+                                const char* method,
+                                const char* content_type,
+                                const uint8_t* body,
+                                size_t length,
+                                size_t* out_length);
+void SetBodyFilter(BodyFilterGate gate, BodyFilter filter);
+
+// $requestheader. names: a malloc-allocated JSON array of the lowercase headers the host's rules read for
+// this request, which the engine frees, or null for none (most requests); on a background sequence for
+// every request while set, so thread-safe and quick. filter: whether a request with these headers
+// ([["Name","value"], ...]) is blocked. The engine adds the Cookie header the request would send.
+using RequestHeaderNames = char* (*)(const char* url,
+                                     const char* source,
+                                     const char* top,
+                                     const char* type,
+                                     const char* method);
+using RequestHeaderFilter = bool (*)(const char* url,
+                                     const char* source,
+                                     const char* top,
+                                     const char* type,
+                                     const char* method,
+                                     const char* headers_json);
+void SetRequestHeaderFilter(RequestHeaderNames names, RequestHeaderFilter filter);
+
+// Whether a response is blocked by alias, a name the request's hostname is a CNAME of. Called on a
+// background sequence for each alias of each response that has some, so thread-safe and quick.
+using CnameFilter = bool (*)(const char* url,
+                             const char* alias,
+                             const char* source,
+                             const char* top,
+                             const char* type,
+                             const char* method);
+void SetCnameFilter(CnameFilter filter);
 
 // The host's scriptlets for a document (frame_url) in a tab at top_origin: malloc-allocated
 // JavaScript for its main world, freed by the engine; null or "" for none. Called on a

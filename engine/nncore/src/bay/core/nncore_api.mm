@@ -1052,6 +1052,19 @@ void WatchTracingStart(std::shared_ptr<TracingStart> start, int checks_left) {
   nncore::SetResponseFilter(filter);
 }
 
++ (void)setBodyFilterGate:(NNCoreBodyFilterGate)gate filter:(NNCoreBodyFilter)filter {
+  nncore::SetBodyFilter(gate, filter);
+}
+
++ (void)setRequestHeaderNames:(NNCoreRequestHeaderNames)names
+                       filter:(NNCoreRequestHeaderFilter)filter {
+  nncore::SetRequestHeaderFilter(names, filter);
+}
+
++ (void)setCnameFilter:(NNCoreCnameFilter)filter {
+  nncore::SetCnameFilter(filter);
+}
+
 + (void)setScriptletSource:(NNCoreScriptletSource)source {
   nncore::SetScriptletSource(source);
 }

@@ -54,7 +54,8 @@ typedef char* _Nullable (*NNCoreContentSecurityPolicySource)(const char* url,
                                                              const char* type);
 
 // The response rules for a request ($header, $ipaddress, $permissions, ##^responseheader): malloc-allocated JSON
-// {"blocked": bool, "add": [[name, value]], "remove": [name]}, freed by the engine; NULL for no change. headersJSON is
+// {"blocked": bool, "redirect": data URL answered in a blocked response's place, "add": [[name, value]],
+// "remove": [name]}, freed by the engine; NULL for no change. headersJSON is
 // [["Name","value"], ...]; ip is the remote address or NULL. Called on a background sequence before the response
 // reaches the renderer, so it must be thread-safe and quick.
 typedef char* _Nullable (*NNCoreResponseFilter)(const char* url,
@@ -64,6 +65,57 @@ typedef char* _Nullable (*NNCoreResponseFilter)(const char* url,
                                                 const char* method,
                                                 const char* _Nullable ip,
                                                 const char* headersJSON);
+
+// Whether the content blocker's body rules ($replace, HTML ##^) want a response's body. contentType and
+// contentDisposition are its headers, or "". Called on a background sequence for every response while
+// set, so it must be thread-safe and quick.
+typedef bool (*NNCoreBodyFilterGate)(const char* url,
+                                     const char* source,
+                                     const char* top,
+                                     const char* type,
+                                     const char* method,
+                                     int status,
+                                     const char* contentType,
+                                     const char* contentDisposition);
+
+// A body the gate asked for, whole and without its Content-Encoding: a malloc-allocated replacement of
+// *outLength bytes, freed by the engine; NULL to leave it. Called on a thread pool: thread-safe, but it
+// may take its time.
+typedef uint8_t* _Nullable (*NNCoreBodyFilter)(const char* url,
+                                               const char* source,
+                                               const char* top,
+                                               const char* type,
+                                               const char* method,
+                                               const char* contentType,
+                                               const uint8_t* _Nullable body,
+                                               size_t length,
+                                               size_t* outLength);
+
+// $requestheader: the lowercase headers the host's rules read for this request, as a malloc-allocated JSON
+// array freed by the engine; NULL for none (most requests). On a background sequence for every request
+// while set, so it must be thread-safe and quick.
+typedef char* _Nullable (*NNCoreRequestHeaderNames)(const char* url,
+                                                    const char* source,
+                                                    const char* top,
+                                                    const char* type,
+                                                    const char* method);
+
+// Whether a request with these headers ([["Name","value"], ...], with the Cookie it would send) is blocked.
+typedef bool (*NNCoreRequestHeaderFilter)(const char* url,
+                                          const char* source,
+                                          const char* top,
+                                          const char* type,
+                                          const char* method,
+                                          const char* headersJSON);
+
+// Whether a response is blocked by alias, a name its hostname is a CNAME of. On a background sequence for
+// each alias of each response that has some, so it must be thread-safe and quick.
+typedef bool (*NNCoreCnameFilter)(const char* url,
+                                  const char* alias,
+                                  const char* source,
+                                  const char* top,
+                                  const char* type,
+                                  const char* method);
 
 // The host's scriptlets for a document: malloc-allocated JavaScript the engine runs in its main
 // world before the page's own scripts, and frees; NULL for none. frameURL: the document's URL
@@ -202,6 +254,13 @@ NNCORE_EXPORT
 + (void)setContentSecurityPolicySource:(nullable NNCoreContentSecurityPolicySource)source;
 // The content blocker's response rules (NNCoreResponseFilter); NULL (the default) changes none.
 + (void)setResponseFilter:(nullable NNCoreResponseFilter)filter;
+// The content blocker's body rules; NULL (the default) rewrites no body.
++ (void)setBodyFilterGate:(nullable NNCoreBodyFilterGate)gate filter:(nullable NNCoreBodyFilter)filter;
+// The content blocker's $requestheader rules; NULL (the default) reads no headers.
++ (void)setRequestHeaderNames:(nullable NNCoreRequestHeaderNames)names
+                       filter:(nullable NNCoreRequestHeaderFilter)filter;
+// The content blocker's CNAME check; NULL (the default) ignores what a hostname is an alias of.
++ (void)setCnameFilter:(nullable NNCoreCnameFilter)filter;
 // The content blocker's scriptlets (NNCoreScriptletSource); NULL (the default) runs none.
 + (void)setScriptletSource:(nullable NNCoreScriptletSource)source;
 // Device choosers (engine:deviceChooser:tab:). index: an option, or -1 for a scanning
