@@ -15,14 +15,16 @@ const isRow = (item: Suggestion): item is Row => item.kind === "page" || item.ki
 export function useSuggestions(query: string, engine: SearchEngine, data: BrowserData, currentUrl: string): { rows: Row[]; completion: string } {
   const [remote, setRemote] = useState<readonly string[]>([]);
 
+  // With suggestions off, nothing typed leaves the device before it's sent.
+  const ask = data.preferences.searchSuggestions;
   useEffect(() => {
-    if (!query.trim()) {
+    if (!query.trim() || !ask) {
       fetcher.cancel();
       setRemote([]);
       return;
     }
     fetcher.request(engine, query, setRemote);
-  }, [engine, query]);
+  }, [engine, query, ask]);
   useEffect(() => () => fetcher.cancel(), []);
 
   return useMemo(() => {
