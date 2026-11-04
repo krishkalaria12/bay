@@ -29,7 +29,8 @@ uint8_t *bay_blocker_serialize(const BayBlocker *blocker, size_t *length);
 void bay_bytes_free(uint8_t *data, size_t length);
 void bay_blocker_free(BayBlocker *blocker);
 // source_url: the document's (or worker's) URL or origin. type: script, image, stylesheet, font, media, subdocument,
-// xmlhttprequest, ping, websocket, object, other. method: the HTTP request method.
+// xmlhttprequest, ping, websocket, object, other; through bay_blocker_match also popup, for a page a page opens
+// (source_url the opener). method: the HTTP request method.
 bool bay_blocker_should_block(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
                               const char *method);
 typedef struct {
@@ -42,6 +43,10 @@ typedef struct {
 } BayBlockerMatch;
 BayBlockerMatch bay_blocker_match(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
                                  const char *method);
+// The Content-Security-Policy $csp rules add to a document's response, or NULL for none. type: document or subdocument.
+// Free with bay_string_free.
+char *bay_blocker_content_security_policy(const BayBlocker *blocker, const char *url, const char *source_url,
+                                          const char *type);
 // The page's scriptlet code for its main world, or NULL for none. Free with bay_string_free.
 char *bay_blocker_scriptlets(const BayBlocker *blocker, const char *url);
 // {"hide": [selector], "exceptions": [selector], "generichide": bool, "script": scriptlet code,

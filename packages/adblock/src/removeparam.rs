@@ -30,6 +30,11 @@ const TYPES: &[&str] = &[
     "webrtc",
 ];
 
+/// Whether an option names a request type, as `script` or `~image`.
+pub fn is_type_option(option: &str) -> bool {
+    TYPES.contains(&option.trim_start_matches('~'))
+}
+
 /// The list's `$removeparam` exceptions as plain rules, one per line.
 pub fn exceptions(list: &str) -> String {
     let mut rules = String::new();
@@ -54,9 +59,7 @@ pub fn exceptions(list: &str) -> String {
         if !found || (pattern.is_empty() && kept.is_empty()) {
             continue;
         }
-        let typed = kept
-            .iter()
-            .any(|option| TYPES.contains(&option.trim_start_matches('~')));
+        let typed = kept.iter().any(|option| is_type_option(option));
         let mut push = |options: &[&str]| {
             rules.push_str(pattern);
             if !options.is_empty() {

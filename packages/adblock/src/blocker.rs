@@ -13,11 +13,13 @@ pub struct Blocker {
     engine: Mutex<Engine>,
     /// The lists' `$removeparam` exceptions as plain rules (crate::removeparam): a request one matches isn't rewritten.
     keep_params: Mutex<Engine>,
+    /// The lists' `$popup` rules as `$document` rules (crate::adapt), asked about pages a page opens.
+    popups: Mutex<Engine>,
 }
 
-/// [`Blocker::serialize`]'s format: this tag, the main engine's length (u64, little-endian), the main engine, then the
-/// `$removeparam` exceptions' engine.
-const SERIALIZED_TAG: &[u8; 4] = b"BAY2";
+/// [`Blocker::serialize`]'s format: this tag, the lengths of the main and `$removeparam` engines (u64, little-endian),
+/// then those engines and the popup engine.
+const SERIALIZED_TAG: &[u8; 4] = b"BAY3";
 
 #[derive(Serialize)]
 pub struct CosmeticResources {
@@ -69,11 +71,14 @@ pub struct RequestMatch {
 impl Blocker {
     /// Builds an engine from one or more filter lists joined into one text.
     pub fn new(lists: &str) -> Self {
+        let adapted = crate::adapt::adapt(lists);
+        let keep_params = crate::removeparam::exceptions(&adapted.main);
         let mut set = FilterSet::new(false);
-        set.add_filter_list(lists.to_owned(), ParseOptions::default());
+        set.add_filter_list(adapted.main, ParseOptions::default());
         Self::from_engines(
             Engine::new_with_filter_set(set),
-            keep_params_engine(&crate::removeparam::exceptions(lists)),
+            plain_engine(&keep_params),
+            plain_engine(&adapted.popups),
         )
     }
 
@@ -82,15 +87,19 @@ impl Blocker {
     pub fn from_lists(lists: &[FilterList]) -> Self {
         let mut set = FilterSet::new(false);
         let mut keep_params = String::new();
+        let mut popups = String::new();
         for list in lists {
             let format = if list.hosts {
                 FilterFormat::Hosts
             } else {
                 FilterFormat::Standard
             };
-            let text = crate::preprocess::preprocess(list.text).into_owned();
+            let mut text = crate::preprocess::preprocess(list.text).into_owned();
             if !list.hosts {
-                keep_params.push_str(&crate::removeparam::exceptions(&text));
+                let adapted = crate::adapt::adapt(&text);
+                keep_params.push_str(&crate::removeparam::exceptions(&adapted.main));
+                popups.push_str(&adapted.popups);
+                text = adapted.main;
             }
             set.add_filter_list(
                 text,
@@ -103,14 +112,16 @@ impl Blocker {
         }
         Self::from_engines(
             Engine::new_with_filter_set(set),
-            keep_params_engine(&keep_params),
+            plain_engine(&keep_params),
+            plain_engine(&popups),
         )
     }
 
-    fn from_engines(engine: Engine, keep_params: Engine) -> Self {
+    fn from_engines(engine: Engine, keep_params: Engine, popups: Engine) -> Self {
         Self {
             engine: Mutex::new(engine),
             keep_params: Mutex::new(keep_params),
+            popups: Mutex::new(popups),
         }
     }
 
@@ -122,28 +133,32 @@ impl Blocker {
     pub fn serialize(&self) -> Vec<u8> {
         let main = self.engine().serialize();
         let keep = lock(&self.keep_params).serialize();
-        let mut data = Vec::with_capacity(SERIALIZED_TAG.len() + 8 + main.len() + keep.len());
+        let popups = lock(&self.popups).serialize();
+        let mut data =
+            Vec::with_capacity(SERIALIZED_TAG.len() + 16 + main.len() + keep.len() + popups.len());
         data.extend_from_slice(SERIALIZED_TAG);
         data.extend_from_slice(&(main.len() as u64).to_le_bytes());
+        data.extend_from_slice(&(keep.len() as u64).to_le_bytes());
         data.extend_from_slice(&main);
         data.extend_from_slice(&keep);
+        data.extend_from_slice(&popups);
         data
     }
 
     /// An engine [`Blocker::serialize`] wrote, or `None` when the data is damaged or from another adblock-rust.
     pub fn deserialize(data: &[u8]) -> Option<Self> {
         let rest = data.strip_prefix(SERIALIZED_TAG)?;
-        let (length, rest) = rest.split_first_chunk::<8>()?;
-        let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
-        if length > rest.len() {
-            return None;
-        }
-        let (main, keep) = rest.split_at(length);
-        let mut engine = Engine::default();
-        engine.deserialize(main).ok()?;
-        let mut keep_params = Engine::default();
-        keep_params.deserialize(keep).ok()?;
-        Some(Self::from_engines(engine, keep_params))
+        let (main_length, rest) = rest.split_first_chunk::<8>()?;
+        let (keep_length, rest) = rest.split_first_chunk::<8>()?;
+        let (main, rest) =
+            rest.split_at_checked(usize::try_from(u64::from_le_bytes(*main_length)).ok()?)?;
+        let (keep, popups) =
+            rest.split_at_checked(usize::try_from(u64::from_le_bytes(*keep_length)).ok()?)?;
+        let read = |bytes: &[u8]| {
+            let mut engine = Engine::default();
+            engine.deserialize(bytes).ok().map(|()| engine)
+        };
+        Some(Self::from_engines(read(main)?, read(keep)?, read(popups)?))
     }
 
     /// Each list's rule counts, in the order the lists were given (kept through serialization).
@@ -215,6 +230,31 @@ impl Blocker {
         self.match_request(url, source_url, kind, method).blocked
     }
 
+    /// The Content-Security-Policy `$csp` rules add to a document's response, if any. `kind` is `document` or
+    /// `subdocument`.
+    pub fn content_security_policy(
+        &self,
+        url: &str,
+        source_url: &str,
+        kind: &str,
+    ) -> Option<String> {
+        let request = Request::new(url, source_url, kind, "GET").ok()?;
+        self.engine().get_csp_directives(&request)
+    }
+
+    /// Whether a page may not open `url` in a new tab or window: a `$popup` rule, or a rule that blocks it as a document
+    /// (uBO would show its block page in the new tab). A `$popup` exception decides first. `source_url` is the opener.
+    fn blocks_popup(&self, url: &str, source_url: &str, method: &str) -> bool {
+        let Ok(request) = Request::new(url, source_url, "document", method) else {
+            return false;
+        };
+        let popup = lock(&self.popups).check_network_request(&request);
+        if popup.exception.is_some() {
+            return false;
+        }
+        popup.should_block() || self.engine().check_network_request(&request).should_block()
+    }
+
     pub fn match_request(
         &self,
         url: &str,
@@ -222,6 +262,12 @@ impl Blocker {
         kind: &str,
         method: &str,
     ) -> RequestMatch {
+        if kind == "popup" {
+            return RequestMatch {
+                blocked: self.blocks_popup(url, source_url, method),
+                ..RequestMatch::default()
+            };
+        }
         let Ok(request) = Request::new(url, source_url, kind, method) else {
             return RequestMatch::default();
         };
@@ -269,7 +315,7 @@ fn lock(engine: &Mutex<Engine>) -> std::sync::MutexGuard<'_, Engine> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn keep_params_engine(rules: &str) -> Engine {
+fn plain_engine(rules: &str) -> Engine {
     let mut set = FilterSet::new(false);
     set.add_filter_list(rules.to_owned(), ParseOptions::default());
     Engine::new_with_filter_set(set)
@@ -456,8 +502,69 @@ mod tests {
                 Some("https://site.example/")
             );
         }
-        assert!(Blocker::deserialize(b"BAY2").is_none());
+        assert!(Blocker::deserialize(b"BAY3").is_none());
         assert!(Blocker::deserialize(&[1, 2, 3]).is_none());
+    }
+
+    #[test]
+    fn popups_follow_popup_rules_and_their_exceptions() {
+        let blocker = Blocker::from_lists(&[FilterList {
+            text: "||pop.example^$popup\n||both.example^$all\n||doc.example^$doc\n||pop.example/ok/$popup,~third-party\n\
+                   @@||pop.example/allowed^$popup\n||script.example^$script\n",
+            hosts: false,
+            permissions: 0,
+        }]);
+        let opener = "https://site.example/";
+        let popup = |url: &str| blocker.match_request(url, opener, "popup", "GET").blocked;
+        assert!(popup("https://pop.example/x"));
+        assert!(popup("https://both.example/"));
+        assert!(popup("https://doc.example/"));
+        assert!(!popup("https://pop.example/allowed/x"));
+        assert!(!popup("https://script.example/"));
+        assert!(!popup("https://site.example/next"));
+        // A `$popup` rule says nothing about the host's other requests.
+        assert!(!blocker.should_block("https://pop.example/x.js", opener, "script", "GET"));
+        let copy = Blocker::deserialize(&blocker.serialize()).expect("deserializes");
+        assert!(
+            copy.match_request("https://pop.example/x", opener, "popup", "GET")
+                .blocked
+        );
+    }
+
+    #[test]
+    fn denyallow_rules_block_all_but_their_hosts() {
+        let blocker =
+            Blocker::new("*$script,3p,denyallow=good.example|cdn.example,domain=site.example\n");
+        let page = "https://site.example/";
+        assert!(blocker.should_block("https://ads.example/a.js", page, "script", "GET"));
+        assert!(!blocker.should_block("https://good.example/a.js", page, "script", "GET"));
+        assert!(!blocker.should_block("https://www.cdn.example/a.js", page, "script", "GET"));
+        assert!(!blocker.should_block(
+            "https://ads.example/a.js",
+            "https://other.example/",
+            "script",
+            "GET"
+        ));
+    }
+
+    #[test]
+    fn csp_rules_answer_for_documents_only_and_honour_exceptions() {
+        let blocker = Blocker::new(
+            "||site.example^$doc,csp=worker-src 'none'\n*$csp=script-src 'none',domain=other.example\n\
+             @@||site.example/free^$csp=worker-src 'none'\n",
+        );
+        let policy = |url: &str, kind: &str| blocker.content_security_policy(url, url, kind);
+        assert_eq!(
+            policy("https://site.example/", "document").as_deref(),
+            Some("worker-src 'none'")
+        );
+        assert_eq!(
+            policy("https://other.example/", "subdocument").as_deref(),
+            Some("script-src 'none'")
+        );
+        assert_eq!(policy("https://site.example/free", "document"), None);
+        assert_eq!(policy("https://site.example/a.js", "script"), None);
+        assert_eq!(policy("https://none.example/", "document"), None);
     }
 
     #[test]

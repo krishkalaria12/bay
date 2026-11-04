@@ -6,6 +6,7 @@
 //! caches the compiled engine ([`Blocker::serialize`]). Tracking-parameter stripping lives here too, so the engines
 //! clean navigations the same way.
 
+mod adapt;
 mod blocker;
 mod ffi;
 #[cfg(target_os = "android")]

@@ -186,7 +186,8 @@ pub unsafe extern "C" fn bay_blocker_free(blocker: *mut Blocker) {
 
 /// Whether to block a request. `source_url` is the URL (or origin) of the document or worker that makes it; `type` is
 /// an adblock resource type (`script`, `image`, `stylesheet`, `font`, `media`, `subdocument`, `xmlhttprequest`,
-/// `ping`, `websocket`, `object`, `other`…). Thread-safe.
+/// `ping`, `websocket`, `object`, `other`…). Thread-safe. Through `bay_blocker_match`, `popup` asks about a page a page
+/// opens (`source_url` the opener).
 ///
 /// # Safety
 /// `blocker` must be live; the strings valid NUL-terminated strings.
@@ -236,6 +237,23 @@ pub unsafe extern "C" fn bay_blocker_match(
         redirect: result.redirect.map_or(std::ptr::null_mut(), give),
         rewrite: result.rewrite.map_or(std::ptr::null_mut(), give),
     }
+}
+
+/// The Content-Security-Policy `$csp` rules add to a document's response, or null for none. `kind` is `document` or
+/// `subdocument`. Free with `bay_string_free`.
+///
+/// # Safety
+/// `blocker` must be live; the strings valid NUL-terminated strings.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_content_security_policy(
+    blocker: *const Blocker,
+    url: *const c_char,
+    source_url: *const c_char,
+    kind: *const c_char,
+) -> *mut c_char {
+    (*blocker)
+        .content_security_policy(borrow(url), borrow(source_url), borrow(kind))
+        .map_or(std::ptr::null_mut(), give)
 }
 
 /// The page's scriptlet code, or null when it has none. Free with `bay_string_free`.
