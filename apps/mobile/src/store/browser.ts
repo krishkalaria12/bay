@@ -78,11 +78,13 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
 }));
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+// One save at a time: two writing the same temporary file at once lose one of them.
+let saving: Promise<void> = Promise.resolve();
 function save(): void {
   clearTimeout(saveTimer);
   saveTimer = undefined;
-  const { ready, data } = useBrowserStore.getState();
-  if (ready) repository.save(data).catch((error: unknown) => console.warn("Couldn't save browsing state.", error));
+  if (!useBrowserStore.getState().ready) return;
+  saving = saving.then(() => repository.save(useBrowserStore.getState().data)).catch((error: unknown) => console.warn("Couldn't save browsing state.", error));
 }
 
 useBrowserStore.subscribe((state, previous) => {
