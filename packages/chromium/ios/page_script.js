@@ -857,6 +857,7 @@
     let ids = [];
     let queued = false;
     let sent = 0;
+    const full = () => seenClasses.size + seenIds.size >= 20000;
     const flush = () => {
       queued = false;
       // Match NNCoreWebView's limit per message, so every discovered name reaches the host.
@@ -868,17 +869,19 @@
       ids = [];
     };
     const note = (el) => {
+      if (full()) return;
       const id = el.getAttribute("id");
       if (id && !seenIds.has(id)) {
         seenIds.add(id);
         ids.push(id);
       }
       const list = el.classList;
-      for (let i = 0; list && i < list.length; i++) {
+      for (let i = 0; list && i < list.length && !full(); i++) {
         if (seenClasses.has(list[i])) continue;
         seenClasses.add(list[i]);
         classes.push(list[i]);
       }
+      if (full()) observer.disconnect();
       if (!queued && (classes.length || ids.length)) {
         queued = true;
         // The first names at once (the page is painting), then every 100 ms.
@@ -886,15 +889,26 @@
       }
     };
     const noteTree = (node) => {
-      if (node.nodeType !== 1 || sent > 20000) return;
+      if (node.nodeType !== 1 || full()) return;
       note(node);
-      if (node.firstElementChild) for (const el of node.querySelectorAll("[id],[class]")) note(el);
+      if (node.firstElementChild && !full()) {
+        for (const el of node.querySelectorAll("[id],[class]")) {
+          note(el);
+          if (full()) break;
+        }
+      }
     };
     const observer = new MutationObserver(
       guard((records) => {
         for (const record of records) {
+          if (full()) break;
           if (record.type === "attributes") note(record.target);
-          else for (const node of record.addedNodes) noteTree(node);
+          else {
+            for (const node of record.addedNodes) {
+              noteTree(node);
+              if (full()) break;
+            }
+          }
         }
       }),
     );

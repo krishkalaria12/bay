@@ -170,6 +170,7 @@ function page(elements = []) {
     ...api,
     root,
     messages,
+    observers,
     drain,
     location,
     mutate(records) {
@@ -200,6 +201,43 @@ test("generic cosmetics send every class and id in batches within the native lim
     p.mutate([{ type: "attributes", target: elements[0] }]);
     assert.equal(p.messages.length, Math.ceil(count / 4000), "seen names are not sent again");
   }
+});
+
+test("generic cosmetics cap pending classes and ids before the first flush", () => {
+  const elements = Array.from({ length: 12000 }, (_, i) => new Element({ classes: [`class-${i}`], id: `id-${i}` }));
+  const p = page(elements);
+  p.installCosmetic();
+  p.drain();
+  assert.equal(
+    p.messages.reduce((count, message) => count + message.classes.length + message.ids.length, 0),
+    20000,
+  );
+  assert.equal(p.observers[0].connected, false, "the exhausted survey stops observing");
+});
+
+test("attribute changes respect the shared cosmetic budget and leave procedural rules observing", () => {
+  const changing = new Element();
+  const ad = new Element({ classes: ["tile"], text: "Article" });
+  const p = page([changing, ad]);
+  p.installCosmetic();
+  p.installProcedural([rule([css(".tile"), op("has-text", "Sponsored")])]);
+  p.drain();
+  for (let i = 0; i < 12500; i++) {
+    changing.attributes.set("id", `id-${i}`);
+    changing.classList = [`class-${i}`];
+    p.mutate([{ type: "attributes", target: changing }]);
+  }
+  assert.equal(
+    p.messages.reduce((count, message) => count + message.classes.length + message.ids.length, 0),
+    20000,
+  );
+  assert.equal(p.observers[0].connected, false);
+  assert.equal(p.observers[1].connected, true, "procedural rules have their own observer");
+  const messages = p.messages.length;
+  ad.textContent = "Sponsored";
+  p.mutate([{ type: "characterData", target: ad }]);
+  assert.equal(ad.style.getPropertyValue("display"), "none");
+  assert.equal(p.messages.length, messages, "cosmetic collection stays stopped");
 });
 
 test("procedural text matches hide elements and restore their styles when text changes", () => {
