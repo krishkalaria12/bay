@@ -575,6 +575,10 @@ export function BrowserScreen(): JSX.Element {
         wallpaper={data.preferences.wallpaper}
         wallpaperPhoto={data.preferences.wallpaperPhoto}
         onWallpaperChange={(id, photo) => dispatch({ type: "wallpaper", id, photo })}
+        pausedHosts={blockingPausedHosts}
+        onResumeBlocking={(paused) => dispatch({ type: "pause-blocking", host: paused, paused: false })}
+        preferences={data.preferences}
+        onPreferencesChange={(update) => dispatch({ type: "preferences", update })}
         onClearData={wipe}
         downloadCount={downloads.downloads.length}
         onDownloads={() => setPanel("downloads")}
