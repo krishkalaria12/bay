@@ -5,11 +5,13 @@ const mode = process.argv[2];
 if (mode !== "dev" && mode !== "build") throw new Error("Expected web dev or build");
 const cwd = fileURLToPath(new URL("../apps/browser/", import.meta.url));
 const cli = fileURLToPath(new URL("../node_modules/expo/bin/cli", import.meta.url));
-const args = mode === "build" ? ["export", "--platform", "web"] : ["start", "--web", "--port", "8090"];
+// A build clears Metro's cache: its transforms inline EXPO_PUBLIC_ values and don't key on them, so a switch of
+// BAY_WEB_SHADERS would otherwise keep the last build's.
+const args = mode === "build" ? ["export", "--platform", "web", "--clear"] : ["start", "--web", "--port", "8090"];
 const child = spawn(process.execPath, [cli, ...args, ...process.argv.slice(3)], {
   cwd,
-  // BAY_WEB_SHADERS=1 draws the shader views with WebGL2; otherwise they keep their CSS (the rollback path).
-  env: { ...process.env, BAY_WEB: "1", EXPO_PUBLIC_BAY_WEB_SHADERS: process.env.BAY_WEB_SHADERS === "1" ? "1" : "0" },
+  // The shader views draw with WebGL2, over a CSS base for a GPU without it. BAY_WEB_SHADERS=0 builds the CSS alone.
+  env: { ...process.env, BAY_WEB: "1", EXPO_PUBLIC_BAY_WEB_SHADERS: process.env.BAY_WEB_SHADERS === "0" ? "0" : "1" },
   stdio: "inherit",
 });
 child.on("error", (error) => {
