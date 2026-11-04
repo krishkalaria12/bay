@@ -29,7 +29,7 @@ test("the menus come in macOS's order, with nested menus and each item's state",
   const items = appMenuItems(state({ disabled: ["back"], checked: ["setAppearance:dark"], titles: { toggleMute: "Unmute Site" } }));
   assert.deepEqual(
     items.map((m) => m.title),
-    ["Bay", "File", "Edit", "View", "Tabs", "Bookmarks", "History", "Window", "Help"],
+    ["Bay", "File", "Edit", "View", "Tabs", "Bookmarks", "History", "Extensions", "Window", "Help"],
   );
   assert.equal(find(items, "back").enabled, false);
   assert.equal(find(items, "forward").enabled, true);
@@ -61,4 +61,21 @@ test("bookmarks, recently closed and spaces fill their menus", () => {
   assert.equal(find(items, "openBookmark:b2").title, "https://work");
   assert.equal(find(items, "restoreClosed:c1").title, "Old Tab");
   assert.equal(find(items, "switchSpace:s1").checked, true);
+});
+
+test("the Window and Extensions menus list what's open and installed", () => {
+  const items = appMenuItems(
+    state({
+      windows: [{ id: "w2", title: "Work" }],
+      extensions: [
+        { id: "e1", title: "Blocker", enabled: true },
+        { id: "e2", title: "Off", enabled: false },
+      ],
+    }),
+  );
+  assert.equal(find(items, "focusWindow:w2").title, "Work");
+  assert.equal(find(items, "openExtension:e1").enabled, true);
+  assert.equal(find(items, "openExtension:e2").enabled, false);
+  assert.equal(find(items, "manageExtensions").title, "Manage Extensions…");
+  assert.equal(find(appMenuItems(state()), "addExtension").title, "Add Extension…");
 });

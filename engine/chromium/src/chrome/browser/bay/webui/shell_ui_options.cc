@@ -94,7 +94,8 @@ bool MenuItems(const base::ListValue& items,
 }  // namespace
 std::optional<std::vector<ShellMenuItem>> ParseShellMenuArgs(
     const base::ListValue& args) {
-  if (args.size() != 1 || !args[0].is_list())
+  if (args.empty() || args.size() > 2 || !args[0].is_list() ||
+      (args.size() == 2 && !ParseShellMenuAnchor(args)))
     return std::nullopt;
   std::vector<ShellMenuItem> items;
   size_t count = 0;
@@ -113,6 +114,18 @@ std::optional<uint32_t> ParseShellSwatch(std::string_view hex) {
     return std::nullopt;
   // RRGGBB is opaque; RRGGBBAA moves its alpha to the top byte.
   return hex.size() == 6 ? 0xFF000000u | value : (value >> 8) | (value << 24);
+}
+std::optional<ShellMenuAnchor> ParseShellMenuAnchor(
+    const base::ListValue& args) {
+  const auto* anchor = args.size() == 2 ? args[1].GetIfList() : nullptr;
+  if (!anchor || anchor->size() != 2)
+    return std::nullopt;
+  const auto x = (*anchor)[0].GetIfDouble();
+  const auto y = (*anchor)[1].GetIfDouble();
+  if (!x || !y || !std::isfinite(*x) || !std::isfinite(*y))
+    return std::nullopt;
+  return ShellMenuAnchor{static_cast<int>(std::round(*x)),
+                         static_cast<int>(std::round(*y))};
 }
 std::optional<ShellPromptOptions> ParseShellPromptOptions(
     const base::DictValue& options) {

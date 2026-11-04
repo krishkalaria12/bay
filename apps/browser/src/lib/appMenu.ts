@@ -7,7 +7,9 @@ import { showMenu, type MenuBookmark, type MenuItem, type MenuState } from "@bay
 import { keyBindings, type ShortcutOverrides } from "./keyBindings";
 import { SHORTCUT_ACTIONS } from "./shortcutCatalog";
 
-const MENUS = ["Bay", "File", "Edit", "View", "Tabs", "Bookmarks", "History", "Window", "Help"];
+const MENUS = ["Bay", "File", "Edit", "View", "Tabs", "Bookmarks", "History", "Extensions", "Window", "Help"];
+// Under the window's top edge, where a menu bar's first menu would open.
+const MENU_ANCHOR: [number, number] = [8, 8];
 
 type Submenu = Extract<MenuItem, { id: string }>;
 
@@ -57,6 +59,18 @@ export function appMenuItems(state: MenuState, overrides: ShortcutOverrides = {}
       title: "Recently Closed",
       children: closed.map((entry) => ({ id: `restoreClosed:${entry.id}`, title: entry.title })),
     });
+  const extensions = state.extensions ?? [];
+  menus
+    .get("Extensions")!
+    .children!.push(
+      ...extensions.map((extension) => ({ id: `openExtension:${extension.id}`, title: extension.title, enabled: extension.enabled })),
+      ...(extensions.length ? [{ separator: true as const }] : []),
+      { id: "addExtension", title: "Add Extension…" },
+      { id: "manageExtensions", title: "Manage Extensions…" },
+    );
+  if (state.windows.length) {
+    menus.get("Window")!.children!.push({ separator: true }, ...state.windows.map((window) => ({ id: `focusWindow:${window.id}`, title: window.title })));
+  }
   if (state.spaces.length)
     menus.get("Window")!.children!.push({
       id: "menu:Window:Spaces",
@@ -68,7 +82,7 @@ export function appMenuItems(state: MenuState, overrides: ShortcutOverrides = {}
 
 /** Opens the menu and runs what was chosen, as the menu bar's command would. */
 export async function showAppMenu(state: MenuState, overrides: ShortcutOverrides, run: (command: string, arg: string | null) => void) {
-  const choice = await showMenu(appMenuItems(state, overrides));
+  const choice = await showMenu(appMenuItems(state, overrides), MENU_ANCHOR);
   if (!choice || choice.startsWith("menu:") || choice.startsWith("folder:")) return;
   const split = choice.indexOf(":");
   run(split < 0 ? choice : choice.slice(0, split), split < 0 ? null : choice.slice(split + 1));

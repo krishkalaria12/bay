@@ -17,7 +17,7 @@ inline constexpr Method methods[] = {
   {"BayWebView", "update", true, 2, 2},
   {"BayWebView", "call", true, 3, 3},
   {"BayWebView", "unmount", true, 1, 1},
-  {"BayShell", "showMenu", true, 1, 1},
+  {"BayShell", "showMenu", true, 1, 2},
   {"BayShell", "copyText", true, 1, 1},
   {"BayShell", "copyImage", true, 1, 2},
   {"BayShell", "setSwitcherCapture", true, 1, 1},

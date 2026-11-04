@@ -310,4 +310,27 @@ TEST(ShellUIOptionsTest, FontFamiliesAreTheFirstColumnOfChromesList) {
   EXPECT_EQ(FontFamiliesFromFontList(fonts),
             base::ListValue().Append("Noto Sans").Append("Inter"));
 }
+TEST(ShellUIOptionsTest, AMenuMayBePlacedInTheWindow) {
+  auto item = base::ListValue().Append(
+      base::DictValue().Set("id", "a").Set("title", "A"));
+  const auto placed = base::ListValue().Append(item.Clone()).Append(
+      base::ListValue().Append(8).Append(10.4));
+  EXPECT_TRUE(ParseShellMenuArgs(placed));
+  const auto anchor = ParseShellMenuAnchor(placed);
+  ASSERT_TRUE(anchor);
+  EXPECT_EQ(anchor->x, 8);
+  EXPECT_EQ(anchor->y, 10);
+  const auto plain = base::ListValue().Append(item.Clone());
+  EXPECT_TRUE(ParseShellMenuArgs(plain));
+  EXPECT_FALSE(ParseShellMenuAnchor(plain));
+  EXPECT_FALSE(ParseShellMenuArgs(
+      base::ListValue().Append(item.Clone()).Append("top")));
+  EXPECT_FALSE(ParseShellMenuArgs(base::ListValue()
+                                      .Append(item.Clone())
+                                      .Append(base::ListValue().Append(1))));
+  EXPECT_FALSE(ParseShellMenuArgs(
+      base::ListValue()
+          .Append(item.Clone())
+          .Append(base::ListValue().Append("a").Append(2))));
+}
 }  // namespace bay

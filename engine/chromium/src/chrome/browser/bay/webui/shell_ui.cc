@@ -483,7 +483,7 @@ class ShellUI::ContextMenu final : public ui::SimpleMenuModel::Delegate {
     Build(items, model_);
   }
 
-  void Show(views::Widget* parent) {
+  void Show(views::Widget* parent, std::optional<ShellMenuAnchor> anchor) {
     if (model_.GetItemCount() == 0) {
       Closed();
       return;
@@ -491,10 +491,15 @@ class ShellUI::ContextMenu final : public ui::SimpleMenuModel::Delegate {
     runner_ = std::make_unique<views::MenuRunner>(
         &model_, views::MenuRunner::CONTEXT_MENU,
         base::BindRepeating(&ContextMenu::Closed, base::Unretained(this)));
+    const gfx::Point origin = parent->GetClientAreaBoundsInScreen().origin();
     runner_->RunMenuAt(
         parent, nullptr,
-        gfx::Rect(display::Screen::Get()->GetCursorScreenPoint(), gfx::Size()),
-        views::MenuAnchorPosition::kTopLeft, ui::mojom::MenuSourceType::kMouse);
+        gfx::Rect(anchor ? origin + gfx::Vector2d(anchor->x, anchor->y)
+                         : display::Screen::Get()->GetCursorScreenPoint(),
+                  gfx::Size()),
+        views::MenuAnchorPosition::kTopLeft,
+        anchor ? ui::mojom::MenuSourceType::kKeyboard
+               : ui::mojom::MenuSourceType::kMouse);
   }
   // The owner is going away. Releasing the runner detaches it from this
   // delegate, so Closed() cannot run afterwards.
@@ -709,7 +714,7 @@ bool ShellUI::Dispatch(const HostContext& context,
         *items, std::move(callback),
         base::BindOnce(&ShellUI::ContextMenuFinished,
                        weak_factory_.GetWeakPtr()));
-    context_menu_->Show(widget);
+    context_menu_->Show(widget, ParseShellMenuAnchor(args));
     return true;
   }
   if (module == "BayShell" && method == "prompt") {

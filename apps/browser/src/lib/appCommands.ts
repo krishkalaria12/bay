@@ -330,6 +330,8 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
       return cycleSpace(windowId, 1);
     case "previousSpace":
       return cycleSpace(windowId, -1);
+    case "focusWindow":
+      return arg ? focus(arg) : undefined;
     case "openExtension":
       return arg ? openExtensionFromMenu(windowId, arg) : undefined;
     case "addExtension":

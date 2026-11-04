@@ -117,8 +117,9 @@ export type BrowserCommand =
   | "share"
   | "sendFeedback"
   | "keyboardShortcuts"
-  // The Chrome-hosted desktop's in-window app menu (F10).
+  // The Chrome-hosted desktop's in-window app menu (F10), and the window it lists to go to.
   | "showAppMenu"
+  | "focusWindow"
   | "copyDiagnostics"
   | "recordPerformanceIssue"
   | "toolTour"
@@ -278,7 +279,8 @@ export type PromptOptions = {
 const Shell = requireNativeModule<{
   globalWindowCoordinates?: boolean;
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
-  showMenu(items: MenuItem[]): Promise<string | null>;
+  // `anchor`: the Chrome-hosted desktop only, where it comes from the window's top left rather than the pointer.
+  showMenu(items: MenuItem[], anchor?: [number, number]): Promise<string | null>;
   copyText(text: string): void;
   copyImage(base64: string, sourceURL?: string): boolean;
   setSwitcherCapture(active: boolean): Promise<void>;
@@ -369,8 +371,9 @@ const withShortcutLabels = (items: MenuItem[]): MenuItem[] =>
     return labeled;
   });
 
-export function showMenu(items: MenuItem[]): Promise<string | null> {
-  return Shell.showMenu(isMac ? items : withShortcutLabels(items));
+export function showMenu(items: MenuItem[], anchor?: [number, number]): Promise<string | null> {
+  if (isMac) return Shell.showMenu(items);
+  return anchor ? Shell.showMenu(withShortcutLabels(items), anchor) : Shell.showMenu(withShortcutLabels(items));
 }
 
 export const openWindow = (id: string, options: OpenWindowOptions = {}) => Shell.openWindow(id, options);

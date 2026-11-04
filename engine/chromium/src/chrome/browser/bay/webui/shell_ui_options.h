@@ -56,8 +56,17 @@ std::optional<ShellPromptOptions> ParseShellPromptOptions(
     const base::DictValue& options);
 std::optional<ShellConfirmOptions> ParseShellConfirmOptions(
     const base::DictValue& options);
-// BayShell.showMenu's one argument. Fields only macOS draws (symbol, key and
-// modifiers) are ignored.
+// A menu placed by the app rather than at the pointer, opened from the keyboard:
+// its top left in the window, from the window's top left.
+struct ShellMenuAnchor {
+  int x;
+  int y;
+};
+// BayShell.showMenu's optional second argument.
+std::optional<ShellMenuAnchor> ParseShellMenuAnchor(
+    const base::ListValue& args);
+// BayShell.showMenu's items. Fields only macOS draws (symbol, key and modifiers)
+// are ignored.
 std::optional<std::vector<ShellMenuItem>> ParseShellMenuArgs(
     const base::ListValue& args);
 // "#RRGGBB" or "#RRGGBBAA", with or without the "#", as macOS reads swatches.
