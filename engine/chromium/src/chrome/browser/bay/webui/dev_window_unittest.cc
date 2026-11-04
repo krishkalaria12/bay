@@ -217,6 +217,8 @@ TEST(DevWindowInputTest, MouseActionsKeepMacSemantics) {
   EXPECT_EQ((*click)[1].changed_flags, ui::EF_LEFT_MOUSE_BUTTON);
   EXPECT_EQ((*click)[1].point, gfx::PointF(85, 133));
   EXPECT_EQ((*click)[2].type, ui::EventType::kMouseReleased);
+  EXPECT_EQ((*ParseDevKeyAction("keys:262144::121"))[0].key, ui::VKEY_NEXT);
+  EXPECT_EQ((*ParseDevKeyAction("keys:0::109"))[0].key, ui::VKEY_F10);
   EXPECT_EQ((*ParseDevMouseAction("click:1,2,right"))[2].flags,
             ui::EF_RIGHT_MOUSE_BUTTON);
   const auto twice = ParseDevMouseAction("mouse:down:10.5,4,2");

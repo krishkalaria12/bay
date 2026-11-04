@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
@@ -23,10 +24,15 @@ bool DevHarnessAllowed();
 // drive: a window's document only its own, the coordinator any.
 BrowserWindowInterface* DevHarnessFrame(const HostContext& context,
                                         const std::string& window_id);
-// The window as it is on screen, frame and pages, as a PNG at `path`.
+// The window as it is on screen, frame and pages, as a PNG at `path`: on the
+// window's background, or `transparent` keeping what shows through as alpha.
 void DevSnapshotWindow(BrowserWindowInterface* frame,
                        const base::FilePath& path,
+                       bool transparent,
                        base::OnceCallback<void(bool)> done);
+// Moves keyboard focus to the window's "window" document, its "page" or that
+// page's docked "devtools", as macOS's first responder. False without one.
+bool DevFocus(BrowserWindowInterface* frame, std::string_view target);
 // Each character as a key, `interval` ms apart, as the platform delivers keys.
 // Answers [{due, handled, drawn}] in ms since the epoch: when the key was due,
 // sent, and the next frame reached the screen.
@@ -34,9 +40,10 @@ void DevTypeKeys(BrowserWindowInterface* frame,
                  const std::u16string& text,
                  double interval,
                  base::OnceCallback<void(base::Value)> done);
-// Sends a "keys:" action and gives its key down, to report what it matched.
+// A "keys:" action's key down, to report what it matched; `send` sends it.
 std::optional<DevKeyStep> DevPressKey(BrowserWindowInterface* frame,
-                                      const std::string& action);
+                                      const std::string& action,
+                                      bool send);
 
 // Developer diagnostics use Chrome's frame session ids on the desktop host.
 // Window renderers can inspect/control only their frame; the coordinator can

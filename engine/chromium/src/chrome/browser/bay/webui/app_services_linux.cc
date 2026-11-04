@@ -56,6 +56,13 @@ void CollectSystemInfo(AppServicesLinux::SystemInfoReply reply) {
       },
       std::move(reply)));
 }
+// A test instance, as on macOS: its own data, or hidden. The dev harness runs
+// only in one. Not the launch environment's allowlist: that's debug builds only.
+bool IsolatedInstance() {
+  auto environment = base::Environment::Create();
+  return environment->GetVar("BAY_BACKGROUND").value_or("") == "1" ||
+         !environment->GetVar("BAY_DATA_DIR").value_or("").empty();
+}
 base::DictValue EnvironmentSnapshot(
     const AppServicesLinux::Operations& operations) {
   base::DictValue environment;
@@ -134,6 +141,7 @@ void AppServicesLinux::Prepared(base::DictValue system_info) {
 #endif
   system_info.Set("locale", locale_);
   system_info.Set("updates", false);
+  system_info.Set("isolatedInstance", IsolatedInstance());
   snapshots_.Set("systemInfo", std::move(system_info));
   snapshots_.Set("environment", std::move(environment_));
   snapshots_.Set("updaterState", UpdaterState());

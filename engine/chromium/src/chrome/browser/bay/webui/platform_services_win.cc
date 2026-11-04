@@ -96,6 +96,12 @@ base::DictValue SystemInfo(const std::string& locale) {
   info.Set("memoryGB", base::SysInfo::AmountOfTotalPhysicalMemory().InGiBF());
   info.Set("locale", locale);
   info.Set("updates", false);
+  // A test instance, as on macOS: its own data, or hidden. The dev harness and
+  // the perf probe run only in one.
+  auto environment = base::Environment::Create();
+  info.Set("isolatedInstance",
+           environment->GetVar("BAY_BACKGROUND").value_or("") == "1" ||
+               !environment->GetVar("BAY_DATA_DIR").value_or("").empty());
   return info;
 }
 base::DictValue EnvironmentSnapshot() {

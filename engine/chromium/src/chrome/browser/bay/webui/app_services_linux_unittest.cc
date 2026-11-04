@@ -197,6 +197,7 @@ TEST_P(AppServicesLinuxTest, SnapshotMatchesFacadeAndReturnsIndependentClones) {
 #endif
   expected.Set("locale", "en-IN");
   expected.Set("updates", false);
+  expected.Set("isolatedInstance", false);
   EXPECT_EQ(*system, expected);
   const auto result = Result("systemInfo");
   ASSERT_TRUE(result.FindDict("value"));

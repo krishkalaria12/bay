@@ -713,6 +713,61 @@ void NativeHost::LocalFilesCall(const std::string& method,
   std::move(reply).Run(base::Value(
       base::DictValue().Set("error", "This local files hook is macOS only")));
 }
+// What a devKeyEquivalent key matches: the window's key shortcuts, which the host
+// runs ahead of the page.
+static base::Value DevKeyResult(BrowserWindowInterface* frame,
+                                const DevKeyStep& step,
+                                bool dry) {
+  base::ListValue matched;
+  for (const auto& [owner, host] : Hosts()) {
+    if (!host || host->is_coordinator() || host->browser() != frame)
+      continue;
+    for (const auto& shortcut : host->key_shortcuts()) {
+      if (shortcut.key_code != step.key ||
+          shortcut.ctrl != !!(step.flags & ui::EF_CONTROL_DOWN) ||
+          shortcut.shift != !!(step.flags & ui::EF_SHIFT_DOWN) ||
+          shortcut.alt != !!(step.flags & ui::EF_ALT_DOWN)) {
+        continue;
+      }
+      auto item = base::DictValue()
+                      .Set("title", shortcut.command)
+                      .Set("action", "onCommand")
+                      .Set("command", shortcut.command)
+                      .Set("enabled", !shortcut.command.empty());
+      if (shortcut.arg)
+        item.Set("arg", *shortcut.arg);
+      if (dry)
+        item.Set("dry", true);
+      matched.Append(std::move(item));
+    }
+  }
+  const bool handled = !matched.empty();
+  auto result = base::DictValue().Set("handledBy", handled ? "window" : "none");
+  if (handled)
+    result.Set("fired", matched.Clone());
+  result.Set("matched", std::move(matched));
+  return base::Value(std::move(result));
+}
+// The key goes in as real input, unless `dry`. Matched first: it may close the
+// window. Answers `wait` later, for what it did.
+static void PressDevKey(base::WeakPtr<BrowserWindowInterface> frame,
+                        std::string action,
+                        bool dry,
+                        base::TimeDelta wait,
+                        NativeHost::InvokeCallback callback) {
+  const auto step =
+      frame ? DevPressKey(frame.get(), action, /*send=*/!dry) : std::nullopt;
+  if (!step) {
+    std::move(callback).Run(Success(base::Value(
+        base::DictValue().Set("error", "The key can't be sent to this window"))));
+    return;
+  }
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback),
+                     Success(DevKeyResult(frame.get(), *step, dry))),
+      wait);
+}
 void NativeHost::DevHarness(const std::string& method,
                             const base::ListValue& args,
                             InvokeCallback callback) {
@@ -753,7 +808,9 @@ void NativeHost::DevHarness(const std::string& method,
     return;
   }
   if (method == "devSnapshotWindow") {
+    const auto* transparent = At(args, 2);
     DevSnapshotWindow(frame, base::FilePath::FromUTF8Unsafe(Text(args, 1)),
+                      transparent && transparent->GetIfBool().value_or(false),
                       base::BindOnce(
                           [](InvokeCallback callback, bool saved) {
                             std::move(callback).Run(
@@ -774,8 +831,7 @@ void NativeHost::DevHarness(const std::string& method,
                     std::move(callback)));
     return;
   }
-  // devKeyEquivalent: the key goes in as real input; what it matched is the
-  // window's key shortcuts, which the host runs ahead of the page.
+  // devKeyEquivalent.
   const auto* press = At(args, 1) ? At(args, 1)->GetIfDict() : nullptr;
   const auto* key = press ? press->FindString("key") : nullptr;
   if (!key) {
@@ -802,39 +858,21 @@ void NativeHost::DevHarness(const std::string& method,
       "keys:%d:%s", flags, characters ? characters->c_str() : key->c_str());
   if (const auto key_code = press->FindInt("keyCode"))
     action += ":" + base::NumberToString(*key_code);
-  const auto step = DevPressKey(frame, action);
-  if (!step) {
+  // As macOS's: focus now, `settle` ms before the key, `wait` ms for what it did.
+  // `asKey` has nothing to do: the key goes straight to this window's host.
+  if (const auto* focus = press->FindString("focus");
+      focus && !DevFocus(frame, *focus)) {
     std::move(callback).Run(Success(base::Value(
-        base::DictValue().Set("error", "The key can't be sent to this window"))));
+        base::DictValue().Set("error", "Nothing to focus for " + *focus))));
     return;
   }
-  base::ListValue matched;
-  for (const auto& [owner, host] : Hosts()) {
-    if (!host || host->is_coordinator() || host->browser() != frame)
-      continue;
-    for (const auto& shortcut : host->key_shortcuts()) {
-      if (shortcut.key_code != step->key ||
-          shortcut.ctrl != !!(step->flags & ui::EF_CONTROL_DOWN) ||
-          shortcut.shift != !!(step->flags & ui::EF_SHIFT_DOWN) ||
-          shortcut.alt != !!(step->flags & ui::EF_ALT_DOWN)) {
-        continue;
-      }
-      auto item = base::DictValue()
-                      .Set("title", shortcut.command)
-                      .Set("action", "onCommand")
-                      .Set("command", shortcut.command)
-                      .Set("enabled", !shortcut.command.empty());
-      if (shortcut.arg)
-        item.Set("arg", *shortcut.arg);
-      matched.Append(std::move(item));
-    }
-  }
-  const bool handled = !matched.empty();
-  auto result = base::DictValue().Set("handledBy", handled ? "window" : "none");
-  if (handled)
-    result.Set("fired", matched.Clone());
-  result.Set("matched", std::move(matched));
-  std::move(callback).Run(Success(base::Value(std::move(result))));
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&PressDevKey, frame->GetWeakPtr(), std::move(action),
+                     press->FindBool("dry").value_or(false),
+                     base::Milliseconds(press->FindInt("wait").value_or(250)),
+                     std::move(callback)),
+      base::Milliseconds(press->FindInt("settle").value_or(0)));
 }
 // The coordinator runs it: it lives as long as Bay does, and there is only one.
 static void RunFromAnyApp(const char* command) {

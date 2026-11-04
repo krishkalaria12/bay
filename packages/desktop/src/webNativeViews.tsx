@@ -215,6 +215,8 @@ function DockSelection({
 function ContextMenuArea({ onContextMenu, captureDescendants = false, ...props }: ContextMenuAreaProps) {
   const configure = useCallback(
     (element: HTMLElement) => {
+      // The dev harness's `hit:` names it as macOS's does.
+      element.dataset.bayView = "ContextMenuArea";
       const open = (event: MouseEvent) => {
         if (!onContextMenu) return;
         event.preventDefault();
