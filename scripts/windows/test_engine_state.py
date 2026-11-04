@@ -45,10 +45,13 @@ class EngineStateTests(unittest.TestCase):
             for name in ("file-link", "directory-link", "dangling-file", "dangling-directory"):
                 with self.subTest(name=name):
                     self.assertTrue((restored / name).is_symlink())
-                    # macOS tar/filesystems can normalize Unicode link text;
-                    # the target must retain the same path on either platform.
-                    self.assertEqual(unicodedata.normalize("NFC", os.readlink(restored / name)),
-                                     unicodedata.normalize("NFC", os.readlink(root / name)))
+                    # macOS can normalize Unicode link text and Windows tar restores
+                    # native separators; the target must be the same path on either.
+                    self.assertEqual(unicodedata.normalize("NFC", os.path.normpath(os.readlink(restored / name))),
+                                     unicodedata.normalize("NFC", os.path.normpath(os.readlink(root / name))))
+            # Resuming a build needs restored links that resolve, not just their text.
+            self.assertEqual((restored / "file-link").read_bytes(), source.read_bytes())
+            self.assertEqual((restored / "directory-link/hello ü.txt").read_bytes(), source.read_bytes())
             self.assertFalse((restored / "dangling-file").exists())
             self.assertFalse((restored / "dangling-directory").exists())
 
