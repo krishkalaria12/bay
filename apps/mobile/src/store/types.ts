@@ -64,7 +64,34 @@ export interface BrowserPreferences {
   wallpaper: WallpaperId;
   /** The user's photo, copied into the app's documents (a file:// URI). */
   wallpaperPhoto: string | null;
+  /** Bay's look: follow the system, or always light or dark. */
+  theme: ThemeChoice;
+  /** Page zoom in percent (80–200): text and images. */
+  textSize: number;
+  /** Ask the search engine for suggestions while typing. Off keeps typed text on the device until it's sent. */
+  searchSuggestions: boolean;
+  /** Open the publisher's page instead of an AMP copy. */
+  skipAmp: boolean;
+  pullToRefresh: boolean;
+  /** Show the start page when Bay comes back after this many hours away; null stays on the last tab. */
+  startPageAfterHours: number | null;
+  /** What to hide on YouTube, with Brave's lists. */
+  youtube: YouTubeCleanup;
 }
+
+export type ThemeChoice = "system" | "light" | "dark";
+
+export interface YouTubeCleanup {
+  shorts: boolean;
+  suggestions: boolean;
+  distractions: boolean;
+}
+
+/** Preferences the settings screen changes in one step. */
+export type SimplePreferences = Pick<
+  BrowserPreferences,
+  "theme" | "textSize" | "searchSuggestions" | "skipAmp" | "pullToRefresh" | "startPageAfterHours" | "youtube"
+>;
 
 export type WallpaperId = "bay" | "dusk" | "forest" | "plain" | "photo";
 

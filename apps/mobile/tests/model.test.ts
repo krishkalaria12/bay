@@ -108,6 +108,13 @@ test("saved state is validated and repaired", () => {
     hiddenElements: {},
     wallpaper: "bay",
     wallpaperPhoto: null,
+    theme: "system",
+    textSize: 100,
+    searchSuggestions: true,
+    skipAmp: true,
+    pullToRefresh: true,
+    startPageAfterHours: null,
+    youtube: { shorts: false, suggestions: false, distractions: false },
   });
   assert.throws(() => parseBrowserData({ version: 2 }, fallback));
 });
@@ -140,6 +147,27 @@ test("private tabs are never archived, saved or put away", () => {
 
   data = reduceBrowserData(data, { type: "close-tab", id: "p", now, fallback: createTab("blank", now) });
   assert.equal(data.archive.length, 0);
+});
+
+test("browsing preferences change in one step and repair bad values", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  data = reduceBrowserData(data, {
+    type: "preferences",
+    update: { theme: "dark", textSize: 130, youtube: { shorts: true, suggestions: false, distractions: false } },
+  });
+  assert.equal(data.preferences.theme, "dark");
+  assert.equal(data.preferences.textSize, 130);
+  assert.equal(data.preferences.youtube.shorts, true);
+  assert.equal(reduceBrowserData(data, { type: "preferences", update: { theme: "dark" } }), data);
+  // Out of range values fall back to the defaults.
+  data = reduceBrowserData(data, { type: "preferences", update: { textSize: 999, startPageAfterHours: 5 } });
+  assert.equal(data.preferences.textSize, 100);
+  assert.equal(data.preferences.startPageAfterHours, null);
+  const saved = parseBrowserData({ version: 1, preferences: { theme: "neon", skipAmp: false, startPageAfterHours: 4, youtube: { shorts: "yes" } } }, data);
+  assert.equal(saved.preferences.theme, "system");
+  assert.equal(saved.preferences.skipAmp, false);
+  assert.equal(saved.preferences.startPageAfterHours, 4);
+  assert.deepEqual(saved.preferences.youtube, { shorts: false, suggestions: false, distractions: false });
 });
 
 test("blocking can be turned off and paused per site", () => {

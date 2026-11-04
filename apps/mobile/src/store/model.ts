@@ -1,4 +1,15 @@
-import type { ArchivedTab, BrowserData, BrowserPreferences, BrowserTab, DownloadItem, HistoryEntry, PinnedSite, TabUpdate, WallpaperId } from "./types";
+import type {
+  ArchivedTab,
+  BrowserData,
+  BrowserPreferences,
+  BrowserTab,
+  DownloadItem,
+  HistoryEntry,
+  PinnedSite,
+  SimplePreferences,
+  TabUpdate,
+  WallpaperId,
+} from "./types";
 import type { ReaderSettings } from "../pagescripts/reader.ts";
 
 export const DEFAULT_PREFERENCES: BrowserPreferences = {
@@ -11,7 +22,16 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   hiddenElements: {},
   wallpaper: "bay",
   wallpaperPhoto: null,
+  theme: "system",
+  textSize: 100,
+  searchSuggestions: true,
+  skipAmp: true,
+  pullToRefresh: true,
+  startPageAfterHours: null,
+  youtube: { shorts: false, suggestions: false, distractions: false },
 };
+export const TEXT_SIZE = { min: 80, max: 200, step: 10 } as const;
+export const START_PAGE_HOURS = [null, 1, 4, 12] as const;
 /** Bay's own wallpapers; "photo" is the user's. */
 export const WALLPAPERS = ["bay", "dusk", "forest", "plain"] as const;
 const builtIn = (id: unknown): id is WallpaperId => (WALLPAPERS as readonly unknown[]).includes(id);
@@ -87,6 +107,7 @@ export type BrowserAction =
   | { type: "block-content"; enabled: boolean }
   | { type: "pause-blocking"; host: string; paused: boolean }
   | { type: "lock-private-tabs"; enabled: boolean }
+  | { type: "preferences"; update: Partial<SimplePreferences> }
   | { type: "reader-settings"; settings: ReaderSettings }
   | { type: "hidden-elements"; host: string; selectors: string[] }
   | { type: "download"; update: DownloadEvent; now: number }
@@ -212,6 +233,13 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
     case "lock-private-tabs":
       return action.enabled === data.preferences.lockPrivateTabs ? data : { ...data, preferences: { ...data.preferences, lockPrivateTabs: action.enabled } };
+    case "preferences": {
+      // Only the updated keys come from the parse, so untouched preferences (and their arrays) stay the same objects.
+      const parsed = parsePreferences({ ...data.preferences, ...action.update });
+      const keys = Object.keys(action.update) as (keyof SimplePreferences)[];
+      if (keys.every((key) => JSON.stringify(parsed[key]) === JSON.stringify(data.preferences[key]))) return data;
+      return { ...data, preferences: { ...data.preferences, ...Object.fromEntries(keys.map((key) => [key, parsed[key]])) } };
+    }
     case "reader-settings": {
       const reader = parseReaderSettings(action.settings, data.preferences.reader);
       const previous = data.preferences.reader;
@@ -452,28 +480,7 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
       },
     ];
   });
-  const savedPreferences = isRecord(value.preferences) ? value.preferences : {};
-  const preferences: BrowserPreferences = {
-    searchEngineId:
-      typeof savedPreferences.searchEngineId === "string" && savedPreferences.searchEngineId
-        ? savedPreferences.searchEngineId
-        : DEFAULT_PREFERENCES.searchEngineId,
-    archiveAfterDays: [null, 1, 7, 30].includes(savedPreferences.archiveAfterDays as number | null)
-      ? (savedPreferences.archiveAfterDays as number | null)
-      : DEFAULT_PREFERENCES.archiveAfterDays,
-    blockContent: typeof savedPreferences.blockContent === "boolean" ? savedPreferences.blockContent : DEFAULT_PREFERENCES.blockContent,
-    blockingPausedHosts: Array.isArray(savedPreferences.blockingPausedHosts)
-      ? [...new Set(savedPreferences.blockingPausedHosts.filter((host): host is string => typeof host === "string" && /^[a-z0-9.-]+$/.test(host)))]
-      : [],
-    lockPrivateTabs: savedPreferences.lockPrivateTabs === true,
-    reader: parseReaderSettings(savedPreferences.reader),
-    hiddenElements: parseHiddenElements(savedPreferences.hiddenElements),
-    wallpaper:
-      builtIn(savedPreferences.wallpaper) || (savedPreferences.wallpaper === "photo" && isFileUri(savedPreferences.wallpaperPhoto))
-        ? (savedPreferences.wallpaper as WallpaperId)
-        : DEFAULT_PREFERENCES.wallpaper,
-    wallpaperPhoto: isFileUri(savedPreferences.wallpaperPhoto) ? savedPreferences.wallpaperPhoto : null,
-  };
+  const preferences = parsePreferences(isRecord(value.preferences) ? value.preferences : {});
   return {
     tabs: tabs.length ? tabs : fallback.tabs,
     activeTabId: tabs.some((tab) => tab.id === value.activeTabId) ? (value.activeTabId as string) : (tabs[0]?.id ?? fallback.activeTabId),
@@ -497,6 +504,47 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
         .filter((entry): entry is [string, string] => /^[a-z0-9.-]+$/.test(entry[0]) && typeof entry[1] === "string" && entry[1].startsWith("file://"))
         .slice(-FAVICON_LIMIT),
     ),
+  };
+}
+
+/** Saved preferences with anything unknown or out of range replaced by its default. */
+export function parsePreferences(savedPreferences: Record<string, unknown>): BrowserPreferences {
+  return {
+    searchEngineId:
+      typeof savedPreferences.searchEngineId === "string" && savedPreferences.searchEngineId
+        ? savedPreferences.searchEngineId
+        : DEFAULT_PREFERENCES.searchEngineId,
+    archiveAfterDays: [null, 1, 7, 30].includes(savedPreferences.archiveAfterDays as number | null)
+      ? (savedPreferences.archiveAfterDays as number | null)
+      : DEFAULT_PREFERENCES.archiveAfterDays,
+    blockContent: typeof savedPreferences.blockContent === "boolean" ? savedPreferences.blockContent : DEFAULT_PREFERENCES.blockContent,
+    blockingPausedHosts: Array.isArray(savedPreferences.blockingPausedHosts)
+      ? [...new Set(savedPreferences.blockingPausedHosts.filter((host): host is string => typeof host === "string" && /^[a-z0-9.-]+$/.test(host)))]
+      : [],
+    lockPrivateTabs: savedPreferences.lockPrivateTabs === true,
+    reader: parseReaderSettings(savedPreferences.reader),
+    hiddenElements: parseHiddenElements(savedPreferences.hiddenElements),
+    wallpaper:
+      builtIn(savedPreferences.wallpaper) || (savedPreferences.wallpaper === "photo" && isFileUri(savedPreferences.wallpaperPhoto))
+        ? (savedPreferences.wallpaper as WallpaperId)
+        : DEFAULT_PREFERENCES.wallpaper,
+    wallpaperPhoto: isFileUri(savedPreferences.wallpaperPhoto) ? savedPreferences.wallpaperPhoto : null,
+    theme: (["system", "light", "dark"] as unknown[]).includes(savedPreferences.theme) ? (savedPreferences.theme as BrowserPreferences["theme"]) : "system",
+    textSize:
+      typeof savedPreferences.textSize === "number" && savedPreferences.textSize >= TEXT_SIZE.min && savedPreferences.textSize <= TEXT_SIZE.max
+        ? Math.round(savedPreferences.textSize / TEXT_SIZE.step) * TEXT_SIZE.step
+        : DEFAULT_PREFERENCES.textSize,
+    searchSuggestions: savedPreferences.searchSuggestions !== false,
+    skipAmp: savedPreferences.skipAmp !== false,
+    pullToRefresh: savedPreferences.pullToRefresh !== false,
+    startPageAfterHours: (START_PAGE_HOURS as readonly unknown[]).includes(savedPreferences.startPageAfterHours)
+      ? (savedPreferences.startPageAfterHours as number | null)
+      : null,
+    youtube: {
+      shorts: isRecord(savedPreferences.youtube) && savedPreferences.youtube.shorts === true,
+      suggestions: isRecord(savedPreferences.youtube) && savedPreferences.youtube.suggestions === true,
+      distractions: isRecord(savedPreferences.youtube) && savedPreferences.youtube.distractions === true,
+    },
   };
 }
 
