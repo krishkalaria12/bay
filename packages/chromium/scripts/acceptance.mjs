@@ -37,7 +37,7 @@ import { createServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { basename, join, resolve } from "node:path";
 import { X509Certificate, createHash, createSign, generateKeyPairSync } from "node:crypto";
-import { crc32, deflateSync, inflateSync } from "node:zlib";
+import { brotliCompressSync, crc32, deflateSync, gzipSync, inflateSync } from "node:zlib";
 import { attach as attachInstance, launch as launchInstance, onScreenWindows as windowsOf, reporter, sleep } from "../../../scripts/lib/instance.mjs";
 
 // MARK: What each check needs
@@ -121,7 +121,9 @@ const usesPageA = [
   "last-used-profile",
 ];
 const needs = {
-  ...Object.fromEntries([...usesPageA, "kill-task", "internal-pages-not-history", "second-profile"].map((name) => [name, ["open-url"]])),
+  ...Object.fromEntries(
+    [...usesPageA, "kill-task", "internal-pages-not-history", "second-profile", "content-blocker-rewrites"].map((name) => [name, ["open-url"]]),
+  ),
   // Another tab with a page: target-blank's C, cmd-click's D in the background, window-open's E.
   "tab-switch": ["open-url", "target-blank"],
   "tab-keys-from-page": ["open-url", "target-blank"],
@@ -268,6 +270,60 @@ const server = createServer((req, res) => {
   if (url.pathname === "/redirect-ad") {
     res.writeHead(302, { location: `http://ib.adnxs.com/ut/v3${url.search}` });
     return res.end();
+  }
+  // The content blocker's body and header rules (content-blocker-rewrites).
+  if (url.pathname === "/body-page") {
+    const legacy = url.searchParams.get("charset") === "windows-1252";
+    const html =
+      `<!doctype html><html><head><title>Body kept</title><script>var adserverDomain = 1; document.title = "Body ad ran"</script>` +
+      `<script>window.kept = "caf\u00e9"</script></head><body>text</body></html>`;
+    const bytes = Buffer.from(html, legacy ? "latin1" : "utf8");
+    const encoding = url.searchParams.get("encoding");
+    const body = encoding === "gzip" ? gzipSync(bytes) : encoding === "br" ? brotliCompressSync(bytes) : bytes;
+    res.writeHead(200, {
+      "content-type": `text/html; charset=${legacy ? "windows-1252" : "utf-8"}`,
+      "content-length": String(body.length),
+      ...(encoding ? { "content-encoding": encoding } : {}),
+    });
+    if (url.searchParams.has("chunks")) {
+      res.write(body.subarray(0, 20));
+      return setTimeout(() => res.end(body.subarray(20)), 200);
+    }
+    return res.end(body);
+  }
+  if (url.pathname === "/body.js") {
+    res.writeHead(200, { "content-type": "text/javascript", "access-control-allow-origin": "*" });
+    return res.end(`try{GameMaster.load()}catch(e){}`);
+  }
+  if (url.pathname === "/body-big.js") {
+    res.writeHead(200, { "content-type": "text/javascript" });
+    res.write(`try{GameMaster.load()}catch(e){}`);
+    return res.end(Buffer.alloc(11 * 1024 * 1024, "/"));
+  }
+  if (url.pathname === "/body-stream.js") {
+    // Never ends: a stream's first event has to arrive by itself.
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    return res.write(`data: try{GameMaster\n\n`);
+  }
+  if (url.pathname === "/location-redirect") {
+    res.writeHead(302, { location: "/location-target", "content-type": "text/html" });
+    return res.end();
+  }
+  if (url.pathname === "/set-cookie-page") {
+    res.writeHead(200, { "content-type": "text/html", "set-cookie": `blocked=${url.search.slice(1)}; path=/` });
+    return res.end("<!doctype html><title>Set cookie</title>");
+  }
+  if (url.pathname === "/cookie-echo") {
+    res.writeHead(200, { "content-type": "text/plain", "access-control-allow-origin": "*" });
+    return res.end(req.headers.cookie ?? "none");
+  }
+  if (url.pathname === "/worker-cookie") {
+    res.writeHead(200, { "content-type": "text/html", "set-cookie": `tracked=doubleclick.net; path=/; secure; samesite=none` });
+    return res.end("<!doctype html><title>Worker cookie</title>");
+  }
+  if (url.pathname === "/index.js") {
+    res.writeHead(200, { "content-type": "text/javascript" });
+    return res.end(`window.workerScript = true;`);
   }
   if (url.pathname === "/file.bin") {
     res.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": 'attachment; filename="nncore-test.bin"' });
@@ -594,8 +650,14 @@ process.env.BAY_CHROMIUM_SWITCHES += ` --host-resolver-rules=${[
   "22bettracking.online",
   "000491b06a.com",
   "buzzadnetwork.com",
+  // Real rules of uBO's lists that need a site of their own: HTML ##^, $replace and ##^responseheader.
+  "skidrowreloaded.com",
+  "pvpoke-re.com",
+  "eturbonews.com",
+  "streamin.me",
 ]
   .map((host) => `MAP ${host} 127.0.0.1:${server.address().port}`)
+  .concat(["blocker-cookie.workers.dev", "tls.skidrowreloaded.com"].map((host) => `MAP ${host} 127.0.0.1:${tlsServer.address().port}`))
   .join(", ")}`;
 // The Web Store's update URL: a .crx downloaded from it is a Web Store install's (extension-download-hidden).
 process.env.BAY_CHROMIUM_SWITCHES += ` --apps-gallery-update-url=${base}/webstore/crx`;
@@ -3792,6 +3854,88 @@ try {
       await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, false, false)`).catch(() => null);
       await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, false, false)`).catch(() => null);
       await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, false)`).catch(() => null);
+      await closeTab(tab).catch(() => null);
+    }
+  });
+
+  await check("content-blocker-rewrites", async () => {
+    // What rules do to a response through the interceptor's held body, with real rules of uBO's lists: HTML ##^ and
+    // $replace (compressed, in a legacy charset, arriving in pieces, too big to hold, never ending), and the headers a
+    // network stack has already acted on (Location, Set-Cookie) or not added yet (Cookie).
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const port = server.address().port;
+    const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "http://adpage.test:${port}/adpage?rewrites" })`);
+    const go = async (url, title) => {
+      await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+      return until(`${title ?? "the page"} at ${url}`, () =>
+        evalApp(`const s = nn.store.getState(); const t = s.tabs[${JSON.stringify(tab)}];
+        return t?.url === ${JSON.stringify(url)} && !s.live[${JSON.stringify(tab)}]?.isLoading && (${JSON.stringify(title ?? "")} === "" || t.title?.startsWith(${JSON.stringify(title ?? "")}))
+          ? t.title : null`),
+      );
+    };
+    const run = async (urlPart, expression) => {
+      const t = await until(`the page ${urlPart}`, () => pageTarget(urlPart));
+      return (await cdp(t, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
+    };
+    try {
+      const html = `http://skidrowreloaded.com:${port}/body-page`;
+      const pages = {};
+      // Chrome only takes brotli over TLS.
+      const urls = ["plain", "encoding=gzip", "charset=windows-1252", "chunks", "chunks&encoding=gzip"].map((query) => `${html}?${query}`);
+      for (const url of [...urls, "https://tls.skidrowreloaded.com/body-page?encoding=br"]) {
+        const query = url.slice(url.indexOf("?"));
+        const title = await go(url, "Body");
+        pages[query] = { title, kept: await run(query, `window.kept`), ad: await run(query, `document.documentElement.outerHTML.includes("adserverDomain")`) };
+      }
+      for (const [query, page] of Object.entries(pages)) {
+        if (page.title !== "Body kept" || page.kept !== "caf\u00e9" || page.ad) throw new Error(`HTML rule on ${query}: ${JSON.stringify(page)}`);
+      }
+      await cef(`setContentBlockerAllowed("skidrowreloaded.com", true)`);
+      const paused = await go(`${html}?paused`, "Body");
+      await cef(`setContentBlockerAllowed("skidrowreloaded.com", false)`);
+      if (paused !== "Body ad ran") throw new Error(`a paused site's body changed: ${paused}`);
+
+      // No port in the URL: the rule's `||host/` needs its path right after the host, and the host map finds the server.
+      const replaced = `http://pvpoke-re.com`;
+      await go(`${replaced}/b`, "Page B");
+      const fetched = (path) => `fetch("${path}").then((r) => r.text())`;
+      const script = await run(`pvpoke-re.com`, fetched("/body.js?v=1"));
+      if (script !== "try{return;GameMaster.load()}catch(e){}") throw new Error(`$replace: ${script}`);
+      const big = await run(`pvpoke-re.com`, `${fetched("/body-big.js?v=1")}.then((text) => [text.length, text.slice(0, 10)])`);
+      if (big[0] !== 32 + 11 * 1024 * 1024 || big[1] !== "try{GameMa") throw new Error(`a body past the limit changed: ${big}`);
+      const stream = await run(
+        `pvpoke-re.com`,
+        `new Promise((resolve) => { const s = new EventSource("/body-stream.js?v=1"); s.onmessage = (e) => { s.close(); resolve(e.data); }; })`,
+      );
+      if (stream !== "try{GameMaster") throw new Error(`a stream: ${stream}`);
+
+      const redirected = `http://eturbonews.com:${port}/location-redirect`;
+      const before = served.get("/location-target") ?? 0;
+      await go(redirected);
+      if ((served.get("/location-target") ?? 0) !== before) throw new Error("the redirect was followed");
+
+      const cookie = `http://streamin.me:${port}`;
+      await go(`${cookie}/set-cookie-page?gone`, "Set cookie");
+      const echoed = await until("the cookie's removal", async () => {
+        const sent = await run(`streamin.me`, fetched("/cookie-echo"));
+        return sent === "none" ? sent : null;
+      });
+
+      // The rule is a third party's script whose Cookie has doubleclick.net in it, and Chrome only adds that later.
+      await go(`http://adpage.test:${port}/adpage?rewrites`);
+      const loads = (tag) =>
+        run(
+          `/adpage?rewrites`,
+          `new Promise((resolve) => { const s = document.createElement("script"); s.src = "https://blocker-cookie.workers.dev/index.js?${tag}";
+          s.onload = () => resolve("loaded"); s.onerror = () => resolve("failed"); document.head.append(s); })`,
+        );
+      const without = await loads("without");
+      await go(`https://blocker-cookie.workers.dev/worker-cookie`, "Worker cookie");
+      await go(`http://adpage.test:${port}/adpage?rewrites`);
+      const withCookie = await loads("with");
+      if (without !== "loaded" || withCookie !== "failed") throw new Error(`$requestheader: ${without}, ${withCookie}`);
+      return { pages, paused, big: big[0], stream, echoed, without, withCookie };
+    } finally {
       await closeTab(tab).catch(() => null);
     }
   });
