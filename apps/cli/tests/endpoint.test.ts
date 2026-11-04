@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromiumRoot, documentsRoot, fromControlFile, installedDataDir } from "../src/endpoint.ts";
 import { checkControlFile } from "../src/controlFileSecurity.ts";
+import { icacls, makeControlFilePrivate } from "./windowsAcl.ts";
 
 describe("desktop data layout", () => {
   it("uses the native host's Chromium directory and document folder", () => {
@@ -54,14 +55,9 @@ describe.skipIf(process.platform !== "win32")("private Windows control files", (
     try {
       const path = join(root, "BayControl.json");
       writeFileSync(path, JSON.stringify({ port: 1234, browser: "/devtools/browser/test", token: "private-test-token", pid: process.pid }));
-      const user = process.env.USERDOMAIN ? `${process.env.USERDOMAIN}\\${process.env.USERNAME}` : process.env.USERNAME;
-      if (!user) throw new Error("test needs the current Windows user");
-      const icacls = join(process.env.SystemRoot || "C:\\Windows", "System32", "icacls.exe");
-      const privateAcl = Bun.spawnSync([icacls, path, "/inheritance:r", "/grant:r", `${user}:(F)`]);
-      expect(privateAcl.exitCode).toBe(0);
+      makeControlFilePrivate(path);
       expect(fromControlFile(path).explicit).toBe(false);
-      const broadAcl = Bun.spawnSync([icacls, path, "/grant", "*S-1-1-0:(R)"]);
-      expect(broadAcl.exitCode).toBe(0);
+      expect(icacls(path, "/grant", "*S-1-1-0:(R)")).toBe(0);
       expect(() => fromControlFile(path)).toThrow("another principal");
     } finally {
       rmSync(root, { recursive: true, force: true });
