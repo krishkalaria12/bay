@@ -276,28 +276,10 @@
               </thead>
               <tbody>
                 <tr>
-                  <td><code>onNowPlaying</code></td>
-                  <td>The sidebar's now-playing card</td>
-                  <td><code>NNCorePictureInPicture.mm</code></td>
-                  <td><span class="tag t-port">P2</span></td>
-                </tr>
-                <tr>
-                  <td><code>onNotification</code>, <code>onNotificationClose</code></td>
-                  <td>Page notifications routed through Bay</td>
-                  <td><code>NNCoreWebView.mm</code></td>
-                  <td><span class="tag t-verify">Verify</span> The OS notification bridge may cover them</td>
-                </tr>
-                <tr>
                   <td><code>onOpenWindow</code>, <code>onActivateRequest</code>, <code>onReady</code></td>
                   <td>Popups and <code>window.open</code>, tab focus requests, the browser id handshake</td>
                   <td>NNCore</td>
                   <td><span class="tag t-verify">Verify</span> The tab broker's page-offer route may replace them</td>
-                </tr>
-                <tr>
-                  <td><code>onPageMessage</code>, <code>onHost</code></td>
-                  <td>Bay's in-page script channel</td>
-                  <td><code>nn_page_channel.mm</code></td>
-                  <td><span class="tag t-verify">Verify</span> Verify the channel used by Boosts</td>
                 </tr>
               </tbody>
             </table>
@@ -453,6 +435,7 @@
             <li>Install and upgrade the CLI, test login-shell/user PATH changes, and verify token-file permissions and authenticated terminal control.</li>
             <li>Test Easel publication, updates and revocation, including secure storage, failed requests and concurrent windows.</li>
             <li>Check quote-card fonts, long passages and mixed-direction text.</li>
+            <li>Exercise page-script selection and Capture gestures, live media controls and notifications across frames, navigation and window transfers.</li>
             <li>Run Windows build and hosting acceptance using <a href="windows-implementation-status.md">the Windows status document</a>.</li>
           </ul>
         </section>

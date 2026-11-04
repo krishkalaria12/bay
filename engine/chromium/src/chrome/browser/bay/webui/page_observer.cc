@@ -13,6 +13,7 @@
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/page_media_events.h"
+#include "chrome/browser/bay/webui/page_message_events.h"
 #include "chrome/browser/bay/webui/page_interaction_events.h"
 #include "chrome/browser/bay/webui/form_prompts.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
@@ -186,6 +187,8 @@ void TabObserver::State() {
     // Prompt controllers follow the page while it changes window or mount.
     // Only the mounted view receives sensitive display fields.
     if (!facts_) {
+      PageMessageEvents::Replay(web_contents(), base::BindRepeating(
+          &TabObserver::Emit, base::Unretained(this)));
       if (auto password = FormPrompts::Password(web_contents()))
         Emit("onPasswordPrompt", std::move(*password));
       if (auto autofill = FormPrompts::Autofill(web_contents()))
@@ -390,9 +393,7 @@ void TabObserver::DidUpdateAudioMutingState(bool) {
 }
 void TabObserver::Media() {
   if (CanEmit())
-    Emit("onMedia", base::DictValue()
-                        .Set("playing", web_contents()->IsCurrentlyAudible())
-                        .Set("muted", web_contents()->IsAudioMuted()));
+    Emit("onMedia", PageMessageEvents::MediaState(web_contents()));
 }
 void TabObserver::WebContentsDestroyed() {
   favicon_observation_.Reset();

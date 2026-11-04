@@ -44,6 +44,7 @@
 #include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_interaction_events.h"
+#include "chrome/browser/bay/webui/page_message_events.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/tab_strip_mirror.h"
@@ -389,6 +390,8 @@ void EngineEvent(void*, const char* topic, const char* json) {
       base::JSONReader::ReadDict(json ? json : "{}", base::JSON_PARSE_RFC);
   if (!parsed)
     return;
+  if (PageMessageEvents::HandleEngineEvent(topic ? topic : "", *parsed))
+    return;
   if (const auto* path = parsed->FindString("profile")) {
     const auto name =
         base::FilePath::FromUTF8Unsafe(*path).BaseName().AsUTF8Unsafe();
@@ -457,6 +460,15 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   ContextSearch::Start(base::BindRepeating(&NativeHost::EmitToView));
   FormPrompts::Start(
       base::BindRepeating(base::IgnoreResult(&NativeHost::EmitToView)));
+  PageMessageEvents::Start(base::BindRepeating(
+      [](content::WebContents* contents, const char* event,
+         base::DictValue payload) {
+        // Media remains a coordinator fact while a tab is parked. The other
+        // channel events replay from their page-owned cache on the next mount.
+        if (std::string_view(event) == "onMedia")
+          TabBroker::Get().EmitPageFact(contents, event, payload.Clone());
+        return NativeHost::EmitToView(contents, event, std::move(payload));
+      }));
   PageMenu::Start();
   DeviceChoosers::Start(base::BindRepeating(&NativeHost::EmitChromeUI));
   CastDialogs::Start(base::BindRepeating(&NativeHost::EmitChromeUI));
