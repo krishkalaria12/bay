@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { history, type HistoryDomain } from "../src/browsing.ts";
 import { chromiumRoot, documentsRoot } from "../src/endpoint.ts";
+import { makeControlFilePrivate } from "./windowsAcl.ts";
 
 it("reports the newest visit when aggregating domain history", () => {
   const root = mkdtempSync(join(tmpdir(), "bay-history-test-"));
@@ -16,6 +17,7 @@ it("reports the newest visit when aggregating domain history", () => {
       JSON.stringify({ port: 12345, browser: "/devtools/browser/test", token: "history-test-secret", pid: process.pid }),
       { mode: 0o600 },
     );
+    makeControlFilePrivate(join(chromiumRoot(root), "BayControl.json"));
     writeFileSync(
       join(documentsRoot(root), "session.json"),
       JSON.stringify({ version: 2, spaces: { default: { id: "default", name: "Personal" } }, spaceOrder: ["default"] }),
