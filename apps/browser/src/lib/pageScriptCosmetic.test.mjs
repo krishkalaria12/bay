@@ -143,6 +143,7 @@ function page(elements = []) {
     "fromJSON",
     "getComputedStyle",
     "window",
+    "url",
     `${source}; return { installCosmetic, installProcedural };`,
   );
   const api = run(
@@ -156,6 +157,7 @@ function page(elements = []) {
     JSON.parse,
     (node, pseudo) => node.computed?.[pseudo ?? "normal"] ?? node.style,
     {},
+    location.href,
   );
   const drain = () => {
     let runs = 0;
