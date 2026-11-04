@@ -41,12 +41,14 @@
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/os_crypt/common/os_crypt_switches.h"
 #include "components/prefs/pref_service.h"
+#include "content/browser/devtools/devtools_instrumentation.h"  // nogncheck
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "extensions/common/switches.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_request_headers.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/websocket.mojom.h"
@@ -424,9 +426,19 @@ class NNContentBrowserClient : public ChromeContentBrowserClient {
     }
     // Chrome only proxies frames with extension webRequest listeners. Workers
     // and other sockets still need the ordinary network factory when allowed.
-    std::vector<network::mojom::HttpHeaderPtr> headers;
+    // DevTools' Network.setExtraHTTPHeaders reaches a socket over this path
+    // only if applied here: it bypasses the URLLoader override.
+    net::HttpRequestHeaders extra;
     if (user_agent) {
-      headers.push_back(network::mojom::HttpHeader::New("User-Agent", *user_agent));
+      extra.SetHeader(net::HttpRequestHeaders::kUserAgent, *user_agent);
+    }
+    if (frame) {
+      content::devtools_instrumentation::ApplyExtraHeadersForWebSocket(
+          frame->GetGlobalId(), std::nullopt, &extra);
+    }
+    std::vector<network::mojom::HttpHeaderPtr> headers;
+    for (net::HttpRequestHeaders::Iterator it(extra); it.GetNext();) {
+      headers.push_back(network::mojom::HttpHeader::New(it.name(), it.value()));
     }
     std::move(factory).Run(url, std::move(headers), std::move(client),
                           mojo::NullRemote(), std::move(options.header_client));
