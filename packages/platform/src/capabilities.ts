@@ -45,7 +45,7 @@ export type Capabilities = {
   inlineCompletion: boolean;
   /** BayWindowProfile, swapping the profile a window shows. */
   windowProfiles: boolean;
-  /** View tooltips (the `tooltip` prop on the platform views). Windows: Phase 5. */
+  /** View tooltips (the `tooltip` prop on the platform views). */
   tooltips: boolean;
   /** Pointer hover (onMouseEnter/onMouseLeave on the platform views). */
   hover: boolean;
@@ -94,9 +94,9 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     keychain: hasModule("BayKeychain"),
     inlineCompletion: mac && hasModule("BayInlineCompletion"),
     windowProfiles: mac && hasModule("BayWindowProfile"),
-    tooltips: mac,
+    tooltips: mac || webDesktop,
     hover: mac || webDesktop,
-    focusRing: mac,
+    focusRing: mac || webDesktop,
     keyDownEvents: mac || webDesktop,
     shareSheet: mac,
     captureMarkup: mac,
