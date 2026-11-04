@@ -115,8 +115,53 @@ pub struct Modifiers {
     /// Plain exceptions, as block rules: one matching means uBO's `matchHeaders` allows.
     exceptions: Mutex<Engine>,
     html: HtmlRules,
-    /// The `$requestheader` rules: every request asks, so they aren't found by a scan of `rules`.
-    request_header_rules: Vec<usize>,
+    index: RuleIndex,
+}
+
+/// Keep list order within each stage without scanning unrelated actions on every request and response.
+struct RuleIndex {
+    transforms: Vec<usize>,
+    removeparams: Vec<usize>,
+    urlskips: Vec<usize>,
+    urlskip_exceptions: Vec<usize>,
+    blocks: Vec<usize>,
+    responses: Vec<usize>,
+    replaces: Vec<usize>,
+    request_headers: Vec<usize>,
+    cnames: Vec<usize>,
+}
+
+impl RuleIndex {
+    fn new(rules: &[Rule]) -> Self {
+        let select = |predicate: fn(&Rule) -> bool| {
+            rules
+                .iter()
+                .enumerate()
+                .filter(|(_, rule)| predicate(rule))
+                .map(|(at, _)| at)
+                .collect()
+        };
+        Self {
+            transforms: select(|rule| rule.transform.is_some() && !rule.exception),
+            removeparams: select(|rule| rule.removeparam.is_some()),
+            urlskips: select(|rule| rule.urlskip.is_some() && !rule.exception),
+            urlskip_exceptions: select(|rule| rule.urlskip_exception),
+            blocks: select(|rule| rule.block),
+            responses: select(|rule| {
+                rule.header.is_some() || rule.ip.is_some() || rule.permissions.is_some()
+            }),
+            replaces: select(|rule| rule.replaces),
+            request_headers: select(|rule| rule.request_header.is_some()),
+            cnames: select(|rule| rule.cname),
+        }
+    }
+
+    fn has_request_rules(&self) -> bool {
+        !self.transforms.is_empty()
+            || !self.removeparams.is_empty()
+            || !self.urlskips.is_empty()
+            || !self.blocks.is_empty()
+    }
 }
 
 /// What a response gets, and whether it is blocked.
@@ -742,21 +787,20 @@ fn modifier_actions(line: &str) -> Option<Vec<Action>> {
 impl Modifiers {
     pub fn new(spec: Spec) -> Self {
         let rules: Vec<Rule> = spec.rules.iter().filter_map(parse_rule).collect();
+        let index = RuleIndex::new(&rules);
         let exceptions = Mutex::new(build_exceptions(&spec.exceptions));
         let html = HtmlRules::new(spec.html_rules.clone());
-        let request_header_rules = rules
-            .iter()
-            .enumerate()
-            .filter(|(_, rule)| rule.request_header.is_some())
-            .map(|(at, _)| at)
-            .collect();
         Self {
             spec,
             rules,
             exceptions,
             html,
-            request_header_rules,
+            index,
         }
+    }
+
+    fn rules_at<'a>(&'a self, index: &'a [usize]) -> impl Iterator<Item = &'a Rule> {
+        index.iter().map(|&at| &self.rules[at])
     }
 
     #[cfg(test)]
@@ -769,10 +813,7 @@ impl Modifiers {
 
     /// Whether [`Modifiers::response`] can change a response at all.
     pub fn has_response_rules(&self) -> bool {
-        !self.spec.response_headers.is_empty()
-            || self.rules.iter().any(|rule| {
-                rule.header.is_some() || rule.ip.is_some() || rule.permissions.is_some()
-            })
+        !self.spec.response_headers.is_empty() || !self.index.responses.is_empty()
     }
 
     /// The resources `$redirect=` names on rules with a response condition.
@@ -784,16 +825,15 @@ impl Modifiers {
 
     /// Whether any `$requestheader` rule exists.
     pub fn has_request_header_rules(&self) -> bool {
-        !self.request_header_rules.is_empty()
+        !self.index.request_headers.is_empty()
     }
 
     /// Whether a response body can be rewritten at all (`$replace`, HTML `##^`).
     pub fn has_body_rules(&self) -> bool {
         !self.html.is_empty()
             || self
-                .rules
-                .iter()
-                .any(|rule| rule.replaces && !rule.exception)
+                .rules_at(&self.index.replaces)
+                .any(|rule| !rule.exception)
     }
 
     /// Whether [`Modifiers::filter_body`] should see this response: uBO's body-filter gates plus a matching
@@ -879,13 +919,15 @@ impl Modifiers {
         kind: &str,
         method: &str,
     ) -> Vec<&'a TextReplace> {
+        if self.index.replaces.is_empty() {
+            return Vec::new();
+        }
         let lower = url.to_ascii_lowercase();
         let source_host = host_of(source);
         let request_host = host_of(url);
         let request = Request::new(url, source, kind, method).ok();
         let matched: Vec<&Rule> = self
-            .rules
-            .iter()
+            .rules_at(&self.index.replaces)
             .filter(|rule| {
                 rule.replaces
                     && rule.types.allows(kind)
@@ -970,16 +1012,14 @@ impl Modifiers {
         kind: &str,
         method: &str,
     ) -> Vec<&Rule> {
-        if self.request_header_rules.is_empty() {
+        if self.index.request_headers.is_empty() {
             return Vec::new();
         }
         let lower = url.to_ascii_lowercase();
         let source_host = host_of(source);
         let request_host = host_of(url);
         let request = Request::new(url, source, kind, method).ok();
-        self.request_header_rules
-            .iter()
-            .map(|&at| &self.rules[at])
+        self.rules_at(&self.index.request_headers)
             .filter(|rule| {
                 rule.types.allows(kind)
                     && rule.prefilter.matches(&lower)
@@ -990,10 +1030,13 @@ impl Modifiers {
 
     /// Whether a `$cname` exception covers this document (uBO's `shouldExceptCname`).
     pub fn cname_excepted(&self, document: &str) -> bool {
+        if self.index.cnames.is_empty() {
+            return false;
+        }
         let lower = document.to_ascii_lowercase();
         let host = host_of(document);
         let request = Request::new(document, document, "document", "GET").ok();
-        self.rules.iter().any(|rule| {
+        self.rules_at(&self.index.cnames).any(|rule| {
             rule.cname
                 && rule.prefilter.matches(&lower)
                 && matches_rule(rule, request.as_ref(), &host, &host)
@@ -1020,7 +1063,7 @@ impl Modifiers {
         mut blocked: bool,
         rewrite: Option<String>,
     ) -> (bool, Option<String>, bool) {
-        if self.rules.is_empty() {
+        if !self.index.has_request_rules() {
             return (blocked, rewrite, false);
         }
         let lower = url.to_ascii_lowercase();
@@ -1030,7 +1073,7 @@ impl Modifiers {
 
         // uBO applies a URI transform first, then the query prune, and only skips a URL when neither changed it.
         if !blocked {
-            for rule in &self.rules {
+            for rule in self.rules_at(&self.index.transforms) {
                 if rule.exception || !rule.types.allows(kind) || !rule.prefilter.matches(&lower) {
                     continue;
                 }
@@ -1045,46 +1088,55 @@ impl Modifiers {
                     return (false, Some(rewritten), any_origin);
                 }
             }
-            let mut excepted: Vec<&str> = Vec::new();
-            for rule in &self.rules {
-                if !rule.exception || !rule.types.allows(kind) || !rule.prefilter.matches(&lower) {
-                    continue;
-                }
-                if rule.removeparam.is_none() {
-                    continue;
-                }
-                if matches_rule(rule, request.as_ref(), &source_host, &request_host) {
-                    excepted.push(&rule.value_key);
-                }
-            }
-            // uBO cancels each block whose value an exception names, and an exception with no
-            // value cancels them all. A blanket `$removeparam` still removes everything, even
-            // when an exception names one parameter.
-            if !excepted.contains(&"") {
-                let mut next = rewrite.clone();
-                for rule in &self.rules {
-                    if rule.exception || !rule.types.allows(kind) || !rule.prefilter.matches(&lower)
+            // A URL with no query has nothing to prune. Avoid hundreds of global
+            // $removeparam lookups for ordinary scripts, stylesheets and images.
+            if url.contains('?') || rewrite.is_some() {
+                let mut excepted: Vec<&str> = Vec::new();
+                for rule in self.rules_at(&self.index.removeparams) {
+                    if !rule.exception
+                        || !rule.types.allows(kind)
+                        || !rule.prefilter.matches(&lower)
                     {
                         continue;
                     }
-                    let Some(prune) = &rule.removeparam else {
-                        continue;
-                    };
-                    if !matches_rule(rule, request.as_ref(), &source_host, &request_host) {
+                    if rule.removeparam.is_none() {
                         continue;
                     }
-                    if excepted.contains(&rule.value_key.as_str()) {
-                        continue;
-                    }
-                    if let Some(rewritten) = prune.apply(next.as_deref().unwrap_or(url)) {
-                        next = Some(rewritten);
+                    if matches_rule(rule, request.as_ref(), &source_host, &request_host) {
+                        excepted.push(&rule.value_key);
                     }
                 }
-                if next.is_some() {
-                    let any_origin = next
-                        .as_deref()
-                        .is_some_and(|rewritten| !same_origin(url, rewritten));
-                    return (false, next, any_origin);
+                // uBO cancels each block whose value an exception names, and an exception with no
+                // value cancels them all. A blanket `$removeparam` still removes everything, even
+                // when an exception names one parameter.
+                if !excepted.contains(&"") {
+                    let mut next = rewrite.clone();
+                    for rule in self.rules_at(&self.index.removeparams) {
+                        if rule.exception
+                            || !rule.types.allows(kind)
+                            || !rule.prefilter.matches(&lower)
+                        {
+                            continue;
+                        }
+                        let Some(prune) = &rule.removeparam else {
+                            continue;
+                        };
+                        if !matches_rule(rule, request.as_ref(), &source_host, &request_host) {
+                            continue;
+                        }
+                        if excepted.contains(&rule.value_key.as_str()) {
+                            continue;
+                        }
+                        if let Some(rewritten) = prune.apply(next.as_deref().unwrap_or(url)) {
+                            next = Some(rewritten);
+                        }
+                    }
+                    if next.is_some() {
+                        let any_origin = next
+                            .as_deref()
+                            .is_some_and(|rewritten| !same_origin(url, rewritten));
+                        return (false, next, any_origin);
+                    }
                 }
             }
         }
@@ -1096,7 +1148,7 @@ impl Modifiers {
             kind,
             "document" | "subdocument" | "image" | "media" | "object" | "other"
         );
-        for rule in &self.rules {
+        for rule in self.rules_at(&self.index.urlskips) {
             if !skippable
                 || rule.exception
                 || !rule.types.allows(kind)
@@ -1114,13 +1166,21 @@ impl Modifiers {
                 continue;
             }
             let excepted = !rule.important
-                && self.rules.iter().any(|exception| {
-                    exception.urlskip_exception
-                        && (exception.value_key.is_empty() || exception.value_key == rule.value_key)
-                        && exception.types.allows(kind)
-                        && exception.prefilter.matches(&lower)
-                        && matches_rule(exception, request.as_ref(), &source_host, &request_host)
-                });
+                && self
+                    .rules_at(&self.index.urlskip_exceptions)
+                    .any(|exception| {
+                        exception.urlskip_exception
+                            && (exception.value_key.is_empty()
+                                || exception.value_key == rule.value_key)
+                            && exception.types.allows(kind)
+                            && exception.prefilter.matches(&lower)
+                            && matches_rule(
+                                exception,
+                                request.as_ref(),
+                                &source_host,
+                                &request_host,
+                            )
+                    });
             if excepted {
                 continue;
             }
@@ -1133,7 +1193,7 @@ impl Modifiers {
         // A rule whose only effect is its strict party constraint blocks like an ordinary block rule.
         let mut strict_blocked = false;
         let mut strict_excepted = false;
-        for rule in &self.rules {
+        for rule in self.rules_at(&self.index.blocks) {
             if !rule.block || !rule.types.allows(kind) || !rule.prefilter.matches(&lower) {
                 continue;
             }
@@ -1167,7 +1227,7 @@ impl Modifiers {
         headers: &[(String, String)],
     ) -> ResponseMatch {
         let mut matched = ResponseMatch::default();
-        if self.rules.is_empty() && self.spec.response_headers.is_empty() {
+        if self.index.responses.is_empty() && self.spec.response_headers.is_empty() {
             return matched;
         }
         let lower = url.to_ascii_lowercase();
@@ -1214,7 +1274,7 @@ impl Modifiers {
         let mut ip_blocked = false;
         let mut ip_excepted = false;
         let mut stand_in = None;
-        for rule in &self.rules {
+        for rule in self.rules_at(&self.index.responses) {
             if !rule.types.allows(kind) || !rule.prefilter.matches(&lower) {
                 continue;
             }
