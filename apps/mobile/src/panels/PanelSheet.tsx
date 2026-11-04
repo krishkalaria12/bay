@@ -189,7 +189,8 @@ export function Group({ label, children, testID }: { label?: string; children: R
         <View className="overflow-hidden rounded-[20px] bg-default">
           {rows.map((row, index) => (
             <View key={row.key ?? index}>
-              {index ? <View className="ml-[52px] h-px bg-foreground/5" /> : null}
+              {/* The hairline starts where the row's text does. */}
+              {index ? <View className={(row.props as { icon?: unknown }).icon ? "ml-[52px] h-px bg-foreground/5" : "ml-4 h-px bg-foreground/5"} /> : null}
               {row}
             </View>
           ))}
