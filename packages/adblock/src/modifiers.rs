@@ -578,7 +578,7 @@ pub fn extract(list: &str, trusted: bool) -> Extracted {
                 continue;
             }
             None => {
-                if line.starts_with("@@") {
+                if line.starts_with("@@") && is_plain_exception(line) {
                     extracted.spec.exceptions.push(line.to_owned());
                 }
             }
@@ -587,6 +587,39 @@ pub fn extract(list: &str, trusted: bool) -> Extracted {
         extracted.list.push('\n');
     }
     extracted
+}
+
+/// Whether an exception is a general allow rule, the realm uBO's `matchHeaders` checks. An exception whose option
+/// names another action (`$csp`, `$redirect`, `$generichide`…) only allows that action, not a response header block.
+fn is_plain_exception(line: &str) -> bool {
+    let Some(body) = line.strip_prefix("@@") else {
+        return false;
+    };
+    let Some((_, options)) = split_rule(body) else {
+        return true;
+    };
+    !options.iter().any(|option| {
+        let name = option
+            .trim_start_matches('~')
+            .split('=')
+            .next()
+            .unwrap_or("")
+            .trim();
+        matches!(
+            name,
+            "csp"
+                | "redirect"
+                | "redirect-rule"
+                | "generichide"
+                | "ghide"
+                | "elemhide"
+                | "ehide"
+                | "specifichide"
+                | "shide"
+                | "genericblock"
+                | "badfilter"
+        )
+    })
 }
 
 /// The modifier options a network rule carries, if any.
@@ -1805,6 +1838,23 @@ mod tests {
                 "permissions-policy".to_owned(),
                 "compute-pressure=()".to_owned()
             )]
+        );
+        // A `$csp` exception allows that directive only; it is not the general allow uBO's header match checks.
+        let realm = modifiers(
+            "||cdn.example^$script,header=server:nginx\n\
+             @@||cdn.example^$csp=script-src 'none'\n",
+        );
+        assert!(
+            realm
+                .response(
+                    "https://cdn.example/a.js",
+                    "https://site.example/",
+                    "script",
+                    "GET",
+                    None,
+                    &headers,
+                )
+                .blocked
         );
     }
 
