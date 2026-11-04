@@ -238,15 +238,7 @@ impl Blocker {
         exceptions.dedup();
         let mut procedural: Vec<String> = resources.procedural_actions.into_iter().collect();
         procedural.sort();
-        let script = if resources.injected_script.is_empty() {
-            String::new()
-        } else {
-            // uBO's function resources read this object; keep it scoped to this document's injection.
-            format!(
-                "(function() {{\nconst scriptletGlobals = Object.create(null);\n{}\n}})();",
-                resources.injected_script
-            )
-        };
+        let script = scriptlet_source(resources.injected_script);
         PageResources {
             hide,
             exceptions,
@@ -261,7 +253,8 @@ impl Blocker {
 
     /// Only the page's scriptlet code ([`Blocker::page_resources`]'s `script`), for a document about to start.
     pub fn scriptlets(&self, url: &str) -> String {
-        self.page_resources(url).script
+        let script = self.engine().url_cosmetic_resources(url).injected_script;
+        scriptlet_source(script)
     }
 
     /// Whether a request should be blocked. `kind` is a resource type such as `script`, `image` or `xhr`.
@@ -501,6 +494,14 @@ impl Blocker {
         self.engine()
             .hidden_class_id_selectors(classes, ids, &exceptions)
     }
+}
+
+fn scriptlet_source(script: String) -> String {
+    if script.is_empty() {
+        return script;
+    }
+    // uBO's function resources read this object; scope it to this document's injection.
+    format!("(function() {{\nconst scriptletGlobals = Object.create(null);\n{script}\n}})();")
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -797,12 +798,19 @@ mod tests {
 
     #[test]
     fn scriptlets_are_only_the_page_script() {
-        let blocker = Blocker::new("example.com##+js(bay-test)\n");
+        let blocker = Blocker::new(
+            "example.com##+js(bay-test)\nexample.com##.banner\n\
+             example.com##div:has-text(Sponsored):remove()\n",
+        );
         assert!(blocker.use_resources(r#"[{"name":"bay-test.js","kind":{"mime":"application/javascript"},"content":"Y29uc29sZS5sb2coMSk="}]"#));
         assert!(blocker
             .scriptlets("https://example.com/")
             .contains("console.log(1)"));
         assert!(blocker.scriptlets("https://other.example/").is_empty());
+        let page = blocker.page_resources("https://example.com/");
+        assert!(!page.hide.is_empty());
+        assert!(!page.procedural.is_empty());
+        assert_eq!(blocker.scriptlets("https://example.com/"), page.script);
     }
 
     #[test]
