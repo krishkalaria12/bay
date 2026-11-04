@@ -292,6 +292,14 @@ int main(int argc, char **argv) {
             "a main frame isn't uncloaked");
     [NNCoreContentBlocker setAllowed:YES onHost:@"body.example" completion:^(NSString *error) { Require(!error, "pause succeeds"); }];
     Require(!gBodyGate(bodyURL, top, top, "xmlhttprequest", "GET", 200, "text/plain", ""), "a paused site's bodies stay");
+    length = 123;
+    Require(!gBodyFilter(bodyURL, top, top, "xmlhttprequest", "GET", "text/plain", (const uint8_t *)text,
+                         strlen(text), &length) && length == 0,
+            "pausing after the gate also leaves an in-flight body unchanged");
+    length = 123;
+    Require(!gBodyFilter(bodyURL, "", "", "xmlhttprequest", "GET", "text/plain", (const uint8_t *)text,
+                         strlen(text), &length) && length == 0,
+            "an in-flight body also checks its URL when no top frame is available");
     [NNCoreContentBlocker setAllowed:NO onHost:@"body.example" completion:^(NSString *error) { Require(!error, "unpause succeeds"); }];
     gEngine = std::make_shared<Engine>(bay_blocker_new(&plain, nullptr, 1));
     PublishLive();

@@ -165,6 +165,7 @@ uint8_t *BodyFiltered(const char *url, const char *source, const char *top, cons
   *outLength = 0;
   std::shared_ptr<const Live> live = CurrentLive();
   if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return nullptr;
   size_t filteredLength = 0;
   uint8_t *filtered = bay_blocker_body_filter(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET",
                                               contentType ?: "", body, length, &filteredLength);
