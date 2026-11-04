@@ -13,6 +13,7 @@
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/page_media_events.h"
+#include "chrome/browser/bay/webui/page_lifecycle_events.h"
 #include "chrome/browser/bay/webui/page_message_events.h"
 #include "chrome/browser/bay/webui/page_interaction_events.h"
 #include "chrome/browser/bay/webui/form_prompts.h"
@@ -67,20 +68,31 @@ TabObserver::TabObserver(content::WebContents* contents,
       lease_(lease),
       requested_url_(std::move(requested_url)),
       host_(std::move(host)) {
+  discarded_ = contents->WasDiscarded() &&
+               !contents->GetPrimaryMainFrame()->IsRenderFrameLive();
   EnsureObservers();
 }
 TabObserver::TabObserver(content::WebContents* contents, FactCallback facts)
     : WebContentsObserver(contents), facts_(std::move(facts)) {
+  discarded_ = contents->WasDiscarded() &&
+               !contents->GetPrimaryMainFrame()->IsRenderFrameLive();
   EnsureObservers();
 }
 TabObserver::~TabObserver() = default;
 void TabObserver::DidOpenRequestedURL(
-    content::WebContents* opened, content::RenderFrameHost*, const GURL& url,
+    content::WebContents* opened, content::RenderFrameHost* source_frame, const GURL& url,
     const content::Referrer&, WindowOpenDisposition disposition,
     ui::PageTransition, bool, bool) {
+  if (!AppRuntime::Enabled()) {
+    if (!facts_ && current())
+      PageLifecycleEvents::OpenRequestedURL(
+          web_contents(), opened, url, disposition,
+          source_frame && source_frame->HasTransientUserActivation());
+    return;
+  }
   // App tabs have one broker-owned observer. Standalone extension views only
   // have this lease-scoped observer, so use their trusted host window instead.
-  if (!AppRuntime::Enabled() || facts_ || !host_ || !current() ||
+  if (facts_ || !host_ || !current() ||
       TabBroker::Get().HasPageKey(web_contents()) || !host_->browser())
     return;
   if (auto* runtime = AppRuntime::GetIfStarted())
@@ -169,6 +181,28 @@ base::DictValue TabObserver::NavigationState(const GURL& url) const {
       .Set("audible", contents->IsCurrentlyAudible())
       .Set("muted", contents->IsAudioMuted());
 }
+bool TabObserver::discarded() const { return discarded_; }
+void TabObserver::ReplaceContents(content::WebContents* contents) {
+  if (!contents || contents == web_contents())
+    return;
+  media_events_.reset();
+  interaction_events_.reset();
+  favicon_observation_.Reset();
+  find_observation_.Reset();
+  zoom_observation_.Reset();
+  last_security_.reset();
+  last_load_error_.reset();
+  initial_state_sent_ = false;
+  crashed_ = false;
+  discarded_ = true;
+  pinch_scale_ = 1;
+  Observe(contents);
+}
+void TabObserver::WasDiscarded() {
+  discarded_ = true;
+  Emit("onDiscarded", base::DictValue().Set(
+      "url", web_contents()->GetLastCommittedURL().spec()));
+}
 void TabObserver::State() {
   if (!CanEmit())
     return;
@@ -182,6 +216,11 @@ void TabObserver::State() {
                            : visible));
   if (!std::exchange(initial_state_sent_, true)) {
     media_events_->Replay();
+    if (discarded_)
+      Emit("onDiscarded", base::DictValue().Set(
+          "url", web_contents()->GetLastCommittedURL().spec()));
+    if (!facts_)
+      PageLifecycleEvents::Replay(web_contents());
     if (interaction_events_)
       interaction_events_->State();
     // Prompt controllers follow the page while it changes window or mount.
@@ -208,6 +247,10 @@ void TabObserver::TitleWasSet(content::NavigationEntry*) {
   State();
 }
 void TabObserver::DidStartLoading() {
+  if (CanEmit() && std::exchange(discarded_, false)) {
+    const int id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
+    Emit("onReady", base::DictValue().Set("browserId", id).Set("tabId", id));
+  }
   if (CanEmit() && std::exchange(crashed_, false)) {
     // ContentCard dismisses a sad tab on a new page. Match the macOS host's
     // empty-then-current report when reloading the same page after a crash.

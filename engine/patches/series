@@ -84,6 +84,7 @@ chromium mac chromium-devtools-background-target.patch
 
 chromium all chromium-scripts-policy.patch
 chromium win chromium-page-interactions-webui.patch
+chromium win chromium-bay-page-activation.patch
 
 layer all engine/chromium
 layer all engine/nncore

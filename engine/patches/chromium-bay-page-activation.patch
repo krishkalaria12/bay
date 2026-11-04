@@ -1,0 +1,17 @@
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -738,8 +738,14 @@
+                                 window_action, user_gesture);
+ }
+ 
++// The Bay document activates its model before Chrome changes the hidden
++// native strip. Other Chrome pages keep the default activation path.
++bool (*g_bay_activate_contents)(content::WebContents*) = nullptr;
++
+ void BrowserWebContentsDelegate::ActivateContents(
+     content::WebContents* contents) {
++  if (g_bay_activate_contents && g_bay_activate_contents(contents))
++    return;
+   // A WebContents can ask to activate after it's been removed from the
+   // TabStripModel. See https://crbug.com/40679349
+   int index = browser_->GetTabStripModel()->GetIndexOfWebContents(contents);

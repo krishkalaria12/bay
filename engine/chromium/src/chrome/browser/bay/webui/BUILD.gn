@@ -65,6 +65,8 @@ source_set("impl") {
     "page_media_events.h",
     "page_interaction_events.cc",
     "page_interaction_events.h",
+    "page_lifecycle_events.cc",
+    "page_lifecycle_events.h",
     "page_message_events.cc",
     "page_message_events.h",
     "page_script.g.h",
@@ -292,6 +294,8 @@ if (is_win) {
       "page_media_events_unittest.cc",
       "form_prompts_unittest.cc",
       "page_interaction_events_unittest.cc",
+      "page_lifecycle_events_unittest.cc",
+      "page_observer_unittest.cc",
       "page_message_events_unittest.cc",
     ]
     deps = [
@@ -301,6 +305,7 @@ if (is_win) {
       "//chrome/browser/media/webrtc",
       "//chrome/browser/ui:test_support",
       "//chrome/browser/ui/passwords:test_support_ui",
+      "//components/sessions",
       "//components/blocked_content",
       "//chrome/browser/content_settings:content_settings_factory",
       "//chrome/test:test_support_unit",

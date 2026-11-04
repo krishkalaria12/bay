@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
@@ -91,6 +92,19 @@ class TabBroker::Entry final : public content::WebContentsObserver {
     ForgetPage();
     contents = nullptr;
   }
+  void AboutToBeDiscarded(content::WebContents* replacement) override {
+    if (replacement != contents)
+      TabBroker::Get().ReplaceContents(contents, replacement);
+  }
+  void Rebind(content::WebContents* replacement) {
+    contents = replacement;
+    Observe(replacement);
+  }
+  void ReplacementAttached() {
+    if (!contents || !profile)
+      return;
+    ObserveFacts(native_profile);
+  }
   void DidOpenRequestedURL(content::WebContents* opened,
                            content::RenderFrameHost*,
                            const GURL& url,
@@ -141,6 +155,7 @@ class TabBroker::Entry final : public content::WebContentsObserver {
   std::unique_ptr<ScopedProfileKeepAlive> profile_keep_alive;
   std::unique_ptr<ScopedKeepAlive> process_keep_alive;
   std::unique_ptr<tabs::TabModel> parked;
+  base::WeakPtrFactory<Entry> weak_factory{this};
 };
 TabBroker& TabBroker::Get() {
   static base::NoDestructor<TabBroker> broker;
@@ -169,6 +184,35 @@ void TabBroker::EmitPageFact(content::WebContents* contents, const char* event,
   const auto found = entries_.find(contents);
   if (found != entries_.end())
     found->second->EmitFact(event, std::move(payload));
+}
+void TabBroker::SetContentsReplacedCallback(ContentsReplacedCallback callback) {
+  contents_replaced_ = std::move(callback);
+}
+void TabBroker::ReplaceContents(content::WebContents* old_contents,
+                                content::WebContents* new_contents) {
+  auto it = entries_.find(old_contents);
+  if (it == entries_.end() || !new_contents || old_contents == new_contents ||
+      old_contents->GetBrowserContext() != new_contents->GetBrowserContext() ||
+      entries_.contains(new_contents))
+    return;
+  auto node = entries_.extract(it);
+  auto& entry = *node.mapped();
+  DetachSurface(old_contents);
+  DisplayMediaPicker::CancelForContents(old_contents);
+  entry.EmitFact("onDiscarded", base::DictValue().Set(
+      "url", old_contents->GetLastCommittedURL().spec()));
+  entry.facts.reset();
+  entry.Rebind(new_contents);
+  node.key() = new_contents;
+  entries_.insert(std::move(node));
+  // SessionTabHelper and the replacement's TabModel are attached after the
+  // discard callback returns. Recreate broker facts only once they exist.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&Entry::ReplacementAttached,
+                                entry.weak_factory.GetWeakPtr()));
+  auto replaced = contents_replaced_;
+  if (replaced)
+    replaced.Run(old_contents, new_contents, entry.lease);
 }
 void TabBroker::PruneDestroyed() {
   std::erase_if(entries_,

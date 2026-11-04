@@ -2632,7 +2632,7 @@ export const nativeContracts = {
       "DownloadNavigation": "{ url: string; committedUrl: string; skipped: boolean }",
       "WebNotification": "{\n  id: string;\n  title: string;\n  body: string;\n  icon: string | null;\n  tag: string;\n  silent: boolean;\n  requireInteraction: boolean;\n  origin: string;\n  browserId: number;\n  isMainFrame: boolean;\n}",
       "PictureInPictureState": "{ kind: \"video\" | \"document\"; active: boolean }",
-      "ActivateRequest": "{ reason: \"pictureInPicture\" }",
+      "ActivateRequest": "{ reason: \"pictureInPicture\" | \"page\" }",
       "DisplayMediaSource": "{\n  id: string;\n  kind: \"screen\" | \"window\";\n  name: string;\n  app?: string;\n  pid?: number;\n  width: number;\n  height: number;\n}",
       "DisplayMediaRequest": "{ id: string; origin: string; audio: boolean; sources: DisplayMediaSource[]; cancelled?: boolean }",
       "ZoomState": "{ zoom: number; host: string; isDefault: boolean; pinchScale: number }",

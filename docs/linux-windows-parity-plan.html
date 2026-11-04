@@ -174,19 +174,6 @@
       td:first-child {
         min-width: 135px;
       }
-      .tag {
-        display: inline-block;
-        font-size: 0.72rem;
-        line-height: 1.2;
-        border-radius: 999px;
-        padding: 0.22rem 0.45rem;
-        background: var(--sunken);
-        white-space: nowrap;
-      }
-      .t-port {
-        background: var(--warn-soft);
-        color: var(--warn);
-      }
       .callout {
         background: var(--surface);
         border: 1px solid var(--line);
@@ -239,54 +226,24 @@
       <nav aria-label="Contents">
         <strong>Remaining work</strong>
         <ol>
-          <li><a href="#events">1. Page events</a></li>
-          <li><a href="#ui">2. View behaviour</a></li>
-          <li><a href="#followups">3. Implementation follow-ups</a></li>
-          <li><a href="#sync">4. Branch sync</a></li>
-          <li><a href="#runtime">5. Runtime acceptance</a></li>
-          <li><a href="#decisions">6. Open decisions</a></li>
+          <li><a href="#ui">1. View behaviour</a></li>
+          <li><a href="#followups">2. Implementation follow-ups</a></li>
+          <li><a href="#sync">3. Branch sync</a></li>
+          <li><a href="#runtime">4. Runtime acceptance</a></li>
+          <li><a href="#decisions">5. Open decisions</a></li>
         </ol>
       </nav>
       <main>
         <header>
           <h1>Remaining Linux and Windows parity work</h1>
-          <p class="lede">
-            Page events first, then view behaviour and the implementation follow-ups below. Run native acceptance on Linux and Windows after the source work.
-          </p>
+          <p class="lede">Finish view behaviour and the implementation follow-ups below, then run native acceptance on Linux and Windows.</p>
           <p class="meta">
-            Updated 3 Nov 2026. Implementation status is based on <code>feat/linux</code>; the latest shared changes still need syncing to
+            Updated 4 Nov 2026. Implementation status is based on <code>feat/linux</code>; the latest shared changes still need syncing to
             <code>feat/windows</code>.
           </p>
         </header>
-        <section id="events" aria-labelledby="events-h">
-          <h2 id="events-h">1. Page events</h2>
-          <p class="prose">
-            Verify the existing Chrome UI and host routes before adding an emitter. For each missing event, connect the page state or prompt to Bay's shared UI
-            and cover emission, resolution and cancellation.
-          </p>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Event</th>
-                  <th>Feature</th>
-                  <th>macOS reference</th>
-                  <th>Priority</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>onOpenWindow</code>, <code>onActivateRequest</code>, <code>onReady</code></td>
-                  <td>Popups and <code>window.open</code>, tab focus requests, the browser id handshake</td>
-                  <td>NNCore</td>
-                  <td><span class="tag t-verify">Verify</span> The tab broker's page-offer route may replace them</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
         <section id="ui" aria-labelledby="ui-h">
-          <h2 id="ui-h">2. View behaviour</h2>
+          <h2 id="ui-h">1. View behaviour</h2>
           <div class="table-wrap">
             <table>
               <thead>
@@ -321,7 +278,7 @@
           </div>
         </section>
         <section id="followups" aria-labelledby="followups-h">
-          <h2 id="followups-h">3. Implementation follow-ups</h2>
+          <h2 id="followups-h">2. Implementation follow-ups</h2>
           <p class="prose">These are the unresolved behaviours from earlier feature work.</p>
           <ul>
             <li>Support SVG responses in favicon fetching.</li>
@@ -347,7 +304,7 @@
           </ul>
         </section>
         <section id="sync" aria-labelledby="sync-h">
-          <h2 id="sync-h">4. Branch sync</h2>
+          <h2 id="sync-h">3. Branch sync</h2>
           <ol>
             <li>
               Copy the remaining shared host changes from <code>feat/linux</code> to <code>feat/windows</code>, preserving Linux-only services, tests and
@@ -358,7 +315,7 @@
           </ol>
         </section>
         <section id="runtime" aria-labelledby="runtime-h">
-          <h2 id="runtime-h">5. Runtime acceptance</h2>
+          <h2 id="runtime-h">4. Runtime acceptance</h2>
           <p class="prose">
             The native Linux and Windows applications still need linking and execution. The acceptance assignments below come from
             <a href="linux-work-split.md">linux-work-split.md</a>.
@@ -436,11 +393,13 @@
             <li>Test Easel publication, updates and revocation, including secure storage, failed requests and concurrent windows.</li>
             <li>Check quote-card fonts, long passages and mixed-direction text.</li>
             <li>Exercise page-script selection and Capture gestures, live media controls and notifications across frames, navigation and window transfers.</li>
+            <li>Test password, address and card prompts, blocked popups, link status and cross-site Peek, camera/microphone/screen indicators and PiP.</li>
+            <li>Test popup adoption, page focus requests, internal app links, and discard/reload recovery during window transfers.</li>
             <li>Run Windows build and hosting acceptance using <a href="windows-implementation-status.md">the Windows status document</a>.</li>
           </ul>
         </section>
         <section id="decisions" aria-labelledby="decisions-h">
-          <h2 id="decisions-h">6. Open decisions</h2>
+          <h2 id="decisions-h">5. Open decisions</h2>
           <ul>
             <li>Choose the Chromium DRM playback and distribution approach for Linux and Windows, then verify protected playback on the target builds.</li>
             <li>Decide whether the ports should expose stable/nightly update-channel selection.</li>
