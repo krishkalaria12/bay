@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // End-to-end import of cookies, addresses and cards into a hidden Bay instance, from a fake Chrome home
-// (scripts/e2e_fixture.py; never a real profile). It drives the real import window through the dev harness
+// (scripts/e2e_fixture.mjs; never a real profile). It drives the real import window through the dev harness
 // (apps/browser/src/lib/devHarness.ts) and its `globalThis.nnImport` hook (components/import/ImportWindow.tsx,
 // Debug builds only), reads the profile's cookies over CDP, and checks a local fixture site receives them.
 //
@@ -208,7 +208,7 @@ const phases = phaseArg === "all" ? ["import", "restart"] : [phaseArg];
 try {
   if (phases[0] === "import") {
     for (const dir of [DATA, HOME]) fs.rmSync(dir, { recursive: true, force: true });
-    execFileSync("python3", [path.join(HERE, "e2e_fixture.py"), HOME, SECRET, String(SERVER_PORT)], { stdio: "ignore" });
+    execFileSync(process.execPath, [path.join(HERE, "e2e_fixture.mjs"), HOME, SECRET, String(SERVER_PORT)], { stdio: "ignore" });
   } else if (!fs.existsSync(DATA)) {
     throw new Error(`${DATA} doesn't exist: run the import phase first`);
   }

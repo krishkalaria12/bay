@@ -1,4 +1,4 @@
-// Compiled with the production renderer by scripts/test-quote-card.py.
+// Compiled with the production renderer by scripts/test-quote-card.mjs.
 func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
   guard condition() else { fatalError(message) }
 }

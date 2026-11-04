@@ -186,7 +186,7 @@ uBO's settings (paused sites, list choices, enabled state) are not carried over.
 
 `cargo test --locked --manifest-path packages/adblock/Cargo.toml` checks rule matching, redirects, scriptlets,
 permissions, procedural resources, every modifier rule (URL skips, URI transforms, query pruning, response headers,
-addresses, `$replace`, `$requestheader`, `$cname`), HTML filtering, charsets and the serialized engine. `python3 packages/chromium/scripts/test-content-blocker.py` runs the actual
+addresses, `$replace`, `$requestheader`, `$cname`), HTML filtering, charsets and the serialized engine. `node packages/chromium/scripts/test-content-blocker.mjs` runs the actual
 native implementation against the Rust library with temporary storage and controlled offline downloads. The browser's
 JavaScript suite exercises cosmetic batching and procedural actions from the real page script, and the native test
 covers the response, body, request-header and CNAME filters and their exceptions. CI runs all three.
