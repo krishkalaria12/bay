@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "bay/core/nn_page_channel.h"
+#include "chrome/browser/bay/webui/content_blocker.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -34,12 +35,30 @@ namespace {
 constexpr size_t kMaxMessageBytes = 2 * 1024 * 1024;
 constexpr size_t kMaxFrames = 256;
 constexpr size_t kMaxNotifications = 500;
+constexpr size_t kMaxFrameUrl = 8192;
+constexpr size_t kMaxCosmeticNames = 4000;
 PageMessageEvents::Sink& EventSink() {
   static base::NoDestructor<PageMessageEvents::Sink> sink;
   return *sink;
 }
 std::string Json(const base::DictValue& value) {
   return base::WriteJson(value).value_or("{}");
+}
+// Class or id names from the page, which its script says are new.
+std::vector<std::string> Names(const base::DictValue* value, const char* key) {
+  std::vector<std::string> names;
+  const auto* list = value ? value->FindList(key) : nullptr;
+  if (!list)
+    return names;
+  for (const auto& item : *list) {
+    if (names.size() >= kMaxCosmeticNames)
+      break;
+    if (item.is_string() && !item.GetString().empty() &&
+        item.GetString().size() <= 256) {
+      names.push_back(item.GetString());
+    }
+  }
+  return names;
 }
 std::string Text(const base::DictValue* value, const char* key, size_t limit) {
   const auto* text = value ? value->FindString(key) : nullptr;
@@ -225,8 +244,35 @@ void PageMessageEvents::Message(content::RenderFrameHost* frame,
         top, top, ContentSettingsType::AUTOPLAY) == CONTENT_SETTING_BLOCK;
     // Desktop capture goes through Chrome's picker hook, including Wayland's
     // portal. Do not enable the macOS page script's getDisplayMedia shim.
-    nncore::PageChannel::GetOrCreate(web_contents())->CallFrame(
-        id, "config", Json(base::DictValue().Set("blockAutoplay", block)));
+    auto config = base::DictValue().Set("blockAutoplay", block);
+    // The content blocker's site sheet now, and generic hiding for the classes
+    // and ids the page script then reports ("cosmetic").
+    auto* channel = nncore::PageChannel::GetOrCreate(web_contents());
+    std::string frame_url = Text(data, "url", kMaxFrameUrl);
+    if (frame_url.empty())
+      frame_url = top.spec();
+    const std::string page_url = main ? frame_url : top.spec();
+    if (auto cosmetics = ContentBlocker::CosmeticsFor(frame_url, page_url)) {
+      if (cosmetics->css)
+        channel->InsertUserStyle(id, *cosmetics->css, frame_url);
+      if (cosmetics->generic)
+        config.Set("cosmetic", true);
+      if (cosmetics->procedural && !cosmetics->procedural->empty())
+        config.Set("procedural", std::move(*cosmetics->procedural));
+    }
+    channel->CallFrame(id, "config", Json(std::move(config)));
+    return;
+  }
+  if (kind == "cosmetic" && data) {
+    const std::string frame_url = Text(data, "url", kMaxFrameUrl);
+    const std::string page_url =
+        main ? frame_url : web_contents()->GetLastCommittedURL().spec();
+    const auto css = ContentBlocker::GenericStyle(
+        frame_url, page_url, Names(data, "classes"), Names(data, "ids"));
+    if (css) {
+      nncore::PageChannel::GetOrCreate(web_contents())
+          ->InsertUserStyle(id, *css, frame_url);
+    }
     return;
   }
   if (kind == "nowPlaying") {

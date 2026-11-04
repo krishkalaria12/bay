@@ -192,6 +192,10 @@ source_set("impl") {
   ]
   if (is_win || is_linux) {
     sources += [
+      "content_blocker.cc",
+      "content_blocker.h",
+      "content_blocker_rules.cc",
+      "content_blocker_rules.h",
       "data_bridge.cc",
       "data_bridge.h",
       "crash_reports.cc",
@@ -209,6 +213,19 @@ source_set("impl") {
       "shell_ui.cc",
       "shell_ui_options.cc",
     ]
+    deps += [ "//third_party/re2" ]
+    # packages/adblock, which scripts/engine.py builds with cargo first.
+    if (is_win) {
+      libs = [
+        "$root_out_dir/bay_adblock/bay_adblock.lib",
+        "bcrypt.lib",
+        "ntdll.lib",
+        "userenv.lib",
+        "ws2_32.lib",
+      ]
+    } else {
+      libs = [ "$root_out_dir/bay_adblock/libbay_adblock.a" ]
+    }
     deps += [
       ":keychain",
       ":notifications",
@@ -1034,6 +1051,21 @@ if (is_win) {
       "//testing/gmock",
       "//testing/gtest",
       "//url",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  test("content_blocker_rules_unittests") {
+    sources = [
+      "content_blocker_rules.cc",
+      "content_blocker_rules_unittest.cc",
+    ]
+    deps = [
+      "//base",
+      "//base/test:run_all_unittests",
+      "//testing/gtest",
+      "//third_party/re2",
     ]
   }
 }

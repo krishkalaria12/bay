@@ -77,6 +77,8 @@ def layer_source(here: Path, owned: str):
             "#pragma once\nnamespace bay {\n"
             f'inline constexpr char kPageScript[] = R"{delimiter}({script}){delimiter}";\n'
             "}  // namespace bay\n", encoding="utf-8")
+        # The blocker's C ABI; scripts/engine.py builds the library behind it.
+        shutil.copy2(repository / "packages/adblock/include/bay_adblock.h", staged / "webui/bay_adblock.h")
         for package in ("import", "sync"):
             for platform in ("windows", "linux"):
                 canonical = repository / "packages" / package / platform

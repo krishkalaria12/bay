@@ -30,6 +30,9 @@ class EngineServices {
   EngineServices(const EngineServices&) = delete;
   EngineServices& operator=(const EngineServices&) = delete;
 
+  static bool DispatchContentBlocker(const std::string& method,
+                                     const base::ListValue& args,
+                                     Response& response);
   bool DispatchEngineModule(const std::string& module,
                             const std::string& method,
                             const base::ListValue& args,

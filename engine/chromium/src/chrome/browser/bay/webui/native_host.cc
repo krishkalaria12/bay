@@ -74,6 +74,7 @@
 #include "chrome/browser/bay/webui/little_bay_access.h"
 #include "chrome/browser/bay/webui/local_files.h"
 #include "chrome/browser/bay/webui/native_file_drag.h"
+#include "chrome/browser/bay/webui/content_blocker.h"
 #include "chrome/browser/bay/webui/window_key_watch.h"
 #include "ui/views/widget/widget.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
@@ -898,6 +899,14 @@ void NativeHost::InstallCloseHooks() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
     g_bay_document_drag_enter = &RecordDocumentDrag;
     WindowKeyWatch::Get().Install();
+    // Every document's Settings shows its stats, not only the coordinator's.
+    ContentBlocker::Get().SetSink(base::BindRepeating([](base::DictValue stats) {
+      for (const auto& [owner, host] : Hosts()) {
+        if (host)
+          host->Emit("BayCEF", "onContentBlocker", base::Value(stats.Clone()));
+      }
+    }));
+    ContentBlocker::Get().Prepare();
     // Alt alone shows the active window's hidden sidebar, as macOS's Option.
     WindowKeyWatch::Get().SetAltHoldHandlers(
         base::BindRepeating([] {
