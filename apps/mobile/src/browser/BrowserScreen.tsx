@@ -89,10 +89,35 @@ export function BrowserScreen(): JSX.Element {
 
   useContentBlocking(ready, blockContent, blockingPausedHosts);
 
-  const { theme } = data.preferences;
+  const { theme, startPageAfterHours } = data.preferences;
   useEffect(() => {
     Uniwind.setTheme(theme);
   }, [theme]);
+
+  // Back after a long time away (or launched again after it): a fresh start page, like a new day. Tabs stay in the
+  // switcher. The time Bay left is saved, since the system usually ends Bay in the background before then.
+  const startFresh = useRef<() => void>(() => {});
+  startFresh.current = () => {
+    const { data: current } = useBrowserStore.getState();
+    if (startPageAfterHours === null || current.leftAt === null) return;
+    if (Date.now() - current.leftAt < startPageAfterHours * 60 * 60 * 1000) return;
+    if (current.tabs.find((tab) => tab.id === current.activeTabId)?.url === "") return;
+    const empty = current.tabs.find((tab) => !tab.url && !tab.private);
+    if (empty) dispatch({ type: "activate-tab", id: empty.id, now: Date.now() });
+    else openTab("");
+    setOverlay("none");
+    setPanel(null);
+    setLink(null);
+  };
+  useEffect(() => {
+    if (ready) startFresh.current();
+  }, [ready]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") startFresh.current();
+    });
+    return () => subscription.remove();
+  }, []);
   const blockerStatus = useBlockerStatus((state) => state.status);
 
   // Private tabs lock as soon as Bay leaves the foreground, which also keeps them out of the app switcher.
