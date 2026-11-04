@@ -7,7 +7,7 @@ import { ARTICLE_HELPERS } from "../src/pagescripts/article.ts";
 import { MARKDOWN_SCRIPT } from "../src/pagescripts/markdown.ts";
 import { hideElementsScript, PICK_PARENT_SCRIPT, START_PICKER_SCRIPT, STOP_PICKER_SCRIPT } from "../src/pagescripts/picker.ts";
 import { CLOSE_READER_SCRIPT, DEFAULT_READER, openReaderScript, updateReaderScript } from "../src/pagescripts/reader.ts";
-import { pageTweaksScript } from "../src/pagescripts/tweaks.ts";
+import { PAGE_COLOR_SCRIPT, pageTweaksScript } from "../src/pagescripts/tweaks.ts";
 import { READABILITY, TURNDOWN } from "../src/pagescripts/vendor.generated.ts";
 import { youtubeSelectors } from "../src/pagescripts/youtube.ts";
 
@@ -253,4 +253,14 @@ test("YouTube cleanup only applies on YouTube and only what's chosen", () => {
   assert.ok(youtubeSelectors(all, "youtube.com").length > 10);
   assert.deepEqual(youtubeSelectors(all, "notyoutube.com"), []);
   assert.deepEqual(youtubeSelectors(all, "music.youtube.com"), []);
+});
+
+test("the top colour comes from the background under the top edge, then theme-color", () => {
+  const page = fixture('<header id="top" style="background: rgb(10, 20, 30)"><a id="link">Hi</a></header>');
+  assert.deepEqual(page.run(PAGE_COLOR_SCRIPT), [10, 20, 30]);
+  const plain = fixture('<meta name="theme-color" content="rgb(200, 100, 50)"><p id="link">Hi</p>');
+  assert.deepEqual(plain.run(PAGE_COLOR_SCRIPT), [200, 100, 50]);
+  // Half-transparent backgrounds don't count: the page behind them shows through.
+  const faint = fixture('<div id="link" style="background: rgba(0, 0, 0, 0.3)">Hi</div>');
+  assert.equal(faint.run(PAGE_COLOR_SCRIPT), null);
 });

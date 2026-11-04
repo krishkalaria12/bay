@@ -25,3 +25,34 @@ if (document.body && (size !== 100 || state.size)) {
 return "ok";
 `;
 }
+
+/**
+ * The colour at the top of the page, for the strip behind the status bar: the background under the top edge, else
+ * the page's theme-color, else its body. Resolves to [r, g, b], or null when the page has no opaque colour there.
+ */
+// ponytail: read once per load, so a header that changes colour on scroll keeps the first one; re-read on scroll if
+// that shows up.
+export const PAGE_COLOR_SCRIPT = `
+const parse = (value) => {
+  const m = /rgba?\\(([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+)(?:,\\s*([\\d.]+))?/.exec(value || "");
+  return m && (m[4] === undefined || Number(m[4]) > 0.9) ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+};
+let element = document.elementFromPoint(innerWidth / 2, 1);
+while (element) {
+  const color = parse(getComputedStyle(element).backgroundColor);
+  if (color) return color;
+  element = element.parentElement;
+}
+for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+  const media = meta.getAttribute("media");
+  if (media && !matchMedia(media).matches) continue;
+  const probe = document.createElement("i");
+  probe.style.color = meta.content;
+  if (!probe.style.color) continue;
+  document.documentElement.append(probe);
+  const color = parse(getComputedStyle(probe).color);
+  probe.remove();
+  if (color) return color;
+}
+return parse(getComputedStyle(document.body || document.documentElement).backgroundColor);
+`;
