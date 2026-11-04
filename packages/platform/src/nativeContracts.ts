@@ -1183,6 +1183,13 @@ export const nativeContracts = {
           "maxArgs": 0,
           "signature": "acceptDrop?(): Promise<{ files: LocalFileDescriptor[]; errors: string[] }>;"
         },
+        "startDrag": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "startDrag?(path: string, relative: string | null): Promise<{ started: boolean; operation: \"none\" | \"copy\" | \"link\"; error?: string }>;"
+        },
         "devDrop": {
           "async": true,
           "optional": true,

@@ -16,6 +16,7 @@ import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEff
 import type { MiddleClickEvent, MouseAreaProps } from "./system";
 import type { LocalFilesAreaProps } from "./localFiles";
 import { localFiles } from "./localFilesNative";
+import { fileDragPath, watchFileDrag, type FileDragSource } from "./webFileDrag";
 import { fluentSymbol, svgSymbol } from "./symbols.web";
 import { WebActivitySpinner } from "./WebActivitySpinner";
 import { EaselCanvasWeb } from "./EaselCanvas.web";
@@ -240,22 +241,11 @@ function MouseArea({
         event.stopPropagation();
         onMiddleClick({ nativeEvent: { shiftKey: event.shiftKey, altKey: event.altKey, metaKey: event.metaKey } });
       };
-      const drag = (event: DragEvent) => {
-        if (!path || !event.dataTransfer) return;
-        const file = path.startsWith("file:") ? path : `file:///${path.replace(/\\/g, "/").replace(/^\/+/, "")}`;
-        const name = (path.split(/[\\/]/).at(-1) ?? "Download").replace(/:/g, "_");
-        event.dataTransfer.effectAllowed = "copy";
-        event.dataTransfer.setData("DownloadURL", `application/octet-stream:${name}:${file}`);
-        event.dataTransfer.setData("text/uri-list", file);
-      };
-      const previous = element.draggable;
-      element.draggable = !!path;
+      const stopDrag = watchFileDrag(element, () => (path ? { path: fileDragPath(path), relative: null } : null), dragFile);
       element.addEventListener("auxclick", middle);
-      element.addEventListener("dragstart", drag);
       return () => {
-        element.draggable = previous;
+        stopDrag();
         element.removeEventListener("auxclick", middle);
-        element.removeEventListener("dragstart", drag);
       };
     },
     [path, onMiddleClick],
@@ -298,10 +288,18 @@ function unavailableCanvas(name: string) {
   });
 }
 
+// A file that can't be dragged stays put, with nothing to show for it, as a macOS drag that doesn't start.
+function dragFile({ path, relative }: FileDragSource) {
+  void localFiles.startDrag(path, relative).then(
+    ({ error }) => error && console.warn(`[file drag] ${error}`),
+    (error: unknown) => console.warn("[file drag]", error),
+  );
+}
+
 function LocalFilesArea({
   dropEnabled,
-  rootPath: _rootPath,
-  relativePath: _relativePath,
+  rootPath,
+  relativePath,
   onFilesDropped,
   onFilesDropError,
   onDropActive,
@@ -311,6 +309,8 @@ function LocalFilesArea({
 }: LocalFilesAreaProps) {
   const configure = useCallback(
     (element: HTMLElement) => {
+      // A pin's own row: its file drags out, and the grant says which.
+      const stopDrag = watchFileDrag(element, () => (rootPath ? { path: rootPath, relative: relativePath ?? "" } : null), dragFile);
       const click = (event: MouseEvent) => {
         if (event.button === 0) onActivate?.();
       };
@@ -354,6 +354,7 @@ function LocalFilesArea({
       element.addEventListener("dragleave", leave);
       element.addEventListener("drop", drop);
       return () => {
+        stopDrag();
         element.removeEventListener("click", click);
         element.removeEventListener("keydown", key);
         element.removeEventListener("contextmenu", context);
@@ -362,9 +363,8 @@ function LocalFilesArea({
         element.removeEventListener("drop", drop);
       };
     },
-    [dropEnabled, onFilesDropped, onFilesDropError, onDropActive, onActivate, onContextMenu],
+    [dropEnabled, rootPath, relativePath, onFilesDropped, onFilesDropError, onDropActive, onActivate, onContextMenu],
   );
-  // Dragging a pinned file out to other apps is macOS only: no file URL is put on a web drag.
   return <Box {...props} configure={configure} />;
 }
 

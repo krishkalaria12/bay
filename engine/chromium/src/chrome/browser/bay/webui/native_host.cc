@@ -73,6 +73,7 @@
 #include "chrome/browser/bay/webui/crash_reports.h"
 #include "chrome/browser/bay/webui/little_bay_access.h"
 #include "chrome/browser/bay/webui/local_files.h"
+#include "chrome/browser/bay/webui/native_file_drag.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #include "chrome/browser/platform_util.h"
 #include "content/public/common/drop_data.h"
@@ -589,6 +590,26 @@ void NativeHost::LocalFilesCall(const std::string& method,
         std::move(callback).Run(Success(std::move(value)));
       },
       std::move(callback));
+  if (method == "startDrag") {
+    // A relative path, even "", is a pin's file and needs its grant.
+    const auto* pinned = At(args, 1);
+    NativeFileDrag::Start(
+        context_.is_window() ? document_contents() : nullptr, root,
+        pinned && pinned->is_string() ? std::make_optional(pinned->GetString())
+                                      : std::nullopt,
+        base::BindOnce(
+            [](base::OnceCallback<void(base::Value)> reply,
+               NativeFileDrag::Result result) {
+              auto value = base::DictValue()
+                               .Set("started", result.started)
+                               .Set("operation", result.operation);
+              if (!result.error.empty())
+                value.Set("error", result.error);
+              std::move(reply).Run(base::Value(std::move(value)));
+            },
+            std::move(reply)));
+    return;
+  }
   if (method == "acceptDrop") {
     // Only once, and only soon after the drag came in.
     std::vector<base::FilePath> files;

@@ -57,7 +57,7 @@ export type Capabilities = {
   shareSheet: boolean;
   /** Capture's Mark Up canvas (ios/Capture.swift). */
   captureMarkup: boolean;
-  /** File drags out of the app (the `draggedTypes` prop). Windows: BayFileDrag (OLE), Phase 4. */
+  /** File drags out of the app: AppKit, or the desktop host's OLE, XDND and Wayland drags (native_file_drag.cc). */
   nativeDrag: boolean;
   /** Dragging the window by its own views (the `mouseDownCanMoveWindow` prop): CSS drag regions on the desktop host. */
   windowMoveByView: boolean;
@@ -100,7 +100,7 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     keyDownEvents: mac || webDesktop,
     shareSheet: mac,
     captureMarkup: mac,
-    nativeDrag: mac,
+    nativeDrag: mac || webDesktop,
     windowMoveByView: mac || webDesktop,
   };
 }

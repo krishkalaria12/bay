@@ -226,59 +226,23 @@
       <nav aria-label="Contents">
         <strong>Remaining work</strong>
         <ol>
-          <li><a href="#ui">1. View behaviour</a></li>
-          <li><a href="#followups">2. Implementation follow-ups</a></li>
-          <li><a href="#sync">3. Branch sync</a></li>
-          <li><a href="#runtime">4. Runtime acceptance</a></li>
-          <li><a href="#decisions">5. Open decisions</a></li>
+          <li><a href="#followups">1. Implementation follow-ups</a></li>
+          <li><a href="#sync">2. Branch sync</a></li>
+          <li><a href="#runtime">3. Runtime acceptance</a></li>
+          <li><a href="#decisions">4. Open decisions</a></li>
         </ol>
       </nav>
       <main>
         <header>
           <h1>Remaining Linux and Windows parity work</h1>
-          <p class="lede">Finish view behaviour and the implementation follow-ups below, then run native acceptance on Linux and Windows.</p>
+          <p class="lede">Finish the implementation follow-ups below, then run native acceptance on Linux and Windows.</p>
           <p class="meta">
             Updated 4 Nov 2026. Implementation status is based on <code>feat/linux</code>; the latest shared changes still need syncing to
             <code>feat/windows</code>.
           </p>
         </header>
-        <section id="ui" aria-labelledby="ui-h">
-          <h2 id="ui-h">1. View behaviour</h2>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Capability</th>
-                  <th>Remaining work</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>tooltips</code></td>
-                  <td>Add DOM tooltips in <code>views.web.tsx</code>, including icon buttons without another label.</td>
-                </tr>
-                <tr>
-                  <td><code>keyDownEvents</code></td>
-                  <td>Check which command-bar, find and sidebar interactions still need view-level key interception beyond the existing web handlers.</td>
-                </tr>
-                <tr>
-                  <td><code>focusRing</code></td>
-                  <td>Add <code>:focus-visible</code> rings and follow the platform's text-field conventions.</td>
-                </tr>
-                <tr>
-                  <td><code>nativeDrag</code></td>
-                  <td>Support dragging downloads and pinned files from Bay into other apps through OLE and XDND.</td>
-                </tr>
-                <tr>
-                  <td><code>windowMoveByView</code></td>
-                  <td>Verify that CSS drag regions cover the sidebar header and do not swallow interactive controls.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
         <section id="followups" aria-labelledby="followups-h">
-          <h2 id="followups-h">2. Implementation follow-ups</h2>
+          <h2 id="followups-h">1. Implementation follow-ups</h2>
           <p class="prose">These are the unresolved behaviours from earlier feature work.</p>
           <ul>
             <li>Support SVG responses in favicon fetching.</li>
@@ -301,10 +265,19 @@
               tray availability across desktops.
             </li>
             <li>Add external-app icons to the open-in-app prompt where the desktop exposes them.</li>
+            <li>
+              Add a smoke test that boots the web app in a browser. Unit tests can't catch a start-up failure, and an import cycle broke the web host's start
+              this way until a real browser found it.
+            </li>
+            <li>Handle the mouse's back and forward buttons on the web host: <code>MouseArea</code> ignores <code>onSideButton</code> there.</li>
+            <li>
+              Native file drags: confirm dragging a pin out of a folder and a download into a file manager and a mail client on X11, Wayland and Windows.
+              Dragging a folder is untested, and a failed start only logs a warning, as a macOS drag that doesn't start shows nothing.
+            </li>
           </ul>
         </section>
         <section id="sync" aria-labelledby="sync-h">
-          <h2 id="sync-h">3. Branch sync</h2>
+          <h2 id="sync-h">2. Branch sync</h2>
           <ol>
             <li>
               Copy the remaining shared host changes from <code>feat/linux</code> to <code>feat/windows</code>, preserving Linux-only services, tests and
@@ -315,7 +288,7 @@
           </ol>
         </section>
         <section id="runtime" aria-labelledby="runtime-h">
-          <h2 id="runtime-h">4. Runtime acceptance</h2>
+          <h2 id="runtime-h">3. Runtime acceptance</h2>
           <p class="prose">
             The native Linux and Windows applications still need linking and execution. The acceptance assignments below come from
             <a href="linux-work-split.md">linux-work-split.md</a>.
@@ -399,7 +372,7 @@
           </ul>
         </section>
         <section id="decisions" aria-labelledby="decisions-h">
-          <h2 id="decisions-h">5. Open decisions</h2>
+          <h2 id="decisions-h">4. Open decisions</h2>
           <ul>
             <li>Choose the Chromium DRM playback and distribution approach for Linux and Windows, then verify protected playback on the target builds.</li>
             <li>Decide whether the ports should expose stable/nightly update-channel selection.</li>

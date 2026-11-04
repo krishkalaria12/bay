@@ -202,6 +202,8 @@ source_set("impl") {
       "little_bay_access.h",
       "local_files.cc",
       "local_files.h",
+      "native_file_drag.cc",
+      "native_file_drag.h",
       "shell_ui.cc",
       "shell_ui_options.cc",
     ]
@@ -727,6 +729,20 @@ if (is_win || is_linux) {
       "//net",
       "//testing/gtest",
       "//url",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  test("native_file_drag_unittests") {
+    sources = [ "native_file_drag_unittest.cc" ]
+    deps = [
+      ":webui",
+      "//base/test:test_support",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+      "//ui/base",
     ]
   }
 }
