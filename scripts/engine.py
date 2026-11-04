@@ -19,6 +19,7 @@ import os
 import pathlib
 import platform as host_platform
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
@@ -61,6 +62,10 @@ GN_ARGS = {
     "v8_drumbrake_bounds_checks": True, "enable_iterator_debugging": False,
     "enable_updater": False, "branding_file_path": "//chrome/app/theme/bay/BRANDING",
 }
+# Free CI runners have 4 cores and limited disk. Ninja's state also survives
+# being stopped and restored from an archive, which is how CI resumes a build.
+CI_GN_ARGS = {"symbol_level": 0, "use_siso": False}
+STOPPED_EXIT_CODE = 124
 
 
 def gn_args(platform="win"):
@@ -209,7 +214,7 @@ def artifact_id(platform="win"):
     return f"bay-engine-{lock['chromium']}-{lock['platform']}-x64-{source_digest(platform)[:16]}"
 
 
-def run(command, cwd=None, env=None):
+def resolve(command, env):
     command = [str(part) for part in command]
     # Python on Windows does not resolve depot_tools .bat entry points itself.
     if sys.platform == "win32":
@@ -217,7 +222,33 @@ def run(command, cwd=None, env=None):
         if executable:
             command[0] = executable
     print(subprocess.list2cmdline(command), flush=True)
-    subprocess.run(command, cwd=cwd, env=env, check=True)
+    return command
+
+
+def run(command, cwd=None, env=None):
+    subprocess.run(resolve(command, env), cwd=cwd, env=env, check=True)
+
+
+def run_until(command, cwd, env, minutes):
+    """Run a resumable Windows build, stopping it after `minutes`. Returns whether it finished."""
+    command = resolve(command, env)
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                               creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+    try:
+        code = process.wait(minutes * 60)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(OSError):
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+        try:
+            process.wait(120)
+        except subprocess.TimeoutExpired:
+            # Ninja logs each finished step, so a forced stop only repeats the running ones.
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], check=False)
+            process.wait()
+        return False
+    if code:
+        raise subprocess.CalledProcessError(code, command)
+    return True
 
 
 def clone_pin(url, destination, revision):
@@ -402,7 +433,7 @@ def generate_gn(root, env, platform="win"):
     run(["gn", "gen", lock["outputDirectory"]], cwd=src, env=env)
 
 
-def build(root, env, targets, jobs, platform="win"):
+def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     lock = platform_lock(platform)
     require_linux_integration(env, platform)
     if platform == "linux":
@@ -416,8 +447,15 @@ def build(root, env, targets, jobs, platform="win"):
     args = ["autoninja", "-C", lock["outputDirectory"]]
     if jobs:
         args += ["-j", str(jobs)]
-    run([*args, *(targets or (["chrome", "chrome_sandbox"] if platform == "linux" else ["chrome"]))], cwd=src, env=env)
+    if ci_minutes is not None:
+        args += ["-k", "0"]
+    args += targets or (["chrome", "chrome_sandbox"] if platform == "linux" else ["chrome"])
+    if ci_minutes is None:
+        run(args, cwd=src, env=env)
+    elif not run_until(args, src, env, ci_minutes):
+        return False
     (root / "bay-engine-build.json").write_text(json.dumps(build_identity(platform), indent=2) + "\n")
+    return True
 
 
 def archive(root, output, platform="win"):
@@ -570,6 +608,8 @@ def main():
     parser.add_argument("--output", type=pathlib.Path, default=REPO / "dist/engine")
     parser.add_argument("--jobs", type=int)
     parser.add_argument("--target", action="append", default=[])
+    parser.add_argument("--ci-minutes", type=int,
+                        help=f"Windows only: build for free CI runners, stopping after this long with exit code {STOPPED_EXIT_CODE}")
     args = parser.parse_args()
     platform = args.platform
     if args.command == "pin":
@@ -583,6 +623,10 @@ def main():
         parser.error("on NixOS, run engine commands inside nix-shell packaging/linux/nix/shell.nix (docs/linux-building.md)")
     if args.jobs is not None and args.jobs < 1:
         parser.error("--jobs must be positive")
+    if args.ci_minutes is not None:
+        if platform != "win" or args.ci_minutes < 1:
+            parser.error("--ci-minutes must be positive and needs --platform win")
+        GN_ARGS.update(CI_GN_ARGS)
     root = (args.root or default_root(platform)).resolve()
     env = environment(root, platform)
     with build_lock(root):
@@ -593,7 +637,8 @@ def main():
         if args.command in ("prepare", "all"):
             prepare(root, env, platform)
         if args.command in ("build", "all"):
-            build(root, env, args.target, args.jobs, platform)
+            if not build(root, env, args.target, args.jobs, platform, ci_minutes=args.ci_minutes):
+                sys.exit(STOPPED_EXIT_CODE)
         if args.command in ("archive", "all"):
             archive(root, args.output, platform)
 

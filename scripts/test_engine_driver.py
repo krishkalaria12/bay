@@ -374,6 +374,37 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(env["BAY_ENGINE_PLATFORM"], "linux")
             self.assertEqual((targets, jobs, platform), (["chrome_sandbox"], 2, "linux"))
 
+    def test_cli_exits_as_stopped_when_a_timed_build_runs_out_of_time(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(sys, "platform", "win32"), \
+             mock.patch.object(sys, "argv", ["engine.py", "build", "--root", directory, "--ci-minutes", "5"]), \
+             mock.patch.dict(engine.GN_ARGS), mock.patch.object(engine, "environment", return_value={}), \
+             mock.patch.object(engine, "build", return_value=False) as build, \
+             self.assertRaises(SystemExit) as stopped:
+            engine.main()
+        self.assertEqual(stopped.exception.code, engine.STOPPED_EXIT_CODE)
+        self.assertEqual(build.call_args.kwargs, {"ci_minutes": 5})
+        self.assertEqual(engine.GN_ARGS["symbol_level"], 1)
+
+    def test_cli_refuses_a_timed_linux_build(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(sys, "platform", "linux"), \
+             mock.patch.object(engine.host_platform, "machine", return_value="x86_64"), \
+             mock.patch.object(sys, "argv", ["engine.py", "--platform", "linux", "build", "--root", directory,
+                                            "--ci-minutes", "5"]), \
+             mock.patch("sys.stderr"), self.assertRaises(SystemExit):
+            engine.main()
+
+    def test_timed_build_keeps_going_past_errors_and_writes_no_stamp_when_stopped(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
+             mock.patch.object(engine, "generate_gn"), \
+             mock.patch.object(engine, "run_until", return_value=False) as run_until:
+            root = Path(directory)
+            self.assertIs(engine.build(root, engine.environment(root), [], 4, ci_minutes=5), False)
+            self.assertEqual(run_until.call_args.args[0][-3:], ["-k", "0", "chrome"])
+            self.assertFalse((root / "bay-engine-build.json").exists())
+
     def test_linux_prepare_preserves_patch_order_and_records_separate_state(self):
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(engine, "require_linux_integration"), \

@@ -421,6 +421,38 @@ class ArtifactTests(unittest.TestCase):
             self.assertIn("is_debug=false", env["GN_DEFINES"])
             self.assertEqual(env["DEPOT_TOOLS_WIN_TOOLCHAIN"], "0")
 
+    def run_until(self, wait):
+        process = mock.Mock()
+        process.wait.side_effect = wait
+        with mock.patch.object(engine.subprocess, "Popen", return_value=process), \
+                mock.patch.object(engine.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, create=True), \
+                mock.patch.object(engine.signal, "CTRL_BREAK_EVENT", 1, create=True), \
+                mock.patch.object(engine.subprocess, "run") as run:
+            return engine.run_until(["autoninja"], None, {"PATH": ""}, 5), process, run
+
+    def test_timed_build_reports_a_finished_run(self):
+        finished, process, _ = self.run_until([0])
+        self.assertIs(finished, True)
+        process.wait.assert_called_once_with(300)
+        process.send_signal.assert_not_called()
+
+    def test_timed_build_interrupts_cleanly_at_its_limit(self):
+        timeout = subprocess.TimeoutExpired("autoninja", 300)
+        finished, process, run = self.run_until([timeout, 0])
+        self.assertIs(finished, False)
+        process.send_signal.assert_called_once_with(1)
+        run.assert_not_called()
+
+    def test_timed_build_kills_what_ignores_the_interrupt(self):
+        timeout = subprocess.TimeoutExpired("autoninja", 300)
+        finished, _, run = self.run_until([timeout, timeout, 0])
+        self.assertIs(finished, False)
+        self.assertEqual(run.call_args.args[0][:3], ["taskkill", "/F", "/T"])
+
+    def test_timed_build_raises_compile_errors(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_until([1])
+
 
 if __name__ == "__main__":
     unittest.main()
