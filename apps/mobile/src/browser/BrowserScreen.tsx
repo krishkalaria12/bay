@@ -14,6 +14,7 @@ import { BrowserBar } from "@/chrome/BrowserBar";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
+import { youtubeSelectors } from "@/pagescripts/youtube";
 import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
 import { newId, useBrowserStore } from "@/store/browser";
 import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
@@ -341,7 +342,9 @@ export function BrowserScreen(): JSX.Element {
                 visible={visible}
                 // The active tab stays live behind the switcher and search so its snapshot and return are instant.
                 suspended={id !== active.id && !playing.includes(id)}
-                hiddenSelectors={reading.selectorsFor(tab)}
+                hiddenSelectors={[...reading.selectorsFor(tab), ...youtubeSelectors(data.preferences.youtube, hostOf(tab.url))]}
+                tweaks={{ textSize: data.preferences.textSize, skipAmp: data.preferences.skipAmp }}
+                pullToRefresh={data.preferences.pullToRefresh}
                 onPageMessage={(message) => {
                   if (!media.pageMessage(id, message) && id === active.id) reading.pageMessage(message);
                 }}
