@@ -190,6 +190,7 @@ test("generic cosmetics send every class and id in batches within the native lim
     p.drain();
     assert.equal(p.messages.length, Math.ceil(count / 4000));
     for (const message of p.messages) {
+      assert.equal(message.url, p.location.href);
       assert.ok(message.classes.length <= 4000);
       assert.ok(message.ids.length <= 4000);
     }
