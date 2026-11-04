@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { adjustLightness, oklab, palette, parseHex } from "./colors.ts";
-import { grainHash, grainInputs } from "./grain.ts";
+import { grainHash, grainInputs, grainPixel } from "./grain.ts";
 import { targetSize } from "./surface.ts";
 import { areaLightUniforms, backdropUniforms, edgeLightUniforms, powerUpUniforms, POWER_UP_PALETTES, validRect } from "./uniforms.ts";
 
@@ -50,6 +50,13 @@ test("grain is fixed per cell and spread over 0-1", () => {
   const n = 64 * 64;
   for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) sum += grainHash(x, y);
   near(sum / n, 0.5, 0.03);
+});
+
+test("a grain tile lightens and darkens alike, and its middle changes nothing", () => {
+  assert.deepEqual(grainPixel(1), { value: 255, alpha: 255 });
+  assert.deepEqual(grainPixel(0), { value: 0, alpha: 255 });
+  assert.equal(grainPixel(0.5).alpha, 0);
+  assert.equal(grainPixel(0.75).alpha, grainPixel(0.25).alpha);
 });
 
 test("backdrop uniforms: angle, grain and CSS size", () => {

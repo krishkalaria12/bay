@@ -4,7 +4,7 @@ import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { SPACE_COLORS } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { TWILIGHT } from "../../store/spaces";
+import { BAY_THEME } from "../../store/spaces";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../ui/primitives";
 import { useOnboardingColors } from "./ui";
@@ -20,25 +20,25 @@ export const PERSONALIZE_COPY = {
 
 const COLORS = Object.keys(SPACE_COLORS) as SpaceColor[];
 
-// Twilight (the first space's look on macOS: store/spaces.ts DEFAULT_SPACE) leads the choices; a plain color replaces it.
-const isTwilight = (theme: (Readonly<Omit<SpaceTheme, "colors">> & { readonly colors: readonly string[] }) | null | undefined) =>
-  !!theme && theme.colors.join() === TWILIGHT.colors.join();
+// Bay's own look (the first space's: store/spaces.ts DEFAULT_SPACE) leads the choices; a plain color replaces it.
+const isBayTheme = (theme: (Readonly<Omit<SpaceTheme, "colors">> & { readonly colors: readonly string[] }) | null | undefined) =>
+  !!theme && theme.colors.join() === BAY_THEME.colors.join();
 
 export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; size?: number }) {
   const spaceId = useBrowser((s) => s.windows[windowId]?.spaceId);
   const current = useBrowser((s) => (spaceId ? s.spaces[spaceId]?.color : undefined));
-  const twilight = useBrowser((s) => (spaceId ? isTwilight(s.spaces[spaceId]?.theme) : false));
+  const bayTheme = useBrowser((s) => (spaceId ? isBayTheme(s.spaces[spaceId]?.theme) : false));
   const themed = useBrowser((s) => (spaceId ? !!s.spaces[spaceId]?.theme : false));
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
   if (!spaceId || incognito) return null;
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: size >= 30 ? 5 : 4 }} accessibilityRole="radiogroup" accessibilityLabel="Theme color">
       <ColorButton
-        name="Twilight"
-        colors={TWILIGHT.colors}
+        name="Bay"
+        colors={BAY_THEME.colors}
         size={size}
-        selected={twilight}
-        onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: "purple", theme: { ...TWILIGHT } }))}
+        selected={bayTheme}
+        onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: "purple", theme: { ...BAY_THEME } }))}
       />
       {COLORS.map((c) => (
         <ColorButton

@@ -1,7 +1,6 @@
 // Static grain: one cell per `grainScale` CSS pixels from the view's top-left, a fixed seed, never animated.
-// The shader multiplies the gradient by (1 - opacity * (1 - g)). A black layer whose alpha is (1 - g), drawn at
-// `opacity`, darkens by exactly that much, so the same tile serves the CSS fallback and glass windows, where there
-// is no gradient to multiply.
+// The shader adds opacity * (g - 0.5) to the gradient, so it shows at any brightness. A layer can't add, so the tile for
+// the CSS fallback and glass windows, where there is no gradient to change, is white above the middle and black below.
 
 export const GRAIN_TILE = 128;
 
@@ -25,8 +24,11 @@ export function grainInputs(opacity: number | undefined, scale: number | undefin
   return { opacity: Math.min(1, Math.max(0, o)), scale: Math.max(0.25, s) };
 }
 
+/** A tile cell for grain `g`: white or black, at twice its distance from the middle. */
+export const grainPixel = (g: number) => ({ value: g < 0.5 ? 0 : 255, alpha: Math.round(Math.abs(g - 0.5) * 2 * 255) });
+
 let tile: string | null | undefined;
-/** A GRAIN_TILE-cell square of black at alpha (1 - g), as a data URL; null without a DOM canvas. */
+/** A GRAIN_TILE-cell square of grainPixels, as a data URL; null without a DOM canvas. */
 export function grainTile(): string | null {
   if (tile !== undefined) return tile;
   try {
@@ -36,7 +38,12 @@ export function grainTile(): string | null {
     if (!ctx) return (tile = null);
     const image = ctx.createImageData(GRAIN_TILE, GRAIN_TILE);
     for (let y = 0; y < GRAIN_TILE; y++)
-      for (let x = 0; x < GRAIN_TILE; x++) image.data[(y * GRAIN_TILE + x) * 4 + 3] = Math.round((1 - grainHash(x, y)) * 255);
+      for (let x = 0; x < GRAIN_TILE; x++) {
+        const { value, alpha } = grainPixel(grainHash(x, y));
+        const pixel = (y * GRAIN_TILE + x) * 4;
+        image.data.fill(value, pixel, pixel + 3);
+        image.data[pixel + 3] = alpha;
+      }
     ctx.putImageData(image, 0, 0);
     tile = canvas.toDataURL("image/png");
   } catch {

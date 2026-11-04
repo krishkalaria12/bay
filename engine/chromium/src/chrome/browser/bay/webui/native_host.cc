@@ -898,6 +898,26 @@ void NativeHost::InstallCloseHooks() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
     g_bay_document_drag_enter = &RecordDocumentDrag;
     WindowKeyWatch::Get().Install();
+    // Alt alone shows the active window's hidden sidebar, as macOS's Option.
+    WindowKeyWatch::Get().SetAltHoldHandlers(
+        base::BindRepeating([] {
+          for (const auto& [owner, host] : Hosts()) {
+            auto* browser =
+                host && !host->is_coordinator() ? host->browser() : nullptr;
+            if (!browser || !browser->GetWindow() ||
+                !browser->GetWindow()->IsActive()) {
+              continue;
+            }
+            host->Emit("BayShell", "onAppEvent",
+                       base::Value(base::DictValue()
+                                       .Set("type", "optionHeld")
+                                       .Set("windowId", WindowRegistry::Get()
+                                                            .IdFor(browser))));
+            return true;
+          }
+          return false;
+        }),
+        base::BindRepeating([] { EmitAppEvent("optionReleased"); }));
 #endif
 #if BUILDFLAG(IS_WIN)
     // Windows' own way to reach an app's menus. On Linux a tap means nothing to

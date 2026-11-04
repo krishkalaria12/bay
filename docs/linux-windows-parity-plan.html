@@ -245,8 +245,7 @@
           <h2 id="followups-h">1. Implementation follow-ups</h2>
           <p class="prose">
             All are implemented except the acceptance checks that remain macOS only, listed under T4 in <a href="#runtime">Runtime acceptance</a> with what each
-            item still needs on a real build. Also open: holding Alt to show the hidden sidebar. The host never sends <code>optionHeld</code> or
-            <code>optionReleased</code>, so that setting does nothing on Linux and Windows yet.
+            item still needs on a real build.
           </p>
         </section>
         <section id="sync" aria-labelledby="sync-h">
@@ -286,6 +285,15 @@
                   <td>T3</td>
                   <td>D</td>
                   <td>Link and run the native tests; Phase 3 acceptance (tabs, splits, popups, extensions, PiP, DevTools)</td>
+                </tr>
+                <tr>
+                  <td>T4</td>
+                  <td>A</td>
+                  <td>
+                    Hidden sidebar: hold Alt alone for a moment and it slides out, let go and it hides; Alt with a key or a click shows nothing, Alt+Tab leaves
+                    no sidebar behind, and on Windows a tap still opens the menu. WebGL backdrops on Mesa, NVIDIA and the software fallback: grain visible, no
+                    idle redraws
+                  </td>
                 </tr>
                 <tr>
                   <td>T4</td>
