@@ -12,8 +12,10 @@ import { startExtensionsBridge } from "../components/extensions/bridge";
 import { runCommand } from "../lib/appCommands";
 import { startWebShortcuts } from "../lib/webShortcuts";
 import { installErrorReporting } from "../telemetry";
+import { startRequestedOnboarding } from "../components/onboarding/state";
+import { followOnboardingRequests } from "./onboardingRequest";
 
-export function startWindowMain() {
+export function startWindowMain(windowId: string) {
   installErrorReporting();
   quietLaunchTabs();
   onCommand(runCommand);
@@ -25,4 +27,5 @@ export function startWindowMain() {
   startTranslate();
   startAppIntegration({ sharedWindow: true });
   registerWindowApplication();
+  followOnboardingRequests(windowId, ({ step, picked }) => startRequestedOnboarding(windowId, step, picked));
 }

@@ -1,6 +1,6 @@
 import "../lib/bridgeEvents";
 import { batchedUpdates } from "@bay/platform";
-import { focusWindow } from "@bay/desktop";
+import { focusWindow, readDocument } from "@bay/desktop";
 import { onExtensionsChanged } from "@bay/chromium";
 import { setStoreBatching, useBrowser, type BrowserState } from "../store/browserStore";
 import { restoreBrowserSession } from "../lib/persist";
@@ -13,12 +13,15 @@ import { executeServiceCommand, stopServiceCommands } from "./serviceExecutor";
 import { createBrowserCoordinator, type BrowserCoordinatorTransport } from "./coordinator";
 import { startExtensionSearchEngines } from "../components/extensions/searchEngines";
 import { refreshExtensions } from "../components/extensions/state";
-import { engineProfile } from "../store/model";
+import { engineProfile, resolveWindowId } from "../store/model";
 import { installErrorReporting, startTelemetry } from "../telemetry";
 import { startApplicationLifecycle } from "../lib/appMenuIntegration";
+import { requestOnboarding } from "./onboardingRequest";
 
 export async function startCoordinatorEntry(transport: BrowserCoordinatorTransport, onError: (error: Error) => void) {
   const store = useBrowser;
+  // Before anything saves: a new install's first window writes a session of its own.
+  const returning = !!readDocument("session.json");
   setStoreBatching(batchedUpdates);
   installErrorReporting();
   prepareCoordinatorStore(store, transport.bootstrap.recoveryState, restoreBrowserSession);
@@ -73,7 +76,13 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
   });
   try {
     await coordinator.announceReady();
-    startApplicationLifecycle();
+    startApplicationLifecycle({
+      returning,
+      start(step, picked) {
+        const windowId = resolveWindowId(store.getState());
+        if (windowId) requestOnboarding(windowId, step, picked);
+      },
+    });
     return coordinator;
   } catch (error) {
     coordinator.dispose();

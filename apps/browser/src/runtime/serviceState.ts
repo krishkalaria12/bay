@@ -9,6 +9,7 @@ import { useMeetingAlert } from "../activity/meetingAlerts";
 import { useSync, type SyncUi } from "../sync/engine";
 import { bindLiveBrowser } from "../activity/activityEngine";
 import { bindGoogleBrowser } from "../activity/googleAuth";
+import { useOnboardingRequest, type OnboardingRequest } from "./onboardingRequest";
 
 /** UI state only. OAuth tokens and the sync document never enter this value. */
 export type ServiceState = {
@@ -17,6 +18,7 @@ export type ServiceState = {
   alerts: ReturnType<typeof useMeetingAlert.getState>;
   sync: SyncUi;
   telemetry: ReturnType<typeof useTelemetry.getState>;
+  onboarding: OnboardingRequest;
 };
 const installed = new Map<string, object>();
 const detach = <T>(value: DeepReadonly<T>): T => JSON.parse(JSON.stringify(value)) as T;
@@ -32,6 +34,7 @@ export function installServiceState(state: DeepReadonly<Partial<ServiceState>>) 
   install("alerts", (value) => useMeetingAlert.setState(value, true));
   install("sync", (value) => useSync.setState(value, true));
   install("telemetry", (value) => useTelemetry.setState(value, true));
+  install("onboarding", (value) => useOnboardingRequest.setState(value, true));
 }
 export function startServiceStateOwner(store: BrowserStore, { restore = true } = {}): () => void {
   if (restore) installServiceState(store.getState().services);
@@ -43,6 +46,7 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
       alerts: useMeetingAlert.getState(),
       sync: useSync.getState(),
       telemetry: useTelemetry.getState(),
+      onboarding: useOnboardingRequest.getState(),
     };
     store.setState({ services });
   };
@@ -52,6 +56,7 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
     useMeetingAlert.subscribe(publish),
     useSync.subscribe(publish),
     useTelemetry.subscribe(publish),
+    useOnboardingRequest.subscribe(publish),
   );
   publish();
   return () => {

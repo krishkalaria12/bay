@@ -77,6 +77,7 @@ test("Windows never advertises Apple-only features, even if a bridge shares modu
 test("Linux desktop uses the web host without Apple services", () => {
   const linux = capabilitiesFor("linux", () => true);
   assert.equal(linux.windowBackdrop, true);
+  assert.equal(linux.introScreen, true);
   assert.equal(linux.hover, true);
   for (const key of [
     "liquidGlass",
