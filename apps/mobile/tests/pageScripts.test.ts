@@ -7,6 +7,7 @@ import { ARTICLE_HELPERS } from "../src/pagescripts/article.ts";
 import { MARKDOWN_SCRIPT } from "../src/pagescripts/markdown.ts";
 import { hideElementsScript, PICK_PARENT_SCRIPT, START_PICKER_SCRIPT, STOP_PICKER_SCRIPT } from "../src/pagescripts/picker.ts";
 import { CLOSE_READER_SCRIPT, DEFAULT_READER, openReaderScript, updateReaderScript } from "../src/pagescripts/reader.ts";
+import { pageTweaksScript } from "../src/pagescripts/tweaks.ts";
 import { READABILITY, TURNDOWN } from "../src/pagescripts/vendor.generated.ts";
 
 function fixture(html = '<section id="card"><a id="link" href="/next">Next</a></section>') {
@@ -232,4 +233,13 @@ test("the favicon script picks the page's best non-SVG icon, else /favicon.ico",
     "https://example.com/touch.png",
   );
   assert.equal(icon('<link rel="shortcut icon" href="https://cdn.example.net/f.ico"><link rel="icon" href="/logo.svg">'), "https://cdn.example.net/f.ico");
+});
+
+test("page tweaks zoom the page, put it back at 100% and leave a page's own AMP canonical alone", () => {
+  const page = fixture('<html amp><head><link rel="canonical" href="https://example.com/story"></head><body><p>Hi</p></body></html>');
+  const root = page.document.body;
+  assert.equal(page.run(pageTweaksScript({ textSize: 130, skipAmp: true })), "ok");
+  assert.equal(root.style.getPropertyValue("zoom"), "1.3");
+  assert.equal(page.run(pageTweaksScript({ textSize: 100, skipAmp: true })), "ok");
+  assert.equal(root.style.getPropertyValue("zoom"), "");
 });
