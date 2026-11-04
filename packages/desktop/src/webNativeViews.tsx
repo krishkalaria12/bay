@@ -13,7 +13,7 @@ import {
 import { Image, Text, type TextStyle } from "react-native";
 import { View, type ViewProps } from "@bay/platform";
 import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEffectProps, SurfaceProps, SymbolProps, VisualEffectProps } from "./index";
-import type { MiddleClickEvent, MouseAreaProps } from "./system";
+import type { MiddleClickEvent, MouseAreaProps, SideButton } from "./system";
 import type { LocalFilesAreaProps } from "./localFiles";
 import { localFiles } from "./localFilesNative";
 import { fileDragPath, watchFileDrag, type FileDragSource } from "./webFileDrag";
@@ -231,8 +231,14 @@ function ContextMenuArea({ onContextMenu, captureDescendants = false, ...props }
 function MouseArea({
   path,
   onMiddleClick,
+  onSideButton,
+  hearsSideButtons: _hearsSideButtons,
   ...props
-}: Omit<MouseAreaProps, "onMiddleClick"> & { onMiddleClick?: (event: { nativeEvent: MiddleClickEvent }) => void }) {
+}: Omit<MouseAreaProps, "onMiddleClick" | "onSideButton"> & {
+  onMiddleClick?: (event: { nativeEvent: MiddleClickEvent }) => void;
+  onSideButton?: (event: { nativeEvent: { button: SideButton } }) => void;
+  hearsSideButtons?: boolean;
+}) {
   const configure = useCallback(
     (element: HTMLElement) => {
       const middle = (event: MouseEvent) => {
@@ -241,14 +247,23 @@ function MouseArea({
         event.stopPropagation();
         onMiddleClick({ nativeEvent: { shiftKey: event.shiftKey, altKey: event.altKey, metaKey: event.metaKey } });
       };
+      // Buttons 3 and 4, released over the area, as AppKit reports them.
+      const side = (event: MouseEvent) => {
+        if ((event.button !== 3 && event.button !== 4) || !onSideButton) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onSideButton({ nativeEvent: { button: event.button === 3 ? "back" : "forward" } });
+      };
       const stopDrag = watchFileDrag(element, () => (path ? { path: fileDragPath(path), relative: null } : null), dragFile);
       element.addEventListener("auxclick", middle);
+      element.addEventListener("mouseup", side);
       return () => {
         stopDrag();
         element.removeEventListener("auxclick", middle);
+        element.removeEventListener("mouseup", side);
       };
     },
-    [path, onMiddleClick],
+    [path, onMiddleClick, onSideButton],
   );
   return <Box {...props} configure={configure} />;
 }
