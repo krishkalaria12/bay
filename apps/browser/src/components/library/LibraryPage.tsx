@@ -35,7 +35,7 @@ import { tabTitle } from "../sidebar/actions";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
 import { chooseEasel, easelMenu, libraryTabMenu, libraryWindow, newEasel, openEasel } from "./actions";
 import { fileNameOf, type EaselDocument, type LibraryMedia } from "./model";
-import { thisComputer } from "./words";
+import { platformWords } from "../../lib/platformWords";
 import { removeLibraryMedia, saveLibraryMedia, startLibrary, useLibrary } from "./state";
 import { SECTIONS, sectionOf, type Section } from "./sections";
 import { LibrarySpaces } from "./LibrarySpaces";
@@ -52,7 +52,7 @@ export function LibraryPage({ tabId, initialSection }: { tabId: string; initialS
         <LibraryTitle />
         <EmptyState
           title="Library is available in regular windows"
-          subtitle={`Media and Easels are saved on ${thisComputer}. Open a regular window to use your Library.`}
+          subtitle={`Media and Easels are saved on ${platformWords.thisComputer}. Open a regular window to use your Library.`}
         />
       </View>
     );
@@ -93,7 +93,7 @@ function PublicLibrary({ tabId, windowId, initialSection }: { tabId: string; win
     }
     if (failed)
       setActionError(
-        `${failed === 1 ? "One file couldn't" : `${failed} files couldn't`} be imported. Choose image files that are available on ${thisComputer}.`,
+        `${failed === 1 ? "One file couldn't" : `${failed} files couldn't`} be imported. Choose image files that are available on ${platformWords.thisComputer}.`,
       );
     setImporting(false);
   }

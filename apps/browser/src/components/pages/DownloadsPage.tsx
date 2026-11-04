@@ -1,4 +1,4 @@
-import { Pressable, View, isMac } from "@bay/platform";
+import { Pressable, View } from "@bay/platform";
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/chromium";
 import { ContextMenuArea, MouseArea, openFile, revealFile, Symbol } from "@bay/desktop";
 import { useState } from "react";
@@ -18,6 +18,7 @@ import { PAGE_WIDTH } from "./constants";
 import { useFileExists } from "../useFileExists";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { clearDownloads, removeDownload } from "../../runtime/windowUiActions";
+import { platformWords } from "../../lib/platformWords";
 
 export function DownloadsPage({ tabId }: { tabId: string }) {
   const theme = useTheme();
@@ -131,7 +132,7 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
             ) : done ? (
               <>
                 {tidy ? <Button title="Tidy Name" onPress={() => void tidyRename(d, tidy, windowId)} /> : null}
-                <Button title={isMac ? "Show in Finder" : "Show in File Explorer"} onPress={() => void revealFile(d.path)} />
+                <Button title={platformWords.revealTitle} onPress={() => void revealFile(d.path)} />
               </>
             ) : null}
             <IconButton icon="ellipsis" size={13} box={26} radius={6} onPress={() => void downloadMenu(d, windowId)} tooltip="More actions" />

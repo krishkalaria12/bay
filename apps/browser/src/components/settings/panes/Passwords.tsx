@@ -31,10 +31,11 @@ import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
 import { PASSWORDS_UNLOCK_MS } from "../constants";
 import { passwordStorageDescription, secretStorageWarning } from "../secretStorage";
+import { platformWords } from "../../../lib/platformWords";
 
 // 1Password connects to a browser it has been told to trust, and only to one installed in Applications.
 function passwordManagerAppsNote() {
-  const apps = "1Password, Bitwarden, KeePassXC and Proton Pass extensions connect to their Mac apps.";
+  const apps = `1Password, Bitwarden, KeePassXC and Proton Pass extensions connect to their ${platformWords.desktopApps}.`;
   return systemInfo().inApplicationsFolder === false
     ? `${apps} For 1Password, move Bay to your Applications folder and reopen it (1Password only connects to browsers there), then in the 1Password app open Settings › Browser › Add Browser and choose it.`
     : `${apps} For 1Password, add Bay once: in the 1Password app, open Settings › Browser › Add Browser and choose Bay.`;
@@ -155,7 +156,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
         <View style={{ alignItems: "center", gap: 10, marginTop: 40 }}>
           <Symbol name="lock.fill" size={26} color={theme.textTertiary} style={{ width: 36, height: 36 }} />
           <Text style={{ fontSize: 14, fontWeight: "500", color: theme.textPrimary }}>Passwords are locked</Text>
-          <Text style={{ fontSize: 12, color: theme.textSecondary }}>Unlock with Touch ID or your login password to see them.</Text>
+          <Text style={{ fontSize: 12, color: theme.textSecondary }}>Unlock with {platformWords.unlockMethod} to see them.</Text>
           <Button title="Unlock" kind="primary" onPress={() => void unlock()} style={{ marginTop: 6 }} />
         </View>
       ) : (

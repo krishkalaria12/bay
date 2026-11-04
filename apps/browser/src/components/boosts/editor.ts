@@ -8,6 +8,7 @@ import { setPopover } from "../window/pageState";
 import { showToast } from "../split/splitActions";
 import { countScript, pickerScript, previewScript, type PickerMode } from "./pickerScript";
 import { addBoost, addSelector, boostsAvailable, boostsForHost, createBoost, deleteBoost, setBoostScript, startBoosts, updateBoost, useBoosts } from "./state";
+import { platformWords } from "../../lib/platformWords";
 
 // The Boost editor over a tab's page (BoostEditor.tsx), as Arc's and Zen's: one Boost of the page's site at a time,
 // changed as you go, the page the preview. Zap, Focus and the selector picker run in the page (pickerScript.ts).
@@ -180,7 +181,7 @@ export async function toggleBoostScript(tabId: string, id: string, host: string,
   if (on && !useBoosts.getState().scriptsAcknowledged) {
     const { confirmed } = await confirm({
       title: "Run JavaScript on this site?",
-      message: `A JavaScript Boost runs on every page of ${host} you open on this Mac, and can read and change what's on them. Run only code you wrote or trust. It stays on this Mac: JavaScript Boosts never sync, and don't run in private windows unless you allow it.`,
+      message: `A JavaScript Boost runs on every page of ${host} you open on ${platformWords.thisComputer}, and can read and change what's on them. Run only code you wrote or trust. It stays on this Mac: JavaScript Boosts never sync, and don't run in private windows unless you allow it.`,
       confirmTitle: "Turn On",
       windowId: useBrowser.getState().tabs[tabId]?.windowId,
     });
@@ -225,7 +226,7 @@ export async function removeBoost(tabId: string | null, id: string) {
   const windowId = tabId ? useBrowser.getState().tabs[tabId]?.windowId : undefined;
   const { confirmed } = await confirm({
     title: `Delete “${boost.name}”?`,
-    message: `${boost.host} goes back to how it looks without it, on your other Macs too.`,
+    message: `${boost.host} goes back to how it looks without it, on ${platformWords.yourOtherComputers} too.`,
     confirmTitle: "Delete",
     destructive: true,
     windowId,

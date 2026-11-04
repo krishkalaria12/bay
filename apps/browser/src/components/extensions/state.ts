@@ -26,6 +26,7 @@ import { activeTabId, engineProfile } from "../../store/model";
 import { openSettings } from "../settings/windows";
 import { closeSidePanelsOf, toggleSidePanel } from "./sidePanels";
 import { browserIdOf, extensionProfile, pageProfile, shownIn, useExtensions, windowExtensions, type Anchor } from "./store";
+import { platformWords } from "../../lib/platformWords";
 
 export * from "./sidePanels";
 export * from "./store";
@@ -151,7 +152,7 @@ export function cancelInstall() {
 export async function removeExtension(profile: string, ext: InstalledExtension, windowId?: string) {
   const { confirmed } = await confirm({
     title: `Remove “${ext.name}”?`,
-    message: ext.fromWebStore ? "Its data and settings will be removed too." : "The extension's folder stays on your Mac.",
+    message: ext.fromWebStore ? "Its data and settings will be removed too." : `The extension's folder stays on ${platformWords.yourComputer}.`,
     confirmTitle: "Remove",
     destructive: true,
     windowId,

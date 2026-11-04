@@ -9,7 +9,7 @@ import type { Tab } from "../../store/types";
 import { showToast } from "../split/splitActions";
 import { openInternalPage, tabDestination } from "../pages/pageUrls";
 import { libraryAvailable } from "./availability";
-import { thisComputer } from "./words";
+import { platformWords } from "../../lib/platformWords";
 import type { LibraryMedia } from "./model";
 import { addMediaToEasel, createEasel, deleteEasel, duplicateEasel, startLibrary, updateEasel, useLibrary } from "./state";
 import { startEaselShares, stopSharingEasel, useEaselShares } from "./sharing";
@@ -35,7 +35,7 @@ export function libraryWindow(windowId?: string | null): string | null {
     return null;
   }
   if (s.windows[id]?.incognito) {
-    showToast(id, "Open Library in a Regular Window", `Library and Easels are saved on ${thisComputer}.`, { icon: "books.vertical" });
+    showToast(id, "Open Library in a Regular Window", `Library and Easels are saved on ${platformWords.thisComputer}.`, { icon: "books.vertical" });
     return null;
   }
   return id;

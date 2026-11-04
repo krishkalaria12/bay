@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { platformWords } from "./platformWords.ts";
 import { test } from "node:test";
 import { localFileAnswers } from "../test-native-stub.mjs";
 import { useBrowser } from "../store/browserStore.ts";
@@ -42,8 +43,8 @@ test("missing grants, external formats and invalid native URLs do not create bro
     await openLocalFile(windowId, id);
     assert.equal(Object.keys(S().tabs).length, count);
   }
-  assert.equal(localFileStatusText({ status: "missing" }), "Missing on this Mac");
-  assert.equal(localFileStatusText({ status: "inaccessible" }), "Access required on this Mac");
+  assert.equal(localFileStatusText({ status: "missing" }), `Missing on ${platformWords.thisComputer}`);
+  assert.equal(localFileStatusText({ status: "inaccessible" }), `Access required on ${platformWords.thisComputer}`);
 });
 
 test("nested file opens forward only a root grant plus relative path", async () => {

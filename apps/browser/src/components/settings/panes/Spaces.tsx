@@ -1,6 +1,6 @@
 import { ContextMenuArea, showMenu, Symbol } from "@bay/desktop";
 import { useState } from "react";
-import { Pressable, View } from "@bay/platform";
+import { Pressable, View, isMac } from "@bay/platform";
 import { StyleSheet, Text } from "react-native";
 import { browserRead, useBrowserRead } from "../../../store/read";
 import Animated, { useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
@@ -67,7 +67,7 @@ export function SpacesPane() {
 
       <SectionHeader
         title="Spaces"
-        description="Drag to reorder. ⌃1–⌃9 switch to the first nine."
+        description={isMac ? "Drag to reorder. ⌃1–⌃9 switch to the first nine." : "Drag to reorder."}
         action={<Button title="Create Space" icon="plus" onPress={() => void createSpace()} />}
       />
       <SpaceList />

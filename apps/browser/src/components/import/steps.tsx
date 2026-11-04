@@ -26,6 +26,7 @@ import {
   TargetPicker,
   Title,
 } from "./ui";
+import { platformWords } from "../../lib/platformWords";
 
 type StepProps = { flow: ImportFlow };
 
@@ -79,7 +80,7 @@ export function ChooseStep({ flow }: StepProps) {
       {!flow.available ? (
         <Note text={`Importing isn't available in this build of ${APP_NAME}.`} />
       ) : flow.browsers.length === 0 ? (
-        <Note text="No other browsers with data to import were found on this Mac." />
+        <Note text={`No other browsers with data to import were found on ${platformWords.thisComputer}.`} />
       ) : (
         <View style={{ gap: 6 }}>
           {flow.browsers.map((b) => (

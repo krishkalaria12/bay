@@ -17,6 +17,7 @@ import { webviews } from "./webviews";
 import { closeWindowDialog } from "./windowClose";
 import { setSiteMuted } from "../runtime/organizeActions";
 import * as spaceActions from "../runtime/spaceActions";
+import { platformWords } from "./platformWords";
 
 const store = () => useBrowser.getState();
 
@@ -85,7 +86,9 @@ async function keptExtensionsNote(): Promise<string> {
     () => null,
   );
   if (names && !names.length) return "";
-  return names ? ` Its extensions (${names.join(", ")}) stay installed on this Mac, turned off.` : " Its extensions stay installed on this Mac, turned off.";
+  return names
+    ? ` Its extensions (${names.join(", ")}) stay installed on ${platformWords.thisComputer}, turned off.`
+    : ` Its extensions stay installed on ${platformWords.thisComputer}, turned off.`;
 }
 
 export async function moveTabToSpace(tabId: string, target: string) {

@@ -749,7 +749,11 @@ function BayContent({
       return flow.unlocking ? (
         <Headline
           title="One quick check"
-          subtitle={`macOS asks for your Mac password to open ${name}'s saved passwords and sign-ins. Click Always Allow, and they stay on this Mac.`}
+          subtitle={
+            isMac
+              ? `macOS asks for your Mac password to open ${name}'s saved passwords and sign-ins. Click Always Allow, and they stay on this Mac.`
+              : `Your system may ask for your password to open ${name}'s saved passwords and sign-ins.`
+          }
         />
       ) : (
         <>

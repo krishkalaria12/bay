@@ -1,4 +1,4 @@
-import { capabilities, isMac } from "@bay/platform";
+import { capabilities } from "@bay/platform";
 import * as cef from "@bay/chromium";
 import {
   confirm,
@@ -28,6 +28,7 @@ import { focus, openUrls, openWindow, switchSpace, switchToTab } from "./actions
 import { openReleaseNotesAfterUpdate, openReleaseNotesPage } from "./releaseNotesPage";
 import { webviews } from "./webviews";
 import { handleWebNotificationResponse } from "./webNotifications";
+import { platformWords } from "./platformWords";
 
 export function startAppIntegration({ sharedWindow = false } = {}) {
   onCommand(runAppCommand);
@@ -91,7 +92,7 @@ export async function diagnostics(): Promise<string> {
   return [
     `${app.appName} ${app.appVersion} (${app.appBuild}) — ${app.configuration}`,
     engine ? `Engine: NNCore, Chromium ${engine.chromiumVersion}` : "Engine: unavailable",
-    `${isMac ? "macOS" : "Windows"} ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
+    `${platformWords.osName} ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
     `Bundle: ${app.bundleId}, locale ${app.locale}`,
     `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, spaces: ${s.spaceOrder.length}`,
     !updates?.available

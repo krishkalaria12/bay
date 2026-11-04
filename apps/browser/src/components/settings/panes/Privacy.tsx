@@ -35,6 +35,7 @@ import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Sheet, Toggle } fro
 import { SETTINGS, type SettingId } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { ShareDiagnosticsSection } from "./ShareDiagnostics";
+import { platformWords } from "../../../lib/platformWords";
 
 const CATEGORIES: { id: FilterListCategory; toggle: string; settingId?: SettingId; section: string }[] = [
   { id: "ads", toggle: SETTINGS.blockAds.title, settingId: SETTINGS.blockAds.id, section: "Ad blockers" },
@@ -90,7 +91,7 @@ export function PrivacyPane() {
 
   return (
     <View>
-      <SectionHeader title="Content blocking" description="Built on EasyList and EasyPrivacy. Blocking happens on this Mac." />
+      <SectionHeader title="Content blocking" description={`Built on EasyList and EasyPrivacy. Blocking happens on ${platformWords.thisComputer}.`} />
       <Group>
         {CATEGORIES.filter((c) => c.toggle).map((c) => (
           <Row key={c.id} settingId={c.settingId} title={c.toggle}>

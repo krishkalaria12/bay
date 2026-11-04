@@ -1,9 +1,10 @@
+import { platformWords } from "../lib/platformWords";
+
 export const SHARING_COPY = {
   toggle: "Share anonymous crash reports and usage stats",
   summary: "Crashes, errors, rough feature counts and speed. Never the sites you visit, anything you type or search, or what's in your tabs.",
   whatsSent: "What's Sent",
-  footnote:
-    "Sent to bay.krishkalaria.in with a random ID made on this Mac, and kept on our own servers. No third parties. Turning this off stops it at once and deletes anything waiting to be sent. This setting doesn't sync.",
+  footnote: `Sent to bay.krishkalaria.in with a random ID made on ${platformWords.thisComputer}, and kept on our own servers. No third parties. Turning this off stops it at once and deletes anything waiting to be sent. This setting doesn't sync.`,
   ask: {
     title: "Help fix Bay?",
     body: "Share anonymous crash reports and usage stats. No sites, searches or typing. Ever.",

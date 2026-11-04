@@ -1,5 +1,4 @@
 import { sendService } from "../runtime/serviceClient";
-import { isMac } from "@bay/platform";
 import { engineInfo } from "@bay/chromium";
 import { launchEnvironment, readDocument, saveDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/desktop";
 import { create } from "zustand";
@@ -21,6 +20,7 @@ import {
 } from "./config";
 import { eventRecord, logRecord, logsRequest, outcome, type OtlpLogRecord, type QueuedEvent } from "./otlp";
 import { cleanProperties } from "./sanitize";
+import { platformWords } from "../lib/platformWords";
 
 // Send only with opt-in; never sync the choice.
 
@@ -102,7 +102,7 @@ function context(): Record<string, unknown> {
     $app_name: "Bay",
     $app_version: info.appVersion,
     $app_build: info.appBuild,
-    $os: isMac ? "macOS" : "Windows",
+    $os: platformWords.osName,
     $os_version: info.osVersion,
     arch: info.arch,
     engine_version: engineVersion,
