@@ -18,11 +18,14 @@ export interface PanelSheetProps {
   dismissible?: boolean;
   /** Shows a back arrow before the title, for a sub-page inside the sheet. */
   onBack?: () => void;
+  /** Drawn in place of the title (which still names the close button). */
+  header?: ReactNode;
 }
 
-export function PanelSheet({ visible, onClose, title, testID, children, height = "65%", dismissible = true, onBack }: PanelSheetProps): JSX.Element {
+export function PanelSheet({ visible, onClose, title, testID, children, height = "65%", dismissible = true, onBack, header }: PanelSheetProps): JSX.Element {
   const insets = useSafeAreaInsets();
   const foreground = useThemeColor("foreground");
+  const muted = useThemeColor("muted");
   // HeroUI renders a closed sheet's content anyway, so every panel's rows would render with the browser. Content
   // mounts on open and stays until the sheet finishes animating closed.
   const [shown, setShown] = useState(visible);
@@ -49,7 +52,7 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
           backgroundClassName="rounded-t-[28px] bg-background"
         >
           <View testID={testID} className="flex-1">
-            <View className="flex-row items-center justify-between px-5 pb-3">
+            <View className="flex-row items-center gap-3 px-5 pb-3">
               <View className="flex-1 flex-row items-center gap-1">
                 {onBack ? (
                   <Pressable
@@ -62,7 +65,11 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
                     <Icon name="back" color={foreground} size={22} />
                   </Pressable>
                 ) : null}
-                <BottomSheet.Title className="text-xl font-semibold">{title}</BottomSheet.Title>
+                {header && !onBack ? (
+                  <View className="flex-1">{header}</View>
+                ) : (
+                  <BottomSheet.Title className="text-xl font-semibold">{title}</BottomSheet.Title>
+                )}
               </View>
               <Pressable
                 testID={`${testID}-close`}
@@ -71,9 +78,11 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
                 accessibilityState={{ disabled: !dismissible }}
                 disabled={!dismissible}
                 onPress={onClose}
-                className="min-h-11 min-w-11 items-center justify-center rounded-full bg-default px-3"
+                hitSlop={6}
+                className={`h-9 w-9 items-center justify-center rounded-full bg-default active:opacity-60 ${header && !onBack ? "self-start" : ""}`}
+                style={{ opacity: dismissible ? 1 : 0.4 }}
               >
-                <Typography className="text-sm">Done</Typography>
+                <Icon name="close" color={muted} size={18} />
               </Pressable>
             </View>
             <BottomSheetScrollView
