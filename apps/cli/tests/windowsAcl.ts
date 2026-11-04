@@ -7,14 +7,15 @@ export function icacls(path: string, ...args: string[]): number {
 }
 
 // A whole new security descriptor: icacls only edits the one it finds, and a runner's new files can carry grants of
-// their own besides the ones they inherit.
+// their own besides the ones they inherit. .NET's own call, as Set-Acl's module doesn't load in powershell.exe when pwsh
+// started it (the runner's shell) and passed down its PSModulePath.
 const PRIVATE_ACL = `
   $user = [Security.Principal.WindowsIdentity]::GetCurrent().User
   $acl = New-Object Security.AccessControl.FileSecurity
   $acl.SetOwner($user)
   $acl.SetAccessRuleProtection($true, $false)
   $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($user, 'FullControl', 'Allow')))
-  Set-Acl -LiteralPath $env:BAY_TEST_ACL_PATH -AclObject $acl
+  [IO.File]::SetAccessControl($env:BAY_TEST_ACL_PATH, $acl)
 `;
 
 /**
