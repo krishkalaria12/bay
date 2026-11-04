@@ -1,4 +1,4 @@
-import { Pressable, View, capabilities } from "@bay/platform";
+import { Pressable, View, capabilities, shortcutForCommand } from "@bay/platform";
 import { appIcons, currentAppIcon, setAppIcon, Symbol, type AppIcon } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Image, Text } from "react-native";
@@ -11,6 +11,8 @@ import { useHover } from "../../ui/primitives";
 import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { APP_ICON_CHOICE_SIZE } from "../constants";
+import { PreviewTrafficLights } from "../../window/PreviewTrafficLights";
+import { platformWords } from "../../../lib/platformWords";
 
 const MODES: { value: Settings["appearance"]; title: string; description: string }[] = [
   { value: "auto", title: "Automatic", description: "Follow the system appearance setting" },
@@ -182,7 +184,7 @@ function SidebarPositionPicker() {
             setting="showSidebarOnOption"
             settingId={SETTINGS.showSidebarOnOption.id}
             title={SETTINGS.showSidebarOnOption.title}
-            description="With the sidebar hidden (⌘S), it slides out while you hold Option and away when you let go."
+            description={`With the sidebar hidden (${shortcutForCommand("toggleSidebar", "⌘S")}), it slides out while you hold ${platformWords.optionKey} and away when you let go.`}
           />
           <SettingToggle
             setting="hideSingleSpaceHeader"
@@ -228,11 +230,10 @@ function SidebarPositionChoice({
         }}
       >
         {/* The window buttons, top left either way: over the page, and faint (they show on hover), on the right. */}
-        <View style={{ position: "absolute", zIndex: 1, left: right ? 9 : 6, top: right ? 8 : 5, flexDirection: "row", gap: 2.5, opacity: right ? 0.45 : 1 }}>
-          {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-            <View key={c} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: c }} />
-          ))}
-        </View>
+        <PreviewTrafficLights
+          size={5}
+          style={{ position: "absolute", zIndex: 1, left: right ? 9 : 6, top: right ? 8 : 5, flexDirection: "row", gap: 2.5, opacity: right ? 0.45 : 1 }}
+        />
         <View style={{ width: "28%", gap: 3, paddingTop: 8 }}>
           {[0, 1, 2].map((i) => (
             <View key={i} style={{ height: 5, borderRadius: 2.5, backgroundColor: i === 0 ? colors.accent : bar }} />
