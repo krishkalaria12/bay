@@ -2,6 +2,7 @@
 import { capabilitiesFor } from "../../../packages/platform/src/capabilities.ts";
 import { relabelShortcuts, windowsShortcutLabel } from "../../../packages/platform/src/keys.ts";
 export * from "../../../packages/platform/src/keys.ts";
+export { webKeyClaimed } from "../../../packages/platform/src/webKeyboard.ts";
 
 export const platformOS = process.env.BAY_TEST_PLATFORM ?? "macos";
 export const isMac = platformOS === "macos";

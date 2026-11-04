@@ -51,7 +51,7 @@ export type Capabilities = {
   hover: boolean;
   /** Keyboard focus rings the app draws (the `enableFocusRing` prop). */
   focusRing: boolean;
-  /** The `keyDownEvents` prop, keys a view takes before the page sees them. Windows: Phase 5. */
+  /** The `keyDownEvents` prop, keys a view takes before the page sees them. */
   keyDownEvents: boolean;
   /** The system's share menu. Elsewhere: none, Copy and Save instead. */
   shareSheet: boolean;
@@ -97,7 +97,7 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     tooltips: mac,
     hover: mac || webDesktop,
     focusRing: mac,
-    keyDownEvents: mac,
+    keyDownEvents: mac || webDesktop,
     shareSheet: mac,
     captureMarkup: mac,
     nativeDrag: mac,

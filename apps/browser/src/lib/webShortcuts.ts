@@ -1,8 +1,11 @@
-import { isMac } from "@bay/platform";
+import { isMac, webKeyClaimed } from "@bay/platform";
 import { setKeyShortcuts, type KeyShortcut } from "@bay/desktop";
 import { runCommand } from "./appCommands";
-import { keyBindings, keyShortcuts, shortcutForKeyEvent } from "./keyBindings";
+import { fieldKeepsKey, keyBindings, keyShortcuts, shortcutForKeyEvent } from "./keyBindings";
 import { browserRead } from "../store/read";
+
+const isTextField = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
 
 /** The Chrome-hosted desktop has no app menu to carry Bay's keys. Its host runs them while a page has focus and hands
  *  them to this document otherwise, where they run unless one of its own fields took the key first. Settings can
@@ -21,16 +24,26 @@ export function startWebShortcuts() {
   };
   apply();
   const unsubscribe = browserRead.subscribe(apply);
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented) return;
+  const run = (event: KeyboardEvent) => {
     const shortcut = shortcutForKeyEvent(shortcuts, event);
     if (!shortcut) return;
     event.preventDefault();
+    event.stopPropagation();
     if (shortcut.command) runCommand({ command: shortcut.command, arg: shortcut.arg, windowId: null });
   };
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (!event.defaultPrevented) run(event);
+  };
+  // A text field stops every key it sees from bubbling, so window shortcuts are looked up on the way down, once it's
+  // clear the field and the views around it don't take the key themselves.
+  const onFieldKeyDown = (event: KeyboardEvent) => {
+    if (!event.defaultPrevented && isTextField(event.target) && !fieldKeepsKey(event) && !webKeyClaimed(event)) run(event);
+  };
   window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keydown", onFieldKeyDown, true);
   return () => {
     unsubscribe();
     window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keydown", onFieldKeyDown, true);
   };
 }

@@ -13,7 +13,7 @@ import { shortcutLabel, platformKeyEvents } from "./shortcuts";
 import type { CompatViewProps, CompatPressableProps, CompatTextInputProps, CompatScrollViewProps, MacOnlyProps } from "./viewTypes";
 export type { CompatViewProps, CompatPressableProps, CompatTextInputProps, CompatScrollViewProps, MacOnlyProps, KeyDownEventSpec } from "./viewTypes";
 
-import { webKeyMatches } from "./webKeyboard";
+import { setKeyClaims, webKeyMatches } from "./webKeyboard";
 import { installTextInputSelection } from "./webTextInput";
 export { keyCode, webKeyMatches } from "./webKeyboard";
 function assignRef<T>(ref: ForwardedRef<T>, value: T | null) {
@@ -28,6 +28,7 @@ function useWebProps<T, P extends Adaptable>(props: P, forwardedRef: ForwardedRe
   const ref = useCallback(
     (value: T | null) => {
       element.current = value instanceof HTMLElement ? value : null;
+      if (element.current) setKeyClaims(element.current, () => latest.current.keyDownEvents && platformKeyEvents(latest.current.keyDownEvents));
       assignRef(forwardedRef, value);
     },
     [forwardedRef],
@@ -58,12 +59,15 @@ function useWebProps<T, P extends Adaptable>(props: P, forwardedRef: ForwardedRe
     const cleanups = [
       listen("keydown", (event) => {
         const current = latest.current;
-        const wanted = current.keyDownEvents && platformKeyEvents(current.keyDownEvents).some((spec) => webKeyMatches(spec, event));
+        // As on macOS, a view with `keyDownEvents` hears only those keys: its handler may not look at which one came
+        // (a dialog's "Escape cancels, otherwise accept"). While an IME composes, Enter and the arrows are the IME's.
+        const listed = current.keyDownEvents;
+        const wanted = !!listed && !event.isComposing && platformKeyEvents(listed).some((spec) => webKeyMatches(spec, event));
         if (wanted) {
           event.preventDefault();
           event.stopPropagation();
         }
-        if (typeof current.onKeyDown === "function") current.onKeyDown(synthetic(event));
+        if (typeof current.onKeyDown === "function" && (!listed || wanted)) current.onKeyDown(synthetic(event));
       }),
       listen("keyup", (event) => {
         const callback = latest.current.onKeyUp;

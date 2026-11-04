@@ -89,6 +89,17 @@ export function keyShortcuts(bindings: readonly KeyBinding[]): KeyShortcut[] {
   });
 }
 
+// Editing keys: Ctrl+Left moves a word in a text field whether or not a shortcut also names it.
+const TEXT_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Backspace", "Delete"]);
+
+/** Whether a text field keeps this key rather than it being looked up as a window shortcut: what it types and edits with,
+ *  as a macOS field keeps its keys while the menu bar takes the rest. */
+export function fieldKeepsKey(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "isComposing">): boolean {
+  if (event.isComposing) return true;
+  if (!event.ctrlKey && !event.altKey && !/^F\d{1,2}$/.test(event.key)) return true;
+  return event.ctrlKey && TEXT_KEYS.has(event.key);
+}
+
 /** The shortcut a key event is, by the same virtual key the host matches: Ctrl+Shift+1's event says "!", and a Russian
  *  layout's Ctrl+T says "е", but both are the key the shortcut names. */
 export function shortcutForKeyEvent(shortcuts: readonly KeyShortcut[], event: KeyboardEvent): KeyShortcut | undefined {

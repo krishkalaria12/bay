@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-const { keyBindings, keyShortcuts, shortcutCatalog, shortcutForKeyEvent } = await import("./keyBindings.ts");
+const { fieldKeepsKey, keyBindings, keyShortcuts, shortcutCatalog, shortcutForKeyEvent } = await import("./keyBindings.ts");
 const { SHORTCUT_ACTIONS } = await import("./shortcutCatalog.ts");
 
 const find = (shortcuts, keyCode, mods = {}) =>
@@ -150,4 +150,14 @@ test("Ctrl+Tab opens the recent-tab switcher, as on macOS, and Ctrl+PageDown and
     find(shortcuts, 0x21, { ctrl: true }).map((s) => s.command),
     ["previousTab"],
   );
+});
+
+test("a text field keeps what it types and edits with, and window shortcuts still reach past it", () => {
+  const key = (name, mods = {}) => ({ key: name, ctrlKey: false, altKey: false, isComposing: false, ...mods });
+  for (const typed of [key("a"), key("A"), key("Enter"), key("Tab"), key("ArrowLeft"), key("Backspace")]) assert.equal(fieldKeepsKey(typed), true, typed.key);
+  for (const edit of [key("ArrowLeft", { ctrlKey: true }), key("Home", { ctrlKey: true }), key("Backspace", { ctrlKey: true })])
+    assert.equal(fieldKeepsKey(edit), true, edit.key);
+  assert.equal(fieldKeepsKey(key("t", { ctrlKey: true, isComposing: true })), true, "an IME is composing");
+  for (const shortcut of [key("t", { ctrlKey: true }), key("ArrowLeft", { altKey: true }), key("F6"), key("F10")])
+    assert.equal(fieldKeepsKey(shortcut), false, shortcut.key);
 });
