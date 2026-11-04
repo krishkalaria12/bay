@@ -4,7 +4,7 @@ import { StyleSheet, View } from "react-native";
 
 import { WATCH_MEDIA_SCRIPT } from "@/pagescripts/media";
 import { hideElementsScript } from "@/pagescripts/picker";
-import { pageTweaksScript } from "@/pagescripts/tweaks";
+import { PAGE_COLOR_SCRIPT, pageTweaksScript } from "@/pagescripts/tweaks";
 import { initialTiming, scriptsFor, shouldHide } from "./navigationEvents";
 
 import type { BrowserTab } from "@/store/types";
@@ -16,6 +16,8 @@ export interface TabPageProps {
   tweaks: { textSize: number; skipAmp: boolean };
   pullToRefresh: boolean;
   onPageMessage: (message: string) => void;
+  /** The colour at the top of the page, [r, g, b], or null when it has none; read as each page loads. */
+  onPageColor: (color: [number, number, number] | null) => void;
   /** Hidden pages stay mounted, so switching back keeps their scroll position and history. */
   visible: boolean;
   /** Paused in the background (see EngineView `suspended`). */
@@ -40,6 +42,7 @@ export function TabPage({
   tweaks,
   pullToRefresh,
   onPageMessage,
+  onPageColor,
 }: TabPageProps): JSX.Element {
   const view = useRef<Tab>(null);
   const timing = useRef(initialTiming());
@@ -116,6 +119,7 @@ export function TabPage({
           currentUrl.current = nativeEvent.url;
           if (run.watchMedia) {
             applyTweaks(nativeEvent.url);
+            void runPageScript<[number, number, number] | null>(view.current, PAGE_COLOR_SCRIPT).then(onPageColor, () => {});
             void runPageScript(view.current, WATCH_MEDIA_SCRIPT).catch(() => {});
           }
         }}

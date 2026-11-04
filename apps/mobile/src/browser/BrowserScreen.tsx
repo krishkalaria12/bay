@@ -3,6 +3,7 @@ import { hostOf } from "@bay/core/src/omnibox.ts";
 import { clearData, privateBrowsingSupported, type LinkPress, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import * as LocalAuthentication from "expo-local-authentication";
+import { StatusBar } from "expo-status-bar";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
@@ -66,6 +67,8 @@ export function BrowserScreen(): JSX.Element {
   const [error, setError] = useState<{ tabId: string; url: string; message: string } | null>(null);
   const toast = useToast();
   const [locked, setLocked] = useState(false);
+  // Each tab's colour at the top of its page, so the strip behind the status bar continues the page.
+  const [pageColors, setPageColors] = useState<Record<string, [number, number, number] | null>>({});
   const barHidden = useSharedValue(0);
 
   useEffect(() => {
@@ -356,6 +359,8 @@ export function BrowserScreen(): JSX.Element {
   }));
 
   const player = media.player;
+  // A locked private tab or an error page shows Bay's own screen there, not the page.
+  const topColor = locked && active.private ? null : error?.tabId === active.id ? null : (pageColors[active.id] ?? null);
   const tabError = error?.tabId === active.id ? error : null;
 
   return (
@@ -376,6 +381,7 @@ export function BrowserScreen(): JSX.Element {
                 hiddenSelectors={[...reading.selectorsFor(tab), ...youtubeSelectors(data.preferences.youtube, hostOf(tab.url))]}
                 tweaks={{ textSize: data.preferences.textSize, skipAmp: data.preferences.skipAmp }}
                 pullToRefresh={data.preferences.pullToRefresh}
+                onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
                 onPageMessage={(message) => {
                   if (!media.pageMessage(id, message) && id === active.id) reading.pageMessage(message);
                 }}
@@ -409,7 +415,12 @@ export function BrowserScreen(): JSX.Element {
       ) : null}
 
       {hasPage && showPages ? (
-        <View className="absolute inset-x-0 top-0 bg-background" style={{ height: insets.top }}>
+        <View
+          className="absolute inset-x-0 top-0 bg-background"
+          style={{ height: insets.top, backgroundColor: topColor ? `rgb(${topColor.join(",")})` : undefined }}
+        >
+          {/* Dark icons on a light page, light ones on a dark page. */}
+          {topColor ? <StatusBar style={0.2126 * topColor[0] + 0.7152 * topColor[1] + 0.0722 * topColor[2] > 140 ? "dark" : "light"} /> : null}
           {page.isLoading ? (
             <View
               testID="page-progress"
