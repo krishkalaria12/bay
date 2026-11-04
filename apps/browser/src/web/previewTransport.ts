@@ -139,6 +139,11 @@ export function createPreviewTransport(): NativeTransport {
           return ok("notRegistered");
         case "BaySystem.menuShortcuts":
           return ok([]);
+        // No native key capture in a browser tab: the field leaves recording mode, and nothing changes.
+        case "BaySystem.recordShortcut":
+          return ok(null);
+        case "BaySystem.cancelRecording":
+          return ok();
         case "BaySystem.fileIcon":
           return ok();
         case "BayKeychain.get":

@@ -1,6 +1,7 @@
 import { isMac, webKeyClaimed } from "@bay/platform";
 import { setKeyShortcuts, type KeyShortcut } from "@bay/desktop";
 import { runCommand } from "./appCommands";
+import { runAppCommand } from "./appMenuIntegration";
 import { fieldKeepsKey, keyBindings, keyShortcuts, shortcutForKeyEvent } from "./keyBindings";
 import { browserRead } from "../store/read";
 
@@ -29,7 +30,11 @@ export function startWebShortcuts() {
     if (!shortcut) return;
     event.preventDefault();
     event.stopPropagation();
-    if (shortcut.command) runCommand({ command: shortcut.command, arg: shortcut.arg, windowId: null });
+    if (!shortcut.command) return;
+    // Both of onCommand's listeners, as a key the host runs has.
+    const command = { command: shortcut.command, arg: shortcut.arg, windowId: null };
+    runCommand(command);
+    runAppCommand(command);
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (!event.defaultPrevented) run(event);

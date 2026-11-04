@@ -259,7 +259,6 @@
               support within each window system's constraints.
             </li>
             <li>Add the Window menu's window list and the Extensions menu to the in-window app menu. Evaluate Alt activation and menu placement.</li>
-            <li>Add web-preview support for <code>recordShortcut</code> and audit shortcut actions that still lack an effective target.</li>
             <li>
               Keep Little Bay accessible after the last Linux window closes, and start its put-away timer in the shared runtime. Validate global-shortcut and
               tray availability across desktops.
@@ -268,10 +267,6 @@
             <li>
               Add a smoke test that boots the web app in a browser. Unit tests can't catch a start-up failure, and an import cycle broke the web host's start
               this way until a real browser found it.
-            </li>
-            <li>
-              Native file drags: confirm dragging a pin out of a folder and a download into a file manager and a mail client on X11, Wayland and Windows.
-              Dragging a folder is untested, and a failed start only logs a warning, as a macOS drag that doesn't start shows nothing.
             </li>
           </ul>
         </section>

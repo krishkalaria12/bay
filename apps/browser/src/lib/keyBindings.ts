@@ -13,8 +13,9 @@ import {
 import { menuShortcuts as nativeMenuShortcuts, type BrowserCommand, type KeyShortcut, type MenuShortcut } from "@bay/desktop";
 import { SHORTCUT_ACTIONS } from "./shortcutCatalog";
 
-// Commands in the table the app doesn't run itself yet: their keys stay Chrome's.
-const LEFT_TO_CHROME = new Set(["closeAllTabs", "searchTabs", "taskManager", "showOnboarding", "returnToPinnedUrl"]);
+// Commands whose table key stays with the page and Chrome. Ctrl+Enter is the web's send key, which macOS's menu only takes
+// while the tab has left its pin, and F1 shouldn't restart onboarding by accident.
+const LEFT_TO_CHROME = new Set(["showOnboarding", "returnToPinnedUrl"]);
 
 /** No command: a key taken off its command, which stays taken so it doesn't go back to being Chrome's. */
 export type KeyBinding = { command: BrowserCommand | ""; arg: string | null; stroke: ShortcutStroke };

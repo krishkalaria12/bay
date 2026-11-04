@@ -49,7 +49,7 @@ export function startApplicationLifecycle() {
   if (updated) openReleaseNotesAfterUpdate();
 }
 
-function runAppCommand({ command, windowId }: CommandEvent) {
+export function runAppCommand({ command, windowId }: CommandEvent) {
   switch (command) {
     case "sendFeedback":
       return void sendFeedback(windowId);

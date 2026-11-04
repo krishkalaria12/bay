@@ -199,7 +199,7 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   restoreClosed: { key: "T", mod: true, shift: true },
   focusCommandBar: { key: "L", mod: true }, // Chrome: Ctrl+L, Alt+D, F6
   closeTab: { key: "W", mod: true },
-  closeAllTabs: { key: "W", mod: true, shift: true },
+  closeAllTabs: { key: "K", mod: true, shift: true }, // as on macOS; Ctrl+Shift+W is Chrome's close window, as ⇧⌘W is Bay's
   print: { key: "P", mod: true },
   copyUrl: { key: "C", mod: true, shift: true }, // Chrome uses this for DevTools inspect; Bay's menu wins while DevTools is closed
   findInPage: { key: "F", mod: true },

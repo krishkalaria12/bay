@@ -30,9 +30,26 @@ test("Ctrl+1…8 select those tabs, Ctrl+9 the last", () => {
   );
 });
 
-test("commands the app doesn't run itself leave their keys to Chrome", () => {
+test("the keys left to pages are the web's own, and a window's close stays Chrome's", () => {
   const commands = new Set(keyBindings().map((b) => b.command));
-  for (const command of ["taskManager", "searchTabs", "closeAllTabs"]) assert.equal(commands.has(command), false, command);
+  for (const command of ["showOnboarding", "returnToPinnedUrl"]) assert.equal(commands.has(command), false, command);
+  for (const command of ["taskManager", "searchTabs", "closeAllTabs"]) assert.equal(commands.has(command), true, command);
+  const shortcuts = keyShortcuts(keyBindings());
+  assert.deepEqual(find(shortcuts, 0x57, { ctrl: true, shift: true }), []);
+  assert.deepEqual(
+    find(shortcuts, 0x4b, { ctrl: true, shift: true }).map((s) => s.command),
+    ["closeAllTabs"],
+  );
+});
+
+test("every action Settings lists has a command that runs it", () => {
+  const source = ["lib/appCommands.ts", "lib/appMenuIntegration.ts", "components/sidebar/sidebarCommands.ts"]
+    .map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"))
+    .join("\n");
+  const unhandled = [...new Set(SHORTCUT_ACTIONS.map((action) => action.id.split(":")[0]))].filter(
+    (command) => !source.includes(`case "${command}"`) && !source.includes(`command === "${command}"`) && !source.includes(`"${command}",`),
+  );
+  assert.deepEqual(unhandled, []);
 });
 
 test("a key chosen in Settings runs its command, and the old key runs nothing rather than Chrome's", () => {
@@ -90,8 +107,10 @@ test("an action's arg comes from its id", () => {
 });
 
 test("Settings can't bind what the app doesn't run, or an id only macOS has", () => {
-  const commands = keyBindings({ closeAllTabs: ["y", "command"], togglePageEngine: ["y", "option"], "std:Edit > Copy": ["y", "shift"] }).map((b) => b.command);
-  for (const command of ["closeAllTabs", "togglePageEngine", "std:Edit > Copy"]) assert.equal(commands.includes(command), false, command);
+  const commands = keyBindings({ showOnboarding: ["y", "command"], togglePageEngine: ["y", "option"], "std:Edit > Copy": ["y", "shift"] }).map(
+    (b) => b.command,
+  );
+  for (const command of ["showOnboarding", "togglePageEngine", "std:Edit > Copy"]) assert.equal(commands.includes(command), false, command);
 });
 
 test("a key event finds its shortcut by virtual key, whatever character it types", () => {
@@ -112,8 +131,9 @@ test("the catalog gives each action its winning default and marks what Chrome ke
   assert.equal(items.get("reopenClosedWindow").defaultKey, "");
   assert.equal(items.get("share").defaultKey, "");
   assert.equal(items.get("share").remappable, true);
-  assert.equal(items.get("closeAllTabs").remappable, false);
-  assert.equal(items.get("closeAllTabs").defaultKey, "w");
+  assert.equal(items.get("closeAllTabs").remappable, true);
+  assert.equal(items.get("closeAllTabs").defaultKey, "k");
+  assert.equal(items.get("searchTabs").remappable, true);
   assert.equal(items.get("std:Edit > Copy").remappable, false);
   assert.equal(items.size, shortcutCatalog().length, "ids are unique");
 });
