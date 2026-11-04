@@ -203,11 +203,7 @@ impl Prefilter {
     fn of(pattern: &str) -> Self {
         let pattern = pattern.trim();
         if let Some(host) = pattern.strip_prefix("||") {
-            let host = host
-                .split(['/', '^', '?', '|'])
-                .next()
-                .unwrap_or("")
-                .trim_end_matches('*');
+            let host = host.split(['/', '^', '?', '|', '*']).next().unwrap_or("");
             if host.len() >= 3 && host.is_ascii() {
                 return Self::Host(host.to_ascii_lowercase());
             }
@@ -2091,6 +2087,46 @@ mod tests {
 
     fn request(blocker: &Modifiers, url: &str, kind: &str) -> (bool, Option<String>, bool) {
         blocker.request(url, "https://site.example/", kind, "GET", false, None)
+    }
+
+    #[test]
+    fn wildcard_hosts_do_not_get_rejected_by_the_prefilter() {
+        let rules = modifiers("||track.*.example^$removeparam=clickid\n");
+        assert_eq!(
+            request(
+                &rules,
+                "https://track.shop.example/?clickid=1&keep=2",
+                "document"
+            )
+            .1,
+            Some("https://track.shop.example/?keep=2".to_owned())
+        );
+        let rules = modifiers(
+            "||track.shop.example^$removeparam=clickid\n\
+             @@||track.*.example^$removeparam=clickid\n",
+        );
+        assert_eq!(
+            request(
+                &rules,
+                "https://track.shop.example/?clickid=1&keep=2",
+                "document"
+            )
+            .1,
+            None
+        );
+        let rules = modifiers("||cdn.*.example^$script,header=server:nginx\n");
+        assert!(
+            rules
+                .response(
+                    "https://cdn.shop.example/a.js",
+                    "https://site.example/",
+                    "script",
+                    "GET",
+                    None,
+                    &[("server".to_owned(), "nginx".to_owned())],
+                )
+                .blocked
+        );
     }
 
     #[test]
