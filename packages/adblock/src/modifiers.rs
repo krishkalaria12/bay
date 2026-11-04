@@ -11,11 +11,12 @@
 //! - `$permissions=` adds a `Permissions-Policy` to a document's response.
 //! - `$strict1p`/`$strict3p` ask that the request's hostname equal (or differ from) the document's hostname, which is
 //!   stricter than adblock-rust's registrable-domain `$1p`.
+//! - `$replace=/re/replacement/flags` replaces text in a response body before the renderer parses it.
+//! - HTML filtering (`##^selector`) removes elements from an HTML response (`crate::html`), as uBO does.
+//! - `$requestheader=name[:value]` blocks a request whose headers match, as `$header` does a response's.
+//! - `$cname` exceptions lift a block found through a hostname's CNAME for the sites they name.
 //! - `##^responseheader(name)` removes a header from a response for the matching site, and generic cosmetic
 //!   exceptions (`#@#selector`) un-hide a selector on every site.
-//!
-//! `$replace` and HTML `##^` filtering are Firefox-only in uBO and ignored on Chromium; `$requestheader` needs request
-//! headers the request filter doesn't carry. Those rules are dropped rather than applied with the wrong meaning.
 
 use std::sync::Mutex;
 
@@ -27,6 +28,8 @@ use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
 
 use crate::adapt::{is_not_network_rule, split_rule};
+use crate::body;
+use crate::html::{self, HtmlRules, HtmlSpec};
 use crate::removeparam::is_type_option;
 
 /// A rule's line as given, and whether its list may use trusted options (`$urlskip`).
@@ -39,6 +42,9 @@ pub struct Spec {
     pub response_headers: Vec<ResponseHeaderSpec>,
     #[serde(default)]
     pub cosmetic_exceptions: Vec<String>,
+    /// `##^selector` HTML filters, in list order (uBO's HTML filtering engine).
+    #[serde(default)]
+    pub html_rules: Vec<HtmlSpec>,
     /// Plain `@@` exceptions, for `$header`/`$ipaddress` rules: uBO's header check treats one as
     /// an allow for the whole response. Kept in the main list too.
     #[serde(default)]
@@ -50,6 +56,7 @@ impl Spec {
         self.rules.extend(other.rules);
         self.response_headers.extend(other.response_headers);
         self.cosmetic_exceptions.extend(other.cosmetic_exceptions);
+        self.html_rules.extend(other.html_rules);
         self.exceptions.extend(other.exceptions);
     }
 }
@@ -79,11 +86,25 @@ struct Rule {
     urlskip: Option<UrlSkip>,
     transform: Option<Transform>,
     removeparam: Option<Prune>,
-    /// The `$removeparam` option's value: uBO matches exceptions to blocks by it.
-    removeparam_key: String,
+    /// The `$removeparam` or `$replace` option's value: uBO matches exceptions to blocks by it.
+    value_key: String,
     header: Option<HeaderCheck>,
     ip: Option<IpCheck>,
     permissions: Option<String>,
+    /// A `$replace` rule; `replace` is its directive, none on an exception (which names one by `value_key`).
+    replaces: bool,
+    /// `$replace=` in a response body, for text responses this request matches.
+    replace: Option<TextReplace>,
+    /// `$requestheader=`: the request is blocked when its headers match.
+    request_header: Option<HeaderCheck>,
+    /// A `$urlskip` exception, which names the skip it cancels by `value_key`, or all with none.
+    urlskip_exception: bool,
+    /// A `$cname` exception: blocks found through a CNAME don't apply to the documents it matches.
+    cname: bool,
+    /// `$important`: exceptions don't cancel it.
+    important: bool,
+    /// `$redirect=` on a rule with a response condition: the resource answering a response it blocks.
+    stand_in: Option<String>,
     /// Blocks the request when it matches, unless a modifier redirects it first (`$urlskip`, a strict party rule).
     block: bool,
 }
@@ -93,12 +114,18 @@ pub struct Modifiers {
     rules: Vec<Rule>,
     /// Plain exceptions, as block rules: one matching means uBO's `matchHeaders` allows.
     exceptions: Mutex<Engine>,
+    html: HtmlRules,
+    /// The `$requestheader` rules: every request asks, so they aren't found by a scan of `rules`.
+    request_header_rules: Vec<usize>,
 }
 
 /// What a response gets, and whether it is blocked.
 #[derive(Default, Serialize)]
 pub struct ResponseMatch {
     pub blocked: bool,
+    /// What answers a blocked response in its place (`$redirect=` on a condition's rule): the resource's name here, its
+    /// data URL from [`crate::Blocker::response`].
+    pub stand_in: Option<String>,
     /// Response headers to add, in order.
     pub headers: Vec<(String, String)>,
     /// Response headers to remove, lowercased.
@@ -203,6 +230,51 @@ impl Prefilter {
     }
 }
 
+/// uBO's body filterer only rewrites text: `text/*` plus the listed application and audio types. Event streams are
+/// left alone: buffering a stream that never ends would break it.
+fn filterable_mime(mime: &str) -> bool {
+    if mime == "text/event-stream" {
+        return false;
+    }
+    mime.starts_with("text/")
+        || matches!(
+            mime,
+            "application/dash+xml"
+                | "application/javascript"
+                | "application/json"
+                | "application/mpegurl"
+                | "application/vnd.api+json"
+                | "application/vnd.apple.mpegurl"
+                | "application/vnd.apple.mpegurl.audio"
+                | "application/x-javascript"
+                | "application/x-mpegurl"
+                | "application/xhtml+xml"
+                | "application/xml"
+                | "audio/mpegurl"
+                | "audio/x-mpegurl"
+        )
+}
+
+/// A `Content-Type`'s MIME type, lowercased, without its parameters. Without one, uBO goes by the request's type.
+fn body_mime(content_type: &str, kind: &str) -> String {
+    let mime = content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    match (mime.is_empty(), kind) {
+        (false, _) => mime,
+        (true, "script") => "text/javascript".to_owned(),
+        (true, "stylesheet") => "text/css".to_owned(),
+        (true, _) => "text/plain".to_owned(),
+    }
+}
+
+fn is_html(mime: &str) -> bool {
+    matches!(mime, "text/html" | "application/xhtml+xml")
+}
+
 /// The URL a `$urlskip=...` rule extracts, step by step as uBO's `js/urlskip.js`.
 struct UrlSkip {
     steps: Vec<Step>,
@@ -289,11 +361,13 @@ impl UrlSkip {
 
 struct Transform {
     re: Pattern,
-    replacement: String,
+    replacement: Template,
+    global: bool,
 }
 
 impl Transform {
-    fn parse(value: &str) -> Option<Self> {
+    /// `rule` is the rule's own pattern: `uritransform=//$1/` applies a regex rule's regex.
+    fn parse(value: &str, rule: &str) -> Option<Self> {
         let (pattern, rest) = delimited(value, '/')?;
         // The replacement follows the pattern's closing slash, up to its own; a trailing `//`
         // is an empty replacement, and anything after the last slash are flags.
@@ -302,18 +376,52 @@ impl Transform {
         } else {
             until(rest, '/')?
         };
-        if pattern.is_empty() {
-            return None;
-        }
-        let re = compile_regex(pattern, flags)?;
-        // JS replacements use `$&` for the whole match; Rust spells it `$0`.
-        let replacement = replacements(replacement).replace("$&", "$0");
-        Some(Self { re, replacement })
+        let pattern = if pattern.is_empty() {
+            rule.strip_prefix('/')?.strip_suffix('/')?
+        } else {
+            pattern
+        };
+        Some(Self {
+            re: compile_regex(pattern, flags)?,
+            replacement: Template::parse(&replacements(replacement)),
+            global: flags.contains('g'),
+        })
     }
 
     fn apply(&self, url: &str) -> Option<String> {
-        let rewritten = self.re.replace(url, &self.replacement)?;
+        let rewritten = self.re.replace(url, &self.replacement, self.global)?;
         is_web_url(&rewritten).then_some(rewritten)
+    }
+}
+
+/// A `$replace` value: a JS-style regex and its replacement. uBO applies one directive per matching rule, first match
+/// only unless the regex has the `g` flag.
+struct TextReplace {
+    re: Pattern,
+    replacement: Template,
+    global: bool,
+}
+
+impl TextReplace {
+    fn parse(value: &str) -> Option<Self> {
+        let (pattern, rest) = delimited(value, '/')?;
+        let (replacement, flags) = if let Some(flags) = rest.strip_prefix('/') {
+            ("", flags)
+        } else {
+            until(rest, '/')?
+        };
+        if pattern.is_empty() {
+            return None;
+        }
+        Some(Self {
+            re: compile_regex(pattern, flags)?,
+            replacement: Template::parse(&replacements(replacement)),
+            global: flags.contains('g'),
+        })
+    }
+
+    fn apply(&self, text: &str) -> Option<String> {
+        self.re.replace(text, &self.replacement, self.global)
     }
 }
 
@@ -555,26 +663,20 @@ pub fn extract(list: &str, trusted: bool) -> Extracted {
                 extracted.spec.response_headers.push(rule);
                 continue;
             }
+            if let Some(rule) = HtmlSpec::parse(line) {
+                extracted.spec.html_rules.push(rule);
+                continue;
+            }
             extracted.list.push_str(line);
             extracted.list.push('\n');
             continue;
         }
         match modifier_actions(line) {
-            Some(actions) => {
-                if actions.iter().any(|action| {
-                    matches!(
-                        action,
-                        Action::Replace | Action::Cname | Action::RequestHeader
-                    )
-                }) {
-                    continue;
-                }
-                if !actions.is_empty() {
-                    extracted.spec.rules.push(RuleSpec {
-                        line: line.to_owned(),
-                        trusted,
-                    });
-                }
+            Some(_) => {
+                extracted.spec.rules.push(RuleSpec {
+                    line: line.to_owned(),
+                    trusted,
+                });
                 continue;
             }
             None => {
@@ -643,12 +745,21 @@ fn modifier_actions(line: &str) -> Option<Vec<Action>> {
 
 impl Modifiers {
     pub fn new(spec: Spec) -> Self {
-        let rules = spec.rules.iter().filter_map(parse_rule).collect();
+        let rules: Vec<Rule> = spec.rules.iter().filter_map(parse_rule).collect();
         let exceptions = Mutex::new(build_exceptions(&spec.exceptions));
+        let html = HtmlRules::new(spec.html_rules.clone());
+        let request_header_rules = rules
+            .iter()
+            .enumerate()
+            .filter(|(_, rule)| rule.request_header.is_some())
+            .map(|(at, _)| at)
+            .collect();
         Self {
             spec,
             rules,
             exceptions,
+            html,
+            request_header_rules,
         }
     }
 
@@ -666,6 +777,231 @@ impl Modifiers {
             || self.rules.iter().any(|rule| {
                 rule.header.is_some() || rule.ip.is_some() || rule.permissions.is_some()
             })
+    }
+
+    /// The resources `$redirect=` names on rules with a response condition.
+    pub fn stand_ins(&self) -> impl Iterator<Item = &str> {
+        self.rules
+            .iter()
+            .filter_map(|rule| rule.stand_in.as_deref())
+    }
+
+    /// Whether any `$requestheader` rule exists.
+    pub fn has_request_header_rules(&self) -> bool {
+        !self.request_header_rules.is_empty()
+    }
+
+    /// Whether a response body can be rewritten at all (`$replace`, HTML `##^`).
+    pub fn has_body_rules(&self) -> bool {
+        !self.html.is_empty()
+            || self
+                .rules
+                .iter()
+                .any(|rule| rule.replaces && !rule.exception)
+    }
+
+    /// Whether [`Modifiers::filter_body`] should see this response: uBO's body-filter gates plus a matching
+    /// `$replace` or HTML rule. `status` is 0 when there is no response, and a partial response isn't a whole body.
+    #[allow(clippy::too_many_arguments)]
+    pub fn body_filter_applies(
+        &self,
+        url: &str,
+        source: &str,
+        kind: &str,
+        method: &str,
+        status: i32,
+        content_type: &str,
+        content_disposition: &str,
+    ) -> bool {
+        if matches!(status, 0 | 206)
+            || host_of(url).is_empty()
+            || !matches!(method, "GET" | "POST")
+            || matches!(kind, "font" | "image" | "media" | "websocket")
+            || !content_disposition.is_empty()
+                && !content_disposition
+                    .get(..6)
+                    .is_some_and(|start| start.eq_ignore_ascii_case("inline"))
+        {
+            return false;
+        }
+        let mime = body_mime(content_type, kind);
+        if !filterable_mime(&mime) {
+            return false;
+        }
+        !self.replaces_for(url, source, kind, method).is_empty()
+            || (is_html(&mime) && self.html.applies(&host_of(url)))
+    }
+
+    /// The response body after `$replace` and HTML `##^` filtering, or `None` when neither changed it.
+    pub fn filter_body(
+        &self,
+        url: &str,
+        source: &str,
+        kind: &str,
+        method: &str,
+        content_type: &str,
+        body: &[u8],
+    ) -> Option<Vec<u8>> {
+        let mime = body_mime(content_type, kind);
+        if !filterable_mime(&mime) || body.len() > body::MAX_BODY {
+            return None;
+        }
+        let encoding = body::charset(content_type, &mime, body)?;
+        let (decoded, _, malformed) = encoding.decode(body);
+        // Bytes the charset can't represent don't survive a round trip through a legacy charset.
+        if malformed && encoding != encoding_rs::UTF_8 {
+            return None;
+        }
+        let mut text = decoded.into_owned();
+        let mut changed = false;
+        for replace in self.replaces_for(url, source, kind, method) {
+            if let Some(replaced) = replace.apply(&text) {
+                text = replaced;
+                changed = true;
+            }
+        }
+        if is_html(&mime) {
+            let host = host_of(url);
+            if self.html.applies(&host) {
+                let mut document = scraper::Html::parse_document(&text);
+                if html::filter(&mut document, &self.html.for_host(&host)) {
+                    text = document.html();
+                    changed = true;
+                }
+            }
+        }
+        changed.then(|| body::encode(&text, encoding))
+    }
+
+    /// The `$replace` directives this request matches, in list order, less what exceptions cancel: one with no value
+    /// cancels them all, one with a value its own directive, and neither an `$important` rule (uBO's
+    /// `matchAndFetchModifiers`).
+    fn replaces_for<'a>(
+        &'a self,
+        url: &str,
+        source: &str,
+        kind: &str,
+        method: &str,
+    ) -> Vec<&'a TextReplace> {
+        let lower = url.to_ascii_lowercase();
+        let source_host = host_of(source);
+        let request_host = host_of(url);
+        let request = Request::new(url, source, kind, method).ok();
+        let matched: Vec<&Rule> = self
+            .rules
+            .iter()
+            .filter(|rule| {
+                rule.replaces
+                    && rule.types.allows(kind)
+                    && rule.prefilter.matches(&lower)
+                    && matches_rule(rule, request.as_ref(), &source_host, &request_host)
+            })
+            .collect();
+        let excepted: Vec<&str> = matched
+            .iter()
+            .filter(|rule| rule.exception)
+            .map(|rule| rule.value_key.as_str())
+            .collect();
+        matched
+            .iter()
+            .filter(|rule| {
+                !rule.exception
+                    && (rule.important
+                        || !excepted
+                            .iter()
+                            .any(|key| key.is_empty() || *key == rule.value_key))
+            })
+            .filter_map(|rule| rule.replace.as_ref())
+            .collect()
+    }
+
+    /// The headers (lowercased) `$requestheader` rules would look at for this request; none for most requests.
+    pub fn request_header_names(
+        &self,
+        url: &str,
+        source: &str,
+        kind: &str,
+        method: &str,
+    ) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .request_header_rules_for(url, source, kind, method)
+            .into_iter()
+            .filter_map(|rule| Some(rule.request_header.as_ref()?.name.clone()))
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    /// Whether `$requestheader` blocks a request with these headers. An exception with the same condition or a plain
+    /// one matching the request cancels the block, as for `$header`.
+    pub fn request_headers_blocked(
+        &self,
+        url: &str,
+        source: &str,
+        kind: &str,
+        method: &str,
+        headers: &[(String, String)],
+    ) -> bool {
+        let mut blocked = false;
+        for rule in self.request_header_rules_for(url, source, kind, method) {
+            if !rule
+                .request_header
+                .as_ref()
+                .is_some_and(|check| check.matches(headers))
+            {
+                continue;
+            }
+            if rule.exception {
+                return false;
+            }
+            blocked = true;
+        }
+        blocked
+            && !Request::new(url, source, kind, method).is_ok_and(|request| {
+                self.exceptions
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .check_network_request(&request)
+                    .should_block()
+            })
+    }
+
+    fn request_header_rules_for(
+        &self,
+        url: &str,
+        source: &str,
+        kind: &str,
+        method: &str,
+    ) -> Vec<&Rule> {
+        if self.request_header_rules.is_empty() {
+            return Vec::new();
+        }
+        let lower = url.to_ascii_lowercase();
+        let source_host = host_of(source);
+        let request_host = host_of(url);
+        let request = Request::new(url, source, kind, method).ok();
+        self.request_header_rules
+            .iter()
+            .map(|&at| &self.rules[at])
+            .filter(|rule| {
+                rule.types.allows(kind)
+                    && rule.prefilter.matches(&lower)
+                    && matches_rule(rule, request.as_ref(), &source_host, &request_host)
+            })
+            .collect()
+    }
+
+    /// Whether a `$cname` exception covers this document (uBO's `shouldExceptCname`).
+    pub fn cname_excepted(&self, document: &str) -> bool {
+        let lower = document.to_ascii_lowercase();
+        let host = host_of(document);
+        let request = Request::new(document, document, "document", "GET").ok();
+        self.rules.iter().any(|rule| {
+            rule.cname
+                && rule.prefilter.matches(&lower)
+                && matches_rule(rule, request.as_ref(), &host, &host)
+        })
     }
 
     pub fn cosmetic_exceptions(&self) -> &[String] {
@@ -722,7 +1058,7 @@ impl Modifiers {
                     continue;
                 }
                 if matches_rule(rule, request.as_ref(), &source_host, &request_host) {
-                    excepted.push(&rule.removeparam_key);
+                    excepted.push(&rule.value_key);
                 }
             }
             // uBO cancels each block whose value an exception names, and an exception with no
@@ -741,7 +1077,7 @@ impl Modifiers {
                     if !matches_rule(rule, request.as_ref(), &source_host, &request_host) {
                         continue;
                     }
-                    if excepted.contains(&rule.removeparam_key.as_str()) {
+                    if excepted.contains(&rule.value_key.as_str()) {
                         continue;
                     }
                     if let Some(rewritten) = prune.apply(next.as_deref().unwrap_or(url)) {
@@ -779,6 +1115,17 @@ impl Modifiers {
                 continue;
             }
             if !matches_rule(rule, request.as_ref(), &source_host, &request_host) {
+                continue;
+            }
+            let excepted = !rule.important
+                && self.rules.iter().any(|exception| {
+                    exception.urlskip_exception
+                        && (exception.value_key.is_empty() || exception.value_key == rule.value_key)
+                        && exception.types.allows(kind)
+                        && exception.prefilter.matches(&lower)
+                        && matches_rule(exception, request.as_ref(), &source_host, &request_host)
+                });
+            if excepted {
                 continue;
             }
             if let Some(skipped_url) = skip.apply(url) {
@@ -870,6 +1217,7 @@ impl Modifiers {
         let mut header_excepted = false;
         let mut ip_blocked = false;
         let mut ip_excepted = false;
+        let mut stand_in = None;
         for rule in &self.rules {
             if !rule.types.allows(kind) || !rule.prefilter.matches(&lower) {
                 continue;
@@ -894,6 +1242,9 @@ impl Modifiers {
             if !header_matched || !ip_matched {
                 continue;
             }
+            if !rule.exception && rule.stand_in.is_some() {
+                stand_in = rule.stand_in.clone();
+            }
             if rule.header.is_some() {
                 if rule.exception {
                     header_excepted = true;
@@ -916,6 +1267,7 @@ impl Modifiers {
         }
         if !excepted && ((header_blocked && !header_excepted) || (ip_blocked && !ip_excepted)) {
             matched.blocked = true;
+            matched.stand_in = stand_in;
         }
         if !permissions.is_empty() {
             matched
@@ -999,10 +1351,17 @@ fn parse_rule(spec: &RuleSpec) -> Option<Rule> {
     let mut urlskip = None;
     let mut transform = None;
     let mut removeparam = None;
-    let mut removeparam_key = String::new();
+    let mut value_key = String::new();
     let mut header = None;
     let mut ip = None;
     let mut permissions = None;
+    let mut replaces = false;
+    let mut replace = None;
+    let mut request_header = None;
+    let mut urlskip_exception = false;
+    let mut cname = false;
+    let mut important = false;
+    let mut stand_in = None;
     let mut modifiers = 0;
     let mut conditions = 0;
     let mut other_action = false;
@@ -1014,26 +1373,38 @@ fn parse_rule(spec: &RuleSpec) -> Option<Rule> {
         let name = name.trim();
         if let Some(action) = Action::of(name) {
             match action {
-                Action::Replace | Action::Cname | Action::RequestHeader => drop = true,
+                Action::Cname => {
+                    // uBO only gives `$cname` a meaning on an exception.
+                    cname = exception;
+                    drop |= !exception;
+                }
+                Action::RequestHeader => {
+                    conditions += 1;
+                    request_header = HeaderCheck::parse(value);
+                }
                 Action::UrlSkip => {
                     // uBO only lets trusted lists use $urlskip and $uritransform; elsewhere it rejects the rule.
                     if !spec.trusted {
                         return None;
                     }
                     modifiers += 1;
-                    urlskip = UrlSkip::parse(value);
+                    value_key = value.trim().to_owned();
+                    urlskip_exception = exception;
+                    if !exception {
+                        urlskip = UrlSkip::parse(value);
+                    }
                 }
                 Action::UriTransform => {
                     if !spec.trusted {
                         return None;
                     }
                     modifiers += 1;
-                    transform = Transform::parse(value);
+                    transform = Transform::parse(value, pattern);
                 }
                 Action::RemoveParam => {
                     modifiers += 1;
                     removeparam = Prune::parse(value);
-                    removeparam_key = value.trim().to_owned();
+                    value_key = value.trim().to_owned();
                 }
                 Action::Header => {
                     conditions += 1;
@@ -1047,12 +1418,22 @@ fn parse_rule(spec: &RuleSpec) -> Option<Rule> {
                     modifiers += 1;
                     permissions = Some(value.replace('|', ", "));
                 }
+                Action::Replace => {
+                    modifiers += 1;
+                    replaces = true;
+                    value_key = value.trim().to_owned();
+                    // An exception needs no directive of its own: it cancels by value, or all with none.
+                    if !exception {
+                        replace = Some(TextReplace::parse(value)?);
+                    }
+                }
                 Action::StrictParty => {
                     strict_party = Some(name == "strict1p" || name == "strict-first-party")
                 }
             }
             continue;
         }
+        important |= name == "important";
         if name == "all" {
             saw_type = true;
             types.0 = Types::ALL;
@@ -1073,15 +1454,28 @@ fn parse_rule(spec: &RuleSpec) -> Option<Rule> {
             kept.push(option);
             continue;
         }
-        if matches!(name, "redirect" | "redirect-rule" | "csp") {
+        if matches!(name, "redirect" | "redirect-rule") && !value.is_empty() {
+            // Only a response condition keeps it: the rule's own engine has no resources to redirect to.
+            stand_in = Some((option, value.split(':').next().unwrap_or(value).to_owned()));
+            continue;
+        }
+        if name == "csp" {
             other_action = true;
         }
         kept.push(option);
+    }
+    // uBO knows a request's address before it goes, so an address rule can redirect. A `$header` rule only cancels.
+    if ip.is_none() || header.is_some() {
+        if let Some((option, _)) = stand_in.take() {
+            kept.push(option);
+            other_action = true;
+        }
     }
     if drop
         || modifiers > 1
         || (modifiers > 0 && other_action)
         || (conditions > 0 && (modifiers > 0 || other_action))
+        || (request_header.is_some() && conditions > 1)
     {
         // uBO keeps one action per rule, and a response condition can't be evaluated at request
         // time, so a rule that combines them never applies. Drop it rather than give it a
@@ -1101,21 +1495,18 @@ fn parse_rule(spec: &RuleSpec) -> Option<Rule> {
     if !saw_type && permissions.is_some() && header.is_none() && ip.is_none() {
         types = Types(Types::DOCUMENT | Types::SUBDOCUMENT);
     }
-    let block = strict_party.is_some()
-        && transform.is_none()
-        && removeparam.is_none()
-        && header.is_none()
-        && ip.is_none()
-        && permissions.is_none()
-        && urlskip.is_none();
-    if !block
-        && urlskip.is_none()
-        && transform.is_none()
-        && removeparam.is_none()
-        && header.is_none()
-        && ip.is_none()
-        && permissions.is_none()
-    {
+    let has_action = urlskip.is_some()
+        || transform.is_some()
+        || removeparam.is_some()
+        || header.is_some()
+        || ip.is_some()
+        || permissions.is_some()
+        || replaces
+        || request_header.is_some()
+        || urlskip_exception
+        || cname;
+    let block = strict_party.is_some() && !has_action;
+    if !block && !has_action {
         return None;
     }
     let engine = build_engine(pattern, &kept, permissions.is_some())?;
@@ -1128,10 +1519,17 @@ fn parse_rule(spec: &RuleSpec) -> Option<Rule> {
         urlskip,
         transform,
         removeparam,
-        removeparam_key,
+        value_key,
         header,
         ip,
         permissions,
+        replaces,
+        replace,
+        request_header,
+        urlskip_exception,
+        cname,
+        important,
+        stand_in: stand_in.map(|(_, name)| name),
         block,
     })
 }
@@ -1213,35 +1611,60 @@ fn delimited(text: &str, delimiter: char) -> Option<(&str, &str)> {
 
 /// A regex as the lists write it. uBO's escaping of `/` and `,` is for its own parser, not the regex. Patterns with
 /// lookaround or backreferences, which Rust's `regex` rejects, fall back to `fancy-regex` (uBO lists use a few for
-/// `$removeparam`).
+/// `$removeparam`), and then to a JavaScript regex engine for the rest of JS's syntax.
 #[derive(Clone)]
-enum Pattern {
+pub(crate) enum Pattern {
     Fast(regex::Regex),
     Fancy(fancy_regex::Regex),
+    Regress(regress::Regex),
 }
 
 impl Pattern {
-    fn new(pattern: &str, flags: &str) -> Option<Self> {
+    pub(crate) fn new(pattern: &str, flags: &str) -> Option<Self> {
         let pattern = pattern.replace("\\/", "/").replace("\\,", ",");
-        let mut builder = regex::RegexBuilder::new(&pattern);
-        if flags.contains('i') {
-            builder.case_insensitive(true);
-        }
-        if let Ok(re) = builder.build() {
+        let (icase, multiline, dot_all) = (
+            flags.contains('i'),
+            flags.contains('m'),
+            flags.contains('s'),
+        );
+        if let Ok(re) = regex::RegexBuilder::new(&pattern)
+            .case_insensitive(icase)
+            .multi_line(multiline)
+            .dot_matches_new_line(dot_all)
+            .build()
+        {
             return Some(Self::Fast(re));
         }
-        let pattern = if flags.contains('i') {
-            format!("(?i){pattern}")
+        let inline: String = [(icase, 'i'), (multiline, 'm'), (dot_all, 's')]
+            .into_iter()
+            .filter_map(|(on, flag)| on.then_some(flag))
+            .collect();
+        let inline = if inline.is_empty() {
+            pattern.clone()
         } else {
-            pattern
+            format!("(?{inline}){pattern}")
         };
-        fancy_regex::Regex::new(&pattern).ok().map(Self::Fancy)
+        if let Ok(re) = fancy_regex::Regex::new(&inline) {
+            return Some(Self::Fancy(re));
+        }
+        let regress_flags = regress::Flags {
+            icase,
+            multiline,
+            dot_all,
+            unicode: flags.contains('u'),
+            unicode_sets: flags.contains('v'),
+            ..Default::default()
+        };
+        regress::Regex::with_flags(&pattern, regress_flags)
+            .ok()
+            .map(Self::Regress)
     }
 
-    fn is_match(&self, text: &str) -> bool {
+    pub(crate) fn is_match(&self, text: &str) -> bool {
         match self {
             Self::Fast(re) => re.is_match(text),
             Self::Fancy(re) => re.is_match(text).unwrap_or(false),
+            Self::Regress(re) => re.find(text).is_some(),
         }
     }
 
@@ -1258,16 +1681,173 @@ impl Pattern {
                 .flatten()?
                 .get(1)
                 .map(|capture| capture.as_str().to_owned()),
+            Self::Regress(re) => {
+                let found = re.find(text)?;
+                let range = found.group(1)?;
+                text.get(range).map(str::to_owned)
+            }
         }
     }
 
-    /// The text with every match replaced; none for an unchanged text.
-    fn replace(&self, text: &str, replacement: &str) -> Option<String> {
+    /// The text with the first (or every, with `all`) match replaced; none for an unchanged text, or one a pattern
+    /// gave up on (`fancy-regex` stops at its backtracking limit).
+    fn replace(&self, text: &str, template: &Template, all: bool) -> Option<String> {
+        let limit = usize::from(!all);
         let replaced = match self {
-            Self::Fast(re) => re.replace(text, replacement),
-            Self::Fancy(re) => re.replace(text, replacement),
+            Self::Fast(re) => re
+                .replacen(text, limit, |found: &regex::Captures<'_>| {
+                    let groups = found.len() - 1;
+                    let whole = found.get_match().range();
+                    template.expand(
+                        text,
+                        whole,
+                        groups,
+                        |at| Some(found.get(at)?.range()),
+                        |name| Some(found.name(name)?.range()),
+                    )
+                })
+                .into_owned(),
+            Self::Fancy(re) => re
+                .try_replacen(text, limit, |found: &fancy_regex::Captures<'_, str>| {
+                    let groups = found.len() - 1;
+                    let whole = found.get(0).map_or(0..0, |whole| whole.range());
+                    template.expand(
+                        text,
+                        whole,
+                        groups,
+                        |at| Some(found.get(at)?.range()),
+                        |name| Some(found.name(name)?.range()),
+                    )
+                })
+                .ok()?
+                .into_owned(),
+            Self::Regress(re) => {
+                let mut out = String::with_capacity(text.len());
+                let mut last = 0;
+                for found in re.find_iter(text).take(if all { usize::MAX } else { 1 }) {
+                    out.push_str(&text[last..found.start()]);
+                    out.push_str(&template.expand(
+                        text,
+                        found.range(),
+                        found.captures.len(),
+                        |at| found.group(at),
+                        |name| found.named_group(name),
+                    ));
+                    last = found.end();
+                }
+                out.push_str(&text[last..]);
+                out
+            }
         };
-        (replaced.as_ref() != text).then(|| replaced.into_owned())
+        (replaced != text).then_some(replaced)
+    }
+}
+
+/// A JavaScript replacement string, which every regex engine here expands the same way: uBO hands these to
+/// `String.replace`, and Rust's own syntax reads `$1abc` as a group called `1abc`.
+struct Template(Vec<Part>);
+
+enum Part {
+    Text(String),
+    /// `$1` to `$99`: the digits as written, as JS only reads a second digit that names a group.
+    Group(usize, Option<usize>),
+    Named(String),
+    Whole,
+    Before,
+    After,
+}
+
+impl Template {
+    fn parse(replacement: &str) -> Self {
+        let mut parts = Vec::new();
+        let mut text = String::new();
+        let mut rest = replacement;
+        while let Some(at) = rest.find('$') {
+            text.push_str(&rest[..at]);
+            let after = &rest[at + 1..];
+            let mut chars = after.chars();
+            let first = chars.next();
+            let second = chars.next();
+            let (part, used) = match (first, second) {
+                (Some('$'), _) => {
+                    text.push('$');
+                    (None, 1)
+                }
+                (Some('&'), _) => (Some(Part::Whole), 1),
+                (Some('`'), _) => (Some(Part::Before), 1),
+                (Some('\''), _) => (Some(Part::After), 1),
+                (Some('<'), _) if after.contains('>') => {
+                    let end = after.find('>').unwrap_or(0);
+                    (Some(Part::Named(after[1..end].to_owned())), end + 1)
+                }
+                (Some(digit), next) if digit.is_ascii_digit() => {
+                    let tens = digit as usize - '0' as usize;
+                    let ones = next.and_then(|c| c.to_digit(10)).map(|one| one as usize);
+                    (
+                        Some(Part::Group(tens, ones)),
+                        1 + usize::from(ones.is_some()),
+                    )
+                }
+                _ => {
+                    text.push('$');
+                    (None, 0)
+                }
+            };
+            if let Some(part) = part {
+                if !text.is_empty() {
+                    parts.push(Part::Text(std::mem::take(&mut text)));
+                }
+                parts.push(part);
+            }
+            rest = &after[used..];
+        }
+        text.push_str(rest);
+        if !text.is_empty() {
+            parts.push(Part::Text(text));
+        }
+        Self(parts)
+    }
+
+    fn expand(
+        &self,
+        text: &str,
+        whole: std::ops::Range<usize>,
+        groups: usize,
+        group: impl Fn(usize) -> Option<std::ops::Range<usize>>,
+        named: impl Fn(&str) -> Option<std::ops::Range<usize>>,
+    ) -> String {
+        let slice = |range: Option<std::ops::Range<usize>>| {
+            range.and_then(|range| text.get(range)).unwrap_or("")
+        };
+        let mut out = String::new();
+        for part in &self.0 {
+            match part {
+                Part::Text(literal) => out.push_str(literal),
+                Part::Whole => out.push_str(slice(Some(whole.clone()))),
+                Part::Before => out.push_str(&text[..whole.start]),
+                Part::After => out.push_str(&text[whole.end..]),
+                Part::Named(name) => out.push_str(slice(named(name))),
+                Part::Group(first, second) => {
+                    let names_group = |at: &usize| (1..=groups).contains(at);
+                    let two_digits = second.map(|second| first * 10 + second).filter(names_group);
+                    if let Some(at) = two_digits {
+                        out.push_str(slice(group(at)));
+                        continue;
+                    }
+                    if names_group(first) {
+                        out.push_str(slice(group(*first)));
+                    } else {
+                        // No such group: JS leaves the text as it was written.
+                        out.push('$');
+                        out.push_str(&first.to_string());
+                    }
+                    if let Some(second) = second {
+                        out.push_str(&second.to_string());
+                    }
+                }
+            }
+        }
+        out
     }
 }
 
@@ -1448,7 +2028,7 @@ fn response_header_rule(line: &str) -> Option<ResponseHeaderSpec> {
     })
 }
 
-fn domain_list_matches(domains: &[String], host: &str) -> bool {
+pub(crate) fn domain_list_matches(domains: &[String], host: &str) -> bool {
     let mut positive = false;
     let mut matched = false;
     for domain in domains {
@@ -1471,6 +2051,12 @@ fn domain_matches(domain: &str, host: &str) -> bool {
     if domain.is_empty() {
         return true;
     }
+    if let Some(entity) = domain.strip_suffix(".*") {
+        if !entity.contains(['*', '?']) {
+            return entity_stem(host)
+                .is_some_and(|stem| stem == entity || stem.ends_with(&format!(".{entity}")));
+        }
+    }
     if domain.contains(['*', '?']) {
         let mut pattern = String::from("^");
         for c in domain.chars() {
@@ -1487,6 +2073,12 @@ fn domain_matches(domain: &str, host: &str) -> bool {
             .is_ok_and(|re| re.is_match(host));
     }
     host == domain || host.ends_with(&format!(".{domain}"))
+}
+
+/// A hostname less its public suffix, which `example.*` in a list names: `www.example` for `www.example.co.uk`.
+pub(crate) fn entity_stem(host: &str) -> Option<&str> {
+    let suffix = psl::suffix_str(host)?;
+    host.strip_suffix(suffix)?.strip_suffix('.')
 }
 
 #[cfg(test)]
@@ -1951,7 +2543,7 @@ mod tests {
         // A response condition and a request-time modifier never meet in uBO, so it keeps neither.
         let spec = extract(
             "||mix.example^$doc,removeparam=x,header=server:nginx\n\
-             ||redir.example^$script,redirect=noopjs,ipaddress=1.2.3.4\n",
+             ||redir.example^$script,redirect=noopjs,header=server:nginx\n",
             true,
         )
         .spec;
@@ -2003,5 +2595,271 @@ mod tests {
             "a.example.com"
         ));
         assert!(domain_list_matches(&[], "anything.example"));
+    }
+
+    #[test]
+    fn replaces_text_in_a_response_body() {
+        let rules = modifiers("||site.example^$replace=/openNewTab\\(\".*?\"\\)/null/g\n");
+        assert!(rules.has_body_rules());
+        assert!(rules.body_filter_applies(
+            "https://site.example/app.js",
+            "https://site.example/",
+            "script",
+            "GET",
+            200,
+            "application/javascript",
+            "",
+        ));
+        assert!(!rules.body_filter_applies(
+            "https://other.example/app.js",
+            "https://other.example/",
+            "script",
+            "GET",
+            200,
+            "application/javascript",
+            "",
+        ));
+        let body = b"openNewTab(\"a\");openNewTab(\"b\");";
+        assert_eq!(
+            rules
+                .filter_body(
+                    "https://site.example/app.js",
+                    "https://site.example/",
+                    "script",
+                    "GET",
+                    "application/javascript",
+                    body,
+                )
+                .unwrap(),
+            b"null;null;"
+        );
+    }
+
+    #[test]
+    fn html_filters_remove_elements_from_a_document() {
+        let rules = modifiers(
+            "site.example##^script:has-text(adserverDomain)\n\
+             site.example##^script[data-cfasync]\n",
+        );
+        assert!(rules.has_body_rules());
+        assert!(rules.body_filter_applies(
+            "https://site.example/",
+            "https://site.example/",
+            "document",
+            "GET",
+            200,
+            "text/html; charset=utf-8",
+            "",
+        ));
+        assert!(!rules.body_filter_applies(
+            "https://site.example/",
+            "https://site.example/",
+            "image",
+            "GET",
+            200,
+            "text/html",
+            "",
+        ));
+        let body = b"<html><head><script>var adserverDomain = 1;</script>\
+                     <script data-cfasync>x()</script><script>keep()</script></head></html>";
+        let filtered = rules
+            .filter_body(
+                "https://site.example/",
+                "https://site.example/",
+                "document",
+                "GET",
+                "text/html; charset=utf-8",
+                body,
+            )
+            .unwrap();
+        let text = String::from_utf8(filtered).unwrap();
+        assert!(!text.contains("adserverDomain"));
+        assert!(!text.contains("data-cfasync"));
+        assert!(text.contains("keep()"));
+    }
+
+    #[test]
+    fn body_filters_honour_methods_attachments_and_encodings() {
+        let rules = modifiers("site.example##^script:has-text(ad)\n");
+        let applies = |method: &str, status: i32, content_type: &str, disposition: &str| {
+            rules.body_filter_applies(
+                "https://site.example/",
+                "https://site.example/",
+                "document",
+                method,
+                status,
+                content_type,
+                disposition,
+            )
+        };
+        assert!(applies("GET", 200, "text/html", ""));
+        assert!(applies("POST", 200, "text/html; charset=utf-8", "inline"));
+        assert!(!applies("PUT", 200, "text/html", ""));
+        assert!(!applies("GET", 0, "text/html", ""));
+        assert!(!applies("GET", 206, "text/html", ""));
+        assert!(!applies("GET", 200, "text/html", "attachment; filename=x"));
+        assert!(!applies("GET", 200, "image/png", ""));
+        assert!(!applies("GET", 200, "text/event-stream", ""));
+        assert!(rules
+            .filter_body(
+                "https://site.example/",
+                "https://site.example/",
+                "document",
+                "GET",
+                "text/html; charset=made-up",
+                b"<script>ad</script>",
+            )
+            .is_none());
+    }
+
+    #[test]
+    fn expands_replacements_as_javascript_does() {
+        let rules = modifiers(concat!(
+            "||one.example^$replace=/(a)(b)/$2$1x$$$&/\n",
+            "||two.example^$replace=/(?<=a)b/[$&]/g\n",
+            "||three.example^$replace=/a.b/z/s\n",
+            "||four.example^$replace=/(?<n>a)/$<n>$9$/\n",
+        ));
+        let filter = |host: &str, body: &str| {
+            let url = format!("https://{host}/");
+            rules
+                .filter_body(
+                    &url,
+                    &url,
+                    "xmlhttprequest",
+                    "GET",
+                    "text/plain",
+                    body.as_bytes(),
+                )
+                .map(|out| String::from_utf8(out).unwrap())
+        };
+        assert_eq!(filter("one.example", "ab").as_deref(), Some("bax$ab"));
+        assert_eq!(filter("two.example", "ab ab").as_deref(), Some("a[b] a[b]"));
+        assert_eq!(filter("three.example", "a\nb").as_deref(), Some("z"));
+        assert_eq!(filter("four.example", "a").as_deref(), Some("a$9$"));
+        assert_eq!(filter("one.example", "nothing"), None);
+    }
+
+    #[test]
+    fn exceptions_cancel_replace_directives() {
+        let rules = modifiers(concat!(
+            "||a.example^$replace=/x/y/\n",
+            "||a.example^$important,replace=/k/l/\n",
+            "@@||a.example^$replace\n",
+            "||b.example^$replace=/x/y/\n",
+            "||b.example^$replace=/p/q/\n",
+            "@@||b.example^$replace=/x/y/\n",
+        ));
+        let filter = |url: &str, body: &[u8]| {
+            rules
+                .filter_body(url, url, "xmlhttprequest", "GET", "text/plain", body)
+                .map(|out| String::from_utf8(out).unwrap())
+        };
+        assert_eq!(filter("https://a.example/", b"xk").as_deref(), Some("xl"));
+        assert_eq!(filter("https://b.example/", b"xp").as_deref(), Some("xq"));
+    }
+
+    #[test]
+    fn request_header_rules_read_the_request() {
+        let rules = modifiers(concat!(
+            "||workers.dev/index.js$script,3p,requestheader=Cookie:*doubleclick.net*\n",
+            "@@||allowed.workers.dev/index.js$script\n",
+        ));
+        let check = |url: &str, cookie: &str| {
+            rules.request_headers_blocked(
+                url,
+                "https://site.example/",
+                "script",
+                "GET",
+                &[("Cookie".to_owned(), cookie.to_owned())],
+            )
+        };
+        assert_eq!(
+            rules.request_header_names(
+                "https://a.workers.dev/index.js",
+                "https://site.example/",
+                "script",
+                "GET"
+            ),
+            ["cookie"]
+        );
+        assert!(rules
+            .request_header_names(
+                "https://a.workers.dev/other.js",
+                "https://site.example/",
+                "script",
+                "GET"
+            )
+            .is_empty());
+        assert!(check("https://a.workers.dev/index.js", "x=doubleclick.net"));
+        assert!(!check("https://a.workers.dev/index.js", "x=fine"));
+        assert!(!check(
+            "https://allowed.workers.dev/index.js",
+            "x=doubleclick.net"
+        ));
+    }
+
+    #[test]
+    fn cname_exceptions_name_documents() {
+        let rules = modifiers("@@||site.example^$cname\n||blocked.example^$cname\n");
+        assert!(rules.cname_excepted("https://www.site.example/page"));
+        assert!(!rules.cname_excepted("https://blocked.example/"));
+        assert!(!rules.cname_excepted("https://other.example/"));
+    }
+
+    #[test]
+    fn uritransform_with_no_pattern_uses_the_rule_regex() {
+        let rules = modifiers(r"/(.*\/play\?.*)%2Cad(.*)/$uritransform=//$1$2/");
+        assert_eq!(
+            request(&rules, "https://site.example/play?a=1%2Cad&b=2", "script")
+                .1
+                .as_deref(),
+            Some("https://site.example/play?a=1&b=2")
+        );
+    }
+
+    #[test]
+    fn a_urlskip_exception_cancels_the_skip() {
+        let rules = modifiers(concat!(
+            "||skip.example/out$doc,urlskip=?url\n",
+            "@@||skip.example/out?keep$doc,urlskip\n",
+        ));
+        let skip = |url: &str| request(&rules, url, "document").1;
+        assert_eq!(
+            skip("https://skip.example/out?url=https%3A%2F%2Fgo.example%2F").as_deref(),
+            Some("https://go.example/")
+        );
+        assert_eq!(
+            skip("https://skip.example/out?keep&url=https%3A%2F%2Fgo.example%2F"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_response_condition_keeps_its_stand_in() {
+        let rules = modifiers("||site.example/a.js$script,redirect=noopjs:5,ipaddress=10.0.0.1\n");
+        assert_eq!(rules.stand_ins().collect::<Vec<_>>(), ["noopjs"]);
+        let answer = |ip: &str| {
+            rules.response(
+                "https://site.example/a.js",
+                "https://site.example/",
+                "script",
+                "GET",
+                Some(ip),
+                &[],
+            )
+        };
+        assert!(answer("10.0.0.1").blocked);
+        assert_eq!(answer("10.0.0.1").stand_in.as_deref(), Some("noopjs"));
+        assert!(!answer("10.0.0.2").blocked);
+        assert_eq!(answer("10.0.0.2").stand_in, None);
+    }
+
+    #[test]
+    fn entity_domains_ignore_the_public_suffix_and_subdomains() {
+        assert!(domain_matches("example.*", "example.co.uk"));
+        assert!(domain_matches("example.*", "www.example.com"));
+        assert!(!domain_matches("example.*", "example.foo.com"));
+        assert!(!domain_matches("example.*", "myexample.com"));
     }
 }

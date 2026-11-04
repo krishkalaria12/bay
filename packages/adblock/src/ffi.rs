@@ -3,6 +3,7 @@
 //! `bay_string_free`, and bytes with `bay_bytes_free`.
 
 use std::ffi::{c_char, CStr, CString};
+use std::panic::AssertUnwindSafe;
 use std::sync::RwLock;
 
 use serde::Deserialize;
@@ -221,6 +222,8 @@ pub struct BayBlockerMatch {
 #[derive(serde::Serialize)]
 struct ResponseAnswer<'a> {
     blocked: bool,
+    /// For a blocked response, the data URL answered in its place.
+    redirect: Option<&'a str>,
     add: &'a [(String, String)],
     remove: &'a [String],
 }
@@ -290,6 +293,7 @@ pub unsafe extern "C" fn bay_blocker_response(
     }
     give_json(&ResponseAnswer {
         blocked: result.blocked,
+        redirect: result.stand_in.as_deref(),
         add: &result.headers,
         remove: &result.removed_headers,
     })
@@ -383,6 +387,170 @@ pub unsafe extern "C" fn bay_blocker_use_resources(
     json: *const c_char,
 ) -> bool {
     (*blocker).use_resources(borrow(json))
+}
+
+/// Whether a response body can be rewritten at all (`$replace`, HTML `##^` filtering). A host wires
+/// `bay_blocker_body_filter_applies`/`bay_blocker_body_filter` only when this is true.
+///
+/// # Safety
+/// `blocker` must be live.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_has_body_modifiers(blocker: *const Blocker) -> bool {
+    !blocker.is_null() && (*blocker).has_body_modifiers()
+}
+
+/// Whether the host should buffer this response body for `bay_blocker_body_filter`: uBO's MIME, method and
+/// disposition gates, plus a `$replace` or HTML rule matching the request. `status` is 0 when there is no response.
+///
+/// # Safety
+/// `blocker` must be live; every string must be null or NUL-terminated.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_body_filter_applies(
+    blocker: *const Blocker,
+    url: *const c_char,
+    source_url: *const c_char,
+    kind: *const c_char,
+    method: *const c_char,
+    status: i32,
+    content_type: *const c_char,
+    content_disposition: *const c_char,
+) -> bool {
+    !blocker.is_null()
+        && (*blocker).body_filter_applies(
+            borrow(url),
+            borrow(source_url),
+            borrow(kind),
+            borrow(method),
+            status,
+            borrow(content_type),
+            borrow(content_disposition),
+        )
+}
+
+/// The response body after `$replace` and HTML filtering, or null when it is unchanged. On a change, `out_length` is
+/// set to the returned bytes' count; free them with `bay_bytes_free(body, out_length)`. The body is whatever a page
+/// sent, so a panic in the parsers behind this leaves it unfiltered: unwinding out of `extern "C"` would abort the
+/// browser.
+///
+/// # Safety
+/// `blocker` must be live; every string must be null or NUL-terminated; `body` must point to `length` readable bytes
+/// (or be null when `length` is 0); `out_length` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_body_filter(
+    blocker: *const Blocker,
+    url: *const c_char,
+    source_url: *const c_char,
+    kind: *const c_char,
+    method: *const c_char,
+    content_type: *const c_char,
+    body: *const u8,
+    length: usize,
+    out_length: *mut usize,
+) -> *mut u8 {
+    *out_length = 0;
+    if blocker.is_null() {
+        return std::ptr::null_mut();
+    }
+    let body = if body.is_null() || length == 0 {
+        &[][..]
+    } else {
+        std::slice::from_raw_parts(body, length)
+    };
+    let filtered = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        (*blocker).filter_body(
+            borrow(url),
+            borrow(source_url),
+            borrow(kind),
+            borrow(method),
+            borrow(content_type),
+            body,
+        )
+    }));
+    let Ok(Some(filtered)) = filtered else {
+        return std::ptr::null_mut();
+    };
+    *out_length = filtered.len();
+    Box::into_raw(filtered.into_boxed_slice()).cast()
+}
+
+/// Whether any `$requestheader` rule exists: a host only asks about each request's headers when one does.
+///
+/// # Safety
+/// `blocker` must be live.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_has_request_header_modifiers(blocker: *const Blocker) -> bool {
+    !blocker.is_null() && (*blocker).has_request_header_modifiers()
+}
+
+/// The request headers `$requestheader` rules would look at for this request, as a JSON array of lowercase names, or
+/// null for none (most requests). Free with `bay_string_free`.
+///
+/// # Safety
+/// `blocker` must be live; every string must be null or NUL-terminated.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_request_header_names(
+    blocker: *const Blocker,
+    url: *const c_char,
+    source_url: *const c_char,
+    kind: *const c_char,
+    method: *const c_char,
+) -> *mut c_char {
+    let names = (*blocker).request_header_names(
+        borrow(url),
+        borrow(source_url),
+        borrow(kind),
+        borrow(method),
+    );
+    if names.is_empty() {
+        return std::ptr::null_mut();
+    }
+    give_json(&names)
+}
+
+/// Whether `$requestheader` blocks a request with these headers (`[["Name","value"], ...]`).
+///
+/// # Safety
+/// `blocker` must be live; every string must be null or NUL-terminated.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_request_headers_blocked(
+    blocker: *const Blocker,
+    url: *const c_char,
+    source_url: *const c_char,
+    kind: *const c_char,
+    method: *const c_char,
+    headers_json: *const c_char,
+) -> bool {
+    let headers: Vec<(String, String)> =
+        serde_json::from_str(borrow(headers_json)).unwrap_or_default();
+    (*blocker).request_headers_blocked(
+        borrow(url),
+        borrow(source_url),
+        borrow(kind),
+        borrow(method),
+        &headers,
+    )
+}
+
+/// Whether a response is blocked by a hostname its URL's host is a CNAME of (`alias`).
+///
+/// # Safety
+/// `blocker` must be live; every string must be null or NUL-terminated.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_cname_blocked(
+    blocker: *const Blocker,
+    url: *const c_char,
+    alias: *const c_char,
+    source_url: *const c_char,
+    kind: *const c_char,
+    method: *const c_char,
+) -> bool {
+    (*blocker).cname_blocked(
+        borrow(url),
+        borrow(alias),
+        borrow(source_url),
+        borrow(kind),
+        borrow(method),
+    )
 }
 
 #[cfg(test)]

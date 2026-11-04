@@ -1,13 +1,13 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use adblock::lists::{FilterFormat, FilterSet, ParseOptions};
 use adblock::request::Request;
-use adblock::resources::{InMemoryResourceStorage, PermissionMask};
+use adblock::resources::{InMemoryResourceStorage, PermissionMask, ResourceType};
 use adblock::Engine;
 use serde::Serialize;
 
-use crate::modifiers::{Modifiers, ResponseMatch, Spec};
+use crate::modifiers::{self, Modifiers, ResponseMatch, Spec};
 
 /// A network and cosmetic filter engine built from filter list text. Safe to share between threads.
 pub struct Blocker {
@@ -17,11 +17,13 @@ pub struct Blocker {
     popups: Mutex<Engine>,
     /// The rules adblock-rust can't represent (crate::modifiers): URL skips, response headers, addresses, permissions.
     modifiers: Modifiers,
+    /// Data URLs of the resources response rules answer with, which the engine's storage doesn't hand out.
+    stand_ins: Mutex<HashMap<String, String>>,
 }
 
 /// [`Blocker::serialize`]'s format: this tag, three lengths (u64, little-endian: main engine, popup engine, modifier
-/// spec JSON), then those pieces. `BAY3` engines have no modifier spec and are rebuilt.
-const SERIALIZED_TAG: &[u8; 4] = b"BAY4";
+/// spec JSON), then those pieces. `BAY4` engines have no HTML filter rules and are rebuilt.
+const SERIALIZED_TAG: &[u8; 4] = b"BAY5";
 
 #[derive(Serialize)]
 pub struct CosmeticResources {
@@ -137,6 +139,7 @@ impl Blocker {
             engine: Mutex::new(engine),
             popups: Mutex::new(popups),
             modifiers,
+            stand_ins: Mutex::new(HashMap::new()),
         }
     }
 
@@ -203,12 +206,24 @@ impl Blocker {
         };
         // Engine::use_resources silently ignores bad entries; reject the bundle whole instead.
         let mut storage = InMemoryResourceStorage::default();
+        let wanted: HashSet<&str> = self.modifiers.stand_ins().collect();
+        let mut stand_ins = HashMap::new();
         for resource in resources {
+            for name in std::iter::once(&resource.name).chain(&resource.aliases) {
+                if let (true, ResourceType::Mime(mime)) =
+                    (wanted.contains(name.as_str()), &resource.kind)
+                {
+                    let mime: &str = mime.into();
+                    let url = format!("data:{mime};base64,{}", resource.content);
+                    stand_ins.insert(name.clone(), url);
+                }
+            }
             if storage.add_resource(resource).is_err() {
                 return false;
             }
         }
         self.engine().use_resource_storage(storage);
+        *lock(&self.stand_ins) = stand_ins;
         true
     }
 
@@ -325,6 +340,121 @@ impl Blocker {
         self.modifiers.has_response_rules()
     }
 
+    /// Whether a response body can be rewritten: `$replace` or HTML `##^` filtering.
+    pub fn has_body_modifiers(&self) -> bool {
+        self.modifiers.has_body_rules()
+    }
+
+    /// Whether [`Blocker::filter_body`] should see this response (uBO's MIME, method and disposition gates, and a
+    /// matching body rule). `status` is 0 when there is no response.
+    #[allow(clippy::too_many_arguments)]
+    pub fn body_filter_applies(
+        &self,
+        url: &str,
+        source_url: &str,
+        kind: &str,
+        method: &str,
+        status: i32,
+        content_type: &str,
+        content_disposition: &str,
+    ) -> bool {
+        self.modifiers.body_filter_applies(
+            url,
+            source_url,
+            kind,
+            method,
+            status,
+            content_type,
+            content_disposition,
+        )
+    }
+
+    /// The response body after `$replace` and HTML filtering, or `None` when it is unchanged.
+    pub fn filter_body(
+        &self,
+        url: &str,
+        source_url: &str,
+        kind: &str,
+        method: &str,
+        content_type: &str,
+        body: &[u8],
+    ) -> Option<Vec<u8>> {
+        self.modifiers
+            .filter_body(url, source_url, kind, method, content_type, body)
+    }
+
+    /// Whether any `$requestheader` rule exists: every request would otherwise ask.
+    pub fn has_request_header_modifiers(&self) -> bool {
+        self.modifiers.has_request_header_rules()
+    }
+
+    /// The request headers `$requestheader` rules would look at for this request; none for most requests.
+    pub fn request_header_names(
+        &self,
+        url: &str,
+        source_url: &str,
+        kind: &str,
+        method: &str,
+    ) -> Vec<String> {
+        self.modifiers
+            .request_header_names(url, source_url, kind, method)
+    }
+
+    /// Whether `$requestheader` blocks a request with these headers.
+    pub fn request_headers_blocked(
+        &self,
+        url: &str,
+        source_url: &str,
+        kind: &str,
+        method: &str,
+        headers: &[(String, String)],
+    ) -> bool {
+        self.modifiers
+            .request_headers_blocked(url, source_url, kind, method, headers)
+    }
+
+    /// Whether a response is blocked by what its hostname's CNAME `alias` points to, as uBO uncloaks one with its
+    /// default settings: the replay is `scheme://alias/` (`cnameReplayFullURL` off), and a main frame
+    /// (`cnameIgnoreRootDocument`), an alias of the same site (`cnameIgnore1stParty`) and a request an exception let
+    /// through (`cnameIgnoreExceptions`) aren't uncloaked. A `$cname` exception lifts all but `$important` blocks.
+    pub fn cname_blocked(
+        &self,
+        url: &str,
+        alias: &str,
+        source_url: &str,
+        kind: &str,
+        method: &str,
+    ) -> bool {
+        let host = modifiers::host_of(url);
+        let alias = alias.trim_end_matches('.').to_ascii_lowercase();
+        if kind == "document"
+            || alias.is_empty()
+            || alias == host
+            || psl::domain_str(&alias).is_none()
+            || psl::domain_str(&alias) == psl::domain_str(&host)
+        {
+            return false;
+        }
+        let Some(at) = url.find(host.as_str()) else {
+            return false;
+        };
+        let rest = &url[at + host.len()..];
+        let port = rest.find(['/', '?', '#']).map_or(rest, |end| &rest[..end]);
+        let replay = format!("{}{alias}{port}/", &url[..at]);
+        let (Ok(original), Ok(request)) = (
+            Request::new(url, source_url, kind, method),
+            Request::new(&replay, source_url, kind, method),
+        ) else {
+            return false;
+        };
+        let engine = self.engine();
+        if engine.check_network_request(&original).exception.is_some() {
+            return false;
+        }
+        let result = engine.check_network_request(&request);
+        result.should_block() && (result.important || !self.modifiers.cname_excepted(source_url))
+    }
+
     /// The response rules for a request: whether the response is blocked, headers to add, and headers to remove.
     /// `ip` is the response's remote address when the engine has one.
     pub fn response(
@@ -336,8 +466,15 @@ impl Blocker {
         ip: Option<&str>,
         headers: &[(String, String)],
     ) -> ResponseMatch {
-        self.modifiers
-            .response(url, source_url, kind, method, ip, headers)
+        let mut matched = self
+            .modifiers
+            .response(url, source_url, kind, method, ip, headers);
+        // A resource by name, as a data URL the engine can answer with.
+        matched.stand_in = matched
+            .stand_in
+            .take()
+            .and_then(|name| lock(&self.stand_ins).get(&name).cloned());
+        matched
     }
 
     pub fn cosmetic_resources(&self, url: &str) -> CosmeticResources {
@@ -366,8 +503,8 @@ impl Blocker {
     }
 }
 
-fn lock(engine: &Mutex<Engine>) -> std::sync::MutexGuard<'_, Engine> {
-    engine
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }

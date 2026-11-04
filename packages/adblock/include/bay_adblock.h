@@ -56,6 +56,31 @@ bool bay_blocker_has_response_modifiers(const BayBlocker *blocker);
 // Free with bay_string_free.
 char *bay_blocker_response(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
                            const char *method, const char *ip, const char *headers_json);
+// Whether a response body can be rewritten ($replace, HTML ##^ filtering).
+bool bay_blocker_has_body_modifiers(const BayBlocker *blocker);
+// Whether the host should buffer a response for bay_blocker_body_filter: uBO's MIME/method/disposition gates plus a
+// body rule matching the request. status is 0 when there is no response.
+bool bay_blocker_body_filter_applies(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
+                                     const char *method, int32_t status, const char *content_type,
+                                     const char *content_disposition);
+// The response body after $replace and HTML filtering, or NULL when it is unchanged (then *out_length is 0). The body
+// has no Content-Encoding left: the network service removes it. Free the returned bytes with
+// bay_bytes_free(body, *out_length).
+uint8_t *bay_blocker_body_filter(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
+                                 const char *method, const char *content_type, const uint8_t *body, size_t length,
+                                 size_t *out_length);
+// Whether any $requestheader rule exists; only then need a host ask about each request.
+bool bay_blocker_has_request_header_modifiers(const BayBlocker *blocker);
+// The request headers $requestheader rules would look at, as a JSON array of lowercase names, or NULL for none (most
+// requests). Free with bay_string_free.
+char *bay_blocker_request_header_names(const BayBlocker *blocker, const char *url, const char *source_url,
+                                       const char *type, const char *method);
+// Whether $requestheader blocks a request with these headers ([["Name","value"], ...]).
+bool bay_blocker_request_headers_blocked(const BayBlocker *blocker, const char *url, const char *source_url,
+                                         const char *type, const char *method, const char *headers_json);
+// Whether a response is blocked by alias, a CNAME of its URL's hostname (uBO's uncloaking).
+bool bay_blocker_cname_blocked(const BayBlocker *blocker, const char *url, const char *alias, const char *source_url,
+                               const char *type, const char *method);
 // The page's scriptlet code for its main world, or NULL for none. Free with bay_string_free.
 char *bay_blocker_scriptlets(const BayBlocker *blocker, const char *url);
 // {"hide": [selector], "exceptions": [selector], "generichide": bool, "script": scriptlet code,
