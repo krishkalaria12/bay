@@ -118,6 +118,9 @@ public class CefModule: Module {
     AsyncFunction("isContentBlockerAllowed") { (host: String, promise: Promise) in
       NNCoreContentBlocker.isAllowed(host: host) { promise.resolve($0) }
     }.runOnQueue(.main)
+    AsyncFunction("setBlockedPageAllowed") { (host: String, allowed: Bool, remember: Bool, promise: Promise) in
+      NNCoreContentBlocker.setPageAllowed(allowed, host: host, remember: remember) { CefModule.settle(promise, $0) }
+    }.runOnQueue(.main)
     AsyncFunction("setContentBlockerAllowed") { (host: String, allowed: Bool, promise: Promise) in
       NNCoreContentBlocker.setAllowed(allowed, host: host) { CefModule.settle(promise, $0) }
     }.runOnQueue(.main)

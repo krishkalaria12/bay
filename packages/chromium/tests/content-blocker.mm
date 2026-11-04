@@ -188,5 +188,23 @@ int main(int argc, char **argv) {
     [NNCoreContentBlocker setAllowed:YES onHost:@"policy.example" completion:^(NSString *error) { Require(!error, "pause succeeds"); }];
     Require(!ContentSecurityPolicy(page, page, page, "document"), "a paused site gets no policy");
     puts("PASS: popup rules refuse pages a page opens and documents get $csp, except where paused");
+
+    // Visits to pages the lists block.
+    const char *pages = "||visit.example^$doc\n||hostonly.example^$all\n";
+    gEngine = std::make_shared<Engine>(bay_blocker_new(&pages, nullptr, 1));
+    PublishLive();
+    Require(nncore_host::ContentBlockerBlocksPage(@"https://visit.example/"), "a $doc rule stops a visit");
+    Require(Filter("https://www.hostonly.example/", "https://www.hostonly.example/", "https://www.hostonly.example/", "document", "GET", nullptr),
+            "and a subdomain of a hostname's rule");
+    [NNCoreContentBlocker setPageAllowed:YES onHost:@"visit.example" remember:NO completion:^(NSString *error) { Require(!error, "visit anyway succeeds"); }];
+    Require(!nncore_host::ContentBlockerBlocksPage(@"https://www.visit.example/"), "Visit Anyway covers the site");
+    Require(![ReadJSON(SettingsPath())[@"allowedPages"] containsObject:@"visit.example"], "Visit Anyway isn't saved");
+    [NNCoreContentBlocker setPageAllowed:NO onHost:@"www.visit.example" remember:NO completion:^(NSString *error) { Require(!error, "ending it succeeds"); }];
+    Require(nncore_host::ContentBlockerBlocksPage(@"https://visit.example/"), "blocking again ends what covers the host");
+    [NNCoreContentBlocker setPageAllowed:YES onHost:@"visit.example" remember:YES completion:^(NSString *error) { Require(!error, "always allow succeeds"); }];
+    Require([ReadJSON(SettingsPath())[@"allowedPages"] containsObject:@"visit.example"], "Always Allow is saved");
+    Require(!nncore_host::ContentBlockerBlocksPage(@"https://visit.example/"), "and lifts the block");
+    Require(!Filter("https://visit.example/a.js", "https://visit.example/", "https://visit.example/", "document", "GET", nullptr), "for documents");
+    puts("PASS: visits to blocked pages stop, and Visit Anyway and Always Allow lift only that");
   }
 }

@@ -16,7 +16,7 @@ Every request a web page makes is put to the blocker before it starts, in the en
   request with a redirect resource receives the bundled stand-in through a data pipe without contacting the ad host.
   It goes in before Chrome's own interceptors, so extensions never see what was blocked.
 - **Subframe navigations** (iframes, frames, fenced frames) go through a `NavigationThrottle` on start and on each
-  redirect, which blocks and collapses the frame. Main-frame navigations are never blocked.
+  redirect, which blocks and collapses the frame.
 - **Tracking parameters** (`$removeparam`): navigations, main frames included, pass through the same interceptor, which
   only rewrites. A request the lists rewrite gets a redirect to the cleaned URL (an internal 307, or the server's own
   redirect pointed there) and starts again there, as Chrome's webRequest answers an extension's redirect. Subresources
@@ -25,6 +25,13 @@ Every request a web page makes is put to the blocker before it starts, in the en
   does each of its redirects. If the blocker refuses it, the navigation stops before reaching the network and the new
   tab closes. A rule that blocks the page as a document (`$doc`, `$all`) refuses it too, and a `$popup` exception decides
   first. The opener is the context, so a paused opener's popups open.
+- **Page visits** (`$doc`, `$all`, a rule that's only a hostname, a hosts-file entry): a main-frame navigation and each of
+  its redirects go through the same `NavigationThrottle`. A blocked one stops at Chromium's error page, so the entry
+  stays for Back and Reload, and the app covers it with its own page (`BlockedPage`): Go Back, Visit Anyway (until the app
+  quits) and Always Allow (saved, listed in Privacy, and never offered in a private window). Those lift only the visit:
+  the site's requests are still filtered. A paused site isn't blocked at all. adblock-rust doesn't apply `||host^` to the
+  page itself, so `from_lists` marks those rules `$all` (`adapt.rs`), as uBO's strict blocking treats them. As in uBO, a
+  link through a listed ad or tracking host stops here too.
 - **Document policies** (`$csp`): a navigation's response gets the rules' `Content-Security-Policy` as one more header,
   in the same interceptor, and its parsed headers are cleared so Chrome parses them again and enforces it.
 - **WebSockets** go through the browser client's handshake hook before the network connection starts. A paused site
@@ -108,9 +115,6 @@ adblock-rust's parser drops a whole rule for one option it doesn't know, silentl
 
 Counts are for the 11 bundled default lists, about 314,000 rules.
 
-- **Main-frame navigations aren't blocked.** uBO strict-blocks them with a warning page and a way to proceed. Here,
-  about 87,000 hostname-only rules, 3,900 `$doc` rules and 114,000 `$all` rules stop a page's requests to those hosts
-  but not a visit to them, malware lists included. This needs a block page, so it's a product decision.
 - `$urlskip` (239 rules, skipping redirect trackers) isn't applied.
 - `$ipaddress` (34) and `cname` exceptions (29) need DNS answers the filter doesn't have. `$header=` (32) needs the
   response. `$uritransform` (17) isn't applied. `$strict1p` (20) isn't converted, since `$1p` covers more requests. `$replace`
@@ -135,7 +139,7 @@ implementation against the Rust library with temporary storage and controlled of
 suite exercises cosmetic batching and procedural actions from the real page script. CI runs all three.
 
 After building the matching engine and the Debug app, start Metro and run the `content-blocker`,
-`content-blocker-fails-closed`, `content-blocker-policies`, `content-blocker-blocks`, `content-blocker-profile`,
+`content-blocker-fails-closed`, `content-blocker-policies`, `content-blocker-page-block`, `content-blocker-blocks`, `content-blocker-profile`,
 `content-blocker-private`, and `content-blocker-restored` acceptance checks. The blocked/allowed rounds also check redirect stand-ins, redirected
 requests, WebSocket handshakes, a tracked link's cleaned navigation, and that a scriptlet runs before a page's first
 inline script, against local fixtures.

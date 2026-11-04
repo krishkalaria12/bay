@@ -591,7 +591,9 @@ process.env.BAY_CHROMIUM_SWITCHES += ` --host-resolver-rules=${[
   "adpage.test",
   "biologianet.com",
   "leitor.net",
-  "07c225f3.online",
+  "22bettracking.online",
+  "000491b06a.com",
+  "buzzadnetwork.com",
 ]
   .map((host) => `MAP ${host} 127.0.0.1:${server.address().port}`)
   .join(", ")}`;
@@ -3681,7 +3683,7 @@ try {
         await cdp(t, "Runtime.evaluate", { expression: `window.open(${JSON.stringify(url)}); 1`, userGesture: true });
         return { known, served };
       };
-      const adHost = "07c225f3.online";
+      const adHost = "22bettracking.online";
       const adUrl = `http://${adHost}:${port}/ad?${tag}`;
       // Refused: the host never hears of it and no tab stays.
       let opened = await opens(adUrl);
@@ -3718,6 +3720,78 @@ try {
     } finally {
       await cef(`setContentBlockerAllowed("adpage.test", false)`).catch(() => null);
       await cef(`setContentBlockerAllowed("leitor.net", false)`).catch(() => null);
+      await closeTab(tab).catch(() => null);
+    }
+  });
+
+  await check("content-blocker-page-block", async () => {
+    // A visit to a page the lists block stops at Bay's page: a hostname's rule and an $all rule (real rules of EasyList and
+    // uBO's list, mapped here). The server never hears of it, Back leaves it, and the entry stays for Reload. Visit Anyway
+    // lifts only that block, for the run or for good, and a paused site never sees it.
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const port = server.address().port;
+    const tag = `pageblock-${Date.now()}`;
+    const start = `http://adpage.test:${port}/adpage?${tag}`;
+    const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: ${JSON.stringify(start)} })`);
+    const blockedPage = () => evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tab)}]?.blockedPage ?? null`);
+    const tabUrl = () => evalApp(`return nn.store.getState().tabs[${JSON.stringify(tab)}]?.url ?? null`);
+    const go = (url) => evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+    const isBlocked = async (url) => {
+      const served = adServed.length;
+      await go(url);
+      await until(`the block page for ${url}`, async () => (await blockedPage()) === url, 10000);
+      if ((await tabUrl()) !== url) throw new Error(`the tab left the blocked URL: ${await tabUrl()}`);
+      const reached = adServed.slice(served).some((s) => s.endsWith(`?${tag}`) && !s.startsWith("adpage.test"));
+      if (reached) throw new Error(`a blocked page reached its server: ${url}`);
+    };
+    const opens = async (url) => {
+      const served = adServed.length;
+      await go(url);
+      await until(`${url} loading`, () => adServed.slice(served).some((s) => url.endsWith(s)), 10000);
+      await until("no block page", async () => !(await blockedPage()), 5000);
+    };
+    const allowedPages = async () => (await cef(`getContentBlocker()`)).allowedPages;
+    const hostRule = "000491b06a.com";
+    const allRule = "buzzadnetwork.com";
+    const pageOf = (host) => `http://${host}:${port}/b?${tag}`;
+    try {
+      await until("the first page", () => pageTarget(`/adpage?${tag}`));
+      await isBlocked(pageOf(hostRule));
+      await isBlocked(pageOf(allRule));
+      // Back leaves the block page: to the last page, which was the other block page, then the one before.
+      await evalApp(`nn.webviews.get(${JSON.stringify(tab)}).goBack(); return true`);
+      await until("Back to the first blocked page", async () => (await blockedPage()) === pageOf(hostRule), 10000);
+      await evalApp(`nn.webviews.get(${JSON.stringify(tab)}).goBack(); return true`);
+      await until("Back to the first page", async () => !(await blockedPage()) && (await tabUrl()) === start, 10000);
+      // Reload asks again.
+      await isBlocked(pageOf(hostRule));
+      await evalApp(`nn.webviews.get(${JSON.stringify(tab)}).reload(); return true`);
+      await sleep(800);
+      if ((await blockedPage()) !== pageOf(hostRule)) throw new Error("Reload left the block page");
+      // Visit Anyway for this run, then blocked again.
+      await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, true, false)`);
+      await go(start);
+      await until("the first page again", async () => !(await blockedPage()) && (await tabUrl()) === start, 10000);
+      await opens(pageOf(hostRule));
+      const kept = await allowedPages();
+      if (kept.includes(hostRule)) throw new Error("Visit Anyway was saved");
+      await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, false, false)`);
+      await isBlocked(`http://${hostRule}:${port}/c?${tag}`);
+      // Always Allow is saved, and listed so it can be undone.
+      await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, true, true)`);
+      if (!(await allowedPages()).includes(allRule)) throw new Error("Always Allow wasn't listed");
+      await opens(pageOf(allRule));
+      await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, false, false)`);
+      if ((await allowedPages()).includes(allRule)) throw new Error("Block Again left it listed");
+      // A paused site isn't blocked.
+      await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, true)`);
+      await opens(`http://${allRule}:${port}/c?${tag}`);
+      await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, false)`);
+      return { blocked: [hostRule, allRule], back: true, visitAnyway: true, alwaysAllow: true, paused: true };
+    } finally {
+      await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, false, false)`).catch(() => null);
+      await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, false, false)`).catch(() => null);
+      await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, false)`).catch(() => null);
       await closeTab(tab).catch(() => null);
     }
   });

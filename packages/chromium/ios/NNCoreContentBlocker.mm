@@ -46,6 +46,8 @@ struct Live {
   std::shared_ptr<Engine> engine;
   bool enabled = true;
   std::vector<std::string> allowed;
+  // Sites the user chose to visit despite a block on the page itself; their requests are still filtered.
+  std::vector<std::string> pages;
 };
 
 std::mutex gLiveLock;
@@ -115,6 +117,15 @@ bool Filter(const char *url, const char *source, const char *top, const char *ty
   if (redirect && answer) *redirect = strdup(answer);
   bay_string_free(match.redirect);
   bay_string_free(match.rewrite);
+  if (match.blocked && type && !strcmp(type, "document")) {
+    const std::string host = HostOf(url);
+    for (const std::string &page : live->pages)
+      if (Covers(page, host)) {
+        // Visit Anyway lifts the block whole: no stand-in either.
+        if (redirect) free(*redirect), *redirect = nullptr;
+        return false;
+      }
+  }
   const uint64_t nanos =
       (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
   gLookups.fetch_add(1, std::memory_order_relaxed);
@@ -244,6 +255,9 @@ void WriteJSON(NSString *path, id value) {
 BOOL gEnabled = YES;
 NSMutableOrderedSet<NSString *> *gSelected;
 NSMutableOrderedSet<NSString *> *gAllowed;
+// Visit Anyway: gAllowedPages is saved (Always Allow), gSessionPages goes with the app.
+NSMutableOrderedSet<NSString *> *gAllowedPages;
+NSMutableOrderedSet<NSString *> *gSessionPages;
 bool gFailNext = false;
 double gDelayNextLoadMs = 0;
 
@@ -265,10 +279,19 @@ void LoadSettings() {
   gAllowed = [NSMutableOrderedSet orderedSet];
   for (NSString *host in [saved[@"allowedHosts"] isKindOfClass:NSArray.class] ? saved[@"allowedHosts"] : @[])
     if ([host isKindOfClass:NSString.class] && host.length) [gAllowed addObject:host.lowercaseString];
+  gAllowedPages = [NSMutableOrderedSet orderedSet];
+  gSessionPages = [NSMutableOrderedSet orderedSet];
+  for (NSString *host in [saved[@"allowedPages"] isKindOfClass:NSArray.class] ? saved[@"allowedPages"] : @[])
+    if ([host isKindOfClass:NSString.class] && host.length) [gAllowedPages addObject:host.lowercaseString];
 }
 
 void SaveSettings() {
-  WriteJSON(SettingsPath(), @{@"enabled" : @(gEnabled), @"lists" : gSelected.array, @"allowedHosts" : gAllowed.array});
+  WriteJSON(SettingsPath(), @{
+    @"enabled" : @(gEnabled),
+    @"lists" : gSelected.array,
+    @"allowedHosts" : gAllowed.array,
+    @"allowedPages" : gAllowedPages.array,
+  });
 }
 
 // The selection in catalogue order, so the engine (and its cache key) doesn't depend on the order lists were picked.
@@ -292,6 +315,8 @@ void PublishLive() {
   live->engine = gEngine;
   live->enabled = gEnabled;
   for (NSString *host in gAllowed) live->allowed.emplace_back(host.UTF8String);
+  for (NSString *host in gAllowedPages) live->pages.emplace_back(host.UTF8String);
+  for (NSString *host in gSessionPages) live->pages.emplace_back(host.UTF8String);
   Publish(std::move(live));
 }
 
@@ -605,6 +630,7 @@ NSDictionary *StateDictionary() {
     @"version" : kVersion,
     @"lists" : lists,
     @"allowedHosts" : gAllowed.array,
+    @"allowedPages" : gAllowedPages.array,
     @"stats" : StatsDictionary(),
   };
 }
@@ -672,6 +698,11 @@ void PrepareContentBlocker() {
       if ([NSFileManager.defaultManager fileExistsAtPath:oldCopies]) [NSFileManager.defaultManager removeItemAtPath:oldCopies error:nil];
     });
   });
+}
+
+bool ContentBlockerBlocksPage(NSString *url) {
+  const char *page = url.UTF8String;
+  return page && Filter(page, page, page, "document", "GET", nullptr);
 }
 
 NSDictionary *ContentBlockerCosmetics(NSString *frameURL, NSString *pageURL) {
@@ -758,6 +789,25 @@ NSString *ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSAr
     // Blocking again on a host ends every pause that covers it ("example.com" for "www.example.com").
     for (NSString *entry in gAllowed.array)
       if (Covers(entry.UTF8String, name.UTF8String)) [gAllowed removeObject:entry];
+  }
+  Changed();
+  completion(nil);
+}
+
++ (void)setPageAllowed:(BOOL)allowed
+                onHost:(NSString *)host
+              remember:(BOOL)remember
+            completion:(void (^)(NSString *))completion {
+  LoadSettings();
+  if (NSString *error = FailedForTest()) return completion(error);
+  NSString *name = [NSString stringWithUTF8String:HostOf(host.lowercaseString.UTF8String).c_str()];
+  if (!name.length) return completion(@"no host");
+  if (allowed) {
+    [remember ? gAllowedPages : gSessionPages addObject:name];
+  } else {
+    for (NSMutableOrderedSet<NSString *> *pages in @[ gAllowedPages, gSessionPages ])
+      for (NSString *entry in pages.array)
+        if (Covers(entry.UTF8String, name.UTF8String)) [pages removeObject:entry];
   }
   Changed();
   completion(nil);

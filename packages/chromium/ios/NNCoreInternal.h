@@ -102,6 +102,8 @@ NSArray<NNCoreProfile *> *LoadedProfiles();
 // The built-in content blocker (NNCoreContentBlocker.mm): its settings, the engine's request filter, and its engine
 // loading in the background. At launch, before the engine starts.
 void PrepareContentBlocker();
+// Whether the blocker refuses a visit to this page (a $doc rule, a hostname's rule), as Visit Anyway and a pause leave it.
+bool ContentBlockerBlocksPage(NSString *url);
 // A frame's cosmetic filters, for its document at `frameURL` in a tab showing `pageURL`: {css (a user sheet, if any),
 // script (scriptlets for its main world, only for an engine that can't run them itself), generic (whether to look for
 // its classes and ids), procedural (rules for the page script)}; nil when the blocker is off, paused on the page, or not

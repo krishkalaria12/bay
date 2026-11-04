@@ -618,46 +618,63 @@ class RequestFilterThrottle : public content::NavigationThrottle {
   }
 };
 
-// A page a page opens (a new tab or window's first navigation, and each of its redirects),
-// which the host may refuse ($popup): the navigation stops and its new tab closes.
-class PopupThrottle : public content::NavigationThrottle {
+// A main frame's navigation, and each of its redirects. A page a page opens (a new tab or
+// window's first navigation) that the host refuses ($popup) stops, and its new tab closes. Any
+// other that the host blocks as a document ($doc, a hostname's rule) stops at an error page,
+// which the host covers with its own: the entry stays, so Back and Reload work.
+class MainFrameThrottle : public content::NavigationThrottle {
  public:
-  explicit PopupThrottle(content::NavigationThrottleRegistry& registry)
+  explicit MainFrameThrottle(content::NavigationThrottleRegistry& registry)
       : content::NavigationThrottle(registry) {}
 
   ThrottleCheckResult WillStartRequest() override { return Check(); }
   ThrottleCheckResult WillRedirectRequest() override { return Check(); }
-  const char* GetNameForLogging() override { return "NNPopupThrottle"; }
+  const char* GetNameForLogging() override { return "NNMainFrameThrottle"; }
 
  private:
   ThrottleCheckResult Check() {
     RequestFilter filter = g_filter.load(std::memory_order_acquire);
     content::NavigationHandle* navigation = navigation_handle();
-    content::WebContents* contents = navigation->GetWebContents();
+    if (!filter || !navigation->GetURL().SchemeIsHTTPOrHTTPS()) {
+      return PROCEED;
+    }
+    const std::string url = navigation->GetURL().spec();
+    const char* method = navigation->IsPost() ? "POST" : "GET";
+    if (OpenedByAPage() && filter(url.c_str(), Opener().c_str(), Opener().c_str(), "popup",
+                                  method, nullptr)) {
+      // Not from inside the navigation's own start: closing destroys it.
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE, base::BindOnce(
+                         [](base::WeakPtr<content::WebContents> page) {
+                           if (page) {
+                             page->ClosePage();
+                           }
+                         },
+                         navigation->GetWebContents()->GetWeakPtr()));
+      return CANCEL;
+    }
+    if (!filter(url.c_str(), url.c_str(), url.c_str(), "document", method, nullptr)) {
+      return PROCEED;
+    }
+    // A prerender just stops: nothing is shown, and a real visit is asked again.
+    if (!navigation->IsInPrimaryMainFrame()) {
+      return CANCEL;
+    }
+    return ThrottleCheckResult(BLOCK_REQUEST, net::ERR_BLOCKED_BY_CLIENT);
+  }
+
+  // The app's own navigations aren't renderer-initiated, and only a page opening one counts:
+  // not one of Chrome's pages or an extension's.
+  bool OpenedByAPage() {
+    content::NavigationHandle* navigation = navigation_handle();
     const std::optional<url::Origin>& initiator = navigation->GetInitiatorOrigin();
-    // The app's own navigations aren't renderer-initiated, and only a page opening one counts:
-    // not one of Chrome's pages or an extension's.
-    if (!filter || !navigation->IsInPrimaryMainFrame() || !navigation->IsRendererInitiated() ||
-        !contents->GetController().IsInitialNavigation() ||
-        !navigation->GetURL().SchemeIsHTTPOrHTTPS() || !initiator ||
-        (!initiator->opaque() && !initiator->GetURL().SchemeIsHTTPOrHTTPS())) {
-      return PROCEED;
-    }
-    const std::string opener = OriginURL(*initiator);
-    if (!filter(navigation->GetURL().spec().c_str(), opener.c_str(), opener.c_str(), "popup",
-                navigation->IsPost() ? "POST" : "GET", nullptr)) {
-      return PROCEED;
-    }
-    // Not from inside the navigation's own start: closing destroys it.
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(
-                       [](base::WeakPtr<content::WebContents> page) {
-                         if (page) {
-                           page->ClosePage();
-                         }
-                       },
-                       contents->GetWeakPtr()));
-    return CANCEL;
+    return navigation->IsInPrimaryMainFrame() && navigation->IsRendererInitiated() &&
+           navigation->GetWebContents()->GetController().IsInitialNavigation() && initiator &&
+           (initiator->opaque() || initiator->GetURL().SchemeIsHTTPOrHTTPS());
+  }
+
+  std::string Opener() {
+    return OriginURL(*navigation_handle()->GetInitiatorOrigin());
   }
 };
 
@@ -786,8 +803,9 @@ void MaybeFilterURLLoaderFactory(
 }
 
 void MaybeAddRequestFilterThrottle(content::NavigationThrottleRegistry& registry) {
-  if (registry.GetNavigationHandle().IsInMainFrame()) {
-    registry.AddThrottle(std::make_unique<PopupThrottle>(registry));
+  // A fenced frame's root is a main frame of its own tree, but it's a page's frame.
+  if (registry.GetNavigationHandle().IsInOutermostMainFrame()) {
+    registry.AddThrottle(std::make_unique<MainFrameThrottle>(registry));
   } else {
     registry.AddThrottle(std::make_unique<RequestFilterThrottle>(registry));
   }

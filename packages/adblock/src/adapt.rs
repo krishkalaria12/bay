@@ -8,6 +8,8 @@
 //! - `$reason=` only words uBO's block page, so it goes. `$strict3p` becomes `$3p`, which covers fewer requests.
 //! - `$csp` rejects a type option, and a `$csp` rule only applies to documents, so `$doc` goes.
 //! - `$popunder` appears only on exceptions, and popunders aren't blocked: those rules go.
+//!
+//! [`block_documents_of_hostname_rules`] is uBO's strict blocking, for an engine that asks about pages being visited.
 
 use crate::removeparam::is_type_option;
 
@@ -31,6 +33,31 @@ pub fn adapt(list: &str) -> Adapted {
         }
     }
     adapted
+}
+
+/// A rule that's only a hostname (`||host^`) also stops a visit to the host, as in uBO. adblock-rust otherwise applies it
+/// to everything a page requests, but not to the page itself. `$all` covers both.
+pub fn block_documents_of_hostname_rules(list: &str) -> String {
+    let mut rules = String::with_capacity(list.len());
+    for line in list.lines() {
+        rules.push_str(line);
+        if is_hostname_rule(line.trim_end()) {
+            rules.push_str("$all");
+        }
+        rules.push('\n');
+    }
+    rules
+}
+
+fn is_hostname_rule(line: &str) -> bool {
+    line.strip_prefix("||")
+        .and_then(|rule| rule.strip_suffix('^'))
+        .is_some_and(|host| {
+            host.contains('.')
+                && host
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
+        })
 }
 
 enum Line {
@@ -231,6 +258,16 @@ mod tests {
             "||gg.example/r/$csp=script-src 'none'\n"
         );
         assert_eq!(main("@@||a.example^$popunder,domain=b.example\n"), "");
+    }
+
+    #[test]
+    fn hostname_rules_also_block_documents() {
+        assert_eq!(
+            block_documents_of_hostname_rules(
+                "||ads.example^\n||ads.example/path^\n||ads.example^$script\n@@||ok.example^\n||tld^\n##.ad\n"
+            ),
+            "||ads.example^$all\n||ads.example/path^\n||ads.example^$script\n@@||ok.example^\n||tld^\n##.ad\n"
+        );
     }
 
     #[test]

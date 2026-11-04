@@ -112,6 +112,9 @@ typedef void (^NNCoreResult)(NSDictionary<NSString *, id> *result);
 + (void)setList:(NSString *)listId enabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setList(_:enabled:completion:));
 + (void)isAllowedOnHost:(NSString *)host completion:(void (^)(BOOL allowed))completion NS_SWIFT_NAME(isAllowed(host:completion:));
 + (void)setAllowed:(BOOL)allowed onHost:(NSString *)host completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setAllowed(_:host:completion:));
+// Visit Anyway on a page the blocker stops: for this run of the app, or kept (remember). The site's requests are still
+// filtered. Not allowed ends both, for the host and whatever covers it.
++ (void)setPageAllowed:(BOOL)allowed onHost:(NSString *)host remember:(BOOL)remember completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setPageAllowed(_:host:remember:completion:));
 // Tests: the next change fails (and changes nothing).
 + (void)devFailNextMessage;
 // Tests: the next engine build goes into force `ms` later.

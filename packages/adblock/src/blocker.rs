@@ -99,7 +99,7 @@ impl Blocker {
                 let adapted = crate::adapt::adapt(&text);
                 keep_params.push_str(&crate::removeparam::exceptions(&adapted.main));
                 popups.push_str(&adapted.popups);
-                text = adapted.main;
+                text = crate::adapt::block_documents_of_hostname_rules(&adapted.main);
             }
             set.add_filter_list(
                 text,
@@ -504,6 +504,40 @@ mod tests {
         }
         assert!(Blocker::deserialize(b"BAY3").is_none());
         assert!(Blocker::deserialize(&[1, 2, 3]).is_none());
+    }
+
+    #[test]
+    fn visits_are_blocked_by_hostname_doc_and_all_rules_and_not_others() {
+        let blocker = Blocker::from_lists(&[
+            FilterList {
+                text: "||host.example^\n||doc.example/page$doc\n||all.example^$all\n||path.example/ad^\n\
+                       ||script.example^$script\n||off.example^\n@@||off.example^$document\n",
+                hosts: false,
+                permissions: 0,
+            },
+            FilterList {
+                text: "0.0.0.0 hosts.example\n",
+                hosts: true,
+                permissions: 0,
+            },
+        ]);
+        let visit = |url: &str| blocker.match_request(url, url, "document", "GET").blocked;
+        assert!(visit("https://host.example/"));
+        assert!(visit("https://www.host.example/any"));
+        assert!(visit("https://doc.example/page"));
+        assert!(!visit("https://doc.example/other"));
+        assert!(visit("https://all.example/"));
+        assert!(visit("https://hosts.example/"));
+        assert!(!visit("https://path.example/ad/"));
+        assert!(!visit("https://script.example/"));
+        assert!(!visit("https://off.example/"));
+        // A page's requests to the host are blocked as before.
+        assert!(blocker.should_block(
+            "https://host.example/a.js",
+            "https://site.example/",
+            "script",
+            "GET"
+        ));
     }
 
     #[test]

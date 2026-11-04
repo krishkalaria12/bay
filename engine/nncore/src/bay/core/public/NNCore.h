@@ -27,10 +27,11 @@ NS_ASSUME_NONNULL_BEGIN
 // "stylesheet", "font", "media", "subdocument", "xmlhttprequest", "ping", "object", "other");
 // method: the HTTP request method ("GET", "POST", ...).
 // true blocks it: it fails with ERR_BLOCKED_BY_CLIENT (tab:didBlockRequests:lastURL: counts
-// it) and a blocked frame collapses. type is "document" for a navigation, which is never
-// blocked here (a subframe's is asked again as "subdocument"), and "popup" for the first
-// navigation of a tab or window a page opened (source and top are the opener): true stops it
-// and closes the new tab.
+// it) and a blocked frame collapses. type is "document" for a main frame's navigation (source
+// and top are its URL): true stops it at an error page, reported by tab:didFailLoad:code:
+// description:, which the host covers with its own. It's "popup" for the first navigation of a
+// tab or window a page opened (source and top are the opener): true stops it and closes the
+// new tab.
 // If redirect is non-null, the host may set *redirect to a malloc-allocated URL, which the
 // engine frees: for a blocked request, a data URL answered in its place (a stand-in); for an
 // allowed one, a URL of the same origin to load instead (its tracking parameters removed,

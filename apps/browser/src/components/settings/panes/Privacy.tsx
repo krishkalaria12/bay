@@ -8,6 +8,7 @@ import {
   onContentBlockerChange,
   removeExternalAppAllowance,
   resetSiteSettings,
+  setBlockedPageAllowed,
   setContentBlockerAllowed,
   setContentBlockerEnabled,
   setFilterListEnabled,
@@ -111,6 +112,19 @@ export function PrivacyPane() {
             {blocker.allowedHosts.map((host) => (
               <Row key={host} icon={<Favicon url={`https://${host}`} />} title={host}>
                 <Button title="Block Again" onPress={() => void setContentBlockerAllowed(host, false).then(refresh)} />
+              </Row>
+            ))}
+          </Group>
+        </>
+      )}
+
+      {!!blocker?.allowedPages.length && (
+        <>
+          <SectionHeader title="Blocked sites you allowed" description="You chose to visit these despite a filter list. Bay still blocks ads on them." />
+          <Group>
+            {blocker.allowedPages.map((host) => (
+              <Row key={host} icon={<Favicon url={`https://${host}`} />} title={host}>
+                <Button title="Block Again" onPress={() => void setBlockedPageAllowed(host, false, false).then(refresh)} />
               </Row>
             ))}
           </Group>

@@ -1476,7 +1476,9 @@ const char kPageReportsKey = 0;
 }
 
 - (void)tab:(NNCoreTab *)tab didFailLoad:(NSString *)url code:(int)code description:(NSString *)text {
-  [self emit:@"loadError" payload:@{@"url" : url ?: @"", @"code" : @(code), @"text" : text ?: @""}];
+  // ERR_BLOCKED_BY_CLIENT from Bay's blocker, not an extension's: the app covers the error page with its own.
+  const BOOL blockedPage = code == -20 && url && nncore_host::ContentBlockerBlocksPage(url);
+  [self emit:@"loadError" payload:@{@"url" : url ?: @"", @"code" : @(code), @"text" : text ?: @"", @"blockedPage" : @(blockedPage)}];
 }
 
 - (void)tab:(NNCoreTab *)tab didChangeStatusText:(NSString *)text {

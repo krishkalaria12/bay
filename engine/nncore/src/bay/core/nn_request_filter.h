@@ -6,11 +6,12 @@
 // interceptor the browser process puts in front of the network service for each factory
 // (NNContentBrowserClient::WillCreateURLLoaderFactory, as Chrome's webRequest does), on a
 // background sequence. Subframe navigations go through a NavigationThrottle on the UI thread,
-// which blocks and collapses the frame. Main-frame navigations are never blocked, except a
-// page opening one the host refuses ($popup), whose new tab closes. Navigations (main frames
-// and subframes) pass through the same interceptor only so a filter's rewrite ($removeparam)
-// can apply, as an internal redirect, and the host's Content-Security-Policy ($csp) can be
-// added to their responses.
+// which blocks and collapses the frame. A main frame's navigation goes through one too: one a
+// page opened that the host refuses ($popup) stops and its new tab closes, and any other the
+// host blocks ($doc, a hostname's rule) stops at an error page the host covers with its own.
+// Navigations also pass through the same interceptor, but only so a filter's rewrite
+// ($removeparam) can apply, as an internal redirect, and the host's Content-Security-Policy
+// ($csp) can be added to their responses.
 //
 // The blocker's scriptlets reach a document synchronously as its main world starts
 // (mojom::NNScriptlets, answered on a background sequence by the host's ScriptletSource).
@@ -41,8 +42,9 @@ namespace nncore {
 // url: the request. source: the URL (or origin) of the document or worker asking. top: the
 // tab's page (its origin for subresources). type: an adblock resource type ("script",
 // "image", "stylesheet", "font", "media", "subdocument", "xmlhttprequest", "ping", "object",
-// "other", "document" for a navigation, and "popup" for a page a page opens, whose source and
-// top are the opener). Called on any thread, so it must be thread-safe and quick. true blocks.
+// "other", "document" for a main frame's navigation, whose source and top are its URL, and
+// "popup" for a page a page opens, whose source and top are the opener). Called on any thread,
+// so it must be thread-safe and quick. true blocks.
 // redirect is null for subframe throttling and WebSockets. Otherwise the host may set it to a
 // malloc-allocated URL, which the engine frees: for a blocked request, a data URL answered in
 // its place (a stand-in); for an allowed one, a URL of the same origin to load instead (the
