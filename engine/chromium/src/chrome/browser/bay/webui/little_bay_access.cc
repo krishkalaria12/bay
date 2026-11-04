@@ -10,10 +10,15 @@
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/shortcut_recorder.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/status_icons/status_icon.h"
 #include "chrome/browser/status_icons/status_tray.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "ui/base/accelerators/command.h"
+#include "ui/base/models/menu_separator_types.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_family.h"
 #include "ui/gfx/image/image_skia.h"
@@ -28,6 +33,8 @@ constexpr char16_t kTitle[] = u"New Little Bay Window";
 constexpr char kCommandGroup[] = "bay";
 constexpr char kOpenCommand[] = "newLittleBay";
 constexpr int kOpenMenuItem = 1;
+constexpr int kNewWindowMenuItem = 2;
+constexpr int kQuitMenuItem = 3;
 
 gfx::ImageSkia TrayImage() {
 #if BUILDFLAG(IS_WIN)
@@ -50,8 +57,28 @@ LittleBayAccess& LittleBayAccess::Get() {
 LittleBayAccess::LittleBayAccess() = default;
 LittleBayAccess::~LittleBayAccess() = default;
 
-void LittleBayAccess::SetOpenHandler(base::RepeatingClosure open) {
+void LittleBayAccess::SetOpenHandler(
+    base::RepeatingCallback<void(const char*)> open) {
   open_ = std::move(open);
+}
+void LittleBayAccess::UpdateKeepAlive() {
+  const bool wanted = !quitting_ && (accelerator_ || status_icon_);
+  if (!wanted) {
+    keep_alive_.reset();
+  } else if (!keep_alive_) {
+    keep_alive_ = std::make_unique<ScopedKeepAlive>(
+        KeepAliveOrigin::BACKGROUND_MODE_MANAGER,
+        KeepAliveRestartOption::ENABLED);
+  }
+  // Any real quit, whichever way it came, ends the keep-alive.
+  if (!terminating_) {
+    terminating_ = browser_shutdown::AddAppTerminatingCallback(base::BindOnce(
+        &LittleBayAccess::AppTerminating, base::Unretained(this)));
+  }
+}
+void LittleBayAccess::AppTerminating() {
+  quitting_ = true;
+  keep_alive_.reset();
 }
 void LittleBayAccess::ClearHotKey() {
   auto* listener = ui::GlobalAcceleratorListener::GetInstance();
@@ -70,6 +97,7 @@ void LittleBayAccess::ClearHotKey() {
 std::string LittleBayAccess::SetHotKey(std::optional<int> key_code,
                                        const base::ListValue& modifiers) {
   ClearHotKey();
+  UpdateKeepAlive();
   if (!key_code)
     return "off";
   const auto accelerator = GlobalShortcutAccelerator(*key_code, modifiers);
@@ -90,15 +118,17 @@ std::string LittleBayAccess::SetHotKey(std::optional<int> key_code,
         kCommandGroup, std::string(), commands, gfx::kNullAcceleratedWidget,
         base::BindRepeating(
             [](const std::string&, const std::string&) {
-              LittleBayAccess::Get().Open();
+              LittleBayAccess::Get().Run("newLittleBay");
             }));
     registered_with_portal_ = true;
     accelerator_ = accelerator;
+    UpdateKeepAlive();
     return "ok";
   }
   if (!listener->RegisterAccelerator(*accelerator, this))
     return "taken";
   accelerator_ = accelerator;
+  UpdateKeepAlive();
   return "ok";
 }
 void LittleBayAccess::SetMenuBarItem(bool on) {
@@ -109,6 +139,7 @@ void LittleBayAccess::SetMenuBarItem(bool on) {
       tray->RemoveStatusIcon(status_icon_.ExtractAsDangling());
     }
     status_icon_ = nullptr;
+    UpdateKeepAlive();
     return;
   }
   if (status_icon_ || !tray)
@@ -122,23 +153,39 @@ void LittleBayAccess::SetMenuBarItem(bool on) {
   // click alone wouldn't always reach Little Bay.
   auto menu = std::make_unique<StatusIconMenuModel>(this);
   menu->AddItem(kOpenMenuItem, kTitle);
+  menu->AddItem(kNewWindowMenuItem, u"New Window");
+  menu->AddSeparator(ui::NORMAL_SEPARATOR);
+  // With the last window closed, this may be the only way left to quit.
+  menu->AddItem(kQuitMenuItem, u"Quit Bay");
   status_icon_->SetContextMenu(std::move(menu));
+  UpdateKeepAlive();
 }
-void LittleBayAccess::Open() {
+void LittleBayAccess::Run(const char* command) {
   if (open_)
-    open_.Run();
+    open_.Run(command);
 }
 void LittleBayAccess::OnKeyPressed(const ui::Accelerator& accelerator) {
-  Open();
+  Run("newLittleBay");
 }
 void LittleBayAccess::ExecuteCommand(const std::string& accelerator_group_id,
                                      const std::string& command_id) {
-  Open();
+  Run("newLittleBay");
 }
 void LittleBayAccess::OnStatusIconClicked() {
-  Open();
+  Run("newLittleBay");
 }
 void LittleBayAccess::ExecuteCommand(int command_id, int event_flags) {
-  Open();
+  switch (command_id) {
+    case kNewWindowMenuItem:
+      Run("newWindow");
+      return;
+    case kQuitMenuItem:
+      // With no windows left, nothing else would end the keep-alive.
+      AppTerminating();
+      chrome::AttemptUserExit();
+      return;
+    default:
+      Run("newLittleBay");
+  }
 }
 }  // namespace bay

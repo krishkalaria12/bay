@@ -218,6 +218,7 @@ source_set("impl") {
       "//chrome/browser:icon_loader",
       "//chrome/app/theme:chrome_unscaled_resources_grit",
       "//chrome/browser/bay/data:data_services",
+      "//chrome/browser/lifetime:termination_notification",
       "//chrome/browser/status_icons",
       "//ui/compositor",
       "//ui/snapshot",

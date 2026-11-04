@@ -145,6 +145,8 @@ class WindowRegistry final : public BrowserCollectionObserver {
   void OnBrowserCreated(BrowserWindowInterface* browser) override;
   void OnBrowserClosed(BrowserWindowInterface* browser) override;
   void OnBrowserActivated(BrowserWindowInterface* browser) override;
+  void OnBrowserDeactivated(BrowserWindowInterface* browser) override;
+  bool AnyWindowActive() const;
 
   std::map<BrowserWindowInterface*, std::unique_ptr<Entry>> entries_;
   std::map<NativeHost*, std::unique_ptr<Host>> hosts_;

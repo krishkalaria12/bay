@@ -77,8 +77,10 @@ export function startNativeSync({
     // and tray icon are its.
     if (!isMac) {
       startLittleBayAccess();
+      startLittleBayPutAway();
       const opens = onCommand((e) => {
         if (e.command === "newLittleBay") reportBrowserCommand(openLittleBay());
+        if (e.command === "newWindow") reportBrowserCommand(createWindow());
       });
       stops.push(() => opens.remove());
     }

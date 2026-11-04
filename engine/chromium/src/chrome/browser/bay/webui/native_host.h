@@ -60,6 +60,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
               InvokeCallback callback) override;
   void SetClient(mojo::PendingRemote<mojom::NativeHostClient> client) override;
   void Emit(const char* module, const char* event, base::Value payload);
+  // An app event for every document.
+  static void EmitAppEvent(const char* type);
   void ViewEvent(int tag, const char* event, base::DictValue payload);
   void PublishHostInfo();
   BrowserWindowInterface* browser() const { return context_.window(); }

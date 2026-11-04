@@ -942,4 +942,23 @@ void WindowRegistry::OnBrowserActivated(BrowserWindowInterface* browser) {
   if (!id.empty())
     Broadcast(base::DictValue().Set("type", "focus").Set("id", id));
 }
+void WindowRegistry::OnBrowserDeactivated(BrowserWindowInterface* browser) {
+  // Moving between Bay's own windows deactivates one before activating the
+  // next, so it takes a moment to know Bay has lost the front.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce([] {
+        if (!WindowRegistry::Get().AnyWindowActive())
+          NativeHost::EmitAppEvent("resignActive");
+      }),
+      base::Milliseconds(100));
+}
+bool WindowRegistry::AnyWindowActive() const {
+  for (const auto& id : Ids()) {
+    auto* window = Find(id.GetString());
+    if (window && window->GetWindow() && window->GetWindow()->IsActive())
+      return true;
+  }
+  return false;
+}
 }  // namespace bay

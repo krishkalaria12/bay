@@ -255,10 +255,6 @@
               Improve tab-drag previews: composite page content, include favicons, and wait for destination content before fading. Investigate Linux preview
               support within each window system's constraints.
             </li>
-            <li>
-              Keep Little Bay accessible after the last Linux window closes, and start its put-away timer in the shared runtime. Validate global-shortcut and
-              tray availability across desktops.
-            </li>
             <li>Add external-app icons to the open-in-app prompt where the desktop exposes them.</li>
           </ul>
         </section>
@@ -314,6 +310,14 @@
                   <td>A</td>
                   <td>
                     Drag a download and a pinned file into a file manager and a mail client on X11, Wayland and Windows; try a pinned folder, which is untested
+                  </td>
+                </tr>
+                <tr>
+                  <td>T4</td>
+                  <td>A</td>
+                  <td>
+                    Little Bay's shortcut and tray icon on GNOME and KDE, X11 and Wayland; with either on, closing the last window leaves Bay running and the
+                    tray's Quit Bay ends it; a Little Bay left behind another app is put away
                   </td>
                 </tr>
                 <tr>

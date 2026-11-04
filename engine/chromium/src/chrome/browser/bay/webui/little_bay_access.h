@@ -2,9 +2,11 @@
 #ifndef CHROME_BROWSER_BAY_WEBUI_LITTLE_BAY_ACCESS_H_
 #define CHROME_BROWSER_BAY_WEBUI_LITTLE_BAY_ACCESS_H_
 
+#include <memory>
 #include <optional>
 #include <string>
 
+#include "base/callback_list.h"
 #include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "base/memory/raw_ptr.h"
@@ -15,6 +17,7 @@
 // NOLINTNEXTLINE(whitespace/line_length)
 #include "ui/base/accelerators/global_accelerator_listener/global_accelerator_listener.h"
 
+class ScopedKeepAlive;
 class StatusIcon;
 
 namespace bay {
@@ -27,21 +30,26 @@ class LittleBayAccess : public ui::GlobalAcceleratorListener::Observer,
  public:
   static LittleBayAccess& Get();
 
-  // Runs when the shortcut or tray icon is used.
-  void SetOpenHandler(base::RepeatingClosure open);
+  // Runs a command the shortcut or tray icon asks for ("newLittleBay").
+  void SetOpenHandler(base::RepeatingCallback<void(const char*)> open);
   // "ok", "off" (no key), "taken" (another app has it), or "unavailable" (this
   // desktop offers no global shortcuts).
   std::string SetHotKey(std::optional<int> key_code,
                         const base::ListValue& modifiers);
   void SetMenuBarItem(bool on);
+  // Whether closing the last window leaves Bay running. A way back in means
+  // Bay stays open, as it does on macOS, until someone quits it.
+  bool KeepsBayRunning() const { return !!keep_alive_; }
 
  private:
   friend class base::NoDestructor<LittleBayAccess>;
   LittleBayAccess();
   ~LittleBayAccess() override;
 
+  void AppTerminating();
   void ClearHotKey();
-  void Open();
+  void Run(const char* command);
+  void UpdateKeepAlive();
 
   // ui::GlobalAcceleratorListener::Observer:
   void OnKeyPressed(const ui::Accelerator& accelerator) override;
@@ -52,7 +60,10 @@ class LittleBayAccess : public ui::GlobalAcceleratorListener::Observer,
   // StatusIconMenuModel::Delegate:
   void ExecuteCommand(int command_id, int event_flags) override;
 
-  base::RepeatingClosure open_;
+  base::RepeatingCallback<void(const char*)> open_;
+  std::unique_ptr<ScopedKeepAlive> keep_alive_;
+  bool quitting_ = false;
+  base::CallbackListSubscription terminating_;
   std::optional<ui::Accelerator> accelerator_;
   // The XDG portal registers shortcuts as command groups, not accelerators.
   bool registered_with_portal_ = false;

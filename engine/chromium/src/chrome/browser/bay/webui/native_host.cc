@@ -432,6 +432,9 @@ bool NativeHost::HandleWindowClose(BrowserWindowInterface* browser) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike") ||
       browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
     return false;
+  // A shortcut or tray icon still leads back in: the window just closes.
+  if (LittleBayAccess::Get().KeepsBayRunning())
+    return false;
   const auto host = QuitOwner();
   if (!host)
     return false;
@@ -832,16 +835,23 @@ void NativeHost::DevHarness(const std::string& method,
   result.Set("matched", std::move(matched));
   std::move(callback).Run(Success(base::Value(std::move(result))));
 }
-// The coordinator opens it: it lives as long as Bay does, and there is only one.
-static void OpenLittleBayFromAnyApp() {
+// The coordinator runs it: it lives as long as Bay does, and there is only one.
+static void RunFromAnyApp(const char* command) {
   for (const auto& [owner, host] : Hosts()) {
     if (host && host->is_coordinator()) {
       host->Emit("BayShell", "onCommand",
                  base::Value(base::DictValue()
-                                 .Set("command", "newLittleBay")
+                                 .Set("command", command)
                                  .Set("arg", base::Value())
                                  .Set("windowId", base::Value())));
     }
+  }
+}
+void NativeHost::EmitAppEvent(const char* type) {
+  for (const auto& [owner, host] : Hosts()) {
+    if (host)
+      host->Emit("BayShell", "onAppEvent",
+                 base::Value(base::DictValue().Set("type", type)));
   }
 }
 void NativeHost::InstallCloseHooks() {
@@ -1889,7 +1899,7 @@ void NativeHost::Invoke(const std::string& module,
       return;
     }
     auto& access = LittleBayAccess::Get();
-    access.SetOpenHandler(base::BindRepeating(&OpenLittleBayFromAnyApp));
+    access.SetOpenHandler(base::BindRepeating(&RunFromAnyApp));
     std::move(callback).Run(Success(base::Value(access.SetHotKey(
         key->is_int() ? std::make_optional(key->GetInt()) : std::nullopt,
         modifiers->GetList()))));
@@ -1902,7 +1912,7 @@ void NativeHost::Invoke(const std::string& module,
       return;
     }
     auto& access = LittleBayAccess::Get();
-    access.SetOpenHandler(base::BindRepeating(&OpenLittleBayFromAnyApp));
+    access.SetOpenHandler(base::BindRepeating(&RunFromAnyApp));
     access.SetMenuBarItem(on->GetBool());
     std::move(callback).Run(Success());
     return;
