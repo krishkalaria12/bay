@@ -9,6 +9,7 @@ import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "heroui-native";
+import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, TabsMenu } from "@/panels";
@@ -87,6 +88,11 @@ export function BrowserScreen(): JSX.Element {
   const lockEnabled = lockPrivateTabs && data.tabs.some((tab) => tab.private);
 
   useContentBlocking(ready, blockContent, blockingPausedHosts);
+
+  const { theme } = data.preferences;
+  useEffect(() => {
+    Uniwind.setTheme(theme);
+  }, [theme]);
   const blockerStatus = useBlockerStatus((state) => state.status);
 
   // Private tabs lock as soon as Bay leaves the foreground, which also keeps them out of the app switcher.
