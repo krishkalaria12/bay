@@ -237,8 +237,8 @@
           <h1>Remaining Linux and Windows parity work</h1>
           <p class="lede">Finish the implementation follow-ups below, then run native acceptance on Linux and Windows.</p>
           <p class="meta">
-            Updated 4 Nov 2026. Implementation status is based on <code>feat/linux</code>; the latest shared changes still need syncing to
-            <code>feat/windows</code>.
+            Updated 4 Nov 2026. <code>feat/linux</code> and <code>feat/windows</code> carry the same shared code; only Linux services, packaging, tests and
+            documentation stay on <code>feat/linux</code>.
           </p>
         </header>
         <section id="followups" aria-labelledby="followups-h">
@@ -250,14 +250,10 @@
         </section>
         <section id="sync" aria-labelledby="sync-h">
           <h2 id="sync-h">2. Branch sync</h2>
-          <ol>
-            <li>
-              Copy the remaining shared host changes from <code>feat/linux</code> to <code>feat/windows</code>, preserving Linux-only services, tests and
-              documentation.
-            </li>
-            <li>Regenerate native contracts and run each branch's JavaScript, type, format and build checks.</li>
-            <li>Merge Windows back into Linux and verify the intended platform differences before pushing both branches.</li>
-          </ol>
+          <p class="prose">
+            The branches were synced on 4 Nov 2026 by copying the shared tree to <code>feat/windows</code> and merging it back. The Windows code paths in that
+            tree have not been compiled yet, and unit tests gated to Linux in <code>BUILD.gn</code> don't build on Windows.
+          </p>
         </section>
         <section id="runtime" aria-labelledby="runtime-h">
           <h2 id="runtime-h">3. Runtime acceptance</h2>

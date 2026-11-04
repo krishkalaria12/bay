@@ -14,6 +14,10 @@ def added(patch):
     return "\n".join(line[1:] for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++"))
 
 
+# The Linux frame stays on feat/linux; Windows' checkout has no copy to read.
+linux_frame = unittest.skipUnless((WEBUI / "frame_linux.cc").exists(), "the Linux frame isn't on this branch")
+
+
 class FrameHookTests(unittest.TestCase):
     def test_frame_hook_is_shared_by_web_desktops_and_follows_window_patches(self):
         names = [step.name for step in series.read_series("win")]
@@ -24,6 +28,7 @@ class FrameHookTests(unittest.TestCase):
         for earlier in ("chromium-bay-webui-window.patch", "chromium-bay-lifecycle.patch"):
             self.assertLess(names.index(earlier), names.index("chromium-bay-native-widget.patch"))
 
+    @linux_frame
     def test_linux_windows_carry_desktop_identity_after_the_frame_hook(self):
         name = "chromium-bay-window-identity-linux.patch"
         names = [step.name for step in series.read_series("linux")]
@@ -75,6 +80,7 @@ class FrameHookTests(unittest.TestCase):
         branch = nncore[nncore.rindex("if (is_linux) {"):]
         self.assertIn('"//chrome/browser/bay/webui:frame_linux"', branch)
 
+    @linux_frame
     def test_linux_frame_replaces_the_system_and_views_captions(self):
         frame = (WEBUI / "frame_linux.cc").read_text()
         self.assertIn("params.remove_standard_frame = true;", frame)

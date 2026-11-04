@@ -60,11 +60,15 @@ class ChromiumLayerTests(unittest.TestCase):
                 if (source.is_file() and "tests" not in relative.parts
                         and "__pycache__" not in relative.parts and source.suffix != ".pyc"):
                     self.assertEqual((target / "import" / relative).read_bytes(), source.read_bytes())
-            self.assertTrue((target / "sync/linux/SyncCryptoLinux.cpp").is_file())
-            self.assertFalse((target / "sync/linux/tests").exists())
+            # The Linux services stay on feat/linux; Windows' checkout has no copy to overlay.
+            has_linux = (checkout / "packages/sync/linux").exists()
+            if has_linux:
+                self.assertTrue((target / "sync/linux/SyncCryptoLinux.cpp").is_file())
+                self.assertFalse((target / "sync/linux/tests").exists())
             data = target.parent
             for source in re.findall(r'"([^"\n]+\.(?:cc|cpp|h))"', (data / "BUILD.gn").read_text()):
-                self.assertTrue((data / source).is_file(), f"Missing GN source {source}")
+                if has_linux or "/linux/" not in source:
+                    self.assertTrue((data / source).is_file(), f"Missing GN source {source}")
             self.assertEqual(
                 hashlib.sha256((data / "vendor/nlohmann/json.hpp").read_bytes()).hexdigest(),
                 "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6",
