@@ -3,6 +3,7 @@ import { browserRead } from "../store/read";
 import { activate, closeTabs, newTab, updateTabDetails } from "../runtime/tabActions";
 import { closePeek, openPeek } from "../runtime/splitActions";
 import { activeTabId } from "../store/model";
+import { platformWords } from "./platformWords";
 
 /** Resolves native access before opening anything. Synced paths alone never authorize a file. */
 export async function openLocalFile(windowId: string, pinId: string, relativePath = ""): Promise<LocalFileAccess> {
@@ -65,5 +66,9 @@ export async function closeLocalFileTab(windowId: string, pinId: string, relativ
 
 export function localFileStatusText(access: LocalFileAccess | null): string {
   if (!access) return "Checking access…";
-  return access.status === "missing" ? "Missing on this Mac" : access.status === "inaccessible" ? "Access required on this Mac" : "";
+  return access.status === "missing"
+    ? `Missing on ${platformWords.thisComputer}`
+    : access.status === "inaccessible"
+      ? `Access required on ${platformWords.thisComputer}`
+      : "";
 }

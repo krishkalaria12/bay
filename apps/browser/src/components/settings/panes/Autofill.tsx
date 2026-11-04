@@ -26,6 +26,7 @@ import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, typ
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { cardStoreName } from "../secretStorage";
+import { platformWords } from "../../../lib/platformWords";
 
 export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
@@ -75,7 +76,7 @@ export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) 
         <Row
           settingId={SETTINGS.saveCreditCards.id}
           title={SETTINGS.saveCreditCards.title}
-          description="Filling in or showing a card number asks for Touch ID or your password."
+          description={`Filling in or showing a card number asks for ${platformWords.unlockMethod}.`}
         >
           <Toggle value={enabled?.cards ?? true} disabled={!enabled} onChange={(v) => toggle("cards", v)} />
         </Row>

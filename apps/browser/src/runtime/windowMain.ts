@@ -13,6 +13,7 @@ import { runCommand } from "../lib/appCommands";
 import { startWebShortcuts } from "../lib/webShortcuts";
 import { installErrorReporting } from "../telemetry";
 import { startRequestedOnboarding } from "../components/onboarding/state";
+import { startCliActiveTab } from "../components/cli/driverControl";
 import { followOnboardingRequests } from "./onboardingRequest";
 
 export function startWindowMain(windowId: string) {
@@ -27,5 +28,6 @@ export function startWindowMain(windowId: string) {
   startTranslate();
   startAppIntegration({ sharedWindow: true });
   registerWindowApplication();
+  startCliActiveTab(windowId);
   followOnboardingRequests(windowId, ({ step, picked }) => startRequestedOnboarding(windowId, step, picked));
 }

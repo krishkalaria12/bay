@@ -28,7 +28,7 @@ import { applyEaselDocument, startLibrary, updateEasel, useLibrary } from "./sta
 import { liveClipTransform } from "./liveClip";
 import { webLink, type EaselItem } from "./model";
 import { EaselShareButton } from "./EaselShareButton";
-import { thisComputer } from "./words";
+import { platformWords } from "../../lib/platformWords";
 
 export const easelCanvases = new Map<string, EaselCanvasHandle>();
 export const easelCanvasStates = new Map<string, EaselState>();
@@ -174,7 +174,7 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
           selectTextOnFocus
           style={{ flex: 1, minWidth: 60, fontSize: 19, fontWeight: "600", color: theme.textPrimary, padding: 4 }}
         />
-        <Text style={{ fontSize: 11, color: theme.textTertiary }}>Saved on {thisComputer}</Text>
+        <Text style={{ fontSize: 11, color: theme.textTertiary }}>Saved on {platformWords.thisComputer}</Text>
         {isEaselWebSharingEnabled() ? <EaselShareButton doc={doc} canvas={canvas} windowId={windowId} /> : null}
         <Button title={busy ? "Exporting…" : "Export PNG"} disabled={busy} onPress={() => void exportPNG()} />
         <IconButton icon="ellipsis" size={16} box={30} radius={8} tooltip="Easel actions" onPress={() => void more()} />

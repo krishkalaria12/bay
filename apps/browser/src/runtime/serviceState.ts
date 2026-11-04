@@ -10,6 +10,8 @@ import { useSync, type SyncUi } from "../sync/engine";
 import { bindLiveBrowser } from "../activity/activityEngine";
 import { bindGoogleBrowser } from "../activity/googleAuth";
 import { useOnboardingRequest, type OnboardingRequest } from "./onboardingRequest";
+import { useCli } from "../components/cli/driverControl";
+import type { CliControlStatus } from "@bay/chromium";
 
 /** UI state only. OAuth tokens and the sync document never enter this value. */
 export type ServiceState = {
@@ -19,6 +21,7 @@ export type ServiceState = {
   sync: SyncUi;
   telemetry: ReturnType<typeof useTelemetry.getState>;
   onboarding: OnboardingRequest;
+  cli: CliControlStatus | null;
 };
 const installed = new Map<string, object>();
 const detach = <T>(value: DeepReadonly<T>): T => JSON.parse(JSON.stringify(value)) as T;
@@ -35,6 +38,7 @@ export function installServiceState(state: DeepReadonly<Partial<ServiceState>>) 
   install("sync", (value) => useSync.setState(value, true));
   install("telemetry", (value) => useTelemetry.setState(value, true));
   install("onboarding", (value) => useOnboardingRequest.setState(value, true));
+  install("cli", (server) => useCli.setState({ server }));
 }
 export function startServiceStateOwner(store: BrowserStore, { restore = true } = {}): () => void {
   if (restore) installServiceState(store.getState().services);
@@ -47,6 +51,7 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
       sync: useSync.getState(),
       telemetry: useTelemetry.getState(),
       onboarding: useOnboardingRequest.getState(),
+      cli: useCli.getState().server,
     };
     store.setState({ services });
   };
@@ -57,6 +62,7 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
     useSync.subscribe(publish),
     useTelemetry.subscribe(publish),
     useOnboardingRequest.subscribe(publish),
+    useCli.subscribe(publish),
   );
   publish();
   return () => {

@@ -1,4 +1,4 @@
-import { View, isMac } from "@bay/platform";
+import { View } from "@bay/platform";
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/chromium";
 import { copyFile, copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, showMenu, Symbol, type MenuItem } from "@bay/desktop";
 import { memo, useEffect, useRef, useState } from "react";
@@ -17,6 +17,7 @@ import { showToast } from "../split/splitActions";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { removeDownload } from "../../runtime/windowUiActions";
 import { tidyRename, resolveTidySuggestion } from "../../lib/tidyDownloads";
+import { platformWords } from "../../lib/platformWords";
 
 // MARK: Formatting
 
@@ -82,7 +83,7 @@ export async function downloadMenu(d: Download, windowId: string) {
         ]
       : [
           { id: "open", title: "Open", enabled: exists },
-          { id: "reveal", title: isMac ? "Show in Finder" : "Show in File Explorer", enabled: exists },
+          { id: "reveal", title: platformWords.revealTitle, enabled: exists },
           { id: "copyFile", title: "Copy File", enabled: exists },
           { id: "copyPath", title: "Copy Path", enabled: d.state === "finished" && !!d.path },
           ...(tidy ? [{ id: "tidy", title: `Rename to “${tidy.filename}”` }] : []),

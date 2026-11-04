@@ -9,7 +9,7 @@ import { isInternalTab } from "../pages/index";
 import { saveLibraryMedia } from "../library/state";
 import { chooseEasel, libraryWindow } from "../library/actions";
 import { fileNameOf, webLink } from "../library/model";
-import { revealTitle } from "../library/words";
+import { platformWords } from "../../lib/platformWords";
 import { engineProfile } from "../../store/model";
 import { themeFor, themeKey } from "../../lib/theme";
 import { captureScript } from "./captureScript";
@@ -211,7 +211,7 @@ function savedToast(windowId: string, path: string | null, title: string) {
   showToast(windowId, title, `In Downloads as ${file}`, {
     icon: "arrow.down.circle",
     key: "capture",
-    action: { title: revealTitle, run: () => void revealFile(path) },
+    action: { title: platformWords.revealTitle, run: () => void revealFile(path) },
   });
 }
 

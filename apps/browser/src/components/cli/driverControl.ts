@@ -94,33 +94,40 @@ export function shownCliTab(s: BrowserProjection): number | null {
   return usePages.getState().chromeTabs[id] ?? null;
 }
 
+// Tells the engine the tab commands act on by default, while `owns` says this document knows it.
+function activeTabPush(owns: () => boolean) {
+  let sent: number | null | undefined;
+  const forget = () => {
+    sent = undefined;
+  };
+  const push = () => {
+    const server = useCli.getState().server;
+    if (!owns() || (server?.state !== "on" && server?.state !== "starting")) return forget();
+    const active = shownCliTab(useBrowser.getState());
+    if (active === sent) return;
+    sent = active;
+    void setCliActiveTab(active).catch(forget);
+  };
+  return { push, forget };
+}
+
 let started = false;
-export function startCliControl() {
+/**
+ * Keeps the engine's control server on the setting. Linux's and Windows' coordinator document does this with
+ * `activeTab: false`: it has no pages, and engine events reach only it, so windows get the status from its service state.
+ */
+export function startCliControl({ activeTab = true } = {}) {
   if (started) return;
   started = true;
   let request = 0;
   let inFlight = 0;
   let generation = 0;
   let applied: boolean | null = null;
-  let sentActive: number | null | undefined;
-
-  const pushActive = () => {
-    const server = useCli.getState().server;
-    if (server?.state !== "on" && server?.state !== "starting") {
-      sentActive = undefined;
-      return;
-    }
-    const active = shownCliTab(useBrowser.getState());
-    if (active === sentActive) return;
-    sentActive = active;
-    void setCliActiveTab(active).catch(() => {
-      sentActive = undefined;
-    });
-  };
+  const { push: pushActive, forget: forgetActive } = activeTabPush(() => activeTab);
 
   const apply = (server: CliControlStatus, reconcile: boolean) => {
     if ((server.generation ?? generation) < generation) return;
-    if ((server.generation ?? generation) > generation) sentActive = undefined;
+    if ((server.generation ?? generation) > generation) forgetActive();
     generation = Math.max(generation, server.generation ?? 0);
     useCli.setState({ server });
     if (reconcile && server.state === "off" && server.reason && useBrowser.getState().settings.cliControl === true) {
@@ -149,6 +156,15 @@ export function startCliControl() {
   });
   usePages.subscribe(pushActive);
   sync();
+}
+
+/** A window document on Linux and Windows: it holds its own pages, so the focused one says which tab is shown. */
+export function startCliActiveTab(windowId: string) {
+  const { push } = activeTabPush(() => useBrowser.getState().ui.focusedWindowId === windowId);
+  useCli.subscribe(push);
+  useBrowser.subscribe(push);
+  usePages.subscribe(push);
+  push();
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));

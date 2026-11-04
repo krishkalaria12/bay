@@ -1,10 +1,11 @@
-import { isMac, shortcutForCommand } from "@bay/platform";
+import { shortcutForCommand } from "@bay/platform";
 import { checkForUpdates, confirm, isDefaultBrowser, setAsDefaultBrowser, systemInfo } from "@bay/desktop";
 import { sendFeedback } from "../../lib/appMenuIntegration";
 import { openReleaseNotesPage, releaseNotesUrl } from "../../lib/releaseNotesPage";
 import { startOnboarding } from "../onboarding/index";
 import { openSettings } from "../settings/windows";
 import type { PaletteMenuAction } from "./CommandBarActionMenu";
+import { platformWords } from "../../lib/platformWords";
 
 // Asked each time the menu opens: "Make … the Default Browser" shows only while Bay isn't.
 export async function appPaletteActions(windowId: string, onDismiss: () => void): Promise<PaletteMenuAction[]> {
@@ -44,7 +45,7 @@ export async function appPaletteActions(windowId: string, onDismiss: () => void)
       run: () =>
         confirm({
           title: `About ${app.appName}`,
-          message: `${app.appName} ${app.appVersion}\nBuild ${app.appBuild}\n${isMac ? "macOS" : "Windows"} ${app.osVersion}`,
+          message: `${app.appName} ${app.appVersion}\nBuild ${app.appBuild}\n${platformWords.osName} ${app.osVersion}`,
           confirmTitle: "OK",
           windowId,
         }),

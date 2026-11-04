@@ -29,6 +29,7 @@ import {
   type EditorSession,
 } from "./editor";
 import { boostsForHost, removeSelector, setBoostScript, updateBoost, useBoosts } from "./state";
+import { platformWords } from "../../lib/platformWords";
 
 // The Boost editor, as Arc's and Zen's: a panel over the page's corner, the page itself the preview. Colours on a
 // wheel (two dots: the dark end and the light end of the tint), Invert, the advanced sliders and the space's colours;
@@ -342,7 +343,9 @@ function Code({ tabId, boost, session }: { tabId: string; boost: Boost; session:
         <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>JavaScript</Text>
         <Toggle value={!!script?.enabled} onChange={(on) => void toggleScript(on)} />
       </View>
-      <Hint text="Only on this Mac, and never synced. It runs once each page's content has loaded, in its own world beside the page's scripts." />
+      <Hint
+        text={`Only on ${platformWords.thisComputer}, and never synced. It runs once each page's content has loaded, in its own world beside the page's scripts.`}
+      />
       <CodeField
         value={script?.code ?? ""}
         placeholder={'document.querySelectorAll("video").forEach((v) => (v.playbackRate = 1.5));'}

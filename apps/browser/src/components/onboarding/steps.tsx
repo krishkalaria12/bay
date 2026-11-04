@@ -18,6 +18,7 @@ import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
 import { finishOnboarding, nextStep, recordDefaultBrowserTrial, skipStep, STEPS, useOnboarding } from "./state";
 import { CheckMark, CheckRow, Reveal, SecondaryButton, SectionLabel, SelectTile, StepActions, StepProgress, StepTitle, useOnboardingColors } from "./ui";
 import { APP_ICON } from "../../lib/assets";
+import { PreviewTrafficLights } from "../window/PreviewTrafficLights";
 
 export function StepLayout({ children, actions, preview }: { children: ReactNode; actions: ReactNode; preview: ReactNode }) {
   const colors = useOnboardingColors();
@@ -219,11 +220,7 @@ function WindowPreview({ windowId }: { windowId: string }) {
         : null}
       {layout === "sidebar" ? (
         <View style={{ width: 70, gap: 6, paddingTop: 4 }}>
-          <View style={{ flexDirection: "row", gap: 4, marginBottom: 6 }}>
-            {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-              <View key={c} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c }} />
-            ))}
-          </View>
+          <PreviewTrafficLights size={7} style={{ flexDirection: "row", gap: 4, marginBottom: 6 }} />
           <View style={[line, { width: "90%", height: 16, borderRadius: 5, backgroundColor: theme.card }]} />
           {[0.8, 0.6, 0.7].map((w, i) => (
             <View key={i} style={[line, { width: `${w * 100}%` }]} />
@@ -231,11 +228,7 @@ function WindowPreview({ windowId }: { windowId: string }) {
         </View>
       ) : (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, height: 18 }}>
-          <View style={{ flexDirection: "row", gap: 4, marginRight: 6 }}>
-            {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-              <View key={c} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c }} />
-            ))}
-          </View>
+          <PreviewTrafficLights size={7} style={{ flexDirection: "row", gap: 4, marginRight: 6 }} />
           <View style={[line, { width: 56, height: 14, borderRadius: 5, backgroundColor: theme.card }]} />
           {[0, 1].map((i) => (
             <View key={i} style={[line, { width: 44 }]} />
@@ -304,11 +297,7 @@ function PinnedPreview({ selected }: { selected: string[] }) {
         gap: 12,
       }}
     >
-      <View style={{ flexDirection: "row", gap: 6 }}>
-        {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-          <View key={c} style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: c }} />
-        ))}
-      </View>
+      <PreviewTrafficLights size={9} style={{ flexDirection: "row", gap: 6 }} />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
         {Array.from({ length: slots }, (_, i) => {
           const site = sites[i];

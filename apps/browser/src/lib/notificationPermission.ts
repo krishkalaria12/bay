@@ -1,5 +1,6 @@
 import { capabilities } from "@bay/platform";
 import { confirm, hasNotificationPermissionQuery, notificationPermission, openNotificationSettings, requestNotificationPermission } from "@bay/desktop";
+import { platformWords } from "./platformWords";
 
 let asked = false;
 
@@ -15,8 +16,8 @@ export async function ensureNotificationPermission(windowId?: string): Promise<b
   asked = true;
   const { confirmed } = await confirm({
     title: "Bay Needs Notifications Permission",
-    message: "You need to open System Settings to give Bay permission to show you Notifications.",
-    confirmTitle: "Open System Settings",
+    message: `You need to open ${platformWords.systemSettings} to give Bay permission to show you Notifications.`,
+    confirmTitle: `Open ${platformWords.systemSettings}`,
     cancelTitle: "Not Now",
     windowId,
   });

@@ -25,6 +25,7 @@ import type { LocalFilePin } from "../../store/types";
 import { useSidebarMetrics } from "./tokens";
 import { blurSidebar, registerSidebarKeyboardRows, type SidebarKeyboardRow } from "./keyboard";
 import { SidebarKeyboardRowView } from "./keyboardFocus";
+import { platformWords } from "../../lib/platformWords";
 
 const fileRowId = (id: string, relativePath = "") => `file|${encodeURIComponent(id)}${relativePath ? `|${encodeURIComponent(relativePath)}` : ""}`;
 
@@ -147,8 +148,8 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
   const rowId = fileRowId(pin.id);
   const menu = async () => {
     const choice = await showMenu([
-      { id: "open", title: folder ? "Open in Finder" : "Open", enabled: available },
-      { id: "reconnect", title: "Locate on This Mac…" },
+      { id: "open", title: folder ? platformWords.openFolderTitle : "Open", enabled: available },
+      { id: "reconnect", title: `Locate on ${platformWords.thisComputerTitle}…` },
       { id: "refresh", title: "Refresh" },
       { separator: true },
       { id: "rename", title: "Rename Pin…" },
@@ -349,7 +350,7 @@ function FileRow({
   return (
     <SidebarKeyboardRowView
       rowId={keyboardRow.id}
-      label={`${name}${folder ? ", folder" : ""}${available ? "" : ", unavailable on this Mac"}`}
+      label={`${name}${folder ? ", folder" : ""}${available ? "" : `, unavailable on ${platformWords.thisComputer}`}`}
       accessibilityState={folder ? { expanded } : undefined}
       onAccessibilityTap={onPress}
     >
@@ -360,7 +361,7 @@ function FileRow({
         onContextMenu={onContextMenu}
         accessible
         accessibilityRole="button"
-        accessibilityLabel={`${name}${folder ? ", folder" : ""}${available ? "" : ", unavailable on this Mac"}`}
+        accessibilityLabel={`${name}${folder ? ", folder" : ""}${available ? "" : `, unavailable on ${platformWords.thisComputer}`}`}
         accessibilityState={folder ? { expanded } : undefined}
         tooltip={rootPath + (relativePath ? `/${relativePath}` : "")}
         style={{

@@ -13,7 +13,7 @@ export function createPreviewTransport(): NativeTransport {
     contractVersion: 2,
     // ?platform=linux previews the Linux host's look (no caption buttons, its UI font and icons).
     platform: query.get("platform") === "linux" ? "linux" : "windows",
-    modules: ["BayCEF", "BayEasel", "BayShell", "BayApp", "BaySystem", "BayKeychain", "BayImport", "BayChromeUI", "BayExtensions"],
+    modules: ["BayCEF", "BayEasel", "BayShell", "BayApp", "BayCli", "BaySystem", "BayKeychain", "BayImport", "BayChromeUI", "BayExtensions"],
     views: [],
     optionalMethods: [
       "BaySystem.downloadsFolder",
@@ -22,11 +22,15 @@ export function createPreviewTransport(): NativeTransport {
       "BayShell.windowState",
       "BayShell.setWindowCaption",
     ],
-    constants: { BayApp: { apiVersion: 9 }, BayShell: { preview: true, hostingSpike: query.has("spike") } },
+    constants: {
+      BayApp: { apiVersion: 9 },
+      BayShell: { preview: true, hostingSpike: query.has("spike"), ...(query.has("window") ? { windowId: String(query.get("window")) } : {}) },
+    },
     snapshots: {
       BayShell: { documents, windowButtonLayout: { left: [], right: ["minimize", "maximize", "close"] } },
       BaySystem: { files: {}, downloadsFolder: null },
       BayEasel: { isEaselWebSharingEnabled: false, readEaselShareRecords: {} },
+      BayCli: { installedVersion: null },
       BayApp: {
         environment: {},
         systemInfo: {

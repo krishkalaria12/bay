@@ -57,6 +57,8 @@ export type Capabilities = {
   keyDownEvents: boolean;
   /** The system's share menu. Elsewhere: none, Copy and Save instead. */
   shareSheet: boolean;
+  /** The `bay` terminal command: installing it, and letting it control Bay. */
+  terminalCommand: boolean;
   /** Capture's Mark Up canvas (ios/Capture.swift). */
   captureMarkup: boolean;
   /** File drags out of the app: AppKit, or the desktop host's OLE, XDND and Wayland drags (native_file_drag.cc). */
@@ -102,6 +104,7 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     focusRing: mac || webDesktop,
     keyDownEvents: mac || webDesktop,
     shareSheet: mac,
+    terminalCommand: hasModule("BayCli"),
     captureMarkup: mac,
     nativeDrag: mac || webDesktop,
     windowMoveByView: mac || webDesktop,

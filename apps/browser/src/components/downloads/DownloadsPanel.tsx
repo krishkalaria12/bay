@@ -1,5 +1,5 @@
 import { ScrollView } from "@bay/platform";
-import { Pressable, TextInput, View, isMac, modKey } from "@bay/platform";
+import { Pressable, TextInput, View, modKey } from "@bay/platform";
 import { cancelDownload, engineCall, pauseDownload, resumeDownload, type Download } from "@bay/chromium";
 import { ContextMenuArea, copyText, downloadsFolder, fileExists, MouseArea, openFile, revealFile, Symbol } from "@bay/desktop";
 import { memo, useEffect, useRef, useState } from "react";
@@ -27,6 +27,7 @@ import { useFileExists } from "../useFileExists";
 import { DOWNLOADS_LIST_TOP, DOWNLOADS_ROW_HEIGHT, PALETTE_FIELD_HEIGHT, PALETTE_FOOTER_HEIGHT } from "../commandBar/constants";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { clearDownloads, removeDownload, setDownloadsOpen } from "../../runtime/windowUiActions";
+import { platformWords } from "../../lib/platformWords";
 
 // The downloads, as a palette: search, a file-type filter, ↩ for the selected file and ⌘K for the rest.
 
@@ -482,7 +483,7 @@ function downloadActions(windowId: string, d: Download, exists: boolean): Palett
     ...(exists
       ? [
           { id: "open", title: "Open", icon: "arrow.up.forward.app", hint: "↩", run: () => openFile(d.path) },
-          { id: "reveal", title: isMac ? "Show in Finder" : "Show in File Explorer", icon: "finder", hint: "⌘↩", run: () => revealFile(d.path) },
+          { id: "reveal", title: platformWords.revealTitle, icon: "finder", hint: "⌘↩", run: () => revealFile(d.path) },
           { id: "copyFile", title: "Copy File", icon: "doc.on.doc", run: () => copyDownloadFile(d) },
         ]
       : []),
@@ -548,7 +549,7 @@ function EmptyState({ filtered, onOpenFolder }: { filtered: boolean; onOpenFolde
           </View>
           <Text style={{ marginTop: 18, fontSize: 17, fontWeight: "600", color: theme.textPrimary }}>Nothing downloaded yet</Text>
           <Text style={{ marginTop: 6, fontSize: 13, lineHeight: 17, textAlign: "center", color: theme.textSecondary, maxWidth: 320 }}>
-            {`Files you download land in Downloads and are listed here, one Enter from ${isMac ? "Finder" : "File Explorer"}.`}
+            {`Files you download land in Downloads and are listed here, one Enter from ${platformWords.fileManager}.`}
           </Text>
           <View {...hoverProps} style={{ marginTop: 18 }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Open Downloads Folder" onPress={onOpenFolder}>
