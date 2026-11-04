@@ -107,7 +107,9 @@ useBrowserStore.subscribe((state, previous) => {
 AppState.addEventListener("change", (status) => {
   if (status === "active") {
     if (useBrowserStore.getState().ready) useBrowserStore.getState().dispatch({ type: "archive-stale", now: Date.now() });
-  } else if (saveTimer) {
-    save();
+  } else {
+    // Saved straight away: Bay may be killed in the background, and the start page timer needs this on next launch.
+    if (status === "background" && useBrowserStore.getState().ready) useBrowserStore.getState().dispatch({ type: "left", now: Date.now() });
+    if (saveTimer) save();
   }
 });

@@ -106,6 +106,8 @@ export interface BrowserData {
   preferences: BrowserPreferences;
   /** Each site's icon (host without www.), downloaded once into the app's cache: a file:// URI. */
   favicons: Record<string, string>;
+  /** When Bay last went to the background, for "start page after hours away"; null while it hasn't. */
+  leftAt: number | null;
 }
 
 export type TabUpdate = Partial<Pick<BrowserTab, "url" | "title" | "favicon" | "lastVisit" | "snapshot">>;

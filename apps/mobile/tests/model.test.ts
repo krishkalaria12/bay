@@ -170,6 +170,14 @@ test("browsing preferences change in one step and repair bad values", () => {
   assert.deepEqual(saved.preferences.youtube, { shorts: false, suggestions: false, distractions: false });
 });
 
+test("the time Bay left survives a restart, and bad values are dropped", () => {
+  let data = initialBrowserData(createTab("a", 0));
+  assert.equal(data.leftAt, null);
+  data = reduceBrowserData(data, { type: "left", now: 42 });
+  assert.equal(parseBrowserData({ version: 1, ...persistedBrowserData(data) }, data).leftAt, 42);
+  assert.equal(parseBrowserData({ version: 1, leftAt: "soon" }, data).leftAt, null);
+});
+
 test("blocking can be turned off and paused per site", () => {
   let data = initialBrowserData(createTab("a", 0));
   assert.equal(data.preferences.blockContent, true);

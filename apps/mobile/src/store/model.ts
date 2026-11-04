@@ -75,6 +75,7 @@ export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFER
     archive: [],
     downloads: [],
     favicons: {},
+    leftAt: null,
     preferences: {
       ...preferences,
       blockingPausedHosts: [...preferences.blockingPausedHosts],
@@ -108,6 +109,7 @@ export type BrowserAction =
   | { type: "pause-blocking"; host: string; paused: boolean }
   | { type: "lock-private-tabs"; enabled: boolean }
   | { type: "preferences"; update: Partial<SimplePreferences> }
+  | { type: "left"; now: number }
   | { type: "reader-settings"; settings: ReaderSettings }
   | { type: "hidden-elements"; host: string; selectors: string[] }
   | { type: "download"; update: DownloadEvent; now: number }
@@ -233,6 +235,8 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     }
     case "lock-private-tabs":
       return action.enabled === data.preferences.lockPrivateTabs ? data : { ...data, preferences: { ...data.preferences, lockPrivateTabs: action.enabled } };
+    case "left":
+      return { ...data, leftAt: action.now };
     case "preferences": {
       // Only the updated keys come from the parse, so untouched preferences (and their arrays) stay the same objects.
       const parsed = parsePreferences({ ...data.preferences, ...action.update });
@@ -504,6 +508,7 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
         .filter((entry): entry is [string, string] => /^[a-z0-9.-]+$/.test(entry[0]) && typeof entry[1] === "string" && entry[1].startsWith("file://"))
         .slice(-FAVICON_LIMIT),
     ),
+    leftAt: typeof value.leftAt === "number" && Number.isFinite(value.leftAt) ? value.leftAt : null,
   };
 }
 
