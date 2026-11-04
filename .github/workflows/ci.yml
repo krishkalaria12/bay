@@ -41,7 +41,7 @@ jobs:
           pnpm turbo run test --filter=@bay/core --filter=@bay/browser
           pnpm --filter @bay/sync exec node --test "src/**/*.test.ts"
       - name: Engine freshness checks
-        run: python3 scripts/tests/test-engine-fresh.py
+        run: node --test scripts/tests/test-engine-fresh.mjs
       - name: React Compiler
         run: pnpm compiler:check
       - name: Rust content blocker
@@ -55,5 +55,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
       - name: Native state and download regression tests
-        run: python3 packages/chromium/scripts/test-content-blocker.py
+        run: node packages/chromium/scripts/test-content-blocker.mjs

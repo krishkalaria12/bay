@@ -202,7 +202,7 @@ jobs:
           dirty="$(git status --porcelain -- apps/browser apps/cli packages engine | grep -v ' apps/browser/build' || true)"
           [ -z "$dirty" ] || { echo "::error::installing changed tracked files, so release.sh would refuse the tree:"; echo "$dirty"; exit 1; }
       - name: Update channels
-        run: python3 packages/desktop/scripts/test-updater.py
+        run: node packages/desktop/scripts/test-updater.mjs
       - name: Build
         run: |
           args=("$VERSION" --channel "$CHANNEL" --phase build)
