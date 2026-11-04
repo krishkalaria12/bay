@@ -69,6 +69,7 @@ chromium linux chromium-window-button-layout-portal-linux.patch
 chromium linux chromium-default-theme-linux.patch
 chromium linux chromium-middle-click-paste-flag-linux.patch
 chromium all chromium-password-bubble-hook.patch
+chromium win,linux chromium-form-prompts-webui.patch
 chromium all chromium-password-generation-local.patch
 chromium all chromium-tab-strip-notify-before-insert.patch
 chromium all chromium-ui-update-before-insert.patch

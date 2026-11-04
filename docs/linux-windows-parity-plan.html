@@ -276,18 +276,6 @@
               </thead>
               <tbody>
                 <tr>
-                  <td><code>onPasswordPrompt</code></td>
-                  <td>Save and update password offers</td>
-                  <td><code>nn_password_prompt.mm</code></td>
-                  <td><span class="tag t-port">P1</span></td>
-                </tr>
-                <tr>
-                  <td><code>onAutofillPrompt</code></td>
-                  <td>Save address and card offers; Bay's suggestion popup</td>
-                  <td><code>nn_autofill_prompt/trigger.mm</code></td>
-                  <td><span class="tag t-port">P1</span></td>
-                </tr>
-                <tr>
                   <td><code>onPopupBlocked</code></td>
                   <td>Blocked-popup notice with "Open"</td>
                   <td>NNCore content hooks</td>
@@ -490,7 +478,6 @@
           <h2 id="decisions-h">6. Open decisions</h2>
           <ul>
             <li>Choose the Chromium DRM playback and distribution approach for Linux and Windows, then verify protected playback on the target builds.</li>
-            <li>Decide whether Chrome's built-in password and autofill prompts are acceptable for a first beta while Bay's prompt events are being ported.</li>
             <li>Decide whether the ports should expose stable/nightly update-channel selection.</li>
           </ul>
         </section>
