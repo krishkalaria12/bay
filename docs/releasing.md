@@ -64,7 +64,7 @@ A nightly by hand: `gh workflow run release.yml` (`-f force=true` even if nothin
 - **checks**: format, lint, types and the JavaScript tests.
 - **build**, on `macos-26` with the newest released Xcode, with no secrets: fetches the engine for this exact
   `engine/` tree, installs (pnpm, Pods), runs `scripts/release.sh <version> --channel <channel> --phase build` (the
-  archive, signed ad hoc) and uploads it. Before the archive, `packages/desktop/scripts/test-updater.py` checks channel
+  archive, signed ad hoc) and uploads it. Before the archive, `packages/desktop/scripts/test-updater.mjs` checks channel
   selection and the pending-install guard against Sparkle's development framework from Pods.
 - **sign** restores no cache and installs nothing but Sparkle's own pinned tools, so no dependency code runs next to
   the keys, and treats the build as untrusted (`.github/release/unpack-build.py`). `.github/release/signing.sh` puts

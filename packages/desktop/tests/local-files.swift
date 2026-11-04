@@ -1,4 +1,4 @@
-// Compiled against the production bookmark helper by scripts/test-local-files.py.
+// Compiled against the production bookmark helper by scripts/test-local-files.mjs.
 func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
   guard condition() else { fatalError(message) }
 }
