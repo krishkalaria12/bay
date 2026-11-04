@@ -161,6 +161,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   std::unique_ptr<CliInstallerService> cli_installer_;
 #endif
   void FinishShortcutRecording(base::Value result);
+  // BayShell.setSwitcherCapture (window_key_watch.h).
+  void SwitcherCapture(bool active);
   // The dragged tab's floating preview (drag_preview.h).
   void DragPreviewCall(const std::string& method, const base::ListValue& args);
   // BayLocalFiles (local_files.h).

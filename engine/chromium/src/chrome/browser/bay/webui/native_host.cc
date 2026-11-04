@@ -74,6 +74,8 @@
 #include "chrome/browser/bay/webui/little_bay_access.h"
 #include "chrome/browser/bay/webui/local_files.h"
 #include "chrome/browser/bay/webui/native_file_drag.h"
+#include "chrome/browser/bay/webui/window_key_watch.h"
+#include "ui/views/widget/widget.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #include "chrome/browser/platform_util.h"
 #include "content/public/common/drop_data.h"
@@ -519,6 +521,27 @@ gfx::Rect RectOf(const std::vector<int>& n) {
   return gfx::Rect(n[0], n[1], n[2], n[3]);
 }
 }  // namespace
+void NativeHost::SwitcherCapture(bool active) {
+  auto& watch = WindowKeyWatch::Get();
+  if (!active) {
+    watch.StopSwitcher(this);
+    return;
+  }
+  auto* window = context_.window();
+  watch.StartSwitcher(
+      this,
+      window && window->GetWindow()
+          ? views::Widget::GetWidgetForNativeWindow(
+                window->GetWindow()->GetNativeWindow())
+          : nullptr,
+      base::BindRepeating(
+          [](base::WeakPtr<NativeHost> host, base::DictValue event) {
+            if (host)
+              host->Emit("BayShell", "onAppEvent",
+                         base::Value(std::move(event)));
+          },
+          GetWeakPtr()));
+}
 void NativeHost::DragPreviewCall(const std::string& method,
                                  const base::ListValue& args) {
   auto& preview = DragPreview::Get();
@@ -825,6 +848,21 @@ void NativeHost::InstallCloseHooks() {
   static const bool installed = [] {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
     g_bay_document_drag_enter = &RecordDocumentDrag;
+    WindowKeyWatch::Get().Install();
+#endif
+#if BUILDFLAG(IS_WIN)
+    // Windows' own way to reach an app's menus. On Linux a tap means nothing to
+    // most apps, and F10 is the desktop's key.
+    WindowKeyWatch::Get().SetAltTapHandler(base::BindRepeating([] {
+      for (const auto& [owner, host] : Hosts()) {
+        auto* browser = host && !host->is_coordinator() ? host->browser() : nullptr;
+        if (browser && browser->GetWindow() &&
+            browser->GetWindow()->IsActive()) {
+          EmitWindowCommand(browser, "showAppMenu");
+          return;
+        }
+      }
+    }));
 #endif
     // The broker installs a detached-tab-only fallback on Linux. Construct it
     // first, then replace that fallback with the full renderer handshake so it
@@ -995,6 +1033,7 @@ content::WebContents* NativeHost::document_contents() const {
 NativeHost::~NativeHost() {
   FinishShortcutRecording(base::Value());
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  WindowKeyWatch::Get().StopSwitcher(this);
   DocumentDrags().erase(document_contents());
 #endif
   InstallPrompts::Get().HostGone(this);
@@ -1805,6 +1844,12 @@ void NativeHost::Invoke(const std::string& module,
                                Success(std::move(reports)));
                          },
                          std::move(callback)));
+    return;
+  }
+  if (module == "BayShell" && method == "setSwitcherCapture") {
+    SwitcherCapture(At(args, 0) && At(args, 0)->is_bool() &&
+                    At(args, 0)->GetBool());
+    std::move(callback).Run(Success());
     return;
   }
   if (module == "BayShell" && method.starts_with("dragPreview")) {

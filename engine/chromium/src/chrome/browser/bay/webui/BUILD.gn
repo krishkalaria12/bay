@@ -204,6 +204,8 @@ source_set("impl") {
       "local_files.h",
       "native_file_drag.cc",
       "native_file_drag.h",
+      "window_key_watch.cc",
+      "window_key_watch.h",
       "shell_ui.cc",
       "shell_ui_options.cc",
     ]
@@ -743,6 +745,18 @@ if (is_win || is_linux) {
       "//content/test:test_support",
       "//testing/gtest",
       "//ui/base",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  test("window_key_watch_unittests") {
+    sources = [ "window_key_watch_unittest.cc" ]
+    deps = [
+      ":webui",
+      "//base/test:run_all_unittests",
+      "//testing/gtest",
+      "//ui/events:events_base",
     ]
   }
 }
