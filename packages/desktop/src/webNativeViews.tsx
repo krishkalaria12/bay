@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Image, Text, type TextStyle } from "react-native";
 import { View, type ViewProps } from "@bay/platform";
+import { surfaceBorderColors } from "./webSurfaceBorder";
 import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEffectProps, SurfaceProps, SymbolProps, VisualEffectProps } from "./index";
 import type { MiddleClickEvent, MouseAreaProps, SideButton } from "./system";
 import type { LocalFilesAreaProps } from "./localFiles";
@@ -135,12 +136,11 @@ function Surface({
   children,
   ...props
 }: NativeSurfaceProps) {
-  const colors = borderColors?.length === 4 ? borderColors : undefined;
   const offset = shadowOffset ?? surfaceShadowOffset ?? [0, 0];
   const radius = shadowRadius ?? surfaceShadowRadius ?? 0;
   const opacity = shadowOpacity ?? surfaceShadowOpacity ?? 0;
   const color = shadowColor ?? surfaceShadowColor ?? "#000000";
-  const css: CSS = {};
+  const css: CSS = surfaceBorderColors(borderColor, borderColors);
   if (opacity > 0 && radius > 0) css.boxShadow = `${offset[0]}px ${offset[1]}px ${radius}px color-mix(in srgb, ${color} ${opacity * 100}%, transparent)`;
   return (
     <Box
@@ -150,9 +150,7 @@ function Surface({
         {
           backgroundColor: fill,
           borderRadius: cornerRadius,
-          borderColor,
           borderWidth,
-          ...(colors ? { borderTopColor: colors[0], borderRightColor: colors[1], borderBottomColor: colors[2], borderLeftColor: colors[3] } : {}),
         },
         style,
       ]}
