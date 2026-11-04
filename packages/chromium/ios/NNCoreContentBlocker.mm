@@ -148,6 +148,66 @@ char *Response(const char *url, const char *source, const char *top, const char 
                               method ?: "GET", ip, headers ?: "[]");
 }
 
+// NNCoreBodyFilterGate: every response's question, whether $replace or an HTML ##^ rule wants its body.
+bool BodyFilterApplies(const char *url, const char *source, const char *top, const char *type, const char *method,
+                       int status, const char *contentType, const char *contentDisposition) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return false;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return false;
+  return bay_blocker_body_filter_applies(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET", status,
+                                         contentType ?: "", contentDisposition ?: "");
+}
+
+// NNCoreBodyFilter: a whole body the gate asked for, on the thread pool. Keeps its own hold on the engine, which a list
+// update may replace while it runs.
+uint8_t *BodyFiltered(const char *url, const char *source, const char *top, const char *type, const char *method,
+                      const char *contentType, const uint8_t *body, size_t length, size_t *outLength) {
+  *outLength = 0;
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  size_t filteredLength = 0;
+  uint8_t *filtered = bay_blocker_body_filter(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET",
+                                              contentType ?: "", body, length, &filteredLength);
+  if (!filtered) return nullptr;
+  uint8_t *copy = (uint8_t *)malloc(filteredLength ?: 1);
+  if (copy) {
+    memcpy(copy, filtered, filteredLength);
+    *outLength = filteredLength;
+  }
+  bay_bytes_free(filtered, filteredLength);
+  return copy;
+}
+
+// NNCoreRequestHeaderNames: what $requestheader rules read for this request, nearly always nothing.
+char *RequestHeaderNames(const char *url, const char *source, const char *top, const char *type, const char *method) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return nullptr;
+  char *names = bay_blocker_request_header_names(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET");
+  char *copy = names ? strdup(names) : nullptr;
+  bay_string_free(names);
+  return copy;
+}
+
+// NNCoreRequestHeaderFilter: $requestheader, with the headers it asked for.
+bool RequestHeadersBlocked(const char *url, const char *source, const char *top, const char *type, const char *method,
+                           const char *headers) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return false;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return false;
+  return bay_blocker_request_headers_blocked(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET",
+                                             headers ?: "[]");
+}
+
+// NNCoreCnameFilter: what a hostname is an alias of, for each alias of a response.
+bool CnameBlocked(const char *url, const char *alias, const char *source, const char *top, const char *type,
+                  const char *method) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return false;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return false;
+  return bay_blocker_cname_blocked(live->engine->blocker, url, alias, source ?: "", type ?: "other", method ?: "GET");
+}
+
 // NNCoreContentSecurityPolicySource: $csp rules, on the filter's sequence while the navigation waits.
 char *ContentSecurityPolicy(const char *url, const char *source, const char *top, const char *type) {
   std::shared_ptr<const Live> live = CurrentLive();
@@ -334,6 +394,18 @@ void PublishLive() {
     [NNCoreEngine setResponseFilter:live->enabled && live->engine && bay_blocker_has_response_modifiers(live->engine->blocker)
                                         ? Response
                                         : nullptr];
+  // The rest are asked about every response or request, so they're only there when a rule can answer.
+  const bool filtering = live->enabled && live->engine;
+  if ([NNCoreEngine respondsToSelector:@selector(setBodyFilterGate:filter:)]) {
+    const bool bodies = filtering && bay_blocker_has_body_modifiers(live->engine->blocker);
+    [NNCoreEngine setBodyFilterGate:bodies ? BodyFilterApplies : nullptr filter:bodies ? BodyFiltered : nullptr];
+  }
+  if ([NNCoreEngine respondsToSelector:@selector(setRequestHeaderNames:filter:)]) {
+    const bool headers = filtering && bay_blocker_has_request_header_modifiers(live->engine->blocker);
+    [NNCoreEngine setRequestHeaderNames:headers ? RequestHeaderNames : nullptr filter:headers ? RequestHeadersBlocked : nullptr];
+  }
+  if ([NNCoreEngine respondsToSelector:@selector(setCnameFilter:)])
+    [NNCoreEngine setCnameFilter:filtering ? CnameBlocked : nullptr];
   Publish(std::move(live));
 }
 

@@ -12,9 +12,23 @@ static NSMutableArray<NSURLProtocol *> *pending;
 + (void (^)(NSString *, NSDictionary<NSString *, id> *))eventHandler { return nil; }
 @end
 static NNCoreResponseFilter gResponseFilter;
+static NNCoreBodyFilterGate gBodyGate;
+static NNCoreBodyFilter gBodyFilter;
+static NNCoreRequestHeaderNames gHeaderNames;
+static NNCoreRequestHeaderFilter gHeaderFilter;
+static NNCoreCnameFilter gCnameFilter;
 @implementation NNCoreEngine
 + (void)setRequestFilter:(NNCoreRequestFilter)filter {}
 + (void)setResponseFilter:(NNCoreResponseFilter)filter { gResponseFilter = filter; }
++ (void)setBodyFilterGate:(NNCoreBodyFilterGate)gate filter:(NNCoreBodyFilter)filter {
+  gBodyGate = gate;
+  gBodyFilter = filter;
+}
++ (void)setRequestHeaderNames:(NNCoreRequestHeaderNames)names filter:(NNCoreRequestHeaderFilter)filter {
+  gHeaderNames = names;
+  gHeaderFilter = filter;
+}
++ (void)setCnameFilter:(NNCoreCnameFilter)filter { gCnameFilter = filter; }
 @end
 
 @interface BlockerTestProtocol : NSURLProtocol
@@ -220,6 +234,69 @@ int main(int argc, char **argv) {
     PublishLive();
     Require(gResponseFilter == nullptr, "lists without response rules register none");
     puts("PASS: response rules block, add and remove headers, and plain exceptions lift them");
+
+    // Body rules: $replace and HTML filtering, gated per response, and lifted on a paused site.
+    Require(gBodyGate == nullptr && gHeaderNames == nullptr, "lists without body or header rules register neither");
+    const char *bodies = "||body.example^$replace=/advert/article/g\n\
+                          page.example##^script:has-text(tracker)\n\
+                          ||headers.example/a.js$script,3p,requestheader=Cookie:*secret*\n\
+                          ||tracker.example^\n@@||excepted.example^$cname\n";
+    gEngine = std::make_shared<Engine>(bay_blocker_new(&bodies, nullptr, 1));
+    PublishLive();
+    Require(gBodyGate && gBodyFilter, "body rules register a filter");
+    const char *bodyURL = "https://body.example/text";
+    const char *top = "https://body.example/";
+    Require(gBodyGate(bodyURL, top, top, "xmlhttprequest", "GET", 200, "text/plain", ""), "a matching response is wanted");
+    Require(!gBodyGate(bodyURL, top, top, "xmlhttprequest", "GET", 200, "image/png", ""), "a binary one isn't");
+    Require(!gBodyGate(bodyURL, top, top, "xmlhttprequest", "GET", 200, "text/plain", "attachment"), "nor a download");
+    Require(!gBodyGate("https://other.example/", top, top, "xmlhttprequest", "GET", 200, "text/plain", ""),
+            "nor one no rule matches");
+    size_t length = 0;
+    const char *text = "an advert, an advert";
+    uint8_t *filtered = gBodyFilter(bodyURL, top, top, "xmlhttprequest", "GET", "text/plain", (const uint8_t *)text,
+                                    strlen(text), &length);
+    Require(filtered && std::string((char *)filtered, length) == "an article, an article", "$replace rewrites a body");
+    free(filtered);
+    Require(!gBodyFilter(bodyURL, top, top, "xmlhttprequest", "GET", "text/plain", (const uint8_t *)"clean", 5, &length) &&
+                length == 0,
+            "a body nothing matches is left alone");
+    const char *pageURL = "https://page.example/";
+    const char *html = "<!doctype html><html><head><script>tracker()</script><script>site()</script></head></html>";
+    Require(gBodyGate(pageURL, pageURL, pageURL, "document", "GET", 200, "text/html; charset=utf-8", ""),
+            "an HTML rule wants a document");
+    filtered = gBodyFilter(pageURL, pageURL, pageURL, "document", "GET", "text/html; charset=utf-8", (const uint8_t *)html,
+                           strlen(html), &length);
+    const std::string document((char *)filtered, length);
+    Require(document.find("tracker()") == std::string::npos && document.find("site()") != std::string::npos,
+            "HTML filtering removes the element and keeps the rest");
+    free(filtered);
+    char *names = gHeaderNames("https://headers.example/a.js", "https://site.example/", "https://site.example/", "script", "GET");
+    Require(names && !strcmp(names, "[\"cookie\"]"), "$requestheader asks for the header it reads");
+    free(names);
+    Require(!gHeaderNames("https://headers.example/b.js", "https://site.example/", "https://site.example/", "script", "GET"),
+            "and for nothing on other requests");
+    Require(gHeaderFilter("https://headers.example/a.js", "https://site.example/", "https://site.example/", "script", "GET",
+                          "[[\"Cookie\",\"a=secret\"]]"),
+            "a matching header blocks");
+    Require(!gHeaderFilter("https://headers.example/a.js", "https://site.example/", "https://site.example/", "script", "GET",
+                           "[[\"Cookie\",\"a=b\"]]"),
+            "another doesn't");
+    Require(gCnameFilter("https://metrics.site.example/a.js", "x.tracker.example", "https://site.example/",
+                         "https://site.example/", "script", "GET"),
+            "a CNAME of a blocked host blocks");
+    Require(!gCnameFilter("https://metrics.excepted.example/a.js", "x.tracker.example", "https://excepted.example/",
+                          "https://excepted.example/", "script", "GET"),
+            "a $cname exception lifts that for its site");
+    Require(!gCnameFilter("https://site.example/", "x.tracker.example", "https://site.example/", "https://site.example/",
+                          "document", "GET"),
+            "a main frame isn't uncloaked");
+    [NNCoreContentBlocker setAllowed:YES onHost:@"body.example" completion:^(NSString *error) { Require(!error, "pause succeeds"); }];
+    Require(!gBodyGate(bodyURL, top, top, "xmlhttprequest", "GET", 200, "text/plain", ""), "a paused site's bodies stay");
+    [NNCoreContentBlocker setAllowed:NO onHost:@"body.example" completion:^(NSString *error) { Require(!error, "unpause succeeds"); }];
+    gEngine = std::make_shared<Engine>(bay_blocker_new(&plain, nullptr, 1));
+    PublishLive();
+    Require(gBodyGate == nullptr && gHeaderNames == nullptr, "and they go with their rules");
+    puts("PASS: body rules rewrite what they should, $requestheader reads headers and CNAMEs are uncloaked");
 
 
     // Visits to pages the lists block.
