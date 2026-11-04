@@ -57,6 +57,7 @@ chromium mac chromium-icloud-keychain-window.patch
 # their saved passwords and cookies. It must survive any re-sync (plain Chromium for NNCore, a version bump), unchanged.
 chromium mac chromium-safe-storage-name.patch
 chromium all chromium-password-bubble-hook.patch
+chromium win,linux chromium-form-prompts-webui.patch
 chromium all chromium-password-generation-local.patch
 chromium all chromium-tab-strip-notify-before-insert.patch
 chromium all chromium-ui-update-before-insert.patch

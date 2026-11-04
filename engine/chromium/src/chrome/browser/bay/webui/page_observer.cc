@@ -13,6 +13,7 @@
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/page_media_events.h"
+#include "chrome/browser/bay/webui/form_prompts.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -173,6 +174,14 @@ void TabObserver::State() {
                            : visible));
   if (!std::exchange(initial_state_sent_, true)) {
     media_events_->Replay();
+    // Prompt controllers follow the page while it changes window or mount.
+    // Only the mounted view receives sensitive display fields.
+    if (!facts_) {
+      if (auto password = FormPrompts::Password(web_contents()))
+        Emit("onPasswordPrompt", std::move(*password));
+      if (auto autofill = FormPrompts::Autofill(web_contents()))
+        Emit("onAutofillPrompt", std::move(*autofill));
+    }
     LoadProgressChanged(web_contents()->GetLoadProgress());
     Favicon();
     Zoom();

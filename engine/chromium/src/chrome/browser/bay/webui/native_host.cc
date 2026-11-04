@@ -40,6 +40,7 @@
 #include "chrome/browser/bay/webui/display_media_picker.h"
 #include "chrome/browser/bay/webui/engine_services.h"
 #include "chrome/browser/bay/webui/install_prompts.h"
+#include "chrome/browser/bay/webui/form_prompts.h"
 #include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
@@ -453,6 +454,7 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   PermissionPrompts::Start(base::BindRepeating(&EmitPermissionEvent));
   ExternalAppPrompts::Start(base::BindRepeating(&NativeHost::EmitToView));
   ContextSearch::Start(base::BindRepeating(&NativeHost::EmitToView));
+  FormPrompts::Start(base::BindRepeating(&NativeHost::EmitToView));
   PageMenu::Start();
   DeviceChoosers::Start(base::BindRepeating(&NativeHost::EmitChromeUI));
   CastDialogs::Start(base::BindRepeating(&NativeHost::EmitChromeUI));

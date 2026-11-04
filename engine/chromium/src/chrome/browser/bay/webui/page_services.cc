@@ -1,5 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/page_services.h"
+#include "chrome/browser/bay/webui/form_prompts.h"
 #include "chrome/browser/bay/webui/page_security.h"
 
 #include <algorithm>
@@ -397,6 +398,32 @@ bool DispatchPageMethod(content::WebContents* contents,
                         const std::string& command,
                         const base::ListValue& params,
                         PageResponse& callback) {
+  if (command == "resolvePasswordPrompt") {
+    if (params.size() != 3 || !params[0].is_string() ||
+        (!params[1].is_none() && !params[1].is_string()) ||
+        (!params[2].is_none() && !params[2].is_string())) {
+      std::move(callback).Run(Failure("Invalid password prompt answer"));
+      return true;
+    }
+    const auto edit = [&](size_t i) -> std::optional<std::string> {
+      return params[i].is_string() ? std::make_optional(params[i].GetString())
+                                    : std::nullopt;
+    };
+    const bool answered = FormPrompts::ResolvePassword(
+        contents, params[0].GetString(), edit(1), edit(2));
+    std::move(callback).Run(answered ? Success() : Failure("The password prompt is no longer available"));
+    return true;
+  }
+  if (command == "resolveAutofillPrompt") {
+    if (params.size() != 2 || !params[0].is_int() || !params[1].is_string()) {
+      std::move(callback).Run(Failure("Invalid autofill prompt answer"));
+      return true;
+    }
+    const bool answered = FormPrompts::ResolveAutofill(
+        contents, params[0].GetInt(), params[1].GetString());
+    std::move(callback).Run(answered ? Success() : Failure("The autofill prompt is no longer available"));
+    return true;
+  }
   if (command == "setBoostStyle") {
     if (params.empty() || !params[0].is_string()) {
       std::move(callback).Run(Failure("Boost style descriptor required"));
