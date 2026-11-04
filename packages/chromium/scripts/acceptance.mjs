@@ -37,7 +37,7 @@ import { createServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { basename, join, resolve } from "node:path";
 import { X509Certificate, createHash, createSign, generateKeyPairSync } from "node:crypto";
-import { crc32, deflateSync, inflateSync } from "node:zlib";
+import { brotliCompressSync, crc32, deflateSync, gzipSync, inflateSync } from "node:zlib";
 import { attach as attachInstance, launch as launchInstance, onScreenWindows as windowsOf, reporter, sleep } from "../../../scripts/lib/instance.mjs";
 
 // MARK: What each check needs
@@ -121,7 +121,17 @@ const usesPageA = [
   "last-used-profile",
 ];
 const needs = {
-  ...Object.fromEntries([...usesPageA, "kill-task", "internal-pages-not-history", "second-profile"].map((name) => [name, ["open-url"]])),
+  ...Object.fromEntries(
+    [
+      ...usesPageA,
+      "kill-task",
+      "internal-pages-not-history",
+      "second-profile",
+      "content-blocker-rewrites",
+      "content-blocker-redirect-state",
+      "content-blocker-cookies",
+    ].map((name) => [name, ["open-url"]]),
+  ),
   // Another tab with a page: target-blank's C, cmd-click's D in the background, window-open's E.
   "tab-switch": ["open-url", "target-blank"],
   "tab-keys-from-page": ["open-url", "target-blank"],
@@ -253,6 +263,9 @@ const stamp = () => new Date().toISOString().slice(11, 23);
 const adServed = [];
 // Every request's path and query, counted (js-reload-keeps-pages: a page loaded once).
 const served = new Map();
+// Responses held until the cookie regression has written an unrelated allowed cookie.
+const heldCookieResponses = new Map();
+const cookieEchoes = new Map();
 const server = createServer((req, res) => {
   if (!req.headers.host?.startsWith("127.0.0.1")) adServed.push(`${req.headers.host}${req.url}`);
   served.set(req.url, (served.get(req.url) ?? 0) + 1);
@@ -264,6 +277,159 @@ const server = createServer((req, res) => {
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64");
     res.writeHead(200, { "content-type": "image/png" });
     return res.end(png);
+  }
+  if (url.pathname === "/redirect-ad") {
+    res.writeHead(302, { location: `http://ib.adnxs.com/ut/v3${url.search}` });
+    return res.end();
+  }
+  if (url.pathname.startsWith("/rewrite-chain-")) {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+    res.setHeader("access-control-allow-headers", "authorization, content-type");
+    res.setHeader("cache-control", "no-store");
+    if (req.method === "OPTIONS") return res.end();
+    const kind = url.searchParams.get("kind");
+    if (url.pathname === "/rewrite-chain-start") {
+      const destination =
+        kind === "post-direct"
+          ? `/rewrite-chain-echo?kind=${kind}&fbclid=tracker`
+          : `http://pvpoke-re.com:${server.address().port}/rewrite-chain-middle?kind=${kind}`;
+      res.writeHead(kind === "auth" ? 302 : 303, { location: destination });
+      return res.end();
+    }
+    if (url.pathname === "/rewrite-chain-middle") {
+      res.writeHead(307, { location: `/rewrite-chain-echo?kind=${kind}&fbclid=tracker` });
+      return res.end();
+    }
+    if (url.pathname === "/rewrite-chain-echo") {
+      const chunks = [];
+      req.on("data", (chunk) => chunks.push(chunk));
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            method: req.method,
+            authorization: req.headers.authorization ?? null,
+            contentType: req.headers["content-type"] ?? null,
+            body: Buffer.concat(chunks).toString(),
+            query: url.search,
+          }),
+        );
+      });
+      return;
+    }
+  }
+  // The content blocker's body and header rules (content-blocker-rewrites).
+  if (url.pathname === "/body-page") {
+    const legacy = url.searchParams.get("charset") === "windows-1252";
+    const html =
+      `<!doctype html><html><head><title>Body kept</title><script>var adserverDomain = 1; document.title = "Body ad ran"</script>` +
+      `<script>window.kept = "caf\u00e9"</script></head><body>text</body></html>`;
+    const bytes = Buffer.from(html, legacy ? "latin1" : "utf8");
+    const encoding = url.searchParams.get("encoding");
+    const body = encoding === "gzip" ? gzipSync(bytes) : encoding === "br" ? brotliCompressSync(bytes) : bytes;
+    res.writeHead(200, {
+      "content-type": `text/html; charset=${legacy ? "windows-1252" : "utf-8"}`,
+      "content-length": String(body.length),
+      ...(encoding ? { "content-encoding": encoding } : {}),
+    });
+    if (url.searchParams.has("chunks")) {
+      res.write(body.subarray(0, 20));
+      return setTimeout(() => res.end(body.subarray(20)), 200);
+    }
+    return res.end(body);
+  }
+  if (url.pathname === "/body.js") {
+    res.writeHead(200, { "content-type": "text/javascript", "access-control-allow-origin": "*" });
+    return res.end(`try{GameMaster.load()}catch(e){}`);
+  }
+  if (url.pathname === "/body-big.js") {
+    res.writeHead(200, { "content-type": "text/javascript" });
+    res.write(`try{GameMaster.load()}catch(e){}`);
+    return res.end(Buffer.alloc(11 * 1024 * 1024, "/"));
+  }
+  if (url.pathname === "/body-stream.js") {
+    // Never ends: a stream's first event has to arrive by itself.
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    return res.write(`data: try{GameMaster\n\n`);
+  }
+  if (url.pathname === "/location-redirect") {
+    res.writeHead(302, { location: "/location-target", "content-type": "text/html" });
+    return res.end();
+  }
+  if (url.pathname === "/set-cookie-page") {
+    res.writeHead(200, { "content-type": "text/html", "set-cookie": `blocked=${url.search.slice(1)}; path=/` });
+    return res.end("<!doctype html><title>Set cookie</title>");
+  }
+  if (url.pathname === "/cookie-write") {
+    res.writeHead(200, {
+      "content-type": "text/html",
+      "cache-control": "no-store",
+      "set-cookie": `${url.searchParams.get("name") ?? "session"}=${url.searchParams.get("value") ?? "kept"}; path=/`,
+    });
+    return res.end("<!doctype html><title>Cookie write</title>");
+  }
+  if (url.pathname === "/cookie-hold") {
+    const token = url.searchParams.get("token");
+    heldCookieResponses.set(token, res);
+    res.on("close", () => {
+      if (heldCookieResponses.get(token) === res) heldCookieResponses.delete(token);
+    });
+    return;
+  }
+  if (url.pathname === "/cookie-release") {
+    const token = url.searchParams.get("token");
+    const held = heldCookieResponses.get(token);
+    heldCookieResponses.delete(token);
+    if (held && !held.destroyed) {
+      held.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
+      held.end("released");
+    }
+    res.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
+    return res.end("released");
+  }
+  if (url.pathname === "/cookie-redirect") {
+    res.writeHead(302, {
+      location: url.searchParams.get("to"),
+      "cache-control": "no-store",
+      "access-control-allow-origin": req.headers.origin ?? "*",
+      "access-control-allow-credentials": "true",
+      "set-cookie": "redirected=blocked; path=/",
+    });
+    return res.end();
+  }
+  if (url.pathname === "/cookie-loop") {
+    const host = req.headers.host.startsWith("streamin.me") ? "adpage.test" : "streamin.me";
+    res.writeHead(302, {
+      location: `http://${host}:${server.address().port}${req.url}`,
+      "cache-control": "no-store",
+      "access-control-allow-origin": "*",
+    });
+    return res.end();
+  }
+  if (url.pathname === "/cookie-echo") {
+    if (url.searchParams.has("taint")) cookieEchoes.set(url.searchParams.get("taint"), req.headers.cookie ?? "none");
+    if (url.searchParams.has("origin")) {
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "access-control-allow-origin": req.headers.origin ?? "*",
+        "access-control-allow-credentials": "true",
+      });
+      return res.end(
+        JSON.stringify({ cookie: req.headers.cookie ?? null, origin: req.headers.origin ?? null, fetchSite: req.headers["sec-fetch-site"] ?? null }),
+      );
+    }
+    res.writeHead(200, { "content-type": "text/plain", "access-control-allow-origin": "*" });
+    return res.end(req.headers.cookie ?? "none");
+  }
+  if (url.pathname === "/worker-cookie") {
+    res.writeHead(200, { "content-type": "text/html", "set-cookie": `tracked=doubleclick.net; path=/; secure; samesite=none` });
+    return res.end("<!doctype html><title>Worker cookie</title>");
+  }
+  if (url.pathname === "/index.js") {
+    res.writeHead(200, { "content-type": "text/javascript", "access-control-allow-origin": "*", "cache-control": "no-store" });
+    return res.end(`window.workerScript = true;`);
   }
   if (url.pathname === "/file.bin") {
     res.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": 'attachment; filename="nncore-test.bin"' });
@@ -356,6 +522,29 @@ const server = createServer((req, res) => {
   if (url.pathname === "/blocking") return res.end(page("Blocking", `<img src="/nnblock-1.png"><img src="/nnblock-2.png"><img src="/icon.png">`));
   // A page whose own markup asks for ads as it loads, each request tagged with the page's query (the content
   // blocker's first page in a profile, a restored tab at launch).
+  // The content blocker's scriptlet probe: uBO's unbreak list sets UOLPD on biologianet.com (mapped here), so a script
+  // in the head sees it only if the blocker's scriptlets ran before the page's own first script.
+  if (url.pathname === "/scriptlet-probe")
+    return res.end(page("Scriptlet probe", "probe", `<script>document.title = "probe " + typeof window.UOLPD;</script>`));
+  // The same probe in a srcdoc frame, which runs as its creator's origin: a known way around a blocker's scriptlets.
+  if (url.pathname === "/scriptlet-srcdoc")
+    return res.end(page("Srcdoc waiting", `<iframe srcdoc="<script>parent.document.title = 'srcdoc ' + typeof window.UOLPD;</script>"></iframe>`));
+  // A worker the page starts: uBO's list has a $csp rule against them on leitor.net (mapped here), so the document's
+  // response gets a policy that refuses it, and the page sees the violation.
+  if (url.pathname === "/csp-probe")
+    return res.end(
+      page(
+        "CSP waiting",
+        "csp",
+        `<script>
+        addEventListener("securitypolicyviolation", (e) => (document.title = "csp " + e.effectiveDirective));
+        try { new Worker("/icon.png"); } catch {}
+        setTimeout(() => { if (document.title === "CSP waiting") document.title = "csp none"; }, 800);
+      </script>`,
+      ),
+    );
+  // A page linked with tracking parameters: the request records which reached the server.
+  if (url.pathname === "/tracked") return res.end(page("Tracked", "tracked"));
   if (url.pathname === "/adfirst") {
     const tag = url.search.slice(1);
     return res.end(
@@ -491,6 +680,12 @@ const server = createServer((req, res) => {
   }
   return res.end(page(url.pathname, url.pathname));
 });
+// Record WebSocket handshakes independently from ordinary HTTP requests. An allowed handshake reaches this fixture;
+// blocked handshakes must fail before the server sees them. No real WebSocket peer or external network is needed.
+server.on("upgrade", (req, socket) => {
+  adServed.push(`${req.headers.host}${req.url}`);
+  socket.end("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+});
 // A kept instance's switches name the fixture's ports (host rules, the Web Store URL): the same ports again.
 const listen = (srv, at) =>
   new Promise((r, j) => {
@@ -556,8 +751,19 @@ process.env.BAY_CHROMIUM_SWITCHES += ` --host-resolver-rules=${[
   "securepubads.g.doubleclick.net",
   "pagead2.googlesyndication.com",
   "adpage.test",
+  "biologianet.com",
+  "leitor.net",
+  "22bettracking.online",
+  "000491b06a.com",
+  "buzzadnetwork.com",
+  // Real rules of uBO's lists that need a site of their own: HTML ##^, $replace and ##^responseheader.
+  "skidrowreloaded.com",
+  "pvpoke-re.com",
+  "eturbonews.com",
+  "streamin.me",
 ]
   .map((host) => `MAP ${host} 127.0.0.1:${server.address().port}`)
+  .concat(["blocker-cookie.workers.dev", "tls.skidrowreloaded.com"].map((host) => `MAP ${host} 127.0.0.1:${tlsServer.address().port}`))
   .join(", ")}`;
 // The Web Store's update URL: a .crx downloaded from it is a Web Store install's (extension-download-hidden).
 process.env.BAY_CHROMIUM_SWITCHES += ` --apps-gallery-update-url=${base}/webstore/crx`;
@@ -3002,7 +3208,15 @@ try {
             .then(() => nn.extensions.useExtensions.getState().popup?.extensionId === "${id}")`);
         if (!opened) throw new Error("the private extension action didn't open its popup");
         const popup = await until("the private popup renderer", async () => (await targets()).find((t) => t.url.includes(`${id}/popup.html`)), 10000);
-        const privateContext = (await cdp(popup, "Runtime.evaluate", { expression: "chrome.extension.inIncognitoContext", returnByValue: true })).result.value;
+        // The target exists before the page has its extension bindings: asked until they answer.
+        const privateContext =
+          (await until("the popup's extension bindings", async () => {
+            const context = await cdp(popup, "Runtime.evaluate", {
+              expression: "String(globalThis.chrome?.extension?.inIncognitoContext)",
+              returnByValue: true,
+            });
+            return ["true", "false"].includes(context.result.value) ? context.result.value : null;
+          })) === "true";
         if (privateContext !== (mode === "split")) throw new Error(`${mode} popup used the wrong profile: ${privateContext}`);
         await setPrivate(false);
         await until("revocation closing the private popup", async () => await evalApp(`return nn.extensions.useExtensions.getState().popup === null`), 10000);
@@ -3252,7 +3466,7 @@ try {
 
   await check("content-blocked-count", async () => {
     // B8: the blocked count counts what extensions' rules stopped, as Chrome's action count does: a blocked image and a
-    // script sent to the extension's stand-in (uBlock Origin answers most ad scripts so), each once.
+    // script sent to the extension's stand-in (as blockers answer some ad scripts), each once.
     return withPopupExtension({}, async () => {
       const tab = await freshTab(`${base}/nn-ads`);
       try {
@@ -3432,8 +3646,8 @@ try {
   // MARK: Content blocker
 
   await check("content-blocker", async () => {
-    // The built-in uBlock Origin, loaded as a component extension and driven through its messaging, with its bundled
-    // lists on from a fresh profile.
+    // The built-in blocker (packages/adblock in the native core), with its bundled default lists on from a fresh
+    // install.
     const state = await until(
       "the blocker's state",
       async () => {
@@ -3445,7 +3659,7 @@ try {
     const enabledLists = state.lists.filter((l) => l.enabled).length;
     if (state.lists.length < 20 || enabledLists < 5 || !(state.stats.networkFilters > 20000))
       throw new Error(
-        `uBlock Origin has no bundled lists on a fresh profile: ${state.lists.length} lists, ${enabledLists} on, ${state.stats.networkFilters} network filters`,
+        `the content blocker has no bundled lists on a fresh install: ${state.lists.length} lists, ${enabledLists} on, ${state.stats.networkFilters} network filters`,
       );
     // Cookie banners are blocked by default (there's no setting for it): EasyList's and uBO's cookie notice lists are on.
     const cookieLists = ["fanboy-cookiemonster", "ublock-cookies-easylist"];
@@ -3458,8 +3672,8 @@ try {
   });
 
   await check("content-blocker-fails-closed", async () => {
-    // A change whose read fails (uBO's background page not answering, its page reloading) changes nothing and reports the
-    // error: devContentBlockerFailNextMessage fails the next call's first message, here the read of the enabled lists.
+    // A change that fails changes nothing and reports the error: devContentBlockerFailNextMessage fails the next change,
+    // here turning a list on.
     const enabled = async () =>
       (await cef(`getContentBlocker()`)).lists
         .filter((l) => l.enabled)
@@ -3496,8 +3710,8 @@ try {
       ? await until("the profile's tab", () => evalApp(`return ${shownTabJs(JSON.stringify(ownWindow))}`))
       : await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${firstPage}" })`);
     try {
-      // A profile loaded just now must not show a page before uBlock Origin is ready in it (NNCore holds its
-      // navigations): none of the first page's ads goes out.
+      // A profile loaded just now blocks from its first page (one blocker serves every profile): none of the first
+      // page's ads goes out.
       await until(
         "the first page",
         () =>
@@ -3527,9 +3741,8 @@ try {
           ).result.value;
           return { fetch: r, reached: adServed.slice(before).some((s) => url.includes(s.split("?")[0])) };
         };
-        // The release smoke test's ad script as a <script>: uBO answers it with its stand-in (an adsbygoogle that does
-        // nothing), so it "loads" without the request leaving the browser. CEF failed the stand-in's load instead
-        // (ERR_BLOCKED_BY_CLIENT on the extension's web_accessible_resources), which the smoke test took as "blocked".
+        // The release smoke test's ad script as a <script>: blocked (it fails to load), or answered by a stand-in (an
+        // adsbygoogle that does nothing) when the blocker has redirect resources; either way it never leaves the browser.
         const script = async () => {
           const before = adServed.length;
           const url = `http://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?${tag}`;
@@ -3543,20 +3756,63 @@ try {
           ).result.value;
           return { script: r, reached: adServed.slice(before).some((s) => s.startsWith("pagead2.")) };
         };
-        return {
+        const extraRequest = async (kind) => {
+          const before = adServed.length;
+          const expression =
+            kind === "redirect"
+              ? `fetch("http://adpage.test:${server.address().port}/redirect-ad?${tag}", { mode: "no-cors" }).then(() => "loaded", () => "failed")`
+              : `new Promise((resolve) => { const socket = new WebSocket("ws://ib.adnxs.com/ut/v3?${tag}");
+                socket.onopen = () => { socket.close(); resolve("opened"); }; socket.onerror = () => resolve("failed"); })`;
+          const outcome = (await cdp(t, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
+          return { outcome, reached: adServed.slice(before).some((s) => s.startsWith("ib.adnxs.com") && s.endsWith(`?${tag}`)) };
+        };
+        // Pages the tab opens itself, last: a tracked link (fbclid and gclid are uBO privacy list $removeparam rules) and
+        // the scriptlet probe. Both are navigations of the tab, not fetches of the page.
+        const open = async (url, title) => {
+          await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+          return until(`${title} (${tag})`, () =>
+            evalApp(`const s = nn.store.getState(); const t = s.tabs[${JSON.stringify(tab)}];
+            return t?.title?.startsWith(${JSON.stringify(title)}) && !s.live[${JSON.stringify(tab)}]?.isLoading ? { url: t.url, title: t.title } : null`),
+          );
+        };
+        const results = {
           adnxs: await reached(`http://ib.adnxs.com/ut/v3?${tag}`),
           gpt: await reached(`http://securepubads.g.doubleclick.net/tag/js/gpt.js?${tag}`),
           adsbygoogle: await script(),
+          redirect: await extraRequest("redirect"),
+          websocket: await extraRequest("websocket"),
         };
+        const trackedTab = await open(`${origin}/tracked?id=${tag}&fbclid=IwAR0bay&gclid=Cj0bay`, "Tracked");
+        const trackedServed = served.has(`/tracked?id=${tag}`);
+        results.tracked = { url: trackedTab.url, served: trackedServed, cleaned: trackedServed && !trackedTab.url.includes("fbclid") };
+        results.scriptlet = (await open(`http://biologianet.com:${server.address().port}/scriptlet-probe?${tag}`, "probe")).title;
+        return results;
       };
-      const stopped = (r) => !r.adnxs.reached && !r.gpt.reached && r.adnxs.fetch === "failed" && !r.adsbygoogle.reached && r.adsbygoogle.script === "stand-in";
+      const stopped = (r) =>
+        !r.adnxs.reached &&
+        !r.gpt.reached &&
+        r.adnxs.fetch === "failed" &&
+        !r.adsbygoogle.reached &&
+        r.adsbygoogle.script === "stand-in" &&
+        !r.redirect.reached &&
+        !r.websocket.reached &&
+        r.tracked.cleaned &&
+        r.scriptlet === "probe object";
       const blocked = await round("blocked");
       await cef(`setContentBlockerAllowed("adpage.test", true)`);
       const allowed = await round("allowed");
       await cef(`setContentBlockerAllowed("adpage.test", false)`);
       const again = await round("again");
       if (!stopped(blocked)) throw new Error(`not blocked: ${JSON.stringify(blocked)}`);
-      if (!allowed.adnxs.reached || !allowed.gpt.reached || !allowed.adsbygoogle.reached)
+      if (
+        !allowed.adnxs.reached ||
+        !allowed.gpt.reached ||
+        !allowed.adsbygoogle.reached ||
+        !allowed.redirect.reached ||
+        !allowed.websocket.reached ||
+        allowed.tracked.cleaned ||
+        !allowed.tracked.url.includes("fbclid")
+      )
         throw new Error(`allowing the site let nothing through: ${JSON.stringify(allowed)}`);
       if (!stopped(again)) throw new Error(`blocked again? ${JSON.stringify(again)}`);
       return { firstPage: "blocked", blocked, allowed, again };
@@ -3566,55 +3822,401 @@ try {
     }
   };
 
+  await check("content-blocker-policies", async () => {
+    // What isn't a request's own block: a page a page opens ($popup, a real rule of uBO's list: the new tab closes and the
+    // host is never asked), $csp on a document's response, and scriptlets in a srcdoc frame. A paused site escapes the
+    // first two.
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const port = server.address().port;
+    const origin = `http://adpage.test:${port}`;
+    const tag = `policies-${Date.now()}`;
+    const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${origin}/adpage?${tag}" })`);
+    const titled = (prefix) =>
+      until(`the title ${prefix}`, () =>
+        evalApp(
+          `const t = nn.store.getState().tabs[${JSON.stringify(tab)}]; return t?.title?.startsWith(${JSON.stringify(prefix)}) && t.title !== "CSP waiting" && t.title !== "Srcdoc waiting" ? t.title : null`,
+        ),
+      );
+    const go = (url) => evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+    const tabIds = async () => (await state()).tabs.map((t) => t.id);
+    const closeNewTabs = async (known) => {
+      for (const id of (await tabIds()).filter((id) => !known.includes(id))) await closeTab(id);
+    };
+    try {
+      await until("the page", () => pageTarget(`/adpage?${tag}`));
+      const opens = async (url) => {
+        const t = await until("the opener", () => pageTarget(`/adpage?${tag}`));
+        const known = await tabIds();
+        const served = adServed.length;
+        await cdp(t, "Runtime.evaluate", { expression: `window.open(${JSON.stringify(url)}); 1`, userGesture: true });
+        return { known, served };
+      };
+      const adHost = "22bettracking.online";
+      const adUrl = `http://${adHost}:${port}/ad?${tag}`;
+      // Refused: the host never hears of it and no tab stays.
+      let opened = await opens(adUrl);
+      await sleep(1500);
+      const refused = {
+        reached: adServed.slice(opened.served).some((s) => s.startsWith(adHost)),
+        tabs: (await tabIds()).filter((id) => !opened.known.includes(id)).length,
+      };
+      if (refused.reached || refused.tabs) throw new Error(`the popup got through: ${JSON.stringify(refused)}`);
+      // Any other page opens.
+      opened = await opens(`${origin}/b?popup-${tag}`);
+      await until("the page it opened", async () => (await state()).tabs.some((t) => t.url?.includes(`/b?popup-${tag}`)));
+      await closeNewTabs(opened.known);
+      // A paused opener's popups open.
+      await cef(`setContentBlockerAllowed("adpage.test", true)`);
+      opened = await opens(adUrl);
+      await until("the paused opener's popup", () => adServed.slice(opened.served).some((s) => s.startsWith(adHost)));
+      await closeNewTabs(opened.known);
+      await cef(`setContentBlockerAllowed("adpage.test", false)`);
+
+      await go(`http://leitor.net:${port}/csp-probe?${tag}`);
+      const policy = await titled("csp ");
+      if (policy !== "csp worker-src") throw new Error(`no policy on the document: ${policy}`);
+      await cef(`setContentBlockerAllowed("leitor.net", true)`);
+      await go(`http://leitor.net:${port}/csp-probe?paused-${tag}`);
+      const paused = await titled("csp ");
+      await cef(`setContentBlockerAllowed("leitor.net", false)`);
+      if (paused !== "csp none") throw new Error(`a policy on a paused site: ${paused}`);
+
+      await go(`http://biologianet.com:${port}/scriptlet-srcdoc?${tag}`);
+      const srcdoc = await titled("srcdoc ");
+      if (srcdoc !== "srcdoc object") throw new Error(`no scriptlet in the srcdoc frame: ${srcdoc}`);
+      return { refused, policy, paused, srcdoc };
+    } finally {
+      await cef(`setContentBlockerAllowed("adpage.test", false)`).catch(() => null);
+      await cef(`setContentBlockerAllowed("leitor.net", false)`).catch(() => null);
+      await closeTab(tab).catch(() => null);
+    }
+  });
+
+  await check("content-blocker-page-block", async () => {
+    // A visit to a page the lists block stops at Bay's page: a hostname's rule and an $all rule (real rules of EasyList and
+    // uBO's list, mapped here). The server never hears of it, Back leaves it, and the entry stays for Reload. Visit Anyway
+    // lifts only that block, for the run or for good, and a paused site never sees it.
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const port = server.address().port;
+    const tag = `pageblock-${Date.now()}`;
+    const start = `http://adpage.test:${port}/adpage?${tag}`;
+    const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: ${JSON.stringify(start)} })`);
+    const blockedPage = () => evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tab)}]?.blockedPage ?? null`);
+    const tabUrl = () => evalApp(`return nn.store.getState().tabs[${JSON.stringify(tab)}]?.url ?? null`);
+    const go = (url) => evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+    const isBlocked = async (url) => {
+      const served = adServed.length;
+      await go(url);
+      await until(`the block page for ${url}`, async () => (await blockedPage()) === url, 10000);
+      if ((await tabUrl()) !== url) throw new Error(`the tab left the blocked URL: ${await tabUrl()}`);
+      const reached = adServed.slice(served).some((s) => s.endsWith(`?${tag}`) && !s.startsWith("adpage.test"));
+      if (reached) throw new Error(`a blocked page reached its server: ${url}`);
+    };
+    const opens = async (url) => {
+      const served = adServed.length;
+      await go(url);
+      await until(`${url} loading`, () => adServed.slice(served).some((s) => url.endsWith(s)), 10000);
+      await until("no block page", async () => !(await blockedPage()), 5000);
+    };
+    const allowedPages = async () => (await cef(`getContentBlocker()`)).allowedPages;
+    const hostRule = "000491b06a.com";
+    const allRule = "buzzadnetwork.com";
+    const pageOf = (host) => `http://${host}:${port}/b?${tag}`;
+    try {
+      await until("the first page", () => pageTarget(`/adpage?${tag}`));
+      await isBlocked(pageOf(hostRule));
+      await isBlocked(pageOf(allRule));
+      // Back leaves the block page: to the last page, which was the other block page, then the one before.
+      await evalApp(`nn.webviews.get(${JSON.stringify(tab)}).goBack(); return true`);
+      await until("Back to the first blocked page", async () => (await blockedPage()) === pageOf(hostRule), 10000);
+      await evalApp(`nn.webviews.get(${JSON.stringify(tab)}).goBack(); return true`);
+      await until("Back to the first page", async () => !(await blockedPage()) && (await tabUrl()) === start, 10000);
+      // Reload asks again.
+      await isBlocked(pageOf(hostRule));
+      await evalApp(`nn.webviews.get(${JSON.stringify(tab)}).reload(); return true`);
+      await sleep(800);
+      if ((await blockedPage()) !== pageOf(hostRule)) throw new Error("Reload left the block page");
+      // Visit Anyway for this run, then blocked again.
+      await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, true, false)`);
+      await go(start);
+      await until("the first page again", async () => !(await blockedPage()) && (await tabUrl()) === start, 10000);
+      await opens(pageOf(hostRule));
+      const kept = await allowedPages();
+      if (kept.includes(hostRule)) throw new Error("Visit Anyway was saved");
+      await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, false, false)`);
+      await isBlocked(`http://${hostRule}:${port}/c?${tag}`);
+      // Always Allow is saved, and listed so it can be undone.
+      await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, true, true)`);
+      if (!(await allowedPages()).includes(allRule)) throw new Error("Always Allow wasn't listed");
+      await opens(pageOf(allRule));
+      await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, false, false)`);
+      if ((await allowedPages()).includes(allRule)) throw new Error("Block Again left it listed");
+      // A paused site isn't blocked.
+      await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, true)`);
+      await opens(`http://${allRule}:${port}/c?${tag}`);
+      await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, false)`);
+      return { blocked: [hostRule, allRule], back: true, visitAnyway: true, alwaysAllow: true, paused: true };
+    } finally {
+      await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, false, false)`).catch(() => null);
+      await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, false, false)`).catch(() => null);
+      await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, false)`).catch(() => null);
+      await closeTab(tab).catch(() => null);
+    }
+  });
+
+  await check("content-blocker-redirect-state", async () => {
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const origin = `http://adpage.test:${server.address().port}`;
+    const tab = await openTab(`${origin}/adpage?redirect-state`, "/adpage");
+    try {
+      const target = await until("the redirect fixture", () => pageTarget("/adpage?redirect-state"));
+      const rounds = {};
+      const failures = [];
+      for (const kind of ["auth", "post-direct", "post-chain"]) {
+        const options =
+          kind === "auth"
+            ? { headers: { authorization: "Bearer redirect-secret" } }
+            : { method: "POST", headers: { "content-type": "application/json" }, body: '{"secret":"upload"}' };
+        const evaluated = await cdp(target, "Runtime.evaluate", {
+          expression: `fetch(${JSON.stringify(`${origin}/rewrite-chain-start?kind=${kind}`)}, ${JSON.stringify(options)}).then((response) => response.json())`,
+          awaitPromise: true,
+          returnByValue: true,
+        });
+        const response = evaluated.result.value;
+        if (
+          !response ||
+          response.method !== "GET" ||
+          response.authorization !== null ||
+          response.contentType !== null ||
+          response.body !== "" ||
+          response.query.includes("fbclid")
+        ) {
+          failures.push(`${kind}: ${JSON.stringify(response ?? evaluated)}`);
+        }
+        rounds[kind] = response;
+      }
+      if (failures.length) throw new Error(`redirects restored request state: ${failures.join("; ")}`);
+      return rounds;
+    } finally {
+      await closeTab(tab.id).catch(() => null);
+    }
+  });
+
+  await check("content-blocker-cookies", async () => {
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const fixturePort = server.address().port;
+    const filteredOrigin = `http://streamin.me:${fixturePort}`;
+    const allowedOrigin = `http://adpage.test:${fixturePort}`;
+    const tab = await openTab(`${filteredOrigin}/b?cookie-rules`, "Page B");
+    const results = {};
+    const failures = [];
+    const target = () => pageFor(tab.id, "/");
+    const evaluate = async (expression) =>
+      (await cdp(await target(), "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
+    const go = async (url, title) => {
+      const finalURL = new URL(url).searchParams.get("to") ?? url;
+      await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab.id)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+      await until(`the cookie fixture ${url}`, async () => {
+        const item = (await state()).tabs.find((item) => item.id === tab.id);
+        return item && item.url === finalURL && !item.loading && item.title === title;
+      });
+    };
+    const paused = (value) => cef(`setContentBlockerAllowed("streamin.me", ${value})`);
+    const request = (path) => evaluate(`fetch(${JSON.stringify(path)}).then((response) => response.text())`);
+    const seed = async (name, value) => {
+      await paused(true);
+      await request(`/cookie-write?name=${name}&value=${value}`);
+      await paused(false);
+    };
+    const expect = (name, value, condition) => {
+      results[name] = value;
+      if (!condition(value)) failures.push(`${name}: ${JSON.stringify(value)}`);
+    };
+    try {
+      await seed("session", "original");
+      await request("/cookie-write?name=session&value=rejected");
+      await cef(`getContentBlocker()`);
+      expect("overwrite", await request("/cookie-echo?overwrite"), (cookie) => cookie.includes("session=original") && !cookie.includes("rejected"));
+
+      // The pending response has no Set-Cookie at all. An unrelated allowed write while
+      // it waits must survive when its headers finally arrive after the site resumes.
+      const token = `concurrent-${Date.now()}`;
+      await evaluate(`window.cookieHeld = fetch("/cookie-hold?token=${token}").then((response) => response.text()); true`);
+      await until("the held cookie response", async () => heldCookieResponses.has(token));
+      await seed("concurrent", "kept");
+      await request(`/cookie-release?token=${token}`);
+      await evaluate("window.cookieHeld");
+      await cef(`getContentBlocker()`);
+      expect("concurrent", await request("/cookie-echo?concurrent"), (cookie) => cookie.includes("concurrent=kept"));
+
+      await seed("session", "sent");
+      expect("outgoing", await request("/cookie-echo?outgoing"), (cookie) => cookie.includes("session=sent"));
+      const allowedWrite = `${allowedOrigin}/cookie-write?name=allowedRedirect&value=stored`;
+      await go(`${filteredOrigin}/cookie-redirect?to=${encodeURIComponent(allowedWrite)}`, "Cookie write");
+      expect("filteredToAllowed", await evaluate("document.cookie"), (cookie) => cookie.includes("allowedRedirect=stored"));
+      const filteredWrite = `${filteredOrigin}/cookie-write?name=filteredRedirect&value=rejected`;
+      await go(`${allowedOrigin}/cookie-redirect?to=${encodeURIComponent(filteredWrite)}`, "Cookie write");
+      expect("allowedToFiltered", await evaluate("document.cookie"), (cookie) => cookie.includes("session=sent") && !cookie.includes("filteredRedirect"));
+
+      await go("https://blocker-cookie.workers.dev/worker-cookie", "Worker cookie");
+      await go(`${allowedOrigin}/adpage?cookie-credentials`, "/adpage");
+      const script = (anonymous, redirect) => {
+        const destination = "https://blocker-cookie.workers.dev/index.js?cookie-credentials";
+        const url = redirect ? `${allowedOrigin}/cookie-redirect?to=${encodeURIComponent(destination)}` : destination;
+        return evaluate(`new Promise((resolve) => {
+          const script = document.createElement("script");
+          ${anonymous ? 'script.crossOrigin = "anonymous";' : ""}
+          script.src = ${JSON.stringify(url)};
+          script.onload = () => { script.remove(); resolve("loaded"); };
+          script.onerror = () => { script.remove(); resolve("failed"); };
+          document.head.append(script);
+        })`);
+      };
+      expect("withCredentials", await script(false, false), (value) => value === "failed");
+      expect("anonymous", await script(true, false), (value) => value === "loaded");
+      expect("anonymousRedirect", await script(true, true), (value) => value === "loaded");
+
+      // A cross-origin hop taints credentials even when the chain returns to its
+      // initiating origin. Both hops also change the response-cookie policy.
+      await request("/cookie-write?name=taint&value=source");
+      expect("taintSeed", await evaluate("document.cookie"), (cookie) => cookie.includes("taint=source"));
+      const returningChain = (tag, query = "taint") => {
+        const end = `${allowedOrigin}/cookie-echo?${query}=${tag}`;
+        const middle = `${filteredOrigin}/cookie-redirect?to=${encodeURIComponent(end)}`;
+        return `${allowedOrigin}/cookie-redirect?to=${encodeURIComponent(middle)}`;
+      };
+      expect("taintedReturn", await request(returningChain("cors")), (value) => value === "none");
+      await evaluate(`fetch(${JSON.stringify(returningChain("no-cors"))}, { mode: "no-cors" }).then(() => true)`);
+      // Chromium retains the initial no-CORS loader's credential decision on
+      // redirects. Cookie filtering must preserve that existing network behavior.
+      expect("noCorsReturn", cookieEchoes.get("no-cors"), (value) => value?.includes("taint=source"));
+      expect(
+        "taintedOrigin",
+        await evaluate(`fetch(${JSON.stringify(returningChain("include", "origin"))}, { credentials: "include" })
+          .then((response) => response.json()).catch((error) => ({ error: error.name }))`),
+        (value) => value?.origin === "null",
+      );
+      const loopPath = `/cookie-loop?token=${Date.now()}`;
+      expect("redirectLoop", await evaluate(`fetch(${JSON.stringify(loopPath)}).then(() => "loaded", () => "failed")`), (value) => value === "failed");
+      expect("redirectLoopRequests", served.get(loopPath), (count) => count > 1 && count <= 21);
+      if (failures.length) throw new Error(`cookie rules changed unrelated state: ${failures.join("; ")}`);
+      return results;
+    } finally {
+      await paused(false).catch(() => null);
+      for (const held of heldCookieResponses.values()) held.destroy();
+      heldCookieResponses.clear();
+      cookieEchoes.clear();
+      for (const [domain, names] of [
+        ["streamin.me", ["session", "concurrent", "filteredRedirect"]],
+        ["adpage.test", ["allowedRedirect", "redirected", "taint"]],
+        ["blocker-cookie.workers.dev", ["tracked"]],
+      ]) {
+        for (const name of names) await cdp(await target(), "Network.deleteCookies", { name, domain, path: "/" }).catch(() => null);
+      }
+      await closeTab(tab.id).catch(() => null);
+    }
+  });
+
+  await check("content-blocker-rewrites", async () => {
+    // What rules do to a response through the interceptor's held body, with real rules of uBO's lists: HTML ##^ and
+    // $replace (compressed, in a legacy charset, arriving in pieces, too big to hold, never ending), and the headers a
+    // network stack has already acted on (Location, Set-Cookie) or not added yet (Cookie).
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const port = server.address().port;
+    const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "http://adpage.test:${port}/adpage?rewrites" })`);
+    const go = async (url, title) => {
+      await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+      return until(`${title ?? "the page"} at ${url}`, () =>
+        evalApp(`const s = nn.store.getState(); const t = s.tabs[${JSON.stringify(tab)}];
+        return t?.url === ${JSON.stringify(url)} && !s.live[${JSON.stringify(tab)}]?.isLoading && (${JSON.stringify(title ?? "")} === "" || t.title?.startsWith(${JSON.stringify(title ?? "")}))
+          ? t.title : null`),
+      );
+    };
+    const run = async (urlPart, expression) => {
+      const t = await until(`the page ${urlPart}`, () => pageTarget(urlPart));
+      return (await cdp(t, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
+    };
+    try {
+      const html = `http://skidrowreloaded.com:${port}/body-page`;
+      const pages = {};
+      // Chrome only takes brotli over TLS.
+      const urls = ["plain", "encoding=gzip", "charset=windows-1252", "chunks", "chunks&encoding=gzip"].map((query) => `${html}?${query}`);
+      for (const url of [...urls, "https://tls.skidrowreloaded.com/body-page?encoding=br"]) {
+        const query = url.slice(url.indexOf("?"));
+        const title = await go(url, "Body");
+        pages[query] = { title, kept: await run(query, `window.kept`), ad: await run(query, `document.documentElement.outerHTML.includes("adserverDomain")`) };
+      }
+      for (const [query, page] of Object.entries(pages)) {
+        if (page.title !== "Body kept" || page.kept !== "caf\u00e9" || page.ad) throw new Error(`HTML rule on ${query}: ${JSON.stringify(page)}`);
+      }
+      await cef(`setContentBlockerAllowed("skidrowreloaded.com", true)`);
+      const paused = await go(`${html}?paused`, "Body");
+      await cef(`setContentBlockerAllowed("skidrowreloaded.com", false)`);
+      if (paused !== "Body ad ran") throw new Error(`a paused site's body changed: ${paused}`);
+
+      // No port in the URL: the rule's `||host/` needs its path right after the host, and the host map finds the server.
+      const replaced = `http://pvpoke-re.com`;
+      await go(`${replaced}/b`, "Page B");
+      const fetched = (path) => `fetch("${path}").then((r) => r.text())`;
+      const script = await run(`pvpoke-re.com`, fetched("/body.js?v=1"));
+      if (script !== "try{return;GameMaster.load()}catch(e){}") throw new Error(`$replace: ${script}`);
+      const big = await run(`pvpoke-re.com`, `${fetched("/body-big.js?v=1")}.then((text) => [text.length, text.slice(0, 10)])`);
+      if (big[0] !== 32 + 11 * 1024 * 1024 || big[1] !== "try{GameMa") throw new Error(`a body past the limit changed: ${big}`);
+      const stream = await run(
+        `pvpoke-re.com`,
+        `new Promise((resolve) => { const s = new EventSource("/body-stream.js?v=1"); s.onmessage = (e) => { s.close(); resolve(e.data); }; })`,
+      );
+      if (stream !== "try{GameMaster") throw new Error(`a stream: ${stream}`);
+
+      const redirected = `http://eturbonews.com:${port}/location-redirect`;
+      const before = served.get("/location-target") ?? 0;
+      await go(redirected);
+      if ((served.get("/location-target") ?? 0) !== before) throw new Error("the redirect was followed");
+
+      const cookie = `http://streamin.me:${port}`;
+      await go(`${cookie}/set-cookie-page?gone`, "Set cookie");
+      const echoed = await until("the cookie's removal", async () => {
+        const sent = await run(`streamin.me`, fetched("/cookie-echo"));
+        return sent === "none" ? sent : null;
+      });
+
+      // The rule is a third party's script whose Cookie has doubleclick.net in it, and Chrome only adds that later.
+      await go(`http://adpage.test:${port}/adpage?rewrites`);
+      const loads = (tag) =>
+        run(
+          `/adpage?rewrites`,
+          `new Promise((resolve) => { const s = document.createElement("script"); s.src = "https://blocker-cookie.workers.dev/index.js?${tag}";
+          s.onload = () => resolve("loaded"); s.onerror = () => resolve("failed"); document.head.append(s); })`,
+        );
+      const without = await loads("without");
+      await go(`https://blocker-cookie.workers.dev/worker-cookie`, "Worker cookie");
+      await go(`http://adpage.test:${port}/adpage?rewrites`);
+      const withCookie = await loads("with");
+      if (without !== "loaded" || withCookie !== "failed") throw new Error(`$requestheader: ${without}, ${withCookie}`);
+      return { pages, paused, big: big[0], stream, echoed, without, withCookie };
+    } finally {
+      await closeTab(tab).catch(() => null);
+    }
+  });
+
   await check("content-blocker-blocks", async () => {
-    // A page's ad requests never reach the ad server: a block rule fails them, and uBO sends some (gpt.js) to its
-    // stand-in script instead, so check the server, not the fetch. Allowing the site lets them through; turning it back
-    // off blocks them again. The hosts are mapped to the fixture server.
+    // A page's ad requests never reach the ad server: a block rule fails them, so check the server, not just the fetch.
+    // Allowing the site lets them through; turning it back off blocks them again. The hosts are mapped to the fixture
+    // server.
     return contentBlockerRounds(undefined);
   });
 
   await check("content-blocker-profile", async () => {
-    // The same in a profile made now (the release smoke test's page is in its Work profile): uBO loads into every
-    // profile, and must block there from its very first page, and follow Personal's allow-list.
+    // The same in a profile made now (the release smoke test's page is in its Work profile): the blocker serves every
+    // profile, and must block there from its very first page, and follow the one allow-list.
     const id = await evalApp(`return nn.store.getState().createSpace({ name: "Blocker" })`);
     if (!id) throw new Error("no profile made");
     return { profile: id, ...(await contentBlockerRounds(id)) };
   });
 
-  await check("content-blocker-held", async () => {
-    // The hold itself, made certain: the next profile's blocker loads 1.5 s late (devContentBlockerDelayNextLoad), so
-    // its first page asks to load long before uBO is ready. NNCore holds it until it is (the host releases the hold
-    // once µBlock.isReadyPromise settles, not a timer): it loads after the delay, and none of its ads goes out.
-    const delay = 1500;
-    await cef(`devContentBlockerDelayNextLoad(${delay})`);
-    const id = await evalApp(`return nn.store.getState().createSpace({ name: "Held" })`);
-    const tag = `held-${Date.now()}`;
-    const started = Date.now();
-    const w = await evalApp(
-      `return nn.actions.openWindow({ spaceId: ${JSON.stringify(id)}, url: "http://adpage.test:${server.address().port}/adfirst?${tag}" })`,
-    );
-    try {
-      await until(
-        "the held page",
-        () =>
-          evalApp(`const s = nn.store.getState(); const t = ${shownTabJs(JSON.stringify(w))};
-        return t && s.tabs[t]?.title === "Ad first" && !s.live[t]?.isLoading ? true : null`),
-        20000,
-      );
-      const loadedAfterMs = Date.now() - started;
-      await sleep(500);
-      const served = adsServedFor(tag);
-      if (served.length) throw new Error(`the held page's ads went out: ${JSON.stringify(served)}`);
-      if (loadedAfterMs < delay) throw new Error(`the page loaded ${loadedAfterMs} ms in, before the blocker (not held)`);
-      return { profile: id, loadedAfterMs };
-    } finally {
-      await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(w)}); return true`);
-    }
-  });
-
   await check("content-blocker-private", async () => {
     // A private window's first page, and the first page of the next one after the first's profile went (released with
-    // its last window): uBO, a component extension (incognito: spanning), runs in private windows on its profile's rules.
+    // its last window): the blocker filters private windows' requests as every other profile's.
     const origin = `http://adpage.test:${server.address().port}`;
     const out = [];
     for (const step of ["first", "after-release"]) {
@@ -5108,7 +5710,9 @@ try {
       const clicked = await until("the dropdown on a click", async () => shownSince(count, "Springfield"), 6000);
       await sleep(300);
       await key(t, "ArrowDown");
-      await sleep(300);
+      // Chrome ignores an accept until the dropdown has been up for 500 ms and its main thread has been idle since
+      // (AutofillPopupControllerImpl::AcceptSuggestion), which takes longer in a busy app: well past that.
+      await sleep(1500);
       await key(t, "Enter");
       const picked = await until("the picked entry in the field", async () => ((await value(t)) === "Springfield" ? true : null), 4000).catch(async (e) => {
         throw new Error(`${e.message}; field "${await value(t)}"`);
@@ -6041,9 +6645,9 @@ process.stdin.on("data", (chunk) => {
   });
 
   await check("content-blocker-restored", async () => {
-    // A tab the app restores at launch asks for ads as it loads. Personal isn't held at launch: its first pages race
-    // uBlock Origin's start (it is ready about 0.35 s after the engine), as in Chrome with uBO, so they're counted, not
-    // failed. Once uBO is ready, the restored tab's next page sends no ads.
+    // A tab the app restores at launch asks for ads as it loads. Nothing is held at launch: its first pages race the
+    // blocker's engine loading (from its cache, usually before the engine has started), so they're counted, not failed.
+    // Once it's ready, the restored tab's next page sends no ads.
     const windowId = await appUp("app-blocker-restored.out.log");
     const tag = `restored-${Date.now()}`;
     const url = `http://adpage.test:${server.address().port}/adfirst?${tag}`;
@@ -6080,7 +6684,7 @@ process.stdin.on("data", (chunk) => {
     const documents = adServed.filter((s) => s.startsWith("adpage.test") && s.endsWith(`?${again}`)).length - pagesBefore;
     if (documents < 1) throw new Error("the next page's document never reached the server");
     const afterReady = adsServedFor(again);
-    if (afterReady.length) throw new Error(`ads went out once uBlock Origin was ready: ${JSON.stringify(afterReady)}`);
+    if (afterReady.length) throw new Error(`ads went out once the content blocker was ready: ${JSON.stringify(afterReady)}`);
     return { restored: tab.url, loadedAfterMs, racedAtLaunch, nextDocuments: documents };
   });
 

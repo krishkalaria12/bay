@@ -4,6 +4,9 @@ import { engineCall, onEngineEvent } from "./engineInfo";
 
 export type { EngineBoost, EngineBoostStyle } from "./native";
 
+/** This JS runtime replaced an earlier one in the same process (a development reload), rather than starting the app. */
+export const isJsReload = () => Cef.isJsReload();
+
 export type DownloadState = "downloading" | "finished" | "failed" | "cancelled";
 
 export type Download = {

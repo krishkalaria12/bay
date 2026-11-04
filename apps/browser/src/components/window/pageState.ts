@@ -18,6 +18,8 @@ import { splitOf } from "../../store/splits";
 export type PageState = {
   status: string;
   crashed: CrashInfo | null;
+  /** The URL of a page the content blocker stopped, covered by BlockedPage. */
+  blockedPage: string | null;
   unresponsive: boolean;
   fullscreen: boolean;
   security: SecurityInfo | null;
@@ -40,6 +42,7 @@ export type PageState = {
 export const IDLE_PAGE: PageState = {
   status: "",
   crashed: null,
+  blockedPage: null,
   unresponsive: false,
   fullscreen: false,
   security: null,

@@ -1,14 +1,19 @@
 #include "bay/core/nn_installed_bubble.h"
 
+#include <string>
 #include <utility>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
+#include "base/one_shot_event.h"
 #include "base/scoped_observation.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -18,6 +23,7 @@
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
 #include "bay/core/nn_browser.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -38,10 +44,12 @@ namespace nncore {
 
 namespace {
 
-// Installs whose bubble waits for a window of their profile.
+// Installs whose bubble waits for a window of their profile. By path and id, not the objects:
+// closing a profile's last window can unload the profile, and the window that brings it back
+// has a new Profile and a new Extension.
 struct Waiting {
-  base::WeakPtr<Profile> profile;
-  scoped_refptr<const extensions::Extension> extension;
+  base::FilePath profile_path;
+  std::string extension_id;
   SkBitmap icon;
 };
 
@@ -114,10 +122,10 @@ bool ExtensionInstalled(Profile* profile,
   }
   std::vector<Waiting>& waiting = WaitingBubbles();
   std::erase_if(waiting, [&](const Waiting& w) {
-    return !w.profile || (w.profile.get() == original &&
-                          w.extension->id() == extension->id());
+    return w.profile_path == original->GetPath() &&
+           w.extension_id == extension->id();
   });
-  waiting.push_back({original->GetWeakPtr(), std::move(extension), bitmap});
+  waiting.push_back({original->GetPath(), extension->id(), bitmap});
   // Lives as long as the process, as the collection does.
   static base::NoDestructor<ActivationWatch> watch;
   return true;
@@ -137,16 +145,30 @@ void ShowWaitingInstalledBubbles() {
   }
   std::vector<Waiting> list = std::move(waiting);
   waiting.clear();
+  ProfileManager* profiles = g_browser_process->profile_manager();
   for (Waiting& w : list) {
-    // The profile went, or the extension did (uninstalled or turned off meanwhile: Chrome's
-    // watcher would wait for it for good).
-    if (!w.profile || !extensions::ExtensionRegistry::Get(w.profile.get())
-                           ->enabled_extensions()
-                           .Contains(w.extension->id())) {
+    Profile* profile = profiles ? profiles->GetProfileByPath(w.profile_path) : nullptr;
+    // Not loaded (its last window closed): the next window of the profile loads it.
+    if (!profile) {
+      waiting.push_back(std::move(w));
       continue;
     }
-    if (content::WebContents* page = ShownPageFor(w.profile.get())) {
-      Show(w.profile.get(), std::move(w.extension), w.icon, page);
+    // Loaded just now: whether the extension is on isn't known until its extensions are.
+    extensions::ExtensionSystem* system = extensions::ExtensionSystem::Get(profile);
+    if (!system->is_ready()) {
+      system->ready().Post(FROM_HERE, base::BindOnce(&ShowWaitingInstalledBubbles));
+      waiting.push_back(std::move(w));
+      continue;
+    }
+    // Uninstalled or turned off meanwhile: Chrome's watcher would wait for it for good.
+    scoped_refptr<const extensions::Extension> extension =
+        extensions::ExtensionRegistry::Get(profile)->enabled_extensions().GetByID(
+            w.extension_id);
+    if (!extension) {
+      continue;
+    }
+    if (content::WebContents* page = ShownPageFor(profile)) {
+      Show(profile, std::move(extension), w.icon, page);
     } else {
       waiting.push_back(std::move(w));
     }
