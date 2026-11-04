@@ -104,3 +104,15 @@ packs it unstripped (the symbols' copy; `release.sh` strips the app's), uploads 
 `engine-<engine tree:12>` (never latest) and appends `<tree> engine-<tree:12> <sha256>` to
 `packages/chromium/prebuilt-engines.tsv`: commit and push that line. Until then, releases of a commit whose `engine/`
 changed fail in **plan**, saying so; `engine/` must be committed and pushed first.
+
+## Reading a Linux or Windows crash report
+
+Crash reports from the desktop host name each frame by module and offset: a minidump has no symbols. Linux builds keep
+frame pointers, so a report has its stack; Windows x64 builds don't, so one has the crashing frame alone. Both ship
+Crashpad (`chrome_crashpad_handler` on Linux, `chrome_elf.dll` on Windows), and `engine.py` keeps each release's symbols
+in its `-symbols` archive. With the archive that matches the report's version:
+
+```bash
+llvm-symbolizer --obj=symbols/.debug/bay.debug 0x<offset>      # Linux
+llvm-symbolizer --obj=chrome.dll.pdb 0x<offset>                # Windows
+```

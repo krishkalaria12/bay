@@ -246,7 +246,6 @@
           <p class="prose">These are the unresolved behaviours from earlier feature work.</p>
           <ul>
             <li>Check Clear animation under main-thread load and address dropped frames if needed.</li>
-            <li>Ensure release builds enable Crashpad and assess symbolication for useful crash stacks.</li>
             <li>
               Port the acceptance scripts' input and window assertions. Define replacements for unsupported <code>windowDrags</code> checks; handle the test
               hooks' ignored timing and transparency options.
@@ -317,6 +316,14 @@
                   <td>
                     Little Bay's shortcut and tray icon on GNOME and KDE, X11 and Wayland; with either on, closing the last window leaves Bay running and the
                     tray's Quit Bay ends it; a Little Bay left behind another app is put away
+                  </td>
+                </tr>
+                <tr>
+                  <td>T4</td>
+                  <td>A</td>
+                  <td>
+                    In an isolated <code>BAY_DATA_DIR</code> instance, crash with <code>devCrash</code>, relaunch and confirm the report arrives; symbolize its
+                    frames with the release's symbols (<a href="releasing.md">releasing.md</a>)
                   </td>
                 </tr>
                 <tr>

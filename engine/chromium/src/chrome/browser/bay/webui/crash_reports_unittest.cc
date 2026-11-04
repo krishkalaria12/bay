@@ -73,5 +73,34 @@ TEST(CrashReportsTest, AMissingDatabaseHasNoReports) {
   EXPECT_TRUE(
       CrashReportsSince(temp.GetPath().Append("missing"), 0).empty());
 }
+TEST(CrashReportsTest, FramePointersLeadUpTheStack) {
+  // Three frames, each saved frame pointer and return address side by side.
+  constexpr uint64_t kBase = 0x1000;
+  const std::vector<uint64_t> words = {
+      0xdead,      0xdead,  // Below the frames.
+      kBase + 32,  0xa1,    // Frame at +16.
+      kBase + 64,  0xa2,    // Frame at +32.
+      0,           0,
+      0,           0xa3,    // Frame at +64: the chain's end.
+  };
+  const auto stack = base::as_byte_span(words);
+  EXPECT_EQ(WalkFramePointers(stack, kBase, kBase + 16, 64),
+            (std::vector<uint64_t>{0xa1, 0xa2, 0xa3}));
+  EXPECT_EQ(WalkFramePointers(stack, kBase, kBase + 16, 2),
+            (std::vector<uint64_t>{0xa1, 0xa2}));
+}
+TEST(CrashReportsTest, ACorruptChainEndsRatherThanRunsAway) {
+  constexpr uint64_t kBase = 0x1000;
+  const std::vector<uint64_t> loop = {kBase, 0xa1};
+  EXPECT_EQ(WalkFramePointers(base::as_byte_span(loop), kBase, kBase, 64),
+            (std::vector<uint64_t>{0xa1}));
+  const std::vector<uint64_t> words = {0, 0};
+  const auto stack = base::as_byte_span(words);
+  EXPECT_TRUE(WalkFramePointers(stack, kBase, kBase - 8, 64).empty());
+  EXPECT_TRUE(WalkFramePointers(stack, kBase, kBase + 9, 64).empty());
+  EXPECT_TRUE(WalkFramePointers(stack, kBase, kBase + 16, 64).empty());
+  EXPECT_TRUE(WalkFramePointers(stack, kBase, kBase + 1, 64).empty());
+  EXPECT_TRUE(WalkFramePointers({}, kBase, kBase, 64).empty());
+}
 }  // namespace
 }  // namespace bay

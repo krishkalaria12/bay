@@ -6,16 +6,21 @@
 #include <utility>
 #include <vector>
 
+#include "base/compiler_specific.h"
 #include "base/functional/bind.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "components/crash/core/app/crashpad.h"
 #include "third_party/crashpad/crashpad/client/annotation.h"
 #include "third_party/crashpad/crashpad/client/crash_report_database.h"
+#include "third_party/crashpad/crashpad/snapshot/cpu_context.h"
 #include "third_party/crashpad/crashpad/snapshot/exception_snapshot.h"
+#include "third_party/crashpad/crashpad/snapshot/memory_snapshot.h"
 #include "third_party/crashpad/crashpad/snapshot/minidump/process_snapshot_minidump.h"
 #include "third_party/crashpad/crashpad/snapshot/module_snapshot.h"
 #include "third_party/crashpad/crashpad/snapshot/process_snapshot.h"
+#include "third_party/crashpad/crashpad/snapshot/thread_snapshot.h"
 #include "third_party/crashpad/crashpad/util/file/file_reader.h"
 
 namespace bay {
@@ -23,6 +28,8 @@ namespace {
 // Reports opened looking for Bay's own, at most; and kept.
 constexpr size_t kOpened = 20;
 constexpr size_t kKept = 5;
+// As many frames as a macOS report sends (nativeFrames in telemetry).
+constexpr size_t kMaxFrames = 64;
 
 // What the exception code means where the dump was written: a signal on
 // Linux, an NTSTATUS on Windows. Names telemetry accepts (SYSTEM_NAME).
@@ -89,16 +96,9 @@ std::string BaseName(const std::string& path) {
   const size_t slash = path.find_last_of("/\\");
   return slash == std::string::npos ? path : path.substr(slash + 1);
 }
-}  // namespace
 
-std::optional<base::DictValue> CrashReportFor(
-    const crashpad::ProcessSnapshot& snapshot,
-    const std::string& id,
-    time_t created) {
-  const auto* exception = snapshot.Exception();
-  if (!exception || ProcessType(snapshot) != "browser")
-    return std::nullopt;
-  const uint64_t address = exception->ExceptionAddress();
+base::DictValue FrameAt(const crashpad::ProcessSnapshot& snapshot,
+                        uint64_t address) {
   base::DictValue frame;
   frame.Set("image", "???");
   for (const auto* module : snapshot.Modules()) {
@@ -109,11 +109,97 @@ std::optional<base::DictValue> CrashReportFor(
       break;
     }
   }
+  return frame;
+}
+
+class StackCopy final : public crashpad::MemorySnapshot::Delegate {
+ public:
+  bool MemorySnapshotDelegateRead(void* data, size_t size) override {
+    const auto* bytes = static_cast<const uint8_t*>(data);
+    // SAFETY: the snapshot gives `size` readable bytes at `data`.
+    bytes_.assign(bytes, UNSAFE_TODO(bytes + size));
+    return true;
+  }
+  const std::vector<uint8_t>& bytes() const { return bytes_; }
+
+ private:
+  std::vector<uint8_t> bytes_;
+};
+
+// The crashing thread's frame pointer, where this build's CPU has a fixed one.
+std::optional<uint64_t> FramePointer(const crashpad::CPUContext& context) {
+  switch (context.architecture) {
+    case crashpad::kCPUArchitectureX86_64:
+      return context.x86_64->rbp;
+    case crashpad::kCPUArchitectureARM64:
+      return context.arm64->regs[29];
+    default:
+      return std::nullopt;
+  }
+}
+
+std::vector<uint64_t> CallersOf(const crashpad::ProcessSnapshot& snapshot,
+                                const crashpad::ExceptionSnapshot& exception) {
+  const auto* context = exception.Context();
+  const auto frame_pointer =
+      context ? FramePointer(*context) : std::optional<uint64_t>();
+  if (!frame_pointer)
+    return {};
+  for (const auto* thread : snapshot.Threads()) {
+    const auto* stack = thread->Stack();
+    if (thread->ThreadID() != exception.ThreadID() || !stack)
+      continue;
+    StackCopy copy;
+    if (!stack->Read(&copy))
+      return {};
+    return WalkFramePointers(copy.bytes(), stack->Address(), *frame_pointer,
+                             kMaxFrames - 1);
+  }
+  return {};
+}
+}  // namespace
+
+std::optional<base::DictValue> CrashReportFor(
+    const crashpad::ProcessSnapshot& snapshot,
+    const std::string& id,
+    time_t created) {
+  const auto* exception = snapshot.Exception();
+  if (!exception || ProcessType(snapshot) != "browser")
+    return std::nullopt;
+  base::ListValue frames;
+  frames.Append(FrameAt(snapshot, exception->ExceptionAddress()));
+  for (uint64_t address : CallersOf(snapshot, *exception))
+    frames.Append(FrameAt(snapshot, address));
   return base::DictValue()
       .Set("incidentId", id)
       .Set("time", static_cast<double>(created) * 1000)
       .Set("exceptionType", ExceptionName(exception->Exception()))
-      .Set("frames", base::ListValue().Append(std::move(frame)));
+      .Set("frames", std::move(frames));
+}
+
+std::vector<uint64_t> WalkFramePointers(base::span<const uint8_t> stack,
+                                        uint64_t base,
+                                        uint64_t frame_pointer,
+                                        size_t limit) {
+  std::vector<uint64_t> addresses;
+  const auto read = [&](uint64_t at) {
+    return base::U64FromNativeEndian(
+        stack.subspan(static_cast<size_t>(at - base)).first<8u>());
+  };
+  while (addresses.size() < limit && frame_pointer >= base &&
+         frame_pointer % 8 == 0 && frame_pointer - base + 16 <= stack.size()) {
+    const uint64_t next = read(frame_pointer);
+    const uint64_t caller = read(frame_pointer + 8);
+    if (!caller)
+      break;
+    addresses.push_back(caller);
+    // The stack grows down, so a caller's frame is always above: this also
+    // ends a corrupted chain that loops.
+    if (next <= frame_pointer)
+      break;
+    frame_pointer = next;
+  }
+  return addresses;
 }
 
 base::ListValue CrashReportsSince(const base::FilePath& database_path,
