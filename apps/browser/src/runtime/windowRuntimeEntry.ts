@@ -44,7 +44,7 @@ export async function startWindowRuntimeEntry(transport: WindowRuntimeTransport<
     client.subscribe(syncServices);
     const { startWindowMain } = await import("./windowMain");
     if (disposed) throw new Error("The browser runtime disconnected before mounting");
-    startWindowMain();
+    startWindowMain(windowId);
     const { AppRegistry } = await import("react-native");
     const rootTag = document.getElementById("root");
     if (!rootTag) throw new Error("The WebUI root element is missing");

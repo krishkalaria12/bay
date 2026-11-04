@@ -43,9 +43,9 @@ export function startAppIntegration({ sharedWindow = false } = {}) {
   if (!sharedWindow) startApplicationLifecycle();
 }
 
-export function startApplicationLifecycle() {
+export function startApplicationLifecycle(onboarding?: Parameters<typeof maybeStartOnboarding>[0]) {
   const updated = trackAppVersion();
-  maybeStartOnboarding();
+  maybeStartOnboarding(onboarding);
   if (updated) openReleaseNotesAfterUpdate();
 }
 

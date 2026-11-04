@@ -514,7 +514,8 @@ export async function launch(app, opts = {}) {
   } catch {}
   for (const f of ["dev-eval.js", "dev-eval-result.json", "instance.json"]) rmSync(join(data, f), { force: true });
   if (opts.session) writeFileSync(join(data, "session.json"), JSON.stringify(opts.session));
-  if (opts.onboarded) writeFileSync(join(data, "onboarding.json"), JSON.stringify({ version: 1, completedAt: 1 }));
+  // A packed bundle isn't __DEV__, so on Linux and Windows a new data folder would otherwise open on onboarding.
+  if (opts.onboarded ?? desktopHost) writeFileSync(join(data, "onboarding.json"), JSON.stringify({ version: 1, completedAt: 1 }));
   if (opts.probe) writeFileSync(join(data, "perf-probe"), "");
   if (desktopHost) writeFileSync(join(data, "dev-harness"), "");
   for (const [name, text] of Object.entries(opts.files ?? {})) writeFileSync(join(data, name), typeof text === "string" ? text : JSON.stringify(text));

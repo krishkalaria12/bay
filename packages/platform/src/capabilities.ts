@@ -35,8 +35,10 @@ export type Capabilities = {
   appleScript: boolean;
   /** Handoff to other Apple devices. Windows: none. */
   handoff: boolean;
-  /** The intro music (AVFoundation). Windows: Media Foundation, later. */
+  /** The intro music through AVFoundation. The desktop host plays the same piece through Web Audio (webIntroMusic.ts). */
   introMusic: boolean;
+  /** Onboarding opens with the intro: its animation and music. */
+  introScreen: boolean;
   /** User notifications (UserNotifications, or Windows App SDK notifications). */
   notifications: boolean;
   /** Secret storage: Keychain on macOS, Credential Manager/DPAPI on Windows. */
@@ -90,6 +92,7 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     appleScript: mac && hasModule("BayApp"),
     handoff: mac,
     introMusic: mac && hasModule("BayApp"),
+    introScreen: webDesktop || (mac && hasModule("BayApp")),
     notifications: hasModule("BayApp") && (mac || hasModule("BayNotifications")),
     keychain: hasModule("BayKeychain"),
     inlineCompletion: mac && hasModule("BayInlineCompletion"),
