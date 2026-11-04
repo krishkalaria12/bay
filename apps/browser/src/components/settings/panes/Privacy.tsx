@@ -10,6 +10,7 @@ import {
   onContentBlockerChange,
   removeExternalAppAllowance,
   resetSiteSettings,
+  setBlockedPageAllowed,
   setContentBlockerAllowed,
   setContentBlockerEnabled,
   setFilterListEnabled,
@@ -120,6 +121,19 @@ export function PrivacyPane() {
         </>
       )}
 
+      {!!blocker?.allowedPages.length && (
+        <>
+          <SectionHeader title="Blocked sites you allowed" description="You chose to visit these despite a filter list. Bay still blocks ads on them." />
+          <Group>
+            {blocker.allowedPages.map((host) => (
+              <Row key={host} icon={<Favicon url={`https://${host}`} />} title={host}>
+                <Button title="Block Again" onPress={() => void setBlockedPageAllowed(host, false, false).then(refresh)} />
+              </Row>
+            ))}
+          </Group>
+        </>
+      )}
+
       <SitePermissions />
       <AppLinks />
       <ZoomLevels />
@@ -171,7 +185,7 @@ function FilterListsSheet() {
       </ScrollView>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16 }}>
         <Text style={{ flex: 1, fontSize: 11.5, color: theme.textTertiary }}>
-          {blocker?.version ? `Blocking by uBlock Origin ${blocker.version}, included with Bay. Its lists update on their own.` : ""}
+          {blocker?.version ? `Blocking by Bay's own content blocker (${blocker.version}). Its lists update on their own.` : ""}
         </Text>
         <Button title="Done" kind="primary" onPress={closeSettingsSheet} />
       </View>

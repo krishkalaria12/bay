@@ -3,7 +3,16 @@
 // oxlint-disable-next-line no-unused-expressions
 (function (post) {
   "use strict";
-  if (!/^(https?|file):$/.test(location.protocol)) return () => {};
+  // An about:blank or srcdoc frame has no URL of its own, and a sandboxed frame has an opaque origin: the page they
+  // run for is the one whose base URL they inherit. Match the content blocker's rules on that, as uBO does, or the
+  // blank frame is a way around its scriptlets and cosmetic filters.
+  const documentURL = () => {
+    if (/^(https?|file):/.test(location.protocol) && location.origin !== "null") return location.href;
+    const base = document.baseURI || "";
+    return /^(https?|file):/.test(base) ? base : "";
+  };
+  const url = documentURL();
+  if (!url) return () => {};
   const isTop = window === window.top;
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const primaryModifier = (event) => (isMac ? event.metaKey : event.ctrlKey);
@@ -839,11 +848,268 @@
     }
   } catch {}
 
+  // MARK: Content blocker — the classes and ids the document uses, each sent once (batched) for the generic cosmetic
+  // filters that hide them (NNCoreContentBlocker.mm), from the moment the browser says the page gets them.
+  let cosmeticOn = false;
+  const installCosmetic = () => {
+    if (cosmeticOn) return;
+    cosmeticOn = true;
+    const seenClasses = new Set();
+    const seenIds = new Set();
+    let classes = [];
+    let ids = [];
+    let queued = false;
+    let sent = 0;
+    const full = () => seenClasses.size + seenIds.size >= 20000;
+    const flush = () => {
+      queued = false;
+      // Match NNCoreWebView's limit per message, so every discovered name reaches the host.
+      for (let offset = 0; offset < Math.max(classes.length, ids.length); offset += 4000) {
+        send("cosmetic", { url, classes: classes.slice(offset, offset + 4000), ids: ids.slice(offset, offset + 4000) });
+      }
+      sent += classes.length + ids.length;
+      classes = [];
+      ids = [];
+    };
+    const note = (el) => {
+      if (full()) return;
+      const id = el.getAttribute("id");
+      if (id && !seenIds.has(id)) {
+        seenIds.add(id);
+        ids.push(id);
+      }
+      const list = el.classList;
+      for (let i = 0; list && i < list.length && !full(); i++) {
+        if (seenClasses.has(list[i])) continue;
+        seenClasses.add(list[i]);
+        classes.push(list[i]);
+      }
+      if (full()) observer.disconnect();
+      if (!queued && (classes.length || ids.length)) {
+        queued = true;
+        // The first names at once (the page is painting), then every 100 ms.
+        setTimeout(guard(flush), sent ? 100 : 0);
+      }
+    };
+    const noteTree = (node) => {
+      if (node.nodeType !== 1 || full()) return;
+      note(node);
+      if (node.firstElementChild && !full()) {
+        for (const el of node.querySelectorAll("[id],[class]")) {
+          note(el);
+          if (full()) break;
+        }
+      }
+    };
+    const observer = new MutationObserver(
+      guard((records) => {
+        for (const record of records) {
+          if (full()) break;
+          if (record.type === "attributes") note(record.target);
+          else {
+            for (const node of record.addedNodes) {
+              noteTree(node);
+              if (full()) break;
+            }
+          }
+        }
+      }),
+    );
+    observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "id"] });
+    if (document.documentElement) noteTree(document.documentElement);
+  };
+
+  // Site rules that require DOM inspection or actions, in adblock-rust's procedural AST format.
+  let proceduralOn = false;
+  const installProcedural = (encoded) => {
+    if (proceduralOn || !isArray(encoded) || !encoded.length) return;
+    const unquote = (text) => {
+      const value = text.trim();
+      if (value[0] !== '"' && value[0] !== "'") return value;
+      let result = "";
+      for (let n = 1; n < value.length; n++) {
+        if (value[n] === value[0]) return n === value.length - 1 ? result : value;
+        if (value[n] === "\\" && (value[n + 1] === value[0] || value[n + 1] === "\\")) n++;
+        result += value[n];
+      }
+      return value;
+    };
+    const pattern = (text, exact = false, quoted = true) => {
+      const value = quoted ? unquote(text) : text.trim();
+      const regex = /^\/(.*)\/([imu]*)$/.exec(value);
+      if (regex) return new RegExp(regex[1], regex[2]);
+      const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(exact ? `^${escaped}$` : escaped);
+    };
+    const select = (node, selector, first) => {
+      if (first || node.nodeType === 9) return [...node.querySelectorAll(selector)];
+      if (/^\s*[+~]/.test(selector)) {
+        const parent = node.parentElement;
+        if (!parent) return [];
+        const index = [...parent.children].indexOf(node) + 1;
+        return [...parent.querySelectorAll(`:scope > :nth-child(${index})${selector}`)];
+      }
+      if (/^\s*>/.test(selector)) return [...node.querySelectorAll(`:scope ${selector}`)];
+      if (/^\s/.test(selector)) return [...node.querySelectorAll(selector.trim())];
+      return node.matches(selector) ? [node] : [];
+    };
+    const operator = ({ type, arg }, index) => {
+      if (typeof arg !== "string") throw new Error("no procedural argument");
+      if (type === "css-selector") return (nodes) => nodes.flatMap((node) => select(node, arg, index === 0));
+      if (type === "has-text") {
+        const regex = pattern(arg);
+        return (nodes) => nodes.filter((node) => regex.test(node.textContent));
+      }
+      if (type === "min-text-length") {
+        const min = Number(arg);
+        if (!Number.isInteger(min) || min < 0) throw new Error("invalid text length");
+        return (nodes) => nodes.filter((node) => node.textContent.length >= min);
+      }
+      if (type === "matches-path") {
+        const regex = pattern(arg.replace(/\P{ASCII}/gu, (c) => encodeURIComponent(c)));
+        return (nodes) => (regex.test(location.pathname + location.search) ? nodes : []);
+      }
+      if (type === "matches-attr") {
+        const attribute = unquote(arg);
+        const equal = attribute.indexOf("=");
+        const name = pattern(equal < 0 ? attribute : attribute.slice(0, equal), true);
+        const value = equal < 0 ? null : pattern(attribute.slice(equal + 1), true);
+        return (nodes) => nodes.filter((node) => node.getAttributeNames?.().some((key) => name.test(key) && (!value || value.test(node.getAttribute(key)))));
+      }
+      if (["matches-css", "matches-css-before", "matches-css-after"].includes(type)) {
+        const before = /^(before|after),\s*/.exec(arg);
+        const declaration = before ? arg.slice(before[0].length) : arg;
+        const colon = declaration.indexOf(":");
+        if (colon <= 0) throw new Error("invalid CSS match");
+        const property = declaration.slice(0, colon).trim();
+        const regex = pattern(declaration.slice(colon + 1), true, false);
+        const pseudoFor = { "matches-css": null, "matches-css-before": "::before", "matches-css-after": "::after" };
+        const pseudo = before ? `::${before[1]}` : pseudoFor[type];
+        return (nodes) => nodes.filter((node) => node.nodeType === 1 && regex.test(getComputedStyle(node, pseudo).getPropertyValue(property)));
+      }
+      if (type === "upward") {
+        if (/^\d+$/.test(arg.trim())) {
+          const count = Number(arg);
+          if (count < 1 || count > 255) throw new Error("invalid ancestor count");
+          return (nodes) =>
+            nodes.flatMap((node) => {
+              for (let n = 0; node && n < count; n++) node = node.parentElement;
+              return node ? [node] : [];
+            });
+        }
+        return (nodes) =>
+          nodes.flatMap((node) => {
+            const parent = node.parentElement?.closest(arg);
+            return parent ? [parent] : [];
+          });
+      }
+      if (type === "xpath") {
+        const expression = document.createExpression(arg, null);
+        return (nodes) =>
+          nodes.flatMap((node) => {
+            const result = expression.evaluate(node, 6, null); // UNORDERED_NODE_SNAPSHOT_TYPE
+            const matches = [];
+            for (let n = 0; n < result.snapshotLength; n++) {
+              const item = result.snapshotItem(n);
+              if (item?.nodeType === 1) matches.push(item);
+            }
+            return matches;
+          });
+      }
+      throw new Error("unknown procedural operator");
+    };
+    const rules = [];
+    for (const entry of encoded) {
+      try {
+        const rule = typeof entry === "string" ? fromJSON(entry) : entry;
+        if (!isArray(rule?.selector) || !rule.selector.length) continue;
+        const action = rule.action || { type: "style", arg: "display:none!important" };
+        if (!["style", "remove", "remove-attr", "remove-class"].includes(action.type)) continue;
+        if (action.type !== "remove" && typeof action.arg !== "string") continue;
+        const probe = document.createElement("span");
+        const styles = [];
+        if (action.type === "style") {
+          probe.style.cssText = action.arg;
+          for (let n = 0; n < probe.style.length; n++) {
+            const name = probe.style[n];
+            styles.push([name, probe.style.getPropertyValue(name), probe.style.getPropertyPriority(name)]);
+          }
+        }
+        rules.push({ operators: rule.selector.map(operator), action, styles, applied: new Map() });
+      } catch {}
+    }
+    if (!rules.length) return;
+    proceduralOn = true;
+    let queued = false;
+    const options = { childList: true, subtree: true, attributes: true, characterData: true };
+    const observer = new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      setTimeout(guard(run), 100);
+    });
+    const run = () => {
+      queued = false;
+      // Actions mutate the observed DOM too. Disconnect while applying them to avoid scheduling ourselves forever.
+      observer.disconnect();
+      try {
+        for (const rule of rules) {
+          try {
+            let nodes = [document];
+            for (const next of rule.operators) nodes = next(nodes);
+            const targets = new Set(nodes.filter((node) => node.nodeType === 1));
+            for (const [node, previous] of rule.applied) {
+              if (targets.has(node)) continue;
+              for (const [name, value, priority, ownedValue, ownedPriority] of previous) {
+                if (node.style.getPropertyValue(name) !== ownedValue || node.style.getPropertyPriority(name) !== ownedPriority) continue;
+                if (value) node.style.setProperty(name, value, priority);
+                else node.style.removeProperty(name);
+              }
+              rule.applied.delete(node);
+            }
+            for (const node of targets) {
+              if (rule.action.type === "remove") node.remove();
+              else if (rule.action.type === "remove-attr") node.removeAttribute(rule.action.arg);
+              else if (rule.action.type === "remove-class") node.classList.remove(rule.action.arg);
+              else {
+                if (!rule.applied.has(node)) {
+                  rule.applied.set(
+                    node,
+                    rule.styles.map(([name, value, priority]) => [
+                      name,
+                      node.style.getPropertyValue(name),
+                      node.style.getPropertyPriority(name),
+                      value,
+                      priority,
+                    ]),
+                  );
+                }
+                for (const [name, value, priority] of rule.styles) node.style.setProperty(name, value, priority);
+              }
+            }
+          } catch {}
+        }
+      } finally {
+        observer.observe(document, options);
+      }
+    };
+    run();
+    // SPA navigations can change :matches-path() without changing the DOM.
+    if (window.navigation)
+      window.navigation.addEventListener("navigatesuccess", () => {
+        if (!queued) {
+          queued = true;
+          setTimeout(guard(run), 0);
+        }
+      });
+  };
+
   handlers.config = (config) => {
     blockAutoplay = !!config.blockAutoplay;
     if (config.displayMediaPicker) installDisplayMedia();
+    if (config.cosmetic) installCosmetic();
+    installProcedural(config.procedural);
   };
-  send("hello", { top: isTop, url: location.href });
+  send("hello", { top: isTop, url });
 
   const receive = (kind, json) => {
     const handler = handlers[kind];

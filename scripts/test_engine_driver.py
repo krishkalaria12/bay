@@ -318,6 +318,36 @@ class BuildTests(unittest.TestCase):
                 self.assertIn("gclient sync --jobs=1 %s", (root / "automate/automate-git.py").read_text())
                 self.assertEqual(commands[-1][1], root / "automate/automate-git.py")
 
+    def test_the_content_blocker_builds_for_each_desktop_where_gn_links_it(self):
+        for platform, target, library in (("win", "x86_64-pc-windows-msvc", "bay_adblock.lib"),
+                                          ("linux", "x86_64-unknown-linux-gnu", "libbay_adblock.a")):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, \
+                 mock.patch.object(engine, "REPO", Path(directory) / "repo"), \
+                 mock.patch.object(engine, "run") as run:
+                built = Path(directory) / "repo/packages/adblock/target" / target / "release" / library
+                built.parent.mkdir(parents=True)
+                built.write_text("library")
+                src = Path(directory) / "src"
+                engine.build_adblock(src, "out/Release", {"PATH": "x"}, platform)
+                command = run.call_args.args[0]
+                self.assertEqual(command[:2], ["cargo", "rustc"])
+                self.assertIn(target, command)
+                self.assertIn("--locked", command)
+                self.assertEqual("RUSTFLAGS" in run.call_args.kwargs["env"], platform == "win")
+                self.assertEqual((src / "out/Release/bay_adblock" / library).read_text(), "library")
+
+    def test_windows_download_bootstraps_depot_tools_before_automate(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "clone_pin"), \
+             mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "run") as run, \
+             mock.patch.object(engine.urllib.request, "urlopen") as urlopen:
+            root = Path(directory)
+            urlopen.return_value.__enter__.return_value.read.return_value = b"script\n"
+            engine.download(root, engine.environment(root, "win"), "win")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(commands[:2], [[root / "depot_tools/cipd_bin_setup.bat"],
+                                            [root / "depot_tools/bootstrap/win_tools.bat"]])
+            self.assertEqual(commands[2][1], root / "automate/automate-git.py")
+
     def test_download_refuses_prepared_tree_before_sync_or_cloning(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "run") as run, \
              mock.patch.object(engine, "clone_pin") as clone, mock.patch.object(engine, "require_tools"):
@@ -361,6 +391,38 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(root, Path(directory).resolve())
             self.assertEqual(env["BAY_ENGINE_PLATFORM"], "linux")
             self.assertEqual((targets, jobs, platform), (["chrome_sandbox"], 2, "linux"))
+
+    def test_cli_exits_as_stopped_when_a_timed_build_runs_out_of_time(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(sys, "platform", "win32"), \
+             mock.patch.object(sys, "argv", ["engine.py", "build", "--root", directory, "--ci-minutes", "5"]), \
+             mock.patch.dict(engine.GN_ARGS), mock.patch.object(engine, "environment", return_value={}), \
+             mock.patch.object(engine, "build", return_value=False) as build, \
+             self.assertRaises(SystemExit) as stopped:
+            engine.main()
+        self.assertEqual(stopped.exception.code, engine.STOPPED_EXIT_CODE)
+        self.assertEqual(build.call_args.kwargs, {"ci_minutes": 5})
+        self.assertEqual(engine.GN_ARGS["symbol_level"], 1)
+
+    def test_cli_refuses_a_timed_linux_build(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(sys, "platform", "linux"), \
+             mock.patch.object(engine.host_platform, "machine", return_value="x86_64"), \
+             mock.patch.object(sys, "argv", ["engine.py", "--platform", "linux", "build", "--root", directory,
+                                            "--ci-minutes", "5"]), \
+             mock.patch("sys.stderr"), self.assertRaises(SystemExit):
+            engine.main()
+
+    def test_timed_build_keeps_going_past_errors_and_writes_no_stamp_when_stopped(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
+             mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
+             mock.patch.object(engine, "build_adblock"), \
+             mock.patch.object(engine, "run_until", return_value=False) as run_until:
+            root = Path(directory)
+            self.assertIs(engine.build(root, engine.environment(root), [], 4, ci_minutes=5), False)
+            self.assertEqual(run_until.call_args.args[0][-3:], ["-k", "0", "chrome"])
+            self.assertFalse((root / "bay-engine-build.json").exists())
 
     def test_linux_prepare_preserves_patch_order_and_records_separate_state(self):
         with tempfile.TemporaryDirectory() as directory, \
@@ -439,7 +501,7 @@ class BuildTests(unittest.TestCase):
                  mock.patch.object(engine, "require_tools"), mock.patch.object(engine, "verify_checkout"), \
                  mock.patch.object(engine, "series"), mock.patch.object(engine, "generate_gn"), \
                  mock.patch.object(engine, "source_digest", return_value="digest"), \
-                 mock.patch.object(engine, "run") as run:
+                 mock.patch.object(engine, "build_adblock"), mock.patch.object(engine, "run") as run:
                 root = Path(directory)
                 env = engine.environment(root, platform)
                 engine.build(root, env, [], 4, platform)

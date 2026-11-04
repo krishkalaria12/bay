@@ -68,7 +68,13 @@ export type PageCommand = {
   text: string;
   modifiers?: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean };
 };
-export type LoadError = { url: string; code: number; text: string };
+export type LoadError = {
+  url: string;
+  code: number;
+  text: string;
+  /** Bay's content blocker stopped this page (WebKit tabs never say so). */
+  blockedPage?: boolean;
+};
 export type NavigationEntry = { url: string; title: string; current: boolean };
 export type CrashInfo = { status: number; reason: "abnormal" | "killed" | "crashed" | "oom" | "launchFailed" | "integrity" | "unknown"; code: number };
 

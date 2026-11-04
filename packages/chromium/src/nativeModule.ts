@@ -1,8 +1,15 @@
 import { Cef, type EngineBoost } from "./native";
 import { WebKit, isWebKitDownload, isWebKitPermission, webKitListener } from "./webkit";
 import { engineCall, onEngineEvent } from "./engineInfo";
+import { isMac } from "@bay/platform";
 
 export type { EngineBoost, EngineBoostStyle } from "./native";
+
+/**
+ * This JS runtime replaced an earlier one in the same process (a development reload), rather than starting the app.
+ * Only macOS has one runtime to replace, and the desktop bridge's call would answer with an always-true Promise.
+ */
+export const isJsReload = () => isMac && Cef.isJsReload();
 
 export type DownloadState = "downloading" | "finished" | "failed" | "cancelled";
 

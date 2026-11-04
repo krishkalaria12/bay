@@ -1,191 +1,788 @@
+// The built-in content blocker: Bay's own (packages/adblock, Brave's adblock-rust).
+//
+// The engine asks it about every web request a page makes (NNCoreRequestFilter: subresources on a background
+// sequence, subframe navigations on the main thread) and fails the blocked ones with ERR_BLOCKED_BY_CLIENT, or answers
+// them with a stand-in; an allowed one may load without its tracking parameters instead ($removeparam). Scriptlets
+// reach each document as it starts, before its own scripts (NNCoreScriptletSource); a document's response may get a
+// Content-Security-Policy ($csp, NNCoreContentSecurityPolicySource); a page a page opens may be refused ($popup, type
+// "popup"). Cosmetic filters go into each frame
+// as a user-origin sheet when its page script says hello (NNCoreWebView), and again for the classes and ids the page
+// script finds in it (generic hiding).
+//
+// The filter lists are uBO's default catalogue (filter_lists.json): each one on or off, downloaded into
+// <app support>/Content Blocker/lists and updated when its `! Expires:` says so. The default lists are bundled
+// (Resources/FilterLists, packages/chromium/scripts/filter-lists.sh), so a new install blocks from its first page. The
+// compiled engine is cached (engine.dat) and loads in milliseconds at launch; it's rebuilt when a list or the
+// selection changes. Settings (on/off, the lists, the hosts it's paused on) live in settings.json and apply to every
+// profile, private ones included.
+
 #import "NNCoreServices.h"
 #import "NNCoreInternal.h"
 
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <mutex>
+#include <string>
 #include <utility>
+#include <vector>
+
+#include "bay_adblock.h"
 
 namespace {
-NSString *ExtensionId() { return @"fajbdaomknpkicfjcpipdmcpoamdmilh"; }
-bool gFailNextMessage = false;
-double gDelayNextLoadMs = 0;
+
+// MARK: The live engine (any thread)
+
+struct Engine {
+  explicit Engine(BayBlocker *b) : blocker(b) {}
+  ~Engine() { bay_blocker_free(blocker); }
+  Engine(const Engine &) = delete;
+  Engine &operator=(const Engine &) = delete;
+  BayBlocker *const blocker;
+};
+
+// What the request filter reads: replaced whole (never changed in place) under gLiveLock.
+struct Live {
+  std::shared_ptr<Engine> engine;
+  bool enabled = true;
+  std::vector<std::string> allowed;
+  // Sites the user chose to visit despite a block on the page itself; their requests are still filtered.
+  std::vector<std::string> pages;
+};
+
+std::mutex gLiveLock;
+std::shared_ptr<const Live> gLive = std::make_shared<Live>();
+
+std::shared_ptr<const Live> CurrentLive() {
+  std::lock_guard<std::mutex> lock(gLiveLock);
+  return gLive;
 }
 
-@interface NNContentBlockerPage : NSObject <NNCoreTabDelegate>
-@property(readonly) NNCoreTab *tab;
-@property(readonly) NSString *origin;
-@property(readonly) BOOL dead;
-@end
-
-@implementation NNContentBlockerPage {
-  NSMutableArray<NSArray *> *_calls;
-  void (^_inflight)(id value, NSString *error);
-  BOOL _started;
-  BOOL _loaded;
-  BOOL _busy;
+void Publish(std::shared_ptr<const Live> live) {
+  std::lock_guard<std::mutex> lock(gLiveLock);
+  gLive = std::move(live);
 }
 
-- (instancetype)initWithTab:(NNCoreTab *)tab origin:(NSString *)origin {
-  if ((self = [super init])) {
-    _tab = tab;
-    _origin = origin;
-    _calls = [NSMutableArray array];
-    _started = tab.loading;
-    tab.delegate = self;
+std::atomic<uint64_t> gLookups{0};
+std::atomic<uint64_t> gLookupNanos{0};
+std::atomic<uint64_t> gMaxLookupNanos{0};
+
+// The lowercased host of a URL or origin ("" when it has none).
+std::string HostOf(const char *url) {
+  if (!url) return {};
+  std::string text(url);
+  size_t start = text.find("://");
+  start = start == std::string::npos ? 0 : start + 3;
+  size_t end = text.find_first_of("/?#", start);
+  std::string authority = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+  const size_t at = authority.rfind('@');
+  if (at != std::string::npos) authority.erase(0, at + 1);
+  if (!authority.empty() && authority[0] == '[') {
+    const size_t close = authority.find(']');
+    authority = authority.substr(0, close == std::string::npos ? std::string::npos : close + 1);
+  } else {
+    const size_t colon = authority.find(':');
+    if (colon != std::string::npos) authority.erase(colon);
   }
-  return self;
+  for (char &c : authority) c = (char)tolower((unsigned char)c);
+  return authority;
 }
 
-- (BOOL)onOwnPage {
-  return !_dead && [_tab.url hasPrefix:_origin];
+// A paused site covers its subdomains: "example.com" covers "www.example.com".
+bool Covers(const std::string &allowed, const std::string &host) {
+  if (allowed.empty() || host.empty()) return false;
+  if (host == allowed) return true;
+  return host.size() > allowed.size() && host.compare(host.size() - allowed.size(), allowed.size(), allowed) == 0 &&
+         host[host.size() - allowed.size() - 1] == '.';
 }
 
-- (void)run:(NSString *)script completion:(void (^)(id value, NSString *error))completion {
-  if (_dead) return completion(nil, @"closed");
-  [_calls addObject:@[ script, [completion copy] ]];
-  [self next];
+bool PausedOn(const Live &live, const std::string &host) {
+  for (const std::string &allowed : live.allowed)
+    if (Covers(allowed, host)) return true;
+  return false;
 }
 
-- (void)leftOwnPage {
-  [self fail:[@"not the extension page: " stringByAppendingString:_tab.url ?: @""]];
+// NNCoreRequestFilter: on the engine's threads.
+bool Filter(const char *url, const char *source, const char *top, const char *type, const char *method,
+            char **redirect, bool *any_origin) {
+  if (redirect) *redirect = nullptr;
+  if (any_origin) *any_origin = false;
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return false;
+  if (PausedOn(*live, HostOf(top && *top ? top : source))) return false;
+  const auto start = std::chrono::steady_clock::now();
+  BayBlockerMatch match =
+      bay_blocker_match(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET");
+  // A blocked request's stand-in, or an allowed one's URL without its tracking parameters.
+  const char *answer = match.blocked ? match.redirect : match.rewrite;
+  if (redirect && answer) *redirect = strdup(answer);
+  if (any_origin && !match.blocked && match.rewrite_any_origin) *any_origin = true;
+  bay_string_free(match.redirect);
+  bay_string_free(match.rewrite);
+  if (match.blocked && type && !strcmp(type, "document")) {
+    const std::string host = HostOf(url);
+    for (const std::string &page : live->pages)
+      if (Covers(page, host)) {
+        // Visit Anyway lifts the block whole: no stand-in either.
+        if (redirect) free(*redirect), *redirect = nullptr;
+        return false;
+      }
+  }
+  const uint64_t nanos =
+      (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+  gLookups.fetch_add(1, std::memory_order_relaxed);
+  gLookupNanos.fetch_add(nanos, std::memory_order_relaxed);
+  uint64_t max = gMaxLookupNanos.load(std::memory_order_relaxed);
+  while (nanos > max && !gMaxLookupNanos.compare_exchange_weak(max, nanos, std::memory_order_relaxed)) {
+  }
+  return match.blocked;
 }
 
-- (void)next {
-  if (_dead || !_loaded || _busy || !_calls.count) return;
-  if (!self.onOwnPage) return [self leftOwnPage];
-  NSArray *call = _calls.firstObject;
-  [_calls removeObjectAtIndex:0];
-  _inflight = call[1];
-  _busy = YES;
-  [_tab evaluate:call[0]
-      completion:^(NSString *json) {
-        void (^completion)(id, NSString *) = self->_inflight;
-        if (!completion) return;
-        if (!self.onOwnPage) return [self leftOwnPage];
-        self->_inflight = nil;
-        self->_busy = NO;
-        NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
-        NSDictionary *answer = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-        NSString *error = ![answer isKindOfClass:NSDictionary.class] ? @"no answer"
-                          : [answer[@"error"] isKindOfClass:NSString.class] ? answer[@"error"]
-                                                                              : nil;
-        id value = error || answer[@"value"] == NSNull.null ? nil : answer[@"value"];
-        completion(value, error);
-        [self next];
-      }];
+// NNCoreResponseFilter: $header, $ipaddress, $permissions and ##^responseheader, on the request's sequence.
+char *Response(const char *url, const char *source, const char *top, const char *type, const char *method,
+               const char *ip, const char *headers) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(top && *top ? top : source))) return nullptr;
+  return bay_blocker_response(live->engine->blocker, url, source ?: "", type ?: "other",
+                              method ?: "GET", ip, headers ?: "[]");
 }
 
-- (void)fail:(NSString *)error {
-  if (_dead) return;
-  _dead = YES;
-  NSArray<NSArray *> *calls = _calls;
-  _calls = nil;
-  void (^inflight)(id, NSString *) = _inflight;
-  _inflight = nil;
-  NNCoreTab *tab = _tab;
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [tab closeNow];
-    if (inflight) inflight(nil, error);
-    for (NSArray *call in calls) ((void (^)(id, NSString *))call[1])(nil, error);
+// NNCoreBodyFilterGate: every response's question, whether $replace or an HTML ##^ rule wants its body.
+bool BodyFilterApplies(const char *url, const char *source, const char *top, const char *type, const char *method,
+                       int status, const char *contentType, const char *contentDisposition) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return false;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return false;
+  return bay_blocker_body_filter_applies(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET", status,
+                                         contentType ?: "", contentDisposition ?: "");
+}
+
+// NNCoreBodyFilter: a whole body the gate asked for, on the thread pool. Keeps its own hold on the engine, which a list
+// update may replace while it runs.
+uint8_t *BodyFiltered(const char *url, const char *source, const char *top, const char *type, const char *method,
+                      const char *contentType, const uint8_t *body, size_t length, size_t *outLength) {
+  *outLength = 0;
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return nullptr;
+  size_t filteredLength = 0;
+  uint8_t *filtered = bay_blocker_body_filter(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET",
+                                              contentType ?: "", body, length, &filteredLength);
+  if (!filtered) return nullptr;
+  uint8_t *copy = (uint8_t *)malloc(filteredLength ?: 1);
+  if (copy) {
+    memcpy(copy, filtered, filteredLength);
+    *outLength = filteredLength;
+  }
+  bay_bytes_free(filtered, filteredLength);
+  return copy;
+}
+
+// NNCoreRequestHeaderNames: what $requestheader rules read for this request, nearly always nothing.
+char *RequestHeaderNames(const char *url, const char *source, const char *top, const char *type, const char *method) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return nullptr;
+  char *names = bay_blocker_request_header_names(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET");
+  char *copy = names ? strdup(names) : nullptr;
+  bay_string_free(names);
+  return copy;
+}
+
+// NNCoreRequestHeaderFilter: $requestheader, with the headers it asked for.
+bool RequestHeadersBlocked(const char *url, const char *source, const char *top, const char *type, const char *method,
+                           const char *headers) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return false;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return false;
+  return bay_blocker_request_headers_blocked(live->engine->blocker, url, source ?: "", type ?: "other", method ?: "GET",
+                                             headers ?: "[]");
+}
+
+// NNCoreCnameFilter: what a hostname is an alias of, for each alias of a response.
+bool CnameBlocked(const char *url, const char *alias, const char *source, const char *top, const char *type,
+                  const char *method) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return false;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return false;
+  return bay_blocker_cname_blocked(live->engine->blocker, url, alias, source ?: "", type ?: "other", method ?: "GET");
+}
+
+// NNCoreContentSecurityPolicySource: $csp rules, on the filter's sequence while the navigation waits.
+char *ContentSecurityPolicy(const char *url, const char *source, const char *top, const char *type) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return nullptr;
+  char *policy = bay_blocker_content_security_policy(live->engine->blocker, url, source ?: "", type ?: "document");
+  char *copy = policy ? strdup(policy) : nullptr;
+  bay_string_free(policy);
+  return copy;
+}
+
+// NNCoreScriptletSource: on a background sequence, while the document's renderer waits.
+char *Scriptlets(const char *frameURL, const char *topOrigin) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(topOrigin && *topOrigin ? topOrigin : frameURL))) return nullptr;
+  char *script = bay_blocker_scriptlets(live->engine->blocker, frameURL);
+  char *copy = script ? strdup(script) : nullptr;
+  bay_string_free(script);
+  return copy;
+}
+
+// The engine runs scriptlets itself, before a document's own scripts (setScriptletSource:); an older one gets them
+// with the frame's cosmetic filters, once its page script says hello.
+BOOL gEngineRunsScriptlets = NO;
+
+// MARK: The catalogue
+
+NSString *const kVersion = @"adblock-rust 0.13.5";
+// Bump with a change to how lists compile (the crate, its features): the cached engine is rebuilt.
+NSString *const kEngineFormat = @"bay-adblock 5";
+
+NSArray<NSDictionary *> *Catalogue() {
+  static NSArray<NSDictionary *> *lists;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    NSBundle *bundle = [NSBundle bundleForClass:NNCoreContentBlocker.class];
+    NSString *path = [bundle pathForResource:@"filter_lists" ofType:@"json"];
+    NSData *data = path ? [NSData dataWithContentsOfFile:path] : nil;
+    NSDictionary *json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    NSMutableArray *valid = [NSMutableArray array];
+    for (NSDictionary *list in [json isKindOfClass:NSDictionary.class] ? json[@"lists"] : nil)
+      if ([list isKindOfClass:NSDictionary.class] && [list[@"id"] isKindOfClass:NSString.class] &&
+          [list[@"urls"] isKindOfClass:NSArray.class])
+        [valid addObject:list];
+    if (!valid.count) NSLog(@"[blocker] no filter list catalogue (filter_lists.json)");
+    lists = valid;
+  });
+  return lists;
+}
+
+NSDictionary *_Nullable CatalogueList(NSString *listId) {
+  for (NSDictionary *list in Catalogue())
+    if ([list[@"id"] isEqualToString:listId]) return list;
+  return nil;
+}
+
+// On by default: the catalogue's default lists, and the regional ones for the user's languages (as uBO chose).
+BOOL OnByDefault(NSDictionary *list) {
+  if ([list[@"defaultOn"] boolValue]) return YES;
+  NSString *lang = [list[@"lang"] isKindOfClass:NSString.class] ? list[@"lang"] : nil;
+  if (!lang.length) return NO;
+  NSSet *codes = [NSSet setWithArray:[lang componentsSeparatedByString:@" "]];
+  for (NSString *preferred in NSLocale.preferredLanguages) {
+    NSString *code = [[preferred componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"-_"]]
+                         .firstObject lowercaseString];
+    if ([codes containsObject:code]) return YES;
+  }
+  return NO;
+}
+
+// MARK: Files
+
+NSString *Directory() {
+  static NSString *directory;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    directory = [[NNCoreHost.dataDirectory stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Content Blocker"];
+    [NSFileManager.defaultManager createDirectoryAtPath:[directory stringByAppendingPathComponent:@"lists"]
+                            withIntermediateDirectories:YES
+                                             attributes:nil
+                                                  error:nil];
+  });
+  return directory;
+}
+
+NSString *ListPath(NSString *listId) {
+  return [[Directory() stringByAppendingPathComponent:@"lists"] stringByAppendingPathComponent:[listId stringByAppendingPathExtension:@"txt"]];
+}
+
+NSString *BundledListPath(NSString *listId) {
+  NSString *path = [[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"FilterLists"]
+      stringByAppendingPathComponent:[listId stringByAppendingPathExtension:@"txt"]];
+  return [NSFileManager.defaultManager fileExistsAtPath:path] ? path : nil;
+}
+
+id ReadJSON(NSString *path) {
+  NSData *data = [NSData dataWithContentsOfFile:path];
+  return data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+}
+
+// JSON the Rust library returned, which it then frees.
+id JSONFrom(char *text) {
+  if (!text) return nil;
+  id value = [NSJSONSerialization JSONObjectWithData:[NSData dataWithBytesNoCopy:text length:strlen(text) freeWhenDone:NO] options:0 error:nil];
+  bay_string_free(text);
+  return value;
+}
+
+void WriteJSON(NSString *path, id value) {
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingPrettyPrinted | NSJSONWritingSortedKeys error:nil];
+  if (data) [data writeToFile:path atomically:YES];
+}
+
+// MARK: Settings (main thread)
+
+BOOL gEnabled = YES;
+NSMutableOrderedSet<NSString *> *gSelected;
+NSMutableOrderedSet<NSString *> *gAllowed;
+// Visit Anyway: gAllowedPages is saved (Always Allow), gSessionPages goes with the app.
+NSMutableOrderedSet<NSString *> *gAllowedPages;
+NSMutableOrderedSet<NSString *> *gSessionPages;
+bool gFailNext = false;
+double gDelayNextLoadMs = 0;
+
+NSString *SettingsPath() { return [Directory() stringByAppendingPathComponent:@"settings.json"]; }
+
+void LoadSettings() {
+  if (gSelected) return;
+  NSDictionary *saved = ReadJSON(SettingsPath());
+  if (![saved isKindOfClass:NSDictionary.class]) saved = nil;
+  gEnabled = [saved[@"enabled"] isKindOfClass:NSNumber.class] ? [saved[@"enabled"] boolValue] : YES;
+  gSelected = [NSMutableOrderedSet orderedSet];
+  if ([saved[@"lists"] isKindOfClass:NSArray.class]) {
+    for (NSString *listId in saved[@"lists"])
+      if ([listId isKindOfClass:NSString.class] && CatalogueList(listId)) [gSelected addObject:listId];
+  } else {
+    for (NSDictionary *list in Catalogue())
+      if (OnByDefault(list)) [gSelected addObject:list[@"id"]];
+  }
+  gAllowed = [NSMutableOrderedSet orderedSet];
+  for (NSString *host in [saved[@"allowedHosts"] isKindOfClass:NSArray.class] ? saved[@"allowedHosts"] : @[])
+    if ([host isKindOfClass:NSString.class] && host.length) [gAllowed addObject:host.lowercaseString];
+  gAllowedPages = [NSMutableOrderedSet orderedSet];
+  gSessionPages = [NSMutableOrderedSet orderedSet];
+  for (NSString *host in [saved[@"allowedPages"] isKindOfClass:NSArray.class] ? saved[@"allowedPages"] : @[])
+    if ([host isKindOfClass:NSString.class] && host.length) [gAllowedPages addObject:host.lowercaseString];
+}
+
+void SaveSettings() {
+  WriteJSON(SettingsPath(), @{
+    @"enabled" : @(gEnabled),
+    @"lists" : gSelected.array,
+    @"allowedHosts" : gAllowed.array,
+    @"allowedPages" : gAllowedPages.array,
   });
 }
 
-- (void)tabDidChangeLoading:(NNCoreTab *)tab {
-  _started = _started || tab.loading;
-  _loaded = _started && !tab.loading;
-  [self next];
+// The selection in catalogue order, so the engine (and its cache key) doesn't depend on the order lists were picked.
+NSArray<NSString *> *SelectedInOrder() {
+  NSMutableArray *ids = [NSMutableArray array];
+  for (NSDictionary *list in Catalogue())
+    if ([gSelected containsObject:list[@"id"]]) [ids addObject:list[@"id"]];
+  return ids;
 }
 
-- (void)tabDidChangeURL:(NNCoreTab *)tab {
-  if (tab.url.length && !self.onOwnPage) [self leftOwnPage];
-}
+// MARK: State the main thread keeps about the engine
 
-- (void)tabDidCommitDocument:(NNCoreTab *)tab {
-  if (!self.onOwnPage) [self leftOwnPage];
-}
+BOOL gReady = NO;
+double gParseMs = 0;
+NSDictionary<NSString *, NSDictionary *> *gCounts = @{};
+std::atomic<NSUInteger> gGeneration{0};
+std::shared_ptr<Engine> gEngine;
 
-- (void)tabWillClose:(NNCoreTab *)tab {
-  [self fail:@"closed"];
-}
-
-- (void)tab:(NNCoreTab *)tab rendererGone:(NSString *)status code:(int)code {
-  [self fail:[@"renderer " stringByAppendingString:status]];
-}
-
-- (void)tab:(NNCoreTab *)tab didFailLoad:(NSString *)url code:(int)code description:(NSString *)text {
-  if (code != -3) [self fail:text];
-}
-
-@end
-
-@interface NNContentBlockerOp : NSObject
-@property(copy) NSString *profile;
-@property(copy) NSString *expression;
-@property(copy) void (^completion)(id value, NSString *error);
-@property int attemptsLeft;
-@property BOOL failNext;
-@property NSTimeInterval deadline;
-@property NSUInteger attempt;
-@end
-
-@implementation NNContentBlockerOp
-@end
-
-namespace {
-
-NSString *ScriptWith(NSString *format, NSArray *args) {
-  NSMutableString *out = [NSMutableString string];
-  NSArray<NSString *> *parts = [format componentsSeparatedByString:@"%@"];
-  for (NSUInteger i = 0; i < parts.count; i++) {
-    [out appendString:parts[i]];
-    if (i < args.count) {
-      NSData *json = [NSJSONSerialization dataWithJSONObject:args[i] options:NSJSONWritingFragmentsAllowed error:nil];
-      [out appendString:json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : @"null"];
-    }
+void PublishLive() {
+  auto live = std::make_shared<Live>();
+  live->engine = gEngine;
+  live->enabled = gEnabled;
+  for (NSString *host in gAllowed) live->allowed.emplace_back(host.UTF8String);
+  for (NSString *host in gAllowedPages) live->pages.emplace_back(host.UTF8String);
+  for (NSString *host in gSessionPages) live->pages.emplace_back(host.UTF8String);
+  // Only engines with response rules need every response's headers marshalled to the host.
+  if ([NNCoreEngine respondsToSelector:@selector(setResponseFilter:)])
+    [NNCoreEngine setResponseFilter:live->enabled && live->engine && bay_blocker_has_response_modifiers(live->engine->blocker)
+                                        ? Response
+                                        : nullptr];
+  // The rest are asked about every response or request, so they're only there when a rule can answer.
+  const bool filtering = live->enabled && live->engine;
+  if ([NNCoreEngine respondsToSelector:@selector(setBodyFilterGate:filter:)]) {
+    const bool bodies = filtering && bay_blocker_has_body_modifiers(live->engine->blocker);
+    [NNCoreEngine setBodyFilterGate:bodies ? BodyFilterApplies : nullptr filter:bodies ? BodyFiltered : nullptr];
   }
-  return out;
-}
-
-NSString *const kProfile = @"";
-
-NSMutableOrderedSet<NSString *> *LoadedProfiles() {
-  static NSMutableOrderedSet<NSString *> *profiles = [NSMutableOrderedSet orderedSet];
-  return profiles;
-}
-
-NSMutableDictionary<NSString *, NNCoreWindow *> *PageWindows() {
-  static NSMutableDictionary *windows = [NSMutableDictionary dictionary];
-  return windows;
-}
-
-NSMutableDictionary<NSString *, NNContentBlockerPage *> *Pages() {
-  static NSMutableDictionary *pages = [NSMutableDictionary dictionary];
-  return pages;
-}
-
-NNContentBlockerPage *PageFor(NSString *profile, NNCoreProfile *p) {
-  NNContentBlockerPage *page = Pages()[profile];
-  if (page.tab.closed) [page fail:@"closed"];
-  if (page && !page.dead) return page;
-  NNCoreWindow *window = PageWindows()[profile];
-  if (!window) {
-    PageWindows()[profile] = window = [[NNCoreWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300)];
-    if ([window respondsToSelector:@selector(setInternal:)]) window.internal = YES;
+  if ([NNCoreEngine respondsToSelector:@selector(setRequestHeaderNames:filter:)]) {
+    const bool headers = filtering && bay_blocker_has_request_header_modifiers(live->engine->blocker);
+    [NNCoreEngine setRequestHeaderNames:headers ? RequestHeaderNames : nullptr filter:headers ? RequestHeadersBlocked : nullptr];
   }
-  NSString *origin = [NSString stringWithFormat:@"chrome-extension://%@/", ExtensionId()];
-  NNCoreTab *tab = [window openTab:[origin stringByAppendingString:@"blank.html"] profile:p foreground:YES];
-  return Pages()[profile] = tab ? [[NNContentBlockerPage alloc] initWithTab:tab origin:origin] : nil;
+  if ([NNCoreEngine respondsToSelector:@selector(setCnameFilter:)])
+    [NNCoreEngine setCnameFilter:filtering ? CnameBlocked : nullptr];
+  Publish(std::move(live));
 }
 
-NSString *BundledExtension() {
-  NSString *bundled = [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"Extensions/ublock"];
-  return [NSFileManager.defaultManager fileExistsAtPath:[bundled stringByAppendingPathComponent:@"manifest.json"]] ? bundled : nil;
-}
-
-NSString *gExtensionPath;
-
-void StartPreparing() {
+dispatch_queue_t Work() {
+  static dispatch_queue_t queue;
   static dispatch_once_t once;
   dispatch_once(&once, ^{
-    gExtensionPath = BundledExtension();
+    queue = dispatch_queue_create("bay.content-blocker", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,
+                                                                                                QOS_CLASS_USER_INITIATED, 0));
+  });
+  return queue;
+}
+
+NSDictionary *StatsDictionary();
+void Emit() {
+  if (NNCoreHost.eventHandler) NNCoreHost.eventHandler(@"contentBlocker", StatsDictionary());
+}
+
+// MARK: Lists on disk and on the network
+
+NSDictionary *ListInfo() {
+  NSDictionary *info = ReadJSON([Directory() stringByAppendingPathComponent:@"lists.json"]);
+  return [info isKindOfClass:NSDictionary.class] ? info : @{};
+}
+
+// How long a list stays fresh, from its `! Expires: 4 days (update frequency)` header: 12 hours to a week, else 4 days.
+NSTimeInterval ExpiresAfter(NSString *text) {
+  NSString *head = [text substringToIndex:MIN(text.length, (NSUInteger)4096)];
+  NSRegularExpression *expires = [NSRegularExpression regularExpressionWithPattern:@"^[!#]\\s*Expires:\\s*(\\d+)\\s*(h|d)"
+                                                                           options:NSRegularExpressionCaseInsensitive |
+                                                                                   NSRegularExpressionAnchorsMatchLines
+                                                                             error:nil];
+  NSTextCheckingResult *match = [expires firstMatchInString:head options:0 range:NSMakeRange(0, head.length)];
+  if (!match) return 4 * 86400;
+  const double n = [head substringWithRange:[match rangeAtIndex:1]].doubleValue;
+  const BOOL hours = [[head substringWithRange:[match rangeAtIndex:2]].lowercaseString isEqualToString:@"h"];
+  return MIN(MAX(n * (hours ? 3600 : 86400), 12 * 3600), 7 * 86400);
+}
+
+// A filter list, not an error page: text that doesn't start like HTML. Bytes, not a decoded prefix: a prefix can end
+// inside a multibyte character (as Croatian and Vietnamese lists' do at 512 bytes), which wouldn't decode.
+BOOL LooksLikeList(NSData *data) {
+  if (data.length < 16 || data.length > 32 * 1024 * 1024) return NO;
+  const unsigned char *bytes = (const unsigned char *)data.bytes;
+  NSUInteger at = 0;
+  // A UTF-8 byte order mark, then whitespace.
+  if (data.length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) at = 3;
+  while (at < data.length && isspace(bytes[at])) at++;
+  return at < data.length && bytes[at] != '<';
+}
+
+NSURLSession *Session() {
+  static NSURLSession *session;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    NSURLSessionConfiguration *config = NSURLSessionConfiguration.ephemeralSessionConfiguration;
+    config.timeoutIntervalForRequest = 60;
+    config.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    session = [NSURLSession sessionWithConfiguration:config];
+  });
+  return session;
+}
+
+// Downloads a list from its first URL that answers; completion(changed) on Work(): whether its file changed.
+void Download(NSDictionary *list, NSUInteger urlIndex, void (^completion)(BOOL changed)) {
+  NSArray<NSString *> *urls = list[@"urls"];
+  if (urlIndex >= urls.count) return dispatch_async(Work(), ^{ completion(NO); });
+  NSURL *url = [NSURL URLWithString:urls[urlIndex]];
+  if (!url) return Download(list, urlIndex + 1, completion);
+  [[Session() dataTaskWithURL:url
+            completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+              const NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class] ? ((NSHTTPURLResponse *)response).statusCode : 0;
+              if (error || status != 200 || !LooksLikeList(data)) {
+                NSLog(@"[blocker] %@ from %@: %@", list[@"id"], url.host, error.localizedDescription ?: [NSString stringWithFormat:@"HTTP %ld", (long)status]);
+                return Download(list, urlIndex + 1, completion);
+              }
+              dispatch_async(Work(), ^{
+                NSString *path = ListPath(list[@"id"]);
+                NSData *old = [NSData dataWithContentsOfFile:path];
+                const BOOL changed = ![old isEqualToData:data];
+                if (changed) [data writeToFile:path atomically:YES];
+                NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"";
+                NSMutableDictionary *info = [ListInfo() mutableCopy];
+                info[list[@"id"]] = @{@"fetched" : @(NSDate.date.timeIntervalSince1970), @"expires" : @(ExpiresAfter(text))};
+                WriteJSON([Directory() stringByAppendingPathComponent:@"lists.json"], info);
+                completion(changed);
+              });
+            }] resume];
+}
+
+// On Work(): copies a bundled list in when there's none on disk yet (it counts as fetched long ago: it updates soon).
+void SeedFromBundle(NSString *listId) {
+  NSString *path = ListPath(listId);
+  if ([NSFileManager.defaultManager fileExistsAtPath:path]) return;
+  if (NSString *bundled = BundledListPath(listId)) [NSFileManager.defaultManager copyItemAtPath:bundled toPath:path error:nil];
+}
+
+// MARK: Building the engine (Work())
+
+NSString *EngineKey(NSArray<NSString *> *ids) {
+  NSMutableArray *parts = [NSMutableArray arrayWithObject:kEngineFormat];
+  for (NSString *listId in ids) {
+    NSDictionary *attributes = [NSFileManager.defaultManager attributesOfItemAtPath:ListPath(listId) error:nil];
+    if (!attributes) continue;
+    [parts addObject:[NSString stringWithFormat:@"%@ %llu %.0f", listId, attributes.fileSize,
+                                                attributes.fileModificationDate.timeIntervalSince1970]];
+  }
+  return [parts componentsJoinedByString:@"\n"];
+}
+
+struct Built {
+  std::shared_ptr<Engine> engine;
+  double ms = 0;
+  NSDictionary<NSString *, NSDictionary *> *counts = @{};
+};
+
+NSDictionary *CountsFor(BayBlocker *blocker, NSArray<NSString *> *ids) {
+  NSArray *counts = JSONFrom(bay_blocker_list_counts(blocker));
+  NSMutableDictionary *byId = [NSMutableDictionary dictionary];
+  if (![counts isKindOfClass:NSArray.class] || counts.count != ids.count) return byId;
+  for (NSUInteger i = 0; i < ids.count; i++) {
+    NSDictionary *c = counts[i];
+    byId[ids[i]] = @{@"network" : c[@"networkFilters"] ?: @0, @"cosmetic" : c[@"cosmeticFilters"] ?: @0};
+  }
+  return byId;
+}
+
+// A new engine from the lists' files, in order.
+BayBlocker *Compile(NSArray<NSString *> *ids) {
+  std::vector<std::string> texts;
+  std::unique_ptr<bool[]> hosts(new bool[ids.count + 1]);
+  std::vector<uint8_t> permissions;
+  for (NSUInteger i = 0; i < ids.count; i++) {
+    NSData *data = [NSData dataWithContentsOfFile:ListPath(ids[i])];
+    texts.emplace_back((const char *)data.bytes, data.length);
+    hosts[i] = [CatalogueList(ids[i])[@"hosts"] boolValue];
+    // As in uBO, only its own uAssets lists may invoke privileged scriptlets.
+    permissions.push_back([ids[i] hasPrefix:@"ublock-"] ? 1 : 0);
+  }
+  std::vector<const char *> pointers;
+  for (const std::string &text : texts) pointers.push_back(text.c_str());
+  return bay_blocker_new_with_permissions(pointers.data(), hosts.get(), permissions.data(), pointers.size());
+}
+
+Built Build(NSArray<NSString *> *ids, BOOL useCache) {
+  Built built;
+  const CFTimeInterval start = CACurrentMediaTime();
+  NSMutableArray<NSString *> *present = [NSMutableArray array];
+  for (NSString *listId in ids)
+    if ([NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) [present addObject:listId];
+  NSString *key = EngineKey(present);
+  NSString *enginePath = [Directory() stringByAppendingPathComponent:@"engine.dat"];
+  NSString *keyPath = [Directory() stringByAppendingPathComponent:@"engine.key"];
+  NSString *metaPath = [Directory() stringByAppendingPathComponent:@"engine.lists.json"];
+  BayBlocker *blocker = nullptr;
+  if (useCache && [[NSString stringWithContentsOfFile:keyPath encoding:NSUTF8StringEncoding error:nil] isEqualToString:key]) {
+    NSData *data = [NSData dataWithContentsOfFile:enginePath options:NSDataReadingMappedIfSafe error:nil];
+    NSArray *cachedIds = ReadJSON(metaPath);
+    if (data && [cachedIds isEqual:present]) blocker = bay_blocker_deserialize((const uint8_t *)data.bytes, data.length);
+  }
+  if (!blocker) {
+    blocker = Compile(present);
+    size_t length = 0;
+    uint8_t *bytes = bay_blocker_serialize(blocker, &length);
+    if ([[NSData dataWithBytesNoCopy:bytes length:length freeWhenDone:NO] writeToFile:enginePath atomically:YES]) {
+      WriteJSON(metaPath, present);
+      [key writeToFile:keyPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }
+    bay_bytes_free(bytes, length);
+  }
+  // Resource storage is separate from adblock-rust's serialized filter engine. Load the pinned resources for both
+  // new and cached engines, so scriptlets and redirect stand-ins work on every launch.
+  NSString *resourcesPath =
+      [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"ContentBlocker/blocker-resources.json"];
+  NSString *resources = [NSString stringWithContentsOfFile:resourcesPath encoding:NSUTF8StringEncoding error:nil];
+  if (!resources || !bay_blocker_use_resources(blocker, resources.UTF8String))
+    NSLog(@"[blocker] missing or invalid bundled scriptlet/redirect resources");
+  built.engine = std::make_shared<Engine>(blocker);
+  built.ms = (CACurrentMediaTime() - start) * 1000;
+  built.counts = CountsFor(blocker, present);
+  return built;
+}
+
+// Builds from the available files first, then rebuilds once missing lists have downloaded. Bundled rules must
+// already block while an optional regional list is downloading. completion(missing) runs on the main thread.
+void Rebuild(BOOL useCache, void (^_Nullable completion)(NSArray<NSString *> *missing)) {
+  completion = [completion copy];
+  const NSUInteger generation = ++gGeneration;
+  NSArray<NSString *> *ids = SelectedInOrder();
+  const double delayMs = std::exchange(gDelayNextLoadMs, 0);
+  dispatch_async(Work(), ^{
+    for (NSString *listId in ids) SeedFromBundle(listId);
+    void (^buildAndPublish)(BOOL, NSArray<NSString *> *) = ^(BOOL finished, NSArray<NSString *> *missing) {
+      // A newer selection is on its way: this one would be replaced at once. Nothing counts as missing, so a stale
+      // failure can't turn off a list a newer selection has on.
+      if (generation != gGeneration.load()) {
+        if (finished && completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(@[]); });
+        return;
+      }
+      auto built = std::make_shared<Built>(Build(ids, useCache));
+      NSLog(@"[blocker] %lu lists in %.0f ms", (unsigned long)built->counts.count, built->ms);
+      void (^apply)(void) = ^{
+        const BOOL current = generation == gGeneration.load();
+        if (current) {
+          gEngine = built->engine;
+          gParseMs = built->ms;
+          gCounts = built->counts;
+          gReady = YES;
+          PublishLive();
+          Emit();
+        }
+        if (finished && completion) completion(current ? missing : @[]);
+      };
+      if (delayMs > 0)
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), apply);
+      else
+        dispatch_async(dispatch_get_main_queue(), apply);
+    };
+    NSMutableArray<NSString *> *absent = [NSMutableArray array];
+    for (NSString *listId in ids)
+      if (![NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) [absent addObject:listId];
+    buildAndPublish(absent.count == 0, @[]);
+    if (!absent.count) return;
+    dispatch_group_t group = dispatch_group_create();
+    for (NSString *listId in absent) {
+      dispatch_group_enter(group);
+      Download(CatalogueList(listId), 0, ^(BOOL) { dispatch_group_leave(group); });
+    }
+    dispatch_group_notify(group, Work(), ^{
+      NSMutableArray<NSString *> *missing = [NSMutableArray array];
+      for (NSString *listId in ids)
+        if (![NSFileManager.defaultManager fileExistsAtPath:ListPath(listId)]) [missing addObject:listId];
+      buildAndPublish(YES, missing);
+    });
+  });
+}
+
+// Lists past their expiry are fetched again; the engine is rebuilt if any changed. force: every selected list.
+void UpdateLists(BOOL force) {
+  NSArray<NSString *> *ids = SelectedInOrder();
+  dispatch_async(Work(), ^{
+    NSDictionary *info = ListInfo();
+    const NSTimeInterval now = NSDate.date.timeIntervalSince1970;
+    dispatch_group_t group = dispatch_group_create();
+    __block BOOL changed = NO;
+    for (NSString *listId in ids) {
+      NSDictionary *entry = [info[listId] isKindOfClass:NSDictionary.class] ? info[listId] : nil;
+      const NSTimeInterval fetched = [entry[@"fetched"] doubleValue], expires = entry[@"expires"] ? [entry[@"expires"] doubleValue] : 0;
+      if (!force && fetched + expires > now) continue;
+      NSDictionary *list = CatalogueList(listId);
+      if (!list) continue;
+      dispatch_group_enter(group);
+      Download(list, 0, ^(BOOL listChanged) {
+        changed = changed || listChanged;
+        dispatch_group_leave(group);
+      });
+    }
+    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+      if (changed) Rebuild(YES, nil);
+    });
+  });
+}
+
+constexpr double kFirstUpdateSeconds = 60;
+constexpr double kUpdateEverySeconds = 3 * 3600;
+
+void ScheduleUpdates(double after) {
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(after * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    if (gEnabled) UpdateLists(NO);
+    ScheduleUpdates(kUpdateEverySeconds);
+  });
+}
+
+// MARK: State for the app
+
+NSDictionary *StatsDictionary() {
+  double network = 0, cosmetic = 0;
+  for (NSString *listId in gCounts) {
+    network += [gCounts[listId][@"network"] doubleValue];
+    cosmetic += [gCounts[listId][@"cosmetic"] doubleValue];
+  }
+  const uint64_t lookups = gLookups.load(std::memory_order_relaxed);
+  const double averageMicros = lookups ? gLookupNanos.load(std::memory_order_relaxed) / 1000.0 / lookups : 0;
+  return @{
+    @"ready" : @(gReady),
+    @"enabled" : @(gEnabled),
+    @"networkFilters" : @(network),
+    @"cosmeticFilters" : @(cosmetic),
+    @"parseMs" : @(round(gParseMs)),
+    @"lookups" : @(lookups),
+    @"averageLookupMicros" : @(round(averageMicros * 100) / 100),
+    @"maxLookupMicros" : @(round(gMaxLookupNanos.load(std::memory_order_relaxed) / 10.0) / 100),
+  };
+}
+
+NSDictionary *StateDictionary() {
+  NSMutableArray *lists = [NSMutableArray array];
+  for (NSDictionary *list in Catalogue()) {
+    NSDictionary *counts = gCounts[list[@"id"]];
+    [lists addObject:@{
+      @"id" : list[@"id"],
+      @"title" : [list[@"title"] isKindOfClass:NSString.class] ? list[@"title"] : list[@"id"],
+      @"category" : [list[@"category"] isKindOfClass:NSString.class] ? list[@"category"] : @"ads",
+      @"enabled" : @([gSelected containsObject:list[@"id"]]),
+      @"defaultOn" : @(OnByDefault(list)),
+      @"filters" : @([counts[@"network"] doubleValue] + [counts[@"cosmetic"] doubleValue]),
+    }];
+  }
+  return @{
+    @"enabled" : @(gEnabled),
+    @"version" : kVersion,
+    @"lists" : lists,
+    @"allowedHosts" : gAllowed.array,
+    @"allowedPages" : gAllowedPages.array,
+    @"stats" : StatsDictionary(),
+  };
+}
+
+// Tests (devFailNextMessage): the next change fails and changes nothing.
+NSString *_Nullable FailedForTest() {
+  if (!gFailNext) return nil;
+  gFailNext = false;
+  return @"failed (dev)";
+}
+
+void Changed() {
+  SaveSettings();
+  PublishLive();
+  Emit();
+}
+
+// MARK: Cosmetic filters
+
+NSString *_Nullable StyleFor(NSArray *selectors) {
+  NSMutableString *css = [NSMutableString string];
+  // One rule per selector: one the engine can't parse drops only itself.
+  for (NSString *selector in selectors)
+    if ([selector isKindOfClass:NSString.class] && selector.length && ![selector containsString:@"{"] && ![selector containsString:@"}"])
+      [css appendFormat:@"%@{display:none!important}\n", selector];
+  return css.length ? css : nil;
+}
+
+BOOL IsWeb(NSString *url) { return [url hasPrefix:@"http://"] || [url hasPrefix:@"https://"]; }
+
+// The engine for a web frame's cosmetic filters, and its resources for the frame (bay_blocker_cosmetic); null when the
+// blocker is off or paused on the page.
+std::shared_ptr<Engine> CosmeticEngine(NSString *frameURL, NSString *pageURL, NSDictionary *_Nullable *resources) {
+  if (!IsWeb(frameURL)) return nullptr;
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine || PausedOn(*live, HostOf(pageURL.UTF8String))) return nullptr;
+  NSDictionary *found = JSONFrom(bay_blocker_cosmetic(live->engine->blocker, frameURL.UTF8String));
+  if (![found isKindOfClass:NSDictionary.class]) return nullptr;
+  *resources = found;
+  return live->engine;
+}
+
+}  // namespace
+
+namespace nncore_host {
+
+void PrepareContentBlocker() {
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    LoadSettings();
+    PublishLive();
+    if ([NNCoreEngine respondsToSelector:@selector(setRequestFilter:)]) [NNCoreEngine setRequestFilter:Filter];
+    else NSLog(@"[blocker] this engine has no request filter: nothing is blocked");
+    if ([NNCoreEngine respondsToSelector:@selector(setContentSecurityPolicySource:)])
+      [NNCoreEngine setContentSecurityPolicySource:ContentSecurityPolicy];
+    if ([NNCoreEngine respondsToSelector:@selector(setScriptletSource:)]) {
+      [NNCoreEngine setScriptletSource:Scriptlets];
+      gEngineRunsScriptlets = YES;
+    }
+    Rebuild(YES, nil);
+    ScheduleUpdates(kFirstUpdateSeconds);
+    // Copies of uBlock Origin, the blocker before this one, from before 0.1.1.
     NSString *oldCopies = [[NNCoreHost.dataDirectory stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Built-in Extensions"];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
       if ([NSFileManager.defaultManager fileExistsAtPath:oldCopies]) [NSFileManager.defaultManager removeItemAtPath:oldCopies error:nil];
@@ -193,495 +790,121 @@ void StartPreparing() {
   });
 }
 
-NSString *ExtensionPath() {
-  StartPreparing();
-  return gExtensionPath;
+bool ContentBlockerBlocksPage(NSString *url) {
+  const char *page = url.UTF8String;
+  return page && Filter(page, page, page, "document", "GET", nullptr, nullptr);
 }
 
-void FollowDefault(NSArray<NSString *> *profiles, void (^done)(NSString *error));
-void WhenDefaultSettled(void (^then)(void));
-
-void LoadIntoProfile(NSString *profile, void (^then)(NSString *error)) {
-  then = [then copy];
-  StartPreparing();
-  void (^load)(void) = ^{
-    if ([LoadedProfiles() containsObject:profile]) return then(nil);
-    nncore_host::WithProfile(profile, ^(NNCoreProfile *p) {
-      if ([LoadedProfiles() containsObject:profile]) return then(nil);
-      NSString *path = gExtensionPath;
-      if (!p || !path || ![p respondsToSelector:@selector(loadComponentExtension:)]) return then(@"not loaded");
-      NSString *loaded = [p loadComponentExtension:path];
-      if (![loaded isEqualToString:ExtensionId()]) {
-        NSLog(@"[blocker] component load failed (%@)", loaded);
-        return then(@"not loaded");
-      }
-      [LoadedProfiles() addObject:profile];
-      then(nil);
-    });
-  };
-  if (NSThread.isMainThread) load();
-  else dispatch_async(dispatch_get_main_queue(), load);
+NSDictionary *ContentBlockerCosmetics(NSString *frameURL, NSString *pageURL) {
+  NSDictionary *resources;
+  if (!CosmeticEngine(frameURL, pageURL, &resources)) return nil;
+  NSMutableDictionary *answer = [NSMutableDictionary dictionary];
+  answer[@"css"] = StyleFor([resources[@"hide"] isKindOfClass:NSArray.class] ? resources[@"hide"] : @[]);
+  if (!gEngineRunsScriptlets && [resources[@"script"] isKindOfClass:NSString.class] && [resources[@"script"] length])
+    answer[@"script"] = resources[@"script"];
+  answer[@"generic"] = @(![resources[@"generichide"] boolValue]);
+  if ([resources[@"procedural"] isKindOfClass:NSArray.class]) answer[@"procedural"] = resources[@"procedural"];
+  return answer;
 }
 
-NSString *const kOffDirective = @"/^(?:bay-blocking-off|)/";
-
-bool gDefaultSettled = false;
-bool gLaunching = true;
-constexpr double kSettleAfterLaunchSeconds = 1.5;
-
-bool SettleWithoutPage() {
-  const char *pagelessSettle = getenv("BAY_BLOCKER_PAGELESS_SETTLE");
-  return !(pagelessSettle && !strcmp(pagelessSettle, "off"));
+NSString *ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSArray<NSString *> *classes,
+                                     NSArray<NSString *> *ids) {
+  NSDictionary *resources;
+  std::shared_ptr<Engine> engine = CosmeticEngine(frameURL, pageURL, &resources);
+  if (!engine || [resources[@"generichide"] boolValue]) return nil;
+  NSDictionary *query = @{@"classes" : classes, @"ids" : ids, @"exceptions" : resources[@"exceptions"] ?: @[]};
+  NSData *json = [NSJSONSerialization dataWithJSONObject:query options:0 error:nil];
+  if (!json) return nil;
+  NSString *text = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
+  NSArray *selectors = JSONFrom(bay_blocker_hidden_selectors(engine->blocker, text.UTF8String));
+  return [selectors isKindOfClass:NSArray.class] ? StyleFor(selectors) : nil;
 }
 
-constexpr int kAttempts = 40;
-constexpr double kRetryMs = 250;
-constexpr double kOpSeconds = 20;
-
-NSString *const kPrelude =
-    @"let failing = %@;"
-     "const offDirective = %@;"
-     "const extensionOrigin = %@;"
-     "const deadline = Date.now() + %@;"
-     "const left = () => Math.max(0, deadline - Date.now());"
-     "let expired = false;"
-     "const withDeadline = (promise, what) => new Promise((resolve, reject) => {"
-     "  const timer = setTimeout(() => { expired = true; reject(new Error(`${what}: timed out`)); }, left());"
-     "  promise.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });"
-     "});"
-     "const ready = () => new Promise((resolve, reject) => {"
-     "  const look = () => {"
-     "    const ublock = chrome.extension.getBackgroundPage()?.µBlock;"
-     "    if (ublock?.isReadyPromise) return ublock.isReadyPromise.then(resolve, reject);"
-     "    if (left() === 0) return reject(new Error('uBlock Origin never started'));"
-     "    setTimeout(look, 10);"
-     "  };"
-     "  look();"
-     "});"
-     "const loadScript = (src) => new Promise((resolve, reject) => {"
-     "  const element = document.createElement('script');"
-     "  element.src = src;"
-     "  element.onload = resolve;"
-     "  element.onerror = () => reject(new Error(`${src} didn't load`));"
-     "  document.head.append(element);"
-     "});"
-     "const client = () => self.vAPI?.messaging ? Promise.resolve()"
-     "  : ['js/vapi.js', 'js/vapi-common.js', 'js/vapi-client.js'].reduce((p, src) => p.then(() => loadScript(src)), Promise.resolve());"
-     "const send = (message) => {"
-     "  if (expired) return Promise.reject(new Error(`${message.what}: timed out`));"
-     "  if (failing) { failing = false; return Promise.reject(new Error(`${message.what}: failed (dev)`)); }"
-     "  return client().then(() => {"
-     "    if (expired) throw new Error(`${message.what}: timed out`);"
-     "    return vAPI.messaging.send('dashboard', message);"
-     "  }).then((reply) => {"
-     "    if (reply === undefined) throw new Error(`${message.what}: no reply`);"
-     "    return reply;"
-     "  });"
-     "};"
-     "const trusted = () => send({what: 'getWhitelist'}).then((t) => {"
-     "  if (!t || !Array.isArray(t.whitelist)) throw new Error('getWhitelist: no answer');"
-     "  return t;"
-     "});"
-     "const lists = () => send({what: 'getLists'}).then((l) => {"
-     "  if (!l || !l.available || typeof l.available !== 'object') throw new Error('getLists: no answer');"
-     "  return l;"
-     "});"
-     "const selected = (l) => Object.keys(l.available).filter((k) => l.available[k] && l.available[k].off !== true);"
-     "const covers = (directive, host) => !directive.includes('/') && (host === directive || host.endsWith('.' + directive));"
-     "const sameSet = (a, b) => [...a].sort().join('\\n') === [...b].sort().join('\\n');"
-     "const storageCall = (name, arg) => expired ? Promise.reject(new Error(`storage ${name}: timed out`))"
-     "  : new Promise((resolve, reject) => chrome.storage.local[name](arg, (v) =>"
-     "    chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(v || {})));"
-     "const local = {get: (k) => storageCall('get', k), set: (v) => storageCall('set', v), remove: (k) => storageCall('remove', k)};"
-     "const reloadLists = () => send({what: 'reloadAllFilters'}).then(() => local.remove('bayReloadPending'));"
-     "const applyLists = (toSelect) => local.set({bayReloadPending: true})"
-     "  .then(() => send({what: 'applyFilterListSelection', toSelect})).then(reloadLists);"
-     "const settlePending = () => local.get('bayReloadPending').then((b) => b.bayReloadPending ? reloadLists() : null);"
-     "Promise.resolve().then(() => { if (location.origin !== extensionOrigin) throw new Error(`not the extension page: ${location.href}`); })"
-     ".then(() => withDeadline(ready(), 'uBlock Origin'))"
-     ".then(() => withDeadline(settlePending().then(() => (%@)), 'the call'))"
-     ".then((v) => post('result', JSON.stringify({value: v === undefined ? null : v})),"
-     "(e) => post('result', JSON.stringify({error: String(e && e.message || e)})))";
-
-NSMutableDictionary<NSString *, NSMutableArray<NNContentBlockerOp *> *> *Queues() {
-  static NSMutableDictionary *queues = [NSMutableDictionary dictionary];
-  return queues;
-}
-
-NSMutableSet<NSString *> *BusyProfiles() {
-  static NSMutableSet *busy = [NSMutableSet set];
-  return busy;
-}
-
-void Pump(NSString *profile);
-
-constexpr double kPageIdleSeconds = 30;
-
-NSMutableDictionary<NSString *, NSNumber *> *Uses() {
-  static NSMutableDictionary *uses = [NSMutableDictionary dictionary];
-  return uses;
-}
-
-void CloseWhenIdle(NSString *profile) {
-  const NSUInteger use = Uses()[profile].unsignedIntegerValue + 1;
-  Uses()[profile] = @(use);
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kPageIdleSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-    if (Uses()[profile].unsignedIntegerValue != use || [BusyProfiles() containsObject:profile] || Queues()[profile].count) return;
-    [Pages()[profile] fail:@"idle"];
-    [Pages() removeObjectForKey:profile];
-  });
-}
-
-void Finish(NNContentBlockerOp *op, id value, NSString *error) {
-  NSMutableArray *queue = Queues()[op.profile];
-  if (queue.firstObject == op) [queue removeObjectAtIndex:0];
-  [BusyProfiles() removeObject:op.profile];
-  if (error) NSLog(@"[blocker] profile \"%@\": %@", op.profile, error);
-  op.completion(value, error);
-  Pump(op.profile);
-  if (!Queues()[op.profile].count) CloseWhenIdle(op.profile);
-}
-
-bool Retriable(NSString *error, NNContentBlockerPage *page) {
-  if (!page.onOwnPage) return true;
-  for (NSString *sign in @[ @"no reply", @"no answer", @"context invalidated", @"not the extension page", @"renderer ", @"closed" ])
-    if ([error containsString:sign]) return true;
-  return false;
-}
-
-void Attempt(NNContentBlockerOp *op) {
-  NSString *profile = op.profile;
-  if (!NNCoreHost.isStarted) return Finish(op, nil, @"unavailable");
-  if (![LoadedProfiles() containsObject:profile]) {
-    return LoadIntoProfile(profile, ^(NSString *error) {
-      if (error) Finish(op, nil, error);
-      else Attempt(op);
-    });
-  }
-  NNCoreProfile *p = nncore_host::LoadedProfile(profile);
-  NNContentBlockerPage *page = p ? PageFor(profile, p) : nil;
-  if (!page) return Finish(op, nil, @"not loaded");
-  const double leftMs = MAX(0, (op.deadline - NSDate.timeIntervalSinceReferenceDate) * 1000);
-  NSString *script = [NSString stringWithFormat:kPrelude, op.failNext ? @"true" : @"false", ScriptWith(@"%@", @[ kOffDirective ]),
-                                                ScriptWith(@"%@", @[ [@"chrome-extension://" stringByAppendingString:ExtensionId()] ]), @((long long)leftMs), op.expression];
-  const NSUInteger attempt = ++op.attempt;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((leftMs + 2000) * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-    if (op.attempt == attempt && Queues()[profile].firstObject == op) [page fail:@"the call timed out"];
-  });
-  [page run:script
-      completion:^(id value, NSString *error) {
-        if (op.attempt != attempt) return;
-        if ([error hasSuffix:@"failed (dev)"]) op.failNext = NO;
-        if ([error containsString:@"timed out"]) [page fail:error];
-        const bool inTime = NSDate.timeIntervalSinceReferenceDate < op.deadline;
-        if (error && op.attemptsLeft > 0 && inTime && Retriable(error, page) && [LoadedProfiles() containsObject:profile] &&
-            !nncore_host::IsDeletedProfile(profile)) {
-          op.attemptsLeft--;
-          [page fail:@"uBlock Origin restarted"];
-          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRetryMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            Attempt(op);
-          });
-          return;
-        }
-        Finish(op, value, error);
-      }];
-}
-
-void Pump(NSString *profile) {
-  if ([BusyProfiles() containsObject:profile]) return;
-  NNContentBlockerOp *op = Queues()[profile].firstObject;
-  if (!op) return;
-  [BusyProfiles() addObject:profile];
-  Attempt(op);
-}
-
-void Call(NSString *profile, NSString *expression, void (^completion)(id value, NSString *error)) {
-  NNContentBlockerOp *op = [NNContentBlockerOp new];
-  op.profile = profile;
-  op.expression = expression;
-  op.completion = completion;
-  op.attemptsLeft = kAttempts;
-  op.deadline = NSDate.timeIntervalSinceReferenceDate + kOpSeconds;
-  if (gFailNextMessage && ![expression isEqualToString:@"null"]) {
-    op.failNext = YES;
-    gFailNextMessage = false;
-  }
-  NSMutableArray *queue = Queues()[profile] ?: (Queues()[profile] = [NSMutableArray array]);
-  [queue addObject:op];
-  Pump(profile);
-}
-
-NSString *const kRead =
-    @"Promise.all([lists(), trusted()]).then(([l, t]) => ({lists: selected(l).sort(), whitelist: [...t.whitelist].sort(), autoUpdate: l.autoUpdate !== false}))";
-
-NSString *const kFollow =
-    @"Promise.all([lists(), trusted()]).then(([l, t]) => {"
-     "  const want = %@;"
-     "  if (!Array.isArray(want.lists) || !Array.isArray(want.whitelist)) throw new Error('no settings to copy');"
-     "  let written = Promise.resolve(null);"
-     "  if (!sameSet(selected(l), want.lists))"
-     "    written = written.then(() => applyLists(want.lists));"
-     "  if (!sameSet(t.whitelist, want.whitelist))"
-     "    written = written.then(() => send({what: 'setWhitelist', whitelist: want.whitelist.join('\\n')}));"
-     "  if ((l.autoUpdate !== false) !== (want.autoUpdate !== false))"
-     "    written = written.then(() => send({what: 'userSettings', name: 'autoUpdate', value: want.autoUpdate !== false}));"
-     "  return written.then(() => null);"
-     "})";
-
-void ForgetGoneProfiles() {
-  for (NSString *profile in LoadedProfiles().array) {
-    if (nncore_host::LoadedProfile(profile) && !nncore_host::IsDeletedProfile(profile)) continue;
-    [LoadedProfiles() removeObject:profile];
-    [Pages()[profile] fail:@"profile gone"];
-    [Pages() removeObjectForKey:profile];
-  }
-}
-
-void FollowDefault(NSArray<NSString *> *profiles, void (^done)(NSString *error)) {
-  done = [done copy];
-  if (!gDefaultSettled && NNCoreHost.isStarted) return WhenDefaultSettled(^{ FollowDefault(profiles, done); });
-  if (!profiles) ForgetGoneProfiles();
-  profiles = [(profiles ?: LoadedProfiles().array) filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
-  if (!profiles.count) return done(nil);
-  Call(kProfile, kRead, ^(NSDictionary *settings, NSString *error) {
-    if (error) return done(error);
-    if (![settings isKindOfClass:NSDictionary.class]) return done(@"no settings to copy");
-    dispatch_group_t group = dispatch_group_create();
-    __block NSString *failed;
-    for (NSString *profile in profiles) {
-      dispatch_group_enter(group);
-      Call(profile, ScriptWith(kFollow, @[ settings ]), ^(id, NSString *error) {
-        const bool gone = !nncore_host::LoadedProfile(profile) || nncore_host::IsDeletedProfile(profile);
-        if (!gone) failed = failed ?: error;
-        dispatch_group_leave(group);
-      });
-    }
-    dispatch_group_notify(group, dispatch_get_main_queue(), ^{ done(failed); });
-  });
-}
-
-NSMutableArray<void (^)(void)> *SettledWaiters() {
-  static NSMutableArray *waiters = [NSMutableArray array];
-  return waiters;
-}
-
-void WhenDefaultSettled(void (^then)(void)) {
-  if (gDefaultSettled) return then();
-  [SettledWaiters() addObject:[then copy]];
-}
-
-void DefaultSettled() {
-  gDefaultSettled = true;
-  gLaunching = false;
-  NSArray<void (^)(void)> *waiters = [SettledWaiters() copy];
-  [SettledWaiters() removeAllObjects];
-  for (void (^waiter)(void) in waiters) waiter();
-}
-
-constexpr int kInheritAttempts = 6;
-
-void Inherit(NSString *profile, int attempt, void (^first)(NSString *error)) {
-  first = [first copy];
-  FollowDefault(@[ profile ], ^(NSString *error) {
-    if (first) first(error);
-    const bool gone = !nncore_host::LoadedProfile(profile) || nncore_host::IsDeletedProfile(profile) ||
-                      ![LoadedProfiles() containsObject:profile];
-    if (!error || gone || attempt + 1 >= kInheritAttempts) {
-      if (error && !gone) NSLog(@"[blocker] profile \"%@\" didn't take the default profile's settings: %@", profile, error);
-      return;
-    }
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((1 << attempt) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-      Inherit(profile, attempt + 1, nil);
-    });
-  });
-}
-
-void LoadHeld(NSString *profile) {
-  NNCoreProfile *p = nncore_host::LoadedProfile(profile);
-  const bool isDefault = profile.length == 0;
-  const bool firstLoad = p && ![LoadedProfiles() containsObject:profile];
-  const bool hold = firstLoad && !isDefault && !gLaunching && [p respondsToSelector:@selector(holdNavigationsUntilRulesetsOf:)];
-  if (hold) [p holdNavigationsUntilRulesetsOf:ExtensionId()];
-  void (^release)(NSString *) = ^(NSString *why) {
-    if (!hold) return;
-    if (!why && [p respondsToSelector:@selector(releaseNavigationHoldReady)]) [p releaseNavigationHoldReady];
-    else [p releaseNavigationHold:why ?: @"uBlock Origin is ready"];
-  };
-  void (^load)(void) = ^{
-    LoadIntoProfile(profile, ^(NSString *error) {
-      if (error) {
-        if (isDefault) DefaultSettled();
-        return release([@"the content blocker didn't load: " stringByAppendingString:error]);
-      }
-      if (!isDefault) {
-        return WhenDefaultSettled(^{
-          Inherit(profile, 0, ^(NSString *followError) {
-            release(followError ? [@"the default profile's settings didn't apply: " stringByAppendingString:followError] : nil);
-          });
-        });
-      }
-      void (^settle)(void) = ^{
-        if (nncore_host::LoadedProfile(profile) && SettleWithoutPage()) return DefaultSettled();
-        Call(profile, @"null", ^(id, NSString *) { DefaultSettled(); });
-      };
-      if (!gLaunching) return settle();
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kSettleAfterLaunchSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), settle);
-    });
-  };
-  const double delay = std::exchange(gDelayNextLoadMs, 0);
-  if (delay > 0) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_MSEC)), dispatch_get_main_queue(), load);
-  else load();
-}
-
-NSString *Category(NSString *listId, NSString *group) {
-  if ([group isEqual:@"regions"]) return @"regional";
-  if ([listId containsString:@"cookie"]) return @"cookies";
-  if ([group isEqual:@"privacy"] || [listId isEqual:@"ublock-privacy"]) return @"trackers";
-  if ([group isEqual:@"malware"] || [listId isEqual:@"ublock-badware"]) return @"security";
-  if ([group isEqual:@"annoyances"] || [group isEqual:@"social"]) return @"annoyances";
-  return @"ads";
-}
-
-double Count(id value) { return [value isKindOfClass:NSNumber.class] ? [value doubleValue] : 0; }
-
-NSString *BundledVersion() {
-  NSString *path = [ExtensionPath() stringByAppendingPathComponent:@"manifest.json"];
-  NSData *data = path ? [NSData dataWithContentsOfFile:path] : nil;
-  NSDictionary *manifest = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-  if (![manifest isKindOfClass:NSDictionary.class]) return @"";
-  for (NSString *key in @[ @"version_name", @"version" ])
-    if ([manifest[key] isKindOfClass:NSString.class]) return manifest[key];
-  return @"";
-}
-
-NSString *const kState =
-    @"Promise.all([lists(), trusted(), fetch('/assets/assets.json').then((r) => r.json())]).then(([l, t, assets]) => {"
-     "  const langs = new Set([chrome.i18n.getUILanguage(), ...(navigator.languages || [])].map((x) => (/^[a-z]+/.exec(x) || [])[0]).filter(Boolean));"
-     "  const forLanguages = (lang) => typeof lang === 'string' && lang.split(/\\s+/).some((x) => langs.has(x));"
-     "  const onByDefault = (id) => !!assets[id] && (assets[id].off !== true || forLanguages(assets[id].lang));"
-     "  return {"
-     "    lists: Object.entries(l.available)"
-     "      .filter(([id, list]) => list && list.content === 'filters' && list.group !== 'user' && list.group !== 'custom')"
-     "      .map(([id, list]) => ({id, title: list.title || id, group: list.group || '', enabled: list.off !== true,"
-     "        defaultOn: onByDefault(id), filters: list.entryCount || 0})),"
-     "    networkFilters: l.netFilterCount || 0,"
-     "    cosmeticFilters: l.cosmeticFilterCount || 0,"
-     "    enabled: !t.whitelist.includes(offDirective),"
-     "    allowedHosts: t.whitelist.filter((d) => !d.includes('/') && !d.startsWith('#') && !(t.whitelistDefault || []).includes(d)),"
-     "  };"
-     "})";
-
-void State(void (^completion)(NSDictionary *state)) {
-  completion = [completion copy];
-  if (!gDefaultSettled && NNCoreHost.isStarted) return WhenDefaultSettled(^{ State(completion); });
-  Call(kProfile, kState, ^(NSDictionary *read, NSString *error) {
-    if (![read isKindOfClass:NSDictionary.class] || ![read[@"lists"] isKindOfClass:NSArray.class]) {
-      return completion(@{
-        @"enabled" : @NO, @"lists" : @[], @"allowedHosts" : @[], @"version" : BundledVersion(),
-        @"stats" : @{@"ready" : @NO, @"enabled" : @NO, @"parseMs" : @0, @"lookups" : @0, @"averageLookupMicros" : @0,
-                     @"maxLookupMicros" : @0, @"error" : error ?: @"unavailable"},
-      });
-    }
-    NSMutableArray *lists = [NSMutableArray array];
-    for (NSDictionary *l in read[@"lists"]) {
-      if (![l isKindOfClass:NSDictionary.class] || ![l[@"id"] isKindOfClass:NSString.class]) continue;
-      [lists addObject:@{
-        @"id" : l[@"id"],
-        @"title" : [l[@"title"] isKindOfClass:NSString.class] ? l[@"title"] : l[@"id"],
-        @"category" : Category(l[@"id"], [l[@"group"] isKindOfClass:NSString.class] ? l[@"group"] : @""),
-        @"enabled" : @([l[@"enabled"] boolValue]),
-        @"defaultOn" : @([l[@"defaultOn"] boolValue]),
-        @"filters" : @(Count(l[@"filters"])),
-      }];
-    }
-    NSMutableArray *allowed = [NSMutableArray array];
-    for (NSString *host in [read[@"allowedHosts"] isKindOfClass:NSArray.class] ? read[@"allowedHosts"] : @[])
-      if ([host isKindOfClass:NSString.class]) [allowed addObject:host];
-    const BOOL on = [read[@"enabled"] boolValue];
-    completion(@{
-      @"enabled" : @(on),
-      @"version" : BundledVersion(),
-      @"lists" : lists,
-      @"allowedHosts" : allowed,
-      @"stats" : @{
-        @"ready" : @YES, @"enabled" : @(on), @"networkFilters" : @(Count(read[@"networkFilters"])),
-        @"cosmeticFilters" : @(Count(read[@"cosmeticFilters"])), @"parseMs" : @0, @"lookups" : @0,
-        @"averageLookupMicros" : @0, @"maxLookupMicros" : @0,
-      },
-    });
-  });
-}
-
-void Changed(NSString *error, void (^completion)(NSString *error)) {
-  if (error) return completion(error);
-  completion = [completion copy];
-  FollowDefault(nil, ^(NSString *followError) {
-    State(^(NSDictionary *state) { if (NNCoreHost.eventHandler) NNCoreHost.eventHandler(@"contentBlocker", state[@"stats"]); });
-    completion(followError);
-  });
-}
-
-}
-
-namespace nncore_host {
-void PrepareContentBlocker() {
-  StartPreparing();
-}
-
-void LoadContentBlocker(NSString *profile) {
-  if (!IsIncognito(profile)) LoadHeld(profile ?: @"");
-}
-}
+}  // namespace nncore_host
 
 @implementation NNCoreContentBlocker
 
 + (void)state:(void (^)(NSDictionary<NSString *, id> *))completion {
-  State(completion);
+  LoadSettings();
+  completion(StateDictionary());
 }
 
 + (void)setEnabled:(BOOL)enabled completion:(void (^)(NSString *))completion {
-  NSString *script = @"trusted().then((t) => {"
-                      "  const on = %@;"
-                      "  const kept = t.whitelist.filter((d) => d !== offDirective);"
-                      "  return send({what: 'setWhitelist', whitelist: (on ? kept : kept.concat([offDirective])).join('\\n')});"
-                      "}).then(() => send({what: 'userSettings', name: 'autoUpdate', value: %@}))";
-  Call(kProfile, ScriptWith(script, @[ @(enabled), @(enabled) ]), ^(id, NSString *error) {
-    Changed(error, completion);
-  });
+  LoadSettings();
+  if (NSString *error = FailedForTest()) return completion(error);
+  const BOOL wasEnabled = gEnabled;
+  gEnabled = enabled;
+  Changed();
+  // Back on after a while off: its lists may have gone stale meanwhile.
+  if (enabled && !wasEnabled) UpdateLists(NO);
+  completion(nil);
 }
 
 + (void)setList:(NSString *)listId enabled:(BOOL)enabled completion:(void (^)(NSString *))completion {
-  NSString *script = @"lists().then((l) => {"
-                      "  const [id, on] = [%@, %@];"
-                      "  if (!l.available[id]) throw new Error(`no list ${id}`);"
-                      "  const keep = selected(l).filter((x) => x !== id);"
-                      "  return applyLists(on ? keep.concat([id]) : keep);"
-                      "})";
-  Call(kProfile, ScriptWith(script, @[ listId, @(enabled) ]), ^(id, NSString *error) {
-    Changed(error, completion);
+  LoadSettings();
+  if (!CatalogueList(listId)) return completion([@"no list " stringByAppendingString:listId ?: @""]);
+  if (NSString *error = FailedForTest()) return completion(error);
+  if (enabled == [gSelected containsObject:listId]) return completion(nil);
+  if (enabled) [gSelected addObject:listId];
+  else [gSelected removeObject:listId];
+  SaveSettings();
+  // Done when the engine has it (a new list downloads first), as uBO answered once its lists had reloaded. A list that
+  // couldn't be downloaded isn't turned on.
+  completion = [completion copy];
+  Rebuild(YES, ^(NSArray<NSString *> *missing) {
+    if (!enabled || ![missing containsObject:listId]) return completion(nil);
+    [gSelected removeObject:listId];
+    SaveSettings();
+    Rebuild(YES, nil);
+    completion([@"couldn't download " stringByAppendingString:listId]);
   });
 }
 
 + (void)isAllowedOnHost:(NSString *)host completion:(void (^)(BOOL))completion {
-  NSString *script = @"trusted().then((t) => t.whitelist.some((d) => covers(d, %@)))";
-  Call(kProfile, ScriptWith(script, @[ host.lowercaseString ]), ^(id allowed, NSString *error) {
-    completion(!error && [allowed isKindOfClass:NSNumber.class] && [allowed boolValue]);
-  });
+  LoadSettings();
+  const std::string name = HostOf(host.lowercaseString.UTF8String);
+  for (NSString *allowed in gAllowed)
+    if (Covers(allowed.UTF8String, name)) return completion(YES);
+  completion(NO);
 }
 
 + (void)setAllowed:(BOOL)allowed onHost:(NSString *)host completion:(void (^)(NSString *))completion {
-  NSString *script = @"trusted().then((t) => {"
-                      "  const [allowed, host] = [%@, %@];"
-                      "  const kept = t.whitelist.filter((d) => allowed ? d !== host : !covers(d, host));"
-                      "  return send({what: 'setWhitelist', whitelist: (allowed ? kept.concat([host]) : kept).join('\\n')});"
-                      "})";
-  Call(kProfile, ScriptWith(script, @[ @(allowed), host.lowercaseString ]), ^(id, NSString *error) {
-    Changed(error, completion);
-  });
+  LoadSettings();
+  if (NSString *error = FailedForTest()) return completion(error);
+  NSString *name = [NSString stringWithUTF8String:HostOf(host.lowercaseString.UTF8String).c_str()];
+  if (!name.length) return completion(@"no host");
+  if (allowed) {
+    [gAllowed addObject:name];
+  } else {
+    // Blocking again on a host ends every pause that covers it ("example.com" for "www.example.com").
+    for (NSString *entry in gAllowed.array)
+      if (Covers(entry.UTF8String, name.UTF8String)) [gAllowed removeObject:entry];
+  }
+  Changed();
+  completion(nil);
+}
+
++ (void)setPageAllowed:(BOOL)allowed
+                onHost:(NSString *)host
+              remember:(BOOL)remember
+            completion:(void (^)(NSString *))completion {
+  LoadSettings();
+  if (NSString *error = FailedForTest()) return completion(error);
+  NSString *name = [NSString stringWithUTF8String:HostOf(host.lowercaseString.UTF8String).c_str()];
+  if (!name.length) return completion(@"no host");
+  if (allowed) {
+    [remember ? gAllowedPages : gSessionPages addObject:name];
+  } else {
+    for (NSMutableOrderedSet<NSString *> *pages in @[ gAllowedPages, gSessionPages ])
+      for (NSString *entry in pages.array)
+        if (Covers(entry.UTF8String, name.UTF8String)) [pages removeObject:entry];
+  }
+  Changed();
+  completion(nil);
 }
 
 + (void)devFailNextMessage {
-  gFailNextMessage = true;
+  gFailNext = true;
 }
 
 + (void)devDelayNextLoad:(double)ms {

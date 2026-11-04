@@ -101,6 +101,7 @@
 #include "bay/core/nn_main_delegate.h"
 #include "bay/core/nn_navigation_hold.h"
 #include "bay/core/nn_page_channel.h"
+#include "bay/core/nn_request_filter.h"
 #include "bay/core/nn_password_prompt.h"
 #include "bay/core/nn_tab_info.h"
 #include "bay/core/nn_permissions.h"
@@ -1037,6 +1038,35 @@ void WatchTracingStart(std::shared_ptr<TracingStart> start, int checks_left) {
     list.push_back(std::move(entry));
   }
   nncore::SetBoosts(std::move(list));
+}
+
++ (void)setRequestFilter:(NNCoreRequestFilter)filter {
+  nncore::SetRequestFilter(filter);
+}
+
++ (void)setContentSecurityPolicySource:(NNCoreContentSecurityPolicySource)source {
+  nncore::SetContentSecurityPolicySource(source);
+}
+
++ (void)setResponseFilter:(NNCoreResponseFilter)filter {
+  nncore::SetResponseFilter(filter);
+}
+
++ (void)setBodyFilterGate:(NNCoreBodyFilterGate)gate filter:(NNCoreBodyFilter)filter {
+  nncore::SetBodyFilter(gate, filter);
+}
+
++ (void)setRequestHeaderNames:(NNCoreRequestHeaderNames)names
+                       filter:(NNCoreRequestHeaderFilter)filter {
+  nncore::SetRequestHeaderFilter(names, filter);
+}
+
++ (void)setCnameFilter:(NNCoreCnameFilter)filter {
+  nncore::SetCnameFilter(filter);
+}
+
++ (void)setScriptletSource:(NNCoreScriptletSource)source {
+  nncore::SetScriptletSource(source);
 }
 
 + (void)setAutoPictureInPicture:(BOOL)enabled {
@@ -2473,6 +2503,14 @@ TabSharingInfoBarDelegate* TabSharingDelegateFor(content::WebContents* contents,
   if (_contents) {
     nncore::PageChannel::GetOrCreate(_contents)->SetBoostStyle(
         css ? base::SysNSStringToUTF8(css) : std::string());
+  }
+}
+
+- (void)insertUserStyle:(NSString*)css frame:(NSString*)frameId origin:(NSString*)origin {
+  if (_contents) {
+    nncore::PageChannel::GetOrCreate(_contents)->InsertUserStyle(
+        base::SysNSStringToUTF8(frameId), base::SysNSStringToUTF8(css),
+        base::SysNSStringToUTF8(origin));
   }
 }
 

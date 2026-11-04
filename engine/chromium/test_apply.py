@@ -44,6 +44,9 @@ class ChromiumLayerTests(unittest.TestCase):
             page_script = checkout / "packages/chromium/ios/page_script.js"
             page_script.parent.mkdir(parents=True, exist_ok=True)
             page_script.write_bytes((REPO / "packages/chromium/ios/page_script.js").read_bytes())
+            adblock = checkout / "packages/adblock/include"
+            adblock.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="mac")
             command = [sys.executable, str(here / "apply.py")]
@@ -102,6 +105,9 @@ class ChromiumLayerTests(unittest.TestCase):
             page_script = checkout / "packages/chromium/ios/page_script.js"
             page_script.parent.mkdir(parents=True, exist_ok=True)
             page_script.write_bytes((REPO / "packages/chromium/ios/page_script.js").read_bytes())
+            adblock = checkout / "packages/adblock/include"
+            adblock.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="linux")
             command = [sys.executable, str(here / "apply.py")]
@@ -135,6 +141,9 @@ class ChromiumLayerTests(unittest.TestCase):
             page_script = checkout / "packages/chromium/ios/page_script.js"
             page_script.parent.mkdir(parents=True, exist_ok=True)
             page_script.write_bytes((REPO / "packages/chromium/ios/page_script.js").read_bytes())
+            adblock = checkout / "packages/adblock/include"
+            adblock.mkdir(parents=True)
+            shutil.copy2(REPO / "packages/adblock/include/bay_adblock.h", adblock)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="win")
             command = [sys.executable, str(here / "apply.py")]
@@ -203,6 +212,12 @@ class ChromiumLayerTests(unittest.TestCase):
                     test.parent.mkdir(exist_ok=True)
                     test.write_text("test-only\n")
                     self.assertEqual(after, engine.source_digest("linux"))
+                crate = engine.REPO / "packages/adblock/src/lib.rs"
+                crate.parent.mkdir(parents=True)
+                crate.write_text("before")
+                before = engine.source_digest("linux")
+                crate.write_text("after")
+                self.assertNotEqual(before, engine.source_digest("linux"))
                 script = engine.REPO / "packages/chromium/ios/page_script.js"
                 script.parent.mkdir(parents=True)
                 script.write_text("before script")

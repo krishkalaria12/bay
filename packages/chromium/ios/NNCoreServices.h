@@ -105,16 +105,19 @@ typedef void (^NNCoreResult)(NSDictionary<NSString *, id> *result);
 
 @end
 
-// The built-in content blocker (uBlock Origin). A change that fails (error) changed nothing.
+// The built-in content blocker (Bay's own, packages/adblock). A change that fails (error) changed nothing.
 @interface NNCoreContentBlocker : NSObject
 + (void)state:(void (^)(NSDictionary<NSString *, id> *state))completion NS_SWIFT_NAME(state(_:));
 + (void)setEnabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setEnabled(_:completion:));
 + (void)setList:(NSString *)listId enabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setList(_:enabled:completion:));
 + (void)isAllowedOnHost:(NSString *)host completion:(void (^)(BOOL allowed))completion NS_SWIFT_NAME(isAllowed(host:completion:));
 + (void)setAllowed:(BOOL)allowed onHost:(NSString *)host completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setAllowed(_:host:completion:));
-// Tests: the next call's first message to the extension fails.
+// Visit Anyway on a page the blocker stops: for this run of the app, or kept (remember). The site's requests are still
+// filtered. Not allowed ends both, for the host and whatever covers it.
++ (void)setPageAllowed:(BOOL)allowed onHost:(NSString *)host remember:(BOOL)remember completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setPageAllowed(_:host:remember:completion:));
+// Tests: the next change fails (and changes nothing).
 + (void)devFailNextMessage;
-// Tests: the next profile's load of the extension waits `ms`, its pages held meanwhile.
+// Tests: the next engine build goes into force `ms` later.
 + (void)devDelayNextLoad:(double)ms;
 @end
 

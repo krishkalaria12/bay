@@ -1,6 +1,8 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/engine_services.h"
 
+#include <algorithm>
+
 #include <cmath>
 #include <optional>
 #include <string_view>
@@ -15,6 +17,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "bay/core/nn_page_channel.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/content_blocker.h"
 #include "chrome/browser/bay/webui/auto_picture_in_picture.h"
 #include "chrome/browser/bay/webui/context_search.h"
 #include "chrome/browser/bay/webui/dev_window.h"
@@ -600,11 +603,79 @@ base::ListValue EngineServices::SupportedMethods() const {
                              "setAutoPictureInPicture",
                              "setSearchEngineName", "fetchFavicon",
                              "removeLegacyFavicons", "systemState",
+                             "getContentBlocker", "setContentBlockerEnabled",
+                             "setFilterListEnabled", "isContentBlockerAllowed",
+                             "setContentBlockerAllowed",
+                             "setBlockedPageAllowed",
                              "resolvePermission",   "resolveExternalApp"})
     methods.Append(std::string("BayCEF.") + method);
   methods.Append("BayChromeUI.changeCaptureSource");
   methods.Append("BayChromeUI.showAutofillSuggestions");
   return methods;
+}
+// static
+bool EngineServices::DispatchContentBlocker(const std::string& method,
+                                            const base::ListValue& args,
+                                            Response& response) {
+  static constexpr const char* kMethodNames[] = {
+      "getContentBlocker",       "setContentBlockerEnabled",
+      "setFilterListEnabled",    "isContentBlockerAllowed",
+      "setContentBlockerAllowed", "setBlockedPageAllowed"};
+  if (!std::ranges::contains(kMethodNames, method))
+    return false;
+  auto& blocker = ContentBlocker::Get();
+  if (!blocker.loaded()) {
+    blocker.WhenLoaded(base::BindOnce(
+        [](std::string method, base::ListValue args, Response response) {
+          DispatchContentBlocker(method, args, response);
+        },
+        method, args.Clone(), std::move(response)));
+    return true;
+  }
+  const auto text = [&](size_t index) -> const std::string* {
+    return index < args.size() ? args[index].GetIfString() : nullptr;
+  };
+  const auto flag = [&](size_t index) {
+    return index < args.size() ? args[index].GetIfBool() : std::nullopt;
+  };
+  auto settled = [&response]() {
+    return base::BindOnce(
+        [](Response response, std::optional<std::string> error) {
+          std::move(response).Run(
+              error ? Failure("content_blocker_failed", error->c_str())
+                    : Success());
+        },
+        std::move(response));
+  };
+  auto invalid = [&] {
+    std::move(response).Run(
+        Failure("invalid_args", "Invalid content blocker arguments"));
+    return true;
+  };
+  if (method == "getContentBlocker") {
+    std::move(response).Run(Success(base::Value(blocker.State())));
+  } else if (method == "setContentBlockerEnabled") {
+    if (!flag(0))
+      return invalid();
+    blocker.SetEnabled(*flag(0), settled());
+  } else if (method == "setFilterListEnabled") {
+    if (!text(0) || !flag(1))
+      return invalid();
+    blocker.SetListEnabled(*text(0), *flag(1), settled());
+  } else if (method == "isContentBlockerAllowed") {
+    if (!text(0))
+      return invalid();
+    std::move(response).Run(Success(base::Value(blocker.IsAllowed(*text(0)))));
+  } else if (method == "setContentBlockerAllowed") {
+    if (!text(0) || !flag(1))
+      return invalid();
+    blocker.SetAllowed(*text(0), *flag(1), settled());
+  } else if (method == "setBlockedPageAllowed") {
+    if (!text(0) || !flag(1) || !flag(2))
+      return invalid();
+    blocker.SetPageAllowed(*text(0), *flag(1), *flag(2), settled());
+  }
+  return true;
 }
 bool EngineServices::DispatchEngineModule(const std::string& module,
                                           const std::string& method,
@@ -631,6 +702,8 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
   };
   if (module == "BayCEF" &&
       DevWindow::Dispatch(context_, method, args, response))
+    return true;
+  if (module == "BayCEF" && DispatchContentBlocker(method, args, response))
     return true;
   if (module == "BayCEF" && method == "systemState") {
     std::move(response).Run(

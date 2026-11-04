@@ -44,7 +44,7 @@ import {
 import { dismissPermissions, startPermissionPrompts } from "../site/permissions";
 import { clearChromeTabId, patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePopover } from "./pageState";
 import { useTabDrag } from "../tabStrip/tabStripDrag";
-import { OpenElsewhere, SadTab, StatusBubble } from "./PaneOverlays";
+import { BlockedPage, OpenElsewhere, SadTab, StatusBubble } from "./PaneOverlays";
 import { PeekLayer, startPeeks } from "../linkOverlay/PeekLayer";
 import { DropTargets, SplitDividers, SplitToast } from "../split/SplitChrome";
 import { SplitEmptyState } from "../split/SplitEmptyState";
@@ -449,6 +449,7 @@ const TabPane = memo(function TabPane({
                   <StatusBubble tabId={tabId} maxWidth={Math.max(160, frame.width / 2)} />
                 </Animated.View>
                 <SadTab tabId={tabId} />
+                <BlockedPage tabId={tabId} />
                 <OpenElsewhere tabId={tabId} windowId={windowId} />
                 {/* A page's own prompts go with its page: not over the New Tab page shown in its place (Back to it). */}
                 {!newTabShown && <DeveloperOffer tabId={tabId} left={pageStart} top={4} paneWidth={frame.width} />}
@@ -580,15 +581,24 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
           setPageSelection(tabId, null);
           setLinkPreview(tabId, null);
           clearEngineOffer(tabId);
-          patchPage(tabId, { popups: [], passwordPrompt: null, crashed: null, status: "" });
+          const blocked = pageOf(tabId).blockedPage;
+          patchPage(tabId, {
+            popups: [],
+            passwordPrompt: null,
+            crashed: null,
+            status: "",
+            // The blocked page's own commit can come after its report.
+            blockedPage: blocked && pageKey(blocked) === pageKey(url) ? blocked : null,
+          });
           revealToolbar(tabId);
           if (!tab()?.peekOf) followSiteChoice(tabId, engine, url, lastPage.current);
         }
         lastPage.current = pageKey(url);
         patchPage(tabId, { themeColorSource: themeColorSource ?? null });
       }}
-      onLoadError={() => {
+      onLoadError={({ url, blockedPage }) => {
         pending.current = null;
+        if (blockedPage) patchPage(tabId, { blockedPage: url });
       }}
       onDownloadNavigation={({ committedUrl, skipped }) => {
         pending.current = null;

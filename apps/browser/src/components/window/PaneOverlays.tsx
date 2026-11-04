@@ -2,6 +2,7 @@ import { reportBrowserCommand } from "../../runtime/commands";
 import * as tabCommands from "../../runtime/tabActions";
 import { View } from "@bay/platform";
 import { toAppUrl, urlForDisplay } from "@bay/core";
+import { setBlockedPageAllowed } from "@bay/chromium";
 import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
@@ -10,8 +11,11 @@ import { hex, useTheme } from "../../lib/theme";
 import { useLatched } from "../../lib/useLatched";
 import { webviews } from "../../lib/webviews";
 import { PromptButton } from "../toolbar/buttons";
+import { goBack } from "./historyMenu";
 import { patchPage, usePage } from "./pageState";
 import { useQuietBrowser } from "../../store/hooks";
+import { useBrowserRead } from "../../store/read";
+import { isIncognitoSpace } from "../../store/model";
 
 export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: number }) {
   const status = usePage(tabId, (p) => p.status);
@@ -90,6 +94,49 @@ export function OpenElsewhere({ tabId, windowId }: { tabId: string; windowId: st
         This tab is showing in another window. Show it here to move it, as it is.
       </Text>
       <PromptButton title="Show Here" primary onPress={() => reportBrowserCommand(tabCommands.activate(tabId, windowId))} />
+    </View>
+  );
+}
+
+// A page the content blocker stopped ($doc, a hostname on its lists), over Chromium's error page at its URL. Visit Anyway
+// only lifts this page's block: the site's requests are still filtered.
+export function BlockedPage({ tabId }: { tabId: string }) {
+  const theme = useTheme();
+  const url = usePage(tabId, (p) => p.blockedPage);
+  const canGoBack = useBrowserRead((s) => !!s.live[tabId]?.canGoBack);
+  const incognito = useQuietBrowser((s) => isIncognitoSpace(s.tabs[tabId]?.spaceId ?? ""));
+  if (!url) return null;
+  const host = url.match(/^https?:\/\/([^/?#:]*)/i)?.[1] ?? url;
+  const visit = (remember: boolean) => {
+    void setBlockedPageAllowed(host, true, remember).then(() => {
+      patchPage(tabId, { blockedPage: null });
+      void webviews.get(tabId)?.reload();
+    });
+  };
+  return (
+    <View
+      style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}
+    >
+      <Symbol name="hand.raised" size={30} weight="light" color={theme.textSecondary} style={{ width: 44, height: 40, marginBottom: 8 }} />
+      <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary, marginBottom: 6 }}>Bay blocked this page</Text>
+      <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center", maxWidth: 380, marginBottom: 18 }}>
+        {host} is on one of Bay's filter lists, which cover malware, ads and trackers. It may not be safe to visit.
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+        <PromptButton
+          title={canGoBack ? "Go Back" : "Close Tab"}
+          primary
+          onPress={() => {
+            if (canGoBack) goBack(tabId);
+            else reportBrowserCommand(tabCommands.closeTab(tabId));
+          }}
+        />
+        <PromptButton title="Visit Anyway" onPress={() => visit(false)} />
+        {!incognito && <PromptButton title="Always Allow" onPress={() => visit(true)} />}
+      </View>
+      <Text style={{ fontSize: 11.5, color: theme.textTertiary, textAlign: "center", maxWidth: 380 }}>
+        Visit Anyway lasts until you quit Bay. Either way, Bay keeps blocking ads on the site.
+      </Text>
     </View>
   );
 }

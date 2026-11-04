@@ -1,0 +1,14 @@
+{
+  "url": "https://perf.example/page",
+  "rules": [
+    "perf.example##^article:has-text(Sponsored):upward(section.slot) > aside.ad",
+    "perf.example##^script:has-text(/adserverDomain[0-9]+/)",
+    "perf.example##^span.keep:has-text(Keep)",
+    "perf.example#@#^span.keep:has-text(Keep)",
+    "perf.example##^aside:has-text(ordinary) > ["
+  ],
+  "prefix": "<!doctype html><html><head><title>HTML filter benchmark</title></head><body>",
+  "fragment": "<section class='slot'><article>Sponsored content</article><aside class='ad'>advert</aside><aside>ordinary</aside><span class='keep'>Keep this</span><script>var adserverDomain42=1;</script><script>window.kept=true;</script></section>",
+  "repeat": 500,
+  "suffix": "</body></html>"
+}

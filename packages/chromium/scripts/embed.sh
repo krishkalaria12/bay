@@ -38,13 +38,17 @@ if ! [[ -f "$stamp" && "$(cat "$stamp")" == "$want" && -d "$frameworks/Chromium 
   echo "$want" > "$stamp"
 fi
 
-# The built-in content blocker (uBlock Origin, pinned in ubo.sh, which installs it once) → Resources/Extensions,
-# where it loads from. Nothing else stays there.
-"$here/ubo.sh"
-ubo="$repo/packages/chromium/vendor/ubo/ext"
-if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ] && [ -f "$ubo/manifest.json" ]; then
-  extensions="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Extensions"
-  mkdir -p "$extensions"
-  find "$extensions" -mindepth 1 -maxdepth 1 ! -name ublock -exec rm -rf {} +
-  rsync -a --delete "$ubo/" "$extensions/ublock/"
+# The content blocker's default filter lists (filter-lists.sh, which downloads them once and keeps them fresh) →
+# Resources/FilterLists, so a new install blocks from its first page. uBlock Origin, which the app once bundled under
+# Resources/Extensions, goes.
+"$here/filter-lists.sh"
+"$here/blocker-resources.sh"
+lists="$repo/packages/chromium/vendor/filter-lists"
+if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]; then
+  resources="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+  rm -rf "$resources/Extensions"
+  mkdir -p "$resources/FilterLists"
+  rsync -a --delete --include '*.txt' --exclude '*' "$lists/" "$resources/FilterLists/"
+  mkdir -p "$resources/ContentBlocker"
+  rsync -a --delete "$repo/packages/chromium/vendor/blocker-resources/" "$resources/ContentBlocker/"
 fi

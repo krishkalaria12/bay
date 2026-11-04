@@ -9,6 +9,7 @@
 #include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/browser/bay/webui/content_blocker.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/page_services.h"
@@ -303,10 +304,15 @@ void TabObserver::LoadError(const GURL& url, int code) {
   if (last_load_error_ == error)
     return;
   last_load_error_ = error;
+  // ERR_BLOCKED_BY_CLIENT from Bay's blocker, not an extension's: the app
+  // covers the error page with its own.
+  const bool blocked_page = code == net::ERR_BLOCKED_BY_CLIENT &&
+                            ContentBlocker::BlocksPage(url.spec());
   Emit("onLoadError", base::DictValue()
                           .Set("url", url.spec())
                           .Set("code", code)
-                          .Set("text", net::ErrorToString(code)));
+                          .Set("text", net::ErrorToString(code))
+                          .Set("blockedPage", blocked_page));
 }
 void TabObserver::DidChangeThemeColor() {
   State();
