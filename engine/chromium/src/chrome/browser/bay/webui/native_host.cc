@@ -43,6 +43,7 @@
 #include "chrome/browser/bay/webui/form_prompts.h"
 #include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/page_observer.h"
+#include "chrome/browser/bay/webui/page_interaction_events.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/tab_strip_mirror.h"
@@ -1224,6 +1225,8 @@ void NativeHost::InvokeView(const std::string& method,
       return;
     }
     auto* contents = mounted.contents;
+    PageInteractionEvents::SetPeekLinks(
+        contents, props.FindBool("peekLinks").value_or(false));
     engine_services_->TrackTab(contents);
     if (auto muted = props.FindBool("muted"))
       contents->SetAudioMuted(*muted);
@@ -1270,6 +1273,8 @@ void NativeHost::InvokeView(const std::string& method,
                                         ui::PAGE_TRANSITION_TYPED, "");
     }
     observer.set_requested_url(requested_url);
+    PageInteractionEvents::SetPeekLinks(
+        contents, props.FindBool("peekLinks").value_or(false));
     if (auto mute = props.FindBool("muted"))
       contents->SetAudioMuted(*mute);
     if (auto frozen = props.FindBool("frozen"))

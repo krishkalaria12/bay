@@ -63,6 +63,8 @@ source_set("impl") {
     "page_observer.h",
     "page_media_events.cc",
     "page_media_events.h",
+    "page_interaction_events.cc",
+    "page_interaction_events.h",
     "page_security.cc",
     "page_security.h",
     "page_services.cc",
@@ -136,6 +138,7 @@ source_set("impl") {
     "//components/version_info",
     "//components/viz/common",
     "//components/zoom",
+    "//components/blocked_content",
     "//extensions/browser",
     "//extensions/common",
     "//net",
@@ -285,6 +288,7 @@ if (is_win) {
     sources = [
       "page_media_events_unittest.cc",
       "form_prompts_unittest.cc",
+      "page_interaction_events_unittest.cc",
     ]
     deps = [
       ":impl",
@@ -293,6 +297,8 @@ if (is_win) {
       "//chrome/browser/media/webrtc",
       "//chrome/browser/ui:test_support",
       "//chrome/browser/ui/passwords:test_support_ui",
+      "//components/blocked_content",
+      "//chrome/browser/content_settings:content_settings_factory",
       "//chrome/test:test_support_unit",
       "//content/test:test_support",
       "//testing/gmock",
