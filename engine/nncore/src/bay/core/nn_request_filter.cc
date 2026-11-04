@@ -20,7 +20,9 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/navigation_throttle_registry.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -53,6 +55,7 @@ namespace nncore {
 namespace {
 
 std::atomic<RequestFilter> g_filter{nullptr};
+std::atomic<ContentSecurityPolicySource> g_csp_source{nullptr};
 
 bool IsWeb(const GURL& url) {
   return url.SchemeIsHTTPOrHTTPS() || url.SchemeIsWSOrWSS();
@@ -117,12 +120,18 @@ struct Decision {
   std::string redirect;
 };
 
-Decision Match(const network::ResourceRequest& request,
-               const std::string& factory_source,
-               const std::string& factory_top) {
-  RequestFilter filter = g_filter.load(std::memory_order_acquire);
-  if (!filter || !IsWeb(request.url)) {
-    return {};
+// Who is asking for a request, and the page it's for.
+struct RequestContext {
+  std::string source;
+  std::string top;
+};
+
+RequestContext ContextOf(const network::ResourceRequest& request,
+                         const std::string& factory_source,
+                         const std::string& factory_top) {
+  // A top-level document is its own context, as uBO judges a main_frame request.
+  if (request.destination == network::mojom::RequestDestination::kDocument) {
+    return {request.url.spec(), request.url.spec()};
   }
   std::string source = request.request_initiator
                            ? OriginURL(*request.request_initiator)
@@ -131,15 +140,22 @@ Decision Match(const network::ResourceRequest& request,
     source = factory_source;
   }
   std::string top = factory_top.empty() ? source : factory_top;
-  // A top-level document is its own context, as uBO judges a main_frame request.
-  if (request.destination == network::mojom::RequestDestination::kDocument) {
-    source = request.url.spec();
-    top = source;
+  return {std::move(source), std::move(top)};
+}
+
+Decision Match(const network::ResourceRequest& request,
+               const std::string& factory_source,
+               const std::string& factory_top) {
+  RequestFilter filter = g_filter.load(std::memory_order_acquire);
+  if (!filter || !IsWeb(request.url)) {
+    return {};
   }
+  const RequestContext context = ContextOf(request, factory_source, factory_top);
   char* redirect = nullptr;
   Decision result;
-  result.blocked = filter(request.url.spec().c_str(), source.c_str(), top.c_str(),
-                          TypeOf(request), request.method.c_str(), &redirect);
+  result.blocked =
+      filter(request.url.spec().c_str(), context.source.c_str(), context.top.c_str(),
+             TypeOf(request), request.method.c_str(), &redirect);
   if (redirect) {
     result.redirect = redirect;
     free(redirect);
@@ -225,6 +241,31 @@ void CompleteBlocked(
                           STRING_STAYS_VALID_UNTIL_COMPLETION);
   writer->Write(std::move(source),
                base::BindOnce(&ResourceWritten, std::move(response)));
+}
+
+// The host's Content-Security-Policy for a navigation's response ($csp), as one more header.
+// Chrome enforces the parsed headers, so those are parsed again (NavigationURLLoaderImpl
+// does it when they're missing, as for a webRequest extension's changes).
+void AddContentSecurityPolicy(const network::ResourceRequest& request,
+                              const std::string& factory_source,
+                              const std::string& factory_top,
+                              network::mojom::URLResponseHead& head) {
+  ContentSecurityPolicySource policy_source =
+      g_csp_source.load(std::memory_order_acquire);
+  if (!policy_source || !head.headers || !request.url.SchemeIsHTTPOrHTTPS()) {
+    return;
+  }
+  const RequestContext context = ContextOf(request, factory_source, factory_top);
+  char* policy = policy_source(request.url.spec().c_str(), context.source.c_str(),
+                                  context.top.c_str(), TypeOf(request));
+  if (!policy) {
+    return;
+  }
+  auto headers = base::MakeRefCounted<net::HttpResponseHeaders>(head.headers->raw_headers());
+  headers->AddHeader("Content-Security-Policy", policy);
+  free(policy);
+  head.headers = std::move(headers);
+  head.parsed_headers.reset();
 }
 
 class FilteringFactory;
@@ -322,6 +363,9 @@ class FilteringLoader : public network::mojom::URLLoader,
   void OnReceiveResponse(network::mojom::URLResponseHeadPtr head,
                          mojo::ScopedDataPipeConsumerHandle body,
                          std::optional<mojo_base::BigBuffer> metadata) override {
+    if (navigation_) {
+      AddContentSecurityPolicy(request_, source_, top_, *head);
+    }
     client_->OnReceiveResponse(std::move(head), std::move(body),
                                std::move(metadata));
   }
@@ -574,6 +618,49 @@ class RequestFilterThrottle : public content::NavigationThrottle {
   }
 };
 
+// A page a page opens (a new tab or window's first navigation, and each of its redirects),
+// which the host may refuse ($popup): the navigation stops and its new tab closes.
+class PopupThrottle : public content::NavigationThrottle {
+ public:
+  explicit PopupThrottle(content::NavigationThrottleRegistry& registry)
+      : content::NavigationThrottle(registry) {}
+
+  ThrottleCheckResult WillStartRequest() override { return Check(); }
+  ThrottleCheckResult WillRedirectRequest() override { return Check(); }
+  const char* GetNameForLogging() override { return "NNPopupThrottle"; }
+
+ private:
+  ThrottleCheckResult Check() {
+    RequestFilter filter = g_filter.load(std::memory_order_acquire);
+    content::NavigationHandle* navigation = navigation_handle();
+    content::WebContents* contents = navigation->GetWebContents();
+    const std::optional<url::Origin>& initiator = navigation->GetInitiatorOrigin();
+    // The app's own navigations aren't renderer-initiated, and only a page opening one counts:
+    // not one of Chrome's pages or an extension's.
+    if (!filter || !navigation->IsInPrimaryMainFrame() || !navigation->IsRendererInitiated() ||
+        !contents->GetController().IsInitialNavigation() ||
+        !navigation->GetURL().SchemeIsHTTPOrHTTPS() || !initiator ||
+        (!initiator->opaque() && !initiator->GetURL().SchemeIsHTTPOrHTTPS())) {
+      return PROCEED;
+    }
+    const std::string opener = OriginURL(*initiator);
+    if (!filter(navigation->GetURL().spec().c_str(), opener.c_str(), opener.c_str(), "popup",
+                navigation->IsPost() ? "POST" : "GET", nullptr)) {
+      return PROCEED;
+    }
+    // Not from inside the navigation's own start: closing destroys it.
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<content::WebContents> page) {
+                         if (page) {
+                           page->ClosePage();
+                         }
+                       },
+                       contents->GetWeakPtr()));
+    return CANCEL;
+  }
+};
+
 std::atomic<ScriptletSource> g_scriptlet_source{nullptr};
 
 // The scriptlet lookups' own sequence: a renderer waits on each, so they don't queue behind
@@ -611,6 +698,10 @@ class ScriptletsHost : public mojom::NNScriptlets {
 };
 
 }  // namespace
+
+void SetContentSecurityPolicySource(ContentSecurityPolicySource source) {
+  g_csp_source.store(source, std::memory_order_release);
+}
 
 void SetScriptletSource(ScriptletSource source) {
   g_scriptlet_source.store(source, std::memory_order_release);
@@ -695,7 +786,9 @@ void MaybeFilterURLLoaderFactory(
 }
 
 void MaybeAddRequestFilterThrottle(content::NavigationThrottleRegistry& registry) {
-  if (!registry.GetNavigationHandle().IsInMainFrame()) {
+  if (registry.GetNavigationHandle().IsInMainFrame()) {
+    registry.AddThrottle(std::make_unique<PopupThrottle>(registry));
+  } else {
     registry.AddThrottle(std::make_unique<RequestFilterThrottle>(registry));
   }
 }

@@ -28,7 +28,9 @@ NS_ASSUME_NONNULL_BEGIN
 // method: the HTTP request method ("GET", "POST", ...).
 // true blocks it: it fails with ERR_BLOCKED_BY_CLIENT (tab:didBlockRequests:lastURL: counts
 // it) and a blocked frame collapses. type is "document" for a navigation, which is never
-// blocked here (a subframe's is asked again as "subdocument").
+// blocked here (a subframe's is asked again as "subdocument"), and "popup" for the first
+// navigation of a tab or window a page opened (source and top are the opener): true stops it
+// and closes the new tab.
 // If redirect is non-null, the host may set *redirect to a malloc-allocated URL, which the
 // engine frees: for a blocked request, a data URL answered in its place (a stand-in); for an
 // allowed one, a URL of the same origin to load instead (its tracking parameters removed,
@@ -41,8 +43,17 @@ typedef bool (*NNCoreRequestFilter)(const char* url,
                                     const char* method,
                                     char* _Nullable* _Nullable redirect);
 
+// The Content-Security-Policy to add to a document's response: malloc-allocated, freed by the
+// engine; NULL for none. type: "document" or "subdocument". On a background sequence while the
+// navigation waits, so it must be thread-safe and quick.
+typedef char* _Nullable (*NNCoreContentSecurityPolicySource)(const char* url,
+                                                             const char* source,
+                                                             const char* top,
+                                                             const char* type);
+
 // The host's scriptlets for a document: malloc-allocated JavaScript the engine runs in its main
-// world before the page's own scripts, and frees; NULL for none. frameURL: the document's URL;
+// world before the page's own scripts, and frees; NULL for none. frameURL: the document's URL
+// (its origin's for an about:blank or srcdoc frame, as a page's own scripts would see it);
 // topOrigin: its tab's top-level origin. Called on a background sequence while the document's
 // renderer waits, so it must be thread-safe and quick.
 typedef char* _Nullable (*NNCoreScriptletSource)(const char* frameURL, const char* topOrigin);
@@ -172,6 +183,9 @@ NNCORE_EXPORT
 // The content blocker (NNCoreRequestFilter); NULL (the default) blocks nothing. Requests
 // starting from now on see the new one.
 + (void)setRequestFilter:(nullable NNCoreRequestFilter)filter;
+// The content blocker's Content-Security-Policy (NNCoreContentSecurityPolicySource); NULL (the
+// default) adds none.
++ (void)setContentSecurityPolicySource:(nullable NNCoreContentSecurityPolicySource)source;
 // The content blocker's scriptlets (NNCoreScriptletSource); NULL (the default) runs none.
 + (void)setScriptletSource:(nullable NNCoreScriptletSource)source;
 // Device choosers (engine:deviceChooser:tab:). index: an option, or -1 for a scanning

@@ -169,5 +169,24 @@ int main(int argc, char **argv) {
     Filter(tracked, tracked, tracked, "document", "GET", &rewrite);
     Require(!rewrite && !Scriptlets("https://news.example/story", "https://news.example"), "a paused site gets neither");
     puts("PASS: allowed documents lose tracking parameters and get scriptlets, except where paused");
+
+    // Popups and $csp, from the live engine.
+    const char *policies = "||pop.example^$popup\n||policy.example^$doc,csp=worker-src 'none'\n";
+    gEngine = std::make_shared<Engine>(bay_blocker_new(&policies, nullptr, 1));
+    PublishLive();
+    const char *opener = "https://opener.example/";
+    Require(Filter("https://pop.example/ad", opener, opener, "popup", "GET", nullptr), "a popup rule refuses the page");
+    Require(!Filter("https://pop.example/a.png", opener, opener, "image", "GET", nullptr), "and not the host's other requests");
+    Require(!Filter("https://fine.example/", opener, opener, "popup", "GET", nullptr), "another page opens");
+    const char *page = "https://policy.example/";
+    char *policy = ContentSecurityPolicy(page, page, page, "document");
+    Require(policy && !strcmp(policy, "worker-src 'none'"), "a document gets its site's policy");
+    free(policy);
+    Require(!ContentSecurityPolicy(opener, opener, opener, "document"), "other sites get none");
+    [NNCoreContentBlocker setAllowed:YES onHost:@"opener.example" completion:^(NSString *error) { Require(!error, "pause succeeds"); }];
+    Require(!Filter("https://pop.example/ad", opener, opener, "popup", "GET", nullptr), "a paused opener's popups open");
+    [NNCoreContentBlocker setAllowed:YES onHost:@"policy.example" completion:^(NSString *error) { Require(!error, "pause succeeds"); }];
+    Require(!ContentSecurityPolicy(page, page, page, "document"), "a paused site gets no policy");
+    puts("PASS: popup rules refuse pages a page opens and documents get $csp, except where paused");
   }
 }

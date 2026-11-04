@@ -3,7 +3,9 @@
 // The engine asks it about every web request a page makes (NNCoreRequestFilter: subresources on a background
 // sequence, subframe navigations on the main thread) and fails the blocked ones with ERR_BLOCKED_BY_CLIENT, or answers
 // them with a stand-in; an allowed one may load without its tracking parameters instead ($removeparam). Scriptlets
-// reach each document as it starts, before its own scripts (NNCoreScriptletSource). Cosmetic filters go into each frame
+// reach each document as it starts, before its own scripts (NNCoreScriptletSource); a document's response may get a
+// Content-Security-Policy ($csp, NNCoreContentSecurityPolicySource); a page a page opens may be refused ($popup, type
+// "popup"). Cosmetic filters go into each frame
 // as a user-origin sheet when its page script says hello (NNCoreWebView), and again for the classes and ids the page
 // script finds in it (generic hiding).
 //
@@ -123,6 +125,17 @@ bool Filter(const char *url, const char *source, const char *top, const char *ty
   return match.blocked;
 }
 
+// NNCoreContentSecurityPolicySource: $csp rules, on the filter's sequence while the navigation waits.
+char *ContentSecurityPolicy(const char *url, const char *source, const char *top, const char *type) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(top && *top ? top : url))) return nullptr;
+  char *policy = bay_blocker_content_security_policy(live->engine->blocker, url, source ?: "", type ?: "document");
+  char *copy = policy ? strdup(policy) : nullptr;
+  bay_string_free(policy);
+  return copy;
+}
+
 // NNCoreScriptletSource: on a background sequence, while the document's renderer waits.
 char *Scriptlets(const char *frameURL, const char *topOrigin) {
   std::shared_ptr<const Live> live = CurrentLive();
@@ -142,7 +155,7 @@ BOOL gEngineRunsScriptlets = NO;
 
 NSString *const kVersion = @"adblock-rust 0.13.5";
 // Bump with a change to how lists compile (the crate, its features): the cached engine is rebuilt.
-NSString *const kEngineFormat = @"bay-adblock 3";
+NSString *const kEngineFormat = @"bay-adblock 4";
 
 NSArray<NSDictionary *> *Catalogue() {
   static NSArray<NSDictionary *> *lists;
@@ -645,6 +658,8 @@ void PrepareContentBlocker() {
     PublishLive();
     if ([NNCoreEngine respondsToSelector:@selector(setRequestFilter:)]) [NNCoreEngine setRequestFilter:Filter];
     else NSLog(@"[blocker] this engine has no request filter: nothing is blocked");
+    if ([NNCoreEngine respondsToSelector:@selector(setContentSecurityPolicySource:)])
+      [NNCoreEngine setContentSecurityPolicySource:ContentSecurityPolicy];
     if ([NNCoreEngine respondsToSelector:@selector(setScriptletSource:)]) {
       [NNCoreEngine setScriptletSource:Scriptlets];
       gEngineRunsScriptlets = YES;

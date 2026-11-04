@@ -1044,6 +1044,10 @@ void WatchTracingStart(std::shared_ptr<TracingStart> start, int checks_left) {
   nncore::SetRequestFilter(filter);
 }
 
++ (void)setContentSecurityPolicySource:(NNCoreContentSecurityPolicySource)source {
+  nncore::SetContentSecurityPolicySource(source);
+}
+
 + (void)setScriptletSource:(NNCoreScriptletSource)source {
   nncore::SetScriptletSource(source);
 }

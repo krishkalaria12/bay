@@ -6,9 +6,11 @@
 // interceptor the browser process puts in front of the network service for each factory
 // (NNContentBrowserClient::WillCreateURLLoaderFactory, as Chrome's webRequest does), on a
 // background sequence. Subframe navigations go through a NavigationThrottle on the UI thread,
-// which blocks and collapses the frame. Main-frame navigations are never blocked; navigations
-// (main frames and subframes) pass through the same interceptor only so a filter's rewrite
-// ($removeparam) can apply, as an internal redirect.
+// which blocks and collapses the frame. Main-frame navigations are never blocked, except a
+// page opening one the host refuses ($popup), whose new tab closes. Navigations (main frames
+// and subframes) pass through the same interceptor only so a filter's rewrite ($removeparam)
+// can apply, as an internal redirect, and the host's Content-Security-Policy ($csp) can be
+// added to their responses.
 //
 // The blocker's scriptlets reach a document synchronously as its main world starts
 // (mojom::NNScriptlets, answered on a background sequence by the host's ScriptletSource).
@@ -39,8 +41,8 @@ namespace nncore {
 // url: the request. source: the URL (or origin) of the document or worker asking. top: the
 // tab's page (its origin for subresources). type: an adblock resource type ("script",
 // "image", "stylesheet", "font", "media", "subdocument", "xmlhttprequest", "ping", "object",
-// "other", and "document" for a navigation). Called on any thread, so it must be thread-safe
-// and quick. true blocks.
+// "other", "document" for a navigation, and "popup" for a page a page opens, whose source and
+// top are the opener). Called on any thread, so it must be thread-safe and quick. true blocks.
 // redirect is null for subframe throttling and WebSockets. Otherwise the host may set it to a
 // malloc-allocated URL, which the engine frees: for a blocked request, a data URL answered in
 // its place (a stand-in); for an allowed one, a URL of the same origin to load instead (the
@@ -56,6 +58,15 @@ using RequestFilter = bool (*)(const char* url,
 // requests to the one current when each request starts.
 void SetRequestFilter(RequestFilter filter);
 bool HasRequestFilter();
+
+// The Content-Security-Policy a document's response gets (type "document" or "subdocument"):
+// malloc-allocated, freed by the engine; null for none. On a background sequence, while the
+// navigation waits, so it must be thread-safe and quick.
+using ContentSecurityPolicySource = char* (*)(const char* url,
+                                              const char* source,
+                                              const char* top,
+                                              const char* type);
+void SetContentSecurityPolicySource(ContentSecurityPolicySource source);
 
 // The host's scriptlets for a document (frame_url) in a tab at top_origin: malloc-allocated
 // JavaScript for its main world, freed by the engine; null or "" for none. Called on a

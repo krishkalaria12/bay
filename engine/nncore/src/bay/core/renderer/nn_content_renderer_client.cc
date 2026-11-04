@@ -71,7 +71,13 @@ blink::WebScriptSource Source(const std::string& code, const char* url) {
 // to the browser (mojom::NNScriptlets), since the page's first inline script can run as soon
 // as this returns.
 void RunScriptlets(blink::WebLocalFrame* frame) {
-  const GURL url(frame->GetDocument().Url());
+  GURL url(frame->GetDocument().Url());
+  // An about:blank or srcdoc frame runs as its creator's origin, and is a known way around a
+  // blocker's scriptlets: the frame's page gets a clean window from one. An opaque origin
+  // (sandboxed) has no URL to ask about.
+  if (url.IsAboutBlank() || url.IsAboutSrcdoc()) {
+    url = url::Origin(frame->GetSecurityOrigin()).GetURL();
+  }
   if (!url.SchemeIsHTTPOrHTTPS()) {
     return;
   }

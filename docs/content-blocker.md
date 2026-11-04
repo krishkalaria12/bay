@@ -21,6 +21,12 @@ Every request a web page makes is put to the blocker before it starts, in the en
   only rewrites. A request the lists rewrite gets a redirect to the cleaned URL (an internal 307, or the server's own
   redirect pointed there) and starts again there, as Chrome's webRequest answers an extension's redirect. Subresources
   are rewritten the same way. A paused site keeps its parameters.
+- **Popups** (`$popup`): the first navigation of a tab or window a page opens goes through a `NavigationThrottle`, as
+  does each of its redirects. If the blocker refuses it, the navigation stops before reaching the network and the new
+  tab closes. A rule that blocks the page as a document (`$doc`, `$all`) refuses it too, and a `$popup` exception decides
+  first. The opener is the context, so a paused opener's popups open.
+- **Document policies** (`$csp`): a navigation's response gets the rules' `Content-Security-Policy` as one more header,
+  in the same interceptor, and its parsed headers are cleared so Chrome parses them again and enforces it.
 - **WebSockets** go through the browser client's handshake hook before the network connection starts. A paused site
   allows its handshakes too; worker handshakes use the available cookie-site origin when there is no frame.
   While a filter is set, handshakes no extension intercepts are opened by Bay, so DevTools' extra request headers
@@ -49,7 +55,9 @@ removal, attribute/class removal, and style actions. DOM mutations schedule batc
 **Scriptlets** must run before the page's own scripts (a `set-constant` or `json-prune` that comes later is too late),
 so they don't wait for hello. As a document's main world starts, its renderer asks the browser synchronously
 (`mojom::NNScriptlets`, answered on a background sequence by `+[NNCoreEngine setScriptletSource:]`'s C function) and
-runs the answer before anything else, as Brave does and as an extension's `document_start` script would run.
+runs the answer before anything else, as Brave does and as an extension's `document_start` script would run. An
+`about:blank` or `srcdoc` frame asks with its origin's URL: pages use such frames to get a window the blocker's scriptlets
+haven't touched.
 
 ## Lists, settings and the engine cache
 
@@ -85,13 +93,34 @@ The filter syntax is interpreted by adblock-rust, rather than uBO's JavaScript f
 covers the AST operators and actions that the pinned crate exposes; this is not a claim of identical handling of every
 uBO syntax extension.
 
+## Rules adblock-rust rejects
+
+adblock-rust's parser drops a whole rule for one option it doesn't know, silently.
+`packages/adblock/src/adapt.rs` rewrites the ones that can still work before the engines are built:
+
+- `$popup` rules go to their own engine as `$document` rules (3,130 rules in the bundled lists).
+- `$denyallow=a|b` becomes the rule plus an exception per host (252). An exception also lifts other rules for those
+  hosts in the same context, a little more than uBO does.
+- `$reason=` goes, `$strict3p` becomes `$3p`, and `$doc` goes from a `$csp` rule (40).
+- `$popunder` appears only on exceptions, and popunders aren't blocked, so those rules go (25).
+
 ## Known gaps
 
-- `$removeparam` with a regular expression, or with no value (remove every parameter), isn't supported by adblock-rust,
-  so those rules do nothing. Named parameters (`fbclid`, `gclid`…) are removed.
-- Scriptlets don't run in `about:blank` and `srcdoc` frames (uBO's `match_about_blank`).
-- HTML filtering (`##^`) and `$csp`/`$permissions` response rules aren't applied; uBO on Chromium has no HTML filtering
-  either.
+Counts are for the 11 bundled default lists, about 314,000 rules.
+
+- **Main-frame navigations aren't blocked.** uBO strict-blocks them with a warning page and a way to proceed. Here,
+  about 87,000 hostname-only rules, 3,900 `$doc` rules and 114,000 `$all` rules stop a page's requests to those hosts
+  but not a visit to them, malware lists included. This needs a block page, so it's a product decision.
+- `$urlskip` (239 rules, skipping redirect trackers) isn't applied.
+- `$ipaddress` (34) and `cname` exceptions (29) need DNS answers the filter doesn't have. `$header=` (32) needs the
+  response. `$uritransform` (17) isn't applied. `$strict1p` (20) isn't converted, since `$1p` covers more requests. `$replace`
+  (18) is Firefox-only in uBO too.
+- `$permissions` (11) isn't applied.
+- `$removeparam` with a regular expression (14), or with no value (12), isn't supported by adblock-rust. Named parameters
+  (`fbclid`, `gclid`…) are removed.
+- `##^responseheader` (7) isn't applied. Other HTML filtering (`##^`) doesn't apply: uBO on Chromium has none either.
+- Generic cosmetic exceptions (`#@#.ad` with no site, 57) are rejected by adblock-rust.
+- Cosmetic filters don't reach `about:blank` and `srcdoc` frames, only scriptlets do. Sandboxed frames get neither.
 - WebSocket handshakes that Bay opens itself don't get DevTools' extra request headers.
 
 ## Existing settings
@@ -106,7 +135,7 @@ implementation against the Rust library with temporary storage and controlled of
 suite exercises cosmetic batching and procedural actions from the real page script. CI runs all three.
 
 After building the matching engine and the Debug app, start Metro and run the `content-blocker`,
-`content-blocker-fails-closed`, `content-blocker-blocks`, `content-blocker-profile`, `content-blocker-private`, and
-`content-blocker-restored` acceptance checks. The blocked/allowed rounds also check redirect stand-ins, redirected
+`content-blocker-fails-closed`, `content-blocker-policies`, `content-blocker-blocks`, `content-blocker-profile`,
+`content-blocker-private`, and `content-blocker-restored` acceptance checks. The blocked/allowed rounds also check redirect stand-ins, redirected
 requests, WebSocket handshakes, a tracked link's cleaned navigation, and that a scriptlet runs before a page's first
 inline script, against local fixtures.

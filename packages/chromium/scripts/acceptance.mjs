@@ -364,6 +364,23 @@ const server = createServer((req, res) => {
   // in the head sees it only if the blocker's scriptlets ran before the page's own first script.
   if (url.pathname === "/scriptlet-probe")
     return res.end(page("Scriptlet probe", "probe", `<script>document.title = "probe " + typeof window.UOLPD;</script>`));
+  // The same probe in a srcdoc frame, which runs as its creator's origin: a known way around a blocker's scriptlets.
+  if (url.pathname === "/scriptlet-srcdoc")
+    return res.end(page("Srcdoc waiting", `<iframe srcdoc="<script>parent.document.title = 'srcdoc ' + typeof window.UOLPD;</script>"></iframe>`));
+  // A worker the page starts: uBO's list has a $csp rule against them on leitor.net (mapped here), so the document's
+  // response gets a policy that refuses it, and the page sees the violation.
+  if (url.pathname === "/csp-probe")
+    return res.end(
+      page(
+        "CSP waiting",
+        "csp",
+        `<script>
+        addEventListener("securitypolicyviolation", (e) => (document.title = "csp " + e.effectiveDirective));
+        try { new Worker("/icon.png"); } catch {}
+        setTimeout(() => { if (document.title === "CSP waiting") document.title = "csp none"; }, 800);
+      </script>`,
+      ),
+    );
   // A page linked with tracking parameters: the request records which reached the server.
   if (url.pathname === "/tracked") return res.end(page("Tracked", "tracked"));
   if (url.pathname === "/adfirst") {
@@ -573,6 +590,8 @@ process.env.BAY_CHROMIUM_SWITCHES += ` --host-resolver-rules=${[
   "pagead2.googlesyndication.com",
   "adpage.test",
   "biologianet.com",
+  "leitor.net",
+  "07c225f3.online",
 ]
   .map((host) => `MAP ${host} 127.0.0.1:${server.address().port}`)
   .join(", ")}`;
@@ -3632,6 +3651,76 @@ try {
       else await evalApp(`nn.store.getState().closeTab(${JSON.stringify(tab)}); return true`);
     }
   };
+
+  await check("content-blocker-policies", async () => {
+    // What isn't a request's own block: a page a page opens ($popup, a real rule of uBO's list: the new tab closes and the
+    // host is never asked), $csp on a document's response, and scriptlets in a srcdoc frame. A paused site escapes the
+    // first two.
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const port = server.address().port;
+    const origin = `http://adpage.test:${port}`;
+    const tag = `policies-${Date.now()}`;
+    const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${origin}/adpage?${tag}" })`);
+    const titled = (prefix) =>
+      until(`the title ${prefix}`, () =>
+        evalApp(
+          `const t = nn.store.getState().tabs[${JSON.stringify(tab)}]; return t?.title?.startsWith(${JSON.stringify(prefix)}) && t.title !== "CSP waiting" && t.title !== "Srcdoc waiting" ? t.title : null`,
+        ),
+      );
+    const go = (url) => evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+    const tabIds = async () => (await state()).tabs.map((t) => t.id);
+    const closeNewTabs = async (known) => {
+      for (const id of (await tabIds()).filter((id) => !known.includes(id))) await closeTab(id);
+    };
+    try {
+      await until("the page", () => pageTarget(`/adpage?${tag}`));
+      const opens = async (url) => {
+        const t = await until("the opener", () => pageTarget(`/adpage?${tag}`));
+        const known = await tabIds();
+        const served = adServed.length;
+        await cdp(t, "Runtime.evaluate", { expression: `window.open(${JSON.stringify(url)}); 1`, userGesture: true });
+        return { known, served };
+      };
+      const adHost = "07c225f3.online";
+      const adUrl = `http://${adHost}:${port}/ad?${tag}`;
+      // Refused: the host never hears of it and no tab stays.
+      let opened = await opens(adUrl);
+      await sleep(1500);
+      const refused = {
+        reached: adServed.slice(opened.served).some((s) => s.startsWith(adHost)),
+        tabs: (await tabIds()).filter((id) => !opened.known.includes(id)).length,
+      };
+      if (refused.reached || refused.tabs) throw new Error(`the popup got through: ${JSON.stringify(refused)}`);
+      // Any other page opens.
+      opened = await opens(`${origin}/b?popup-${tag}`);
+      await until("the page it opened", async () => (await state()).tabs.some((t) => t.url?.includes(`/b?popup-${tag}`)));
+      await closeNewTabs(opened.known);
+      // A paused opener's popups open.
+      await cef(`setContentBlockerAllowed("adpage.test", true)`);
+      opened = await opens(adUrl);
+      await until("the paused opener's popup", () => adServed.slice(opened.served).some((s) => s.startsWith(adHost)));
+      await closeNewTabs(opened.known);
+      await cef(`setContentBlockerAllowed("adpage.test", false)`);
+
+      await go(`http://leitor.net:${port}/csp-probe?${tag}`);
+      const policy = await titled("csp ");
+      if (policy !== "csp worker-src") throw new Error(`no policy on the document: ${policy}`);
+      await cef(`setContentBlockerAllowed("leitor.net", true)`);
+      await go(`http://leitor.net:${port}/csp-probe?paused-${tag}`);
+      const paused = await titled("csp ");
+      await cef(`setContentBlockerAllowed("leitor.net", false)`);
+      if (paused !== "csp none") throw new Error(`a policy on a paused site: ${paused}`);
+
+      await go(`http://biologianet.com:${port}/scriptlet-srcdoc?${tag}`);
+      const srcdoc = await titled("srcdoc ");
+      if (srcdoc !== "srcdoc object") throw new Error(`no scriptlet in the srcdoc frame: ${srcdoc}`);
+      return { refused, policy, paused, srcdoc };
+    } finally {
+      await cef(`setContentBlockerAllowed("adpage.test", false)`).catch(() => null);
+      await cef(`setContentBlockerAllowed("leitor.net", false)`).catch(() => null);
+      await closeTab(tab).catch(() => null);
+    }
+  });
 
   await check("content-blocker-blocks", async () => {
     // A page's ad requests never reach the ad server: a block rule fails them, so check the server, not just the fetch.
