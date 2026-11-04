@@ -264,10 +264,6 @@
               tray availability across desktops.
             </li>
             <li>Add external-app icons to the open-in-app prompt where the desktop exposes them.</li>
-            <li>
-              Add a smoke test that boots the web app in a browser. Unit tests can't catch a start-up failure, and an import cycle broke the web host's start
-              this way until a real browser found it.
-            </li>
           </ul>
         </section>
         <section id="sync" aria-labelledby="sync-h">
@@ -316,6 +312,13 @@
                   <td>T4</td>
                   <td>A</td>
                   <td>App boot from Metro and the packed bundle; port the <code>*-test.mjs</code> suites to xvfb and Weston</td>
+                </tr>
+                <tr>
+                  <td>T4</td>
+                  <td>A</td>
+                  <td>
+                    Drag a download and a pinned file into a file manager and a mail client on X11, Wayland and Windows; try a pinned folder, which is untested
+                  </td>
                 </tr>
                 <tr>
                   <td>T5</td>

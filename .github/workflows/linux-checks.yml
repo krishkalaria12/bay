@@ -32,6 +32,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm typecheck:web
       - run: pnpm build:web
+      - name: Boot the web app in Chromium
+        run: CHROMIUM="$(command -v google-chrome || command -v chromium)" pnpm test:web-boot
       - name: Install native fixture dependencies
         run: |
           sudo apt-get update

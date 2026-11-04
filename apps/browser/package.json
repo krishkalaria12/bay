@@ -16,6 +16,7 @@
     "dev:links": "node scripts/external-link-rules-demo.mjs",
     "test": "node --no-warnings --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\"",
     "web": "node ../../scripts/web.mjs dev",
+    "test:web-boot": "node scripts/web-boot-test.mjs",
     "build:web": "node ../../scripts/web.mjs build",
     "typecheck:web": "tsc -p tsconfig.web.json"
   },

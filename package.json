@@ -26,6 +26,7 @@
     "windows:build": "node scripts/windows/run-python.mjs build-app.py",
     "web": "pnpm --filter @bay/browser web",
     "build:web": "pnpm --filter @bay/browser build:web",
+    "test:web-boot": "pnpm --filter @bay/browser test:web-boot",
     "typecheck:web": "pnpm --filter @bay/browser typecheck:web"
   },
   "devDependencies": {
