@@ -16,6 +16,8 @@ import { refreshExtensions } from "../components/extensions/state";
 import { engineProfile, resolveWindowId } from "../store/model";
 import { installErrorReporting, startTelemetry } from "../telemetry";
 import { startApplicationLifecycle } from "../lib/appMenuIntegration";
+import { startCliControl } from "../components/cli/driverControl";
+import { startUserScripts } from "../components/cli/userScripts";
 import { requestOnboarding } from "./onboardingRequest";
 
 export async function startCoordinatorEntry(transport: BrowserCoordinatorTransport, onError: (error: Error) => void) {
@@ -76,6 +78,8 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
   });
   try {
     await coordinator.announceReady();
+    startCliControl({ activeTab: false });
+    startUserScripts();
     startApplicationLifecycle({
       returning,
       start(step, picked) {

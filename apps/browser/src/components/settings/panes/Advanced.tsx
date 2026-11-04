@@ -1,4 +1,4 @@
-import { View, isMac } from "@bay/platform";
+import { View, capabilities } from "@bay/platform";
 import { engineInfo, listComponents, WIDEVINE_COMPONENT_ID, type EngineComponent, type EngineInfo } from "@bay/chromium";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
@@ -63,7 +63,7 @@ export function AdvancedPane() {
         </Row>
       </Group>
 
-      {isMac ? (
+      {capabilities.terminalCommand ? (
         <>
           <SectionHeader title="Terminal" />
           <Group>

@@ -17,6 +17,7 @@ test("coordinator snapshots detach remote mirrors and stop publishing", () => {
   assert.ok(snapshot.alerts);
   assert.ok(snapshot.sync);
   assert.ok(snapshot.telemetry);
+  assert.equal(snapshot.cli, null);
   assert.equal("scopes" in snapshot.sync, false);
   assert.equal("deviceId" in snapshot.sync, false);
   stop();
@@ -49,4 +50,20 @@ test("service browser mutations use the explicit authority and reject private re
   } finally {
     stop();
   }
+});
+
+test("the coordinator's terminal status reaches window documents", async () => {
+  const { useCli } = await import("../components/cli/driverControl.ts");
+  const browser = createBrowserStore();
+  browser.getState().hydrate({});
+  const stop = startServiceStateOwner(browser, { restore: false });
+  useCli.setState({ server: { state: "on", connections: 2 } });
+  const published = browser.getState().services.cli;
+  assert.deepEqual(published, { state: "on", connections: 2 });
+  stop();
+  useCli.setState({ server: null });
+  installServiceState({ cli: published });
+  assert.deepEqual(useCli.getState().server, published);
+  assert.notEqual(useCli.getState().server, published);
+  useCli.setState({ server: null });
 });

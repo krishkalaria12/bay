@@ -245,7 +245,8 @@
           <h2 id="followups-h">1. Implementation follow-ups</h2>
           <p class="prose">
             All are implemented except the acceptance checks that remain macOS only, listed under T4 in <a href="#runtime">Runtime acceptance</a> with what each
-            item still needs on a real build.
+            item still needs on a real build. Also open: holding Alt to show the hidden sidebar. The host never sends <code>optionHeld</code> or <code>optionReleased</code>, so that setting does nothing on Linux and
+            Windows yet.
           </p>
         </section>
         <section id="sync" aria-labelledby="sync-h">
@@ -285,6 +286,14 @@
                   <td>T3</td>
                   <td>D</td>
                   <td>Link and run the native tests; Phase 3 acceptance (tabs, splits, popups, extensions, PiP, DevTools)</td>
+                </tr>
+                <tr>
+                  <td>T4</td>
+                  <td>A</td>
+                  <td>
+                    Terminal: install the <code>bay</code> command from Settings › Advanced, turn on control, confirm Settings shows connected commands and <code>bay exec</code> acts on the
+                    focused window's tab; a userscript installed with the command loads
+                  </td>
                 </tr>
                 <tr>
                   <td>T4</td>
