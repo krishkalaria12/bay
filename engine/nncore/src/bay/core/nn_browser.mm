@@ -33,6 +33,7 @@
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/password_manager/core/browser/password_form.h"
 #import "components/remote_cocoa/app_shim/bridged_content_view.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_handle.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
 #include "extensions/browser/api/web_request/web_request_info.h"
@@ -1538,6 +1539,25 @@ void InstallRuleMatchedHook() {
           bridge->NoteRuleMatched(block, request.url);
         }
       };
+}
+
+void NoteContentBlockerRedirect(content::GlobalRenderFrameHostId frame_id,
+                               const GURL& url) {
+  // Posted from the filtering sequence: resolve the live frame and tab only on
+  // the UI thread, and ignore responses for removed, cached or prerendered pages.
+  content::RenderFrameHost* frame = content::RenderFrameHost::FromID(frame_id);
+  if (!InPrimaryPage(frame)) {
+    return;
+  }
+  content::WebContents* contents = content::WebContents::FromRenderFrameHost(frame);
+  if (!contents) {
+    return;
+  }
+  if (TabBridge* bridge = TabBridge::FromWebContents(contents)) {
+    // A stand-in succeeds rather than producing ERR_BLOCKED_BY_CLIENT. Do not
+    // add it to the failure de-duplication queue, just as a DNR redirect is counted.
+    bridge->NoteRuleMatched(false, url);
+  }
 }
 
 void TabBridge::NoteBlocked(const GURL& url) {

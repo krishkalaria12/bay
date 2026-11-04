@@ -1470,6 +1470,13 @@ export const nativeContracts = {
           "maxArgs": 1,
           "signature": "deleteProfileData(profile: string): Promise<{ remaining: string[] }>;"
         },
+        "isJsReload": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "isJsReload(): Promise<boolean>;"
+        },
         "getContentBlocker": {
           "async": true,
           "optional": false,
@@ -1504,6 +1511,13 @@ export const nativeContracts = {
           "minArgs": 2,
           "maxArgs": 2,
           "signature": "setContentBlockerAllowed(host: string, allowed: boolean): Promise<void>;"
+        },
+        "setBlockedPageAllowed": {
+          "async": true,
+          "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "setBlockedPageAllowed(host: string, allowed: boolean, remember: boolean): Promise<void>;"
         },
         "setSiteSetting": {
           "async": true,
@@ -2671,7 +2685,7 @@ export const nativeContracts = {
       "BlockedPopup": "{ id: string; url: string; origin: string }",
       "FindResult": "{ count: number; active: number; final: boolean }",
       "PageCommand": "{\n  command: \"search\" | \"ask\" | \"copyLinkToHighlight\" | \"escape\";\n  text: string;\n  modifiers?: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean };\n}",
-      "LoadError": "{ url: string; code: number; text: string }",
+      "LoadError": "{\n  url: string;\n  code: number;\n  text: string;\n  /** Bay's content blocker stopped this page (WebKit tabs never say so). */\n  blockedPage?: boolean;\n}",
       "NavigationEntry": "{ url: string; title: string; current: boolean }",
       "CrashInfo": "{ status: number; reason: \"abnormal\" | \"killed\" | \"crashed\" | \"oom\" | \"launchFailed\" | \"integrity\" | \"unknown\"; code: number }",
       "CertificatePrincipal": "{ commonName: string; displayName: string; organizations: string[]; country: string }",

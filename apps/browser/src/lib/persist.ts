@@ -1,5 +1,5 @@
 import { restorableClosedEntry, restorableClosedWindow, restorableWindow } from "../store/windowPlacement";
-import { cancelDownload, endWebKitPrivateSession, type Download } from "@bay/chromium";
+import { cancelDownload, endWebKitPrivateSession, isJsReload, type Download } from "@bay/chromium";
 import { readDocument, saveDocument, writeDocument } from "@bay/desktop";
 import { useBrowser, type BrowserState, type BrowserStore, type HydrateData } from "../store/browserStore";
 import { inPinnedContainer, isIncognitoSpace, makeTab, newId, snapshotTab } from "../store/model";
@@ -278,6 +278,9 @@ export function loadSession(): HydrateData | null {
   const saved = read<SessionV2>("session.json");
   if (saved?.version !== 2) return null;
   const session = migrateProfileSession(saved);
+  // A JS reload isn't a launch: each window's page is parked for it to show again (NNCoreWebView), and one not shown soon
+  // closes, so windows keep the tabs they showed whatever settings.launchTab and restoreSession say.
+  const reloaded = isJsReload();
   const spaces = session.spaces ?? session.profiles;
   const spaceOrder = session.spaceOrder ?? session.profileOrder ?? [];
   if (spaces) {
@@ -307,9 +310,9 @@ export function loadSession(): HydrateData | null {
     deletedGroups: session.deletedGroups ?? [],
     cleanedTabs: session.cleanedTabs ?? [],
     downloads: (downloads?.downloads ?? []).map((d, i) => ({ ...d, id: `saved-${i}` })),
-    launch: true,
+    launch: !reloaded,
   };
-  if (session.settings && session.settings.restoreSession === false) {
+  if (!reloaded && session.settings && session.settings.restoreSession === false) {
     // A launch that doesn't restore the last session: each space keeps its pinned tabs, and its other tabs wait in
     // Recently Closed, one window's worth per space (where a window showed it).
     const now = Date.now();

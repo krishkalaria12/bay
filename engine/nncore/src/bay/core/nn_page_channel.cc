@@ -348,6 +348,22 @@ void PageChannel::ExecuteInFrame(const std::string& frame_id,
   }
 }
 
+void PageChannel::InsertUserStyle(const std::string& frame_id,
+                                  const std::string& css,
+                                  const std::string& origin) {
+  content::RenderFrameHost* target = FindFrame(frame_id);
+  if (!target) {
+    return;
+  }
+  if (target->IsInPrimaryMainFrame()) {
+    if (mojom::NNPage* page = MainPage()) {
+      page->InsertUserStyle(css, origin);
+    }
+  } else if (auto page = PageOf(target)) {
+    page->InsertUserStyle(css, origin);
+  }
+}
+
 void PageChannel::CallFrame(const std::string& frame_id,
                             const std::string& kind,
                             const std::string& json) {

@@ -54,7 +54,7 @@ const SECTIONS: Item[][] = [
     { id: "passwords", title: "Passwords", icon: "key.fill", color: "#8E8E93", words: "passkeys logins" },
     { id: "autofill", title: "Autofill", icon: "creditcard.fill", color: "#30D158", words: "addresses cards payment" },
     { id: "privacy", title: "Privacy", icon: "hand.raised.fill", color: "#0A84FF", words: "security cookies tracking permissions clear data ads" },
-    { id: "extensions", title: "Extensions", icon: "puzzlepiece.extension.fill", color: "#BF5AF2", words: "chrome web store ublock" },
+    { id: "extensions", title: "Extensions", icon: "puzzlepiece.extension.fill", color: "#BF5AF2", words: "chrome web store" },
     { id: "calendar", title: "Calendar", icon: "calendar", color: "#FF453A", words: "meetings events" },
     { id: "advanced", title: "Advanced", icon: "slider.horizontal.3", color: "#636366", words: "developer diagnostics" },
   ],

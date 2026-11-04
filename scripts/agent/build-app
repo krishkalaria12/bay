@@ -64,7 +64,9 @@ native_stamp() {
     git ls-files -co --exclude-standard -- \
       apps/browser/macos apps/browser/app.json apps/browser/react-native.config.js \
       'packages/*/ios/*' 'packages/*/expo-module.config.json' packages/desktop/docktile \
-      packages/chromium/scripts/embed.sh packages/chromium/scripts/stage-framework.sh packages/chromium/scripts/ubo.sh \
+      packages/chromium/scripts/embed.sh packages/chromium/scripts/stage-framework.sh packages/chromium/scripts/adblock.sh \
+      packages/chromium/scripts/filter-lists.sh 'packages/adblock/src/*' packages/adblock/Cargo.toml packages/adblock/Cargo.lock \
+      'packages/chromium/scripts/blocker-resources.*' packages/adblock/include/bay_adblock.h \
       packages/chromium/scripts/signing engine/nncore/src/bay/core/public patches pnpm-lock.yaml
     echo apps/browser/macos/Pods/Manifest.lock
   ) | python3 -c '
