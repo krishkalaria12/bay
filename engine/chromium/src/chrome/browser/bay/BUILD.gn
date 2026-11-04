@@ -167,7 +167,10 @@ source_set("bay") {
       "nn_downloads_win.cc",
       "nn_external_apps_win.cc",
     ]
-    libs = [ "shlwapi.lib" ]
+    libs = [
+      "shell32.lib",
+      "shlwapi.lib",
+    ]
   } else if (is_linux) {
     assert(use_gio && use_glib, "Bay Linux external app names require GIO")
     sources += [

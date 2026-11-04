@@ -88,5 +88,48 @@ TEST_F(ExternalAppsLinuxTest, FtpAssociationUsesTheRegisteredDisplayName) {
       testing::ExitedWithCode(0), "");
 }
 
+TEST_F(ExternalAppsLinuxTest, IconsFollowTheThemeLayoutNearestThePromptsSize) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  const base::FilePath first = temp.GetPath().Append("first");
+  const base::FilePath second = temp.GetPath().Append("second");
+  const auto place = [](const base::FilePath& file) {
+    ASSERT_TRUE(base::CreateDirectory(file.DirName()));
+    ASSERT_TRUE(base::WriteFile(file, "icon"));
+  };
+  const auto hicolor = [](const base::FilePath& dir, const char* size) {
+    return dir.Append("icons/hicolor").Append(size).Append("apps");
+  };
+  place(hicolor(second, "256x256").Append("app.png"));
+  place(hicolor(second, "64x64").Append("app.png"));
+  place(hicolor(first, "scalable").Append("vector.svg"));
+  place(second.Append("pixmaps/old.png"));
+  EXPECT_EQ(FindAppIcon("app", {first, second}),
+            hicolor(second, "64x64").Append("app.png"));
+  EXPECT_EQ(FindAppIcon("vector", {first, second}),
+            hicolor(first, "scalable").Append("vector.svg"));
+  EXPECT_EQ(FindAppIcon("old", {first, second}),
+            second.Append("pixmaps/old.png"));
+  EXPECT_TRUE(FindAppIcon("missing", {first, second}).empty());
+  EXPECT_TRUE(FindAppIcon("../../secret", {first, second}).empty());
+  EXPECT_TRUE(FindAppIcon("", {first, second}).empty());
+}
+TEST_F(ExternalAppsLinuxTest, IconFilesBecomeDataUrisOfASensibleSize) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  const auto png = temp.GetPath().Append("a.png");
+  ASSERT_TRUE(base::WriteFile(png, "png"));
+  EXPECT_EQ(IconDataUri(png), "data:image/png;base64,cG5n");
+  const auto svg = temp.GetPath().Append("a.svg");
+  ASSERT_TRUE(base::WriteFile(svg, "<svg/>"));
+  EXPECT_TRUE(IconDataUri(svg)->starts_with("data:image/svg+xml;base64,"));
+  const auto xpm = temp.GetPath().Append("a.xpm");
+  ASSERT_TRUE(base::WriteFile(xpm, "xpm"));
+  EXPECT_FALSE(IconDataUri(xpm));
+  const auto large = temp.GetPath().Append("large.png");
+  ASSERT_TRUE(base::WriteFile(large, std::string(1024 * 1024 + 1, 'a')));
+  EXPECT_FALSE(IconDataUri(large));
+  EXPECT_FALSE(IconDataUri(temp.GetPath().Append("missing.png")));
+}
 }  // namespace
 }  // namespace bay
