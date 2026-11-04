@@ -34,7 +34,12 @@ export type IconName =
   | "error"
   | "chevron"
   | "wallpaper"
-  | "download";
+  | "download"
+  | "translate"
+  | "textSize"
+  | "palette"
+  | "tune"
+  | "visibility";
 
 export interface IconProps {
   name: IconName;
