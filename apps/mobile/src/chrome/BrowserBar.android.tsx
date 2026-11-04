@@ -2,7 +2,7 @@ import { useThemeColor } from "heroui-native";
 import type { JSX } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { barButtons, barInsecure, barSite, type BarButton, type BrowserBarProps } from "./BrowserBar.types";
+import { barButtons, barInsecure, barNewTab, barSite, type BarButton, type BrowserBarProps } from "./BrowserBar.types";
 import { MaterialSymbol, type MaterialSymbolName } from "./MaterialSymbol";
 import { TabCount } from "./TabCount";
 
@@ -13,6 +13,7 @@ function BarPressable({
   wide = false,
   text,
   insecure = false,
+  leading,
   privately = false,
 }: {
   button: BarButton;
@@ -22,6 +23,8 @@ function BarPressable({
   text?: string;
   /** A warning before the text. */
   insecure?: boolean;
+  /** An icon before the text. */
+  leading?: MaterialSymbolName;
   privately?: boolean;
 }): JSX.Element {
   const themeForeground = useThemeColor("foreground");
@@ -44,6 +47,7 @@ function BarPressable({
       {text ? (
         <View className="flex-row items-center gap-1 px-3.5">
           {insecure ? <MaterialSymbol name="error" color={danger} size={16} /> : null}
+          {leading ? <MaterialSymbol name={leading} color={foreground} size={20} /> : null}
           <Text numberOfLines={1} className="shrink" style={{ color: foreground, fontSize: 15, fontWeight: "500" }}>
             {text}
           </Text>
@@ -61,7 +65,15 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   return (
     <View className="flex-row items-center justify-center gap-4">
       <BarPressable button={left} icon={left.icon} privately={props.privately} />
-      <BarPressable button={search} icon="search" wide text={barSite(props)} insecure={barInsecure(props)} privately={props.privately} />
+      <BarPressable
+        button={search}
+        icon="search"
+        wide
+        text={barNewTab(props) ? "New tab" : barSite(props)}
+        leading={barNewTab(props) ? "add" : undefined}
+        insecure={barInsecure(props)}
+        privately={props.privately}
+      />
       <BarPressable button={right} icon={right.icon} privately={props.privately} />
     </View>
   );

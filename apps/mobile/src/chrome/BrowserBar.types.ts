@@ -1,6 +1,13 @@
 /** Lens's floating bar: archive, search and settings on the start page and tab switcher; tabs, search and more over a page. */
 export type BrowserBarProps = (
-  | { mode: "start"; onArchive: () => void; onSearch: () => void; onSettings: () => void }
+  | {
+      mode: "start";
+      onArchive: () => void;
+      onSearch: () => void;
+      onSettings: () => void;
+      /** Over the tab switcher, the capsule opens a new tab and says so. */
+      newTab?: boolean;
+    }
   | {
       mode: "page";
       onTabs: () => void;
@@ -34,6 +41,11 @@ export function barSite(props: BrowserBarProps): string | undefined {
   return props.mode === "page" && props.site ? props.site.replace(/^www\./, "") : undefined;
 }
 
+/** The capsule reads "New tab" over the tab switcher. */
+export function barNewTab(props: BrowserBarProps): boolean {
+  return props.mode === "start" && props.newTab === true;
+}
+
 /** A page loaded without encryption gets a warning in the capsule. */
 export function barInsecure(props: BrowserBarProps): boolean {
   return props.mode === "page" && Boolean(props.site) && props.insecure === true;
@@ -43,7 +55,7 @@ export function barButtons(props: BrowserBarProps): [BarButton & { icon: "archiv
   return props.mode === "start"
     ? [
         { id: "bar-archive", label: "Archive", icon: "archive", onPress: props.onArchive },
-        { id: "bar-search", label: "Search", onPress: props.onSearch },
+        { id: "bar-search", label: props.newTab ? "New tab" : "Search", onPress: props.onSearch },
         { id: "bar-settings", label: "Settings", icon: "settings", onPress: props.onSettings },
       ]
     : [

@@ -517,6 +517,7 @@ export function BrowserScreen(): JSX.Element {
           ) : (
             <BrowserBar
               mode="start"
+              newTab={overlay === "tabs"}
               onArchive={() => setPanel("archive")}
               onSearch={() => search(overlay === "tabs")}
               onSettings={() => setPanel("settings")}

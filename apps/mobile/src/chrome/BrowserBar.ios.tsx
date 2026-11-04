@@ -3,7 +3,7 @@ import { accessibilityLabel, buttonStyle, controlSize, font, frame, tint, trunca
 import type { JSX } from "react";
 import { View } from "react-native";
 
-import { barButtons, barInsecure, barSite, type BrowserBarProps } from "./BrowserBar.types";
+import { barButtons, barInsecure, barNewTab, barSite, type BrowserBarProps } from "./BrowserBar.types";
 import { GlassIconButton } from "./GlassIconButton";
 import { TabCount } from "./TabCount";
 import { useStableCallback } from "./useStableCallback";
@@ -40,7 +40,12 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
               accessibilityLabel(search.label),
             ]}
           >
-            {site ? (
+            {barNewTab(props) ? (
+              <HStack spacing={6} modifiers={[frame({ width: 136, height: 20 })]}>
+                <Image systemName="plus" size={15} />
+                <Text modifiers={[font({ size: 15, weight: "medium" })]}>New tab</Text>
+              </HStack>
+            ) : site ? (
               // A fixed height keeps the host on one line, truncated.
               <HStack spacing={4} modifiers={[frame({ width: 136, height: 20 })]}>
                 {insecure ? <Image systemName="exclamationmark.triangle.fill" color="red" size={13} /> : null}
