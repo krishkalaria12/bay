@@ -253,7 +253,8 @@ std::string WriteTextFile(const std::string& contents,
   if (written)
     base::SetPosixFilePermissions(path, mode);
 #endif
-  return SavedResult(written);
+  return written ? SavedResult(true)
+                 : Failure("write_failed", "The file couldn't be saved");
 }
 // A Boost to import, up to a megabyte. Null when unreadable or not UTF-8.
 std::string ReadTextFile(const base::FilePath& path) {
@@ -281,6 +282,8 @@ struct ShellFilePickerRequest {
   int file_type_index = 0;
   base::FilePath::StringType default_extension;
   std::string cancelled = ListResult({});
+  // Told of the chosen file on the UI thread, before any disk work.
+  base::OnceCallback<void(const base::FilePath&)> chosen;
   // Turns the chosen file into the answer, off the UI thread. Without it, the
   // answer is the chosen files' URLs.
   base::OnceCallback<std::string(const base::FilePath&)> disk_work;
@@ -311,9 +314,24 @@ ShellFilePickerRequest SaveTextRequest(const HostContext& context,
   request.type = ui::SelectFileDialog::SELECT_SAVEAS_FILE;
   request.title = u"Save File";
   // Native dialogs read a relative path against the browser's working folder.
+  // The folder last saved to, as a save panel remembers it, and Downloads
+  // until there is one.
   base::FilePath folder;
-  if (Profile* profile = context.profile())
-    folder = profile->GetPrefs()->GetFilePath(prefs::kDownloadDefaultDirectory);
+  if (Profile* profile = context.profile()) {
+    PrefService* prefs = profile->GetPrefs();
+    folder = prefs->GetFilePath(
+        prefs->HasPrefPath(prefs::kSaveFileDefaultDirectory)
+            ? prefs::kSaveFileDefaultDirectory
+            : prefs::kDownloadDefaultDirectory);
+    request.chosen = base::BindOnce(
+        [](base::WeakPtr<Profile> profile, const base::FilePath& path) {
+          if (profile) {
+            profile->GetPrefs()->SetFilePath(prefs::kSaveFileDefaultDirectory,
+                                             path.DirName());
+          }
+        },
+        profile->GetWeakPtr());
+  }
   request.default_path = folder.Append(save.name);
   const auto extension = save.name.FinalExtension();
   if (!extension.empty())
@@ -389,6 +407,8 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
   void FileSelected(const ui::SelectedFileInfo& file, int) override {
     if (!response_ || on_disk_)
       return;
+    if (request_.chosen)
+      std::move(request_.chosen).Run(file.path());
     if (!request_.disk_work) {
       Complete(ListResult(base::ListValue().Append(
           net::FilePathToFileURL(file.path()).spec())));

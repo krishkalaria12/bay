@@ -258,7 +258,19 @@ export async function exportBoostFile(id: string) {
       .filter((c) => c >= " " && !'/\\?<>:*|"'.includes(c))
       .join("")
       .trim() || "Boost";
-  await saveTextFile(`${name}.json`, exportBoost(boost, withScript ? script : undefined));
+  try {
+    await saveTextFile(`${name}.json`, exportBoost(boost, withScript ? script : undefined));
+  } catch (error) {
+    fileDialogFailed("Couldn't Export the Boost", "The file couldn't be saved. Try another folder.", error);
+  }
+}
+
+/** A file dialog that can't open because one is, or a file that can't be saved or read. */
+function fileDialogFailed(title: string, message: string, error: unknown) {
+  const windowId = useBrowser.getState().ui.focusedWindowId;
+  const busy = (error as { code?: string } | null)?.code === "dialog_busy";
+  if (windowId) showToast(windowId, title, busy ? "Finish with the open file dialog first." : message, { icon: "exclamationmark.triangle" });
+  else console.error(title, error);
 }
 
 /** A Boost from a file (Bay's or Zen's) for the tab's site, opened in the editor. Its script stays off. */
@@ -267,7 +279,10 @@ export async function importBoostFile(tabId: string) {
   const tab = useBrowser.getState().tabs[tabId];
   const host = boostHost(tab?.url);
   if (!tab || !host) return;
-  const json = await openTextFile(["json"]);
+  const json = await openTextFile(["json"]).catch((error: unknown) => {
+    fileDialogFailed("Couldn't Import the Boost", "The file couldn't be opened.", error);
+    return null;
+  });
   if (!json) return;
   const currentTab = useBrowser.getState().tabs[tabId];
   const currentHost = boostHost(currentTab?.url);

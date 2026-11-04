@@ -1641,8 +1641,19 @@ TEST_F(TextFileDialogTest, SaveReplacesAFileAndKeepsItsPermissions) {
   ASSERT_TRUE(base::GetPosixFilePermissions(In("kept.json"), &mode));
   EXPECT_EQ(mode, 0640);
 }
-TEST_F(TextFileDialogTest, SaveThatCannotWriteAnswersFalse) {
-  EXPECT_EQ(Save(In("missing/chosen.json"), "text"), R"({"value":false})");
+TEST_F(TextFileDialogTest, SaveThatCannotWriteIsAnError) {
+  ExpectError(Save(In("missing/chosen.json"), "text"), "write_failed");
+}
+TEST_F(TextFileDialogTest, TheNextSaveStartsWhereTheLastOneWent) {
+  const auto folder = In("Exports");
+  ASSERT_TRUE(base::CreateDirectory(folder));
+  EXPECT_EQ(Save(folder.AppendASCII("first.json"), "text"), R"({"value":true})");
+  base::test::TestFuture<const std::string&> result;
+  Call("saveTextFile", base::ListValue().Append("Boost.json").Append("text"),
+       result.GetCallback());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->suggested_path, folder.AppendASCII("Boost.json"));
+  dialog->Cancel();
 }
 TEST_F(TextFileDialogTest, OpenFiltersOnTheExtensionsAndReturnsTheText) {
   ASSERT_TRUE(base::WriteFile(In("boost.json"), "{\"é\":1}"));

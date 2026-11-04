@@ -286,6 +286,7 @@ const Shell = requireNativeModule<{
   pickFiles(): Promise<string[]>;
   // macOS answers at once; the web host loads the system's list off its UI thread.
   fontFamilies?(): Promise<string[]>;
+  // True once written, false if the user cancelled; rejects when it can't be written.
   saveTextFile?(name: string, contents: string): Promise<boolean>;
   openTextFile?(extensions: string[]): Promise<string | null>;
   readDocument(name: string): string | null;
