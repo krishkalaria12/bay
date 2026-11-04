@@ -191,6 +191,18 @@ native implementation against the Rust library with temporary storage and contro
 JavaScript suite exercises cosmetic batching and procedural actions from the real page script, and the native test
 covers the response, body, request-header and CNAME filters and their exceptions. CI runs all three.
 
+For offline C ABI timings on macOS, build the release library and run the Rust example:
+
+```sh
+cargo build --release --locked --manifest-path packages/adblock/Cargo.toml
+cargo run --release --locked --manifest-path packages/adblock/Cargo.toml --example bench-content-blocker -- --documents
+```
+
+The benchmark dynamically loads `packages/adblock/target/release/libbay_adblock.dylib`. Use `--library PATH` to
+compare other builds, `--rounds N` and `--iterations N` to change sampling, and omit `--documents` to measure only
+request, response and body-gate calls. It reports JSON with timings, list hashes and answers. The Rust driver removes
+Python's call overhead, so collect new baselines before comparing timings. SHA-256 uses macOS CommonCrypto.
+
 After building the matching engine and the Debug app, start Metro and run the `content-blocker`,
 `content-blocker-fails-closed`, `content-blocker-policies`, `content-blocker-page-block`, `content-blocker-rewrites`,
 `content-blocker-blocks`, `content-blocker-profile`, `content-blocker-private`, `content-blocker-restored`,
