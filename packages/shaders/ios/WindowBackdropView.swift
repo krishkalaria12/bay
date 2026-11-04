@@ -129,10 +129,10 @@ fragment float4 backdropFragment(FullscreenOut in [[stage_in]],
   float4 lab = mix(u.labA, u.labB, t);
   float3 base = oklabToSRGB(lab.xyz);
 
-  // Multiply-blend a grey grain tile: base * (1 - a * (1 - g)).
+  // Film grain, up and down by the same amount, so it shows on a dark window too.
   float2 cell = floor(in.uv * u.viewSize / max(u.grainScale, 0.25f));
   float g = grainHash(cell);
-  float3 rgb = base * (1.0f - u.grainOpacity * (1.0f - g));
+  float3 rgb = base + u.grainOpacity * (g - 0.5f);
   return float4(saturate(rgb), lab.w);
 }
 """
@@ -222,8 +222,8 @@ final class WindowTreatmentView: NSView {
     gradient.colors = [lighter, color].map { $0.withAlphaComponent(tint.alpha).cgColor }
   }
 
-  // A black layer at alpha (1 - g), drawn at the grain opacity, darkens the tint as the shader's multiply darkens the
-  // gradient, without sampling the desktop behind it.
+  // White above the middle and black below, drawn at the grain opacity: a layer can't add as the shader does, and this
+  // moves the tint both ways without sampling the desktop behind it.
   private func updateGrain() {
     grainLayer.opacity = min(max(grain.opacity, 0), 1)
     grainLayer.backgroundColor = grain.opacity > 0
@@ -241,7 +241,11 @@ final class WindowTreatmentView: NSView {
     for y in 0..<side {
       for x in 0..<side {
         let g = grainHash(Float(x * cells / side), Float(y * cells / side))
-        bytes[(y * side + x) * 4 + 3] = UInt8(((1 - g) * 255).rounded())
+        let alpha = UInt8((abs(g - 0.5) * 2 * 255).rounded())
+        let pixel = (y * side + x) * 4
+        // Premultiplied: white's channels are its alpha.
+        if g >= 0.5 { bytes.replaceSubrange(pixel..<(pixel + 3), with: repeatElement(alpha, count: 3)) }
+        bytes[pixel + 3] = alpha
       }
     }
     guard let provider = CGDataProvider(data: Data(bytes) as CFData),

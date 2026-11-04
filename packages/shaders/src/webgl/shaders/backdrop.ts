@@ -29,10 +29,10 @@ void main() {
   float t = clamp(dot(uv - 0.5, direction) + 0.5, 0.0, 1.0);
   vec4 lab = mix(labA, labB, t);
   vec3 base = oklabToSRGB(lab.xyz);
-  // Multiply-blend a grey grain tile: base * (1 - a * (1 - g)). Cells are CSS pixels from the top-left.
+  // Film grain, up and down by the same amount, so it shows on a dark window too. Cells are CSS pixels from the top-left.
   vec2 cell = floor(uv * viewSize / max(grainScale, 0.25));
   float g = hash12(cell);
-  vec3 rgb = clamp(base * (1.0 - grainOpacity * (1.0 - g)), 0.0, 1.0);
+  vec3 rgb = clamp(base + grainOpacity * (g - 0.5), 0.0, 1.0);
   fragColor = vec4(rgb * lab.w, lab.w);
 }
 `,
