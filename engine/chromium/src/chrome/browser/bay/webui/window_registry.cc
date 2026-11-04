@@ -17,6 +17,7 @@
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/profile_window.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/bay/webui/window_key_watch.h"
 #include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
@@ -948,8 +949,12 @@ void WindowRegistry::OnBrowserDeactivated(BrowserWindowInterface* browser) {
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce([] {
-        if (!WindowRegistry::Get().AnyWindowActive())
+        if (!WindowRegistry::Get().AnyWindowActive()) {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+          WindowKeyWatch::Get().AppResigned();
+#endif
           NativeHost::EmitAppEvent("resignActive");
+        }
       }),
       base::Milliseconds(100));
 }
