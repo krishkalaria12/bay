@@ -78,7 +78,7 @@ pub struct ResponseHeaderSpec {
 
 /// A rule's actions, with the pattern and the options the engine still understands.
 struct Rule {
-    engine: Mutex<Engine>,
+    matcher: RuleMatcher,
     exception: bool,
     types: Types,
     prefilter: Prefilter,
@@ -107,6 +107,25 @@ struct Rule {
     stand_in: Option<String>,
     /// Blocks the request when it matches, unless a modifier redirects it first (`$urlskip`, a strict party rule).
     block: bool,
+}
+
+enum RuleMatcher {
+    /// An unconstrained `*$all` rule matches every supported request.
+    All,
+    Engine(Box<Mutex<Engine>>),
+}
+
+impl RuleMatcher {
+    fn matches(&self, request: &Request) -> bool {
+        match self {
+            Self::All => request.is_supported,
+            Self::Engine(engine) => engine
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .check_network_request(request)
+                .should_block(),
+        }
+    }
 }
 
 pub struct Modifiers {
@@ -1235,14 +1254,6 @@ impl Modifiers {
         let request_host = host_of(url);
         let host = request_host.clone();
         let request = Request::new(url, source, kind, method).ok();
-        let excepted = request.as_ref().is_some_and(|request| {
-            self.exceptions
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .check_network_request(request)
-                .should_block()
-        });
-
         // ##^responseheader(name): a removable set, less the names (or the whole site) an exception keeps.
         let mut removed: Vec<String> = Vec::new();
         let mut header_exceptions: Vec<String> = Vec::new();
@@ -1321,9 +1332,21 @@ impl Modifiers {
                 }
             }
         }
-        if !excepted && ((header_blocked && !header_excepted) || (ip_blocked && !ip_excepted)) {
-            matched.blocked = true;
-            matched.stand_in = stand_in;
+        if (header_blocked && !header_excepted) || (ip_blocked && !ip_excepted) {
+            // Plain exceptions only affect a response that would be blocked.
+            // Most responses only need permissions or header edits, so don't
+            // run them through the full exception engine preemptively.
+            let excepted = request.as_ref().is_some_and(|request| {
+                self.exceptions
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .check_network_request(request)
+                    .should_block()
+            });
+            if !excepted {
+                matched.blocked = true;
+                matched.stand_in = stand_in;
+            }
         }
         if !permissions.is_empty() {
             matched
@@ -1386,11 +1409,7 @@ fn matches_rule(
     let Some(request) = request else {
         return false;
     };
-    let engine = rule
-        .engine
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    engine.check_network_request(request).should_block()
+    rule.matcher.matches(request)
 }
 
 fn parse_rule(spec: &RuleSpec) -> Option<Rule> {
@@ -1565,9 +1584,17 @@ fn parse_rule(spec: &RuleSpec) -> Option<Rule> {
     if !block && !has_action {
         return None;
     }
-    let engine = build_engine(pattern, &kept, permissions.is_some())?;
+    let matcher = if matches!(pattern, "" | "*") && kept.is_empty() && permissions.is_none() {
+        RuleMatcher::All
+    } else {
+        RuleMatcher::Engine(Box::new(Mutex::new(build_engine(
+            pattern,
+            &kept,
+            permissions.is_some(),
+        )?)))
+    };
     Some(Rule {
-        engine: Mutex::new(engine),
+        matcher,
         exception,
         types,
         prefilter: Prefilter::of(pattern),
@@ -2147,6 +2174,45 @@ mod tests {
 
     fn request(blocker: &Modifiers, url: &str, kind: &str) -> (bool, Option<String>, bool) {
         blocker.request(url, "https://site.example/", kind, "GET", false, None)
+    }
+
+    #[test]
+    fn unconstrained_matcher_preserves_engine_type_method_and_scheme_gates() {
+        let engine = build_engine("*", &[], false).unwrap();
+        for url in [
+            "https://site.example/a?b=1",
+            "http://site.example/",
+            "ws://site.example/",
+            "wss://site.example/",
+            "ftp://site.example/",
+            "file:///tmp/a",
+        ] {
+            for kind in [
+                "document",
+                "subdocument",
+                "script",
+                "stylesheet",
+                "image",
+                "xmlhttprequest",
+                "ping",
+                "font",
+                "media",
+                "websocket",
+                "object",
+                "other",
+                "unknown",
+            ] {
+                for method in ["GET", "POST", "HEAD", "not-a-method"] {
+                    if let Ok(request) = Request::new(url, "https://site.example/", kind, method) {
+                        assert_eq!(
+                            RuleMatcher::All.matches(&request),
+                            engine.check_network_request(&request).should_block(),
+                            "{url} {kind} {method}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
