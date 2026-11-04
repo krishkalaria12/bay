@@ -59,7 +59,7 @@ export type Capabilities = {
   captureMarkup: boolean;
   /** File drags out of the app (the `draggedTypes` prop). Windows: BayFileDrag (OLE), Phase 4. */
   nativeDrag: boolean;
-  /** Dragging the window by its own views (the `mouseDownCanMoveWindow` prop). Windows: Phase 5. */
+  /** Dragging the window by its own views (the `mouseDownCanMoveWindow` prop): CSS drag regions on the desktop host. */
   windowMoveByView: boolean;
 };
 
@@ -101,6 +101,6 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     shareSheet: mac,
     captureMarkup: mac,
     nativeDrag: mac,
-    windowMoveByView: mac,
+    windowMoveByView: mac || webDesktop,
   };
 }

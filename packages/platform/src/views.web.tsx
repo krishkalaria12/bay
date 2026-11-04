@@ -135,7 +135,7 @@ export const View = forwardRef<ComponentRef<typeof NativeView>, CompatViewProps>
   return <NativeView {...(bound.props as NativeViewProps)} ref={bound.ref} />;
 });
 export const Pressable = forwardRef<ComponentRef<typeof NativeView>, CompatPressableProps>(function Pressable(props, ref) {
-  const bound = useWebProps(props, ref);
+  const bound = useWebProps({ ...props, mouseDownCanMoveWindow: props.mouseDownCanMoveWindow ?? false }, ref);
   return <NativePressable {...(bound.props as NativePressableProps)} ref={bound.ref} />;
 });
 export const TextInput = forwardRef<ComponentRef<typeof NativeTextInput>, CompatTextInputProps>(function TextInput(props, ref) {
@@ -146,7 +146,7 @@ export const TextInput = forwardRef<ComponentRef<typeof NativeTextInput>, Compat
     },
     [ref],
   );
-  const bound = useWebProps(props, inputRef);
+  const bound = useWebProps({ ...props, mouseDownCanMoveWindow: props.mouseDownCanMoveWindow ?? false }, inputRef);
   return <NativeTextInput {...(bound.props as NativeTextInputProps)} ref={bound.ref} />;
 });
 export const ScrollView = forwardRef<ComponentRef<typeof NativeScrollView>, CompatScrollViewProps>(function ScrollView(props, ref) {
