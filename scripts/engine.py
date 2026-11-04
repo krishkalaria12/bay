@@ -414,6 +414,7 @@ def prepare(root, env, platform="win"):
     step("domains", substitute)
     series(root, env, "capture-base", "--phase", "chromium")
     series(root, env, "apply", "--phase", "chromium")
+    series(root, env, "check")
     generate_gn(root, env, platform)
     (root / "bay-engine-source.json").write_text(json.dumps(build_identity(platform), indent=2) + "\n")
 
@@ -470,8 +471,6 @@ def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     args = ["autoninja", "-C", lock["outputDirectory"]]
     if jobs:
         args += ["-j", str(jobs)]
-    if ci_minutes is not None:
-        args += ["-k", "0"]
     args += targets or (["chrome", "chrome_sandbox"] if platform == "linux" else ["chrome"])
     if ci_minutes is None:
         run(args, cwd=src, env=env)

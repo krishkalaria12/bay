@@ -413,7 +413,7 @@ class BuildTests(unittest.TestCase):
              mock.patch("sys.stderr"), self.assertRaises(SystemExit):
             engine.main()
 
-    def test_timed_build_keeps_going_past_errors_and_writes_no_stamp_when_stopped(self):
+    def test_timed_build_uses_fail_fast_ninja_and_writes_no_stamp_when_paused(self):
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
              mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
@@ -421,7 +421,18 @@ class BuildTests(unittest.TestCase):
              mock.patch.object(engine, "run_until", return_value=False) as run_until:
             root = Path(directory)
             self.assertIs(engine.build(root, engine.environment(root), [], 4, ci_minutes=5), False)
-            self.assertEqual(run_until.call_args.args[0][-3:], ["-k", "0", "chrome"])
+            self.assertEqual(run_until.call_args.args[0], ["autoninja", "-C", engine.LOCK["outputDirectory"], "-j", "4", "chrome"])
+            self.assertFalse((root / "bay-engine-build.json").exists())
+
+    def test_compile_error_is_not_reported_as_a_resumable_pause(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
+             mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
+             mock.patch.object(engine, "build_adblock"), \
+             mock.patch.object(engine, "run_until", side_effect=subprocess.CalledProcessError(1, ["autoninja"])):
+            root = Path(directory)
+            with self.assertRaises(subprocess.CalledProcessError):
+                engine.build(root, engine.environment(root), [], 4, ci_minutes=5)
             self.assertFalse((root / "bay-engine-build.json").exists())
 
     def test_linux_prepare_preserves_patch_order_and_records_separate_state(self):
@@ -445,10 +456,29 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(Path(calls[2].args[0][1]).name, "domain_substitution.py")
             self.assertEqual(calls[3], mock.call.series(root, env, "capture-base", "--phase", "chromium"))
             self.assertEqual(calls[4], mock.call.series(root, env, "apply", "--phase", "chromium"))
-            self.assertEqual(calls[5], mock.call.gn(root, env, "linux"))
+            self.assertEqual(calls[5], mock.call.series(root, env, "check"))
+            self.assertEqual(calls[6], mock.call.gn(root, env, "linux"))
             self.assertFalse((root / "bay-prepare-state.json").exists())
             self.assertEqual(json.loads((root / "bay-prepare-state-linux.json").read_text()),
                              ["chromium-compat", "ungoogled", "domains"])
+
+    def test_prepare_rejects_invalid_series_before_gn_and_source_stamp(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(engine, "verify_checkout"), \
+             mock.patch.object(engine, "generate_gn") as gn:
+            root = Path(directory)
+            (root / "bay-prepare-state.json").write_text(json.dumps(
+                ["chromium-compat", "ungoogled", "domains"]))
+
+            def invalid_series(_root, _env, command, *options):
+                if command == "check":
+                    raise subprocess.CalledProcessError(1, ["series.py", "check"])
+
+            with mock.patch.object(engine, "series", side_effect=invalid_series):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    engine.prepare(root, engine.environment(root))
+            gn.assert_not_called()
+            self.assertFalse((root / "bay-engine-source.json").exists())
 
     def test_linux_prepare_refuses_missing_integration_before_any_patching(self):
         with tempfile.TemporaryDirectory() as directory, \
