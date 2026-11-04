@@ -5,7 +5,7 @@ import { Text, type NativeSyntheticEvent } from "react-native";
 import type { NativeHandle, NativeProps } from "./ChromiumView";
 
 let nextTag = 1;
-type MountedView = { surfaceId: string; browserId: number; chromeTabId: number };
+type MountedView = { surfaceId: string; browserId: number; chromeTabId: number; discarded?: boolean };
 type ViewEvent = { tag: number; event: string; payload: unknown };
 
 /** SurfaceEmbed is an engine-owned compositor surface, never a scripted iframe. */
@@ -55,9 +55,22 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
     const mountedProps = latestSerialized.current;
     firstProps.current = mountedProps;
     let alive = true;
+    let surfaceReplaced = false;
+    let nativeLifecycleSeen = false;
     const events = subscribeNativeEvent("BayCEF", "onViewEvent", (raw) => {
       const event = raw as ViewEvent;
       if (!alive || event.tag !== tag || typeof event.event !== "string") return;
+      // Chrome's legacy discard replaces WebContents while retaining this
+      // mount lease. Retarget the embed before the replacement page reloads.
+      if (event.event === "__surfaceChanged") {
+        const payload = event.payload as { surfaceId?: unknown } | null;
+        if (payload && typeof payload.surfaceId === "string" && payload.surfaceId.length <= 256) {
+          surfaceReplaced = true;
+          setSurfaceId(payload.surfaceId);
+        }
+        return;
+      }
+      if (event.event === "onDiscarded" || event.event === "onReady") nativeLifecycleSeen = true;
       const handler = latest.current[event.event as keyof NativeProps];
       if (typeof handler === "function")
         (handler as (value: NativeSyntheticEvent<unknown>) => void)({ nativeEvent: event.payload } as NativeSyntheticEvent<unknown>);
@@ -67,11 +80,14 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
       .then(() => invokeNative<MountedView>("BayWebView", "mount", [tag, windowId ?? "", JSON.parse(mountedProps)]));
     pending.current = mount.then((mounted) => {
       if (!alive) return;
-      setSurfaceId(mounted.surfaceId);
-      latest.current.onReady?.({ nativeEvent: { browserId: mounted.browserId, tabId: mounted.chromeTabId } } as NativeSyntheticEvent<{
-        browserId: number;
-        tabId: number;
-      }>);
+      // Events and replies use separate Mojo pipes. A discard may have
+      // replaced this surface or reported readiness before the reply arrives.
+      if (!surfaceReplaced) setSurfaceId(mounted.surfaceId);
+      if (!mounted.discarded && !nativeLifecycleSeen && !surfaceReplaced)
+        latest.current.onReady?.({ nativeEvent: { browserId: mounted.browserId, tabId: mounted.chromeTabId } } as NativeSyntheticEvent<{
+          browserId: number;
+          tabId: number;
+        }>);
     });
     void pending.current.catch((cause) => {
       if (alive) setError(cause instanceof Error ? cause.message : String(cause));

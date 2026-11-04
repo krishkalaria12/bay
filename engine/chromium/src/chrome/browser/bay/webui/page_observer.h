@@ -46,6 +46,8 @@ class TabObserver final : public content::WebContentsObserver,
   bool current() const;
   void State();
   void Media();
+  void ReplaceContents(content::WebContents* contents);
+  bool discarded() const;
 
  private:
   bool CanEmit() const;
@@ -67,6 +69,7 @@ class TabObserver final : public content::WebContentsObserver,
                            bool renderer_initiated) override;
   void TitleWasSet(content::NavigationEntry*) override;
   void DidStartLoading() override;
+  void WasDiscarded() override;
   void DidStopLoading() override;
   void LoadProgressChanged(double progress) override;
   void DidStartNavigation(content::NavigationHandle* handle) override;
@@ -121,6 +124,7 @@ class TabObserver final : public content::WebContentsObserver,
       zoom_observation_{this};
   bool initial_state_sent_ = false;
   bool crashed_ = false;
+  bool discarded_ = false;
   double pinch_scale_ = 1;
   std::optional<base::DictValue> last_security_;
   std::optional<std::pair<std::string, int>> last_load_error_;

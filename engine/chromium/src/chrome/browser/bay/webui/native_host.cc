@@ -57,6 +57,7 @@
 #include "chrome/browser/bay/webui/cli_installer.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_interaction_events.h"
+#include "chrome/browser/bay/webui/page_lifecycle_events.h"
 #include "chrome/browser/bay/webui/page_message_events.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/shortcut_recorder.h"
@@ -364,7 +365,8 @@ void EngineEvent(void*, const char* topic, const char* json) {
       base::JSONReader::ReadDict(json ? json : "{}", base::JSON_PARSE_RFC);
   if (!parsed)
     return;
-  if (PageMessageEvents::HandleEngineEvent(topic ? topic : "", *parsed))
+  if (PageMessageEvents::HandleEngineEvent(topic ? topic : "", *parsed) ||
+      PageLifecycleEvents::HandleEngineEvent(topic ? topic : "", *parsed))
     return;
   if (const auto* path = parsed->FindString("profile")) {
     const auto name =
@@ -848,6 +850,36 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
         if (std::string_view(event) == "onMedia")
           TabBroker::Get().EmitPageFact(contents, event, payload.Clone());
         return NativeHost::EmitToView(contents, event, std::move(payload));
+      }));
+  PageLifecycleEvents::Start(base::BindRepeating(&NativeHost::EmitToView));
+  TabBroker::Get().SetContentsReplacedCallback(base::BindRepeating(
+      [](content::WebContents* old_contents, content::WebContents* contents,
+         uint64_t lease) {
+        for (const auto& [raw, host] : Hosts()) {
+          if (!host)
+            continue;
+          for (const auto& [tag, observer] : host->tabs_) {
+            if (observer->contents() != old_contents || observer->lease() != lease)
+              continue;
+            observer->ReplaceContents(contents);
+            base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+                FROM_HERE, base::BindOnce(
+                    [](base::WeakPtr<NativeHost> host,
+                       base::WeakPtr<content::WebContents> contents,
+                       int tag, uint64_t lease) {
+                      if (!host || !contents ||
+                          !TabBroker::Get().IsCurrent(contents.get(), lease) ||
+                          host->ContentsForTag(tag) != contents.get())
+                        return;
+                      host->engine_services_->TrackTab(contents.get());
+                      auto* handle = guest_contents::GuestContentsHandle::
+                          CreateForWebContents(contents.get());
+                      host->ViewEvent(tag, "__surfaceChanged", base::DictValue()
+                          .Set("surfaceId", handle->id().ToString()));
+                      host->tabs_.at(tag)->State();
+                    }, host, contents->GetWeakPtr(), tag, lease));
+          }
+        }
       }));
   PageMenu::Start();
   DeviceChoosers::Start(base::BindRepeating(&NativeHost::EmitChromeUI));
@@ -2075,7 +2107,8 @@ void NativeHost::InvokeView(const std::string& method,
         Success(base::Value(base::DictValue()
                                 .Set("surfaceId", handle->id().ToString())
                                 .Set("browserId", TabId(contents))
-                                .Set("chromeTabId", TabId(contents)))));
+                                .Set("chromeTabId", TabId(contents))
+                                .Set("discarded", tabs_[tag]->discarded()))));
     tabs_[tag]->State();
     return;
   }

@@ -65,6 +65,11 @@ class TabBroker final {
   bool Tracks(content::WebContents* contents);
   void SetProfileReleasedCallback(
       base::RepeatingCallback<void(base::WeakPtr<Profile>)> callback);
+  // Legacy Chrome discard swaps WebContents underneath its stable TabModel.
+  // Rebind the mounted lease before Chrome destroys the old contents.
+  using ContentsReplacedCallback = base::RepeatingCallback<void(
+      content::WebContents*, content::WebContents*, uint64_t)>;
+  void SetContentsReplacedCallback(ContentsReplacedCallback callback);
   // Must run before explicit app quit starts destroying browser profiles.
   void Shutdown();
 
@@ -80,9 +85,12 @@ class TabBroker final {
   void Attach(Entry& entry, BrowserWindowInterface* browser);
   void Close(Entry& entry);
   size_t ParkedCount() const;
+  void ReplaceContents(content::WebContents* old_contents,
+                       content::WebContents* new_contents);
 
   std::map<content::WebContents*, std::unique_ptr<Entry>> entries_;
   base::RepeatingCallback<void(base::WeakPtr<Profile>)> profile_released_;
+  ContentsReplacedCallback contents_replaced_;
   uint64_t next_lease_ = 0;
   bool shutting_down_ = false;
 };

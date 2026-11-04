@@ -109,7 +109,7 @@ export type WebNotification = {
 };
 
 export type PictureInPictureState = { kind: "video" | "document"; active: boolean };
-export type ActivateRequest = { reason: "pictureInPicture" };
+export type ActivateRequest = { reason: "pictureInPicture" | "page" };
 export type DisplayMediaSource = {
   id: string;
   kind: "screen" | "window";

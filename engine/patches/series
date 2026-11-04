@@ -99,6 +99,7 @@ chromium mac chromium-devtools-background-target.patch
 
 chromium all chromium-scripts-policy.patch
 chromium win,linux chromium-page-interactions-webui.patch
+chromium win,linux chromium-bay-page-activation.patch
 
 layer all engine/chromium
 layer all engine/nncore
