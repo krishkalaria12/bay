@@ -9,6 +9,7 @@ import { hideElementsScript, PICK_PARENT_SCRIPT, START_PICKER_SCRIPT, STOP_PICKE
 import { CLOSE_READER_SCRIPT, DEFAULT_READER, openReaderScript, updateReaderScript } from "../src/pagescripts/reader.ts";
 import { pageTweaksScript } from "../src/pagescripts/tweaks.ts";
 import { READABILITY, TURNDOWN } from "../src/pagescripts/vendor.generated.ts";
+import { youtubeSelectors } from "../src/pagescripts/youtube.ts";
 
 function fixture(html = '<section id="card"><a id="link" href="/next">Next</a></section>') {
   const dom = new JSDOM(html, { url: "https://example.com/story", runScripts: "outside-only" });
@@ -242,4 +243,14 @@ test("page tweaks zoom the page, put it back at 100% and leave a page's own AMP 
   assert.equal(root.style.getPropertyValue("zoom"), "1.3");
   assert.equal(page.run(pageTweaksScript({ textSize: 100, skipAmp: true })), "ok");
   assert.equal(root.style.getPropertyValue("zoom"), "");
+});
+
+test("YouTube cleanup only applies on YouTube and only what's chosen", () => {
+  const all = { shorts: true, suggestions: true, distractions: true };
+  assert.deepEqual(youtubeSelectors(all, "example.com"), []);
+  assert.deepEqual(youtubeSelectors({ shorts: false, suggestions: false, distractions: false }, "m.youtube.com"), []);
+  assert.ok(youtubeSelectors({ ...all, suggestions: false, distractions: false }, "m.youtube.com").includes("ytm-reel-shelf-renderer"));
+  assert.ok(youtubeSelectors(all, "youtube.com").length > 10);
+  assert.deepEqual(youtubeSelectors(all, "notyoutube.com"), []);
+  assert.deepEqual(youtubeSelectors(all, "music.youtube.com"), []);
 });
