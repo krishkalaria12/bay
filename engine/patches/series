@@ -98,6 +98,7 @@ chromium all chromium-devtools-control-token.patch
 chromium mac chromium-devtools-background-target.patch
 
 chromium all chromium-scripts-policy.patch
+chromium win,linux chromium-page-interactions-webui.patch
 
 layer all engine/chromium
 layer all engine/nncore

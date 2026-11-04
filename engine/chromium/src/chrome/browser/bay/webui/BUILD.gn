@@ -81,6 +81,8 @@ source_set("impl") {
     "page_observer.h",
     "page_media_events.cc",
     "page_media_events.h",
+    "page_interaction_events.cc",
+    "page_interaction_events.h",
     "page_security.cc",
     "page_security.h",
     "page_services.cc",
@@ -163,6 +165,7 @@ source_set("impl") {
     "//components/version_info",
     "//components/viz/common",
     "//components/zoom",
+    "//components/blocked_content",
     "//crypto",
     "//extensions/browser",
     "//extensions/common",
@@ -816,6 +819,7 @@ if (is_linux) {
       "cli_installer_unittest.cc",
       "page_media_events_unittest.cc",
       "form_prompts_unittest.cc",
+      "page_interaction_events_unittest.cc",
     ]
     deps = [
       ":impl",
@@ -831,6 +835,8 @@ if (is_linux) {
       "//chrome/browser/ui/passwords:test_support_ui",
       "//chrome/browser/ui/tabs:tab_model",
       "//components/tab_groups",
+      "//components/blocked_content",
+      "//chrome/browser/content_settings:content_settings_factory",
       "//components/tabs:public",
       "//chrome/common:constants",
       "//components/prefs",
