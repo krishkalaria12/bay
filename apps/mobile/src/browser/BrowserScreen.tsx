@@ -515,6 +515,13 @@ export function BrowserScreen(): JSX.Element {
         onFind={find.start}
         onInspect={reading.startInspecting}
         onToggleBlocking={toggleBlocking}
+        hiddenCount={reading.selectorsFor(active).length}
+        onShowHidden={reading.showHidden}
+        privateAvailable={privateBrowsingSupported}
+        onNewTab={() => search(true)}
+        onNewPrivateTab={() => search(true, true)}
+        onTranslate={() => navigate(active.id, translateUrl(active.url))}
+        onDownloads={() => setPanel("downloads")}
         onBack={() => run((tab) => tab.goBack())}
         onForward={() => run((tab) => tab.goForward())}
         onReload={() => run((tab) => tab.reload())}
@@ -622,6 +629,13 @@ function blockerDetail(status: BlockerStatus): string {
     case "off":
       return "uBlock Origin's lists, updated daily";
   }
+}
+
+/** The page through Google Translate, into the phone's language. */
+function translateUrl(url: string): string {
+  if (/^https:\/\/[^/]+\.translate\.goog\//.test(url)) return url;
+  const language = Intl.DateTimeFormat().resolvedOptions().locale.split("-")[0] || "en";
+  return `https://translate.google.com/translate?sl=auto&tl=${language}&u=${encodeURIComponent(url)}`;
 }
 
 /** Follow a link's redirects without opening it, to show where it really goes. */
