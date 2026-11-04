@@ -477,6 +477,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
     if (!pullToRefreshEnabled || disposed || webView.url == null || loading) return super.onInterceptTouchEvent(event)
+    // A second finger is a pinch, never a pull.
+    if (event.pointerCount > 1) return super.onInterceptTouchEvent(event)
     when (event.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
         pullStartX = event.x
