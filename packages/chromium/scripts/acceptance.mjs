@@ -3019,7 +3019,15 @@ try {
             .then(() => nn.extensions.useExtensions.getState().popup?.extensionId === "${id}")`);
         if (!opened) throw new Error("the private extension action didn't open its popup");
         const popup = await until("the private popup renderer", async () => (await targets()).find((t) => t.url.includes(`${id}/popup.html`)), 10000);
-        const privateContext = (await cdp(popup, "Runtime.evaluate", { expression: "chrome.extension.inIncognitoContext", returnByValue: true })).result.value;
+        // The target exists before the page has its extension bindings: asked until they answer.
+        const privateContext =
+          (await until("the popup's extension bindings", async () => {
+            const context = await cdp(popup, "Runtime.evaluate", {
+              expression: "String(globalThis.chrome?.extension?.inIncognitoContext)",
+              returnByValue: true,
+            });
+            return ["true", "false"].includes(context.result.value) ? context.result.value : null;
+          })) === "true";
         if (privateContext !== (mode === "split")) throw new Error(`${mode} popup used the wrong profile: ${privateContext}`);
         await setPrivate(false);
         await until("revocation closing the private popup", async () => await evalApp(`return nn.extensions.useExtensions.getState().popup === null`), 10000);
