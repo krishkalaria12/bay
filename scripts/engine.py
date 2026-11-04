@@ -192,6 +192,7 @@ def sha256(path):
 def source_digest(platform="win"):
     digest = hashlib.sha256(platform.encode() + b"\0")
     for directory in ("engine/patches", "engine/chromium", "engine/nncore",
+                      "packages/adblock/include", "packages/adblock/src",
                       "packages/import/windows", "packages/import/linux",
                       "packages/sync/windows", "packages/sync/linux"):
         for path in sorted((REPO / directory).rglob("*")):
@@ -199,6 +200,10 @@ def source_digest(platform="win"):
             if path.is_file() and not package_test and "__pycache__" not in path.parts and path.suffix != ".pyc":
                 digest.update(path.relative_to(REPO).as_posix().encode() + b"\0")
                 digest.update(bytes.fromhex(sha256(path)))
+    for manifest in ("packages/adblock/Cargo.toml", "packages/adblock/Cargo.lock"):
+        if (REPO / manifest).is_file():
+            digest.update(manifest.encode() + b"\0")
+            digest.update(bytes.fromhex(sha256(REPO / manifest)))
     page_script = REPO / "packages/chromium/ios/page_script.js"
     if page_script.is_file():
         digest.update(b"packages/chromium/ios/page_script.js\0")
@@ -433,6 +438,22 @@ def generate_gn(root, env, platform="win"):
     run(["gn", "gen", lock["outputDirectory"]], cwd=src, env=env)
 
 
+def build_adblock(src, output_directory, env, platform):
+    """Build the content blocker's Rust library where webui/BUILD.gn links it."""
+    target, library = {"win": ("x86_64-pc-windows-msvc", "bay_adblock.lib"),
+                       "linux": ("x86_64-unknown-linux-gnu", "libbay_adblock.a")}[platform]
+    cargo_env = dict(env)
+    if platform == "win":
+        # Chrome links the static C runtime, and one binary can't mix the two.
+        cargo_env["RUSTFLAGS"] = "-C target-feature=+crt-static"
+    crate = REPO / "packages/adblock"
+    run(["cargo", "rustc", "--locked", "--release", "--lib", "--crate-type", "staticlib", "--target", target],
+        cwd=crate, env=cargo_env)
+    destination = src / output_directory / "bay_adblock"
+    destination.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(crate / "target" / target / "release" / library, destination / library)
+
+
 def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     lock = platform_lock(platform)
     require_linux_integration(env, platform)
@@ -444,6 +465,8 @@ def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     series(root, env, "check")
     generate_gn(root, env, platform)
     src = pathlib.Path(env["CHROMIUM_SRC"])
+    require_tools(("cargo",), env)
+    build_adblock(src, lock["outputDirectory"], env, platform)
     args = ["autoninja", "-C", lock["outputDirectory"]]
     if jobs:
         args += ["-j", str(jobs)]

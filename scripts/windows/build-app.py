@@ -42,6 +42,7 @@ def stage(engine, web_directory, destination, cli_directory=None):
     # Keep the Chrome target's binary unchanged except its browser-facing name.
     (destination / "chrome.exe").rename(destination / "Bay.exe")
     shutil.copy2(engine / "manifest.json", destination / "engine-manifest.json")
+    web_artifacts.stage_content_blocker(REPO, destination)
     if cli_directory is not None:
         cli_bundle.stage(cli_directory, destination / "bay-cli", "win")
     web_artifacts.write_manifest(destination, manifest["id"])
@@ -64,6 +65,7 @@ def main():
         return
     if args.engine is None:
         parser.error("--engine is required unless --verify is supplied")
+    web_artifacts.fetch_content_blocker(REPO)
     if not args.skip_web_build:
         command = ["pnpm", "--filter", "@bay/browser", "build:web"]
         if sys.platform == "win32":

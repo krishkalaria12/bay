@@ -5,6 +5,9 @@ from html.parser import HTMLParser
 import hashlib
 import json
 import pathlib
+import shutil
+import subprocess
+import sys
 import posixpath
 import re
 import urllib.parse
@@ -103,6 +106,38 @@ def validate_entrypoint(directory):
             raise ValueError(f"the WebUI entrypoint references a missing resource: {name}")
     return {"entrypoint": "bay-ui/index.html", "bootstrap": "bay-ui/bay-native-host.js",
             "scripts": ["bay-ui/" + name for name, _ in scripts]}
+
+
+def git_bash():
+    """Git's bash: on Windows, plain `bash` can be WSL's."""
+    if sys.platform != "win32":
+        return "bash"
+    return str(pathlib.Path(shutil.which("git")).resolve().parents[1] / "bin/bash.exe")
+
+
+def fetch_content_blocker(repository):
+    """The default filter lists and the pinned scriptlet resources, as embed.sh gets them on macOS."""
+    scripts = repository / "packages/chromium/scripts"
+    for script in ("filter-lists.sh", "blocker-resources.sh"):
+        subprocess.run([git_bash(), (scripts / script).as_posix()], cwd=repository, check=True)
+
+
+def stage_content_blocker(repository, destination):
+    """Files the blocker reads beside the binary: webui/content_blocker.cc's ContentBlocker folder."""
+    package = repository / "packages/chromium"
+    target = destination / "ContentBlocker"
+    target.mkdir(parents=True)
+    shutil.copy2(package / "ios/filter_lists.json", target)
+    resources = package / "vendor/blocker-resources"
+    if resources.is_dir():
+        for path in resources.iterdir():
+            if path.is_file() and not path.name.startswith("."):
+                shutil.copy2(path, target)
+    lists = sorted((package / "vendor/filter-lists").glob("*.txt"))
+    if lists:
+        (target / "FilterLists").mkdir()
+        for path in lists:
+            shutil.copy2(path, target / "FilterLists")
 
 
 def write_manifest(directory, engine_id, platform="windows"):

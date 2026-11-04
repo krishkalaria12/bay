@@ -318,6 +318,24 @@ class BuildTests(unittest.TestCase):
                 self.assertIn("gclient sync --jobs=1 %s", (root / "automate/automate-git.py").read_text())
                 self.assertEqual(commands[-1][1], root / "automate/automate-git.py")
 
+    def test_the_content_blocker_builds_for_each_desktop_where_gn_links_it(self):
+        for platform, target, library in (("win", "x86_64-pc-windows-msvc", "bay_adblock.lib"),
+                                          ("linux", "x86_64-unknown-linux-gnu", "libbay_adblock.a")):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, \
+                 mock.patch.object(engine, "REPO", Path(directory) / "repo"), \
+                 mock.patch.object(engine, "run") as run:
+                built = Path(directory) / "repo/packages/adblock/target" / target / "release" / library
+                built.parent.mkdir(parents=True)
+                built.write_text("library")
+                src = Path(directory) / "src"
+                engine.build_adblock(src, "out/Release", {"PATH": "x"}, platform)
+                command = run.call_args.args[0]
+                self.assertEqual(command[:2], ["cargo", "rustc"])
+                self.assertIn(target, command)
+                self.assertIn("--locked", command)
+                self.assertEqual("RUSTFLAGS" in run.call_args.kwargs["env"], platform == "win")
+                self.assertEqual((src / "out/Release/bay_adblock" / library).read_text(), "library")
+
     def test_windows_download_bootstraps_depot_tools_before_automate(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "clone_pin"), \
              mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "run") as run, \
@@ -398,7 +416,8 @@ class BuildTests(unittest.TestCase):
     def test_timed_build_keeps_going_past_errors_and_writes_no_stamp_when_stopped(self):
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
-             mock.patch.object(engine, "generate_gn"), \
+             mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
+             mock.patch.object(engine, "build_adblock"), \
              mock.patch.object(engine, "run_until", return_value=False) as run_until:
             root = Path(directory)
             self.assertIs(engine.build(root, engine.environment(root), [], 4, ci_minutes=5), False)
@@ -482,7 +501,7 @@ class BuildTests(unittest.TestCase):
                  mock.patch.object(engine, "require_tools"), mock.patch.object(engine, "verify_checkout"), \
                  mock.patch.object(engine, "series"), mock.patch.object(engine, "generate_gn"), \
                  mock.patch.object(engine, "source_digest", return_value="digest"), \
-                 mock.patch.object(engine, "run") as run:
+                 mock.patch.object(engine, "build_adblock"), mock.patch.object(engine, "run") as run:
                 root = Path(directory)
                 env = engine.environment(root, platform)
                 engine.build(root, env, [], 4, platform)
