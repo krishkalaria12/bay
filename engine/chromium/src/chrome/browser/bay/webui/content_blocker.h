@@ -26,8 +26,8 @@ namespace bay {
 
 // Bay's content blocker on the desktop host: packages/adblock's engine, which
 // nn_request_filter asks about every request. The same lists, cache, settings
-// and answers as NNCoreContentBlocker.mm on macOS (docs/content-blocker.md),
-// kept in <user data>/Content Blocker. UI sequence, unless a method says not.
+// and answers as NNCoreContentBlocker.mm on macOS, kept in
+// <user data>/Content Blocker. UI sequence, unless a method says not.
 class ContentBlocker {
  public:
   using Done = base::OnceCallback<void(std::optional<std::string> error)>;
