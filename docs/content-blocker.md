@@ -45,8 +45,11 @@ Every request a web page makes is put to the blocker before it starts, in the en
   The response's parsed headers are cleared so Chrome reads the edited ones again. Two headers need more, because the
   network service has already acted on them. With `location` gone, the redirect ends there as an empty response of its
   own, as it would had the header not been sent. `set-cookie` never reaches the browser (`HttpResponseHeaders` crosses
-  Mojo without cookies), so its rule deletes what the response stored: the URL's HTTP cookies written since the request
-  started. The response filter is only installed while the live engine has such rules.
+  Mojo without cookies), so a trusted header client removes it before the network service stores cookies. Existing
+  cookies and outgoing cookies remain intact. The client follows each loader's real request URL across redirects and
+  runs after Chrome's existing extension and enterprise header clients. Cookie rules therefore keep the loader's CORS
+  and credential state and honor a pause changed while the response downloads. The response filter is only installed
+  while the live engine has such rules.
 - **Response bodies** (`$replace`, HTML `##^`): uBO only applies these in Firefox, where the API exposes a body; here the
   interceptor is ours. A response a rule matches stays in `FilteringLoader` until its body has arrived, because its
   headers and every byte depend on the result: the client gets nothing, then the response on a new pipe. The Rust
@@ -61,7 +64,8 @@ Every request a web page makes is put to the blocker before it starts, in the en
   the sites it names.
 - **Request headers** (`$requestheader`): only for the rare request such a rule matches, the interceptor reads the
   request's headers before starting it. `Cookie` isn't among them yet (the network service adds it), so it's read from
-  the cookie store for the request's URL and same-site context.
+  the cookie store for the request's URL and same-site context. Reads honor credentials mode, origin-access exemptions
+  and redirect taint, including when an internal URL rewrite restarts the network loader.
 - **WebSockets** go through the browser client's handshake hook before the network connection starts. A paused site
   allows its handshakes too; worker handshakes use the available cookie-site origin when there is no frame.
   While a filter is set, handshakes no extension intercepts are opened by Bay; DevTools' extra request headers are
@@ -80,7 +84,7 @@ engine has such rules. Blocked requests are counted by the engine's existing `ER
 Why there: a CEF resource request handler doesn't exist in this engine (NNCore replaced CEF's browser-side client),
 and the app only reaches the engine through `NNCore.h`. Renderer-side throttles would need the engine in every
 renderer process. The factory interceptor sees every subresource from one place, with the initiator's origin and the
-top frame's, and costs nothing for requests it lets through. It is NNCore code (`//bay/core`), not a Chromium patch,
+top frame's. Allowed requests continue through Chromium's existing factory. It is NNCore code (`//bay/core`), not a Chromium patch,
 but it is compiled into Chrome's framework, so it needs an engine build.
 
 **Cosmetic filtering**: the page script (`page_script.js`) says hello from every frame at document start; the host
@@ -162,8 +166,6 @@ Counts are for the 11 bundled lists, about 314,000 rules. Every `$replace` (83),
 - `$requestheader` sees the headers on the request, `Referer`, and `Cookie` from the store, which doesn't know of a site
   setting that withholds them. Headers only the network stack adds (`Accept-Encoding`, `Host`) aren't there, and a worker's
   request, having no frame, has no `Cookie` to read. uBO on Chromium doesn't support the option at all.
-- `##^responseheader(set-cookie)` removes a cookie just after it was stored, not instead: a page's script could read it
-  in between, and a value it replaced isn't restored. uBO on Chromium doesn't have the option's header either.
 - `##^responseheader(location)` ends the redirect with an empty body: the network stack has dropped the real one.
 - A held body means a page rendering nothing until it has all arrived, on the sites a body rule matches. A script with
   `integrity` fails if a rule changed it, as in uBO on Firefox. A response a service worker answers from its cache
@@ -191,12 +193,16 @@ covers the response, body, request-header and CNAME filters and their exceptions
 
 After building the matching engine and the Debug app, start Metro and run the `content-blocker`,
 `content-blocker-fails-closed`, `content-blocker-policies`, `content-blocker-page-block`, `content-blocker-rewrites`,
-`content-blocker-blocks`, `content-blocker-profile`, `content-blocker-private`, and `content-blocker-restored` acceptance
+`content-blocker-blocks`, `content-blocker-profile`, `content-blocker-private`, `content-blocker-restored`,
+`content-blocker-redirect-state`, and `content-blocker-cookies` acceptance
 checks. The blocked/allowed rounds also check redirect stand-ins, redirected requests, WebSocket handshakes, a tracked
 link's cleaned navigation, and that a scriptlet runs before a page's first inline script, against local fixtures.
 `content-blocker-rewrites` holds real rules' responses: gzip and brotli, a legacy charset, a body in pieces, one too big
 to hold, an endless stream, a paused site, a removed `Location` and `Set-Cookie`, and a `Cookie` the network stack hadn't
 added yet.
+`content-blocker-redirect-state` covers stripped authorization and POST-to-GET uploads across later URL rewrites.
+`content-blocker-cookies` covers existing and concurrently written cookies, outgoing cookies, cookie policy changes
+across redirects, and credentialed versus anonymous scripts.
 
 CNAME uncloaking needs real DNS, which the fixtures can't give, so it isn't in the suite. To check it by hand, find a
 host whose CNAME isn't listed (`dig`), add a rule for the CNAME's target to a test build's lists, and compare: its

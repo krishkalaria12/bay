@@ -27,12 +27,14 @@
 #include "base/time/time.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/navigation_throttle_registry.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/shared_cors_origin_access_list.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -50,6 +52,7 @@
 #include "net/base/data_url.h"
 #include "net/base/ip_address.h"
 #include "net/base/isolation_info.h"
+#include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
@@ -63,6 +66,8 @@
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/cors/cors.h"
+#include "services/network/public/cpp/cors/origin_access_list.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/cpp/url_loader_factory_builder.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
@@ -342,8 +347,6 @@ struct ResponseVerdict {
   std::string stand_in;
   // Whether ##^responseheader(location) took the redirect's target.
   bool removed_location = false;
-  // Whether ##^responseheader(set-cookie) applies.
-  bool removes_cookies = false;
 };
 
 // Applies the host's response rules ($header, $ipaddress, $permissions, ##^responseheader). Changes are
@@ -388,9 +391,9 @@ ResponseVerdict ApplyResponseFilter(const network::ResourceRequest& request,
       if (!name.is_string()) {
         continue;
       }
-      // Never in these headers: they cross Mojo without cookies, after the network service stored them.
+      // The trusted header client removes Set-Cookie before storage. These
+      // headers cross Mojo without it, so no cookie-store cleanup belongs here.
       if (base::EqualsCaseInsensitiveASCII(name.GetString(), "set-cookie")) {
-        verdict.removes_cookies = true;
         continue;
       }
       if (!updated->HasHeader(name.GetString())) {
@@ -421,52 +424,60 @@ ResponseVerdict ApplyResponseFilter(const network::ResourceRequest& request,
   return verdict;
 }
 
-// ##^responseheader(set-cookie): the cookies a response stored, which is every HTTP cookie for its URL
-// written since its request started. The header itself is out of reach (ResponseVerdict), and the
-// store only deletes a cookie it handed out. On the UI thread.
-void DeleteStoredCookies(content::GlobalRenderFrameHostId frame, const GURL& url, base::Time since) {
-  content::RenderFrameHost* host = content::RenderFrameHost::FromID(frame);
-  if (!host) {
-    return;
+// ##^responseheader(set-cookie) is a host rule, independent of the response's
+// headers or address. The trusted header hook calls this before cookie storage.
+bool DiscardsResponseCookies(const network::ResourceRequest& request,
+                             const std::string& factory_source,
+                             const std::string& factory_top) {
+  ResponseFilter filter = g_response_filter.load(std::memory_order_acquire);
+  if (!filter || !request.url.SchemeIsHTTPOrHTTPS()) {
+    return false;
   }
-  host->GetStoragePartition()->GetCookieManagerForBrowserProcess()->GetCookieList(
-      url, net::CookieOptions::MakeAllInclusive(), net::CookiePartitionKeyCollection::ContainsAll(),
-      base::BindOnce(
-          [](content::GlobalRenderFrameHostId frame, base::Time since,
-             const net::CookieAccessResultList& cookies, const net::CookieAccessResultList&) {
-            content::RenderFrameHost* host = content::RenderFrameHost::FromID(frame);
-            if (!host) {
-              return;
-            }
-            network::mojom::CookieManager* manager =
-                host->GetStoragePartition()->GetCookieManagerForBrowserProcess();
-            for (const net::CookieWithAccessResult& entry : cookies) {
-              if (entry.cookie.SourceType() == net::CookieSourceType::kHTTP &&
-                  entry.cookie.LastUpdateDate() >= since) {
-                manager->DeleteCanonicalCookie(entry.cookie, base::DoNothing());
-              }
-            }
-          },
-          frame, since));
+  const RequestContext context = ContextOf(request, factory_source, factory_top);
+  char* answer = filter(request.url.spec().c_str(), context.source.c_str(),
+                        context.top.c_str(), TypeOf(request), request.method.c_str(),
+                        nullptr, "[]");
+  if (!answer) {
+    return false;
+  }
+  std::optional<base::DictValue> result =
+      base::JSONReader::ReadDict(answer, base::JSON_PARSE_RFC);
+  free(answer);
+  const base::ListValue* removed = result ? result->FindList("remove") : nullptr;
+  return removed && std::ranges::any_of(*removed, [](const base::Value& name) {
+    return name.is_string() &&
+           base::EqualsCaseInsensitiveASCII(name.GetString(), "set-cookie");
+  });
 }
 
 // The Cookie header a request will carry, which the network service only adds after this interceptor:
 // the cookies Chrome would send for the URL, as a site's own requests get them. On the UI thread;
 // `done` always runs, with "" when the frame has gone.
 void ReadCookies(content::GlobalRenderFrameHostId frame,
-                 const GURL& url,
-                 const net::SiteForCookies& site_for_cookies,
+                 network::ResourceRequest request,
+                 const GURL& credentials_url,
                  base::OnceCallback<void(std::string)> done) {
   content::RenderFrameHost* host = content::RenderFrameHost::FromID(frame);
   if (!host) {
     return std::move(done).Run(std::string());
   }
+  // CorsURLLoader resolves same-origin credentials only after this interceptor.
+  // Honor its origin exemptions too, including extension isolated worlds.
+  if (request.credentials_mode == network::mojom::CredentialsMode::kSameOrigin &&
+      request.request_initiator && !request.request_initiator->IsSameOriginWith(credentials_url)) {
+    const auto& access = host->GetBrowserContext()
+                             ->GetSharedCorsOriginAccessList()->GetOriginAccessList();
+    if (access.CheckAccessState(request.isolated_world_origin.value_or(*request.request_initiator),
+                                credentials_url) != network::cors::OriginAccessList::AccessState::kAllowed) {
+      return std::move(done).Run(std::string());
+    }
+  }
   net::CookieOptions options;
   options.set_include_httponly();
   options.set_same_site_cookie_context(net::cookie_util::ComputeSameSiteContextForSubresource(
-      url, site_for_cookies, /*force_ignore_site_for_cookies=*/false));
+      request.url, request.site_for_cookies, /*force_ignore_site_for_cookies=*/false));
   host->GetStoragePartition()->GetCookieManagerForBrowserProcess()->GetCookieList(
-      url, options, net::CookiePartitionKeyCollection(),
+      request.url, options, net::CookiePartitionKeyCollection(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(
               [](base::OnceCallback<void(std::string)> done,
@@ -620,7 +631,6 @@ class FilteringLoader : public network::mojom::URLLoader,
     if (verdict.blocked) {
       return Block({.blocked = true, .redirect = verdict.stand_in});
     }
-    NoteRemovedCookies(verdict);
     if (navigation_) {
       AddContentSecurityPolicy(request_, source_, top_, *head);
     }
@@ -633,6 +643,14 @@ class FilteringLoader : public network::mojom::URLLoader,
 
   void OnReceiveRedirect(const net::RedirectInfo& redirect,
                          network::mojom::URLResponseHeadPtr head) override {
+    // Keep the redirect limit across blocker rewrites, which restart the loader.
+    if (server_redirects_++ == 20) {
+      client_->OnComplete(network::URLLoaderCompletionStatus(net::ERR_TOO_MANY_REDIRECTS));
+      return Destroy();
+    }
+    // CORS remains in force after a cross-origin hop, even when a later redirect
+    // returns to the initiator. Preserve that decision if we restart the loader.
+    force_omit_same_origin_credentials_ |= head->response_type == network::mojom::FetchResponseType::kCors;
     if (BlockedByCname(*head)) {
       return Block({.blocked = true});
     }
@@ -641,7 +659,6 @@ class FilteringLoader : public network::mojom::URLLoader,
     if (verdict.blocked) {
       return Block({.blocked = true, .redirect = verdict.stand_in});
     }
-    NoteRemovedCookies(verdict);
     if (verdict.removed_location) {
       return EndAtRedirect(std::move(head));
     }
@@ -737,13 +754,20 @@ class FilteringLoader : public network::mojom::URLLoader,
     }
     const bool reads_cookie = std::string_view(wanted).find("\"cookie\"") != std::string::npos;
     free(wanted);
-    if (!reads_cookie || !frame_ ||
-        request_.credentials_mode == network::mojom::CredentialsMode::kOmit) {
+    if (!reads_cookie || !frame_ || (request_.load_flags & net::LOAD_DO_NOT_SEND_COOKIES) ||
+        !network::cors::CalculateCredentialsFlag(
+            request_.credentials_mode, force_omit_same_origin_credentials_
+                                           ? network::mojom::FetchResponseType::kCors
+                                           : network::mojom::FetchResponseType::kBasic)) {
       return FinishRequestHeaders(std::move(next), std::string());
     }
+    // Unlike CORS redirects, no-CORS redirects keep the network loader's
+    // initial credentials decision (CorsURLLoader::FollowRedirect).
+    const GURL credentials_url = request_.mode == network::mojom::RequestMode::kNoCors && target_.is_bound()
+                                     ? network_credentials_url_ : request_.url;
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
-        base::BindOnce(&ReadCookies, *frame_, request_.url, request_.site_for_cookies,
+        base::BindOnce(&ReadCookies, *frame_, request_, credentials_url,
                        base::BindPostTaskToCurrentDefault(base::BindOnce(
                            &FilteringLoader::FinishRequestHeaders,
                            weak_factory_.GetWeakPtr(), std::move(next)))));
@@ -790,14 +814,6 @@ class FilteringLoader : public network::mojom::URLLoader,
       }
     }
     return false;
-  }
-
-  void NoteRemovedCookies(const ResponseVerdict& verdict) {
-    if (frame_ && verdict.removes_cookies) {
-      content::GetUIThreadTaskRunner({})->PostTask(
-          FROM_HERE,
-          base::BindOnce(&DeleteStoredCookies, *frame_, request_.url, network_started_));
-    }
   }
 
   // ##^responseheader(location) took a redirect's target, which the network stack has already read:
@@ -1066,7 +1082,9 @@ class FilteringLoader : public network::mojom::URLLoader,
   const bool navigation_;
   bool restart_pending_ = false;
   int rewrites_ = 0;
-  base::Time network_started_;
+  int server_redirects_ = 0;
+  bool force_omit_same_origin_credentials_ = false;
+  GURL network_credentials_url_;
 
   // A held response (HoldBody). `head_` and `metadata_` wait until ReleaseResponse; `pending_` is the
   // whole body until then, and after it what's next to write, of which `written_` have gone.
@@ -1176,9 +1194,17 @@ void FilteringLoader::StartNetwork() {
     // The factory's document went while a rewrite waited for its client.
     return NetworkGone();
   }
-  network_started_ = base::Time::Now();
+  std::optional<network::ResourceRequest> credentialless_request;
+  network_credentials_url_ = request_.url;
+  if (force_omit_same_origin_credentials_ &&
+      request_.credentials_mode == network::mojom::CredentialsMode::kSameOrigin) {
+    credentialless_request = request_;
+    credentialless_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  }
   factory_->target()->CreateLoaderAndStart(
-      target_.BindNewPipeAndPassReceiver(), request_id_, options_, request_,
+      target_.BindNewPipeAndPassReceiver(), request_id_,
+      options_ | network::mojom::kURLLoadOptionUseHeaderClient,
+      credentialless_request ? *credentialless_request : request_,
       network_client_.BindNewPipeAndPassRemote(), annotation_);
   network_client_.set_disconnect_handler(
       base::BindOnce(&FilteringLoader::NetworkGone, base::Unretained(this)));
@@ -1383,7 +1409,7 @@ void SetRequestFilter(RequestFilter filter) {
   g_filter.store(filter, std::memory_order_release);
 }
 
-void MaybeFilterURLLoaderFactory(
+ResponseCookieFilterInstaller MaybeFilterURLLoaderFactory(
     content::ContentBrowserClient::URLLoaderFactoryType type,
     const url::Origin& request_initiator,
     const net::IsolationInfo& isolation_info,
@@ -1404,18 +1430,29 @@ void MaybeFilterURLLoaderFactory(
       break;
     default:
       // Downloads, prefetches, DevTools and early hints.
-      return;
+      return {};
   }
   // Only web pages' requests: an extension's, or one of Chrome's pages', aren't the blocker's.
   // A navigation is, wherever it starts (the app's address bar included).
   const GURL initiator = request_initiator.GetURL();
   if (!navigation && !request_initiator.opaque() && !initiator.SchemeIsHTTPOrHTTPS()) {
-    return;
+    return {};
   }
   std::string top;
   if (isolation_info.top_frame_origin()) {
     top = OriginURL(*isolation_info.top_frame_origin());
   }
+  const bool main_frame = navigation && (!frame || !frame->GetParentOrOuterDocument());
+  auto policy = base::BindRepeating(
+      [](std::string source, std::string top, bool main_frame, const GURL& url) {
+        network::ResourceRequest request;
+        request.url = url;
+        if (main_frame) {
+          request.destination = network::mojom::RequestDestination::kDocument;
+        }
+        return DiscardsResponseCookies(request, source, top);
+      },
+      OriginURL(request_initiator), top, main_frame);
   auto [receiver, target] = factory_builder.Append();
   FilterTaskRunner()->PostTask(
       FROM_HERE,
@@ -1424,6 +1461,12 @@ void MaybeFilterURLLoaderFactory(
                      frame ? std::make_optional(frame->GetGlobalId())
                            : std::nullopt,
                      navigation));
+  return base::BindOnce(
+      [](ResponseCookiePolicy policy, scoped_refptr<base::SequencedTaskRunner> runner,
+         mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>* client) {
+        WrapResponseCookieFilter(client, std::move(policy), std::move(runner));
+      },
+      std::move(policy), FilterTaskRunner());
 }
 
 void MaybeAddRequestFilterThrottle(content::NavigationThrottleRegistry& registry) {

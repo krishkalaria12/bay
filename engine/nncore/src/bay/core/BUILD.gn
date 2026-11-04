@@ -27,6 +27,8 @@ source_set("core") {
     "nn_cast_dialog.mm",
     "nn_context_menu.h",
     "nn_context_menu.mm",
+    "nn_cookie_filter.cc",
+    "nn_cookie_filter.h",
     "nn_desktop_capture.h",
     "nn_desktop_capture.mm",
     "nn_devtools_call.h",

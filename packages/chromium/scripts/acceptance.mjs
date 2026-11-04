@@ -129,6 +129,7 @@ const needs = {
       "second-profile",
       "content-blocker-rewrites",
       "content-blocker-redirect-state",
+      "content-blocker-cookies",
     ].map((name) => [name, ["open-url"]]),
   ),
   // Another tab with a page: target-blank's C, cmd-click's D in the background, window-open's E.
@@ -262,6 +263,9 @@ const stamp = () => new Date().toISOString().slice(11, 23);
 const adServed = [];
 // Every request's path and query, counted (js-reload-keeps-pages: a page loaded once).
 const served = new Map();
+// Responses held until the cookie regression has written an unrelated allowed cookie.
+const heldCookieResponses = new Map();
+const cookieEchoes = new Map();
 const server = createServer((req, res) => {
   if (!req.headers.host?.startsWith("127.0.0.1")) adServed.push(`${req.headers.host}${req.url}`);
   served.set(req.url, (served.get(req.url) ?? 0) + 1);
@@ -357,7 +361,65 @@ const server = createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html", "set-cookie": `blocked=${url.search.slice(1)}; path=/` });
     return res.end("<!doctype html><title>Set cookie</title>");
   }
+  if (url.pathname === "/cookie-write") {
+    res.writeHead(200, {
+      "content-type": "text/html",
+      "cache-control": "no-store",
+      "set-cookie": `${url.searchParams.get("name") ?? "session"}=${url.searchParams.get("value") ?? "kept"}; path=/`,
+    });
+    return res.end("<!doctype html><title>Cookie write</title>");
+  }
+  if (url.pathname === "/cookie-hold") {
+    const token = url.searchParams.get("token");
+    heldCookieResponses.set(token, res);
+    res.on("close", () => {
+      if (heldCookieResponses.get(token) === res) heldCookieResponses.delete(token);
+    });
+    return;
+  }
+  if (url.pathname === "/cookie-release") {
+    const token = url.searchParams.get("token");
+    const held = heldCookieResponses.get(token);
+    heldCookieResponses.delete(token);
+    if (held && !held.destroyed) {
+      held.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
+      held.end("released");
+    }
+    res.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
+    return res.end("released");
+  }
+  if (url.pathname === "/cookie-redirect") {
+    res.writeHead(302, {
+      location: url.searchParams.get("to"),
+      "cache-control": "no-store",
+      "access-control-allow-origin": req.headers.origin ?? "*",
+      "access-control-allow-credentials": "true",
+      "set-cookie": "redirected=blocked; path=/",
+    });
+    return res.end();
+  }
+  if (url.pathname === "/cookie-loop") {
+    const host = req.headers.host.startsWith("streamin.me") ? "adpage.test" : "streamin.me";
+    res.writeHead(302, {
+      location: `http://${host}:${server.address().port}${req.url}`,
+      "cache-control": "no-store",
+      "access-control-allow-origin": "*",
+    });
+    return res.end();
+  }
   if (url.pathname === "/cookie-echo") {
+    if (url.searchParams.has("taint")) cookieEchoes.set(url.searchParams.get("taint"), req.headers.cookie ?? "none");
+    if (url.searchParams.has("origin")) {
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "access-control-allow-origin": req.headers.origin ?? "*",
+        "access-control-allow-credentials": "true",
+      });
+      return res.end(
+        JSON.stringify({ cookie: req.headers.cookie ?? null, origin: req.headers.origin ?? null, fetchSite: req.headers["sec-fetch-site"] ?? null }),
+      );
+    }
     res.writeHead(200, { "content-type": "text/plain", "access-control-allow-origin": "*" });
     return res.end(req.headers.cookie ?? "none");
   }
@@ -366,7 +428,7 @@ const server = createServer((req, res) => {
     return res.end("<!doctype html><title>Worker cookie</title>");
   }
   if (url.pathname === "/index.js") {
-    res.writeHead(200, { "content-type": "text/javascript" });
+    res.writeHead(200, { "content-type": "text/javascript", "access-control-allow-origin": "*", "cache-control": "no-store" });
     return res.end(`window.workerScript = true;`);
   }
   if (url.pathname === "/file.bin") {
@@ -3936,6 +3998,121 @@ try {
       if (failures.length) throw new Error(`redirects restored request state: ${failures.join("; ")}`);
       return rounds;
     } finally {
+      await closeTab(tab.id).catch(() => null);
+    }
+  });
+
+  await check("content-blocker-cookies", async () => {
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const fixturePort = server.address().port;
+    const filteredOrigin = `http://streamin.me:${fixturePort}`;
+    const allowedOrigin = `http://adpage.test:${fixturePort}`;
+    const tab = await openTab(`${filteredOrigin}/b?cookie-rules`, "Page B");
+    const results = {};
+    const failures = [];
+    const target = () => pageFor(tab.id, "/");
+    const evaluate = async (expression) =>
+      (await cdp(await target(), "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
+    const go = async (url, title) => {
+      const finalURL = new URL(url).searchParams.get("to") ?? url;
+      await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab.id)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+      await until(`the cookie fixture ${url}`, async () => {
+        const item = (await state()).tabs.find((item) => item.id === tab.id);
+        return item && item.url === finalURL && !item.loading && item.title === title;
+      });
+    };
+    const paused = (value) => cef(`setContentBlockerAllowed("streamin.me", ${value})`);
+    const request = (path) => evaluate(`fetch(${JSON.stringify(path)}).then((response) => response.text())`);
+    const seed = async (name, value) => {
+      await paused(true);
+      await request(`/cookie-write?name=${name}&value=${value}`);
+      await paused(false);
+    };
+    const expect = (name, value, condition) => {
+      results[name] = value;
+      if (!condition(value)) failures.push(`${name}: ${JSON.stringify(value)}`);
+    };
+    try {
+      await seed("session", "original");
+      await request("/cookie-write?name=session&value=rejected");
+      await cef(`getContentBlocker()`);
+      expect("overwrite", await request("/cookie-echo?overwrite"), (cookie) => cookie.includes("session=original") && !cookie.includes("rejected"));
+
+      // The pending response has no Set-Cookie at all. An unrelated allowed write while
+      // it waits must survive when its headers finally arrive after the site resumes.
+      const token = `concurrent-${Date.now()}`;
+      await evaluate(`window.cookieHeld = fetch("/cookie-hold?token=${token}").then((response) => response.text()); true`);
+      await until("the held cookie response", async () => heldCookieResponses.has(token));
+      await seed("concurrent", "kept");
+      await request(`/cookie-release?token=${token}`);
+      await evaluate("window.cookieHeld");
+      await cef(`getContentBlocker()`);
+      expect("concurrent", await request("/cookie-echo?concurrent"), (cookie) => cookie.includes("concurrent=kept"));
+
+      await seed("session", "sent");
+      expect("outgoing", await request("/cookie-echo?outgoing"), (cookie) => cookie.includes("session=sent"));
+      const allowedWrite = `${allowedOrigin}/cookie-write?name=allowedRedirect&value=stored`;
+      await go(`${filteredOrigin}/cookie-redirect?to=${encodeURIComponent(allowedWrite)}`, "Cookie write");
+      expect("filteredToAllowed", await evaluate("document.cookie"), (cookie) => cookie.includes("allowedRedirect=stored"));
+      const filteredWrite = `${filteredOrigin}/cookie-write?name=filteredRedirect&value=rejected`;
+      await go(`${allowedOrigin}/cookie-redirect?to=${encodeURIComponent(filteredWrite)}`, "Cookie write");
+      expect("allowedToFiltered", await evaluate("document.cookie"), (cookie) => cookie.includes("session=sent") && !cookie.includes("filteredRedirect"));
+
+      await go("https://blocker-cookie.workers.dev/worker-cookie", "Worker cookie");
+      await go(`${allowedOrigin}/adpage?cookie-credentials`, "/adpage");
+      const script = (anonymous, redirect) => {
+        const destination = "https://blocker-cookie.workers.dev/index.js?cookie-credentials";
+        const url = redirect ? `${allowedOrigin}/cookie-redirect?to=${encodeURIComponent(destination)}` : destination;
+        return evaluate(`new Promise((resolve) => {
+          const script = document.createElement("script");
+          ${anonymous ? 'script.crossOrigin = "anonymous";' : ""}
+          script.src = ${JSON.stringify(url)};
+          script.onload = () => { script.remove(); resolve("loaded"); };
+          script.onerror = () => { script.remove(); resolve("failed"); };
+          document.head.append(script);
+        })`);
+      };
+      expect("withCredentials", await script(false, false), (value) => value === "failed");
+      expect("anonymous", await script(true, false), (value) => value === "loaded");
+      expect("anonymousRedirect", await script(true, true), (value) => value === "loaded");
+
+      // A cross-origin hop taints credentials even when the chain returns to its
+      // initiating origin. Both hops also change the response-cookie policy.
+      await request("/cookie-write?name=taint&value=source");
+      expect("taintSeed", await evaluate("document.cookie"), (cookie) => cookie.includes("taint=source"));
+      const returningChain = (tag, query = "taint") => {
+        const end = `${allowedOrigin}/cookie-echo?${query}=${tag}`;
+        const middle = `${filteredOrigin}/cookie-redirect?to=${encodeURIComponent(end)}`;
+        return `${allowedOrigin}/cookie-redirect?to=${encodeURIComponent(middle)}`;
+      };
+      expect("taintedReturn", await request(returningChain("cors")), (value) => value === "none");
+      await evaluate(`fetch(${JSON.stringify(returningChain("no-cors"))}, { mode: "no-cors" }).then(() => true)`);
+      // Chromium retains the initial no-CORS loader's credential decision on
+      // redirects. Cookie filtering must preserve that existing network behavior.
+      expect("noCorsReturn", cookieEchoes.get("no-cors"), (value) => value?.includes("taint=source"));
+      expect(
+        "taintedOrigin",
+        await evaluate(`fetch(${JSON.stringify(returningChain("include", "origin"))}, { credentials: "include" })
+          .then((response) => response.json()).catch((error) => ({ error: error.name }))`),
+        (value) => value?.origin === "null",
+      );
+      const loopPath = `/cookie-loop?token=${Date.now()}`;
+      expect("redirectLoop", await evaluate(`fetch(${JSON.stringify(loopPath)}).then(() => "loaded", () => "failed")`), (value) => value === "failed");
+      expect("redirectLoopRequests", served.get(loopPath), (count) => count > 1 && count <= 21);
+      if (failures.length) throw new Error(`cookie rules changed unrelated state: ${failures.join("; ")}`);
+      return results;
+    } finally {
+      await paused(false).catch(() => null);
+      for (const held of heldCookieResponses.values()) held.destroy();
+      heldCookieResponses.clear();
+      cookieEchoes.clear();
+      for (const [domain, names] of [
+        ["streamin.me", ["session", "concurrent", "filteredRedirect"]],
+        ["adpage.test", ["allowedRedirect", "redirected", "taint"]],
+        ["blocker-cookie.workers.dev", ["tracked"]],
+      ]) {
+        for (const name of names) await cdp(await target(), "Network.deleteCookies", { name, domain, path: "/" }).catch(() => null);
+      }
       await closeTab(tab.id).catch(() => null);
     }
   });

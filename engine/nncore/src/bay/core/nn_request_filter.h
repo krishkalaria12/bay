@@ -26,6 +26,7 @@
 #include <stdint.h>
 
 #include "content/public/browser/content_browser_client.h"
+#include "bay/core/nn_cookie_filter.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace content {
@@ -161,7 +162,10 @@ void NoteContentBlockerRedirect(content::GlobalRenderFrameHostId frame,
                                const GURL& url);
 
 // From NNContentBrowserClient::WillCreateURLLoaderFactory, before Chrome's own interceptors.
-void MaybeFilterURLLoaderFactory(
+// The returned callback installs cookie interception after Chrome's header clients.
+using ResponseCookieFilterInstaller = base::OnceCallback<void(
+    mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*)>;
+ResponseCookieFilterInstaller MaybeFilterURLLoaderFactory(
     content::ContentBrowserClient::URLLoaderFactoryType type,
     const url::Origin& request_initiator,
     const net::IsolationInfo& isolation_info,
