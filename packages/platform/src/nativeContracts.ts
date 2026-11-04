@@ -1146,7 +1146,7 @@ export const nativeContracts = {
       "constants": {}
     },
     "BayLocalFiles": {
-      "source": "desktop/src/localFiles.tsx",
+      "source": "desktop/src/localFilesNative.ts",
       "methods": {
         "inspect": {
           "async": true,
@@ -2605,12 +2605,14 @@ export const nativeContracts = {
       "UserScriptsNative": "{\n  watch(on: boolean): void;\n  read(): Promise<UserScriptsFolder>;\n  readStatus(): Promise<string | null>;\n  writeStatus(json: string): Promise<void>;\n  addListener(name: \"onChange\", listener: () => void): EventSubscription;\n}"
     },
     "desktop/src/localFiles.tsx": {
+      "LocalFilesAreaProps": "ViewProps & {\n  dropEnabled?: boolean;\n  rootPath?: string;\n  relativePath?: string;\n  onFilesDropped?: (event: { nativeEvent: { files: LocalFileDescriptor[] } }) => void;\n  onFilesDropError?: (event: { nativeEvent: { message: string } }) => void;\n  onDropActive?: (event: { nativeEvent: { active: boolean } }) => void;\n  /** A click that did not become a drag, or VoiceOver's press. */\n  onActivate?: () => void;\n  onContextMenu?: () => void;\n}"
+    },
+    "desktop/src/localFilesNative.ts": {
       "LocalFileDescriptor": "{ path: string; name: string; kind: \"file\" | \"folder\" }",
       "LocalFileStatus": "\"available\" | \"missing\" | \"inaccessible\"",
       "LocalFileAccess": "{\n  status: LocalFileStatus;\n  path?: string;\n  name?: string;\n  kind?: \"file\" | \"folder\";\n  url?: string;\n  browserReadable?: boolean;\n}",
       "LocalFileEntry": "LocalFileDescriptor & { relativePath: string }",
-      "LocalFileListing": "{ access: LocalFileAccess; entries: LocalFileEntry[] }",
-      "LocalFilesAreaProps": "ViewProps & {\n  dropEnabled?: boolean;\n  rootPath?: string;\n  relativePath?: string;\n  onFilesDropped?: (event: { nativeEvent: { files: LocalFileDescriptor[] } }) => void;\n  onFilesDropError?: (event: { nativeEvent: { message: string } }) => void;\n  onDropActive?: (event: { nativeEvent: { active: boolean } }) => void;\n  /** A click that did not become a drag, or VoiceOver's press. */\n  onActivate?: () => void;\n  onContextMenu?: () => void;\n}"
+      "LocalFileListing": "{ access: LocalFileAccess; entries: LocalFileEntry[] }"
     },
     "chromium/src/native.ts": {
       "Result": "T | { error: string }",
