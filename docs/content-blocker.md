@@ -103,6 +103,15 @@ runs the answer before anything else, as Brave does and as an extension's `docum
 `srcdoc` or sandboxed frame asks with the base URL it inherits: pages use such frames to get a window the blocker's
 scriptlets haven't touched.
 
+## Linux and Windows
+
+The same crate and the same request filter run on the desktop host. `engine/nncore`'s `nn_request_filter.cc` and
+`nn_cookie_filter.cc` are portable, and `NNDesktopContentBrowserClient` makes the calls `nn_main_delegate.cc` makes on
+macOS. `chrome/browser/bay/webui/content_blocker.cc` is `NNCoreContentBlocker.mm` in C++: the lists, cache and settings,
+kept in `<user data>/Content Blocker`. `scripts/engine.py build` compiles the crate with `cargo` before Chromium and
+`webui/BUILD.gn` links it, so an engine build needs Rust. `build-app.py` copies the catalogue, the pinned scriptlet
+resources and the default lists into a `ContentBlocker` folder beside the binary.
+
 ## Lists, settings and the engine cache
 
 - The catalogue is uBO's (`packages/chromium/ios/filter_lists.json`, generated from uBO 1.75's `assets.json`): the same
