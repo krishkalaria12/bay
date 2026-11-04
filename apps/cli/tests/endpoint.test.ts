@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromiumRoot, documentsRoot, fromControlFile, installedDataDir } from "../src/endpoint.ts";
 import { checkControlFile } from "../src/controlFileSecurity.ts";
-import { icacls, makeControlFilePrivate } from "./windowsAcl.ts";
+import { CONTROL_FILE_TIMEOUT, icacls, makeControlFilePrivate } from "./windowsAcl.ts";
 
 describe("desktop data layout", () => {
   it("uses the native host's Chromium directory and document folder", () => {
@@ -50,17 +50,21 @@ describe.skipIf(process.platform === "win32")("private control files", () => {
 });
 
 describe.skipIf(process.platform !== "win32")("private Windows control files", () => {
-  it("accepts an owner-only DACL and refuses a token inherited by other principals", () => {
-    const root = mkdtempSync(join(tmpdir(), "bay-control-acl-test-"));
-    try {
-      const path = join(root, "BayControl.json");
-      writeFileSync(path, JSON.stringify({ port: 1234, browser: "/devtools/browser/test", token: "private-test-token", pid: process.pid }));
-      makeControlFilePrivate(path);
-      expect(fromControlFile(path).explicit).toBe(false);
-      expect(icacls(path, "/grant", "*S-1-1-0:(R)")).toBe(0);
-      expect(() => fromControlFile(path)).toThrow("another principal");
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+  it(
+    "accepts an owner-only DACL and refuses a token inherited by other principals",
+    () => {
+      const root = mkdtempSync(join(tmpdir(), "bay-control-acl-test-"));
+      try {
+        const path = join(root, "BayControl.json");
+        writeFileSync(path, JSON.stringify({ port: 1234, browser: "/devtools/browser/test", token: "private-test-token", pid: process.pid }));
+        makeControlFilePrivate(path);
+        expect(fromControlFile(path).explicit).toBe(false);
+        expect(icacls(path, "/grant", "*S-1-1-0:(R)")).toBe(0);
+        expect(() => fromControlFile(path)).toThrow("another principal");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+    CONTROL_FILE_TIMEOUT,
+  );
 });
