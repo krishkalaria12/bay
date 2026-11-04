@@ -38,10 +38,23 @@ const documentWith = () => {
   const styles = new Map();
   const document = {
     head: { appendChild: (style) => styles.set(style.id, style) },
-    documentElement: { clientWidth: 800, clientHeight: 600 },
+    documentElement: {
+      clientWidth: 800,
+      clientHeight: 600,
+      attributes: new Map(),
+      setAttribute(name, value) {
+        this.attributes.set(name, value);
+      },
+      removeAttribute(name) {
+        this.attributes.delete(name);
+      },
+    },
     getElementById: (id) => styles.get(id) ?? null,
     createElement: () => new Node(document),
-    addEventListener() {},
+    handlers: {},
+    addEventListener(type, handler) {
+      this.handlers[type] = handler;
+    },
     removeEventListener() {},
     styles,
   };
@@ -62,12 +75,26 @@ test("a ring needs one stylesheet, and a view only says when it draws its own", 
   assert.equal(node.attributes.size, 0);
 });
 
-test("the sheet leaves pages and focus moved by code alone, and sets text fields' rings inside them", () => {
+test("the sheet leaves pages, focus moved by code and text fields alone", () => {
   const document = documentWith();
   setWebFocusRing(new Node(document));
   const css = [...document.styles.values()][0].textContent;
-  assert.match(css, /:not\(embed\):not\(\[tabindex="-1"\]\)/);
-  assert.match(css, /input:focus-visible[\s\S]*outline-offset: -2px/);
+  assert.match(css, /html\[data-bay-tabbing\] :focus-visible:not\(embed\):not\(input\):not\(textarea\):not\(select\):not\(\[tabindex="-1"\]\)/);
+  assert.match(css, /input:focus,\s*textarea:focus,\s*select:focus[\s\S]*outline: none !important/);
+});
+
+test("a ring shows from a Tab until the next press of the pointer, and no other key starts it", () => {
+  const document = documentWith();
+  setWebFocusRing(new Node(document));
+  const tabbing = () => document.documentElement.attributes.has("data-bay-tabbing");
+  document.handlers.keydown({ key: "t", ctrlKey: true });
+  assert.equal(tabbing(), false);
+  document.handlers.keydown({ key: "Tab", ctrlKey: true });
+  assert.equal(tabbing(), false, "Ctrl+Tab is the switcher");
+  document.handlers.keydown({ key: "Tab" });
+  assert.equal(tabbing(), true);
+  document.handlers.pointerdown();
+  assert.equal(tabbing(), false);
 });
 
 test("a tooltip shows after a pause, or at once for the keyboard, and goes with its view", (t) => {
