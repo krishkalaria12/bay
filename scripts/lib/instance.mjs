@@ -17,17 +17,22 @@
 // - `eval` fails at once when the app dies, and runs one script at a time (the harness has one dev-eval.js).
 // - `js: "pinned"` (default) serves Metro through a proxy that refuses its websockets, so other agents' edits and
 //   reload broadcasts can't restart the app's JS mid-run; the proxy runs detached and exits once the app has gone.
+// - On Linux and Windows the instance is the binary itself (`app` is it or its folder), started with the same
+//   environment and hidden as far as the desktop allows. JS runs from its packed bundle, and `eval` goes over DevTools
+//   into the coordinator document, or `{ window }`'s; the launch asks for the harness with a "dev-harness" document.
 //
 // `node scripts/lib/instance.mjs --self-test` checks the ownership rules.
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Linux or Windows, for a script's checks that need AppKit. BAY_INSTANCE_HOST=desktop drives the path on macOS, against a stand-in binary. */
+export const desktopHost = process.env.BAY_INSTANCE_HOST === "desktop" || process.platform !== "darwin";
 const here = fileURLToPath(import.meta.url);
 
 // MARK: Processes
@@ -92,15 +97,20 @@ export const isAlive = (pid) => {
     return e.code === "EPERM";
   }
 };
+/** On Linux and Windows, the binary or the folder it was built into. */
+export const desktopBinary = (app, platform = process.platform, isFile = (path) => statSync(path).isFile()) =>
+  isFile(app) ? app : join(app, platform === "win32" ? "Bay.exe" : "bay");
 /** The app bundle's main executable. */
 export const binaryOf = (app) =>
-  join(
-    app,
-    "Contents/MacOS",
-    execFileSync("plutil", ["-extract", "CFBundleExecutable", "raw", join(app, "Contents/Info.plist")])
-      .toString()
-      .trim(),
-  );
+  desktopHost
+    ? desktopBinary(app)
+    : join(
+        app,
+        "Contents/MacOS",
+        execFileSync("plutil", ["-extract", "CFBundleExecutable", "raw", join(app, "Contents/Info.plist")])
+          .toString()
+          .trim(),
+      );
 /** The app's windows on screen (CoreGraphics' numbers, layer 0), for screencapture -l. */
 export const onScreenWindows = (pid) =>
   JSON.parse(
@@ -283,7 +293,20 @@ export async function devtools(target, { name = target.url } = {}) {
 
 // MARK: Instances
 
+/** An async function body, as the dev harness runs one, as one expression for Runtime.evaluate. */
+export const harnessExpression = (body) => `(async (nn) => {\n${body}\n})(globalThis.nn)`;
+const HARNESS_URL = "chrome://bay/";
+const devToolsAnswers = async (port) => {
+  try {
+    return (await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000) })).ok;
+  } catch {
+    return false;
+  }
+};
+
 class Instance {
+  // DevTools sessions on the host's documents, by "coordinator" or window id.
+  #documents = new Map();
   constructor(record) {
     Object.assign(this, record);
     this.evalQueue = Promise.resolve();
@@ -294,6 +317,7 @@ class Instance {
   }
   /** The same start time and binary: the same process (a reused pid has another start time). */
   stillOwned() {
+    if (desktopHost) return isAlive(this.pid) && (process.platform === "win32" || processInfo(this.pid)?.started === this.started);
     const info = processInfo(this.pid);
     return !!info && info.started === this.started && commandIsBinary(info.command, this.binary);
   }
@@ -308,9 +332,12 @@ class Instance {
     return this;
   }
 
-  /** Runs `body` (a function body: `return …`, may return a promise) in the app's JS through the dev harness. */
-  eval(body, { timeout = 20000 } = {}) {
-    const run = this.evalQueue.then(() => this.#eval(body, timeout));
+  /**
+   * Runs `body` (a function body: `return …`, may return a promise) in the app's JS through the dev harness. On Linux
+   * and Windows that is the coordinator document, which holds the store, or `window`'s, which holds its views.
+   */
+  eval(body, { timeout = 20000, window } = {}) {
+    const run = this.evalQueue.then(() => (desktopHost ? this.#evalDocument(body, timeout, window) : this.#eval(body, timeout)));
     this.evalQueue = run.catch(() => {});
     return run;
   }
@@ -334,6 +361,30 @@ class Instance {
       await sleep(25);
     }
     throw new Error(`eval timed out after ${timeout} ms: ${body.slice(0, 80)}`);
+  }
+  async #evalDocument(body, timeout, window) {
+    if (!isAlive(this.pid)) throw Object.assign(new Error(`the app (pid ${this.pid}) exited`), { appDied: true });
+    const document = await this.#document(window ?? "coordinator");
+    try {
+      return (await document.eval(harnessExpression(body), { timeout })) ?? null;
+    } catch (e) {
+      throw Object.assign(new Error(e.message.replace(/^page: /, "")), { fromApp: true });
+    }
+  }
+  async #document(key) {
+    const known = this.#documents.get(key);
+    if (known && !known.closed) return known;
+    for (const target of await this.targets()) {
+      if (!target.url.startsWith(HARNESS_URL) || !target.webSocketDebuggerUrl) continue;
+      const document = await devtools(target).catch(() => null);
+      const host = await document?.eval("globalThis.nn?.host ?? null", { timeout: 3000 }).catch(() => null);
+      if (host && (key === "coordinator" ? host.role === "coordinator" : host.windowId === key)) {
+        this.#documents.set(key, document);
+        return document;
+      }
+      document?.close();
+    }
+    throw new Error(`no document with the dev harness for ${key}`);
   }
   /** Waits until the dev harness answers (and `test`, a body returning truthy, holds). */
   async ready({ timeout = 90000, test = "return true" } = {}) {
@@ -376,6 +427,7 @@ class Instance {
     return devtools({ url: "browser", webSocketDebuggerUrl: version.webSocketDebuggerUrl });
   }
   windows() {
+    if (desktopHost) throw new Error("windows() asks CoreGraphics: on this host, BayCEF.chromeWindows() through eval");
     return onScreenWindows(this.pid);
   }
 
@@ -399,7 +451,12 @@ class Instance {
       return !isAlive(this.pid);
     };
     if (!this.stillOwned()) return { how: "gone" };
-    if (graceful) {
+    if (graceful && desktopHost) {
+      // Chrome's own shutdown, as the window manager or `taskkill` without /F asks for it.
+      if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(this.pid)], { timeout: 10000 });
+      else process.kill(this.pid, "SIGTERM");
+      if (await gone(timeout)) return { how: "quit" };
+    } else if (graceful) {
       spawnSync(
         "osascript",
         [
@@ -446,7 +503,7 @@ class Instance {
  */
 export async function launch(app, opts = {}) {
   app = resolve(app);
-  if (app.startsWith("/Applications/")) throw new Error("never an installed app: pass a build (apps/browser/build-*)");
+  if (/^(\/Applications\/|\/opt\/|\/usr\/|[A-Za-z]:\\Program Files)/.test(app)) throw new Error("never an installed app: pass a build (apps/browser/build-*)");
   const data = resolve(opts.data ?? join(process.env.TMPDIR ?? "/tmp", `nn-instance-${process.pid}-${Date.now()}`));
   if (opts.fresh) rmSync(data, { recursive: true, force: true });
   mkdirSync(data, { recursive: true });
@@ -459,13 +516,13 @@ export async function launch(app, opts = {}) {
   if (opts.session) writeFileSync(join(data, "session.json"), JSON.stringify(opts.session));
   if (opts.onboarded) writeFileSync(join(data, "onboarding.json"), JSON.stringify({ version: 1, completedAt: 1 }));
   if (opts.probe) writeFileSync(join(data, "perf-probe"), "");
+  if (desktopHost) writeFileSync(join(data, "dev-harness"), "");
   for (const [name, text] of Object.entries(opts.files ?? {})) writeFileSync(join(data, name), typeof text === "string" ? text : JSON.stringify(text));
   const binary = binaryOf(app);
   const port = opts.port ? parsePort(opts.port) : await freePort();
-  const busy = listenerPids(port);
-  if (busy.length) throw new Error(`DevTools port ${port} is already in use by pid ${busy.join(", ")}`);
+  if (desktopHost ? await devToolsAnswers(port) : listenerPids(port).length) throw new Error(`DevTools port ${port} is already in use`);
   const metroPort = Number(opts.metroPort ?? process.env.METRO_PORT ?? 8081);
-  const jsMode = opts.js ?? "pinned";
+  const jsMode = opts.js ?? (desktopHost ? "none" : "pinned");
   let js = { mode: jsMode, metroPort };
   if (jsMode === "pinned") {
     const kept = previous?.js;
@@ -485,8 +542,24 @@ export async function launch(app, opts = {}) {
     ...opts.env,
   };
   const log = resolve(opts.log ?? join(data, "app.out.log"));
-  const before = binaryPids(binary);
   const launchedAt = Date.now();
+  const startTimeout = opts.startTimeout ?? 60000;
+  const started = desktopHost
+    ? await startDesktop(binary, { env, log, port, args: opts.args, urls: opts.urls, switches, startTimeout })
+    : await startMac(app, binary, { env, log, port, args: opts.args, urls: opts.urls, startTimeout });
+  const instance = new Instance({ app, binary, data, port, log, launchedAt, js, ...started, meta: opts.meta ?? {} }).save();
+  if (opts.ready !== false)
+    try {
+      await instance.ready(typeof opts.ready === "string" ? { test: opts.ready } : typeof opts.ready === "object" ? opts.ready : {});
+    } catch (e) {
+      await instance.quit({ graceful: false });
+      throw e;
+    }
+  return instance;
+}
+
+async function startMac(app, binary, { env, log, port, args, urls, startTimeout }) {
+  const before = binaryPids(binary);
   // `open -g -n` with the environment, never a plain open, so it can't take focus.
   execFileSync("open", [
     "-g",
@@ -498,25 +571,38 @@ export async function launch(app, opts = {}) {
     log,
     "--stderr",
     log,
-    ...(opts.urls?.length ? ["-a", app, ...opts.urls] : [app]),
-    ...(opts.args?.length ? ["--args", ...opts.args] : []),
+    ...(urls?.length ? ["-a", app, ...urls] : [app]),
+    ...(args?.length ? ["--args", ...args] : []),
   ]);
   let owned = null;
-  for (const end = Date.now() + (opts.startTimeout ?? 60000); !owned && Date.now() < end; await sleep(100)) {
+  for (const end = Date.now() + startTimeout; !owned && Date.now() < end; await sleep(100)) {
     let info;
     const pid = ownedCandidate(listenerPids(port), before, (p) => (info = processInfo(p))?.command, binary);
     if (pid && info) owned = { pid, started: info.started };
   }
-  if (!owned) throw new Error(`the app didn't listen on DevTools port ${port} within ${(opts.startTimeout ?? 60000) / 1000} s (log: ${log})`);
-  const instance = new Instance({ app, binary, data, port, log, launchedAt, js, ...owned, meta: opts.meta ?? {} }).save();
-  if (opts.ready !== false)
-    try {
-      await instance.ready(typeof opts.ready === "string" ? { test: opts.ready } : typeof opts.ready === "object" ? opts.ready : {});
-    } catch (e) {
-      await instance.quit({ graceful: false });
-      throw e;
-    }
-  return instance;
+  if (!owned) throw new Error(`the app didn't listen on DevTools port ${port} within ${startTimeout / 1000} s (log: ${log})`);
+  return owned;
+}
+
+/** The binary itself, so its pid is ours from the start; the port was free, so what answers on it is this instance. */
+async function startDesktop(binary, { env, log, port, args = [], urls = [], switches, startTimeout }) {
+  const output = openSync(log, "a");
+  const child = spawn(binary, [`--remote-debugging-port=${port}`, ...switches.split(" ").filter(Boolean), ...args, ...urls], {
+    env: Object.fromEntries(Object.entries({ ...process.env, ...env }).filter(([, value]) => value !== null && value !== undefined)),
+    detached: true,
+    stdio: ["ignore", output, output],
+  });
+  let failed = null;
+  child.on("error", (error) => (failed = error));
+  child.unref();
+  closeSync(output);
+  for (const end = Date.now() + startTimeout; Date.now() < end; await sleep(100)) {
+    if (failed) throw new Error(`the app couldn't start: ${failed.message}`);
+    if (child.exitCode !== null) throw new Error(`the app exited with ${child.exitCode} before listening (log: ${log})`);
+    if (await devToolsAnswers(port)) return { pid: child.pid, started: processInfo(child.pid)?.started ?? null };
+  }
+  child.kill("SIGKILL");
+  throw new Error(`the app didn't listen on DevTools port ${port} within ${startTimeout / 1000} s (log: ${log})`);
 }
 
 /** The instance recorded in a data dir (or the scratch dir holding data/), if it is still the same process. */
@@ -627,6 +713,20 @@ if (process.argv[1] === here) {
     for (const bad of ["0", "65536", "94.5", "-1", "", "9474x", "1e3"]) assert.throws(() => parsePort(bad), /1\.\.65535/, bad);
     assert.deepEqual(pidList("12\n34\n12\n"), [12, 34]);
     assert.deepEqual(pidList(""), []);
+    assert.equal(
+      desktopBinary("/b/bay", "linux", () => true),
+      "/b/bay",
+    );
+    assert.equal(
+      desktopBinary("/b", "linux", () => false),
+      join("/b", "bay"),
+    );
+    assert.equal(
+      desktopBinary("/b", "win32", () => false),
+      join("/b", "Bay.exe"),
+    );
+    // A body's top-level return and its `nn`, as new Function("nn", body) gives them on macOS.
+    assert.equal(harnessExpression("return nn;"), "(async (nn) => {\nreturn nn;\n})(globalThis.nn)");
     assert.ok(commandIsBinary(bin, bin));
     assert.ok(commandIsBinary(`${bin} --flag`, bin));
     assert.ok(!commandIsBinary(`${bin}2`, bin));

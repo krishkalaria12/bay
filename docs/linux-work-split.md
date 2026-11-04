@@ -151,7 +151,8 @@ D produces the T1 engine archive and shares it with A before A starts runtime ch
   - Check Phase 3's exit criteria: real tabs, split panes, popups, extensions, prompts, PiP, DevTools, and the same engine JSON as on Mac and Windows.
 - [ ] **T4 · A · App boot and test ports (Phase 4, M = 2).**
   - The real `App.tsx` boots from Metro (`BAY_DEV=1`) and from the packed bundle.
-  - Port `apps/browser/scripts/*-test.mjs` (shortcuts, windowing, tab drag, zoom-scroll) to run under `xvfb-run` and headless Weston.
+  - Run `apps/browser/scripts/*-test.mjs` under `xvfb-run` and headless Weston: `node apps/browser/scripts/tab-drag-test.mjs <folder with bay> <port>`. `scripts/lib/instance.mjs` starts the binary and evaluates over DevTools in the coordinator document, or `{ window }`'s. Ported, never yet run on a real build: shortcuts (the app's own table, one focus), tab drag and tear-off. `windowDrags` counts left presses the window's hit test calls HTCAPTION.
+  - Still macOS only, and they skip or need work: the shortcuts script's real presses and per-focus matrix, windowing's frame recorder (ScreenCaptureKit), zoom-scroll (`devScrollZoom`), tab drag's four preview checks (`devDragPreviewState`), and space-swipe and interaction-habits (`devPostFlags`, `devSimulate` and others). A script body that reads `nn.webviews` or `nn.pageState` beside the store needs splitting between documents.
   - Windowing tests assert behaviour, not coordinates, on Wayland.
 - [ ] **T5 · A · Shell and desktop checks (Phases 5 and 8, M = 2).**
   - Snapping and tiling on GNOME, KDE and one wlroots compositor; caption buttons follow the desktop's layout.

@@ -1,6 +1,6 @@
 import "@expo/metro-runtime";
 import "expo";
-import { installNativeTransport, getNativeHostInfo } from "@bay/platform/nativeBridge";
+import { installNativeTransport, getNativeHostInfo, readNativeSnapshot } from "@bay/platform/nativeBridge";
 import { createMojoTransport, type WebNativeBridgeOptions } from "../../packages/platform/src/mojoTransport";
 
 declare global {
@@ -103,6 +103,10 @@ async function start() {
       window: async (transport) => (await import("./src/runtime/windowRuntimeEntry")).startWindowRuntimeEntry(transport, showStartupError),
     });
     addEventListener("pagehide", () => owner.dispose(), { once: true });
+    // A test instance whose launcher asked for it (scripts/lib/instance.mjs): a packed bundle isn't __DEV__.
+    const isolated = readNativeSnapshot<{ isolatedInstance?: boolean }>("BayApp", "systemInfo")?.isolatedInstance;
+    if (isolated && readNativeSnapshot<Record<string, unknown>>("BayShell", "documents")?.["dev-harness"] !== undefined)
+      (await import("./src/lib/devHarness")).startDevHarness();
     return;
   }
   await import("./src/main");

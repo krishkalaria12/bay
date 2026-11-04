@@ -243,13 +243,10 @@
         </header>
         <section id="followups" aria-labelledby="followups-h">
           <h2 id="followups-h">1. Implementation follow-ups</h2>
-          <p class="prose">These are the unresolved behaviours from earlier feature work.</p>
-          <ul>
-            <li>
-              Port the acceptance scripts' input and window assertions. Define replacements for unsupported <code>windowDrags</code> checks; handle the test
-              hooks' ignored timing and transparency options.
-            </li>
-          </ul>
+          <p class="prose">
+            All are implemented except the acceptance checks that remain macOS only, listed under T4 in <a href="#runtime">Runtime acceptance</a> with what each
+            item still needs on a real build.
+          </p>
         </section>
         <section id="sync" aria-labelledby="sync-h">
           <h2 id="sync-h">2. Branch sync</h2>
@@ -292,6 +289,15 @@
                   <td>T3</td>
                   <td>D</td>
                   <td>Link and run the native tests; Phase 3 acceptance (tabs, splits, popups, extensions, PiP, DevTools)</td>
+                </tr>
+                <tr>
+                  <td>T4</td>
+                  <td>A</td>
+                  <td>
+                    Acceptance scripts: launch the binary through <code>scripts/lib/instance.mjs</code> and check it reaches the coordinator document over
+                    DevTools. Run shortcuts, tab drag and tear-off, and check <code>windowDrags</code> counts empty-strip presses and no tab drags.
+                    <code>docs/linux-work-split.md</code> lists the scripts and checks that remain macOS only.
+                  </td>
                 </tr>
                 <tr>
                   <td>T4</td>
