@@ -14,9 +14,13 @@ SCRIPT = Path(__file__).with_name("engine-state.py")
 SPEC = importlib.util.spec_from_file_location("bay_engine_state", SCRIPT)
 state = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(state)
+# Only the Windows runner saves state, with the libarchive tar Windows ships.
+# GNU tar has no --options, and macOS shares Windows' tar, so it still runs there.
+needs_libarchive_tar = unittest.skipIf(sys.platform == "linux", "GNU tar can't create the state archive")
 
 
 class EngineStateTests(unittest.TestCase):
+    @needs_libarchive_tar
     def test_native_tar_round_trip_preserves_links_and_tree_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -55,6 +59,7 @@ class EngineStateTests(unittest.TestCase):
             self.assertFalse((restored / "dangling-file").exists())
             self.assertFalse((restored / "dangling-directory").exists())
 
+    @needs_libarchive_tar
     def test_failed_tar_keeps_previous_archive_and_removes_partial_output(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
