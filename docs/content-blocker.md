@@ -40,9 +40,28 @@ Every request a web page makes is put to the blocker before it starts, in the en
   in the same interceptor, and its parsed headers are cleared so Chrome parses them again and enforces it.
 - **Response rules** (`$header`, `$ipaddress`, `$permissions`, `##^responseheader`): the interceptor inspects each
   response, and each redirect's response, before it reaches the renderer. `$header` and `$ipaddress` can refuse it
-  (`ERR_BLOCKED_BY_CLIENT`), `$permissions` appends a `Permissions-Policy`, and `##^responseheader` removes `location`,
-  `refresh`, `report-to` or `set-cookie`. The response's parsed headers are cleared so Chrome reads the edited ones
-  again. The response filter is only installed while the live engine has such rules.
+  (`ERR_BLOCKED_BY_CLIENT`), or answer it with a stand-in when an `$ipaddress` rule names one with `$redirect`.
+  `$permissions` appends a `Permissions-Policy`, and `##^responseheader` removes `location`, `refresh` or `report-to`.
+  The response's parsed headers are cleared so Chrome reads the edited ones again. Two headers need more, because the
+  network service has already acted on them. With `location` gone, the redirect ends there as an empty response of its
+  own, as it would had the header not been sent. `set-cookie` never reaches the browser (`HttpResponseHeaders` crosses
+  Mojo without cookies), so its rule deletes what the response stored: the URL's HTTP cookies written since the request
+  started. The response filter is only installed while the live engine has such rules.
+- **Response bodies** (`$replace`, HTML `##^`): uBO only applies these in Firefox, where the API exposes a body; here the
+  interceptor is ours. A response a rule matches stays in `FilteringLoader` until its body has arrived, because its
+  headers and every byte depend on the result: the client gets nothing, then the response on a new pipe. The Rust
+  filter runs on the thread pool, not the filter's sequence. uBO's gates apply: `GET` or `POST`, text types only, not a
+  download, and up to 10 MiB. Past that, what's held goes to the client unchanged and the rest follows, and a body that
+  fails on the network goes as it came. Partial responses and event streams aren't held. The network service has
+  already removed `Content-Encoding` by then, so filtering only deals with the charset. A changed body drops the cached
+  code that came with it, as V8 only compares a script's length.
+- **CNAME uncloaking**: each response's `dns_aliases` go through the rules as uBO replays them with its defaults
+  (`scheme://alias/`), so a first-party name pointing at a listed tracker is blocked. A main frame, an alias on the same
+  site and a request an exception let through aren't uncloaked. A `$cname` exception lifts all but `$important` blocks on
+  the sites it names.
+- **Request headers** (`$requestheader`): only for the rare request such a rule matches, the interceptor reads the
+  request's headers before starting it. `Cookie` isn't among them yet (the network service adds it), so it's read from
+  the cookie store for the request's URL and same-site context.
 - **WebSockets** go through the browser client's handshake hook before the network connection starts. A paused site
   allows its handshakes too; worker handshakes use the available cookie-site origin when there is no frame.
   While a filter is set, handshakes no extension intercepts are opened by Bay; DevTools' extra request headers are
@@ -53,8 +72,10 @@ The engine only asks; the host decides. `+[NNCoreEngine setRequestFilter:]` take
 URL to load instead with whether it may cross origins), which the app's native core
 (`packages/chromium/ios/NNCoreContentBlocker.mm`) implements over the Rust engine. `+[NNCoreEngine setResponseFilter:]`
 takes a second (`NNCoreResponseFilter`: the request, its remote address and its response headers → block, headers to
-add, headers to remove), registered only when the engine has response rules. Blocked requests are counted by the
-engine's existing `ERR_BLOCKED_BY_CLIENT` accounting (`tab:didBlockRequests:lastURL:`).
+add, headers to remove), registered only when the engine has response rules. `setBodyFilterGate:filter:`,
+`setRequestHeaderNames:filter:` and `setCnameFilter:` take the rest, and the first two are only registered when the
+engine has such rules. Blocked requests are counted by the engine's existing `ERR_BLOCKED_BY_CLIENT` accounting
+(`tab:didBlockRequests:lastURL:`).
 
 Why there: a CEF resource request handler doesn't exist in this engine (NNCore replaced CEF's browser-side client),
 and the app only reaches the engine through `NNCore.h`. Renderer-side throttles would need the engine in every
@@ -105,9 +126,14 @@ Redirect rules return local stand-ins while allow/exception rules continue to ta
 
 adblock-rust's parser drops a whole rule for an option it doesn't know. `packages/adblock/src/modifiers.rs` lifts the
 modifier options it can apply out of the list before the engine is built, and applies them itself with uBO's
-semantics: `$urlskip`, `$uritransform`, `$removeparam` with its exceptions, `$header`, `$ipaddress`, `$permissions`,
-`$strict1p`/`$strict3p`, `##^responseheader`, and generic cosmetic exceptions. `$urlskip` and `$uritransform` are
-trusted-only, as in uBO: only the `ublock-*` lists may use them.
+semantics: `$urlskip` and `$uritransform` with their exceptions, `$removeparam` with its exceptions, `$header`,
+`$requestheader`, `$ipaddress`, `$permissions`, `$strict1p`/`$strict3p`, `$replace`, `$cname` exceptions,
+`##^responseheader`, and generic cosmetic exceptions. `$urlskip` and `$uritransform` are trusted-only, as in uBO: only
+the `ublock-*` lists may use them. A regex runs on Rust's `regex`, then `fancy-regex` for lookaround and backreferences,
+then `regress` for the rest of JavaScript's syntax, and a replacement is expanded as JavaScript does it whichever one
+matched. HTML `##^` selectors (`packages/adblock/src/html.rs`) parse the document with `scraper` (html5ever), evaluate
+CSS with `selectors` and uBO's `:has-text()`, `:upward()`, `:has()`, `:not()`, `:content()` and `:min-text-length()`
+themselves, and serialize what's left. uBO re-serializes a filtered document too.
 
 The filter syntax is interpreted by adblock-rust, rather than uBO's JavaScript filtering engine. Procedural execution
 covers the AST operators and actions that the pinned crate exposes; this is not a claim of identical handling of every
@@ -127,20 +153,28 @@ rewrites the rest that can still work before the engines are built:
 
 ## Remaining limits
 
-Counts are for the 11 bundled lists, about 311,000 rules. Most are limits uBO on Chromium shares.
+Counts are for the 11 bundled lists, about 314,000 rules. Every `$replace` (83), HTML `##^` (410), `$requestheader` (1),
+`$cname` (29), `$removeparam` (274), `$urlskip` (244) and `$uritransform` (20) rule in them parses and applies.
 
-- `$replace` (about 90 rules) rewrites a response body, and HTML `##^` filtering (over 400) parses one; uBO applies both
-  only in Firefox, where its API exposes the body. Chromium gives neither the body, so the rules are dropped rather
-  than given a meaning uBO doesn't.
-- `$requestheader` (1) needs the request's headers, which the filter doesn't carry. Dropped.
-- `cname` exceptions (29) and the resolved address behind one need DNS answers Chromium doesn't expose here.
-  `$ipaddress` uses the remote endpoint the connection actually used, so a rule against the CDN's address applies, but
-  one against an origin behind a CNAME cannot. uBO on Chromium has the same limit.
-- `##^responseheader(location)` can't stop a redirect the network stack has already decided; it only removes the header
-  from the response the renderer sees. `set-cookie` removal happens after the network stack may have stored the cookie.
-  Header rules on Chromium have the same timing.
-- `$removeparam` regexes run on Rust's regex engine, with `fancy-regex` for lookaround and backreferences. A construct
-  neither supports is skipped rather than applied differently.
+- CNAME uncloaking happens at the response, from the answer the network stack got, so the request has already gone,
+  with the first-party cookies it carried; only what comes back is refused. uBO on Firefox resolves the name first, which
+  here would hold every request for a DNS answer. A WebSocket handshake isn't uncloaked.
+- `$requestheader` sees the headers on the request, `Referer`, and `Cookie` from the store, which doesn't know of a site
+  setting that withholds them. Headers only the network stack adds (`Accept-Encoding`, `Host`) aren't there, and a worker's
+  request, having no frame, has no `Cookie` to read. uBO on Chromium doesn't support the option at all.
+- `##^responseheader(set-cookie)` removes a cookie just after it was stored, not instead: a page's script could read it
+  in between, and a value it replaced isn't restored. uBO on Chromium doesn't have the option's header either.
+- `##^responseheader(location)` ends the redirect with an empty body: the network stack has dropped the real one.
+- A held body means a page rendering nothing until it has all arrived, on the sites a body rule matches. A script with
+  `integrity` fails if a rule changed it, as in uBO on Firefox. A response a service worker answers from its cache
+  doesn't pass through. A body in UTF-16 or with bytes its legacy charset can't represent is left alone, since it couldn't
+  be written back, and `$replace=json:` isn't supported (none in the bundled lists).
+- `$ipaddress` uses the remote endpoint the connection actually used, so behind a proxy it sees the proxy.
+- adblock-rust's parser rejects about 120 rules: 41 empty `$redirect-rule` exceptions, then a few each of cosmetic rules
+  it doesn't support (`:remove-attr()` on a plain selector, invalid scriptlet arguments, `:-abp-properties()`), and
+  network options it doesn't know (`$ehide`, `$shide`, `$inline-script`, `$top`).
+- The mobile apps share the Rust rules, but only the desktop engine has the interceptor these rules need: `$replace`,
+  HTML `##^`, `$requestheader` and CNAME uncloaking don't apply there.
 
 ## Existing settings
 
@@ -149,14 +183,22 @@ uBO's settings (paused sites, list choices, enabled state) are not carried over.
 ## Verification
 
 `cargo test --locked --manifest-path packages/adblock/Cargo.toml` checks rule matching, redirects, scriptlets,
-permissions, procedural resources, every modifier rule (URL skips, URI transforms, query pruning, response headers and
-addresses) and the serialized engine. `python3 packages/chromium/scripts/test-content-blocker.py` runs the actual
+permissions, procedural resources, every modifier rule (URL skips, URI transforms, query pruning, response headers,
+addresses, `$replace`, `$requestheader`, `$cname`), HTML filtering, charsets and the serialized engine. `python3 packages/chromium/scripts/test-content-blocker.py` runs the actual
 native implementation against the Rust library with temporary storage and controlled offline downloads. The browser's
 JavaScript suite exercises cosmetic batching and procedural actions from the real page script, and the native test
-covers the response filter and exceptions. CI runs all three.
+covers the response, body, request-header and CNAME filters and their exceptions. CI runs all three.
 
 After building the matching engine and the Debug app, start Metro and run the `content-blocker`,
-`content-blocker-fails-closed`, `content-blocker-policies`, `content-blocker-page-block`, `content-blocker-blocks`, `content-blocker-profile`,
-`content-blocker-private`, and `content-blocker-restored` acceptance checks. The blocked/allowed rounds also check redirect stand-ins, redirected
-requests, WebSocket handshakes, a tracked link's cleaned navigation, and that a scriptlet runs before a page's first
-inline script, against local fixtures.
+`content-blocker-fails-closed`, `content-blocker-policies`, `content-blocker-page-block`, `content-blocker-rewrites`,
+`content-blocker-blocks`, `content-blocker-profile`, `content-blocker-private`, and `content-blocker-restored` acceptance
+checks. The blocked/allowed rounds also check redirect stand-ins, redirected requests, WebSocket handshakes, a tracked
+link's cleaned navigation, and that a scriptlet runs before a page's first inline script, against local fixtures.
+`content-blocker-rewrites` holds real rules' responses: gzip and brotli, a legacy charset, a body in pieces, one too big
+to hold, an endless stream, a paused site, a removed `Location` and `Set-Cookie`, and a `Cookie` the network stack hadn't
+added yet.
+
+CNAME uncloaking needs real DNS, which the fixtures can't give, so it isn't in the suite. To check it by hand, find a
+host whose CNAME isn't listed (`dig`), add a rule for the CNAME's target to a test build's lists, and compare: its
+requests load without the rule, fail with `ERR_BLOCKED_BY_CLIENT` with it, and load on a paused site or one a `$cname`
+exception names. Use a neutral path: `/b/ss/` is Adobe's beacon, which EasyPrivacy blocks by URL.
