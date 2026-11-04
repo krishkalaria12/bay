@@ -61,6 +61,7 @@
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
 #include "net/url_request/redirect_info.h"
+#include "net/url_request/redirect_util.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/cpp/url_loader_factory_builder.h"
@@ -566,14 +567,18 @@ class FilteringLoader : public network::mojom::URLLoader,
     if (new_url) {
       request_.url = *new_url;
     }
+    // Keep the saved request in step with the network loader. A later blocker rewrite
+    // starts a new loader from it, so an earlier redirect's removed credentials must
+    // not return, and header rules must see the headers that will actually be sent.
+    for (const std::string& header : headers.removed_headers) {
+      request_.headers.RemoveHeader(header);
+      request_.cors_exempt_headers.RemoveHeader(header);
+    }
+    request_.headers.MergeFrom(headers.modified_headers);
+    request_.cors_exempt_headers.MergeFrom(headers.modified_cors_exempt_headers);
     if (restart_pending_) {
       // The client followed a redirect this loader made: the request starts again there.
       restart_pending_ = false;
-      for (const std::string& header : headers.removed_headers) {
-        request_.headers.RemoveHeader(header);
-      }
-      request_.headers.MergeFrom(headers.modified_headers);
-      request_.cors_exempt_headers.MergeFrom(headers.modified_cors_exempt_headers);
       if (!navigation_) {
         const Decision decision = Match(request_, source_, top_);
         if (decision.blocked) {
@@ -655,8 +660,7 @@ class FilteringLoader : public network::mojom::URLLoader,
       rewritten.new_url = rewrite;
       return RedirectClient(rewritten, std::move(head));
     }
-    request_.url = redirect.new_url;
-    request_.method = redirect.new_method;
+    UpdateRequestOnRedirect(redirect);
     client_->OnReceiveRedirect(redirect, std::move(head));
   }
 
@@ -697,6 +701,21 @@ class FilteringLoader : public network::mojom::URLLoader,
   ~FilteringLoader() override = default;
 
   void StartNetwork();
+
+  void UpdateRequestOnRedirect(const net::RedirectInfo& info) {
+    bool clear_body = false;
+    net::RedirectUtil::UpdateHttpRequest(
+        request_.url, request_.method, info, std::nullopt, std::nullopt,
+        &request_.headers, &clear_body);
+    bool clear_cors_exempt_body = false;
+    net::RedirectUtil::UpdateHttpRequest(
+        request_.url, request_.method, info, std::nullopt, std::nullopt,
+        &request_.cors_exempt_headers, &clear_cors_exempt_body);
+    if (clear_body || clear_cors_exempt_body) {
+      request_.request_body.reset();
+    }
+    request_.UpdateOnRedirect(info);
+  }
 
   void FollowTargetRedirect(network::HttpRequestHeadersUpdateParams headers,
                             const std::optional<GURL>& new_url) {
@@ -1015,11 +1034,7 @@ class FilteringLoader : public network::mojom::URLLoader,
     ++rewrites_;
     network_client_.reset();
     target_.reset();
-    request_.url = info.new_url;
-    request_.method = info.new_method;
-    request_.site_for_cookies = info.new_site_for_cookies;
-    request_.referrer = GURL(info.new_referrer);
-    request_.referrer_policy = info.new_referrer_policy;
+    UpdateRequestOnRedirect(info);
     restart_pending_ = true;
     client_->OnReceiveRedirect(info, std::move(head));
   }

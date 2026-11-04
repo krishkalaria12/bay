@@ -122,7 +122,14 @@ const usesPageA = [
 ];
 const needs = {
   ...Object.fromEntries(
-    [...usesPageA, "kill-task", "internal-pages-not-history", "second-profile", "content-blocker-rewrites"].map((name) => [name, ["open-url"]]),
+    [
+      ...usesPageA,
+      "kill-task",
+      "internal-pages-not-history",
+      "second-profile",
+      "content-blocker-rewrites",
+      "content-blocker-redirect-state",
+    ].map((name) => [name, ["open-url"]]),
   ),
   // Another tab with a page: target-blank's C, cmd-click's D in the background, window-open's E.
   "tab-switch": ["open-url", "target-blank"],
@@ -270,6 +277,43 @@ const server = createServer((req, res) => {
   if (url.pathname === "/redirect-ad") {
     res.writeHead(302, { location: `http://ib.adnxs.com/ut/v3${url.search}` });
     return res.end();
+  }
+  if (url.pathname.startsWith("/rewrite-chain-")) {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+    res.setHeader("access-control-allow-headers", "authorization, content-type");
+    res.setHeader("cache-control", "no-store");
+    if (req.method === "OPTIONS") return res.end();
+    const kind = url.searchParams.get("kind");
+    if (url.pathname === "/rewrite-chain-start") {
+      const destination =
+        kind === "post-direct"
+          ? `/rewrite-chain-echo?kind=${kind}&fbclid=tracker`
+          : `http://pvpoke-re.com:${server.address().port}/rewrite-chain-middle?kind=${kind}`;
+      res.writeHead(kind === "auth" ? 302 : 303, { location: destination });
+      return res.end();
+    }
+    if (url.pathname === "/rewrite-chain-middle") {
+      res.writeHead(307, { location: `/rewrite-chain-echo?kind=${kind}&fbclid=tracker` });
+      return res.end();
+    }
+    if (url.pathname === "/rewrite-chain-echo") {
+      const chunks = [];
+      req.on("data", (chunk) => chunks.push(chunk));
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            method: req.method,
+            authorization: req.headers.authorization ?? null,
+            contentType: req.headers["content-type"] ?? null,
+            body: Buffer.concat(chunks).toString(),
+            query: url.search,
+          }),
+        );
+      });
+      return;
+    }
   }
   // The content blocker's body and header rules (content-blocker-rewrites).
   if (url.pathname === "/body-page") {
@@ -3855,6 +3899,44 @@ try {
       await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, false, false)`).catch(() => null);
       await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, false)`).catch(() => null);
       await closeTab(tab).catch(() => null);
+    }
+  });
+
+  await check("content-blocker-redirect-state", async () => {
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const origin = `http://adpage.test:${server.address().port}`;
+    const tab = await openTab(`${origin}/adpage?redirect-state`, "/adpage");
+    try {
+      const target = await until("the redirect fixture", () => pageTarget("/adpage?redirect-state"));
+      const rounds = {};
+      const failures = [];
+      for (const kind of ["auth", "post-direct", "post-chain"]) {
+        const options =
+          kind === "auth"
+            ? { headers: { authorization: "Bearer redirect-secret" } }
+            : { method: "POST", headers: { "content-type": "application/json" }, body: '{"secret":"upload"}' };
+        const evaluated = await cdp(target, "Runtime.evaluate", {
+          expression: `fetch(${JSON.stringify(`${origin}/rewrite-chain-start?kind=${kind}`)}, ${JSON.stringify(options)}).then((response) => response.json())`,
+          awaitPromise: true,
+          returnByValue: true,
+        });
+        const response = evaluated.result.value;
+        if (
+          !response ||
+          response.method !== "GET" ||
+          response.authorization !== null ||
+          response.contentType !== null ||
+          response.body !== "" ||
+          response.query.includes("fbclid")
+        ) {
+          failures.push(`${kind}: ${JSON.stringify(response ?? evaluated)}`);
+        }
+        rounds[kind] = response;
+      }
+      if (failures.length) throw new Error(`redirects restored request state: ${failures.join("; ")}`);
+      return rounds;
+    } finally {
+      await closeTab(tab.id).catch(() => null);
     }
   });
 
