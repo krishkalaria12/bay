@@ -39,6 +39,7 @@ class Step:
     def __init__(self, kind, name, line, platforms="all"):
         self.kind, self.name, self.line = kind, name, line
         self.platforms = platforms
+        self.target = None  # read_series sets the platform being built.
 
     def __repr__(self):
         return f"{self.kind} {self.name}"
@@ -160,6 +161,21 @@ def run(cmd, cwd, env=None, check=False):
     return p
 
 
+def normalize_windows_patch_files(step, tree):
+    # CEF's Windows patcher can leave CRLF in a file even with autocrlf off.
+    # Use the patches' LF bytes in both the live tree and scratch replay, so
+    # strict validation sees the same input as application. Never touch layers
+    # or binary files, or alter the recorded pre-patch baseline.
+    if step.kind not in ("cef", "chromium") or step.target != "win":
+        return
+    for relative, _ in step.paths():
+        path = Path(tree, relative)
+        if path.is_file():
+            content = path.read_bytes()
+            if b"\r\n" in content and b"\0" not in content:
+                path.write_bytes(content.replace(b"\r\n", b"\n"))
+
+
 def apply_step(step, tree, strict=True):
     """Applies one step to `tree` (a chromium/src or a scratch copy of its touched files). Returns an error or
     None. strict: git apply (exact context, offsets allowed, no fuzz)."""
@@ -167,6 +183,7 @@ def apply_step(step, tree, strict=True):
         env = dict(os.environ, CHROMIUM_SRC=tree, BAY_ENGINE_PLATFORM=step.target)
         p = run(layer_command(step), REPO, env)
         return None if p.returncode == 0 else (p.stderr or p.stdout).strip()
+    normalize_windows_patch_files(step, tree)
     cwd = os.path.join(tree, step.root)
     p = run(["git", "apply", "--whitespace=nowarn", step.patch], cwd)
     if p.returncode == 0:
@@ -267,6 +284,7 @@ def cmd_apply(args):
     for index, step in enumerate(steps):
         if args.phase and phase_of(step) != args.phase:
             continue
+        normalize_windows_patch_files(step, SRC)
         if step.kind != "layer" and is_applied(step, SRC, steps[index + 1:]):
             print(f"already applied {step.name}")
             continue

@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import tempfile
+import subprocess
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -220,6 +222,63 @@ class AppliedDetectionTests(unittest.TestCase):
             (tree / "BRANDING").write_text("NAME=Elsewhere\nKEEP=0\n")
             with mock.patch.object(series, "HERE", str(patches)):
                 self.assertFalse(series.is_applied(create, str(tree), [rewrite, other]))
+
+
+class WindowsLineEndingTests(unittest.TestCase):
+    RELATIVE = "chrome/browser/chrome_content_browser_client.cc"
+    # The relevant pinned source, also captured with CRLF by the failed runner.
+    SOURCE = """blink::mojom::AutoplayPolicy DetermineWebContentsAutoplayPolicy(
+    content::WebContents* web_contents,
+    blink::mojom::AutoplayPolicy current_policy) {
+  using PolicyStatus = AutoplayPolicyStatusObserver::PolicyStatus;
+
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  PrefService* prefs = profile->GetPrefs();
+  return current_policy;
+}
+"""
+
+    def test_actual_autoplay_patch_replays_crlf_baseline_without_mutating_it(self):
+        step = next(s for s in series.read_series("win")
+                    if s.name == "chromium-bay-document-autoplay.patch")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / "base"
+            target = base / self.RELATIVE
+            target.parent.mkdir(parents=True)
+            original = self.SOURCE.replace("\n", "\r\n").encode()
+            target.write_bytes(original)
+            failed = subprocess.run(["git", "apply", "--check", step.patch],
+                                    cwd=base, capture_output=True)
+            self.assertNotEqual(failed.returncode, 0)
+            snapshot = root / "snapshot"
+            with mock.patch.object(series, "BASE", str(base)):
+                self.assertEqual(series.materialize([step], str(snapshot)), [])
+            applied = (snapshot / self.RELATIVE).read_bytes()
+            self.assertIn(b'host() == "bay"', applied)
+            self.assertNotIn(b"\r\n", applied)
+            self.assertEqual(target.read_bytes(), original)
+            # Live application and scratch replay must reproduce identical bytes.
+            with mock.patch.object(series, "SRC", str(base)), \
+                 mock.patch.object(series, "read_series", return_value=[step]):
+                args = SimpleNamespace(platform="win", phase=None)
+                series.cmd_apply(args)
+                self.assertEqual(target.read_bytes(), applied)
+                modified = target.stat().st_mtime_ns
+                series.cmd_apply(args)
+                self.assertEqual(target.stat().st_mtime_ns, modified)
+
+    def test_binary_files_are_never_line_ending_normalized(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / self.RELATIVE
+            path.parent.mkdir(parents=True)
+            data = b"binary\0\r\ncontent"
+            path.write_bytes(data)
+            step = next(s for s in series.read_series("win")
+                        if s.name == "chromium-bay-document-autoplay.patch")
+            series.normalize_windows_patch_files(step, directory)
+            self.assertEqual(path.read_bytes(), data)
 
 
 if __name__ == "__main__":
