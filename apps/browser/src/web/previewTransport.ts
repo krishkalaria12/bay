@@ -13,7 +13,7 @@ export function createPreviewTransport(): NativeTransport {
     contractVersion: 2,
     // ?platform=linux previews the Linux host's look (no caption buttons, its UI font and icons).
     platform: query.get("platform") === "linux" ? "linux" : "windows",
-    modules: ["BayCEF", "BayShell", "BayApp", "BaySystem", "BayKeychain", "BayImport", "BayChromeUI", "BayExtensions"],
+    modules: ["BayCEF", "BayEasel", "BayShell", "BayApp", "BaySystem", "BayKeychain", "BayImport", "BayChromeUI", "BayExtensions"],
     views: [],
     optionalMethods: [
       "BaySystem.downloadsFolder",
@@ -26,6 +26,7 @@ export function createPreviewTransport(): NativeTransport {
     snapshots: {
       BayShell: { documents, windowButtonLayout: { left: [], right: ["minimize", "maximize", "close"] } },
       BaySystem: { files: {}, downloadsFolder: null },
+      BayEasel: { isEaselWebSharingEnabled: false, readEaselShareRecords: {} },
       BayApp: {
         environment: {},
         systemInfo: {

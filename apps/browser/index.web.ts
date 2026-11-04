@@ -1,7 +1,13 @@
 import "@expo/metro-runtime";
 import "expo";
+import { StyleSheet } from "react-native";
 import { installNativeTransport, getNativeHostInfo, readNativeSnapshot } from "@bay/platform/nativeBridge";
 import { createMojoTransport, type WebNativeBridgeOptions } from "../../packages/platform/src/mojoTransport";
+
+// A hairline is half a point on the Retina Macs the UI is drawn for, and a whole pixel in react-native-web, so every
+// `hairlineWidth * 2` border came out twice as thick. Chromium still draws half a point as one pixel at 1x. Set here,
+// before the app's modules load.
+(StyleSheet as unknown as { hairlineWidth: number }).hairlineWidth = 0.5;
 
 declare global {
   var __bayNativeHostReady: Promise<WebNativeBridgeOptions> | undefined;
