@@ -40,6 +40,8 @@ typedef struct {
   // The URL to load instead, without the parameters $removeparam rules strip: only for allowed requests. Free with
   // bay_string_free; NULL for none.
   char *rewrite;
+  // True when `rewrite` may load from another origin (a $urlskip extracted a URL from a redirect tracker).
+  bool rewrite_any_origin;
 } BayBlockerMatch;
 BayBlockerMatch bay_blocker_match(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
                                  const char *method);
@@ -47,6 +49,13 @@ BayBlockerMatch bay_blocker_match(const BayBlocker *blocker, const char *url, co
 // Free with bay_string_free.
 char *bay_blocker_content_security_policy(const BayBlocker *blocker, const char *url, const char *source_url,
                                           const char *type);
+// Whether bay_blocker_response can change a response ($header, $ipaddress, $permissions, ##^responseheader).
+bool bay_blocker_has_response_modifiers(const BayBlocker *blocker);
+// The response rules for a request. headers_json is [["Name","value"], ...]; ip is the response's remote address or
+// NULL. Returns {"blocked": bool, "add": [[name, value]], "remove": [name]} as JSON, or NULL when there is nothing.
+// Free with bay_string_free.
+char *bay_blocker_response(const BayBlocker *blocker, const char *url, const char *source_url, const char *type,
+                           const char *method, const char *ip, const char *headers_json);
 // The page's scriptlet code for its main world, or NULL for none. Free with bay_string_free.
 char *bay_blocker_scriptlets(const BayBlocker *blocker, const char *url);
 // {"hide": [selector], "exceptions": [selector], "generichide": bool, "script": scriptlet code,

@@ -7,19 +7,21 @@ use adblock::resources::{InMemoryResourceStorage, PermissionMask};
 use adblock::Engine;
 use serde::Serialize;
 
+use crate::modifiers::{Modifiers, ResponseMatch, Spec};
+
 /// A network and cosmetic filter engine built from filter list text. Safe to share between threads.
 pub struct Blocker {
     // The engine's default single-thread build is not `Sync`; matching takes microseconds, so a lock is cheap.
     engine: Mutex<Engine>,
-    /// The lists' `$removeparam` exceptions as plain rules (crate::removeparam): a request one matches isn't rewritten.
-    keep_params: Mutex<Engine>,
     /// The lists' `$popup` rules as `$document` rules (crate::adapt), asked about pages a page opens.
     popups: Mutex<Engine>,
+    /// The rules adblock-rust can't represent (crate::modifiers): URL skips, response headers, addresses, permissions.
+    modifiers: Modifiers,
 }
 
-/// [`Blocker::serialize`]'s format: this tag, the lengths of the main and `$removeparam` engines (u64, little-endian),
-/// then those engines and the popup engine.
-const SERIALIZED_TAG: &[u8; 4] = b"BAY3";
+/// [`Blocker::serialize`]'s format: this tag, three lengths (u64, little-endian: main engine, popup engine, modifier
+/// spec JSON), then those pieces. `BAY3` engines have no modifier spec and are rebuilt.
+const SERIALIZED_TAG: &[u8; 4] = b"BAY4";
 
 #[derive(Serialize)]
 pub struct CosmeticResources {
@@ -66,19 +68,22 @@ pub struct RequestMatch {
     pub redirect: Option<String>,
     /// The URL to load instead, without the parameters `$removeparam` rules strip. Only when `blocked` is false.
     pub rewrite: Option<String>,
+    /// Whether the rewrite may load from another origin (`$urlskip`), rather than the request's own.
+    pub rewrite_any_origin: bool,
 }
 
 impl Blocker {
-    /// Builds an engine from one or more filter lists joined into one text.
+    /// Builds an engine from one or more filter lists joined into one text. Only uBO's own lists are trusted with
+    /// `$urlskip`; use [`Blocker::from_lists`] to mark them.
     pub fn new(lists: &str) -> Self {
-        let adapted = crate::adapt::adapt(lists);
-        let keep_params = crate::removeparam::exceptions(&adapted.main);
+        let extracted = crate::modifiers::extract(lists, false);
+        let adapted = crate::adapt::adapt(&extracted.list);
         let mut set = FilterSet::new(false);
         set.add_filter_list(adapted.main, ParseOptions::default());
         Self::from_engines(
             Engine::new_with_filter_set(set),
-            plain_engine(&keep_params),
             plain_engine(&adapted.popups),
+            Modifiers::new(extracted.spec),
         )
     }
 
@@ -86,21 +91,31 @@ impl Blocker {
     /// uBO's `!#if` blocks are resolved as uBO resolves them on Chromium.
     pub fn from_lists(lists: &[FilterList]) -> Self {
         let mut set = FilterSet::new(false);
-        let mut keep_params = String::new();
         let mut popups = String::new();
+        let mut spec = Spec::default();
         for list in lists {
             let format = if list.hosts {
                 FilterFormat::Hosts
             } else {
                 FilterFormat::Standard
             };
-            let mut text = crate::preprocess::preprocess(list.text).into_owned();
-            if !list.hosts {
-                let adapted = crate::adapt::adapt(&text);
-                keep_params.push_str(&crate::removeparam::exceptions(&adapted.main));
-                popups.push_str(&adapted.popups);
-                text = crate::adapt::block_documents_of_hostname_rules(&adapted.main);
+            if list.hosts {
+                set.add_filter_list(
+                    list.text.to_owned(),
+                    ParseOptions {
+                        format,
+                        permissions: PermissionMask::from_bits(list.permissions),
+                        ..ParseOptions::default()
+                    },
+                );
+                continue;
             }
+            let text = crate::preprocess::preprocess(list.text).into_owned();
+            let extracted = crate::modifiers::extract(&text, list.permissions & 1 != 0);
+            spec.merge(extracted.spec);
+            let adapted = crate::adapt::adapt(&extracted.list);
+            popups.push_str(&adapted.popups);
+            let text = crate::adapt::block_documents_of_hostname_rules(&adapted.main);
             set.add_filter_list(
                 text,
                 ParseOptions {
@@ -112,16 +127,16 @@ impl Blocker {
         }
         Self::from_engines(
             Engine::new_with_filter_set(set),
-            plain_engine(&keep_params),
             plain_engine(&popups),
+            Modifiers::new(spec),
         )
     }
 
-    fn from_engines(engine: Engine, keep_params: Engine, popups: Engine) -> Self {
+    fn from_engines(engine: Engine, popups: Engine, modifiers: Modifiers) -> Self {
         Self {
             engine: Mutex::new(engine),
-            keep_params: Mutex::new(keep_params),
             popups: Mutex::new(popups),
+            modifiers,
         }
     }
 
@@ -132,16 +147,17 @@ impl Blocker {
     /// The engine in adblock-rust's binary format, to cache and load with [`Blocker::deserialize`].
     pub fn serialize(&self) -> Vec<u8> {
         let main = self.engine().serialize();
-        let keep = lock(&self.keep_params).serialize();
         let popups = lock(&self.popups).serialize();
+        let spec = serde_json::to_vec(self.modifiers.spec()).unwrap_or_default();
         let mut data =
-            Vec::with_capacity(SERIALIZED_TAG.len() + 16 + main.len() + keep.len() + popups.len());
+            Vec::with_capacity(SERIALIZED_TAG.len() + 24 + main.len() + popups.len() + spec.len());
         data.extend_from_slice(SERIALIZED_TAG);
-        data.extend_from_slice(&(main.len() as u64).to_le_bytes());
-        data.extend_from_slice(&(keep.len() as u64).to_le_bytes());
+        for length in [main.len(), popups.len(), spec.len()] {
+            data.extend_from_slice(&(length as u64).to_le_bytes());
+        }
         data.extend_from_slice(&main);
-        data.extend_from_slice(&keep);
         data.extend_from_slice(&popups);
+        data.extend_from_slice(&spec);
         data
     }
 
@@ -149,16 +165,22 @@ impl Blocker {
     pub fn deserialize(data: &[u8]) -> Option<Self> {
         let rest = data.strip_prefix(SERIALIZED_TAG)?;
         let (main_length, rest) = rest.split_first_chunk::<8>()?;
-        let (keep_length, rest) = rest.split_first_chunk::<8>()?;
+        let (popup_length, rest) = rest.split_first_chunk::<8>()?;
+        let (spec_length, rest) = rest.split_first_chunk::<8>()?;
         let (main, rest) =
             rest.split_at_checked(usize::try_from(u64::from_le_bytes(*main_length)).ok()?)?;
-        let (keep, popups) =
-            rest.split_at_checked(usize::try_from(u64::from_le_bytes(*keep_length)).ok()?)?;
+        let (popups, spec) =
+            rest.split_at_checked(usize::try_from(u64::from_le_bytes(*popup_length)).ok()?)?;
+        let spec = spec.get(..usize::try_from(u64::from_le_bytes(*spec_length)).ok()?)?;
         let read = |bytes: &[u8]| {
             let mut engine = Engine::default();
             engine.deserialize(bytes).ok().map(|()| engine)
         };
-        Some(Self::from_engines(read(main)?, read(keep)?, read(popups)?))
+        Some(Self::from_engines(
+            read(main)?,
+            read(popups)?,
+            Modifiers::new(serde_json::from_slice(spec).ok()?),
+        ))
     }
 
     /// Each list's rule counts, in the order the lists were given (kept through serialization).
@@ -196,7 +218,9 @@ impl Blocker {
         let mut hide: Vec<String> = resources.hide_selectors.into_iter().collect();
         hide.sort();
         let mut exceptions: Vec<String> = resources.exceptions.into_iter().collect();
+        exceptions.extend(self.modifiers.cosmetic_exceptions().iter().cloned());
         exceptions.sort();
+        exceptions.dedup();
         let mut procedural: Vec<String> = resources.procedural_actions.into_iter().collect();
         procedural.sort();
         let script = if resources.injected_script.is_empty() {
@@ -272,26 +296,59 @@ impl Blocker {
             return RequestMatch::default();
         };
         let result = self.engine().check_network_request(&request);
-        let blocked = result.should_block();
+        let engine_blocked = result.should_block();
+        // A redirect-rule without a matching block must not redirect an allowed request.
+        let redirect = if engine_blocked {
+            result.redirect
+        } else {
+            None
+        };
+        let (blocked, rewrite, rewrite_any_origin) = self.modifiers.request(
+            url,
+            source_url,
+            kind,
+            method,
+            engine_blocked,
+            result.rewritten_url,
+        );
         RequestMatch {
             blocked,
-            // A redirect-rule without a matching block must not redirect an allowed request.
-            redirect: if blocked { result.redirect } else { None },
-            // adblock-rust ignores `$removeparam` exceptions: one that matches keeps the URL as it is.
-            rewrite: result.rewritten_url.filter(|_| {
-                !blocked
-                    && !lock(&self.keep_params)
-                        .check_network_request(&request)
-                        .should_block()
-            }),
+            redirect: if blocked { redirect } else { None },
+            rewrite,
+            rewrite_any_origin,
         }
+    }
+
+    /// Whether [`Blocker::response`] can change a response: `$header`, `$ipaddress`, `$permissions` or
+    /// `##^responseheader`.
+    pub fn has_response_modifiers(&self) -> bool {
+        self.modifiers.has_response_rules()
+    }
+
+    /// The response rules for a request: whether the response is blocked, headers to add, and headers to remove.
+    /// `ip` is the response's remote address when the engine has one.
+    pub fn response(
+        &self,
+        url: &str,
+        source_url: &str,
+        kind: &str,
+        method: &str,
+        ip: Option<&str>,
+        headers: &[(String, String)],
+    ) -> ResponseMatch {
+        self.modifiers
+            .response(url, source_url, kind, method, ip, headers)
     }
 
     pub fn cosmetic_resources(&self, url: &str) -> CosmeticResources {
         let resources = self.engine().url_cosmetic_resources(url);
+        let mut exceptions: Vec<String> = resources.exceptions.into_iter().collect();
+        exceptions.extend(self.modifiers.cosmetic_exceptions().iter().cloned());
+        exceptions.sort();
+        exceptions.dedup();
         CosmeticResources {
             hide: resources.hide_selectors.into_iter().collect(),
-            exceptions: resources.exceptions.into_iter().collect(),
+            exceptions,
             generichide: resources.generichide,
         }
     }
@@ -673,6 +730,74 @@ mod tests {
             assert!(!allowed.blocked);
             assert!(allowed.redirect.is_none());
         }
+    }
+
+    #[test]
+    fn response_rules_block_add_and_remove_headers() {
+        let blocker = Blocker::new(
+            "||cdn.example^$script,header=server:nginx\n@@||cdn.example/ok.js^$script\n\
+             *$doc,permissions=compute-pressure=()|idle-detection=()\n\
+             stream.example##^responseheader(set-cookie)\n",
+        );
+        assert!(blocker.has_response_modifiers());
+        let headers = [("Server".to_owned(), "nginx".to_owned())];
+        let blocked = blocker.response(
+            "https://cdn.example/ad.js",
+            "https://site.example/",
+            "script",
+            "GET",
+            None,
+            &headers,
+        );
+        assert!(blocked.blocked);
+        // A plain exception allows the request, and with it the response.
+        let allowed = blocker.response(
+            "https://cdn.example/ok.js",
+            "https://site.example/",
+            "script",
+            "GET",
+            None,
+            &headers,
+        );
+        assert!(!allowed.blocked);
+        let policy = blocker.response(
+            "https://page.example/",
+            "https://page.example/",
+            "document",
+            "GET",
+            None,
+            &[],
+        );
+        assert_eq!(
+            policy.headers,
+            [(
+                "permissions-policy".to_owned(),
+                "compute-pressure=(), idle-detection=()".to_owned()
+            )]
+        );
+        let stream = blocker.response(
+            "https://stream.example/",
+            "https://stream.example/",
+            "document",
+            "GET",
+            None,
+            &[],
+        );
+        assert_eq!(stream.removed_headers, ["set-cookie"]);
+
+        let copy = Blocker::deserialize(&blocker.serialize()).expect("deserializes");
+        assert!(copy.has_response_modifiers());
+        assert!(
+            copy.response(
+                "https://cdn.example/ad.js",
+                "https://site.example/",
+                "script",
+                "GET",
+                None,
+                &headers,
+            )
+            .blocked
+        );
     }
 
     #[test]

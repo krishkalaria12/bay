@@ -214,6 +214,15 @@ pub struct BayBlockerMatch {
     pub blocked: bool,
     pub redirect: *mut c_char,
     pub rewrite: *mut c_char,
+    pub rewrite_any_origin: bool,
+}
+
+/// The JSON `bay_blocker_response` returns.
+#[derive(serde::Serialize)]
+struct ResponseAnswer<'a> {
+    blocked: bool,
+    add: &'a [(String, String)],
+    remove: &'a [String],
 }
 
 /// # Safety
@@ -236,7 +245,54 @@ pub unsafe extern "C" fn bay_blocker_match(
         blocked: result.blocked,
         redirect: result.redirect.map_or(std::ptr::null_mut(), give),
         rewrite: result.rewrite.map_or(std::ptr::null_mut(), give),
+        rewrite_any_origin: result.rewrite_any_origin,
     }
+}
+
+/// Whether [`bay_blocker_response`] can change a response. Thread-safe.
+///
+/// # Safety
+/// `blocker` must be live.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_has_response_modifiers(blocker: *const Blocker) -> bool {
+    (*blocker).has_response_modifiers()
+}
+
+/// Applies response rules. `headers_json` is `[["Name","value"], ...]`; `ip` is the remote address or null. Returns
+/// `{"blocked": bool, "add": [[name, value]], "remove": [name]}` as JSON, or null when nothing applies. Free with
+/// `bay_string_free`.
+///
+/// # Safety
+/// `blocker` must be live; the strings must be valid NUL-terminated strings (or null where noted).
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_response(
+    blocker: *const Blocker,
+    url: *const c_char,
+    source_url: *const c_char,
+    kind: *const c_char,
+    method: *const c_char,
+    ip: *const c_char,
+    headers_json: *const c_char,
+) -> *mut c_char {
+    let headers: Vec<(String, String)> =
+        serde_json::from_str(borrow(headers_json)).unwrap_or_default();
+    let ip = (!ip.is_null()).then(|| borrow(ip));
+    let result = (*blocker).response(
+        borrow(url),
+        borrow(source_url),
+        borrow(kind),
+        borrow(method),
+        ip,
+        &headers,
+    );
+    if !result.blocked && result.headers.is_empty() && result.removed_headers.is_empty() {
+        return std::ptr::null_mut();
+    }
+    give_json(&ResponseAnswer {
+        blocked: result.blocked,
+        add: &result.headers,
+        remove: &result.removed_headers,
+    })
 }
 
 /// The Content-Security-Policy `$csp` rules add to a document's response, or null for none. `kind` is `document` or
@@ -463,6 +519,53 @@ mod tests {
             assert!(!result.blocked && result.redirect.is_null());
             assert_eq!(take(result.rewrite), "https://news.example/?a=1");
             assert!(bay_blocker_scriptlets(blocker, page.as_ptr()).is_null());
+            bay_blocker_free(blocker);
+        }
+    }
+
+    #[test]
+    fn c_abi_applies_response_rules() {
+        unsafe {
+            let list = c"||cdn.example^$script,header=server:nginx\nstream.example##^responseheader(set-cookie)";
+            let blocker = bay_blocker_new([list.as_ptr()].as_ptr(), std::ptr::null(), 1);
+            assert!(bay_blocker_has_response_modifiers(blocker));
+            let script = c"https://cdn.example/ad.js";
+            let source = c"https://site.example/";
+            let answer = take(bay_blocker_response(
+                blocker,
+                script.as_ptr(),
+                source.as_ptr(),
+                c"script".as_ptr(),
+                c"GET".as_ptr(),
+                std::ptr::null(),
+                c"[[\"Server\",\"nginx\"]]".as_ptr(),
+            ));
+            let answer: serde_json::Value = serde_json::from_str(&answer).unwrap();
+            assert_eq!(answer["blocked"], true);
+            assert!(bay_blocker_response(
+                blocker,
+                script.as_ptr(),
+                source.as_ptr(),
+                c"script".as_ptr(),
+                c"GET".as_ptr(),
+                std::ptr::null(),
+                c"[]".as_ptr(),
+            )
+            .is_null());
+            let stream = c"https://stream.example/";
+            let answer = take(bay_blocker_response(
+                blocker,
+                stream.as_ptr(),
+                stream.as_ptr(),
+                c"document".as_ptr(),
+                c"GET".as_ptr(),
+                std::ptr::null(),
+                c"[[\"Set-Cookie\",\"a=b\"]]".as_ptr(),
+            ));
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&answer).unwrap()["remove"],
+                serde_json::json!(["set-cookie"])
+            );
             bay_blocker_free(blocker);
         }
     }

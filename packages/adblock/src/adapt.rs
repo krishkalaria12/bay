@@ -154,7 +154,7 @@ fn push_rule(list: &mut String, pattern: &str, first: &[&str], options: &[&str])
     list.push('\n');
 }
 
-fn is_not_network_rule(line: &str) -> bool {
+pub(crate) fn is_not_network_rule(line: &str) -> bool {
     line.starts_with('!')
         || line.starts_with('[')
         || ["##", "#@#", "#?#", "#$#", "#%#"]
@@ -164,7 +164,7 @@ fn is_not_network_rule(line: &str) -> bool {
 
 /// The pattern and options of a network rule: at the last `$` whose rest reads as options, since a `$` can also be
 /// inside a pattern's regular expression or an option's value. Commas inside a `/regex/` value don't split.
-fn split_rule(line: &str) -> Option<(&str, Vec<&str>)> {
+pub(crate) fn split_rule(line: &str) -> Option<(&str, Vec<&str>)> {
     let mut end = line.len();
     while let Some(at) = line[..end].rfind('$') {
         let options = split_options(&line[at + 1..]);
