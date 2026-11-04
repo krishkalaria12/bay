@@ -159,6 +159,20 @@ TabBroker::TabBroker() {
 #endif
 }
 TabBroker::~TabBroker() = default;
+content::WebContents* TabBroker::ContentsForBrowserId(int id) const {
+  for (const auto& [contents, entry] : entries_) {
+    if (entry->contents &&
+        sessions::SessionTabHelper::IdForTab(entry->contents).id() == id)
+      return entry->contents;
+  }
+  return TabWithId(id);
+}
+void TabBroker::EmitPageFact(content::WebContents* contents, const char* event,
+                            base::DictValue payload) {
+  const auto found = entries_.find(contents);
+  if (found != entries_.end())
+    found->second->EmitFact(event, std::move(payload));
+}
 void TabBroker::PruneDestroyed() {
   std::erase_if(entries_,
                 [](const auto& entry) { return !entry.second->contents; });

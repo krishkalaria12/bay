@@ -83,6 +83,9 @@ source_set("impl") {
     "page_media_events.h",
     "page_interaction_events.cc",
     "page_interaction_events.h",
+    "page_message_events.cc",
+    "page_message_events.h",
+    "page_script.g.h",
     "page_security.cc",
     "page_security.h",
     "page_services.cc",
@@ -820,6 +823,7 @@ if (is_linux) {
       "page_media_events_unittest.cc",
       "form_prompts_unittest.cc",
       "page_interaction_events_unittest.cc",
+      "page_message_events_unittest.cc",
     ]
     deps = [
       ":impl",

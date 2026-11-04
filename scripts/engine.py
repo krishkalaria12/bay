@@ -194,6 +194,10 @@ def source_digest(platform="win"):
             if path.is_file() and not package_test and "__pycache__" not in path.parts and path.suffix != ".pyc":
                 digest.update(path.relative_to(REPO).as_posix().encode() + b"\0")
                 digest.update(bytes.fromhex(sha256(path)))
+    page_script = REPO / "packages/chromium/ios/page_script.js"
+    if page_script.is_file():
+        digest.update(b"packages/chromium/ios/page_script.js\0")
+        digest.update(bytes.fromhex(sha256(page_script)))
     digest.update(bytes.fromhex(sha256(DRIVER_PATH)))
     digest.update(bytes.fromhex(sha256(DRIVER_PATH.parent / "windows/engine.py")))
     digest.update(bytes.fromhex(sha256(DRIVER_PATH.parent / "windows/web-artifacts.py")))

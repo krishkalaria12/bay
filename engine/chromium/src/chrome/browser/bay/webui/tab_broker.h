@@ -56,6 +56,9 @@ class TabBroker final {
   OfferResult Offer(content::WebContents* contents, bool park = true);
   void ReleaseOffer(const std::string& adopt_id);
   bool HasPageKey(content::WebContents* contents) const;
+  content::WebContents* ContentsForBrowserId(int id) const;
+  void EmitPageFact(content::WebContents* contents, const char* event,
+                    base::DictValue payload);
   // Stable workspace tab id, including while parked or moving between views.
   std::string KeyFor(content::WebContents* contents) const;
   // Mounted, parked or offered.

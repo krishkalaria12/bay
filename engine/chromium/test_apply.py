@@ -41,11 +41,16 @@ class ChromiumLayerTests(unittest.TestCase):
                     source = REPO / "packages" / package / platform
                     if source.exists():
                         shutil.copytree(source, checkout / "packages" / package / platform)
+            page_script = checkout / "packages/chromium/ios/page_script.js"
+            page_script.parent.mkdir(parents=True, exist_ok=True)
+            page_script.write_bytes((REPO / "packages/chromium/ios/page_script.js").read_bytes())
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="mac")
             command = [sys.executable, str(here / "apply.py")]
             subprocess.run(command, env=environment, check=True, capture_output=True)
             target = root / "chrome/browser/bay/data/packages"
+            embedded = root / "chrome/browser/bay/webui/page_script.g.h"
+            self.assertIn(page_script.read_text(encoding="utf-8"), embedded.read_text(encoding="utf-8"))
             for package, source in (("import", "ImportService.cpp"), ("sync", "SyncService.cpp")):
                 copied = target / package / "windows" / source
                 self.assertEqual(copied.read_bytes(), (checkout / "packages" / package / "windows" / source).read_bytes())
@@ -90,6 +95,9 @@ class ChromiumLayerTests(unittest.TestCase):
             tests = source.parent / "tests"
             tests.mkdir(exist_ok=True)
             (tests / "OverlayFixture.cpp").write_text("test only\n")
+            page_script = checkout / "packages/chromium/ios/page_script.js"
+            page_script.parent.mkdir(parents=True, exist_ok=True)
+            page_script.write_bytes((REPO / "packages/chromium/ios/page_script.js").read_bytes())
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="linux")
             command = [sys.executable, str(here / "apply.py")]
@@ -120,6 +128,9 @@ class ChromiumLayerTests(unittest.TestCase):
                     source = REPO / "packages" / package / platform
                     if source.exists():
                         shutil.copytree(source, checkout / "packages" / package / platform)
+            page_script = checkout / "packages/chromium/ios/page_script.js"
+            page_script.parent.mkdir(parents=True, exist_ok=True)
+            page_script.write_bytes((REPO / "packages/chromium/ios/page_script.js").read_bytes())
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="win")
             command = [sys.executable, str(here / "apply.py")]
@@ -188,6 +199,12 @@ class ChromiumLayerTests(unittest.TestCase):
                     test.parent.mkdir(exist_ok=True)
                     test.write_text("test-only\n")
                     self.assertEqual(after, engine.source_digest("linux"))
+                script = engine.REPO / "packages/chromium/ios/page_script.js"
+                script.parent.mkdir(parents=True)
+                script.write_text("before script")
+                before = engine.source_digest("linux")
+                script.write_text("after script")
+                self.assertNotEqual(before, engine.source_digest("linux"))
                 icon = engine.REPO / "engine/chromium/assets/windows/bay.ico"
                 icon.parent.mkdir(parents=True)
                 icon.write_bytes(b"before")

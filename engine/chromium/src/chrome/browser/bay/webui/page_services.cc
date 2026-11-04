@@ -2,6 +2,7 @@
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/form_prompts.h"
 #include "chrome/browser/bay/webui/page_interaction_events.h"
+#include "chrome/browser/bay/webui/page_message_events.h"
 #include "chrome/browser/bay/webui/page_security.h"
 
 #include <algorithm>
@@ -399,6 +400,8 @@ bool DispatchPageMethod(content::WebContents* contents,
                         const std::string& command,
                         const base::ListValue& params,
                         PageResponse& callback) {
+  if (PageMessageEvents::Dispatch(contents, command, params, callback))
+    return true;
   if (PageInteractionEvents::Dispatch(contents, command, params, callback))
     return true;
   if (command == "resolvePasswordPrompt") {
