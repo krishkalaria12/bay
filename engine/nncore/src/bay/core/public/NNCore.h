@@ -42,7 +42,8 @@ typedef bool (*NNCoreRequestFilter)(const char* url,
                                     const char* top,
                                     const char* type,
                                     const char* method,
-                                    char* _Nullable* _Nullable redirect);
+                                    char* _Nullable* _Nullable redirect,
+                                    bool* _Nullable anyOrigin);
 
 // The Content-Security-Policy to add to a document's response: malloc-allocated, freed by the
 // engine; NULL for none. type: "document" or "subdocument". On a background sequence while the
@@ -51,6 +52,18 @@ typedef char* _Nullable (*NNCoreContentSecurityPolicySource)(const char* url,
                                                              const char* source,
                                                              const char* top,
                                                              const char* type);
+
+// The response rules for a request ($header, $ipaddress, $permissions, ##^responseheader): malloc-allocated JSON
+// {"blocked": bool, "add": [[name, value]], "remove": [name]}, freed by the engine; NULL for no change. headersJSON is
+// [["Name","value"], ...]; ip is the remote address or NULL. Called on a background sequence before the response
+// reaches the renderer, so it must be thread-safe and quick.
+typedef char* _Nullable (*NNCoreResponseFilter)(const char* url,
+                                                const char* source,
+                                                const char* top,
+                                                const char* type,
+                                                const char* method,
+                                                const char* _Nullable ip,
+                                                const char* headersJSON);
 
 // The host's scriptlets for a document: malloc-allocated JavaScript the engine runs in its main
 // world before the page's own scripts, and frees; NULL for none. frameURL: the document's URL
@@ -187,6 +200,8 @@ NNCORE_EXPORT
 // The content blocker's Content-Security-Policy (NNCoreContentSecurityPolicySource); NULL (the
 // default) adds none.
 + (void)setContentSecurityPolicySource:(nullable NNCoreContentSecurityPolicySource)source;
+// The content blocker's response rules (NNCoreResponseFilter); NULL (the default) changes none.
++ (void)setResponseFilter:(nullable NNCoreResponseFilter)filter;
 // The content blocker's scriptlets (NNCoreScriptletSource); NULL (the default) runs none.
 + (void)setScriptletSource:(nullable NNCoreScriptletSource)source;
 // Device choosers (engine:deviceChooser:tab:). index: an option, or -1 for a scanning

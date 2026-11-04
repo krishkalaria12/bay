@@ -8,10 +8,12 @@
 
 #include "base/byte_size.h"
 #include "base/functional/bind.h"
+#include "base/json/json_reader.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -31,7 +33,9 @@
 #include "mojo/public/cpp/system/data_pipe_producer.h"
 #include "mojo/public/cpp/system/string_data_source.h"
 #include "bay/core/mojom/nncore.mojom.h"
+#include "base/json/json_writer.h"
 #include "net/base/data_url.h"
+#include "net/base/ip_address.h"
 #include "net/base/isolation_info.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/site_for_cookies.h"
@@ -56,6 +60,7 @@ namespace {
 
 std::atomic<RequestFilter> g_filter{nullptr};
 std::atomic<ContentSecurityPolicySource> g_csp_source{nullptr};
+std::atomic<ResponseFilter> g_response_filter{nullptr};
 
 bool IsWeb(const GURL& url) {
   return url.SchemeIsHTTPOrHTTPS() || url.SchemeIsWSOrWSS();
@@ -116,8 +121,10 @@ const char* TypeOf(const network::ResourceRequest& request) {
 struct Decision {
   bool blocked = false;
   // For a blocked request, a data URL answered in its place (a stand-in); for an allowed
-  // one, a URL of its origin to load instead (its tracking parameters removed).
+  // one, a URL to load instead (its tracking parameters removed, or a $urlskip target).
   std::string redirect;
+  // Whether redirect may load from another origin (a $urlskip from a redirect tracker).
+  bool rewrite_any_origin = false;
 };
 
 // Who is asking for a request, and the page it's for.
@@ -152,26 +159,30 @@ Decision Match(const network::ResourceRequest& request,
   }
   const RequestContext context = ContextOf(request, factory_source, factory_top);
   char* redirect = nullptr;
+  bool any_origin = false;
   Decision result;
   result.blocked =
       filter(request.url.spec().c_str(), context.source.c_str(), context.top.c_str(),
-             TypeOf(request), request.method.c_str(), &redirect);
+             TypeOf(request), request.method.c_str(), &redirect, &any_origin);
   if (redirect) {
     result.redirect = redirect;
     free(redirect);
   }
+  result.rewrite_any_origin = any_origin;
   return result;
 }
 
-// The URL an allowed request loads instead (a $removeparam rewrite): a web URL of the same
-// origin that differs from `url`; empty for none.
+// The URL an allowed request loads instead (a $removeparam rewrite or a $urlskip target): a
+// web URL that differs from `url`. A $urlskip may cross origins; a $removeparam stays put.
 GURL RewriteOf(const Decision& decision, const GURL& url) {
   if (decision.blocked || decision.redirect.empty()) {
     return GURL();
   }
   GURL rewritten(decision.redirect);
-  if (!rewritten.is_valid() || !rewritten.SchemeIsHTTPOrHTTPS() || rewritten == url ||
-      !url::IsSameOriginWith(rewritten, url)) {
+  if (!rewritten.is_valid() || !rewritten.SchemeIsHTTPOrHTTPS() || rewritten == url) {
+    return GURL();
+  }
+  if (!decision.rewrite_any_origin && !url::IsSameOriginWith(rewritten, url)) {
     return GURL();
   }
   return rewritten;
@@ -266,6 +277,86 @@ void AddContentSecurityPolicy(const network::ResourceRequest& request,
   free(policy);
   head.headers = std::move(headers);
   head.parsed_headers.reset();
+}
+
+// The response's headers as [["Name", "value"], ...], for the host's response rules.
+std::string HeadersJSON(const net::HttpResponseHeaders& headers) {
+  base::ListValue list;
+  size_t at = 0;
+  std::string name, value;
+  while (headers.EnumerateHeaderLines(&at, &name, &value)) {
+    base::ListValue pair;
+    pair.Append(name);
+    pair.Append(value);
+    list.Append(std::move(pair));
+  }
+  return base::WriteJson(list).value_or("[]");
+}
+
+// The response's remote address, or an empty string for an in-process or cached response.
+std::string RemoteAddress(const network::mojom::URLResponseHead& head) {
+  const net::IPAddress& address = head.remote_endpoint.address();
+  return address.IsValid() && !address.IsZero() ? address.ToString() : std::string();
+}
+
+// Applies the host's response rules ($header, $ipaddress, $permissions, ##^responseheader). True
+// blocks the response. Changes are made on a copy of the headers, then parsed headers are cleared
+// so Chrome parses them again (as for a webRequest extension's changes).
+bool ApplyResponseFilter(const network::ResourceRequest& request,
+                         const std::string& factory_source,
+                         const std::string& factory_top,
+                         network::mojom::URLResponseHead& head) {
+  ResponseFilter filter = g_response_filter.load(std::memory_order_acquire);
+  if (!filter || !head.headers || !request.url.SchemeIsHTTPOrHTTPS()) {
+    return false;
+  }
+  const RequestContext context = ContextOf(request, factory_source, factory_top);
+  const std::string ip = RemoteAddress(head);
+  const std::string headers = HeadersJSON(*head.headers);
+  char* answer = filter(request.url.spec().c_str(), context.source.c_str(),
+                        context.top.c_str(), TypeOf(request), request.method.c_str(),
+                        ip.empty() ? nullptr : ip.c_str(), headers.c_str());
+  if (!answer) {
+    return false;
+  }
+  std::optional<base::DictValue> result =
+      base::JSONReader::ReadDict(answer, base::JSON_PARSE_RFC);
+  free(answer);
+  if (!result) {
+    return false;
+  }
+  if (result->FindBool("blocked").value_or(false)) {
+    return true;
+  }
+  bool changed = false;
+  auto updated =
+      base::MakeRefCounted<net::HttpResponseHeaders>(head.headers->raw_headers());
+  if (const base::ListValue* remove = result->FindList("remove")) {
+    for (const base::Value& name : *remove) {
+      if (name.is_string() && updated->HasHeader(name.GetString())) {
+        updated->RemoveHeader(name.GetString());
+        changed = true;
+      }
+    }
+  }
+  if (const base::ListValue* add = result->FindList("add")) {
+    for (const base::Value& item : *add) {
+      if (!item.is_list() || item.GetList().size() != 2) {
+        continue;
+      }
+      const base::ListValue& pair = item.GetList();
+      if (!pair[0].is_string() || !pair[1].is_string()) {
+        continue;
+      }
+      updated->AddHeader(pair[0].GetString(), pair[1].GetString());
+      changed = true;
+    }
+  }
+  if (changed) {
+    head.headers = std::move(updated);
+    head.parsed_headers.reset();
+  }
+  return false;
 }
 
 class FilteringFactory;
@@ -363,6 +454,9 @@ class FilteringLoader : public network::mojom::URLLoader,
   void OnReceiveResponse(network::mojom::URLResponseHeadPtr head,
                          mojo::ScopedDataPipeConsumerHandle body,
                          std::optional<mojo_base::BigBuffer> metadata) override {
+    if (ApplyResponseFilter(request_, source_, top_, *head)) {
+      return BlockResponse();
+    }
     if (navigation_) {
       AddContentSecurityPolicy(request_, source_, top_, *head);
     }
@@ -372,6 +466,10 @@ class FilteringLoader : public network::mojom::URLLoader,
 
   void OnReceiveRedirect(const net::RedirectInfo& redirect,
                          network::mojom::URLResponseHeadPtr head) override {
+    // uBO checks a redirect's headers too: a $header rule can stop a redirect tracker.
+    if (ApplyResponseFilter(request_, source_, top_, *head)) {
+      return BlockResponse();
+    }
     network::ResourceRequest next = request_;
     next.url = redirect.new_url;
     next.method = redirect.new_method;
@@ -456,6 +554,13 @@ class FilteringLoader : public network::mojom::URLLoader,
 
   void Block(const Decision& decision) {
     CompleteBlocked(client_.Unbind(), decision, frame_, request_.url);
+    Destroy();
+  }
+
+  // A response rule refused the response ($header, $ipaddress): complete as a blocked request.
+  void BlockResponse() {
+    client_->OnComplete(
+        network::URLLoaderCompletionStatus(net::ERR_BLOCKED_BY_CLIENT));
     Destroy();
   }
 
@@ -612,7 +717,7 @@ class RequestFilterThrottle : public content::NavigationThrottle {
     const std::string top =
         parent->GetOutermostMainFrame()->GetLastCommittedURL().spec();
     return filter(url.spec().c_str(), source.c_str(), top.c_str(), "subdocument",
-                  navigation->IsPost() ? "POST" : "GET", nullptr)
+                  navigation->IsPost() ? "POST" : "GET", nullptr, nullptr)
                ? BLOCK_REQUEST_AND_COLLAPSE
                : PROCEED;
   }
@@ -641,7 +746,7 @@ class MainFrameThrottle : public content::NavigationThrottle {
     const std::string url = navigation->GetURL().spec();
     const char* method = navigation->IsPost() ? "POST" : "GET";
     if (OpenedByAPage() && filter(url.c_str(), Opener().c_str(), Opener().c_str(), "popup",
-                                  method, nullptr)) {
+                                  method, nullptr, nullptr)) {
       // Not from inside the navigation's own start: closing destroys it.
       content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE, base::BindOnce(
@@ -653,7 +758,8 @@ class MainFrameThrottle : public content::NavigationThrottle {
                          navigation->GetWebContents()->GetWeakPtr()));
       return CANCEL;
     }
-    if (!filter(url.c_str(), url.c_str(), url.c_str(), "document", method, nullptr)) {
+    if (!filter(url.c_str(), url.c_str(), url.c_str(), "document", method, nullptr,
+                nullptr)) {
       return PROCEED;
     }
     // A prerender just stops: nothing is shown, and a real visit is asked again.
@@ -724,6 +830,10 @@ void SetScriptletSource(ScriptletSource source) {
   g_scriptlet_source.store(source, std::memory_order_release);
 }
 
+void SetResponseFilter(ResponseFilter filter) {
+  g_response_filter.store(filter, std::memory_order_release);
+}
+
 void ExposeScriptlets(service_manager::BinderRegistry* registry) {
   registry->AddInterface<mojom::NNScriptlets>(
       base::BindRepeating(&ScriptletsHost::Bind), ScriptletTaskRunner());
@@ -752,7 +862,7 @@ bool ShouldBlockWebSocket(content::RenderFrameHost* frame,
       frame ? OriginURL(frame->GetOutermostMainFrame()->GetLastCommittedOrigin())
             : source;
   return filter(url.spec().c_str(), source.c_str(), top.c_str(), "websocket",
-                "GET", nullptr);
+                "GET", nullptr, nullptr);
 }
 
 void SetRequestFilter(RequestFilter filter) {

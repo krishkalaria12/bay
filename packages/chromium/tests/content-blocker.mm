@@ -11,8 +11,10 @@ static NSMutableArray<NSURLProtocol *> *pending;
 + (NSString *)dataDirectory { return [testRoot stringByAppendingPathComponent:@"Chromium"]; }
 + (void (^)(NSString *, NSDictionary<NSString *, id> *))eventHandler { return nil; }
 @end
+static NNCoreResponseFilter gResponseFilter;
 @implementation NNCoreEngine
 + (void)setRequestFilter:(NNCoreRequestFilter)filter {}
++ (void)setResponseFilter:(NNCoreResponseFilter)filter { gResponseFilter = filter; }
 @end
 
 @interface BlockerTestProtocol : NSURLProtocol
@@ -76,7 +78,7 @@ static void Respond(NSString *path, NSString *text) {
   [request.client URLProtocolDidFinishLoading:request];
 }
 static BOOL Blocks(const char *url, const char *top = "https://site.example/") {
-  return Filter(url, "https://site.example/", top, "image", "GET", nullptr);
+  return Filter(url, "https://site.example/", top, "image", "GET", nullptr, nullptr);
 }
 static void Setup() {
   NSString *resources = [testRoot stringByAppendingPathComponent:@"Fixture.bundle/Contents/Resources"];
@@ -158,7 +160,7 @@ int main(int argc, char **argv) {
     PublishLive();
     const char *tracked = "https://news.example/story?id=1&fbclid=abc";
     char *rewrite = nullptr;
-    Require(!Filter(tracked, tracked, tracked, "document", "GET", &rewrite), "a tracked document isn't blocked");
+    Require(!Filter(tracked, tracked, tracked, "document", "GET", &rewrite, nullptr), "a tracked document isn't blocked");
     Require(rewrite && !strcmp(rewrite, "https://news.example/story?id=1"), "it loads without its tracking parameter");
     free(rewrite);
     char *script = Scriptlets("https://news.example/story", "https://news.example");
@@ -166,7 +168,7 @@ int main(int argc, char **argv) {
     free(script);
     [NNCoreContentBlocker setAllowed:YES onHost:@"news.example" completion:^(NSString *error) { Require(!error, "pause succeeds"); }];
     rewrite = nullptr;
-    Filter(tracked, tracked, tracked, "document", "GET", &rewrite);
+    Filter(tracked, tracked, tracked, "document", "GET", &rewrite, nullptr);
     Require(!rewrite && !Scriptlets("https://news.example/story", "https://news.example"), "a paused site gets neither");
     puts("PASS: allowed documents lose tracking parameters and get scriptlets, except where paused");
 
@@ -175,26 +177,57 @@ int main(int argc, char **argv) {
     gEngine = std::make_shared<Engine>(bay_blocker_new(&policies, nullptr, 1));
     PublishLive();
     const char *opener = "https://opener.example/";
-    Require(Filter("https://pop.example/ad", opener, opener, "popup", "GET", nullptr), "a popup rule refuses the page");
-    Require(!Filter("https://pop.example/a.png", opener, opener, "image", "GET", nullptr), "and not the host's other requests");
-    Require(!Filter("https://fine.example/", opener, opener, "popup", "GET", nullptr), "another page opens");
+    Require(Filter("https://pop.example/ad", opener, opener, "popup", "GET", nullptr, nullptr), "a popup rule refuses the page");
+    Require(!Filter("https://pop.example/a.png", opener, opener, "image", "GET", nullptr, nullptr), "and not the host's other requests");
+    Require(!Filter("https://fine.example/", opener, opener, "popup", "GET", nullptr, nullptr), "another page opens");
     const char *page = "https://policy.example/";
     char *policy = ContentSecurityPolicy(page, page, page, "document");
     Require(policy && !strcmp(policy, "worker-src 'none'"), "a document gets its site's policy");
     free(policy);
     Require(!ContentSecurityPolicy(opener, opener, opener, "document"), "other sites get none");
     [NNCoreContentBlocker setAllowed:YES onHost:@"opener.example" completion:^(NSString *error) { Require(!error, "pause succeeds"); }];
-    Require(!Filter("https://pop.example/ad", opener, opener, "popup", "GET", nullptr), "a paused opener's popups open");
+    Require(!Filter("https://pop.example/ad", opener, opener, "popup", "GET", nullptr, nullptr), "a paused opener's popups open");
     [NNCoreContentBlocker setAllowed:YES onHost:@"policy.example" completion:^(NSString *error) { Require(!error, "pause succeeds"); }];
     Require(!ContentSecurityPolicy(page, page, page, "document"), "a paused site gets no policy");
     puts("PASS: popup rules refuse pages a page opens and documents get $csp, except where paused");
+
+    // Response rules: $header and its plain exception, $permissions, ##^responseheader.
+    const char *responses = "||cdn.example^$script,header=server:nginx\n@@||cdn.example/ok.js^$script\n\
+                             *$doc,permissions=compute-pressure=()\nstream.example##^responseheader(set-cookie)\n";
+    gEngine = std::make_shared<Engine>(bay_blocker_new(&responses, nullptr, 1));
+    PublishLive();
+    Require(gResponseFilter != nullptr, "response rules register a filter");
+    const char *asset = "https://cdn.example/ad.js";
+    char *answer = gResponseFilter(asset, "https://site.example/", "https://site.example/", "script", "GET", "1.2.3.4",
+                                   "[[\"Server\",\"nginx\"]]");
+    Require(answer && strstr(answer, "\"blocked\":true"), "a matching response header blocks");
+    free(answer);
+    const char *allowed = "https://cdn.example/ok.js";
+    Require(!gResponseFilter(allowed, "https://site.example/", "https://site.example/", "script", "GET", "1.2.3.4",
+                             "[[\"Server\",\"nginx\"]]"),
+            "a plain exception allows it");
+    const char *policyPage = "https://perms.example/";
+    answer = gResponseFilter(policyPage, policyPage, policyPage, "document", "GET", nullptr, "[]");
+    Require(answer && strstr(answer, "permissions-policy") && strstr(answer, "compute-pressure=()"),
+            "a document gets its Permissions-Policy");
+    free(answer);
+    const char *stream = "https://stream.example/";
+    answer = gResponseFilter(stream, stream, stream, "document", "GET", nullptr, "[[\"Set-Cookie\",\"a=b\"]]");
+    Require(answer && strstr(answer, "\"remove\":[\"set-cookie\"]"), "a response header is removed");
+    free(answer);
+    const char *plain = "||ads.example^\n";
+    gEngine = std::make_shared<Engine>(bay_blocker_new(&plain, nullptr, 1));
+    PublishLive();
+    Require(gResponseFilter == nullptr, "lists without response rules register none");
+    puts("PASS: response rules block, add and remove headers, and plain exceptions lift them");
+
 
     // Visits to pages the lists block.
     const char *pages = "||visit.example^$doc\n||hostonly.example^$all\n";
     gEngine = std::make_shared<Engine>(bay_blocker_new(&pages, nullptr, 1));
     PublishLive();
     Require(nncore_host::ContentBlockerBlocksPage(@"https://visit.example/"), "a $doc rule stops a visit");
-    Require(Filter("https://www.hostonly.example/", "https://www.hostonly.example/", "https://www.hostonly.example/", "document", "GET", nullptr),
+    Require(Filter("https://www.hostonly.example/", "https://www.hostonly.example/", "https://www.hostonly.example/", "document", "GET", nullptr, nullptr),
             "and a subdomain of a hostname's rule");
     [NNCoreContentBlocker setPageAllowed:YES onHost:@"visit.example" remember:NO completion:^(NSString *error) { Require(!error, "visit anyway succeeds"); }];
     Require(!nncore_host::ContentBlockerBlocksPage(@"https://www.visit.example/"), "Visit Anyway covers the site");
@@ -204,7 +237,7 @@ int main(int argc, char **argv) {
     [NNCoreContentBlocker setPageAllowed:YES onHost:@"visit.example" remember:YES completion:^(NSString *error) { Require(!error, "always allow succeeds"); }];
     Require([ReadJSON(SettingsPath())[@"allowedPages"] containsObject:@"visit.example"], "Always Allow is saved");
     Require(!nncore_host::ContentBlockerBlocksPage(@"https://visit.example/"), "and lifts the block");
-    Require(!Filter("https://visit.example/a.js", "https://visit.example/", "https://visit.example/", "document", "GET", nullptr), "for documents");
+    Require(!Filter("https://visit.example/a.js", "https://visit.example/", "https://visit.example/", "document", "GET", nullptr, nullptr), "for documents");
     puts("PASS: visits to blocked pages stop, and Visit Anyway and Always Allow lift only that");
   }
 }

@@ -104,8 +104,9 @@ bool PausedOn(const Live &live, const std::string &host) {
 
 // NNCoreRequestFilter: on the engine's threads.
 bool Filter(const char *url, const char *source, const char *top, const char *type, const char *method,
-            char **redirect) {
+            char **redirect, bool *any_origin) {
   if (redirect) *redirect = nullptr;
+  if (any_origin) *any_origin = false;
   std::shared_ptr<const Live> live = CurrentLive();
   if (!live->enabled || !live->engine) return false;
   if (PausedOn(*live, HostOf(top && *top ? top : source))) return false;
@@ -115,6 +116,7 @@ bool Filter(const char *url, const char *source, const char *top, const char *ty
   // A blocked request's stand-in, or an allowed one's URL without its tracking parameters.
   const char *answer = match.blocked ? match.redirect : match.rewrite;
   if (redirect && answer) *redirect = strdup(answer);
+  if (any_origin && !match.blocked && match.rewrite_any_origin) *any_origin = true;
   bay_string_free(match.redirect);
   bay_string_free(match.rewrite);
   if (match.blocked && type && !strcmp(type, "document")) {
@@ -134,6 +136,16 @@ bool Filter(const char *url, const char *source, const char *top, const char *ty
   while (nanos > max && !gMaxLookupNanos.compare_exchange_weak(max, nanos, std::memory_order_relaxed)) {
   }
   return match.blocked;
+}
+
+// NNCoreResponseFilter: $header, $ipaddress, $permissions and ##^responseheader, on the request's sequence.
+char *Response(const char *url, const char *source, const char *top, const char *type, const char *method,
+               const char *ip, const char *headers) {
+  std::shared_ptr<const Live> live = CurrentLive();
+  if (!live->enabled || !live->engine) return nullptr;
+  if (PausedOn(*live, HostOf(top && *top ? top : source))) return nullptr;
+  return bay_blocker_response(live->engine->blocker, url, source ?: "", type ?: "other",
+                              method ?: "GET", ip, headers ?: "[]");
 }
 
 // NNCoreContentSecurityPolicySource: $csp rules, on the filter's sequence while the navigation waits.
@@ -166,7 +178,7 @@ BOOL gEngineRunsScriptlets = NO;
 
 NSString *const kVersion = @"adblock-rust 0.13.5";
 // Bump with a change to how lists compile (the crate, its features): the cached engine is rebuilt.
-NSString *const kEngineFormat = @"bay-adblock 4";
+NSString *const kEngineFormat = @"bay-adblock 5";
 
 NSArray<NSDictionary *> *Catalogue() {
   static NSArray<NSDictionary *> *lists;
@@ -317,6 +329,11 @@ void PublishLive() {
   for (NSString *host in gAllowed) live->allowed.emplace_back(host.UTF8String);
   for (NSString *host in gAllowedPages) live->pages.emplace_back(host.UTF8String);
   for (NSString *host in gSessionPages) live->pages.emplace_back(host.UTF8String);
+  // Only engines with response rules need every response's headers marshalled to the host.
+  if ([NNCoreEngine respondsToSelector:@selector(setResponseFilter:)])
+    [NNCoreEngine setResponseFilter:live->enabled && live->engine && bay_blocker_has_response_modifiers(live->engine->blocker)
+                                        ? Response
+                                        : nullptr];
   Publish(std::move(live));
 }
 
@@ -702,7 +719,7 @@ void PrepareContentBlocker() {
 
 bool ContentBlockerBlocksPage(NSString *url) {
   const char *page = url.UTF8String;
-  return page && Filter(page, page, page, "document", "GET", nullptr);
+  return page && Filter(page, page, page, "document", "GET", nullptr, nullptr);
 }
 
 NSDictionary *ContentBlockerCosmetics(NSString *frameURL, NSString *pageURL) {

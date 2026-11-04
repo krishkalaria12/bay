@@ -47,14 +47,17 @@ namespace nncore {
 // so it must be thread-safe and quick. true blocks.
 // redirect is null for subframe throttling and WebSockets. Otherwise the host may set it to a
 // malloc-allocated URL, which the engine frees: for a blocked request, a data URL answered in
-// its place (a stand-in); for an allowed one, a URL of the same origin to load instead (the
-// request with tracking parameters removed). Anything else is ignored.
+// its place (a stand-in); for an allowed one, a URL to load instead (the request with tracking
+// parameters removed, or a $urlskip target). Anything else is ignored. any_origin may be set
+// to true when that replacement may cross origins (a $urlskip); it is null where there is no
+// redirect.
 using RequestFilter = bool (*)(const char* url,
                                const char* source,
                                const char* top,
                                const char* type,
                                const char* method,
-                               char** redirect);
+                               char** redirect,
+                               bool* any_origin);
 
 // nullptr (the default) filters nothing; factories made before a filter was set pass their
 // requests to the one current when each request starts.
@@ -69,6 +72,19 @@ using ContentSecurityPolicySource = char* (*)(const char* url,
                                               const char* top,
                                               const char* type);
 void SetContentSecurityPolicySource(ContentSecurityPolicySource source);
+
+// The response rules for a request ($header, $ipaddress, $permissions, ##^responseheader). `headers_json` is
+// [["Name","value"], ...]; `ip` is the remote address or null. Returns malloc-allocated JSON
+// {"blocked": bool, "add": [[name, value]], "remove": [name]}, which the engine frees; null for no change. Called on
+// a background sequence before the response reaches the renderer, so it must be thread-safe and quick.
+using ResponseFilter = char* (*)(const char* url,
+                                 const char* source,
+                                 const char* top,
+                                 const char* type,
+                                 const char* method,
+                                 const char* ip,
+                                 const char* headers_json);
+void SetResponseFilter(ResponseFilter filter);
 
 // The host's scriptlets for a document (frame_url) in a tab at top_origin: malloc-allocated
 // JavaScript for its main world, freed by the engine; null or "" for none. Called on a
