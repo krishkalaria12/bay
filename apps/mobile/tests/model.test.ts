@@ -107,6 +107,7 @@ test("saved state is validated and repaired", () => {
     reader: { theme: "paper", font: "serif", size: 19 },
     hiddenElements: {},
     wallpaper: "bay",
+    wallpaperPhoto: null,
   });
   assert.throws(() => parseBrowserData({ version: 2 }, fallback));
 });
@@ -318,6 +319,15 @@ test("the wallpaper is one of Bay's built-ins", () => {
   assert.equal(data.preferences.wallpaper, "forest");
   const saved = { version: 1, ...data, preferences: { ...data.preferences, wallpaper: "neon" } };
   assert.equal(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).preferences.wallpaper, "bay");
+
+  // A photo needs a file in the app; picking a built-in keeps it for later.
+  assert.equal(reduceBrowserData(data, { type: "wallpaper", id: "photo" }), data);
+  assert.equal(reduceBrowserData(data, { type: "wallpaper", id: "photo", photo: "https://x.com/a.jpg" }), data);
+  data = reduceBrowserData(data, { type: "wallpaper", id: "photo", photo: "file:///docs/wallpaper-1.jpg" });
+  assert.deepEqual([data.preferences.wallpaper, data.preferences.wallpaperPhoto], ["photo", "file:///docs/wallpaper-1.jpg"]);
+  data = reduceBrowserData(data, { type: "wallpaper", id: "dusk" });
+  data = reduceBrowserData(data, { type: "wallpaper", id: "photo" });
+  assert.deepEqual([data.preferences.wallpaper, data.preferences.wallpaperPhoto], ["photo", "file:///docs/wallpaper-1.jpg"]);
 });
 
 test("site icons are kept per host, and clearing history drops the ones nothing else shows", () => {

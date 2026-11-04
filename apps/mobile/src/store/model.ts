@@ -10,8 +10,12 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   reader: { theme: "paper", font: "serif", size: 19 },
   hiddenElements: {},
   wallpaper: "bay",
+  wallpaperPhoto: null,
 };
+/** Bay's own wallpapers; "photo" is the user's. */
 export const WALLPAPERS = ["bay", "dusk", "forest", "plain"] as const;
+const builtIn = (id: unknown): id is WallpaperId => (WALLPAPERS as readonly unknown[]).includes(id);
+const isFileUri = (uri: unknown): uri is string => typeof uri === "string" && uri.startsWith("file://");
 const DAY = 24 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 1000;
 const ARCHIVE_LIMIT = 200;
@@ -76,7 +80,7 @@ export type BrowserAction =
   | { type: "favicon"; host: string; uri: string | null }
   | { type: "remove-archived"; id: string }
   | { type: "clear-archive" }
-  | { type: "wallpaper"; id: WallpaperId }
+  | { type: "wallpaper"; id: WallpaperId; photo?: string }
   | { type: "search-engine"; id: string }
   | { type: "archive-days"; days: number | null }
   | { type: "archive-stale"; now: number }
@@ -170,10 +174,13 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return data.archive.some((tab) => tab.id === action.id) ? { ...data, archive: data.archive.filter((tab) => tab.id !== action.id) } : data;
     case "clear-archive":
       return data.archive.length ? { ...data, archive: [] } : data;
-    case "wallpaper":
-      return WALLPAPERS.includes(action.id) && action.id !== data.preferences.wallpaper
-        ? { ...data, preferences: { ...data.preferences, wallpaper: action.id } }
-        : data;
+    case "wallpaper": {
+      // A new photo replaces the old one; picking a built-in keeps the photo for switching back.
+      const photo = action.id === "photo" ? (action.photo ?? data.preferences.wallpaperPhoto) : data.preferences.wallpaperPhoto;
+      if (!(builtIn(action.id) || (action.id === "photo" && isFileUri(photo)))) return data;
+      if (action.id === data.preferences.wallpaper && photo === data.preferences.wallpaperPhoto) return data;
+      return { ...data, preferences: { ...data.preferences, wallpaper: action.id, wallpaperPhoto: photo } };
+    }
     case "clear-history": {
       if (!data.history.length) return data;
       // Icons stay for sites a tab, the archive or a pin still shows.
@@ -461,7 +468,11 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
     lockPrivateTabs: savedPreferences.lockPrivateTabs === true,
     reader: parseReaderSettings(savedPreferences.reader),
     hiddenElements: parseHiddenElements(savedPreferences.hiddenElements),
-    wallpaper: WALLPAPERS.includes(savedPreferences.wallpaper as WallpaperId) ? (savedPreferences.wallpaper as WallpaperId) : DEFAULT_PREFERENCES.wallpaper,
+    wallpaper:
+      builtIn(savedPreferences.wallpaper) || (savedPreferences.wallpaper === "photo" && isFileUri(savedPreferences.wallpaperPhoto))
+        ? (savedPreferences.wallpaper as WallpaperId)
+        : DEFAULT_PREFERENCES.wallpaper,
+    wallpaperPhoto: isFileUri(savedPreferences.wallpaperPhoto) ? savedPreferences.wallpaperPhoto : null,
   };
   return {
     tabs: tabs.length ? tabs : fallback.tabs,

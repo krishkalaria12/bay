@@ -1,8 +1,11 @@
-import { Typography } from "heroui-native";
+import { File, Paths } from "expo-file-system";
+import { launchImageLibraryAsync } from "expo-image-picker";
+import { Typography, useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
-import { Pressable, View } from "react-native";
+import { Image, Pressable, View } from "react-native";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
+import { Icon } from "@/chrome/Icon";
 import { WALLPAPERS } from "@/store/model";
 import type { WallpaperId } from "@/store/types";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
@@ -24,7 +27,9 @@ export interface SettingsPanelProps {
   lockPrivateTabs: boolean;
   onLockPrivateTabsChange: (enabled: boolean) => void;
   wallpaper: WallpaperId;
-  onWallpaperChange: (id: WallpaperId) => void;
+  /** The user's photo, kept even while a built-in wallpaper is chosen. */
+  wallpaperPhoto: string | null;
+  onWallpaperChange: (id: WallpaperId, photo?: string) => void;
   onClearData: () => Promise<void>;
   downloadCount: number;
   onDownloads: () => void;
@@ -126,7 +131,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           </Group>
         </>
       ) : page === "wallpaper" ? (
-        <WallpaperPicker value={props.wallpaper} onChange={props.onWallpaperChange} />
+        <WallpaperPicker value={props.wallpaper} photo={props.wallpaperPhoto} onChange={props.onWallpaperChange} />
       ) : (
         <>
           <Group label="Search">
@@ -246,40 +251,95 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   );
 }
 
-/** Three columns of start page previews. */
-function WallpaperPicker({ value, onChange }: { value: WallpaperId; onChange: (id: WallpaperId) => void }): JSX.Element {
+/** Copies a gallery photo into the app's documents and replaces the old one. */
+async function pickPhoto(previous: string | null): Promise<string | null> {
+  // The system photo picker needs no storage permission.
+  const result = await launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+  const asset = result.canceled ? undefined : result.assets[0];
+  if (!asset) return null;
+  const file = new File(Paths.document, `wallpaper-${Date.now()}.jpg`);
+  new File(asset.uri).copy(file);
+  if (previous) {
+    try {
+      new File(previous).delete();
+    } catch {}
+  }
+  return file.uri;
+}
+
+/** Three columns of start page previews, then the user's photo. */
+function WallpaperPicker({
+  value,
+  photo,
+  onChange,
+}: {
+  value: WallpaperId;
+  photo: string | null;
+  onChange: (id: WallpaperId, photo?: string) => void;
+}): JSX.Element {
+  const [error, setError] = useState(false);
+  const foreground = useThemeColor("foreground");
+  const tiles: WallpaperId[] = [...WALLPAPERS, "photo"];
   return (
-    <View className="mt-1 flex-row flex-wrap justify-between" style={{ rowGap: 16 }}>
-      {WALLPAPERS.map((id) => {
-        const selected = id === value;
-        return (
-          <Pressable
-            key={id}
-            testID={`settings-wallpaper-${id}`}
-            accessibilityRole="radio"
-            accessibilityLabel={WALLPAPER_NAMES[id]}
-            accessibilityState={{ selected }}
-            onPress={() => onChange(id)}
-            className="items-center gap-2 active:opacity-70"
-            style={{ width: "31%" }}
-          >
-            <View
-              className={
-                selected ? "w-full overflow-hidden rounded-2xl border-2 border-accent" : "w-full overflow-hidden rounded-2xl border border-foreground/10"
-              }
-              style={{ aspectRatio: 0.62 }}
+    <>
+      <View className="mt-1 flex-row flex-wrap" style={{ rowGap: 16 }}>
+        {tiles.map((id, index) => {
+          const selected = id === value;
+          const empty = id === "photo" && !photo;
+          return (
+            <Pressable
+              key={id}
+              testID={`settings-wallpaper-${id}`}
+              accessibilityRole="radio"
+              accessibilityLabel={empty ? "Choose a photo" : WALLPAPER_NAMES[id]}
+              accessibilityState={{ selected }}
+              onPress={() => {
+                if (id !== "photo") return onChange(id);
+                setError(false);
+                // Tapping the chosen photo again picks a new one.
+                if (photo && !selected) return onChange("photo");
+                pickPhoto(photo).then(
+                  (uri) => uri && onChange("photo", uri),
+                  () => setError(true),
+                );
+              }}
+              className="items-center gap-2 active:opacity-70"
+              style={{ width: "31%", marginRight: index % 3 === 2 ? 0 : "3.5%" }}
             >
-              <Wallpaper id={id} scale={0.6} />
-              <View className="absolute bottom-2.5 left-0 right-0 flex-row justify-center gap-1">
-                <View className="h-3 w-3 rounded-full bg-foreground/15" />
-                <View className="h-3 w-8 rounded-full bg-foreground/15" />
-                <View className="h-3 w-3 rounded-full bg-foreground/15" />
+              <View
+                className={
+                  selected
+                    ? "w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-accent"
+                    : "w-full items-center justify-center overflow-hidden rounded-2xl border border-foreground/10"
+                }
+                style={{ aspectRatio: 0.62 }}
+              >
+                {empty ? (
+                  <Icon name="add" size={28} color={foreground} />
+                ) : id === "photo" ? (
+                  <Image source={{ uri: photo! }} resizeMode="cover" resizeMethod="resize" fadeDuration={0} className="absolute inset-0" />
+                ) : (
+                  <Wallpaper id={id} scale={0.6} />
+                )}
+                {empty ? null : (
+                  <View className="absolute bottom-2.5 left-0 right-0 flex-row justify-center gap-1">
+                    <View className="h-3 w-3 rounded-full bg-foreground/15" />
+                    <View className="h-3 w-8 rounded-full bg-foreground/15" />
+                    <View className="h-3 w-3 rounded-full bg-foreground/15" />
+                  </View>
+                )}
               </View>
-            </View>
-            <Typography className={selected ? "text-sm font-medium text-accent" : "text-sm"}>{WALLPAPER_NAMES[id]}</Typography>
-          </Pressable>
-        );
-      })}
-    </View>
+              <Typography className={selected ? "text-sm font-medium text-accent" : "text-sm"}>{empty ? "Choose photo" : WALLPAPER_NAMES[id]}</Typography>
+            </Pressable>
+          );
+        })}
+      </View>
+      {photo ? <Typography className="mt-4 px-1 text-sm text-muted">Tap your photo again to choose another.</Typography> : null}
+      {error ? (
+        <Typography testID="settings-wallpaper-error" accessibilityRole="alert" className="mt-3 px-1 text-sm text-danger">
+          Couldn't use that photo. Try another.
+        </Typography>
+      ) : null}
+    </>
   );
 }

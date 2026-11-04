@@ -50,6 +50,14 @@
           "showMenuAtLaunch": false,
           "toolsButton": false
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": false,
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
       ]
     ],
     "experiments": {
