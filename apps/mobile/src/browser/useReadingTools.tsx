@@ -159,6 +159,8 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
       return siteRules(tab.private ? privateRules[tab.id] : data.preferences.hiddenElements, site);
     },
     pageMessage,
+    /** Brings back everything hidden on the current site. */
+    showHidden: () => setRules([]),
     openReader: () =>
       task(async () => {
         if (reader) {
