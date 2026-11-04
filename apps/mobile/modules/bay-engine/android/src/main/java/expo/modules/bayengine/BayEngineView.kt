@@ -146,6 +146,9 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     settings.allowFileAccess = false
     settings.allowContentAccess = false
     settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+    // Pinch to zoom, without the old on-screen +/- buttons. A site's viewport limits still apply.
+    settings.builtInZoomControls = true
+    settings.displayZoomControls = false
     overScrollMode = OVER_SCROLL_NEVER
     setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
       // A private page's cookies are in its own profile.
