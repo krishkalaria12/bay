@@ -290,6 +290,10 @@ def download(root, env, platform="win"):
         ("ungoogled", "https://github.com/ungoogled-software/ungoogled-chromium.git", lock["ungoogledCommit"]),
     ):
         clone_pin(url, root / name, revision)
+    if platform == "win":
+        # DEPOT_TOOLS_UPDATE=0 also skips the bootstrap in update_depot_tools.bat.
+        run([root / "depot_tools/cipd_bin_setup.bat"], env=env)
+        run([root / "depot_tools/bootstrap/win_tools.bat"], env=env)
     if platform == "linux":
         run([root / "depot_tools/ensure_bootstrap"], env=env)
         chromium = root / "chromium_git/chromium"

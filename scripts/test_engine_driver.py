@@ -318,6 +318,18 @@ class BuildTests(unittest.TestCase):
                 self.assertIn("gclient sync --jobs=1 %s", (root / "automate/automate-git.py").read_text())
                 self.assertEqual(commands[-1][1], root / "automate/automate-git.py")
 
+    def test_windows_download_bootstraps_depot_tools_before_automate(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "clone_pin"), \
+             mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "run") as run, \
+             mock.patch.object(engine.urllib.request, "urlopen") as urlopen:
+            root = Path(directory)
+            urlopen.return_value.__enter__.return_value.read.return_value = b"script\n"
+            engine.download(root, engine.environment(root, "win"), "win")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(commands[:2], [[root / "depot_tools/cipd_bin_setup.bat"],
+                                            [root / "depot_tools/bootstrap/win_tools.bat"]])
+            self.assertEqual(commands[2][1], root / "automate/automate-git.py")
+
     def test_download_refuses_prepared_tree_before_sync_or_cloning(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "run") as run, \
              mock.patch.object(engine, "clone_pin") as clone, mock.patch.object(engine, "require_tools"):
