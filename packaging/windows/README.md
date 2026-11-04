@@ -132,6 +132,15 @@ use the dedicated self-hosted `bay-engine` runner. The package workflow accepts
 an explicit version/channel and supports certificate secrets in the
 `windows-release` environment. It only uploads build artifacts.
 
+`windows-build.yml` compiles the engine and an unsigned test installer on free
+GitHub runners, so no Windows build machine is needed. Each job compiles for
+under four hours, saves the build tree as an artifact and the next job resumes;
+a full build takes about two days. It builds without debug symbols, so its
+engine is for testing only. Start it by pushing a `windows-build-N` tag, then
+download the `bay-windows-installer` artifact from the run. Later runs resume from
+the newest saved tree for seven days. After a change to a patch, raise
+`STATE_ARTIFACT` in the workflow to start from a clean tree.
+
 The [hosting gate](hosting-gate.md) records Phase 2 separately from process
 liveness. Run it on Windows 11 at 100% and 150%, and Windows 10. The smoke command
 accepts `-HostingSpike` to launch that diagnostic page, but still checks only
