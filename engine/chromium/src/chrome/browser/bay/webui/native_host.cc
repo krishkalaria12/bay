@@ -835,7 +835,8 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   PermissionPrompts::Start(base::BindRepeating(&EmitPermissionEvent));
   ExternalAppPrompts::Start(base::BindRepeating(&NativeHost::EmitToView));
   ContextSearch::Start(base::BindRepeating(&NativeHost::EmitToView));
-  FormPrompts::Start(base::BindRepeating(&NativeHost::EmitToView));
+  FormPrompts::Start(
+      base::BindRepeating(base::IgnoreResult(&NativeHost::EmitToView)));
   PageMenu::Start();
   DeviceChoosers::Start(base::BindRepeating(&NativeHost::EmitChromeUI));
   CastDialogs::Start(base::BindRepeating(&NativeHost::EmitChromeUI));
