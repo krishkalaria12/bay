@@ -105,12 +105,12 @@ def validate_entrypoint(directory):
             "scripts": ["bay-ui/" + name for name, _ in scripts]}
 
 
-def write_manifest(directory, engine_id):
+def write_manifest(directory, engine_id, platform="windows"):
     directory = pathlib.Path(directory)
     ui = validate_entrypoint(directory / "bay-ui")
     modules, shared = mojo_files(directory / "bay-ui")
     ui.update(nativeHostModule="bay-ui/" + MOJO_ENTRY, sharedMojoImports=shared)
-    manifest = {"schemaVersion": 1, "engineId": engine_id, "platform": "windows", "architecture": "x64", "ui": ui,
+    manifest = {"schemaVersion": 1, "engineId": engine_id, "platform": platform, "architecture": "x64", "ui": ui,
                 "files": {path.relative_to(directory).as_posix(): digest(path) for path in sorted(directory.rglob("*"))
                           if path.is_file() and path.relative_to(directory).as_posix() != APP_MANIFEST}}
     (directory / APP_MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

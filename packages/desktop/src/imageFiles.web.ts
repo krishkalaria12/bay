@@ -2,6 +2,7 @@ import { requireNativeModule } from "@bay/platform/native";
 import type { EaselDocument, EaselImage } from "./easel";
 import { boundedScale, renderEasel } from "./easelDraw";
 import { safeUrl } from "./easelEditor";
+import { easelShareSnapshot } from "./easelShare";
 
 // Library's images on the desktop web hosts. Blink decodes and normalizes them here, in the page's renderer; the host
 // only moves PNG bytes (library_files.cc).
@@ -145,9 +146,20 @@ async function loadImages(paths: Iterable<string>) {
   return images;
 }
 
-async function renderDocument(document: EaselDocument) {
+async function renderDocument(document: EaselDocument, requireImages = false) {
   const images = await loadImages(document.items.flatMap((item) => item.path ?? []));
+  if (requireImages && document.items.some((item) => item.kind === "image" && (!item.path || !images.has(item.path))))
+    throw new Error("An image is unavailable. Restore or remove it before sharing.");
   return renderEasel(document, (path) => images.get(path) ?? null);
+}
+
+async function prepareShare(document: EaselDocument, title: string) {
+  if (!document.items.length) return easelShareSnapshot(document, title, null);
+  const canvas = await renderDocument(document, true);
+  if (!canvas) throw new Error("Couldn't render this Easel. Try again.");
+  const png = await canvas.convertToBlob({ type: "image/png" });
+  if (png.size > 12_000_000) throw new Error("This Easel is too large to share. Export it as HTML instead.");
+  return easelShareSnapshot(document, title, { data: `data:image/png;base64,${await blobBase64(png)}`, width: canvas.width, height: canvas.height });
 }
 
 const escaped = (text: string) =>
@@ -198,4 +210,5 @@ export const imageFiles = {
   portrait,
   exportHTML,
   exportPNG,
+  prepareShare,
 };

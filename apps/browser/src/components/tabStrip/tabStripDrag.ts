@@ -1,4 +1,7 @@
+import { capabilities } from "@bay/platform";
+import { Dimensions } from "react-native";
 import { dragPreview, hapticTick, windowFrame, type DragPreviewShape } from "@bay/desktop";
+import { hideDragCard, showDragCard } from "./webDragCard";
 import { create } from "zustand";
 import { focus } from "../../lib/actions";
 import { lastPicture, startTabPictures } from "../../lib/tabThumbnails";
@@ -78,7 +81,7 @@ export function beginTabDrag(tabId: string | null, tabIds: string[] = tabId ? [t
   useTabDrag.setState({ ...IDLE, tabId, tabIds, windowId, x: -1, y: -1 });
   const seq = ++dragSeq;
   liveFrame = null;
-  if (windowId)
+  if (windowId && capabilities.globalWindowCoordinates)
     void windowFrame(windowId)
       .then((frame) => {
         if (seq === dragSeq) liveFrame = frame;
@@ -92,7 +95,8 @@ export function updateTabDrag(x: number, y: number, lifted: boolean | null = nul
   const drag = useTabDrag.getState();
   if (!drag.tabIds.length || !drag.windowId) return;
   const s = useBrowser.getState();
-  const { outside, overWindow } = windowUnder(s, drag.windowId, x, y, liveFrame);
+  const local = !capabilities.globalWindowCoordinates ? Dimensions.get("window") : null;
+  const { outside, overWindow } = windowUnder(s, drag.windowId, x, y, liveFrame, local ? [local.width, local.height] : undefined);
   if (overWindow && overWindow !== drag.overWindow && s.settings.tabReorderHaptics) hapticTick();
   const screen = overWindow ? screenPoint(s, drag.windowId, x, y, liveFrame) : null;
   const over = overWindow ? s.windows[overWindow]?.frame : null;
@@ -131,10 +135,23 @@ function previewShape(d: TabDrag): DragPreviewShape {
   return (d.lifted ?? d.onPage) ? "card" : "hidden";
 }
 
+// Without global coordinates no desktop preview is ever shown.
+function endPreview(...args: Parameters<typeof dragPreview.end>) {
+  hideDragCard();
+  if (capabilities.globalWindowCoordinates) dragPreview.end(...args);
+}
+
 function syncPreview() {
   const d = useTabDrag.getState();
   if (!d.windowId) return;
   const shape = previewShape(d);
+  if (!capabilities.globalWindowCoordinates) {
+    // The card can't leave the window here, and over the tab list the tab itself shows where it's going.
+    const tab = d.tabId ? useBrowser.getState().tabs[d.tabId] : undefined;
+    if (shape === "card" && !d.outside && tab) showDragCard(pointer, tab.customTitle || tab.title || tab.url || "New Tab", tab.favicon);
+    else hideDragCard();
+    return;
+  }
   // Within its list there's no picture: nothing to send while it stays hidden.
   if (shape === "hidden" && sentShape === "hidden") return;
   if (shape !== "hidden" && picture) takePicture(picture, d.windowId);
@@ -239,11 +256,12 @@ export function endTabDrag(): boolean {
   const shown = begun;
   sentShape = "hidden";
   if (target && tabId) {
-    dragPreview.end();
+    endPreview();
     dropTabIntoSplit(tabId, target.tabId, target.side);
     return true;
   }
   if (!(outside || onPage) || !windowId || !tabIds.length) {
+    hideDragCard();
     if (shown) dragPreview.end();
     return false;
   }
@@ -261,12 +279,12 @@ export function endTabDrag(): boolean {
     (moved) => {
       if (dragSeq !== endingSequence) return;
       // A new window: the picture grows into it after its ID is acknowledged.
-      dragPreview.end(asked.frame ? moved : null, asked.frame);
+      endPreview(asked.frame ? moved : null, asked.frame);
       if (moved && moved === overWindow && insertBefore !== undefined) reportBrowserCommand(placeTabs(tabIds, { pinned: false, beforeId: insertBefore }));
       if (moved) focus(moved);
     },
     (error) => {
-      if (dragSeq === endingSequence) dragPreview.end();
+      if (dragSeq === endingSequence) endPreview();
       console.error("Couldn't move tabs to another window", error);
     },
   );
@@ -274,6 +292,7 @@ export function endTabDrag(): boolean {
 }
 
 export function cancelTabDrag() {
+  hideDragCard();
   useTabDrag.setState({ ...IDLE, tabIds: [] });
   dragSeq++;
   picture = null;

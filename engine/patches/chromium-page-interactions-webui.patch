@@ -1,26 +1,21 @@
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -836,6 +836,10 @@
- using web_app::ChromeContentBrowserClientIsolatedWebAppsPart;
- #endif
+@@ -838,6 +838,7 @@
  
-+namespace bay {
+ namespace bay {
+ void AddScriptsPagesThrottle(content::NavigationThrottleRegistry& registry);
 +void AddPageInteractionThrottles(content::NavigationThrottleRegistry& registry);
-+}
-+
- namespace {
- 
- const char kAIManagerUserDataKey[] = "ai_manager";
-@@ -5527,6 +5531,9 @@
- 
- void ChromeContentBrowserClient::CreateThrottlesForNavigation(
-     content::NavigationThrottleRegistry& registry) {
-+#if BUILDFLAG(IS_WIN)
-+  bay::AddPageInteractionThrottles(registry);
-+#endif
-   CreateAndAddChromeThrottlesForNavigation(registry);
  }
  
+ namespace {
+@@ -5533,6 +5534,7 @@
+     content::NavigationThrottleRegistry& registry) {
+ #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+   bay::AddScriptsPagesThrottle(registry);
++  bay::AddPageInteractionThrottles(registry);
+ #endif
+   CreateAndAddChromeThrottlesForNavigation(registry);
+ }
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 @@ -122,6 +122,8 @@

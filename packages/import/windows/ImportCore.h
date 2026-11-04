@@ -37,6 +37,64 @@ Json chromiumLogins(const Path &profile, const Bytes &key,
 Json firefoxLogins(const Path &profile, const std::string &password,
                    const std::atomic_bool &cancelled);
 Bytes chromiumKey(const Path &root);
+
+// Linux source identity is selected from trusted discovery metadata. Never use
+// a user-supplied string as a keyring attribute or Safe Storage label.
+enum class LinuxChromiumBrowser {
+  Chrome,
+  Chromium,
+  Brave,
+  Edge,
+  Vivaldi,
+  Opera,
+  Helium
+};
+enum class LinuxSecretBackend {
+  Automatic,
+  SecretService,
+  KWallet,
+  KWallet5,
+  KWallet6
+};
+LinuxChromiumBrowser linuxChromiumBrowser(const std::string &productId);
+class ChromiumSecretContext {
+public:
+  explicit ChromiumSecretContext(LinuxChromiumBrowser browser)
+      : browser_(browser) {}
+  ChromiumSecretContext(const ChromiumSecretContext &) = delete;
+  ChromiumSecretContext &operator=(const ChromiumSecretContext &) = delete;
+  ChromiumSecretContext(ChromiumSecretContext &&other) noexcept
+      : browser_(other.browser_), v11_(std::move(other.v11_)) {}
+  ChromiumSecretContext &operator=(ChromiumSecretContext &&other) noexcept {
+    if (this != &other) {
+      bay::sync::erase(v11_);
+      browser_ = other.browser_;
+      v11_ = std::move(other.v11_);
+    }
+    return *this;
+  }
+  ~ChromiumSecretContext() { bay::sync::erase(v11_); }
+  LinuxChromiumBrowser browser() const { return browser_; }
+  bool unlocked() const { return v11_.size() == 16; }
+
+private:
+  LinuxChromiumBrowser browser_;
+  Bytes v11_;
+  friend Bytes decryptLinuxChromiumSecret(const Bytes &,
+                                          const ChromiumSecretContext &);
+  friend ChromiumSecretContext
+  unlockLinuxChromiumSecrets(LinuxChromiumBrowser, bool, LinuxSecretBackend,
+                             class LinuxSecretLookup &);
+};
+// This creates a locked context and does not contact any secret service.
+ChromiumSecretContext linuxChromiumSecrets(LinuxChromiumBrowser browser);
+// Call only from explicit unlockBrowser consent, never listing or import.
+ChromiumSecretContext unlockLinuxChromiumSecrets(
+    LinuxChromiumBrowser browser, bool consent,
+    LinuxSecretBackend backend = LinuxSecretBackend::Automatic);
+Json chromiumLogins(const Path &profile, const ChromiumSecretContext &context,
+                    const std::atomic_bool &cancelled, int &blocked);
+
 Bytes decodeBase64(const std::string &text);
 std::string encodeBase64(const Bytes &bytes);
 void wipeJson(Json &value) noexcept;
@@ -65,6 +123,10 @@ struct SensitiveImport {
   }
 };
 SensitiveImport chromiumAutofill(const Path &profile, const Bytes &key,
+                                 const std::atomic_bool &cancelled,
+                                 int &blocked);
+SensitiveImport chromiumAutofill(const Path &profile,
+                                 const ChromiumSecretContext &context,
                                  const std::atomic_bool &cancelled,
                                  int &blocked);
 SensitiveImport firefoxCookies(const Path &profile,
@@ -99,6 +161,12 @@ using ImportWriter =
                        const SensitiveImport &)>;
 void SetImportWriter(ImportWriter writer);
 Json readEnginePasswords(const Path &root, const Path &profile);
+// The owning browser supplies its current encryptor, including desktop/portal
+// providers. This never looks up another browser's Safe Storage item.
+using EnginePasswordDecryptor =
+    std::function<std::optional<std::string>(const std::string &)>;
+Json readEnginePasswords(const Path &profile,
+                         const EnginePasswordDecryptor &decrypt);
 inline constexpr char kModuleName[] = "BayImport";
 const std::vector<std::string> &MethodNames();
 bool RequiresUIThread(const std::string &method);

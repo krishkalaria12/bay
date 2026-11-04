@@ -19,7 +19,7 @@ namespace bay {
 // Layouts over it.
 class FrameWin {
  public:
-  // WebUIBrowserWindow's native widget factory (chromium-bay-frame-win.patch).
+  // WebUIBrowserWindow's factory (chromium-bay-native-widget.patch).
   static views::NativeWidget* CreateNativeWidget(views::Widget* widget);
 
   // True when windows draw Mica behind a transparent UI: Windows 11 22H2 or

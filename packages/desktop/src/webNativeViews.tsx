@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useCallback,
+  useId,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -12,8 +13,10 @@ import {
 import { Image, Text, type TextStyle } from "react-native";
 import { View, type ViewProps } from "@bay/platform";
 import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEffectProps, SurfaceProps, SymbolProps, VisualEffectProps } from "./index";
-import type { MiddleClickEvent, MouseAreaProps } from "./system";
+import type { MiddleClickEvent, MouseAreaProps, SideButton } from "./system";
 import type { LocalFilesAreaProps } from "./localFiles";
+import { localFiles } from "./localFilesNative";
+import { fileDragPath, watchFileDrag, type FileDragSource } from "./webFileDrag";
 import { fluentSymbol, svgSymbol } from "./symbols.web";
 import { WebActivitySpinner } from "./WebActivitySpinner";
 import { EaselCanvasWeb } from "./EaselCanvas.web";
@@ -55,8 +58,13 @@ const Box = forwardRef<ViewRef, BoxProps>(function Box({ css, configure, ...prop
 });
 
 const weights = { light: "300", regular: "400", medium: "500", semibold: "600", bold: "700" } as const;
+// Lucide's strokes (2 units of 24) read lighter than SF Symbols at the same weight; these match macOS's sidebar glyphs.
+const strokes = { light: 1.6, regular: 1.9, medium: 2.1, semibold: 2.3, bold: 2.5 } as const;
+/** A stroke never renders thinner than about one device pixel, so small glyphs stay crisp. */
+const MIN_STROKE_PX = 1.1;
 function Symbol({ name, size = 16, weight = "regular", color = "currentColor", style, ...props }: SymbolProps) {
   const windowsFont = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+  const maskId = `bay-symbol-${useId().replace(/[^\w-]/g, "")}`;
   return (
     <View {...props} accessible={false} pointerEvents="none" style={[{ alignItems: "center", justifyContent: "center" }, style]}>
       {windowsFont ? (
@@ -73,12 +81,13 @@ function Symbol({ name, size = 16, weight = "regular", color = "currentColor", s
           height={size}
           viewBox="0 0 24 24"
           fill="none"
-          stroke={color}
-          strokeWidth={weight === "bold" ? 2.5 : weight === "light" ? 1.4 : 1.8}
+          stroke="currentColor"
+          strokeWidth={Math.max(strokes[weight], (MIN_STROKE_PX * 24) / size)}
           strokeLinecap="round"
           strokeLinejoin="round"
+          style={{ color, display: "block", overflow: "visible" }}
         >
-          {svgSymbol(name)}
+          {svgSymbol(name, maskId)}
         </svg>
       )}
     </View>
@@ -206,6 +215,8 @@ function DockSelection({
 function ContextMenuArea({ onContextMenu, captureDescendants = false, ...props }: ContextMenuAreaProps) {
   const configure = useCallback(
     (element: HTMLElement) => {
+      // The dev harness's `hit:` names it as macOS's does.
+      element.dataset.bayView = "ContextMenuArea";
       const open = (event: MouseEvent) => {
         if (!onContextMenu) return;
         event.preventDefault();
@@ -222,8 +233,14 @@ function ContextMenuArea({ onContextMenu, captureDescendants = false, ...props }
 function MouseArea({
   path,
   onMiddleClick,
+  onSideButton,
+  hearsSideButtons: _hearsSideButtons,
   ...props
-}: Omit<MouseAreaProps, "onMiddleClick"> & { onMiddleClick?: (event: { nativeEvent: MiddleClickEvent }) => void }) {
+}: Omit<MouseAreaProps, "onMiddleClick" | "onSideButton"> & {
+  onMiddleClick?: (event: { nativeEvent: MiddleClickEvent }) => void;
+  onSideButton?: (event: { nativeEvent: { button: SideButton } }) => void;
+  hearsSideButtons?: boolean;
+}) {
   const configure = useCallback(
     (element: HTMLElement) => {
       const middle = (event: MouseEvent) => {
@@ -232,25 +249,23 @@ function MouseArea({
         event.stopPropagation();
         onMiddleClick({ nativeEvent: { shiftKey: event.shiftKey, altKey: event.altKey, metaKey: event.metaKey } });
       };
-      const drag = (event: DragEvent) => {
-        if (!path || !event.dataTransfer) return;
-        const file = path.startsWith("file:") ? path : `file:///${path.replace(/\\/g, "/").replace(/^\/+/, "")}`;
-        const name = (path.split(/[\\/]/).at(-1) ?? "Download").replace(/:/g, "_");
-        event.dataTransfer.effectAllowed = "copy";
-        event.dataTransfer.setData("DownloadURL", `application/octet-stream:${name}:${file}`);
-        event.dataTransfer.setData("text/uri-list", file);
+      // Buttons 3 and 4, released over the area, as AppKit reports them.
+      const side = (event: MouseEvent) => {
+        if ((event.button !== 3 && event.button !== 4) || !onSideButton) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onSideButton({ nativeEvent: { button: event.button === 3 ? "back" : "forward" } });
       };
-      const previous = element.draggable;
-      element.draggable = !!path;
+      const stopDrag = watchFileDrag(element, () => (path ? { path: fileDragPath(path), relative: null } : null), dragFile);
       element.addEventListener("auxclick", middle);
-      element.addEventListener("dragstart", drag);
+      element.addEventListener("mouseup", side);
       return () => {
-        element.draggable = previous;
+        stopDrag();
         element.removeEventListener("auxclick", middle);
-        element.removeEventListener("dragstart", drag);
+        element.removeEventListener("mouseup", side);
       };
     },
-    [path, onMiddleClick],
+    [path, onMiddleClick, onSideButton],
   );
   return <Box {...props} configure={configure} />;
 }
@@ -290,11 +305,19 @@ function unavailableCanvas(name: string) {
   });
 }
 
+// A file that can't be dragged stays put, with nothing to show for it, as a macOS drag that doesn't start.
+function dragFile({ path, relative }: FileDragSource) {
+  void localFiles.startDrag(path, relative).then(
+    ({ error }) => error && console.warn(`[file drag] ${error}`),
+    (error: unknown) => console.warn("[file drag]", error),
+  );
+}
+
 function LocalFilesArea({
   dropEnabled,
-  rootPath: _rootPath,
-  relativePath: _relativePath,
-  onFilesDropped: _onFilesDropped,
+  rootPath,
+  relativePath,
+  onFilesDropped,
   onFilesDropError,
   onDropActive,
   onActivate,
@@ -303,6 +326,8 @@ function LocalFilesArea({
 }: LocalFilesAreaProps) {
   const configure = useCallback(
     (element: HTMLElement) => {
+      // A pin's own row: its file drags out, and the grant says which.
+      const stopDrag = watchFileDrag(element, () => (rootPath ? { path: rootPath, relative: relativePath ?? "" } : null), dragFile);
       const click = (event: MouseEvent) => {
         if (event.button === 0) onActivate?.();
       };
@@ -317,12 +342,12 @@ function LocalFilesArea({
         event.stopPropagation();
         onContextMenu();
       };
-      // Browser File objects carry no native access grant. A picker can reconnect a
-      // file; a drop must not turn untrusted path metadata into a native grant.
+      // A page's File objects carry no path or access grant: the host grants what the desktop itself dropped
+      // (BayLocalFiles.acceptDrop), never path metadata from here.
       const over = (event: DragEvent) => {
-        if (!dropEnabled) return;
+        if (!dropEnabled || !event.dataTransfer?.types.includes("Files")) return;
         event.preventDefault();
-        if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+        event.dataTransfer.dropEffect = "copy";
         onDropActive?.({ nativeEvent: { active: true } });
       };
       const leave = () => onDropActive?.({ nativeEvent: { active: false } });
@@ -331,7 +356,13 @@ function LocalFilesArea({
         event.preventDefault();
         event.stopPropagation();
         leave();
-        onFilesDropError?.({ nativeEvent: { message: "Dropping local files is unavailable in this Bay host. Use the file picker to reconnect." } });
+        void localFiles.acceptDrop().then(
+          ({ files, errors }) => {
+            for (const message of errors) onFilesDropError?.({ nativeEvent: { message } });
+            if (files.length) onFilesDropped?.({ nativeEvent: { files } });
+          },
+          () => onFilesDropError?.({ nativeEvent: { message: "Couldn't pin the dropped files. Try again." } }),
+        );
       };
       element.addEventListener("click", click);
       element.addEventListener("keydown", key);
@@ -340,6 +371,7 @@ function LocalFilesArea({
       element.addEventListener("dragleave", leave);
       element.addEventListener("drop", drop);
       return () => {
+        stopDrag();
         element.removeEventListener("click", click);
         element.removeEventListener("keydown", key);
         element.removeEventListener("contextmenu", context);
@@ -348,10 +380,8 @@ function LocalFilesArea({
         element.removeEventListener("drop", drop);
       };
     },
-    [dropEnabled, onFilesDropError, onDropActive, onActivate, onContextMenu],
+    [dropEnabled, rootPath, relativePath, onFilesDropped, onFilesDropError, onDropActive, onActivate, onContextMenu],
   );
-  // Rendering and keyboard activation work with the native LocalFiles commands.
-  // Native drag grants require a separate host adapter, so no fake file URL is emitted.
   return <Box {...props} configure={configure} />;
 }
 

@@ -1,3 +1,4 @@
+import { isMac } from "@bay/platform";
 import { APP_NAME } from "../../lib/constants";
 import type { SettingsPane } from "./windows";
 
@@ -113,8 +114,8 @@ export const SETTINGS = {
   littleBayMenuBarItem: {
     id: "links.littleBayMenuBarItem",
     pane: "links",
-    title: "Show Little Bay in the menu bar",
-    words: "little bay menu bar status item icon",
+    title: isMac ? "Show Little Bay in the menu bar" : "Show Little Bay in the system tray",
+    words: "little bay menu bar status item icon tray",
   },
   littleBayPutAwayAfterHours: {
     id: "links.littleBayPutAwayAfterHours",

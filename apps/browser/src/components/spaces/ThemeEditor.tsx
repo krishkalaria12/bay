@@ -18,7 +18,7 @@ import {
   type Harmony,
 } from "../../lib/spaceTheme";
 import { MAX_THEME_COLORS } from "../../lib/constants";
-import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
+import { customGrain, hex, SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
@@ -496,7 +496,7 @@ function GrainDial({ value, onChange }: { value: number; onChange(v: number): vo
         <WindowBackdrop
           colors={theme.dark ? ["#5A5A5E", "#2C2C2E"] : ["#E4E4E7", "#B9B9BE"]}
           angle={135}
-          grainOpacity={value * 0.45}
+          grainOpacity={customGrain(value)}
           style={StyleSheet.absoluteFill}
         />
       </View>

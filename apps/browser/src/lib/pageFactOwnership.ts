@@ -1,7 +1,4 @@
-import { isWindows } from "@bay/platform";
-import { getNativeHostInfo } from "@bay/platform/nativeBridge";
-
-/** Shared-runtime page facts arrive through the coordinator's native subscription. */
+/** The native macOS app owns page facts locally and has no web host transport. */
 export function pageFactsInCoordinator(): boolean {
-  return isWindows && getNativeHostInfo().constants.BayShell?.sharedRuntime === true;
+  return false;
 }

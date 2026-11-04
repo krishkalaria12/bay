@@ -1,22 +1,34 @@
 # Copyright 2026 Bay. Apache-2.0.
-import("//ui/webui/resources/tools/build_webui.gni")
+import("//tools/typescript/ts_library.gni")
+import("//tools/typescript/webui_path_mappings.gni")
 
-# mojom() emits TypeScript. Build the real WebUI ES module with Chromium's
-# trusted-resource path mappings before archiving the adjacent disk resources.
-build_webui("build") {
-  grd_prefix = "bay_native_host"
-  mojo_files =
+# Compile only generated Mojo bindings. build_webui's authored-source lint
+# pipeline does not support this Mojo-only target in the pinned Chromium tree.
+copy("copy_mojo") {
+  sources =
       [ "$root_gen_dir/chrome/browser/bay/webui/native_host.mojom-webui.ts" ]
-  mojo_files_deps = [ "//chrome/browser/bay/webui:mojom_ts__generator" ]
+  outputs = [ "$target_gen_dir/preprocessed/{{source_file_part}}" ]
+  deps = [ "//chrome/browser/bay/webui:mojom_ts__generator" ]
+}
+
+webui_path_mappings("build_path_map") {
   ts_deps = [ "//ui/webui/resources/mojo:build_ts" ]
   webui_context_type = "trusted"
+}
 
-  # Consumers build :build_ts directly; composite targets permit that
-  # dependency.
-  ts_composite = true
-
-  # There is no authored TypeScript to lint. The template's lint target assumes
-  # preprocess_ts_files exists, which is absent for a Mojo-only invocation.
-  enable_type_aware_eslint_checks = false
-  optimize = false
+ts_library("build_ts") {
+  root_dir = "$target_gen_dir/preprocessed"
+  out_dir = "$target_gen_dir/tsc"
+  in_files = [ "native_host.mojom-webui.ts" ]
+  composite = true
+  definitions = [ "//tools/typescript/definitions/strings.d.ts" ]
+  path_mappings_file = "$target_gen_dir/path_mappings_build_path_map.json"
+  extra_deps = [
+    ":build_path_map",
+    ":copy_mojo",
+  ]
+  deps = [
+    "//tools/typescript/definitions:build_ts",
+    "//ui/webui/resources/mojo:build_ts",
+  ]
 }

@@ -2,6 +2,7 @@ import { requireOptionalNativeModule, nativeRandomUUID, nativeSnapshot } from "@
 import type { Listing, Transport } from "./scope.ts";
 
 export type FolderInfo = {
+  keyStorage?: "persistent" | "session" | "locked";
   path: string;
   defaultPath: string;
   iCloudAvailable: boolean;

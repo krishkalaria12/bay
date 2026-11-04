@@ -8,7 +8,8 @@ const cli = fileURLToPath(new URL("../node_modules/expo/bin/cli", import.meta.ur
 const args = mode === "build" ? ["export", "--platform", "web"] : ["start", "--web", "--port", "8090"];
 const child = spawn(process.execPath, [cli, ...args, ...process.argv.slice(3)], {
   cwd,
-  env: { ...process.env, BAY_WEB: "1" },
+  // BAY_WEB_SHADERS=1 draws the shader views with WebGL2; otherwise they keep their CSS (the rollback path).
+  env: { ...process.env, BAY_WEB: "1", EXPO_PUBLIC_BAY_WEB_SHADERS: process.env.BAY_WEB_SHADERS === "1" ? "1" : "0" },
   stdio: "inherit",
 });
 child.on("error", (error) => {

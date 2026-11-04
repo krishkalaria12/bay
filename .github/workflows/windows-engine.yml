@@ -6,6 +6,7 @@ on:
     paths:
       - engine/**
       - scripts/windows/engine.py
+      - scripts/engine.py
       - .github/workflows/windows-engine.yml
 permissions:
   contents: read

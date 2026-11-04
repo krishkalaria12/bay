@@ -127,7 +127,9 @@ unsigned recoveryQRSize(const Bytes &entropy) {
   return static_cast<unsigned>(qrCode(entropy).getSize());
 }
 } // namespace detail
-#ifndef _WIN32
+#if (!defined(_WIN32) && !defined(__linux__) &&                                \
+     !defined(BAY_SYNC_LINUX_TEST)) ||                                         \
+    defined(BAY_SYNC_PORTABLE_TEST)
 Bytes recoveryKitPreviewPNG(const Bytes &, const std::string &, unsigned) {
   throw Failure("unsupported", "Recovery preview rendering requires Windows");
 }
@@ -145,7 +147,7 @@ std::string recoveryPhrase(const Bytes &entropy) {
 std::string recoveryKitText(const Bytes &entropy, const std::string &device) {
   std::string out =
       "Bay Recovery Kit\r\nCreated on " + device +
-      "\r\n\r\nTo recover your data on another Mac or Windows PC:\r\n1. Open "
+      "\r\n\r\nTo recover your data on another computer:\r\n1. Open "
       "Bay > Settings > Sync and choose the same sync folder.\r\n2. Click "
       "Enter Recovery Phrase.\r\n3. Enter these 24 words in order.\r\n\r\n";
   auto words = recoveryWords(entropy);
@@ -160,8 +162,7 @@ std::string recoveryKitPDF(const Bytes &entropy, const std::string &device) {
   std::string content =
       pdfText(50, 744, 24, "Bay Recovery Kit") +
       pdfText(50, 720, 11, "Created on " + device) +
-      pdfText(50, 680, 12,
-              "To recover your data on another Mac or Windows PC:");
+      pdfText(50, 680, 12, "To recover your data on another computer:");
   content +=
       pdfText(
           50, 656, 11,

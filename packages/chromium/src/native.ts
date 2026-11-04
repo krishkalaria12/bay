@@ -2,7 +2,7 @@ import { requireNativeModule, type EventSubscription } from "@bay/platform/nativ
 import type { ContentBlockerState, ContentBlockerStats } from "./contentBlocker";
 import type { DisplayMediaSource } from "./ChromiumView";
 import type { ExternalAppAllowance } from "./externalApps";
-import type { FaviconImage } from "./favicons";
+import type { FaviconImage, FaviconSvg } from "./favicons";
 import type {
   BrowsingDataType,
   Download,
@@ -14,7 +14,7 @@ import type {
   PermissionResult,
   SystemState,
 } from "./nativeModule";
-import type { PasswordExportStatus, SavedPassword } from "./passwords";
+import type { PasswordExportStatus, SavedPassword, SecretStorageKind } from "./passwords";
 import type { TabStripCommand, TabStripTransaction } from "./tabStripBridge";
 import type { AddressInput, CardInput, SavedAddress, SavedCard } from "./autofill";
 import type { ClearSiteDataResult, SiteSettingType, SiteSettingValue, SiteSettings } from "./siteSettings";
@@ -83,7 +83,7 @@ export const Cef = requireNativeModule<{
   getExternalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;
   removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;
   clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;
-  fetchFavicon(url: string, profile: string): Promise<FaviconImage | null>;
+  fetchFavicon(url: string, profile: string): Promise<FaviconImage | FaviconSvg | null>;
   removeLegacyFavicons(profile: string): Promise<void>;
   engineCall(name: string, profile: string, args: string | null): Promise<string>;
   releaseProfile(profile: string): Promise<void>;
@@ -111,6 +111,8 @@ export const Cef = requireNativeModule<{
   updatePassword(profile: string, origin: string, username: string, newUsername: string | null, newPassword: string | null): Promise<Result<{ ok: true }>>;
   deletePassword(profile: string, origin: string, username: string): Promise<Result<{ ok: true }>>;
   getNeverSavePasswordOrigins(profile: string): Promise<Result<{ origins: string[] }>>;
+  // Linux web host only.
+  secretStorage?(): Promise<SecretStorageKind>;
   allowSavingPasswords(profile: string, origin: string): Promise<Result<{ ok: true }>>;
   exportPasswords(profile: string): Promise<Result<{ status: PasswordExportStatus; path?: string }>>;
   getPasswordAutofill(profile: string): Promise<boolean>;

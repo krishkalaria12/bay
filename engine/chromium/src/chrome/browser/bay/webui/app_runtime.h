@@ -51,6 +51,12 @@ class AppRuntime final : public ProfileManagerObserver,
                     const std::string& tab_id,
                     const std::string& profile,
                     const std::string& adopt_id) const;
+  // Every page a page opens, whether OpenPage offers it or not. Such a page
+  // is never one Chrome opened by itself (WindowRegistry::AdoptLaunchPages).
+  static void MarkOpenedByPage(content::WebContents* opened);
+  static bool IsOpenedByPage(content::WebContents* contents);
+  // Accepted state names `window_id` as a regular window.
+  bool CanAdoptInto(const std::string& window_id) const;
   void OpenPage(content::WebContents* source,
                 content::WebContents* opened,
                 const std::string& source_tab_id,

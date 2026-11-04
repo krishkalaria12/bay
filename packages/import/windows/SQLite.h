@@ -3,6 +3,10 @@
 #ifdef _WIN32
 #include <winsqlite/winsqlite3.h>
 #pragma comment(lib, "winsqlite3.lib")
+#elif defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
+// Chromium exports prefixed SQLite symbols through this shim. A system header
+// would compile references that cannot link against //third_party/sqlite.
+#include "third_party/sqlite/sqlite3.h"
 #else
 #include <sqlite3.h>
 #endif

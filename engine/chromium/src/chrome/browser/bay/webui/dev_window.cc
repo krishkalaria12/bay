@@ -3,12 +3,23 @@
 
 #include <cmath>
 #include <limits>
+#include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <utility>
 #include <vector>
 
 #include "base/environment.h"
+#include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/no_destructor.h"
+#include "base/scoped_observation.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/task/thread_pool.h"
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
@@ -19,7 +30,9 @@
 #include "chrome/browser/bay/webui/dev_window_input.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/bay/webui/window_registry.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
@@ -28,12 +41,25 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/base/base_window.h"
+#include "ui/base/hit_test.h"
+#include "ui/color/color_id.h"
+#include "ui/color/color_provider.h"
+#include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/image/image.h"
+#include "ui/snapshot/snapshot.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
+#include "ui/aura/window_observer.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/events/event.h"
+#include "ui/events/event_handler.h"
+#include "components/viz/common/frame_timing_details.h"
+#include "ui/compositor/compositor.h"
 #endif
 
 namespace bay {
@@ -109,7 +135,7 @@ base::DictValue Describe(BrowserWindowInterface* frame) {
           .Set("profile", ProfileId(frame))
           .Set("frame", window->GetBounds().ToString())
           .Set("bounds", Rect(window->GetBounds()))
-          .Set("globalCoordinates", true)
+          .Set("globalCoordinates", GlobalWindowCoordinates())
           .Set("key", window->IsActive())
           .Set("active", window->IsActive())
           .Set("visible", window->IsVisible())
@@ -210,7 +236,8 @@ bool IsInputAction(const std::string& action) {
          action.starts_with("type:");
 }
 // "hit:<x>,<y>": what the window's document has at the point, by its renderer's
-// own hit test ("tag#id[label]"); a page shows as its embed element.
+// own hit test ("tag#id[label] NativeViewName", the name macOS's answer has);
+// a page shows as its embed element.
 void HitTest(BrowserWindowInterface* frame,
              const gfx::PointF& point,
              DevWindow::Response response) {
@@ -226,9 +253,11 @@ void HitTest(BrowserWindowInterface* frame,
           .Set("expression",
                base::StringPrintf(
                    "(()=>{const e=document.elementFromPoint(%f,%f);if(!e)"
-                   "return\"\";const l=e.getAttribute(\"aria-label\");return "
+                   "return\"\";const l=e.getAttribute(\"aria-label\");"
+                   "const v=e.closest(\"[data-bay-view]\");return "
                    "e.tagName.toLowerCase()+(e.id?\"#\"+e.id:\"\")+"
-                   "(l?\"[\"+l+\"]\":\"\")})()",
+                   "(l?\"[\"+l+\"]\":\"\")+"
+                   "(v?\" \"+v.dataset.bayView:\"\")})()",
                    point.x(), point.y()))
           .Set("returnByValue", true),
       base::Seconds(5),
@@ -288,6 +317,67 @@ base::ListValue TabViews(BrowserWindowInterface* frame) {
       });
   return result;
 }
+#if defined(USE_AURA)
+// "windowDrags" (macOS swizzles AppKit's performWindowDrag): left presses that
+// start a window move, counted where the desktop decides one. Windows asks
+// WM_NCHITTEST and Linux's window event filter asks the widget's hit test, and
+// both move the window on HTCAPTION. Watches from its first call, ahead of
+// that filter, which stops a press it turns into a move.
+class WindowDragWatch : public ui::EventHandler, public aura::WindowObserver {
+ public:
+  static WindowDragWatch& For(aura::Window* root) {
+    auto& watch = (*Watches())[root];
+    if (!watch)
+      watch = base::WrapUnique(new WindowDragWatch(root));
+    return *watch;
+  }
+  // "<count>\n<x>,<y>\n…": each drag's press in window coordinates.
+  std::string Take() {
+    std::string out = base::NumberToString(presses_.size());
+    for (const auto& point : presses_)
+      out += "\n" + point.ToString();
+    presses_.clear();
+    return out;
+  }
+  ~WindowDragWatch() override { root_->RemovePreTargetHandler(this); }
+
+ private:
+  using Map = std::map<aura::Window*, std::unique_ptr<WindowDragWatch>>;
+  static Map* Watches() {
+    static base::NoDestructor<Map> watches;
+    return watches.get();
+  }
+  explicit WindowDragWatch(aura::Window* root) : root_(root) {
+    root_->AddPreTargetHandler(this, ui::EventTarget::Priority::kSystem);
+    observation_.Observe(root_);
+  }
+  void OnMouseEvent(ui::MouseEvent* event) override {
+    if (event->type() != ui::EventType::kMousePressed ||
+        !event->IsOnlyLeftMouseButton()) {
+      return;
+    }
+    auto* target = static_cast<aura::Window*>(event->target());
+    auto* widget =
+        target ? views::Widget::GetTopLevelWidgetForNativeView(target) : nullptr;
+    if (!widget)
+      return;
+    gfx::Point point = event->location();
+    aura::Window::ConvertPointToTarget(target, widget->GetNativeWindow(),
+                                       &point);
+    if (widget->GetNonClientComponent(point) == HTCAPTION)
+      presses_.push_back(point);
+  }
+  void OnWindowDestroying(aura::Window* window) override {
+    observation_.Reset();
+    Watches()->erase(window);  // Deletes this.
+  }
+
+  raw_ptr<aura::Window> root_;
+  std::vector<gfx::Point> presses_;
+  base::ScopedObservation<aura::Window, aura::WindowObserver> observation_{
+      this};
+};
+#endif
 std::string Visibility(const ui::BaseWindow* window) {
   return window->IsVisible() ? "visible=1" : "visible=0";
 }
@@ -314,6 +404,13 @@ bool Action(BrowserWindowInterface* frame,
                      focused ? focused->GetLastCommittedOrigin().Serialize()
                              : ""))
             .value_or("{}");
+#if defined(USE_AURA)
+  } else if (action == "windowDrags") {
+    auto* host = HostOf(frame);
+    if (!host)
+      return false;
+    result = WindowDragWatch::For(host->window()).Take();
+#endif
   } else if (action == "fakeActiveClicks") {
     // Only AppKit keeps a first click from an inactive app to itself.
     result = "1";
@@ -405,10 +502,7 @@ bool DevWindow::Dispatch(const HostContext& context,
     invalid();
     return true;
   }
-  if (!ReadOnly(*action) && base::Environment::Create()
-                                ->GetVar("BAY_DATA_DIR")
-                                .value_or("")
-                                .empty()) {
+  if (!ReadOnly(*action) && !DevHarnessAllowed()) {
     std::move(response).Run(Failure("permission_denied",
                                     "Developer window mutations require an "
                                     "isolated BAY_DATA_DIR instance"));
@@ -450,5 +544,187 @@ bool DevWindow::Dispatch(const HostContext& context,
   }
   std::move(response).Run(Reply(base::Value(std::move(result))));
   return true;
+}
+
+bool DevHarnessAllowed() {
+  return !base::Environment::Create()
+              ->GetVar("BAY_DATA_DIR")
+              .value_or("")
+              .empty();
+}
+BrowserWindowInterface* DevHarnessFrame(const HostContext& context,
+                                        const std::string& window_id) {
+  auto& windows = WindowRegistry::Get();
+  BrowserWindowInterface* frame = nullptr;
+  if (window_id == "key") {
+    for (const auto& id : windows.Ids()) {
+      auto* candidate = windows.Find(id.GetString());
+      if (candidate && candidate->GetWindow() &&
+          candidate->GetWindow()->IsActive()) {
+        frame = candidate;
+      }
+    }
+  } else {
+    frame = windows.Find(window_id);
+  }
+  if (!frame || (context.is_window() && frame != context.window()))
+    return nullptr;
+  return frame;
+}
+namespace {
+// On a worker: `background`, when given, shows through what's see-through.
+bool WriteSnapshot(const base::FilePath& path,
+                   std::optional<SkColor> background,
+                   SkBitmap bitmap) {
+  if (background) {
+    SkBitmap flat;
+    flat.allocN32Pixels(bitmap.width(), bitmap.height());
+    SkCanvas canvas(flat);
+    canvas.drawColor(*background);
+    canvas.drawImage(bitmap.asImage(), 0, 0);
+    bitmap = std::move(flat);
+  }
+  const auto png = gfx::PNGCodec::EncodeBGRASkBitmap(
+      bitmap, /*discard_transparency=*/background.has_value());
+  return png && base::WriteFile(path, *png);
+}
+}  // namespace
+void DevSnapshotWindow(BrowserWindowInterface* frame,
+                       const base::FilePath& path,
+                       bool transparent,
+                       base::OnceCallback<void(bool)> done) {
+  auto* widget = WidgetOf(frame);
+  if (!widget || !path.IsAbsolute()) {
+    std::move(done).Run(false);
+    return;
+  }
+  // As macOS's: on the window's background unless asked for the see-through
+  // parts, which the compositor's copy keeps as alpha.
+  std::optional<SkColor> background;
+  if (!transparent) {
+    const auto* colors = widget->GetColorProvider();
+    background =
+        colors ? colors->GetColor(ui::kColorWindowBackground) : SK_ColorWHITE;
+  }
+  ui::GrabWindowSnapshot(
+      widget->GetNativeWindow(),
+      gfx::Rect(widget->GetWindowBoundsInScreen().size()),
+      base::BindOnce(
+          [](base::FilePath path, std::optional<SkColor> background,
+             base::OnceCallback<void(bool)> done, gfx::Image image) {
+            if (image.IsEmpty()) {
+              std::move(done).Run(false);
+              return;
+            }
+            base::ThreadPool::PostTaskAndReplyWithResult(
+                FROM_HERE, {base::MayBlock()},
+                base::BindOnce(&WriteSnapshot, path, background,
+                               *image.ToSkBitmap()),
+                std::move(done));
+          },
+          path, background, std::move(done)));
+}
+bool DevFocus(BrowserWindowInterface* frame, std::string_view target) {
+  content::WebContents* contents = nullptr;
+  if (target == "window") {
+    contents = WindowRegistry::Get().DocumentOf(frame);
+  } else if (target == "page") {
+    contents = ActivePage(frame);
+  } else if (target == "devtools") {
+    auto* page = ActivePage(frame);
+    contents = page ? DevToolsWindow::GetInTabWebContents(page, nullptr)
+                    : nullptr;
+  }
+  if (!contents)
+    return false;
+  contents->Focus();
+  return true;
+}
+namespace {
+struct TypingRun {
+  base::WeakPtr<BrowserWindowInterface> frame;
+  std::vector<std::vector<DevKeyStep>> keys;
+  double start = 0;
+  double interval = 0;
+  base::ListValue times;
+  size_t drawn = 0;
+  base::OnceCallback<void(base::Value)> done;
+};
+double NowMs() {
+  return base::Time::Now().InMillisecondsFSinceUnixEpoch();
+}
+void FinishTyping(std::shared_ptr<TypingRun> run) {
+  if (++run->drawn == run->keys.size() && run->done)
+    std::move(run->done).Run(base::Value(std::move(run->times)));
+}
+void TypeKey(std::shared_ptr<TypingRun> run, size_t index) {
+  auto* host = run->frame ? HostOf(run->frame.get()) : nullptr;
+  const double handled = NowMs();
+  if (host) {
+    for (const auto& step : run->keys[index])
+      SendDevKey(host, step);
+  }
+  run->times.Append(base::DictValue()
+                        .Set("due", run->start + run->interval * index)
+                        .Set("handled", handled)
+                        .Set("drawn", handled));
+#if defined(USE_AURA)
+  if (host && host->compositor()) {
+    host->compositor()->RequestSuccessfulPresentationTimeForNextFrame(
+        base::BindOnce(
+            [](std::shared_ptr<TypingRun> run, size_t index,
+               const viz::FrameTimingDetails&) {
+              run->times[index].GetDict().Set("drawn", NowMs());
+              FinishTyping(run);
+            },
+            run, index));
+  } else {
+    FinishTyping(run);
+  }
+#else
+  FinishTyping(run);
+#endif
+  if (index + 1 < run->keys.size()) {
+    const double due = run->start + run->interval * (index + 1);
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, base::BindOnce(&TypeKey, run, index + 1),
+        base::Milliseconds(std::max(0.0, due - NowMs())));
+  }
+}
+}  // namespace
+void DevTypeKeys(BrowserWindowInterface* frame,
+                 const std::u16string& text,
+                 double interval,
+                 base::OnceCallback<void(base::Value)> done) {
+  auto run = std::make_shared<TypingRun>();
+  run->frame = frame->GetWeakPtr();
+  run->interval = std::max(0.0, interval);
+  for (const char16_t character : text) {
+    auto steps = ParseDevKeyAction(
+        "type:" + base::UTF16ToUTF8(std::u16string(1, character)));
+    if (steps && !steps->empty())
+      run->keys.push_back(std::move(*steps));
+  }
+  if (run->keys.empty()) {
+    std::move(done).Run(base::Value(base::ListValue()));
+    return;
+  }
+  run->done = std::move(done);
+  run->start = NowMs();
+  TypeKey(run, 0);
+}
+std::optional<DevKeyStep> DevPressKey(BrowserWindowInterface* frame,
+                                      const std::string& action,
+                                      bool send) {
+  const auto steps = ParseDevKeyAction(action);
+  if (!steps || steps->empty() || !HostOf(frame))
+    return std::nullopt;
+  if (send)
+    PostKeys(frame, *steps);
+  for (const auto& step : *steps) {
+    if (step.type == ui::EventType::kKeyPressed)
+      return step;
+  }
+  return steps->front();
 }
 }  // namespace bay

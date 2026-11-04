@@ -2,6 +2,7 @@
 #ifndef CHROME_BROWSER_BAY_WEBUI_BAY_WEBUI_H_
 #define CHROME_BROWSER_BAY_WEBUI_BAY_WEBUI_H_
 
+#include "build/build_config.h"
 #include "chrome/browser/bay/webui/native_host.mojom-forward.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_ui.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
@@ -31,6 +32,8 @@ class BayWebUIBrowserWindow : public WebUIBrowserWindow {
  public:
   explicit BayWebUIBrowserWindow(BrowserWindowInterface* browser);
   void SetFocusToLocationBar(bool is_user_initiated) override;
+  // Ctrl+Q quits on Linux, as its desktops expect (quit_shortcut_linux.h);
+  // then the window's own key shortcuts (RunWindowShortcut), then Chrome's.
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const input::NativeWebKeyboardEvent& event) override;
   // A window Chrome opened beside Bay's own is never shown (WindowRegistry).
@@ -48,6 +51,12 @@ void BindAppRuntime(content::WebUI* web_ui,
                     mojo::PendingReceiver<mojom::AppRuntime> receiver);
 void EmitWindowCommand(BrowserWindowInterface* browser, const char* command);
 
+// A key down while the window is recording a shortcut, which is its answer
+// (BaySystem.recordShortcut). True when recording took the key: it comes ahead
+// of every other use of a key, as Chrome's reserved accelerators would close
+// the window instead of being recorded.
+bool RecordWindowShortcut(BrowserWindowInterface* browser,
+                          const input::NativeWebKeyboardEvent& event);
 // One of the window's key shortcuts (NativeHost::KeyShortcut) for a key down:
 // with a page focused its command runs, as macOS's menu runs it first; with
 // Bay's own document focused the key goes there, where a field's own keys come

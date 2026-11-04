@@ -90,6 +90,7 @@ void TabObserver::DidOpenRequestedURL(
           source_frame && source_frame->HasTransientUserActivation());
     return;
   }
+  AppRuntime::MarkOpenedByPage(opened);
   // App tabs have one broker-owned observer. Standalone extension views only
   // have this lease-scoped observer, so use their trusted host window instead.
   if (facts_ || !host_ || !current() ||

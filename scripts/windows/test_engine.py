@@ -53,6 +53,8 @@ class PatchPlatformTests(unittest.TestCase):
         win = {step.name for step in series.read_series("win")}
         self.assertIn("chromium-safe-storage-name.patch", mac)
         self.assertNotIn("chromium-safe-storage-name.patch", win)
+        self.assertNotIn("chromium-safe-storage-name-linux.patch", win)
+        self.assertNotIn("chromium-safe-storage-name-linux.patch", mac)
         self.assertIn("chromium-bay-layer-win.patch", win)
         self.assertNotIn("chromium-bay-layer-win.patch", mac)
         self.assertIn("chromium-bay-branding-win.patch", win)
@@ -61,7 +63,8 @@ class PatchPlatformTests(unittest.TestCase):
         self.assertNotIn("cef-chrome-tabs.patch", win)
         self.assertFalse(any(step.kind == "cef" for step in series.read_series("win")))
         self.assertIn("chromium-extension-updates.patch", win & mac)
-        self.assertEqual({step.name for step in series.read_series()}, win | mac)
+        self.assertEqual({step.name for step in series.read_series()},
+                         win | mac | {step.name for step in series.read_series("linux")})
 
     def test_windows_nncore_has_no_mac_hooks(self):
         step = next(step for step in series.read_series("win") if step.name == "engine/nncore")
@@ -355,6 +358,8 @@ class ArtifactTests(unittest.TestCase):
                 self.assertIn("runtime/bay-ui/native_host.mojom-webui.js", archive.namelist())
                 self.assertIn("runtime/notification_helper.exe", archive.namelist())
                 self.assertNotIn("runtime/chrome.pdb", archive.namelist())
+                self.assertNotIn("runtime/xdg-settings", archive.namelist())
+                self.assertNotIn("runtime/xdg-mime", archive.namelist())
                 manifest = json.loads(archive.read("manifest.json"))
                 self.assertEqual(manifest["mojo"]["sharedImports"], ["//resources/mojo/mojo/public/js/bindings.js"])
             (generated / "helper.js").unlink()

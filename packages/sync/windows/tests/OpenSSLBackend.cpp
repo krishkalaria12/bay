@@ -62,3 +62,41 @@ Bytes aesGcmOpen(const Bytes &key, const Bytes &nonce, const Bytes &input,
   return out;
 }
 } // namespace bay::sync
+
+namespace bay::sync {
+void createPrivateDirectory(const std::filesystem::path &path) {
+  if (!std::filesystem::create_directory(path))
+    throw Failure("folder", "Private folder already exists");
+  std::filesystem::permissions(path, std::filesystem::perms::owner_all,
+                               std::filesystem::perm_options::replace);
+}
+} // namespace bay::sync
+
+#if defined(BAY_SYNC_PORTABLE_TEST) && defined(__linux__)
+#include <fstream>
+namespace bay::sync {
+void SetSecretNamespace(std::string) {}
+std::string GetSecretNamespace() { return "portable-test"; }
+std::filesystem::path temporaryRecoveryKit(const Bytes &, const std::string &,
+                                         const std::filesystem::path &) {
+  throw Failure("unsupported", "Recovery export requires the desktop backend");
+}
+void copyRecoveryKitFile(const std::filesystem::path &) {
+  throw Failure("unsupported", "Clipboard requires the desktop backend");
+}
+
+void copyRecoveryPhraseText(const std::string &) {
+  throw Failure("unsupported", "Clipboard requires the desktop backend");
+}
+void revealSyncFolder(const std::filesystem::path &) {
+  throw Failure("unsupported", "Folder reveal requires the desktop backend");
+}
+void writeRecoveryKitFile(const std::filesystem::path &path,
+                          const std::string &content) {
+  std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+  stream.write(content.data(), content.size());
+  if (!stream)
+    throw Failure("save", "Could not save the recovery kit");
+}
+} // namespace bay::sync
+#endif

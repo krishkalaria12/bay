@@ -113,7 +113,10 @@ class TabBroker::Entry final : public content::WebContentsObserver {
                            ui::PageTransition,
                            bool,
                            bool) override {
-    if (key.empty() || !contents || !profile || !AppRuntime::Enabled())
+    if (!AppRuntime::Enabled())
+      return;
+    AppRuntime::MarkOpenedByPage(opened);
+    if (key.empty() || !contents || !profile)
       return;
     if (auto* runtime = AppRuntime::GetIfStarted())
       runtime->OpenPage(contents, opened, key, {}, url, disposition);

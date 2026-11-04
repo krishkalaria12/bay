@@ -15,6 +15,7 @@ const files = [
   "desktop/src/cli.ts",
   "desktop/src/userScripts.ts",
   "desktop/src/localFiles.tsx",
+  "desktop/src/localFilesNative.ts",
   "chromium/src/native.ts",
   "chromium/src/chromeDialogs.ts",
   "chromium/src/extensions.ts",
@@ -24,6 +25,7 @@ const files = [
   "chromium/src/webkit.ts",
   "sync/src/native.ts",
   "import/src/index.ts",
+  "shaders/src/types.ts",
   "shaders/src/index.tsx",
 ];
 const modules = {},

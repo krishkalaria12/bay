@@ -56,7 +56,8 @@ export function installCliInBackground(): Promise<CliInstallResult> {
       installation = null;
       const error = result.ok ? null : (result.error ?? "The installer stopped.");
       const binPath = result.binPath ?? useCli.getState().binPath;
-      useCli.setState({ installing: false, step: null, installedVersion: installedCliVersion(), binPath, error });
+      const installedVersion = result.installedVersion === undefined ? installedCliVersion() : result.installedVersion;
+      useCli.setState({ installing: false, step: null, installedVersion, binPath, error });
       try {
         writeDocument(INSTALL_DOC, JSON.stringify({ version: 1, binPath, error }));
       } catch (error) {

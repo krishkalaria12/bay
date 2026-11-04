@@ -1,8 +1,14 @@
 #include "SyncService.h"
 #include "../../import/windows/ImportCore.h"
+#include "Base64.h"
 #include "RecoveryKit.h"
 #include "SyncVault.h"
+#include <cstdlib>
 #include <fstream>
+#include <nlohmann/json.hpp>
+#if defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
+#include <unistd.h>
+#endif
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -23,8 +29,12 @@ namespace {
 std::mutex stateMutex;
 Bytes entropy;
 std::unique_ptr<Keys> keys;
+std::string unlockedAccount;
+bool persistentKey = false;
+std::uint64_t keyGeneration = 1;
 std::string configuredDirectory;
 ProfileResolver profileResolver;
+PasswordDecryptor passwordDecryptor;
 struct SecretText {
   std::string value;
   ~SecretText() {
@@ -33,14 +43,18 @@ struct SecretText {
       bytes[index] = 0;
   }
 };
-void setEntropy(Bytes next) {
+void setEntropy(Bytes next, std::string account = {}, bool persistent = false) {
+  ++keyGeneration;
   erase(entropy);
+  unlockedAccount = std::move(account);
+  persistentKey = persistent;
   entropy = std::move(next);
   keys = entropy.empty() ? nullptr : std::make_unique<Keys>(entropy);
 }
 Keys &unlocked() {
   if (!keys)
-    throw Failure("locked", "Sync is not set up on this Windows device");
+    throw Failure("locked",
+                  "Enter your recovery phrase to unlock sync on this device");
   return *keys;
 }
 fs::path environment(const wchar_t *name) {
@@ -49,15 +63,25 @@ fs::path environment(const wchar_t *name) {
   auto n = GetEnvironmentVariableW(name, value, 32768);
   return n && n < 32768 ? fs::path(value) : fs::path{};
 #else
-  (void)name;
-  return {};
+  std::string key;
+  while (*name)
+    key += static_cast<char>(*name++);
+  const auto *value = std::getenv(key.c_str());
+  return value ? fs::u8path(value) : fs::path{};
 #endif
 }
 fs::path dataDirectory() {
   if (!configuredDirectory.empty())
     return fs::u8path(configuredDirectory);
   auto custom = environment(L"BAY_DATA_DIR");
-  return custom.empty() ? environment(L"LOCALAPPDATA") / "Bay" : custom;
+  if (!custom.empty())
+    return custom;
+#ifdef _WIN32
+  return environment(L"LOCALAPPDATA") / "Bay";
+#else
+  auto xdg = environment(L"XDG_CONFIG_HOME");
+  return (xdg.empty() ? environment(L"HOME") / ".config" : xdg) / "bay";
+#endif
 }
 fs::path defaultFolder() {
   auto custom = environment(L"BAY_SYNC_DEFAULT_FOLDER");
@@ -102,7 +126,14 @@ std::string deviceName() {
   if (GetComputerNameW(name, &n))
     return fs::path(name).u8string();
 #endif
+#if defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
+  char name[256]{};
+  if (gethostname(name, sizeof(name) - 1) == 0 && name[0])
+    return name;
+  return "This Linux device";
+#else
   return "This Windows device";
+#endif
 }
 Json choose(bool folder, const fs::path &current = {}, bool text = false) {
 #ifdef _WIN32
@@ -145,7 +176,8 @@ Json choose(bool folder, const fs::path &current = {}, bool text = false) {
   (void)folder;
   (void)current;
   (void)text;
-  return nullptr;
+  throw Failure("unavailable",
+                "The host must provide the asynchronous file chooser");
 #endif
 }
 void clipboard(const std::string &text) {
@@ -194,19 +226,30 @@ void clipboard(const std::string &text) {
     GlobalFree(block);
     throw Failure("clipboard", "Could not copy recovery phrase");
   }
+#elif defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
+  copyRecoveryPhraseText(text);
 #else
   (void)text;
-  throw Failure("unsupported", "Clipboard access requires Windows");
+  throw Failure("unsupported", "Clipboard access is unavailable");
 #endif
 }
 } // namespace
 void SetDataDirectory(std::string directory) {
   std::lock_guard<std::mutex> lock(stateMutex);
+  if (configuredDirectory != directory)
+    setEntropy({});
   configuredDirectory = std::move(directory);
+#if defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
+  SetSecretNamespace(configuredDirectory);
+#endif
 }
 void SetProfileResolver(ProfileResolver resolver) {
   std::lock_guard<std::mutex> lock(stateMutex);
   profileResolver = std::move(resolver);
+}
+void SetPasswordDecryptor(PasswordDecryptor decryptor) {
+  std::lock_guard<std::mutex> lock(stateMutex);
+  passwordDecryptor = std::move(decryptor);
 }
 std::string Invoke(const std::string &, const std::string &method,
                    const std::string &argsJson) {
@@ -227,7 +270,10 @@ std::string Invoke(const std::string &, const std::string &method,
                     ? defaultPath
                     : fs::u8path(args[0].get<std::string>());
     bool exists = fs::is_directory(path);
-    return Json{{"path", path.u8string()},
+    std::lock_guard<std::mutex> lock(stateMutex);
+    return Json{{"keyStorage",
+                 keys ? (persistentKey ? "persistent" : "session") : "locked"},
+                {"path", path.u8string()},
                 {"defaultPath", defaultPath.u8string()},
                 {"iCloudAvailable", false},
                 {"inICloud", false},
@@ -236,15 +282,54 @@ std::string Invoke(const std::string &, const std::string &method,
                 {"hasSyncData", exists && hasSyncData(path)}}
         .dump();
   }
+  if (method == "readPasswords") {
+    auto profile = args.at(0).get<std::string>();
+    if (profile.find_first_of("/\\:") != std::string::npos || profile == ".." ||
+        profile == ".")
+      throw Failure("format", "Invalid profile id");
+    // Resolve through Chrome rather than guessing user-data/profile paths.
+    ProfileResolver resolve;
+    PasswordDecryptor decryptor;
+    {
+      std::lock_guard<std::mutex> lock(stateMutex);
+      resolve = profileResolver;
+      decryptor = passwordDecryptor;
+    }
+    if (!resolve)
+      throw Failure("profile_unavailable",
+                    "This browser profile is not loaded");
+    // The host may marshal profile resolution to the browser UI sequence.
+    // Never hold the key-state mutex while waiting for that sequence or disk.
+    auto paths = resolve(profile);
+    if (paths.first.empty() || paths.second.empty())
+      throw Failure("profile_unavailable",
+                    "This browser profile is not loaded");
+    try {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST) ||                    \
+    defined(BAY_SYNC_LINUX_TEST)
+      return bay::importer::readEnginePasswords(paths.second, decryptor).dump();
+#else
+      return bay::importer::readEnginePasswords(paths.first, paths.second)
+          .dump();
+#endif
+    } catch (const std::exception &) {
+      return "null";
+    }
+  }
   std::lock_guard<std::mutex> lock(stateMutex);
   if (method == "createPhrase") {
     auto value = randomBytes(32);
     bool saved = saveSecret(args.at(0), value);
-    if (saved)
-      setEntropy(std::move(value));
+    bool accepted = saved;
+#if defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
+    accepted =
+        true; // Keep entropy in memory when Secret Service is unavailable.
+#endif
+    if (accepted)
+      setEntropy(std::move(value), args.at(0), saved);
     else
       erase(value);
-    result = saved;
+    result = accepted;
   } else if (method == "enterPhrase") {
     Bytes next;
     try {
@@ -264,22 +349,32 @@ std::string Invoke(const std::string &, const std::string &method,
       return Json{{"error", hasSyncData(folder) ? "mismatch" : "noData"}}
           .dump();
     }
-    if (!saveSecret(args.at(0), next)) {
+    bool saved = saveSecret(args.at(0), next);
+#if !defined(__linux__) && !defined(BAY_SYNC_LINUX_TEST)
+    if (!saved) {
       erase(next);
       return Json{{"error", "keychain"}}.dump();
     }
-    setEntropy(std::move(next));
+#endif
+    setEntropy(std::move(next), args.at(0), saved);
     result = {{"ok", true}};
   } else if (method == "unlock") {
-    auto saved = loadSecret(args.at(0));
+    auto account = args.at(0).get<std::string>();
+    if (keys && account == unlockedAccount)
+      return Json(true).dump();
+    setEntropy({});
+    auto saved = loadSecret(account);
     result = saved && saved->size() == 32;
     if (result.get<bool>())
-      setEntropy(std::move(*saved));
+      setEntropy(std::move(*saved), account, true);
     else if (saved)
       erase(*saved);
   } else if (method == "forget") {
-    deleteSecret(args.at(0));
+    auto account = args.at(0).get<std::string>();
+    bool remove = persistentKey || !keys || unlockedAccount != account;
     setEntropy({});
+    if (remove)
+      deleteSecret(account);
   } else if (method == "chainStatus") {
     auto path = fs::u8path(args.at(0).get<std::string>());
     result = !fs::is_directory(path)                 ? "unavailable"
@@ -315,12 +410,11 @@ std::string Invoke(const std::string &, const std::string &method,
     Vault(fs::u8path(args.at(0).get<std::string>()), unlocked()).deleteChain();
   else if (method == "sealLocal") {
     auto text = args.at(0).get<std::string>();
-    result = bay::importer::encodeBase64(
+    result = encodeBase64(
         unlocked().seal(Bytes(text.begin(), text.end()), "local", "state"));
   } else if (method == "openLocal") {
     try {
-      auto plain = unlocked().open(bay::importer::decodeBase64(args.at(0)),
-                                   "local", "state");
+      auto plain = unlocked().open(decodeBase64(args.at(0)), "local", "state");
       result = std::string(plain.begin(), plain.end());
       erase(plain);
     } catch (const Failure &) {
@@ -339,16 +433,15 @@ std::string Invoke(const std::string &, const std::string &method,
     auto png = method == "qrCode"
                    ? recoveryQrPNG(entropy)
                    : recoveryKitPreviewPNG(entropy, deviceName(), width);
-    result = "data:image/png;base64," + bay::importer::encodeBase64(png);
+    result = "data:image/png;base64," + encodeBase64(png);
     erase(png);
   } else if (method == "copyRecoveryPhrase") {
     unlocked();
-    auto text = recoveryPhrase(entropy);
-    clipboard(text);
-    std::fill(text.begin(), text.end(), '\0');
+    SecretText text{recoveryPhrase(entropy)};
+    clipboard(text.value);
   } else if (method == "copyRecoveryKit") {
     unlocked();
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
     copyRecoveryKitFile(
         temporaryRecoveryKit(entropy, deviceName(), dataDirectory()));
 #else
@@ -378,26 +471,53 @@ std::string Invoke(const std::string &, const std::string &method,
                                                 nullptr, nullptr,
                                                 SW_SHOWNORMAL)) <= 32)
       throw Failure("folder", "Could not open this sync folder");
+#elif defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
+    revealSyncFolder(fs::u8path(args.at(0).get<std::string>()));
 #endif
-  } else if (method == "readPasswords") {
-    auto profile = args.at(0).get<std::string>();
-    if (profile.find_first_of("/\\:") != std::string::npos || profile == ".." ||
-        profile == ".")
-      throw Failure("format", "Invalid profile id");
-    // Resolve through Chrome rather than guessing user-data/profile paths.
-    if (!profileResolver)
-      throw Failure("profile_unavailable", "This browser profile is not loaded");
-    auto paths = profileResolver(profile);
-    if (paths.first.empty() || paths.second.empty())
-      throw Failure("profile_unavailable", "This browser profile is not loaded");
-    try {
-      result = bay::importer::readEnginePasswords(paths.first, paths.second);
-    } catch (const std::exception &) {
-      result = nullptr;
-    }
   } else
-    throw Failure("unsupported", "Unknown Windows sync method");
+    throw Failure("unsupported", "Unknown sync method");
   return result.dump();
+}
+std::uint64_t RecoveryKeyGeneration() noexcept {
+  try {
+    std::lock_guard<std::mutex> lock(stateMutex);
+    return keys ? keyGeneration : 0;
+  } catch (...) {
+    return 0;
+  }
+}
+std::string SaveRecoveryKitToPath(const std::string &format,
+                                  const std::string &path,
+                                  std::uint64_t expectedGeneration) {
+  try {
+    if (format != "pdf" && format != "text")
+      throw Failure("invalid_arguments", "Invalid recovery kit format");
+    std::lock_guard<std::mutex> lock(stateMutex);
+    unlocked();
+    if (!expectedGeneration || expectedGeneration != keyGeneration)
+      throw Failure("locked", "Sync changed while the recovery kit dialog was "
+                              "open. Try saving again");
+    SecretText content{format == "text"
+                           ? recoveryKitText(entropy, deviceName())
+                           : recoveryKitPDF(entropy, deviceName())};
+#if defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
+    writeRecoveryKitFile(fs::u8path(path), content.value);
+#else
+    std::ofstream stream(fs::u8path(path), std::ios::binary | std::ios::trunc);
+    stream.write(content.value.data(), content.value.size());
+    if (!stream)
+      throw Failure("save", "Could not save the recovery kit");
+#endif
+    return Json{{"value", path}}.dump();
+  } catch (const Failure &error) {
+    return Json{{"error", {{"code", error.code}, {"message", error.what()}}}}
+        .dump();
+  } catch (const std::exception &) {
+    return Json{
+        {"error",
+         {{"code", "save"}, {"message", "Could not save the recovery kit"}}}}
+        .dump();
+  }
 }
 const std::vector<std::string> &MethodNames() {
   static const std::vector<std::string> methods = {"folderInfo",
@@ -429,7 +549,7 @@ const std::vector<std::string> &MethodNames() {
 bool RequiresUIThread(const std::string &method) {
   static const std::vector<std::string> methods = {
       "chooseFolder", "saveRecoveryKit", "copyRecoveryKit",
-      "copyRecoveryPhrase"};
+      "copyRecoveryPhrase", "revealFolder"};
   return std::find(methods.begin(), methods.end(), method) != methods.end();
 }
 std::string InvokeEnvelope(const std::string &method,
@@ -437,8 +557,7 @@ std::string InvokeEnvelope(const std::string &method,
   try {
     auto &methods = MethodNames();
     if (std::find(methods.begin(), methods.end(), method) == methods.end())
-      throw Failure("unsupported",
-                    "This native method is unavailable on Windows");
+      throw Failure("unsupported", "This native sync method is unavailable");
     if (!Json::parse(argsJson).is_array())
       throw Failure("invalid_arguments",
                     "Native method arguments must be a JSON array");

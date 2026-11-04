@@ -1,5 +1,9 @@
 #include "ImportCore.h"
 #include "SQLite.h"
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+#include "../linux/ChromiumSecrets.h"
+#include "../linux/FirefoxNSS.h"
+#endif
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -23,7 +27,19 @@ void wipeJson(Json &value) noexcept {
   value = nullptr;
 }
 namespace {
+struct WipeSecretBytes {
+  Bytes &bytes;
+  ~WipeSecretBytes() { bay::sync::erase(bytes); }
+};
 Bytes decrypt(const Bytes &value, const Bytes &key) {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  // A legacy Bytes key cannot identify the Linux v11 scheme or source browser.
+  // Keep old callers safe: fixed v10 only, without any desktop secret lookup.
+  if (!key.empty())
+    throw Failure("unsupported", "Use a source-specific Linux secret context");
+  return decryptLinuxChromiumSecret(
+      value, linuxChromiumSecrets(LinuxChromiumBrowser::Chromium));
+#else
   if (value.size() >= 3 && value[0] == 'v' && value[1] == '2' &&
       value[2] == '0')
     throw Failure("appBound", "These secrets are protected by the source "
@@ -42,6 +58,26 @@ Bytes decrypt(const Bytes &value, const Bytes &key) {
   (void)key;
   throw Failure("unsupported", "DPAPI decryption requires Windows");
 #endif
+#endif
+}
+Bytes decrypt(const Bytes &value, const ChromiumSecretContext &context) {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  return decryptLinuxChromiumSecret(value, context);
+#else
+  (void)value;
+  (void)context;
+  throw Failure("unsupported", "Linux browser secret context requires Linux");
+#endif
+}
+Bytes decrypt(const Bytes &value, const EnginePasswordDecryptor &decryptor) {
+  auto plain = decryptor(std::string(value.begin(), value.end()));
+  if (!plain)
+    throw Failure("locked", "The browser could not decrypt a saved password");
+  Bytes result(plain->begin(), plain->end());
+  volatile char *bytes = plain->data();
+  for (std::size_t i = 0; i < plain->size(); ++i)
+    bytes[i] = 0;
+  return result;
 }
 } // namespace
 std::string encodeBase64(const Bytes &bytes) {
@@ -90,6 +126,11 @@ Bytes decodeBase64(const std::string &text) {
   return out;
 }
 Bytes chromiumKey(const Path &root) {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  (void)root;
+  return {}; // Legacy callers can read v10 only; no Local State or keyring
+             // read.
+#else
   auto data = Json::parse(readText(root / "Local State"));
   auto encrypted = decodeBase64(
       data.value("os_crypt", Json::object()).value("encrypted_key", ""));
@@ -109,9 +150,11 @@ Bytes chromiumKey(const Path &root) {
 #else
   throw Failure("unsupported", "DPAPI decryption requires Windows");
 #endif
+#endif
 }
-Json chromiumLogins(const Path &profile, const Bytes &key,
-                    const std::atomic_bool &cancelled, int &blocked) {
+template <class Key>
+Json chromiumLoginsImpl(const Path &profile, const Key &key,
+                        const std::atomic_bool &cancelled, int &blocked) {
   blocked = 0;
   Json out = Json::array();
   std::set<std::string> seen;
@@ -129,6 +172,7 @@ Json chromiumLogins(const Path &profile, const Bytes &key,
       if (encrypted.empty())
         return true;
       Bytes password;
+      WipeSecretBytes wipePassword{password};
       try {
         password = decrypt(encrypted, key);
       } catch (const Failure &) {
@@ -156,7 +200,7 @@ Json chromiumLogins(const Path &profile, const Bytes &key,
       auto identity = credential.value("realm", credential.value("url", "")) +
                       std::string(1, '\0') + credential.value("username", "");
       if (seen.insert(identity).second)
-        out.push_back(credential);
+        out.push_back(std::move(credential));
       return true;
     });
   }
@@ -164,20 +208,21 @@ Json chromiumLogins(const Path &profile, const Bytes &key,
     throw Failure("notFound", "No saved passwords in this profile");
   return out;
 }
-Json readEnginePasswords(const Path &root, const Path &profile) {
-  if (!std::filesystem::exists(profile / "Login Data"))
+Json chromiumLogins(const Path &profile, const Bytes &key,
+                    const std::atomic_bool &cancelled, int &blocked) {
+  return chromiumLoginsImpl(profile, key, cancelled, blocked);
+}
+Json chromiumLogins(const Path &profile, const ChromiumSecretContext &context,
+                    const std::atomic_bool &cancelled, int &blocked) {
+  return chromiumLoginsImpl(profile, context, cancelled, blocked);
+}
+template <class Key> Json enginePasswords(const Path &profile, const Key &key) {
+  if (!std::filesystem::exists(profile / "Login Data") &&
+      !std::filesystem::exists(profile / "Login Data For Account"))
     return Json::array();
-  auto key = chromiumKey(root);
   std::atomic_bool cancelled{false};
   int blocked = 0;
-  Json items;
-  try {
-    items = chromiumLogins(profile, key, cancelled, blocked);
-  } catch (...) {
-    bay::sync::erase(key);
-    throw;
-  }
-  bay::sync::erase(key);
+  auto items = chromiumLoginsImpl(profile, key, cancelled, blocked);
   if (blocked)
     return nullptr;
   Json out = Json::array();
@@ -189,9 +234,24 @@ Json readEnginePasswords(const Path &root, const Path &profile) {
                    {"created", item.value("created", 0.0)}});
   return out;
 }
-SensitiveImport chromiumAutofill(const Path &profile, const Bytes &key,
-                                 const std::atomic_bool &cancelled,
-                                 int &blocked) {
+Json readEnginePasswords(const Path &root, const Path &profile) {
+  if (!std::filesystem::exists(profile / "Login Data") &&
+      !std::filesystem::exists(profile / "Login Data For Account"))
+    return Json::array();
+  auto key = chromiumKey(root);
+  WipeSecretBytes wipe{key};
+  return enginePasswords(profile, key);
+}
+Json readEnginePasswords(const Path &profile,
+                         const EnginePasswordDecryptor &decryptor) {
+  if (!decryptor)
+    return nullptr;
+  return enginePasswords(profile, decryptor);
+}
+template <class Key>
+SensitiveImport chromiumAutofillImpl(const Path &profile, const Key &key,
+                                     const std::atomic_bool &cancelled,
+                                     int &blocked) {
   Snapshot db(profile / "Web Data");
   SensitiveImport out;
   blocked = 0;
@@ -314,6 +374,7 @@ SensitiveImport chromiumAutofill(const Path &profile, const Bytes &key,
       if (encrypted.empty())
         return true;
       Bytes number;
+      WipeSecretBytes wipeNumber{number};
       try {
         number = decrypt(encrypted, key);
       } catch (const Failure &) {
@@ -349,6 +410,17 @@ SensitiveImport chromiumAutofill(const Path &profile, const Bytes &key,
       return true;
     });
   return out;
+}
+SensitiveImport chromiumAutofill(const Path &profile, const Bytes &key,
+                                 const std::atomic_bool &cancelled,
+                                 int &blocked) {
+  return chromiumAutofillImpl(profile, key, cancelled, blocked);
+}
+SensitiveImport chromiumAutofill(const Path &profile,
+                                 const ChromiumSecretContext &context,
+                                 const std::atomic_bool &cancelled,
+                                 int &blocked) {
+  return chromiumAutofillImpl(profile, context, cancelled, blocked);
 }
 namespace {
 std::string percentDecode(const std::string &value) {
@@ -632,6 +704,11 @@ Json firefoxLogins(const Path &profile, const std::string &password,
     out.push_back(item);
   }
   return out;
+}
+#elif defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+Json firefoxLogins(const Path &profile, const std::string &password,
+                   const std::atomic_bool &cancelled) {
+  return firefoxLoginsLinux(profile, password, cancelled);
 }
 #else
 Json firefoxLogins(const Path &, const std::string &,

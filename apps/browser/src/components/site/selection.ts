@@ -2,6 +2,7 @@ import { setSearchEngineName } from "@bay/chromium";
 import { chooseTextFragment, cleanUrl, searchUrl, withTextFragment, type SelectionContext } from "@bay/core";
 import { copyQuoteCard, copyText, shareQuoteCard, type QuoteCard } from "@bay/desktop";
 import { create } from "zustand";
+import { capabilities } from "@bay/platform";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { spaceThemeKey, themeFor } from "../../lib/theme";
@@ -116,14 +117,16 @@ export async function shareSelectionQuote(tabId: string) {
     showToast(tab.windowId, "Copied Quote", "Paste the card or its link into another app.", {
       icon: "quote.bubble.fill",
       key: "share-quote",
-      action: {
-        title: "Share…",
-        run: () => {
-          void shareQuoteCard(card, tab.windowId)
-            .then((shared) => !shared && failed("The share menu couldn't be opened. You can still paste the quote."))
-            .catch(() => failed("The share menu couldn't be opened. You can still paste the quote."));
-        },
-      },
+      action: capabilities.shareSheet
+        ? {
+            title: "Share…",
+            run: () => {
+              void shareQuoteCard(card, tab.windowId)
+                .then((shared) => !shared && failed("The share menu couldn't be opened. You can still paste the quote."))
+                .catch(() => failed("The share menu couldn't be opened. You can still paste the quote."));
+            },
+          }
+        : undefined,
     });
   } catch {
     failed("The card couldn't be created. Select the text and try again.");

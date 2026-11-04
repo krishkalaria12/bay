@@ -1,7 +1,17 @@
 import { reportBrowserCommand } from "../runtime/commands";
 import { withSidebarUndoWindow } from "../store/sidebarUndo";
 import { joinMeetingNow } from "../activity/meetingAlerts";
-import { closeWindow as closeNativeWindow, copyText, openExternalURL, pickFiles, prompt, setAppearance, sharePage, type CommandEvent } from "@bay/desktop";
+import {
+  closeWindow as closeNativeWindow,
+  copyText,
+  openExternalURL,
+  pickFiles,
+  prompt,
+  setAppearance,
+  sharePage,
+  type BrowserCommand,
+  type CommandEvent,
+} from "@bay/desktop";
 import { markdownLink } from "@bay/core";
 import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../store/model";
 import { closeTab, createSpace, cycleSpace, focus, moveTabToSpace, moveTabToWindow, openWindow, switchSpace, toggleMute } from "./actions";
@@ -42,6 +52,8 @@ import { browserRead } from "../store/read";
 import { addBookmark, addBookmarkFolder } from "../runtime/bookmarkActions";
 import { dismissCommandPanel, openCommandPanel, setFind, toggleDownloads } from "../runtime/windowUiActions";
 import { togglePageEngine } from "./pageEngines";
+import { showAppMenu } from "./appMenu";
+import { menuState } from "./shellBridge";
 
 export function runCommand(event: CommandEvent) {
   return withSidebarUndoWindow(event.windowId ?? undefined, () => dispatchCommand(event));
@@ -59,6 +71,11 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
   const peekWindow = resolveWindowId(s, requested);
   if (peekWindow && !s.windowUi[peekWindow]?.panel.open && runPeekCommand(command, peekWindow)) return;
   if (command === "newTab" && requested && s.windows[requested]) return openNewTabPanel(requested);
+  // menuState only reads, and the projection is the same data, read-only.
+  if (command === "showAppMenu")
+    return void showAppMenu(menuState(s as unknown as Parameters<typeof menuState>[0]), s.settings.shortcuts, (next, nextArg) =>
+      runCommand({ command: next as BrowserCommand, arg: nextArg, windowId: requested }),
+    );
 
   switch (command) {
     case "undoPinnedFolderMove": {
@@ -313,6 +330,8 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
       return cycleSpace(windowId, 1);
     case "previousSpace":
       return cycleSpace(windowId, -1);
+    case "focusWindow":
+      return arg ? focus(arg) : undefined;
     case "openExtension":
       return arg ? openExtensionFromMenu(windowId, arg) : undefined;
     case "addExtension":

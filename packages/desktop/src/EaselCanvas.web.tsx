@@ -372,9 +372,9 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
         easel.commitText();
         return imageFiles.exportPNG(easel.document);
       },
-      // Web sharing stays off on these hosts (isEaselWebSharingEnabled).
-      prepareShare: async () => {
-        throw new Error("Easel web sharing isn't available on this platform.");
+      prepareShare: async (title) => {
+        easel.commitText();
+        return imageFiles.prepareShare(easel.document, title);
       },
       addText: async (text) => easel.addText(text),
       addLink: async (url, title) => easel.addLink(url, title),

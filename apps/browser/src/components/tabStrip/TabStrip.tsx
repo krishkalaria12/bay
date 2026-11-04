@@ -3,7 +3,7 @@ import { ScrollView } from "@bay/platform";
 import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/desktop";
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
-import { PanResponder, StyleSheet, Text } from "react-native";
+import { PanResponder, Platform, StyleSheet, Text } from "react-native";
 import { nodeTag } from "../../lib/nodeTag";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, ThemeScope, useTheme, useWindowTint } from "../../lib/theme";
@@ -88,7 +88,7 @@ import { makeRoom, registerSlot, reorderOffsets, settleRoom } from "./tabStripRe
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, setInsert, setInsertResolver, updateTabDrag, useTabDrag } from "./tabStripDrag";
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type EasedColor, type ToolbarPalette } from "../toolbar/colors";
 import { listOfTab } from "../../store/model";
-import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../window/windowButtons";
+import { useWindowButtonLayout, windowButtonRoom } from "../window/windowButtons";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { closeGroup, moveGroup, placeTabs, updateGroup } from "../../runtime/organizeActions";
 import { browserRead } from "../../store/read";
@@ -105,6 +105,12 @@ type Entry = { kind: "dock"; ids: string[] } | GroupEntry | Member;
 // `width`: the window's (the peek's, floating), from its parent, so a strip mounting again lays its tabs out right on its
 // first frame. `hidden`: page full screen keeps the strip mounted out of view, and gives the traffic lights back.
 // `swipe`: the strip pages profiles; a hidden peek's doesn't, or switching profiles would wait on its pager.
+// raiseView on the Chrome-hosted desktop, which has no native view tags: the element, and `levels` of its ancestors,
+// over their siblings, as a later sibling would otherwise draw over the dragged tab.
+function raiseElement(element: HTMLElement | null, levels: number, raised: boolean) {
+  for (let level = 0; element && level <= levels; level++, element = element.parentElement) element.style.zIndex = raised ? "1" : "";
+}
+
 export function TopTabStrip({
   width,
   floating = false,
@@ -121,9 +127,10 @@ export function TopTabStrip({
   const { pages } = usePagerPages(windowId);
   const spaceChip = useSpaceIndicatorWidth(STRIP_PROFILE_ROOM);
   const controls = (spaceChip ? spaceChip + STRIP_CONTROLS_GAP : 0) + STRIP_DOWNLOADS_BOX;
-  const left = floating ? 8 : LIGHTS_WIDTH + STRIP_LIGHTS_GAP;
-  // The drop-down strip shows in page full screen, where the window has no caption buttons.
-  const caption = floating ? 0 : CAPTION_BUTTONS_WIDTH;
+  const room = windowButtonRoom(useWindowButtonLayout());
+  const left = floating ? 8 : room.left + STRIP_LIGHTS_GAP;
+  // The floating strip's popup provides its own clearance from the window buttons.
+  const caption = floating ? 0 : room.right;
   const right = Math.max(84, controls + 8 + 6) + caption;
   const pageWidth = Math.max(0, width - left - right);
   const flare = floating ? 0 : STRIP_FLARE;
@@ -481,6 +488,7 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
   // Drawn over the row while dragged and settling (a group's member over the group's other members).
   let raised: number | null = null;
   const raise = (on: boolean) => {
+    if (Platform.OS === "web") return raiseElement(view as unknown as HTMLElement | null, current().groupId ? 1 : 0, on);
     const tag = on ? nodeTag(view) : raised;
     raiseView(tag, current().groupId ? 1 : 0, on);
     raised = on ? tag : null;
@@ -1392,7 +1400,11 @@ function NewTabButton({ windowId }: { windowId: string }) {
   );
 }
 
+const PEEK_INSET = 6;
+
 export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; enabled: boolean }) {
+  const room = windowButtonRoom(useWindowButtonLayout());
+  const peekWidth = Math.max(0, windowWidth - 2 * PEEK_INSET);
   const theme = useTheme();
   const windowTint = useWindowTint();
   const { slide, live, show, hide } = usePeek(enabled);
@@ -1403,7 +1415,10 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
   });
   return (
     <>
-      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: LIGHTS_WIDTH, right: CAPTION_BUTTONS_WIDTH, top: 0, height: 6 }} /> : null}
+      {/* Leaving the strip hides the peek unless the pointer goes on into it, as at the sidebar's edge (App.tsx). */}
+      {enabled ? (
+        <View onMouseEnter={show} onMouseLeave={hide} style={{ position: "absolute", left: room.left, right: room.right, top: 0, height: 6 }} />
+      ) : null}
       {/* The window under it while it's out: the pointer reaching it hides the peek, as leaving the peek does. */}
       {live ? (
         <View pointerEvents="none" onMouseEnter={hide} style={{ position: "absolute", left: 0, right: 0, top: 4 + STRIP_PEEK_HEIGHT, bottom: 0 }} />
@@ -1415,8 +1430,8 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
         style={[
           {
             position: "absolute",
-            left: 6,
-            width: windowWidth - 12,
+            left: PEEK_INSET,
+            width: peekWidth,
             // Out of the window while hidden (a transform doesn't move hover tracking): its tabs mustn't hover under the page.
             top: live ? 4 : -10_000,
             height: STRIP_PEEK_HEIGHT,
@@ -1437,7 +1452,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
         >
           <View style={{ position: "absolute", left: 0, right: 0, top: STRIP_PEEK_PAD - STRIP_ITEM_TOP, height: TOP_STRIP_HEIGHT }}>
             {/* The border insets the strip. */}
-            <TopTabStrip floating swipe={live} width={windowWidth - 12 - STRIP_PEEK_BORDER * 2} />
+            <TopTabStrip floating swipe={live} width={Math.max(0, peekWidth - STRIP_PEEK_BORDER * 2)} />
           </View>
         </Surface>
       </Animated.View>

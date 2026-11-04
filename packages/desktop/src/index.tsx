@@ -1,4 +1,5 @@
-import { capabilities } from "@bay/platform";
+import { capabilities, isMac, platformOS } from "@bay/platform";
+import { formatShortcut, menuShortcutStroke } from "@bay/platform/keys";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
 import {
@@ -116,6 +117,9 @@ export type BrowserCommand =
   | "share"
   | "sendFeedback"
   | "keyboardShortcuts"
+  // The Chrome-hosted desktop's in-window app menu (F10), and the window it lists to go to.
+  | "showAppMenu"
+  | "focusWindow"
   | "copyDiagnostics"
   | "recordPerformanceIssue"
   | "toolTour"
@@ -161,7 +165,17 @@ export type WindowEvent =
   | ({ type: "state"; id: string } & WindowState);
 
 /** A window's placement, as its caption buttons show it (Windows). */
-export type WindowState = { maximized: boolean; fullscreen: boolean };
+export type WindowState = {
+  maximized: boolean;
+  fullscreen: boolean;
+  /** Ephemeral native state, never restored from a session. */
+  minimized?: boolean;
+  /** Restored/normal window size, including while maximized or fullscreen. No screen position. */
+  size?: [number, number];
+};
+/** Desktop decoration order, from left to right within each physical window edge. */
+export type WindowButton = "minimize" | "maximize" | "close";
+export type WindowButtonLayout = { left: readonly WindowButton[]; right: readonly WindowButton[] };
 /** The caption the UI draws (Windows): its maximize button, in the window from the top-left, for Snap Layouts; and
  *  its theme, which the system backdrop follows. */
 export type WindowCaption = { maximize: [number, number, number, number] | null; dark: boolean };
@@ -171,6 +185,7 @@ export type AppEvent =
   | { type: "willQuit" }
   | { type: "quitCancelled" }
   | { type: "appearance"; dark: boolean }
+  | { type: "windowButtonLayout"; layout: WindowButtonLayout }
   | { type: "quitWarningSuppressed" }
   | { type: "resignActive" }
   | { type: "screenLocked" }
@@ -197,6 +212,8 @@ export type MenuItem =
       swatch?: string;
       key?: string;
       modifiers?: ("command" | "shift" | "option" | "control")[];
+      // Web hosts: the trailing hint, filled in from key and modifiers.
+      shortcut?: string;
       enabled?: boolean;
       checked?: boolean;
       children?: MenuItem[];
@@ -209,7 +226,9 @@ export type OpenWindowOptions = {
   focus?: boolean;
   kind?: "browser" | "small" | "settings" | "import" | "taskManager";
   profile?: string;
-  // Little Bay: its remembered size; the window opens centred on the active screen.
+  // Restored size without a screen position; the compositor places the window.
+  maximized?: boolean;
+  // Little Bay also opens at its remembered size, centred on the active screen.
   size?: [number, number];
   // Settings: the pane to show, and the space it is about.
   pane?: string;
@@ -258,14 +277,18 @@ export type PromptOptions = {
 };
 
 const Shell = requireNativeModule<{
+  globalWindowCoordinates?: boolean;
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
-  showMenu(items: MenuItem[]): Promise<string | null>;
+  // `anchor`: the Chrome-hosted desktop only, where it comes from the window's top left rather than the pointer.
+  showMenu(items: MenuItem[], anchor?: [number, number]): Promise<string | null>;
   copyText(text: string): void;
-  copyImage(base64: string): boolean;
+  copyImage(base64: string, sourceURL?: string): boolean;
   setSwitcherCapture(active: boolean): Promise<void>;
   startDictation(): void;
   pickFiles(): Promise<string[]>;
-  fontFamilies?(): string[];
+  // macOS answers at once; the web host loads the system's list off its UI thread.
+  fontFamilies?(): Promise<string[]>;
+  // True once written, false if the user cancelled; rejects when it can't be written.
   saveTextFile?(name: string, contents: string): Promise<boolean>;
   openTextFile?(extensions: string[]): Promise<string | null>;
   readDocument(name: string): string | null;
@@ -290,6 +313,7 @@ const Shell = requireNativeModule<{
   minimizeWindow?(id: string): Promise<void>;
   toggleMaximizeWindow?(id: string): Promise<void>;
   windowState?(id: string): Promise<WindowState>;
+  windowButtonLayout?(): WindowButtonLayout;
   setWindowCaption?(id: string, caption: WindowCaption): Promise<void>;
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
@@ -305,6 +329,9 @@ const Shell = requireNativeModule<{
 }>("BayShell");
 
 export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
+/** The caption buttons the app draws (capabilities.captionButtons), in Windows' order. Linux hosts still publish the
+ *  desktop's button layout (snapshots.BayShell.windowButtonLayout), but Bay's Linux windows show no buttons. */
+export const windowButtonLayout = (): WindowButtonLayout => ({ left: [], right: capabilities.captionButtons ? ["minimize", "maximize", "close"] : [] });
 export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
 export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));
@@ -321,7 +348,7 @@ export const setSidebarMoveUndo = (windowId: string, available: boolean, focus =
 export const startDictation = () => Shell.startDictation();
 export const setSwitcherCapture = (active: boolean) => void Shell.setSwitcherCapture(active);
 export const pickFiles = () => Shell.pickFiles();
-export const fontFamilies = (): string[] => Shell.fontFamilies?.() ?? [];
+export const fontFamilies = async (): Promise<string[]> => (await Shell.fontFamilies?.()) ?? [];
 export const saveTextFile = (name: string, contents: string) => Shell.saveTextFile?.(name, contents) ?? Promise.resolve(false);
 export const openTextFile = (extensions: string[] = []) => Shell.openTextFile?.(extensions) ?? Promise.resolve(null);
 
@@ -334,8 +361,19 @@ export async function copyImage(base64: string): Promise<boolean> {
   return await Shell.copyImage(base64);
 }
 
-export function showMenu(items: MenuItem[]): Promise<string | null> {
-  return Shell.showMenu(items);
+// macOS draws key and modifiers itself; the web hosts show the label Bay's keyboard tables would.
+const withShortcutLabels = (items: MenuItem[]): MenuItem[] =>
+  items.map((item) => {
+    if ("separator" in item) return item;
+    const labeled = { ...item };
+    if (item.children) labeled.children = withShortcutLabels(item.children);
+    if (item.key) labeled.shortcut = formatShortcut(menuShortcutStroke(item.key, item.modifiers), platformOS);
+    return labeled;
+  });
+
+export function showMenu(items: MenuItem[], anchor?: [number, number]): Promise<string | null> {
+  if (isMac) return Shell.showMenu(items);
+  return anchor ? Shell.showMenu(withShortcutLabels(items), anchor) : Shell.showMenu(withShortcutLabels(items));
 }
 
 export const openWindow = (id: string, options: OpenWindowOptions = {}) => Shell.openWindow(id, options);
@@ -379,13 +417,13 @@ export const dragPreview = {
 export const raiseView = (tag: number | null, levels: number, raised: boolean) => {
   if (tag != null) void Shell.raiseView?.(tag, levels, raised);
 };
-/** The window's frame now, on screen (AppKit's coordinates); null on builds without it. */
+/** The window's frame now, on screen (AppKit's coordinates); null without global screen coordinates. */
 export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFrame?.(id) ?? Promise.resolve(null);
 export const windowIds = () => Shell.windowIds();
 
 /** A key the window's host runs as an app command (onCommand) rather than Chrome's: `keyCode` is the key's virtual-key
- *  code, as Chromium's key events carry it. */
-export type KeyShortcut = { command: BrowserCommand; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean };
+ *  code, as Chromium's key events carry it. An empty command runs nothing, which keeps the key from Chrome. */
+export type KeyShortcut = { command: BrowserCommand | ""; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean };
 /** Hands the host the window's key shortcuts (hosts whose menus don't carry them: the Chrome-hosted desktop). */
 export const setKeyShortcuts = (shortcuts: KeyShortcut[]) => Shell.setKeyShortcuts?.(shortcuts) ?? Promise.resolve();
 

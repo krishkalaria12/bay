@@ -78,10 +78,13 @@ def layer_source(here: Path, owned: str):
             f'inline constexpr char kPageScript[] = R"{delimiter}({script}){delimiter}";\n'
             "}  // namespace bay\n", encoding="utf-8")
         for package in ("import", "sync"):
-            canonical = repository / "packages" / package / "windows"
-            destination = staged / "data/packages" / package / "windows"
-            shutil.copytree(canonical, destination,
-                            ignore=shutil.ignore_patterns("tests", "__pycache__", "*.pyc"))
+            for platform in ("windows", "linux"):
+                canonical = repository / "packages" / package / platform
+                if platform == "linux" and not canonical.exists():
+                    continue
+                destination = staged / "data/packages" / package / platform
+                shutil.copytree(canonical, destination,
+                                ignore=shutil.ignore_patterns("tests", "__pycache__", "*.pyc"))
         yield staged
 
 

@@ -4,21 +4,23 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { history, type HistoryDomain } from "../src/browsing.ts";
+import { chromiumRoot, documentsRoot } from "../src/endpoint.ts";
 
 it("reports the newest visit when aggregating domain history", () => {
   const root = mkdtempSync(join(tmpdir(), "bay-history-test-"));
   try {
-    mkdirSync(join(root, "Chromium", "Default"), { recursive: true });
+    mkdirSync(join(chromiumRoot(root), "Default"), { recursive: true });
+    mkdirSync(documentsRoot(root), { recursive: true });
     writeFileSync(
-      join(root, "Chromium", "BayControl.json"),
+      join(chromiumRoot(root), "BayControl.json"),
       JSON.stringify({ port: 12345, browser: "/devtools/browser/test", token: "history-test-secret", pid: process.pid }),
       { mode: 0o600 },
     );
     writeFileSync(
-      join(root, "session.json"),
+      join(documentsRoot(root), "session.json"),
       JSON.stringify({ version: 2, spaces: { default: { id: "default", name: "Personal" } }, spaceOrder: ["default"] }),
     );
-    const db = new Database(join(root, "Chromium", "Default", "History"));
+    const db = new Database(join(chromiumRoot(root), "Default", "History"));
     const now = Math.floor(Date.now() / 1000) * 1000;
     const chromeTime = (now + 11_644_473_600_000) * 1000;
     try {

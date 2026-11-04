@@ -14,7 +14,8 @@ import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSp
 import { activeTabId, listIds, spaceFolded, spaceHeaderHidden, windowListKey } from "../../store/model";
 import { cleanUpCandidates, hasClearableTabs } from "../../store/tabTidying";
 import { openNewTabInSplit } from "../split/splitActions";
-import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../window/windowButtons";
+import { LIGHTS_WIDTH, useWindowButtonLayout } from "../window/windowButtons";
+import { sidebarButtonRoom } from "../window/geometry";
 import { listTopGap, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "../window/layout";
 import { SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS } from "../window/constants";
 import { SidebarPlayer, useSidebarPlayerTab } from "../media/SidebarPlayer";
@@ -98,11 +99,11 @@ export function Sidebar() {
   const field = useSidebarFieldShown();
   const header = field ? SIDEBAR_FIELD.top + metrics.addressHeight : layout.sidebarHeader;
   const glowRoom = field ? 0 : GLOW_ROOM;
-  // The header clears the window's buttons on its side of the window: macOS's traffic lights on the left, the caption
-  // buttons on the right (Windows). Elsewhere the profile starts at the inset.
+  // The header clears only the window buttons at its outer edge.
   const right = useSidebarOnRight();
-  const profileX = !right && LIGHTS_WIDTH ? PROFILE_INDICATOR_X : layout.sidebarInset + 4;
-  const headerEnd = right && CAPTION_BUTTONS_WIDTH ? CAPTION_BUTTONS_WIDTH : 7;
+  const buttonRoom = sidebarButtonRoom(useWindowButtonLayout(), right);
+  const profileX = !right && LIGHTS_WIDTH ? PROFILE_INDICATOR_X : buttonRoom.left + layout.sidebarInset + 4;
+  const headerEnd = buttonRoom.right || 7;
   // The footer: downloads at its left, then the space switcher with its + for a new space (every window but a
   // private one).
   const spaces = !useIsIncognito();

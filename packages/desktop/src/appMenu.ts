@@ -1,8 +1,9 @@
 import { requireNativeModule, nativeSnapshot, type EventSubscription } from "@bay/platform/native";
 import { capabilities } from "@bay/platform";
+import { playWebIntroMusic, setWebIntroMusicMuted, stopWebIntroMusic } from "./webIntroMusic";
 
 export type UpdaterState =
-  | { available: false }
+  | { available: false; managedBy?: "packageManager" }
   | {
       available: true;
       configured: boolean;
@@ -120,6 +121,8 @@ type AppModule = {
   checkForUpdates(): Promise<void>;
   installPendingUpdate(): Promise<void>;
   disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;
+  // The Chrome-hosted desktop: the rows' own pixels, for the document to animate (clear_specks.cc).
+  documentSpecks?(rects: [number, number, number, number][]): Promise<number[][]>;
   setAutomaticUpdateChecks(on: boolean): Promise<void>;
   setAutomaticUpdateDownloads(on: boolean): Promise<void>;
   setUpdateChannel(channel: UpdateChannel): Promise<void>;
@@ -130,11 +133,11 @@ type AppModule = {
   appIcons(size: number): Promise<AppIcon[]>;
   appIcon(): Promise<string>;
   setAppIcon(id: string): Promise<void>;
-  notificationPermission(): Promise<NotificationPermission>;
-  requestNotificationPermission(): Promise<boolean>;
+  notificationPermission?(): Promise<NotificationPermission>;
+  requestNotificationPermission?(): Promise<boolean>;
   postNotification(options: NotificationOptions): Promise<string | null>;
   removeNotifications(ids: string[]): Promise<void>;
-  openNotificationSettings(): Promise<void>;
+  openNotificationSettings?(): Promise<void>;
   setScriptState(state: ScriptState): Promise<void>;
   replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;
   systemInfo(): SystemInfo;
@@ -165,6 +168,9 @@ export const disintegrate = (windowId: string, rects: { x: number; y: number; wi
     windowId,
     rects.map((r) => [r.x, r.y, r.width, r.height]),
   );
+/** Each row's specks as `[x, y, r, g, b, a]` runs, in window points; empty where the host can't read the window. */
+export const documentSpecks = (rects: { x: number; y: number; width: number; height: number }[]): Promise<number[][]> =>
+  App.documentSpecks?.(rects.map((r) => [r.x, r.y, r.width, r.height])) ?? Promise.resolve([]);
 export const onUpdatePending = (listener: (pending: PendingUpdate | null) => void) => App.addListener("onUpdatePending", (e) => listener(e.pending ?? null));
 export const setAutomaticUpdateChecks = (on: boolean) => App.setAutomaticUpdateChecks(on);
 export const setAutomaticUpdateDownloads = (on: boolean) => App.setAutomaticUpdateDownloads(on);
@@ -181,14 +187,17 @@ export const appIcons = (size = 64) => App.appIcons(size);
 export const currentAppIcon = () => App.appIcon();
 export const setAppIcon = (id: string) => App.setAppIcon(id);
 
-export const notificationPermission = () => App.notificationPermission();
+// Some desktop notification services accept submissions without a permission API.
+export const hasNotificationPermissionQuery = () => typeof App.notificationPermission === "function";
+export const notificationPermission = () => App.notificationPermission?.() ?? Promise.reject(new Error("Notification permission queries are unavailable"));
 
 export const crashReports = (since: number): Promise<CrashReport[]> => App.crashReports(since);
 export const devCrash = (kind?: "exception") => App.devCrash(kind);
-export const requestNotificationPermission = () => App.requestNotificationPermission();
+export const requestNotificationPermission = () =>
+  App.requestNotificationPermission?.() ?? Promise.reject(new Error("Notification permission requests are unavailable"));
 export const postNotification = (options: NotificationOptions) => App.postNotification(options);
 export const removeNotifications = (ids: string[]) => App.removeNotifications(ids);
-export const openNotificationSettings = () => App.openNotificationSettings();
+export const openNotificationSettings = () => App.openNotificationSettings?.() ?? Promise.reject(new Error("Notification settings are unavailable"));
 export const onNotificationResponse = (listener: (e: NotificationResponse) => void) => App.addListener("onNotificationResponse", listener);
 
 export const setScriptState = (state: ScriptState) => App.setScriptState(state);
@@ -206,14 +215,20 @@ export type IntroMusicCues = {
   exit: number;
   end: number;
 };
+// A hidden test instance never makes a sound on the owner's computer (IntroMusic.swift); BAY_ALLOW_AUDIO=1 allows it.
+const quietInstance = () => launchEnvironment("BAY_BACKGROUND") === "1" && launchEnvironment("BAY_ALLOW_AUDIO") !== "1";
+const hasWebAudio = () => typeof AudioContext === "function";
 export const playIntroMusic = (cues: IntroMusicCues, muted: boolean) => {
   if (capabilities.introMusic) void App.playIntroMusic(cues, muted);
+  else if (hasWebAudio() && !quietInstance()) playWebIntroMusic(cues, muted);
 };
 export const setIntroMusicMuted = (muted: boolean) => {
   if (capabilities.introMusic) void App.setIntroMusicMuted(muted);
+  else if (hasWebAudio()) setWebIntroMusicMuted(muted);
 };
 export const stopIntroMusic = (fade = 0.4) => {
   if (capabilities.introMusic) void App.stopIntroMusic(fade);
+  else if (hasWebAudio()) stopWebIntroMusic(fade);
 };
 export const devRenderIntroMusic = (cues: IntroMusicCues, path: string) => App.devRenderIntroMusic(cues, path);
 export const launchEnvironment = (name: string) => nativeSnapshot("BayApp", "launchEnvironment", [name], () => App.launchEnvironment(name));

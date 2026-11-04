@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/scoped_observation.h"
+#include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -104,6 +105,13 @@ base::Value Encode(SkBitmap bitmap) {
 }
 
 void Decode(std::string_view body, Reply reply) {
+  // No decoder here reads SVG. The document does, as an image, where it can't
+  // run script or load anything.
+  if (IsSvgBody(body)) {
+    std::move(reply).Run(base::Value(
+        base::DictValue().Set("svg", base::Base64Encode(body))));
+    return;
+  }
   // In the sandboxed decoder: an icon is untrusted web data.
   data_decoder::DecodeImageIsolated(
       base::as_byte_span(body), data_decoder::mojom::ImageCodec::kDefault,
@@ -160,7 +168,7 @@ class IconDownload : public ProfileObserver {
     const network::mojom::URLResponseHead* head = loader_->ResponseInfo();
     const bool ok = loader_->NetError() == net::OK && body && head &&
                     head->headers && head->headers->response_code() == 200 &&
-                    IsIconBody(*body);
+                    (IsIconBody(*body) || IsSvgBody(*body));
     Reply reply = std::move(reply_);
     delete this;
     if (ok)
@@ -182,6 +190,18 @@ class IconDownload : public ProfileObserver {
 };
 
 }  // namespace
+
+bool IsSvgBody(std::string_view body) {
+  // An XML declaration, a doctype or comments may come first; a page with an
+  // inline <svg> isn't an icon.
+  const std::string_view start = body.substr(0, 4096);
+  const size_t svg = start.find("<svg");
+  return svg != std::string_view::npos &&
+         base::TrimWhitespaceASCII(start, base::TRIM_LEADING)
+             .starts_with("<") &&
+         start.substr(0, svg).find("<html") == std::string_view::npos &&
+         start.substr(0, svg).find("<HTML") == std::string_view::npos;
+}
 
 bool IsIconBody(std::string_view body) {
   if (body.empty())
@@ -208,7 +228,7 @@ void FetchIcon(const std::string& url,
     std::string charset;
     std::string body;
     if (net::DataURL::Parse(target, &mime, &charset, &body) &&
-        mime.starts_with("image/") && IsIconBody(body)) {
+        mime.starts_with("image/") && (IsIconBody(body) || IsSvgBody(body))) {
       Decode(body, std::move(reply));
     } else {
       std::move(reply).Run(base::Value());

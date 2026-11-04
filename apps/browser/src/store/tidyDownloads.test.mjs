@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import { test } from "node:test";
+
+// The rename needs neither module, and the real ones pull in the whole window UI.
+const windowUi = {
+  "../components/split/splitActions": "data:text/javascript,export const showToast = () => {};",
+  "../components/pages/pageUrls": "data:text/javascript,export const isInternalTab = () => false;",
+};
+registerHooks({
+  resolve(specifier, context, next) {
+    const url = context.parentURL?.endsWith("/lib/tidyDownloads.ts") && windowUi[specifier];
+    return url ? { url, shortCircuit: true } : next(specifier, context);
+  },
+});
+
 const { useBrowser } = await import("./browserStore.ts");
+const { applyTidyName } = await import("../lib/tidyDownloads.ts");
 
 const S = () => useBrowser.getState();
 const download = (patch = {}) => ({
@@ -46,4 +61,16 @@ test("a download the engine moved elsewhere follows the engine", () => {
   S().updateDownloadFile("d1", { filename: "Q3 Report.pdf", path: "/Downloads/Q3 Report.pdf" });
   S().upsertDownload(download({ filename: "other.pdf", path: "/Elsewhere/other.pdf" }));
   assert.equal(find().path, "/Elsewhere/other.pdf");
+});
+
+test("a tidy rename names the download after the file on either kind of path", async () => {
+  for (const [path, filename] of [
+    ["/Downloads/Q3 Report.pdf", "Q3 Report.pdf"],
+    ["C:\\Users\\me\\Downloads\\Q3 Report.pdf", "Q3 Report.pdf"],
+  ]) {
+    S().hydrate({});
+    S().upsertDownload(download({ path }));
+    await applyTidyName(find(), { filename, stem: "Q3 Report", extension: "pdf", basis: "page" }, useBrowser);
+    assert.equal(find().filename, filename);
+  }
 });

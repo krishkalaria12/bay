@@ -2,7 +2,7 @@
   "name": "@bay/shaders",
   "version": "0.0.0",
   "private": true,
-  "description": "Metal shaders: Dia-style new-tab area light and grained OKLab window backdrop",
+  "description": "Bay's decorative shaders: Metal on macOS, WebGL2 on Windows and Linux",
   "main": "src/index.tsx",
   "browser": "./src/index.web.tsx",
   "types": "src/index.tsx",
@@ -14,7 +14,9 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc -p .",
+    "typecheck": "tsc -p . && tsc -p tsconfig.web.json",
+    "test": "node --import ../platform/src/test-loader.mjs --test \"src/**/*.test.mjs\"",
+    "test:web": "node scripts/check-web-shaders.mjs",
     "shaders:check": "node scripts/check-shaders.mjs"
   },
   "dependencies": {

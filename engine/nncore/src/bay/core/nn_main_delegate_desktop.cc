@@ -35,11 +35,18 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/pip/nn_pip_platform.h"
+#include "chrome/browser/bay/webui/frame_linux.h"
+#include "chrome/browser/ui/webui_browser/webui_browser_window.h"
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/webui/notifications.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
+#endif
 #if BUILDFLAG(IS_WIN)
 #include "base/base_paths_win.h"
 #include "chrome/browser/bay/webui/frame_win.h"
-#include "chrome/browser/bay/webui/notifications_win.h"
-#include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #endif
 
@@ -48,14 +55,21 @@ namespace {
 
 class BayRuntimeMainExtraParts final : public ChromeBrowserMainExtraParts {
  public:
-#if BUILDFLAG(IS_WIN)
   void PreProfileInit() override {
-    NotificationDisplayServiceFactory::SetBayHandlerInitializer(
-        &bay::NotificationsWin::InstallHandler);
+#if BUILDFLAG(IS_LINUX)
+    InitializeBayPictureInPictureBounds();
+    WebUIBrowserWindow::SetBayNativeWidgetFactory(
+        &bay::FrameLinux::CreateNativeWidget);
+#endif
+#if BUILDFLAG(IS_WIN)
     WebUIBrowserWindow::SetBayNativeWidgetFactory(
         &bay::FrameWin::CreateNativeWidget);
-  }
 #endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+    NotificationDisplayServiceFactory::SetBayHandlerInitializer(
+        &bay::Notifications::InstallHandler);
+#endif
+  }
   void PostMainMessageLoopRun() override { bay::ShutdownAppRuntimeIfStarted(); }
 };
 

@@ -204,7 +204,7 @@ does not establish a complete browser host.
 ## Frame, notifications and menus
 
 Bay windows use their own Win32 frame (`frame_win.cc`, installed through
-`chromium-bay-frame-win.patch`). DWM keeps the borders, shadow and Aero Snap;
+`chromium-bay-native-widget.patch`). DWM keeps the borders, shadow and Aero Snap;
 the client area reaches the window's top, the top edge stays a resize border,
 and the UI's caption buttons are drawn at the top right. The host reports the
 UI's maximize button as `HTMAXBUTTON` so Windows 11 offers Snap Layouts over
@@ -254,6 +254,12 @@ go to the coordinator: each regular page is offered as a new tab of the most
 recently active regular Bay window (`AppRuntime::AdoptPage`), the active one in
 front. New tab and blank pages, and private pages, close with the window. Only
 the coordinator opens browser windows, from accepted state.
+
+Chrome can also add a page straight into an existing Bay window's tab strip: a
+link another app opens while Bay runs, a startup URL, an extension's new tab.
+The window registry offers each such page the same way, as a tab of that
+window or of the most recently active regular Bay window, once accepted state
+names one. Pages the broker holds and pages a page opened are left alone.
 
 ## Utility windows in the shared runtime
 

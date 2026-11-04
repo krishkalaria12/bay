@@ -1,25 +1,9 @@
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "@bay/platform/native";
-
-export const DIA_SPECTRUM = ["#0358F7", "#5092C7", "#E1E1FE", "#FFD400", "#FA3D1D", "#FD02F5"];
-
-export type Rect = { x: number; y: number; width: number; height: number };
-
-export type AreaLightPalette = "blue" | "red" | "pink" | "orange" | "yellow" | "green" | "purple";
-
-export type AreaLightProps = ViewProps & {
-  source: Rect | null;
-  cornerRadius?: number;
-  palette?: AreaLightPalette | string[];
-  lift?: number;
-  intensity?: number;
-  falloff?: number;
-  tilt?: [number, number];
-  noiseSeed?: number;
-  introDelay?: number;
-  introDuration?: number;
-  replayKey?: number;
-};
+import { GRAIN_OPACITY, GRAIN_SCALE } from "./constants";
+import type { AreaLightProps, EdgeLightProps, PowerUpProps, Rect, WindowBackdropProps } from "./types";
+export { DIA_SPECTRUM } from "./constants";
+export type { Rect, AreaLightPalette, AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps } from "./types";
 
 type NativeAreaLightProps = Omit<AreaLightProps, "source" | "palette"> & { shapeFrame: number[]; palette?: string[] };
 
@@ -30,33 +14,11 @@ export function AreaLight({ source, palette = "pink", ...props }: AreaLightProps
   return <NativeAreaLight pointerEvents="none" {...props} palette={typeof palette === "string" ? [palette] : palette} shapeFrame={shapeFrame} />;
 }
 
-export type WindowBackdropProps = ViewProps & {
-  colors: [string, string];
-  vibrancy?: boolean;
-  tintColor?: string;
-  tintAlpha?: number;
-  tintLightness?: number;
-  angle?: number;
-  grainOpacity?: number;
-  grainScale?: number;
-};
-
 const NativeBackdrop = requireNativeViewManager<WindowBackdropProps>("BayWindowBackdrop");
 
-export function WindowBackdrop({ angle = 180, grainOpacity = 0.09, grainScale = 1, ...props }: WindowBackdropProps) {
+export function WindowBackdrop({ angle = 180, grainOpacity = GRAIN_OPACITY, grainScale = GRAIN_SCALE, ...props }: WindowBackdropProps) {
   return <NativeBackdrop pointerEvents="none" angle={angle} grainOpacity={grainOpacity} grainScale={grainScale} {...props} />;
 }
-
-export type EdgeLightProps = ViewProps & {
-  rectFrame: Rect;
-  cornerRadius?: number;
-  lightStart: { x: number; y: number };
-  lightEnd: { x: number; y: number };
-  lightColor?: string;
-  logoFrame?: Rect | null;
-  animationDuration?: number;
-  animationDelay?: number;
-};
 
 type NativeEdgeLightProps = ViewProps & {
   rectFrame: number[];
@@ -84,14 +46,6 @@ export function EdgeLight({ rectFrame, lightStart, lightEnd, logoFrame, ...props
     />
   );
 }
-
-export type PowerUpProps = ViewProps & {
-  palette?: AreaLightPalette | string[];
-  speed?: number;
-  origin?: number;
-  cornerRadius?: number;
-  halo?: Rect | null;
-};
 
 type NativePowerUpProps = Omit<PowerUpProps, "palette" | "halo"> & { palette?: string[]; haloFrame: number[] };
 

@@ -960,7 +960,7 @@ export function startSync(store: BrowserStore): () => void {
       try {
         const ok = await SyncNative.unlock(owner.deviceId!);
         if (doc !== owner) return;
-        if (!ok) return publishUi({ status: "locked", error: "Enter your recovery phrase to keep syncing on this Mac." });
+        if (!ok) return publishUi({ status: "locked", error: "Enter your recovery phrase to keep syncing on this device." });
         if (await loadState()) {
           publishUi();
           scheduleSync(500);

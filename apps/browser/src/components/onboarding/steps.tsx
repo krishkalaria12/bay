@@ -348,7 +348,7 @@ function PinnedPreview({ selected }: { selected: string[] }) {
 type SystemState = { isDefault: boolean; inDock: boolean; loginEnabled: boolean };
 
 async function applySystemChoices(system: SystemState, choice: { setDefault: boolean; trial: boolean; login: boolean; dock: boolean }) {
-  if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser()) && choice.trial) recordDefaultBrowserTrial();
+  if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser().catch(() => false)) && choice.trial) recordDefaultBrowserTrial();
   if (choice.login !== system.loginEnabled) await setLaunchAtLogin(choice.login).catch(() => {});
   if (capabilities.dock && choice.dock && !system.inDock) await addToDock();
 }

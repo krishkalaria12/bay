@@ -608,7 +608,7 @@
               <code>src/constants.ts</code>. Remove duplicate public prop declarations while preserving native adapter prop names and export compatibility.
             </p>
             <p>
-              Add <code>src/web/surface.ts</code>, <code>staticRenderer.ts</code>, <code>clock.ts</code>, <code>ShaderView.tsx</code>, <code>colors.ts</code>,
+              Add <code>src/webgl/surface.ts</code>, <code>staticRenderer.ts</code>, <code>clock.ts</code>, <code>ShaderView.tsx</code>, <code>colors.ts</code>,
               <code>uniforms.ts</code>, <code>fallbacks.tsx</code>, and <code>sources/{common,backdrop,powerUp,areaLight,edgeLight}.ts</code>. Use typed uniform
               descriptors and explicit premultiplied sRGB output. Implement top-left UVs, per-context program caches, allocation limits, fallback states, and
               lifecycle rules before effect ports.
@@ -626,7 +626,7 @@
             <h3>Restore backdrop grain end to end</h3>
             <p>
               Implement the OKLab backdrop and static grain from Bay's <code>ios/WindowBackdropView.swift</code>, with Ardia's GLSL as a porting reference. Add
-              <code>src/web/grain.ts</code> for the deterministic fallback/glass tile and common cell rules.
+              <code>src/webgl/grain.ts</code> for the deterministic fallback/glass tile and common cell rules.
             </p>
             <p>
               In <code>ios/WindowBackdropView.swift</code> and <code>ios/ShadersModule.swift</code>, forward grain opacity/scale into a static layer on
@@ -645,7 +645,7 @@
           <div>
             <h3>Restore the active PowerUp and halo</h3>
             <p>
-              Port <code>ios/PowerUpView.swift</code> into <code>src/web/sources/powerUp.ts</code> and its uniform builder. Preserve palette selection, alpha,
+              Port <code>ios/PowerUpView.swift</code> into <code>src/webgl/shaders/powerUp.ts</code> and its uniform builder. Preserve palette selection, alpha,
               speed, origin, radius, optional halo, 24 CSS-pixel blur, and finite timing. Bay's current native limits are 3.75 seconds for the band and 2
               seconds for the halo; preserve those semantics rather than extending duration by speed.
             </p>
@@ -690,7 +690,7 @@
                     <td>Shared theme swatches and richer gradients</td>
                     <td>
                       Add <code>ThemeSwatch</code> and optional theme color-stop inputs in <code>src/types.ts</code>, both entry points, and
-                      <code>ios/ShadersModule.swift</code>. Build <code>src/web/themeGradient.ts</code> and a native <code>ios/ThemeSwatchView.swift</code>.
+                      <code>ios/ShadersModule.swift</code>. Build <code>src/webgl/themeGradient.ts</code> and a native <code>ios/ThemeSwatchView.swift</code>.
                       Reuse the same color/grain recipe for window and editor preview. Preserve the existing two-color 180° path; new custom-theme inputs
                       support up to three colors at 135°, matching the useful Ardia approach. Wire <code>lib/theme.ts</code> and <code>ThemeEditor.tsx</code> so
                       a middle saved color is represented rather than only the first and last.
@@ -710,9 +710,9 @@
                     <td>Restrained glass rim</td>
                     <td>
                       Use Ardia's <a data-ardia="apps/demo/src/shims/web/glassRim.ts">cached rim/mask approach</a> as a reference for a static, opt-in
-                      <code>src/web/GlassRim.tsx</code>. Put the consuming wrapper in <code>apps/browser/src/components/primitives/</code>. Limit initial use to
-                      the theme preview. CSS mask/border fallback, keyboard focus visibility, and contrast modes are required. This is a rim effect, not native
-                      Liquid Glass, desktop blur, or a reason to mark <code>vibrancy</code> supported.
+                      <code>src/webgl/GlassRim.tsx</code>. Put the consuming wrapper in <code>apps/browser/src/components/primitives/</code>. Limit initial use
+                      to the theme preview. CSS mask/border fallback, keyboard focus visibility, and contrast modes are required. This is a rim effect, not
+                      native Liquid Glass, desktop blur, or a reason to mark <code>vibrancy</code> supported.
                     </td>
                   </tr>
                 </tbody>

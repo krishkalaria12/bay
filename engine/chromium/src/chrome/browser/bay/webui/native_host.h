@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -22,12 +23,29 @@ namespace content {
 class WebContents;
 class WebUI;
 }  // namespace content
+namespace input {
+struct NativeWebKeyboardEvent;
+}  // namespace input
 
 namespace bay {
 class TabObserver;
 class PlatformServices;
+class Keychain;
 class BrowserServices;
 class EngineServices;
+class DocumentStore;
+class SecretStorage;
+class ShellUI;
+class SyncUI;
+class ShellAppearance;
+class ShellFiles;
+class DefaultBrowser;
+class Autostart;
+class AppServicesLinux;
+class WindowButtonLayoutLinux;
+class UserScripts;
+class EaselSharing;
+class CliInstallerService;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -42,6 +60,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
               InvokeCallback callback) override;
   void SetClient(mojo::PendingRemote<mojom::NativeHostClient> client) override;
   void Emit(const char* module, const char* event, base::Value payload);
+  // An app event for every document.
+  static void EmitAppEvent(const char* type);
   void ViewEvent(int tag, const char* event, base::DictValue payload);
   void PublishHostInfo();
   BrowserWindowInterface* browser() const { return context_.window(); }
@@ -49,6 +69,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   // The Bay document this host serves.
   content::WebContents* document_contents() const;
   // A key the window's document runs as its command (BayShell.setKeyShortcuts).
+  // No command: a key taken off its command. Nothing runs, so it doesn't go
+  // back to being Chrome's accelerator.
   struct KeyShortcut {
     int key_code;
     bool ctrl;
@@ -57,6 +79,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
     std::string command;
     std::optional<std::string> arg;
   };
+  // Takes a key down while BaySystem.recordShortcut waits for one.
+  bool RecordShortcutKey(const input::NativeWebKeyboardEvent& event);
   const std::vector<KeyShortcut>& key_shortcuts() const {
     return key_shortcuts_;
   }
@@ -64,6 +88,13 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   base::WeakPtr<NativeHost> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
  private:
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  friend class NativeHostQuitTest;
+  static bool HandleWindowClose(BrowserWindowInterface* browser);
+  static void PrepareForQuit(base::OnceCallback<void(bool)> completion);
+  static void CancelQuit();
+  static void InstallCloseHooks();
+#endif
   static bool EmitDisplayMediaRequest(content::WebContents* contents,
                                       base::DictValue request);
   // The connected host whose view shows |contents|, and that view's tag.
@@ -92,19 +123,59 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
                            InvokeCallback callback);
   content::WebContents* ContentsForTag(int tag) const;
   base::DictValue Info() const;
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  // Host info waits for saved documents and the platform snapshots.
   void PlatformReady();
-  std::unique_ptr<PlatformServices> platform_services_;
+  std::unique_ptr<ShellAppearance> appearance_;
+  std::unique_ptr<Keychain> keychain_;
   bool platform_ready_ = false;
   std::vector<GetHostInfoCallback> host_info_callbacks_;
 #endif
+#if BUILDFLAG(IS_WIN)
+  std::unique_ptr<PlatformServices> platform_services_;
+#endif
 
   const HostContext context_;
+#if BUILDFLAG(IS_LINUX)
+  void ChooseImportFile(const base::ListValue& args, InvokeCallback callback);
+  std::unique_ptr<WindowButtonLayoutLinux> button_layout_;
+  // Document-scoped ownership dismisses prompts and settles pending icons.
+  std::unique_ptr<ShellFiles> files_;
+  std::unique_ptr<DefaultBrowser> default_browser_;
+  std::unique_ptr<Autostart> autostart_;
+  std::unique_ptr<AppServicesLinux> app_services_;
+  bool documents_ready_ = false;
+  std::unique_ptr<ShellUI> shell_ui_;
+  std::unique_ptr<SyncUI> sync_ui_;
+  std::unique_ptr<SecretStorage> secret_storage_;
+  std::unique_ptr<DocumentStore> documents_;
+#endif
   std::unique_ptr<BrowserServices> browser_services_;
   std::unique_ptr<EngineServices> engine_services_;
   mojo::Remote<mojom::NativeHostClient> client_;
   std::map<int, std::unique_ptr<TabObserver>> tabs_;
   std::vector<KeyShortcut> key_shortcuts_;
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  // Reconnecting a pin's file asks in its own picker (shell_ui.h).
+  std::unique_ptr<ShellUI> local_files_ui_;
+  std::unique_ptr<UserScripts> user_scripts_;
+  std::unique_ptr<EaselSharing> easel_sharing_;
+  std::unique_ptr<CliInstallerService> cli_installer_;
+#endif
+  void FinishShortcutRecording(base::Value result);
+  // BayShell.setSwitcherCapture (window_key_watch.h).
+  void SwitcherCapture(bool active);
+  // The dragged tab's floating preview (drag_preview.h).
+  void DragPreviewCall(const std::string& method, const base::ListValue& args);
+  // BayLocalFiles (local_files.h).
+  void LocalFilesCall(const std::string& method,
+                      const base::ListValue& args,
+                      InvokeCallback callback);
+  // BayApp's test harness hooks (dev_window.h).
+  void DevHarness(const std::string& method,
+                  const base::ListValue& args,
+                  InvokeCallback callback);
+  InvokeCallback shortcut_recording_;
   std::map<uintptr_t, std::pair<bool, InvokeCallback>> pending_;
   // View tags whose mount waits for its profile to load.
   std::set<int> loading_mounts_;

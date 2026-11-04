@@ -8,8 +8,9 @@ bootstrap launcher ships. The macOS build remains separate.
 
 ## Engine
 
-The pin is `engine/patches/build/engine-lock.json`. It matches macOS's existing
-Chromium revision. The pinned tree's `docs/windows_build_instructions.md`
+The pin is `engine/patches/build/engine-lock.json`, with shared source pins and
+settings under `platforms.win`. It matches macOS's existing Chromium revision.
+The pinned tree's `docs/windows_build_instructions.md`
 requires Visual Studio 2026 with Desktop C++, ATL/MFC, Windows SDK
 10.0.28000.2270, and SDK debugging tools 26100.3323+. Use Python 3.12, Git for
 Windows, long path support, a short checkout path, and an NTFS SSD with at least
@@ -21,8 +22,10 @@ From Developer PowerShell:
 python scripts/windows/engine.py all --root C:/bay-engine --output dist/engine
 ```
 
-`download`, `prepare`, `build`, and `archive` run individually too. Preparation
-records completed phases. A failed phase stops immediately; investigate a partly
+The shared entry point is `python scripts/engine.py --platform win`; the Windows
+entry point above remains compatible. `download`, `prepare`, `build`, and
+`archive` run individually too. Preparation records completed phases.
+A failed phase stops immediately; investigate a partly
 applied ungoogled/domain phase before retrying, or use a new root. Existing source
 checkouts are never reset. Bay's CEF patches and the patches that host Chrome's
 views inside the macOS app are macOS-only in the series; the former CEF host for

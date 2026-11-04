@@ -19,14 +19,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
       - run: pnpm install --frozen-lockfile
+      - name: Test the standalone CLI
+        working-directory: apps/cli
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun test tests/
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
       - run: pnpm typecheck
       - run: pnpm typecheck:web
       - run: pnpm build:web
+      - name: Boot the web app in Chromium
+        run: pnpm test:web-boot
+        env:
+          CHROMIUM: C:\Program Files\Google\Chrome\Application\chrome.exe
       - run: pnpm test
+      - run: python -m unittest scripts/test_engine_driver.py -v
       - run: python -m unittest discover -s scripts/windows -p 'test_*.py' -v
       - name: Compile installer template
         shell: pwsh
@@ -65,6 +79,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
       - run: pnpm install --frozen-lockfile
       - name: Fetch verified pinned engine
         env:

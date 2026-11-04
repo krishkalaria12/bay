@@ -115,6 +115,8 @@ const Capture = () =>
     exportEaselHTML(document: string): Promise<string | null>;
     createEaselShareIdentity(): Promise<{ id: string; key: string }>;
     readEaselShareRecords(): string | null;
+    /** WebUI cannot use the native app's cross-origin fetch path. */
+    requestShare?(id: string, key: string, method: string, body: string): Promise<{ status: number }>;
     /** The desktop web hosts' file moves (imageFiles.web.ts). macOS has none. */
     readImage?(path: string): Promise<string | null>;
     storeImage?(base64: string, cache: boolean): Promise<string | null>;
@@ -136,4 +138,8 @@ export const exportEaselHTML = async (document: string) => (imageFiles ? imageFi
 export const createEaselShareIdentity = async () => Capture().createEaselShareIdentity();
 /** Returns null only for a missing registry; throws on read or decoding failures. */
 export const readEaselShareRecords = () => nativeSnapshot("BayEasel", "readEaselShareRecords", [], () => Capture().readEaselShareRecords());
+/** Fresh reads let separate web windows serialize publication changes without stale snapshots. */
+export const readCurrentEaselShareRecords = async () => Capture().readEaselShareRecords();
+/** Null leaves native macOS fetch in charge; web hosts use the fixed native sharing endpoint. */
+export const requestEaselShare = (id: string, key: string, method: "PUT" | "DELETE", body = "") => Capture().requestShare?.(id, key, method, body) ?? null;
 export { libraryImageUri } from "./imageFiles";

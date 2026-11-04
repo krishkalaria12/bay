@@ -42,8 +42,8 @@ export function SyncPane() {
   return (
     <View>
       <Text style={{ marginTop: 20, fontSize: 12.5, lineHeight: 17, color: theme.textSecondary }}>
-        Sync your spaces, bookmarks, history, open tabs, pinned tabs, groups, passwords and settings across your Macs. It all goes through a folder you choose,
-        like one in iCloud Drive, and it’s end-to-end encrypted: only your devices can read it.
+        Sync your spaces, bookmarks, history, open tabs, pinned tabs, groups, passwords and settings across your devices. It all goes through a folder you
+        choose, like one in iCloud Drive, and it’s end-to-end encrypted: only your devices can read it.
       </Text>
       {enabled ? <SyncOn info={info} /> : <SyncOff info={info} />}
     </View>
@@ -80,7 +80,7 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
   const error = useSync((s) => s.error);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const noICloud = !!info && info.path === info.defaultPath && !info.iCloudAvailable;
+  const noICloud = isMac && !!info && info.path === info.defaultPath && !info.iCloudAvailable;
   const hasData = !!info?.hasSyncData;
 
   const turnOn = async () => {
@@ -228,6 +228,11 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
         </View>
       ) : null}
 
+      {info?.keyStorage === "session" ? (
+        <Text style={{ marginTop: 10, fontSize: 12.5, color: theme.textSecondary }}>
+          Secret Service is unavailable. Save your Recovery Kit: you’ll need your recovery phrase each time you start Bay.
+        </Text>
+      ) : null}
       <SectionHeader title="Spaces" description="Choose which spaces sync on this Mac. Each syncs on its own." />
       <Group>
         {profiles.map((p) => {

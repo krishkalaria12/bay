@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
@@ -16,16 +17,31 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/nn_dispatch.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#if BUILDFLAG(IS_LINUX)
+#include "components/os_crypt/async/browser/os_crypt_async.h"
+#include "components/os_crypt/async/common/encryptor.h"
+#endif
 
 namespace bay {
 namespace {
+// FilePath's POSIX value is already the native byte sequence. UTF-8 helpers
+// may apply locale conversions and change which filesystem object is opened.
+std::string NativePath(const base::FilePath& path) {
+#if BUILDFLAG(IS_WIN)
+  return path.AsUTF8Unsafe();
+#else
+  return path.value();
+#endif
+}
 constexpr auto kImportTimeout = base::Seconds(30);
 constexpr char kUnavailable[] = "{\"error\":\"Browser engine is unavailable\"}";
 struct ProfileSnapshot {
@@ -43,7 +59,7 @@ class ProfileTracker : public ProfileObserver {
       observations_.AddObservation(profile);
   }
   void OnProfileWillBeDestroyed(Profile* profile) override {
-    const auto path = profile->GetPath().AsUTF8Unsafe();
+    const auto path = NativePath(profile->GetPath());
     base::AutoLock lock(Profiles().lock);
     std::erase_if(Profiles().paths, [&](const auto& entry) {
       return entry.second.profile_directory == path;
@@ -127,9 +143,8 @@ void RegisterDataProfile(Profile* profile) {
   static base::NoDestructor<ProfileTracker> tracker;
   tracker->Observe(profile);
   const auto path = profile->GetPath();
-  const auto basename = path.BaseName().AsUTF8Unsafe();
-  const data::ProfilePaths paths{path.DirName().AsUTF8Unsafe(),
-                                 path.AsUTF8Unsafe()};
+  const auto basename = NativePath(path.BaseName());
+  const data::ProfilePaths paths{NativePath(path.DirName()), NativePath(path)};
   base::AutoLock lock(Profiles().lock);
   Profiles().paths[basename == "Default" ? "" : basename] = paths;
   if (basename == "Default")
@@ -145,12 +160,27 @@ void InitializeDataBridge(
     return;
   base::FilePath directory;
   CHECK(base::PathService::Get(chrome::DIR_USER_DATA, &directory));
-  data::Configure(directory.AsUTF8Unsafe(), [](const std::string& id) {
+  data::Configure(NativePath(directory), [](const std::string& id) {
     base::AutoLock lock(Profiles().lock);
     auto found = Profiles().paths.find(id);
     return found == Profiles().paths.end() ? data::ProfilePaths{}
                                            : found->second;
   });
+#if BUILDFLAG(IS_LINUX)
+  // Bay's current providers decrypt v10, desktop-backed v11 and portal v12.
+  // The refcounted encryptor is safe on data workers. Until it is available,
+  // reads return null so sync cannot interpret an unavailable key as deletion.
+  g_browser_process->os_crypt_async()->GetInstance(
+      base::BindOnce([](scoped_refptr<os_crypt_async::Encryptor> encryptor) {
+        data::SetPasswordDecryptor(
+            [encryptor = std::move(encryptor)](
+                const std::string& ciphertext) -> std::optional<std::string> {
+              return encryptor ? encryptor->DecryptData(
+                                     base::as_byte_span(ciphertext))
+                               : std::nullopt;
+            });
+      }));
+#endif
   data::SetEventSink([runner = content::GetUIThreadTaskRunner({}), events](
                          const std::string& module, const std::string& event,
                          const std::string& json) {
