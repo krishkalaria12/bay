@@ -34,6 +34,8 @@
       libxml2
       ncurses
       nodejs_24
+      cargo
+      rustc
       openssl
       perl
       pkg-config

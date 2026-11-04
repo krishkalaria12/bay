@@ -62,7 +62,7 @@ Python) that expect `/lib64/ld-linux-x86-64.so.2` and libraries under
 `/usr/lib`. NixOS has neither, so the driver refuses to start there until
 `packaging/linux/nix/shell.nix` provides them. That shell is a `buildFHSEnv`:
 a bubblewrap namespace over the host's filesystem, not a container. It has every
-base tool above, Node 24, pnpm through Corepack at the version `package.json`
+base tool above, Rust for the content blocker (elsewhere, `cargo` on `PATH` from rustup), Node 24, pnpm through Corepack at the version `package.json`
 pins, and the libraries `build-app.py`'s ldd check needs. Target libraries
 still come from Chromium's pinned Debian sysroot, so the engine is the same one
 other distros build.

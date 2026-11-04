@@ -85,6 +85,7 @@ def stage(engine_directory, web_directory, destination, cli_directory=None):
     shutil.copytree(runtime / "bay-ui", destination / "bay-ui", dirs_exist_ok=True)
     shutil.copy2(REPO / "packaging/linux/bay-wrapper", destination / "bay-wrapper")
     shutil.copy2(engine_directory / "manifest.json", destination / "engine-manifest.json")
+    web_artifacts.stage_content_blocker(REPO, destination)
     if cli_directory is not None:
         cli_bundle.stage(cli_directory, destination / "bay-cli", "linux")
     missing = unresolved_libraries(destination)
@@ -114,6 +115,7 @@ def main():
         parser.error("--engine-archive and a trusted --sha256 are required unless --verify is given")
     if engine.sha256(args.engine_archive) != args.sha256.lower():
         raise ValueError("engine archive SHA-256 does not match the configured checksum")
+    web_artifacts.fetch_content_blocker(REPO)
     if not args.skip_web_build:
         subprocess.run(["pnpm", "--filter", "@bay/browser", "build:web"], cwd=REPO, check=True)
     with tempfile.TemporaryDirectory(prefix="bay-linux-engine-") as directory:
