@@ -82,7 +82,7 @@ chromium all chromium-injected-author-sheet-order.patch
 chromium mac chromium-devtools-control-token.patch
 chromium mac chromium-devtools-background-target.patch
 
-chromium all chromium-scripts-policy.patch
+chromium mac chromium-scripts-policy.patch
 chromium win chromium-page-interactions-webui.patch
 chromium win chromium-bay-page-activation.patch
 
