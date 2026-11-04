@@ -4,15 +4,22 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/base64.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/timer/timer.h"
+#include "chrome/browser/bay/webui/window_registry.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/base_window.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/codec/jpeg_codec.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -28,6 +35,9 @@ constexpr gfx::Size kCard(209, 110);
 constexpr base::TimeDelta kMorph = base::Milliseconds(60);
 constexpr base::TimeDelta kGrow = base::Milliseconds(200);
 constexpr base::TimeDelta kFadeOut = base::Milliseconds(100);
+// The longest a new window's content is waited for, as macOS's revealTimeout.
+constexpr base::TimeDelta kRevealTimeout = base::Milliseconds(600);
+constexpr std::string_view kPngDataUri = "data:image/png;base64,";
 
 views::Widget* WidgetOf(BrowserWindowInterface* frame) {
   return frame && frame->GetWindow()
@@ -37,13 +47,39 @@ views::Widget* WidgetOf(BrowserWindowInterface* frame) {
 }
 }  // namespace
 
+// Runs `done` once when `document` has painted, or after the time-out.
+class RevealWatch : public content::WebContentsObserver {
+ public:
+  RevealWatch(content::WebContents* document, base::OnceClosure done)
+      : content::WebContentsObserver(document), done_(std::move(done)) {
+    timeout_.Start(
+        FROM_HERE, kRevealTimeout,
+        base::BindOnce(&RevealWatch::Finish, base::Unretained(this)));
+  }
+
+ private:
+  void Finish() {
+    if (done_)
+      std::move(done_).Run();
+  }
+  void DidFirstVisuallyNonEmptyPaint() override { Finish(); }
+  void WebContentsDestroyed() override { Finish(); }
+
+  base::OnceClosure done_;
+  base::OneShotTimer timeout_;
+};
+
 // The picture with the card's rim: rounded, with a light border.
 class DragPreviewView : public views::View {
  public:
-  void Show(gfx::ImageSkia image, bool pill, std::u16string placeholder) {
+  void Show(gfx::ImageSkia image,
+            bool pill,
+            std::u16string placeholder,
+            gfx::ImageSkia icon) {
     image_ = std::move(image);
     pill_ = pill;
     placeholder_ = std::move(placeholder);
+    icon_ = std::move(icon);
     SchedulePaint();
   }
 
@@ -62,10 +98,17 @@ class DragPreviewView : public views::View {
                            std::round(image_.width() * scale),
                            std::round(image_.height() * scale), true);
     } else if (!placeholder_.empty()) {
+      constexpr int kIcon = 32;
+      const int top = icon_.isNull() ? 12 : 16 + kIcon;
+      if (!icon_.isNull()) {
+        canvas->DrawImageInt(icon_, 0, 0, icon_.width(), icon_.height(),
+                             (bounds.width() - kIcon) / 2, 10, kIcon, kIcon,
+                             true);
+      }
       canvas->DrawStringRectWithFlags(
           placeholder_, gfx::FontList(), SK_ColorWHITE,
-          gfx::ToEnclosedRect(gfx::RectF(12, 12, bounds.width() - 24,
-                                         bounds.height() - 24)),
+          gfx::ToEnclosedRect(gfx::RectF(12, top, bounds.width() - 24,
+                                         bounds.height() - top - 8)),
           gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::MULTI_LINE);
     }
     cc::PaintFlags border;
@@ -82,6 +125,7 @@ class DragPreviewView : public views::View {
   gfx::ImageSkia image_;
   bool pill_ = false;
   std::u16string placeholder_;
+  gfx::ImageSkia icon_;
 };
 
 // static
@@ -125,24 +169,51 @@ void DragPreview::Snapshotted(uint64_t generation, bool pill,
   if (generation != generation_ || image.IsEmpty())
     return;
   (pill ? pill_image_ : window_image_) = image.AsImageSkia();
+  Compose();
   if (shape_ != "hidden")
     Place(false);
 }
-void DragPreview::SetPage(const std::string& jpeg) {
+void DragPreview::Compose() {
+  if (page_image_.isNull() || window_image_.isNull()) {
+    card_image_ = page_image_.isNull() ? window_image_ : page_image_;
+    return;
+  }
+  gfx::Canvas canvas(window_image_.size(), 1.0f, /*is_opaque=*/true);
+  canvas.DrawImageInt(window_image_, 0, 0);
+  canvas.DrawImageInt(page_image_, 0, 0, page_image_.width(),
+                      page_image_.height(), page_frame_.x(), page_frame_.y(),
+                      page_frame_.width(), page_frame_.height(), true);
+  card_image_ = gfx::ImageSkia::CreateFrom1xBitmap(canvas.GetBitmap());
+}
+void DragPreview::SetPage(const std::string& jpeg, const gfx::Rect& frame) {
   if (!source_)
     return;
   const SkBitmap bitmap = gfx::JPEGCodec::Decode(base::as_byte_span(jpeg));
   if (bitmap.drawsNothing())
     return;
   page_image_ = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+  page_frame_ = frame;
   placeholder_.clear();
+  Compose();
   if (shape_ == "card")
     Place(false);
 }
-void DragPreview::SetPlaceholder(const std::u16string& title) {
+void DragPreview::SetPlaceholder(const std::u16string& title,
+                                 const std::string& favicon) {
   if (!source_ || !page_image_.isNull())
     return;
   placeholder_ = title;
+  placeholder_icon_ = gfx::ImageSkia();
+  std::string png;
+  if (favicon.starts_with(kPngDataUri) &&
+      base::Base64Decode(favicon.substr(kPngDataUri.size()), &png)) {
+    const SkBitmap icon = gfx::PNGCodec::Decode(base::as_byte_span(png));
+    if (!icon.drawsNothing())
+      placeholder_icon_ = gfx::ImageSkia::CreateFrom1xBitmap(icon);
+  }
+  // The window's own picture is hiding what the tab has: show this instead.
+  window_image_ = gfx::ImageSkia();
+  Compose();
   if (shape_ == "card")
     Place(false);
 }
@@ -185,9 +256,9 @@ void DragPreview::Place(bool animated) {
       pill ? grab_.OffsetFromOrigin()
            : gfx::Vector2d(size.width() / 2, size.height() / 2);
   const gfx::Rect bounds(pointer_ - offset, size);
-  view_->Show(pill ? pill_image_
-                   : (page_image_.isNull() ? window_image_ : page_image_),
-              pill, pill ? std::u16string() : placeholder_);
+  view_->Show(pill ? pill_image_ : card_image_, pill,
+              pill ? std::u16string() : placeholder_,
+              pill ? gfx::ImageSkia() : placeholder_icon_);
   if (animated)
     Animate(bounds, 1, kMorph, base::DoNothing());
   else if (animation_.IsRunning())
@@ -205,16 +276,8 @@ void DragPreview::End(BrowserWindowInterface* target,
     Close();
     return;
   }
-  auto fade = base::BindOnce(
-      [](DragPreview* preview, uint64_t generation) {
-        if (preview->generation_ != generation || !preview->widget_)
-          return;
-        preview->Animate(preview->widget_->GetWindowBoundsInScreen(), 0,
-                         kFadeOut,
-                         base::BindOnce(&DragPreview::Close,
-                                        base::Unretained(preview)));
-      },
-      base::Unretained(this), generation_);
+  auto fade =
+      base::BindOnce(&DragPreview::Fade, base::Unretained(this), generation_);
   auto* widget = WidgetOf(target);
   std::optional<gfx::Rect> frame =
       widget ? std::make_optional(widget->GetWindowBoundsInScreen()) : fallback;
@@ -222,9 +285,31 @@ void DragPreview::End(BrowserWindowInterface* target,
     std::move(fade).Run();
     return;
   }
-  if (!window_image_.isNull())
-    view_->Show(window_image_, false, std::u16string());
-  Animate(*frame, 1, kGrow, std::move(fade));
+  if (!card_image_.isNull())
+    view_->Show(card_image_, false, std::u16string(), gfx::ImageSkia());
+  // Fades once the new window shows its content, so nothing blinks between.
+  auto* document = target ? WindowRegistry::Get().DocumentOf(target) : nullptr;
+  auto reveal = base::BindOnce(
+      [](DragPreview* preview, base::WeakPtr<content::WebContents> document,
+         base::OnceClosure fade) {
+        if (!document || document->CompletedFirstVisuallyNonEmptyPaint()) {
+          std::move(fade).Run();
+          return;
+        }
+        preview->reveal_ =
+            std::make_unique<RevealWatch>(document.get(), std::move(fade));
+      },
+      base::Unretained(this),
+      document ? document->GetWeakPtr()
+               : base::WeakPtr<content::WebContents>(),
+      std::move(fade));
+  Animate(*frame, 1, kGrow, std::move(reveal));
+}
+void DragPreview::Fade(uint64_t generation) {
+  if (generation != generation_ || !widget_)
+    return;
+  Animate(widget_->GetWindowBoundsInScreen(), 0, kFadeOut,
+          base::BindOnce(&DragPreview::Close, base::Unretained(this)));
 }
 void DragPreview::Cancel() {
   ++generation_;
@@ -235,9 +320,15 @@ void DragPreview::Cancel() {
 void DragPreview::Close() {
   animation_.Stop();
   animated_.Reset();
+  // Posted: the watch may be what's calling.
+  if (reveal_) {
+    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+        FROM_HERE, std::move(reveal_));
+  }
   view_ = nullptr;
   widget_.reset();
-  pill_image_ = window_image_ = page_image_ = gfx::ImageSkia();
+  pill_image_ = window_image_ = page_image_ = card_image_ = gfx::ImageSkia();
+  placeholder_icon_ = gfx::ImageSkia();
   placeholder_.clear();
 }
 void DragPreview::Animate(const gfx::Rect& to, float opacity,
@@ -259,9 +350,8 @@ void DragPreview::Animate(const gfx::Rect& to, float opacity,
 void DragPreview::Step() {
   if (!widget_)
     return;
-  const double t = std::min(
-      1.0, (base::TimeTicks::Now() - started_) / std::max(duration_,
-                                                          base::Milliseconds(1)));
+  const base::TimeDelta length = std::max(duration_, base::Milliseconds(1));
+  const double t = std::min(1.0, (base::TimeTicks::Now() - started_) / length);
   const double eased = t * t * (3 - 2 * t);
   const auto mix = [&](int a, int b) {
     return static_cast<int>(std::round(a + (b - a) * eased));

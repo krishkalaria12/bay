@@ -23,6 +23,7 @@ class Widget;
 
 namespace bay {
 class DragPreviewView;
+class RevealWatch;
 
 // A tab dragged out of its window (DragPreview in Windows.swift): its pill
 // while it's over a tab list, a card of its page anywhere else, which grows
@@ -35,10 +36,11 @@ class DragPreview {
 
   void Begin(BrowserWindowInterface* source, const gfx::Rect& chip,
              const gfx::Point& grab);
-  // The page as the engine painted it, a JPEG.
-  void SetPage(const std::string& jpeg);
-  // A tab never painted: its title where its page would be.
-  void SetPlaceholder(const std::u16string& title);
+  // The page as the engine painted it, a JPEG, at `frame` in the window.
+  void SetPage(const std::string& jpeg, const gfx::Rect& frame);
+  // A tab never painted: its icon, a PNG data: URI or empty, and title where
+  // its page would be.
+  void SetPlaceholder(const std::u16string& title, const std::string& favicon);
   // "hidden", "pill" or "card", with the pointer.
   void Update(const std::string& shape, const gfx::Point& pointer);
   // Grows into `target`'s window (or `fallback`, a frame on screen) and fades,
@@ -55,6 +57,9 @@ class DragPreview {
   ~DragPreview();
 
   void Snapshotted(uint64_t generation, bool pill, gfx::Image image);
+  // The card's picture: the page laid into the window, as it was on screen.
+  void Compose();
+  void Fade(uint64_t generation);
   void Place(bool animated);
   void Animate(const gfx::Rect& to, float opacity, base::TimeDelta duration,
                base::OnceClosure done);
@@ -71,7 +76,12 @@ class DragPreview {
   gfx::ImageSkia pill_image_;
   gfx::ImageSkia window_image_;
   gfx::ImageSkia page_image_;
+  gfx::Rect page_frame_;
+  gfx::ImageSkia card_image_;
   std::u16string placeholder_;
+  gfx::ImageSkia placeholder_icon_;
+  // Holds the card over a new window until its document has painted.
+  std::unique_ptr<RevealWatch> reveal_;
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<DragPreviewView> view_ = nullptr;
   // A frame and opacity animation, as AppKit's animator doesn't run for an

@@ -249,10 +249,6 @@
               Port the acceptance scripts' input and window assertions. Define replacements for unsupported <code>windowDrags</code> checks; handle the test
               hooks' ignored timing and transparency options.
             </li>
-            <li>
-              Improve tab-drag previews: composite page content, include favicons, and wait for destination content before fading. Investigate Linux preview
-              support within each window system's constraints.
-            </li>
           </ul>
         </section>
         <section id="sync" aria-labelledby="sync-h">
@@ -324,6 +320,11 @@
                     In an isolated <code>BAY_DATA_DIR</code> instance, crash with <code>devCrash</code>, relaunch and confirm the report arrives; symbolize its
                     frames with the release's symbols (<a href="releasing.md">releasing.md</a>)
                   </td>
+                </tr>
+                <tr>
+                  <td>T5</td>
+                  <td>A</td>
+                  <td>Tab tear-off previews: the floating card on X11 and Windows, growing into the new window; the in-window card on Wayland</td>
                 </tr>
                 <tr>
                   <td>T5</td>

@@ -559,10 +559,11 @@ void NativeHost::DragPreviewCall(const std::string& method,
     }
   } else if (method == "dragPreviewPage") {
     std::string jpeg;
-    if (base::Base64Decode(Text(args, 0), &jpeg))
-      preview.SetPage(jpeg);
+    const auto frame = Numbers(args, 1, 4);
+    if (frame && base::Base64Decode(Text(args, 0), &jpeg))
+      preview.SetPage(jpeg, RectOf(*frame));
   } else if (method == "dragPreviewPlaceholder") {
-    preview.SetPlaceholder(base::UTF8ToUTF16(Text(args, 0)));
+    preview.SetPlaceholder(base::UTF8ToUTF16(Text(args, 0)), Text(args, 1));
   } else if (method == "dragPreviewUpdate") {
     if (const auto point = Numbers(args, 1, 2))
       preview.Update(Text(args, 0), gfx::Point((*point)[0], (*point)[1]));

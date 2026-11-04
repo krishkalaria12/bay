@@ -1,6 +1,7 @@
 import { capabilities } from "@bay/platform";
 import { Dimensions } from "react-native";
 import { dragPreview, hapticTick, windowFrame, type DragPreviewShape } from "@bay/desktop";
+import { hideDragCard, showDragCard } from "./webDragCard";
 import { create } from "zustand";
 import { focus } from "../../lib/actions";
 import { lastPicture, startTabPictures } from "../../lib/tabThumbnails";
@@ -136,14 +137,21 @@ function previewShape(d: TabDrag): DragPreviewShape {
 
 // Without global coordinates no desktop preview is ever shown.
 function endPreview(...args: Parameters<typeof dragPreview.end>) {
+  hideDragCard();
   if (capabilities.globalWindowCoordinates) dragPreview.end(...args);
 }
 
 function syncPreview() {
-  if (!capabilities.globalWindowCoordinates) return;
   const d = useTabDrag.getState();
   if (!d.windowId) return;
   const shape = previewShape(d);
+  if (!capabilities.globalWindowCoordinates) {
+    // The card can't leave the window here, and over the tab list the tab itself shows where it's going.
+    const tab = d.tabId ? useBrowser.getState().tabs[d.tabId] : undefined;
+    if (shape === "card" && !d.outside && tab) showDragCard(pointer, tab.customTitle || tab.title || tab.url || "New Tab", tab.favicon);
+    else hideDragCard();
+    return;
+  }
   // Within its list there's no picture: nothing to send while it stays hidden.
   if (shape === "hidden" && sentShape === "hidden") return;
   if (shape !== "hidden" && picture) takePicture(picture, d.windowId);
@@ -253,6 +261,7 @@ export function endTabDrag(): boolean {
     return true;
   }
   if (!(outside || onPage) || !windowId || !tabIds.length) {
+    hideDragCard();
     if (shown) dragPreview.end();
     return false;
   }
@@ -283,6 +292,7 @@ export function endTabDrag(): boolean {
 }
 
 export function cancelTabDrag() {
+  hideDragCard();
   useTabDrag.setState({ ...IDLE, tabIds: [] });
   dragSeq++;
   picture = null;
