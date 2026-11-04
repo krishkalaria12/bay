@@ -2,7 +2,7 @@ import { requireNativeModule, type EventSubscription } from "@bay/platform/nativ
 import type { ContentBlockerState, ContentBlockerStats } from "./contentBlocker";
 import type { DisplayMediaSource } from "./ChromiumView";
 import type { ExternalAppAllowance } from "./externalApps";
-import type { FaviconImage } from "./favicons";
+import type { FaviconImage, FaviconSvg } from "./favicons";
 import type {
   BrowsingDataType,
   Download,
@@ -83,7 +83,7 @@ export const Cef = requireNativeModule<{
   getExternalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;
   removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;
   clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;
-  fetchFavicon(url: string, profile: string): Promise<FaviconImage | null>;
+  fetchFavicon(url: string, profile: string): Promise<FaviconImage | FaviconSvg | null>;
   removeLegacyFavicons(profile: string): Promise<void>;
   engineCall(name: string, profile: string, args: string | null): Promise<string>;
   releaseProfile(profile: string): Promise<void>;

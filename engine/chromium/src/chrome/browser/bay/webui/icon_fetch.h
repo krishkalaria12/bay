@@ -15,8 +15,8 @@ namespace bay {
 // row), through the profile's own network stack without cookies or credentials,
 // a 200 only, with a size cap and a time-out. A private window's profile is used
 // only while its window is open; a fetch never makes one. Replies
-// {uri: "data:image/png;base64,…", width, height}, or null. SVG icons need a
-// renderer to rasterize and come back null, as a live tab's still show them.
+// {uri: "data:image/png;base64,…", width, height}, {svg: base64} for the
+// document to rasterize, or null.
 void FetchIcon(const std::string& url,
                const std::string& profile,
                base::OnceCallback<void(base::Value)> reply);
@@ -24,6 +24,8 @@ void FetchIcon(const std::string& url,
 // What Chrome decodes as a favicon, sniffed from the bytes whatever the server
 // calls them: a .ico served as text/plain works, an HTML error page doesn't.
 bool IsIconBody(std::string_view body);
+// An SVG file, from its first bytes.
+bool IsSvgBody(std::string_view body);
 
 }  // namespace bay
 

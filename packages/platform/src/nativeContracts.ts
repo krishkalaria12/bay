@@ -1440,7 +1440,7 @@ export const nativeContracts = {
           "optional": false,
           "minArgs": 2,
           "maxArgs": 2,
-          "signature": "fetchFavicon(url: string, profile: string): Promise<FaviconImage | null>;"
+          "signature": "fetchFavicon(url: string, profile: string): Promise<FaviconImage | FaviconSvg | null>;"
         },
         "removeLegacyFavicons": {
           "async": true,

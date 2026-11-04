@@ -2524,6 +2524,11 @@ TEST(ExternalAppPromptsTest, DescribesAPromptAsMacOsWordsIt) {
 TEST(IconFetchTest, OnlyWhatChromeDecodesAsAFaviconPasses) {
   EXPECT_FALSE(IsIconBody(""));
   EXPECT_FALSE(IsIconBody("<!doctype html><html></html>"));
+  EXPECT_TRUE(IsSvgBody("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>"));
+  EXPECT_TRUE(IsSvgBody("\n<?xml version=\"1.0\"?><!-- icon --><svg></svg>"));
+  EXPECT_FALSE(IsSvgBody("<!doctype html><html><body><svg></svg></html>"));
+  EXPECT_FALSE(IsSvgBody("not markup <svg>"));
+  EXPECT_FALSE(IsSvgBody(""));
   EXPECT_TRUE(IsIconBody(std::string_view("\x89PNG\r\n\x1a\n", 8)));
   EXPECT_TRUE(IsIconBody(std::string_view("\x00\x00\x01\x00\x01\x00", 6)));
   EXPECT_TRUE(IsIconBody(std::string_view("\x00\x00\x02\x00\x01\x00", 6)));
