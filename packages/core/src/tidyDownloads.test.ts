@@ -2,7 +2,7 @@
 // browser actually hands over. Nothing here renames a file; these are the words the offer is made from.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanPageTitle, isUserNamedDownload, looksGenerated, splitFilename, tidyDownloadName, tidyNameFor } from "./tidyDownloads.ts";
+import { cleanPageTitle, isUserNamedDownload, looksGenerated, modelTidyName, splitFilename, tidyDownloadName, tidyNameFor } from "./tidyDownloads.ts";
 
 test("splitFilename keeps a whole archive extension", () => {
   assert.deepEqual(splitFilename("IMG_8812.JPG"), { stem: "IMG_8812", extension: "JPG" });
@@ -90,6 +90,45 @@ test("a screenshot takes the page's name", () => {
   assert.equal(tidyDownloadName({ filename: "Screenshot 2026-10-24 at 12.34.56.png", pageTitle: "Dashboard — Linear" })?.filename, "Dashboard.png");
   assert.equal(tidyDownloadName({ filename: "image.png", pageTitle: "A cat on a sofa" })?.filename, "A Cat on a Sofa.png");
   assert.equal(tidyDownloadName({ filename: "Untitled design (1).png", pageTitle: "Poster — Figma" })?.filename, "Poster.png");
+});
+
+test("a web address's slug becomes words", () => {
+  assert.equal(tidyDownloadName({ filename: "Hello-World-master.zip" })?.filename, "Hello World Master.zip");
+  assert.equal(tidyDownloadName({ filename: "annual-report.pdf" })?.filename, "Annual Report.pdf");
+});
+
+test("a dotted version survives the clean up", () => {
+  assert.equal(tidyDownloadName({ filename: "Cra-0.1.30.dmg" })?.filename, "Cra 0.1.30.dmg");
+  assert.equal(tidyDownloadName({ filename: "node-v22.11.0-darwin-arm64.tar.gz" })?.filename.includes("22.11.0"), true);
+  assert.equal(tidyNameFor("Cra 0.1.30", "Cra-0.1.30.dmg")?.filename, "Cra 0.1.30.dmg");
+});
+
+test("a model's answer keeps its own wording and loses what a file name can't hold", () => {
+  assert.equal(tidyNameFor("DM with Sara", "Screenshot 2026-09-26.png")?.filename, "DM with Sara.png");
+  assert.equal(tidyNameFor("Fly.io Invoice Nov 3", "invoice_771100.pdf")?.filename, "Fly.io Invoice Nov 3.pdf");
+  assert.equal(tidyNameFor("“Q3 Report.PDF”\nHope that helps", "x_1.pdf")?.filename, "Q3 Report.pdf");
+  assert.equal(tidyNameFor("../../etc/passwd: a/b", "x_1.pdf")?.filename, "etc passwd a b.pdf");
+  assert.equal(tidyNameFor("...hidden", "x_1.pdf")?.filename, "hidden.pdf");
+  assert.equal(tidyNameFor("Report.app", "x_1.pdf")?.filename, "Report.pdf");
+  assert.equal(tidyNameFor("download", "x_1.pdf"), null);
+  assert.equal(tidyNameFor("Same", "Same.pdf"), null);
+});
+
+test("a model's answer has to keep the subject of a name that says something", () => {
+  // The answers the on-device model gave when the page was about something else.
+  assert.equal(modelTidyName("Acme Q3 2026 Report", "Cra-0.1.30.dmg"), null);
+  assert.equal(modelTidyName("CV", "resume_final_v2.docx"), null);
+  assert.equal(modelTidyName("Cra 0.1.30", "Cra-0.1.30.dmg")?.filename, "Cra 0.1.30.dmg");
+  assert.equal(modelTidyName("Fly.io Invoice Nov 3", "invoice_771100_2026-11-03.pdf")?.filename, "Fly.io Invoice Nov 3.pdf");
+  assert.equal(modelTidyName("Hello World", "Hello-World-master.zip")?.filename, "Hello World.zip");
+  assert.equal(modelTidyName("Huracan S 02", "gw_hura_s_02.webp")?.filename, "Huracan S 02.webp");
+});
+
+test("a name that says nothing leaves the model free", () => {
+  assert.equal(modelTidyName("Navan Lisbon Trip", "387494875.pdf")?.filename, "Navan Lisbon Trip.pdf");
+  assert.equal(modelTidyName("Acme Q3 Report", "IMG_20261024_8812.pdf")?.filename, "Acme Q3 Report.pdf");
+  assert.equal(modelTidyName("DM with Sara", "Screenshot 2026-09-26 at 11.12.18 PM.png")?.filename, "DM with Sara.png");
+  assert.equal(modelTidyName("Stripe Payments", "data_export_1730000000.csv")?.filename, "Stripe Payments.csv");
 });
 
 test("names a person made are left alone", () => {

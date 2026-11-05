@@ -13,7 +13,7 @@ import { SIDEBAR_FOOTER_DOWNLOADS } from "../window/constants";
 import { openInternalPage } from "../pages/pageUrls";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { showToast } from "../split/splitActions";
-import { tidyRename, resolveTidySuggestion } from "../../lib/tidyDownloads";
+import { keepDownloadName, tidyRename, resolveTidySuggestion } from "../../lib/tidyDownloads";
 
 // MARK: Formatting
 
@@ -61,7 +61,11 @@ export const isOpenWhenDone = (id: string) => openWhenDone.has(id);
 
 export function toggleOpenWhenDone(id: string) {
   if (openWhenDone.has(id)) openWhenDone.delete(id);
-  else openWhenDone.add(id);
+  else {
+    openWhenDone.add(id);
+    // It's opened the moment it finishes: renaming it then would pull the file from under the app opening it.
+    keepDownloadName(id);
+  }
 }
 
 export async function downloadMenu(d: Download, windowId: string) {

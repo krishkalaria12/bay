@@ -528,12 +528,12 @@ export const translation: Omit<TranslationModule, "available"> | null = Translat
 
 type TidyNamesModule = {
   readonly available: boolean;
-  suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;
+  suggest(filename: string, pageTitle: string, pageUrl: string): Promise<string | null>;
 };
 const TidyNamesNative = requireNativeModule<TidyNamesModule>("BayTidyNames");
 
-// Null unless launched with BAY_TIDY_DOWNLOADS_AI=true on a Mac with Apple Intelligence; Tidy Downloads then leans on
-// the local cleaner alone.
+// Null before macOS 26, where Tidy Downloads leans on the local cleaner alone. Its answer is null while Apple
+// Intelligence is off or still downloading.
 export const tidyNames: Omit<TidyNamesModule, "available"> | null = TidyNamesNative.available ? TidyNamesNative : null;
 
 /** Where Apple Intelligence stands on this Mac. */
