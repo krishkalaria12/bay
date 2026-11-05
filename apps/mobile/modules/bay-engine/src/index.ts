@@ -29,7 +29,7 @@ export interface NavigationState {
   isLoading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
-  /** Android: the tab's first navigation became a download, so it has no page to show. */
+  /** The tab's first navigation became a download, so it has no page to show. */
   blank?: boolean;
 }
 
@@ -145,7 +145,10 @@ export function runPageScript<T>(tab: Tab, script: string, timeout = 10_000): Pr
   });
 }
 
-/** A page download's progress. iOS saves to the app's Downloads folder (shown in Files); Android to the public one, with a progress notification. */
+/**
+ * A page download's progress. iOS saves to the app's Downloads folder (shown in Files), and on iOS 26 shows the system's
+ * progress while Bay is in the background; Android saves to the public one, with a progress notification.
+ */
 export interface DownloadUpdate {
   id: string;
   url: string;
@@ -157,7 +160,7 @@ export interface DownloadUpdate {
   /** The saved file (a file:// URL on iOS, a content:// URI on Android), once finished. */
   path?: string;
   error?: string;
-  /** Android: why a download that hasn't finished isn't moving ("Waiting for Wi-Fi"); absent while it transfers. */
+  /** Why a download that hasn't finished isn't moving ("Starting…"; Android also "Waiting for Wi-Fi"); absent while it transfers. */
   waiting?: string;
   /** Started in a private tab: kept out of anything Bay saves. */
   private: boolean;
