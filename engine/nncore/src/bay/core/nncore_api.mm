@@ -1044,6 +1044,31 @@ void WatchTracingStart(std::shared_ptr<TracingStart> start, int checks_left) {
   nncore::SetRequestFilter(filter);
 }
 
++ (void)setContentSecurityPolicySource:(NNCoreContentSecurityPolicySource)source {
+  nncore::SetContentSecurityPolicySource(source);
+}
+
++ (void)setResponseFilter:(NNCoreResponseFilter)filter {
+  nncore::SetResponseFilter(filter);
+}
+
++ (void)setBodyFilterGate:(NNCoreBodyFilterGate)gate filter:(NNCoreBodyFilter)filter {
+  nncore::SetBodyFilter(gate, filter);
+}
+
++ (void)setRequestHeaderNames:(NNCoreRequestHeaderNames)names
+                       filter:(NNCoreRequestHeaderFilter)filter {
+  nncore::SetRequestHeaderFilter(names, filter);
+}
+
++ (void)setCnameFilter:(NNCoreCnameFilter)filter {
+  nncore::SetCnameFilter(filter);
+}
+
++ (void)setScriptletSource:(NNCoreScriptletSource)source {
+  nncore::SetScriptletSource(source);
+}
+
 + (void)setAutoPictureInPicture:(BOOL)enabled {
   g_auto_picture_in_picture = enabled;
   for (Profile* profile : g_browser_process->profile_manager()->GetLoadedProfiles()) {

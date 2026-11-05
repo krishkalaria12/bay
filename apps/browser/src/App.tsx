@@ -1,41 +1,43 @@
 import { WindowBackdrop } from "@bay/shaders";
-import { onAppEvent, setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/shell";
+import { onAppEvent, setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
-import { CommandPanel } from "./components/CommandPanel";
-import { ContentCard } from "./components/ContentCard";
+import { CommandPanel } from "./components/commandBar/CommandBarPanel";
+import { ContentCard } from "./components/window/TabPageCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
 import { EditBookmarkDialog } from "./components/bookmarks/EditBookmarkDialog";
 import { ExtensionOverlays } from "./components/extensions/ExtensionOverlays";
 import { ExtensionSidePanel } from "./components/extensions/SidePanel";
-import { DownloadMagnet } from "./components/Downloads";
-import { DownloadsPanel } from "./components/DownloadsPanel";
+import { DownloadMagnet } from "./components/downloads/DownloadRow";
+import { DownloadsPanel } from "./components/downloads/DownloadsPanel";
 import { UtilityWindow } from "./components/settings/UtilityWindow";
 import { isUtilityWindowId } from "./components/settings/windows";
-import { OnboardingOverlay } from "./components/onboarding";
+import { OnboardingOverlay } from "./components/onboarding/index";
 import { CreateSpaceHost } from "./components/spaces/CreateSpace";
-import { RenameDialogHost } from "./components/RenameDialog";
+import { RenameDialogHost } from "./components/ui/RenameDialog";
 import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
-import { useFullscreenTab } from "./components/layout/pageState";
-import { SpaceSwipe, SpaceTint } from "./components/layout/SpaceSwipe";
-import { TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
-import { TOP_CARD_INSET } from "./components/layout/constants";
-import { TOP_STRIP_HEIGHT } from "./components/layout/constants";
-import { usePeek } from "./components/layout/usePeek";
-import { useSidebarDock } from "./components/layout/useSidebarDock";
-import { useSidebarLights } from "./components/layout/useSidebarLights";
-import { useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./components/layout/windowLayout";
-import { WindowProfile } from "./components/layout/WindowProfile";
-import { Sidebar } from "./components/Sidebar";
+import { useFullscreenTab } from "./components/window/pageState";
+import { SpaceSwipe, SpaceTint } from "./components/spaces/SpaceSwipe";
+import { TopStripPeek, TopTabStrip } from "./components/tabStrip/TabStrip";
+import { TOP_CARD_INSET } from "./components/window/constants";
+import { TOP_STRIP_HEIGHT } from "./components/window/constants";
+import { usePeek } from "./components/linkOverlay/usePeek";
+import { useSidebarDock } from "./components/sidebar/useSidebarDock";
+import { useSidebarLights } from "./components/sidebar/useSidebarLights";
+import { useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./components/window/layout";
+import { WindowProfile } from "./components/window/WindowProfile";
+import { Sidebar } from "./components/sidebar/Sidebar";
+import { LibrarySidebar } from "./components/library/LibrarySidebar";
+import { closeLibrarySidebar, useLibrarySidebar } from "./components/library/sidebarState";
 import { LittleBayWindow } from "./components/littleBay/LittleBayWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
 import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
-import { hex, ThemeScope, useTheme } from "./lib/theme";
+import { hex, ThemeScope, useTheme, useWindowTint } from "./lib/theme";
 import { layout } from "./lib/constants";
 import { useEffectEvent } from "./lib/useEffectEvent";
-import { useBrowser } from "./store/browser";
+import { useBrowser } from "./store/browserStore";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
 
 export function WindowRoot({ windowId }: { windowId?: string }) {
@@ -75,13 +77,19 @@ function BrowserWindow() {
   const addressInSidebar = useAddressBarInSidebar();
   const [peekOut, setPeekOut] = useState(false);
   const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, topTabs, peekOut });
-  const lightsColor = theme.windowTint[0];
+  const windowTint = useWindowTint();
+  const lightsColor = windowTint[0];
   useEffect(() => {
     void setTrafficLightsMode(windowId, lights, lightsColor);
   }, [windowId, lights, lightsColor]);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);
+  const library = useLibrarySidebar((l) => !!l[windowId]);
+  // Hiding the sidebar (or moving tabs to the top) puts the Library away with it.
+  useEffect(() => {
+    if (!showSidebar) closeLibrarySidebar(windowId);
+  }, [showSidebar, windowId]);
   const dock = useSidebarDock(showSidebar);
   useSidebarLights(windowId, { on: right && addressInSidebar && !fullscreen, progress: dock.progress, windowWidth: width, sidebarWidth, peekOut });
   // The sidebar's slot narrows to the card's inset as it closes; the sidebar slides out by as much, so its edge stays
@@ -101,7 +109,7 @@ function BrowserWindow() {
 
   return (
     <View style={{ flex: 1, flexDirection: right ? "row-reverse" : "row" }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <WindowProfile />
       <SpaceTint />
       {!topTabs && (
@@ -111,9 +119,13 @@ function BrowserWindow() {
         >
           {dock.mounted ? (
             <Animated.View style={[{ width: sidebarWidth, height: "100%" }, dockedStyle]}>
-              <SpaceSwipe>
-                <Sidebar />
-              </SpaceSwipe>
+              {/* The Library in the sidebar's place; the tabs stay mounted underneath, keeping their scroll and rows. */}
+              <View style={{ flex: 1, display: library ? "none" : "flex" }}>
+                <SpaceSwipe>
+                  <Sidebar />
+                </SpaceSwipe>
+              </View>
+              {library ? <LibrarySidebar windowId={windowId} /> : null}
             </Animated.View>
           ) : null}
         </Animated.View>
@@ -191,6 +203,7 @@ if (__DEV__) {
 
 function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boolean; onOut: (out: boolean) => void }) {
   const theme = useTheme();
+  const windowTint = useWindowTint();
   const windowId = useWindowId();
   const sidebarWidth = useSidebarWidth(windowId);
   const { slide, live, show, hide } = usePeek(enabled);
@@ -265,7 +278,7 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
         ]}
       >
         <Surface
-          fill={hex(theme.windowTint[0])}
+          fill={hex(windowTint[0])}
           cornerRadius={12}
           borderColor={hex(theme.panelBorder)}
           borderWidth={0.5}

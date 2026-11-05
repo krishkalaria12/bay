@@ -1,9 +1,9 @@
-import { Surface, Symbol } from "@bay/shell";
+import { Surface, Symbol } from "@bay/desktop";
 import { useEffect } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { installUpdate, updateTitle, usePendingUpdate, watchPendingUpdate } from "../../lib/updates";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 
 /** The row over the sidebar's foot while an update waits (as Arc's): "Update Bay", "Downloading Update…" with a spinner
  * while it downloads in the background, or "Restart to Update" once it's downloaded. */

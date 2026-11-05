@@ -1,9 +1,13 @@
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
+import { useSettings } from "../../store/hooks";
 import type { GroupColor } from "../../store/types";
 import { useSidebarUi } from "./state";
+import { Dimensions } from "react-native";
+import { libraryWidth, useLibrarySidebar } from "../library/sidebarState";
+import { publicSpaceIds } from "../library/spaces";
 
 const DARK = {
   groupFill: "rgba(255,255,255,0.1)", // TabGroupNeutralBackground
@@ -114,9 +118,15 @@ export function withAlpha(hex: string, alpha: number): string {
 export function useSidebarWidth(windowId: string): number {
   const saved = useBrowser((s) => s.settings.sidebarWidth ?? layout.sidebarWidth);
   const dragging = useSidebarUi((u) => u.dragWidth[windowId]);
-  return dragging ?? saved;
+  // The Library in the sidebar needs room for its rail and its list (and its Spaces, side by side).
+  const section = useLibrarySidebar((l) => l[windowId]);
+  const library = useBrowser((s) =>
+    section ? libraryWidth(section, publicSpaceIds(s).length, s.windows[windowId]?.frame?.[2] ?? Dimensions.get("window").width) : 0,
+  );
+  const width = dragging ?? saved;
+  return Math.max(width, library);
 }
 
 export function useSidebarMetrics() {
-  return useBrowser((s) => sidebarMetrics(s.settings.density));
+  return useSettings((s) => sidebarMetrics(s.density));
 }

@@ -1,0 +1,207 @@
+import { toAppUrl, urlForDisplay } from "@bay/core";
+import { setBlockedPageAllowed } from "@bay/chromium";
+import { Surface, Symbol } from "@bay/desktop";
+import { useEffect, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { hex, useTheme } from "../../lib/theme";
+import { useLatched } from "../../lib/useLatched";
+import { webviews } from "../../lib/webviews";
+import { PromptButton } from "../toolbar/buttons";
+import { goBack } from "./historyMenu";
+import { patchPage, usePage } from "./pageState";
+import { useBrowser } from "../../store/browserStore";
+import { useQuietBrowser } from "../../store/hooks";
+import { isIncognitoSpace } from "../../store/model";
+
+export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: number }) {
+  const status = usePage(tabId, (p) => p.status);
+  // Mounted with the shown page, so on every tab switch: its fade comes with the page's first status. One there as
+  // the page shows is shown at once, as before; a later one fades in.
+  const [instant] = useState(!!status);
+  return useLatched(!!status) ? <Bubble status={status} instant={instant} maxWidth={maxWidth} /> : null;
+}
+
+function Bubble({ status, instant, maxWidth }: { status: string; instant: boolean; maxWidth: number }) {
+  const theme = useTheme();
+  const [shown, setShown] = useState(status);
+  const opacity = useSharedValue(instant ? 1 : 0);
+  useEffect(() => {
+    if (status) {
+      setShown(status);
+      opacity.set(withTiming(1, { duration: 90, easing: Easing.out(Easing.quad) }));
+      return;
+    }
+    const hide = () => setShown("");
+    const timer = setTimeout(() => {
+      opacity.set(
+        withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) }, (finished) => {
+          if (finished) runOnJS(hide)();
+        }),
+      );
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [status]);
+  const fade = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+  if (!shown) return null;
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 6, bottom: 6, maxWidth }, fade]}>
+      <Surface
+        fill={hex(theme.dark ? "rgba(40,38,39,0.96)" : "rgba(250,249,250,0.97)")}
+        cornerRadius={7}
+        borderColor={hex(theme.dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)")}
+        borderWidth={0.5}
+        shadowColor="#000000"
+        shadowOpacity={theme.dark ? 0.3 : 0.1}
+        shadowRadius={6}
+        shadowOffset={[0, 2]}
+        style={{ paddingHorizontal: 8, height: 22, justifyContent: "center" }}
+      >
+        <Text numberOfLines={1} ellipsizeMode="middle" style={{ fontSize: 12, color: theme.dark ? "#FFFFFFD9" : "#000000C7" }}>
+          {displayUrl(shown)}
+        </Text>
+      </Surface>
+    </Animated.View>
+  );
+}
+
+function displayUrl(url: string) {
+  let out = /^https?:\/\//i.test(url) ? urlForDisplay(url) : toAppUrl(url);
+  try {
+    out = decodeURI(out);
+  } catch {}
+  return out;
+}
+
+/** The tab's page is in another window (as Arc's, a space's tab shows in one window at a time): Show Here brings it. */
+export function OpenElsewhere({ tabId, windowId }: { tabId: string; windowId: string }) {
+  const theme = useTheme();
+  const elsewhere = useQuietBrowser((s) => {
+    const shownIn = s.tabs[tabId]?.windowId;
+    return !!shownIn && shownIn !== windowId && !!s.windows[shownIn];
+  });
+  if (!elsewhere) return null;
+  return (
+    <View
+      style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}
+    >
+      <Symbol name="macwindow.on.rectangle" size={30} weight="light" color={theme.textSecondary} style={{ width: 44, height: 40, marginBottom: 14 }} />
+      <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary, marginBottom: 6 }}>Open in another window</Text>
+      <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center", maxWidth: 340, marginBottom: 18 }}>
+        This tab is showing in another window. Show it here to move it, as it is.
+      </Text>
+      <PromptButton title="Show Here" primary onPress={() => useBrowser.getState().activate(tabId, windowId)} />
+    </View>
+  );
+}
+
+// A page the content blocker stopped ($doc, a hostname on its lists), over Chromium's error page at its URL. Visit Anyway
+// only lifts this page's block: the site's requests are still filtered.
+export function BlockedPage({ tabId }: { tabId: string }) {
+  const theme = useTheme();
+  const url = usePage(tabId, (p) => p.blockedPage);
+  const canGoBack = useBrowser((s) => !!s.live[tabId]?.canGoBack);
+  const incognito = useQuietBrowser((s) => isIncognitoSpace(s.tabs[tabId]?.spaceId ?? ""));
+  if (!url) return null;
+  const host = url.match(/^https?:\/\/([^/?#:]*)/i)?.[1] ?? url;
+  const visit = (remember: boolean) => {
+    void setBlockedPageAllowed(host, true, remember).then(() => {
+      patchPage(tabId, { blockedPage: null });
+      void webviews.get(tabId)?.reload();
+    });
+  };
+  return (
+    <View
+      style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}
+    >
+      <Symbol name="hand.raised" size={30} weight="light" color={theme.textSecondary} style={{ width: 44, height: 40, marginBottom: 8 }} />
+      <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary, marginBottom: 6 }}>Bay blocked this page</Text>
+      <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center", maxWidth: 380, marginBottom: 18 }}>
+        {host} is on one of Bay's filter lists, which cover malware, ads and trackers. It may not be safe to visit.
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+        <PromptButton
+          title={canGoBack ? "Go Back" : "Close Tab"}
+          primary
+          onPress={() => {
+            if (canGoBack) goBack(tabId);
+            else useBrowser.getState().closeTab(tabId);
+          }}
+        />
+        <PromptButton title="Visit Anyway" onPress={() => visit(false)} />
+        {!incognito && <PromptButton title="Always Allow" onPress={() => visit(true)} />}
+      </View>
+      <Text style={{ fontSize: 11.5, color: theme.textTertiary, textAlign: "center", maxWidth: 380 }}>
+        Visit Anyway lasts until you quit Bay. Either way, Bay keeps blocking ads on the site.
+      </Text>
+    </View>
+  );
+}
+
+export function SadTab({ tabId }: { tabId: string }) {
+  const theme = useTheme();
+  const crashed = usePage(tabId, (p) => !!p.crashed);
+  const unresponsive = usePage(tabId, (p) => p.unresponsive);
+  if (crashed) {
+    return (
+      <View
+        style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}
+      >
+        <Symbol name="exclamationmark.triangle" size={30} weight="light" color={theme.textSecondary} style={{ width: 44, height: 40, marginBottom: 14 }} />
+        <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary, marginBottom: 6 }}>This tab needs to reload</Text>
+        <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center", maxWidth: 340, marginBottom: 18 }}>
+          Something went wrong with this tab. Reloading often fixes it.
+        </Text>
+        <PromptButton
+          title="Reload"
+          primary
+          onPress={() => {
+            patchPage(tabId, { crashed: null });
+            void webviews.get(tabId)?.reload();
+          }}
+        />
+      </View>
+    );
+  }
+  if (!unresponsive) return null;
+  return (
+    <View
+      style={[
+        StyleSheet.absoluteFill,
+        { alignItems: "center", justifyContent: "center", backgroundColor: theme.dark ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.12)" },
+      ]}
+    >
+      <Surface
+        fill={hex(theme.panel)}
+        cornerRadius={14}
+        borderColor={hex(theme.panelBorder)}
+        borderWidth={0.5}
+        shadowColor="#000000"
+        shadowOpacity={theme.panelShadowOpacity}
+        shadowRadius={20}
+        shadowOffset={[0, 8]}
+        style={{ width: 320, padding: 18, gap: 6 }}
+      >
+        <Text style={{ fontSize: 14, fontWeight: "600", color: theme.textPrimary }}>Page Unresponsive</Text>
+        <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}>You can wait for it to become responsive or exit the page.</Text>
+        <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
+          <PromptButton
+            title="Exit Page"
+            onPress={() => {
+              patchPage(tabId, { unresponsive: false });
+              void webviews.get(tabId)?.resolveUnresponsive(true);
+            }}
+          />
+          <PromptButton
+            title="Wait"
+            primary
+            onPress={() => {
+              patchPage(tabId, { unresponsive: false });
+              void webviews.get(tabId)?.resolveUnresponsive(false);
+            }}
+          />
+        </View>
+      </Surface>
+    </View>
+  );
+}

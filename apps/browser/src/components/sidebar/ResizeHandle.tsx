@@ -1,8 +1,8 @@
 import { View } from "react-native";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
-import { useResizeDrag } from "../layout/useResizeDrag";
-import { useSidebarOnRight } from "../layout/windowLayout";
+import { useBrowser } from "../../store/browserStore";
+import { useResizeDrag } from "./useResizeDrag";
+import { useSidebarOnRight } from "../window/layout";
 import { setSidebarUi, sidebarUi } from "./state";
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./constants";
 

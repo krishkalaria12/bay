@@ -1,9 +1,9 @@
 import { resolveInput } from "@bay/core";
-import { Surface } from "@bay/shell";
+import { Surface } from "@bay/desktop";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useWindowId } from "../../store/hooks";
 import { searchUrlPrefix } from "../../store/settings";
 import { Button, TextField, useFormColors } from "../settings/controls";

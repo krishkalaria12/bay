@@ -1,11 +1,11 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, Text, View, type GestureResponderEvent, type TextStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { toggleMute } from "../../lib/actions";
 import { hex } from "../../lib/theme";
 import { useTab } from "../../store/hooks";
-import { Favicon, useHover } from "../primitives";
+import { Favicon, useHover } from "../ui/primitives";
 import { useArtwork } from "./artwork";
 import { useMarqueeGroup, Marquee } from "./Marquee";
 import {

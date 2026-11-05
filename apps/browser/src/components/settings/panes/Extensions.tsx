@@ -1,8 +1,8 @@
-import { reloadExtension, type InstalledExtension } from "@bay/nncore";
+import { reloadExtension, type InstalledExtension } from "@bay/chromium";
 import { useEffect, useState } from "react";
 import { Image, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile, resolveWindowId } from "../../../store/model";
 import { InstallDialogHost } from "../../extensions/ExtensionOverlays";

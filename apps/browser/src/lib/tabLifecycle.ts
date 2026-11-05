@@ -1,25 +1,38 @@
-import { listTasks, onSystemState, releaseProfile, systemState, type SystemState, type WebViewHandle } from "@bay/nncore";
-import { onAppEvent, onWindowEvent } from "@bay/shell";
+import { listTasks, onSystemState, releaseProfile, systemState, type SystemState, type WebViewHandle } from "@bay/chromium";
+import { onAppEvent, onWindowEvent } from "@bay/desktop";
 import { create } from "zustand";
-import { pageOf } from "../components/layout/pageState";
+import { pageOf } from "../components/window/pageState";
 import { useMedia } from "../components/media/state";
-import { isInternalTab } from "../components/pages";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { isInternalTab } from "../components/pages/index";
+import { useBrowser, type BrowserState } from "../store/browserStore";
 import { activeTabId, engineProfile, inPinnedContainer, isIncognitoSpace, wake } from "../store/model";
 import { shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
-import { applyHeldReports } from "./nativeEvents";
-import { everySlowly } from "./slowTimers";
+import { applyHeldReports } from "./bridgeEvents";
+import { everySlowly } from "./throttledTimers";
 import { webviews } from "./webviews";
 import { LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
-import { siteKeptAwake } from "./awakeSites";
+import { siteKeptAwake } from "./keptAwakeSites";
 
+// The policy of a Mac with more than 16 GB; policyFor gives a smaller one's.
 export const POLICY = {
   protectedRecent: 10,
   idleMs: 2 * 60 * 60_000,
   profileIdleMs: 2 * 60 * 60_000,
   perSweep: 6,
 };
+
+/**
+ * Less memory, sooner sleep. Twenty tabs' pages take about 1.2 GB: an 8 GB Mac is swapping (and every app on it lags)
+ * well before macOS reports memory pressure, which is when the sweep otherwise starts reclaiming. Idle time is the
+ * app's active time, so tabs left behind don't sleep while the Mac is away.
+ */
+export function policyFor(physicalMemory: number | undefined): Pick<typeof POLICY, "idleMs" | "protectedRecent"> {
+  const gb = (physicalMemory ?? Infinity) / 2 ** 30;
+  if (gb <= 8) return { idleMs: 30 * 60_000, protectedRecent: 5 };
+  if (gb <= 16) return { idleMs: 60 * 60_000, protectedRecent: 8 };
+  return { idleMs: POLICY.idleMs, protectedRecent: POLICY.protectedRecent };
+}
 
 type Lifecycle = {
   discarded: Record<string, true>;
@@ -174,16 +187,19 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
   sweeping = true;
   const slept: string[] = [];
   try {
-    const policy = { ...POLICY, ...overrides };
+    const policy = { ...POLICY, ...policyFor(currentSystem()?.physicalMemory), ...overrides };
     const s = store();
     const shown = shownTabIds(s);
     const now = activeClock();
     const pressure = currentSystem()?.memoryPressure ?? "normal";
+    // A warning must be able to reclaim a small session too. Keeping ten recent pages alive could otherwise
+    // leave no candidates until pressure became critical. Visible and busy pages have separate protections below.
+    const protectedRecent = pressure === "critical" ? 0 : pressure === "warning" ? Math.min(policy.protectedRecent, 2) : policy.protectedRecent;
     const recent = new Set(
       Object.values(s.tabs)
         .filter((t) => t.url)
         .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
-        .slice(0, pressure === "critical" ? 0 : policy.protectedRecent)
+        .slice(0, protectedRecent)
         .map((t) => t.id),
     );
     const unused = unusedProfiles(s, now, policy.profileIdleMs);
@@ -259,6 +275,8 @@ export function reloadRecentTabs(sys: SystemState) {
   ids.forEach((id, i) =>
     setTimeout(
       () => {
+        const latest = currentSystem() ?? sys;
+        if (latest.onBattery || latest.lowPowerMode || latest.memoryPressure !== "normal") return;
         const t = store().tabs[id];
         if (t?.url && !t.navigation && !t.adoptId) store().updateTab(id, wake(t));
       },

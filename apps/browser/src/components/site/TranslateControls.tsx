@@ -1,9 +1,9 @@
-import { showMenu, translation, type MenuItem } from "@bay/shell";
+import { showMenu, translation, type MenuItem } from "@bay/desktop";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { isIncognitoSpace } from "../../store/model";
-import { PopoverRow, PopoverSeparator, Toggle, ToolbarButton } from "../layout/controls";
-import type { ToolbarPalette } from "../layout/toolbarColors";
+import { PopoverRow, PopoverSeparator, Toggle, ToolbarButton } from "../toolbar/buttons";
+import type { ToolbarPalette } from "../toolbar/colors";
 import {
   defaultTarget,
   isNeverTranslated,
@@ -15,7 +15,7 @@ import {
   translatePage,
   translateStateOf,
   useTranslateState,
-} from "./translate";
+} from "./translateState";
 
 export function TranslateButton({ tabId, palette, onFocus }: { tabId: string; palette: ToolbarPalette; onFocus: () => void }) {
   const theme = useTheme();

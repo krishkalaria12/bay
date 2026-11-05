@@ -1,4 +1,4 @@
-import { hostOf } from "@bay/core/src/omnibox.ts";
+import { hostOf } from "@bay/core/src/input.ts";
 import { useThemeColor } from "heroui-native";
 import { useRef, type JSX } from "react";
 import { Pressable, Text, View } from "react-native";

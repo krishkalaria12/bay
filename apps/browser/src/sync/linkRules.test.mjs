@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Clock, emptyScope, syncScope } from "@bay/sync";
-import { useBrowser } from "../store/browser.ts";
+import { useBrowser } from "../store/browserStore.ts";
 import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules.ts";
 
 const S = () => useBrowser.getState();

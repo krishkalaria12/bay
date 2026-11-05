@@ -22,15 +22,15 @@ function renderTabs(tabLayout) {
     ["Button", "Checkbox", "Group", "PopUp", "Row", "SectionHeader", "SettingToggle", "TextField", "Toggle"].map((name) => [name, name]),
   );
   const mocks = {
-    "@bay/shell": { Symbol: "Symbol" },
+    "@bay/desktop": { Symbol: "Symbol" },
     "react-native": { View: "View", Text: "Text", Pressable: "Pressable" },
     "../../../lib/theme": {},
-    "../../../store/browser": { useBrowser: (selector) => selector(state) },
+    "../../../store/browserStore": { useBrowser: (selector) => selector(state) },
     "../controls": controls,
     "../definitions": { SETTINGS },
     "../constants": constants,
-    "../../../live/store": {},
-    "../../../lib/awakeSites": {},
+    "../../../activity/activityStore": {},
+    "../../../lib/keptAwakeSites": {},
   };
   const module = { exports: {} };
   new Function("require", "module", "exports", tabsCode)((id) => mocks[id] ?? require(id), module, module.exports);

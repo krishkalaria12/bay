@@ -1,9 +1,9 @@
-import { closeCastDialog, onCastDialog, onCastRoutes, showCastDialog, watchCastRoutes, type CastDialog, type CastRoute } from "@bay/nncore";
+import { closeCastDialog, onCastDialog, onCastRoutes, showCastDialog, watchCastRoutes, type CastDialog, type CastRoute } from "@bay/chromium";
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId, engineProfile, incognitoSpaceId } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
-import { tabForBrowser } from "../layout/pageState";
+import { tabForBrowser } from "../window/pageState";
 
 type CastStore = {
   dialogs: Record<string, CastDialog>;

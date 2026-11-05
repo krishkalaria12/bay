@@ -1,4 +1,4 @@
-import { hostOf } from "@bay/core/src/omnibox.ts";
+import { hostOf } from "@bay/core/src/input.ts";
 import { addMediaControlListener, runPageScript, setMediaSession, type MediaControl, type Tab } from "@bay/engine";
 import { useEffect, useRef, useState } from "react";
 

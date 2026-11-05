@@ -1,10 +1,11 @@
-import { faviconsFor, fetchFavicon, onHistoryChanged, removeLegacyFavicons } from "@bay/nncore";
-import { iconTheme, readDocument, removeDocument, type IconTheme } from "@bay/shell";
+import { faviconsFor, fetchFavicon, onHistoryChanged, removeLegacyFavicons } from "@bay/chromium";
+import { iconTheme, readDocument, removeDocument, type IconTheme } from "@bay/desktop";
 import { useEffect } from "react";
-import { create } from "zustand";
-import { batchStoreUpdates, useBrowser, type BrowserState } from "../store/browser";
+import { create, useStore } from "zustand";
+import { batchStoreUpdates, useBrowser, type BrowserState } from "../store/browserStore";
 import { engineProfile, isIncognitoSpace } from "../store/model";
 import { DEFAULT_SPACE_ID } from "../store/constants";
+import { appearanceStore } from "../store/derivedStores";
 import { webviews } from "./webviews";
 import { APPEARANCE_SWAP_MS, FAVICON_FLUSH_MS, FAVICON_LOOKUP_BATCH, FAVICON_LOOKUP_DELAY_MS, MAX_FAVICONS } from "./constants";
 
@@ -42,7 +43,33 @@ export const pageKey = (url: string) => url.replace(/#.*$/, "");
 // Answers come in bursts (a launch asks Chrome about every tab's page, then checks each icon's shape), so changes
 // wait for the next frame and land together, in order: one store update and one commit. A change that gives back
 // what it got changes nothing, and no icon re-renders for it.
-type Change = (f: Favicons) => Favicons;
+// Only maps made by this flush can be edited in place. Published maps are copied on their first write;
+// counts follow those copies so a burst doesn't enumerate and spread a growing map for every icon.
+// Keep ownership local to the flush: subscribers can synchronously queue and flush another batch.
+class FaviconBatch {
+  private sizes = new WeakMap<object, number>();
+
+  size(map: object): number {
+    return this.sizes.get(map) ?? Object.keys(map).length;
+  }
+
+  set<T>(map: Record<string, T>, key: string, value: T, capped = false): Record<string, T> {
+    let size = this.size(map);
+    // At capacity even replacing an existing key starts over, just as a single queued write did.
+    if (capped && size >= MAX_FAVICONS) {
+      map = { [key]: value };
+      size = 1;
+    } else {
+      if (!this.sizes.has(map)) map = { ...map };
+      if (!Object.hasOwn(map, key)) size++;
+      Object.defineProperty(map, key, { value, enumerable: true, configurable: true, writable: true });
+    }
+    this.sizes.set(map, size);
+    return map;
+  }
+}
+
+type Change = (f: Favicons, batch: FaviconBatch) => Favicons;
 const changes: Change[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -56,22 +83,25 @@ function flush() {
   clearTimeout(flushTimer);
   flushTimer = undefined;
   const all = changes.splice(0);
-  if (all.length) batchStoreUpdates(() => useFavicons.setState((f) => all.reduce((s, change) => change(s), f)));
+  if (all.length) {
+    batchStoreUpdates(() =>
+      useFavicons.setState((f) => {
+        const batch = new FaviconBatch();
+        return all.reduce((s, change) => change(s, batch), f);
+      }),
+    );
+  }
 }
 
 // `now` for what the user did (Clear Data, a closed private window) and for answers that come batched: applied after
 // anything queued.
-function update(key: string, change: (icons: Icons) => Icons, now = false) {
-  queue((f) => {
+function update(key: string, change: (icons: Icons, batch: FaviconBatch) => Icons, now = false) {
+  queue((f, batch) => {
     const before = f.profiles[key] ?? EMPTY;
-    const after = change(before);
-    return after === before ? f : { ...f, profiles: { ...f.profiles, [key]: after } };
+    const after = change(before, batch);
+    return after === before ? f : { ...f, profiles: batch.set(f.profiles, key, after) };
   }, now);
 }
-
-// Bounded: past MAX_ICONS a map starts over (Chrome still has every icon; pages ask again).
-const capped = <T>(map: Record<string, T>, key: string, value: T): Record<string, T> =>
-  Object.keys(map).length >= MAX_FAVICONS ? { [key]: value } : { ...map, [key]: value };
 
 // The pages whose answer the queued changes may change, for the icons waiting on one (onFavicons); null: any page.
 let watching = false;
@@ -163,17 +193,17 @@ function remember(key: string, page: string, src: string, uri: string) {
   if (icons && icons.pages[page] === uri && icons.srcs[src] === uri) return;
   const dark = useBrowser.getState().ui.appDark;
   const swapped = Date.now() - appearanceChangedAt < APPEARANCE_SWAP_MS;
-  update(key, (icons) => {
+  update(key, (icons, batch) => {
     const previous = icons.pages[page];
     if (previous === uri && icons.srcs[src] === uri) return icons;
     let appearances = icons.appearances;
-    if (swapped && previous && previous !== uri) appearances = { ...appearances, [page]: dark ? [previous, uri] : [uri, previous] };
-    // As `capped`; a map that starts over forgets every other page.
-    const startsOver = Object.keys(icons.pages).length >= MAX_FAVICONS;
+    if (swapped && previous && previous !== uri) appearances = batch.set(appearances, page, dark ? [previous, uri] : [uri, previous]);
+    // A map that starts over forgets every other page.
+    const startsOver = batch.size(icons.pages) >= MAX_FAVICONS;
     if (startsOver) touchAll();
     else touch(page);
-    const pages = startsOver ? { [page]: uri } : { ...icons.pages, [page]: uri };
-    return { pages, srcs: icons.srcs[src] === uri ? icons.srcs : capped(icons.srcs, src, uri), appearances };
+    const pages = batch.set(icons.pages, page, uri, true);
+    return { pages, srcs: icons.srcs[src] === uri ? icons.srcs : batch.set(icons.srcs, src, uri, true), appearances };
   });
 }
 
@@ -239,7 +269,7 @@ export function resolveFavicon(url: string, src?: string | null, spaceId?: strin
 
 // Callers re-render on an appearance change themselves (useAppearanceDark): the lookup reads it for
 // icons that have a light and a dark version.
-export const useAppearanceDark = () => useBrowser((s) => s.ui.appDark);
+export const useAppearanceDark = () => useStore(appearanceStore);
 
 // Whether every profile the lookup reads has Chrome's answer for the page (an icon, or none).
 function answered(url: string, spaceId?: string): boolean {
@@ -313,7 +343,7 @@ export function useFaviconTheme(url: string, src?: string | null, spaceId?: stri
     theming.add(uri);
     void iconTheme({ uri })
       .catch(() => null)
-      .then((found) => queue((f) => (f.themes[uri] === (found ?? null) ? f : { ...f, themes: capped(f.themes, uri, found ?? null) })))
+      .then((found) => queue((f, batch) => (f.themes[uri] === (found ?? null) ? f : { ...f, themes: batch.set(f.themes, uri, found ?? null, true) })))
       .finally(() => theming.delete(uri));
   }, [pending, uri]);
   return theme;

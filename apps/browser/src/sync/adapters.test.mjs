@@ -1,7 +1,7 @@
 // Two simulated Macs share one sync folder; each round trip runs the real adapters against the real store.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("../store/browser.ts");
+const { useBrowser } = await import("../store/browserStore.ts");
 const model = await import("../store/model.ts");
 const { Clock, emptyScope, syncScope } = await import("@bay/sync");
 const adapters = await import("./adapters.ts");
@@ -497,7 +497,7 @@ test("sync retains loose rows around folders, mixed child rows and empty sibling
     S().newPinnedFolder(w, { name: "Empty root", beforeId: ids[1] });
     S().newPinnedFolder(w, { name: "Empty child", parentId: root, beforeId: ids[3] });
   });
-  const { folderEntries, sidebarEntries } = await import("../components/sidebar/entries.ts");
+  const { folderEntries, sidebarEntries } = await import("../components/sidebar/sidebarEntries.ts");
   const snapshot = (device) =>
     device.with(() => {
       const render = (entry) =>

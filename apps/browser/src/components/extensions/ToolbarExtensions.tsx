@@ -1,13 +1,13 @@
-import { terminateCastRoute, type ActionState, type CastRoute, type InstalledExtension } from "@bay/nncore";
-import { ContextMenuArea, showMenu, Symbol } from "@bay/shell";
+import { terminateCastRoute, type ActionState, type CastRoute, type InstalledExtension } from "@bay/chromium";
+import { ContextMenuArea, showMenu, Symbol } from "@bay/desktop";
 import { memo, useRef, useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { toggleCastPicker, useCastRoutes } from "../media/cast";
-import type { ToolbarPalette } from "../layout/toolbarColors";
-import { usePages } from "../layout/pageState";
-import { useHover } from "../primitives";
+import type { ToolbarPalette } from "../toolbar/colors";
+import { usePages } from "../window/pageState";
+import { useHover } from "../ui/primitives";
 import { toolbarAnchors } from "./bridge";
 import {
   activateExtension,

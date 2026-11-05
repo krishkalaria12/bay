@@ -190,9 +190,9 @@ engine/
   nncore/             The layer: src/bay/core, plus the hooks that make Chrome's framework link it
   patches/            The patch series (series, series.py) and the source-build steps
 packages/
-  nncore/             JS API over the engine (tab strips, autofill, extensions, content blocker)
+  chromium/           JS API over the engine (tab strips, autofill, extensions, content blocker)
   adblock/            The content blocker: adblock-rust behind a C ABI, linked into the app (and the mobile app)
-  shell/              Native menu bar + shortcuts → JS, windows, SF Symbols, native primitives
+  desktop/            Native menu bar + shortcuts → JS, windows, SF Symbols, native primitives
   shaders/            Metal animations + grained OKLab window backdrop
   import/             Import from other browsers (bookmarks, history, passwords, Arc spaces)
   sync/               Encrypted sync: sealed files in a folder, merged on a recovery phrase

@@ -1,5 +1,5 @@
 import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
-import { hostOf } from "@bay/core/src/omnibox.ts";
+import { hostOf } from "@bay/core/src/input.ts";
 import { clearData, privateBrowsingSupported, type LinkPress, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import * as LocalAuthentication from "expo-local-authentication";

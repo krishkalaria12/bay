@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { create } from "zustand";
 import { SPACE_COLORS, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useWindowId } from "../../store/hooks";
 import { SPACE_LOOKS, themeOfColor, unusedSpaceLook } from "../../store/spaces";
 import type { SpaceColor } from "../../store/types";

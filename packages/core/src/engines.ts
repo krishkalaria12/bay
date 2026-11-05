@@ -1,5 +1,5 @@
 import { BANG_PLACEHOLDER, isValidBangTemplate } from "./bangs.ts";
-import { hostOf, searchUrlFor } from "./omnibox.ts";
+import { hostOf, searchUrlFor } from "./input.ts";
 
 export type SearchEngine = {
   id: string;

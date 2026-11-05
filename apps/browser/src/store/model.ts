@@ -1,5 +1,5 @@
 import { appUrlOrigin, displayHost } from "@bay/core";
-import type { BrowserState } from "./browser";
+import type { BrowserState, BrowserShape } from "./browserStore";
 import { DEFAULT_SPACE_ID } from "./constants";
 import type { BrowserWindow, Space, Tab, TabLive, TabSnapshot } from "./types";
 
@@ -138,7 +138,7 @@ export function withList<S extends Pick<BrowserState, "tabLists">>(s: S, list: T
 }
 
 /** The tabs the window lists for a space (its shown one by default), in the list's order. */
-export function viewTabIds(s: BrowserState, windowId: string, spaceId?: string): string[] {
+export function viewTabIds(s: BrowserShape, windowId: string, spaceId?: string): string[] {
   const w = s.windows[windowId];
   if (!w) return [];
   const space = w.kind === "small" ? w.spaceId : (spaceId ?? w.spaceId);
@@ -151,12 +151,12 @@ export const spaceTabIds = (s: Pick<BrowserState, "spaces" | "tabs" | "tabLists"
   listIds(s, spaceListKey(s, spaceId)).filter((id) => s.tabs[id]?.spaceId === spaceId);
 
 /** Whether another window shows the tab now. */
-export const shownElsewhere = (s: BrowserState, id: string, windowId: string) =>
+export const shownElsewhere = (s: BrowserShape, id: string, windowId: string) =>
   Object.values(s.windows).some((w) => w.id !== windowId && w.activeTabIds[w.spaceId] === id);
 
 /** The tab a window shows for a space it comes to: the one it showed there, else the space's most recent one, unless
  *  another window shows it now. None: the window takes a new tab. */
-export function tabToShow(s: BrowserState, windowId: string, spaceId: string): string | undefined {
+export function tabToShow(s: BrowserShape, windowId: string, spaceId: string): string | undefined {
   const w = s.windows[windowId];
   const view = viewTabIds(s, windowId, spaceId).filter((id) => !shownElsewhere(s, id, windowId));
   const remembered = w?.activeTabIds[spaceId];
@@ -166,7 +166,7 @@ export function tabToShow(s: BrowserState, windowId: string, spaceId: string): s
 
 /** A blank tab the window can show for a space (settings.launchTab), so launches don't pile up new tabs. None: the
  *  window takes a new tab. */
-export function blankTabToShow(s: BrowserState, windowId: string, spaceId: string): string | undefined {
+export function blankTabToShow(s: BrowserShape, windowId: string, spaceId: string): string | undefined {
   return viewTabIds(s, windowId, spaceId).find((id) => !s.tabs[id]!.url && !inPinnedContainer(s, id) && !shownElsewhere(s, id, windowId));
 }
 
@@ -183,14 +183,14 @@ export function sharesProfile(s: Pick<BrowserState, "spaces">, a: string, b: str
 }
 
 /** A space's pinned tiles, in their list's order. */
-export function favoriteTabIds(s: BrowserState, windowId: string, spaceId?: string): string[] {
+export function favoriteTabIds(s: BrowserShape, windowId: string, spaceId?: string): string[] {
   const w = s.windows[windowId];
   if (!w || w.kind === "small") return [];
   const space = spaceId ?? w.spaceId;
   return listIds(s, spaceListKey(s, space)).filter((id) => s.tabs[id]?.spaceId === space && s.tabs[id]?.pinned);
 }
 
-export function closesWindow(s: BrowserState, id: string): boolean {
+export function closesWindow(s: BrowserShape, id: string): boolean {
   const tab = s.tabs[id];
   const w = tab && s.windows[tab.windowId];
   if (!tab || !w || tab.spaceId !== w.spaceId || inPinnedContainer(s, id)) return false;
@@ -198,7 +198,7 @@ export function closesWindow(s: BrowserState, id: string): boolean {
 }
 
 /** The tab the window shows for a space (its shown one by default). */
-export function activeTabId(s: BrowserState, windowId: string, spaceId?: string): string | undefined {
+export function activeTabId(s: BrowserShape, windowId: string, spaceId?: string): string | undefined {
   const w = s.windows[windowId];
   if (!w) return undefined;
   const space = spaceId ?? w.spaceId;
@@ -207,22 +207,22 @@ export function activeTabId(s: BrowserState, windowId: string, spaceId?: string)
   return t && (w.kind === "small" ? t.windowId === windowId : tabListKey(s, t) === spaceListKey(s, space)) ? id : undefined;
 }
 
-export function activeTab(s: BrowserState, windowId: string): Tab | undefined {
+export function activeTab(s: BrowserShape, windowId: string): Tab | undefined {
   const id = activeTabId(s, windowId);
   return id ? s.tabs[id] : undefined;
 }
 
-export function spaceFor(s: BrowserState, spaceId: string): Space {
+export function spaceFor(s: BrowserShape, spaceId: string): Space {
   return isIncognitoSpace(spaceId) ? INCOGNITO_SPACE : (s.spaces[spaceId] ?? s.spaces[s.settings.defaultSpaceId] ?? INCOGNITO_SPACE);
 }
 
-export function bookmarkSpaceId(s: BrowserState, window: BrowserWindow | undefined): string {
+export function bookmarkSpaceId(s: BrowserShape, window: BrowserWindow | undefined): string {
   return !window || window.incognito ? s.settings.defaultSpaceId : window.spaceId;
 }
 
-export function resolveWindowId(s: BrowserState, id?: string | null): string | undefined {
+export function resolveWindowId(s: BrowserShape, id?: string | null): string | undefined {
   if (id && s.windows[id]) return id;
-  // Without a window named, never pick a Little Bay: it holds one page (store/small.ts).
+  // Without a window named, never pick a Little Bay: it holds one page (store/littleBay.ts).
   const main = (w: string) => !!s.windows[w] && s.windows[w]!.kind !== "small";
   return s.ui.focusOrder.find(main) ?? s.windowOrder.find(main);
 }
@@ -263,7 +263,7 @@ export function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-export function windowTitle(s: BrowserState, windowId: string): string {
+export function windowTitle(s: BrowserShape, windowId: string): string {
   const w = s.windows[windowId];
   if (!w) return "";
   const tab = activeTab(s, windowId);

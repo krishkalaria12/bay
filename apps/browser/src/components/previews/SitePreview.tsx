@@ -1,13 +1,13 @@
-import { FadeLabel, Symbol } from "@bay/shell";
+import { FadeLabel, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
-import { ago } from "../../live/meetings";
-import { useBrowser } from "../../store/browser";
-import { HoverSurface, SmallButton } from "../live/LiveItemCard";
-import { useHover } from "../primitives";
+import { ago } from "../../activity/meetings";
+import { useBrowser } from "../../store/browserStore";
+import { HoverSurface, SmallButton } from "../activity/LiveItemCard";
+import { useHover } from "../ui/primitives";
 import { dismissHover } from "../sidebar/hover";
 import type { Anchor } from "../sidebar/state";
 import {
@@ -27,7 +27,7 @@ import {
   type PreviewSite,
   type Pull,
   type Review,
-} from "./sites";
+} from "./knownSites";
 
 const FRESH_MS = 60_000;
 // A page that never answers (its policy stopped the request) shows as one that didn't, not as loading forever.

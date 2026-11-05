@@ -11,15 +11,15 @@ import {
   setAutofillSettings,
   type SavedAddress,
   type SavedCard,
-} from "@bay/nncore";
-import { confirm, copyText, Symbol } from "@bay/shell";
+} from "@bay/chromium";
+import { confirm, copyText, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
-import { IconButton } from "../../primitives";
+import { IconButton } from "../../ui/primitives";
 import { NetworkBadge } from "../../site/Autofill";
 import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, type Option } from "../controls";
 import { SETTINGS } from "../definitions";

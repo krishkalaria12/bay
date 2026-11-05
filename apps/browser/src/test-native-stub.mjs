@@ -25,6 +25,8 @@ export const saveDocument = (name, contents) =>
   });
 export const setZoom = () => Promise.resolve();
 export const launchEnvironment = () => null;
+export const jsReload = { on: false };
+export const isJsReload = () => jsReload.on;
 export const appInfo = { appVersion: "1.0" };
 export const systemInfo = () => ({ ...appInfo });
 export const calendarAuthorization = () => "notDetermined";
@@ -164,7 +166,7 @@ export const faviconsFor = async (profile, pages) => ({
 export const removeLegacyFavicons = () => Promise.resolve();
 export const removeDocument = (name) => docs.delete(name);
 
-// Chrome's tab strips (lib/chromeTabs.ts): a test installs a fake engine on globalThis.nnTestTabStrip.
+// Chrome's tab strips (lib/engineTabs.ts): a test installs a fake engine on globalThis.nnTestTabStrip.
 export const chromeWindows = () => Promise.resolve([]);
 export const devWindowAction = () => Promise.resolve("");
 export const engineInfo = () => Promise.resolve(null);

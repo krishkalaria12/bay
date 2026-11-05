@@ -1,11 +1,11 @@
-import { clearBrowsingData, type BrowsingDataType } from "@bay/nncore";
-import { Surface } from "@bay/shell";
+import { clearBrowsingData, type BrowsingDataType } from "@bay/chromium";
+import { Surface } from "@bay/desktop";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { create } from "zustand";
 import { pruneProfileFavicons } from "../../lib/favicons";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { engineProfile, isIncognitoSpace, spaceFor } from "../../store/model";
 import { Button, Checkbox, PopUp } from "../settings/controls";
 

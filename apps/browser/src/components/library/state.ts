@@ -1,4 +1,4 @@
-import { readDocument, retainLibraryImage, writeDocument } from "@bay/shell";
+import { readDocument, retainLibraryImage, writeDocument } from "@bay/desktop";
 import { create } from "zustand";
 import { newId } from "../../store/model";
 import { mediaItem, parseEasel, readLibrary, type CaptureSource, type EaselDocument, type LibraryData, type LibraryMedia } from "./model";

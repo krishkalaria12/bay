@@ -1,4 +1,4 @@
-import { hostOf } from "@bay/core/src/omnibox.ts";
+import { hostOf } from "@bay/core/src/input.ts";
 import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import { Typography, useThemeColor } from "heroui-native";
 import { useState, type JSX } from "react";

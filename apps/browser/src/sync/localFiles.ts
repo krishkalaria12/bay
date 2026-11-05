@@ -1,5 +1,5 @@
 import { assignPositions, type Adapter } from "@bay/sync";
-import { useBrowser } from "../store/browser";
+import { useBrowser } from "../store/browserStore";
 import { normalizeLocalFiles } from "../store/localFiles";
 import { isIncognitoSpace } from "../store/model";
 import type { LocalFilePin } from "../store/types";

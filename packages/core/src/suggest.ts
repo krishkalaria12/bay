@@ -4,7 +4,7 @@ import { parseCurrency, type CurrencyAnswer } from "./currency.ts";
 import { findEmoji } from "./emoji.ts";
 import { BUILT_IN_ENGINES, searchUrl, type SearchEngine } from "./engines.ts";
 import { matchActions, type ActionCandidate } from "./fuzzy.ts";
-import { fixupUrl, hostOf, urlForDisplay } from "./omnibox.ts";
+import { fixupUrl, hostOf, urlForDisplay } from "./input.ts";
 import { matchQuickCreate } from "./quickCreate.ts";
 import { scopedSearchUrl, type SearchScope } from "./siteSearch.ts";
 
@@ -44,9 +44,9 @@ export type SuggestOptions = {
   limit?: number;
   // Search suggestions from the engine, at most (default 4).
   remoteLimit?: number;
-  // The engine's suggestions straight after the search row, matching pages after them (the palette, as yab lists
-  // them); by default the best three pages come first.
-  remoteFirst?: boolean;
+  // How many rows (matching sites, then pages) come before the engine's suggestions (default 3). The palette, with
+  // room for twenty, puts more of what you've visited first: a page you've been to shouldn't sit below ten guesses.
+  pagesAhead?: number;
   now?: number;
   engine?: Pick<SearchEngine, "name" | "url">;
   preference?: "website" | "search";
@@ -464,13 +464,16 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   out.push(...actionMatches.slice(0, 2).map((m) => actionRow(m.action)));
   out.push(...creates.map(createRow));
   // The sites themselves, as Chrome's omnibox lists them ("dash": dash.cloudflare.com, dashboard.render.com…), ahead of
-  // the engine's suggestions; their deeper pages come after those, so a site's many addresses don't crowd the others out.
-  const shownSites = sites ? topSites(sites, now, options.remoteFirst ? 4 : 2) : [];
+  // the engine's suggestions, with the best matching pages.
+  const pagesAhead = options.pagesAhead ?? 3;
+  const shownSites = sites ? topSites(sites, now, pagesAhead > 3 ? 4 : 2) : [];
   const siteRows = shownSites.map((site) => known(`${site.origin}/`) ?? siteRow(site));
   const siteOrigins = new Set(shownSites.map((site) => site.origin));
   const pageRows = ranked.map((x) => pageSuggestion(x.c, x.tabId, x.cleanedId));
   const deeper = (row: Suggestion) => row.kind === "page" && siteOrigins.has(/^https?:\/\/[^/?#]+/i.exec(row.url)?.[0] ?? "");
-  const ahead = options.remoteFirst ? [] : pageRows.filter((row) => !deeper(row)).slice(0, Math.max(0, 3 - siteRows.length));
+  // Other sites' pages first; a shown site's deeper pages fill what room is left, so they don't crowd the others out
+  // but still beat the engine's guesses when nothing else matches.
+  const ahead = [...pageRows.filter((row) => !deeper(row)), ...pageRows.filter(deeper)].slice(0, Math.max(0, pagesAhead - siteRows.length));
   out.push(...siteRows);
   out.push(...ahead);
   out.push(...remoteRows((text) => searchUrl(engine, text), engine.name));

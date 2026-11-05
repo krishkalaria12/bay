@@ -2,10 +2,10 @@ import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SPACE_COLORS } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { DEFAULT_SPACE } from "../../store/spaces";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { useOnboardingColors } from "./ui";
 
 export const PERSONALIZE_COPY = {

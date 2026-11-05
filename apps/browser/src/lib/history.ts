@@ -1,6 +1,6 @@
-import { addHistoryVisits, onHistoryChanged, queryHistory, watchHistory, type EngineHistoryEntry, type HistoryChange } from "@bay/nncore";
-import { readDocument, removeDocument } from "@bay/shell";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { addHistoryVisits, onHistoryChanged, queryHistory, watchHistory, type EngineHistoryEntry, type HistoryChange } from "@bay/chromium";
+import { readDocument, removeDocument } from "@bay/desktop";
+import { useBrowser, type BrowserState } from "../store/browserStore";
 import { MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
 import { engineProfile, isIncognitoSpace } from "../store/model";
 import type { HistoryEntry } from "../store/types";

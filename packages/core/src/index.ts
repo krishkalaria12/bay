@@ -9,7 +9,7 @@ export * from "./emojiData.ts";
 export * from "./fuzzy.ts";
 export * from "./elementInfo.ts";
 export * from "./idn.ts";
-export * from "./omnibox.ts";
+export * from "./input.ts";
 export * from "./quickCreate.ts";
 export * from "./sharedCollection.ts";
 export * from "./selectorFor.ts";

@@ -13,7 +13,7 @@ import {
   visitRecorder,
 } from "./engines.ts";
 import { makeTab, snapshotTab } from "./model.ts";
-import { setWebKitAvailable } from "@bay/nncore";
+import { setWebKitAvailable } from "@bay/chromium";
 
 const tab = (id, patch = {}) => ({ id, url: "", navigation: null, openerId: null, ...patch });
 const state = (tabs, settings = {}) => ({
@@ -27,6 +27,35 @@ test("a site is its scheme, host and port, and nothing else", () => {
   assert.equal(siteOf("https://example.com:443/"), "https://example.com");
   assert.equal(siteOf("bay://settings"), null);
   assert.equal(siteOf("not a url"), null);
+});
+
+test("engine checks reuse URL parsing without caching settings decisions", () => {
+  const OriginalURL = globalThis.URL;
+  let parses = 0;
+  globalThis.URL = class extends OriginalURL {
+    constructor(...args) {
+      super(...args);
+      parses++;
+    }
+  };
+  try {
+    const url = "https://www.netflix.com/watch/cache-regression";
+    const s = state([tab("cached", { url })], { protectedVideoInWebKit: true });
+    for (let i = 0; i < 60; i++) {
+      assert.equal(engineMark(s, "cached"), "webkit");
+      assert.equal(ruleFor(s, url), undefined);
+      assert.equal(protectedVideoSite(url), true);
+    }
+    assert.equal(parses, 1, "unchanged rows should not repeatedly construct URLs");
+    assert.equal(engineMark({ ...s, settings: { ...s.settings, protectedVideoInWebKit: false } }, "cached"), null);
+    assert.equal(engineMark({ ...s, settings: { ...s.settings, websiteEngines: { "https://www.netflix.com": "chromium" } } }, "cached"), null);
+    for (let i = 0; i < 1100; i++) siteOf(`https://cache-test.example/${i}`);
+    const before = parses;
+    assert.equal(protectedVideoSite(url), true);
+    assert.equal(parses, before + 1, "old addresses must leave the bounded cache");
+  } finally {
+    globalThis.URL = OriginalURL;
+  }
 });
 
 test("rules match the exact site, never its subdomains", () => {

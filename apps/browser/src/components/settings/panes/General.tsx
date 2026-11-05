@@ -12,11 +12,11 @@ import {
   updaterState,
   type UpdateChannel,
   type UpdaterState,
-} from "@bay/shell";
+} from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { AppState, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
@@ -92,6 +92,21 @@ export function GeneralPane() {
               { value: "close", title: "Start fresh" },
             ]}
             onChange={(v) => update({ restoreSession: v === "keep" })}
+            minWidth={190}
+          />
+        </Row>
+      </Group>
+
+      <SectionHeader title="Library" description="Media, downloads, Easels, spaces, Boosts and archived tabs." />
+      <Group>
+        <Row settingId={SETTINGS.libraryIn.id} title={SETTINGS.libraryIn.title} description="With tabs on top or the sidebar hidden, it opens as a page.">
+          <PopUp
+            value={settings.libraryIn}
+            options={[
+              { value: "sidebar", title: "The Sidebar" },
+              { value: "page", title: "A Page" },
+            ]}
+            onChange={(v) => update({ libraryIn: v })}
             minWidth={190}
           />
         </Row>

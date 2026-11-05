@@ -22,4 +22,10 @@ const config = mergeConfig(getDefaultConfig(projectRoot), {
   },
 });
 
+// Modules load as the bundle starts, not at their first use. With inline requires every use of an import is a module
+// lookup: 2.5–3.4% of the JS thread while tabs switch, open and close. The app needs most of its modules for its first
+// window anyway: measured on the Release bench (3 alternating launches), evaluating the bundle took 8 ms longer and the
+// first window came 27 ms sooner; opening a tab took 14% less, closing one 16% less, and the bytecode is 250 KB smaller.
+config.transformer.getTransformOptions = async () => ({ transform: { experimentalImportSupport: false, inlineRequires: false } });
+
 module.exports = config;

@@ -16,5 +16,25 @@ import { downloadLink, site } from "../site";
       <li><a class="hover:text-ink" href={site.nightlyDownloadUrl} {...downloadLink} data-download-location="footer-nightly">Download Nightly</a></li>
     </ul>
   </div>
-  <p class="mt-6 text-[12px] text-faint">Arc is a trademark of The Browser Company. Bay is an independent browser and isn’t affiliated with it.</p>
+  <div class="mt-7 flex flex-col gap-x-6 gap-y-4 sm:flex-row sm:items-end sm:justify-between">
+    <a
+      href="https://macbase.app/apps/bay?ref=badge"
+      target="_blank"
+      rel="noopener"
+      class="inline-flex w-fit opacity-90 transition hover:opacity-100"
+    >
+      <img
+        src="https://macbase.app/badge/featured-on-macbase.svg"
+        alt="Bay is featured on MacBase"
+        width="313"
+        height="100"
+        class="h-16 w-auto"
+        loading="lazy"
+        decoding="async"
+      />
+    </a>
+    <p class="text-[12px] text-faint sm:max-w-xs sm:text-right">
+      Bay is an independent browser for the Mac, built on Chrome’s own engine.
+    </p>
+  </div>
 </footer>

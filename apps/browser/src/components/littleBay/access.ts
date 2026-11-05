@@ -1,6 +1,6 @@
-import { setLittleBayHotKey, setLittleBayMenuBarItem, type HotKeyStatus } from "@bay/shell";
+import { setLittleBayHotKey, setLittleBayMenuBarItem, type HotKeyStatus } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import type { LittleBayShortcut } from "../../store/settings";
 
 // Little Bay from any app (packages/shell LittleBayAccess.swift), as Little Arc's: a shortcut and a menu bar button,

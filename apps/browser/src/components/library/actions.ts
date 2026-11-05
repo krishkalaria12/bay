@@ -1,11 +1,14 @@
-import { confirm, prompt, showMenu } from "@bay/shell";
-import { useBrowser } from "../../store/browser";
-import { resolveWindowId, viewTabIds } from "../../store/model";
-import { showToast } from "../layout/splitActions";
-import { openInternalPage, tabDestination } from "../pages/urls";
+import { confirm, prompt, showMenu } from "@bay/desktop";
+import { useBrowser } from "../../store/browserStore";
+import { isIncognitoSpace, resolveWindowId, viewTabIds } from "../../store/model";
+import type { Tab } from "../../store/types";
+import { showToast } from "../split/splitActions";
+import { openInternalPage, tabDestination } from "../pages/pageUrls";
 import type { LibraryMedia } from "./model";
 import { addMediaToEasel, createEasel, deleteEasel, duplicateEasel, startLibrary, updateEasel, useLibrary } from "./state";
 import { startEaselShares, stopSharingEasel, useEaselShares } from "./sharing";
+import { sectionOf } from "./sections";
+import { closeLibrarySidebar, librarySidebarOpen, showLibrarySidebar, useLibrarySidebar } from "./sidebarState";
 
 export const easelUrl = (id: string) => `bay://easel/${encodeURIComponent(id)}`;
 export function easelIdOf(url: string): string | null {
@@ -28,11 +31,35 @@ export function libraryWindow(windowId?: string | null): string | null {
   return id;
 }
 
+// The sidebar shows it where it can (Settings › General › Open Library in): a window with its tabs in a sidebar
+// that's open. Elsewhere, and when chosen, it's a page.
+function libraryFitsSidebar(windowId: string): boolean {
+  const s = useBrowser.getState();
+  const w = s.windows[windowId];
+  return !!w && s.settings.libraryIn !== "page" && w.sidebarOpen && (w.tabLayout ?? s.settings.tabLayout) === "sidebar";
+}
+
 export function openLibrary(windowId?: string | null, section?: string) {
   const id = libraryWindow(windowId);
   if (!id) return;
+  if (libraryFitsSidebar(id)) {
+    startLibrary();
+    showLibrarySidebar(id, section ? sectionOf(section) : (useLibrarySidebar.getState()[id] ?? "media"));
+  } else openLibraryPage(id, section);
+}
+
+export function openLibraryPage(windowId?: string | null, section?: string) {
+  const id = libraryWindow(windowId);
+  if (!id) return;
+  closeLibrarySidebar(id);
   startLibrary();
   openInternalPage("library", id, section ? { query: section } : {});
+}
+
+/** The Library button: shows the Library, or hides it from the sidebar when it's there. */
+export function toggleLibrary(windowId: string) {
+  if (librarySidebarOpen(windowId)) closeLibrarySidebar(windowId);
+  else openLibrary(windowId);
 }
 
 export function openEasel(id: string, windowId?: string | null) {
@@ -133,4 +160,35 @@ export async function removeEasel(id: string) {
       .filter((t) => easelIdOf(tabDestination(t)) === id)
       .map((t) => t.id),
   );
+}
+
+export async function libraryTabMenu(windowId: string, tab: Tab) {
+  if (!libraryWindow(windowId)) return;
+  const s = useBrowser.getState();
+  const spaces = s.spaceOrder.map((id) => s.spaces[id]).filter((space) => space && !isIncognitoSpace(space.id) && !isIncognitoSpace(space.profileId ?? ""));
+  const choice = await showMenu([
+    { id: "open", title: "Open Tab" },
+    {
+      id: "move",
+      title: "Move to Space",
+      children: spaces.map((space) => ({
+        id: `space:${space!.id}`,
+        title: space!.name,
+        checked: space!.id === tab.spaceId,
+        enabled: space!.id !== tab.spaceId,
+      })),
+    },
+    { separator: true },
+    { id: "close", title: "Close Tab" },
+  ]);
+  if (!choice || !libraryWindow(windowId)) return;
+  const current = useBrowser.getState();
+  const live = current.tabs[tab.id];
+  if (!live || isIncognitoSpace(live.spaceId)) return;
+  if (choice === "open") {
+    current.switchSpace(windowId, live.spaceId);
+    useBrowser.getState().activate(tab.id, windowId);
+  }
+  if (choice.startsWith("space:")) current.moveTabToSpace(tab.id, choice.slice(6));
+  if (choice === "close") current.closeTab(tab.id);
 }

@@ -1,16 +1,16 @@
-import { ContextMenuArea, fileExists, MouseArea, openFile, showMenu, Surface, Symbol } from "@bay/shell";
+import { ContextMenuArea, fileExists, MouseArea, openFile, showMenu, Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { isIncognitoSpace } from "../../store/model";
-import { downloadsIn } from "../../store/ui";
-import { downloadMenu, FileIcon } from "../Downloads";
-import { showToast } from "../layout/splitActions";
-import { IconButton, useHover } from "../primitives";
+import { downloadsIn } from "../../store/windowUi";
+import { downloadMenu, FileIcon } from "../downloads/DownloadRow";
+import { showToast } from "../split/splitActions";
+import { IconButton, useHover } from "../ui/primitives";
 import { useSidebarWidth } from "../sidebar/tokens";
-import { openLibrary } from "./actions";
+import { openLibrary, openLibraryPage, toggleLibrary } from "./actions";
 import { startLibrary, useLibrary } from "./state";
 
 type RecentTypes = { media: boolean; downloads: boolean };
@@ -61,14 +61,26 @@ export function LibraryButton({ windowId }: { windowId: string }) {
   async function preferences() {
     cancelTimer();
     setOpen(false);
+    const inPage = useBrowser.getState().settings.libraryIn === "page";
     const choice = await showMenu([
       { id: "media", title: "Show Recent Media", checked: recentTypes.media },
       { id: "downloads", title: "Show Recent Downloads", checked: recentTypes.downloads },
       { separator: true },
       { id: "library", title: "Open Library" },
+      { id: "libraryPage", title: "Open Library as Page" },
+      {
+        id: "libraryIn",
+        title: "Open Library In",
+        children: [
+          { id: "in:sidebar", title: "Sidebar", checked: !inPage },
+          { id: "in:page", title: "Page", checked: inPage },
+        ],
+      },
     ]);
     if (choice === "media" || choice === "downloads") setRecentTypes((types) => ({ ...types, [choice]: !types[choice] }));
     if (choice === "library") openPage();
+    if (choice === "libraryPage") openLibraryPage(windowId);
+    if (choice === "in:sidebar" || choice === "in:page") useBrowser.getState().updateSettings({ libraryIn: choice === "in:page" ? "page" : "sidebar" });
   }
 
   return (
@@ -85,7 +97,11 @@ export function LibraryButton({ windowId }: { windowId: string }) {
           box={28}
           radius={7}
           tooltip={downloading.length ? `Library · ${downloading.length} downloading` : "Library"}
-          onPress={() => openPage()}
+          onPress={() => {
+            cancelTimer();
+            setOpen(false);
+            toggleLibrary(windowId);
+          }}
         />
       </ContextMenuArea>
       {downloading.length ? (

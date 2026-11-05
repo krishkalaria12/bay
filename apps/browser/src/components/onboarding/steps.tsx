@@ -1,12 +1,12 @@
-import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
+import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { interpolateColor } from "react-native-reanimated";
 import { SPACE_COLORS, spaceThemeKey, themeFor, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import type { Settings } from "../../store/settings";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
-import { Favicon, useHover } from "../primitives";
+import { Favicon, useHover } from "../ui/primitives";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "./personalize";
 import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
 import { finishOnboarding, nextStep, recordDefaultBrowserTrial, skipStep, STEPS, useOnboarding } from "./state";

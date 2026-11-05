@@ -1,4 +1,4 @@
-import { fileExists } from "@bay/shell";
+import { fileExists } from "@bay/desktop";
 import type { ImageSourcePropType } from "react-native";
 
 // The browsers onboarding offers to leave, found by where their apps live: a check per path, so the import step has

@@ -10,11 +10,11 @@ import {
   type ExtensionSearchEngine,
   type SearchEngine,
 } from "@bay/core";
-import type { PageEngine } from "@bay/nncore";
+import type { PageEngine } from "@bay/chromium";
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { layout } from "../lib/constants";
-import { DEFAULT_AWAKE_SITES, normalizeAwakeSites } from "../lib/awakeSites";
+import { DEFAULT_AWAKE_SITES, normalizeAwakeSites } from "../lib/keptAwakeSites";
 import { DEFAULT_SPACE_ID } from "./constants";
 import { normalizeExternalLinkRules, normalizeLinkDestination, type ExternalLinkRule, type LinkDestination } from "../lib/externalLinkRules";
 
@@ -36,10 +36,12 @@ export type Settings = {
   searchSuggestions: boolean;
   calculatorEnabled: boolean;
   tidyDownloads: boolean;
+  // Where the Library opens: in the sidebar, as Arc's does (beside the page), or as a page of its own.
+  libraryIn: "sidebar" | "page";
   commandBarPreference: "website" | "search";
 
   tabLayout: "sidebar" | "top";
-  // With tabs on top: the toolbar collapses to a strip while you scroll down (components/AutoHideToolbar.tsx).
+  // With tabs on top: the toolbar collapses to a strip while you scroll down (toolbar/AutoHideToolbar.tsx).
   hideToolbarWhileScrolling: boolean;
   newTabPosition: "top" | "bottom";
   warnBeforeClosingLastTab: boolean;
@@ -63,7 +65,7 @@ export type Settings = {
   // Sites whose videos stay in their page when you leave them (Arc's per-site Picture-in-Picture switch), by host.
   noAutoPictureInPictureSites: string[];
   // Arc's Previews on hover (components/previews): a folder's or group's tabs, Gmail's unread mail, GitHub's pull
-  // requests. The calendar's is the calendar's own setting (live/store.ts).
+  // requests. The calendar's is the calendar's own setting (activity/activityStore.ts).
   previewFolders: boolean;
   previewGmail: boolean;
   previewGithub: boolean;
@@ -129,6 +131,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchSuggestions: true,
   calculatorEnabled: true,
   tidyDownloads: false,
+  libraryIn: "sidebar",
   commandBarPreference: "website",
   tabLayout: "sidebar",
   hideToolbarWhileScrolling: true,

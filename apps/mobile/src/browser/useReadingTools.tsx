@@ -1,4 +1,4 @@
-import { hostOf } from "@bay/core/src/omnibox.ts";
+import { hostOf } from "@bay/core/src/input.ts";
 import { runPageScript, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState, type ReactNode } from "react";

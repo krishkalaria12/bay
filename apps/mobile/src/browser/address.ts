@@ -1,5 +1,5 @@
 import { BUILT_IN_ENGINES, engineById, searchUrl, type SearchEngine } from "@bay/core/src/engines.ts";
-import { fixupUrl, hostOf } from "@bay/core/src/omnibox.ts";
+import { fixupUrl, hostOf } from "@bay/core/src/input.ts";
 
 // Deep imports keep the bundle off @bay/core's desktop-only modules (shared collections, the bang list).
 export const SEARCH_ENGINES: readonly SearchEngine[] = BUILT_IN_ENGINES;

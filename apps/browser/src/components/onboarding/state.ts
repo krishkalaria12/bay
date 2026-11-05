@@ -1,6 +1,6 @@
-import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/shell";
+import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { resolveWindowId } from "../../store/model";
 import { pinSites } from "./sites";
 import { endToolTour, startToolTour } from "./tour/state";

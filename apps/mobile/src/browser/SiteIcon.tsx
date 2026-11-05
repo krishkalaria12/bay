@@ -1,4 +1,4 @@
-import { hostOf } from "@bay/core/src/omnibox.ts";
+import { hostOf } from "@bay/core/src/input.ts";
 import { useState, type JSX } from "react";
 import { Image, Text, useColorScheme, View } from "react-native";
 

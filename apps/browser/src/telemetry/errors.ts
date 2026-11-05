@@ -1,4 +1,4 @@
-import { crashReports, systemInfo } from "@bay/shell";
+import { crashReports, systemInfo } from "@bay/desktop";
 import { advanceCrashCursor, capture, crashCursor, isSharing, loadChoice } from "./client";
 import { recordLog } from "./logs";
 import { errorCode, errorMessage, errorType, nativeCrashExceptions, parseStack, type ExceptionFrame } from "./sanitize";
