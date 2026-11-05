@@ -388,6 +388,7 @@ export function BrowserScreen(): JSX.Element {
                 hiddenSelectors={[...reading.selectorsFor(tab), ...youtubeSelectors(data.preferences.youtube, hostOf(tab.url))]}
                 tweaks={{ textSize: data.preferences.textSize, skipAmp: data.preferences.skipAmp }}
                 pullToRefresh={data.preferences.pullToRefresh}
+                pageColor={pageColors[id] ?? null}
                 onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
                 onPageMessage={(message) => {
                   if (!media.pageMessage(id, message) && id === active.id) reading.pageMessage(message);
