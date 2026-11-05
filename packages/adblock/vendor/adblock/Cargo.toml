@@ -13,23 +13,9 @@
 edition = "2024"
 name = "adblock"
 version = "0.13.5"
-authors = [
-    "Anton Lazarev <alazarev@brave.com>",
-    "Andrius Aucinas",
-]
+authors = ["Anton Lazarev <alazarev@brave.com>", "Andrius Aucinas"]
 build = false
-exclude = [
-    "*.md",
-    ".github/",
-    ".gitignore",
-    ".npmignore",
-    "data/",
-    "examples/",
-    "js/",
-    "package-lock.json",
-    "package.json",
-    "tests/",
-]
+exclude = ["*.md", ".github/", ".gitignore", ".npmignore", "data/", "examples/", "js/", "package-lock.json", "package.json", "tests/"]
 autolib = false
 autobins = false
 autoexamples = false
@@ -42,17 +28,9 @@ repository = "https://github.com/brave/adblock-rust/"
 
 [features]
 content-blocking = []
-css-validation = [
-    "cssparser",
-    "selectors",
-    "precomputed-hash",
-]
+css-validation = ["cssparser", "selectors", "precomputed-hash"]
 debug-info = []
-default = [
-    "embedded-domain-resolver",
-    "full-regex-handling",
-    "single-thread",
-]
+default = ["embedded-domain-resolver", "full-regex-handling", "single-thread"]
 embedded-domain-resolver = ["addr"]
 full-regex-handling = []
 resource-assembler = []

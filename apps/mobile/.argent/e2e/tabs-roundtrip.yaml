@@ -1,0 +1,43 @@
+# Tabs: open a second tab from the switcher, switch back, close a tab into the archive and restore it.
+# Needs network access to example.com and example.org.
+steps:
+  - run: ../flows/fresh-start
+  - tap: { id: start-screen }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "example.com" }
+  - await: { visible: { id: bar-tabs }, timeout: 30000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # A search from the switcher opens a new tab.
+  - tap: { id: bar-tabs }
+  - await: { visible: { id: tab-card-0 }, timeout: 10000 }
+  - tap: { id: bar-search }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "example.org" }
+  - await: { visible: { id: bar-tabs }, timeout: 30000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-tabs }
+  - await: { visible: { id: tab-card-1 }, timeout: 10000 }
+
+  # Back to the first tab.
+  - tap: { id: tab-card-0 }
+  - await: { visible: { id: bar-more }, timeout: 10000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/" }, timeout: 10000 }
+  - tap: { id: page-menu-close }
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+
+  # Closing a tab archives it; the archive restores it.
+  - tap: { id: bar-tabs }
+  - await: { visible: { id: tab-card-0 }, timeout: 10000 }
+  - scroll-to: { target: { id: tab-close-1 }, direction: right }
+  - tap: { id: tab-close-1 }
+  - await: { hidden: { id: tab-card-1 }, timeout: 10000 }
+  - tap: { id: bar-archive }
+  - await: { visible: { text: "https://example.org/" }, timeout: 10000 }
+  - tap: { text: "https://example.org/" }
+  - await: { visible: { id: bar-more }, timeout: 15000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, equals: "https://example.org/" }, timeout: 30000 }
+  - tap: { id: page-menu-close }

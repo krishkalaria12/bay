@@ -1,0 +1,19 @@
+# Bay engine
+
+Local Expo module imported as `@bay/engine`. The Swift implementation uses `WKWebView`; the Kotlin implementation uses `android.webkit.WebView`. Both export `BayEngine` to Expo and the same TypeScript `EngineView`, `Tab`, navigation state and error types.
+
+Keep `EngineView` mounted and use its ref to request navigation. `initialUrl` is loaded once when the native view is created (later values are ignored), so a newly mounted tab can open its page before its ref is usable. `load(url)`, `goBack()`, `goForward()`, `reload()` and `stop()` resolve when the native command is dispatched. Observe `onNavigationStateChange` for URL, title, estimated progress, loading and history availability. Main-frame failures are delivered through `onNavigationError`. Page code has no JavaScript bridge to the app.
+
+`onScroll` reports `{ offsetY, deltaY }` in logical screen points, throttled to 50 ms with a trailing update. `pullToRefreshEnabled` defaults to true; both engines reload when the user pulls down from the top. iOS supports WebKit's native back/forward edge gestures. Android edge navigation belongs to the shared gesture layer.
+
+Long-pressing an HTTP(S) link emits `onLinkPress` with `{ url, title, x, y }` instead of the system link menu. Coordinates are normalized within the engine view, or null when unavailable. Android gets the anchor text through the native focused-node API. iOS turns off WebKit's link callout and link-text selection with an injected style and finds the link under the finger from an isolated script world, which also gives it the link text. Text selection outside links is preserved.
+
+`snapshot()` resolves to a unique `file://` JPEG URI in the app cache, or null when no page viewport can be captured. Images are limited to 640 pixels wide. A successful new capture removes only that view's preceding capture. Its last snapshot survives view disposal, so archived cards can retain their image until cache eviction or clear data.
+
+Module-level `clearData()` waits for native website-data deletion and removes the snapshot cache. Close page views before calling it so scripts cannot immediately write fresh data. Android uses AndroidX WebKit's `DELETE_BROWSING_DATA` capability and rejects with `E_WEBVIEW_UPDATE_REQUIRED` if the installed system WebView cannot provide complete deletion. It does not claim success through the incomplete legacy API.
+
+Privacy (both engines): `setContentBlocking(lists, version)` blocks with filter list text through Bay's Rust blocker (`packages/adblock`, Brave's adblock-rust): Android checks every subresource in `shouldInterceptRequest` and injects cosmetic CSS (site rules plus generic rules for the classes and ids a page uses); iOS converts the lists into WebKit content-blocking rules, compiled once per `version` and cached by WebKit. `setBlockingPausedHosts` pauses it per site. Main-frame GET navigations drop tracking parameters (`setTrackingParameters` with `@bay/core`'s `TRACKING_PARAMS`) and move from HTTP to HTTPS, falling back to HTTP for the session when HTTPS can't connect or the site redirects back; local hosts are never upgraded. Third-party cookies are off on both (WebKit's default; set explicitly on Android). `private` views use a non-persistent data store (iOS) or a separate WebView profile (Android, `privateBrowsingSupported`), deleted with the last private view. Run `scripts/adblock` (part of `pnpm native`) after changing the crate.
+
+The app accepts HTTP and HTTPS addresses. `app.plugin.js` enables HTTP for WebKit page loads and Android release builds. Native certificate validation stays enabled. Android disables file/content access and mixed content.
+
+Run `pnpm native` in `apps/mobile` after native changes. Native build folders are generated; edit this module and its config plugin rather than generated projects. The local package is included in the mobile pnpm workspace and discovered by Expo autolinking.
