@@ -16,6 +16,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Icon } from "@/chrome/Icon";
+import { PillButton } from "@/chrome/PillButton";
 import { Surface } from "@/chrome/Surface";
 import { DownloadProgress, downloadStatus } from "@/panels/DownloadsPanel";
 import { useBrowserStore } from "@/store/browser";
@@ -92,15 +93,7 @@ export function DownloadToast({ item, onOpen, onShowAll }: { item: DownloadItem;
           </Pressable>
           {item.state === "finished" ? (
             <Animated.View entering={FadeIn.duration(200)}>
-              <Pressable
-                testID="download-toast-open"
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${item.filename}`}
-                onPress={onOpen}
-                className="min-h-11 items-center justify-center rounded-full bg-default px-4"
-              >
-                <Typography className="text-sm">Open</Typography>
-              </Pressable>
+              <PillButton testID="download-toast-open" label="Open" accessibilityLabel={`Open ${item.filename}`} onPress={onOpen} />
             </Animated.View>
           ) : null}
         </View>

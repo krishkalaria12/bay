@@ -3,6 +3,7 @@ import { useEffect, useState, type JSX } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 
+import { PillButton } from "@/chrome/PillButton";
 import type { DownloadItem } from "@/store/types";
 
 import { ActionRow, PanelSheet } from "./PanelSheet";
@@ -39,15 +40,13 @@ export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, 
               </Typography>
               {item.state === "downloading" ? <DownloadProgress item={item} /> : null}
             </Pressable>
-            <Pressable
+            <PillButton
+              compact
               testID={`download-${index}-${item.state === "downloading" ? "cancel" : "remove"}`}
-              accessibilityRole="button"
+              label={item.state === "downloading" ? "Cancel" : "Remove"}
               accessibilityLabel={item.state === "downloading" ? `Cancel ${item.filename}` : `Remove ${item.filename} from the list`}
               onPress={() => (item.state === "downloading" ? onCancel(item) : onRemove(item))}
-              className="min-h-11 items-center justify-center rounded-full bg-default px-3"
-            >
-              <Typography className="text-sm">{item.state === "downloading" ? "Cancel" : "Remove"}</Typography>
-            </Pressable>
+            />
           </View>
         ))
       ) : (
