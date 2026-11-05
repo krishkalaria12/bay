@@ -120,6 +120,8 @@ export const NEW_MENU_MS = 170;
 
 // The room the divider's line leaves for Clear at its end.
 export const CLEAR_WIDTH = 44;
+// Tidy, before Clear: its label, and the hairline between them.
+export const TIDY_WIDTH = 42;
 // The room the divider leaves under its line while Clear shows (Clear's text reaches below the line).
 export const CLEAR_GAP = 6;
 // Under the space's title row, before its pinned tabs (or, with none, its tabs).

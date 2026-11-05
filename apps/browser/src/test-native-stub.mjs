@@ -312,6 +312,13 @@ export const engineBoostCalls = [];
 export const setBoosts = (boosts) => (engineBoostCalls.push(boosts), Promise.resolve());
 
 export const tidyNames = null;
+// Tidy Tabs' model: a test sets `answer` (a function of the prompt) and `status`.
+export const tidyTabsAnswers = { status: "off", answer: async () => null, prompts: [] };
+export const tidyTabsModel = {
+  modelStatus: () => tidyTabsAnswers.status,
+  group: (prompt) => (tidyTabsAnswers.prompts.push(prompt), tidyTabsAnswers.answer(prompt)),
+};
+export const TidySquiggle = null;
 export const userScriptsAvailable = () => false;
 export const watchUserScripts = () => {};
 export const readUserScripts = async () => ({ state: "empty" });

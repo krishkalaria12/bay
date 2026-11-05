@@ -1,4 +1,4 @@
-import { requireNativeModule, requireNativeViewManager, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule, requireNativeViewManager, requireOptionalNativeModule, type EventSubscription } from "expo-modules-core";
 import type { ViewProps } from "react-native";
 
 export * from "./system";
@@ -535,3 +535,17 @@ const TidyNamesNative = requireNativeModule<TidyNamesModule>("BayTidyNames");
 // Null unless launched with BAY_TIDY_DOWNLOADS_AI=true on a Mac with Apple Intelligence; Tidy Downloads then leans on
 // the local cleaner alone.
 export const tidyNames: Omit<TidyNamesModule, "available"> | null = TidyNamesNative.available ? TidyNamesNative : null;
+
+/** Where Apple Intelligence stands on this Mac. */
+export type TidyModelStatus = "available" | "off" | "preparing" | "ineligible" | "needsNewerMacOS" | "unavailable";
+type TidyTabsModule = {
+  modelStatus(): TidyModelStatus;
+  /** Named groups of tab ids from the prompt, or null when the model couldn't answer. */
+  group(prompt: string): Promise<{ name: string; tabs: number[] }[] | null>;
+};
+// Optional: a platform or a build without it groups tabs by site.
+export const tidyTabsModel = requireOptionalNativeModule<TidyTabsModule>("BayTidyTabs");
+
+export type TidySquiggleProps = ViewProps & { running: boolean; color: string };
+/** The divider's wave while the model works. Null without the model, which is the only thing that takes long enough to need it. */
+export const TidySquiggle = tidyTabsModel ? requireNativeViewManager<TidySquiggleProps>("BayTidyTabs") : null;

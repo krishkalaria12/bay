@@ -54,6 +54,8 @@ export type Settings = {
   // Off by default; reversible via Reset Name. macOS 26 with Apple Intelligence in Arc;
   // Bay ships a heuristic that runs everywhere.
   tidyTabTitles: boolean;
+  // Arc Max's Tidy Tabs: the divider's Tidy button. The sidebar menu and command bar offer it either way.
+  tidyTabs: boolean;
   cleanUpInactiveTabsAfterHours: number | null;
   awakeSites: string[];
   mutedSites: string[];
@@ -138,6 +140,8 @@ export const DEFAULT_SETTINGS: Settings = {
   optShiftClickOpensInGroup: true,
   autoGroupMeetingTabs: true,
   tidyTabTitles: false,
+  // On, as in Arc: it waits for a click.
+  tidyTabs: true,
   // On, as Arc's archive (its default is 12 hours). A saved session keeps its choice.
   cleanUpInactiveTabsAfterHours: 12,
   awakeSites: [...DEFAULT_AWAKE_SITES],

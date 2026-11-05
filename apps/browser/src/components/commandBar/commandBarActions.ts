@@ -56,7 +56,7 @@ const DEFS: ActionDef[] = [
   { command: "renameTab", title: "Rename Tab", icon: "pencil", needs: "tab" },
   { command: "searchTabs", title: "Search Tabs", icon: "magnifyingglass", hint: "⇧⌘A" },
   { command: "cleanUpTabs", title: "Clean Up Tabs", icon: "sparkles", hint: "⌥⌘K" },
-  { command: "tidyTabs", title: "Tidy Tabs", icon: "rectangle.stack", keywords: ["group tabs", "organize tabs", "group by site"] },
+  { command: "tidyTabs", title: "Tidy Tabs", icon: "rectangle.stack", keywords: ["group tabs", "organize tabs", "sort tabs", "group by topic"] },
   { command: "newGroupWithTabs", title: "New Group with Tab", icon: "folder.badge.plus", hint: "⌃⌘N", keywords: ["tab group"], needs: "tab" },
   { command: "reload", title: "Reload Page", icon: "arrow.clockwise", hint: "⌘R", keywords: ["refresh"], needs: page },
   { command: "forceReload", title: "Force Reload Page", icon: "arrow.clockwise", hint: "⇧⌘R", keywords: ["hard reload", "hard refresh"], needs: page },

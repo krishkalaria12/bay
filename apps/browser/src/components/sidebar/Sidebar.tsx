@@ -1,10 +1,10 @@
 import { LibraryButton } from "../library/LibraryButton";
-import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/desktop";
+import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion, TidySquiggle } from "@bay/desktop";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { cycleSpace } from "../../lib/actions";
-import { ThemeScope, useTheme } from "../../lib/theme";
+import { hex, ThemeScope, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { everySlowly } from "../../lib/throttledTimers";
 import { useEffectEvent } from "../../lib/useEffectEvent";
@@ -23,6 +23,9 @@ import { usePageStyle, usePagerPages } from "../spaces/pager";
 import { SpaceSwitcher } from "../spaces/SpaceSwitcher";
 import { SpaceTitle } from "./SpaceTitle";
 import { clearTabs } from "./clearTabs";
+import { TIDY_SQUIGGLE_SETTLE_MS, runTidyTabs, useTidyOffer } from "../../lib/tidyTabs";
+import { useTrailing } from "../../lib/useTrailing";
+import { reduceMotion } from "../../lib/reduceMotion";
 import { UPDATE_ROW_HEIGHT, UpdateRow, useUpdateRowShown } from "./UpdateRow";
 import { SidebarAddressRow, SidebarHeaderTools } from "./AddressBar";
 import { DragGhost } from "./DragGhost";
@@ -53,6 +56,7 @@ import {
   PIN_BAND,
   PINNED_DIVIDER_PAD,
   CLEAR_WIDTH,
+  TIDY_WIDTH,
   CLEAR_GAP,
   SPACE_TITLE_GAP,
   ROWS_PER_FRAME,
@@ -481,17 +485,24 @@ function PinnedDivider({ pinned, listed, windowId, spaceId }: { pinned: boolean;
   const controller = useDragController();
   const clearable = useBrowser((s) => hasClearableTabs(s, windowId, spaceId));
   const { hovered, hoverProps } = useHover();
-  const shown = pinned || listed || clearable;
+  const { hovered: tidyHovered, hoverProps: tidyHoverProps } = useHover();
+  const tidy = useTidyOffer(windowId, spaceId);
+  const tidyShown = tidy.offered || tidy.running;
+  // The wave stays for its way back to flat, then the line returns.
+  const waving = useTrailing(tidy.running && !reduceMotion(), TIDY_SQUIGGLE_SETTLE_MS);
+  const trailing = clearable || tidyShown;
+  const shown = pinned || listed || trailing;
   // The line and its room come and go with the pinned section folding.
   const { open } = useFold(!shown);
   const room = useAnimatedStyle(
     () => ({
       paddingTop: open.get() * PINNED_DIVIDER_PAD,
-      paddingBottom: open.get() * PINNED_DIVIDER_PAD + (clearable ? CLEAR_GAP : 0),
+      paddingBottom: open.get() * PINNED_DIVIDER_PAD + (trailing ? CLEAR_GAP : 0),
     }),
-    [clearable],
+    [trailing],
   );
   const line = useAnimatedStyle(() => ({ height: open.get(), opacity: open.get() }));
+  const lineInset = (clearable ? CLEAR_WIDTH : 0) + (tidyShown ? TIDY_WIDTH : 0);
   return (
     <View
       ref={(v) => {
@@ -500,13 +511,38 @@ function PinnedDivider({ pinned, listed, windowId, spaceId }: { pinned: boolean;
     >
       {/* Clear stands on the line: room under it so it, and the line, aren't on the first tab. */}
       <Animated.View style={[{ paddingHorizontal: 9 }, room]}>
-        <Animated.View style={[{ borderRadius: 0.5, marginRight: clearable ? CLEAR_WIDTH : 0, backgroundColor: tokens.separator }, line]} />
+        <Animated.View style={[{ borderRadius: 0.5, marginRight: lineInset, backgroundColor: waving ? "transparent" : tokens.separator }, line]} />
       </Animated.View>
-      {clearable ? (
-        <View {...hoverProps} style={{ position: "absolute", right: 2, top: PINNED_DIVIDER_PAD - 8, height: 17, justifyContent: "center" }}>
-          <Pressable onPress={() => void clearTabs(windowId)} accessibilityRole="button" tooltip="Put away every tab but this one">
-            <Text style={{ fontSize: 12, fontWeight: "500", color: hovered ? theme.textPrimary : theme.textSecondary }}>Clear</Text>
-          </Pressable>
+      {waving && TidySquiggle ? (
+        <TidySquiggle
+          running={tidy.running}
+          color={hex(tokens.separator)}
+          style={{ position: "absolute", left: 9, right: 9 + lineInset, top: PINNED_DIVIDER_PAD - 5, height: 11 }}
+        />
+      ) : null}
+      {trailing ? (
+        <View style={{ position: "absolute", right: 2, top: PINNED_DIVIDER_PAD - 8, height: 17, flexDirection: "row", alignItems: "center" }}>
+          {tidyShown ? (
+            <View {...tidyHoverProps} style={{ flexDirection: "row", alignItems: "center" }}>
+              <Pressable
+                onPress={() => void runTidyTabs(windowId)}
+                disabled={tidy.running}
+                accessibilityRole="button"
+                accessibilityLabel={tidy.running ? "Tidying tabs" : "Tidy tabs"}
+                tooltip="Sort these tabs into groups"
+              >
+                <Text style={{ fontSize: 12, fontWeight: "500", color: tidyHovered || tidy.running ? theme.textPrimary : theme.textSecondary }}>Tidy</Text>
+              </Pressable>
+              {clearable ? <View style={{ width: StyleSheet.hairlineWidth, height: 12, marginHorizontal: 8, backgroundColor: tokens.separator }} /> : null}
+            </View>
+          ) : null}
+          {clearable ? (
+            <View {...hoverProps}>
+              <Pressable onPress={() => void clearTabs(windowId)} accessibilityRole="button" tooltip="Put away every tab but this one">
+                <Text style={{ fontSize: 12, fontWeight: "500", color: hovered ? theme.textPrimary : theme.textSecondary }}>Clear</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </View>

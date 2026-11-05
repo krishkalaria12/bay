@@ -28,6 +28,7 @@ function renderTabs(tabLayout) {
     "../../../store/browserStore": { useBrowser: (selector) => selector(state) },
     "../controls": controls,
     "../definitions": { SETTINGS },
+    "../TidyModelNote": { TidyModelNote: "TidyModelNote" },
     "../constants": constants,
     "../../../activity/activityStore": {},
     "../../../lib/keptAwakeSites": {},

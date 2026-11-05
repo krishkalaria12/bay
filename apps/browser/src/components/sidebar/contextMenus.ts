@@ -23,6 +23,7 @@ import {
   windowTitle,
 } from "../../store/model";
 import { awayFromPin, cleanedTabsFor, groupLabel, groupOf, keptDeletedGroups, selectedTabIds } from "../../store/tabTidying";
+import { runTidyTabs } from "../../lib/tidyTabs";
 import { pinRowTitle, rowPinned, splitOf } from "../../store/splits";
 import type { GroupColor, Tab } from "../../store/types";
 import {
@@ -458,7 +459,7 @@ export async function openSidebarMenu(windowId: string) {
   else if (choice === "newFolder") newPinnedFolderWith(windowId);
   else if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice === "clean") s.cleanUpTabs(windowId);
-  else if (choice === "tidy") s.tidyTabs(windowId);
+  else if (choice === "tidy") void runTidyTabs(windowId);
   else if (choice === "mute") muteAll(windowId, !muted);
   else if (choice === "closeAll") closeAllTabs(windowId);
 }
@@ -543,7 +544,7 @@ export async function openOverflowMenu(windowId: string) {
   else if (choice.startsWith("cleaned:")) s.restoreCleaned(choice.slice(8), windowId);
   else if (choice === "restoreAll") s.restoreCleaned(undefined, windowId);
   else if (choice === "clean") s.cleanUpTabs(windowId);
-  else if (choice === "tidy") s.tidyTabs(windowId);
+  else if (choice === "tidy") void runTidyTabs(windowId);
   else if (choice === "daily") s.updateSettings({ cleanUpInactiveTabsAfterHours: daily ? null : 24 });
   else if (choice === "mute") muteAll(windowId, !muted);
   else if (choice === "closeAll") closeAllTabs(windowId);
