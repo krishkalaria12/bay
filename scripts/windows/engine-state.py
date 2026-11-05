@@ -18,6 +18,13 @@ import tempfile
 MTIME_NS = "BAY.mtime-ns"
 # Windows types a link as a file or a directory when making it.
 DIRECTORY_LINK = "BAY.directory-link"
+# Saving and restoring take many minutes; show they're moving.
+PROGRESS_INTERVAL = 50_000
+
+
+def report_progress(action, count):
+    if count % PROGRESS_INTERVAL == 0:
+        print(f"state archive: {action} {count} entries", flush=True)
 
 
 def is_link(entry):
@@ -78,8 +85,9 @@ def create(root: Path, archive: Path):
         # Compression streams directly to disk; a second, uncompressed tree would
         # exhaust the runner's free space.
         with tarfile.open(temporary, "w:gz", compresslevel=1) as tar:
-            for entry, name in walk(root):
+            for count, (entry, name) in enumerate(walk(root), 1):
                 add_entry(tar, entry, name)
+                report_progress("saved", count)
         temporary.replace(archive)
     finally:
         temporary.unlink(missing_ok=True)
@@ -94,10 +102,12 @@ def restore(root: Path, archive: Path):
         raise ValueError(f"restore destination must be empty: {root}")
     root.mkdir(parents=True, exist_ok=True)
     links = []
+    # Keep tarfile's small default buffer: every read recopies what's left of it.
     # The archive comes from this repository's own runs, and its links may point
     # outside the tree, so the default filter would refuse them.
-    with tarfile.open(archive, "r|gz", bufsize=1 << 20) as tar:
-        for member in tar:
+    with tarfile.open(archive, "r|gz") as tar:
+        for count, member in enumerate(tar, 1):
+            report_progress("restored", count)
             if member.issym():
                 links.append(member)
                 continue
@@ -139,11 +149,12 @@ def check(root: Path, archive: Path):
         create(root, archive)
         print(f"state archive: {archive.stat().st_size / 2**30:.1f} GB", flush=True)
         restore(restored, archive)
+        print("state archive: comparing the restored tree", flush=True)
         original = describe(root)
         different = sorted({name for name, _ in original.items() ^ describe(restored).items()})
         if different:
             raise ValueError(f"{len(different)} entries changed in a round trip, such as {different[:20]}")
-        print(f"state archive: {len(original)} entries restored exactly", flush=True)
+        print(f"state archive: {len(original)} entries restored exactly, removing the copy", flush=True)
     finally:
         if restored.exists():
             shutil.rmtree(restored, onexc=clear_read_only_and_retry)
