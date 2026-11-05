@@ -14,6 +14,11 @@ module.exports = function withBayEngine(config) {
       ...mod.modResults.NSAppTransportSecurity,
       NSAllowsArbitraryLoadsInWebContent: true,
     };
+    // iOS 26 keeps a download running after Bay leaves the screen as a continued-processing task, one identifier per
+    // download (BayDownloads.swift). Without this entry, registering one would crash, so BayDownloads checks for it.
+    const downloadTasks = `${config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile"}.download.*`;
+    const permitted = mod.modResults.BGTaskSchedulerPermittedIdentifiers ?? [];
+    if (!permitted.includes(downloadTasks)) mod.modResults.BGTaskSchedulerPermittedIdentifiers = [...permitted, downloadTasks];
     return mod;
   });
   config = withGradleProperties(config, (mod) => {

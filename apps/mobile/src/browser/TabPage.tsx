@@ -18,6 +18,8 @@ export interface TabPageProps {
   onPageMessage: (message: string) => void;
   /** The colour at the top of the page, [r, g, b], or null when it has none; read as each page loads. */
   onPageColor: (color: [number, number, number] | null) => void;
+  /** The last colour onPageColor reported: fills the gap above the page while Android's pull to refresh pulls it down. */
+  pageColor: [number, number, number] | null;
   /** Hidden pages stay mounted, so switching back keeps their scroll position and history. */
   visible: boolean;
   /** Paused in the background (see EngineView `suspended`). */
@@ -43,6 +45,7 @@ export function TabPage({
   pullToRefresh,
   onPageMessage,
   onPageColor,
+  pageColor,
 }: TabPageProps): JSX.Element {
   const view = useRef<Tab>(null);
   const timing = useRef(initialTiming());
@@ -97,7 +100,9 @@ export function TabPage({
   return (
     <View
       testID={visible ? "page-view" : undefined}
-      style={[StyleSheet.absoluteFill, { opacity: visible ? 1 : 0 }]}
+      // The page's top colour (or the theme's background) behind it, never the wallpaper.
+      className="bg-background"
+      style={[StyleSheet.absoluteFill, { opacity: visible ? 1 : 0 }, pageColor ? { backgroundColor: `rgb(${pageColor.join(",")})` } : null]}
       pointerEvents={visible ? "auto" : "none"}
       accessibilityElementsHidden={!visible}
       importantForAccessibility={visible ? "auto" : "no-hide-descendants"}

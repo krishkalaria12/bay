@@ -1,6 +1,7 @@
 import { useThemeColor } from "heroui-native";
 import type { JSX } from "react";
 import { Pressable, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { barButtons, barInsecure, barNewTab, barSite, type BarButton, type BrowserBarProps } from "./BrowserBar.types";
 import { MaterialSymbol, type MaterialSymbolName } from "./MaterialSymbol";
@@ -65,15 +66,17 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   return (
     <View className="flex-row items-center justify-center gap-4">
       <BarPressable button={left} icon={left.icon} privately={props.privately} />
-      <BarPressable
-        button={search}
-        icon="search"
-        wide
-        text={barNewTab(props) ? "New tab" : barSite(props)}
-        leading={barNewTab(props) ? "add" : undefined}
-        insecure={barInsecure(props)}
-        privately={props.privately}
-      />
+      <Animated.View style={props.capsuleStyle}>
+        <BarPressable
+          button={search}
+          icon="search"
+          wide
+          text={barNewTab(props) ? "New tab" : barSite(props)}
+          leading={barNewTab(props) ? "add" : undefined}
+          insecure={barInsecure(props)}
+          privately={props.privately}
+        />
+      </Animated.View>
       <BarPressable button={right} icon={right.icon} privately={props.privately} />
     </View>
   );
