@@ -1,5 +1,28 @@
 ---
 import { downloadLink, site } from "../site";
+
+const featured = [
+  {
+    href: "https://macbase.app/apps/bay?ref=badge",
+    src: "https://macbase.app/badge/featured-on-macbase.svg",
+    alt: "Bay is featured on MacBase",
+    width: 313,
+    height: 100,
+  },
+  {
+    href: "https://lemonlaunch.dev/productivity/bay",
+    src: "https://lemonlaunch.dev/badge/lemonlaunch-badge-light.svg",
+    alt: "Featured on LemonLaunch",
+    width: 188,
+    height: 56,
+  },
+];
+
+// The strip is two identical halves and slides by exactly one, so each half has to outrun the
+// 260px window or a hole shows at the seam. The duration scales with the count to hold the speed.
+const repeats = Math.ceil(4 / featured.length);
+const half = Array.from({ length: repeats }, () => featured).flat();
+const strip = [...half, ...half];
 ---
 
 <footer class="mx-auto max-w-6xl border-t border-line px-5 py-10">
@@ -17,24 +40,44 @@ import { downloadLink, site } from "../site";
     </ul>
   </div>
   <div class="mt-7 flex flex-col gap-x-6 gap-y-4 sm:flex-row sm:items-end sm:justify-between">
-    <a
-      href="https://macbase.app/apps/bay?ref=badge"
-      target="_blank"
-      rel="noopener"
-      class="inline-flex w-fit opacity-90 transition hover:opacity-100"
-    >
-      <img
-        src="https://macbase.app/badge/featured-on-macbase.svg"
-        alt="Bay is featured on MacBase"
-        width="313"
-        height="100"
-        class="h-16 w-auto"
-        loading="lazy"
-        decoding="async"
-      />
-    </a>
-    <p class="text-[12px] text-faint sm:max-w-xs sm:text-right">
+    <p class="text-[12px] text-faint sm:max-w-xs">
       Bay is an independent browser for the Mac, built on Chrome’s own engine.
     </p>
+    <div class="min-w-0 sm:w-[260px]">
+      <h3 class="font-mono text-[13px] leading-[17px] tracking-[.1em] text-ink uppercase">Featured on</h3>
+      <div class="mt-[10px] flex w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)] [&:hover_.animate-marquee]:[animation-play-state:paused]">
+        <div
+          class="flex w-max shrink-0 animate-marquee motion-reduce:animate-none"
+          style={`animation-duration: ${half.length * 4.5}s`}
+        >
+          {
+            strip.map((badge, i) => {
+              // Only the first run is real content; the repeats exist for the loop.
+              const repeat = i >= featured.length;
+              return (
+                <a
+                  href={badge.href}
+                  target="_blank"
+                  rel="noopener"
+                  class="mr-[24px] flex h-[44px] shrink-0 items-center opacity-80 transition-opacity duration-200 hover:opacity-100"
+                  aria-hidden={repeat ? "true" : undefined}
+                  tabindex={repeat ? -1 : undefined}
+                >
+                  <img
+                    src={badge.src}
+                    alt={repeat ? "" : badge.alt}
+                    width={badge.width}
+                    height={badge.height}
+                    class="h-[32px] w-auto max-w-none object-contain"
+                    loading="lazy"
+                    draggable="false"
+                  />
+                </a>
+              );
+            })
+          }
+        </div>
+      </div>
+    </div>
   </div>
 </footer>
