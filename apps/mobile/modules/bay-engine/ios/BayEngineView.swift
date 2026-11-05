@@ -22,6 +22,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   private var snapshotURL: URL?
   private var startedLoading = false
   private var pendingInitialURL: String?
+  /// The tab's first navigation became a download, so it has no page; reported as `blank` while that's still so.
+  private var firstNavigationBecameDownload = false
   /// Hosts this view moved from HTTP to HTTPS, with when; an HTTPS page that sends the view straight back keeps HTTP.
   private var upgradedHosts: [String: Date] = [:]
 
@@ -62,9 +64,20 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     if isPrivate { configuration.websiteDataStore = BayPrivateBrowsing.dataStore() }
     // Video plays in the page when it asks to (playsinline), as in Safari.
     configuration.allowsInlineMediaPlayback = true
+    // Google won't sign anyone in from what it can tell is an app's embedded web view ("This browser or app may not be
+    // secure", OAuth's disallowed_useragent): WKWebView's user agent ends at "Mobile/15E148", without Safari's
+    // "Version/… Safari/…" tokens. Bay is a browser, so it presents as Safari does (Android drops `; wv` likewise).
+    configuration.applicationNameForUserAgent = safariUserAgentSuffix
     configuration.userContentController.addUserScript(linkStyle)
     return WKWebView(frame: .zero, configuration: configuration)
   }
+
+  /// "Version/26.0 Mobile/15E148 Safari/604.1", with this iOS's major and minor version, as Safari sends.
+  private static let safariUserAgentSuffix: String = {
+    let parts = UIDevice.current.systemVersion.split(separator: ".")
+    let version = "\(parts.first ?? "26").\(parts.count > 1 ? parts[1] : "0")"
+    return "Version/\(version) Mobile/15E148 Safari/604.1"
+  }()
 
   // Link long-presses open Bay's link menu (see longPress), so WebKit's callout and link-text selection are off.
   private static let linkStyle = WKUserScript(
@@ -245,14 +258,19 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   private func emitState() {
     if !webView.isLoading { refreshControl.endRefreshing() }
-    onNavigationStateChange([
-      "url": webView.url?.absoluteString ?? "",
-      "title": webView.title ?? "",
-      "progress": webView.estimatedProgress,
-      "isLoading": webView.isLoading,
+    // A tab with no page yet whose navigation became a download (a download link typed into a new tab) says so, so it
+    // goes back to the start page instead of keeping the file's address and downloading it again when restored.
+    let blank = firstNavigationBecameDownload && webView.backForwardList.currentItem == nil
+    var state: [String: Any] = [
+      "url": blank ? "" : webView.url?.absoluteString ?? "",
+      "title": blank ? "" : webView.title ?? "",
+      "progress": blank ? 0.0 : webView.estimatedProgress,
+      "isLoading": blank ? false : webView.isLoading,
       "canGoBack": webView.canGoBack,
       "canGoForward": webView.canGoForward
-    ])
+    ]
+    if blank { state["blank"] = true }
+    onNavigationStateChange(state)
   }
 
   func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -312,10 +330,18 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
     BayDownloads.shared.track(download, url: navigationAction.request.url, isPrivate: isPrivate)
+    navigationBecameDownload()
   }
 
   func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
     BayDownloads.shared.track(download, url: navigationResponse.response.url, isPrivate: isPrivate)
+    navigationBecameDownload()
+  }
+
+  /// The navigation never finishes as a page: the view stays on the page it started from, or none.
+  private func navigationBecameDownload() {
+    if webView.backForwardList.currentItem == nil { firstNavigationBecameDownload = true }
+    emitState()
   }
 
   private func httpsUpgrade(_ url: URL) -> URL? {
