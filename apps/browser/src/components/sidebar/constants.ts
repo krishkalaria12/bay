@@ -36,8 +36,8 @@ export const SLEEPING_OPACITY = 0.45;
 
 // MARK: Groups and live folders (geometry.ts, Fold.tsx, LiveFolderBlock.tsx)
 
-export const GROUP_PAD = 2;
-export const GROUP_BORDER = 0.5;
+// With no box around a group, this is what shows which tabs are its own.
+export const GROUP_INDENT = 12;
 // Dia 1.50.1 (owner recording, 60 fps): a group opens or closes in about 150 ms.
 export const FOLD_MS = 150;
 export const LIVE_FOLDER_PAD = 2;
