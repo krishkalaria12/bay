@@ -495,11 +495,21 @@ export const DockSelection = requireNativeViewManager<DockSelectionProps>("BayDo
 
 const InlineCompletionModule = requireNativeModule<{
   complete(tag: number, typed: string, completion: string): Promise<InlineWrite>;
+  showMenu(tag: number, items: MenuItem[]): Promise<string | null>;
+  recordEdit(tag: number, before: string, after: string, start: number, end: number, state: string): Promise<void>;
+  addListener(name: "onTextInputRestore", listener: (e: { tag: number; state: string }) => void): EventSubscription;
 }>("BayInlineCompletion");
 
 export type InlineWrite = 0 | 1 | 2;
 
 export const completeInline = (tag: number, typed: string, completion: string) => InlineCompletionModule.complete(tag, typed, completion);
+export const showTextInputMenu = (tag: number, items: MenuItem[]) => InlineCompletionModule.showMenu(tag, items);
+export const recordTextInputEdit = (tag: number, before: string, after: string, start: number, end: number, state: string) =>
+  InlineCompletionModule.recordEdit(tag, before, after, start, end, state);
+export const onTextInputRestore = (tag: number, listener: (state: string) => void) =>
+  InlineCompletionModule.addListener("onTextInputRestore", (e) => {
+    if (e.tag === tag) listener(e.state);
+  });
 
 type TranslationModule = {
   readonly available: boolean;
