@@ -159,16 +159,21 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     settings.displayZoomControls = false
     overScrollMode = OVER_SCROLL_NEVER
     setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-      // A private page's cookies are in its own profile.
-      val cookies = if (usesPrivateProfile) {
-        ProfileStore.getInstance().getProfile(PRIVATE_PROFILE)?.cookieManager?.getCookie(url)
-      } else {
-        CookieManager.getInstance().getCookie(url)
-      }
-      BayDownloads.start(context, url, userAgent, contentDisposition, mimeType, cookies, usesPrivateProfile)
-      // The navigation became a download and never finishes, so the page stops loading here.
+      // A private page's cookies are in its own profile. Asked per address, so a redirect to another host gets its own.
+      val cookieManager = if (usesPrivateProfile) ProfileStore.getInstance().getProfile(PRIVATE_PROFILE)?.cookieManager else CookieManager.getInstance()
+      // File hosts often refuse a download that doesn't say which page it came from.
+      BayDownloads.start(context, url, userAgent, contentDisposition, mimeType, { address -> cookieManager?.getCookie(address) }, this.url, usesPrivateProfile)
+      // The navigation became a download and never finishes, so the page stops loading here, back on the page it
+      // started from. A tab that had no page yet (a download link typed into a new tab) says so, so it goes back to
+      // the start page instead of keeping the file's address and downloading it again when it's restored.
       loading = false
-      emitState()
+      val committed = copyBackForwardList().currentItem?.url
+      if (committed == null) {
+        onNavigationStateChange(mapOf("url" to "", "title" to "", "progress" to 0.0, "isLoading" to false,
+          "canGoBack" to false, "canGoForward" to false, "blank" to true))
+      } else {
+        emitState(committed)
+      }
     }
     setOnTouchListener { _, event ->
       if (event.actionMasked == MotionEvent.ACTION_DOWN) {

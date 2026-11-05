@@ -41,6 +41,7 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   chevron: "chevron.forward",
   wallpaper: "photo.on.rectangle",
   download: "arrow.down.circle",
+  check: "checkmark.circle",
   translate: "translate",
   textSize: "textformat.size",
   palette: "paintpalette",

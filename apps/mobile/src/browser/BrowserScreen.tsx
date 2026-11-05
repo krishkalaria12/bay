@@ -154,6 +154,12 @@ export function BrowserScreen(): JSX.Element {
   const fail = useCallback((_tabId: string, cause: unknown) => showToast(cause instanceof Error ? cause.message : "Something went wrong."), [showToast]);
 
   const downloads = useDownloads((message) => toast.show(message));
+  // The download toast rides on the bottom bar, so a download started (or finished) while the bar is scrolled away
+  // brings it back; otherwise the tap looks like it did nothing.
+  const downloadToastKey = downloads.toast ? `${downloads.toast.id} ${downloads.toast.state}` : null;
+  useEffect(() => {
+    if (downloadToastKey) barHidden.value = withTiming(0, { duration: 180 });
+  }, [downloadToastKey, barHidden]);
   const find = useFindInPage(views.get(active.id), `${active.id} ${active.url}`);
   const reading = useReadingTools(active, views.get(active.id), page.isLoading, locked && Boolean(active.private), (cause) => fail(active.id, cause));
 
@@ -180,6 +186,7 @@ export function BrowserScreen(): JSX.Element {
       failed.delete(tabId);
       setError((current) => (current?.tabId === tabId ? null : current));
     }
+    if (state.blank) return dispatch({ type: "update-tab", id: tabId, update: { url: "", title: "" } });
     if (!isWebURL(state.url)) return;
     if (failed.has(tabId)) return dispatch({ type: "update-tab", id: tabId, update: { url: state.url } });
     dispatch({ type: "update-tab", id: tabId, update: { url: state.url, ...(state.title ? { title: state.title } : {}) } });
@@ -489,6 +496,7 @@ export function BrowserScreen(): JSX.Element {
           ) : null}
           {downloads.toast && !(locked && downloads.toast.private) ? (
             <DownloadToast
+              key={downloads.toast.id}
               item={downloads.toast}
               onOpen={() => downloads.toast && downloads.open(downloads.toast)}
               onShowAll={() => {

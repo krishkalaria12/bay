@@ -29,6 +29,8 @@ export interface NavigationState {
   isLoading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  /** Android: the tab's first navigation became a download, so it has no page to show. */
+  blank?: boolean;
 }
 
 export interface NavigationError {
@@ -143,7 +145,7 @@ export function runPageScript<T>(tab: Tab, script: string, timeout = 10_000): Pr
   });
 }
 
-/** A page download's progress. iOS saves to the app's Downloads folder (shown in Files); Android to the public one. */
+/** A page download's progress. iOS saves to the app's Downloads folder (shown in Files); Android to the public one, with a progress notification. */
 export interface DownloadUpdate {
   id: string;
   url: string;
@@ -155,6 +157,8 @@ export interface DownloadUpdate {
   /** The saved file (a file:// URL on iOS, a content:// URI on Android), once finished. */
   path?: string;
   error?: string;
+  /** Android: why a download that hasn't finished isn't moving ("Waiting for Wi-Fi"); absent while it transfers. */
+  waiting?: string;
   /** Started in a private tab: kept out of anything Bay saves. */
   private: boolean;
 }
@@ -164,9 +168,10 @@ export function addDownloadListener(listener: (update: DownloadUpdate) => void):
   return nativeEngine.addListener("onDownload", listener);
 }
 
-/** iOS works with a download's file, Android with the system's download id. */
+/** iOS works with a download's file; Android with its saved content:// URI, or the system's download id before Android 10. */
 function downloadReference(download: { id: string; path?: string }): string {
-  return Platform.OS === "android" ? download.id : (download.path ?? "");
+  if (Platform.OS === "android") return download.path?.startsWith("content://") && download.id.startsWith("b-") ? download.path : download.id;
+  return download.path ?? "";
 }
 
 /** Opens a finished download: Quick Look on iOS, the app the system picks on Android. */

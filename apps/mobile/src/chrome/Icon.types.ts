@@ -35,6 +35,7 @@ export type IconName =
   | "chevron"
   | "wallpaper"
   | "download"
+  | "check"
   | "translate"
   | "textSize"
   | "palette"
