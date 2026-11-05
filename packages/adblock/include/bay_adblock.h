@@ -23,8 +23,10 @@ BayBlocker *bay_blocker_new(const char *const *lists, const bool *hosts, size_t 
 // Per-list permissions: bit 1 allows trusted uBO scriptlets. NULL grants none.
 BayBlocker *bay_blocker_new_with_permissions(const char *const *lists, const bool *hosts, const uint8_t *permissions,
                                            size_t count);
-// From bay_blocker_serialize's bytes; NULL when they're damaged or from another adblock-rust.
-BayBlocker *bay_blocker_deserialize(const uint8_t *data, size_t length);
+// From bay_blocker_serialize's bytes; NULL when they're damaged or from another adblock-rust. It reads its rules from
+// them instead of copying them, so they must stay readable and unchanged until release(owner), which runs once, on any
+// thread: when the blocker is freed, or before this returns NULL.
+BayBlocker *bay_blocker_deserialize(const uint8_t *data, size_t length, void *owner, void (*release)(void *owner));
 uint8_t *bay_blocker_serialize(const BayBlocker *blocker, size_t *length);
 void bay_bytes_free(uint8_t *data, size_t length);
 void bay_blocker_free(BayBlocker *blocker);

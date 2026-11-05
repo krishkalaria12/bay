@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
+use adblock::engine::{SharedBytes, SERIALIZED_HEADER_LENGTH};
 use adblock::lists::{FilterFormat, FilterSet, ParseOptions};
 use adblock::request::Request;
 use adblock::resources::{InMemoryResourceStorage, PermissionMask, ResourceType};
@@ -22,8 +23,15 @@ pub struct Blocker {
 }
 
 /// [`Blocker::serialize`]'s format: this tag, three lengths (u64, little-endian: main engine, popup engine, modifier
-/// spec JSON), then those pieces. `BAY4` engines have no HTML filter rules and are rebuilt.
-const SERIALIZED_TAG: &[u8; 4] = b"BAY5";
+/// spec JSON), then those pieces, each engine after the zero bytes of [`engine_padding`]. `BAY5` engines aren't aligned
+/// and are rebuilt.
+const SERIALIZED_TAG: &[u8; 4] = b"BAY6";
+
+/// How many zero bytes put an engine written at `offset` where its rules start on an 8-byte boundary, for
+/// `Engine::deserialize_shared` to read them in place.
+fn engine_padding(offset: usize) -> usize {
+    offset.wrapping_add(SERIALIZED_HEADER_LENGTH).wrapping_neg() % 8
+}
 
 #[derive(Serialize)]
 pub struct CosmeticResources {
@@ -157,32 +165,48 @@ impl Blocker {
         let main = self.engine().serialize();
         let popups = lock(&self.popups).serialize();
         let spec = serde_json::to_vec(self.modifiers.spec()).unwrap_or_default();
-        let mut data =
-            Vec::with_capacity(SERIALIZED_TAG.len() + 24 + main.len() + popups.len() + spec.len());
+        // At most 7 bytes of padding before each engine.
+        let mut data = Vec::with_capacity(
+            SERIALIZED_TAG.len() + 24 + 2 * 7 + main.len() + popups.len() + spec.len(),
+        );
         data.extend_from_slice(SERIALIZED_TAG);
         for length in [main.len(), popups.len(), spec.len()] {
             data.extend_from_slice(&(length as u64).to_le_bytes());
         }
-        data.extend_from_slice(&main);
-        data.extend_from_slice(&popups);
+        for engine in [&main, &popups] {
+            data.resize(data.len() + engine_padding(data.len()), 0);
+            data.extend_from_slice(engine);
+        }
         data.extend_from_slice(&spec);
         data
     }
 
-    /// An engine [`Blocker::serialize`] wrote, or `None` when the data is damaged or from another adblock-rust.
-    pub fn deserialize(data: &[u8]) -> Option<Self> {
+    /// An engine [`Blocker::serialize`] wrote, or `None` when the data is damaged or from another adblock-rust. It keeps
+    /// `file` and reads its rules from there instead of copying them.
+    pub fn deserialize(file: SharedBytes) -> Option<Self> {
+        let data: &[u8] = (*file).as_ref();
         let rest = data.strip_prefix(SERIALIZED_TAG)?;
         let (main_length, rest) = rest.split_first_chunk::<8>()?;
         let (popup_length, rest) = rest.split_first_chunk::<8>()?;
-        let (spec_length, rest) = rest.split_first_chunk::<8>()?;
-        let (main, rest) =
-            rest.split_at_checked(usize::try_from(u64::from_le_bytes(*main_length)).ok()?)?;
-        let (popups, spec) =
-            rest.split_at_checked(usize::try_from(u64::from_le_bytes(*popup_length)).ok()?)?;
-        let spec = spec.get(..usize::try_from(u64::from_le_bytes(*spec_length)).ok()?)?;
-        let read = |bytes: &[u8]| {
+        let (spec_length, _) = rest.split_first_chunk::<8>()?;
+        let section = |start: usize, length: &[u8; 8]| {
+            let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
+            Some(start..start.checked_add(length)?)
+        };
+
+        let header = SERIALIZED_TAG.len() + 24;
+        let main = section(header + engine_padding(header), main_length)?;
+        let popups = section(
+            main.end.checked_add(engine_padding(main.end))?,
+            popup_length,
+        )?;
+        let spec = data.get(section(popups.end, spec_length)?)?;
+        let read = |range| {
             let mut engine = Engine::default();
-            engine.deserialize(bytes).ok().map(|()| engine)
+            engine
+                .deserialize_shared(file.clone(), range)
+                .ok()
+                .map(|()| engine)
         };
         Some(Self::from_engines(
             read(main)?,
@@ -569,7 +593,7 @@ fn load_engine(
     if let Ok(bytes) = std::fs::read(cache) {
         if let Some(blocker) = bytes
             .strip_prefix(header.as_bytes())
-            .and_then(Blocker::deserialize)
+            .and_then(|bytes| Blocker::deserialize(std::sync::Arc::new(bytes.to_vec())))
         {
             return Ok(blocker);
         }
@@ -631,9 +655,58 @@ pub fn content_blocking_rules(lists: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     const LIST: &str =
         "||ads.example^\n@@||ads.example/allowed^\nexample.com##.banner\n##.ad-slot\n";
+
+    fn blocks_the_ad(blocker: &Blocker) -> bool {
+        blocker.should_block(
+            "https://ads.example/x.png",
+            "https://news.example/",
+            "image",
+            "GET",
+        )
+    }
+
+    #[test]
+    fn a_deserialized_blocker_reads_its_rules_in_place_until_it_is_freed() {
+        let file = Arc::new(Blocker::new(LIST).serialize());
+        let blocker = Blocker::deserialize(file.clone()).expect("deserializes");
+        // Both engines hold the file; neither took a copy.
+        assert!(Arc::strong_count(&file) > 2);
+        assert!(blocks_the_ad(&blocker));
+        drop(blocker);
+        assert_eq!(Arc::strong_count(&file), 1);
+    }
+
+    #[test]
+    fn an_unaligned_file_is_copied_and_still_works() {
+        // A byte past a Vec's start, which is aligned.
+        struct Shifted(Vec<u8>);
+        impl AsRef<[u8]> for Shifted {
+            fn as_ref(&self) -> &[u8] {
+                &self.0[1..]
+            }
+        }
+        let mut shifted = vec![0];
+        shifted.extend_from_slice(&Blocker::new(LIST).serialize());
+        let file = Arc::new(Shifted(shifted));
+        let blocker = Blocker::deserialize(file.clone()).expect("deserializes");
+        assert_eq!(Arc::strong_count(&file), 1);
+        assert!(blocks_the_ad(&blocker));
+    }
+
+    #[test]
+    fn a_length_past_the_end_of_the_file_is_refused() {
+        let bytes = Blocker::new(LIST).serialize();
+        for field in 0..3 {
+            let mut damaged = bytes.clone();
+            let at = SERIALIZED_TAG.len() + field * 8;
+            damaged[at..at + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+            assert!(Blocker::deserialize(Arc::new(damaged)).is_none());
+        }
+    }
 
     #[test]
     fn blocks_listed_hosts_and_honours_exceptions() {
@@ -713,7 +786,7 @@ mod tests {
             hosts: false,
             permissions: 0,
         }]);
-        let copy = Blocker::deserialize(&blocker.serialize()).expect("deserializes");
+        let copy = Blocker::deserialize(Arc::new(blocker.serialize())).expect("deserializes");
         assert!(copy.should_block(
             "https://ads.example/pixel.js",
             "https://site.example/",
@@ -725,7 +798,7 @@ mod tests {
             copy.page_resources("https://example.com/").hide,
             vec![".banner".to_owned()]
         );
-        assert!(Blocker::deserialize(b"not an engine").is_none());
+        assert!(Blocker::deserialize(Arc::new(b"not an engine".to_vec())).is_none());
     }
 
     #[test]
@@ -782,7 +855,7 @@ mod tests {
             hosts: false,
             permissions: 0,
         }]);
-        let copy = Blocker::deserialize(&blocker.serialize()).expect("deserializes");
+        let copy = Blocker::deserialize(Arc::new(blocker.serialize())).expect("deserializes");
         let archived = "https://web.archive.org/web/2020/https://site.example/?fbclid=abc";
         for engine in [&blocker, &copy] {
             assert!(engine
@@ -798,8 +871,8 @@ mod tests {
                 Some("https://site.example/")
             );
         }
-        assert!(Blocker::deserialize(b"BAY3").is_none());
-        assert!(Blocker::deserialize(&[1, 2, 3]).is_none());
+        assert!(Blocker::deserialize(Arc::new(b"BAY3".to_vec())).is_none());
+        assert!(Blocker::deserialize(Arc::new(vec![1, 2, 3])).is_none());
     }
 
     #[test]
@@ -854,7 +927,7 @@ mod tests {
         assert!(!popup("https://site.example/next"));
         // A `$popup` rule says nothing about the host's other requests.
         assert!(!blocker.should_block("https://pop.example/x.js", opener, "script", "GET"));
-        let copy = Blocker::deserialize(&blocker.serialize()).expect("deserializes");
+        let copy = Blocker::deserialize(Arc::new(blocker.serialize())).expect("deserializes");
         assert!(
             copy.match_request("https://pop.example/x", opener, "popup", "GET")
                 .blocked
@@ -1031,7 +1104,7 @@ mod tests {
         );
         assert_eq!(stream.removed_headers, ["set-cookie"]);
 
-        let copy = Blocker::deserialize(&blocker.serialize()).expect("deserializes");
+        let copy = Blocker::deserialize(Arc::new(blocker.serialize())).expect("deserializes");
         assert!(copy.has_response_modifiers());
         assert!(
             copy.response(
