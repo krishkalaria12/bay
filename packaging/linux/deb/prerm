@@ -1,0 +1,11 @@
+#!/bin/sh
+# Undoes postinst when Bay is removed, not when it's upgraded.
+set -e
+
+if [ "$1" = remove ] || [ "$1" = deconfigure ]; then
+  update-alternatives --remove x-www-browser /usr/bin/bay
+  update-alternatives --remove gnome-www-browser /usr/bin/bay
+  if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
+    apparmor_parser -R /etc/apparmor.d/bay 2>/dev/null || true
+  fi
+fi

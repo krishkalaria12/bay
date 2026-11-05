@@ -1,0 +1,11 @@
+# Ubuntu 23.10 and later let only programs with an AppArmor profile create unprivileged user namespaces, which
+# Chromium's sandbox needs. This profile allows that and confines nothing else. The .deb and .rpm install it as
+# /etc/apparmor.d/bay; the AppImage prints its own (AppRun).
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bay /opt/bay/bay flags=(unconfined) {
+  userns,
+
+  include if exists <local/bay>
+}
