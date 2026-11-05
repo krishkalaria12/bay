@@ -1,9 +1,15 @@
 import { confirm, prompt, showMenu } from "@bay/desktop";
-import { useBrowser } from "../../store/browserStore";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { activate, newTab, closeTab, closeTabs, updateTabDetails } from "../../runtime/tabActions";
+import { pinRows, setPinnedUrl } from "../../runtime/organizeActions";
+import { switchSpace, moveTabToSpace } from "../../runtime/windowActions";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { isIncognitoSpace, resolveWindowId, viewTabIds } from "../../store/model";
 import type { Tab } from "../../store/types";
 import { showToast } from "../split/splitActions";
 import { openInternalPage, tabDestination } from "../pages/pageUrls";
+import { libraryAvailable } from "./availability";
+import { platformWords } from "../../lib/platformWords";
 import type { LibraryMedia } from "./model";
 import { addMediaToEasel, createEasel, deleteEasel, duplicateEasel, startLibrary, updateEasel, useLibrary } from "./state";
 import { startEaselShares, stopSharingEasel, useEaselShares } from "./sharing";
@@ -24,8 +30,12 @@ export function libraryWindow(windowId?: string | null): string | null {
   const s = useBrowser.getState();
   const id = resolveWindowId(s, windowId);
   if (!id) return null;
+  if (!libraryAvailable()) {
+    showToast(id, "Library Is Unavailable", "Library and Easels are not supported in this window yet.", { icon: "books.vertical" });
+    return null;
+  }
   if (s.windows[id]?.incognito) {
-    showToast(id, "Open Library in a Regular Window", "Library and Easels are saved on this Mac.", { icon: "books.vertical" });
+    showToast(id, "Open Library in a Regular Window", `Library and Easels are saved on ${platformWords.thisComputer}.`, { icon: "books.vertical" });
     return null;
   }
   return id;
@@ -63,6 +73,10 @@ export function toggleLibrary(windowId: string) {
 }
 
 export function openEasel(id: string, windowId?: string | null) {
+  reportBrowserCommand(openEaselTab(id, windowId));
+}
+
+async function openEaselTab(id: string, windowId?: string | null) {
   const window = libraryWindow(windowId);
   if (!window) return;
   startLibrary();
@@ -71,10 +85,14 @@ export function openEasel(id: string, windowId?: string | null) {
   if (!doc) return;
   const existing = viewTabIds(s, window).find((t) => easelIdOf(tabDestination(s.tabs[t]!)) === id);
   if (existing) {
-    s.activate(existing, window);
+    await activate(existing, window);
     return existing;
   }
-  return s.newTab(window, { url: easelUrl(id), snapshot: { title: doc.title, pinnedRow: true, pinnedUrl: easelUrl(id) } });
+  const tabId = await newTab(window, { url: easelUrl(id) });
+  await updateTabDetails(tabId, { customTitle: doc.title });
+  await pinRows([tabId], true);
+  await setPinnedUrl(tabId, easelUrl(id));
+  return tabId;
 }
 
 export function newEasel(windowId?: string | null) {
@@ -110,6 +128,7 @@ export async function chooseEasel(media: LibraryMedia, windowId: string) {
 }
 
 export async function renameEasel(id: string) {
+  if (!libraryAvailable()) return;
   const doc = useLibrary.getState().easels[id];
   if (!doc) return;
   const title = await prompt({ title: "Rename Easel", value: doc.title, confirmTitle: "Rename" });
@@ -117,6 +136,7 @@ export async function renameEasel(id: string) {
 }
 
 export async function easelMenu(id: string, windowId: string) {
+  if (!libraryAvailable()) return;
   const choice = await showMenu([
     { id: "open", title: "Open Easel" },
     { id: "rename", title: "Rename…" },
@@ -134,6 +154,7 @@ export async function easelMenu(id: string, windowId: string) {
 }
 
 export async function removeEasel(id: string) {
+  if (!libraryAvailable()) return;
   const doc = useLibrary.getState().easels[id];
   if (!doc) return;
   startEaselShares();
@@ -155,7 +176,7 @@ export async function removeEasel(id: string) {
   }
   deleteEasel(id);
   const s = useBrowser.getState();
-  s.closeTabs(
+  await closeTabs(
     Object.values(s.tabs)
       .filter((t) => easelIdOf(tabDestination(t)) === id)
       .map((t) => t.id),
@@ -186,9 +207,9 @@ export async function libraryTabMenu(windowId: string, tab: Tab) {
   const live = current.tabs[tab.id];
   if (!live || isIncognitoSpace(live.spaceId)) return;
   if (choice === "open") {
-    current.switchSpace(windowId, live.spaceId);
-    useBrowser.getState().activate(tab.id, windowId);
+    await switchSpace(windowId, live.spaceId);
+    await activate(tab.id, windowId);
   }
-  if (choice.startsWith("space:")) current.moveTabToSpace(tab.id, choice.slice(6));
-  if (choice === "close") current.closeTab(tab.id);
+  if (choice.startsWith("space:")) await moveTabToSpace(tab.id, choice.slice(6));
+  if (choice === "close") await closeTab(tab.id);
 }

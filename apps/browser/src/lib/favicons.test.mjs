@@ -374,7 +374,7 @@ test("native lookup answers flush after pending reports and capped resets notify
 test("shared engine profiles coalesce while other profiles and their published maps remain independent", async (t) => {
   const kept = freezeIcons({ pages: { "https://kept/": "kept" }, srcs: {}, appearances: {} });
   setup(t, { kept });
-  setSpaceProfiles({ personal: "shared", work: "shared" });
+  useBrowser.setState({ spaces: { ...useBrowser.getState().spaces, personal: { profileId: "shared" }, work: { profileId: "shared" } } });
   tab("a", "https://site/a", "personal");
   tab("b", "https://site/b", "work");
   tab("c", "https://site/c", "other");

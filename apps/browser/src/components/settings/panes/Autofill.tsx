@@ -1,3 +1,4 @@
+import { View, platformOS } from "@bay/platform";
 import {
   cardNetworkName,
   deleteAddress,
@@ -14,9 +15,9 @@ import {
 } from "@bay/chromium";
 import { confirm, copyText, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
+import { browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browserStore";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
 import { IconButton } from "../../ui/primitives";
@@ -24,11 +25,13 @@ import { NetworkBadge } from "../../site/Autofill";
 import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, type Option } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
+import { cardStoreName } from "../secretStorage";
+import { platformWords } from "../../../lib/platformWords";
 
 export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => initial ?? useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => initial ?? browserRead.getState().settings.defaultSpaceId);
   const [addresses, setAddresses] = useState<SavedAddress[] | null>(null);
   const [cards, setCards] = useState<SavedCard[] | null>(null);
   const [enabled, setEnabled] = useState<{ addresses: boolean; cards: boolean } | null>(null);
@@ -61,7 +64,7 @@ export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) 
     <View>
       <SectionHeader
         title="Autofill"
-        description="Addresses and cards you save are offered when you fill in a form, separately for each profile. Card numbers are kept in your macOS Keychain."
+        description={`Addresses and cards you save are offered when you fill in a form, separately for each space. Card numbers are kept in ${cardStoreName(platformOS)}.`}
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
@@ -73,7 +76,7 @@ export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) 
         <Row
           settingId={SETTINGS.saveCreditCards.id}
           title={SETTINGS.saveCreditCards.title}
-          description="Filling in or showing a card number asks for Touch ID or your password."
+          description={`Filling in or showing a card number asks for ${platformWords.unlockMethod}.`}
         >
           <Toggle value={enabled?.cards ?? true} disabled={!enabled} onChange={(v) => toggle("cards", v)} />
         </Row>

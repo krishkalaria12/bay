@@ -90,8 +90,8 @@ test("engine and new-tab history transitions invalidate without a browser-store 
     patchPage(active, { engineBack: { engine: "webkit", url: "https://another.example" } });
     assert.equal(calls, 3, "changing the history target preserves availability");
     patchPage(active, { engineBack: null });
-    patchPage(active, { newTabShown: { url: "https://example.com", title: "Example", favicon: null } });
-    patchPage(active, { newTabShown: null });
+    S().updateTab(active, { newTabHistory: { url: "https://example.com", title: "Example", favicon: null } });
+    S().updateTab(active, { newTabHistory: undefined });
     assert.equal(calls, 6);
     patchPage(active, { backToNewTab: true });
     usePages.setState({ pages: {} });

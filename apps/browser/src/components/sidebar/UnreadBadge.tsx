@@ -1,4 +1,5 @@
-import { Text, View } from "react-native";
+import { View } from "@bay/platform";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { unreadFromTitle, unreadLabel } from "../../lib/unreadBadges";
 import { useSettings, useTab } from "../../store/hooks";

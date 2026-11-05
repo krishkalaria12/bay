@@ -1,7 +1,8 @@
+import { Pressable, ScrollView, TextInput, View } from "@bay/platform";
 import { useShallow } from "zustand/react/shallow";
 import { fontFamilies, showMenu, Surface, Symbol, type MenuItem } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { PanResponder, Pressable, ScrollView, Text, TextInput, View, type GestureResponderEvent } from "react-native";
+import { PanResponder, Text, type GestureResponderEvent } from "react-native";
 import { BOOST_CASES, BOOST_FONTS, BOOST_SIZES, DEFAULT_BOOST_COLOR, tintEnds, type Boost, type BoostColor, type BoostTextCase } from "../../lib/boosts";
 import { hex, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
@@ -28,6 +29,7 @@ import {
   type EditorSession,
 } from "./editor";
 import { boostsForHost, removeSelector, setBoostScript, updateBoost, useBoosts } from "./state";
+import { platformWords } from "../../lib/platformWords";
 
 // The Boost editor, as Arc's and Zen's: a panel over the page's corner, the page itself the preview. Colours on a
 // wheel (two dots: the dark end and the light end of the tint), Invert, the advanced sliders and the space's colours;
@@ -220,12 +222,15 @@ function Look({ tabId, boost, session }: { tabId: string; boost: Boost; session:
   );
 }
 
+// The web host's menus end at 1000 items, and two go to the site's font and a separator.
+const MAX_FONT_ITEMS = 998;
+
 function Fonts({ boost }: { boost: Boost }) {
   const theme = useTheme();
   const shown = ["", ...BOOST_FONTS.slice(0, 4)];
   const custom = boost.font && !shown.includes(boost.font) ? boost.font : null;
   const more = async () => {
-    const families = fontFamilies();
+    const families = (await fontFamilies()).slice(0, MAX_FONT_ITEMS);
     const items: MenuItem[] = [
       { id: "font:", title: "Site's Font", checked: !boost.font },
       { separator: true },
@@ -338,7 +343,9 @@ function Code({ tabId, boost, session }: { tabId: string; boost: Boost; session:
         <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>JavaScript</Text>
         <Toggle value={!!script?.enabled} onChange={(on) => void toggleScript(on)} />
       </View>
-      <Hint text="Only on this Mac, and never synced. It runs once each page's content has loaded, in its own world beside the page's scripts." />
+      <Hint
+        text={`Only on ${platformWords.thisComputer}, and never synced. It runs once each page's content has loaded, in its own world beside the page's scripts.`}
+      />
       <CodeField
         value={script?.code ?? ""}
         placeholder={'document.querySelectorAll("video").forEach((v) => (v.playbackRate = 1.5));'}

@@ -1,0 +1,1850 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bay for Windows</title>
+    <meta
+      name="description"
+      content="Phased plan for Bay on Windows with a web-rendered UI: Bay's React UI as a Chrome WebUI page, tabs through SurfaceEmbed, the NNCore engine, phases with exit criteria, module and patch maps, risks and decisions."
+    />
+    <style>
+      :root {
+        --bg: #fbfaf8;
+        --surface: #ffffff;
+        --sunken: #f3f1ed;
+        --ink: #1d1c1a;
+        --muted: #5f5b54;
+        --faint: #8a857c;
+        --line: #e4e0d8;
+        --accent: #2f5bd3;
+        --accent-soft: #e8eefc;
+        --ok: #1f7a4d;
+        --ok-soft: #e3f3ea;
+        --warn: #9a5b00;
+        --warn-soft: #fbf0dc;
+        --risk: #b0362c;
+        --risk-soft: #fbe7e4;
+        --mac: #6b4fbb;
+        --mac-soft: #efeafb;
+        --radius: 10px;
+        --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+        --sans: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #151514;
+          --surface: #1c1c1b;
+          --sunken: #232321;
+          --ink: #ecebe7;
+          --muted: #b1ada4;
+          --faint: #85817a;
+          --line: #34332f;
+          --accent: #8aa8ff;
+          --accent-soft: #1f2a46;
+          --ok: #6fd1a0;
+          --ok-soft: #173327;
+          --warn: #f0b45c;
+          --warn-soft: #3a2c14;
+          --risk: #f08a80;
+          --risk-soft: #3d1d1a;
+          --mac: #b7a2f5;
+          --mac-soft: #2a2340;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #151514;
+        --surface: #1c1c1b;
+        --sunken: #232321;
+        --ink: #ecebe7;
+        --muted: #b1ada4;
+        --faint: #85817a;
+        --line: #34332f;
+        --accent: #8aa8ff;
+        --accent-soft: #1f2a46;
+        --ok: #6fd1a0;
+        --ok-soft: #173327;
+        --warn: #f0b45c;
+        --warn-soft: #3a2c14;
+        --risk: #f08a80;
+        --risk-soft: #3d1d1a;
+        --mac: #b7a2f5;
+        --mac-soft: #2a2340;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15.5px/1.6 var(--sans);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      code,
+      .mono {
+        font-family: var(--mono);
+        font-size: 0.88em;
+      }
+      code {
+        background: var(--sunken);
+        padding: 0.08em 0.35em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.9rem, 4vw, 2.6rem);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.45rem;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.9rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin: 1.4rem 0 0.5rem;
+      }
+      h4 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 1.1rem 0 0.4rem;
+      }
+      p {
+        margin: 0 0 0.8rem;
+      }
+      ul,
+      ol {
+        margin: 0 0 0.9rem;
+        padding-left: 1.25rem;
+      }
+      li {
+        margin: 0.18rem 0;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      .skip {
+        position: absolute;
+        left: -999px;
+        top: 0;
+        background: var(--surface);
+        padding: 8px 12px;
+      }
+      .skip:focus {
+        left: 16px;
+        top: 16px;
+        z-index: 10;
+      }
+
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+      header.top {
+        padding: 48px 0 28px;
+        border-bottom: 1px solid var(--line);
+      }
+      .eyebrow {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 0.6rem;
+      }
+      .lede {
+        font-size: 1.12rem;
+        color: var(--muted);
+        max-width: 72ch;
+        margin-top: 0.9rem;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        margin-top: 1.1rem;
+        font-size: 0.86rem;
+        color: var(--faint);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 32px;
+        padding: 28px 16px 80px;
+      }
+      @media (min-width: 1000px) {
+        .layout {
+          grid-template-columns: 220px minmax(0, 1fr);
+          gap: 48px;
+        }
+        nav.toc {
+          position: sticky;
+          top: 20px;
+          align-self: start;
+          max-height: calc(100vh - 40px);
+          overflow: auto;
+        }
+      }
+      nav.toc {
+        font-size: 0.9rem;
+      }
+      nav.toc h2 {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 0.5rem;
+      }
+      nav.toc ol {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      nav.toc li {
+        margin: 0;
+      }
+      nav.toc a {
+        display: block;
+        padding: 4px 8px;
+        border-radius: 6px;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      nav.toc a:hover {
+        background: var(--sunken);
+      }
+      nav.toc a.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      nav.toc .sub a {
+        padding-left: 20px;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      @media (max-width: 999px) {
+        nav.toc {
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          padding: 12px;
+        }
+        nav.toc .sub {
+          display: none;
+        }
+      }
+
+      main {
+        min-width: 0;
+      }
+      main section {
+        margin-bottom: 56px;
+        scroll-margin-top: 16px;
+      }
+      .prose {
+        max-width: 78ch;
+      }
+
+      .callout {
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        margin: 0 0 1rem;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+      }
+      .callout.risk {
+        border-left-color: var(--risk);
+      }
+      .callout.ok {
+        border-left-color: var(--ok);
+      }
+      .callout > :last-child {
+        margin-bottom: 0;
+      }
+
+      .grid2 {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 760px) {
+        .grid2 {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        min-width: 0;
+      }
+      .card h3 {
+        margin-top: 0;
+      }
+      .card > :last-child {
+        margin-bottom: 0;
+      }
+
+      .chip {
+        display: inline-block;
+        font-size: 0.74rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        vertical-align: 1px;
+      }
+      .chip.mac {
+        background: var(--mac-soft);
+        color: var(--mac);
+      }
+      .chip.win {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .chip.ok {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+      .chip.warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .chip.risk {
+        background: var(--risk-soft);
+        color: var(--risk);
+      }
+      .chip.gate {
+        background: var(--ink);
+        color: var(--bg);
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        margin: 0 0 1rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        background: var(--sunken);
+        font-weight: 600;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        position: sticky;
+        top: 0;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      caption {
+        caption-side: top;
+        text-align: left;
+        padding: 10px 12px 0;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      /* flow of phases */
+      .flow {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 1fr;
+        margin: 0 0 1.2rem;
+        padding: 0;
+        list-style: none;
+      }
+      @media (min-width: 760px) {
+        .flow {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      @media (min-width: 1180px) {
+        .flow {
+          grid-template-columns: repeat(5, 1fr);
+        }
+      }
+      .flow li {
+        margin: 0;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+        font-size: 0.88rem;
+      }
+      .flow li strong {
+        display: block;
+        font-size: 0.95rem;
+      }
+      .flow li .chip {
+        margin-top: 6px;
+      }
+      .flow li.gate {
+        border-color: var(--ink);
+        border-width: 2px;
+      }
+
+      /* phase cards */
+      .phase {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 22px 22px 8px;
+        margin-bottom: 18px;
+        scroll-margin-top: 16px;
+      }
+      .phase.gate {
+        border: 2px solid var(--ink);
+      }
+      .phase-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 8px 12px;
+        margin-bottom: 0.4rem;
+      }
+      .phase-num {
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        color: var(--faint);
+      }
+      .phase-head h3 {
+        margin: 0;
+        font-size: 1.2rem;
+      }
+      .phase .goal {
+        color: var(--muted);
+        max-width: 80ch;
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 4px 18px;
+        font-size: 0.86rem;
+        margin: 0.6rem 0 0.4rem;
+        padding: 10px 12px;
+        background: var(--sunken);
+        border-radius: 8px;
+      }
+      @media (min-width: 760px) {
+        .facts {
+          grid-template-columns: max-content 1fr;
+        }
+      }
+      .facts dt {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .facts dd {
+        margin: 0;
+      }
+      .checks li::marker {
+        content: "✓  ";
+        color: var(--ok);
+      }
+      .cols {
+        display: grid;
+        gap: 0 28px;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 900px) {
+        .cols {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      /* hosting diagram */
+      .stack {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 1fr;
+        margin: 0.4rem 0 1rem;
+      }
+      @media (min-width: 860px) {
+        .stack {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      @media (min-width: 860px) {
+        .stack.single {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .stack figure {
+        margin: 0;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 14px;
+        min-width: 0;
+      }
+      .stack figcaption {
+        font-size: 0.86rem;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .layer {
+        border-radius: 7px;
+        padding: 7px 10px;
+        font-size: 0.82rem;
+        margin-top: 6px;
+        border: 1px dashed var(--line);
+        background: var(--sunken);
+      }
+      .layer.top {
+        background: var(--accent-soft);
+        border-style: solid;
+        border-color: transparent;
+        color: var(--ink);
+      }
+      .layer.chrome {
+        background: var(--ok-soft);
+        border-style: solid;
+        border-color: transparent;
+      }
+      .layer.win {
+        background: var(--sunken);
+      }
+      .layer b {
+        font-weight: 600;
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        margin: 0 0 10px;
+      }
+      details > summary {
+        cursor: pointer;
+        padding: 11px 14px;
+        font-weight: 600;
+        list-style-position: inside;
+      }
+      details[open] > summary {
+        border-bottom: 1px solid var(--line);
+      }
+      details > .inner {
+        padding: 4px 14px 6px;
+      }
+
+      .sources li {
+        overflow-wrap: anywhere;
+        font-size: 0.9rem;
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 20px 0 40px;
+        color: var(--faint);
+        font-size: 0.85rem;
+      }
+      .theme-toggle {
+        margin-left: auto;
+        font: inherit;
+        font-size: 0.82rem;
+        color: var(--muted);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 12px;
+        cursor: pointer;
+      }
+      @media print {
+        nav.toc,
+        .theme-toggle {
+          display: none;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        details {
+          border: 0;
+        }
+        details > summary {
+          list-style: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="top">
+      <div class="wrap">
+        <div class="eyebrow">Bay · Port plan · <span class="mono">feat/windows</span></div>
+        <h1>Bay for Windows</h1>
+        <p class="lede">
+          On Windows, Bay's UI is drawn by the engine itself. The React UI runs as a privileged Chrome page, each tab is an element inside that page, and one
+          compositor draws both, the same model Zen uses on Gecko. The engine is the one the Mac already runs: Chrome plus Bay's layer. This plan covers what
+          carries over, the architecture, the phases in order, and what was removed from the earlier React Native for Windows design.
+        </p>
+        <div class="meta">
+          <span>Drafted 8 Oct 2026 · Revised 17 Oct 2026</span>
+          <span>Engine: Chromium 154.0.8037.58 + NNCore</span>
+          <span>UI: React 19 · react-native-web · Reanimated 3.19 (web)</span>
+          <button class="theme-toggle" type="button" id="themeToggle" aria-label="Toggle colour theme">Theme</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap layout">
+      <nav class="toc" aria-label="Contents">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#summary">Summary</a></li>
+          <li><a href="#changed">What changed</a></li>
+          <li><a href="#scope">Scope</a></li>
+          <li><a href="#architecture">The architecture</a></li>
+          <li><a href="#inventory">What carries over</a></li>
+          <li><a href="#phases">Phases</a></li>
+          <li class="sub"><a href="#p0">0 · Groundwork on macOS</a></li>
+          <li class="sub"><a href="#p1">1 · Windows toolchain & engine</a></li>
+          <li class="sub"><a href="#p2">2 · Hosting spike (gate)</a></li>
+          <li class="sub"><a href="#p3">3 · Engine: NNCore on Windows</a></li>
+          <li class="sub"><a href="#p4">4 · UI on the web + bridge</a></li>
+          <li class="sub"><a href="#p5">5 · Windows shell & UX</a></li>
+          <li class="sub"><a href="#p6">6 · Data: import, sync, secrets</a></li>
+          <li class="sub"><a href="#p7">7 · Packaging, signing, updates</a></li>
+          <li class="sub"><a href="#p8">8 · Hardening & beta</a></li>
+          <li><a href="#modules">Native module map</a></li>
+          <li><a href="#engine">Engine file map</a></li>
+          <li><a href="#patches">Patch series map</a></li>
+          <li><a href="#risks">Risks</a></li>
+          <li><a href="#decisions">Decisions needed</a></li>
+          <li><a href="#sources">Sources</a></li>
+        </ol>
+      </nav>
+
+      <main id="main">
+        <div class="callout warn">
+          <p>
+            <strong>Revised 17 October 2026.</strong> The hosting decision moved from React Native for Windows to a web-rendered UI. The React Native for
+            Windows host, its native-module glue and its JavaScript animation engine have been removed from <span class="mono">feat/windows</span>; any of it
+            can be recovered from commit <span class="mono">f9e87f27</span>. The portable C++ (sync, import), the engine build and the packaging stay. See
+            <a href="#changed">What changed</a> and the <a href="windows-implementation-status.md">implementation status</a>.
+          </p>
+        </div>
+
+        <section id="summary" aria-labelledby="summary-h">
+          <h2 id="summary-h">Summary</h2>
+          <div class="prose">
+            <div class="callout ok">
+              <p>
+                <strong>Bay on Windows is Chrome with Bay's UI as its window.</strong> Bay's React UI is built with react-native-web and served as a Chrome
+                WebUI page (<code>chrome://bay</code>). Each tab is an <code>&lt;embed&gt;</code> in that page, backed by Chromium's
+                <strong>SurfaceEmbed</strong>. The window is a Views widget created through the same <code>BrowserWindow</code> hook the Mac's NNCore already
+                uses. Native calls travel over one Mojo interface carrying the JSON contracts Bay already generates.
+              </p>
+            </div>
+            <p>
+              <strong>Upstream is building the same thing.</strong> Chromium's <em>WebUI Browser</em> (feature <code>kWebium</code>,
+              <code>chrome/browser/ui/webui_browser</code>) renders a whole browser window as WebUI and hosts tab contents through
+              <code>components/surface_embed</code>. Both are in Bay's pinned tag, 154.0.8037.58, switched off by default, and under active development (about
+              100 commits to the window code since June 2026). Upstream's SurfaceEmbed render test runs on Windows and macOS; it is disabled only on Linux.
+            </p>
+            <p>
+              <strong>Why this beats the earlier design.</strong> React Native for Windows could not draw over web pages in one window (the airspace rule), so
+              the earlier plan's first open item was a host for overlays above Chrome's windows. Here overlays are ordinary DOM above an
+              <code>&lt;embed&gt;</code>. Bay keeps real Reanimated (its web path) instead of a custom animation engine, and Windows and Linux share one host.
+            </p>
+            <p>
+              <strong>What it costs.</strong> The UI has to reach parity under react-native-web, the 26 synchronous native calls become asynchronous, and Bay
+              depends on an upstream feature that is still experimental. Phase 2 is a short spike that tests every one of these on a Windows machine before the
+              main port.
+            </p>
+            <p>
+              <strong>Phase 0 still runs entirely on this Mac.</strong> Booting the UI on the web, splitting NNCore's <code>.mm</code> files and the async
+              bridge all happen here, and none of them change how the Mac app behaves.
+            </p>
+          </div>
+        </section>
+
+        <section id="changed" aria-labelledby="changed-h">
+          <h2 id="changed-h">What changed</h2>
+          <div class="table-wrap">
+            <table>
+              <caption>
+                Earlier plan (8 Oct) against this one
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col"></th>
+                  <th scope="col">Earlier: React Native for Windows</th>
+                  <th scope="col">Now: web-rendered UI</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>UI runtime</td>
+                  <td>React Native for Windows 0.81 Fabric, XAML composition</td>
+                  <td>react-native-web in a Chrome WebUI page, the same build Linux uses</td>
+                </tr>
+                <tr>
+                  <td>Tabs</td>
+                  <td>CEF child HWNDs placed at pane rects</td>
+                  <td><code>&lt;embed&gt;</code> elements backed by SurfaceEmbed, composited with the UI</td>
+                </tr>
+                <tr>
+                  <td>Overlays over pages</td>
+                  <td>Unsolved: needed owned popup windows (the earlier plan's open gate)</td>
+                  <td>DOM above the <code>&lt;embed&gt;</code>; translucency, and blur through CSS <code>backdrop-filter</code> to verify in Phase 2</td>
+                </tr>
+                <tr>
+                  <td>Engine</td>
+                  <td>CEF (<code>libcef.dll</code>) with a C ABI host</td>
+                  <td>Chrome (<code>chrome.dll</code>) with Bay's layer: NNCore, as on macOS</td>
+                </tr>
+                <tr>
+                  <td>Animation</td>
+                  <td>A custom JavaScript engine that re-rendered components every frame</td>
+                  <td>Reanimated's web support: styles written straight to the DOM</td>
+                </tr>
+                <tr>
+                  <td>Native bridge</td>
+                  <td>One TurboModule (<code>BayWindows</code>) with JSON envelopes</td>
+                  <td>One Mojo interface with the same JSON envelopes and contracts</td>
+                </tr>
+                <tr>
+                  <td>Shared with Linux</td>
+                  <td>Nothing above the engine</td>
+                  <td>The whole host; only the frame, backdrop and system integration differ</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="grid2">
+            <div class="card">
+              <h3>Removed from <span class="mono">feat/windows</span></h3>
+              <ul>
+                <li><code>apps/browser/windows/</code>: the React Native for Windows app project, its dispatcher and build script</li>
+                <li>
+                  Native-module glue: <code>packages/shell/windows/WindowsHost.cpp</code>, <code>packages/nncore/windows/</code>, <code>SyncModule</code>,
+                  <code>ImportModule</code>
+                </li>
+                <li>The <code>BayWindows</code> TurboModule spec and its codegen config</li>
+                <li>Every <code>.windows.ts(x)</code> platform file, including the motion engine and its runtime</li>
+                <li>The <code>react-native-windows</code> dependency, scripts, CI steps and licence notice</li>
+              </ul>
+              <p class="prose">
+                Worth porting from <span class="mono">f9e87f27</span> in Phase 4: the Segoe Fluent glyph table (<code>symbols.windows.ts</code>) and the view
+                fallbacks in <code>nativeViews.windows.tsx</code> and <code>shaders/src/index.windows.tsx</code>.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Kept</h3>
+              <ul>
+                <li>Portable C++: sync (<code>SyncCrypto</code>, <code>SyncVault</code>, wordlist, golden vectors) and import (readers, sessions, secrets)</li>
+                <li><code>@bay/platform</code>: capabilities, the Windows shortcut table, the JSON bridge envelopes, the generated contracts</li>
+                <li>Engine work: the series platform column, <code>chromium-bay-layer-win.patch</code>, Windows PiP and external-app files</li>
+                <li>
+                  The CEF host (<code>engine/nncore/src/bay/core/win</code>) and <code>scripts/windows/engine.py</code>, until Phase 3 replaces them with the
+                  Chrome build
+                </li>
+                <li>
+                  Packaging (<code>packaging/windows</code>, <code>package.ps1</code>, <code>smoke.ps1</code>) and the updater, to be pointed at the new binary
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="scope" aria-labelledby="scope-h">
+          <h2 id="scope-h">Scope</h2>
+          <div class="grid2">
+            <div class="card">
+              <h3>In scope for the first Windows release</h3>
+              <ul>
+                <li>
+                  Everything in the sidebar and tabs model: spaces, pinned and split panes, command panel, find bar, peek, Little Bay, downloads, settings,
+                  developer bar and inspector
+                </li>
+                <li>
+                  Chrome features through the engine: extensions and the Web Store, passwords and autofill, permissions, PiP, casting, DevTools, site settings,
+                  history, bookmarks
+                </li>
+                <li>Content blocker, favicons, zoom, spaces and profiles</li>
+                <li>Importing from Chrome, Edge, Brave, Vivaldi, Opera, Firefox and Arc for Windows</li>
+                <li>Encrypted folder sync, readable by the Mac app and the Windows app</li>
+                <li>Installer, auto-update, code signing, default-browser registration</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Out of scope (macOS-only)</h3>
+              <ul>
+                <li>Liquid Glass and <code>NSVisualEffectView</code> vibrancy, replaced by Mica behind a translucent UI where it fits</li>
+                <li>Metal shaders (area light, edge light, power-up, the grained backdrop); WebGL versions are possible later</li>
+                <li>Dock tile, Dock selection, alternate app icons</li>
+                <li>AppleScript, Handoff, Apple Translation, Touch Bar, iCloud Keychain passkeys</li>
+                <li>Importing from Safari and Dia, which uses Apple Events</li>
+                <li>Calendar via EventKit (can return later through Windows APIs)</li>
+              </ul>
+            </div>
+          </div>
+          <h3>macOS feature → Windows decision</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">macOS feature</th>
+                  <th scope="col">Windows</th>
+                  <th scope="col">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Liquid Glass / vibrancy surfaces</td>
+                  <td>
+                    Mica or Mica Alt through <code>DWMWA_SYSTEMBACKDROP_TYPE</code> behind a transparent UI page; CSS translucency inside the page; solid
+                    surfaces on Windows 10
+                  </td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Metal shaders</td>
+                  <td>Static fallbacks; WebGL ports later if wanted</td>
+                  <td><span class="chip risk">Drop</span> for now</td>
+                </tr>
+                <tr>
+                  <td>SF Symbols (<code>BaySymbol</code>)</td>
+                  <td>Segoe Fluent Icons through CSS, reusing the glyph table; bundled SVGs for glyphs Fluent lacks</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Global menu bar (<code>Menus.swift</code>)</td>
+                  <td>An app menu drawn by the UI, the same shortcuts on Ctrl, native context menus through Views</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Traffic lights</td>
+                  <td>
+                    Caption buttons drawn by the UI; the maximize button answers <code>WM_NCHITTEST</code> with <code>HTMAXBUTTON</code> so Snap Layouts works
+                  </td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Sparkle updates</td>
+                  <td>The existing Windows updater script (signed metadata, checksums, publisher check), wired to the app</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Keychain (<code>BayKeychain</code>)</td>
+                  <td>Credential Manager or DPAPI, called from the Bay layer</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>UserNotifications</td>
+                  <td>Chrome's Windows notification bridge (toasts with an AUMID)</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Launch at login, default browser</td>
+                  <td><code>HKCU\…\Run</code>; ProgID and Capabilities registration, then <code>ms-settings:defaultapps</code></td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Trackpad swipe (<code>NNSwipe</code>)</td>
+                  <td>Chrome's overscroll history navigation on precision touchpads</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Dock tile, AppleScript, Handoff, Translate, Calendar</td>
+                  <td>Taskbar jump list and badge later; the rest —</td>
+                  <td><span class="chip risk">Drop</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="architecture" aria-labelledby="architecture-h">
+          <h2 id="architecture-h">The architecture</h2>
+          <div class="stack single">
+            <figure>
+              <div class="layer win">
+                <b>Window</b> · <code>BayWebUIBrowserWindow</code>: a Views widget with Bay's frame (drag regions, caption hit tests, Mica)
+              </div>
+              <div class="layer top"><b>UI</b> · <code>chrome://bay</code>: Bay's React UI on react-native-web, Reanimated on web, overlays as DOM</div>
+              <div class="layer chrome">
+                <b>Tabs</b> · <code>&lt;embed type="application/x-chromium-surface-embed"&gt;</code> per pane, one Chrome WebContents each
+              </div>
+              <div class="layer win"><b>Bridge</b> · one Mojo interface: <code>Invoke(module, method, json)</code> and an event stream</div>
+              <div class="layer chrome"><b>Engine</b> · Chrome + NNCore: Bay's tab strips, profiles and services; sync and import C++ in the Bay layer</div>
+              <figcaption>
+                One process tree and one compositor. The UI page and each tab render in their own renderer processes; the tab's output is a layer inside the UI
+                page's compositor tree, so the UI can draw above, beside and over it. No scripting crosses between the UI and a page.
+              </figcaption>
+            </figure>
+          </div>
+          <div class="prose">
+            <h3>The window</h3>
+            <p>
+              Chrome creates browser windows through <code>BrowserWindow::CreateBrowserWindow</code>. With <code>kWebium</code> on, it returns a
+              <code>WebUIBrowserWindow</code>: a <code>views::Widget</code> whose client view is a <code>views::WebView</code> loading the WebUI. Its client
+              view turns CSS <code>app-region: drag</code> areas into <code>HTCAPTION</code>, and permission prompts anchor to elements the WebUI reports.
+              NNCore already replaces window creation on macOS (<code>g_bay_browser_window_factory</code> in <code>browser.cc</code>, creating
+              <code>NNBrowserWindow</code>). On Windows the same hook creates <code>BayWebUIBrowserWindow</code>, modelled on upstream's window but loading
+              <code>chrome://bay</code>. Upstream keeps the standard Windows frame, so Bay adds its own frame view: caption buttons drawn by the UI, the
+              maximize button reported as <code>HTMAXBUTTON</code>, and resize borders.
+            </p>
+            <h3>The UI</h3>
+            <p>
+              The React tree in <code>apps/browser/src</code> builds for the web with Metro (Expo 54) and is served by a <code>WebUIDataSource</code>. The data
+              source sets the CSP: <code>object-src 'self'</code> for the embeds, a policy for react-native-web's injected styles, and Trusted Types
+              (<code>OverrideContentSecurityPolicy</code>, or <code>DisableTrustedTypesCSP</code> while the bundle needs it). React Native's platform props map
+              to the DOM in <code>@bay/platform</code>'s <code>.web.tsx</code> wrappers: hover to pointer events, tooltips to <code>title</code>, the focus ring
+              to <code>:focus-visible</code>, window dragging to <code>app-region: drag</code>.
+            </p>
+            <h3>The tabs</h3>
+            <p>
+              SurfaceEmbed embeds an independent WebContents in a WebUI through a <code>blink::WebPlugin</code>. The browser owns the tab's WebContents, so a
+              tab can be detached and re-attached to another window without reloading, which is how NNCore already treats tabs (transfer and adoption). The UI
+              asks the engine for a tab's <code>SurfaceEmbedHandle</code> id and renders <code>&lt;embed data-content-id&gt;</code>. Input, focus and Tab
+              traversal, accessibility tree stitching, hit testing and visibility are in M154. The fix that stops forcing the surface opaque, pinch zoom and
+              occlusion landed after it and come in as backports.
+            </p>
+            <h3>The bridge</h3>
+            <p>
+              The earlier Windows bridge already reduced every native module to <code>invoke(module, method, argsJSON)</code> plus events, with contracts
+              generated from the TypeScript facades. That shape moves to Mojo unchanged: a <code>bay.mojom.NativeHost</code> interface bound only for
+              <code>chrome://bay</code>, dispatching to NNCore's JSON engine calls (<code>NN_ENGINE_CALL</code>) and to Windows services. Mojo's sync methods
+              are only synchronous when called from C++, so from the UI page every call is async: the 26 sync methods become async, a snapshot, or optional.
+            </p>
+            <h3>The engine</h3>
+            <p>
+              NNCore is Chrome plus Bay's layer; it runs no CEF at runtime. About 9.2k of its 10.1k <code>.mm</code> lines are Chrome C++ with less than 10%
+              Objective-C, so Phase 0 splits them into portable <code>.cc</code> and small <code>_mac.mm</code> files, and Windows builds the same engine.
+              <code>chromium-bay-layer-win.patch</code> already links Bay's layer into <code>chrome.dll</code>. The Windows build target changes from
+              <code>libcef</code> to <code>chrome</code>, which is how ungoogled-chromium-windows and Helium build.
+            </p>
+          </div>
+          <h3>Fallbacks</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">If Phase 2 finds</th>
+                  <th scope="col">Then</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>SurfaceEmbed fails on Windows (input, IME or painting)</td>
+                  <td>
+                    Use upstream's other path in the same window, <code>GuestContents</code> through an <code>iframe</code> (<code>webview.html.ts</code>
+                    switches on <code>enableSurfaceEmbed</code>), or the Linux plan's L‑A: tab BrowserViews under a transparent overlay view with a masked hit
+                    test
+                  </td>
+                </tr>
+                <tr>
+                  <td>The UI can't keep 60 fps</td>
+                  <td>Profile first (compiler output, layout thrash, Reanimated's web path); move hot animations to CSS transitions</td>
+                </tr>
+                <tr>
+                  <td>Blur over pages doesn't work</td>
+                  <td>Translucent panels without blur, as Zen ships on Linux; or a Views layer background blur under the panel rects</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="prose">
+            <strong>Why not CEF for this.</strong> A WebUI browser window and SurfaceEmbed live at Chrome's <code>BrowserWindow</code> and tab-strip layer.
+            CEF's Chrome style wraps that layer in its own browser view and hides the WebContents. Bay already maintains a Chrome-level engine for macOS, so
+            using it on Windows removes a second engine instead of adding a third layer.
+          </p>
+        </section>
+
+        <section id="inventory" aria-labelledby="inventory-h">
+          <h2 id="inventory-h">What carries over</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Area</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">On Windows</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>UI TypeScript (<code>apps/browser/src</code>)</td>
+                  <td class="num">~46k lines</td>
+                  <td><span class="chip ok">Reuse</span> through react-native-web; fixes go in <code>@bay/platform</code> wrappers, not components</td>
+                </tr>
+                <tr>
+                  <td><code>@bay/core</code>, package TypeScript APIs, stores, tests</td>
+                  <td class="num">~6k lines</td>
+                  <td><span class="chip ok">Reuse</span></td>
+                </tr>
+                <tr>
+                  <td><code>@bay/platform</code> (capabilities, shortcuts, contracts, JSON bridge)</td>
+                  <td class="num">~3k lines</td>
+                  <td><span class="chip ok">Reuse</span>; add a web OS layer and a Mojo transport</td>
+                </tr>
+                <tr>
+                  <td>NNCore engine (<code>engine/nncore</code>)</td>
+                  <td class="num">~10k lines .mm</td>
+                  <td><span class="chip warn">Split</span> ~9.2k into portable <code>.cc</code>; ~0.9k stays macOS-only</td>
+                </tr>
+                <tr>
+                  <td>Chrome-side services (<code>engine/chromium/src/chrome/browser/bay</code>)</td>
+                  <td class="num">~7.8k lines</td>
+                  <td><span class="chip ok">Reuse</span>; Windows files for downloads, external apps and PiP exist</td>
+                </tr>
+                <tr>
+                  <td>Sync and import C++ (<code>packages/sync/windows</code>, <code>packages/import/windows</code>)</td>
+                  <td class="num">~2.4k lines</td>
+                  <td><span class="chip ok">Reuse</span>, compiled into the Bay layer instead of a React Native module</td>
+                </tr>
+                <tr>
+                  <td>NNCore's Objective‑C API (<code>nncore_api.mm</code>) and the RN macOS host modules</td>
+                  <td class="num">~2.7k + ~24k lines</td>
+                  <td><span class="chip risk">macOS-only</span>; Windows gets the Mojo dispatcher instead</td>
+                </tr>
+                <tr>
+                  <td>Patch series</td>
+                  <td class="num">48 patches</td>
+                  <td><span class="chip ok">Mostly reuse</span>; see the <a href="#patches">patch map</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="phases" aria-labelledby="phases-h">
+          <h2 id="phases-h">Phases</h2>
+          <ol class="flow" aria-label="Phase order">
+            <li><strong>0 · Groundwork</strong>Web boot, async bridge, .mm split<br /><span class="chip mac">Mac</span></li>
+            <li><strong>1 · Toolchain & engine</strong>Chrome target on Windows<br /><span class="chip win">Windows</span></li>
+            <li class="gate"><strong>2 · Hosting spike</strong>WebUI + SurfaceEmbed<br /><span class="chip gate">Gate</span></li>
+            <li><strong>3 · Engine</strong>NNCore on Windows<br /><span class="chip win">Windows</span></li>
+            <li><strong>4 · UI + bridge</strong>Web wrappers, Mojo<br /><span class="chip mac">Mostly Mac</span></li>
+            <li><strong>5 · Shell & UX</strong>Frame, Mica, menus<br /><span class="chip win">Windows</span></li>
+            <li><strong>6 · Data</strong>Import, sync, secrets<br /><span class="chip win">Windows</span></li>
+            <li><strong>7 · Packaging</strong>Installer, signing<br /><span class="chip win">Windows</span></li>
+            <li><strong>8 · Hardening</strong>Matrix, beta<br /><span class="chip win">Windows</span></li>
+          </ol>
+
+          <!-- Phase 0 -->
+          <article class="phase" id="p0" aria-labelledby="p0-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 0</span>
+              <h3 id="p0-h">Groundwork on macOS</h3>
+              <span class="chip mac">Runs on this Mac, shared with Linux</span>
+            </div>
+            <p class="goal">Leave the codebase ready for a web-hosted UI without changing the Mac app.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Nothing</dd>
+            </dl>
+            <ul>
+              <li>
+                <strong>Boot the UI on the web.</strong> Build <code>apps/browser</code> for the web with Metro (Expo 54) and open it in desktop Chrome against
+                stub native modules. List every react-native-web gap: layout, text, macOS-only props, Reanimated's web path.
+              </li>
+              <li>
+                <strong>Web wrappers.</strong> <code>.web.tsx</code> versions of the <code>@bay/platform</code> views: hover → pointer events,
+                <code>tooltip</code> → <code>title</code>, focus ring → <code>:focus-visible</code>, <code>draggedTypes</code> → HTML5 drag,
+                <code>mouseDownCanMoveWindow</code> → <code>app-region: drag</code>.
+              </li>
+              <li>
+                <strong>Platform identity.</strong> On the web <code>Platform.OS</code> is <code>"web"</code>. The host passes the real OS in its constants, and
+                <code>@bay/platform</code> maps it to <code>windows</code> or <code>linux</code> for <code>capabilitiesFor</code> and the shortcut tables.
+              </li>
+              <li>
+                <strong>No sync calls.</strong> Convert the 26 synchronous native methods to async, snapshots pushed by the host, or optional. This also
+                simplifies the Mac bridge.
+              </li>
+              <li>
+                <strong>Transport-agnostic bridge.</strong> Keep the <code>{value}</code>/<code>{error}</code> envelopes and generated contracts; put a
+                transport interface under them so a Mojo transport can replace the TurboModule one.
+              </li>
+              <li>
+                <strong>Split NNCore.</strong> Move the Chrome logic of each <code>.mm</code> into a <code>.cc</code> and keep AppKit in a small
+                <code>_mac.mm</code>, starting with <code>nn_browser</code>, <code>nn_browser_window</code>, <code>nn_tab_info</code> and the prompts.
+              </li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The full UI renders in desktop Chrome on the Mac against stubs, with every gap triaged.</li>
+              <li>No synchronous native call remains in the contracts.</li>
+              <li>The Mac app builds and passes its acceptance scripts after the NNCore split.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 1 -->
+          <article class="phase" id="p1" aria-labelledby="p1-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 1</span>
+              <h3 id="p1-h">Windows toolchain & engine build</h3>
+              <span class="chip win">Needs a Windows machine</span>
+            </div>
+            <p class="goal">Build Chrome from Bay's pinned tree on Windows x64, with Bay's patches and layer, and run upstream's WebUI browser on it.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>The series platform column (done); Phase 0 is helpful, not blocking</dd>
+              <dt>Machine</dt>
+              <dd>Windows 11 x64; at least 100 GB free on an NTFS SSD; 32–64 GB RAM is realistic; as many cores as possible. A cloud VM works.</dd>
+              <dt>Toolchain</dt>
+              <dd>
+                The Visual Studio and Windows SDK named by Chromium 154's <code>windows_build_instructions.md</code>, with "Desktop development with C++" and
+                MFC/ATL; Python 3, Git, depot_tools; long paths enabled.
+              </dd>
+            </dl>
+            <ul>
+              <li>
+                Run the existing download and patch steps (<code>scripts/windows/engine.py</code>), then build the <code>chrome</code> target instead of
+                <code>libcef</code>. <a href="https://github.com/ungoogled-software/ungoogled-chromium-windows">ungoogled-chromium-windows</a> and
+                <a href="https://github.com/imputnet/helium-windows">helium-windows</a> are the references for an ungoogled Chrome build on Windows.
+              </li>
+              <li>Keep the Bay branding and GN args; drop the CEF-only args when the target switches.</li>
+              <li>
+                Launch with <code>--enable-features=Webium,SurfaceEmbed</code> and check upstream's <code>chrome://webui-browser</code>: tabs render in
+                <code>&lt;embed&gt;</code>, typing, IME and Narrator reach the page.
+              </li>
+              <li>Archive the build output (binaries, resources, PDBs) so app builds download it rather than rebuild.</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The patched Chrome builds reproducibly from a clean checkout with one documented command.</li>
+              <li>Upstream's WebUI browser runs on it with SurfaceEmbed tabs.</li>
+              <li>Engine artifacts are archived and versioned.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 2 -->
+          <article class="phase gate" id="p2" aria-labelledby="p2-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 2</span>
+              <h3 id="p2-h">Hosting spike</h3>
+              <span class="chip gate">Go / no-go gate</span>
+              <span class="chip win">Windows</span>
+            </div>
+            <p class="goal">A throwaway build that proves the architecture before the main port. The output is a short decision record.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 1</dd>
+              <dt>Setup</dt>
+              <dd>
+                Upstream's <code>WebUIBrowserWindow</code> pointed at a small <code>chrome://bay</code> page: a react-native-web sidebar, two tab embeds, a
+                translucent overlay panel, a minimal Mojo bridge
+              </dd>
+            </dl>
+            <div class="table-wrap">
+              <table>
+                <caption>
+                  Run on Windows 11 at 100% and 150%, and once on Windows 10.
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Test</th>
+                    <th scope="col">Passes when</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Overlay</td>
+                    <td>A rounded, translucent panel draws over a playing video with no flicker while the window moves and resizes</td>
+                  </tr>
+                  <tr>
+                    <td>Blur over pages</td>
+                    <td>CSS <code>backdrop-filter</code> on the panel blurs the page and video behind it at 60 fps, or the failure is recorded</td>
+                  </tr>
+                  <tr>
+                    <td>Input</td>
+                    <td>Clicks, wheel, hover, text selection and drag reach the page around the panel; drag-and-drop works between the UI and a page</td>
+                  </tr>
+                  <tr>
+                    <td>Keyboard & focus</td>
+                    <td>Ctrl shortcuts reach the UI while a page has focus; page shortcuts still work; F6 cycles sidebar → address → page</td>
+                  </tr>
+                  <tr>
+                    <td>IME</td>
+                    <td>Microsoft IME for Japanese and Chinese in a page field and a UI field (TSF), with the candidate window placed correctly</td>
+                  </tr>
+                  <tr>
+                    <td>Accessibility</td>
+                    <td>Narrator and NVDA read the UI, then the page, in order; UI Automation sees one tree</td>
+                  </tr>
+                  <tr>
+                    <td>Frame</td>
+                    <td>Dragging, resize edges, double-click maximize, Aero Snap and Snap Layouts from the UI's maximize button; mixed-DPI monitors</td>
+                  </tr>
+                  <tr>
+                    <td>Backdrop</td>
+                    <td>Mica shows through a transparent UI background with readable text, and active/inactive states update</td>
+                  </tr>
+                  <tr>
+                    <td>Motion</td>
+                    <td>Sidebar and peek animations hold 60 fps with three panes loading, using Reanimated on web</td>
+                  </tr>
+                  <tr>
+                    <td>Bridge</td>
+                    <td>p95 Mojo round trip under 2 ms; 60 Hz tab events cause no UI jank; tabs cannot reach the bridge</td>
+                  </tr>
+                  <tr>
+                    <td>Tabs</td>
+                    <td>A tab moves to a new window without reloading; fullscreen, PiP and DevTools work for an embedded tab</td>
+                  </tr>
+                  <tr>
+                    <td>Cost</td>
+                    <td>The UI renderer's memory and cold start are measured and acceptable next to the Mac app's</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <h4>Outcomes</h4>
+            <ul>
+              <li><strong>All pass:</strong> proceed to Phases 3 and 4.</li>
+              <li>
+                <strong>SurfaceEmbed fails:</strong> try the <code>GuestContents</code> path, then the L‑A fallback; see <a href="#architecture">Fallbacks</a>.
+              </li>
+              <li><strong>Performance fails:</strong> profile before changing the architecture.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 3 -->
+          <article class="phase" id="p3" aria-labelledby="p3-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 3</span>
+              <h3 id="p3-h">Engine: NNCore on Windows</h3>
+              <span class="chip win">Windows</span>
+            </div>
+            <p class="goal">Bay's engine runs on Windows with its own window, WebUI and tab strips, and the CEF host is retired.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phases 0 (NNCore split) and 2</dd>
+            </dl>
+            <ul>
+              <li>
+                <code>//bay/core</code> builds into <code>chrome.dll</code> on Windows; <code>NNMainDelegate</code> and the NNCore hooks apply on Windows.
+              </li>
+              <li>
+                <code>BayWebUIBrowserWindow</code>: a <code>BrowserWindow</code> modelled on upstream's, reusing its modal dialog host, exclusive access
+                (fullscreen), find bar owner and side panel pieces from <code>chrome/browser/ui/webui_browser</code>.
+              </li>
+              <li>
+                <code>chrome://bay</code>: a <code>WebUIController</code> with its data source and CSP, the SurfaceEmbed binder and plugin allowlist for Bay's
+                URL, and the <code>bay.mojom.NativeHost</code> receiver.
+              </li>
+              <li>Tab strips, transfer and adoption from <code>nn_browser</code>, with each tab exposing a <code>SurfaceEmbedHandle</code> id.</li>
+              <li>The engine calls (<code>NN_ENGINE_CALL</code>) behind the Mojo dispatcher, checked against the generated contracts.</li>
+              <li>
+                Retire the CEF host: <code>engine/nncore/src/bay/core/win</code>, the CEF targets in <code>engine.py</code>, and the CEF-only patches on
+                Windows.
+              </li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The Windows build opens Bay's window with real tabs, extensions, passwords and DevTools, and no CEF binaries ship.</li>
+              <li>The Mac app still builds and passes its acceptance scripts.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 4 -->
+          <article class="phase" id="p4" aria-labelledby="p4-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 4</span>
+              <h3 id="p4-h">UI on the web + native bridge</h3>
+              <span class="chip mac">JS parts on Mac</span>
+              <span class="chip win">Integration on Windows</span>
+            </div>
+            <p class="goal">The whole Bay UI runs in <code>chrome://bay</code> with every native module answered.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phases 0 and 3</dd>
+            </dl>
+            <ul>
+              <li>The Mojo transport in <code>@bay/platform</code>; contract tests run against it.</li>
+              <li><code>BayCEF</code> becomes an <code>&lt;embed&gt;</code> component with the same props and handle as today's web view.</li>
+              <li>
+                Native views on the web: <code>BaySymbol</code> through Segoe Fluent Icons (port the glyph table), <code>BayVisualEffect</code> and
+                <code>BaySurface</code> through CSS, <code>BayFadeLabel</code> through a CSS mask, <code>BayContextMenuArea</code> through native Views menus
+                over Mojo, <code>BayFileDrag</code> through HTML5 drag.
+              </li>
+              <li>Each module in the <a href="#modules">module map</a> answered by the Bay layer, Chrome's own services, or marked optional.</li>
+              <li>Ship the web bundle in the build's resources; production CSP with no remote origins.</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>Every Mac acceptance flow has a passing Windows run: spaces, splits, peek, command panel, downloads, settings.</li>
+              <li>Screenshot diffs against the Mac show no unintended layout changes.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 5 -->
+          <article class="phase" id="p5" aria-labelledby="p5-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 5</span>
+              <h3 id="p5-h">Windows shell & UX</h3>
+              <span class="chip win">Windows</span>
+            </div>
+            <p class="goal">Bay feels at home on Windows 11.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 4</dd>
+            </dl>
+            <ul>
+              <li>
+                <strong>Frame:</strong> caption buttons drawn by the UI; the frame view returns <code>HTMAXBUTTON</code> over the maximize button's rect, which
+                the UI reports like a drag region, so Snap Layouts appears. Minimum width of at most 500 epx so windows snap to every zone.
+              </li>
+              <li>
+                <strong>Backdrop:</strong> Mica or Mica Alt on Windows 11 22621+, a solid theme colour on Windows 10; follows the accent colour and dark mode.
+              </li>
+              <li><strong>Menus and shortcuts:</strong> an app menu in the UI; Ctrl shortcuts from the Windows shortcut table, including user remapping.</li>
+              <li><strong>System:</strong> notifications with an AUMID, jump list, default-browser and launch-at-login settings, touch and pen.</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>Snap Layouts, Aero Snap and multi-monitor DPI changes work from Bay's own caption.</li>
+              <li>A Windows user can find every Mac menu command through the app menu or the command panel.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 6 -->
+          <article class="phase" id="p6" aria-labelledby="p6-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 6</span>
+              <h3 id="p6-h">Data: import, sync, secrets</h3>
+              <span class="chip mac">Parsers & vectors on Mac</span>
+              <span class="chip win">Integration on Windows</span>
+            </div>
+            <p class="goal">A user moving from Chrome, Edge or Arc on Windows lands in Bay with their data, and a Mac user's sync folder opens on Windows.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 4 for integration; the C++ already exists and has tests</dd>
+            </dl>
+            <ul>
+              <li>
+                Compile <code>packages/sync/windows</code> and <code>packages/import/windows</code> into the Bay layer and expose them as
+                <code>BaySync</code> and <code>BayImport</code> on the Mojo bridge. Long work runs off the UI thread, and imported cookie and card values stay
+                in the browser process.
+              </li>
+              <li>
+                <strong>Crypto:</strong> keep CNG on Windows, or move the sync crypto to the BoringSSL already in Chrome so Windows and Linux share one backend.
+                The golden vectors decide either way.
+              </li>
+              <li>
+                <strong>Chromium secrets:</strong> older <code>v10</code> data is DPAPI-protected and importable with consent. App-bound encryption (Chrome
+                127+) ties cookies to Chrome's own service; Bay does not work around it and guides users through Chrome's password export instead.
+              </li>
+              <li>Folder sync with OneDrive placeholders, Dropbox and SMB shares; the key store in Credential Manager or DPAPI.</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The import fixtures give identical results on Windows.</li>
+              <li>A vault written on the Mac opens on Windows and the other way round.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 7 -->
+          <article class="phase" id="p7" aria-labelledby="p7-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 7</span>
+              <h3 id="p7-h">Packaging, signing, updates</h3>
+              <span class="chip win">Windows + CI</span>
+            </div>
+            <p class="goal">A signed per-user install that updates itself, without SmartScreen warnings.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 4 (an app to ship); signing can be set up any time</dd>
+            </dl>
+            <ul>
+              <li>
+                <strong>Installer:</strong> the existing Inno Setup script (<code>packaging/windows/Bay.iss</code>), per-user under <code>%LOCALAPPDATA%</code>,
+                staging the Chrome build instead of the React Native app.
+              </li>
+              <li>
+                <strong>Registration:</strong> <code>RegisteredApplications</code>, <code>StartMenuInternet\Bay\Capabilities</code>, ProgIDs, AUMID, native
+                messaging host keys.
+              </li>
+              <li>
+                <strong>Updates:</strong> wire <code>packaging/windows/update.ps1</code>'s verified flow (HTTPS metadata, checksums, signed installer and
+                publisher) into the app, with a prerelease channel.
+              </li>
+              <li>
+                <strong>Signing:</strong> Azure Artifact Signing or an OV/EV certificate; sign every PE file and the installer. Crashpad minidumps with archived
+                PDBs.
+              </li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>A clean Windows 11 VM installs, launches, sets Bay as default through Settings, updates and uninstalls cleanly.</li>
+              <li>SmartScreen shows no unknown-publisher warning for a signed build.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 8 -->
+          <article class="phase" id="p8" aria-labelledby="p8-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 8</span>
+              <h3 id="p8-h">Hardening & beta</h3>
+              <span class="chip win">Windows + VMs</span>
+            </div>
+            <p class="goal">Quality on par with the Mac app, then a limited beta.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phases 5–7</dd>
+            </dl>
+            <ul>
+              <li>Accessibility with Narrator and NVDA across the UI and pages; keyboard-only use; high contrast.</li>
+              <li>Displays: mixed DPI, 4K at 150–200%, HDR video.</li>
+              <li>GPUs: Intel, AMD, NVIDIA; DirectComposition and transparency quirks; Windows on Arm, then a native arm64 build.</li>
+              <li>Performance: cold start, memory with 50 tabs, resize and animation frame times against the Mac's numbers.</li>
+              <li>CI: JS checks and the portable native tests on every PR (already running); app builds from archived engine artifacts.</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>Every Mac test script has a Windows run in CI.</li>
+              <li>No known crash in the beta channel for one release cycle.</li>
+            </ul>
+          </article>
+        </section>
+
+        <section id="modules" aria-labelledby="modules-h">
+          <h2 id="modules-h">Native module map</h2>
+          <p class="prose">
+            From the generated contracts: 15 modules and 17 views. "Bay layer" means C++ in the browser process behind the Mojo bridge; "Chrome" means an
+            existing Chrome service called from it.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Module</th>
+                  <th scope="col">Methods (sync)</th>
+                  <th scope="col">On Windows</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>BayCEF</code> (tabs, web view)</td>
+                  <td class="num">62 (2)</td>
+                  <td>NNCore tab strips in the Bay layer; the view becomes an <code>&lt;embed&gt;</code></td>
+                </tr>
+                <tr>
+                  <td><code>BayShell</code> (windows, menus, clipboard, dialogs)</td>
+                  <td class="num">33 (6)</td>
+                  <td>Bay layer over Chrome: <code>views::MenuRunner</code>, <code>ui::Clipboard</code>, <code>ui::SelectFileDialog</code>, window state</td>
+                </tr>
+                <tr>
+                  <td><code>BayApp</code> (lifecycle, default browser, login item)</td>
+                  <td class="num">34 (2)</td>
+                  <td>Bay layer: registry, <code>ms-settings:defaultapps</code>, notifications through Chrome's Windows bridge</td>
+                </tr>
+                <tr>
+                  <td><code>BaySystem</code> (file icons, drag, sharing)</td>
+                  <td class="num">16 (3)</td>
+                  <td>Bay layer: shell icons, HTML5 drag out, Windows share</td>
+                </tr>
+                <tr>
+                  <td><code>BayChromeUI</code>, <code>BayExtensions</code></td>
+                  <td class="num">15, 10</td>
+                  <td>Bay layer over Chrome's extension and UI services, as on macOS</td>
+                </tr>
+                <tr>
+                  <td><code>BaySync</code>, <code>BayImport</code></td>
+                  <td class="num">25 (2), 23 (5)</td>
+                  <td>The existing C++, compiled into the Bay layer</td>
+                </tr>
+                <tr>
+                  <td><code>BayKeychain</code></td>
+                  <td class="num">3</td>
+                  <td>Credential Manager or DPAPI</td>
+                </tr>
+                <tr>
+                  <td><code>BaySwipe</code></td>
+                  <td class="num">7 (2)</td>
+                  <td>Chrome's touchpad overscroll navigation; pager calls optional</td>
+                </tr>
+                <tr>
+                  <td><code>BayInlineCompletion</code></td>
+                  <td class="num">1</td>
+                  <td>In the UI, on the DOM input</td>
+                </tr>
+                <tr>
+                  <td><code>BayGlassEffect</code>, <code>BayDockSelection</code>, <code>BayTranslate</code>, <code>BayCalendar</code></td>
+                  <td class="num">1, 1, 8, 4</td>
+                  <td>Not implemented: capability off, UI falls back</td>
+                </tr>
+                <tr>
+                  <td>
+                    Views: <code>BaySymbol</code>, <code>BayVisualEffect</code>, <code>BaySurface</code>, <code>BayFadeLabel</code>,
+                    <code>BayActivitySpinner</code>, <code>BayContextMenuArea</code>, <code>BayFileDrag</code>, <code>BayShell</code>,
+                    <code>BayWindowProfile</code>
+                  </td>
+                  <td class="num">—</td>
+                  <td>Web components in <code>@bay/shell</code>'s <code>.web.tsx</code> files</td>
+                </tr>
+                <tr>
+                  <td>
+                    Views: <code>BayAreaLight</code>, <code>BayEdgeLight</code>, <code>BayPowerUp</code>, <code>BayWindowBackdrop</code>,
+                    <code>BayGlassEffect</code>, <code>BayDockSelection</code>, <code>BaySwipe</code>
+                  </td>
+                  <td class="num">—</td>
+                  <td>Static fallbacks; WebGL later if wanted</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="engine" aria-labelledby="engine-h">
+          <h2 id="engine-h">Engine file map</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Files</th>
+                  <th scope="col">Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code>nn_browser</code>, <code>nn_browser_window</code>, <code>nn_tab_info</code>, <code>nn_permissions</code>,
+                    <code>nn_page_channel</code>, <code>nn_context_menu</code>, prompts and choosers (under 10% Objective‑C each)
+                  </td>
+                  <td><span class="chip ok">Split</span> into <code>.cc</code> plus a small <code>_mac.mm</code>; build on Windows</td>
+                </tr>
+                <tr>
+                  <td><code>nn_lifetime</code>, <code>nn_external_apps</code>, <code>nn_password_prompt</code>, <code>nn_picture_in_picture</code></td>
+                  <td><span class="chip warn">Per-platform</span>: Windows versions exist for external apps and PiP</td>
+                </tr>
+                <tr>
+                  <td><code>nncore_api.mm</code> (Objective‑C API for the RN macOS host)</td>
+                  <td><span class="chip risk">macOS-only</span>; Windows uses the Mojo dispatcher</td>
+                </tr>
+                <tr>
+                  <td>
+                    New: <code>bay_webui_browser_window</code>, <code>bay_frame_view_win</code>, <code>bay_ui</code> (WebUI controller),
+                    <code>bay_native_host</code> (Mojo)
+                  </td>
+                  <td><span class="chip ok">Add</span> in Phase 3</td>
+                </tr>
+                <tr>
+                  <td><code>engine/nncore/src/bay/core/win/</code> (CEF C ABI host and subprocess)</td>
+                  <td><span class="chip risk">Retire</span> once the Chrome build runs</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="patches" aria-labelledby="patches-h">
+          <h2 id="patches-h">Patch series map</h2>
+          <div class="grid2">
+            <div class="card">
+              <h3>Keep <span class="chip ok">all</span></h3>
+              <p>
+                The Chromium-side patches marked <code>all</code> (autofill, extensions, passwords, PiP, branding, tab-strip hooks) and
+                <code>chromium-bay-layer-win.patch</code>. The NNCore hooks from <code>engine/nncore/apply.sh</code> move into a cross-platform
+                <code>apply.py</code> step.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Add <span class="chip win">Windows + Linux</span></h3>
+              <ul>
+                <li><code>chromium-bay-webui-window</code>: Bay's window factory and the <code>chrome://bay</code> registration</li>
+                <li><code>chromium-surface-embed-bay</code>: the SurfaceEmbed binder and plugin allowlist for Bay's URL</li>
+                <li>Backports from trunk: SurfaceEmbed on by default, non-opaque surfaces, pinch zoom, occlusion</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Not needed on Windows <span class="chip risk">retire</span></h3>
+              <p>
+                Once Phase 3 retires the CEF host, Windows needs neither the <code>cef-*</code> patches nor the patches that host Chrome's views inside the
+                macOS app (<code>chromium-window-hosted</code>, <code>chromium-webview-native-hosted</code>). Mark them <code>mac</code>.
+              </p>
+            </div>
+            <div class="card">
+              <h3>macOS-only <span class="chip mac">mac</span></h3>
+              <p>Touch Bar autofill, iCloud Keychain, DevTools redock display, Safe Storage name and the macOS Bay layer stay <code>mac</code>.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="risks" aria-labelledby="risks-h">
+          <h2 id="risks-h">Risks</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Risk</th>
+                  <th scope="col">Impact</th>
+                  <th scope="col">Mitigation</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>react-native-web gaps against the macOS UI (layout, text, macOS-only props)</td>
+                  <td><span class="chip risk">High</span></td>
+                  <td>Phase 0's web boot finds them on the Mac first; fixes go in <code>@bay/platform</code> wrappers; shared with Linux</td>
+                </tr>
+                <tr>
+                  <td>Webium and SurfaceEmbed are experimental and off by default in M154</td>
+                  <td><span class="chip risk">High</span></td>
+                  <td>
+                    Depend on <code>surface_embed</code> (small, stable shape) and copy, not link, the window code; carry backports in the series; Phase 2 gate;
+                    GuestContents and L‑A fallbacks
+                  </td>
+                </tr>
+                <tr>
+                  <td>The 26 synchronous native calls</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Converted in Phase 0; Mojo calls from JavaScript are always async anyway</td>
+                </tr>
+                <tr>
+                  <td>WebUI CSP and Trusted Types reject parts of the bundle</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Set the data source's CSP for the bundle; no remote origins or <code>eval</code> in Release</td>
+                </tr>
+                <tr>
+                  <td>Bridge security: a privileged page next to untrusted tabs</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Bind <code>NativeHost</code> only for <code>chrome://bay</code>; SurfaceEmbed gives pages no script access to the UI</td>
+                </tr>
+                <tr>
+                  <td>Snap Layouts, drag and resize with a frame drawn by the UI</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>
+                    The frame view answers <code>WM_NCHITTEST</code> (<code>HTCAPTION</code>, <code>HTMAXBUTTON</code>, borders) from rects the UI reports
+                  </td>
+                </tr>
+                <tr>
+                  <td>Mica behind a transparent WebUI (DirectComposition, driver quirks)</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Phase 2 backdrop test; solid theme colour as the fallback</td>
+                </tr>
+                <tr>
+                  <td>Three platforms to keep in step on every Chromium rebase</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>One engine (NNCore) everywhere; the platform column; Windows CI on every engine bump</td>
+                </tr>
+                <tr>
+                  <td>App-bound encryption blocks Chrome cookie import</td>
+                  <td><span class="chip ok">Low</span></td>
+                  <td>By design: guide users through Chrome's export</td>
+                </tr>
+                <tr>
+                  <td>Build cost (disk, RAM, hours)</td>
+                  <td><span class="chip ok">Low</span></td>
+                  <td>Archive engine artifacts; rebuild only when the pin or the series changes</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="decisions" aria-labelledby="decisions-h">
+          <h2 id="decisions-h">Decisions needed</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Decision</th>
+                  <th scope="col">Recommendation</th>
+                  <th scope="col">Needed by</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Hosting</td>
+                  <td><strong>Decided 17 Oct 2026:</strong> web-rendered UI with SurfaceEmbed tabs</td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td>Sync crypto backend on Windows</td>
+                  <td>BoringSSL from Chrome, shared with Linux; CNG stays only if the vectors or performance say so</td>
+                  <td>Phase 6</td>
+                </tr>
+                <tr>
+                  <td>Base the window on upstream's class or Bay's own</td>
+                  <td>Upstream's for the spike; Bay's own copy for the product, reusing upstream's helpers</td>
+                  <td>Phase 3</td>
+                </tr>
+                <tr>
+                  <td>Windows 10 support</td>
+                  <td>Supported with a solid backdrop until Chrome drops it</td>
+                  <td>Phase 5</td>
+                </tr>
+                <tr>
+                  <td>Icon set</td>
+                  <td>Segoe Fluent Icons on Windows, bundled SVGs on Linux, behind one <code>Symbol</code> component</td>
+                  <td>Phase 4</td>
+                </tr>
+                <tr>
+                  <td>The macOS host later</td>
+                  <td>Keep React Native for macOS; revisit once Windows and Linux ship on the web host</td>
+                  <td>After beta</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="sources" aria-labelledby="sources-h">
+          <h2 id="sources-h">Sources</h2>
+          <h3>Chromium at 154.0.8037.58</h3>
+          <ul class="sources">
+            <li>
+              <a href="https://github.com/chromium/chromium/tree/154.0.8037.58/chrome/browser/ui/webui_browser">chrome/browser/ui/webui_browser</a>
+              (WebUIBrowserWindow, client view, page handler)
+            </li>
+            <li>
+              <a href="https://github.com/chromium/chromium/tree/154.0.8037.58/chrome/browser/resources/webui_browser"
+                >chrome/browser/resources/webui_browser</a
+              >
+              (the WebUI front end, <code>webview.html.ts</code>)
+            </li>
+            <li>
+              <a href="https://github.com/chromium/chromium/blob/154.0.8037.58/chrome/browser/ui/views/frame/browser_window_factory.cc"
+                >browser_window_factory.cc</a
+              >
+              (the <code>kWebium</code> switch in <code>CreateBrowserWindow</code>)
+            </li>
+            <li><a href="https://github.com/chromium/chromium/tree/154.0.8037.58/components/surface_embed">components/surface_embed</a></li>
+            <li>
+              <a href="https://github.com/chromium/chromium/blob/main/components/surface_embed/USER_GUIDE.md">SurfaceEmbed user guide</a> and
+              <a href="https://chromium.googlesource.com/chromium/src.git/+/main/components/surface_embed/guest_view_vs_surface_embed.md"
+                >GuestView vs. SurfaceEmbed</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/chromium/chromium/blob/154.0.8037.58/content/public/browser/web_ui_data_source.h">web_ui_data_source.h</a> (CSP,
+              Trusted Types, request filters)
+            </li>
+            <li><a href="https://chromium.googlesource.com/chromium/src/+/lkgr/docs/trusted_types_on_webui.md">Trusted Types on WebUI</a></li>
+            <li>
+              <a href="https://github.com/chromium/chromium/tree/154.0.8037.58/components/browser_apis/tab_strip">components/browser_apis/tab_strip</a>
+              (upstream's tab strip API for WebUI)
+            </li>
+          </ul>
+          <h3>Windows</h3>
+          <ul class="sources">
+            <li>
+              <a href="https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-snap-layout-menu"
+                >Support snap layouts for desktop apps on Windows 11</a
+              >
+            </li>
+            <li><a href="https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type">DWM_SYSTEMBACKDROP_TYPE</a></li>
+            <li>
+              <a href="https://firefox-source-docs.mozilla.org/widget/windows/shell/set-default.html">Setting the default browser on Windows</a>, Firefox source
+              docs
+            </li>
+            <li>
+              <a href="https://security.googleblog.com/2024/07/improving-security-of-chrome-cookies-on.html?m=1">App-bound encryption for Chrome cookies</a>
+            </li>
+            <li>
+              <a href="https://devclass.com/2026/01/14/code-signing-windows-apps-may-be-easier-and-more-secure-with-new-azure-artifact-service/"
+                >Azure Artifact Signing</a
+              >
+            </li>
+          </ul>
+          <h3>Builds and reference browsers</h3>
+          <ul class="sources">
+            <li><a href="https://github.com/ungoogled-software/ungoogled-chromium-windows">ungoogled-chromium-windows</a></li>
+            <li><a href="https://github.com/imputnet/helium-windows">helium-windows</a></li>
+            <li><a href="https://github.com/zen-browser/desktop">Zen</a>: a browser UI rendered by its engine on every platform</li>
+            <li><a href="https://www.infoq.com/news/2016/04/vivaldi-1/">Vivaldi 1.0: a React UI on Chromium</a>, InfoQ</li>
+          </ul>
+          <h3>UI runtime</h3>
+          <ul class="sources">
+            <li><a href="https://docs.swmansion.com/react-native-reanimated/docs/3.x/guides/web-support">Reanimated 3: web support</a></li>
+            <li><a href="https://necolas.github.io/react-native-web/">react-native-web</a></li>
+          </ul>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var btn = document.getElementById("themeToggle");
+        try {
+          var saved = localStorage.getItem("bay-plan-theme");
+          if (saved) root.setAttribute("data-theme", saved);
+        } catch (e) {}
+        btn.addEventListener("click", function () {
+          var dark = root.getAttribute("data-theme") === "dark" || (!root.getAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+          var next = dark ? "light" : "dark";
+          root.setAttribute("data-theme", next);
+          try {
+            localStorage.setItem("bay-plan-theme", next);
+          } catch (e) {}
+        });
+
+        var links = Array.prototype.slice.call(document.querySelectorAll("nav.toc a"));
+        var targets = links
+          .map(function (a) {
+            return document.querySelector(a.getAttribute("href"));
+          })
+          .filter(Boolean);
+        if (!("IntersectionObserver" in window)) return;
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (e) {
+              if (!e.isIntersecting) return;
+              links.forEach(function (a) {
+                var on = a.getAttribute("href") === "#" + e.target.id;
+                a.classList.toggle("active", on);
+                if (on) a.setAttribute("aria-current", "location");
+                else a.removeAttribute("aria-current");
+              });
+            });
+          },
+          { rootMargin: "0px 0px -70% 0px" },
+        );
+        targets.forEach(function (t) {
+          io.observe(t);
+        });
+      })();
+    </script>
+  </body>
+</html>

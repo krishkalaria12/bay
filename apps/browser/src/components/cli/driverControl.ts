@@ -1,11 +1,14 @@
 import { cliControlStatus, onCliControlChanged, setCliActiveTab, setCliControl, type CliControlStatus } from "@bay/chromium";
 import { installedCliVersion, installCli, onCliInstallLine, readDocument, writeDocument, type CliInstallResult } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection } from "../../runtime/projection";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSettings } from "../../runtime/settingsActions";
 import { tabEngine } from "../../store/engines";
 import { activeTabId } from "../../store/model";
 import { shownPeek } from "../../store/peeks";
-import { pageOf, usePages } from "../window/pageState";
+import { usePages } from "../window/pageState";
 
 const INSTALL_DOC = "bay-cli.json";
 
@@ -53,7 +56,8 @@ export function installCliInBackground(): Promise<CliInstallResult> {
       installation = null;
       const error = result.ok ? null : (result.error ?? "The installer stopped.");
       const binPath = result.binPath ?? useCli.getState().binPath;
-      useCli.setState({ installing: false, step: null, installedVersion: installedCliVersion(), binPath, error });
+      const installedVersion = result.installedVersion === undefined ? installedCliVersion() : result.installedVersion;
+      useCli.setState({ installing: false, step: null, installedVersion, binPath, error });
       try {
         writeDocument(INSTALL_DOC, JSON.stringify({ version: 1, binPath, error }));
       } catch (error) {
@@ -80,54 +84,54 @@ export function describeCliControl(server: CliControlStatus | null): string {
 }
 
 /** The current pane, including a Peek over it, once its Chromium page exists. */
-export function shownCliTab(s: BrowserState): number | null {
+export function shownCliTab(s: BrowserProjection): number | null {
   const windowId = s.ui.focusedWindowId;
   if (!windowId || !s.windows[windowId]) return null;
   const id = shownPeek(s, windowId)?.tabId ?? activeTabId(s, windowId);
   const tab = id ? s.tabs[id] : undefined;
-  if (
-    !id ||
-    !tab ||
-    !/^(https?|about|data|blob):/i.test(tab.url) ||
-    !(tab.navigation || tab.adoptId) ||
-    tabEngine(s, id) !== "chromium" ||
-    pageOf(id).newTabShown
-  )
+  if (!id || !tab || !/^(https?|about|data|blob):/i.test(tab.url) || !(tab.navigation || tab.adoptId) || tabEngine(s, id) !== "chromium" || tab.newTabHistory)
     return null;
   return usePages.getState().chromeTabs[id] ?? null;
 }
 
+// Tells the engine the tab commands act on by default, while `owns` says this document knows it.
+function activeTabPush(owns: () => boolean) {
+  let sent: number | null | undefined;
+  const forget = () => {
+    sent = undefined;
+  };
+  const push = () => {
+    const server = useCli.getState().server;
+    if (!owns() || (server?.state !== "on" && server?.state !== "starting")) return forget();
+    const active = shownCliTab(useBrowser.getState());
+    if (active === sent) return;
+    sent = active;
+    void setCliActiveTab(active).catch(forget);
+  };
+  return { push, forget };
+}
+
 let started = false;
-export function startCliControl() {
+/**
+ * Keeps the engine's control server on the setting. Linux's and Windows' coordinator document does this with
+ * `activeTab: false`: it has no pages, and engine events reach only it, so windows get the status from its service state.
+ */
+export function startCliControl({ activeTab = true } = {}) {
   if (started) return;
   started = true;
   let request = 0;
   let inFlight = 0;
   let generation = 0;
   let applied: boolean | null = null;
-  let sentActive: number | null | undefined;
-
-  const pushActive = () => {
-    const server = useCli.getState().server;
-    if (server?.state !== "on" && server?.state !== "starting") {
-      sentActive = undefined;
-      return;
-    }
-    const active = shownCliTab(useBrowser.getState());
-    if (active === sentActive) return;
-    sentActive = active;
-    void setCliActiveTab(active).catch(() => {
-      sentActive = undefined;
-    });
-  };
+  const { push: pushActive, forget: forgetActive } = activeTabPush(() => activeTab);
 
   const apply = (server: CliControlStatus, reconcile: boolean) => {
     if ((server.generation ?? generation) < generation) return;
-    if ((server.generation ?? generation) > generation) sentActive = undefined;
+    if ((server.generation ?? generation) > generation) forgetActive();
     generation = Math.max(generation, server.generation ?? 0);
     useCli.setState({ server });
     if (reconcile && server.state === "off" && server.reason && useBrowser.getState().settings.cliControl === true) {
-      useBrowser.getState().updateSettings({ cliControl: false });
+      reportBrowserCommand(updateSettings({ cliControl: false }));
     }
     pushActive();
   };
@@ -152,6 +156,15 @@ export function startCliControl() {
   });
   usePages.subscribe(pushActive);
   sync();
+}
+
+/** A window document on Linux and Windows: it holds its own pages, so the focused one says which tab is shown. */
+export function startCliActiveTab(windowId: string) {
+  const { push } = activeTabPush(() => useBrowser.getState().ui.focusedWindowId === windowId);
+  useCli.subscribe(push);
+  useBrowser.subscribe(push);
+  usePages.subscribe(push);
+  push();
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));

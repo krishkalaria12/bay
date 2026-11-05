@@ -1,5 +1,5 @@
 import { extensionActionStates } from "@bay/chromium";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId } from "../../store/model";
 import { browserIdOf, useExtensions, windowExtensions } from "./store";
 

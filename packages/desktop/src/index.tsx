@@ -1,5 +1,15 @@
-import { requireNativeModule, requireNativeViewManager, type EventSubscription } from "expo-modules-core";
-import type { ViewProps } from "react-native";
+import { capabilities, isMac, platformOS } from "@bay/platform";
+import { formatShortcut, menuShortcutStroke } from "@bay/platform/keys";
+import type { ViewProps } from "@bay/platform";
+import { requireNativeViewManager } from "./nativeViews";
+import {
+  requireNativeModule,
+  requireOptionalNativeModule,
+  nativeSnapshot,
+  nativeDocumentWrite,
+  nativeDocumentSave,
+  type EventSubscription,
+} from "@bay/platform/native";
 
 export * from "./system";
 export * from "./appMenu";
@@ -107,6 +117,9 @@ export type BrowserCommand =
   | "share"
   | "sendFeedback"
   | "keyboardShortcuts"
+  // The Chrome-hosted desktop's in-window app menu (F10), and the window it lists to go to.
+  | "showAppMenu"
+  | "focusWindow"
   | "copyDiagnostics"
   | "recordPerformanceIssue"
   | "toolTour"
@@ -146,13 +159,33 @@ export type WindowEvent =
   | { type: "focus"; id: string }
   | { type: "close"; id: string }
   | { type: "frame"; id: string; frame: [number, number, number, number] }
-  | { type: "closeRequest"; id: string };
+  | { type: "closeRequest"; id: string }
+  // Windows' shared runtime: openWindow named this open utility window again, with these options.
+  | { type: "opened"; id: string; options: OpenWindowOptions }
+  | ({ type: "state"; id: string } & WindowState);
+
+/** A window's placement, as its caption buttons show it (Windows). */
+export type WindowState = {
+  maximized: boolean;
+  fullscreen: boolean;
+  /** Ephemeral native state, never restored from a session. */
+  minimized?: boolean;
+  /** Restored/normal window size, including while maximized or fullscreen. No screen position. */
+  size?: [number, number];
+};
+/** Desktop decoration order, from left to right within each physical window edge. */
+export type WindowButton = "minimize" | "maximize" | "close";
+export type WindowButtonLayout = { left: readonly WindowButton[]; right: readonly WindowButton[] };
+/** The caption the UI draws (Windows): its maximize button, in the window from the top-left, for Snap Layouts; and
+ *  its theme, which the system backdrop follows. */
+export type WindowCaption = { maximize: [number, number, number, number] | null; dark: boolean };
 
 export type AppEvent =
   | { type: "reopen" }
   | { type: "willQuit" }
   | { type: "quitCancelled" }
   | { type: "appearance"; dark: boolean }
+  | { type: "windowButtonLayout"; layout: WindowButtonLayout }
   | { type: "quitWarningSuppressed" }
   | { type: "resignActive" }
   | { type: "screenLocked" }
@@ -179,6 +212,8 @@ export type MenuItem =
       swatch?: string;
       key?: string;
       modifiers?: ("command" | "shift" | "option" | "control")[];
+      // Web hosts: the trailing hint, filled in from key and modifiers.
+      shortcut?: string;
       enabled?: boolean;
       checked?: boolean;
       children?: MenuItem[];
@@ -191,8 +226,13 @@ export type OpenWindowOptions = {
   focus?: boolean;
   kind?: "browser" | "small" | "settings" | "import" | "taskManager";
   profile?: string;
-  // Little Bay: its remembered size; the window opens centred on the active screen.
+  // Restored size without a screen position; the compositor places the window.
+  maximized?: boolean;
+  // Little Bay also opens at its remembered size, centred on the active screen.
   size?: [number, number];
+  // Settings: the pane to show, and the space it is about.
+  pane?: string;
+  spaceId?: string;
 };
 
 export type MenuEntry = { id: string; title: string; current?: boolean };
@@ -237,14 +277,18 @@ export type PromptOptions = {
 };
 
 const Shell = requireNativeModule<{
+  globalWindowCoordinates?: boolean;
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
-  showMenu(items: MenuItem[]): Promise<string | null>;
+  // `anchor`: the Chrome-hosted desktop only, where it comes from the window's top left rather than the pointer.
+  showMenu(items: MenuItem[], anchor?: [number, number]): Promise<string | null>;
   copyText(text: string): void;
-  copyImage(base64: string): boolean;
+  copyImage(base64: string, sourceURL?: string): boolean;
   setSwitcherCapture(active: boolean): Promise<void>;
   startDictation(): void;
   pickFiles(): Promise<string[]>;
-  fontFamilies?(): string[];
+  // macOS answers at once; the web host loads the system's list off its UI thread.
+  fontFamilies?(): Promise<string[]>;
+  // True once written, false if the user cancelled; rejects when it can't be written.
   saveTextFile?(name: string, contents: string): Promise<boolean>;
   openTextFile?(extensions: string[]): Promise<string | null>;
   readDocument(name: string): string | null;
@@ -266,9 +310,15 @@ const Shell = requireNativeModule<{
   dragPreviewEnd?(windowId: string | null, frame: Rect4 | null): Promise<void>;
   setWindowTitle(id: string, title: string): Promise<void>;
   windowIds(): Promise<string[]>;
+  minimizeWindow?(id: string): Promise<void>;
+  toggleMaximizeWindow?(id: string): Promise<void>;
+  windowState?(id: string): Promise<WindowState>;
+  windowButtonLayout?(): WindowButtonLayout;
+  setWindowCaption?(id: string, caption: WindowCaption): Promise<void>;
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
   setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;
+  setKeyShortcuts?(shortcuts: KeyShortcut[]): Promise<void>;
   focusSidebarRow?(windowId: string, tag: number): Promise<void>;
   setSidebarKeyboard?(windowId: string, active: boolean): Promise<void>;
   setSidebarMoveUndo?(windowId: string, available: boolean, focus: boolean): Promise<void>;
@@ -278,11 +328,14 @@ const Shell = requireNativeModule<{
   prompt(options: PromptOptions): Promise<string | null>;
 }>("BayShell");
 
-export const readDocument = (name: string) => Shell.readDocument(name);
-export const writeDocument = (name: string, contents: string) => Shell.writeDocument(name, contents);
+export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
+/** The caption buttons the app draws (capabilities.captionButtons), in Windows' order. Linux hosts still publish the
+ *  desktop's button layout (snapshots.BayShell.windowButtonLayout), but Bay's Linux windows show no buttons. */
+export const windowButtonLayout = (): WindowButtonLayout => ({ left: [], right: capabilities.captionButtons ? ["minimize", "maximize", "close"] : [] });
+export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
-export const saveDocument = (name: string, contents: string) => Shell.saveDocument(name, contents);
-export const removeDocument = (name: string) => Shell.removeDocument(name);
+export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));
+export const removeDocument = (name: string) => nativeDocumentWrite(name, null, () => Shell.removeDocument(name));
 
 export const focusSidebarRow = (windowId: string, tag: number) => Shell.focusSidebarRow?.(windowId, tag) ?? Promise.resolve();
 
@@ -295,7 +348,7 @@ export const setSidebarMoveUndo = (windowId: string, available: boolean, focus =
 export const startDictation = () => Shell.startDictation();
 export const setSwitcherCapture = (active: boolean) => void Shell.setSwitcherCapture(active);
 export const pickFiles = () => Shell.pickFiles();
-export const fontFamilies = (): string[] => Shell.fontFamilies?.() ?? [];
+export const fontFamilies = async (): Promise<string[]> => (await Shell.fontFamilies?.()) ?? [];
 export const saveTextFile = (name: string, contents: string) => Shell.saveTextFile?.(name, contents) ?? Promise.resolve(false);
 export const openTextFile = (extensions: string[] = []) => Shell.openTextFile?.(extensions) ?? Promise.resolve(null);
 
@@ -304,12 +357,23 @@ export function copyText(text: string) {
 }
 
 /** An image (base64 PNG or JPEG) on the clipboard; false if it isn't one. */
-export function copyImage(base64: string): boolean {
-  return Shell.copyImage(base64);
+export async function copyImage(base64: string): Promise<boolean> {
+  return await Shell.copyImage(base64);
 }
 
-export function showMenu(items: MenuItem[]): Promise<string | null> {
-  return Shell.showMenu(items);
+// macOS draws key and modifiers itself; the web hosts show the label Bay's keyboard tables would.
+const withShortcutLabels = (items: MenuItem[]): MenuItem[] =>
+  items.map((item) => {
+    if ("separator" in item) return item;
+    const labeled = { ...item };
+    if (item.children) labeled.children = withShortcutLabels(item.children);
+    if (item.key) labeled.shortcut = formatShortcut(menuShortcutStroke(item.key, item.modifiers), platformOS);
+    return labeled;
+  });
+
+export function showMenu(items: MenuItem[], anchor?: [number, number]): Promise<string | null> {
+  if (isMac) return Shell.showMenu(items);
+  return anchor ? Shell.showMenu(withShortcutLabels(items), anchor) : Shell.showMenu(withShortcutLabels(items));
 }
 
 export const openWindow = (id: string, options: OpenWindowOptions = {}) => Shell.openWindow(id, options);
@@ -323,13 +387,15 @@ export const WindowProfile = requireNativeViewManager<WindowProfileProps>("BayWi
 export const closeWindow = (id: string) => Shell.closeWindow(id);
 export const focusWindow = (id: string) => Shell.focusWindow(id);
 export const setWindowTitle = (id: string, title: string) => Shell.setWindowTitle(id, title);
-export const setTrafficLightsCenter = (id: string, center: [number, number] | null) => Shell.setTrafficLightsCenter(id, center);
+export const setTrafficLightsCenter = (id: string, center: [number, number] | null) =>
+  capabilities.trafficLights ? Shell.setTrafficLightsCenter(id, center) : Promise.resolve();
 /**
  * The window buttons: "shown"; "hover", only while the pointer is over the window's top (Zen's, with the page under
  * them); "hidden" (Arc's with the sidebar closed, shown with its peek).
  */
 export type TrafficLightsMode = "shown" | "hover" | "hidden";
-export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode, color?: string) => Shell.setTrafficLightsMode(id, mode, color ?? null);
+export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode, color?: string) =>
+  capabilities.trafficLights ? Shell.setTrafficLightsMode(id, mode, color ?? null) : Promise.resolve();
 type Rect4 = [number, number, number, number];
 export type DragPreviewShape = "hidden" | "pill" | "card";
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›
@@ -351,9 +417,21 @@ export const dragPreview = {
 export const raiseView = (tag: number | null, levels: number, raised: boolean) => {
   if (tag != null) void Shell.raiseView?.(tag, levels, raised);
 };
-/** The window's frame now, on screen (AppKit's coordinates); null on builds without it. */
+/** The window's frame now, on screen (AppKit's coordinates); null without global screen coordinates. */
 export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFrame?.(id) ?? Promise.resolve(null);
 export const windowIds = () => Shell.windowIds();
+
+/** A key the window's host runs as an app command (onCommand) rather than Chrome's: `keyCode` is the key's virtual-key
+ *  code, as Chromium's key events carry it. An empty command runs nothing, which keeps the key from Chrome. */
+export type KeyShortcut = { command: BrowserCommand | ""; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean };
+/** Hands the host the window's key shortcuts (hosts whose menus don't carry them: the Chrome-hosted desktop). */
+export const setKeyShortcuts = (shortcuts: KeyShortcut[]) => Shell.setKeyShortcuts?.(shortcuts) ?? Promise.resolve();
+
+// The window's own caption buttons (capabilities.captionButtons): no-ops on hosts whose system draws them.
+export const minimizeWindow = (id: string) => Shell.minimizeWindow?.(id) ?? Promise.resolve();
+export const toggleMaximizeWindow = (id: string) => Shell.toggleMaximizeWindow?.(id) ?? Promise.resolve();
+export const windowState = (id: string): Promise<WindowState> => Shell.windowState?.(id) ?? Promise.resolve({ maximized: false, fullscreen: false });
+export const setWindowCaption = (id: string, caption: WindowCaption) => Shell.setWindowCaption?.(id, caption) ?? Promise.resolve();
 
 export const setAppearance = (mode: "auto" | "light" | "dark") => Shell.setAppearance(mode);
 export const isDarkAppearance = () => Shell.isDarkAppearance();
@@ -370,8 +448,19 @@ export function setMenuStateParts(state: MenuState, bookmarksChanged: boolean) {
 }
 export const replyToTerminate = (ok: boolean) => Shell.replyToTerminate(ok);
 
-export const confirm = (options: ConfirmOptions) => Shell.confirm(options);
-export const prompt = (options: PromptOptions) => Shell.prompt(options);
+export type ConfirmResult = { confirmed: boolean; suppressed: boolean };
+/** The app's own dialog for a confirm or a prompt, or null to leave it to the system's. */
+export type DialogPresenter = {
+  confirm(options: ConfirmOptions): Promise<ConfirmResult> | null;
+  prompt(options: PromptOptions): Promise<string | null> | null;
+};
+let dialogPresenter: DialogPresenter | null = null;
+/** The app's in-window dialogs take the system's place where it can show them. */
+export const setDialogPresenter = (presenter: DialogPresenter | null) => {
+  dialogPresenter = presenter;
+};
+export const confirm = (options: ConfirmOptions): Promise<ConfirmResult> => dialogPresenter?.confirm(options) ?? Shell.confirm(options);
+export const prompt = (options: PromptOptions): Promise<string | null> => dialogPresenter?.prompt(options) ?? Shell.prompt(options);
 
 export const onCommand = (listener: (e: CommandEvent) => void) => Shell.addListener("onCommand", listener);
 export const onWindowEvent = (listener: (e: WindowEvent) => void) => Shell.addListener("onWindowEvent", listener);
@@ -463,20 +552,20 @@ export type GlassEffectProps = ViewProps & {
   dark?: boolean;
 };
 
-const GlassEffectModule = requireNativeModule<{ isLiquidGlass(): boolean }>("BayGlassEffect");
+const GlassEffectModule = requireOptionalNativeModule<{ isLiquidGlass(): boolean }>("BayGlassEffect");
 
-export const isLiquidGlass = (): boolean => GlassEffectModule.isLiquidGlass();
+export const isLiquidGlass = (): boolean => GlassEffectModule?.isLiquidGlass() ?? false;
 
 export const GlassEffect = requireNativeViewManager<GlassEffectProps>("BayGlassEffect");
 
 export type IconTheme = { kind: "blur" } | { kind: "template"; fill: string; stroke?: string };
 
-const DockSelectionModule = requireNativeModule<{
+const DockSelectionModule = requireOptionalNativeModule<{
   iconTheme(uri: string | null, emoji: string | null): Promise<IconTheme | null>;
 }>("BayDockSelection");
 
 export const iconTheme = (source: { uri: string } | { emoji: string }): Promise<IconTheme | null> =>
-  DockSelectionModule.iconTheme("uri" in source ? source.uri : null, "emoji" in source ? source.emoji : null);
+  DockSelectionModule?.iconTheme("uri" in source ? source.uri : null, "emoji" in source ? source.emoji : null) ?? Promise.resolve(null);
 
 export type DockSelectionProps = ViewProps & {
   image?: string;
@@ -493,13 +582,14 @@ export type DockSelectionProps = ViewProps & {
 
 export const DockSelection = requireNativeViewManager<DockSelectionProps>("BayDockSelection");
 
-const InlineCompletionModule = requireNativeModule<{
+const InlineCompletionModule = requireOptionalNativeModule<{
   complete(tag: number, typed: string, completion: string): Promise<InlineWrite>;
 }>("BayInlineCompletion");
 
 export type InlineWrite = 0 | 1 | 2;
 
-export const completeInline = (tag: number, typed: string, completion: string) => InlineCompletionModule.complete(tag, typed, completion);
+export const completeInline = (tag: number, typed: string, completion: string) =>
+  InlineCompletionModule?.complete(tag, typed, completion) ?? Promise.resolve(0 as InlineWrite);
 
 type TranslationModule = {
   readonly available: boolean;
@@ -512,17 +602,18 @@ type TranslationModule = {
   translate(source: string, target: string, texts: string[]): Promise<string[]>;
   translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;
 };
-const TranslationNative = requireNativeModule<TranslationModule>("BayTranslate");
+const TranslationNative = requireOptionalNativeModule<TranslationModule>("BayTranslate");
 
 // Null before macOS 26, which has no translation API for apps.
-export const translation: Omit<TranslationModule, "available"> | null = TranslationNative.available ? TranslationNative : null;
+export const translation: Omit<TranslationModule, "available"> | null = TranslationNative?.available ? TranslationNative : null;
 
 type TidyNamesModule = {
   readonly available: boolean;
   suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;
 };
-const TidyNamesNative = requireNativeModule<TidyNamesModule>("BayTidyNames");
+const TidyNamesNative = requireOptionalNativeModule<TidyNamesModule>("BayTidyNames");
 
 // Null unless launched with BAY_TIDY_DOWNLOADS_AI=true on a Mac with Apple Intelligence; Tidy Downloads then leans on
 // the local cleaner alone.
-export const tidyNames: Omit<TidyNamesModule, "available"> | null = TidyNamesNative.available ? TidyNamesNative : null;
+export const tidyNames: Omit<TidyNamesModule, "available"> | null =
+  TidyNamesNative && nativeSnapshot("BayTidyNames", "available", [], () => TidyNamesNative.available) ? TidyNamesNative : null;

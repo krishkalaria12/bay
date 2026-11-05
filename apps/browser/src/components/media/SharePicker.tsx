@@ -1,10 +1,12 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, View } from "@bay/platform";
 import { getDisplayMediaSources, type DisplayMediaRequest, type DisplayMediaSource } from "@bay/chromium";
 import { runningAppIcon, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile } from "../../store/model";
 import { Popover, PromptButton } from "../toolbar/buttons";
 import { usePages } from "../window/pageState";
@@ -30,6 +32,15 @@ type Pending = DisplayMediaRequest & { pageUrl: string };
 
 export function requestDisplayMedia(tabId: string, request: DisplayMediaRequest) {
   const pending = useMedia.getState().displayRequests[tabId];
+  if (request.cancelled) {
+    if (pending?.id === request.id)
+      useMedia.setState((m) => {
+        const displayRequests = { ...m.displayRequests };
+        delete displayRequests[tabId];
+        return { displayRequests };
+      });
+    return;
+  }
   if (pending) void webviews.get(tabId)?.resolveDisplayMedia(pending.id, null);
   const pageUrl = useBrowser.getState().tabs[tabId]?.url ?? "";
   useMedia.setState((m) => ({ displayRequests: { ...m.displayRequests, [tabId]: { ...request, pageUrl } as Pending } }));

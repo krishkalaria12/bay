@@ -8,7 +8,7 @@ import { devHourly, sessionEnding, startUsage } from "./usage";
 export { installErrorReporting };
 
 export function startTelemetry() {
-  startUsage();
+  const stop = startUsage();
   if (__DEV__) {
     (globalThis as { nnTelemetry?: unknown }).nnTelemetry = {
       store: useTelemetry,
@@ -35,4 +35,5 @@ export function startTelemetry() {
       crash: devCrash,
     };
   }
+  return stop;
 }

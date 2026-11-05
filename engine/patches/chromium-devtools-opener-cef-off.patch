@@ -1,0 +1,14 @@
+diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtools/devtools_window.cc
+--- a/chrome/browser/devtools/devtools_window.cc
++++ b/chrome/browser/devtools/devtools_window.cc
+@@ -2119,7 +2119,10 @@
+ 
+   if (!browser_) {
+     auto create_params = BrowserWindowCreateParams::CreateForDevTools(profile_);
++#if BUILDFLAG(ENABLE_CEF)
++    // Bay: the opener field exists only in CEF builds.
+     create_params.opener = opener;
++#endif
+ 
+     browser_ = CreateBrowserWindow(std::move(create_params));
+     browser_->GetTabStripModel()->AddWebContents(

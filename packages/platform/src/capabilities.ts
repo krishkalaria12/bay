@@ -1,0 +1,112 @@
+// What the platform can do, as data. This is the one place the app asks "is this available?" —
+// call sites never branch on the OS themselves. Pure: the caller passes the OS and a module probe,
+// so this is testable under plain Node and the bound values live in os.ts.
+
+import type { PlatformOS } from "./types";
+
+export type Capabilities = {
+  /** The host can query and place windows in global screen coordinates. */
+  globalWindowCoordinates: boolean;
+  /** BayGlassEffect renders real Liquid Glass (macOS 26+). Elsewhere: the Surface fallback. */
+  liquidGlass: boolean;
+  /** BayVisualEffect (NSVisualEffectView vibrancy). Elsewhere: the Surface fallback. */
+  vibrancy: boolean;
+  /** The shader views: Metal on macOS (BayAreaLight, BayEdgeLight, BayPowerUp, BayWindowBackdrop), WebGL2 on the web host. */
+  shaders: boolean;
+  /** A window backdrop is available (macOS vibrancy/glass, Windows Mica/Acrylic). */
+  windowBackdrop: boolean;
+  /** Dock membership and app icon switching (BayApp). Windows: the taskbar instead. */
+  dock: boolean;
+  /** BayDockSelection, the Dock icon's themed preview. Windows: none. */
+  dockSelection: boolean;
+  /** A global menu bar the app maintains (macOS). Windows: the in-window app menu. */
+  menuBar: boolean;
+  /** The window's buttons are the app's own views (BayShell traffic lights). */
+  trafficLights: boolean;
+  /** The app draws the window's caption buttons (minimize, maximize, close): Windows. Linux windows have none. */
+  captionButtons: boolean;
+  /** BaySwipe: trackpad two-finger back/forward, the app's own. Windows: Chrome's overscroll. */
+  swipe: boolean;
+  /** BayCalendar (EventKit). Windows: none yet. */
+  calendar: boolean;
+  /** BayTranslate. Windows: none. */
+  translation: boolean;
+  /** AppleScript (Automation, the dev script runner). Windows: none. */
+  appleScript: boolean;
+  /** Handoff to other Apple devices. Windows: none. */
+  handoff: boolean;
+  /** The intro music through AVFoundation. The desktop host plays the same piece through Web Audio (webIntroMusic.ts). */
+  introMusic: boolean;
+  /** Onboarding opens with the intro: its animation and music. */
+  introScreen: boolean;
+  /** User notifications (UserNotifications, or Windows App SDK notifications). */
+  notifications: boolean;
+  /** Secret storage: Keychain on macOS, Credential Manager/DPAPI on Windows. */
+  keychain: boolean;
+  /** BayInlineCompletion, inline text completion in fields. */
+  inlineCompletion: boolean;
+  /** BayWindowProfile, swapping the profile a window shows. */
+  windowProfiles: boolean;
+  /** View tooltips (the `tooltip` prop on the platform views). */
+  tooltips: boolean;
+  /** Pointer hover (onMouseEnter/onMouseLeave on the platform views). */
+  hover: boolean;
+  /** Keyboard focus rings the app draws (the `enableFocusRing` prop). */
+  focusRing: boolean;
+  /** The `keyDownEvents` prop, keys a view takes before the page sees them. */
+  keyDownEvents: boolean;
+  /** The system's share menu. Elsewhere: none, Copy and Save instead. */
+  shareSheet: boolean;
+  /** The `bay` terminal command: installing it, and letting it control Bay. */
+  terminalCommand: boolean;
+  /** Capture's Mark Up canvas (ios/Capture.swift). */
+  captureMarkup: boolean;
+  /** File drags out of the app: AppKit, or the desktop host's OLE, XDND and Wayland drags (native_file_drag.cc). */
+  nativeDrag: boolean;
+  /** Dragging the window by its own views (the `mouseDownCanMoveWindow` prop): CSS drag regions on the desktop host. */
+  windowMoveByView: boolean;
+};
+
+/**
+ * The capability table. `hasModule` answers whether a named native module is built into this app
+ * (the caller probes with requireOptionalNativeModule), so a build without one degrades instead of
+ * crashing. On Windows most macOS-only entries are false by design: the plan's out-of-scope list. `webgl2` is the
+ * web host's probe result; it says nothing about the window backdrop, which is the host's own treatment.
+ */
+export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boolean, webgl2 = false): Capabilities {
+  const mac = os === "macos";
+  const windows = os === "windows";
+  const webDesktop = windows || os === "linux";
+  return {
+    globalWindowCoordinates: mac || windows,
+    liquidGlass: mac && hasModule("BayGlassEffect"),
+    vibrancy: mac && hasModule("BayVisualEffect"),
+    shaders: mac ? hasModule("BayAreaLight") && hasModule("BayEdgeLight") && hasModule("BayPowerUp") && hasModule("BayWindowBackdrop") : webDesktop && webgl2,
+    windowBackdrop: mac || webDesktop,
+    dock: mac && hasModule("BayApp"),
+    dockSelection: mac && hasModule("BayDockSelection"),
+    menuBar: mac,
+    trafficLights: mac,
+    captionButtons: windows,
+    swipe: mac && hasModule("BaySwipe"),
+    calendar: mac && hasModule("BayCalendar"),
+    translation: mac && hasModule("BayTranslate"),
+    appleScript: mac && hasModule("BayApp"),
+    handoff: mac,
+    introMusic: mac && hasModule("BayApp"),
+    introScreen: webDesktop || (mac && hasModule("BayApp")),
+    notifications: hasModule("BayApp") && (mac || hasModule("BayNotifications")),
+    keychain: hasModule("BayKeychain"),
+    inlineCompletion: mac && hasModule("BayInlineCompletion"),
+    windowProfiles: mac && hasModule("BayWindowProfile"),
+    tooltips: mac || webDesktop,
+    hover: mac || webDesktop,
+    focusRing: mac || webDesktop,
+    keyDownEvents: mac || webDesktop,
+    shareSheet: mac,
+    terminalCommand: hasModule("BayCli"),
+    captureMarkup: mac,
+    nativeDrag: mac || webDesktop,
+    windowMoveByView: mac || webDesktop,
+  };
+}

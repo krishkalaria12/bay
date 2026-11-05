@@ -1,9 +1,10 @@
+import { Pressable, View } from "@bay/platform";
 import { terminateCastRoute, type ActionState, type CastRoute, type InstalledExtension } from "@bay/chromium";
 import { ContextMenuArea, showMenu, Symbol } from "@bay/desktop";
 import { memo, useRef, useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { toggleCastPicker, useCastRoutes } from "../media/cast";
 import type { ToolbarPalette } from "../toolbar/colors";
 import { usePages } from "../window/pageState";

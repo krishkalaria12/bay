@@ -1,4 +1,4 @@
-import { useBrowser } from "../store/browserStore";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { quietStore } from "../store/derivedStores";
 import { activeTabId, IDLE_LIVE } from "../store/model";
 import { IDLE_PAGE, usePages } from "../components/window/pageState";
@@ -27,7 +27,7 @@ export function subscribeMenuInputs(changed: () => void): () => void {
       if (!id) return;
       const page = s.pages[id] ?? IDLE_PAGE;
       const before = prev.pages[id] ?? IDLE_PAGE;
-      if (page.backToNewTab !== before.backToNewTab || !!page.engineBack !== !!before.engineBack || !!page.newTabShown !== !!before.newTabShown) changed();
+      if (page.backToNewTab !== before.backToNewTab || !!page.engineBack !== !!before.engineBack) changed();
     }),
   ];
   return () => stops.forEach((stop) => stop());

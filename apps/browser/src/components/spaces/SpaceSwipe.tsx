@@ -1,13 +1,16 @@
+import { View } from "@bay/platform";
 import { SwipeArea, type SwipeAreaHandle, type SwipeEvent } from "@bay/chromium";
 import { WindowBackdrop } from "@bay/shaders";
 import { useEffect, useRef, type ReactNode } from "react";
-import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { Extrapolation, interpolate, useAnimatedStyle, useEvent } from "react-native-reanimated";
+import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, useEvent } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
+import { useHighContrast } from "../../lib/highContrast";
 import { themeFor, themeKey } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { pagerFor, usePagerNativeConfig, usePagerPages, usePagerSurface } from "./pager";
+import { SpaceSwipeGesture } from "../window/SpaceSwipeGesture";
 
 // `swipes` false keeps the children mounted without the swipe area: the peek has one only while it's out.
 export function SpaceSwipe({ children, swipes = true }: { children: ReactNode; swipes?: boolean }) {
@@ -66,25 +69,29 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
   // position returns to zero. The area stays transparent and recognizes no single-profile drags.
   if (!multiple && !nativePager) return null;
   return (
-    <SwipeArea
-      ref={area}
-      style={style}
-      canSwipeBack={previous}
-      canSwipeForward={next}
-      tracksUnavailableDirections={multiple}
-      isPager={multiple}
-      onSwipe={onSwipe}
-      nativePager={nativePager}
-      onPagerPosition={nativePager && onPagerPosition}
-      onPagerState={nativePager && pager.onNativeState}
-    />
+    <>
+      <SpaceSwipeGesture canSwipeBack={previous} canSwipeForward={next} onSwipe={onSwipe} />
+      <SwipeArea
+        ref={area}
+        style={style}
+        canSwipeBack={previous}
+        canSwipeForward={next}
+        tracksUnavailableDirections={multiple}
+        isPager={multiple}
+        onSwipe={onSwipe}
+        nativePager={nativePager}
+        onPagerPosition={nativePager && onPagerPosition}
+        onPagerState={nativePager && pager.onNativeState}
+      />
+    </>
   );
 }
 
 export function SpaceTint() {
   const windowId = useWindowId();
   const { pages, paging } = usePagerPages(windowId);
-  const keys = useBrowser(useShallow((s) => pages.map((p) => themeKey(s, windowId, p.id))));
+  const contrast = useHighContrast();
+  const keys = useBrowser(useShallow((s) => pages.map((p) => themeKey(s, windowId, p.id, undefined, contrast))));
   if (!paging) return null;
   return (
     <>

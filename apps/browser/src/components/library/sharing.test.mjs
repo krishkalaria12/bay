@@ -4,6 +4,7 @@ import { docs, easelSharingAnswers, heldSaves, keychainAnswers } from "../../tes
 import { easelShareURL, publishEasel, startEaselShares, stopSharingEasel, useEaselShares } from "./sharing.ts";
 
 const originalFetch = globalThis.fetch;
+const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
 const secrets = new Map();
 const requests = [];
 let count;
@@ -14,6 +15,7 @@ beforeEach(() => {
   count = 0;
   heldSaves.error = null;
   easelSharingAnswers.enabled = true;
+  easelSharingAnswers.request = null;
   useEaselShares.setState({ loaded: false, error: null, records: {}, busy: {} });
   keychainAnswers.get = async (account) => secrets.get(account) ?? null;
   keychainAnswers.set = async (account, key) => (secrets.set(account, key), true);
@@ -27,8 +29,11 @@ beforeEach(() => {
 });
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+  else delete globalThis.navigator;
   heldSaves.error = null;
   easelSharingAnswers.enabled = false;
+  easelSharingAnswers.request = null;
 });
 const snapshot = async () => JSON.stringify({ version: 1, title: "References", background: "#FFFFFF", image: null, links: [] });
 
@@ -126,7 +131,7 @@ test("failed durable save or Keychain save never sends an upload", async () => {
   assert.equal(useEaselShares.getState().records.board, undefined);
   heldSaves.error = null;
   keychainAnswers.set = async () => false;
-  await assert.rejects(publishEasel("board", snapshot), /Keychain/);
+  await assert.rejects(publishEasel("board", snapshot), /secure storage/);
   assert.equal(requests.length, 0);
 });
 
@@ -140,8 +145,8 @@ test("snapshot failure never creates a publication and missing Keychain credenti
   assert.equal(secrets.size, 0);
   await publishEasel("board", snapshot);
   secrets.clear();
-  await assert.rejects(publishEasel("board", snapshot), /Keychain/);
-  await assert.rejects(stopSharingEasel("board"), /Keychain/);
+  await assert.rejects(publishEasel("board", snapshot), /secure storage/);
+  await assert.rejects(stopSharingEasel("board"), /secure storage/);
   assert.equal(requests.length, 1);
 });
 
@@ -211,4 +216,80 @@ test("failed post-upload save retains the pending record and management key", as
   assert.equal(useEaselShares.getState().records.board.publishedAt, null);
   assert.equal(secrets.size, 1);
   assert.equal(JSON.parse(docs.get("easel-shares.json")).records.board.publishedAt, null);
+});
+
+test("web sharing uses the fixed native transport without a cross-origin renderer request", async () => {
+  const native = [];
+  easelSharingAnswers.request = async (...args) => {
+    native.push(args);
+    return { status: args[2] === "DELETE" ? 204 : 200 };
+  };
+  await publishEasel("board", snapshot);
+  assert.equal(requests.length, 0);
+  assert.equal(native.length, 1);
+  assert.equal(native[0][0], "1".padStart(32, "0"));
+  assert.equal(native[0][1], "b".repeat(64));
+  assert.equal(native[0][2], "PUT");
+  assert.equal(JSON.parse(native[0][3]).revision, 1);
+  await stopSharingEasel("board");
+  assert.equal(native[1][2], "DELETE");
+  assert.equal(requests.length, 0);
+});
+
+test("native HTTP errors preserve publication ownership for retry or revocation", async () => {
+  easelSharingAnswers.request = async () => ({ status: 503 });
+  await assert.rejects(publishEasel("board", snapshot), /503/);
+  assert.equal(useEaselShares.getState().records.board.publishedAt, null);
+  assert.equal(secrets.size, 1);
+  assert.equal(requests.length, 0);
+});
+
+function webLocks() {
+  let queue = Promise.resolve();
+  const names = [];
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      locks: {
+        request(name, run) {
+          names.push(name);
+          const next = queue.then(run);
+          queue = next.catch(() => {});
+          return next;
+        },
+      },
+    },
+  });
+  return names;
+}
+
+test("web windows refresh durable ownership inside an origin-wide lock before saving", async () => {
+  const existing = { id: "a".repeat(32), publishedAt: 100, revision: 4 };
+  docs.set("easel-shares.json", JSON.stringify({ version: 1, records: { existing } }));
+  useEaselShares.setState({ loaded: true, error: null, records: {} });
+  const names = webLocks();
+  await publishEasel("new-board", snapshot);
+  assert.deepEqual(JSON.parse(docs.get("easel-shares.json")).records.existing, existing);
+  assert.deepEqual(names, ["bay-easel-sharing"]);
+});
+
+test("a stale window reuses an existing link and advances its durable revision", async () => {
+  const existing = { id: "a".repeat(32), publishedAt: 100, revision: 4 };
+  docs.set("easel-shares.json", JSON.stringify({ version: 1, records: { board: existing } }));
+  secrets.set(`easel-share:${existing.id}`, "c".repeat(64));
+  useEaselShares.setState({ loaded: true, error: null, records: {} });
+  webLocks();
+  assert.equal(await publishEasel("board", snapshot), easelShareURL(existing.id));
+  assert.equal(count, 0);
+  assert.equal(JSON.parse(requests[0].body).revision, 5);
+});
+
+test("a failed fresh registry read prevents writes even when the startup snapshot looked healthy", async () => {
+  useEaselShares.setState({ loaded: true, error: null, records: {} });
+  docs.set("easel-shares.json", "broken");
+  webLocks();
+  await assert.rejects(publishEasel("board", snapshot), /read Easel sharing records/);
+  assert.equal(count, 0);
+  assert.equal(requests.length, 0);
+  assert.equal(docs.get("easel-shares.json"), "broken");
 });

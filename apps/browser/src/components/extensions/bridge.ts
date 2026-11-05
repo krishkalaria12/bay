@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
 import {
   onExtensionInstallPrompt,
   onExtensionSidePanel,
@@ -7,11 +9,15 @@ import {
   webStoreExtensionId,
   type TabsRequest,
 } from "@bay/chromium";
+import { getNativeHostInfo } from "@bay/platform/nativeBridge";
 import { AppState } from "react-native";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import { useBrowser as legacyBrowser } from "../../store/browserStore";
 import { changedIds } from "../../store/recordDiff";
+import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
 import { activeTabId, engineProfile } from "../../store/model";
 import { tabForBrowser, usePages } from "../window/pageState";
 import { refreshActionStates } from "./actions";
@@ -32,9 +38,9 @@ import {
   windowExtensions,
 } from "./state";
 
-export function startExtensionsBridge() {
+export function startExtensionsBridge({ sharedWindow = false } = {}) {
   onExtensionTabsRequest(openRequestedTab);
-  startExtensionSearchEngines();
+  if (!sharedWindow) startExtensionSearchEngines();
   onExtensionsChanged(({ profile }) => void refreshExtensions(profile));
 
   const loaded = new Set<string>();
@@ -53,12 +59,15 @@ export function startExtensionsBridge() {
 
   startActionStates();
   startSidePanels();
-  startWebStoreIntegration();
+  startWebStoreIntegration(sharedWindow);
   if (__DEV__) Object.assign(globalThis, { nnExtensionsApp: { ...state, bridge: { openExtensionFromMenu } } });
 }
 
 function openRequestedTab(request: TabsRequest) {
   if (!request.url) return;
+  // Only the coordinator may adopt a live page (runtime/pageOpen.ts), and extension requests are not offered to it:
+  // in shared mode the URL opens afresh, as it does without a matching profile.
+  const adoptId = pageFactsInCoordinator() ? undefined : request.adoptId;
   const s = useBrowser.getState();
   const ofProfile = (id: string) => !!s.windows[id] && !s.windows[id]!.incognito && engineProfile(s.windows[id]!.spaceId) === request.profile;
   const windowId =
@@ -68,17 +77,17 @@ function openRequestedTab(request: TabsRequest) {
   const background = request.active === false;
   // A live tab Chrome made keeps its profile's cookies and storage: adopted only under an app profile on that profile,
   // in a window showing it, else in a new window of it. Without one, the URL opens afresh (and Chrome's tab goes).
-  const spaceId = request.adoptId
+  const spaceId = adoptId
     ? windowId && ofProfile(windowId)
       ? s.windows[windowId]!.spaceId
       : s.spaceOrder.find((p) => engineProfile(p) === request.profile)
     : undefined;
-  if (request.adoptId && spaceId) {
-    if (windowId && ofProfile(windowId)) s.newTab(windowId, { url: request.url, adoptId: request.adoptId, spaceId, background });
-    else openWindow({ url: request.url, adoptId: request.adoptId, spaceId });
+  if (adoptId && spaceId) {
+    if (windowId && ofProfile(windowId)) legacyBrowser.getState().newTab(windowId, { url: request.url, adoptId, spaceId, background });
+    else legacyBrowser.getState().createWindow({ url: request.url, adoptId, spaceId });
     return;
   }
-  if (windowId) s.newTab(windowId, { url: request.url, background });
+  if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url: request.url, background }));
   else openWindow({ url: request.url });
 }
 
@@ -197,11 +206,13 @@ else store.waiting = (id) => post("result", JSON.stringify(id));
 
 const isStorePage = (url: string | undefined) => !!url && url.startsWith("https://chromewebstore.google.com/");
 
-function startWebStoreIntegration() {
+function startWebStoreIntegration(sharedWindow: boolean) {
   onExtensionInstallPrompt((prompt) => {
     const s = useBrowser.getState();
     const tabId = prompt.browserId ? tabForBrowser(prompt.browserId) : undefined;
-    const windowId = (tabId && s.tabs[tabId]?.windowId) || s.ui.focusedWindowId || s.windowOrder[0];
+    // The web host asks one window, the one this document shows: the prompt is its own.
+    const own = sharedWindow ? getNativeHostInfo().constants.BayShell?.windowId : undefined;
+    const windowId = (typeof own === "string" && own) || (tabId && s.tabs[tabId]?.windowId) || s.ui.focusedWindowId || s.windowOrder[0];
     if (windowId) showInstallPrompt(windowId, prompt);
     else void resolveExtensionInstallPrompt(prompt.requestId, false);
   });

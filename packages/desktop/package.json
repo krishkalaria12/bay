@@ -8,6 +8,9 @@
   "scripts": {
     "typecheck": "tsc -p ."
   },
+  "dependencies": {
+    "@bay/platform": "workspace:*"
+  },
   "peerDependencies": {
     "expo": "*",
     "react": "*",

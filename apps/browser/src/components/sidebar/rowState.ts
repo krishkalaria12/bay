@@ -1,5 +1,6 @@
 import type { StoreApi } from "zustand/vanilla";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { browserRead } from "../../store/read";
+import type { BrowserProjection } from "../../runtime/projection";
 import { activeTabId } from "../../store/model";
 import { selectionStore, tabLiveStore, tabStore, windowsStore } from "../../store/derivedStores";
 
@@ -8,7 +9,7 @@ export const SELECTED = 2;
 export const PLAYING = 4;
 export const LOADING = 8;
 
-export function rowFlags(s: BrowserState, windowId: string, tabId: string): number {
+export function rowFlags(s: BrowserProjection, windowId: string, tabId: string): number {
   const tab = s.tabs[tabId];
   const live = s.live[tabId];
   let flags = 0;
@@ -22,10 +23,10 @@ export function rowFlags(s: BrowserState, windowId: string, tabId: string): numb
 // These flags depend on one tab, its live state, the window's selection and window ownership. In particular, another
 // tab's progress must never ask every row to recompute them. Keep one scalar snapshot so a combined update renders once.
 export function tabRowStore(windowId: string, tabId: string): Pick<StoreApi<number>, "getState" | "getInitialState" | "subscribe"> {
-  const read = () => rowFlags(useBrowser.getState(), windowId, tabId);
+  const read = () => rowFlags(browserRead.getState(), windowId, tabId);
   return {
     getState: read,
-    getInitialState: () => rowFlags(useBrowser.getInitialState(), windowId, tabId),
+    getInitialState: () => rowFlags(browserRead.getState(), windowId, tabId),
     subscribe(listener) {
       let previous = read();
       const changed = () => {

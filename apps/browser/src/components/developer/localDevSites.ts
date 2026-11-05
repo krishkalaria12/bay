@@ -1,4 +1,5 @@
-import type { BrowserState, BrowserShape } from "../../store/browserStore";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import type { BrowserShape } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { useQuietBrowser } from "../../store/hooks";
 

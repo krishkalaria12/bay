@@ -1,3 +1,4 @@
+import { hasServiceClient, requestService } from "../runtime/serviceClient";
 import {
   CONFLUENCE_CQL,
   DRIVE_QUERY,
@@ -199,19 +200,46 @@ export const SOURCES: Record<LiveSourceId, LiveSource> = { github, bitbucket, no
 
 // MARK: Connecting accounts
 
+type AccountScope = { active: boolean };
+let accountScope: AccountScope | undefined;
+export function startAccountRequests(): () => void {
+  const scope: AccountScope = { active: true };
+  accountScope = scope;
+  return () => {
+    scope.active = false;
+    if (accountScope === scope) accountScope = undefined;
+  };
+}
+const checkAccountScope = (scope: AccountScope | undefined) => {
+  if (scope && !scope.active) throw new Error("Account request owner is stopped");
+};
+
 const account = (login: string, name: string | null, avatar: string | null): LiveAccount => ({ login, name, avatar, connectedAt: Date.now() });
 
 export async function connectGithub(token: string) {
+  if (hasServiceClient()) return requestService<void>("liveConnect", ["github", [token]]);
+  const scope = accountScope;
   const json = await githubGraphql<{ data?: { viewer: { login: string; name: string | null; avatarUrl: string } } }>(token.trim(), VIEWER_QUERY);
   const viewer = json.data?.viewer;
   if (!viewer) throw new LiveError("signedOut", "GitHub didn't accept the token");
+  checkAccountScope(scope);
   await setSecret("github", token.trim());
+  checkAccountScope(scope);
   setAccount("github", account(viewer.login, viewer.name, viewer.avatarUrl));
 }
-
 export type DeviceFlow = { userCode: string; verificationUri: string; expiresAt: number; done: Promise<void>; cancel(): void };
 
 export async function startGithubDeviceFlow(clientId: string): Promise<DeviceFlow> {
+  if (hasServiceClient()) {
+    const flow = await requestService<{ id: string; userCode: string; verificationUri: string; expiresAt: number }>("githubStart", [clientId]);
+    return {
+      ...flow,
+      done: requestService("githubWait", [flow.id]),
+      cancel: () => {
+        void requestService("githubCancel", [flow.id]).catch(console.error);
+      },
+    };
+  }
   const code = await request<{ device_code: string; user_code: string; verification_uri: string; expires_in: number; interval: number }>(
     `${endpoints.githubWeb}/login/device/code`,
     { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form({ client_id: clientId, scope: "repo read:org" }) },
@@ -239,21 +267,30 @@ export async function startGithubDeviceFlow(clientId: string): Promise<DeviceFlo
 }
 
 export async function connectBitbucket(user: string, token: string) {
+  if (hasServiceClient()) return requestService<void>("liveConnect", ["bitbucket", [user, token]]);
+  const scope = accountScope;
   const me = await request<{ account_id: string; display_name: string; links?: { avatar?: { href: string } } }>(`${endpoints.bitbucket}/user`, {
     headers: { Authorization: basic(user.trim(), token.trim()) },
   });
+  checkAccountScope(scope);
   await setSecret("bitbucket", token.trim());
+  checkAccountScope(scope);
   updateConfig({ bitbucketUser: user.trim() });
+  checkAccountScope(scope);
   setAccount("bitbucket", account(me.account_id, me.display_name, me.links?.avatar?.href ?? null));
 }
-
 export async function connectNotion(token: string) {
+  if (hasServiceClient()) return requestService<void>("liveConnect", ["notion", [token]]);
+  const scope = accountScope;
   const me = await request<{ name?: string; bot?: { workspace_name?: string } }>(`${endpoints.notion}/users/me`, { headers: notionHeaders(token.trim()) });
+  checkAccountScope(scope);
   await setSecret("notion", token.trim());
+  checkAccountScope(scope);
   setAccount("notion", account(me.bot?.workspace_name ?? me.name ?? "Notion", me.bot?.workspace_name ?? null, null));
 }
-
 export async function connectConfluence(site: string, email: string, token: string) {
+  if (hasServiceClient()) return requestService<void>("liveConnect", ["confluence", [site, email, token]]);
+  const scope = accountScope;
   const base = site
     .trim()
     .replace(/\/+$/, "")
@@ -261,12 +298,15 @@ export async function connectConfluence(site: string, email: string, token: stri
   const me = await request<{ accountId: string; displayName: string }>(`${endpoints.confluence(base)}/wiki/rest/api/user/current`, {
     headers: { Authorization: basic(email.trim(), token.trim()) },
   });
+  checkAccountScope(scope);
   await setSecret("confluence", token.trim());
+  checkAccountScope(scope);
   updateConfig({ confluenceSite: base, confluenceEmail: email.trim() });
+  checkAccountScope(scope);
   setAccount("confluence", account(me.accountId, me.displayName, null));
 }
-
 export async function connectGoogle(clientId: string, clientSecret: string, code: string, verifier: string, redirectUri: string) {
+  const scope = accountScope;
   const json = await request<{ access_token: string; refresh_token?: string; expires_in: number }>(endpoints.googleToken, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -286,15 +326,21 @@ export async function connectGoogle(clientId: string, clientSecret: string, code
     expires_at: Date.now() + json.expires_in * 1000,
     client_secret: clientSecret,
   };
+  checkAccountScope(scope);
   await setSecret("gdrive", JSON.stringify(tokens));
   const about = await request<{ user?: { displayName: string; emailAddress: string; photoLink?: string } }>(`${endpoints.drive}/about?fields=user`, {
     headers: { Authorization: `Bearer ${json.access_token}` },
   }).catch(() => null);
+  checkAccountScope(scope);
   updateConfig({ googleClientId: clientId });
+  checkAccountScope(scope);
   setAccount("gdrive", account(about?.user?.emailAddress ?? "Google Drive", about?.user?.displayName ?? null, about?.user?.photoLink ?? null));
 }
-
 export async function disconnect(source: LiveSourceId) {
+  if (hasServiceClient()) return requestService<void>("liveDisconnect", [source]);
+  const scope = accountScope;
+  checkAccountScope(scope);
   await deleteSecret(source);
+  checkAccountScope(scope);
   setAccount(source, null);
 }

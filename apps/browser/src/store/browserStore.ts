@@ -1,3 +1,5 @@
+import type { BrowserProjection } from "../runtime/projection";
+import type { ServiceState } from "../runtime/serviceState";
 import { create, type StateCreator } from "zustand";
 import { createSidebarUndoSlice, withSidebarUndoActions, type SidebarUndoSlice } from "./sidebarUndo";
 import { createBookmarksSlice, EMPTY_BOOKMARKS, engineRoots, rootIdsFor, type BookmarksSlice } from "./bookmarks";
@@ -11,9 +13,9 @@ import { createPeeksSlice, type PeeksSlice } from "./peeks";
 import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, isolateSavedSpaces, withSpaceEmoji, type SpacesSlice } from "./spaces";
 import { normalizeAwakeSites } from "../lib/keptAwakeSites";
 import { normalizeExternalLinkRules, normalizeLinkDestination } from "../lib/externalLinkRules";
-import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
+import { createSettingsSlice, DEFAULT_SETTINGS, restoreSettings, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
-import { activated, apply, createTabsSlice, withNewTab, type TabsSlice } from "./tabs";
+import { activated, apply, createTabsSlice, registeredAppUrlOpener, withNewTab, type AppUrlOpener, type TabsSlice } from "./tabs";
 import type { BrowserWindow, PinnedFolder, Tab, TabGroup } from "./types";
 import { createUiSlice, type UiSlice } from "./windowUi";
 import { createWindowsSlice, type WindowsSlice } from "./windows";
@@ -34,6 +36,7 @@ export type BrowserState = SidebarUndoSlice &
   BookmarksSlice &
   SettingsSlice &
   UiSlice & {
+    services: Partial<ServiceState>;
     hydrate(data: HydrateData): void;
   };
 
@@ -93,17 +96,19 @@ const batched =
     return creator(batchedSet, get, api);
   };
 
-/** The store's state without `live`: what a selector on the quiet view reads (store/derivedStores.ts). */
-export type BrowserShape = Omit<BrowserState, "live">;
+/** Durable data visible to selectors that do not read page progress. */
+export type BrowserShape = Omit<BrowserProjection, "live">;
 
-export const useBrowser = create<BrowserState>()(
+// A store per runtime owner: the app's own (useBrowser), or an isolated one (runtime/authority.ts, tests) that doesn't
+// publish engine profiles or open app URLs on the app's behalf.
+const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener): StateCreator<BrowserState> =>
   batched((...a) =>
     withSidebarUndoActions(
       {
         ...createSidebarUndoSlice(...a),
-        ...createSpacesSlice(...a),
+        ...createSpacesSlice(publishEngineProfiles)(...a),
         ...createWindowsSlice(...a),
-        ...createTabsSlice(...a),
+        ...createTabsSlice(openAppUrl)(...a),
         ...createGroupsSlice(...a),
         ...createFoldersSlice(...a),
         ...createSharedCollectionsSlice(...a),
@@ -116,6 +121,7 @@ export const useBrowser = create<BrowserState>()(
         ...createSettingsSlice(...a),
         ...createUiSlice(...a),
 
+        services: {},
         hydrate(data) {
           const [set, get] = a;
           const s = get();
@@ -124,7 +130,7 @@ export const useBrowser = create<BrowserState>()(
           const isolated = isolateSavedSpaces(savedSpaces, spaceOrder, data.orphanedProfileData ?? []);
           const { detached, owners } = isolated;
           const spaces = withSpaceEmoji(isolated.spaces, spaceOrder);
-          const settings = { ...DEFAULT_SETTINGS, ...data.settings };
+          const settings = restoreSettings(data.settings);
           settings.externalLinkRules = normalizeExternalLinkRules(settings.externalLinkRules);
           settings.density = settings.density === "compact" ? "compact" : "comfortable";
           settings.searchShortcutMode = settings.searchShortcutMode === "duckduckgo" ? "duckduckgo" : "arc";
@@ -254,6 +260,7 @@ export const useBrowser = create<BrowserState>()(
             folderMoveUndo: [],
             localFiles: normalizeLocalFiles(data.localFiles, spaces),
             sidebarUndo: {},
+            bookmarkUndo: [],
             splits,
             closedTabs: data.closedTabs ?? [],
             closedWindows: data.closedWindows ?? [],
@@ -296,17 +303,23 @@ export const useBrowser = create<BrowserState>()(
       a[1],
       a[0],
     ),
-  ),
-);
+  );
 
-useBrowser.subscribe((s, prev) => {
-  if (s.spaces !== prev.spaces && Object.values(s.localFiles).some((pin) => !s.spaces[pin.spaceId])) {
-    useBrowser.setState({ localFiles: normalizeLocalFiles(s.localFiles, s.spaces) });
-  }
-  if (s.windows !== prev.windows && Object.keys(s.sidebarUndo).some((id) => !s.windows[id]))
-    useBrowser.setState({ sidebarUndo: Object.fromEntries(Object.entries(s.sidebarUndo).filter(([id]) => s.windows[id])) });
-  const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
-  if (patch) useBrowser.setState(patch);
-});
+export function createBrowserStore(options: { publishEngineProfiles?: boolean; openAppUrl?: AppUrlOpener } = {}) {
+  const store = create<BrowserState>()(browserState(options.publishEngineProfiles ?? false, options.openAppUrl ?? (() => false)));
+  store.subscribe((s, prev) => {
+    if (s.spaces !== prev.spaces && Object.values(s.localFiles).some((pin) => !s.spaces[pin.spaceId]))
+      store.setState({ localFiles: normalizeLocalFiles(s.localFiles, s.spaces) });
+    if (s.windows !== prev.windows && Object.keys(s.sidebarUndo).some((id) => !s.windows[id]))
+      store.setState({ sidebarUndo: Object.fromEntries(Object.entries(s.sidebarUndo).filter(([id]) => s.windows[id])) });
+    const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
+    if (patch) store.setState(patch);
+  });
+  return store;
+}
+
+// Native integrations on macOS still use model.engineProfile without an explicit registry.
+export const useBrowser = createBrowserStore({ publishEngineProfiles: true, openAppUrl: registeredAppUrlOpener });
+export type BrowserStore = ReturnType<typeof createBrowserStore>;
 
 export type { CreateWindowOptions } from "./windows";

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import * as urlmatch from "../src/urlmatch.ts";
 import { build, defaultUrl, Meta, parseMeta, urlRuns } from "../src/userscript.ts";
-import { Store } from "../src/scriptsStore.ts";
+import { Store, swap } from "../src/scriptsStore.ts";
 import { main } from "../src/cli.ts";
 import { VERSION } from "../src/version.ts";
 
@@ -245,6 +245,134 @@ describe("Store", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  for (const platform of new Set([process.platform, "win32"])) {
+    it(`exchanges complete directory trees on the ${platform} path`, () => {
+      const first = join(root, "first");
+      const second = join(root, "second");
+      mkdirSync(first);
+      mkdirSync(second);
+      writeFileSync(join(first, "value"), "new");
+      writeFileSync(join(second, "value"), "old");
+      const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+      try {
+        // Exercise the three-move Windows path on POSIX too. Filesystem and
+        // FFI behavior still needs the same suite on a real Windows machine.
+        Object.defineProperty(process, "platform", { value: platform });
+        swap(first, second);
+        expect(readFileSync(join(first, "value"), "utf8")).toBe("old");
+        expect(readFileSync(join(second, "value"), "utf8")).toBe("new");
+        swap(first, second);
+        expect(readFileSync(join(first, "value"), "utf8")).toBe("new");
+      } finally {
+        Object.defineProperty(process, "platform", original);
+      }
+    });
+  }
+
+  for (const published of [false, true]) {
+    it(`recovers a Windows exchange interrupted ${published ? "after" : "before"} publication`, () => {
+      const store = new Store(root);
+      store.open(true);
+      const first = join(store.path, ".extension-new");
+      const second = join(store.path, "extension");
+      const temporary = join(store.path, ".swap-012345abcdef");
+      const journal = `${temporary}.json`;
+      mkdirSync(first);
+      mkdirSync(second);
+      writeFileSync(join(first, "value"), "new");
+      writeFileSync(join(second, "value"), "old");
+      writeFileSync(journal, JSON.stringify({ first: ".extension-new", second: "extension" }));
+      renameSync(second, temporary);
+      if (published) renameSync(first, second);
+      store.lock();
+      store.close();
+      expect(readFileSync(join(second, "value"), "utf8")).toBe(published ? "new" : "old");
+      expect(readFileSync(join(first, "value"), "utf8")).toBe(published ? "old" : "new");
+      expect(readdirSync(store.path).some((name) => name.startsWith(".swap-"))).toBe(false);
+    });
+  }
+
+  it("refuses an exchange journal that names a folder outside Scripts", () => {
+    const store = new Store(root);
+    store.open(true);
+    writeFileSync(join(store.path, ".swap-012345abcdef.json"), JSON.stringify({ first: "../outside", second: "extension" }));
+    expect(() => store.lock()).toThrow("invalid folder names");
+    store.close();
+  });
+
+  it("serializes another process until its writer unlocks", async () => {
+    const store = new Store(root);
+    store.open(true);
+    store.lock();
+    const started = join(root, "started");
+    const acquired = join(root, "acquired");
+    const source = new URL("../src/scriptsStore.ts", import.meta.url).href;
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--eval",
+        `
+      import { Store } from ${JSON.stringify(source)};
+      import { writeFileSync } from 'node:fs';
+      const store = new Store(${JSON.stringify(root)});
+      store.open(false);
+      writeFileSync(${JSON.stringify(started)}, 'yes');
+      store.lock();
+      writeFileSync(${JSON.stringify(acquired)}, 'yes');
+      store.close();
+    `,
+      ],
+      { stdout: "ignore", stderr: "pipe" },
+    );
+    try {
+      const deadline = Date.now() + 3000;
+      while (!existsSync(started) && Date.now() < deadline) await Bun.sleep(20);
+      expect(existsSync(started)).toBe(true);
+      await Bun.sleep(100);
+      expect(existsSync(acquired)).toBe(false);
+      store.unlock();
+      expect(await child.exited).toBe(0);
+      expect(existsSync(acquired)).toBe(true);
+    } finally {
+      store.close();
+      child.kill();
+    }
+  });
+
+  it("rejects a repeated lock and releases it after close", () => {
+    const store = new Store(root);
+    store.open(true);
+    store.lock();
+    expect(() => store.lock()).toThrow("already locked");
+    store.close();
+    store.close();
+    store.lock();
+    store.close();
+  });
+
+  it("refuses a hard-linked lock file", () => {
+    const store = new Store(root);
+    store.open(true);
+    const target = join(root, "other-lock");
+    writeFileSync(target, "");
+    linkSync(target, join(store.path, ".lock"));
+    expect(() => store.lock()).toThrow("plain file without links");
+  });
+
+  it.skipIf(process.platform === "win32")("refuses scripts folders and lock files that are symbolic links", () => {
+    const store = new Store(root);
+    const outside = join(root, "outside");
+    mkdirSync(outside);
+    symlinkSync(outside, store.path);
+    expect(() => store.open(true)).toThrow("plain folder");
+    rmSync(store.path);
+    store.open(true);
+    const target = join(root, "other-lock");
+    writeFileSync(target, "");
+    symlinkSync(target, join(store.path, ".lock"));
+    expect(() => store.lock()).toThrow();
+  });
+
   it("applies installs and uninstalls cleanly", async () => {
     const store = new Store(root);
     store.open(true);
@@ -268,6 +396,31 @@ describe("Store", () => {
     expect(store.installed().length).toBe(0);
 
     store.close();
+  });
+  it("restores the published extension when record persistence fails", async () => {
+    class FailingRecordStore extends Store {
+      override commitRecord(): void {
+        throw new Error("record write failed");
+      }
+    }
+    const script = join(root, "update.user.ts");
+    writeFileSync(script, `// ==UserScript==\n// @name update\n// @match https://example.com/*\n// ==/UserScript==\nconsole.log('old');\n`);
+    const store = new Store(root);
+    store.open(true);
+    store.lock();
+    try {
+      store.apply({ add: await build(script) });
+      const original = readFileSync(join(store.path, "extension", "js", "update.js"), "utf8");
+      writeFileSync(script, readFileSync(script, "utf8").replace("'old'", "'new'"));
+      const updated = await build(script);
+      const failing = new FailingRecordStore(root);
+      expect(() => failing.apply({ add: updated })).toThrow("record write failed");
+      expect(readFileSync(join(store.path, "extension", "js", "update.js"), "utf8")).toBe(original);
+      expect(store.generation()).toBe(1);
+      expect(store.extensionGeneration()).toBe(1);
+    } finally {
+      store.close();
+    }
   });
 });
 

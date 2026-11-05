@@ -1,12 +1,16 @@
 import type { Download } from "@bay/chromium";
-import { ContextMenuArea, fileExists, MouseArea, openFile, Symbol, WindowDragRegion } from "@bay/desktop";
+import { ContextMenuArea, MouseArea, openFile, Symbol, WindowDragRegion } from "@bay/desktop";
 import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "@bay/platform";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { layout } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { clearDownloads } from "../../runtime/windowUiActions";
+import { useFileExists } from "../useFileExists";
 import { downloadsIn } from "../../store/windowUi";
 import { downloadMenu, downloadStatus, FileIcon } from "../downloads/DownloadRow";
 import { showToast } from "../split/splitActions";
@@ -152,7 +156,7 @@ function SectionAction({ windowId, section, disabled }: { windowId: string; sect
         box={28}
         tooltip="Clear All"
         disabled={!clearable}
-        onPress={() => useBrowser.getState().clearDownloads(windowId)}
+        onPress={() => reportBrowserCommand(clearDownloads(windowId))}
       />
     );
   return null;
@@ -199,7 +203,8 @@ function fileKind(name: string): string {
 function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
-  const exists = d.state !== "finished" || fileExists(d.path);
+  const filePresent = useFileExists(d.path, d.state === "finished");
+  const exists = d.state !== "finished" || filePresent === true;
   const done = d.state === "finished" && exists;
   const progress = d.total > 0 ? d.received / d.total : 0;
   const host = hostLabel(d.tabUrl || d.referrer || d.url);

@@ -1,8 +1,9 @@
+import { View } from "@bay/platform";
 import { SwipeArea, swipeHaptic, type SwipeAreaHandle, type SwipeEvent } from "@bay/chromium";
 import { useQuietBrowser } from "../../store/hooks";
 import { Surface, Symbol, VisualEffect } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -14,7 +15,7 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { Favicon, NewTabIcon } from "../ui/primitives";
 import { HistoryPopover } from "./HistoryPopover";

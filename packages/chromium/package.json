@@ -10,7 +10,8 @@
     "test": "node --no-warnings --test \"src/**/*.test.mjs\""
   },
   "dependencies": {
-    "@bay/core": "workspace:*"
+    "@bay/core": "workspace:*",
+    "@bay/platform": "workspace:*"
   },
   "peerDependencies": {
     "expo": "*",

@@ -45,6 +45,10 @@ export type LibraryMedia = {
 };
 export type LibraryData = { version: 1; easels: Record<string, EaselDocument>; media: Record<string, LibraryMedia>; removedMediaPaths: string[] };
 
+/** An absolute path on this computer: macOS and Linux, or Windows'. */
+export const localPath = (v: unknown): v is string => typeof v === "string" && /^(\/|[a-z]:[\\/]|\\\\)/i.test(v);
+export const fileNameOf = (path: string) => path.split(/[\\/]/).pop() ?? "";
+
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const KINDS = new Set(["image", "text", "link", "pen", "rect", "ellipse", "arrow"]);
@@ -55,7 +59,7 @@ export function validItem(v: unknown): v is EaselItem {
   if (![v.x, v.y, v.width, v.height].every(finite) || (v.width as number) < 0 || (v.height as number) < 0) return false;
   if ([v.x, v.y, v.width, v.height].some((n) => Math.abs(n as number) > 1_000_000)) return false;
   if (v.points !== undefined && (!Array.isArray(v.points) || !v.points.every((p) => Array.isArray(p) && p.length === 2 && p.every(finite)))) return false;
-  if (v.path !== undefined && (typeof v.path !== "string" || !v.path.startsWith("/"))) return false;
+  if (v.path !== undefined && !localPath(v.path)) return false;
   if (v.text !== undefined && typeof v.text !== "string") return false;
   if (v.url !== undefined && (typeof v.url !== "string" || !webLink(v.url))) return false;
   if (v.source !== undefined) {
@@ -82,15 +86,13 @@ export function readLibrary(json: string | null): LibraryData {
   if (!json) return empty;
   const value: unknown = JSON.parse(json);
   if (!record(value) || value.version !== 1 || !record(value.easels) || !record(value.media)) throw new Error("Unsupported Library data");
-  empty.removedMediaPaths = Array.isArray(value.removedMediaPaths)
-    ? value.removedMediaPaths.filter((p): p is string => typeof p === "string" && p.startsWith("/"))
-    : [];
+  empty.removedMediaPaths = Array.isArray(value.removedMediaPaths) ? value.removedMediaPaths.filter(localPath) : [];
   for (const [id, v] of Object.entries(value.easels)) {
     const doc = parseEasel(v);
     if (doc && id === doc.id) empty.easels[id] = doc;
   }
   for (const [id, v] of Object.entries(value.media)) {
-    if (!record(v) || v.id !== id || typeof v.name !== "string" || typeof v.path !== "string" || !v.path.startsWith("/")) continue;
+    if (!record(v) || v.id !== id || typeof v.name !== "string" || !localPath(v.path)) continue;
     if (![v.width, v.height, v.createdAt].every(finite) || (v.width as number) <= 0 || (v.height as number) <= 0) continue;
     if (v.source !== undefined && !validItem({ id, kind: "image", x: 0, y: 0, width: v.width, height: v.height, source: v.source })) continue;
     empty.media[id] = v as LibraryMedia;

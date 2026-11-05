@@ -72,6 +72,7 @@ test("different Chromium profiles keep their extensions in their own destination
 test("spaces sharing an engine profile install each extension once", async () => {
   const [first, second] = reset();
   setSpaceProfiles({ [second]: first });
+  useBrowser.setState((s) => ({ spaces: { ...s.spaces, [second]: { ...s.spaces[second], profileId: first } } }));
   assert.equal((await importExtensions([first, second], source("Default", ["shared"]))).imported, 1);
   assert.equal(writes.length, 1);
 });

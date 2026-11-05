@@ -1,8 +1,9 @@
+import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface } from "@bay/desktop";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { displayUrl } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { tabTitle } from "./actions";
 import { useSidebarUi } from "./state";
 import { commitSwitcher, focusSwitcherRow } from "./spaceSwitcher";

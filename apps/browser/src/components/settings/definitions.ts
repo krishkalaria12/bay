@@ -1,5 +1,7 @@
+import { isMac } from "@bay/platform";
 import { APP_NAME } from "../../lib/constants";
 import type { SettingsPane } from "./windows";
+import { platformWords } from "../../lib/platformWords";
 
 // Stable IDs identify search targets independently of their displayed labels.
 export const SETTINGS = {
@@ -47,7 +49,7 @@ export const SETTINGS = {
   showSidebarOnOption: {
     id: "appearance.showSidebarOnOption",
     pane: "appearance",
-    title: "Hold Option to show the hidden sidebar",
+    title: `Hold ${platformWords.optionKey} to show the hidden sidebar`,
     words: "alt option key peek auto-hide reveal",
   },
   hideSingleSpaceHeader: {
@@ -113,8 +115,8 @@ export const SETTINGS = {
   littleBayMenuBarItem: {
     id: "links.littleBayMenuBarItem",
     pane: "links",
-    title: "Show Little Bay in the menu bar",
-    words: "little bay menu bar status item icon",
+    title: isMac ? "Show Little Bay in the menu bar" : "Show Little Bay in the system tray",
+    words: "little bay menu bar status item icon tray",
   },
   littleBayPutAwayAfterHours: {
     id: "links.littleBayPutAwayAfterHours",
@@ -129,7 +131,12 @@ export const SETTINGS = {
     words: "peek pinned favorites",
   },
   cmdClickCreatesTabGroup: { id: "links.cmdClickCreatesTabGroup", pane: "links", title: "⌘-clicking links creates tab groups", words: "cmd command click" },
-  optShiftClickOpensInGroup: { id: "links.optShiftClickOpensInGroup", pane: "links", title: "⌥⇧-click opens tab in group", words: "option shift click split" },
+  optShiftClickOpensInGroup: {
+    id: "links.optShiftClickOpensInGroup",
+    pane: "links",
+    title: `${platformWords.optionShift}-click opens tab in group`,
+    words: "option shift click split",
+  },
   importPasswords: { id: "passwords.importPasswords", pane: "passwords", title: "Import passwords", words: "csv" },
   exportPasswords: { id: "passwords.exportPasswords", pane: "passwords", title: "Export passwords", words: "csv" },
   passwordManagerApps: { id: "passwords.passwordManagerApps", pane: "passwords", title: "Password manager apps", words: "1password bitwarden" },

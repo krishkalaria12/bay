@@ -1,7 +1,8 @@
+import type { ViewProps } from "@bay/platform";
 import { toAppUrl, toEngineUrl } from "@bay/core";
-import { requireNativeViewManager } from "expo-modules-core";
+import NativeWebView, { webKitView } from "./NativeWebView";
 import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
-import type { NativeSyntheticEvent, ViewProps } from "react-native";
+import { NativeSyntheticEvent } from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
 import type { EngineBoostStyle } from "./native";
@@ -114,7 +115,7 @@ export type WebNotification = {
 };
 
 export type PictureInPictureState = { kind: "video" | "document"; active: boolean };
-export type ActivateRequest = { reason: "pictureInPicture" };
+export type ActivateRequest = { reason: "pictureInPicture" | "page" };
 export type DisplayMediaSource = {
   id: string;
   kind: "screen" | "window";
@@ -124,7 +125,7 @@ export type DisplayMediaSource = {
   width: number;
   height: number;
 };
-export type DisplayMediaRequest = { id: string; origin: string; audio: boolean; sources: DisplayMediaSource[] };
+export type DisplayMediaRequest = { id: string; origin: string; audio: boolean; sources: DisplayMediaSource[]; cancelled?: boolean };
 
 export type ZoomState = { zoom: number; host: string; isDefault: boolean; pinchScale: number };
 export type ContentBlockedState = { count: number; url: string };
@@ -324,7 +325,7 @@ type NativeEvents = {
   onExternalApp: ExternalAppRequest;
 };
 type Handlers = keyof NativeEvents;
-type NativeProps = Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> };
+export type NativeProps = Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> };
 
 const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<WebViewProps[K]>> } = {
   onNavigationChange: (e) => [{ ...e, url: toAppUrl(e.url) }],
@@ -363,7 +364,7 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onExternalApp: (e) => [e],
 };
 
-type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard" | "setBoostStyle"> & {
+export type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard" | "setBoostStyle"> & {
   setBoostStyle?(descriptor: string): Promise<void>;
   evaluate(code: string): Promise<string | null>;
   downloadFavicon(url: string): Promise<FaviconImage | null>;
@@ -371,10 +372,6 @@ type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavico
   resolvePasswordPrompt(answer: string, username: string | null, password: string | null): Promise<void>;
   discard(unload: boolean): Promise<DiscardOutcome>;
 };
-
-const NativeWebView = requireNativeViewManager<NativeProps>("BayCEF");
-let NativeWebKitView: typeof NativeWebView | undefined;
-const webKitView = () => (NativeWebKitView ??= requireNativeViewManager<NativeProps>("BayWebKit"));
 
 const VIEW_RETRIES = 3;
 // Expo's view functions reject with this cause when the view tag has no registered view.
@@ -467,11 +464,5 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
   }
 
   const Native = props.engine === "webkit" && hasWebKit() ? webKitView() : NativeWebView;
-  return (
-    <Native
-      // @ts-expect-error expo view managers accept a ref to their AsyncFunctions
-      ref={native}
-      {...(nativeProps as NativeProps)}
-    />
-  );
+  return <Native ref={native} {...(nativeProps as NativeProps)} />;
 });

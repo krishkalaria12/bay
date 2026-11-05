@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
+import { desktopHost, launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const [appArg, scratchArg] = process.argv.slice(2);
 if (!appArg || !scratchArg) throw new Error("usage: phase0-drag-test.mjs <Debug Bay.app> <scratch dir>");
@@ -27,6 +27,8 @@ const server = createServer((req, res) => {
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
+// A window document holds its pages on Linux and Windows, and the coordinator doesn't.
+const pageMounted = (app, id, path) => (desktopHost ? app.pageTarget(path).then(Boolean) : app.eval(`return !!nn.webviews.get("${id}")`));
 const until = async (description, fn) => {
   for (const end = Date.now() + 20000; Date.now() < end; await sleep(100)) {
     const result = await fn();
@@ -55,7 +57,8 @@ try {
       });
       try {
         await app.eval(`nn.developer.setDeveloperMode(${JSON.stringify(base)}, false); return true`);
-        await until("the live tab loaded", () => app.eval('return !!nn.webviews.get("live") && nn.store.getState().live.live?.isLoading === false'));
+        const loaded = async () => (await pageMounted(app, "live", path)) && (await app.eval("return nn.store.getState().live.live?.isLoading === false"));
+        await until("the live tab loaded", loaded);
         const page = await app.page(path);
         let before;
         try {
@@ -67,16 +70,20 @@ try {
         }
         assert.equal(before.scroll, 2300);
         const targetBefore = await app.pageTarget(path);
-        const browserBefore = await app.eval('return Object.entries(nn.pageState.getState().browsers).find(([, tab]) => tab === "live")?.[0]');
+        const browserOf = (window) => app.eval('return Object.entries(nn.pageState.getState().browsers).find(([, tab]) => tab === "live")?.[0]', { window });
+        const browserBefore = await browserOf("w1");
         const loadsBefore = requests.get(path);
         const native = `const C = globalThis.expo.modules.BayCEF; const win = () => C.chromeWindows().then(ws => ws.find(w => w.hasRoot).window);`;
         let fullscreen = null;
         if (mode === "acted-fullscreen") {
           fullscreen = JSON.parse(await app.eval(`${native} return win().then(n => C.devWindow(n, "fakeFullScreen:1"))`));
-          assert.equal(fullscreen.acted, true);
-          assert.equal(fullscreen.chromeCounts, true);
           assert.equal(fullscreen.fullScreen, true);
-          assert.equal(fullscreen.styleMask, false, "the test does not enter a macOS Space");
+          // Real full screen elsewhere: only macOS has a Space to stay out of.
+          if (!desktopHost) {
+            assert.equal(fullscreen.acted, true);
+            assert.equal(fullscreen.chromeCounts, true);
+            assert.equal(fullscreen.styleMask, false, "the test does not enter a macOS Space");
+          }
         }
         // Find only the two tab runs. The fixture has one space and no restored or startup tabs.
         const items = await app.eval(`${native} return win().then(n => {
@@ -99,7 +106,7 @@ try {
           return w && s.tabs.live.windowId === w.id ? { id: w.id, count: Object.keys(s.windows).length, active: w.activeTabIds[w.spaceId] } : null`),
         );
         assert.equal(moved.count, 2);
-        await until("the moved native page mounted", () => app.eval('return !!nn.webviews.get("live") && nn.store.getState().live.live?.isLoading === false'));
+        await until("the moved native page mounted", loaded);
         await sleep(1000);
         const afterPage = await app.page(path);
         let after;
@@ -109,7 +116,7 @@ try {
           afterPage.close();
         }
         const targetAfter = await app.pageTarget(path);
-        const browserAfter = await app.eval('return Object.entries(nn.pageState.getState().browsers).find(([, tab]) => tab === "live")?.[0]');
+        const browserAfter = await browserOf(moved.id);
         assert.deepEqual(after, before, "nonce, scroll and unsaved form survive");
         assert.equal(targetAfter.id, targetBefore.id, "the same DevTools document target survives");
         assert.equal(browserAfter, browserBefore, "the same native tab survives");

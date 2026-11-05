@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
-import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
+import { desktopHost, launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const args = process.argv.slice(2);
 const appArg = args.find((a) => !a.startsWith("--"));
@@ -293,8 +293,9 @@ async function check(name, fn) {
 
 try {
   mkdirSync(data, { recursive: true });
-  const built = spawnSync("swiftc", ["-O", recorderSource, "-o", recorder], { encoding: "utf8" });
-  if (built.status !== 0) rep.log(`(no recorder: ${built.stderr.trim().split("\n")[0]})`);
+  // The recorder is ScreenCaptureKit: without it, a check on the frames skips.
+  const built = desktopHost ? null : spawnSync("swiftc", ["-O", recorderSource, "-o", recorder], { encoding: "utf8" });
+  if (built && built.status !== 0) rep.log(`(no recorder: ${built.stderr.trim().split("\n")[0]})`);
   // perf-probe: a Release build runs the dev harness only for a data folder holding it.
   app = await launch(appPath, { data, port, session: fixture(), onboarded: true, probe: true });
   rep.log(`instance: pid ${app.pid}, DevTools port ${app.port}, data ${data}`);

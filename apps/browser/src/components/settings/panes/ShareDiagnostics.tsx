@@ -1,10 +1,13 @@
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView } from "@bay/platform";
+import { View } from "@bay/platform";
+import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { setSharing, useTelemetry } from "../../../telemetry/client";
 import { SHARING_COPY, WHATS_SENT } from "../../../telemetry/copy";
 import { Button, Group, Row, SectionHeader, Sheet, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
+import { platformWords } from "../../../lib/platformWords";
 
 export function ShareDiagnosticsSection() {
   const sharing = useTelemetry((s) => s.sharing);
@@ -15,7 +18,11 @@ export function ShareDiagnosticsSection() {
         <Row title={SHARING_COPY.toggle} description={SHARING_COPY.summary}>
           <Toggle value={sharing} onChange={(on) => setSharing(on, "settings")} />
         </Row>
-        <Row title={SHARING_COPY.whatsSent} description="Every field, and what never leaves this Mac." onPress={() => showSettingsSheet(<WhatsSentSheet />)} />
+        <Row
+          title={SHARING_COPY.whatsSent}
+          description={`Every field, and what never leaves ${platformWords.thisComputer}.`}
+          onPress={() => showSettingsSheet(<WhatsSentSheet />)}
+        />
       </Group>
     </>
   );

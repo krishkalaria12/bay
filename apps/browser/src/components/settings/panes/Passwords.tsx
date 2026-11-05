@@ -1,3 +1,4 @@
+import { View, platformOS } from "@bay/platform";
 import {
   deletePassword,
   exportPasswords,
@@ -6,17 +7,19 @@ import {
   getPasswordAutofill,
   listPasswords,
   savePassword,
+  secretStorage,
   setNeverSavePasswords,
   setPasswordAutofill,
   unlockPasswords,
   updatePassword,
   type SavedPassword,
+  type SecretStorageKind,
 } from "@bay/chromium";
 import { confirm, copyText, Symbol, systemInfo } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
+import { browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browserStore";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile, plural } from "../../../store/model";
 import { importModule } from "../../import/module";
@@ -27,10 +30,12 @@ import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
 import { PASSWORDS_UNLOCK_MS } from "../constants";
+import { passwordStorageDescription, secretStorageWarning } from "../secretStorage";
+import { platformWords } from "../../../lib/platformWords";
 
 // 1Password connects to a browser it has been told to trust, and only to one installed in Applications.
 function passwordManagerAppsNote() {
-  const apps = "1Password, Bitwarden, KeePassXC and Proton Pass extensions connect to their Mac apps.";
+  const apps = `1Password, Bitwarden, KeePassXC and Proton Pass extensions connect to their ${platformWords.desktopApps}.`;
   return systemInfo().inApplicationsFolder === false
     ? `${apps} For 1Password, move Bay to your Applications folder and reopen it (1Password only connects to browsers there), then in the 1Password app open Settings › Browser › Add Browser and choose it.`
     : `${apps} For 1Password, add Bay once: in the 1Password app, open Settings › Browser › Add Browser and choose Bay.`;
@@ -42,7 +47,7 @@ const isUnlocked = (profile: string) => Date.now() < (unlockedUntil.get(profile)
 export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => initial ?? useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => initial ?? browserRead.getState().settings.defaultSpaceId);
   const [, setUnlockedAt] = useState(0);
   const [list, setList] = useState<SavedPassword[] | null>(null);
   const [never, setNever] = useState<string[]>([]);
@@ -50,6 +55,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
   const [query, setQuery] = useState("");
   const [importStatus, setImportStatus] = useState("");
   const [exportStatus, setExportStatus] = useState("");
+  const [storage, setStorage] = useState<SecretStorageKind | null>(null);
   const profile = engineProfile(spaceId);
   const unlocked = isUnlocked(profile);
 
@@ -71,6 +77,9 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
         .catch(() => {}),
     [profile],
   );
+
+  useEffect(() => void secretStorage().then(setStorage), []);
+  const storageWarning = secretStorageWarning(storage);
 
   const unlock = async () => {
     if (!(await unlockPasswords(profile))) return;
@@ -107,12 +116,19 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
     <View>
       <SectionHeader
         title="Passwords"
-        description="Saved on this Mac, separately for each profile, and encrypted with a key in your Keychain."
+        description={passwordStorageDescription(platformOS)}
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
       />
       <Group>
+        {storageWarning ? (
+          <Row
+            icon={<Symbol name="exclamationmark.triangle.fill" size={14} color="#FF9500" style={{ width: 28, height: 20 }} />}
+            title={storageWarning.title}
+            description={storageWarning.description}
+          />
+        ) : null}
         <Row
           title="Offer to save and fill passwords"
           description="Offers to save a login after you sign in, and suggests saved ones when you click a login field."
@@ -140,7 +156,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
         <View style={{ alignItems: "center", gap: 10, marginTop: 40 }}>
           <Symbol name="lock.fill" size={26} color={theme.textTertiary} style={{ width: 36, height: 36 }} />
           <Text style={{ fontSize: 14, fontWeight: "500", color: theme.textPrimary }}>Passwords are locked</Text>
-          <Text style={{ fontSize: 12, color: theme.textSecondary }}>Unlock with Touch ID or your login password to see them.</Text>
+          <Text style={{ fontSize: 12, color: theme.textSecondary }}>Unlock with {platformWords.unlockMethod} to see them.</Text>
           <Button title="Unlock" kind="primary" onPress={() => void unlock()} style={{ marginTop: 6 }} />
         </View>
       ) : (

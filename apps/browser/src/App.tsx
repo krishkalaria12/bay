@@ -1,8 +1,9 @@
+import { View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { onAppEvent, setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { interpolate, useAnimatedStyle } from "@bay/platform/motion";
 import { CommandPanel } from "./components/commandBar/CommandBarPanel";
 import { ContentCard } from "./components/window/TabPageCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
@@ -16,9 +17,11 @@ import { isUtilityWindowId } from "./components/settings/windows";
 import { OnboardingOverlay } from "./components/onboarding/index";
 import { CreateSpaceHost } from "./components/spaces/CreateSpace";
 import { RenameDialogHost } from "./components/ui/RenameDialog";
+import { AppDialogHost } from "./components/AppDialog";
 import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
 import { useFullscreenTab } from "./components/window/pageState";
 import { SpaceSwipe, SpaceTint } from "./components/spaces/SpaceSwipe";
+import { CaptionButtons } from "./components/window/CaptionButtons";
 import { TopStripPeek, TopTabStrip } from "./components/tabStrip/TabStrip";
 import { TOP_CARD_INSET } from "./components/window/constants";
 import { TOP_STRIP_HEIGHT } from "./components/window/constants";
@@ -37,7 +40,7 @@ import { useSidebarWidth } from "./components/sidebar/tokens";
 import { hex, ThemeScope, useTheme, useWindowTint } from "./lib/theme";
 import { layout } from "./lib/constants";
 import { useEffectEvent } from "./lib/useEffectEvent";
-import { useBrowser } from "./store/browserStore";
+import { useBrowserRead as useBrowser } from "./store/read";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
 
 export function WindowRoot({ windowId }: { windowId?: string }) {
@@ -45,6 +48,7 @@ export function WindowRoot({ windowId }: { windowId?: string }) {
     return (
       <ThemeScope>
         <UtilityWindow id={windowId!} />
+        <AppDialogHost windowId={windowId!} />
       </ThemeScope>
     );
   return <BrowserWindowRoot windowId={windowId} />;
@@ -57,7 +61,10 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   if (!id || !exists) return null;
   return (
     <WindowContext.Provider value={id}>
-      <ThemeScope>{small ? <LittleBayWindow /> : <BrowserWindow />}</ThemeScope>
+      <ThemeScope>
+        {small ? <LittleBayWindow /> : <BrowserWindow />}
+        <AppDialogHost windowId={id} />
+      </ThemeScope>
     </WindowContext.Provider>
   );
 }
@@ -75,6 +82,13 @@ function BrowserWindow() {
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left.
   const right = useSidebarOnRight();
   const addressInSidebar = useAddressBarInSidebar();
+  // Caption buttons sit in the desktop layout's corners: over the page there when it has no toolbar to hold them.
+  const captionOnHover = {
+    left: !topTabs && addressInSidebar && (right || !showSidebar),
+    right: !topTabs && addressInSidebar && (!right || !showSidebar),
+  };
+  const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
+  const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   const [peekOut, setPeekOut] = useState(false);
   const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, topTabs, peekOut });
   const windowTint = useWindowTint();
@@ -159,6 +173,7 @@ function BrowserWindow() {
       )}
       {!sidebarOpen &&
         (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} onOut={setPeekOut} />)}
+      {!fullscreen && <CaptionButtons windowId={windowId} height={captionHeight} glyphCenter={captionCenter} onHover={captionOnHover} />}
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />
@@ -251,7 +266,11 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
 
   return (
     <>
-      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", [side]: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} /> : null}
+      {/* Leaving the strip hides the peek after the delay, unless the pointer goes on into it: crossing the strip out of the
+          window is otherwise never seen, as nothing reads the pointer outside it (Wayland has no global pointer). */}
+      {enabled ? (
+        <View onMouseEnter={show} onMouseLeave={hide} style={{ position: "absolute", [side]: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} />
+      ) : null}
       {/* The rest of the window while it's out: the pointer reaching it hides the peek, as leaving the peek does. Its own
           leave alone missed some exits (onto the page, say), leaving it out. */}
       {live ? (

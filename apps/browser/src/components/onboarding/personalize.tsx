@@ -1,12 +1,16 @@
+import { Pressable, View } from "@bay/platform";
 import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { SPACE_COLORS } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
-import { DEFAULT_SPACE } from "../../store/spaces";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { BAY_THEME } from "../../store/spaces";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../ui/primitives";
 import { useOnboardingColors } from "./ui";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { toggleTabLayout } from "../../runtime/splitActions";
+import { updateSpace } from "../../runtime/spaceActions";
 
 export const PERSONALIZE_COPY = {
   title: "Make it yours",
@@ -16,25 +20,25 @@ export const PERSONALIZE_COPY = {
 
 const COLORS = Object.keys(SPACE_COLORS) as SpaceColor[];
 
-// The first space starts on Twilight (store/spaces.ts DEFAULT_SPACE): it leads the choices, and a plain color replaces it.
-const TWILIGHT = DEFAULT_SPACE.theme!;
-const isTwilight = (theme: SpaceTheme | null | undefined) => !!theme && theme.colors.join() === TWILIGHT.colors.join();
+// Bay's own look (the first space's: store/spaces.ts DEFAULT_SPACE) leads the choices; a plain color replaces it.
+const isBayTheme = (theme: (Readonly<Omit<SpaceTheme, "colors">> & { readonly colors: readonly string[] }) | null | undefined) =>
+  !!theme && theme.colors.join() === BAY_THEME.colors.join();
 
 export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; size?: number }) {
   const spaceId = useBrowser((s) => s.windows[windowId]?.spaceId);
   const current = useBrowser((s) => (spaceId ? s.spaces[spaceId]?.color : undefined));
-  const twilight = useBrowser((s) => (spaceId ? isTwilight(s.spaces[spaceId]?.theme) : false));
+  const bayTheme = useBrowser((s) => (spaceId ? isBayTheme(s.spaces[spaceId]?.theme) : false));
   const themed = useBrowser((s) => (spaceId ? !!s.spaces[spaceId]?.theme : false));
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
   if (!spaceId || incognito) return null;
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: size >= 30 ? 5 : 4 }} accessibilityRole="radiogroup" accessibilityLabel="Theme color">
       <ColorButton
-        name="Twilight"
-        colors={TWILIGHT.colors}
+        name="Bay"
+        colors={BAY_THEME.colors}
         size={size}
-        selected={twilight}
-        onPress={() => useBrowser.getState().updateSpace(spaceId, { color: "purple", theme: { ...TWILIGHT } })}
+        selected={bayTheme}
+        onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: "purple", theme: { ...BAY_THEME } }))}
       />
       {COLORS.map((c) => (
         <ColorButton
@@ -43,7 +47,7 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
           colors={[SPACE_COLORS[c].swatch]}
           size={size}
           selected={!themed && current === c}
-          onPress={() => useBrowser.getState().updateSpace(spaceId, { color: c, theme: null })}
+          onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: c, theme: null }))}
         />
       ))}
     </View>
@@ -106,7 +110,7 @@ function ColorButton({ name, colors, size, selected, onPress }: { name: string; 
 export function TabLayoutPicker({ windowId }: { windowId: string }) {
   const layout = useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
   const pick = (next: "sidebar" | "top") => {
-    if (next !== layout) useBrowser.getState().toggleTabLayout(windowId);
+    if (next !== layout) reportBrowserCommand(toggleTabLayout(windowId));
   };
   return (
     <View style={{ flexDirection: "row", gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel="Tab layout">

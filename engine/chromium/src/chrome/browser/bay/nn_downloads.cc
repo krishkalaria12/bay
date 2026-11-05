@@ -89,8 +89,8 @@ base::DictValue Describe(DownloadItem* item) {
       .Set("url", item->GetOriginalUrl().spec())
       // What the server called the file. When the saved name differs, a person chose it; Tidy Downloads leaves it alone.
       .Set("suggestedFilename", item->GetSuggestedFilename())
-      .Set("filename", name.value())
-      .Set("path", path.value())
+      .Set("filename", name.AsUTF8Unsafe())
+      .Set("path", path.AsUTF8Unsafe())
       // The page that started the download, for a readable name in the app. Private downloads keep no page URLs,
       // as their quarantine reference does.
       .Set("referrer", off_the_record ? "" : item->GetReferrerUrl().spec())
@@ -154,7 +154,7 @@ class DownloadsState : public ProfileState {
     }
     if (const char* dir = getenv("BAY_DOWNLOADS_DIR"); dir && *dir) {
       DownloadPrefs::FromBrowserContext(profile)->SetDownloadPath(
-          base::FilePath(dir));
+          base::FilePath::FromUTF8Unsafe(dir));
     }
     watches_.push_back(std::make_unique<Watch>(this, profile));
     for (Profile* off_the_record : profile->GetAllOffTheRecordProfiles()) {

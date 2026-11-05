@@ -1,6 +1,6 @@
 import { setAutoPictureInPicture, setDisplayMediaPicker } from "@bay/chromium";
 import { useState } from "react";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSettings, useTab, useTabLive } from "../../store/hooks";
 import { usePage } from "../window/pageState";
 import { startCast } from "./cast";

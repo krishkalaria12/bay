@@ -1,3 +1,4 @@
+import { isMac } from "@bay/platform";
 // The Developer Mode inspector, run in the page by evaluate (in its main world, with `post` to answer and to message
 // the app as "devMode": devMode.ts › onDeveloperMessage). Rulers along the top and left, the element under the pointer
 // outlined with its margin and padding, and a click pins it with what it is: size, place, type, colours and the CSS
@@ -6,6 +7,7 @@
 // false takes it away. No template literals or backticks inside: this file's string is one.
 export function inspectorScript(on: boolean): string {
   return `const ON = ${on ? "true" : "false"};
+const MOD_KEY_LABEL = ${JSON.stringify(isMac ? "⌘" : "Ctrl")};
 ${SCRIPT}`;
 }
 
@@ -348,7 +350,7 @@ const fillCard = (el) => {
   }
   const actions = text("div", "actions");
   const copy = text("button", "primary", "Copy for Agent");
-  copy.append(text("kbd", "", "⌘"), text("kbd", "", "C"));
+  copy.append(text("kbd", "", MOD_KEY_LABEL), text("kbd", "", "C"));
   copy.addEventListener("click", () => copyFor(el));
   const elements = text("button", "", "Open in Elements");
   elements.addEventListener("click", () => send({ type: "elements" }));

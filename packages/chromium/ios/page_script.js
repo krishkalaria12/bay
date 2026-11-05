@@ -14,6 +14,9 @@
   const url = documentURL();
   if (!url) return () => {};
   const isTop = window === window.top;
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const primaryModifier = (event) => (isMac ? event.metaKey : event.ctrlKey);
+  const secondaryModifier = (event) => (isMac ? event.ctrlKey : event.metaKey);
   const handlers = Object.create(null);
   // Page code runs after this and can replace any global or prototype method:
   // keep the originals, and send plain copies (a page's Object.prototype.toJSON
@@ -1328,12 +1331,12 @@
     true,
   );
   document.addEventListener("selectionchange", () => selectionShown && !selecting && getSelection().isCollapsed && hideSelection());
-  document.addEventListener("keydown", (e) => e.metaKey || /^(Shift|Meta|Alt|Control)$/.test(e.key) || hideSelection(), true);
+  document.addEventListener("keydown", (e) => primaryModifier(e) || /^(Shift|Meta|Alt|Control)$/.test(e.key) || hideSelection(), true);
   addEventListener("scroll", hideSelection, { passive: true, capture: true });
   addEventListener("resize", hideSelection);
   addEventListener("pagehide", hideSelection);
 
-  // MARK: Capture — ⌘⇧ and a drag on the page starts Capture where it was pressed, as Arc's: the app puts its own
+  // MARK: Capture — the primary modifier plus Shift and a drag starts Capture where it was pressed: the app puts its own
   // selection in the page, which goes on with the drag (apps/browser components/capture/captureScript.ts). Until then
   // the page gets neither the press nor the click it ends in (⌘⇧-click on a link would open it).
   if (isTop) {
@@ -1346,7 +1349,7 @@
       "mousedown",
       (e) => {
         swallowClick = false;
-        if (!e.isTrusted || e.button !== 0 || !e.metaKey || !e.shiftKey || e.altKey || e.ctrlKey) return;
+        if (!e.isTrusted || e.button !== 0 || !primaryModifier(e) || !e.shiftKey || e.altKey || secondaryModifier(e)) return;
         swallow(e);
         swallowClick = true;
         send("captureGesture", { x: e.clientX, y: e.clientY });

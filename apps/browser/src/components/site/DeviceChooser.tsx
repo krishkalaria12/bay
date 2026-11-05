@@ -1,10 +1,11 @@
+import { Pressable, ScrollView, View } from "@bay/platform";
 import { cancelDeviceChooser, onDeviceChooser, openBluetoothSettings, refreshDeviceChooser, selectDevice, type DeviceChooser as Chooser } from "@bay/chromium";
 import { Symbol } from "@bay/desktop";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Text } from "react-native";
 import { create } from "zustand";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { Popover, PromptButton } from "../toolbar/buttons";
 import { tabForBrowser } from "../window/pageState";
 import { useHover } from "../ui/primitives";

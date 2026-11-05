@@ -8,12 +8,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
+import { desktopHost, launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const [appArg, port] = process.argv.slice(2);
 if (!appArg) {
   console.error("usage: node zoom-scroll-test.mjs <Debug Bay.app> [cdpPort]");
   process.exit(2);
+}
+// Its gestures are AppKit's scroll phases, through a hook only macOS has.
+if (desktopHost) {
+  console.log("SKIP zoom-scroll-test (needs BayCEF.devScrollZoom, macOS only)");
+  process.exit(0);
 }
 const scratch = mkdtempSync(join(tmpdir(), "nn-zoom-scroll-"));
 const data = join(scratch, "data");

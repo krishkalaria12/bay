@@ -313,3 +313,22 @@ test("script toggles read current consent and disable without a warning", async 
   assert.equal(useBoosts.getState().scriptsAcknowledged, false);
   assert.equal(asked.length, 0);
 });
+
+test("a file dialog that's busy or can't save says so, and a cancelled one says nothing", async () => {
+  const { tabId } = setup();
+  useBrowser.setState((s) => ({ ui: { ...s.ui, focusedWindowId: s.tabs[tabId].windowId } }));
+  const saveTextFile = native.shellDialogAnswers.saveTextFile;
+  const openTextFile = native.shellDialogAnswers.openTextFile;
+  const id = "a";
+  native.shellDialogAnswers.saveTextFile = async () => false;
+  await editor.exportBoostFile(id);
+  assert.equal(globalThis.boostTestToasts.length, 0);
+  native.shellDialogAnswers.saveTextFile = () => Promise.reject(Object.assign(new Error("no"), { code: "write_failed" }));
+  await editor.exportBoostFile(id);
+  assert.deepEqual(globalThis.boostTestToasts.at(-1).slice(1, 3), ["Couldn't Export the Boost", "The file couldn't be saved. Try another folder."]);
+  native.shellDialogAnswers.openTextFile = () => Promise.reject(Object.assign(new Error("no"), { code: "dialog_busy" }));
+  await editor.importBoostFile(tabId);
+  assert.deepEqual(globalThis.boostTestToasts.at(-1).slice(1, 3), ["Couldn't Import the Boost", "Finish with the open file dialog first."]);
+  native.shellDialogAnswers.saveTextFile = saveTextFile;
+  native.shellDialogAnswers.openTextFile = openTextFile;
+});

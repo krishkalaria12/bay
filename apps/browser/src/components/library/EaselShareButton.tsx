@@ -1,6 +1,8 @@
 import { confirm, copyText, sharePage, showMenu, type EaselCanvasHandle } from "@bay/desktop";
 import { useEffect, type RefObject } from "react";
-import { useBrowser } from "../../store/browserStore";
+import { capabilities } from "@bay/platform";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { newTab } from "../../runtime/tabActions";
 import { showToast } from "../split/splitActions";
 import { Button } from "../settings/controls";
 import type { EaselDocument } from "./model";
@@ -50,7 +52,7 @@ async function openEaselSharing(doc: EaselDocument, canvas: RefObject<EaselCanva
     const choice = await showMenu([
       { id: "copy", title: "Copy Easel Link", enabled: current.publishedAt !== null },
       { id: "open", title: "Open Shared Page", enabled: current.publishedAt !== null },
-      { id: "share", title: "Share Link Via…", enabled: current.publishedAt !== null },
+      ...(capabilities.shareSheet ? [{ id: "share", title: "Share Link Via…", enabled: current.publishedAt !== null }] : []),
       { separator: true },
       { id: "update", title: current.publishedAt === null ? "Retry Publishing and Copy Link" : "Update Shared Page and Copy Link" },
       { id: "stop", title: "Stop Sharing…" },
@@ -60,7 +62,7 @@ async function openEaselSharing(doc: EaselDocument, canvas: RefObject<EaselCanva
       copyText(url);
       showToast(windowId, "Easel Link Copied", undefined, { icon: "link" });
     }
-    if (choice === "open") useBrowser.getState().newTab(windowId, { url });
+    if (choice === "open") reportBrowserCommand(newTab(windowId, { url }));
     if (choice === "share") await sharePage(url, doc.title, windowId);
     if (choice === "update") await publish();
     if (choice === "stop") {

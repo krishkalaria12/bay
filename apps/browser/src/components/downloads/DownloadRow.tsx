@@ -1,11 +1,12 @@
+import { View } from "@bay/platform";
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/chromium";
 import { copyFile, copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, showMenu, Symbol, type MenuItem } from "@bay/desktop";
 import { memo, useEffect, useRef, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
-import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { Image, StyleSheet } from "react-native";
+import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import { downloadVisibleIn } from "../../store/windowUi";
 import { useSidebarOnRight, useTabLayout } from "../window/layout";
@@ -13,7 +14,10 @@ import { SIDEBAR_FOOTER_DOWNLOADS } from "../window/constants";
 import { openInternalPage } from "../pages/pageUrls";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { showToast } from "../split/splitActions";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { removeDownload } from "../../runtime/windowUiActions";
 import { tidyRename, resolveTidySuggestion } from "../../lib/tidyDownloads";
+import { platformWords } from "../../lib/platformWords";
 
 // MARK: Formatting
 
@@ -65,7 +69,10 @@ export function toggleOpenWhenDone(id: string) {
 }
 
 export async function downloadMenu(d: Download, windowId: string) {
-  const exists = d.state === "finished" && fileExists(d.path);
+  const exists = d.state === "finished" && (await fileExists(d.path).catch(() => false));
+  const current = useBrowser.getState().downloads.find((item) => item.id === d.id);
+  if (!current || current.path !== d.path || current.state !== d.state) return;
+  d = current;
   const tidy = d.state === "finished" ? await resolveTidySuggestion(d) : null;
   const items: MenuItem[] =
     d.state === "downloading"
@@ -76,7 +83,7 @@ export async function downloadMenu(d: Download, windowId: string) {
         ]
       : [
           { id: "open", title: "Open", enabled: exists },
-          { id: "reveal", title: "Show in Finder", enabled: exists },
+          { id: "reveal", title: platformWords.revealTitle, enabled: exists },
           { id: "copyFile", title: "Copy File", enabled: exists },
           { id: "copyPath", title: "Copy Path", enabled: d.state === "finished" && !!d.path },
           ...(tidy ? [{ id: "tidy", title: `Rename to “${tidy.filename}”` }] : []),
@@ -107,16 +114,16 @@ export async function downloadMenu(d: Download, windowId: string) {
   if (choice === "tidy" && tidy) void tidyRename(d, tidy, windowId);
   if (choice === "copy") copyText(d.url);
   if (choice === "page") openInternalPage("downloads", windowId);
-  if (choice === "trash") void trashDownload(d);
-  if (choice === "remove") useBrowser.getState().removeDownload(d.id);
+  if (choice === "trash") reportBrowserCommand(trashDownload(windowId, d));
+  if (choice === "remove") reportBrowserCommand(removeDownload(windowId, d.id));
 }
 
 export async function copyDownloadFile(d: Download) {
   if (!(await copyFile(d.path))) throw new Error("The file may have been moved or deleted.");
 }
 
-export async function trashDownload(d: Download) {
-  if (await moveToTrash(d.path)) useBrowser.getState().removeDownload(d.id);
+export async function trashDownload(windowId: string, d: Download) {
+  if (await moveToTrash(d.path)) await removeDownload(windowId, d.id);
 }
 
 const iconCache = new Map<string, string | null>();

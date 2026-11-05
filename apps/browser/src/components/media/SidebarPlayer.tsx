@@ -1,10 +1,11 @@
+import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useShallow } from "zustand/react/shallow";
 import { useState, type ComponentProps } from "react";
-import { Image, Pressable, View } from "react-native";
+import { Image } from "react-native";
 import { switchToTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useTab } from "../../store/hooks";
 import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { useSidebarTokens } from "../sidebar/tokens";

@@ -1,5 +1,7 @@
 # Building Bay
 
+For the Linux branch, see [Building Bay on Linux](docs/linux-building.md).
+
 How to build Bay from source on your own Mac: the engine (a patched Chromium), then the app on top of
 it. Run every command from the root of your clone.
 

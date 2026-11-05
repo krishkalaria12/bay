@@ -1,0 +1,406 @@
+import {
+  forwardRef,
+  useCallback,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  type ComponentRef,
+  type ComponentType,
+  type CSSProperties,
+  type ForwardedRef,
+} from "react";
+import { Image, Text, type TextStyle } from "react-native";
+import { View, type ViewProps } from "@bay/platform";
+import { surfaceBorderColors } from "./webSurfaceBorder";
+import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEffectProps, SurfaceProps, SymbolProps, VisualEffectProps } from "./index";
+import type { MiddleClickEvent, MouseAreaProps, SideButton } from "./system";
+import type { LocalFilesAreaProps } from "./localFiles";
+import { localFiles } from "./localFilesNative";
+import { fileDragPath, watchFileDrag, type FileDragSource } from "./webFileDrag";
+import { fluentSymbol, svgSymbol } from "./symbols.web";
+import { WebActivitySpinner } from "./WebActivitySpinner";
+import { EaselCanvasWeb } from "./EaselCanvas.web";
+
+type ViewRef = ComponentRef<typeof View>;
+type CSS = CSSProperties & { WebkitAppRegion?: "drag" | "no-drag"; WebkitBackdropFilter?: string; WebkitMaskImage?: string };
+type BoxProps = ViewProps & { css?: CSS; configure?: (element: HTMLElement) => void | (() => void) };
+function assignRef<T>(ref: ForwardedRef<T>, value: T | null) {
+  if (typeof ref === "function") ref(value);
+  else if (ref) ref.current = value;
+}
+/** RN Web keeps layout and accessibility semantics; CSS-only effects stay at the DOM boundary. */
+const Box = forwardRef<ViewRef, BoxProps>(function Box({ css, configure, ...props }, ref) {
+  const element = useRef<HTMLElement | null>(null);
+  const bind = useCallback(
+    (value: ViewRef | null) => {
+      element.current = value instanceof HTMLElement ? value : null;
+      assignRef(ref, value);
+    },
+    [ref],
+  );
+  useLayoutEffect(() => {
+    const node = element.current;
+    if (!node || !css) return;
+    const previous = new Map<string, string>();
+    for (const [name, value] of Object.entries(css)) {
+      const property = name.replace(/[A-Z]/g, (character) => `-${character.toLowerCase()}`);
+      previous.set(property, node.style.getPropertyValue(property));
+      node.style.setProperty(property, typeof value === "number" ? String(value) : (value ?? ""));
+    }
+    return () => {
+      for (const [property, value] of previous) node.style.setProperty(property, value);
+    };
+  }, [css]);
+  useLayoutEffect(() => {
+    if (element.current) return configure?.(element.current);
+  }, [configure]);
+  return <View {...props} ref={bind} />;
+});
+
+const weights = { light: "300", regular: "400", medium: "500", semibold: "600", bold: "700" } as const;
+// Lucide's strokes (2 units of 24) read lighter than SF Symbols at the same weight; these match macOS's sidebar glyphs.
+const strokes = { light: 1.6, regular: 1.9, medium: 2.1, semibold: 2.3, bold: 2.5 } as const;
+/** A stroke never renders thinner than about one device pixel, so small glyphs stay crisp. */
+const MIN_STROKE_PX = 1.1;
+function Symbol({ name, size = 16, weight = "regular", color = "currentColor", style, ...props }: SymbolProps) {
+  const windowsFont = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+  const maskId = `bay-symbol-${useId().replace(/[^\w-]/g, "")}`;
+  return (
+    <View {...props} accessible={false} pointerEvents="none" style={[{ alignItems: "center", justifyContent: "center" }, style]}>
+      {windowsFont ? (
+        <Text
+          accessible={false}
+          style={{ fontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets", fontSize: size, color, fontWeight: weights[weight], lineHeight: size + 3 }}
+        >
+          {fluentSymbol(name)}
+        </Text>
+      ) : (
+        <svg
+          aria-hidden="true"
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={Math.max(strokes[weight], (MIN_STROKE_PX * 24) / size)}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ color, display: "block", overflow: "visible" }}
+        >
+          {svgSymbol(name, maskId)}
+        </svg>
+      )}
+    </View>
+  );
+}
+function FadeLabel({ text, fontSize, weight = "regular", color, fadeWidth = 16, style, ...props }: FadeLabelProps) {
+  const width = Math.max(0, fadeWidth);
+  return (
+    <Box
+      {...props}
+      style={style}
+      css={{
+        overflow: "hidden",
+        maskImage: `linear-gradient(to right, #000 calc(100% - ${width}px), transparent)`,
+        WebkitMaskImage: `linear-gradient(to right, #000 calc(100% - ${width}px), transparent)`,
+      }}
+    >
+      <Text numberOfLines={1} ellipsizeMode="clip" style={{ fontSize, fontWeight: weights[weight], color, whiteSpace: "nowrap" } as TextStyle}>
+        {text}
+      </Text>
+    </Box>
+  );
+}
+type NativeSurfaceProps = SurfaceProps & {
+  surfaceShadowColor?: string;
+  surfaceShadowOpacity?: number;
+  surfaceShadowRadius?: number;
+  surfaceShadowOffset?: [number, number];
+};
+function Surface({
+  fill,
+  cornerRadius,
+  borderColor,
+  borderWidth,
+  borderColors,
+  shadowColor,
+  shadowOpacity,
+  shadowRadius,
+  shadowOffset,
+  surfaceShadowColor,
+  surfaceShadowOpacity,
+  surfaceShadowRadius,
+  surfaceShadowOffset,
+  style,
+  children,
+  ...props
+}: NativeSurfaceProps) {
+  const offset = shadowOffset ?? surfaceShadowOffset ?? [0, 0];
+  const radius = shadowRadius ?? surfaceShadowRadius ?? 0;
+  const opacity = shadowOpacity ?? surfaceShadowOpacity ?? 0;
+  const color = shadowColor ?? surfaceShadowColor ?? "#000000";
+  const css: CSS = surfaceBorderColors(borderColor, borderColors);
+  if (opacity > 0 && radius > 0) css.boxShadow = `${offset[0]}px ${offset[1]}px ${radius}px color-mix(in srgb, ${color} ${opacity * 100}%, transparent)`;
+  return (
+    <Box
+      {...props}
+      css={css}
+      style={[
+        {
+          backgroundColor: fill,
+          borderRadius: cornerRadius,
+          borderWidth,
+        },
+        style,
+      ]}
+    >
+      {children}
+    </Box>
+  );
+}
+function Effect({
+  cornerRadius,
+  tint,
+  dark,
+  style,
+  children,
+  material: _material,
+  blendingMode: _blending,
+  glassStyle: _glass,
+  ...props
+}: VisualEffectProps & GlassEffectProps) {
+  return (
+    <Box
+      {...props}
+      css={{ backdropFilter: "blur(24px) saturate(1.35)", WebkitBackdropFilter: "blur(24px) saturate(1.35)" }}
+      style={[{ borderRadius: cornerRadius, backgroundColor: tint ?? (dark ? "rgba(30,30,30,0.72)" : "rgba(245,245,245,0.72)") }, style]}
+    >
+      {children}
+    </Box>
+  );
+}
+function DockSelection({
+  image,
+  emoji,
+  iconSize = 32,
+  cornerRadius,
+  style,
+  theme: _theme,
+  fill,
+  stroke,
+  strokeWidth,
+  dark: _dark,
+  glass: _glass,
+  ...props
+}: DockSelectionProps) {
+  return (
+    <View
+      {...props}
+      style={[
+        { borderRadius: cornerRadius, alignItems: "center", justifyContent: "center", backgroundColor: fill, borderColor: stroke, borderWidth: strokeWidth },
+        style,
+      ]}
+    >
+      {image ? (
+        <Image source={{ uri: image }} style={{ width: iconSize, height: iconSize }} />
+      ) : emoji ? (
+        <Text style={{ fontSize: iconSize }}>{emoji}</Text>
+      ) : null}
+    </View>
+  );
+}
+function ContextMenuArea({ onContextMenu, captureDescendants = false, ...props }: ContextMenuAreaProps) {
+  const configure = useCallback(
+    (element: HTMLElement) => {
+      // The dev harness's `hit:` names it as macOS's does.
+      element.dataset.bayView = "ContextMenuArea";
+      const open = (event: MouseEvent) => {
+        if (!onContextMenu) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onContextMenu();
+      };
+      element.addEventListener("contextmenu", open, captureDescendants);
+      return () => element.removeEventListener("contextmenu", open, captureDescendants);
+    },
+    [onContextMenu, captureDescendants],
+  );
+  return <Box {...props} configure={configure} />;
+}
+function MouseArea({
+  path,
+  onMiddleClick,
+  onSideButton,
+  hearsSideButtons: _hearsSideButtons,
+  ...props
+}: Omit<MouseAreaProps, "onMiddleClick" | "onSideButton"> & {
+  onMiddleClick?: (event: { nativeEvent: MiddleClickEvent }) => void;
+  onSideButton?: (event: { nativeEvent: { button: SideButton } }) => void;
+  hearsSideButtons?: boolean;
+}) {
+  const configure = useCallback(
+    (element: HTMLElement) => {
+      const middle = (event: MouseEvent) => {
+        if (event.button !== 1 || !onMiddleClick) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onMiddleClick({ nativeEvent: { shiftKey: event.shiftKey, altKey: event.altKey, metaKey: event.metaKey } });
+      };
+      // Buttons 3 and 4, released over the area, as AppKit reports them.
+      const side = (event: MouseEvent) => {
+        if ((event.button !== 3 && event.button !== 4) || !onSideButton) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onSideButton({ nativeEvent: { button: event.button === 3 ? "back" : "forward" } });
+      };
+      const stopDrag = watchFileDrag(element, () => (path ? { path: fileDragPath(path), relative: null } : null), dragFile);
+      element.addEventListener("auxclick", middle);
+      element.addEventListener("mouseup", side);
+      return () => {
+        stopDrag();
+        element.removeEventListener("auxclick", middle);
+        element.removeEventListener("mouseup", side);
+      };
+    },
+    [path, onMiddleClick, onSideButton],
+  );
+  return <Box {...props} configure={configure} />;
+}
+const PlainView = forwardRef<ViewRef, ViewProps & { profile?: string; neighbours?: string[] }>(function PlainView(
+  { profile: _profile, neighbours: _neighbours, ...props },
+  ref,
+) {
+  return <View {...props} ref={ref} />;
+});
+const DragRegion = forwardRef<ViewRef, ViewProps>(function DragRegion(props, ref) {
+  return <Box {...props} ref={ref} css={{ WebkitAppRegion: "drag" }} />;
+});
+/** Until these canvases have DOM implementations, show their limit and reject edits explicitly. */
+function unavailableCanvas(name: string) {
+  return forwardRef<object, ViewProps>(function UnavailableCanvas({ style }, ref) {
+    useImperativeHandle(
+      ref,
+      () =>
+        new Proxy(
+          {},
+          {
+            get(_target, method) {
+              if (method === "then" || typeof method !== "string") return undefined;
+              return async () => {
+                throw new Error(`${name} is unavailable in this Bay host`);
+              };
+            },
+          },
+        ),
+      [],
+    );
+    return (
+      <View style={style} accessibilityRole="alert">
+        <Text style={{ margin: 24 }}>{name} is unavailable in this Bay host.</Text>
+      </View>
+    );
+  });
+}
+
+// A file that can't be dragged stays put, with nothing to show for it, as a macOS drag that doesn't start.
+function dragFile({ path, relative }: FileDragSource) {
+  void localFiles.startDrag(path, relative).then(
+    ({ error }) => error && console.warn(`[file drag] ${error}`),
+    (error: unknown) => console.warn("[file drag]", error),
+  );
+}
+
+function LocalFilesArea({
+  dropEnabled,
+  rootPath,
+  relativePath,
+  onFilesDropped,
+  onFilesDropError,
+  onDropActive,
+  onActivate,
+  onContextMenu,
+  ...props
+}: LocalFilesAreaProps) {
+  const configure = useCallback(
+    (element: HTMLElement) => {
+      // A pin's own row: its file drags out, and the grant says which.
+      const stopDrag = watchFileDrag(element, () => (rootPath ? { path: rootPath, relative: relativePath ?? "" } : null), dragFile);
+      const click = (event: MouseEvent) => {
+        if (event.button === 0) onActivate?.();
+      };
+      const key = (event: KeyboardEvent) => {
+        if (!onActivate || event.target !== element || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        onActivate();
+      };
+      const context = (event: MouseEvent) => {
+        if (!onContextMenu) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onContextMenu();
+      };
+      // A page's File objects carry no path or access grant: the host grants what the desktop itself dropped
+      // (BayLocalFiles.acceptDrop), never path metadata from here.
+      const over = (event: DragEvent) => {
+        if (!dropEnabled || !event.dataTransfer?.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        onDropActive?.({ nativeEvent: { active: true } });
+      };
+      const leave = () => onDropActive?.({ nativeEvent: { active: false } });
+      const drop = (event: DragEvent) => {
+        if (!dropEnabled) return;
+        event.preventDefault();
+        event.stopPropagation();
+        leave();
+        void localFiles.acceptDrop().then(
+          ({ files, errors }) => {
+            for (const message of errors) onFilesDropError?.({ nativeEvent: { message } });
+            if (files.length) onFilesDropped?.({ nativeEvent: { files } });
+          },
+          () => onFilesDropError?.({ nativeEvent: { message: "Couldn't pin the dropped files. Try again." } }),
+        );
+      };
+      element.addEventListener("click", click);
+      element.addEventListener("keydown", key);
+      element.addEventListener("contextmenu", context);
+      element.addEventListener("dragover", over);
+      element.addEventListener("dragleave", leave);
+      element.addEventListener("drop", drop);
+      return () => {
+        stopDrag();
+        element.removeEventListener("click", click);
+        element.removeEventListener("keydown", key);
+        element.removeEventListener("contextmenu", context);
+        element.removeEventListener("dragover", over);
+        element.removeEventListener("dragleave", leave);
+        element.removeEventListener("drop", drop);
+      };
+    },
+    [dropEnabled, rootPath, relativePath, onFilesDropped, onFilesDropError, onDropActive, onActivate, onContextMenu],
+  );
+  return <Box {...props} configure={configure} />;
+}
+
+const views: Record<string, unknown> = {
+  BaySymbol: Symbol,
+  BayFadeLabel: FadeLabel,
+  BayActivitySpinner: WebActivitySpinner,
+  BaySurface: Surface,
+  BayVisualEffect: Effect,
+  BayGlassEffect: Effect,
+  BayDockSelection: DockSelection,
+  BayWindowProfile: PlainView,
+  BayShell: DragRegion,
+  BayContextMenuArea: ContextMenuArea,
+  BayFileDrag: MouseArea,
+  BayCapture: unavailableCanvas("Capture Mark Up"),
+  BayEasel: EaselCanvasWeb,
+  BayLocalFiles: LocalFilesArea,
+};
+export function requireNativeViewManager<P extends object>(name: string): ComponentType<P> {
+  const component = views[name];
+  if (!component) throw new Error(`No desktop web view adapter for ${name}`);
+  return component as ComponentType<P>;
+}

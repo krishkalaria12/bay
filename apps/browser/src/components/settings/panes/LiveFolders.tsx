@@ -1,6 +1,9 @@
+import { reportBrowserCommand } from "../../../runtime/commands";
+import * as tabCommands from "../../../runtime/tabActions";
+import { View } from "@bay/platform";
 import { copyText, focusWindow } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../../lib/theme";
 import { deleteLiveFolder, refreshFolder, statusText } from "../../../activity/activityEngine";
@@ -18,7 +21,7 @@ import {
 } from "../../../activity/sources";
 import { live, updateConfig, useLive } from "../../../activity/activityStore";
 import type { LiveAccount, LiveSourceId } from "../../../activity/types";
-import { useBrowser } from "../../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { Favicon } from "../../ui/primitives";
 import { Button, Group, Row, SectionHeader, Sheet, TextField } from "../controls";
 import { SETTINGS } from "../definitions";
@@ -50,7 +53,7 @@ export function LiveFoldersPane() {
             <Row
               key={f.id}
               title={f.name}
-              description={`${profiles[f.spaceId]?.name ?? "Profile"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}
+              description={`${profiles[f.spaceId]?.name ?? "Space"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}
             >
               <View style={{ flexDirection: "row", gap: 6 }}>
                 <Button title="Refresh" onPress={() => void refreshFolder(f.id)} />
@@ -109,7 +112,7 @@ function browserWindow(): string | null {
 function openInBrowser(url: string) {
   const windowId = browserWindow();
   if (!windowId) return;
-  useBrowser.getState().newTab(windowId, { url });
+  reportBrowserCommand(tabCommands.newTab(windowId, { url }));
   void focusWindow(windowId);
 }
 

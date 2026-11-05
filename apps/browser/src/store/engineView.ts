@@ -1,9 +1,10 @@
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "./browserStore";
+import { useBrowserRead as useBrowser } from "./read";
+import type { BrowserProjection, DeepReadonly } from "../runtime/projection";
 import { changedIds } from "./recordDiff";
 import type { Tab } from "./types";
 
-type EngineView = Pick<BrowserState, "tabs" | "settings">;
+type EngineView = Pick<BrowserProjection, "tabs" | "settings">;
 
 // Every tab icon has an engine badge selector, and every page a view chosen by its engine. Publish only when what
 // engine selection reads changed, so page progress, selection, titles and the stamp of a tab switch don't run those
@@ -13,7 +14,7 @@ export const useEngineView = create<EngineView>()(() => {
   return { tabs, settings };
 });
 
-const sameEngineInputs = (a: Tab | undefined, b: Tab | undefined) =>
+const sameEngineInputs = (a: DeepReadonly<Tab> | undefined, b: DeepReadonly<Tab> | undefined) =>
   a === b ||
   (!!a &&
     !!b &&

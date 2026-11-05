@@ -1,5 +1,6 @@
 import type { StoreApi } from "zustand/vanilla";
-import { useBrowser, type BrowserShape } from "./browserStore";
+import { useBrowserRead as useBrowser } from "./read";
+import type { BrowserShape } from "./browserStore";
 import { changedIds } from "./recordDiff";
 import { spaceHeaderHidden } from "./model";
 
@@ -31,7 +32,7 @@ export function selectStore<S, T>(source: ReadStore<S>, select: (state: S) => T)
 }
 
 /** One source subscription routes a record's changes to the IDs with mounted consumers. */
-export function recordStores<S, T>(source: ReadStore<S>, select: (state: S) => Record<string, T>) {
+export function recordStores<S, T>(source: ReadStore<S>, select: (state: S) => Readonly<Record<string, T>>) {
   const listeners = new Map<string, Set<(state: T | undefined, prev: T | undefined) => void>>();
   let stop: (() => void) | undefined;
   return (id: string): ReadStore<T | undefined> => ({

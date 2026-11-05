@@ -1,0 +1,32 @@
+// Copyright 2026 Bay. Apache-2.0.
+module bay.mojom;
+
+// Available only in the browser-owned, top-level chrome://bay document.
+// Arguments and results use the generated @bay/platform JSON envelopes.
+interface NativeHost {
+  GetHostInfo() => (string info_json);
+  Invoke(string module_name, string method, string args_json) => (string result_json);
+  SetClient(pending_remote<NativeHostClient> client);
+};
+
+interface NativeHostClient {
+  OnNativeEvent(string module_name, string name, string payload_json);
+  OnHostInfoChanged(string info_json);
+};
+
+// Separate from NativeHost: the detached application coordinator has no native
+// browser window. The browser authenticates each primary document endpoint.
+interface AppRuntime {
+  Connect(pending_remote<AppRuntimeClient> client) => (string result_json);
+  GetSnapshot() => (string result_json);
+  Dispatch(string request_json) => (string result_json);
+  Publish(string commit_json) => (string result_json);
+  Resolve(string token, string reply_json) => (string result_json);
+  Ready() => (string result_json);
+};
+
+interface AppRuntimeClient {
+  OnCommit(string commit_json);
+  OnCommand(string token, string request_json);
+  OnRuntimeClosed(string code);
+};

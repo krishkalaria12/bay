@@ -1,7 +1,10 @@
+import { isMac, menuKeyName, virtualKeyCode } from "@bay/platform";
 import { setLittleBayHotKey, setLittleBayMenuBarItem, type HotKeyStatus } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import type { LittleBayShortcut } from "../../store/settings";
+import type { BrowserProjection } from "../../runtime/projection";
+type ReadShortcut = BrowserProjection["settings"]["littleBayShortcut"];
 
 // Little Bay from any app (packages/shell LittleBayAccess.swift), as Little Arc's: a shortcut and a menu bar button,
 // each opening a Little Bay ready to type with Bay in the background or not. Settings › Links turns them on.
@@ -9,10 +12,15 @@ import type { LittleBayShortcut } from "../../store/settings";
 /** Arc's ⌥⌘N, as the shortcut starts when it's turned on: "n" is key code 45 (kVK_ANSI_N). */
 export const DEFAULT_LITTLE_BAY_SHORTCUT: LittleBayShortcut = { key: "n", keyCode: 45, modifiers: ["option", "command"] };
 
-/** Whether the shortcut is registered: "taken" when another app holds it. */
+/** The key as this platform registers it: macOS's own key code there, and elsewhere the virtual key its name means, as
+ *  the saved code may be macOS's (the default is, and settings sync). */
+export const hotKeyCode = (shortcut: { key: string; keyCode: number }, mac: boolean = isMac): number | null =>
+  mac ? shortcut.keyCode : virtualKeyCode(menuKeyName(shortcut.key));
+
+/** Whether the shortcut is registered: "taken" when another app holds it, "unavailable" on a desktop with no way to ask. */
 export const useLittleBayAccess = create<{ status: HotKeyStatus }>()(() => ({ status: "off" }));
 
-const sameShortcut = (a: LittleBayShortcut | null, b: LittleBayShortcut | null) =>
+const sameShortcut = (a: ReadShortcut, b: ReadShortcut) =>
   a === b || (!!a && !!b && a.keyCode === b.keyCode && [...a.modifiers].sort().join() === [...b.modifiers].sort().join());
 
 let started = false;
@@ -20,7 +28,7 @@ let started = false;
 export function startLittleBayAccess() {
   if (started) return;
   started = true;
-  let shortcut: LittleBayShortcut | null = null;
+  let shortcut: ReadShortcut = null;
   let menuBar = false;
   const apply = () => {
     const settings = useBrowser.getState().settings;
@@ -29,7 +37,7 @@ export function startLittleBayAccess() {
     const unregistered = !!next && useLittleBayAccess.getState().status === "off";
     if (!sameShortcut(next, shortcut) || unregistered) {
       shortcut = next;
-      void setLittleBayHotKey(next?.keyCode ?? null, next?.modifiers ?? []).then(
+      void setLittleBayHotKey(next ? hotKeyCode(next) : null, [...(next?.modifiers ?? [])]).then(
         (status) => {
           // A newer choice has its own registration on the way.
           if (sameShortcut(shortcut, next)) useLittleBayAccess.setState({ status });

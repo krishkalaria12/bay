@@ -1,7 +1,7 @@
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSettings } from "../../store/hooks";
 import type { GroupColor } from "../../store/types";
 import { useSidebarUi } from "./state";

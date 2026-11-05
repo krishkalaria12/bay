@@ -1,3 +1,4 @@
+import { View, isMac, shortcutLabel } from "@bay/platform";
 import {
   checkForUpdates,
   isDefaultBrowser,
@@ -14,9 +15,11 @@ import {
   type UpdaterState,
 } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { AppState, Text, View } from "react-native";
+import { AppState, Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browserStore";
 import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
@@ -24,8 +27,7 @@ import { openImport } from "../windows";
 import { APP_NAME } from "../../../lib/constants";
 
 export function GeneralPane() {
-  const settings = useBrowser((s) => s.settings);
-  const update = useBrowser((s) => s.updateSettings);
+  const settings = useBrowserRead((s) => s.settings);
   const [loginStatus, setLoginStatus] = useState<string>("notRegistered");
 
   const refreshLogin = () => void launchAtLoginStatus().then(setLoginStatus);
@@ -51,15 +53,19 @@ export function GeneralPane() {
             }
           />
         </Row>
-        <Row settingId={SETTINGS.warnBeforeQuitting.id} title={SETTINGS.warnBeforeQuitting.title} description={`Asks before ${APP_NAME} quits with ⌘Q.`}>
-          <Toggle value={settings.warnBeforeQuitting} onChange={(v) => update({ warnBeforeQuitting: v })} />
+        <Row
+          settingId={SETTINGS.warnBeforeQuitting.id}
+          title={SETTINGS.warnBeforeQuitting.title}
+          description={isMac ? `Asks before ${APP_NAME} quits with ⌘Q.` : `Asks before ${APP_NAME} quits.`}
+        >
+          <Toggle value={settings.warnBeforeQuitting} onChange={(v) => reportBrowserCommand(updateSettings({ warnBeforeQuitting: v }))} />
         </Row>
         <Row
           settingId={SETTINGS.warnBeforeClosingWindow.id}
           title={SETTINGS.warnBeforeClosingWindow.title}
-          description="Asks before ⇧⌘W or the close button closes its tabs."
+          description={shortcutLabel("Asks before ⇧⌘W or the close button closes its tabs.")}
         >
-          <Toggle value={settings.warnBeforeClosingWindow} onChange={(v) => update({ warnBeforeClosingWindow: v })} />
+          <Toggle value={settings.warnBeforeClosingWindow} onChange={(v) => reportBrowserCommand(updateSettings({ warnBeforeClosingWindow: v }))} />
         </Row>
       </Group>
 
@@ -72,7 +78,7 @@ export function GeneralPane() {
               { value: "newTab", title: "A new tab" },
               { value: "lastTab", title: "The last tab you viewed" },
             ]}
-            onChange={(v) => update({ launchTab: v })}
+            onChange={(v) => reportBrowserCommand(updateSettings({ launchTab: v }))}
             minWidth={190}
           />
         </Row>
@@ -91,7 +97,7 @@ export function GeneralPane() {
               { value: "keep", title: "Preserve tabs and windows" },
               { value: "close", title: "Start fresh" },
             ]}
-            onChange={(v) => update({ restoreSession: v === "keep" })}
+            onChange={(v) => reportBrowserCommand(updateSettings({ restoreSession: v === "keep" }))}
             minWidth={190}
           />
         </Row>
@@ -106,7 +112,7 @@ export function GeneralPane() {
               { value: "sidebar", title: "The Sidebar" },
               { value: "page", title: "A Page" },
             ]}
-            onChange={(v) => update({ libraryIn: v })}
+            onChange={(v) => reportBrowserCommand(updateSettings({ libraryIn: v }))}
             minWidth={190}
           />
         </Row>
@@ -121,7 +127,7 @@ export function GeneralPane() {
               { value: "website", title: "Use Website First" },
               { value: "search", title: "Prefer Search Engine" },
             ]}
-            onChange={(v) => update({ commandBarPreference: v })}
+            onChange={(v) => reportBrowserCommand(updateSettings({ commandBarPreference: v }))}
             minWidth={190}
           />
         </Row>
@@ -163,14 +169,10 @@ function UpdatesSection() {
   const lastCheck = state.lastCheck
     ? `Last checked ${new Date(state.lastCheck).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
     : "Not checked yet.";
+  const localCleaner = isMac ? "Bay cleans the name on this Mac. Nothing leaves it." : "Bay cleans the name on your computer. Nothing leaves it.";
   return (
     <>
-      <SectionHeader
-        title="Downloads"
-        description={
-          tidyNames ? "Apple's on-device model writes the suggested name. Nothing leaves this Mac." : "Bay cleans the name on this Mac. Nothing leaves it."
-        }
-      />
+      <SectionHeader title="Downloads" description={tidyNames ? "Apple's on-device model writes the suggested name. Nothing leaves this Mac." : localCleaner} />
       <Group>
         <SettingToggle
           setting="tidyDownloads"
@@ -228,7 +230,17 @@ function DefaultBrowserBanner() {
   const theme = useTheme();
   const colors = useFormColors();
   const [isDefault, setIsDefault] = useState<boolean | null>(null);
+  // Why setting the default failed, when trying again can't help (Linux without bay.desktop installed).
+  const [problem, setProblem] = useState<string | null>(null);
   const refresh = () => void isDefaultBrowser().then(setIsDefault);
+  const makeDefault = () =>
+    void setAsDefaultBrowser().then(
+      (value) => {
+        setProblem(null);
+        setIsDefault(value);
+      },
+      (failure: unknown) => setProblem(failure instanceof Error ? failure.message : "The default browser wasn't changed. Try again."),
+    );
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
@@ -250,10 +262,13 @@ function DefaultBrowserBanner() {
       }}
     >
       <Symbol name={isDefault ? "checkmark.seal.fill" : "safari"} size={20} color={isDefault ? "#34C759" : theme.icon} style={{ width: 28, height: 28 }} />
-      <Text style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
-        {isDefault ? `${APP_NAME} is your default browser` : `${APP_NAME} works best as your default browser`}
-      </Text>
-      {!isDefault && <Button title={`Set ${APP_NAME} as Default`} kind="primary" onPress={() => void setAsDefaultBrowser().then(setIsDefault)} />}
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ fontSize: 13, color: theme.textPrimary }}>
+          {isDefault ? `${APP_NAME} is your default browser` : `${APP_NAME} works best as your default browser`}
+        </Text>
+        {!isDefault && problem && <Text style={{ fontSize: 12, color: theme.textSecondary }}>{problem}</Text>}
+      </View>
+      {!isDefault && <Button title={`Set ${APP_NAME} as Default`} kind="primary" onPress={makeDefault} />}
     </View>
   );
 }

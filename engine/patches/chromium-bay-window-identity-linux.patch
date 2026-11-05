@@ -1,0 +1,31 @@
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.cc b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+--- a/chrome/browser/ui/webui_browser/webui_browser_window.cc
++++ b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+@@ -21,6 +21,9 @@
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_init_state.h"
++#if BUILDFLAG(IS_LINUX)
++#include "chrome/browser/shell_integration_linux.h"  // nogncheck
++#endif
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window_state.h"
+@@ -167,6 +170,17 @@
+                                            &params.show_state);
+   params.delegate = widget_delegate_.get();
+   params.native_widget = CreateNativeWidget();
++#if BUILDFLAG(IS_LINUX)
++  // As BrowserNativeWidgetAuraLinux does: the desktop matches windows to the
++  // desktop file through the X11 class and the Wayland app id, and the launch
++  // token lets the first window take focus.
++  params.wm_class_name = shell_integration_linux::GetProgramClassName();
++  params.wm_class_class = shell_integration_linux::GetProgramClassClass();
++  params.wm_role_name = "browser";
++  params.wayland_app_id = params.wm_class_class;
++  params.startup_id =
++      BrowserInitState::From(browser_)->create_params().startup_id;
++#endif
+ #if BUILDFLAG(IS_CHROMEOS)
+   params.remove_standard_frame = true;
+ #endif

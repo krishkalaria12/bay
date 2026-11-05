@@ -5,6 +5,8 @@ import {
   keychainGet,
   keychainSet,
   readEaselShareRecords,
+  readCurrentEaselShareRecords,
+  requestEaselShare,
   saveDocument,
 } from "@bay/desktop";
 import { create } from "zustand";
@@ -19,26 +21,56 @@ let saves = Promise.resolve();
 
 export const easelShareURL = (id: string) => `${ORIGIN}/easel/${id}/`;
 
+const RECORDS_ERROR = "Couldn't read Easel sharing records. Restore easel-shares.json before changing shared pages.";
+const LOCK = "bay-easel-sharing";
+let channel: BroadcastChannel | null = null;
+const sharingLocks = () => (typeof navigator !== "undefined" ? navigator.locks : undefined);
+
+function parseRecords(text: string | null): Record<string, Publication> {
+  const data = text === null ? { version: 1, records: {} } : JSON.parse(text);
+  if (data?.version !== 1 || !data.records || typeof data.records !== "object" || Array.isArray(data.records)) throw new Error(RECORDS_ERROR);
+  for (const value of Object.values(data.records) as Publication[]) {
+    if (
+      !value ||
+      !/^[a-f0-9]{32}$/.test(value.id) ||
+      !Number.isSafeInteger(value.revision) ||
+      value.revision < 1 ||
+      (value.publishedAt !== null && !Number.isFinite(value.publishedAt))
+    )
+      throw new Error(RECORDS_ERROR);
+  }
+  return data.records;
+}
+
+async function refreshRecords() {
+  try {
+    useEaselShares.setState({ records: parseRecords(await readCurrentEaselShareRecords()) });
+  } catch {
+    throw new Error(RECORDS_ERROR);
+  }
+}
+
+function syncSharingWindows() {
+  const locks = sharingLocks();
+  if (channel || !locks || typeof BroadcastChannel === "undefined") return;
+  channel = new BroadcastChannel(LOCK);
+  (channel as { unref?(): void }).unref?.();
+  // Notifications carry no registry copy. Read the newest durable records
+  // under the same lock as writers, even if a notification was delayed.
+  channel.onmessage = () => {
+    void locks.request(LOCK, refreshRecords).catch(() => {
+      useEaselShares.setState({ error: RECORDS_ERROR });
+    });
+  };
+}
+
 export function startEaselShares() {
   if (useEaselShares.getState().loaded) return;
   try {
-    const text = readEaselShareRecords();
-    const data = text === null ? { version: 1, records: {} } : JSON.parse(text);
-    if (data?.version !== 1 || !data.records || typeof data.records !== "object" || Array.isArray(data.records)) throw new Error("Invalid sharing records");
-    for (const value of Object.values(data.records) as Publication[]) {
-      if (
-        !value ||
-        !/^[a-f0-9]{32}$/.test(value.id) ||
-        !Number.isSafeInteger(value.revision) ||
-        value.revision < 1 ||
-        (value.publishedAt !== null && !Number.isFinite(value.publishedAt))
-      ) {
-        throw new Error("Invalid sharing record");
-      }
-    }
-    useEaselShares.setState({ loaded: true, records: data.records, error: null });
+    useEaselShares.setState({ loaded: true, records: parseRecords(readEaselShareRecords()), error: null });
+    syncSharingWindows();
   } catch {
-    useEaselShares.setState({ loaded: true, error: "Couldn't read Easel sharing records. Restore easel-shares.json before changing shared pages." });
+    useEaselShares.setState({ loaded: true, error: RECORDS_ERROR });
   }
 }
 
@@ -50,6 +82,7 @@ function saveRecord(easelId: string, value: Publication | null) {
     else delete records[easelId];
     await saveDocument(FILE, JSON.stringify({ version: 1, records }));
     useEaselShares.setState({ records });
+    channel?.postMessage(null);
   });
   saves = next.catch(() => {});
   return next;
@@ -62,6 +95,12 @@ async function exclusive<T>(easelId: string, run: () => Promise<T>): Promise<T> 
   if (state.busy[easelId]) throw new Error("This Easel is already being shared. Wait for it to finish.");
   useEaselShares.setState({ busy: { ...state.busy, [easelId]: true } });
   try {
+    const locks = sharingLocks();
+    if (locks)
+      return await locks.request(LOCK, async () => {
+        await refreshRecords();
+        return run();
+      });
     return await run();
   } finally {
     const busy = { ...useEaselShares.getState().busy };
@@ -73,7 +112,7 @@ async function exclusive<T>(easelId: string, run: () => Promise<T>): Promise<T> 
 async function managementKey(id: string) {
   const key = await keychainGet(account(id));
   if (!key || !/^[a-f0-9]{64}$/.test(key))
-    throw new Error("The sharing key is unavailable in Keychain. Restore access to it before changing this shared page.");
+    throw new Error("The sharing key is unavailable in secure storage. Restore access to it before changing this shared page.");
   return key;
 }
 
@@ -82,18 +121,21 @@ async function request(publication: Publication, method: "PUT" | "DELETE", body?
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
   try {
-    const response = await fetch(`${ORIGIN}/api/easels/${publication.id}`, {
-      method,
-      headers: { Authorization: `Bearer ${key}`, ...(body ? { "Content-Type": "application/json" } : {}) },
-      body,
-      signal: controller.signal,
-      redirect: "error",
-    });
-    if (!response.ok) {
+    const native = requestEaselShare(publication.id, key, method, body);
+    const response = native
+      ? await native
+      : await fetch(`${ORIGIN}/api/easels/${publication.id}`, {
+          method,
+          headers: { Authorization: `Bearer ${key}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+          body,
+          signal: controller.signal,
+          redirect: "error",
+        });
+    if (response.status < 200 || response.status >= 300) {
       const messages: Record<number, string> = {
         400: "This Easel couldn't be shared. Check its source links or export it as HTML.",
-        401: "The sharing key wasn't accepted. Restore Keychain access before trying again.",
-        403: "This Mac couldn't authorize a change to the shared page. Check its sharing key in Keychain.",
+        401: "The sharing key wasn't accepted. Restore secure storage access before trying again.",
+        403: "This device couldn't authorize a change to the shared page. Check its sharing key in secure storage.",
         404: "Web sharing isn't available on Bay's website yet. Export this Easel as HTML instead.",
         409: "A newer snapshot reached the shared page first. Publish again to share your current Easel.",
         410: "This link has been stopped. Stop sharing here, then publish a new link.",
@@ -119,7 +161,7 @@ export async function publishEasel(easelId: string, snapshot: () => Promise<stri
     if (!publication) {
       const identity = await createEaselShareIdentity();
       if (!/^[a-f0-9]{32}$/.test(identity.id) || !/^[a-f0-9]{64}$/.test(identity.key)) throw new Error("Couldn't create a secure sharing link.");
-      if (!(await keychainSet(account(identity.id), identity.key))) throw new Error("Couldn't save the sharing key in Keychain. Nothing was published.");
+      if (!(await keychainSet(account(identity.id), identity.key))) throw new Error("Couldn't save the sharing key in secure storage. Nothing was published.");
       publication = { id: identity.id, publishedAt: null, revision: 0 };
     }
     if (publication.revision >= Number.MAX_SAFE_INTEGER) throw new Error("Stop sharing and publish a new link before updating this page.");

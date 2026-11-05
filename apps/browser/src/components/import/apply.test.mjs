@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("../../store/browserStore.ts");
-const { importArcSpace } = await import("./apply.ts");
+const { importArcSpace, importWarningNotes } = await import("./apply.ts");
 const { sidebarEntries, folderEntries } = await import("../sidebar/sidebarEntries.ts");
 const { folderDepth, folderTabIds } = await import("../../store/folders.ts");
 
@@ -11,12 +11,41 @@ const short = (id) => S().tabs[id].url.replace(/^https:\/\/|\.com\/?$/g, "");
 const link = (name, title) => ({ type: "url", url: `https://${name}.com`, title: title ?? name });
 const folder = (title, ...children) => ({ type: "folder", title, children });
 
-test("an Arc space's pinned tabs become pinned rows and its folders pinned folders, in Arc's order", () => {
+test("partial imports report protected passwords and cards in completion notes", () => {
+  const result = {
+    credentials: [{ url: "https://saved.test", username: "saved", password: "readable" }],
+    failed: [],
+    warnings: [
+      { kind: "passwords", code: "passwordExportRequired", message: "2 passwords are protected. Export its password CSV and import that file" },
+      { kind: "autofill", code: "appBound", message: "Protected payment cards were skipped. Their source browser must export them" },
+    ],
+  };
+  assert.deepEqual(
+    importWarningNotes(result),
+    result.warnings.map((warning) => `${warning.message}.`),
+  );
+});
+
+test("completion notes retain skipped-data warnings without duplicating failed categories", () => {
+  const result = {
+    failed: ["passwords"],
+    warnings: [
+      { kind: "passwords", code: "passwordExportRequired", message: "Passwords need export" },
+      { kind: "autofill", code: "locked", message: "Cards were locked" },
+      { kind: "cookies", code: "undecryptable", message: "Cookies could not decrypt" },
+      { code: "skipped", message: "Some data was skipped" },
+      { code: "info", message: "An informational message" },
+    ],
+  };
+  assert.deepEqual(importWarningNotes(result), ["Cards were locked.", "Cookies could not decrypt.", "Some data was skipped."]);
+});
+
+test("an Arc space's pinned tabs become pinned rows and its folders pinned folders, in Arc's order", async () => {
   S().hydrate({});
   const w = S().createWindow({ url: "https://home.com" });
   const spaceId = S().windows[w].spaceId;
   const bookmarks = Object.keys(S().bookmarks.nodes).length;
-  const n = importArcSpace(spaceId, {
+  const n = await importArcSpace(spaceId, {
     id: "s",
     name: "Space",
     profileId: "Default",
@@ -47,7 +76,7 @@ test("an Arc space's pinned tabs become pinned rows and its folders pinned folde
   assert.equal(Object.keys(S().bookmarks.nodes).length, bookmarks, "no bookmarks");
 });
 
-test("Arc imports retain every usable overflow tab in the fifth folder level", () => {
+test("Arc imports retain every usable overflow tab in the fifth folder level", async () => {
   S().hydrate({});
   const w = S().createWindow({ url: "https://home.com" });
   const spaceId = S().windows[w].spaceId;
@@ -55,7 +84,7 @@ test("Arc imports retain every usable overflow tab in the fifth folder level", (
   for (let depth = 80; depth >= 1; depth--) {
     pinned = [{ type: "folder", title: `Level ${depth}`, children: [link(`level-${depth}`), ...pinned] }];
   }
-  const n = importArcSpace(spaceId, { id: "deep", name: "Deep", profileId: "Default", pinned, tabs: [] });
+  const n = await importArcSpace(spaceId, { id: "deep", name: "Deep", profileId: "Default", pinned, tabs: [] });
   assert.equal(n, 80);
   const folders = Object.values(S().pinnedFolders);
   assert.equal(folders.length, 5);
@@ -73,12 +102,12 @@ test("Arc imports retain every usable overflow tab in the fifth folder level", (
   );
 });
 
-test("empty Arc folders keep their parents and destination space even with another space focused", () => {
+test("empty Arc folders keep their parents and destination space even with another space focused", async () => {
   S().hydrate({});
   const w = S().createWindow({ url: "https://home.com" });
   const focused = S().windows[w].spaceId;
   const destination = S().createSpace({ name: "Imported" });
-  const n = importArcSpace(destination, {
+  const n = await importArcSpace(destination, {
     id: "empty",
     name: "Empty",
     profileId: "Default",
@@ -95,7 +124,7 @@ test("empty Arc folders keep their parents and destination space even with anoth
   assert.deepEqual(folderEntries(S(), root.id), [`f:${child.id}`]);
 });
 
-test("Arc preserves mixed direct tabs, nested folders and empty siblings at every level", () => {
+test("Arc preserves mixed direct tabs, nested folders and empty siblings at every level", async () => {
   S().hydrate({});
   const w = S().createWindow({ url: "https://home.com" });
   const spaceId = S().windows[w].spaceId;
@@ -131,7 +160,7 @@ test("Arc preserves mixed direct tabs, nested folders and empty siblings at ever
     link("tail"),
     folder("Empty last", folder("Empty last descendant")),
   ];
-  assert.equal(importArcSpace(spaceId, { id: "mixed", name: "Mixed", profileId: "Default", pinned, tabs: [] }), 12);
+  assert.equal(await importArcSpace(spaceId, { id: "mixed", name: "Mixed", profileId: "Default", pinned, tabs: [] }), 12);
   const sourceTree = (node) => (node.type === "folder" ? { folder: node.title, children: node.children.map(sourceTree) } : node.title);
   const importedTree = (entry) => {
     const id = entry.slice(2);

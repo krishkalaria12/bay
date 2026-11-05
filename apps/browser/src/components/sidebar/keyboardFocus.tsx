@@ -1,6 +1,11 @@
+import { isMac, View, type ScrollView, type ViewProps } from "@bay/platform";
 import { focusSidebarRow, prompt } from "@bay/desktop";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { findNodeHandle, StyleSheet, View, type ScrollView, type ViewProps } from "react-native";
+import { StyleSheet } from "react-native";
+import { nodeTag } from "../../lib/nodeTag";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { undoSidebarEdit } from "../../runtime/organizeActions";
+import { openPeek } from "../../runtime/splitActions";
 import { closeTab } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
@@ -9,13 +14,14 @@ import { live, updateFolder, useLive } from "../../activity/activityStore";
 import { useShallow } from "zustand/react/shallow";
 import { createStore, useStore, type StoreApi } from "zustand";
 import { sidebarKeyboardRowIds } from "./sidebarEntries";
-import { useBrowser } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId } from "../../store/model";
 import { usePageSpaceId, useSpaceFolded, useWindowField, useWindowId, useQuietBrowser } from "../../store/hooks";
 import { splitStore } from "../../store/derivedStores";
 import { clickTab, startRename } from "./actions";
 import { dismissHover } from "./hover";
-import { blurSidebar, focusSidebar, reconcileSidebarKeyboard, registerSidebarKeyboardActions, type SidebarKeyboardRow } from "./keyboard";
+import { blurSidebar, focusSidebar, reconcileSidebarKeyboard, registerSidebarKeyboardActions, runSidebarKey, type SidebarKeyboardRow } from "./keyboard";
+import { startWebSidebarKeyboard } from "./webKeyboard";
 import { measureRow, registerRow, setSidebarUi, useSidebarUi } from "./state";
 
 // The scope's visible rows, as a store each row reads its own entry of: a tab opening or closing changes the set, and
@@ -69,8 +75,9 @@ export function SidebarKeyboardRowView({ rowId, legacyId, label, children, ...pr
         if (!ref.current) return;
         revealers.get(windowId)?.(ref.current);
         if (ms === 220) {
-          const tag = findNodeHandle(ref.current);
+          const tag = nodeTag(ref.current);
           if (tag) void focusSidebarRow(windowId, tag);
+          else webKeyboards.get(windowId)?.focusRow(ref.current as unknown as HTMLElement);
         }
       }, ms),
     );
@@ -99,6 +106,9 @@ export function SidebarKeyboardRowView({ rowId, legacyId, label, children, ...pr
     </View>
   );
 }
+
+// The Chrome-hosted desktop's sidebar keyboard (webKeyboard.ts), by window.
+const webKeyboards = new Map<string, ReturnType<typeof startWebSidebarKeyboard>>();
 
 export function useSidebarKeyboard(windowId: string, scroll: RefObject<ScrollView | null>, scrollY: RefObject<number>, glowRoom: number) {
   useEffect(() => {
@@ -144,7 +154,7 @@ export function useSidebarKeyboard(windowId: string, scroll: RefObject<ScrollVie
           const id = tabId(row);
           const url = row.item?.url ?? (id ? s.tabs[id]?.url : undefined);
           if (from && url) {
-            s.openPeek(from, url);
+            reportBrowserCommand(openPeek(from, url));
             // The peek takes focus when mounted. Keep Escape on the page's existing peek handler.
             blurSidebar(windowId);
           }
@@ -195,8 +205,21 @@ export function useSidebarKeyboard(windowId: string, scroll: RefObject<ScrollVie
       });
     };
     revealers.set(windowId, reveal);
+    const web = isMac
+      ? null
+      : startWebSidebarKeyboard({
+          active: () => !!useSidebarUi.getState().keyboard[windowId]?.active,
+          runKey: (key) => runSidebarKey(windowId, key),
+          blur: () => blurSidebar(windowId),
+          canUndo: () => !!useBrowser.getState().sidebarUndo[windowId]?.length,
+          undo: () => reportBrowserCommand(undoSidebarEdit(windowId)),
+        });
+    if (web) webKeyboards.set(windowId, web);
     const unsub = useBrowser.subscribe((s, prev) => {
       if (!s.windows[windowId]) return;
+      // Only a user's edit adds an entry, so a new one is an Undo to offer.
+      const latest = s.sidebarUndo[windowId]?.at(-1);
+      if (web && latest && !prev.sidebarUndo[windowId]?.includes(latest)) web.armUndo();
       if (s.windows[windowId]?.spaceId !== prev.windows[windowId]?.spaceId) blurSidebar(windowId);
       if (s.windowUi[windowId]?.panel.open || !s.windows[windowId]?.sidebarOpen) blurSidebar(windowId);
       if (
@@ -213,6 +236,8 @@ export function useSidebarKeyboard(windowId: string, scroll: RefObject<ScrollVie
     const unsubLive = useLive.subscribe(() => reconcileSidebarKeyboard(windowId));
     const unsubUi = useSidebarUi.subscribe((s, prev) => {
       if (renaming && prev.renaming?.windowId === windowId && !s.renaming) restore();
+      const active = !!s.keyboard[windowId]?.active;
+      if (web && active !== !!prev.keyboard[windowId]?.active) web.changed(active);
     });
     return () => {
       unregister();
@@ -220,6 +245,8 @@ export function useSidebarKeyboard(windowId: string, scroll: RefObject<ScrollVie
       unsubLive();
       unsubUi();
       if (revealers.get(windowId) === reveal) revealers.delete(windowId);
+      if (web && webKeyboards.get(windowId) === web) webKeyboards.delete(windowId);
+      web?.stop();
     };
   }, [windowId, scroll, scrollY, glowRoom]);
 }

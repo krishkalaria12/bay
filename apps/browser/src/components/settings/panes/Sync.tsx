@@ -1,7 +1,8 @@
+import { View, isMac } from "@bay/platform";
 import { showMenu, Symbol } from "@bay/desktop";
 import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState } from "react";
-import { Linking, Text, View } from "react-native";
+import { Linking, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useSpaces } from "../../../store/hooks";
 import {
@@ -20,6 +21,7 @@ import { SpaceBadge } from "../../spaces/icons";
 import { Button, Group, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { folderLabel, showConnectDevice, showPhraseEntry, showRecoveryKit, showStopSync } from "./SyncSheets";
+import { platformWords } from "../../../lib/platformWords";
 
 export function SyncPane() {
   const theme = useTheme();
@@ -41,8 +43,8 @@ export function SyncPane() {
   return (
     <View>
       <Text style={{ marginTop: 20, fontSize: 12.5, lineHeight: 17, color: theme.textSecondary }}>
-        Sync your spaces, bookmarks, history, open tabs, pinned tabs, groups, passwords and settings across your Macs. It all goes through a folder you choose,
-        like one in iCloud Drive, and it’s end-to-end encrypted: only your devices can read it.
+        Sync your spaces, bookmarks, history, open tabs, pinned tabs, groups, passwords and settings across your devices. It all goes through a folder you
+        choose, like one in iCloud Drive, and it’s end-to-end encrypted: only your devices can read it.
       </Text>
       {enabled ? <SyncOn info={info} /> : <SyncOff info={info} />}
     </View>
@@ -79,7 +81,7 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
   const error = useSync((s) => s.error);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const noICloud = !!info && info.path === info.defaultPath && !info.iCloudAvailable;
+  const noICloud = isMac && !!info && info.path === info.defaultPath && !info.iCloudAvailable;
   const hasData = !!info?.hasSyncData;
 
   const turnOn = async () => {
@@ -142,8 +144,8 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
       </Group>
       {failure ? <Text style={{ marginTop: 8, fontSize: 12, color: colors.destructive }}>{failure}</Text> : null}
       <Text style={{ marginTop: 12, fontSize: 11.5, lineHeight: 15, color: theme.textTertiary }}>
-        No server and no account: your Macs meet in the sync folder. Your recovery phrase never leaves your devices, and without it the folder is unreadable,
-        file names included.
+        No server and no account: {platformWords.yourComputers} meet in the sync folder. Your recovery phrase never leaves your devices, and without it the
+        folder is unreadable, file names included.
       </Text>
     </>
   );
@@ -195,7 +197,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
       { id: "copy", title: "Copy Recovery Code", symbol: "doc.on.doc" },
       { separator: true },
       { id: "now", title: "Sync Now", symbol: "arrow.triangle.2.circlepath" },
-      { id: "reveal", title: "Show Sync Folder in Finder", symbol: "folder", enabled: !!info?.exists },
+      { id: "reveal", title: platformWords.revealSyncFolderTitle, symbol: "folder", enabled: !!info?.exists },
       { separator: true },
       { id: "stop", title: "Stop Syncing…", symbol: "xmark.circle" },
     ]);
@@ -227,7 +229,12 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
         </View>
       ) : null}
 
-      <SectionHeader title="Spaces" description="Choose which spaces sync on this Mac. Each syncs on its own." />
+      {info?.keyStorage === "session" ? (
+        <Text style={{ marginTop: 10, fontSize: 12.5, color: theme.textSecondary }}>
+          Secret Service is unavailable. Save your Recovery Kit: you’ll need your recovery phrase each time you start Bay.
+        </Text>
+      ) : null}
+      <SectionHeader title="Spaces" description={`Choose which spaces sync on ${platformWords.thisComputer}. Each syncs on its own.`} />
       <Group>
         {profiles.map((p) => {
           const link = links[p.id];
@@ -244,7 +251,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
             title={p.name}
             description="On your other devices"
           >
-            <Button title="Add to This Mac" onPress={() => addRemoteProfile(p.syncId)} />
+            <Button title={`Add to ${platformWords.thisComputerTitle}`} onPress={() => addRemoteProfile(p.syncId)} />
           </Row>
         ))}
       </Group>
@@ -265,12 +272,12 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
             <Row
               key={d.id}
               icon={<Symbol name="laptopcomputer" size={15} color={theme.icon} style={{ width: 24, height: 20 }} />}
-              title={d.current ? `${d.name} (This Mac)` : d.name}
+              title={d.current ? `${d.name} (${platformWords.thisComputerTitle})` : d.name}
               description={d.current ? statusLine(status, lastSyncedAt, 0) : d.lastSeen ? `last synced ${ago(d.lastSeen)}` : "hasn’t synced yet"}
             />
           ))
         ) : (
-          <Row title="Just this Mac so far" description="Other devices show here once they sync." />
+          <Row title={`Just ${platformWords.thisComputer} so far`} description="Other devices show here once they sync." />
         )}
       </Group>
     </>

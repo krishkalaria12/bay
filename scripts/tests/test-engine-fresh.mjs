@@ -12,7 +12,7 @@ test("layers and stale framework", () => {
   const layers = readFileSync(path.join(ROOT, "engine/patches/series"), "utf8")
     .split(/\r?\n/)
     .filter((line) => line.startsWith("layer "))
-    .map((line) => line.trim().split(/\s+/)[1]);
+    .map((line) => line.trim().split(/\s+/)[2]);
   for (const layer of layers) assert.ok(statSync(path.join(ROOT, layer, "apply.sh")).isFile(), layer);
   const root = mkdtempSync(path.join(tmpdir(), "bay-engine-fresh-test-"));
   try {

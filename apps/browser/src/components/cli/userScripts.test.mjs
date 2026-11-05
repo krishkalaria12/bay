@@ -10,6 +10,7 @@ const code = ts.transpileModule(readFileSync(new URL("./userScripts.ts", import.
 function fixture({ folder = { state: "ready", generation: 1, path: "/data/Scripts/extension", token: "one" }, existing = [] } = {}) {
   const calls = [];
   const statuses = [];
+  const timers = new Set();
   const state = {
     settings: { cliControl: true },
     spaceOrder: ["default", "shared", "work", "incognito:private"],
@@ -59,14 +60,14 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
         statuses.push(JSON.parse(json));
       },
     },
-    "../../store/browserStore": { useBrowser: { getState: () => state, subscribe() {} } },
+    "../../store/read": { useBrowserRead: { getState: () => state, subscribe() {} } },
     "../../store/model": {
       isIncognitoSpace: (id) => id.startsWith("incognito:"),
       engineProfile: (id) => (["default", "shared"].includes(id) ? "" : id),
     },
   };
   const module = { exports: {} };
-  new Function("require", "module", "exports", "__DEV__", code)(
+  new Function("require", "module", "exports", "__DEV__", "setTimeout", "clearTimeout", code)(
     (id) => {
       assert.ok(id in mocks, `unexpected import ${id}`);
       return mocks[id];
@@ -74,12 +75,22 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
     module,
     module.exports,
     false,
+    (callback) => (timers.add(callback), callback),
+    (callback) => timers.delete(callback),
   );
   return {
     ...module.exports,
     calls,
     statuses,
     state,
+    retry() {
+      const callbacks = [...timers];
+      timers.clear();
+      for (const callback of callbacks) callback();
+    },
+    updateFolder(value) {
+      current = value;
+    },
     setFolder: (value) => {
       current = value;
       notice();
@@ -103,6 +114,32 @@ test("loads once per native profile and reports each public space", async () => 
   await f.settled();
   assert.equal(f.calls.filter((x) => x[0] === "install").length, 4);
   assert.equal(f.statuses.at(-1).generation, 2);
+});
+
+test("retries a locked or half-published generation without another watch event", async () => {
+  for (const state of ["busy", "pending"]) {
+    const f = fixture({ folder: { state } });
+    f.startUserScripts();
+    await f.settled();
+    assert.equal(f.statuses.length, 0);
+    f.updateFolder({ state: "ready", generation: 2, path: "/data/Scripts/extension", token: "two" });
+    f.retry();
+    await f.settled();
+    assert.equal(f.statuses[0].generation, 2);
+    assert.equal(f.calls.filter((x) => x[0] === "install").length, 2);
+  }
+});
+
+test("stops retrying publication when terminal control is switched off", async () => {
+  const f = fixture({ folder: { state: "busy" } });
+  f.startUserScripts();
+  await f.settled();
+  f.state.settings.cliControl = false;
+  f.updateFolder({ state: "ready", generation: 2, path: "/data/Scripts/extension", token: "two" });
+  f.retry();
+  await f.settled();
+  assert.equal(f.statuses.length, 0);
+  assert.equal(f.calls.filter((x) => x[0] === "install").length, 0);
 });
 
 test("keeps a user-disabled extension disabled while reloading its source", async () => {

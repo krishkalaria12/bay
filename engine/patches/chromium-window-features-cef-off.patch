@@ -1,0 +1,17 @@
+diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+--- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
++++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+@@ -249,11 +249,13 @@
+ // static
+ bool BrowserWindowFeatures::IsNormalBrowser(
+     const BrowserWindowInterface* browser) {
++#if BUILDFLAG(ENABLE_CEF)
+   // CEF normal browsers have TYPE_POPUP.
+   if (browser->GetType() == BrowserWindowInterface::Type::TYPE_POPUP &&
+       browser->cef_delegate()) {
+     return true;
+   }
++#endif
+   return browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL;
+ }
+ 

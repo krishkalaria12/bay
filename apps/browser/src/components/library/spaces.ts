@@ -1,4 +1,4 @@
-import type { BrowserState } from "../../store/browserStore";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { isIncognitoSpace } from "../../store/model";
 
 /** The spaces the Library lists: every one but a private window's. */

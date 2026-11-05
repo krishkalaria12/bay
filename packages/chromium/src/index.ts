@@ -10,6 +10,7 @@ export * from "./extensions";
 export * from "./chromeDialogs";
 export * from "./favicons";
 export * from "./engineInfo";
+export * from "./pageEvents";
 export * from "./history";
 export * from "./bookmarks";
 export * from "./swipe";

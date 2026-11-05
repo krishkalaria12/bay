@@ -104,3 +104,36 @@ test("native edit markers survive native changes and clear on external document 
   updateEasel(id, { items: [] });
   assert.equal(useLibrary.getState().easels[id].nativeEditId, undefined);
 });
+
+test("a window's change reaches the others, which take it without writing it again", async () => {
+  reset();
+  const other = new BroadcastChannel("bay-library");
+  const received = new Promise((resolve) => (other.onmessage = ({ data }) => resolve(data)));
+  const id = createEasel("work", "Shared");
+  const published = await received;
+  assert.equal(published.easels[id].title, "Shared");
+  assert.equal(JSON.parse(docs.get("library.json")).easels[id].title, "Shared");
+
+  const written = docs.get("library.json");
+  const changed = new Promise((resolve) => {
+    const stop = useLibrary.subscribe((s) => {
+      if (!s.easels.remote) return;
+      stop();
+      resolve();
+    });
+  });
+  other.postMessage({ ...published, easels: { ...published.easels, remote: { ...published.easels[id], id: "remote", title: "From another window" } } });
+  await changed;
+  assert.equal(useLibrary.getState().easels.remote.title, "From another window");
+  assert.equal(docs.get("library.json"), written, "the window that changed it already saved it");
+  other.close();
+});
+
+test("Windows paths are local paths, and file names come from either separator", async () => {
+  const { fileNameOf, localPath, validItem } = await import("./model.ts");
+  for (const path of ["/data/a.png", "C:\\Users\\me\\a.png", "c:/Users/me/a.png", "\\\\server\\share\\a.png"]) assert.equal(localPath(path), true, path);
+  for (const path of ["a.png", "https://example.com/a.png", "file:///a.png", 3, undefined]) assert.equal(localPath(path), false);
+  assert.equal(fileNameOf("C:\\Users\\me\\a.png"), "a.png");
+  assert.equal(fileNameOf("/data/b.png"), "b.png");
+  assert.equal(validItem({ id: "i", kind: "image", x: 0, y: 0, width: 1, height: 1, path: "C:\\Bay\\a.png" }), true);
+});

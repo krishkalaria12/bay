@@ -1,5 +1,6 @@
+import { View, isMac } from "@bay/platform";
 import type { DiaTabsResult, ImportKind } from "@bay/import";
-import { ActivityIndicator, Image, Text, View } from "react-native";
+import { ActivityIndicator, Image, Text } from "react-native";
 import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { plural } from "../../store/model";
@@ -25,6 +26,7 @@ import {
   TargetPicker,
   Title,
 } from "./ui";
+import { platformWords } from "../../lib/platformWords";
 
 type StepProps = { flow: ImportFlow };
 
@@ -78,7 +80,7 @@ export function ChooseStep({ flow }: StepProps) {
       {!flow.available ? (
         <Note text={`Importing isn't available in this build of ${APP_NAME}.`} />
       ) : flow.browsers.length === 0 ? (
-        <Note text="No other browsers with data to import were found on this Mac." />
+        <Note text={`No other browsers with data to import were found on ${platformWords.thisComputer}.`} />
       ) : (
         <View style={{ gap: 6 }}>
           {flow.browsers.map((b) => (
@@ -162,7 +164,7 @@ export function SpacesStep({ flow }: StepProps) {
           )}
           <Text
             style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}
-          >{`Customize which profiles to bring over to ${APP_NAME}. The first goes into your selected profile; the others become new profiles.`}</Text>
+          >{`Customize which profiles to bring over to ${APP_NAME}. The first goes into your selected space; the others become new spaces.`}</Text>
           <View style={{ gap: 6 }}>
             {source.profiles.map((p) => (
               <SelectRow
@@ -198,7 +200,7 @@ export function UnlockStep({ flow }: StepProps) {
         <>
           <Button title="Back" onPress={() => flow.setStep(source.profiles.length > 1 || flow.isArc ? "profiles" : "choose")} />
           <Spacer />
-          <Button title="Skip Encrypted Data" onPress={flow.skipEncrypted} />
+          <Button title={flow.basicStore ? "Continue Without Unlocking" : "Skip Encrypted Data"} disabled={flow.unlocking} onPress={flow.skipEncrypted} />
           <Button title={flow.unlocking ? "Waiting for password..." : "Continue"} kind="primary" disabled={flow.unlocking} onPress={() => void flow.unlock()} />
         </>
       }
@@ -210,12 +212,18 @@ export function UnlockStep({ flow }: StepProps) {
       <View style={{ alignItems: "center", marginTop: 10, gap: 14 }}>
         <Handoff iconPath={source.iconPath} symbol="lock.fill" />
         <Text style={{ fontSize: 13, lineHeight: 18, textAlign: "center", color: theme.textPrimary, maxWidth: 420 }}>
-          {many
-            ? `Some data is encrypted, so macOS will ask for your computer password once for each selected profile.`
-            : `Some data is encrypted, so macOS will ask for your computer password to bring it securely into ${APP_NAME}.`}
+          {isMac
+            ? many
+              ? `Some data is encrypted, so macOS will ask for your computer password once for each selected profile.`
+              : `Some data is encrypted, so macOS will ask for your computer password to bring it securely into ${APP_NAME}.`
+            : `Continue to allow ${APP_NAME} to unlock ${source.name}'s saved data. Your desktop may ask you to unlock its password store.`}
         </Text>
         <Text style={{ fontSize: 12, lineHeight: 17, textAlign: "center", color: theme.textSecondary, maxWidth: 420 }}>
-          {`macOS may ask whether ${APP_NAME} can use “${source.name} Safe Storage” from your keychain: it's the key ${source.name} encrypts passwords, cookies and cards with. Click Allow. Your data stays on this Mac.`}
+          {isMac
+            ? `macOS may ask whether ${APP_NAME} can use “${source.name} Safe Storage” from your keychain: it's the key ${source.name} encrypts passwords, cookies and cards with. Click Allow. Your data stays on this Mac.`
+            : flow.basicStore
+              ? "You can continue without unlocking. Passwords and cards that need the keyring will be skipped and reported when the import finishes. Your data stays on this computer."
+              : "Your data stays on this computer. If access is denied, you can skip the encrypted data."}
         </Text>
       </View>
       {flow.error && <ErrorText text={flow.error} />}

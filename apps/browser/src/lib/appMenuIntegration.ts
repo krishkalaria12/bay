@@ -1,3 +1,4 @@
+import { capabilities } from "@bay/platform";
 import * as cef from "@bay/chromium";
 import {
   confirm,
@@ -19,15 +20,17 @@ import {
 import { maybeStartOnboarding, openVideoTour, startOnboarding, startToolTour } from "../components/onboarding/index";
 import { trackAppVersion } from "../components/newTab/releaseNotes";
 import { openTaskManager } from "../components/taskManager/window";
-import { useBrowser, type BrowserState } from "../store/browserStore";
+import { useBrowserRead as useBrowser } from "../store/read";
+import type { BrowserProjection as BrowserState } from "../runtime/projection";
 import { changedIds } from "../store/recordDiff";
 import { activeTabId, listIds, resolveWindowId, viewTabIds, windowListKey, windowTitle } from "../store/model";
 import { focus, openUrls, openWindow, switchSpace, switchToTab } from "./actions";
 import { openReleaseNotesAfterUpdate, openReleaseNotesPage } from "./releaseNotesPage";
 import { webviews } from "./webviews";
 import { handleWebNotificationResponse } from "./webNotifications";
+import { platformWords } from "./platformWords";
 
-export function startAppIntegration() {
+export function startAppIntegration({ sharedWindow = false } = {}) {
   onCommand(runAppCommand);
   onNotificationResponse((response) => {
     if (handleWebNotificationResponse(response) || response.action !== "click") return;
@@ -36,14 +39,18 @@ export function startAppIntegration() {
     if (tabId && s.tabs[tabId]) switchToTab(tabId);
     else if (windowId && s.windows[windowId]) focus(windowId);
   });
-  startHandoff();
-  startScripting();
+  if (capabilities.handoff) startHandoff();
+  if (capabilities.appleScript) startScripting();
+  if (!sharedWindow) startApplicationLifecycle();
+}
+
+export function startApplicationLifecycle(onboarding?: Parameters<typeof maybeStartOnboarding>[0]) {
   const updated = trackAppVersion();
-  maybeStartOnboarding();
+  maybeStartOnboarding(onboarding);
   if (updated) openReleaseNotesAfterUpdate();
 }
 
-function runAppCommand({ command, windowId }: CommandEvent) {
+export function runAppCommand({ command, windowId }: CommandEvent) {
   switch (command) {
     case "sendFeedback":
       return void sendFeedback(windowId);
@@ -85,9 +92,9 @@ export async function diagnostics(): Promise<string> {
   return [
     `${app.appName} ${app.appVersion} (${app.appBuild}) — ${app.configuration}`,
     engine ? `Engine: NNCore, Chromium ${engine.chromiumVersion}` : "Engine: unavailable",
-    `macOS ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
+    `${platformWords.osName} ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
     `Bundle: ${app.bundleId}, locale ${app.locale}`,
-    `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, profiles: ${s.spaceOrder.length}`,
+    `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, spaces: ${s.spaceOrder.length}`,
     !updates?.available
       ? "Updates: not built in"
       : !updates.configured
@@ -215,13 +222,13 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
   };
   switch (request.command) {
     case "newWindow": {
-      const windowId = openWindow({ url: request.url, incognito: request.incognito, spaceId: request.profileId });
+      const windowId = await openWindow({ url: request.url, incognito: request.incognito, spaceId: request.profileId });
       return { windowId };
     }
     case "newTab": {
       const windowId = resolveWindowId(s, request.windowId);
       if (!windowId) {
-        const created = openWindow({ url: request.url });
+        const created = await openWindow({ url: request.url });
         return { windowId: created, tabId: activeTabId(useBrowser.getState(), created) };
       }
       const view = viewTabIds(s, windowId);
@@ -233,23 +240,24 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
         const list = listIds(s, windowListKey(s, w));
         index = at < view.length ? list.indexOf(view[at]!) : list.length;
       }
-      const tabId = s.newTab(windowId, { url: request.url, index });
+      const { newTab } = await import("../runtime/tabActions");
+      const tabId = await newTab(windowId, { url: request.url, index });
       return { windowId, tabId };
     }
     case "setURL":
       tabOf(request.tabId);
-      return s.navigate(request.tabId, request.url);
+      return void (await (await import("../runtime/tabActions")).navigate(request.tabId, request.url));
     case "closeTab":
       tabOf(request.tabId);
-      return s.closeTab(request.tabId);
+      return void (await (await import("../runtime/tabActions")).closeTab(request.tabId));
     case "closeWindow":
       if (!s.windows[request.windowId]) throw new Error("That window no longer exists.");
-      return s.closeWindow(request.windowId);
+      return void (await (await import("../runtime/windowActions")).closeWindow(request.windowId));
     case "reload": {
       const tab = tabOf(request.tabId);
       const web = webviews.get(request.tabId);
       if (web) return void (await web.reload());
-      if (tab.url) s.navigate(tab.id, tab.url);
+      if (tab.url) await (await import("../runtime/tabActions")).navigate(tab.id, tab.url);
       return;
     }
     case "back":
@@ -260,15 +268,15 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
       return void (await loaded(request.tabId).goForward());
     case "focusTab":
       tabOf(request.tabId);
-      return switchToTab(request.tabId);
+      return void (await switchToTab(request.tabId));
     case "setActiveTabIndex": {
       if (!s.windows[request.windowId]) throw new Error("That window no longer exists.");
       if (request.index < 1 || request.index > viewTabIds(s, request.windowId).length) throw new Error("There's no tab at that index.");
-      return s.activateIndex(request.windowId, request.index - 1);
+      return void (await (await import("../runtime/tabActions")).activateIndex(request.windowId, request.index - 1));
     }
     case "focusProfile": {
       const windowId = resolveWindowId(s, null);
-      if (!s.spaces[request.profileId]) throw new Error("That profile no longer exists.");
+      if (!s.spaces[request.profileId]) throw new Error("That space no longer exists.");
       if (!windowId || s.windows[windowId]!.incognito) throw new Error("There's no window to show the space in.");
       return switchSpace(windowId, request.profileId);
     }

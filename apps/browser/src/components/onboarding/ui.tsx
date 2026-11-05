@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/desktop";
 import { useEffect, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useHover } from "../ui/primitives";
 import { isFirstStep, previousStep, skipStep, STEPS, useOnboarding, type OnboardingStep } from "./state";
