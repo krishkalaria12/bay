@@ -15,6 +15,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   let onPageMessage = EventDispatcher()
   private lazy var messageProxy = BayPageMessageProxy(view: self)
   private let refreshControl = UIRefreshControl()
+  /// When the current pull to refresh started: the spinner stays at least briefly, so a cached reload doesn't flash it.
+  private var refreshStartedAt: CFTimeInterval = 0
   private var observations: [NSKeyValueObservation] = []
   private var lastScrollOffset: CGFloat = 0
   private var lastScrollEmission: CFTimeInterval = 0
@@ -204,7 +206,25 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
       refreshControl.endRefreshing()
       return
     }
+    // A tick as the pull crosses the trigger point, as on Android.
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    refreshStartedAt = CACurrentMediaTime()
     webView.reload()
+  }
+
+  /// Ends a pull to refresh once the reload has run, after the spinner has shown for at least 0.45 s (Android's minimum).
+  private func endRefreshingWhenLoaded() {
+    guard refreshControl.isRefreshing, !webView.isLoading else { return }
+    let remaining = 0.45 - (CACurrentMediaTime() - refreshStartedAt)
+    guard remaining > 0 else {
+      refreshControl.endRefreshing()
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + remaining) { [weak self] in
+      // The reload may have started in the meantime; its own finish ends the spinner then.
+      guard let self, !self.webView.isLoading else { return }
+      self.refreshControl.endRefreshing()
+    }
   }
 
   /// WebKit draws on the main thread; the resize, JPEG encoding and file write run in the background. A suspended
@@ -257,7 +277,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   private func emitState() {
-    if !webView.isLoading { refreshControl.endRefreshing() }
+    endRefreshingWhenLoaded()
     // A tab with no page yet whose navigation became a download (a download link typed into a new tab) says so, so it
     // goes back to the start page instead of keeping the file's address and downloading it again when restored.
     let blank = firstNavigationBecameDownload && webView.backForwardList.currentItem == nil
