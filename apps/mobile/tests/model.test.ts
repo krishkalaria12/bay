@@ -240,6 +240,26 @@ test("restoring hidden element rules rejects malformed hosts and selector values
   assert.deepEqual(data.preferences.hiddenElements["news.com"], [".ad"]);
 });
 
+test("a waiting download says why until bytes arrive", () => {
+  const update = (extra: object) => ({
+    id: "d1",
+    url: "https://a.com/f",
+    filename: "f.mkv",
+    state: "progress" as const,
+    received: 0,
+    total: 0,
+    private: false,
+    ...extra,
+  });
+  let data = initialBrowserData(page("a", "https://a.com/"));
+  data = reduceBrowserData(data, { type: "download", update: update({ waiting: "Waiting for Wi-Fi" }), now: 1 });
+  assert.equal(data.downloads[0]?.waiting, "Waiting for Wi-Fi");
+  const same = reduceBrowserData(data, { type: "download", update: update({ waiting: "Waiting for Wi-Fi" }), now: 2 });
+  assert.equal(same, data);
+  data = reduceBrowserData(data, { type: "download", update: update({ received: 5, total: 10 }), now: 3 });
+  assert.equal(data.downloads[0]?.waiting, undefined);
+});
+
 test("downloads track an engine's updates and survive a restart as finished or failed", () => {
   const update = (state: "started" | "progress" | "finished" | "cancelled", extra = {}) => ({
     id: "d1",

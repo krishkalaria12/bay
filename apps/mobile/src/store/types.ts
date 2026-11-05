@@ -43,6 +43,8 @@ export interface DownloadItem {
   /** The saved file, once finished: a file:// URL on iOS, a content:// URI on Android. */
   path?: string;
   error?: string;
+  /** Why it isn't moving yet ("Starting…", "Waiting for Wi-Fi"); absent while bytes arrive. */
+  waiting?: string;
   startedAt: number;
   /** From a private tab: kept in memory only. */
   private?: boolean;

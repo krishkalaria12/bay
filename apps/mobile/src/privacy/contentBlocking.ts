@@ -4,7 +4,7 @@ import { Directory, File, Paths } from "expo-file-system";
 import { useEffect } from "react";
 import { create } from "zustand";
 
-import { FILTER_LISTS, isStale, listUnchanged, listVersion, looksLikeFilterList, type ListValidators } from "./filterLists";
+import { ENGINE_RULES, FILTER_LISTS, isStale, listUnchanged, listVersion, looksLikeFilterList, type ListValidators } from "./filterLists";
 
 // List text never passes through JavaScript: lists download straight to files, their versions come from native MD5
 // digests, and the engines read the files themselves. (7 MB of text on the JS thread made typing drop keystrokes.)
@@ -99,7 +99,7 @@ async function applyCached(): Promise<void> {
   const digests = await Promise.all(files.map((file) => file.digest("MD5")));
   await setContentBlocking(
     files.map((file) => file.uri),
-    listVersion(digests.join(":")),
+    listVersion([ENGINE_RULES, ...digests].join(":")),
   );
   setStatus({ state: "ready", lists: files.length });
 }
