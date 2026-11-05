@@ -506,11 +506,13 @@ export function Omnibox({
   );
 
   if (palette) {
+    const switchingTo = current?.kind === "page" && current.tabId && typed.trim() ? current : null;
+    const fieldPage = pageContext ? { url: currentUrl, favicon: currentFavicon } : switchingTo;
     return (
       <View ref={root}>
         <PaletteContent
           pageContext={pageContext}
-          leadingIcon={pageContext ? <Favicon url={currentUrl} favicon={currentFavicon} size={20} spaceId={spaceId} /> : undefined}
+          leadingIcon={fieldPage ? <Favicon url={fieldPage.url} favicon={fieldPage.favicon} size={20} spaceId={spaceId} /> : undefined}
           field={
             <ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}>
               <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
