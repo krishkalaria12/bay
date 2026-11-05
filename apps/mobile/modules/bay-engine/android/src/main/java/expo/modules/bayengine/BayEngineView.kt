@@ -26,6 +26,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.ProfileStore
 import androidx.webkit.ScriptHandler
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import expo.modules.kotlin.AppContext
@@ -140,6 +141,13 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     addJavascriptInterface(PageBridge(), "__bayPage")
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       WebViewCompat.addDocumentStartJavaScript(this, BayContentBlocker.COSMETIC_SCRIPT, setOf("*"))
+    }
+    // Google won't sign anyone in from what it can tell is an app's embedded WebView ("This browser or app may not be
+    // secure", OAuth's disallowed_useragent): it looks for the `; wv` and `Version/4.0` tokens in the user agent and
+    // the X-Requested-With header naming the app. Bay is a browser, so it presents as Chrome does.
+    settings.userAgentString = settings.userAgentString.replace("; wv)", ")").replace(Regex(" Version/[\\d.]+"), "")
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+      WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
     }
     settings.javaScriptEnabled = true
     settings.domStorageEnabled = true
