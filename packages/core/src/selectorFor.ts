@@ -1,6 +1,6 @@
-// Zen Browser's element selector builder (src/zen/boosts/ZenSelectorComponent.sys.mjs › getSelectionPath), shared by
-// desktop Boosts' picker and mobile's Hide elements. Mozilla Public License 2.0: https://mozilla.org/MPL/2.0/ (this file
-// stays under the MPL-2.0).
+// Zen Browser's element selector builder (src/zen/boosts/ZenSelectorComponent.sys.mjs › getSelectionPath), for
+// mobile's Hide elements (desktop Boosts' picker keeps its own copy in pickerScript.ts). Mozilla Public License 2.0:
+// https://mozilla.org/MPL/2.0/ (this file stays under the MPL-2.0).
 //
 // Zen's getSelectionPath. related: 0 the element itself (the shortest of three candidate paths), 1 its parent, 2 its
 // kind under the same parent, 3 its kind under parents of that kind, 4 its kind anywhere, 5 its parent's kind, 6

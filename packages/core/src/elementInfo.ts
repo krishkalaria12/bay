@@ -1,7 +1,8 @@
-// What an element is, for Developer Mode's inspector on desktop (apps/browser developer/inspectorScript.ts) and the
-// mobile inspector: its name and a selector for it, size and place, type and colours, the CSS rules that match it,
-// React's components for it, which font renders its text, and all of that as text for a coding agent. Page-script
-// source run inside a page script, in the page's main world or an isolated one. No backticks inside: it is one string.
+// What an element is, for the mobile inspector (desktop's Developer Mode keeps its own copy in apps/browser
+// developer/inspectorScript.ts): its name and a selector for it, size and place, type and colours, the CSS rules that
+// match it, React's components for it, which font renders its text, and all of that as text for a coding agent.
+// Page-script source run inside a page script, in the page's main world or an isolated one. No backticks inside: it is
+// one string.
 /** Page-script source defining nameOf, selectorOf, hex, describe, rulesOf, componentsOf, forAgent and fontOf. */
 export const ELEMENT_INFO = String.raw`
 const MAX_RULES = 6;
