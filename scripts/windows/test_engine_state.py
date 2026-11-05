@@ -1,9 +1,12 @@
-"""Exercise the same native tar commands used to resume Windows engine jobs."""
+"""Exercise the archive that resumes Windows engine jobs across runner stages."""
+import builtins
 import importlib.util
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 import unicodedata
@@ -14,43 +17,49 @@ SCRIPT = Path(__file__).with_name("engine-state.py")
 SPEC = importlib.util.spec_from_file_location("bay_engine_state", SCRIPT)
 state = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(state)
-# Only the Windows runner saves state, with the libarchive tar Windows ships.
-# GNU tar has no --options, and macOS shares Windows' tar, so it still runs there.
-needs_libarchive_tar = unittest.skipIf(sys.platform == "linux", "GNU tar can't create the state archive")
+# A multiple of 100ns, the resolution NTFS keeps.
+MODIFIED_NS = 1700000000123456700
+
+
+def make_tree(root):
+    (root / "source").mkdir(parents=True)
+    source = root / "source/hello ü.txt"
+    source.write_text("engine source\n", encoding="utf-8")
+    os.utime(source, ns=(MODIFIED_NS, MODIFIED_NS))
+    os.link(source, root / "source/hard-link.txt")
+    (root / ".build-state").write_text("saved\n")
+    (root / "empty").mkdir()
+    (root / "file-link").symlink_to("source/hello ü.txt")
+    (root / "directory-link").symlink_to("source", target_is_directory=True)
+    (root / "dangling-file").symlink_to("missing.txt")
+    (root / "dangling-directory").symlink_to("missing-directory", target_is_directory=True)
+    return source
 
 
 class EngineStateTests(unittest.TestCase):
-    @needs_libarchive_tar
-    def test_native_tar_round_trip_preserves_links_and_tree_metadata(self):
+    def test_round_trip_preserves_links_and_exact_times(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             root = base / "engine"
-            root.mkdir()
-            (root / "source").mkdir()
-            source = root / "source/hello ü.txt"
-            source.write_text("engine source\n", encoding="utf-8")
-            os.utime(source, (1700000000, 1700000000))
-            (root / ".build-state").write_text("saved\n")
-            (root / "empty").mkdir()
-            (root / "file-link").symlink_to("source/hello ü.txt")
-            (root / "directory-link").symlink_to("source", target_is_directory=True)
-            (root / "dangling-file").symlink_to("missing.txt")
-            (root / "dangling-directory").symlink_to("missing-directory", target_is_directory=True)
+            source = make_tree(root)
             archive = base / "state.tar.gz"
             subprocess.run([sys.executable, SCRIPT, "create", "--root", root,
                             "--archive", archive], check=True)
+            with tarfile.open(archive) as tar:
+                self.assertNotIn("directory-link/hello ü.txt", tar.getnames())
             restored = base / "restored"
             subprocess.run([sys.executable, SCRIPT, "restore", "--root", restored,
                             "--archive", archive], check=True)
-            self.assertEqual((restored / "source/hello ü.txt").read_bytes(), source.read_bytes())
-            self.assertEqual(int((restored / "source/hello ü.txt").stat().st_mtime), 1700000000)
+            copy = restored / "source/hello ü.txt"
+            self.assertEqual(copy.read_bytes(), source.read_bytes())
+            self.assertEqual(copy.stat().st_mtime_ns, MODIFIED_NS)
+            self.assertEqual((restored / "source/hard-link.txt").read_bytes(), source.read_bytes())
             self.assertEqual((restored / ".build-state").read_text(), "saved\n")
             self.assertTrue((restored / "empty").is_dir())
             for name in ("file-link", "directory-link", "dangling-file", "dangling-directory"):
                 with self.subTest(name=name):
                     self.assertTrue((restored / name).is_symlink())
-                    # macOS can normalize Unicode link text and Windows tar restores
-                    # native separators; the target must be the same path on either.
+                    # Windows restores native separators; the target must be the same path.
                     self.assertEqual(unicodedata.normalize("NFC", os.path.normpath(os.readlink(restored / name))),
                                      unicodedata.normalize("NFC", os.path.normpath(os.readlink(root / name))))
             # Resuming a build needs restored links that resolve, not just their text.
@@ -59,8 +68,24 @@ class EngineStateTests(unittest.TestCase):
             self.assertFalse((restored / "dangling-file").exists())
             self.assertFalse((restored / "dangling-directory").exists())
 
-    @needs_libarchive_tar
-    def test_failed_tar_keeps_previous_archive_and_removes_partial_output(self):
+    @unittest.skipUnless(os.name == "nt", "junctions exist only on Windows")
+    def test_junction_is_kept_as_a_link_and_not_entered(self):
+        import _winapi
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "engine"
+            (root / "source").mkdir(parents=True)
+            (root / "source/file.txt").write_text("through a junction\n")
+            _winapi.CreateJunction(str(root / "source"), str(root / "junction"))
+            archive = base / "state.tar.gz"
+            state.create(root, archive)
+            with tarfile.open(archive) as tar:
+                self.assertNotIn("junction/file.txt", tar.getnames())
+            restored = base / "restored"
+            state.restore(restored, archive)
+            self.assertEqual((restored / "junction/file.txt").read_text(), "through a junction\n")
+
+    def test_failed_write_keeps_previous_archive_and_removes_partial_output(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             root = base / "engine"
@@ -69,18 +94,73 @@ class EngineStateTests(unittest.TestCase):
             archive = base / "state.tar.gz"
             state.create(root, archive)
             previous = archive.read_bytes()
-            native_run = subprocess.run
-
-            def unreadable_input(command, **kwargs):
-                # Ask the actual archiver to read a missing input after it has
-                # already written part of the new archive.
-                return native_run([*command, "missing-source.cc"], capture_output=True, **kwargs)
-
-            with mock.patch.object(state.subprocess, "run", side_effect=unreadable_input):
-                with self.assertRaises(subprocess.CalledProcessError):
+            with mock.patch.object(tarfile.TarFile, "addfile", side_effect=OSError("disk full")):
+                with self.assertRaisesRegex(OSError, "disk full"):
                     state.create(root, archive)
             self.assertEqual(archive.read_bytes(), previous)
             self.assertEqual(list(base.glob("*.partial")), [])
+
+    def test_unreadable_file_is_reported_and_the_rest_is_saved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "engine"
+            root.mkdir()
+            (root / "held.obj").write_text("held\n")
+            (root / "source.cc").write_text("source\n")
+            native_open = builtins.open
+
+            def held_open(path, *args, **kwargs):
+                if str(path).endswith("held.obj"):
+                    raise PermissionError(13, "held by another process")
+                return native_open(path, *args, **kwargs)
+
+            archive = base / "state.tar.gz"
+            with mock.patch.object(builtins, "open", side_effect=held_open), \
+                 mock.patch.object(builtins, "print") as printed:
+                state.create(root, archive)
+            self.assertIn("held.obj", printed.call_args.args[0])
+            self.assertTrue(printed.call_args.args[0].startswith("::warning::"))
+            restored = base / "restored"
+            state.restore(restored, archive)
+            self.assertEqual([path.name for path in restored.iterdir()], ["source.cc"])
+
+    def test_check_proves_the_round_trip_and_leaves_nothing_behind(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "engine"
+            make_tree(root)
+            read_only = root / "source/read-only.txt"
+            read_only.write_text("pack\n")
+            read_only.chmod(stat.S_IREAD)
+            scratch = base / "state"
+            with mock.patch.object(builtins, "print"):
+                state.check(root, scratch / "state.tar.gz")
+            self.assertEqual(list(scratch.iterdir()), [])
+            self.assertTrue(read_only.exists())
+
+    def test_check_fails_when_the_round_trip_loses_an_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "engine"
+            make_tree(root)
+            scratch = base / "state"
+            native_restore = state.restore
+
+            def lossy_restore(destination, archive):
+                native_restore(destination, archive)
+                (destination / ".build-state").unlink()
+
+            with mock.patch.object(state, "restore", side_effect=lossy_restore), \
+                 mock.patch.object(builtins, "print"):
+                with self.assertRaisesRegex(ValueError, r"1 entries changed.*\.build-state"):
+                    state.check(root, scratch / "state.tar.gz")
+            self.assertEqual(list(scratch.iterdir()), [])
+
+    def test_check_reports_a_failed_archive_rather_than_its_clean_up(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            with self.assertRaisesRegex(ValueError, "not a directory"):
+                state.check(base / "missing", base / "state.tar.gz")
 
     def test_refuses_missing_input_and_archive_inside_source(self):
         with tempfile.TemporaryDirectory() as directory:

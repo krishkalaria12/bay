@@ -102,6 +102,9 @@ jobs:
       - name: Patch sources
         if: env.DONE != 'true' && steps.state.outputs.run == ''
         run: python scripts/windows/engine.py prepare --root $env:ENGINE_ROOT
+      - name: Check saved state survives on the real tree
+        if: env.DONE != 'true' && steps.state.outputs.run == ''
+        run: python scripts/windows/engine-state.py check --root $env:ENGINE_ROOT --archive "$env:STATE_DIR\check\state.tar.gz"
       - name: Compile
         id: compile
         if: env.DONE != 'true'
