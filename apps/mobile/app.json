@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "Bay",
+    "slug": "bay",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "bay",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.krishkalaria.bay.mobile",
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "UIBackgroundModes": ["audio"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "in.krishkalaria.bay.mobile"
+    },
+    "plugins": [
+      "./modules/bay-engine/app.plugin.js",
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Bay uses Face ID to unlock your private tabs."
+        }
+      ],
+      "expo-status-bar",
+      [
+        "expo-dev-client",
+        {
+          "defaultLaunchURL": "http://127.0.0.1:8081",
+          "skipOnboarding": true,
+          "showMenuAtLaunch": false,
+          "toolsButton": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": false,
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

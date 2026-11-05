@@ -1,0 +1,8 @@
+# Cold start on both platforms (fresh-start launches the app): the start page shows its hint and the archive,
+# search and settings buttons.
+steps:
+  - run: ../flows/fresh-start
+  - await: { visible: { text: Tap to search }, timeout: 10000 }
+  - await: { visible: { id: bar-archive }, timeout: 10000 }
+  - await: { visible: { id: bar-search }, timeout: 10000 }
+  - await: { visible: { id: bar-settings }, timeout: 10000 }

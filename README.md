@@ -191,7 +191,7 @@ engine/
   patches/            The patch series (series, series.py) and the source-build steps
 packages/
   chromium/           JS API over the engine (tab strips, autofill, extensions, content blocker)
-  adblock/            The content blocker: adblock-rust behind a C ABI, linked into the app
+  adblock/            The content blocker: adblock-rust behind a C ABI, linked into the app (and the mobile app)
   desktop/            Native menu bar + shortcuts → JS, windows, SF Symbols, native primitives
   shaders/            Metal animations + grained OKLab window backdrop
   import/             Import from other browsers (bookmarks, history, passwords, Arc spaces)

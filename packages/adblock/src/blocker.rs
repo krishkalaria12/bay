@@ -92,6 +92,11 @@ impl Blocker {
     /// Builds an engine from separate lists, so each list's rule count can be read back ([`Blocker::list_counts`]).
     /// uBO's `!#if` blocks are resolved as uBO resolves them on Chromium.
     pub fn from_lists(lists: &[FilterList]) -> Self {
+        Self::from_lists_for(lists, crate::Platform::DesktopChromium)
+    }
+
+    /// [`Blocker::from_lists`], resolving uBO's `!#if` blocks for `platform` (the mobile engines pass theirs).
+    pub fn from_lists_for(lists: &[FilterList], platform: crate::Platform) -> Self {
         let mut set = FilterSet::new(false);
         let mut popups = String::new();
         let mut spec = Spec::default();
@@ -112,7 +117,7 @@ impl Blocker {
                 );
                 continue;
             }
-            let text = crate::preprocess::preprocess(list.text).into_owned();
+            let text = crate::preprocess::preprocess_for(list.text, platform).into_owned();
             let extracted = crate::modifiers::extract(&text, list.permissions & 1 != 0);
             spec.merge(extracted.spec);
             let adapted = crate::adapt::adapt(&extracted.list);
@@ -255,6 +260,22 @@ impl Blocker {
     pub fn scriptlets(&self, url: &str) -> String {
         let script = self.engine().url_cosmetic_resources(url).injected_script;
         scriptlet_source(script)
+    }
+
+    /// What to do with a request (a mobile engine's question): let it load, block it, or answer it with a harmless
+    /// stand-in (`$redirect`, as a `data:` URL), which keeps pages that expect an ad script from breaking.
+    pub fn check(&self, url: &str, source_url: &str, kind: &str) -> Check {
+        let result = self.match_request(url, source_url, kind, "GET");
+        match (result.blocked, result.redirect) {
+            (true, Some(redirect)) => Check::Redirect(redirect),
+            (true, None) => Check::Block,
+            _ => Check::Allow,
+        }
+    }
+
+    /// Redirect and scriptlet resources from a file of adblock-rust `Resource` JSON (`resources/resources.json`).
+    pub fn use_resources_file(&self, path: &std::path::Path) -> bool {
+        std::fs::read_to_string(path).is_ok_and(|json| self.use_resources(&json))
     }
 
     /// Whether a request should be blocked. `kind` is a resource type such as `script`, `image` or `xhr`.
@@ -496,6 +517,84 @@ impl Blocker {
     }
 }
 
+/// A request's fate, from [`Blocker::check`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Check {
+    Allow,
+    Block,
+    /// Answer with this `data:` URL instead.
+    Redirect(String),
+}
+
+/// uBO's "trusted" scriptlets (cookie and storage writers…) may only come from uBO's own lists, as in uBO itself.
+/// The mobile engines load lists from files and recognise uBO's by title; this is the permission bit they get.
+pub const TRUSTED_SCRIPTLETS: u8 = 0b1;
+
+fn list_permissions(text: &str) -> u8 {
+    let ubo = text
+        .lines()
+        .take(12)
+        .any(|line| line.starts_with("! Title: uBlock"));
+    if ubo {
+        TRUSTED_SCRIPTLETS
+    } else {
+        0
+    }
+}
+
+/// Loads the engine cached at `cache` for `version` (a near-instant read), or builds it from the list files and
+/// writes the cache for the next launch. Building parses every rule; loading only maps the serialized engine.
+/// Resources aren't part of the cache, so `resources` (if given) is loaded either way. Used by the mobile engines.
+pub fn load_cached(
+    files: &[String],
+    cache: &std::path::Path,
+    version: &str,
+    platform: crate::Platform,
+    resources: Option<&std::path::Path>,
+) -> std::io::Result<Blocker> {
+    let blocker = load_engine(files, cache, version, platform)?;
+    if let Some(resources) = resources {
+        blocker.use_resources_file(resources);
+    }
+    Ok(blocker)
+}
+
+fn load_engine(
+    files: &[String],
+    cache: &std::path::Path,
+    version: &str,
+    platform: crate::Platform,
+) -> std::io::Result<Blocker> {
+    let header = format!("bay-adblock:{version}\n");
+    if let Ok(bytes) = std::fs::read(cache) {
+        if let Some(blocker) = bytes
+            .strip_prefix(header.as_bytes())
+            .and_then(Blocker::deserialize)
+        {
+            return Ok(blocker);
+        }
+    }
+    let texts = files
+        .iter()
+        .map(std::fs::read_to_string)
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let lists: Vec<FilterList> = texts
+        .iter()
+        .map(|text| FilterList {
+            text,
+            hosts: false,
+            permissions: list_permissions(text),
+        })
+        .collect();
+    let blocker = Blocker::from_lists_for(&lists, platform);
+    let mut bytes = header.into_bytes();
+    bytes.extend(blocker.serialize());
+    let draft = cache.with_extension("tmp");
+    std::fs::write(&draft, &bytes)?;
+    std::fs::rename(&draft, cache)?;
+    Ok(blocker)
+}
+
 fn scriptlet_source(script: String) -> String {
     if script.is_empty() {
         return script;
@@ -519,7 +618,9 @@ fn plain_engine(rules: &str) -> Engine {
 /// WebKit content-blocking rules for the lists, as a JSON array. WebKit compiles them itself.
 pub fn content_blocking_rules(lists: &str) -> String {
     let mut set = FilterSet::new(true);
-    set.add_filter_list(lists.to_owned(), ParseOptions::default());
+    // Only iOS turns lists into WebKit rules, so its `!#if` branches are the ones to keep.
+    let lists = crate::preprocess_for(lists, crate::Platform::IosWebKit);
+    set.add_filter_list(lists.into_owned(), ParseOptions::default());
     let rules = set
         .into_content_blocking()
         .map(|(rules, _)| rules)
@@ -952,5 +1053,106 @@ mod tests {
         assert!(rules.as_array().is_some_and(|rules| !rules.is_empty()));
         assert!(text.contains("ads\\\\.example") || text.contains("ads\\.example"));
         assert!(text.contains("css-display-none"));
+    }
+
+    #[test]
+    fn caches_the_engine_per_version() {
+        let dir = std::env::temp_dir().join(format!("bay-adblock-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let list = dir.join("list.txt");
+        let cache = dir.join("engine.bin");
+        std::fs::write(&list, "||ads.example^\n").unwrap();
+        let files = vec![list.to_string_lossy().into_owned()];
+        let blocked = |blocker: &Blocker| {
+            blocker.should_block(
+                "https://ads.example/a.js",
+                "https://site.example/",
+                "script",
+                "GET",
+            )
+        };
+        let built =
+            load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView, None).unwrap();
+        assert!(blocked(&built));
+        // A cached engine is used even when the lists have changed, until the version does.
+        std::fs::write(&list, "||other.example^\n").unwrap();
+        let cached =
+            load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView, None).unwrap();
+        assert!(blocked(&cached));
+        let rebuilt =
+            load_cached(&files, &cache, "v2", crate::Platform::AndroidWebView, None).unwrap();
+        assert!(!blocked(&rebuilt));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn typed_rules_match_the_request_types_android_sends() {
+        let blocker = Blocker::new(
+            "||cdn.example/gtag/js$script\n||ads.example^$subdocument\n||api.example/track$xmlhttprequest\n",
+        );
+        let check = |url: &str, kind: &str| {
+            blocker.check(url, "https://site.example/", kind) == Check::Block
+        };
+        assert!(check("https://cdn.example/gtag/js?id=G-1", "script"));
+        assert!(!check("https://cdn.example/gtag/js?id=G-1", "other"));
+        assert!(check("https://ads.example/frame.html", "subdocument"));
+        assert!(!check("https://ads.example/frame.html", "image"));
+        assert!(check("https://api.example/track", "xmlhttprequest"));
+        assert!(!check("https://api.example/track", "other"));
+        for kind in ["stylesheet", "image", "font", "media", "document", "object"] {
+            assert!(!check("https://cdn.example/gtag/js?id=G-1", kind), "{kind}");
+        }
+    }
+
+    #[test]
+    fn mobile_lists_trust_only_ublock_titled_lists_and_redirect_blocked_scripts() {
+        let resources = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/resources.json"
+        ))
+        .unwrap();
+        let dir = std::env::temp_dir().join(format!("bay-adblock-trust-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ubo = dir.join("ubo.txt");
+        let other = dir.join("other.txt");
+        std::fs::write(&ubo, "! Title: uBlock filters\n||ads.example/ad.js$script,redirect=noop.js\nexample.com##+js(trusted-set-cookie, consent, accepted)\nexample.com##+js(set-constant, adsEnabled, false)\n").unwrap();
+        std::fs::write(&other, "! Title: Another list\nother.example##+js(trusted-set-cookie, consent, accepted)\nother.example##+js(set-constant, adsEnabled, false)\n").unwrap();
+        let files = vec![
+            ubo.to_string_lossy().into_owned(),
+            other.to_string_lossy().into_owned(),
+        ];
+        let blocker = load_cached(
+            &files,
+            &dir.join("engine.bin"),
+            "v1",
+            crate::Platform::AndroidWebView,
+            None,
+        )
+        .unwrap();
+        assert!(blocker.use_resources(&resources));
+        match blocker.check(
+            "https://ads.example/ad.js",
+            "https://site.example/",
+            "script",
+        ) {
+            Check::Redirect(url) => assert!(url.starts_with("data:application/javascript;base64,")),
+            other => panic!("expected a redirect, got {other:?}"),
+        }
+        assert_eq!(
+            blocker.check(
+                "https://cdn.example/app.js",
+                "https://site.example/",
+                "script"
+            ),
+            Check::Allow
+        );
+        // uBO's own list may use a trusted scriptlet; another list only gets the untrusted one.
+        let trusted = blocker.scriptlets("https://example.com/");
+        assert!(trusted.contains("consent"));
+        assert!(trusted.contains("adsEnabled"));
+        let untrusted = blocker.scriptlets("https://other.example/");
+        assert!(untrusted.contains("adsEnabled"));
+        assert!(!untrusted.contains("consent"));
+        std::fs::remove_dir_all(dir).ok();
     }
 }

@@ -1,0 +1,51 @@
+# Search card: open an address, reopen it from history by its title, and search with the default engine.
+# Needs network access to example.com and Google.
+steps:
+  - run: ../flows/fresh-start
+  - tap: { id: start-screen }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "example.com" }
+  - await: { visible: { id: bar-more }, timeout: 30000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/" }, timeout: 30000 }
+  - tap: { id: page-menu-close }
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+
+  # The visit is in history with its page title, and inline completion fills the address.
+  - tap: { id: bar-search }
+  - await: { visible: { id: clear-address }, timeout: 10000 }
+  - tap: { id: clear-address }
+  - type: { into: { id: address-input }, text: "exam", submit: false }
+  - await: { text: { in: { id: suggestion-0 }, contains: Example Domain }, timeout: 10000 }
+  # The engine's suggestions can arrive and reorder the rows, so tap the history row by its title.
+  - await: { idle: true, timeout: 15000 }
+  - tap: { text: Example Domain, within: { id: search-card } }
+  - await: { hidden: { id: address-input }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # Anything that isn't an address searches with the engine from Settings (Google by default).
+  - tap: { id: bar-search }
+  - await: { visible: { id: clear-address }, timeout: 10000 }
+  - tap: { id: clear-address }
+  - type: { into: { id: address-input }, text: "bay browser" }
+  - await: { idle: true, timeout: 20000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, contains: "google.com/search?q=bay" }, timeout: 30000 }
+
+  # Back, forward and reload from the page menu, once its sheet has finished sliding up.
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: page-back }
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+  - await: { idle: true, timeout: 20000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/" }, timeout: 20000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: page-forward }
+  - await: { idle: true, timeout: 20000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, contains: "google.com/search?q=bay" }, timeout: 20000 }
+  - await: { visible: { id: page-reload }, timeout: 20000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: page-reload }
+  - await: { idle: true, timeout: 20000 }

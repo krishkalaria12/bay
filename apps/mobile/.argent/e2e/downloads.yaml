@@ -1,0 +1,29 @@
+# Downloads: a file the browser can't show downloads with a toast, appears first in Downloads and leaves the list when
+# removed or cleared. Needs network access to proof.ovh.net (a 1 MB test file served as application/octet-stream).
+steps:
+  - run: ../flows/fresh-start
+
+  - tap: { id: start-screen }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "proof.ovh.net/files/1Mb.dat" }
+  - await: { visible: { id: download-toast }, timeout: 30000 }
+  - await: { visible: { id: download-toast-open }, timeout: 60000 }
+  - await: { text: { in: { id: download-toast-status }, contains: "1.0 MB" }, timeout: 10000 }
+  # The navigation that became a download isn't an error and doesn't keep loading.
+  - await: { hidden: { id: navigation-error }, timeout: 5000 }
+  - await: { hidden: { id: page-progress }, timeout: 10000 }
+
+  # The toast opens Downloads, newest first. Clearing browsing data keeps the list, so earlier runs' files may follow.
+  - tap: { id: download-toast }
+  - await: { visible: { id: downloads-panel }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - await: { text: { in: { id: download-0 }, contains: "1Mb" }, timeout: 10000 }
+  - await: { text: { in: { id: download-0-status }, contains: "1.0 MB" }, timeout: 10000 }
+  - tap: { id: download-0-remove }
+  - await: { idle: true, timeout: 15000 }
+  - when: { visible: { id: downloads-clear } }
+    steps:
+      - tap: { id: downloads-clear }
+  - await: { visible: { id: downloads-empty }, timeout: 10000 }
+  - tap: { id: downloads-panel-close }
+  - await: { hidden: { id: downloads-panel }, timeout: 10000 }

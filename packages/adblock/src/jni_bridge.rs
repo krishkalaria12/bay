@@ -1,7 +1,7 @@
 //! JNI for the Android engine (`expo.modules.bayengine.BayAdblock`). A blocker handle is a leaked `Box<Blocker>`;
 //! Kotlin frees it with `nativeFree` once no request can still reach it.
 
-use jni::objects::{JClass, JString};
+use jni::objects::{JClass, JObjectArray, JString};
 use jni::sys::{jboolean, jlong, jstring, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
@@ -21,20 +21,44 @@ fn strings(json: &str) -> Vec<String> {
     serde_json::from_str(json).unwrap_or_default()
 }
 
+/// None for handle 0 (blocking off), so a call racing a toggle answers harmlessly instead of crashing.
+///
 /// # Safety
-/// `handle` must come from `nativeNew` and not have been freed.
-unsafe fn blocker<'a>(handle: jlong) -> &'a Blocker {
-    &*(handle as *const Blocker)
+/// `handle` must be 0 or come from `nativeLoad` and not have been freed.
+unsafe fn blocker<'a>(handle: jlong) -> Option<&'a Blocker> {
+    (handle as *const Blocker).as_ref()
 }
 
+/// The cached engine for `version`, or one built from the list files (then cached); 0 if the files can't be read.
 #[no_mangle]
-pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeNew(
+pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeLoad(
     mut env: JNIEnv,
     _class: JClass,
-    lists: JString,
+    files: JObjectArray,
+    cache: JString,
+    version: JString,
+    resources: JString,
 ) -> jlong {
-    let lists = text(&mut env, &lists);
-    Box::into_raw(Box::new(Blocker::new(&lists))) as jlong
+    let count = env.get_array_length(&files).unwrap_or(0);
+    let mut paths = Vec::new();
+    for index in 0..count {
+        if let Ok(path) = env.get_object_array_element(&files, index) {
+            paths.push(text(&mut env, &JString::from(path)));
+        }
+    }
+    let (cache, version) = (text(&mut env, &cache), text(&mut env, &version));
+    let resources = text(&mut env, &resources);
+    let resources = (!resources.is_empty()).then(|| std::path::PathBuf::from(resources));
+    match crate::load_cached(
+        &paths,
+        std::path::Path::new(&cache),
+        &version,
+        crate::Platform::AndroidWebView,
+        resources.as_deref(),
+    ) {
+        Ok(blocker) => Box::into_raw(Box::new(blocker)) as jlong,
+        Err(_) => 0,
+    }
 }
 
 #[no_mangle]
@@ -48,36 +72,19 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeFree(
     }
 }
 
+/// The page's cosmetic resources and scriptlets from one lookup, as JSON `{ hide, exceptions, generichide, script }`.
 #[no_mangle]
-pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeShouldBlock(
-    mut env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    url: JString,
-    source: JString,
-    kind: JString,
-) -> jboolean {
-    let (url, source, kind) = (
-        text(&mut env, &url),
-        text(&mut env, &source),
-        text(&mut env, &kind),
-    );
-    if blocker(handle).should_block(&url, &source, &kind, "GET") {
-        JNI_TRUE
-    } else {
-        JNI_FALSE
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCosmetic(
+pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativePageResources(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
     url: JString,
 ) -> jstring {
     let url = text(&mut env, &url);
-    let json = serde_json::to_string(&blocker(handle).cosmetic_resources(&url)).unwrap_or_default();
+    let json = blocker(handle).map_or_else(
+        || "{}".to_owned(),
+        |b| serde_json::to_string(&b.page_resources(&url)).unwrap_or_default(),
+    );
     give(&mut env, &json)
 }
 
@@ -95,8 +102,9 @@ pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeHidde
         text(&mut env, &ids),
         text(&mut env, &exceptions),
     );
-    let selectors =
-        blocker(handle).hidden_selectors(&strings(&classes), &strings(&ids), &strings(&exceptions));
+    let selectors = blocker(handle).map_or_else(Vec::new, |b| {
+        b.hidden_selectors(&strings(&classes), &strings(&ids), &strings(&exceptions))
+    });
     give(
         &mut env,
         &serde_json::to_string(&selectors).unwrap_or_default(),
@@ -125,4 +133,28 @@ pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCleanUrl(
 ) -> jstring {
     let url = text(&mut env, &url);
     clean_url(&url).map_or(std::ptr::null_mut(), |clean| give(&mut env, &clean))
+}
+
+/// "" to let the request load, "block", or a `data:` URL to answer it with (`$redirect`).
+#[no_mangle]
+pub unsafe extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeCheck(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    url: JString,
+    source: JString,
+    kind: JString,
+) -> jstring {
+    let (url, source, kind) = (
+        text(&mut env, &url),
+        text(&mut env, &source),
+        text(&mut env, &kind),
+    );
+    let answer =
+        match blocker(handle).map_or(crate::Check::Allow, |b| b.check(&url, &source, &kind)) {
+            crate::Check::Allow => String::new(),
+            crate::Check::Block => "block".to_owned(),
+            crate::Check::Redirect(data_url) => data_url,
+        };
+    give(&mut env, &answer)
 }

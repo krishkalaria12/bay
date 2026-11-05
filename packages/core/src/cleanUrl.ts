@@ -91,6 +91,13 @@ const SITE_PARAMS: { hosts: string[]; params: string[]; prefixes?: string[] }[] 
   },
 ];
 
+/** The parameter table as data, for engines that strip parameters natively (Bay mobile's Rust blocker). */
+export const TRACKING_PARAMS = {
+  global: [...GLOBAL_PARAMS],
+  prefixes: GLOBAL_PREFIXES,
+  sites: SITE_PARAMS.map((site) => ({ hosts: site.hosts, params: site.params, prefixes: site.prefixes ?? [] })),
+};
+
 function siteRules(hostname: string) {
   const host = hostname.toLowerCase().replace(/^www\./, "");
   return SITE_PARAMS.filter((r) => r.hosts.some((h) => host === h || host.endsWith(`.${h}`)));
