@@ -241,6 +241,8 @@ export function BrowserScreen(): JSX.Element {
   }
 
   // The bar swipe moves through tabs in the switcher's order.
+  const activeIndex = data.tabs.findIndex((tab) => tab.id === active.id);
+
   function swipeTabs(step: 1 | -1): void {
     const next = data.tabs[data.tabs.findIndex((tab) => tab.id === active.id) + step];
     if (!next) return;
@@ -508,20 +510,23 @@ export function BrowserScreen(): JSX.Element {
           ) : null}
           {toast.toast ? <Toast key={toast.toast.key} text={toast.toast.text} action={toast.toast.action} onDone={toast.dismiss} /> : null}
           {hasPage && showPages ? (
-            <TabSwipe onSwipe={swipeTabs}>
-              <BrowserBar
-                mode="page"
-                site={locked && active.private ? undefined : host}
-                insecure={active.url.startsWith("http:")}
-                privately={Boolean(active.private)}
-                onTabs={showTabs}
-                onTabsLongPress={() => setPanel("tabs")}
-                tabCount={data.tabs.length}
-                onSearch={() => search(false)}
-                onMore={() => {
-                  if (!(locked && active.private)) setPanel("page");
-                }}
-              />
+            <TabSwipe onSwipe={swipeTabs} hasPrevious={activeIndex > 0} hasNext={activeIndex < data.tabs.length - 1} contentKey={`${active.id} ${host ?? ""}`}>
+              {(capsuleStyle) => (
+                <BrowserBar
+                  capsuleStyle={capsuleStyle}
+                  mode="page"
+                  site={locked && active.private ? undefined : host}
+                  insecure={active.url.startsWith("http:")}
+                  privately={Boolean(active.private)}
+                  onTabs={showTabs}
+                  onTabsLongPress={() => setPanel("tabs")}
+                  tabCount={data.tabs.length}
+                  onSearch={() => search(false)}
+                  onMore={() => {
+                    if (!(locked && active.private)) setPanel("page");
+                  }}
+                />
+              )}
             </TabSwipe>
           ) : (
             <BrowserBar
