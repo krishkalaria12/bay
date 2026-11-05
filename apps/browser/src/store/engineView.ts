@@ -3,15 +3,12 @@ import { useBrowser, type BrowserState } from "./browserStore";
 import { changedIds } from "./recordDiff";
 import type { Tab } from "./types";
 
-type EngineView = Pick<BrowserState, "tabs" | "settings">;
+type EngineView = Pick<BrowserState, "tabs">;
 
 // Every tab icon has an engine badge selector, and every page a view chosen by its engine. Publish only when what
 // engine selection reads changed, so page progress, selection, titles and the stamp of a tab switch don't run those
 // selectors across every mounted sidebar, strip and page. `tabs` here can be older than the store's only in other fields.
-export const useEngineView = create<EngineView>()(() => {
-  const { tabs, settings } = useBrowser.getState();
-  return { tabs, settings };
-});
+export const useEngineView = create<EngineView>()(() => ({ tabs: useBrowser.getState().tabs }));
 
 const sameEngineInputs = (a: Tab | undefined, b: Tab | undefined) =>
   a === b ||
@@ -25,6 +22,6 @@ const sameEngineInputs = (a: Tab | undefined, b: Tab | undefined) =>
     a.openerId === b.openerId);
 
 useBrowser.subscribe((s, prev) => {
-  if (s.settings !== prev.settings || (s.tabs !== prev.tabs && changedIds(s.tabs, prev.tabs).some((id) => !sameEngineInputs(s.tabs[id], prev.tabs[id]))))
-    useEngineView.setState({ tabs: s.tabs, settings: s.settings });
+  if (s.tabs !== prev.tabs && changedIds(s.tabs, prev.tabs).some((id) => !sameEngineInputs(s.tabs[id], prev.tabs[id])))
+    useEngineView.setState({ tabs: s.tabs });
 });

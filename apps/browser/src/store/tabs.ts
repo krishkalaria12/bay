@@ -31,7 +31,7 @@ import { forgetOpeners, insertionIndex, openerSuccessor, switchKeepsOpeners } fr
 import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./tabTidying";
 import { searchUrlPrefix } from "./settings";
 import { mainWindowFor } from "./littleBay";
-import { tabEngine, typedNavigationEngine } from "./engines";
+import { engineForUrl, tabEngine } from "./engines";
 import { pinnedSplitOf, removeFromSplits, splitOf } from "./splits";
 import type { BrowserWindow, ClosedTab, Tab, TabLive, TabSnapshot } from "./types";
 import { MAX_CLOSED_TABS } from "./constants";
@@ -449,7 +449,7 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     // Typing an address starts a new task (a New Tab page gets one lookup first, as in Chrome).
     const base = userInitiated && tab.url ? forgetOpeners(s, tabListKey(s, tab)) : s;
     // A typed address opens in its site's engine (store/engines.ts); moving engines drops the page the tab adopted.
-    const engine = userInitiated ? typedNavigationEngine(s, tab, url) : undefined;
+    const engine = userInitiated ? engineForUrl(url) : undefined;
     const page = engine ? { engine, ...(engine !== tabEngine(s, id) ? { adoptId: undefined } : {}) } : {};
     set(
       apply(base, {

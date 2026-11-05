@@ -144,7 +144,8 @@ export const useBrowser = create<BrowserState>()(
             const own = rawWindows[t.windowId];
             // A peek is thrown away with its window's session (store/peeks.ts).
             if (!spaceOk(t.spaceId) || (isIncognitoSpace(t.spaceId) && !own) || t.peekOf) continue;
-            const { adoptId: _, wakeAdoptId: _wake, ...rest } = t;
+            // Its engine comes from its address again, so a page a website rule once moved isn't stuck there.
+            const { adoptId: _, wakeAdoptId: _wake, engine: _engine, ...rest } = t;
             tabs[t.id] = {
               ...rest,
               windowId: own ? t.windowId : "",

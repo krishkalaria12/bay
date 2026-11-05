@@ -9,8 +9,6 @@ import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { folderChildren } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browserStore";
-import { canSwitchEngine, ENGINE_NAMES, ENGINE_SYMBOLS, otherEngine, tabEngine } from "../../store/engines";
-import { togglePageEngine } from "../../lib/pageEngines";
 import {
   activeTabId,
   bookmarkSpaceId,
@@ -164,7 +162,6 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const keptAwake = siteKeptAwake(tab.url, s.settings.awakeSites);
   const awake = !!webviews.get(tab.id) && !useLifecycle.getState().discarded[tab.id];
 
-  const engine = canSwitchEngine(tab.url) ? otherEngine(tabEngine(s, tab.id)) : null;
   // The everyday actions up top; the rest under More, so the menu stays short.
   const more: MenuItem[] = [
     ...(pinnedPage(tab) ? [] : [{ id: "keep", title: tab.kept ? "Don’t Keep Tab" : "Keep Tab", symbol: "anchor" }]),
@@ -180,7 +177,6 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "mute", title: tab.muted ? "Unmute Site" : "Mute Site", symbol: tab.muted ? "speaker.wave.2" : "speaker.slash", enabled: !!tab.url },
     { id: "keepSiteAwake", title: "Keep This Site Awake", symbol: "sun.max", checked: keptAwake, enabled: !!site },
     { id: "sleep", title: "Put Tab to Sleep", symbol: "moon", enabled: !current && awake },
-    ...(engine ? [{ id: "engine", title: `Open Page in ${ENGINE_NAMES[engine]}`, symbol: ENGINE_SYMBOLS[engine] }] : []),
     sep,
     { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
     { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
@@ -269,7 +265,6 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice === "icon") void openIconPicker(windowId, t);
   else if (choice === "resetIcon") s.updateTab(tab.id, { customIcon: null });
   else if (choice === "mute") toggleMute(tab.id);
-  else if (choice === "engine") void togglePageEngine(tab.id);
   // Like ⌘D: bookmarks the page (or finds its bookmark) and opens the dialog; never removes one.
   else if (choice === "bookmark") bookmarkTab(windowId, tab.id);
   else if (choice.startsWith("folder:")) void bookmarkTabs(windowId, [tab.id], choice.slice(7));

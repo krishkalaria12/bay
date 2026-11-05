@@ -769,7 +769,7 @@
   };
 
   // Protected video: Chromium here has no Widevine, so a player that needs a DRM system it can't have stalls. Tell the
-  // app once (it offers to open the page in WebKit, apps/browser lib/pageEngines.ts) when a refused Widevine, PlayReady
+  // app once (it moves the page to WebKit, apps/browser lib/pageEngines.ts) when a refused Widevine, PlayReady
   // or FairPlay request is followed by playback that tried and didn't start, not on a capability check alone.
   try {
     const NavigatorType = window.Navigator;

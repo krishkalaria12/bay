@@ -10,7 +10,6 @@ import {
   type ExtensionSearchEngine,
   type SearchEngine,
 } from "@bay/core";
-import type { PageEngine } from "@bay/chromium";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browserStore";
 import { layout } from "../lib/constants";
@@ -107,12 +106,6 @@ export type Settings = {
   littleBayMenuBarItem: boolean;
   // A Little Bay left alone this long is put away, its page in the Library's archive (littleBay/putAway.ts); null never.
   littleBayPutAwayAfterHours: number | null;
-
-  // Where pages open (store/engines.ts): the default engine, website rules ("https://host[:port]" to an engine), and
-  // whether streaming sites open in WebKit, where their protected video plays.
-  pageEngine: PageEngine;
-  websiteEngines: Record<string, PageEngine>;
-  protectedVideoInWebKit: boolean;
 };
 
 export type LittleBayShortcut = { key: string; keyCode: number; modifiers: ("control" | "option" | "shift" | "command")[] };
@@ -180,9 +173,6 @@ export const DEFAULT_SETTINGS: Settings = {
   littleBayMenuBarItem: false,
   // Arc's: six hours.
   littleBayPutAwayAfterHours: 6,
-  pageEngine: "chromium",
-  websiteEngines: {},
-  protectedVideoInWebKit: true,
 };
 
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];
