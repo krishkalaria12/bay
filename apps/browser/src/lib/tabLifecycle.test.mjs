@@ -119,6 +119,10 @@ test("awake sites survive two idle hours and sleep last only under critical memo
     assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), []);
     t.mock.timers.setTime(now + 10 * 60_000);
     assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), [], "inactive spaces use the longer timer too");
+    t.mock.timers.setTime(now + 29 * 60_000);
+    globalThis.nnLifecycle.simulate({ physicalMemory: 32 * 2 ** 30, memoryPressure: "warning" });
+    assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), [], "a warning shortens the timer to a quarter, not to nothing");
+    globalThis.nnLifecycle.simulate({ physicalMemory: 32 * 2 ** 30 });
     t.mock.timers.setTime(now + 119 * 60_000);
     assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), []);
     t.mock.timers.setTime(now + 2 * 60 * 60_000);
@@ -130,6 +134,7 @@ test("awake sites survive two idle hours and sleep last only under critical memo
     const urgent = S().newTab(w, { url: "https://another.com", background: true });
     pages.set(urgent, fakePage());
     load(urgent, pages.get(urgent));
+    assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), [], "a tab just hidden stays awake under a warning");
     globalThis.nnLifecycle.simulate({ memoryPressure: "critical" });
     assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0, perSweep: 1 }), [urgent]);
     assert.equal(pages.get(awake).discarded, 0, "ordinary tabs take the first sweep's budget");
@@ -151,7 +156,9 @@ test("awake sites survive two idle hours and sleep last only under critical memo
   }
 });
 
-test("warning pressure can reclaim a small recent session while keeping active, busy and unsaved pages", async () => {
+test("warning pressure can reclaim a small recent session while keeping active, busy and unsaved pages", async (t) => {
+  const now = Date.now();
+  t.mock.timers.enable({ apis: ["Date", "setInterval", "setTimeout"], now });
   globalThis.__DEV__ = true;
   lifecycle.startTabLifecycle();
   await new Promise((resolve) => setImmediate(resolve));
@@ -184,7 +191,13 @@ test("warning pressure can reclaim a small recent session while keeping active, 
   try {
     globalThis.nnLifecycle.simulate({ memoryPressure: "normal" });
     assert.deepEqual(await lifecycle.sweep(), [], "the ordinary idle policy stays unchanged");
-    globalThis.nnLifecycle.simulate({ memoryPressure: "warning" });
+    globalThis.nnLifecycle.simulate({ physicalMemory: 32 * 2 ** 30, memoryPressure: "warning" });
+    // Switching away and back records when each loaded tab went out of view.
+    S().activate(idle, w);
+    S().activate(shown, w);
+    ids.forEach((id, i) => S().updateTab(id, { lastActiveAt: Date.now() - i * 1000 }));
+    assert.deepEqual(await lifecycle.sweep(), [], "a warning doesn't sleep a tab the moment it's hidden");
+    t.mock.timers.setTime(now + 30 * 60_000);
     assert.deepEqual(await lifecycle.sweep(), [idle], "warning pressure must not reserve the entire recent session");
 
     for (const id of [shown, recent, audio, unsaved, pinned, loading]) assert.equal(pages.get(id).discarded, 0);

@@ -230,7 +230,17 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
     const pressure = currentSystem()?.memoryPressure ?? "normal";
     // A warning must be able to reclaim a small session too. Keeping ten recent pages alive could otherwise
     // leave no candidates until pressure became critical. Visible and busy pages have separate protections below.
-    const protectedRecent = pressure === "critical" ? 0 : pressure === "warning" ? Math.min(policy.protectedRecent, 2) : policy.protectedRecent;
+    // macOS sits at warning for hours with plenty free, so a warning shortens the timer rather than dropping it.
+    let protectedRecent = policy.protectedRecent;
+    let idleMs = policy.idleMs;
+
+    if (pressure === "critical") {
+      protectedRecent = 0;
+      idleMs = 0;
+    } else if (pressure === "warning") {
+      protectedRecent = Math.min(policy.protectedRecent, 2);
+      idleMs = policy.idleMs / 4;
+    }
 
     const recent = new Set(
       Object.values(s.tabs)
@@ -251,7 +261,7 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
       if (pressure !== "critical" && siteKeptAwake(tab.url, s.settings.awakeSites)) return false;
       const idle = now - (hiddenAt.get(id) ?? now);
 
-      if (!unused.has(tab.spaceId) && (recent.has(id) || (pressure === "normal" && idle < policy.idleMs))) return false;
+      if (!unused.has(tab.spaceId) && (recent.has(id) || idle < idleMs)) return false;
 
       return !keepAliveReason(s, id);
     });
