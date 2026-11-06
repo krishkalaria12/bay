@@ -109,6 +109,14 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private var refreshing = false
   private var refreshStartedAt = 0L
   private var refreshSawLoading = false
+  /** Edge swipe back/forward (A4): where the finger went down, which edge, and whether it is being dragged. */
+  private var edgeStartX = 0f
+  private var edgeStartY = 0f
+  /** -1: left edge, swipe right to go back; 1: right edge, swipe left to go forward; 0: neither. */
+  private var edgeDirection = 0
+  private var edgeSwiping = false
+  /** Past the trigger point in the current edge swipe (one haptic tick when it's crossed). */
+  private var edgeArmed = false
   /** Video fullscreen (A2): the custom view and its hidden callback, plus the orientation to restore. */
   private var customView: View? = null
   private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -777,29 +785,95 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
-    if (!pullToRefreshEnabled || disposed || webView.url == null || loading || refreshing) return super.onInterceptTouchEvent(event)
-    // A second finger is a pinch, never a pull.
-    if (event.pointerCount > 1) return super.onInterceptTouchEvent(event)
+    if (disposed || webView.url == null) return super.onInterceptTouchEvent(event)
+    // A second finger is a pinch, never a pull or an edge swipe.
+    if (event.pointerCount > 1) {
+      if (edgeSwiping) {
+        edgeSwiping = false
+        edgeArmed = false
+        settleEdge()
+      }
+      return super.onInterceptTouchEvent(event)
+    }
     when (event.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
         pullStartX = event.x
         pullStartY = event.y
         pulling = false
         pullArmed = false
+        edgeStartX = event.x
+        edgeStartY = event.y
+        edgeSwiping = false
+        edgeArmed = false
+        // Edge swipe (A4): the first 24dp at each side, matching iOS's allowsBackForwardNavigationGestures.
+        // A direction is only armed when there's history that way, so a swipe without history stays the page's.
+        val edgeWidth = 24 * density
+        edgeDirection = when {
+          event.x < edgeWidth && webView.canGoBack() -> -1
+          event.x > width - edgeWidth && webView.canGoForward() -> 1
+          else -> 0
+        }
       }
       MotionEvent.ACTION_MOVE -> {
-        val distance = event.y - pullStartY
-        if (!webView.canScrollVertically(-1) && distance > touchSlop * 2 && distance > abs(event.x - pullStartX) * 1.5) {
-          pulling = true
-          parent?.requestDisallowInterceptTouchEvent(true)
-          return true
+        // Pull to refresh keeps its rules; edge swipe runs alongside it. Both steal the gesture once the
+        // movement is clearly theirs, and both need the other not to have started first.
+        if (!pulling && !edgeSwiping && pullToRefreshEnabled && !loading && !refreshing) {
+          val distance = event.y - pullStartY
+          if (!webView.canScrollVertically(-1) && distance > touchSlop * 2 && distance > abs(event.x - pullStartX) * 1.5) {
+            pulling = true
+            parent?.requestDisallowInterceptTouchEvent(true)
+            return true
+          }
         }
+        if (!edgeSwiping && !pulling && edgeDirection != 0) {
+          val dx = event.x - edgeStartX
+          val dy = event.y - edgeStartY
+          val towardHistory = if (edgeDirection == -1) dx > 0 else dx < 0
+          if (towardHistory && abs(dx) > touchSlop * 2 && abs(dx) > abs(dy) * 1.5) {
+            edgeSwiping = true
+            parent?.requestDisallowInterceptTouchEvent(true)
+            return true
+          }
+        }
+      }
+      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+        if (pulling || edgeSwiping) return true
       }
     }
     return super.onInterceptTouchEvent(event)
   }
 
   override fun onTouchEvent(event: MotionEvent): Boolean {
+    if (edgeSwiping) {
+      when (event.actionMasked) {
+        MotionEvent.ACTION_MOVE -> {
+          val dx = event.x - edgeStartX
+          // The page follows the finger a little, like WebKit's edge preview. Cap it so the edge stays put.
+          val follow = (dx * 0.4f).coerceIn(-56 * density, 56 * density)
+          val distance = if (edgeDirection == -1) dx else -dx
+          webView.translationX = follow
+          webView.translationY = 0f
+          val armed = distance >= pullThreshold
+          if (armed && !edgeArmed) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+          edgeArmed = armed
+          invalidate()
+        }
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+          val dx = event.x - edgeStartX
+          val distance = if (edgeDirection == -1) dx else -dx
+          val navigate = event.actionMasked == MotionEvent.ACTION_UP && distance >= pullThreshold
+          val direction = edgeDirection
+          edgeSwiping = false
+          edgeArmed = false
+          parent?.requestDisallowInterceptTouchEvent(false)
+          if (navigate) {
+            if (direction == -1) webView.goBack() else webView.goForward()
+          }
+          settleEdge()
+        }
+      }
+      return true
+    }
     if (!pulling) return super.onTouchEvent(event)
     when (event.actionMasked) {
       MotionEvent.ACTION_MOVE -> {
@@ -832,6 +906,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   private fun settlePage() {
     webView.animate().translationY(0f).setDuration(240).setInterpolator(DecelerateInterpolator()).withEndAction { invalidate() }.start()
+  }
+
+  private fun settleEdge() {
+    webView.animate().translationX(0f).setDuration(240).setInterpolator(DecelerateInterpolator()).withEndAction { invalidate() }.start()
   }
 
   /** Each spinner frame: ends the refresh once the reload has run (shown at least briefly), or gives up on one that never starts. */
@@ -887,6 +965,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     spinner.cancel()
     hideFullscreen()
     BayFileChooser.cancelPending()
+    edgeSwiping = false
+    pulling = false
     webView.animate().cancel()
     webView.stopLoading()
     webView.setOnLongClickListener(null)

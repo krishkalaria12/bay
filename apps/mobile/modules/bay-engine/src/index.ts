@@ -66,7 +66,7 @@ export interface EngineViewProps extends ViewProps {
   active?: boolean;
   /** Defaults to false. Hidden tabs that aren't playing media pass true so the engine pauses their timers, animations and drawing; snapshots then resolve null. */
   suspended?: boolean;
-  /** Defaults to true. iOS also supports the native back/forward edge gestures. */
+  /** Defaults to true. Both engines support native back/forward edge gestures: iOS via WebKit, Android via its edge swipe. */
   pullToRefreshEnabled?: boolean;
   onNavigationStateChange?: (event: NativeSyntheticEvent<NavigationState>) => void;
   /** Main-frame failures only. Native certificate validation is never bypassed. */
