@@ -8,25 +8,30 @@ let showTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function switcherStep(windowId: string, backward: boolean) {
   const current = sidebarUi().switcher;
+
   if (current && current.windowId === windowId) return moveSwitcher(backward ? -1 : 1);
   const ids = recentTabIds(useBrowser.getState(), windowId);
+
   if (ids.length < 2) return;
   setSidebarUi({ switcher: { windowId, ids, index: backward ? ids.length - 1 : 1, visible: false } });
   setSwitcherCapture(true);
   clearTimeout(showTimer);
   showTimer = setTimeout(() => {
     const s = sidebarUi().switcher;
+
     if (s) setSidebarUi({ switcher: { ...s, visible: true } });
   }, SWITCHER_SHOW_AFTER_MS);
 }
 
 export function moveSwitcher(step: 1 | -1) {
   const s = sidebarUi().switcher;
+
   if (s) focusSwitcherRow(s.index + step);
 }
 
 export function focusSwitcherRow(index: number) {
   const s = sidebarUi().switcher;
+
   if (!s) return;
   const n = s.ids.length;
   setSidebarUi({ switcher: { ...s, index: (index + n) % n } });
@@ -34,9 +39,11 @@ export function focusSwitcherRow(index: number) {
 
 export function commitSwitcher(index?: number) {
   const s = sidebarUi().switcher;
+
   if (!s) return;
   endSwitcher();
   const id = s.ids[index ?? s.index];
+
   if (id && useBrowser.getState().tabs[id]) useBrowser.getState().activate(id, s.windowId);
 }
 

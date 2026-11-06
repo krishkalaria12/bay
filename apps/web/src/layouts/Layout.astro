@@ -2,7 +2,7 @@
 import "@fontsource/caveat/latin-600.css";
 import "../styles/global.css";
 import handFont from "@fontsource/caveat/files/caveat-latin-600-normal.woff2?url";
-import { graph, site } from "../site";
+import { graph, site, type JsonLd } from "../site";
 import { ClientRouter } from "astro:transitions";
 import PostHog from "../components/PostHog.astro";
 
@@ -14,7 +14,7 @@ interface Props {
   type?: "website" | "article";
   noindex?: boolean;
   /** This page's own JSON-LD nodes; the site's Organization, WebSite and app are added to the same graph. */
-  schema?: Record<string, unknown>[];
+  schema?: JsonLd[];
 }
 
 const {

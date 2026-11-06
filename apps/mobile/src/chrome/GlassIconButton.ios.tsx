@@ -19,6 +19,7 @@ export function GlassIconButton(props: {
 }): JSX.Element {
   const onPress = useStableCallback(props.onPress);
   const onLongPress = useStableCallback(props.onLongPress);
+
   return (
     <View testID={props.id} collapsable={false}>
       <Host matchContents>

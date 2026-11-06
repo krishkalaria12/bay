@@ -15,6 +15,7 @@ test("tab row notifications ignore progress and route only display flags to the 
   const seen = [];
   let unrelated = 0;
   const stops = [shown.subscribe(() => unrelated++), background.subscribe((value) => seen.push(value))];
+
   try {
     for (let i = 1; i <= 60; i++) S().updateLive(other, { progress: i / 100 });
     assert.deepEqual(seen, []);
@@ -47,15 +48,18 @@ test("row snapshots preserve window ownership, per-space activation and reentran
   const own = tabRowStore(w, tab);
   const elsewhere = tabRowStore(second, tab);
   const stops = [own.subscribe(() => {}), elsewhere.subscribe(() => {})];
+
   try {
     assert.equal(own.getState(), ACTIVE);
     assert.equal(elsewhere.getState(), 0);
     S().activate(tab, second);
     assert.equal(elsewhere.getState() & ACTIVE, ACTIVE);
     assert.equal(own.getState() & ACTIVE, ACTIVE, "the source window keeps its selected open-elsewhere row");
+
     const stop = elsewhere.subscribe((flags) => {
       if (flags & SELECTED) S().setSelection(second, []);
     });
+
     S().setSelection(second, [tab]);
     assert.equal(elsewhere.getState(), rowFlags(S(), second, tab));
     assert.equal(elsewhere.getState() & SELECTED, 0);

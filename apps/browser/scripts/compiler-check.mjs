@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const compiler = require.resolve("babel-plugin-react-compiler");
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
+
 const files = execFileSync(
   "git",
   [
@@ -33,6 +34,7 @@ const lineOf = (event) => event.detail?.loc?.start?.line ?? event.detail?.option
 
 let compiled = 0;
 const failures = [];
+
 for (const file of files) {
   const src = readFileSync(repo + file, "utf8");
   transformSync(src, {
@@ -65,4 +67,5 @@ if (failures.length) {
   console.error(`The React Compiler couldn't compile ${failures.length} function(s):\n${failures.map((f) => `  ${f}`).join("\n")}`);
   process.exit(1);
 }
+
 console.log(`✓ ${compiled} components and hooks compiled in ${files.length} files`);

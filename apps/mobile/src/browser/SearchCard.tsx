@@ -30,7 +30,9 @@ export interface SearchCardProps {
 
 function targetFor(row: Row): OpenTarget {
   if (row.kind === "page" && row.tabId) return { kind: "tab", id: row.tabId };
+
   if (row.kind === "page" && row.cleanedId) return { kind: "archived", id: row.cleanedId };
+
   return { kind: "url", url: row.url };
 }
 
@@ -75,12 +77,15 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 
   function submit(): void {
     const first = rows[0];
+
     if (completion && first) return onOpen(targetFor(first));
     const url = resolveAddress(query, engine);
+
     if (url) onOpen({ kind: "url", url });
   }
 
   const pins = data.pinnedSites.slice(0, 4);
+
   return (
     <View style={StyleSheet.absoluteFill} testID="search-card">
       <Pressable testID="search-dismiss" accessibilityLabel="Close search" style={StyleSheet.absoluteFill} onPress={onDismiss} />
@@ -201,12 +206,14 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 // Shared by the field and its completion so the completion lines up after the typed text.
 const inputTextStyle = { fontSize: 17, padding: 0, margin: 0, includeFontPadding: false } as const;
 
-function rowText(row: Row, engine: SearchEngine): { title: string; detail: string } {
+function rowText(row: Row, engine: SearchEngine) {
   switch (row.kind) {
     case "page": {
       const address = displayUrl(row.url);
+
       return { title: row.title || address, detail: row.tabId ? `Switch to tab · ${address}` : address };
     }
+
     case "search":
       return { title: row.query, detail: `Search ${engine.name}` };
     case "calc":
@@ -235,6 +242,7 @@ function SuggestionRow({
   const foreground = colors?.text ?? themeForeground;
   const muted = colors?.secondary ?? themeMuted;
   const { title, detail } = rowText(row, engine);
+
   return (
     <Pressable
       testID={`suggestion-${index}`}

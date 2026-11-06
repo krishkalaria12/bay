@@ -21,7 +21,9 @@ export function useMeetingCountdown(groupId: string) {
   useEffect(() => {
     if (minutesLeft === null) return;
     const due = WIGGLE_MARKS_MIN.filter((m) => minutesLeft <= m && minutesLeft > m - 1 && !wiggled.has(`${groupId}:${m}`));
+
     for (const m of WIGGLE_MARKS_MIN) if (minutesLeft <= m - 1) wiggled.add(`${groupId}:${m}`);
+
     if (!due.length) return;
     due.forEach((m) => wiggled.add(`${groupId}:${m}`));
     wiggle.set(0);
@@ -31,12 +33,14 @@ export function useMeetingCountdown(groupId: string) {
 
   const label = end && minutesLeft !== null && minutesLeft <= COUNTDOWN_WITHIN_MIN ? timeRemaining(end, now) : null;
   const wiggleStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.get() * 4}deg` }] }));
+
   return { label, urgent: minutesLeft !== null && minutesLeft <= 2, wiggleStyle };
 }
 
 export function MeetingTimeLabel({ label, urgent }: { label: string; urgent: boolean }) {
   const theme = useTheme();
   const colors = useLiveColors();
+
   return (
     <Text style={{ fontSize: 11, fontWeight: "600", fontVariant: ["tabular-nums"], color: urgent ? colors.now : theme.textSecondary, marginRight: 4 }}>
       {label}

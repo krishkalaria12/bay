@@ -42,20 +42,26 @@ export type LiveSource = {
 
 async function secret(source: LiveSourceId): Promise<string> {
   const value = await getSecret(source);
+
   if (!value) throw new LiveError(live().accounts[source] ? "signedOut" : "notConfigured", "Not signed in");
+
   return value;
 }
 
 // MARK: GitHub
 
-async function githubGraphql<T>(token: string, query: string, variables: Record<string, unknown> = {}): Promise<T> {
+async function githubGraphql<T>(token: string, query: string, variables: Record<string, string | string[]> = {}): Promise<T> {
   const json = await request<T & { errors?: { type?: string; message: string }[] }>(endpoints.githubGraphql, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ query, variables }),
   });
+
   const error = json.errors?.[0];
+
+  // SAFETY: { data? assertion matches the runtime value validated at this call site.
   if (error && !(json as { data?: unknown }).data) throw new LiveError(error.type === "RATE_LIMITED" ? "rateLimited" : "other", error.message);
+
   return json;
 }
 
@@ -70,28 +76,36 @@ const github: LiveSource = {
     const ids = detailIds(json, folder.filters);
     const pages = Array.from({ length: Math.ceil(ids.length / DETAILS_PAGE) }, (_, i) => ids.slice(i * DETAILS_PAGE, (i + 1) * DETAILS_PAGE));
     const page = async (ids: string[]) => detailNodes(ids, await githubGraphql<DetailsResponse>(token, GITHUB_DETAILS_QUERY, { ids }));
+
     // Every page or none (a partial result would read as PRs gone); a page is small, so a failure is retried once.
-    const retry = (ids: string[]) => (error: unknown) =>
-      error instanceof LiveError && (error.kind === "other" || error.kind === "network") ? page(ids) : Promise.reject(error);
+    const retry = (ids: string[]) => (cause: unknown) =>
+      cause instanceof LiveError && (cause.kind === "other" || cause.kind === "network") ? page(ids) : Promise.reject(cause);
+
     const details = await Promise.all(pages.map((ids) => page(ids).catch(retry(ids))));
+
     return mapGithub(withDetails(json, details.flat()), folder.filters);
   },
   async resolveGone(items) {
     const prs = items.filter((it) => it.source === "github");
+
     if (!prs.length) return {};
     const token = await secret("github");
     const ids = prs.map((it) => it.id.slice("github:".length));
     const json = await githubGraphql<{ data?: { nodes: ({ id: string; state: string } | null)[] } }>(token, GITHUB_STATE_QUERY, { ids });
     const out: Record<string, CompletionState> = {};
+
     for (const n of json.data?.nodes ?? []) {
       if (!n) continue;
       const item = prs.find((it) => it.id === `github:${n.id}`);
+
       if (!item) continue;
+
       if (n.state === "MERGED") out[item.id] = "merged";
       else if (n.state === "CLOSED") out[item.id] = "closed";
       // Still open but no longer awaiting you: you finished your review.
       else if (item.section === "review" || item.section === "team") out[item.id] = "reviewed";
     }
+
     return out;
   },
 };
@@ -109,16 +123,21 @@ const bitbucket: LiveSource = {
     if (!folder.filters.authored) return [];
     const auth = await bitbucketAuth();
     const me = live().accounts.bitbucket;
+
     if (!me) throw new LiveError("signedOut", "Not signed in");
+
     const page = await request<{ values: BitbucketPR[] }>(`${endpoints.bitbucket}/pullrequests/${encodeURIComponent(me.login)}?state=OPEN&pagelen=50`, {
       headers: { Authorization: auth },
     });
+
     return Promise.all(
       page.values.map(async (pr) => {
         const repo = pr.destination.repository.full_name;
+
         const statuses = await request<BitbucketStatuses>(`${endpoints.bitbucket}/repositories/${repo}/pullrequests/${pr.id}/statuses?pagelen=50`, {
           headers: { Authorization: auth },
         }).catch(() => null);
+
         return mapBitbucket(pr, statuses);
       }),
     );
@@ -136,10 +155,12 @@ const notion: LiveSource = {
   site: "https://www.notion.so",
   async fetch() {
     const token = await secret("notion");
+
     const [pages, users] = await Promise.all([
       request<NotionSearch>(`${endpoints.notion}/search`, { method: "POST", headers: notionHeaders(token), body: JSON.stringify(NOTION_SEARCH_BODY) }),
       request<NotionUsers>(`${endpoints.notion}/users?page_size=100`, { headers: notionHeaders(token) }).catch(() => null),
     ]);
+
     return mapNotion(pages, users, live().accounts.notion?.name ?? null);
   },
 };
@@ -153,9 +174,11 @@ const confluence: LiveSource = {
   site: "https://www.atlassian.com",
   async fetch() {
     const { confluenceSite, confluenceEmail } = live().config;
+
     if (!confluenceSite) throw new LiveError("notConfigured", "No Confluence site");
     const auth = basic(confluenceEmail, await secret("confluence"));
     const url = `${endpoints.confluence(confluenceSite)}/wiki/rest/api/content/search?limit=30&expand=space,history.lastUpdated&cql=${encodeURIComponent(CONFLUENCE_CQL)}`;
+
     return mapConfluence(await request<ConfluenceSearch>(url, { headers: { Authorization: auth } }), confluenceSite);
   },
 };
@@ -165,8 +188,11 @@ const confluence: LiveSource = {
 type GoogleTokens = { access_token: string; refresh_token: string; expires_at: number; client_secret: string };
 
 async function googleAccessToken(): Promise<string> {
+  // SAFETY: GoogleTokens assertion matches the runtime value validated at this call site.
   const stored = JSON.parse(await secret("gdrive")) as GoogleTokens;
+
   if (stored.expires_at > Date.now() + 60_000) return stored.access_token;
+
   const json = await request<{ access_token: string; expires_in: number }>(endpoints.googleToken, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -177,7 +203,9 @@ async function googleAccessToken(): Promise<string> {
       grant_type: "refresh_token",
     }),
   });
+
   await setSecret("gdrive", JSON.stringify({ ...stored, access_token: json.access_token, expires_at: Date.now() + json.expires_in * 1000 }));
+
   return json.access_token;
 }
 
@@ -188,9 +216,11 @@ const gdrive: LiveSource = {
   site: "https://drive.google.com",
   async fetch() {
     const token = await googleAccessToken();
+
     const query = Object.entries(DRIVE_QUERY)
       .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
       .join("&");
+
     return mapDrive(await request<DriveFiles>(`${endpoints.drive}/files?${query}`, { headers: { Authorization: `Bearer ${token}` } }));
   },
 };
@@ -204,6 +234,7 @@ const account = (login: string, name: string | null, avatar: string | null): Liv
 export async function connectGithub(token: string) {
   const json = await githubGraphql<{ data?: { viewer: { login: string; name: string | null; avatarUrl: string } } }>(token.trim(), VIEWER_QUERY);
   const viewer = json.data?.viewer;
+
   if (!viewer) throw new LiveError("signedOut", "GitHub didn't accept the token");
   await setSecret("github", token.trim());
   setAccount("github", account(viewer.login, viewer.name, viewer.avatarUrl));
@@ -216,25 +247,33 @@ export async function startGithubDeviceFlow(clientId: string): Promise<DeviceFlo
     `${endpoints.githubWeb}/login/device/code`,
     { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form({ client_id: clientId, scope: "repo read:org" }) },
   );
+
   let cancelled = false;
   let interval = Math.max(code.interval, 1) * 1000;
   const expiresAt = Date.now() + code.expires_in * 1000;
+
   const done = (async () => {
     while (!cancelled && Date.now() < expiresAt) {
       await new Promise((r) => setTimeout(r, interval));
+
       if (cancelled) break;
+
       const json = await request<{ access_token?: string; error?: string; interval?: number }>(`${endpoints.githubWeb}/login/oauth/access_token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: form({ client_id: clientId, device_code: code.device_code, grant_type: "urn:ietf:params:oauth:grant-type:device_code" }),
       });
+
       if (json.access_token) return connectGithub(json.access_token);
+
       if (json.error === "slow_down") interval = (json.interval ?? interval / 1000 + 5) * 1000;
       else if (json.error && json.error !== "authorization_pending")
         throw new LiveError("signedOut", json.error === "access_denied" ? "Access was denied" : json.error);
     }
+
     throw new LiveError("signedOut", cancelled ? "Cancelled" : "The code expired");
   })();
+
   return { userCode: code.user_code, verificationUri: code.verification_uri, expiresAt, done, cancel: () => (cancelled = true) };
 }
 
@@ -242,6 +281,7 @@ export async function connectBitbucket(user: string, token: string) {
   const me = await request<{ account_id: string; display_name: string; links?: { avatar?: { href: string } } }>(`${endpoints.bitbucket}/user`, {
     headers: { Authorization: basic(user.trim(), token.trim()) },
   });
+
   await setSecret("bitbucket", token.trim());
   updateConfig({ bitbucketUser: user.trim() });
   setAccount("bitbucket", account(me.account_id, me.display_name, me.links?.avatar?.href ?? null));
@@ -258,9 +298,11 @@ export async function connectConfluence(site: string, email: string, token: stri
     .trim()
     .replace(/\/+$/, "")
     .replace(/^(?!https?:\/\/)/, "https://");
+
   const me = await request<{ accountId: string; displayName: string }>(`${endpoints.confluence(base)}/wiki/rest/api/user/current`, {
     headers: { Authorization: basic(email.trim(), token.trim()) },
   });
+
   await setSecret("confluence", token.trim());
   updateConfig({ confluenceSite: base, confluenceEmail: email.trim() });
   setAccount("confluence", account(me.accountId, me.displayName, null));
@@ -279,17 +321,22 @@ export async function connectGoogle(clientId: string, clientSecret: string, code
       redirect_uri: redirectUri,
     }),
   });
+
   if (!json.refresh_token) throw new LiveError("signedOut", "Google didn't return a refresh token");
+
   const tokens: GoogleTokens = {
     access_token: json.access_token,
     refresh_token: json.refresh_token,
     expires_at: Date.now() + json.expires_in * 1000,
     client_secret: clientSecret,
   };
+
   await setSecret("gdrive", JSON.stringify(tokens));
+
   const about = await request<{ user?: { displayName: string; emailAddress: string; photoLink?: string } }>(`${endpoints.drive}/about?fields=user`, {
     headers: { Authorization: `Bearer ${json.access_token}` },
   }).catch(() => null);
+
   updateConfig({ googleClientId: clientId });
   setAccount("gdrive", account(about?.user?.emailAddress ?? "Google Drive", about?.user?.displayName ?? null, about?.user?.photoLink ?? null));
 }

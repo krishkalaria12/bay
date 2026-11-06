@@ -49,10 +49,12 @@ const archiveOptions = [
   { days: 30, label: "After 30 days" },
   { days: null, label: "Never" },
 ];
+
 const startPageOptions = START_PAGE_HOURS.map((hours) => ({
   hours,
   label: hours === null ? "Never" : hours === 1 ? "After 1 hour away" : `After ${hours} hours away`,
 }));
+
 const themes: { id: ThemeChoice; label: string }[] = [
   { id: "system", label: "Match phone" },
   { id: "light", label: "Light" },
@@ -60,6 +62,7 @@ const themes: { id: ThemeChoice; label: string }[] = [
 ];
 
 type Page = "main" | "engine" | "privacy" | "appearance" | "browsing" | "wallpaper" | "textSize" | "archive" | "startPage";
+
 const pages: Record<Page, { title: string; parent: Page }> = {
   main: { title: "Settings", parent: "main" },
   engine: { title: "Search engine", parent: "main" },
@@ -103,8 +106,10 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     if (busy) return;
     setBusy(true);
     setError(null);
+
     try {
       await props.onClearData();
+
       if (!mounted.current) return;
       setConfirming(false);
       // The empty start page behind the sheet shows the result.
@@ -119,6 +124,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const { preferences: prefs, onPreferencesChange: change } = props;
   const engineName = props.engines.find((engine) => engine.id === props.searchEngineId)?.name;
   const back = () => setPage(pages[page].parent);
+
   // A choice goes back to the page it was made from.
   const choose = (action: () => void) => () => {
     action();
@@ -126,6 +132,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   };
 
   let content: JSX.Element;
+
   switch (page) {
     case "engine":
       content = (
@@ -446,6 +453,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 function TextSize({ value, onChange }: { value: number; onChange: (size: number) => void }): JSX.Element {
   const foreground = useThemeColor("foreground");
   const step = (delta: number) => onChange(Math.min(TEXT_SIZE.max, Math.max(TEXT_SIZE.min, value + delta)));
+
   return (
     <>
       <View className="rounded-[20px] bg-default p-4">
@@ -502,14 +510,17 @@ async function pickPhoto(previous: string | null): Promise<string | null> {
   // The system photo picker needs no storage permission.
   const result = await launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
   const asset = result.canceled ? undefined : result.assets[0];
+
   if (!asset) return null;
   const file = new File(Paths.document, `wallpaper-${Date.now()}.jpg`);
   new File(asset.uri).copy(file);
+
   if (previous) {
     try {
       new File(previous).delete();
     } catch {}
   }
+
   return file.uri;
 }
 
@@ -526,12 +537,14 @@ function WallpaperPicker({
   const [error, setError] = useState(false);
   const foreground = useThemeColor("foreground");
   const tiles: WallpaperId[] = [...WALLPAPERS, "photo"];
+
   return (
     <>
       <View className="mt-1 flex-row flex-wrap" style={{ rowGap: 16 }}>
         {tiles.map((id, index) => {
           const selected = id === value;
           const empty = id === "photo" && !photo;
+
           return (
             <Pressable
               key={id}
@@ -542,6 +555,7 @@ function WallpaperPicker({
               onPress={() => {
                 if (id !== "photo") return onChange(id);
                 setError(false);
+
                 // Tapping the chosen photo again picks a new one.
                 if (photo && !selected) return onChange("photo");
                 pickPhoto(photo).then(

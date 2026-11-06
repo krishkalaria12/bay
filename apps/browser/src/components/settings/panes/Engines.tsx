@@ -90,14 +90,18 @@ function RuleSheet({ site, engine: initial }: { site?: string; engine?: PageEngi
   const [address, setAddress] = useState(site ? siteLabel(site) : "");
   const [engine, setEngine] = useState<PageEngine>(initial ?? "webkit");
   const [error, setError] = useState<string | null>(null);
+
   const save = () => {
     const typed = address.trim();
     const target = siteOf(/^[a-z][\w+.-]*:\/\//i.test(typed) ? typed : resolveInput(typed, ""));
+
     if (!target) return setError("Enter a website address, like netflix.com.");
+
     if (site && site !== target) setWebsiteEngine(site, null);
     setWebsiteEngine(target, engine);
     closeSettingsSheet();
   };
+
   return (
     <Sheet width={440} onClose={closeSettingsSheet}>
       <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>{site ? "Edit Website Rule" : "Add Website Rule"}</Text>

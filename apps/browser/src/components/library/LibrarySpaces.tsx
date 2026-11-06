@@ -33,20 +33,27 @@ export function LibrarySpaces({ windowId, query }: { windowId: string; query: st
       windows: s.windows,
     })),
   );
+
   const columns = publicSpaceIds({ spaces, spaceOrder })
     .map((id) => {
       const space = spaces[id]!;
+
       const all = spaceTabIds({ spaces, tabs, tabLists }, id)
         .map((t) => tabs[t]!)
         .filter((tab) => !windows[tab.windowId]?.incognito && !tab.folderId);
+
       const shown = all.filter((tab) => matchesQuery(query, tabTitle(tab), tab.url, space.name));
+
       const folders = childFolderIds({ pinnedFolders }, null, id)
         .map((f) => pinnedFolders[f]!)
         .filter((f) => matchesQuery(query, f.name, space.name));
+
       return { space, folders, pinned: shown.filter((t) => t.pinned || t.pinnedRow), open: shown.filter((t) => !t.pinned && !t.pinnedRow) };
     })
     .filter((c) => !query || matchesQuery(query, c.space.name) || c.folders.length || c.pinned.length || c.open.length);
+
   if (!columns.length) return <EmptyState title="No matching spaces or tabs" subtitle="Try a space name, tab title, or website." />;
+
   return (
     <ScrollView
       horizontal
@@ -65,6 +72,7 @@ export function LibrarySpaces({ windowId, query }: { windowId: string; query: st
 
 async function newSpace(windowId: string) {
   const id = await createSpace(windowId);
+
   if (id) switchSpace(windowId, id);
 }
 
@@ -85,15 +93,18 @@ function SpaceColumn({
 }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
+
   const showTab = (tab: Tab) => {
     switchSpace(windowId, spaceId);
     useBrowser.getState().activate(tab.id, windowId);
   };
+
   const tabRow = (tab: Tab) => (
     <ContextMenuArea key={tab.id} onContextMenu={() => void libraryTabMenu(windowId, tab)}>
       <ColumnRow title={tabTitle(tab)} icon={<Favicon url={tab.url} favicon={tab.favicon} spaceId={tab.spaceId} />} onPress={() => showTab(tab)} />
     </ContextMenuArea>
   );
+
   return (
     <View style={{ width: SPACE_COLUMN, borderRadius: 12, backgroundColor: tokens.groupFill, overflow: "hidden" }}>
       <View style={{ height: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 12, paddingRight: 6 }}>
@@ -135,6 +146,7 @@ function SpaceColumn({
 function ColumnRow({ title, icon, bold, onPress }: { title: string; icon: ReactNode; bold?: boolean; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} style={{ borderRadius: 8, backgroundColor: hovered ? theme.rowHover : undefined }}>
       <Pressable onPress={onPress} style={{ height: ROW, flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 8 }}>

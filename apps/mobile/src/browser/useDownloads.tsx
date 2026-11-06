@@ -22,6 +22,7 @@ export function useDownloads(onError: (message: string) => void) {
       dispatch({ type: "download", update, now: Date.now() });
       setToastId(update.id);
     });
+
     return () => subscription.remove();
   }, [dispatch]);
 
@@ -29,6 +30,7 @@ export function useDownloads(onError: (message: string) => void) {
   useEffect(() => {
     if (!settled) return;
     const timer = setTimeout(() => setToastId(null), TOAST_MS);
+
     return () => clearTimeout(timer);
   }, [settled, toastId]);
 
@@ -49,6 +51,7 @@ export function useDownloads(onError: (message: string) => void) {
 
 export function DownloadToast({ item, onOpen, onShowAll }: { item: DownloadItem; onOpen: () => void; onShowAll: () => void }): JSX.Element {
   const progress = item.state === "downloading" && item.total ? item.received / item.total : null;
+
   return (
     <Surface radius={18} style={{ padding: 12 }}>
       <View className="flex-row items-center gap-3">

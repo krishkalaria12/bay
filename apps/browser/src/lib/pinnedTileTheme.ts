@@ -16,13 +16,18 @@ export function useTileTheme(url: string, favicon: string | null | undefined, cu
     if (!emoji) return;
     let live = true;
     let pending = emojiThemes.get(emoji);
+
     if (!pending) emojiThemes.set(emoji, (pending = iconTheme({ emoji }).catch(() => null)));
     void pending.then((theme) => live && setEmojiTheme({ emoji, theme }));
+
     return () => {
       live = false;
     };
   }, [emoji]);
+
   if (emoji) return emojiTheme?.emoji === emoji && emojiTheme.theme ? { theme: emojiTheme.theme, emoji } : null;
+
   if (customIcon || !resolved || !pageTheme) return null;
+
   return { theme: pageTheme, image: resolved.uri };
 }

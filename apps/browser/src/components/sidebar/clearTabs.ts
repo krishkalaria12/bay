@@ -14,11 +14,15 @@ export const clearableTabs = (s: ReturnType<typeof useBrowser.getState>, windowI
 
 export async function clearTabs(windowId: string) {
   const ids = clearableTabs(useBrowser.getState(), windowId);
+
   if (!ids.length) return;
+
   if (!reduceMotion()) {
     const rects = (await Promise.all(ids.slice(0, CLEAR_MAX_ROWS).map((id) => measureRow(windowId, id)))).filter((r): r is Anchor => !!r);
+
     // The rows are drawn while they're snapshot, before they go.
     if (rects.length) await disintegrate(windowId, rects).catch(() => {});
   }
+
   useBrowser.getState().cleanUpTabs(windowId, { inactiveForMs: 0 });
 }

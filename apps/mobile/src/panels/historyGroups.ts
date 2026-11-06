@@ -5,12 +5,16 @@ export function groupByDay<T>(entries: readonly T[], now: number, at: (entry: T)
   const today = midnight.getTime();
   const yesterday = new Date(today).setDate(new Date(today).getDate() - 1);
   const week = new Date(today).setDate(new Date(today).getDate() - 6);
+
+  // SAFETY: each group starts with an empty entries list; every entry is pushed exactly once below.
   const groups = [
     { label: "Today", from: today, entries: [] as T[] },
     { label: "Yesterday", from: yesterday, entries: [] as T[] },
     { label: "This week", from: week, entries: [] as T[] },
     { label: "Earlier", from: -Infinity, entries: [] as T[] },
   ];
+
   for (const entry of entries) groups.find((group) => at(entry) >= group.from)!.entries.push(entry);
-  return groups.filter((group) => group.entries.length).map(({ label, entries: grouped }) => ({ label, entries: grouped }));
+
+  return groups.flatMap((group) => (group.entries.length ? [{ label: group.label, entries: group.entries }] : []));
 }

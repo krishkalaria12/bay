@@ -21,23 +21,30 @@ import { chromeChanged, groupStep, stripActual, stripPlan, type GroupBindings } 
 
 let started = false;
 const mirror = new Map<number, StripState>();
+
 // -1 until the first snapshot arrives; transactions before it wait.
 let lastRev = -1;
 let early: TabStripTransaction[] = [];
+
 // Tabs the app has seen in a strip (a tab Chrome made is Chrome's to place only the first time).
 const seen = new Set<string>();
+
 // The command each strip is waiting for (an arrange or group with the tabs it lists; the store group a new Chrome
 // group is made for).
 type Kind = "arrange" | "activate" | "group";
+
 const inflight = new Map<number, { kind: Kind; cmd: number; keys?: string[]; makes?: string; successor?: boolean }>();
+
 // Chrome's group ids → the store's.
 const groups: GroupBindings = new Map();
+
 // What was last sent to each strip, against which of its states: a plan Chrome couldn't reach isn't sent again
 // until something other than the app's commands changes the strip.
 const tried = new Map<string, { sig: string; since: number }>();
 const changedAt = new Map<number, number>();
 
 if (__DEV__) {
+  // SAFETY: nnChromeTabs is the tab-strip sync's own dev-harness surface, read only by tests.
   (globalThis as { nnChromeTabs?: unknown }).nnChromeTabs = {
     chromeWindows,
     engineInfo,
@@ -54,11 +61,14 @@ export function startChromeTabs() {
   void tabStrips().then((snapshot) => {
     for (const strip of snapshot.strips) {
       mirror.set(strip.strip, strip);
+
       for (const t of strip.tabs) if (t.key) seen.add(t.key);
     }
+
     lastRev = snapshot.rev;
     const queued = early;
     early = [];
+
     for (const tx of queued) receive(tx);
     scheduleProject();
   });
@@ -73,6 +83,7 @@ function placed(s: BrowserState, prev: BrowserState) {
   return changedIds(s.tabs, prev.tabs).some((id) => {
     const a = s.tabs[id];
     const b = prev.tabs[id];
+
     return !a || !b || a.windowId !== b.windowId || a.spaceId !== b.spaceId || a.pinned !== b.pinned;
   });
 }
@@ -82,20 +93,27 @@ function placed(s: BrowserState, prev: BrowserState) {
 function receive(tx: TabStripTransaction) {
   if (tx.rev <= lastRev) return;
   lastRev = tx.rev;
+
   for (const [strip, f] of inflight) {
     if (f.cmd !== tx.cmd) continue;
     inflight.delete(strip);
     // The Chrome group made for a store group: whatever group its tabs are in now.
     const made = f.makes && tx.strips.find((x) => x.strip === strip)?.tabs.find((t) => t.key === f.keys?.[0])?.group;
+
     if (made && f.makes) groups.set(made, f.makes);
   }
+
   const start = useBrowser.getState();
   let s = start;
+
   for (const strip of tx.strips) {
     const before = mirror.get(strip.strip);
+
     if (strip.closed) mirror.delete(strip.strip);
     else mirror.set(strip.strip, strip);
+
     if (tx.cmd === null || tx.cmd < 0) changedAt.set(strip.strip, tx.rev);
+
     if (tx.cmd === null) {
       // A command of the app's own on its way to this strip comes after Chrome's change, and wins.
       const waiting = inflight.get(strip.strip);
@@ -113,9 +131,12 @@ function receive(tx: TabStripTransaction) {
         },
       });
     }
+
     for (const t of strip.tabs) if (t.key) seen.add(t.key);
   }
+
   if (seen.size > 2 * Object.keys(s.tabs).length + 64) for (const key of seen) if (!s.tabs[key]) seen.delete(key);
+
   if (s !== start) useBrowser.setState(s);
   scheduleProject();
 }
@@ -137,10 +158,12 @@ function project(s: BrowserState) {
   for (const strip of mirror.values()) {
     if (inflight.has(strip.strip)) continue;
     const plan = stripPlan(s, strip);
+
     if (!plan) continue;
     const actual = stripActual(strip, plan);
     // The shown tab first: Chrome's commands and extensions act on its active tab.
     const order = `${plan.keys.join(",")}|${plan.pinned}`;
+
     if (plan.active && plan.active !== actual.active) {
       // Chrome's active tab is gone from the store (it closed): the store's pick is a successor.
       const successor = !!actual.active && !s.tabs[actual.active];
@@ -149,6 +172,7 @@ function project(s: BrowserState) {
       send(strip.strip, "arrange", order, { op: "arrange", strip: strip.strip, keys: plan.keys, pinned: plan.pinned });
     } else {
       const step = groupStep(s, strip, groups);
+
       if (step) {
         const { makes, ...rest } = step;
         send(strip.strip, "group", JSON.stringify(step), { op: "group", strip: strip.strip, ...rest }, makes);
@@ -160,7 +184,8 @@ function project(s: BrowserState) {
 function send(strip: number, kind: Kind, sig: string, command: TabStripCommand, makes?: string, successor?: boolean) {
   const since = changedAt.get(strip) ?? 0;
   const last = tried.get(`${strip}:${kind}`);
+
   if (last?.sig === sig && last.since === since) return;
   tried.set(`${strip}:${kind}`, { sig, since });
-  inflight.set(strip, { kind, cmd: sendTabStripCommand(command), ...(command.op !== "activate" ? { keys: command.keys } : {}), makes, successor });
+  inflight.set(strip, { kind, cmd: sendTabStripCommand(command), ...(command.op !== "activate" ? { keys: command.keys } : undefined), makes, successor });
 }

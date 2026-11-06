@@ -3,6 +3,7 @@ import { useTheme } from "../../lib/theme";
 
 export function Keycaps({ hint, color }: { hint: string; color?: string }) {
   const theme = useTheme();
+
   return (
     <View pointerEvents="none" style={{ flexDirection: "row", gap: 3 }}>
       {Array.from(hint.replace(/\s/g, "")).map((key, i) => (

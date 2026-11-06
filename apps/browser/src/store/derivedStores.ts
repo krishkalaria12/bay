@@ -1,5 +1,5 @@
 import type { StoreApi } from "zustand/vanilla";
-import { useBrowser, type BrowserShape } from "./browserStore";
+import { useBrowser, type BrowserState, type QuietBrowserState } from "./browserStore";
 import { changedIds } from "./recordDiff";
 import { spaceHeaderHidden } from "./model";
 
@@ -9,6 +9,7 @@ type ReadStore<T> = Pick<StoreApi<T>, "getState" | "getInitialState" | "subscrib
 export function selectStore<S, T>(source: ReadStore<S>, select: (state: S) => T): ReadStore<T> {
   const listeners = new Set<(state: T, prev: T) => void>();
   let stop: (() => void) | undefined;
+
   return {
     getState: () => select(source.getState()),
     getInitialState: () => select(source.getInitialState()),
@@ -17,10 +18,13 @@ export function selectStore<S, T>(source: ReadStore<S>, select: (state: S) => T)
       listeners.add(run);
       stop ??= source.subscribe((s, prev) => {
         const before = select(prev);
+
         if (!Object.is(select(s), before)) listeners.forEach((notify) => notify(select(source.getState()), before));
       });
+
       return () => {
         listeners.delete(run);
+
         if (!listeners.size) {
           stop?.();
           stop = undefined;
@@ -34,24 +38,30 @@ export function selectStore<S, T>(source: ReadStore<S>, select: (state: S) => T)
 export function recordStores<S, T>(source: ReadStore<S>, select: (state: S) => Record<string, T>) {
   const listeners = new Map<string, Set<(state: T | undefined, prev: T | undefined) => void>>();
   let stop: (() => void) | undefined;
+
   return (id: string): ReadStore<T | undefined> => ({
     getState: () => select(source.getState())[id],
     getInitialState: () => select(source.getInitialState())[id],
     subscribe(listener) {
       let subscribers = listeners.get(id);
+
       if (!subscribers) listeners.set(id, (subscribers = new Set()));
       // Give each subscription its own identity, including two consumers that pass the same callback.
       const run = (state: T | undefined, prev: T | undefined) => listener(state, prev);
       subscribers.add(run);
       stop ??= source.subscribe((s, prev) => {
         const before = select(prev);
+
         for (const key of changedIds(select(s), before)) {
           listeners.get(key)?.forEach((notify) => notify(select(source.getState())[key], before[key]));
         }
       });
+
       return () => {
         if (!subscribers.delete(run)) return;
+
         if (!subscribers.size) listeners.delete(id);
+
         if (!listeners.size) {
           stop?.();
           stop = undefined;
@@ -73,25 +83,32 @@ export const spaceHeaderHiddenStore = selectStore(useBrowser, spaceHeaderHidden)
 export const windowsStore = selectStore(useBrowser, (s) => s.windows);
 
 // The store without `live`, which every page's progress replaces (the most frequent update there is). A selector that
-// reads nothing of it follows this and doesn't run then; `BrowserShape` has no `live`, so one that does won't compile.
-function withoutLive(): ReadStore<BrowserShape> {
-  const listeners = new Set<(state: BrowserShape, prev: BrowserShape) => void>();
+// reads nothing of it follows this and doesn't run then; `QuietBrowserState` has no `live`, so one that does won't compile.
+function withoutLive(): ReadStore<QuietBrowserState> {
+  const listeners = new Set<(state: QuietBrowserState, prev: QuietBrowserState) => void>();
   let stop: (() => void) | undefined;
+
   return {
     getState: useBrowser.getState,
     getInitialState: useBrowser.getInitialState,
     subscribe(listener) {
       listeners.add(listener);
       stop ??= useBrowser.subscribe((s, prev) => {
-        for (const key in s) {
-          if (key !== "live" && s[key as keyof typeof s] !== prev[key as keyof typeof s]) {
+        // SAFETY: Object.keys on a BrowserState yields its own state keys, so viewing them as keyof BrowserState preserves identity.
+        const keys = Object.keys(s) as (keyof BrowserState)[];
+
+        for (const key of keys) {
+          if (key !== "live" && s[key] !== prev[key]) {
             for (const each of listeners) each(s, prev);
+
             return;
           }
         }
       });
+
       return () => {
         listeners.delete(listener);
+
         if (!listeners.size) {
           stop?.();
           stop = undefined;
@@ -100,6 +117,7 @@ function withoutLive(): ReadStore<BrowserShape> {
     },
   };
 }
+
 export const quietStore = withoutLive();
 
 export const spaceOrderStore = selectStore(useBrowser, (s) => s.spaceOrder);

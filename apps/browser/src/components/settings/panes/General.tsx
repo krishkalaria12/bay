@@ -149,20 +149,28 @@ function UpdatesSection() {
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
+
     return () => sub.remove();
   }, []);
+
   if (!state?.available) return null;
   const ready = state.configured;
   const channelBusy = state.sessionInProgress || state.pending?.ready === true;
+
   const set = (patch: { automaticChecks?: boolean; automaticDownloads?: boolean; channel?: UpdateChannel }) => {
     setState({ ...state, ...patch });
+
     if (patch.automaticChecks !== undefined) void setAutomaticUpdateChecks(patch.automaticChecks).finally(refresh);
+
     if (patch.automaticDownloads !== undefined) void setAutomaticUpdateDownloads(patch.automaticDownloads).finally(refresh);
+
     if (patch.channel !== undefined) void setUpdateChannel(patch.channel).finally(refresh);
   };
+
   const lastCheck = state.lastCheck
     ? `Last checked ${new Date(state.lastCheck).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
     : "Not checked yet.";
+
   return (
     <>
       <SectionHeader
@@ -232,9 +240,12 @@ function DefaultBrowserBanner() {
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
+
     return () => sub.remove();
   }, []);
+
   if (isDefault === null) return <View style={{ height: 20 }} />;
+
   return (
     <View
       style={{

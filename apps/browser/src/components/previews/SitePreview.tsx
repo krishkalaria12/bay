@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { FadeLabel, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -30,11 +31,13 @@ import {
 } from "./knownSites";
 
 const FRESH_MS = 60_000;
+
 // A page that never answers (its policy stopped the request) shows as one that didn't, not as loading forever.
 const ANSWER_MS = 8_000;
 const ROWS = 5;
 
 type Answer<T> = { kind: "ready"; data: T } | { kind: "signedOut" } | { kind: "unloaded" } | { kind: "unreadable" };
+
 type State<T> = Answer<T> | { kind: "loading" };
 
 // The last answer per tab: shown at once on the next hover while a fresh one comes, never older than a minute unasked.
@@ -49,8 +52,11 @@ export function primePreview(tabId: string, data: GmailData | GithubData) {
 export function useSitePreview(tabId: string | undefined): PreviewSite | null {
   return useBrowser((s) => {
     const site = tabId ? previewSiteOf(s.tabs[tabId]) : null;
+
     if (site === "gmail" && s.settings.previewGmail) return site;
+
     if (site === "github" && s.settings.previewGithub) return site;
+
     return null;
   });
 }
@@ -58,44 +64,63 @@ export function useSitePreview(tabId: string | undefined): PreviewSite | null {
 async function ask(tabId: string, site: PreviewSite): Promise<Answer<GmailData | GithubData>> {
   const view = webviews.get(tabId);
   const tab = useBrowser.getState().tabs[tabId];
+
   if (!view || !tab) return { kind: "unloaded" };
   const place = tabPlace(site, tab.url);
+
   if (place === "signIn") return { kind: "signedOut" };
+
   if (place === "elsewhere") return { kind: "unloaded" };
   const urls = site === "gmail" ? [gmailFeedUrl(gmailAccount(tab.url))] : githubPullsUrls;
   const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), ANSWER_MS));
   const headers = site === "github" ? githubPullsHeaders : {};
   const all = await Promise.race([view.evaluate<Fetched[]>(fetchScript(urls, headers)).catch(() => null), timeout]);
+
   if (!all?.length) return { kind: "unreadable" };
+
   if (all.some(signedOut)) return { kind: "signedOut" };
+
   if (site === "gmail") {
     const f = all[0]!;
+
     // A fetch the page couldn't make (the tab is on Google's sign-in, another origin) is a signed-out tab too.
     if ("error" in f) return { kind: "signedOut" };
     const data = parseGmailFeed(f.body);
+
     return data ? { kind: "ready", data } : { kind: "unreadable" };
   }
+
   const [authored, requested] = all.map((f) => ("error" in f ? null : parseGithubPulls(f.body)));
+
   if (!authored || !requested) return { kind: "unreadable" };
+
   return { kind: "ready", data: { authored, requested } };
 }
 
 function usePreviewData<T>(tabId: string, site: PreviewSite): State<T> {
   const sleeping = useIsSleeping(tabId);
   const cached = answers.get(tabId);
+  // SAFETY: Answer<T>) assertion matches the runtime value validated at this call site.
   const [state, setState] = useState<State<T>>(() => (cached ? (cached.answer as Answer<T>) : { kind: "loading" }));
   useEffect(() => {
     if (sleeping) return setState({ kind: "unloaded" });
+
     if (cached && Date.now() - cached.at < FRESH_MS) return;
     let live = true;
     void ask(tabId, site).then((answer) => {
       answers.set(tabId, { at: Date.now(), answer });
-      if (live) setState(answer as Answer<T>);
+
+      if (live) {
+        // SAFETY: ask resolves with the site's validated Answer<T> for this tab; the cache stores the same value.
+        setState(answer as Answer<T>);
+      }
     });
+
     return () => {
       live = false;
     };
   }, [tabId, site, sleeping]);
+
   return state;
 }
 
@@ -104,6 +129,7 @@ function openInTab(tabId: string, url: string) {
   dismissHover();
   const s = useBrowser.getState();
   s.activate(tabId);
+
   if (url) s.navigate(tabId, url);
 }
 
@@ -116,6 +142,7 @@ function GmailPreview({ tabId, anchor }: { tabId: string; anchor: Anchor }) {
   const account = useBrowser((s) => gmailAccount(s.tabs[tabId]?.url ?? ""));
   const now = Date.now();
   const count = state.kind === "ready" ? (state.data.unread ? `${state.data.unread} unread` : "") : "";
+
   return (
     <HoverSurface anchor={anchor} width={300}>
       <Header title="Inbox" detail={count}>
@@ -146,6 +173,7 @@ function GmailPreview({ tabId, anchor }: { tabId: string; anchor: Anchor }) {
 
 function GithubPreview({ tabId, anchor }: { tabId: string; anchor: Anchor }) {
   const state = usePreviewData<GithubData>(tabId, "github");
+
   return (
     <HoverSurface anchor={anchor} width={320}>
       <Header title="Pull requests" detail={state.kind === "ready" ? `${state.data.authored.length} open` : ""} />
@@ -183,6 +211,7 @@ const REVIEWS: Record<Review, { label: string; icon: string; tint: string | null
 function PullRow({ pull, tabId }: { pull: Pull; tabId: string }) {
   const theme = useTheme();
   const review = pull.review ? REVIEWS[pull.review] : null;
+
   return (
     <ItemRow
       title={pull.title}
@@ -201,6 +230,7 @@ function PullRow({ pull, tabId }: { pull: Pull; tabId: string }) {
 
 function Header({ title, detail, children }: { title: string; detail: string; children?: React.ReactNode }) {
   const theme = useTheme();
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6, marginTop: -2, minHeight: 24 }}>
       <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>{title}</Text>
@@ -213,6 +243,7 @@ function Header({ title, detail, children }: { title: string; detail: string; ch
 
 function SectionTitle({ title }: { title: string }) {
   const theme = useTheme();
+
   return <Text style={{ fontSize: 11.5, fontWeight: "600", color: theme.textSecondary, marginTop: 8, marginBottom: 2, marginLeft: 4 }}>{title}</Text>;
 }
 
@@ -235,17 +266,22 @@ function Body<T>({
   children(data: T): React.ReactNode;
 }) {
   if (state.kind === "loading") return <Note text="Loading…" />;
+
   if (state.kind === "signedOut")
     return <Note text={`Sign in to ${name} in this tab to see ${what} here.`} action={`Open ${name}`} onPress={() => openInTab(tabId, "")} />;
+
   if (state.kind === "unloaded") return <Note text={`Open ${name} once to see ${what} here.`} action={`Open ${name}`} onPress={() => openInTab(tabId, "")} />;
+
   if (state.kind === "unreadable")
     return <Note text={`${name} didn't answer. Open it to see ${what}.`} action={`Open ${name}`} onPress={() => openInTab(tabId, "")} />;
+
   return isEmpty(state.data) ? <Note text={empty} /> : <View style={{ gap: 1 }}>{children(state.data)}</View>;
 }
 
 function Note({ text, action, onPress }: { text: string; action?: string; onPress?(): void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} style={{ paddingVertical: 4 }}>
       <Text style={{ fontSize: 12.5, lineHeight: 17, color: theme.textSecondary }}>
@@ -264,6 +300,7 @@ function Note({ text, action, onPress }: { text: string; action?: string; onPres
 function ItemRow({ title, detail, trailing, onPress }: { title: string; detail: string; trailing: React.ReactNode; onPress(): void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
@@ -282,7 +319,7 @@ function ItemRow({ title, detail, trailing, onPress }: { title: string; detail: 
             <FadeLabel text={title} fontSize={12.5} weight="medium" color={theme.textPrimary} style={{ height: 16 }} />
             <FadeLabel text={detail} fontSize={11.5} color={theme.textSecondary} style={{ height: 15 }} />
           </View>
-          {typeof trailing === "string" ? <Text style={{ fontSize: 11, color: theme.textTertiary }}>{trailing}</Text> : trailing}
+          {v.is(v.string(), trailing) ? <Text style={{ fontSize: 11, color: theme.textTertiary }}>{trailing}</Text> : trailing}
         </View>
       </Pressable>
     </View>

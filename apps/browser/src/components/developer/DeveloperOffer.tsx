@@ -13,7 +13,9 @@ import { DEVELOPER_OFFER_WIDTH, DEVELOPER_YELLOW } from "./constants";
  */
 export function DeveloperOffer({ tabId, left, top, paneWidth }: { tabId: string; left: number; top: number; paneWidth: number }) {
   const site = useDeveloperOffer(tabId);
+
   if (!site) return null;
+
   return <Offer key={site} tabId={tabId} site={site} left={left} top={top} width={Math.min(DEVELOPER_OFFER_WIDTH, paneWidth - 2 * left)} />;
 }
 
@@ -21,10 +23,13 @@ function Offer({ tabId, site, left, top, width }: { tabId: string; site: string;
   const theme = useTheme();
   const keys = useRef<View>(null);
   useEffect(() => {
-    const t = setTimeout(() => (keys.current as unknown as { focus?: () => void } | null)?.focus?.(), 50);
+    // SAFETY: { focus? assertion matches the runtime value validated at this call site.
+    const t = setTimeout(() => (keys.current as { focus?: () => void } | null)?.focus?.(), 50);
+
     return () => clearTimeout(t);
   }, []);
   const answer = (on: boolean) => answerDeveloperOffer(tabId, on);
+
   return (
     <Popover width={width} top={top} left={left} modal={false}>
       <View
@@ -72,11 +77,13 @@ function KeyButton({ title, keyLabel, primary, onPress }: { title: string; keyLa
   const { hovered, hoverProps } = useHover();
   const light = primary === theme.dark;
   let fill: string;
+
   if (primary && theme.dark) fill = hovered ? "#FFFFFF" : "#E6E6E8";
   else if (primary) fill = hovered ? "#2C2C2E" : "#1C1C1E";
   else if (theme.dark) fill = `rgba(255,255,255,${hovered ? 0.14 : 0.09})`;
   else fill = `rgba(0,0,0,${hovered ? 0.09 : 0.06})`;
   const text = primary ? (theme.dark ? "#1C1C1E" : "#FFFFFF") : theme.textPrimary;
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>

@@ -68,12 +68,18 @@ const EXTENSIONS: Record<Exclude<Filter, "all">, string[]> = {
 
 function kindOf(d: Download): Exclude<Filter, "all"> | null {
   const mime = d.mimeType.toLowerCase();
+
   if (mime.startsWith("image/")) return "images";
+
   if (mime.startsWith("video/")) return "videos";
+
   if (mime.startsWith("audio/")) return "audio";
   const name = d.filename || d.path;
   const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+
+  // SAFETY: (keyof typeof EXTENSIONS)[]) if (EXTENSIONS[kind].includes(e assertion matches the runtime value validated at this call site.
   for (const kind of Object.keys(EXTENSIONS) as (keyof typeof EXTENSIONS)[]) if (EXTENSIONS[kind].includes(ext)) return kind;
+
   return null;
 }
 
@@ -85,13 +91,16 @@ const shownIn = (s: BrowserState, windowId: string, query: string, filter: Filte
 /** The folder downloads land in: ~/Downloads, or, on a build without it, the newest download's. */
 function downloadsFolderFor(windowId: string): string | null {
   const folder = downloadsFolder();
+
   if (folder) return folder;
   const latest = downloadsIn(useBrowser.getState(), windowId).find((d) => d.state === "finished" && d.path);
+
   return latest ? latest.path.slice(0, latest.path.lastIndexOf("/")) : null;
 }
 
 async function openDownloadsFolder(windowId: string) {
   const folder = downloadsFolderFor(windowId);
+
   if (!folder || !(await openFile(folder))) throw new Error("Couldn't find the Downloads folder.");
 }
 
@@ -102,7 +111,9 @@ type Primary = "open" | "pause" | "resume" | "remove" | "folder";
 
 function primaryOf(d: Download | undefined): Primary {
   if (!d) return "folder";
+
   if (d.state === "downloading") return d.paused ? "resume" : "pause";
+
   return d.state === "finished" && fileExists(d.path) ? "open" : "remove";
 }
 
@@ -110,8 +121,11 @@ const PRIMARY_TITLES: Record<Primary, string> = { open: "Open", pause: "Pause", 
 
 function runPrimary(primary: Primary, d: Download | undefined, windowId: string) {
   if (primary === "folder" || !d) return openDownloadsFolder(windowId);
+
   if (primary === "open") return openFile(d.path);
+
   if (primary === "pause") return pauseDownload(d.id);
+
   if (primary === "resume") return resumeDownload(d.id);
   useBrowser.getState().removeDownload(d.id);
 }
@@ -121,7 +135,9 @@ function runPrimary(primary: Primary, d: Download | undefined, windowId: string)
 export function DownloadsPanel({ windowWidth, windowHeight }: { windowWidth: number; windowHeight: number }) {
   const windowId = useWindowId();
   const open = useWindowUi().downloadsOpen;
+
   if (!open || windowWidth < 1 || windowHeight < 1) return null;
+
   return <Panel windowId={windowId} windowWidth={windowWidth} windowHeight={windowHeight} />;
 }
 
@@ -152,9 +168,11 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
   useEffect(() => {
     appear.set(withTiming(1, { duration: 150, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System }));
   }, [appear]);
+
   const appearStyle = useAnimatedStyle(() => {
     "worklet";
     const p = appear.get();
+
     return { opacity: p, transform: [{ translateY: (1 - p) * 6 }] };
   });
 
@@ -163,6 +181,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
     engineCall<{ value: boolean }>("nn_prefs_get", enginePrefsProfile(windowId), { name: ASK_PREF })
       .then((r) => live && setAskWhere(r.value))
       .catch(() => undefined);
+
     return () => {
       live = false;
     };
@@ -170,14 +189,17 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
 
   useEffect(() => {
     const visible = viewport.current;
+
     if (!visible.height) return;
     const top = DOWNLOADS_LIST_TOP + selectedIndex * DOWNLOADS_ROW_HEIGHT;
+
     const y =
       top < visible.y
         ? top
         : top + DOWNLOADS_ROW_HEIGHT > visible.y + visible.height
           ? top + DOWNLOADS_ROW_HEIGHT - visible.height + DOWNLOADS_LIST_TOP
           : visible.y;
+
     if (y !== visible.y) {
       visible.y = y;
       scroll.current?.scrollTo({ y, animated: false });
@@ -187,12 +209,15 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
   const dismiss = () => {
     useBrowser.getState().setDownloadsOpen(windowId, false);
     const active = activeTabId(useBrowser.getState(), windowId);
+
     if (active) void webviews.get(active)?.focus();
   };
+
   const closeMenu = () => {
     setMenu(null);
     input.current?.focus();
   };
+
   const current = () => (selectedId ? useBrowser.getState().downloads.find((d) => d.id === selectedId) : undefined);
   const submit = () => void runPrimary(primary, current(), windowId);
 
@@ -240,23 +265,35 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
 
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
     const { key, metaKey, shiftKey, ctrlKey } = e.nativeEvent;
+
     if (key === "Escape") {
       if (menu) return closeMenu();
+
       if (query) return setQuery("");
+
       return dismiss();
     }
+
     if (metaKey && key.toLowerCase() === "k") return openActionsMenu();
+
     if (metaKey && key.toLowerCase() === "p") return openFilterMenu();
+
     if (key === "ArrowDown" || (ctrlKey && key === "n") || (key === "Tab" && !shiftKey)) return move(1);
+
     if (key === "ArrowUp" || (ctrlKey && key === "p") || (key === "Tab" && shiftKey)) return move(-1);
     const d = current();
+
     if (key === "Enter") {
       if (!metaKey) return submit();
+
       if (d?.state === "finished") void revealFile(d.path);
       else void openDownloadsFolder(windowId).catch(() => undefined);
+
       return;
     }
+
     if (metaKey && shiftKey && key.toLowerCase() === "c" && d) return copyText(d.url);
+
     if (shiftKey && key === "Backspace" && !query && d && d.state !== "downloading") return useBrowser.getState().removeDownload(d.id);
   };
 
@@ -332,6 +369,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
                   // A click opens a finished file; the rest of ↩'s actions (pause, remove) stay on the keyboard.
                   onPress={(d) => {
                     setSelected(index);
+
                     if (primaryOf(d) === "open") void openFile(d.path);
                   }}
                   onMenu={(d) => {
@@ -420,6 +458,7 @@ const FIELD_KEYS = [
   { key: "c", metaKey: true, shiftKey: true },
   { key: "C", metaKey: true, shiftKey: true },
 ];
+
 // ⇧⌫ removes the selected download only while the search field is empty, so it still deletes text.
 const EMPTY_FIELD_KEYS = [...FIELD_KEYS, { key: "Backspace", shiftKey: true }];
 
@@ -429,11 +468,14 @@ function downloadActions(d: Download, windowId?: string): PaletteMenuAction[] {
   // Tidy Downloads: an offer to rename, only when a suggestion has been computed for this download.
   const tidyEntry = useTidyNames.getState().entries[d.id];
   const tidy = tidyEntry && tidyEntry.filename === d.filename ? tidyEntry.value : null;
+
   if (!tidy) void resolveTidySuggestion(d);
+
   const tidyAction =
     tidy && d.state === "finished"
       ? [{ id: "tidy", title: `Rename to “${tidy.filename}”`, icon: "wand.and.stars", hint: "⌘K", run: () => void tidyRename(d, tidy, windowId ?? "") }]
       : [];
+
   if (d.state === "downloading") {
     return [
       d.paused
@@ -444,6 +486,7 @@ function downloadActions(d: Download, windowId?: string): PaletteMenuAction[] {
       copy,
     ];
   }
+
   return [
     ...tidyAction,
     ...(exists
@@ -472,6 +515,7 @@ function downloadActions(d: Download, windowId?: string): PaletteMenuAction[] {
 function FilterButton({ icon, title, onPress }: { icon: string; title: string; onPress(): void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip="Filter (⌘P)">
       <Pressable accessibilityRole="button" accessibilityLabel={`Show ${title}`} onPress={onPress}>
@@ -500,6 +544,7 @@ function EmptyState({ filtered, onOpenFolder }: { filtered: boolean; onOpenFolde
   const { hovered, hoverProps } = useHover();
   // The button inverts the theme: light on dark, dark on light.
   const [buttonFill, buttonHover] = theme.dark ? ["#EDEDF0", "#FFFFFF"] : ["#1C1C1E", "#000000"];
+
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, paddingBottom: 12 }}>
       {filtered ? (
@@ -570,11 +615,13 @@ const PanelRow = memo(function PanelRow({
   const d = useBrowser((s) => s.downloads.find((x) => x.id === id));
   const tidy = useTidySuggestion(d);
   const windowId = useWindowId();
+
   if (!d) return null;
   const exists = d.state !== "finished" || fileExists(d.path);
   const done = d.state === "finished" && exists;
   const progress = d.total > 0 ? d.received / d.total : 0;
   const host = hostLabel(d.url);
+
   return (
     <View onMouseEnter={onHover}>
       <MouseArea path={done ? d.path : null}>

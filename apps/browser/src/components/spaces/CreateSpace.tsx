@@ -23,12 +23,15 @@ export function requestCreateSpace(windowId?: string, preset: CreateSpacePreset 
     if (windowId && useBrowser.getState().windows[windowId]) {
       useRequest.getState().request?.resolve(null);
       useRequest.setState({ request: { windowId, preset, resolve, key: Date.now() } });
+
       return;
     }
+
     const done = (id: string | null) => {
       closeSettingsSheet();
       resolve(id);
     };
+
     showSettingsSheet(<CreateSpaceSheet preset={preset} onDone={done} />);
   });
 }
@@ -36,11 +39,14 @@ export function requestCreateSpace(windowId?: string, preset: CreateSpacePreset 
 export function CreateSpaceHost() {
   const windowId = useWindowId();
   const request = useRequest((r) => (r.request?.windowId === windowId ? r.request : null));
+
   if (!request) return null;
+
   const done = (id: string | null) => {
     useRequest.setState({ request: null });
     request.resolve(id);
   };
+
   // In a window: yab's panel at the sidebar's foot. (Settings, which has no sidebar, keeps the sheet.)
   return <NewSpacePanel key={request.key} windowId={windowId} presetName={request.preset.name} onDone={done} />;
 }
@@ -56,6 +62,9 @@ function CreateSpaceSheet({ preset, onDone }: { preset: CreateSpacePreset; onDon
     const id = useBrowser.getState().createSpace({ name, color: look.color, theme: look.theme, icon });
     onDone(id);
   };
+
+  // SAFETY: SPACE_COLORS is keyed by SpaceColor; Object.keys yields exactly those keys at runtime.
+  const looks = [...SPACE_LOOKS, ...(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => ({ name: SPACE_COLORS[c].name, ...themeOfColor(c) }))];
 
   return (
     <Sheet width={420} onClose={() => onDone(null)}>
@@ -104,8 +113,9 @@ function CreateSpaceSheet({ preset, onDone }: { preset: CreateSpacePreset; onDon
 
       <Label>Theme</Label>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-        {[...SPACE_LOOKS, ...(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => ({ name: SPACE_COLORS[c].name, ...themeOfColor(c) }))].map((l) => {
+        {looks.map((l) => {
           const on = l.theme.colors.join() === look.theme.colors.join();
+
           return (
             <Pressable key={l.name} onPress={() => setLook({ color: l.color, theme: l.theme })} tooltip={l.name}>
               <View style={{ width: 22, height: 22, borderRadius: 11, padding: 2, borderWidth: 2, borderColor: on ? l.theme.colors[0] : "transparent" }}>
@@ -130,5 +140,6 @@ function CreateSpaceSheet({ preset, onDone }: { preset: CreateSpacePreset; onDon
 
 function Label({ children }: { children: string }) {
   const theme = useTheme();
+
   return <Text style={{ fontSize: 12, fontWeight: "600", color: theme.textSecondary, marginTop: 16, marginBottom: 7 }}>{children}</Text>;
 }

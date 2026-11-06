@@ -3,5 +3,6 @@ export function liveClipTransform(clip: number[], display: { width: number; heig
   const [x = 0, y = 0, width = 1, height = 1] = clip;
   const scaleX = display.width / Math.max(1, width);
   const scaleY = display.height / Math.max(1, height);
+
   return { left: -x * scaleX, top: -(y - scrollY) * scaleY, scaleX, scaleY };
 }

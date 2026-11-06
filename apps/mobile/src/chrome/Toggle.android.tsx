@@ -13,6 +13,7 @@ export function Toggle({ value, disabled }: ToggleProps): JSX.Element {
     on.value = withTiming(value ? 1 : 0, { duration: 160 });
   }, [value, on]);
   const thumb = useAnimatedStyle(() => ({ transform: [{ translateX: on.value * 18 }] }));
+
   return (
     <View
       pointerEvents="none"

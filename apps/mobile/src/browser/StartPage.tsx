@@ -28,14 +28,18 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
   // History is kept newest first; show the latest page of each site that isn't pinned.
   const seen = new Set(pins.map((site) => siteName(site.url)));
   const recent: HistoryEntry[] = [];
+
   for (const entry of history) {
     if (recent.length === RECENT) break;
     const site = siteName(entry.url);
+
     if (seen.has(site)) continue;
     seen.add(site);
     recent.push(entry);
   }
+
   if (!pins.length && !recent.length) return null;
+
   return (
     <View testID="start-page" className="w-full gap-6 px-5">
       {pins.length ? (

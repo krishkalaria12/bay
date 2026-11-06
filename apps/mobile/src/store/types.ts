@@ -1,5 +1,12 @@
 import type { ReaderSettings } from "../pagescripts/reader.ts";
 
+/** A JSON object: what the saved state and page messages are made of. */
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+export type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
+
 export interface BrowserTab {
   id: string;
   url: string;
@@ -81,17 +88,17 @@ export interface BrowserPreferences {
 
 export type ThemeChoice = "system" | "light" | "dark";
 
-export interface YouTubeCleanup {
+/** What to hide on YouTube, with Brave's lists. Kept a type alias so it stays assignable to `JsonValue`. */
+export type YouTubeCleanup = {
   shorts: boolean;
   suggestions: boolean;
   distractions: boolean;
-}
+};
 
 /** Preferences the settings screen changes in one step. */
-export type SimplePreferences = Pick<
-  BrowserPreferences,
-  "theme" | "textSize" | "searchSuggestions" | "skipAmp" | "pullToRefresh" | "startPageAfterHours" | "youtube"
->;
+export const SIMPLE_PREFERENCE_KEYS = ["theme", "textSize", "searchSuggestions", "skipAmp", "pullToRefresh", "startPageAfterHours", "youtube"] as const;
+
+export type SimplePreferences = Pick<BrowserPreferences, (typeof SIMPLE_PREFERENCE_KEYS)[number]>;
 
 export type WallpaperId = "bay" | "dusk" | "forest" | "plain" | "photo";
 
@@ -110,9 +117,13 @@ export interface BrowserData {
   leftAt: number | null;
 }
 
-export type TabUpdate = Partial<Pick<BrowserTab, "url" | "title" | "favicon" | "lastVisit" | "snapshot">>;
+/** The tab fields an engine update can change. */
+export const TAB_UPDATE_FIELDS = ["url", "title", "favicon", "lastVisit", "snapshot"] as const;
+
+export type TabUpdate = Partial<Pick<BrowserTab, (typeof TAB_UPDATE_FIELDS)[number]>>;
 
 export interface BrowserRepository {
-  load(): Promise<unknown | null>;
+  /** The saved document as JSON, or null before anything is saved. */
+  load(): Promise<JsonValue | null>;
   save(data: BrowserData): Promise<void>;
 }

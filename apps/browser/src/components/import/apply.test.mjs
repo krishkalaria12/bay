@@ -1,6 +1,7 @@
 // An Arc space's pinned tabs and folders land in the Pinned section, not the Essentials or the bookmarks.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { importArcSpace } = await import("./apply.ts");
 const { sidebarEntries, folderEntries } = await import("../sidebar/sidebarEntries.ts");
@@ -16,6 +17,7 @@ test("an Arc space's pinned tabs become pinned rows and its folders pinned folde
   const w = S().createWindow({ url: "https://home.com" });
   const spaceId = S().windows[w].spaceId;
   const bookmarks = Object.keys(S().bookmarks.nodes).length;
+
   const n = importArcSpace(spaceId, {
     id: "s",
     name: "Space",
@@ -32,6 +34,7 @@ test("an Arc space's pinned tabs become pinned rows and its folders pinned folde
     ],
     tabs: [{ url: "https://e.com", title: "e", pinned: false, windowIndex: 0, active: false }],
   });
+
   assert.equal(n, 5);
   const e = sidebarEntries(S(), w);
   assert.deepEqual(e.tiles, []);
@@ -51,10 +54,15 @@ test("Arc imports retain every usable overflow tab in the fifth folder level", (
   S().hydrate({});
   const w = S().createWindow({ url: "https://home.com" });
   const spaceId = S().windows[w].spaceId;
-  let pinned = [];
+  let folder = null;
+
   for (let depth = 80; depth >= 1; depth--) {
-    pinned = [{ type: "folder", title: `Level ${depth}`, children: [link(`level-${depth}`), ...pinned] }];
+    const children = folder ? [link(`level-${depth}`), folder] : [link(`level-${depth}`)];
+    folder = { type: "folder", title: `Level ${depth}`, children };
   }
+
+  const pinned = folder ? [folder] : [];
+
   const n = importArcSpace(spaceId, { id: "deep", name: "Deep", profileId: "Default", pinned, tabs: [] });
   assert.equal(n, 80);
   const folders = Object.values(S().pinnedFolders);
@@ -78,6 +86,7 @@ test("empty Arc folders keep their parents and destination space even with anoth
   const w = S().createWindow({ url: "https://home.com" });
   const focused = S().windows[w].spaceId;
   const destination = S().createSpace({ name: "Imported" });
+
   const n = importArcSpace(destination, {
     id: "empty",
     name: "Empty",
@@ -85,6 +94,7 @@ test("empty Arc folders keep their parents and destination space even with anoth
     pinned: [{ type: "folder", title: "Root", children: [{ type: "folder", title: "Child", children: [] }] }],
     tabs: [],
   });
+
   assert.equal(n, 0);
   const [root, child] = Object.values(S().pinnedFolders);
   assert.equal(root.spaceId, destination);
@@ -99,6 +109,7 @@ test("Arc preserves mixed direct tabs, nested folders and empty siblings at ever
   S().hydrate({});
   const w = S().createWindow({ url: "https://home.com" });
   const spaceId = S().windows[w].spaceId;
+
   const pinned = [
     folder("Empty first", folder("Empty descendant")),
     link("loose"),
@@ -131,11 +142,15 @@ test("Arc preserves mixed direct tabs, nested folders and empty siblings at ever
     link("tail"),
     folder("Empty last", folder("Empty last descendant")),
   ];
+
   assert.equal(importArcSpace(spaceId, { id: "mixed", name: "Mixed", profileId: "Default", pinned, tabs: [] }), 12);
   const sourceTree = (node) => (node.type === "folder" ? { folder: node.title, children: node.children.map(sourceTree) } : node.title);
+
   const importedTree = (entry) => {
     const id = entry.slice(2);
+
     return entry.startsWith("f:") ? { folder: S().pinnedFolders[id].name, children: folderEntries(S(), id).map(importedTree) } : S().tabs[id].title;
   };
+
   assert.deepEqual(sidebarEntries(S(), w).pinned.map(importedTree), pinned.map(sourceTree));
 });

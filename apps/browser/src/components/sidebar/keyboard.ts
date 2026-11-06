@@ -8,6 +8,7 @@ import { adjacentKeyboardRow, reconcileKeyboardRow, type SidebarKeyboardRow } fr
 import { setSidebarUi, sidebarUi } from "./state";
 
 export type { SidebarKeyboardRow } from "./keyboardModel";
+
 export type SidebarKeyboardActions = {
   open(row: SidebarKeyboardRow): void;
   peek(row: SidebarKeyboardRow): void;
@@ -15,6 +16,7 @@ export type SidebarKeyboardActions = {
   rename(row: SidebarKeyboardRow): void;
   focusPage(): void;
 };
+
 const actions = new Map<string, SidebarKeyboardActions>();
 const extensions = new Map<string, Map<string, SidebarKeyboardRow[]>>();
 const previous = new Map<string, SidebarKeyboardRow[]>();
@@ -23,10 +25,12 @@ const listeners = new Map<string, () => void>();
 export function registerSidebarKeyboardActions(windowId: string, value: SidebarKeyboardActions, changed: () => void) {
   actions.set(windowId, value);
   listeners.set(windowId, changed);
+
   return () => {
     if (actions.get(windowId) !== value) return;
     actions.delete(windowId);
     listeners.delete(windowId);
+
     if (!useBrowser.getState().windows[windowId]) {
       previous.delete(windowId);
       const keyboard = { ...sidebarUi().keyboard };
@@ -42,12 +46,15 @@ export function registerSidebarKeyboardActions(windowId: string, value: SidebarK
 export function registerSidebarKeyboardRows(windowId: string, spaceId: string, source: string, rows: SidebarKeyboardRow[]) {
   const key = `${windowId}|${spaceId}`;
   let sources = extensions.get(key);
+
   if (!sources) extensions.set(key, (sources = new Map()));
   sources.set(source, rows);
   listeners.get(windowId)?.();
+
   return () => {
     if (sources.get(source) !== rows) return;
     sources.delete(source);
+
     if (!sources.size) extensions.delete(key);
     listeners.get(windowId)?.();
   };
@@ -57,16 +64,19 @@ export function keyboardRows(windowId: string) {
   const s = useBrowser.getState();
   const spaceId = s.windows[windowId]?.spaceId;
   const extra = [...(extensions.get(`${windowId}|${spaceId}`)?.values() ?? [])].flat();
+
   return sidebarKeyboardRows(s, windowId, live(), extra);
 }
 
 export function focusedKeyboardRow(windowId: string) {
   const id = sidebarUi().keyboard[windowId]?.rowId;
+
   return id ? keyboardRows(windowId).find((row) => row.id === id) : undefined;
 }
 
 function focusRow(windowId: string, row?: SidebarKeyboardRow) {
   const current = sidebarUi().keyboard[windowId];
+
   if (current?.active && current.rowId === (row?.id ?? null)) return;
   // Hold the stable responder while React replaces, collapses or unmounts the previous row.
   void setSidebarKeyboard(windowId, true);
@@ -77,9 +87,12 @@ function focusRow(windowId: string, row?: SidebarKeyboardRow) {
 export function focusSidebar(windowId: string) {
   const s = useBrowser.getState();
   const w = s.windows[windowId];
+
   if (!w || w.kind === "small") return;
+
   // Reveal a hidden or top-layout sidebar before asking its rows for frames.
   if ((w.tabLayout ?? s.settings.tabLayout) !== "sidebar") s.toggleTabLayout(windowId);
+
   if (!useBrowser.getState().windows[windowId]?.sidebarOpen) useBrowser.getState().toggleSidebar(windowId);
   s.closePanel(windowId);
   const rows = keyboardRows(windowId);
@@ -95,6 +108,7 @@ export function focusSidebar(windowId: string) {
 
 export function blurSidebar(windowId: string) {
   const current = sidebarUi().keyboard[windowId];
+
   if (current?.active) {
     setSidebarUi({ keyboard: { ...sidebarUi().keyboard, [windowId]: { ...current, active: false } } });
     void setSidebarKeyboard(windowId, false);
@@ -104,8 +118,10 @@ export function blurSidebar(windowId: string) {
 export function reconcileSidebarKeyboard(windowId: string) {
   const rows = keyboardRows(windowId);
   const current = sidebarUi().keyboard[windowId];
+
   if (current?.active && current.rowId) {
     const row = reconcileKeyboardRow(rows, current.rowId, previous.get(windowId) ?? []);
+
     if (row?.id !== current.rowId) focusRow(windowId, row);
   } else if (current?.active && rows.length) focusRow(windowId, rows[0]);
   previous.set(windowId, rows);
@@ -113,6 +129,7 @@ export function reconcileSidebarKeyboard(windowId: string) {
 
 function expand(row: SidebarKeyboardRow, collapsed: boolean) {
   const s = useBrowser.getState();
+
   if (row.expand) row.expand(collapsed);
   else if (row.kind === "folder") s.updatePinnedFolder(row.id.slice(2), { collapsed });
   else if (row.kind === "group") s.updateGroup(row.id.slice(2), { collapsed });
@@ -123,8 +140,10 @@ function expand(row: SidebarKeyboardRow, collapsed: boolean) {
 export function renameKeyboardRow(windowId: string): boolean {
   if (!sidebarUi().keyboard[windowId]?.active) return false;
   const row = focusedKeyboardRow(windowId);
+
   if (row?.rename) row.rename();
   else if (row) actions.get(windowId)?.rename(row);
+
   return true;
 }
 
@@ -134,19 +153,26 @@ export function runSidebarKey(windowId: string, key: string) {
   const rows = keyboardRows(windowId);
   const row = focusedKeyboardRow(windowId);
   const effect = actions.get(windowId);
+
   if (key === "Escape") {
     dismissPeek(windowId);
     blurSidebar(windowId);
     effect?.focusPage();
+
     return;
   }
+
   if (key === "ArrowDown" || key === "ArrowUp") return focusRow(windowId, adjacentKeyboardRow(rows, row?.id, key === "ArrowDown" ? 1 : -1));
+
   if (key === "Home" || key === "End") return focusRow(windowId, key === "Home" ? rows[0] : rows.at(-1));
+
   if (!row) return;
+
   if (key === "ArrowRight") {
     if (row.collapsed) expand(row, false);
     else {
       const child = rows.find((candidate) => candidate.parentId === row.id);
+
       if (child) focusRow(windowId, child);
     }
   } else if (key === "ArrowLeft") {

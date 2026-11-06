@@ -3,7 +3,7 @@ import MetalKit
 
 final class AreaLightView: MetalSurface {
   struct Params {
-    var shapeFrame = SIMD4<Float>(0, 0, 0, 0)
+    var areaRect = SIMD4<Float>(0, 0, 0, 0)
     var cornerRadius: Float = 22
     var lift: Float = 10
     var intensity: Float = 4
@@ -16,7 +16,7 @@ final class AreaLightView: MetalSurface {
   }
 
   private struct Uniforms {
-    var shapeFrame: SIMD4<Float>
+    var areaRect: SIMD4<Float>
     var rotationTrig: SIMD4<Float>
     var viewSize: SIMD2<Float>
     var cornerRadius: Float
@@ -170,7 +170,7 @@ final class AreaLightView: MetalSurface {
     let b = Float(progress) * k * p.tilt.y
     let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     var uniforms = Uniforms(
-      shapeFrame: p.shapeFrame,
+      areaRect: p.areaRect,
       rotationTrig: SIMD4(cos(a), sin(a), cos(b), sin(b)),
       viewSize: size,
       cornerRadius: p.cornerRadius,
@@ -185,7 +185,7 @@ final class AreaLightView: MetalSurface {
     encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
     colors.withUnsafeBytes { encoder.setFragmentBytes($0.baseAddress!, length: $0.count, index: 1) }
     Self.lastState = [
-      "T": T, "shapeFrame": [p.shapeFrame.x, p.shapeFrame.y, p.shapeFrame.z, p.shapeFrame.w].map(Double.init),
+      "T": T, "areaRect": [p.areaRect.x, p.areaRect.y, p.areaRect.z, p.areaRect.w].map(Double.init),
       "viewSize": [Double(size.x), Double(size.y)], "lift": Double(uniforms.lift), "intensity": Double(uniforms.intensity),
       "tiltDeg": Double(a) * 180 / .pi, "k": Double(k), "running": driving, "key": activity.isKey,
       "visible": activity.isVisible, "reduceMotion": WindowActivity.reduceMotion,
@@ -201,7 +201,7 @@ final class AreaLightView: MetalSurface {
 
 let areaLightSource = """
 struct AreaLightUniforms {
-  float4 shapeFrame;    // emitter rect (x, y, w, h) in points, top-left origin
+  float4 areaRect;    // emitter rect (x, y, w, h) in points, top-left origin
   float4 rotationTrig;  // (cos a, sin a, cos b, sin b): tilt about X by a, then Y by b
   float2 viewSize;      // points
   float cornerRadius;
@@ -303,9 +303,9 @@ fragment float4 areaLightFragment(FullscreenOut in [[stage_in]],
   float cosB = u.rotationTrig.z, sinB = u.rotationTrig.w;
 
   float2 pixel = u.viewSize * in.uv;
-  float2 hs = u.shapeFrame.zw * 0.5f;
+  float2 hs = u.areaRect.zw * 0.5f;
   if (hs.x <= 0.0f || hs.y <= 0.0f) return float4(0.0f);
-  float2 d = pixel - (u.shapeFrame.xy + hs);
+  float2 d = pixel - (u.areaRect.xy + hs);
 
   // Pixels behind the tilted emitter plane get nothing.
   float planeOffset = (d.y * sinA - cosA * sinB * d.x) / max(cosB * cosA, 1e-3f);
@@ -329,7 +329,7 @@ fragment float4 areaLightFragment(FullscreenOut in [[stage_in]],
 
   // Emitter colour: diagonal palette gradient scrolling every 20s, warped by simplex noise.
   float edgeFade = saturate(outside / hs.x);
-  float2 shapeUV = (clamp(local, -hs, hs) + hs) / u.shapeFrame.z;
+  float2 shapeUV = (clamp(local, -hs, hs) + hs) / u.areaRect.z;
   float2 noiseP = shapeUV * 0.75f - u.time * 0.05f + u.noiseSeed * float2(17.3f, 31.7f);
   float warp = (1.0f - edgeFade) * 0.125f * simplex2D(noiseP);
   float gradPos = shapeUV.x * 0.9f + shapeUV.y * 0.1f - u.time * 0.05f + warp;

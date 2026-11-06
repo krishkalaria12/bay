@@ -6,14 +6,19 @@ import { READABILITY } from "./vendor.generated.ts";
 // Runs on both engines through runPageScript; state lives under Symbol.for("bay.reader").
 
 export type ReaderThemeId = "light" | "paper" | "sepia" | "mint" | "gray" | "dark" | "black";
+
 export type ReaderFont = "serif" | "sans" | "mono";
 
-export interface ReaderSettings {
+/**
+ * A JSON-shaped settings record: a type alias rather than an interface so it stays assignable to `JsonValue` (only
+ * aliases get TypeScript's implicit index signature).
+ */
+export type ReaderSettings = {
   theme: ReaderThemeId;
   font: ReaderFont;
   /** Body text size in CSS pixels. */
   size: number;
-}
+};
 
 export const READER_THEMES: readonly { id: ReaderThemeId; name: string; background: string; text: string; muted: string; link: string }[] = [
   { id: "light", name: "Light", background: "#FFFFFF", text: "#1C1C1E", muted: "#6B6B70", link: "#0A66C2" },
@@ -34,10 +39,15 @@ export const READER_FONTS: readonly { id: ReaderFont; name: string; family: stri
 export const DEFAULT_READER: ReaderSettings = { theme: "paper", font: "serif", size: 19 };
 export const READER_SIZES = { min: 14, max: 28, step: 1 } as const;
 
-function variables(settings: ReaderSettings): Record<string, string> {
+interface ReaderVariables {
+  [variable: string]: string;
+}
+
+function variables(settings: ReaderSettings): ReaderVariables {
   const theme = READER_THEMES.find((entry) => entry.id === settings.theme) ?? READER_THEMES[0]!;
   const font = READER_FONTS.find((entry) => entry.id === settings.font) ?? READER_FONTS[0]!;
   const size = Number.isFinite(settings.size) ? Math.min(READER_SIZES.max, Math.max(READER_SIZES.min, Math.round(settings.size))) : DEFAULT_READER.size;
+
   return {
     "--bay-bg": theme.background,
     "--bay-text": theme.text,

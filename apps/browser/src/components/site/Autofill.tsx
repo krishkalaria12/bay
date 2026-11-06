@@ -9,6 +9,7 @@ import { openSettings } from "../settings/windows";
 export async function requestAutofill(windowId: string, arg: string | null) {
   const passwords = arg === "passwords";
   const browserId = browserIdOf(activeTabId(useBrowser.getState(), windowId));
+
   if (browserId && (await showAutofillSuggestions(browserId, passwords ? "passwords" : "field"))) return;
   const s = useBrowser.getState();
   const w = s.windows[windowId];
@@ -29,6 +30,7 @@ const BADGES: Record<CardNetwork, { label: string; fill: string; text: string }>
 
 export function NetworkBadge({ network }: { network: CardNetwork }) {
   const badge = BADGES[network] ?? BADGES.card;
+
   return (
     <View
       style={{ width: 28, height: 19, borderRadius: 3.5, backgroundColor: badge.fill, alignItems: "center", justifyContent: "center", flexDirection: "row" }}

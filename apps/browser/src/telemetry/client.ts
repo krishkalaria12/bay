@@ -17,6 +17,7 @@ import {
   TELEMETRY_STATE_DOC,
   URGENT_FLUSH_DELAY_MS,
 } from "./config";
+import type { JsonValue } from "../lib/json";
 import { eventRecord, logRecord, logsRequest, outcome, type OtlpLogRecord, type QueuedEvent } from "./otlp";
 import { cleanProperties } from "./sanitize";
 
@@ -47,6 +48,8 @@ const DEFAULT: Saved = {
 function readJson<T>(name: string): T | null {
   try {
     const json = readDocument(name);
+
+    // SAFETY: JSON.parse yields the persisted telemetry document shape written by writeDocument for this name.
     return json ? (JSON.parse(json) as T) : null;
   } catch {
     return null;
@@ -57,9 +60,11 @@ let saved: Saved = { ...DEFAULT };
 
 function save(patch: Partial<Saved>) {
   saved = { ...saved, ...patch };
+
   try {
     writeDocument(TELEMETRY_STATE_DOC, JSON.stringify(saved));
   } catch {}
+
   useTelemetry.setState({ sharing: saved.sharing, decided: saved.decidedAt !== null, askDone: saved.askDoneAt !== null });
 }
 
@@ -82,8 +87,13 @@ export const environment = (): "dev" | "test" | "production" => (__DEV__ ? "dev"
 const devSendAllowed = () => launchEnvironment(DEV_SEND_ENV) === "1";
 const canSend = () => !__DEV__ || devSendAllowed();
 
-function context(): Record<string, unknown> {
+export interface TelemetryContext {
+  [attribute: string]: string | number | boolean | null;
+}
+
+function context(): TelemetryContext {
   const info = appInfo();
+
   return {
     $lib: "bay-telemetry",
     $lib_version: "1",
@@ -108,14 +118,17 @@ let queue: Queue = { version: 1, events: [], logs: [] };
 let generation = 0;
 
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
+
 function persistQueue(now = false) {
   clearTimeout(persistTimer);
   persistTimer = undefined;
+
   const write = () => {
     try {
       writeDocument(TELEMETRY_QUEUE_DOC, JSON.stringify(queue));
     } catch {}
   };
+
   if (now) write();
   else persistTimer = setTimeout(write, 2000);
 }
@@ -130,16 +143,18 @@ function clearQueue() {
 let droppedWhileOff = 0;
 
 export type CaptureOptions = {
-  raw?: Record<string, unknown>;
+  raw?: Record<string, JsonValue>;
   urgent?: boolean;
   persist?: boolean;
 };
 
-export function capture(event: string, props: Record<string, unknown> = {}, options: CaptureOptions = {}) {
+export function capture(event: string, props: Record<string, JsonValue> = {}, options: CaptureOptions = {}) {
   if (!saved.sharing || !saved.installId) {
     droppedWhileOff++;
+
     return;
   }
+
   try {
     queue.events.push({
       uuid: uuidv7(),
@@ -148,6 +163,7 @@ export function capture(event: string, props: Record<string, unknown> = {}, opti
       timestamp: new Date().toISOString(),
       properties: { ...context(), ...cleanProperties(props), ...options.raw },
     });
+
     if (queue.events.length > MAX_EVENTS) queue.events.splice(0, queue.events.length - MAX_EVENTS);
     persistQueue(options.persist);
     scheduleFlush(options.urgent ? URGENT_FLUSH_DELAY_MS : FLUSH_DELAY_MS);
@@ -156,8 +172,10 @@ export function capture(event: string, props: Record<string, unknown> = {}, opti
 
 export function queueLog(level: "warn" | "error", message: string, attributes: Record<string, string | number | boolean>) {
   if (!saved.sharing) return;
+
   try {
     queue.logs.push(logRecord(level, message, attributes));
+
     if (queue.logs.length > MAX_LOGS) queue.logs.splice(0, queue.logs.length - MAX_LOGS);
     persistQueue();
     scheduleFlush(FLUSH_DELAY_MS);
@@ -175,6 +193,7 @@ let retryAt = 0;
 function scheduleFlush(delay: number) {
   if (!saved.sharing) return;
   const due = Math.max(Date.now() + delay, retryAt);
+
   if (flushTimer && flushDueAt <= due) return;
   clearTimeout(flushTimer);
   flushDueAt = due;
@@ -197,13 +216,16 @@ export const requestLog = (): readonly RequestLogEntry[] => requests;
 
 function logRequest(entry: RequestLogEntry, body: string) {
   requests.push(entry);
+
   if (requests.length > 200) requests.shift();
+
   if (__DEV__) {
     try {
       const line = JSON.stringify({ ...entry, body: JSON.parse(body) });
       writeDocument(TELEMETRY_REQUEST_LOG_DOC, (readDocument(TELEMETRY_REQUEST_LOG_DOC) ?? "").slice(-400_000) + `${line}\n`);
     } catch {}
   }
+
   if (__DEV__) console.log(`[telemetry] ${entry.dryRun ? "dry run" : "POST"} ${entry.url} ${entry.kind}×${entry.count} → ${entry.status}`);
 }
 
@@ -212,12 +234,16 @@ const inflight = new Set<AbortController>();
 
 async function post(kind: RequestLogEntry["kind"], url: string, body: string, count: number) {
   const entry: RequestLogEntry = { at: new Date().toISOString(), kind, url, count, bytes: body.length, status: null };
+
   if (!canSend()) {
     logRequest({ ...entry, dryRun: true }, body);
+
     return 200;
   }
+
   const abort = new AbortController();
   inflight.add(abort);
+
   try {
     const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: abort.signal });
     entry.status = response.status;
@@ -226,12 +252,15 @@ async function post(kind: RequestLogEntry["kind"], url: string, body: string, co
   } finally {
     inflight.delete(abort);
   }
+
   logRequest(entry, body);
+
   return entry.status;
 }
 
-function resource(): Record<string, unknown> {
+function resource(): TelemetryContext {
   const info = appInfo();
+
   return {
     "service.name": "bay-app",
     "service.version": info.appVersion,
@@ -265,28 +294,37 @@ async function drain<T>(
   gen: number,
 ): Promise<DrainResult> {
   let size = BATCH_SIZE;
+
   for (let batch = take().slice(0, size); batch.length; batch = take().slice(0, size)) {
     const body = encode(batch);
+
     if (body.length > MAX_BODY_BYTES && batch.length > 1) {
       size = Math.ceil(batch.length / 2);
       continue;
     }
+
     const status = await post(kind, LOGS_URL, body, batch.length);
+
     if (gen !== generation) return "stale";
     const result = outcome(status, batch.length);
+
     if (result === "retry") return "failed";
+
     if (result === "split") size = Math.ceil(batch.length / 2);
     else remove(batch);
   }
+
   return "done";
 }
 
 export async function flush() {
   flushTimer = undefined;
+
   if (!saved.sharing || flushing) return;
   flushing = true;
   const gen = generation;
   let result: DrainResult;
+
   try {
     result = await drain(
       "events",
@@ -295,6 +333,7 @@ export async function flush() {
       (batch) => (queue.events = queue.events.filter((e) => !batch.includes(e))),
       gen,
     );
+
     if (result === "done")
       result = await drain(
         "logs",
@@ -306,8 +345,10 @@ export async function flush() {
   } finally {
     flushing = false;
   }
+
   if (result === "stale") return;
   persistQueue(true);
+
   if (result === "failed") {
     failures++;
     retryAt = Date.now() + Math.min(MAX_BACKOFF_MS, 30_000 * 2 ** (failures - 1));
@@ -324,17 +365,21 @@ export type SharingSource = "settings" | "onboarding" | "ask";
 
 export function setSharing(on: boolean, source: SharingSource) {
   const now = Date.now();
+
   if (on === saved.sharing) return save({ decidedAt: now, askDoneAt: saved.askDoneAt ?? now });
   generation++;
   failures = 0;
   retryAt = 0;
+
   if (!on) {
     for (const abort of inflight) abort.abort();
     inflight.clear();
     save({ sharing: false, installId: null, sessionOpen: false, decidedAt: now, askDoneAt: saved.askDoneAt ?? now });
     clearQueue();
+
     return;
   }
+
   save({
     sharing: true,
     installId: uuidv4(),
@@ -367,18 +412,24 @@ export function startClient(): { previous: PreviousSession; updatedFrom: string 
   void engineInfo()
     .then((e) => (engineVersion = `NNCore / Chromium ${e.chromiumVersion}`))
     .catch(() => {});
+
   if (!saved.sharing) {
     const stale = readJson<Queue>(TELEMETRY_QUEUE_DOC);
+
     if (stale?.events?.length || stale?.logs?.length) clearQueue();
+
     return null;
   }
+
   const stored = readJson<Queue>(TELEMETRY_QUEUE_DOC);
+
   if (stored?.version === 1) queue = { version: 1, events: [...(stored.events ?? []), ...queue.events], logs: [...(stored.logs ?? []), ...queue.logs] };
   const previous: PreviousSession = saved.lastVersion === null ? "none" : saved.sessionOpen ? "unclean" : "clean";
   const version = appInfo().appVersion;
   const updatedFrom = saved.lastVersion && saved.lastVersion !== version ? saved.lastVersion : null;
   save({ sessionOpen: true, lastVersion: version });
   scheduleFlush(10_000);
+
   return { previous, updatedFrom };
 }
 
@@ -398,17 +449,20 @@ export const devState = () => ({ saved, queued: { events: queue.events.length, l
 function hex(n: number) {
   return Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
 }
+
 function variant() {
   return (8 + Math.floor(Math.random() * 4)).toString(16);
 }
 
 export function uuidv4() {
   const h = hex(29);
+
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(12, 15)}-${variant()}${h.slice(15, 18)}-${h.slice(18, 29)}${hex(1)}`;
 }
 
 export function uuidv7() {
   const ms = Date.now().toString(16).padStart(12, "0");
   const h = hex(18);
+
   return `${ms.slice(0, 8)}-${ms.slice(8, 12)}-7${h.slice(0, 3)}-${variant()}${h.slice(3, 6)}-${h.slice(6, 18)}`;
 }

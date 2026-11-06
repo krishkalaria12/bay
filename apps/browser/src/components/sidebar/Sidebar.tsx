@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { LibraryButton } from "../library/LibraryButton";
 import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/desktop";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -61,7 +62,13 @@ import {
 // The list's room and its height: with new tabs at the bottom, the New Tab row docks below the list once the list
 // leaves no room for it (at the top it stays the list's first row).
 type Room = { available: number; list: number };
+
 const dockedIn = ({ available, list }: Room, pitch: number) => available > 0 && list + pitch + 12 > available;
+
+function asView(v: ScrollView | View | null): View {
+  // SAFETY: scroll.current is a mounted ScrollView host view; at runtime it exposes View.measureInWindow.
+  return v as View;
+}
 
 export function Sidebar() {
   const metrics = useSidebarMetrics();
@@ -78,10 +85,12 @@ export function Sidebar() {
   const { available } = room;
   const newTabsAtBottom = useSettings((s) => s.newTabPosition === "bottom");
   const docked = newTabsAtBottom && dockedIn(room, newTabPitch);
+
   const onListHeight = (height: number) => {
     listHeight.current = height;
     setRoom((r) => (dockedIn({ ...r, list: height }, newTabPitch) === dockedIn(r, newTabPitch) ? r : { ...r, list: height }));
   };
+
   const scroll = useRef<ScrollView>(null);
   const scrollY = useRef(0);
   const geometry = useRef<SidebarGeometry>({ viewport: 0, regions: { pinned: 0, pinnedGroups: 0, list: 0 }, newTabAtTop: false });
@@ -111,11 +120,13 @@ export function Sidebar() {
   }, [windowId, offscreen.side, offscreen.reveal]);
   // A card anchored to a row of the page paging away would stay where the row was.
   useEffect(() => dismissHover(), [current]);
+
   // The pages' callbacks are made here, not in the drag provider's render function (which makes new ones on every
   // render, and every page and its rows rendered again whenever the sidebar did: the offscreen marker showing, a resize).
   const onScrollView = useEffectEvent((v: ScrollView | null) => {
     scroll.current = v;
   });
+
   const onScrollY = useEffectEvent((y: number) => {
     scrollY.current = y;
     dismissHover();
@@ -263,6 +274,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
   // row, so paging mounts nothing (dropping back to a screenful unmounted every row past it on the page leaving and
   // mounted them again on the page arriving, on every switch).
   const [visited, setVisited] = useState(current);
+
   if (current && !visited) setVisited(true);
   const cap = visited ? undefined : rows;
   const growing = cap === undefined && mountedRows < all.length;
@@ -270,6 +282,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
     if (!growing) return;
     // Once caught up, every row mounts with the list (a tab opened later never waits for a chunk).
     const frame = requestAnimationFrame(() => setMountedRows((n) => (n + ROWS_PER_FRAME >= all.length ? Infinity : n + ROWS_PER_FRAME)));
+
     return () => cancelAnimationFrame(frame);
   }, [growing, mountedRows, all.length]);
   const limit = cap ?? (growing ? mountedRows : undefined);
@@ -301,22 +314,28 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
   const scrollY = useSharedValue(0);
   // The sidebar's drag (DragProvider, above every page) scrolls the current page's list as a drag nears its edges.
   const drag = useDragController();
+
   const setScrollView = useEffectEvent((view: ScrollView | null) => {
     onScrollView(view);
     drag?.follow(view);
   });
+
   const tellScroll = useEffectEvent((y: number) => {
     drag?.scrolled(y);
     onScrollY(y);
   });
+
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.set(e.contentOffset.y);
     runOnJS(tellScroll)(e.contentOffset.y);
   });
+
   const edgeAt = (y: number) => {
     "worklet";
+
     return interpolate(y, [0, Math.max(1, topGap)], [0, glowRoom], Extrapolation.CLAMP);
   };
+
   const clip = useAnimatedStyle(() => ({ transform: [{ translateY: edgeAt(scrollY.get()) }] }), [topGap, glowRoom]);
   const unclip = useAnimatedStyle(() => ({ transform: [{ translateY: -edgeAt(scrollY.get()) }] }), [topGap, glowRoom]);
 
@@ -352,6 +371,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                         <View
                           onLayout={(e) => {
                             measured.current = e.nativeEvent.layout.height + glowRoom - (inlineNewTab ? metrics.rowHeight + NEW_TAB_GAP : 0);
+
                             if (current) onListHeight(measured.current);
                           }}
                         >
@@ -411,7 +431,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                               </View>
                             ) : null}
                             {listed.map((row) =>
-                              typeof row === "string" ? (
+                              v.is(v.string(), row) ? (
                                 <ListRow key={row} entry={row} opening={motion.opening.has(row)} onOpened={motion.opened} />
                               ) : (
                                 <ClosingTabRow key={`closing:${row.tab.id}`} row={row} onGone={motion.gone} />
@@ -461,15 +481,21 @@ const ListRow = memo(function ListRow({ entry, opening, onOpened }: { entry: str
 
 const ListEntry = memo(function ListEntry({ entry }: { entry: string }) {
   const id = entry.slice(2);
+
   if (entry.startsWith("g:")) return <GroupBlock groupId={id} section="list" />;
+
   if (entry.startsWith("s:")) return <SplitRowItem splitId={id} section="list" />;
+
   return <TabRowItem tabId={id} section="list" />;
 });
 
 const PinnedEntry = memo(function PinnedEntry({ entry }: { entry: string }) {
   const id = entry.slice(2);
+
   if (entry.startsWith("f:")) return <FolderBlock folderId={id} />;
+
   if (entry.startsWith("s:")) return <SplitRowItem splitId={id} section="pinned" />;
+
   return <TabRowItem tabId={id} section="pinned" />;
 });
 
@@ -484,6 +510,7 @@ function PinnedDivider({ pinned, listed, windowId, spaceId }: { pinned: boolean;
   const shown = pinned || listed || clearable;
   // The line and its room come and go with the pinned section folding.
   const { open } = useFold(!shown);
+
   const room = useAnimatedStyle(
     () => ({
       paddingTop: open.get() * PINNED_DIVIDER_PAD,
@@ -491,7 +518,9 @@ function PinnedDivider({ pinned, listed, windowId, spaceId }: { pinned: boolean;
     }),
     [clearable],
   );
+
   const line = useAnimatedStyle(() => ({ height: open.get(), opacity: open.get() }));
+
   return (
     <View
       ref={(v) => {
@@ -515,6 +544,7 @@ function PinnedDivider({ pinned, listed, windowId, spaceId }: { pinned: boolean;
 
 const Tail = memo(function Tail({ id, section }: { id: string; section: "list" | "pinned" | "pinnedGroups" }) {
   const { ref, style } = useDragItem(id, { kind: "tail", tabIds: [], section });
+
   return <Animated.View ref={ref} style={style} />;
 });
 
@@ -534,14 +564,18 @@ function useRevealTabs(
     let opened: string | null = null;
     let frame = 0;
     let reveals = 0;
+
     const show = (y: number, height: number) => {
       const top = scrollY.current ?? 0;
       const viewport = geometryRef.current.viewport;
+
       if (y - top < glowRoom) scroll.current?.scrollTo({ y: Math.max(0, y - glowRoom), animated: true });
       else if (y + height - top > viewport - 8) scroll.current?.scrollTo({ y: y + height - viewport + 8, animated: true });
     };
+
     const reveal = () => {
       frame = 0;
+
       // A page that hasn't laid out yet (the sidebar just mounted) reveals once it has.
       if (!geometryRef.current.viewport || !scroll.current) return;
       reveals += 1;
@@ -550,34 +584,44 @@ function useRevealTabs(
       switched = opened = null;
       const s = useBrowser.getState();
       const spaceId = s.windows[windowId]?.spaceId;
+
       if (!tabId || !spaceId) return;
       const { regions, newTabAtTop } = geometryRef.current;
       const span = rowSpan(s, windowId, spaceId, tabId, newTabAtTop);
+
       if (span) return show(glowRoom + regions[span.section] + span.top, span.height);
       // A pinned tile or a live folder's row: always mounted, so measured once.
-      const view = scroll.current as unknown as View;
+      const view = asView(scroll.current);
       void measureRow(windowId, tabId).then((row) =>
         view.measureInWindow((_x, y) => row && mine === reveals && show(row.y - y + (scrollY.current ?? 0), row.height)),
       );
     };
+
     // After the frame's layout: the rows it adds are in the list.
     const schedule = () => {
       if ((switched || opened) && !frame) frame = requestAnimationFrame(reveal);
     };
+
     const unsubscribe = useBrowser.subscribe((s, prev) => {
       if (s.windows === prev.windows && s.tabs === prev.tabs && s.tabLists === prev.tabLists) return;
       const active = activeTabId(s, windowId);
+
       if (active && active !== activeTabId(prev, windowId)) switched = active;
       const w = s.windows[windowId];
       const list = w ? listIds(s, windowListKey(s, w)) : undefined;
       const before = w ? listIds(prev, windowListKey(prev, w)) : undefined;
+
       if (list && before && list !== before) {
         const had = new Set(before);
+
         for (const id of list) if (!had.has(id) && s.tabs[id]?.openerId && id !== active) opened = id;
       }
+
       schedule();
     });
+
     geometryRef.current.laidOut = schedule;
+
     return () => {
       cancelAnimationFrame(frame);
       unsubscribe();
@@ -588,7 +632,10 @@ function useRevealTabs(
 
 // DEV: a window's sidebar list, for tests: where the tab marker is, and a scroll (nnSidebar(windowId)).
 const devSidebars = new Map<string, { side: "above" | "below" | null; scrollTo: (y: number) => void; reveal: () => void }>();
-if (__DEV__) (globalThis as { nnSidebar?: unknown }).nnSidebar = (windowId: string) => devSidebars.get(windowId);
+
+if (__DEV__)
+  // SAFETY: nnSidebar is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  (globalThis as { nnSidebar?: unknown }).nnSidebar = (windowId: string) => devSidebars.get(windowId);
 
 // The window's tab, when it's a list row scrolled out of view: which edge it's beyond, kept up as the list scrolls and
 // changes, and a scroll that brings it back.
@@ -600,41 +647,53 @@ function useOffscreenTab(
   glowRoom: number,
 ) {
   const [side, setSide] = useState<"above" | "below" | null>(null);
+
   const activeRow = () => {
     const s = useBrowser.getState();
     const spaceId = s.windows[windowId]?.spaceId;
     const tabId = activeTabId(s, windowId);
+
     if (!spaceId || !tabId) return null;
     const { regions, newTabAtTop } = geometryRef.current;
     const span = rowSpan(s, windowId, spaceId, tabId, newTabAtTop);
+
     return span ? { y: glowRoom + regions[span.section] + span.top, height: span.height } : null;
   };
+
   const check = useEffectEvent(() => {
     const row = activeRow();
     setSide(row ? offscreenSide(row, scrollY.current ?? 0, geometryRef.current.viewport, glowRoom) : null);
   });
+
   const reveal = useEffectEvent(() => {
     const row = activeRow();
+
     if (!row) return;
     const viewport = geometryRef.current.viewport;
     const y = row.y < (scrollY.current ?? 0) + glowRoom ? row.y - glowRoom : row.y + row.height - viewport + 8;
     scroll.current?.scrollTo({ y: Math.max(0, y), animated: true });
   });
+
   useEffect(() => {
     let frame = 0;
+
     // After the frame's layout: rows opened or closed have moved the tab.
     const later = () => {
       if (!frame) frame = requestAnimationFrame(() => ((frame = 0), check()));
     };
+
     const unsubscribe = useBrowser.subscribe((s, prev) => {
       if (s.windows !== prev.windows || s.tabs !== prev.tabs || s.tabLists !== prev.tabLists || s.spaces !== prev.spaces) later();
     });
+
     later();
+
     return () => {
       cancelAnimationFrame(frame);
       unsubscribe();
     };
   }, [windowId, glowRoom]);
+
   return { side, check, reveal };
 }
 
@@ -643,12 +702,14 @@ function NewTabRow({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} style={{ flexDirection: "row", alignItems: "center" }}>
       <Pressable
         style={{ flex: 1 }}
         onPress={(e) => {
-          if ((e.nativeEvent as unknown as { altKey?: boolean }).altKey) openNewTabInSplit(windowId);
+          // SAFETY: { altKey? assertion matches the runtime value validated at this call site.
+          if ((e.nativeEvent as { altKey?: boolean }).altKey) openNewTabInSplit(windowId);
           else useBrowser.getState().openNewTabPanel(windowId);
         }}
       >
@@ -692,6 +753,7 @@ function NewTabRow({ windowId }: { windowId: string }) {
 
 // Declined for the session: no window offers it again until the app restarts.
 let upsellDeclined = false;
+
 const declineUpsell = () => {
   upsellDeclined = true;
 };
@@ -705,13 +767,17 @@ function CleanUpUpsell({ windowId }: { windowId: string }) {
   useEffect(() => {
     const check = () => setCount(cleanUpCandidates(useBrowser.getState(), windowId).length);
     check();
+
     return everySlowly({ every: 60_000, run: check });
   }, [windowId]);
+
   if (hidden || daily || count < CLEAN_UP_UPSELL_MIN) return null;
+
   const dismiss = () => {
     declineUpsell();
     setHidden(true);
   };
+
   return (
     <View
       style={{ marginTop: 10, borderRadius: 12, padding: 10, backgroundColor: tokens.groupFill, borderWidth: 0.5, borderColor: tokens.groupStroke, gap: 8 }}
@@ -746,6 +812,7 @@ function CleanUpUpsell({ windowId }: { windowId: string }) {
 function UpsellButton({ title, onPress, primary = false }: { title: string; onPress: () => void; primary?: boolean }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
+
   return (
     <Pressable onPress={onPress}>
       {({ pressed }) => (

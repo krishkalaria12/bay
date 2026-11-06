@@ -14,7 +14,9 @@ import { onEscapeKey } from "../../lib/escapeKey";
 export function FindBar({ tabId }: { tabId: string }) {
   const hasPage = useBrowser((s) => !!s.tabs[tabId]?.url);
   const find = useFind(tabId);
+
   if (!find.open || !hasPage) return null;
+
   return <FindBarPanel key={tabId} tabId={tabId} find={find} />;
 }
 
@@ -30,38 +32,49 @@ function FindBarPanel({ tabId, find }: { tabId: string; find: FindState }) {
   const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ translateY: interpolate(appear.get(), [0, 1], [-6, 0]) }] }));
   useEffect(() => {
     const request = find.focusRequest;
+
     if (!request || handledFocus.get(tabId) === request) return;
     handledFocus.set(tabId, request);
     input.current?.focus();
     input.current?.setSelection(0, find.query.length);
+
     if (find.query) void webviews.get(tabId)?.find(find.query, true, false);
   }, [find.focusRequest]);
 
   const setFind = (patch: Partial<FindState>) => useBrowser.getState().setFind(tabId, patch);
+
   const run = (backwards: boolean, query?: string, findNext = true) => {
     const text = query ?? find.query;
+
     if (!text) setFind({ count: null, active: 0 });
     void webviews.get(tabId)?.find(text, !backwards, findNext);
   };
+
   const close = () => {
     setFind({ open: false, count: null, active: 0 });
     void webviews.get(tabId)?.stopFinding(false);
     void webviews.get(tabId)?.focus();
   };
+
   const [replacement, setReplacement] = useState("");
   const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
   useEffect(() => {
     if (!note) return;
     const timer = setTimeout(() => setNote(null), 2200);
+
     return () => clearTimeout(timer);
   }, [note]);
+
   const replace = async (all: boolean) => {
     if (!find.query) return;
     const { field, count } = await replaceInField(tabId, find.query, replacement, all);
+
     if (!field) return setNote({ text: "Not in a text field", error: true });
+
     if (all || !count) setNote({ text: count ? `${count} replaced` : "No matches", error: !count });
     run(false, find.query, false);
   };
+
   const none = find.count === 0 && !!find.query;
   const separator = theme.dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)";
   const error = theme.dark ? "#FF6B63" : "#C93333";
@@ -144,6 +157,7 @@ function FindBarPanel({ tabId, find }: { tabId: string; find: FindState }) {
 function TextButton({ title, disabled, onPress }: { title: string; disabled: boolean; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} disabled={disabled}>

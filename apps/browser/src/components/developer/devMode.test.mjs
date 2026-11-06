@@ -7,17 +7,21 @@ registerHooks({
     if (specifier === "@bay/desktop" && context.parentURL?.endsWith("/developer/devMode.ts")) {
       return { url: "data:text/javascript,export const copyText = () => {}", shortCircuit: true };
     }
+
     if (specifier === "../split/splitActions" && context.parentURL?.endsWith("/developer/devMode.ts")) {
       return { url: "data:text/javascript,export const showToast = () => {}", shortCircuit: true };
     }
+
     return next(specifier, context);
   },
 });
+
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { webviews } = await import("../../lib/webviews.ts");
 const dev = await import("./devMode.ts");
 const { JSON_VIEWER_SCRIPT } = await import("./jsonViewerScript.ts");
 const S = () => useBrowser.getState();
+
 dev.startDeveloperMode();
 
 function setup(url) {
@@ -28,6 +32,7 @@ function setup(url) {
   const id = S().windows[w].activeTabIds.default;
   const scripts = [];
   webviews.set(id, { evaluate: async (code) => scripts.push(code), focus: async () => {} });
+
   return { w, id, scripts };
 }
 
@@ -35,6 +40,7 @@ test("local server offers survive progress and disappear after answering or navi
   const { w, id } = setup("http://localhost:7101/one");
   assert.equal(dev.useDeveloperUi.getState().offers[id], "localhost:7101");
   const offers = dev.useDeveloperUi.getState().offers;
+
   for (let i = 0; i < 60; i++) S().updateLive(id, { progress: i / 100 });
   assert.strictEqual(dev.useDeveloperUi.getState().offers, offers);
   const other = S().newTab(w, { url: "http://localhost:7101/two" });
@@ -55,6 +61,7 @@ test("JSON viewing follows load completion and newly enabled sites, without reru
   assert.deepEqual(scripts, [], "wait for a loading document");
   S().updateLive(id, { isLoading: false });
   assert.deepEqual(scripts, [JSON_VIEWER_SCRIPT]);
+
   for (let i = 0; i < 60; i++) S().updateLive(id, { progress: i / 100 });
   assert.equal(scripts.length, 1);
   dev.setDeveloperMode(S().tabs[id].url, false);
@@ -83,15 +90,19 @@ test("inspector returns after navigation and stops when its site is disabled or 
 test("a progress update never reads unrelated loading records", async () => {
   const { id } = setup("https://example.com");
   let unrelatedReads = 0;
+
   const live = new Proxy(
     { ...S().live, [id]: { ...S().live[id], progress: 0.5 }, unrelated: { isLoading: false } },
     {
       get(target, key) {
         if (key === "unrelated") unrelatedReads++;
-        return Reflect.get(target, key);
+
+        // Fixture state object has no getters; indexing forwards the stored properties.
+        return target[key];
       },
     },
   );
+
   useBrowser.setState({ live });
   const { withChangedEntry } = await import("../../store/recordDiff.ts");
   const next = withChangedEntry(live, id, { ...live[id], progress: 0.6 });

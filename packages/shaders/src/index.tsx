@@ -1,5 +1,6 @@
 import { requireNativeViewManager } from "expo-modules-core";
 import type { ViewProps } from "react-native";
+import * as v from "valibot";
 
 export const DIA_SPECTRUM = ["#0358F7", "#5092C7", "#E1E1FE", "#FFD400", "#FA3D1D", "#FD02F5"];
 
@@ -21,13 +22,14 @@ export type AreaLightProps = ViewProps & {
   replayKey?: number;
 };
 
-type NativeAreaLightProps = Omit<AreaLightProps, "source" | "palette"> & { shapeFrame: number[]; palette?: string[] };
+type NativeAreaLightProps = Omit<AreaLightProps, "source" | "palette"> & { areaRect: number[]; palette?: string[] };
 
 const NativeAreaLight = requireNativeViewManager<NativeAreaLightProps>("BayAreaLight");
 
 export function AreaLight({ source, palette = "pink", ...props }: AreaLightProps) {
-  const shapeFrame = source ? [source.x, source.y, source.width, source.height] : [0, 0, 0, 0];
-  return <NativeAreaLight pointerEvents="none" {...props} palette={typeof palette === "string" ? [palette] : palette} shapeFrame={shapeFrame} />;
+  const areaRect = source ? [source.x, source.y, source.width, source.height] : [0, 0, 0, 0];
+
+  return <NativeAreaLight pointerEvents="none" {...props} palette={v.is(v.string(), palette) ? [palette] : palette} areaRect={areaRect} />;
 }
 
 export type WindowBackdropProps = ViewProps & {
@@ -99,6 +101,6 @@ const NativePowerUp = requireNativeViewManager<NativePowerUpProps>("BayPowerUp")
 
 export function PowerUp({ palette = "pink", halo = null, ...props }: PowerUpProps) {
   return (
-    <NativePowerUp pointerEvents="none" {...props} palette={typeof palette === "string" ? [palette] : palette} haloFrame={halo ? rect(halo) : [0, 0, 0, 0]} />
+    <NativePowerUp pointerEvents="none" {...props} palette={v.is(v.string(), palette) ? [palette] : palette} haloFrame={halo ? rect(halo) : [0, 0, 0, 0]} />
   );
 }

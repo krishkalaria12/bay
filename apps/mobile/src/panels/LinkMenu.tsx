@@ -40,12 +40,15 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
     props.onClose();
     action();
   }
+
   async function resolveDestination(): Promise<void> {
     if (resolving) return;
     setResolving(true);
     setError(null);
+
     try {
       const url = await props.onResolveDestination();
+
       if (mounted.current) setDestination(url);
     } catch (cause) {
       if (mounted.current) setError(cause instanceof Error ? cause.message : "Couldn't check this link. Try again.");

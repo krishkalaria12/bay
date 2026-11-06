@@ -15,8 +15,10 @@ export function SiteIcon({ url, size = 28 }: { url: string; size?: number }): JS
   // Sites that switch icons with the colour scheme (GitHub's turns white in dark mode) gave the one for this theme.
   const tile = useColorScheme() === "dark" ? "#2C2C2E" : "#FFFFFF";
   const radius = size * 0.28;
+
   if (icon && broken !== icon) {
     const inner = Math.round(size * 0.72);
+
     return (
       <View
         className="items-center justify-center border border-black/5 dark:border-white/10"
@@ -36,10 +38,13 @@ export function SiteIcon({ url, size = 28 }: { url: string; size?: number }): JS
       </View>
     );
   }
+
   const name = hostOf(url);
   const letter = (name.match(/[a-z0-9]/i)?.[0] ?? "•").toUpperCase();
   let hash = 0;
+
   for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+
   return (
     <View
       className="items-center justify-center border border-black/5"

@@ -35,6 +35,7 @@ export function ExtensionSidePanel() {
   }, [panel?.url, panel?.extensionId]);
 
   const width = dragWidth ?? savedWidth;
+
   const resize = useResizeDrag({
     min: SIDE_PANEL_MIN_WIDTH,
     max: SIDE_PANEL_MAX_WIDTH,
@@ -47,7 +48,9 @@ export function ExtensionSidePanel() {
   const room = width + layout.cardInset - 1;
   const roomStyle = useAnimatedStyle(() => ({ width: appear.get() * room }), [room]);
   const fade = useAnimatedStyle(() => ({ opacity: appear.get() }));
+
   if (!shown) return null;
+
   return (
     <Animated.View style={[{ overflow: "hidden" }, roomStyle]}>
       <Animated.View style={[{ position: "absolute", top: 0, bottom: 0, right: 0, width: width }, fade]}>
@@ -68,6 +71,7 @@ function PanelCard({ windowId, panel }: { windowId: string; panel: SidePanel }) 
   const ext = useExtensions((e) => e.lists[profile]?.find((x) => x.id === extensionId));
   const title = ext?.actionTitle || ext?.name || "Extension";
   const icon = ext?.actionIcon || ext?.icon;
+
   return (
     <View style={{ flex: 1, borderRadius: layout.cardRadius, overflow: "hidden", backgroundColor: theme.card }}>
       <View style={{ height: SIDE_PANEL_HEADER, flexDirection: "row", alignItems: "center", paddingLeft: 12, paddingRight: 5, gap: 8 }}>
@@ -81,6 +85,7 @@ function PanelCard({ windowId, panel }: { windowId: string; panel: SidePanel }) 
           tooltip="More"
           onPress={() => {
             const found = findExtension(profile, extensionId);
+
             if (found) void showExtensionMenu(windowId, found);
           }}
         />

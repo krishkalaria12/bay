@@ -6,6 +6,7 @@ import { layout } from "../../lib/constants";
 // The window buttons' centre from the sidebar's top-left: AppKit's spot in the window (NNCoreChromeWindow.mm), so the
 // header lays out as it does with the sidebar on the left.
 const LIGHTS: readonly [number, number] = [25, 27];
+
 // The peek's distance from the window's edge (App.tsx's SidebarPeek).
 const PEEK_EDGE = 6;
 
@@ -21,13 +22,16 @@ export function useSidebarLights(
   const { progress, windowWidth, sidebarWidth, peekOut } = o;
   const on = o.on && windowWidth > 0;
   const sent = useRef("");
+
   const place = (left: number, top: number) => {
     const center: [number, number] = [Math.round((left + LIGHTS[0]) * 2) / 2, top + LIGHTS[1]];
     const key = center.join(",");
+
     if (key === sent.current) return;
     sent.current = key;
     void setTrafficLightsCenter(windowId, center);
   };
+
   // The docked sidebar's left edge: the slot narrows to the card's inset as it closes (App.tsx's slotStyle).
   useAnimatedReaction(
     () => (on && !peekOut ? progress.get() : -1),
@@ -41,6 +45,7 @@ export function useSidebarLights(
   }, [windowId, on, peekOut, windowWidth, sidebarWidth]);
   useEffect(() => {
     if (!on) return;
+
     return () => {
       sent.current = "";
       void setTrafficLightsCenter(windowId, null);

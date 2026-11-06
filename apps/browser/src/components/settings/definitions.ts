@@ -182,4 +182,5 @@ export const SETTINGS = {
 } as const satisfies Record<string, { id: string; pane: SettingsPane; title: string; topTabsTitle?: string; words?: string }>;
 
 export type SettingEntry = (typeof SETTINGS)[keyof typeof SETTINGS];
+
 export type SettingId = SettingEntry["id"];

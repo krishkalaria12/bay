@@ -1,6 +1,7 @@
 // Arc's Previews: which tabs get one, and reading Gmail's unread feed and GitHub's pull request pages.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const sites = await import("./knownSites.ts");
 
 test("only a pinned or favorite tab on a known site has a preview, by the page it's pinned to", () => {
@@ -44,6 +45,7 @@ test("Gmail's feed gives how many are unread, and each mail's sender, subject, s
 // became a dashboard that loads its lists after the page: its HTML only held an empty review section.
 const search = (results, loggedIn = true) =>
   JSON.stringify({ payload: { blackbirdSearchRoute: { results, result_count: results.length, logged_in: loggedIn, type: "pullrequests" } }, title: "Search" });
+
 const PR = {
   author_name: "someone",
   created: "2026-10-08T23:52:17.000+05:30",
@@ -62,6 +64,7 @@ test("a GitHub pull request search gives each pull request, newest first, and it
     repo: { repository: { name: "ferret", owner_login: "someone" } },
     review_decision: "APPROVED",
   };
+
   const pulls = sites.parseGithubPulls(search([older, PR]));
   assert.deepEqual(pulls[0], {
     title: "docs: add windows port & plan",

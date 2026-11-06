@@ -9,23 +9,31 @@ const originalFetch = globalThis.fetch;
 const originalRequire = globalThis.require;
 let requests;
 let loadCount;
+
 const requireBundled = (id) => {
   assert.equal(id, "@bay/core/src/bangList.ts");
   loadCount++;
+
   return bundled;
 };
+
 const response = (status, body = null, headers = {}) => ({
   status,
   headers: new Headers({ "content-type": "application/json", ...headers }),
   text: async () => body,
 });
+
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+
 const deferred = () => {
   let resolve;
   const promise = new Promise((r) => (resolve = r));
+
   return { promise, resolve };
 };
+
 const slim = [bundled.BANG_LIST, bundled.BANG_LIST_UNICODE].filter(Boolean).join("\n");
+
 const updated = JSON.stringify([
   ...["gh", "w", "yt"].map((t) => ({ s: t, ts: [t], u: `https://${t}.example/?q={searchTerms}` })),
   ...Array.from({ length: 1100 }, (_, i) => ({ s: `Site ${i}`, ts: [`site${i}`], u: `https://site${i}.example/?q={searchTerms}` })),
@@ -41,9 +49,11 @@ beforeEach(() => {
   globalThis.require = requireBundled;
   globalThis.fetch = async (...args) => {
     requests.push(args);
+
     return response(304);
   };
 });
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
   globalThis.require = originalRequire;
@@ -64,6 +74,7 @@ test("a failed local load can be retried", async () => {
   globalThis.require = () => {
     throw new Error("temporary load failure");
   };
+
   await assert.rejects(loadBangs(), /temporary load failure/);
   globalThis.require = requireBundled;
   assert.ok((await loadBangs()).get("gh"));
@@ -82,6 +93,7 @@ test("valid saved catalogs load without the bundle, corrupt files fall back loca
 
 test("only possible leading and trailing bangs wait on Enter, forced searches do not", () => {
   for (const text of ["!gh react", "react !w", " !YT ", "!unknown query"]) assert.equal(mayBeBang(text), true, text);
+
   for (const text of ["!", "hello!", "say !gh in the middle", "!gh!", "? !gh react", "?!w", "plain text"]) assert.equal(mayBeBang(text), false, text);
 });
 
@@ -146,6 +158,7 @@ test("a refreshed table is published only after its list and ETag have saved tog
   globalThis.fetch = async () => response(200, updated, { etag: '"new"' });
   heldSaves.on = true;
   const pending = refreshBangs();
+
   while (!heldSaves.queue.length) await tick();
   assert.equal(bangStatus().source, "bundled");
   assert.equal(docs.has("bangs.txt"), false);

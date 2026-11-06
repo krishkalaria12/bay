@@ -24,6 +24,7 @@ export function SearchPane() {
   const locked = !!controlling;
   const duckduckgo = settings.searchShortcutMode === "duckduckgo";
   const customKeywords = new Set(custom.map((e) => e.keyword.toLowerCase()));
+
   const common = POPULAR_SITE_SEARCHES.filter(
     (site, index, sites) => site.keyword && !customKeywords.has(site.keyword) && sites.findIndex((s) => s.keyword === site.keyword) === index,
   );
@@ -146,11 +147,13 @@ function EngineRow({ engine, selected, locked, editable }: { engine: SearchEngin
   const colors = useFormColors();
   const duckduckgo = useBrowser((s) => s.settings.searchShortcutMode === "duckduckgo");
   const shortcutError = engine.custom ? validateEngine(engine, []) : null;
+
   const description = engine.extension
     ? `${engine.keyword ? `${engine.keyword} · ` : ""}Added by ${engine.extension.name || "an extension"}`
     : engine.custom
       ? `${duckduckgo ? "!" : ""}${engine.keyword.replace(/^!/, "")} · ${shortcutError ?? engine.url}`
       : engine.keyword;
+
   return (
     <Row icon={<Favicon url={`https://${engineHost(engine)}`} />} title={engine.name} description={description}>
       {editable && <IconButton icon="pencil" size={11} box={24} radius={6} onPress={() => showSettingsSheet(<EngineSheet engine={engine} />)} tooltip="Edit" />}
@@ -173,24 +176,29 @@ function EngineSheet({ engine, preset }: { engine?: SearchEngine; preset?: Engin
   const [keyword, setKeyword] = useState(initial?.keyword ?? "");
   const [url, setUrl] = useState(initial?.url ?? "");
   const [error, setError] = useState<string | null>(null);
+
   const save = () => {
     const s = useBrowser.getState();
     const input = { name, keyword, url };
     let result: string | null;
+
     if (engine) result = s.updateCustomEngine(engine.id, input);
     else {
       const added = s.addCustomEngine(input);
       result = "error" in added ? added.error : null;
     }
+
     if (result) return setError(result);
     closeSettingsSheet();
   };
+
   const field = (label: string, value: string, set: (v: string) => void, placeholder: string) => (
     <View style={{ marginTop: 12 }}>
       <Text style={{ fontSize: 11.5, marginBottom: 5, color: theme.textSecondary }}>{label}</Text>
       <TextField value={value} onChangeText={set} placeholder={placeholder} onSubmit={save} onEscape={closeSettingsSheet} />
     </View>
   );
+
   return (
     <Sheet width={440} onClose={closeSettingsSheet}>
       <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>

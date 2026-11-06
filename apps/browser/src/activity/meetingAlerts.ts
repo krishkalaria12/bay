@@ -16,14 +16,18 @@ const notified = new Set<string>();
 
 export function alertEvent(now = Date.now()): CalendarEvent | null {
   const lead = ALERT_LEADS.find((l) => l.value === live().calendar.alertLead)?.minutes;
+
   if (lead === null || lead === undefined) return null;
+
   return dueAlerts(useCalendar.getState().events, now, lead, new Set(live().dismissedAlerts))[0] ?? null;
 }
 
 function check() {
   const event = alertEvent();
   const current = useMeetingAlert.getState().event;
+
   if (event?.occurrence !== current?.occurrence) useMeetingAlert.setState({ event });
+
   if (!event || appActive || live().calendar.alertCondition !== "always" || notified.has(event.occurrence)) return;
   notified.add(event.occurrence);
   const link = joinLink(event);
@@ -38,6 +42,7 @@ function check() {
 
 export function joinEvent(event: CalendarEvent, openAll = false, windowId = frontWindow()) {
   const link = joinLink(event);
+
   if (!link || !windowId) return;
   joinMeeting(windowId, event, link.url, openAll);
   dismiss(event);
@@ -49,14 +54,17 @@ export const meetingToJoin = (now = Date.now()) => joinableMeeting(useCalendar.g
 /** ⌃⌘J: joins the meeting that's on now (or about to start) as the alert's Join does; false when none is. */
 export function joinMeetingNow(): boolean {
   const event = meetingToJoin();
+
   if (!event) return false;
   joinEvent(event, false, frontWindow() ?? openWindow());
+
   return true;
 }
 
 export function dismiss(event: CalendarEvent) {
   dismissAlert(event.occurrence);
   void removeNotifications([`meeting:${event.occurrence}`]);
+
   if (useMeetingAlert.getState().event?.occurrence === event.occurrence) useMeetingAlert.setState({ event: null });
   check();
 }
@@ -66,6 +74,7 @@ const frontWindow = () => {
   const id = s.ui.focusedWindowId;
   // A main window: a call doesn't open in a private window or Little Bay.
   const main = (w: string) => !s.windows[w]!.incognito && s.windows[w]!.kind !== "small";
+
   return id && s.windows[id] && main(id) ? id : s.windowOrder.find(main);
 };
 
@@ -89,6 +98,7 @@ export function startMeetingAlerts() {
     watch: (changed) => {
       const calendar = useCalendar.subscribe(changed);
       const alert = useMeetingAlert.subscribe(changed);
+
       return () => (calendar(), alert());
     },
   });

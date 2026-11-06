@@ -9,9 +9,12 @@ const shell = resolve(import.meta.dirname, "..");
 const source = readFileSync(join(shell, "ios/QuoteCard.swift"), "utf8");
 const module = readFileSync(join(shell, "ios/ShellModule.swift"), "utf8");
 const colorStart = module.indexOf("extension NSColor {");
+
 if (colorStart < 0) throw new Error("missing NSColor extension in ShellModule.swift");
+
 const color = module.slice(colorStart).split("\nlet installTextFieldSelectAll")[0];
 const root = mkdtempSync(join(tmpdir(), "bay-quote-test-"));
+
 try {
   const main = join(root, "main.swift");
   writeFileSync(main, source + "\n" + color + "\n" + readFileSync(join(shell, "tests/quote-card.swift"), "utf8"));

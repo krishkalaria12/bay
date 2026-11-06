@@ -33,6 +33,7 @@ const STAGE: CSSProperties = { left: 240, top: 64, width: 1440, height: 810 };
  * the recording's point (x, y) (fractions of it) to (toX, toY) of the window, kept inside the recording's edges.
  */
 type Zoom = { at: number; len: number; scale: number; x: number; y: number; toX: number; toY: number };
+
 function Clip({ name, from, rate = 1, zoom }: { name: string; from: number; rate?: number; zoom?: Zoom }) {
   const frame = useBeat();
   const { fps } = useVideoConfig();
@@ -41,6 +42,7 @@ function Clip({ name, from, rate = 1, zoom }: { name: string; from: number; rate
   const edge = (to: number, at: number) => Math.min(0, Math.max(1 - s, to - s * at));
   const tx = zoom ? edge(zoom.toX, zoom.x) * 100 : 0;
   const ty = zoom ? edge(zoom.toY, zoom.y) * 100 : 0;
+
   return (
     <div style={{ position: "absolute", inset: 0, transform: `translate(${tx}%, ${ty}%) scale(${s})`, transformOrigin: "0 0" }}>
       <OffthreadVideo
@@ -58,6 +60,7 @@ function Clip({ name, from, rate = 1, zoom }: { name: string; from: number; rate
 function ClipScene({ children, caption, stage = STAGE, extra }: { children: ReactNode; caption: ReactNode; stage?: CSSProperties; extra?: ReactNode }) {
   const fade = useSceneFade();
   const rise = useIn(0, 22);
+
   return (
     <Paper>
       <AbsoluteFill style={{ opacity: fade }}>
@@ -77,6 +80,7 @@ function Intro() {
   const title = useIn(8, 22);
   const mark = useIn(22, 16);
   const sub = useIn(28, 20);
+
   return (
     <Paper>
       <AbsoluteFill style={{ opacity: fade, alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
@@ -105,6 +109,7 @@ function EndCard() {
   const pill = useSpring(18, { damping: 12, mass: 0.7 });
   const note = useIn(30, 16);
   const mark = useIn(16, 16);
+
   return (
     <Paper>
       <AbsoluteFill style={{ opacity: fade, alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
@@ -157,6 +162,7 @@ const CMD2 = `bay exec 'await newTab("github.com/krishkalaria12/bay")'`;
 
 function typed(text: string, frame: number, start: number, cps = 34) {
   const n = Math.max(0, Math.min(text.length, Math.floor(((frame - start) / BEAT) * cps)));
+
   return text.slice(0, n);
 }
 
@@ -167,6 +173,7 @@ function Terminal() {
   const line1 = typed(CMD1, frame, 2, 72);
   const line2 = frame > 104 ? typed(CMD2, frame, 106, 72) : "";
   const caret = Math.floor(frame / 15) % 2 === 0;
+
   const lines: ReactNode[] = [
     <div key="c" style={{ color: "#7d8492" }}>
       # opens behind the page you’re on
@@ -176,12 +183,14 @@ function Terminal() {
       {frame <= 28 && caret ? "▍" : ""}
     </div>,
   ];
+
   if (frame > 36)
     lines.push(
       <div key="1o" style={{ color: "#7d8492" }}>
         ✓ Kyoto – Wikipedia
       </div>,
     );
+
   if (frame > 104)
     lines.push(
       <div key="2">
@@ -189,12 +198,14 @@ function Terminal() {
         {frame <= 132 && caret ? "▍" : ""}
       </div>,
     );
+
   if (frame > 146)
     lines.push(
       <div key="2o" style={{ color: "#7d8492" }}>
         ✓ GitHub – krishkalaria12/bay
       </div>,
     );
+
   return (
     <div
       style={{
@@ -228,6 +239,7 @@ function Terminal() {
 function CliScene() {
   const mark = useIn(26, 16);
   const note = useSpring(118, { damping: 12, mass: 0.8 });
+
   return (
     <ClipScene
       stage={{ left: 90, top: 70, width: 1260, height: 709 }}
@@ -258,6 +270,7 @@ function CliScene() {
 
 function PinSplitScene() {
   const mark = useIn(24, 16);
+
   return (
     <ClipScene
       caption={
@@ -277,6 +290,7 @@ function PinSplitScene() {
 
 function SpacesScene() {
   const mark = useIn(24, 16);
+
   return (
     <ClipScene
       caption={
@@ -299,6 +313,7 @@ function ClearScene() {
   const mark = useIn(24, 16);
   // ⌘T is pressed ~0.2s into the scene.
   const press = interpolate(frame, [4, 7, 12], [0, 1, 0], clamp);
+
   return (
     <ClipScene
       caption={
@@ -319,6 +334,7 @@ function ClearScene() {
 
 function PeekScene() {
   const mark = useIn(24, 16);
+
   return (
     <ClipScene
       caption={
@@ -341,6 +357,7 @@ function ImportScene() {
   const mark = useIn(20, 16);
   // Return is pressed at 3.2s in the recording (0.8x from 0.9s): ~86 frames in.
   const press = interpolate(frame, [84, 87, 95], [0, 1, 0], clamp);
+
   return (
     <ClipScene
       caption={
@@ -361,6 +378,7 @@ function ImportScene() {
 
 function RightScene() {
   const mark = useIn(24, 16);
+
   return (
     <ClipScene
       caption={
@@ -393,9 +411,11 @@ function ChannelScene() {
   const py = interpolate(frame, [8, 40], [760, 449], { ...clamp, easing: easeOut });
   const pressed = interpolate(frame, [40, 43, 48], [0, 1, 0], clamp);
   const note = useIn(56, 18);
+
   const seg = (label: string, on: boolean) => (
     <div style={{ width: 170, textAlign: "center", fontSize: 24, fontWeight: 600, color: on ? C.ink : C.faint, position: "relative", zIndex: 1 }}>{label}</div>
   );
+
   return (
     <Paper>
       <AbsoluteFill style={{ opacity: fade }}>
@@ -491,6 +511,7 @@ export const bay154Frames = (fps: number) => SCENES.reduce((n, [, len]) => n + t
 export function Bay154() {
   useFonts();
   const { width, fps } = useVideoConfig();
+
   return (
     <AbsoluteFill style={{ background: C.paper }}>
       {/* The score (scripts/music/bay-1.5.4.py), on the edit's bar grid. */}

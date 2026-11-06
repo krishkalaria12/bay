@@ -6,7 +6,9 @@ import { Text, View } from "react-native";
 export function TabCount({ count }: { count: number }): JSX.Element | null {
   const foreground = useThemeColor("foreground");
   const background = useThemeColor("background");
+
   if (count < 2) return null;
+
   return (
     <View
       testID="tab-count"

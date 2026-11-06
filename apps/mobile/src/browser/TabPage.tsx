@@ -51,8 +51,10 @@ export function TabPage({
 
   useEffect(() => {
     const current = view.current;
+
     if (!current) return;
     register(current);
+
     return () => register(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -64,7 +66,9 @@ export function TabPage({
 
   const selectorsKey = JSON.stringify(hiddenSelectors);
   useEffect(() => {
+    // SAFETY: selectorsKey is the JSON string of hiddenSelectors at this point, so its parse round-trips to a string array.
     const selectors = JSON.parse(selectorsKey) as string[];
+
     if (shouldHide(timing.current, selectors.length > 0)) applyHiddenElements(selectors);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectorsKey]);
@@ -74,22 +78,28 @@ export function TabPage({
   // copy) stays, so the two never bounce.
   const ampLeft = useRef(new Set<string>());
   const currentUrl = useRef(tab.url);
+
   function applyTweaks(url = currentUrl.current): void {
     const current = view.current;
+
     if (!current) return;
+    // SAFETY: tweaksKey is the JSON string of tweaks at this point, so its parse round-trips to the settings object.
     const settings = JSON.parse(tweaksKey) as TabPageProps["tweaks"];
     const skipAmp = settings.skipAmp && !ampLeft.current.has(url);
     void runPageScript<string>(current, pageTweaksScript({ ...settings, skipAmp }))
       .then((result) => result === "amp" && ampLeft.current.add(url))
       .catch(() => {});
   }
+
   // A changed setting applies to the open page at once; the default text size on a fresh tab has nothing to undo.
   const firstTweaks = useRef(true);
   useEffect(() => {
     if (firstTweaks.current) {
       firstTweaks.current = false;
+
       return;
     }
+
     applyTweaks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tweaksKey]);
@@ -113,10 +123,13 @@ export function TabPage({
         onNavigationStateChange={({ nativeEvent }) => {
           onNavigation(nativeEvent);
           const run = scriptsFor(timing.current, nativeEvent, hiddenSelectors.length > 0);
+
           if (!view.current) return;
+
           if (run.hideElements) applyHiddenElements(hiddenSelectors);
           // Early in each load (so text doesn't jump late) and again once it finishes.
           currentUrl.current = nativeEvent.url;
+
           if (run.watchMedia) {
             applyTweaks(nativeEvent.url);
             void runPageScript<[number, number, number] | null>(view.current, PAGE_COLOR_SCRIPT).then(onPageColor, () => {});

@@ -11,10 +11,12 @@ import { join, resolve } from "node:path";
 import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const [appArg, port] = process.argv.slice(2);
+
 if (!appArg) {
   console.error("usage: node zoom-scroll-test.mjs <Debug Bay.app> [cdpPort]");
   process.exit(2);
 }
+
 const scratch = mkdtempSync(join(tmpdir(), "nn-zoom-scroll-"));
 const data = join(scratch, "data");
 const rep = reporter(join(scratch, "zoom-scroll-test.log"), { name: "zoom-scroll-test" });
@@ -23,10 +25,13 @@ const server = createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html" });
   res.end(`<!doctype html><title>tall</title><body style="font:20px system-ui;height:6000px"><h1>tall</h1>`);
 });
+
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
+
 const url = `http://127.0.0.1:${server.address().port}/`;
 
 let app;
+
 try {
   app = await launch(resolve(appArg), {
     data,
@@ -35,15 +40,20 @@ try {
     ready: "return !!globalThis.expo.modules.BayCEF.devScrollZoom",
   });
   const nn = (body) => app.eval(body, { timeout: 60000 });
+
   for (let i = 0; i < 60 && !(await nn(`return nn.store.getState().tabs.t1?.title === "tall";`)); i++) await sleep(500);
   await sleep(1500);
 
   const zoom = () => nn(`return nn.store.getState().tabs.t1.zoom;`);
+
   const reset = async () => {
     await nn(`return nn.webviews.get("t1")?.zoomStep(0);`);
+
     for (let i = 0; i < 20 && (await zoom()) !== 1; i++) await sleep(200);
   };
+
   const scroll = (steps) => nn(`return globalThis.expo.modules.BayCEF.devScrollZoom(${JSON.stringify(steps)});`);
+
   const gesture = (trackpad) => [
     { phase: "mayBegin", dy: 0, trackpad },
     { phase: "began", dy: 12, trackpad },
@@ -60,7 +70,9 @@ try {
       const after = await zoom();
       const scrolled = zoomed.every((z) => !z);
       const detail = `zoomed per event ${JSON.stringify(zoomed)}, zoom ${after}`;
+
       if (!(expectZoom ? zoomed.some(Boolean) && after > 1 : scrolled && after === 1)) throw new Error(detail);
+
       return detail;
     });
 
@@ -87,4 +99,5 @@ try {
   server.close();
   rmSync(data, { recursive: true, force: true });
 }
+
 process.exit(rep.summary() ? 0 : 1);

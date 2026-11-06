@@ -12,8 +12,10 @@ test("engine badge subscribers skip transient updates and follow all engine inpu
   const id = S().windows[w].activeTabIds.default;
   let calls = 0;
   const stop = useEngineView.subscribe(() => calls++);
+
   try {
     const before = useEngineView.getState();
+
     for (let i = 0; i < 60; i++) S().updateLive(id, { progress: i / 100 });
     S().setSelection(w, [id]);
     S().toggleSidebar(w);
@@ -54,6 +56,7 @@ test("engine selectors skip a tab switch's stamp and titles, and follow what sel
   const two = S().newTab(w, { url: "https://two.example", background: true });
   let calls = 0;
   const stop = useEngineView.subscribe(() => calls++);
+
   try {
     S().activate(two);
     S().activate(one);

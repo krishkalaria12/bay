@@ -22,11 +22,13 @@ export function startLittleBayAccess() {
   started = true;
   let shortcut: LittleBayShortcut | null = null;
   let menuBar = false;
+
   const apply = () => {
     const settings = useBrowser.getState().settings;
     const next = settings.littleBayShortcut ?? null;
     // A shortcut not registered yet (at launch) registers even when it's the one already chosen.
     const unregistered = !!next && useLittleBayAccess.getState().status === "off";
+
     if (!sameShortcut(next, shortcut) || unregistered) {
       shortcut = next;
       void setLittleBayHotKey(next?.keyCode ?? null, next?.modifiers ?? []).then(
@@ -37,11 +39,13 @@ export function startLittleBayAccess() {
         () => useLittleBayAccess.setState({ status: next ? "taken" : "off" }),
       );
     }
+
     if (settings.littleBayMenuBarItem !== menuBar) {
       menuBar = settings.littleBayMenuBarItem;
       void setLittleBayMenuBarItem(menuBar);
     }
   };
+
   apply();
   useBrowser.subscribe((s, prev) => {
     if (s.settings.littleBayShortcut !== prev.settings.littleBayShortcut || s.settings.littleBayMenuBarItem !== prev.settings.littleBayMenuBarItem) apply();

@@ -21,34 +21,44 @@ const FOLDER = `${WORK}/folder`;
 const PORT = await freePort();
 const W = `http://127.0.0.1:${PORT}`;
 const DEV = { A: {}, B: {}, C: {} };
+
 for (const [name, d] of Object.entries(DEV)) d.dir = `${WORK}/${name}`;
 
 // MARK: Harness
 
 fs.rmSync(WORK, { recursive: true, force: true });
+
 const report = reporter(`${WORK}/e2e.log`, { name: "sync e2e" });
+
 // What happened since the last check: in the log, and printed under a failing check.
 const note = report.log;
+
 // An assertion on collected data (untimed).
 const check = (name, ok, detail = "") => report.record(name, { error: ok ? null : detail || "the assertion failed" });
 
 const apps = {};
+
 async function start(name) {
   const { dir } = DEV[name];
+
   const app = (apps[name] = await launch(APP, {
     data: dir,
     env: { BAY_SYNC_DEFAULT_FOLDER: FOLDER },
     ready: { timeout: 120_000, test: "return !!globalThis.nnSync && Object.keys(nn.store.getState().windows).length > 0" },
   }));
+
   note(`${name}: pid ${app.pid}, DevTools ${app.port}, log ${app.log}`);
 }
 
 const short = (x, n) => (x === undefined ? "undefined" : JSON.stringify(x).slice(0, n));
+
 async function ev(name, body, timeout = 90_000) {
   const what = body.replace(/\s+/g, " ").trim().slice(0, 160);
+
   try {
     const result = await apps[name].eval(body, { timeout });
     note(`[${name}] ${what} -> ${short(result, 1000)}`);
+
     return result;
   } catch (e) {
     note(`[${name}] ${what} -> error ${e.message}`);
@@ -59,12 +69,15 @@ async function ev(name, body, timeout = 90_000) {
 // Chrome records a page load in its history; the store's view shows it once Chrome reports it.
 async function inHistory(name, url) {
   const end = Date.now() + 30_000;
+
   while (Date.now() < end) {
     if (await ev(name, `return (nn.store.getState().history.default || []).some((h) => h.url === ${JSON.stringify(url)})`)) return;
     await sleep(300);
   }
+
   throw new Error(`${name}: ${url} never reached Chrome's history`);
 }
+
 // A page load, then its tab closes.
 async function visit(name, url) {
   const tab = await ev(name, `const s = nn.store.getState(); return s.newTab(s.windowOrder[0], { url: ${JSON.stringify(url)} });`);
@@ -101,6 +114,7 @@ async function state(name) {
   `,
   );
 }
+
 const data = (x) => ({ bookmarks: x.bookmarks, history: x.history, settings: x.settings, pinned: x.pinned, passwords: x.passwords });
 const same = (a, b) => JSON.stringify(data(a)) === JSON.stringify(data(b));
 const text = (x) => JSON.stringify(x);
@@ -109,6 +123,7 @@ function bip39(entropy) {
   const list = fs.readFileSync(`${WORK}/english.txt`, "utf8").split("\n").filter(Boolean);
   const hash = crypto.createHash("sha256").update(entropy).digest()[0];
   const bits = [...entropy].map((b) => b.toString(2).padStart(8, "0")).join("") + hash.toString(2).padStart(8, "0");
+
   return bits
     .match(/.{11}/g)
     .map((b) => list[parseInt(b, 2)])
@@ -121,7 +136,9 @@ const savePassword = (origin, user, password) =>
 // MARK: Run
 
 fs.mkdirSync(FOLDER, { recursive: true });
+
 const swift = fs.readFileSync(`${repo}/packages/sync/ios/Core/Wordlist.swift`, "utf8");
+
 fs.writeFileSync(`${WORK}/english.txt`, [...swift.matchAll(/"([a-z]+)"/g)].map((m) => m[1]).join("\n"));
 
 const server = http
@@ -131,12 +148,14 @@ const server = http
     res.end(`<!doctype html><title>NNE2E ${name} page</title><h1>${name}</h1>`);
   })
   .listen(PORT, "127.0.0.1");
+
 await new Promise((r, j) => (server.once("listening", r), server.once("error", j)));
 
 try {
   // Both at once; one that never gets ready is quit by launch(), the other is in `apps` for the quit below.
   const started = await Promise.allSettled([start("A"), start("B")]);
   const notStarted = started.find((r) => r.status === "rejected");
+
   if (notStarted) throw notStarted.reason;
 
   check("A turns on sync", text(await ev("A", `return nnSync.turnOnSync(${JSON.stringify(FOLDER)})`)) === '{"ok":true}');
@@ -164,17 +183,20 @@ try {
   [swapped[0], swapped[1]] = [swapped[1], swapped[0]];
   const typo = [...words];
   typo[3] = "bay";
+
   const wrong = {
     "a valid phrase of someone else": [bip39(crypto.randomBytes(32)), "mismatch"],
     "two words swapped": [swapped[0] === swapped[1] ? [...words].reverse().join(" ") : swapped.join(" "), "checksum"],
     "a word not on the list": [typo.join(" "), "unknownWord"],
     "23 words": [words.slice(0, 23).join(" "), "wordCount"],
   };
+
   for (const [name, [p, error]] of Object.entries(wrong)) {
     const r = await ev("B", `return nnSync.enterRecoveryPhrase(${JSON.stringify(FOLDER)}, ${JSON.stringify(p)})`);
     const enabled = await ev("B", "return nnSync.useSync.getState().enabled");
     check(`B rejects the wrong phrase: ${name}`, r.error === error && !enabled, text(r));
   }
+
   await ev(
     "B",
     `
@@ -190,6 +212,7 @@ try {
     "B joins with the right phrase",
     text(await ev("B", `return nnSync.enterRecoveryPhrase(${JSON.stringify(FOLDER)}, ${JSON.stringify(typed)})`)) === '{"ok":true}',
   );
+
   for (let i = 0; i < 3; i++) await sync("B", "A");
   let [a, b] = [await state("A"), await state("B")];
   check(

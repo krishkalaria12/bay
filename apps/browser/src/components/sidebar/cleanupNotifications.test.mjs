@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { startCleanupNotifications } = await import("./cleanupNotifications.ts");
 
@@ -7,16 +8,20 @@ const S = () => useBrowser.getState();
 const flush = () => new Promise((resolve) => queueMicrotask(resolve));
 const notices = [];
 const notify = (windowId, count) => notices.push({ windowId, count });
+
 const setup = (t) => {
   S().hydrate({});
   notices.length = 0;
   const windowId = S().createWindow({ url: "https://active.com" });
   t.after(startCleanupNotifications(notify));
+
   return windowId;
 };
+
 const stale = (windowId, url = "https://stale.com") => {
   const id = S().newTab(windowId, { url, background: true });
   S().updateTab(id, { lastActiveAt: Date.now() - 24 * 3_600_000 });
+
   return id;
 };
 
@@ -74,10 +79,12 @@ test("private cleanup only notifies its private window", async (t) => {
 test("cleanup counts tabs beyond the saved history limit", async (t) => {
   const regular = setup(t);
   const privateWindow = S().createWindow({ incognito: true, url: "https://private.com" });
+
   for (const w of [regular, privateWindow]) {
     for (let i = 0; i < 101; i++) stale(w, `https://stale-${i}.com`);
     assert.equal(S().cleanUpTabs(w), 101);
   }
+
   await flush();
   assert.deepEqual(notices, [
     { windowId: regular, count: 101 },

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const { activeTabId } = await import("./model.ts");
 const { setAppUrlOpener } = await import("./tabs.ts");
@@ -8,6 +9,7 @@ const { focusedWindows } = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
 const tabLists = await import("./model.ts");
+
 // A window's list: its space's tabs, in sidebar order (store/model.ts).
 const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const reset = () => S().hydrate({});
@@ -95,8 +97,10 @@ test("group submissions preserve app URL routing without creating a blank placeh
   let routed = null;
   setAppUrlOpener((url, windowId) => {
     routed = { url, windowId };
+
     return true;
   });
+
   try {
     S().openNewTabPanel(w, group);
     assert.equal(S().submitNewTabPanel(w, "bay://settings"), "");
@@ -116,8 +120,10 @@ test("navigating to an app URL keeps a fresh New Tab palette opened by its handl
   const originalSession = S().windowUi[w].panel.sessionId;
   setAppUrlOpener((_url, windowId) => {
     S().openNewTabPanel(windowId);
+
     return true;
   });
+
   try {
     S().navigate(current, "bay://newtab");
     assert.equal(S().windowUi[w].panel.open, true);

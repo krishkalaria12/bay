@@ -31,39 +31,53 @@ const NO_REMOTE: string[] = [];
 const EMPTY: SuggestionResult = { items: [], completion: "" };
 
 type BookmarkRow = { url: string; title: string; favicon: string | null };
+
 const bookmarkCache = new WeakMap<Bookmarks, Map<string, BookmarkRow[]>>();
 
 function profileBookmarks(b: Bookmarks, spaceId: string): BookmarkRow[] {
   let perProfile = bookmarkCache.get(b);
+
   if (!perProfile) bookmarkCache.set(b, (perProfile = new Map()));
   let rows = perProfile.get(spaceId);
+
   if (!rows) {
     rows = [];
+
     for (const [url, ids] of bookmarksByUrl(b, spaceId)) {
       const node = b.nodes[ids[0]!];
+
       if (node?.kind === "url") rows.push({ url, title: node.title, favicon: node.favicon });
     }
+
     perProfile.set(spaceId, rows);
   }
+
   return rows;
 }
 
 type CleanedRow = { id: string; url: string; title: string; favicon: string | null; closedAt: number };
+
 const cleanedCache = new WeakMap<ClosedTab[], Map<string, CleanedRow[]>>();
 
 // The space's cleaned up tabs (Arc's archive), newest first, for the bar to find and restore.
 function spaceCleaned(list: ClosedTab[], spaceId: string): CleanedRow[] {
   let perSpace = cleanedCache.get(list);
+
   if (!perSpace) cleanedCache.set(list, (perSpace = new Map()));
   let rows = perSpace.get(spaceId);
+
   if (!rows) {
     rows = [];
+
     for (let i = list.length - 1; i >= 0; i--) {
       const { id, tab, closedAt } = list[i]!;
+
       if (tab.spaceId === spaceId && tab.url) rows.push({ id, url: tab.url, title: tab.customTitle || tab.title, favicon: tab.favicon, closedAt });
     }
+
     perSpace.set(spaceId, rows);
   }
+
   return rows;
 }
 
@@ -71,24 +85,30 @@ const historyHostCache = new WeakMap<HistoryEntry[], string[]>();
 
 function historyHosts(history: HistoryEntry[]): string[] {
   let hosts = historyHostCache.get(history);
+
   if (!hosts) {
     const set = new Set<string>();
+
     for (const h of history) set.add(hostOf(h.url));
     set.delete("");
     historyHostCache.set(history, (hosts = [...set]));
   }
+
   return hosts;
 }
 
 function knownHosts(s: BrowserState, spaceId: string): string[] {
   const hosts: string[] = [];
+
   for (const t of Object.values(s.tabs)) if (t.spaceId === spaceId && t.url) hosts.push(hostOf(t.url));
+
   return hosts.concat(historyHosts(s.history[spaceId] ?? NO_HISTORY));
 }
 
 export function scopeFor(text: string, windowId: string): SearchScope | null {
   const s = useBrowser.getState();
   const spaceId = s.windows[windowId]?.spaceId ?? "";
+
   return findScope(text, { engines: searchEngines(s.settings), hosts: () => knownHosts(s, spaceId) });
 }
 
@@ -100,7 +120,9 @@ function suggestEngine(scope: SearchScope | null, engines: SearchEngine[], fallb
 function remoteFor(remote: { text: string; list: string[] }, query: string): string[] {
   if (remote.text === query) return remote.list;
   const q = query.toLowerCase();
+
   if (!remote.text || !q.startsWith(remote.text.toLowerCase())) return NO_REMOTE;
+
   return remote.list.filter((s) => s.toLowerCase().startsWith(q));
 }
 
@@ -145,11 +167,15 @@ export function useSuggestions({
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+
     const step = () => {
       timer = prepareSuggestions(source, Date.now() + SUGGEST_WARM_SLICE_MS) ? undefined : setTimeout(step, 16);
+
       if (!timer) historyHosts(source.history);
     };
+
     timer = setTimeout(step, 0);
+
     return () => clearTimeout(timer);
   }, [source]);
 
@@ -161,11 +187,13 @@ export function useSuggestions({
   useEffect(() => {
     if (!active || !calculatorEnabled || scope || !parseCurrency(query)) return;
     let cancelled = false;
+
     const timer = setTimeout(() => {
       void convertCurrency(query).then((answer) => {
         if (!cancelled) setCurrency(answer);
       });
     }, 180);
+
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -173,24 +201,30 @@ export function useSuggestions({
   }, [active, calculatorEnabled, scope, query, convertCurrency]);
   const bundledBangs = useBangs(active && bangsEnabled && !scope && query.includes("!"));
   const customBangs = useMemo(() => customBangTable(engines.filter((e) => e.custom)), [engines]);
+
   const bangs = useMemo(
     () => (bangsEnabled ? joinBangTables(bundledBangs ? [customBangs, bundledBangs] : [customBangs]) : null),
     [bangsEnabled, customBangs, bundledBangs],
   );
+
   const bang = useMemo(() => (bangs ? findBang(query, bangs) : null), [bangs, query]);
   const pendingBang = bangsEnabled && !bundledBangs && mayBeBang(query);
   const fromEngine = suggestEngine(scope, engines, engine);
   useEffect(() => {
     const q = query.replace(/^\?/, "").trim();
+
     if (!active || !suggestionsOn || !q || /^[a-z][a-z0-9+.-]*:\/\//i.test(q) || scope?.kind === "history" || bang || (!scope && pendingBang)) {
       fetcher.cancel();
+
       return;
     }
+
     fetcher.request(fromEngine, q, (list) => setRemote({ text: query, list }));
   }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, fetcher]);
   useEffect(() => () => fetcher.cancel(), [fetcher]);
 
   if (!active || !query) return EMPTY;
+
   return buildSuggestions(text, source, {
     engine,
     preference,

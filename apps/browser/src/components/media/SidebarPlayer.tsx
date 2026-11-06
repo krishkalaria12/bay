@@ -23,22 +23,29 @@ export function useSidebarPlayerTab(windowId: string): string | undefined {
   // Only tabs with a media session can have a player: start from those (usually none) rather than
   // filtering every tab in the window on every store update.
   const sessions = useMedia(useShallow((m) => Object.keys(m.sessions)));
+
   const hidden = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
+
       if (!sessions.length || !w) return NO_IDS;
       const ids = sessions.filter((id) => s.tabs[id]?.windowId === windowId && s.tabs[id]!.spaceId === w.spaceId && !isTabShown(s, id));
       // In sidebar order, which breaks ties between equally recent sessions.
       const order = listIds(s, windowListKey(s, w));
+
       return ids.length > 1 ? ids.sort((a, b) => order.indexOf(a) - order.indexOf(b)) : ids;
     }),
   );
+
   // The player keeps the tab it shows (playerTabFor): a pause, or a report that was already on its way, never swaps it.
   const [shown, setShown] = useState<string | undefined>(undefined);
+
   const next = useMedia(
     (m) => playerTabFor(m, hidden, shown) ?? (all.length > 1 ? (playerTabFor(m, all, shown) ?? all.find((id) => !m.dismissed[id])) : undefined),
   );
+
   if (next !== shown) setShown(next);
+
   return next;
 }
 
@@ -52,6 +59,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
   const playing = isPlaying(session);
   const { hovered, hoverProps } = useHover();
   const artwork = useArtwork(tabId, session?.artwork);
+
   if (!session || !tab) return null;
   const tracks = hasTrackControls(session);
   const title = session.title || tab.title;
@@ -158,12 +166,14 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
 // The bar is the only part that moves with the clock: it ticks on its own instead of re-rendering the player.
 function TickingSeekBar({ playing, ...props }: { playing: boolean } & ComponentProps<typeof SeekBar>) {
   useTicker(playing, 1000);
+
   return <SeekBar {...props} />;
 }
 
 function CornerButton({ icon, tooltip, onPress }: { icon: string; tooltip: string; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip={tooltip}>
       <Pressable onPress={onPress}>

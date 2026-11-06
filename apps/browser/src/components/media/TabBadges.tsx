@@ -20,8 +20,10 @@ export const TabBadges = memo(function TabBadges({ tabId, size = 16, pip = true 
 function PipBadge({ tabId, size }: { tabId: string; size: number }) {
   const tokens = useSidebarTokens();
   const open = useMedia((m) => !!m.pipOpen[tabId]);
+
   if (!open) return null;
   const d = Math.round(size * 0.72);
+
   return (
     <View
       pointerEvents="none"
@@ -44,9 +46,12 @@ function PipBadge({ tabId, size }: { tabId: string; size: number }) {
 
 function CaptureBadge({ tabId, size }: { tabId: string; size: number }) {
   const capture = usePage(tabId, (p) => p.mediaAccess);
+
   if (!capture) return null;
+
   if (capture.screen) {
     const d = Math.round(size * 0.72);
+
     return (
       <View
         pointerEvents="none"
@@ -66,7 +71,9 @@ function CaptureBadge({ tabId, size }: { tabId: string; size: number }) {
       </View>
     );
   }
+
   const d = Math.max(6, Math.round(size * 0.44));
+
   return (
     <View
       pointerEvents="none"

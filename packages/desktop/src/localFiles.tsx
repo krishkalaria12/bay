@@ -2,7 +2,9 @@ import { requireNativeModule, requireNativeViewManager } from "expo-modules-core
 import type { ViewProps } from "react-native";
 
 export type LocalFileDescriptor = { path: string; name: string; kind: "file" | "folder" };
+
 export type LocalFileStatus = "available" | "missing" | "inaccessible";
+
 export type LocalFileAccess = {
   status: LocalFileStatus;
   path?: string;
@@ -11,16 +13,20 @@ export type LocalFileAccess = {
   url?: string;
   browserReadable?: boolean;
 };
+
 export type LocalFileEntry = LocalFileDescriptor & { relativePath: string };
+
 export type LocalFileListing = { access: LocalFileAccess; entries: LocalFileEntry[] };
+
+export type LocalFileDevResult = Record<string, string | number | boolean | string[]>;
 
 const Native = requireNativeModule<{
   inspect(rootPath: string, relativePath: string): Promise<LocalFileAccess>;
   list(rootPath: string, relativePath: string): Promise<LocalFileListing>;
   open(rootPath: string, relativePath: string): Promise<LocalFileAccess>;
   reconnect(rootPath: string, kind: "file" | "folder" | null): Promise<LocalFileDescriptor | null>;
-  devDrop?(windowId: string, paths: string[]): Promise<Record<string, unknown>>;
-  devUpload?(windowId: string, rootPath: string, relativePath: string, x: number, y: number): Promise<Record<string, unknown>>;
+  devDrop?(windowId: string, paths: string[]): Promise<LocalFileDevResult>;
+  devUpload?(windowId: string, rootPath: string, relativePath: string, x: number, y: number): Promise<LocalFileDevResult>;
 }>("BayLocalFiles");
 
 /** Paths are metadata. Only a native Finder drop or file picker can grant access on this Mac. */

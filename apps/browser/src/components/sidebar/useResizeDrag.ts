@@ -32,38 +32,52 @@ export function useResizeDrag(o: ResizeOptions): GestureResponderHandlers {
       if (width !== null) runOnJS(show)(width);
     },
   );
+
   return handlers;
 }
 
 function resizeDrag(options: () => ResizeOptions, springWidth: SharedValue<number>, springing: SharedValue<boolean>) {
   let live: number | null = null;
   let start = 0;
+
   const show = (width: number) => {
     live = width;
     options().onLive(width);
   };
+
   const commit = (width: number) => {
     live = null;
     options().onCommit(width);
     options().onLive(null);
   };
+
   const band = (over: number) => RESIZE_BAND * (1 - Math.exp(-over / RESIZE_BAND_SCALE));
   const unband = (stretch: number) => -RESIZE_BAND_SCALE * Math.log(1 - Math.min(stretch, RESIZE_BAND - 0.01) / RESIZE_BAND);
+
   const rubberBand = (width: number) => {
     const { min, max } = options();
+
     if (width > max) return max + band(width - max);
+
     if (width < min) return min - band(min - width);
+
     return width;
   };
+
   // The pointer position a width on screen stands for, so a grab mid-spring starts where the edge is.
   const unstretch = (width: number) => {
     const { min, max } = options();
+
     if (width > max) return max + unband(width - max);
+
     if (width < min) return min - unband(min - width);
+
     return width;
   };
+
   const clamp = (width: number) => Math.min(options().max, Math.max(options().min, width));
   const at = (dx: number) => rubberBand(start + options().direction * dx);
+
   const handlers = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onPanResponderGrant: () => {
@@ -77,6 +91,7 @@ function resizeDrag(options: () => ResizeOptions, springWidth: SharedValue<numbe
     onPanResponderRelease: (_, g) => {
       const raw = at(g.dx);
       const target = clamp(raw);
+
       if (raw === target) return commit(target);
       const settle = () => commit(target);
       springWidth.set(raw);
@@ -92,5 +107,6 @@ function resizeDrag(options: () => ResizeOptions, springWidth: SharedValue<numbe
     onPanResponderTerminate: () => commit(clamp(live ?? options().saved())),
     onPanResponderTerminationRequest: () => false,
   }).panHandlers;
+
   return { show, handlers };
 }

@@ -6,6 +6,7 @@ import { patchPage, usePages } from "../components/window/pageState.ts";
 import { subscribeMenuInputs } from "./menuUpdates.ts";
 
 const S = () => useBrowser.getState();
+
 function setup() {
   S().hydrate({});
   usePages.setState({ pages: {} });
@@ -13,6 +14,7 @@ function setup() {
   S().setFocusedWindow(windowId);
   const active = activeTabId(S(), windowId);
   const background = S().newTab(windowId, { url: "https://background.example", background: true });
+
   return { windowId, active, background };
 }
 
@@ -20,6 +22,7 @@ test("menu inputs ignore progress and audio reports, including the focused tab",
   const { active, background } = setup();
   let calls = 0;
   const stop = subscribeMenuInputs(() => calls++);
+
   try {
     for (let i = 0; i < 600; i++) S().updateLive(i % 2 ? active : background, { progress: i / 600, playingAudio: !!(i % 3) });
     patchPage(active, { status: "Link target", blocked: 4, fullscreen: true });
@@ -33,9 +36,11 @@ test("menu inputs follow loading and history availability for the focused tab", 
   const { active, background } = setup();
   let calls = 0;
   const stop = subscribeMenuInputs(() => calls++);
+
   try {
     S().updateLive(background, { isLoading: true, canGoBack: true, canGoForward: true });
     assert.equal(calls, 0, "a background tab does not control Stop, Back or Forward");
+
     for (const key of ["isLoading", "canGoBack", "canGoForward"]) {
       S().updateLive(active, { [key]: true });
       const after = calls;
@@ -43,6 +48,7 @@ test("menu inputs follow loading and history availability for the focused tab", 
       assert.equal(calls, after, "unchanged availability does not schedule a rebuild");
       S().updateLive(active, { [key]: false });
     }
+
     assert.equal(calls, 6);
     S().updateLive(active, { isLoading: true });
     const live = { ...S().live };
@@ -58,6 +64,7 @@ test("non-live changes and focus switches still invalidate the menu", () => {
   const { windowId, active, background } = setup();
   const seen = [];
   const stop = subscribeMenuInputs(() => seen.push(activeTabId(S(), S().ui.focusedWindowId)));
+
   try {
     S().updateSettings({ showFullUrl: !S().settings.showFullUrl });
     S().updateTab(active, { title: "Renamed" });
@@ -81,6 +88,7 @@ test("engine and new-tab history transitions invalidate without a browser-store 
   const { active, background } = setup();
   let calls = 0;
   const stop = subscribeMenuInputs(() => calls++);
+
   try {
     patchPage(background, { backToNewTab: true });
     assert.equal(calls, 0);
@@ -99,6 +107,7 @@ test("engine and new-tab history transitions invalidate without a browser-store 
   } finally {
     stop();
   }
+
   S().updateLive(active, { isLoading: true });
   S().updateTab(active, { title: "After unsubscribe" });
   patchPage(active, { backToNewTab: true });

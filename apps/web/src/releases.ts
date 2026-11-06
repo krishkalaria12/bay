@@ -5,7 +5,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 export type Item = { title: string; body: string };
+
 export type Section = { title: string; items: Item[] };
+
 export type Release = { version: string; date: string; headline: string; sections: Section[] };
 
 // Astro builds from apps/web.
@@ -30,20 +32,25 @@ function parse(version: string, source: string): Release {
   const sections: Section[] = [];
   let section: Section | null = null;
   let item: Item | null = null;
+
   for (const line of body.split("\n")) {
     const heading = line.match(/^#{2,3}\s+(.+)$/);
+
     if (heading) {
       section = { title: heading[1]!.trim(), items: [] };
       sections.push(section);
       item = null;
       continue;
     }
+
     const bullet = line.match(/^[-*]\s+(.*)$/);
+
     if (bullet) {
       if (!section) {
         section = { title: "", items: [] };
         sections.push(section);
       }
+
       // "**Title.** What changed", or a bullet with no title.
       const titled = bullet[1]!.match(/^\*\*(.+?)\*\*\s*(.*)$/);
       item = titled ? { title: titled[1]!.replace(/[.:]$/, ""), body: sentence(titled[2]!) } : { title: "", body: bullet[1]! };
@@ -54,13 +61,16 @@ function parse(version: string, source: string): Release {
       item = null;
     }
   }
+
   return { version, date: field("date"), headline: field("headline"), sections: sections.filter((s) => s.items.length) };
 }
 
 const newer = (a: string, b: string) => {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
+
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pb[i] ?? 0) - (pa[i] ?? 0);
+
   return 0;
 };
 
@@ -75,15 +85,19 @@ export function releases(): Release[] {
 /** "October 10, 2026" (the dates are days, read in UTC so they never shift). */
 export const longDate = (date: string) =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+
 export const shortDate = (date: string) =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 /** "10 added, 4 fixed", or for one untitled list, "10 highlights". */
 export function counts(release: Release): string {
   const named = release.sections.filter((s) => s.title);
+
   if (!named.length) {
     const n = release.sections.reduce((sum, s) => sum + s.items.length, 0);
+
     return `${n} highlight${n === 1 ? "" : "s"}`;
   }
+
   return named.map((s) => `${s.items.length} ${s.title.toLowerCase()}`).join(", ");
 }

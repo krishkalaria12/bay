@@ -48,15 +48,19 @@ const filtersText = (n: number) => `${n.toLocaleString()} ${n === 1 ? "filter" :
 
 function useContentBlocker() {
   const [state, setState] = useState<ContentBlockerState | null>(null);
+
   const refresh = () =>
     void getContentBlocker()
       .then(setState)
       .catch(() => {});
+
   useEffect(() => {
     refresh();
     const sub = onContentBlockerChange(refresh);
+
     return () => sub.remove();
   }, []);
+
   return [state, refresh] as const;
 }
 
@@ -64,8 +68,10 @@ const categoryOn = (s: ContentBlockerState, c: FilterListCategory) => s.enabled 
 
 async function setCategory(s: ContentBlockerState, c: FilterListCategory, on: boolean) {
   const lists = s.lists.filter((l) => l.category === c);
+
   for (const l of on ? lists.filter((l) => l.defaultOn || l.enabled) : lists.filter((l) => l.enabled)) await setFilterListEnabled(l.id, on);
   const anyOn = CATEGORIES.some((x) => (x.id === c ? on : categoryOn(s, x.id)));
+
   if (anyOn !== s.enabled) await setContentBlockerEnabled(anyOn);
 }
 
@@ -75,14 +81,17 @@ export function PrivacyPane() {
 
   const toggleCategory = async (c: FilterListCategory, on: boolean) => {
     if (!blocker) return;
+
     if (!on && c === "ads") {
       const { confirmed } = await confirm({
         title: "Turn Off Ad Blocker?",
         message: "Bay's Ad Blocker hides ads so pages load faster and feel cleaner.",
         confirmTitle: "Turn Off",
       });
+
       if (!confirmed) return;
     }
+
     // A change that fails changed nothing (or only the lists before it): show what the blocker has.
     await setCategory(blocker, c, on).finally(refresh);
   };
@@ -91,11 +100,15 @@ export function PrivacyPane() {
     <View>
       <SectionHeader title="Content blocking" description="Built on EasyList and EasyPrivacy. Blocking happens on this Mac." />
       <Group>
-        {CATEGORIES.filter((c) => c.toggle).map((c) => (
-          <Row key={c.id} settingId={c.settingId} title={c.toggle}>
-            <Toggle value={!!blocker && categoryOn(blocker, c.id)} disabled={!blocker} onChange={(v) => void toggleCategory(c.id, v)} />
-          </Row>
-        ))}
+        {CATEGORIES.flatMap((c) =>
+          c.toggle
+            ? [
+                <Row key={c.id} settingId={c.settingId} title={c.toggle}>
+                  <Toggle value={!!blocker && categoryOn(blocker, c.id)} disabled={!blocker} onChange={(v) => void toggleCategory(c.id, v)} />
+                </Row>,
+              ]
+            : [],
+        )}
         <Row
           settingId={SETTINGS.contentBlockerFilters.id}
           title={SETTINGS.contentBlockerFilters.title}
@@ -147,6 +160,7 @@ export function PrivacyPane() {
 // Turning a list on turns the blocker on too.
 async function enableFilterList(l: FilterList, on: boolean, blocker: ContentBlockerState | null) {
   await setFilterListEnabled(l.id, on);
+
   if (on && blocker && !blocker.enabled) await setContentBlockerEnabled(true);
 }
 
@@ -154,6 +168,7 @@ function FilterListsSheet() {
   const theme = useTheme();
   const [blocker, refresh] = useContentBlocker();
   const toggle = (l: FilterList, on: boolean) => enableFilterList(l, on, blocker).finally(refresh);
+
   return (
     <Sheet width={500} onClose={closeSettingsSheet}>
       <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Advanced Ad Block Settings</Text>
@@ -163,7 +178,9 @@ function FilterListsSheet() {
       <ScrollView style={{ maxHeight: 420, marginTop: 8 }}>
         {CATEGORIES.map((c) => {
           const lists = blocker?.lists.filter((l) => l.category === c.id) ?? [];
+
           if (!lists.length) return null;
+
           return (
             <View key={c.id}>
               <SectionHeader title={c.section} />
@@ -197,13 +214,17 @@ function ZoomLevels() {
   const profiles = useSpaces();
   const [selected, setSelected] = useState(spaceId);
   const [levels, setLevels] = useState<Record<string, number>>({});
+
   const load = () =>
     void getZoomLevels(engineProfile(selected))
       .then(setLevels)
       .catch(() => {});
+
   useEffect(load, [selected]);
   const hosts = Object.keys(levels).sort();
+
   if (!hosts.length) return null;
+
   return (
     <>
       <SectionHeader
@@ -257,10 +278,12 @@ function SitePermissions() {
   const profiles = useSpaces();
   const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
   const [origins, setOrigins] = useState<string[] | null>(null);
+
   const refresh = () =>
     void getSiteSettingsOrigins(engineProfile(spaceId))
       .then(setOrigins)
       .catch(() => setOrigins([]));
+
   useEffect(refresh, [spaceId]);
 
   return (
@@ -295,10 +318,12 @@ function AppLinks() {
   const profiles = useSpaces();
   const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
   const [allowed, setAllowed] = useState<ExternalAppAllowance[] | null>(null);
+
   const refresh = () =>
     void getExternalAppAllowances(engineProfile(spaceId))
       .then(setAllowed)
       .catch(() => setAllowed([]));
+
   useEffect(refresh, [spaceId]);
 
   return (
@@ -336,16 +361,20 @@ function SiteSheet({ spaceId, origin, onChanged }: { spaceId: string; origin: st
   const profile = engineProfile(spaceId);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [status, setStatus] = useState("");
+
   const load = () =>
     void getSiteSettings(profile, origin)
       .then(setSettings)
       .catch(() => {});
+
   useEffect(load, []);
+
   const set = async (type: SiteSettingType, value: SiteSettingValue) => {
     await setSiteSetting(profile, origin, type, value);
     load();
     onChanged();
   };
+
   return (
     <Sheet width={460} onClose={closeSettingsSheet}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -354,16 +383,20 @@ function SiteSheet({ spaceId, origin, onChanged }: { spaceId: string; origin: st
       </View>
       <ScrollView style={{ maxHeight: 380, marginTop: 12 }}>
         <Group>
-          {SETTING_LABELS.filter(([type]) => settings?.[type]).map(([type, label]) => (
-            <Row key={type} title={label} description={settings![type].isDefault ? `Default (${settings![type].value})` : undefined}>
-              <PopUp
-                value={settings![type].isDefault ? "default" : settings![type].value}
-                options={VALUE_OPTIONS}
-                onChange={(v) => void set(type, v)}
-                minWidth={100}
-              />
-            </Row>
-          ))}
+          {SETTING_LABELS.flatMap(([type, label]) =>
+            settings?.[type]
+              ? [
+                  <Row key={type} title={label} description={settings![type].isDefault ? `Default (${settings![type].value})` : undefined}>
+                    <PopUp
+                      value={settings![type].isDefault ? "default" : settings![type].value}
+                      options={VALUE_OPTIONS}
+                      onChange={(v) => void set(type, v)}
+                      minWidth={100}
+                    />
+                  </Row>,
+                ]
+              : [],
+          )}
         </Group>
       </ScrollView>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16 }}>

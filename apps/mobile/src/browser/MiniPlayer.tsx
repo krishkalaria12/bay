@@ -18,6 +18,7 @@ export interface MiniPlayerProps {
 export function MiniPlayer({ title, site, playing, onOpen, onToggle, onClose }: MiniPlayerProps): JSX.Element {
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
+
   return (
     <Surface radius={22} style={{ paddingVertical: 6, paddingLeft: 14, paddingRight: 6 }}>
       <View className="flex-row items-center gap-1">

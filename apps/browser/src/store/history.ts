@@ -25,11 +25,13 @@ export function withoutVisitsSince(entry: HistoryEntry, since: number): HistoryE
   if (entry.lastVisit < since) return entry;
   const times = entry.visitTimes?.length ? entry.visitTimes : [entry.lastVisit];
   const kept = times.filter((t) => t < since);
+
   if (!kept.length) return null;
+
   return { ...entry, visits: entry.visits - (times.length - kept.length), lastVisit: kept[kept.length - 1]!, visitTimes: kept };
 }
 
-const failed = (what: string) => (error: unknown) => console.warn(`[history] ${what}`, error);
+const failed = (what: string) => (error: Error) => console.warn(`[history] ${what}`, error);
 
 export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice> = (set) => ({
   history: {},
@@ -48,16 +50,21 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
     let added = 0;
     set((s) => {
       const byUrl = new Map((s.history[spaceId] ?? []).map((h) => [h.url, h]));
+
       for (const e of rows) {
         const existing = byUrl.get(e.url);
+
         if (existing) continue;
         added++;
         byUrl.set(e.url, { url: e.url, title: e.title, favicon: null, visits: Math.max(1, e.visits), lastVisit: e.lastVisit, visitTimes: [e.lastVisit] });
       }
+
       const merged = [...byUrl.values()].sort((a, b) => b.lastVisit - a.lastVisit).slice(0, MAX_HISTORY);
+
       return { history: { ...s.history, [spaceId]: merged } };
     });
     void importHistoryRows(engineProfile(spaceId), rows).catch(failed("import"));
+
     return added;
   },
 
@@ -65,6 +72,7 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
     set((s) => {
       if (since === undefined) return { history: { ...s.history, [spaceId]: [] } };
       const kept = (s.history[spaceId] ?? []).map((h) => withoutVisitsSince(h, since)).filter((h): h is HistoryEntry => !!h);
+
       return { history: { ...s.history, [spaceId]: kept.sort((a, b) => b.lastVisit - a.lastVisit) } };
     });
   },

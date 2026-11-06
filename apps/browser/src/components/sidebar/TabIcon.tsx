@@ -36,6 +36,7 @@ export const TabIcon = memo(function TabIcon({
   const iconSize = size ?? metrics.iconSize;
   const sleeping = useIsSleeping(tabId ?? "");
   const props = { url, favicon, icon, size: iconSize, color, direct };
+
   return (
     <View style={{ opacity: sleeping ? SLEEPING_OPACITY : 1 }}>
       {profile || !tabId ? <Icon {...props} spaceId={profile} /> : <TabSpaceIcon {...props} tabId={tabId} />}
@@ -48,8 +49,10 @@ export const TabIcon = memo(function TabIcon({
 function EngineMark({ tabId, size }: { tabId: string; size: number }) {
   const theme = useTheme();
   const mark = useEngineView((s) => engineMark(s, tabId));
+
   if (!mark) return null;
   const box = Math.round(size * 0.6);
+
   return (
     <View
       pointerEvents="none"
@@ -75,6 +78,7 @@ function EngineMark({ tabId, size }: { tabId: string; size: number }) {
 // the sidebar, where every row runs its selectors on every store update.
 function TabSpaceIcon({ tabId, ...props }: Omit<Parameters<typeof Icon>[0], "spaceId"> & { tabId: string }) {
   const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId);
+
   return <Icon {...props} spaceId={spaceId} />;
 }
 
@@ -96,9 +100,11 @@ function Icon({
   direct?: boolean;
 }) {
   const theme = useTheme();
+
   if (icon?.startsWith(SYMBOL_PREFIX)) {
     // A chosen symbol keeps its colour; `color` is for the plain ones (a folder's own).
     const own = color ? undefined : iconColor(icon, theme.dark);
+
     return (
       <Symbol
         name={icon.slice(SYMBOL_PREFIX.length)}
@@ -110,6 +116,7 @@ function Icon({
       />
     );
   }
+
   if (icon) {
     return (
       <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
@@ -117,5 +124,6 @@ function Icon({
       </View>
     );
   }
+
   return <Favicon url={url} favicon={favicon} size={size} spaceId={spaceId} direct={direct} />;
 }

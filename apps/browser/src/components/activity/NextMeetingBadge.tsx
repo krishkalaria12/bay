@@ -14,8 +14,10 @@ export function NextMeetingBadge({ tabId }: { tabId: string }) {
   // The URL, not the check: the selector runs on every store update, the regex only when it changes.
   const pinnedUrl = useQuietBrowser((s) => {
     const t = s.tabs[tabId];
+
     return t?.pinned ? (t.pinnedUrl ?? t.url) : null;
   });
+
   const calendar = pinnedUrl !== null && isCalendarUrl(pinnedUrl);
   const on = useLive((s) => s.calendar.showTimeToNext);
   const events = useCalendar((s) => s.events);
@@ -37,8 +39,10 @@ export function NextMeetingBadge({ tabId }: { tabId: string }) {
     );
   }, [text]);
   const shownStyle = useAnimatedStyle(() => ({ opacity: shown.get(), transform: [{ scale: interpolate(shown.get(), [0, 1], [0.5, 1]) }] }));
+
   if (!label) return null;
   const live = label === "Now";
+
   return (
     <Animated.View
       pointerEvents="none"

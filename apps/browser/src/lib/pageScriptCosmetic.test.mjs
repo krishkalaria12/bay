@@ -5,7 +5,9 @@ import { test } from "node:test";
 const script = readFileSync(new URL("../../../../packages/chromium/ios/page_script.js", import.meta.url), "utf8");
 const start = script.indexOf("  let cosmeticOn = false;");
 const end = script.indexOf("  handlers.config =", start);
+
 assert.ok(start > 0 && end > start);
+
 const source = script.slice(start, end);
 
 class Style {
@@ -30,14 +32,17 @@ class Style {
   }
   set cssText(text) {
     this.values.clear();
+
     for (const declaration of text.split(";")) {
       const colon = declaration.indexOf(":");
+
       if (colon < 1) continue;
       const value = declaration.slice(colon + 1).trim();
       this.setProperty(declaration.slice(0, colon).trim(), value.replace(/\s*!important$/, ""), value.endsWith("!important") ? "important" : "");
     }
   }
 }
+
 class Element {
   nodeType = 1;
   children = [];
@@ -48,12 +53,17 @@ class Element {
     this.classList = [...classes];
     this.classList.remove = (name) => {
       const index = this.classList.indexOf(name);
+
       if (index >= 0) this.classList.splice(index, 1);
     };
+
     this.textContent = text;
     this.tagName = tag;
+
     if (id) this.attributes.set("id", id);
+
     for (const [key, value] of Object.entries(attributes)) this.attributes.set(key, value);
+
     for (const child of children) this.append(child);
   }
   append(child) {
@@ -78,25 +88,33 @@ class Element {
   }
   matches(selector) {
     if (selector === "[id],[class]") return this.attributes.has("id") || this.classList.length > 0;
+
     if (selector.startsWith(".")) return this.classList.includes(selector.slice(1));
+
     if (selector.startsWith("#")) return this.getAttribute("id") === selector.slice(1);
+
     return selector === "*" || this.tagName === selector;
   }
   querySelectorAll(selector) {
     const out = [];
     const direct = selector.startsWith(":scope > ");
     const match = direct ? selector.slice(9) : selector;
+
     const visit = (el) => {
       for (const child of el.children) {
         if (child.matches(match)) out.push(child);
+
         if (!direct) visit(child);
       }
     };
+
     visit(this);
+
     return out;
   }
   closest(selector) {
     for (let node = this; node; node = node.parentElement) if (node.matches(selector)) return node;
+
     return null;
   }
 }
@@ -107,6 +125,7 @@ function page(elements = []) {
   const observers = [];
   const messages = [];
   const location = { href: "https://example.com/news?q=1", pathname: "/news", search: "?q=1" };
+
   const document = {
     nodeType: 9,
     documentElement: root,
@@ -115,10 +134,12 @@ function page(elements = []) {
     createExpression: (xpath) => ({
       evaluate: (node) => {
         const matches = node.querySelectorAll(xpath.replace(".//", ""));
+
         return { snapshotLength: matches.length, snapshotItem: (index) => matches[index] };
       },
     }),
   };
+
   class MutationObserver {
     connected = false;
     constructor(callback) {
@@ -132,6 +153,10 @@ function page(elements = []) {
       this.connected = false;
     }
   }
+
+  // The slice uses page_script.js's own null-prototype-proof string check; mirrors it here.
+  const isStr = (value) => value !== null && value !== undefined && !(value instanceof Object) && Object.getPrototypeOf(value) === String.prototype;
+
   const run = new Function(
     "document",
     "MutationObserver",
@@ -144,8 +169,10 @@ function page(elements = []) {
     "getComputedStyle",
     "window",
     "url",
+    "isStr",
     `${source}; return { installCosmetic, installProcedural };`,
   );
+
   const api = run(
     document,
     MutationObserver,
@@ -158,14 +185,18 @@ function page(elements = []) {
     (node, pseudo) => node.computed?.[pseudo ?? "normal"] ?? node.style,
     {},
     location.href,
+    isStr,
   );
+
   const drain = () => {
     let runs = 0;
+
     while (timers.length) {
       assert.ok(runs++ < 20, "cosmetic work does not schedule itself forever");
       timers.shift()();
     }
   };
+
   return {
     ...api,
     root,
@@ -179,6 +210,7 @@ function page(elements = []) {
     },
   };
 }
+
 const css = (arg) => ({ type: "css-selector", arg });
 const op = (type, arg) => ({ type, arg });
 const rule = (selector, action) => JSON.stringify({ selector, ...(action && { action }) });
@@ -190,11 +222,13 @@ test("generic cosmetics send every class and id in batches within the native lim
     p.installCosmetic();
     p.drain();
     assert.equal(p.messages.length, Math.ceil(count / 4000));
+
     for (const message of p.messages) {
       assert.equal(message.url, p.location.href);
       assert.ok(message.classes.length <= 4000);
       assert.ok(message.ids.length <= 4000);
     }
+
     // Model the native boundary: no names may disappear even after it truncates a message.
     assert.equal(new Set(p.messages.flatMap((m) => m.classes.slice(0, 4000))).size, count);
     assert.equal(new Set(p.messages.flatMap((m) => m.ids.slice(0, 4000))).size, count);
@@ -222,11 +256,13 @@ test("attribute changes respect the shared cosmetic budget and leave procedural 
   p.installCosmetic();
   p.installProcedural([rule([css(".tile"), op("has-text", "Sponsored")])]);
   p.drain();
+
   for (let i = 0; i < 12500; i++) {
     changing.attributes.set("id", `id-${i}`);
     changing.classList = [`class-${i}`];
     p.mutate([{ type: "attributes", target: changing }]);
   }
+
   assert.equal(
     p.messages.reduce((count, message) => count + message.classes.length + message.ids.length, 0),
     20000,

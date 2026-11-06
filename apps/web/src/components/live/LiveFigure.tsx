@@ -10,8 +10,10 @@ const edge = (b: Box, p: { x: number; y: number }, pad: number) => {
     midY = b.y + b.h / 2,
     dx = p.x - midX,
     dy = p.y - midY;
+
   const s = Math.min(dx ? b.w / 2 / Math.abs(dx) : Infinity, dy ? b.h / 2 / Math.abs(dy) : Infinity);
   const L = Math.hypot(dx, dy) || 1;
+
   return { x: midX + dx * s + (dx / L) * pad, y: midY + dy * s + (dy / L) * pad };
 };
 
@@ -21,37 +23,46 @@ const arrow = (a: { x: number; y: number }, b: { x: number; y: number }, bend: n
     my = (a.y + b.y) / 2,
     dx = b.x - a.x,
     dy = b.y - a.y;
+
   const qx = mx - dy * bend,
     qy = my + dx * bend;
+
   const tx = b.x - qx,
     ty = b.y - qy,
     tl = Math.hypot(tx, ty) || 1,
     ux = tx / tl,
     uy = ty / tl;
+
   const turn = (t: number) => ({ x: -ux * Math.cos(t) + uy * Math.sin(t), y: -uy * Math.cos(t) - ux * Math.sin(t) });
+
   const h1 = turn(0.5),
     h2 = turn(-0.5),
     hl = 11;
+
   return [`M${a.x} ${a.y} Q${qx} ${qy} ${b.x} ${b.y}`, `M${b.x + h1.x * hl} ${b.y + h1.y * hl} L${b.x} ${b.y} L${b.x + h2.x * hl} ${b.y + h2.y * hl}`];
 };
 
+/** The windows a space can keep tabs for, as the tidy control offers them. */
+const PUT_AWAY_AFTER = [
+  [12, "12 hours"],
+  [24, "1 day"],
+  [168, "7 days"],
+] as const;
+
 function TidyControls({ bay }: { bay: Bay }) {
   const sp = bay.s.spaces[bay.s.space];
+
   return (
     <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-[13px]">
       <span className="text-muted">Put away after</span>
       <span className="flex rounded-xl bg-white p-1 shadow-[0_0_0_1px_var(--color-line)]">
-        {[
-          [12, "12 hours"],
-          [24, "1 day"],
-          [168, "7 days"],
-        ].map(([h, label]) => (
+        {PUT_AWAY_AFTER.map(([h, label]) => (
           <button
             key={h}
             type="button"
             onClick={() => {
               bay.touch();
-              bay.keep(h as number);
+              bay.keep(h);
             }}
             className={cx(
               "cursor-pointer rounded-lg px-3 py-1.5 font-semibold transition-colors",
@@ -100,27 +111,38 @@ export default function LiveFigure({ preset, note, spot, noteClass, bend = 0.2, 
     const draw = () => {
       const f = fig.current,
         n = noteEl.current;
+
       const t = spot ? f?.querySelector<HTMLElement>(`[data-spot="${spot}"]`) : null;
+
       if (!f || !n || !t || !t.getClientRects().length) return setPaths([]);
       const o = f.getBoundingClientRect();
+
       const box = (el: Element): Box => {
         const r = el.getBoundingClientRect();
+
         return { x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height };
       };
+
       const nb = box(n),
         tb = box(t);
+
       const end = edge(tb, { x: nb.x + nb.w / 2, y: nb.y + nb.h / 2 }, 8);
       setPaths(arrow(edge(nb, end, 6), end, bend).map((d) => d.replace(/\d+\.\d+/g, (x) => (+x).toFixed(1))));
     };
+
     draw();
     const ro = new ResizeObserver(draw);
+
     if (fig.current) ro.observe(fig.current);
+
     return () => ro.disconnect();
   }, [bay.s, spot, bend]);
 
   useEffect(() => {
     const f = fig.current;
+
     if (!f) return;
+
     const io = new IntersectionObserver(
       ([e]) => {
         if (e.isIntersecting) {
@@ -130,7 +152,9 @@ export default function LiveFigure({ preset, note, spot, noteClass, bend = 0.2, 
       },
       { rootMargin: "0px 0px -15% 0px" },
     );
+
     io.observe(f);
+
     return () => io.disconnect();
   }, []);
 

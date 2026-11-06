@@ -4,16 +4,20 @@ import { test } from "node:test";
 import { decodeSharedCollection, sharedCollectionAppUrl, sharedCollectionToken, sharedCollectionUrl, encodeSharedCollection } from "@bay/core";
 
 const native = new URL("../test-native-stub.mjs", import.meta.url).href;
+
 globalThis.collectionEffects = { copied: [], toasts: [] };
+
 registerHooks({
   resolve(specifier, context, next) {
     if (!context.parentURL?.endsWith("/lib/sharedLinkEncoding.ts")) return next(specifier, context);
+
     const source =
       specifier === "@bay/desktop"
         ? `export * from ${JSON.stringify(native)}; export const copyText = (text) => globalThis.collectionEffects.copied.push(text);`
         : specifier === "../components/ui/toasts"
           ? "export const showToast = (...args) => globalThis.collectionEffects.toasts.push(args);"
           : null;
+
     return source ? { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true } : next(specifier, context);
   },
 });
@@ -34,6 +38,7 @@ function setup() {
   const w = S().createWindow({ url: "https://first.example" });
   const a = S().windows[w].activeTabIds[S().windows[w].spaceId];
   const b = S().newTab(w, { url: "https://second.example" });
+
   return { w, a, b };
 }
 
@@ -56,6 +61,7 @@ test("folder snapshots preserve nested, empty and interleaved entries through im
     ["f:", "f:", "t:"],
   );
   const payload = JSON.stringify(decodeSharedCollection(encodeSharedCollection(snapshot)));
+
   for (const secret of [a, b, child, empty, "private image", "private icon", "muted"]) assert.equal(payload.includes(secret), false);
 });
 
@@ -67,8 +73,10 @@ test("sharing requires consent before replacing the clipboard and preserves snap
   shellDialogAnswers.confirm = async (options) => {
     assert.match(options.message, /Anyone with this link/);
     assert.equal(options.confirmTitle, "Copy Share Link");
+
     return { confirmed: true };
   };
+
   await shareCollection(w, source);
   const decoded = decodeSharedCollection(sharedCollectionToken(effects.copied[0]));
   assert.deepEqual(
@@ -91,10 +99,12 @@ test("split snapshots include every pane in split order", () => {
 
 test("private, internal and local-only tabs never reach the clipboard", async () => {
   const { w, a } = setup();
+
   for (const url of ["bay://history", "file:///Users/person/secret.txt", "http://192.168.1.2/private"]) {
     S().updateTab(a, { url });
     await shareCollection(w, { kind: "selection", tabIds: [a] });
   }
+
   const privateWindow = S().createWindow({ incognito: true, url: "https://secret.example" });
   const privateTab = S().windows[privateWindow].activeTabIds[S().windows[privateWindow].spaceId];
   assert.throws(() => collectionSnapshot(S(), { kind: "selection", tabIds: [privateTab] }), /Private tabs/);
@@ -119,8 +129,10 @@ test("import confirms its destination and retains that space if the user switche
     assert.equal(options.confirmTitle, "Add Folder");
     assert.match(options.message, /1 link as a folder/);
     S().switchSpace(w, other);
+
     return { confirmed: true };
   };
+
   await importCollectionUrl(sharedCollectionAppUrl(encodeSharedCollection(collection)), w);
   const folder = Object.values(S().pinnedFolders).find((f) => f.name === "Research");
   assert.equal(folder.spaceId, spaceId);

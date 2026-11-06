@@ -16,6 +16,7 @@ export function PaletteSurface({
   raised?: boolean;
 }) {
   const theme = useTheme();
+
   return (
     <Surface
       fill={theme.glass ? "#00000000" : theme.panel}

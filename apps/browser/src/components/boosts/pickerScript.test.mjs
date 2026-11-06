@@ -7,6 +7,7 @@ import { pickerScript } from "./pickerScript.ts";
 // Explicit CSSOM readbacks include pending substitutions. Any write to the target's declarations fails the test.
 function untouchedStyle(cssText = "", declarations = {}) {
   const writes = [];
+
   const style = new Proxy(
     {
       cssText,
@@ -18,14 +19,17 @@ function untouchedStyle(cssText = "", declarations = {}) {
     {
       set(_target, property, value) {
         writes.push([property, value]);
+
         return true;
       },
     },
   );
+
   const snapshot = () => ({
     cssText: style.cssText,
     declarations: Object.keys(declarations).map((property) => [property, style.getPropertyValue(property), style.getPropertyPriority(property)]),
   });
+
   return { style, writes, snapshot };
 }
 
@@ -34,7 +38,9 @@ function page({ tag = "div", id = "target", classes = [], matches, escapes = {},
   const listeners = new Map(),
     timers = new Map(),
     messages = [];
+
   let timerId = 0;
+
   const node = (tagName) => {
     return {
       tagName: tagName.toUpperCase(),
@@ -56,7 +62,9 @@ function page({ tag = "div", id = "target", classes = [], matches, escapes = {},
             this.cancels++;
           },
         };
+
         this.animations.push(animation);
+
         return animation;
       },
       getAnimations() {
@@ -74,17 +82,22 @@ function page({ tag = "div", id = "target", classes = [], matches, escapes = {},
       },
     };
   };
+
   const body = node("body"),
     target = node(tag),
     controls = new Map();
+
   Object.assign(target, { style: inline.style, id, classList: Object.assign(classes, { toggle() {} }), parentNode: body });
   body.children.push(target);
+
   const shadow = {
     querySelector: (selector) => {
       if (!controls.has(selector)) controls.set(selector, node("button"));
+
       return controls.get(selector);
     },
   };
+
   const document = {
     body,
     documentElement: node("html"),
@@ -93,6 +106,7 @@ function page({ tag = "div", id = "target", classes = [], matches, escapes = {},
     createTextNode: (textContent) => ({ textContent }),
     createElement: (tagName) => Object.assign(node(tagName), { attachShadow: () => shadow }),
   };
+
   const context = vm.createContext({
     document,
     innerWidth: 1000,
@@ -110,22 +124,28 @@ function page({ tag = "div", id = "target", classes = [], matches, escapes = {},
     setTimeout: (fn) => {
       const id = ++timerId;
       timers.set(id, fn);
+
       return id;
     },
     clearTimeout: (id) => timers.delete(id),
   });
+
   const run = (mode, pickerId = "one") => vm.runInContext(`(function () { ${pickerScript(mode, pickerId)} })()`, context);
+
   const event = (type, extra = {}) => {
     for (const fn of Array.from(listeners.get(type) ?? []))
       fn({ isTrusted: true, target, clientX: 20, clientY: 20, preventDefault() {}, stopImmediatePropagation() {}, ...extra });
   };
+
   const click = (selector) => controls.get(selector).events.get("click")();
+
   const flush = () => {
     for (const [id, fn] of Array.from(timers)) {
       timers.delete(id);
       fn();
     }
   };
+
   return { run, event, click, flush, messages, target, document, timers };
 }
 
@@ -138,6 +158,7 @@ for (const stop of ["done", "escape", "uninstall", "replacement"]) {
     assert.equal(p.messages.length, 1);
     assert.equal(p.messages[0].type, "select");
     assert.equal(p.messages[0].pickerId, "one");
+
     if (stop === "done") p.click(".done");
     else if (stop === "escape") p.event("keydown", { key: "Escape" });
     else p.run(stop === "replacement" ? "zap" : null, "two");
@@ -154,6 +175,7 @@ test("shadow content picks the document host, leaving unrelated document nodes a
   p.target.shadowRoot = {
     elementFromPoint: () => {
       descended = true;
+
       return { tagName: "DIV", nodeType: 1, classList: [], id: "inner" };
     },
   };
@@ -236,6 +258,7 @@ const styleCases = [
     },
   ],
 ];
+
 for (const cleanup of ["timer", "done", "escape", "uninstall", "pagehide", "replacement"]) {
   for (const [name, cssText, declarations] of styleCases) {
     test(`owned fade leaves ${name} untouched through repeated zaps and ${cleanup}`, () => {
@@ -245,12 +268,14 @@ for (const cleanup of ["timer", "done", "escape", "uninstall", "pagehide", "repl
       // A page-owned animation must remain alone, even when it exists before the picker.
       const pageAnimation = p.target.animate([{ transform: "scale(2)" }], { duration: 1000 });
       p.run("zap");
+
       for (let i = 0; i < 2; i++) {
         p.event("click");
         p.click(".this");
         assert.deepEqual(inline.snapshot(), before);
         assert.deepEqual(inline.writes, [], "no temporary or cleanup writes to page styles");
       }
+
       const [firstFade, latestFade] = p.target.animations.slice(1);
       assert.equal(firstFade.cancels, 1, "repeated zap cancels the previous owned animation");
       assert.equal(latestFade.cancels, 0);
@@ -261,6 +286,7 @@ for (const cleanup of ["timer", "done", "escape", "uninstall", "pagehide", "repl
       );
       assert.equal(latestFade.options.duration, 140);
       assert.equal(latestFade.options.fill, "forwards");
+
       if (cleanup === "timer") p.flush();
       else if (cleanup === "pagehide") p.event("pagehide");
       else if (cleanup === "done") p.click(".done");

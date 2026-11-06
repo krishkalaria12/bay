@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, reduceBrowserData, siteHost } from "../src/store/model.ts";
+import type { JsonValue } from "../src/store/types.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const page = (id: string, url: string, lastVisit = 0) => ({ ...createTab(id, lastVisit, url), title: id });
@@ -38,6 +39,7 @@ test("closing the last tab leaves a blank one, and blank tabs aren't archived", 
 
 test("stale tabs are archived, except the current one and pinned sites", () => {
   const now = 10 * DAY;
+
   let data = {
     ...initialBrowserData(page("current", "https://current.com/", 0)),
     tabs: [
@@ -49,6 +51,7 @@ test("stale tabs are archived, except the current one and pinned sites", () => {
     activeTabId: "current",
     pinnedSites: [{ id: "p", url: "https://pinned.com/", title: "Pinned", favicon: null }],
   };
+
   data = reduceBrowserData(data, { type: "archive-stale", now });
   assert.deepEqual(
     data.tabs.map((tab) => tab.id),
@@ -79,6 +82,7 @@ test("visits count up and move to the top of history", () => {
 
 test("saved state is validated and repaired", () => {
   const fallback = initialBrowserData(createTab("fallback", 0));
+
   const data = parseBrowserData(
     {
       version: 1,
@@ -92,6 +96,7 @@ test("saved state is validated and repaired", () => {
     },
     fallback,
   );
+
   assert.deepEqual(
     data.tabs.map((tab) => tab.url),
     ["https://a.com/"],
@@ -206,7 +211,7 @@ test("reader settings survive persistence and clamp the text size", () => {
 
 test("malformed reader settings use defaults and finite sizes stay within bounds", () => {
   const fallback = initialBrowserData(createTab("a", 0));
-  const restore = (reader: unknown) => parseBrowserData({ version: 1, preferences: { reader } }, fallback).preferences.reader;
+  const restore = (reader: JsonValue) => parseBrowserData({ version: 1, preferences: { reader } }, fallback).preferences.reader;
   assert.deepEqual(restore({ theme: "unknown", font: [], size: NaN }), { theme: "paper", font: "serif", size: 19 });
   assert.equal(restore({ size: -10 }).size, 14);
   assert.equal(restore({ size: 20.6 }).size, 21);
@@ -251,6 +256,7 @@ test("downloads track an engine's updates and survive a restart as finished or f
     private: false,
     ...extra,
   });
+
   let data = initialBrowserData(page("a", "https://a.com/"));
   data = reduceBrowserData(data, { type: "download", update: update("started"), now: 1 });
   data = reduceBrowserData(data, { type: "download", update: update("progress", { received: 10, total: 100 }), now: 2 });
@@ -342,6 +348,7 @@ test("the archive keeps one entry per address, and entries can be removed or cle
       { ...page("y", "https://x.com/"), closedAt: 9 },
     ],
   };
+
   assert.deepEqual(
     parseBrowserData(JSON.parse(JSON.stringify(saved)), data).archive.map((tab) => tab.id),
     ["y"],
@@ -369,10 +376,12 @@ test("the wallpaper is one of Bay's built-ins", () => {
 test("site icons are kept per host, and clearing history drops the ones nothing else shows", () => {
   assert.equal(siteHost("https://www.Example.com:8080/a?b"), "example.com");
   assert.equal(siteHost("about:blank"), "");
+
   let data = {
     ...initialBrowserData(page("a", "https://www.a.com/")),
     history: [{ url: "https://h.com/", title: "", favicon: null, visits: 1, lastVisit: 1 }],
   };
+
   data = reduceBrowserData(data, { type: "favicon", host: "a.com", uri: "file:///a" });
   data = reduceBrowserData(data, { type: "favicon", host: "h.com", uri: "file:///h" });
   assert.deepEqual(Object.keys(data.favicons), ["a.com", "h.com"]);

@@ -1,4 +1,5 @@
 export type LiveSourceId = "github" | "bitbucket" | "notion" | "confluence" | "gdrive";
+
 export type LiveFolderKind = "pullRequests" | "documents";
 
 export type LiveFolder = {

@@ -193,13 +193,17 @@ export function searchEngines(settings: Settings): SearchEngine[] {
   const custom = settings.customSearchEngines ?? NO_CUSTOM_ENGINES;
   const extension = settings.extensionSearchEngines ?? NO_EXTENSION_ENGINES;
   const cached = engineCache.get(custom);
+
   if (cached && cached.legacyUrl === settings.customSearchUrl && cached.extension === extension) return cached.engines;
   const engines = allEngines(custom, extension);
+
   if (settings.customSearchUrl?.includes("%s")) {
     const at = engines.findIndex((e) => e.extension);
     engines.splice(at < 0 ? engines.length : at, 0, { id: "custom", name: "Custom", keyword: "custom", url: settings.customSearchUrl, custom: true });
   }
+
   engineCache.set(custom, { legacyUrl: settings.customSearchUrl, extension, engines });
+
   return engines;
 }
 
@@ -209,6 +213,7 @@ export function controllingSearchExtension(settings: Settings): ExtensionSearchE
 
 export function defaultSearchEngine(settings: Settings): SearchEngine {
   const controlling = controllingSearchExtension(settings);
+
   return engineById(searchEngines(settings), controlling ? extensionEngineId(controlling.extensionId) : settings.searchEngine);
 }
 
@@ -247,8 +252,10 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
           : "openLinksInLittleBay" in patch
             ? { externalLinkDefault: null }
             : {}),
-        ...("externalLinkRules" in patch ? { externalLinkRules: normalizeExternalLinkRules(patch.externalLinkRules) } : {}),
-        ...("awakeSites" in patch ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites } : {}),
+        ...("externalLinkRules" in patch ? { externalLinkRules: normalizeExternalLinkRules(patch.externalLinkRules) } : undefined),
+        ...("awakeSites" in patch
+          ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites }
+          : undefined),
       },
     }));
   },
@@ -260,18 +267,23 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
   addCustomEngine(input) {
     const { settings } = get();
     const error = validateCustomEngine(settings, input);
+
     if (error) return { error };
     const engine = makeCustomEngine(input, newEngineId());
     get().updateSettings({ customSearchEngines: [...settings.customSearchEngines, engine] });
+
     return { id: engine.id };
   },
 
   updateCustomEngine(id, input) {
     const { settings } = get();
+
     if (!settings.customSearchEngines.some((e) => e.id === id)) return "This search engine no longer exists.";
     const error = validateCustomEngine(settings, input, id);
+
     if (error) return error;
     get().updateSettings({ customSearchEngines: settings.customSearchEngines.map((e) => (e.id === id ? makeCustomEngine(input, id) : e)) });
+
     return null;
   },
 
@@ -279,7 +291,7 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
     const { settings } = get();
     get().updateSettings({
       customSearchEngines: settings.customSearchEngines.filter((e) => e.id !== id),
-      ...(settings.searchEngine === id ? { searchEngine: DEFAULT_SETTINGS.searchEngine } : {}),
+      ...(settings.searchEngine === id ? { searchEngine: DEFAULT_SETTINGS.searchEngine } : undefined),
     });
   },
 });

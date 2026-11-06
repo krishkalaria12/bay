@@ -31,11 +31,13 @@ test("boost sync applies records, ignores malformed ones and drops code from ano
   useBoosts.setState({ boosts: {}, scripts: {} });
   addBoost(newBoost("keep", "a.com", 1));
   addBoost(newBoost("gone", "b.com", 1), "local()");
+
   const visible = new Map([
     ["boost:new", { ...newBoost("ignored", "c.com", 2), script: "evil()", css: "p{}" }],
     ["boost:bad", { host: "not a host" }],
     ["boost:keep", 42],
   ]);
+
   boostsAdapter.apply(visible, new Set(["boost:new", "boost:bad", "boost:keep", "boost:gone"]), () => undefined);
   const s = useBoosts.getState();
   assert.deepEqual(Object.keys(s.boosts).sort(), ["keep", "new"]);

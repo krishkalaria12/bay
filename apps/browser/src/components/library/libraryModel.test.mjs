@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { mediaItem, parseEasel, readLibrary, validItem, webLink } from "./model.ts";
 
 const doc = { id: "board", title: "Research", background: "#FFFFFF", spaceId: "default", createdAt: 1, updatedAt: 2, items: [] };
+
 const image = {
   id: "img",
   kind: "image",
@@ -23,6 +24,7 @@ test("Library reload preserves geometry, original source crop and default engine
 
 test("invalid records cannot pass nonfinite geometry or executable links to canvas/export", () => {
   assert.equal(validItem(image), true);
+
   for (const patch of [
     { width: -1 },
     { x: Infinity },

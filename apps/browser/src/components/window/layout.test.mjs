@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { addressBarInSidebar, besideRow, sidebarOnRight, sidebarSiteControlsGeometry } = await import("./layout.ts");
 const S = () => useBrowser.getState();

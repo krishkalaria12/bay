@@ -36,6 +36,7 @@ const WIDTH = 268;
 const PAD = 12;
 const FIELD = WIDTH - 2 * PAD;
 const CASE_TITLES: Record<BoostTextCase, string> = { none: "Aa", capitalize: "Ab", uppercase: "AB", lowercase: "ab" };
+
 // The small dot's places round the wheel from the big one: Arc's soft pair first, then contrasts.
 const SPREADS = [40, 180, 150, 310, 0];
 
@@ -43,7 +44,9 @@ export function BoostEditor({ tabId, right = 10, top = 10, maxHeight }: { tabId:
   const theme = useTheme();
   const session = useEditorSession(tabId);
   const boost = useBoosts((s) => (session ? s.boosts[session.boostId] : undefined));
+
   if (!session || !boost) return null;
+
   return (
     <Surface
       fill={hex(theme.panel)}
@@ -68,12 +71,15 @@ function Header({ tabId, boost }: { tabId: string; boost: Boost }) {
   const theme = useTheme();
   const others = useBoosts(useShallow((s) => boostsForHost(s, boost.host)));
   const { hovered, hoverProps } = useHover();
+
   const menu = async () => {
     const items: MenuItem[] = [];
+
     if (others.length > 1) {
       for (const b of others) items.push({ id: `boost:${b.id}`, title: b.name, checked: b.id === boost.id });
       items.push({ separator: true });
     }
+
     items.push(
       { id: "new", title: "New Boost for This Site", symbol: "plus" },
       { id: "rename", title: "Rename Boost…", symbol: "pencil" },
@@ -86,7 +92,9 @@ function Header({ tabId, boost }: { tabId: string; boost: Boost }) {
       { id: "delete", title: "Delete Boost…", symbol: "trash" },
     );
     const choice = await showMenu(items);
+
     if (!choice) return;
+
     if (choice.startsWith("boost:")) switchEditorBoost(tabId, choice.slice(6));
     else if (choice === "new") openBoostEditor(tabId, { fresh: true });
     else if (choice === "rename") void renameBoost(tabId, boost.id);
@@ -96,6 +104,7 @@ function Header({ tabId, boost }: { tabId: string; boost: Boost }) {
     else if (choice === "export") void exportBoostFile(boost.id);
     else if (choice === "delete") void removeBoost(tabId, boost.id);
   };
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingTop: 8, paddingBottom: 6, gap: 2 }}>
       <IconButton icon="xmark" size={12} box={26} tooltip="Close (Esc)" onPress={() => closeBoostEditor(tabId)} />
@@ -133,13 +142,16 @@ function Look({ tabId, boost, session }: { tabId: string; boost: Boost; session:
   const color = boost.color;
   const setColor = (patch: Partial<BoostColor>) => updateBoost(boost.id, (b) => ({ color: { ...(b.color ?? DEFAULT_BOOST_COLOR), ...patch } }));
   const ends = color ? tintEnds(color) : null;
+
   const sizeIndex = Math.max(
     0,
     BOOST_SIZES.findIndex((s) => Math.abs(s - boost.size) < 0.01),
   );
+
   const nextSize = () => updateBoost(boost.id, { size: BOOST_SIZES[(sizeIndex + 1) % BOOST_SIZES.length]! });
   const nextCase = () => updateBoost(boost.id, { textCase: BOOST_CASES[(BOOST_CASES.indexOf(boost.textCase) + 1) % BOOST_CASES.length]! });
   const zapping = session.picking === "zap";
+
   return (
     <View style={{ gap: 10 }}>
       <View style={{ opacity: color ? 1 : 0.55 }}>
@@ -224,16 +236,21 @@ function Fonts({ boost }: { boost: Boost }) {
   const theme = useTheme();
   const shown = ["", ...BOOST_FONTS.slice(0, 4)];
   const custom = boost.font && !shown.includes(boost.font) ? boost.font : null;
+
   const more = async () => {
     const families = fontFamilies();
+
     const items: MenuItem[] = [
       { id: "font:", title: "Site's Font", checked: !boost.font },
       { separator: true },
       ...(families.length ? families : [...BOOST_FONTS]).map((f) => ({ id: `font:${f}`, title: f, checked: boost.font === f })),
     ];
+
     const choice = await showMenu(items);
+
     if (choice?.startsWith("font:")) updateBoost(boost.id, { font: choice.slice(5) });
   };
+
   return (
     <View style={{ flexDirection: "row", gap: 5 }}>
       {shown.map((f) => (
@@ -269,8 +286,10 @@ function ZapRow({ tabId, boost, selector, count }: { tabId: string; boost: Boost
   useEffect(() => {
     if (!hovered) return;
     previewZap(tabId, selector);
+
     return () => previewZap(tabId, null);
   }, [hovered, tabId, selector]);
+
   return (
     <View
       {...hoverProps}
@@ -308,9 +327,11 @@ function Code({ tabId, boost, session }: { tabId: string; boost: Boost; session:
   const theme = useTheme();
   const script = useBoosts((s) => s.scripts[boost.id]);
   const [dirtyScript, setDirtyScript] = useState(false);
+
   const toggleScript = async (on: boolean) => {
     if (await toggleBoostScript(tabId, boost.id, boost.host, on)) setDirtyScript(true);
   };
+
   return (
     <View style={{ gap: 8 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -344,6 +365,7 @@ function Code({ tabId, boost, session }: { tabId: string; boost: Boost; session:
         placeholder={'document.querySelectorAll("video").forEach((v) => (v.playbackRate = 1.5));'}
         onChange={(code) => {
           setBoostScript(boost.id, { code });
+
           if (script?.enabled) setDirtyScript(true);
         }}
       />
@@ -369,6 +391,7 @@ function Code({ tabId, boost, session }: { tabId: string; boost: Boost; session:
 
 function CodeField({ value, placeholder, onChange }: { value: string; placeholder: string; onChange(v: string): void }) {
   const theme = useTheme();
+
   return (
     <TextInput
       multiline
@@ -397,12 +420,14 @@ function CodeField({ value, placeholder, onChange }: { value: string; placeholde
 
 function Hint({ text }: { text: string }) {
   const theme = useTheme();
+
   return <Text style={{ fontSize: 11, lineHeight: 14.5, color: theme.textSecondary }}>{text}</Text>;
 }
 
 function FieldButton({ icon, tooltip, on, disabled, onPress }: { icon: string; tooltip: string; on?: boolean; disabled?: boolean; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View tooltip={tooltip} {...hoverProps}>
       <Pressable onPress={onPress} disabled={disabled} accessibilityLabel={tooltip}>
@@ -427,6 +452,7 @@ function FieldButton({ icon, tooltip, on, disabled, onPress }: { icon: string; t
 function Tile({ on, onPress, children }: { on: boolean; onPress: () => void; children: ReactNode }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
@@ -466,6 +492,7 @@ function BigButton({
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const tint = on ? "#FFFFFF" : theme.textPrimary;
+
   return (
     <View {...hoverProps} style={flex ? { flex: 1 } : undefined}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
@@ -495,9 +522,11 @@ function Slider({ title, value, onChange }: { title: string; value: number; onCh
   const theme = useTheme();
   const track = useRef<View>(null);
   const origin = useRef({ x: 0, width: 1 });
+
   const change = useEffectEvent((e: GestureResponderEvent) =>
     onChange(Math.min(1, Math.max(0, (e.nativeEvent.pageX - origin.current.x) / Math.max(1, origin.current.width)))),
   );
+
   const [pan] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -507,6 +536,7 @@ function Slider({ title, value, onChange }: { title: string; value: number; onCh
       onPanResponderTerminationRequest: () => false,
     }),
   );
+
   return (
     <View style={{ gap: 3 }}>
       <View style={{ flexDirection: "row" }}>

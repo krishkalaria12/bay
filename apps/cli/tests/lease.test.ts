@@ -6,6 +6,7 @@ import { leaseRoot } from "../src/lease.ts";
 
 it("finds leases beside the installed version through the current symlink", () => {
   const root = mkdtempSync(join(tmpdir(), "bay-lease-test-"));
+
   try {
     const version = join(root, "0.1.0");
     mkdirSync(join(version, "bin"), { recursive: true });

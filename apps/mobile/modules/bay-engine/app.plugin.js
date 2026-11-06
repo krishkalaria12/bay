@@ -14,19 +14,25 @@ module.exports = function withBayEngine(config) {
       ...mod.modResults.NSAppTransportSecurity,
       NSAllowsArbitraryLoadsInWebContent: true,
     };
+
     return mod;
   });
   config = withGradleProperties(config, (mod) => {
     for (const [key, value] of Object.entries(gradleProperties)) {
       const item = mod.modResults.find((item) => item.type === "property" && item.key === key);
+
       if (item) item.value = value;
       else mod.modResults.push({ type: "property", key, value });
     }
+
     return mod;
   });
+
   return withAndroidManifest(config, (mod) => {
     const application = mod.modResults.manifest.application?.[0];
+
     if (application) application.$["android:usesCleartextTraffic"] = "true";
+
     return mod;
   });
 };

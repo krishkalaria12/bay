@@ -43,6 +43,7 @@ export function everySlowly(job: SlowJob): Unsubscribe {
   jobs.add(entry);
   const unwatch = job.watch?.(reschedule);
   reschedule();
+
   return () => {
     jobs.delete(entry);
     unwatch?.();
@@ -56,20 +57,25 @@ export function reschedule() {
   if (firing) return;
   const now = clock();
   let next = Infinity;
+
   for (const job of jobs) {
     if (!isNeeded(job)) {
       job.armed = false;
       continue;
     }
+
     // A job that just became needed waits for its next slot; one already armed keeps its deadline.
     if (!job.armed && job.next <= now) job.next = slotAfter(now, job.every);
     job.armed = true;
     next = Math.min(next, job.next);
   }
+
   if (next === timerAt) return;
+
   if (timer) clearTimeout(timer);
   timer = null;
   timerAt = next;
+
   if (next !== Infinity) timer = setTimeout(fire, Math.max(0, next - now));
 }
 
@@ -79,11 +85,14 @@ function fire() {
   const now = clock();
   // Every due job advances before any runs, so a callback that reschedules sees the batch's next slots.
   const due = [...jobs].filter((job) => job.armed && job.next <= now + GRID_SLACK_MS);
+
   for (const job of due) job.next = slotAfter(Math.max(now, job.next), job.every);
   firing = true;
+
   try {
     for (const job of due) {
       if (!jobs.has(job) || !isNeeded(job)) continue;
+
       try {
         job.run();
       } catch (error) {
@@ -93,6 +102,7 @@ function fire() {
   } finally {
     firing = false;
   }
+
   reschedule();
 }
 
@@ -100,6 +110,7 @@ function fire() {
 export function slowTimersForTests(now: () => number) {
   for (const job of jobs) job.next = slotAfter(now(), job.every);
   clock = now;
+
   return {
     pending: () => (timer ? timerAt : null),
     fire: () => {
@@ -108,6 +119,7 @@ export function slowTimersForTests(now: () => number) {
     },
     clear: () => {
       jobs.clear();
+
       if (timer) clearTimeout(timer);
       timer = null;
       timerAt = Infinity;

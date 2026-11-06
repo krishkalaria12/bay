@@ -7,8 +7,11 @@ import { useHover } from "../ui/primitives";
 import type { ToolbarPalette } from "./colors";
 
 export type ClickModifiers = { metaKey: boolean; altKey: boolean; shiftKey: boolean };
+
 export function modifiersOf(e: GestureResponderEvent | undefined): ClickModifiers {
+  // SAFETY: Partial<ClickModifiers> assertion matches the runtime value validated at this call site.
   const n = (e?.nativeEvent ?? {}) as Partial<ClickModifiers>;
+
   return { metaKey: !!n.metaKey, altKey: !!n.altKey, shiftKey: !!n.shiftKey };
 }
 
@@ -42,6 +45,7 @@ export function ToolbarButton({
   style?: ViewStyle;
 }) {
   const { hovered, hoverProps } = useHover();
+
   const button = (
     <Pressable onPress={(e) => onPress?.(modifiersOf(e))} onLongPress={onLongPress} delayLongPress={450} disabled={disabled}>
       {({ pressed }) => (
@@ -66,6 +70,7 @@ export function ToolbarButton({
       )}
     </Pressable>
   );
+
   return (
     <View tooltip={tooltip} style={style} {...hoverProps}>
       {onContextMenu && !disabled ? <ContextMenuArea onContextMenu={onContextMenu}>{button}</ContextMenuArea> : button}
@@ -95,11 +100,14 @@ export function Popover({
   useEffect(() => {
     appear.set(withTiming(1, { duration: 170, easing: Easing.out(Easing.cubic) }));
   }, []);
+
   const appearStyle = useAnimatedStyle(() => ({
     opacity: appear.get(),
     transform: [{ scale: interpolate(appear.get(), [0, 1], [0.94, 1]) }, { translateY: interpolate(appear.get(), [0, 1], [-4, 0]) }],
   }));
+
   const origin = right !== undefined ? "top right" : "top left";
+
   return (
     <>
       {modal && onDismiss && <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />}
@@ -145,6 +153,7 @@ export function PopoverRow({
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const tint = destructive ? "#FF6B63" : theme.textPrimary;
+
   const content = (pressed: boolean) => (
     <View
       style={{
@@ -178,7 +187,9 @@ export function PopoverRow({
       {accessory}
     </View>
   );
+
   if (!onPress) return <View {...hoverProps}>{content(false)}</View>;
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} disabled={disabled}>
@@ -190,6 +201,7 @@ export function PopoverRow({
 
 export function PopoverSeparator() {
   const theme = useTheme();
+
   return (
     <View
       style={{
@@ -205,6 +217,7 @@ export function PopoverSeparator() {
 export function PromptButton({ title, onPress, primary, flex }: { title: string; onPress: () => void; primary?: boolean; flex?: boolean }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} style={flex ? { flex: 1 } : undefined}>
       <Pressable onPress={onPress}>
@@ -252,6 +265,7 @@ export function Toggle({ value, onChange }: { value: boolean; onChange: (value: 
   const off = theme.dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)";
   const track = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(x.get(), [0, 1], [off, "#3478F6"]) }), [off]);
   const knob = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() * 13 }] }));
+
   return (
     <Pressable onPress={() => onChange(!value)} hitSlop={6}>
       <Animated.View style={[{ width: 30, height: 17, borderRadius: 9, padding: 1.5 }, track]}>

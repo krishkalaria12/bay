@@ -39,6 +39,9 @@ export const fromArc = [
   ["Command Bar", "Command bar", "Addresses, searches, open tabs and the ones put away."],
 ] as const;
 
+/** One JSON-LD node: string keys holding JSON values, nested as deep as a page's schema goes. */
+export type JsonLd = { [key: string]: string | number | boolean | null | JsonLd | JsonLd[] };
+
 export const faqs = [
   {
     q: "What is Bay?",

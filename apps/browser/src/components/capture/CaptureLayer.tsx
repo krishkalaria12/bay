@@ -28,7 +28,9 @@ export function CaptureLayer({ tabId }: { tabId: string }) {
   const session = useCapture(tabId);
   const [pane, setPane] = useState({ width: 0, height: 0 });
   const ready = session && (session.phase === "ready" || session.phase === "markup") ? session : null;
+
   if (!ready) return null;
+
   return (
     <View style={StyleSheet.absoluteFill} onLayout={(e) => setPane({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
       {pane.width > 0 &&
@@ -44,8 +46,10 @@ export function CaptureLayer({ tabId }: { tabId: string }) {
 // Where the capture was on the page, in the pane's points; the whole pane for a capture of what it shows.
 function sourceBox(session: Ready, pane: { width: number; height: number }): Box {
   const { area, image } = session;
+
   if (!area) return { x: 0, y: 0, width: pane.width, height: pane.height };
   const k = pane.width / area.viewportWidth;
+
   // A marked-up capture keeps its size; its aspect is the image's.
   return { x: area.left * k, y: area.top * k, width: area.width * k, height: (area.width * k * image.height) / Math.max(1, image.width) };
 }
@@ -61,12 +65,15 @@ function CaptureResult({ tabId, session, pane }: { tabId: string; session: Ready
 
   useEffect(() => {
     lift.set(withSpring(1, bouncySpring(14, 4)));
-    const timer = setTimeout(() => (keys.current as unknown as { focus?: () => void } | null)?.focus?.(), 30);
+    // SAFETY: { focus? assertion matches the runtime value validated at this call site.
+    const timer = setTimeout(() => (keys.current as { focus?: () => void } | null)?.focus?.(), 30);
+
     return () => clearTimeout(timer);
   }, []);
 
   const imageStyle = useAnimatedStyle(() => {
     const p = lift.get();
+
     return {
       left: interpolate(p, [0, 1], [from.x, to.x]),
       top: interpolate(p, [0, 1], [from.y, to.y]),
@@ -74,11 +81,14 @@ function CaptureResult({ tabId, session, pane }: { tabId: string; session: Ready
       height: interpolate(p, [0, 1], [from.height, to.height]),
     };
   });
+
   const shadeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, lift.get()) }));
+
   const barStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, lift.get() * 1.4),
     transform: [{ translateY: interpolate(lift.get(), [0, 1], [barAbove ? 6 : -6, 0]) }],
   }));
+
   const center = to.x + to.width / 2;
   const barLeft = Math.max(8, Math.min(pane.width - barWidth - 8, center - barWidth / 2));
 
@@ -172,6 +182,7 @@ function CaptureResult({ tabId, session, pane }: { tabId: string; session: Ready
 function BarButton({ icon, title, tooltip, onPress, compact }: { icon: string; title: string; tooltip: string; onPress: () => void; compact?: boolean }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View tooltip={tooltip} {...hoverProps}>
       <Pressable onPress={onPress} accessibilityLabel={title} accessibilityRole="button">
@@ -226,11 +237,14 @@ function MarkupEditor({ tabId, session, pane }: { tabId: string; session: Ready;
     setSaving(true);
     const image = await canvas.current?.export();
     setSaving(false);
+
     if (image) applyMarkup(tabId, image);
     else setMarkingUp(tabId, false);
   };
+
   const panelWidth = Math.max(320, pane.width - 32);
   const panelHeight = Math.max(240, pane.height - 32);
+
   const divider = (
     <View
       style={{ width: StyleSheet.hairlineWidth, height: 20, marginHorizontal: 6, backgroundColor: theme.dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)" }}

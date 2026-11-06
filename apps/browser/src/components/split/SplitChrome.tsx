@@ -32,16 +32,20 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
   const [dragging, setDragging] = useState(false);
   // The sizes the drag started from.
   const start = useRef<{ sizes: number[]; stack?: [number, number] }>({ sizes: split.sizes });
+
   const grant = useEffectEvent(() => {
     start.current = { sizes: split.sizes, stack: split.stack?.sizes };
     setDragging(true);
   });
+
   const move = useEffectEvent((dx: number, dy: number) => {
     const delta = divider.vertical ? dx : dy;
     const room = divider.vertical ? width : height;
+
     if (divider.kind === "root") {
       useBrowser.getState().updateSplit(split.id, { sizes: resize(start.current.sizes, divider.index, delta, room) });
     } else if (start.current.stack) {
+      // SAFETY: [number, number] assertion matches the runtime value validated at this call site.
       const next = resize(start.current.stack, 0, delta, room) as [number, number];
       useBrowser.getState().updateSplit(split.id, { stackSizes: next });
     }
@@ -60,6 +64,7 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
 
   const { rect, vertical } = divider;
   const active = hovered || dragging;
+
   return (
     <View
       {...responder.panHandlers}
@@ -101,16 +106,20 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   const outside = useTabDrag((s) => s.outside);
   const target = useTabDrag((s) => s.target);
   const full = Object.keys(panes).length >= 3;
+
   // The page showing the dragged tab alone splits with the tab it leaves for: the one used last.
   const fallback = useBrowser((s) => {
     if (!dragging || Object.keys(panes).length !== 1 || !panes[dragging]) return null;
     const tab = s.tabs[dragging];
     const others = (tab ? viewTabIds(s, windowId, tab.spaceId) : []).map((id) => s.tabs[id]!).filter((t) => t.id !== dragging);
+
     return others.sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]?.id ?? null;
   });
+
   // Memoized by hand: an effect keeps it (the zones mounted for their slide out), so a new one each render would loop.
   const candidates = useMemo((): [string, Rect][] => {
     if (fallback && dragging) return [[fallback, panes[dragging]!]];
+
     return Object.entries(panes).filter(([tabId]) => tabId !== dragging);
   }, [panes, dragging, fallback]);
 
@@ -121,25 +130,33 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   const [grown, setGrown] = useState(false);
   useEffect(() => {
     setGrown(false);
+
     if (!shown) return;
     // Dia grows the targets as soon as they've slid in.
     const timer = setTimeout(() => setGrown(true), ZONE_SLIDE_MS);
+
     return () => clearTimeout(timer);
   }, [shown]);
 
   const hit = shown && grown && overPage ? zoneHit(candidates, px, py, target) : null;
   const preview = shown && overPage;
   const ready = !!dragging && !!origin && !full && candidates.length > 0 && grown && lifted !== false;
+
   const resolve = useEffectEvent((x: number, y: number, current: Parameters<typeof zoneHit>[3], outside: boolean) => {
     if (!ready || outside || !origin) return null;
+
     const px = x - origin.x,
       py = y - origin.y;
+
     if (!Object.values(panes).some((r) => px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height)) return null;
+
     return zoneHit(candidates, px, py, current);
   });
+
   useEffect(() => {
     if (!dragging) return;
     setTargetResolver(resolve);
+
     return () => setTargetResolver(null);
   }, [dragging, resolve]);
   useEffect(() => setDropTarget(hit), [hit?.tabId, hit?.side]);
@@ -158,6 +175,7 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   }, [shown, candidates]);
 
   if (!mounted.length) return null;
+
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {mounted.flatMap(([tabId, rect]) =>
@@ -225,6 +243,7 @@ function DropZone({
   const rest = dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)";
   const calm = dark ? "rgba(255,236,214,0.04)" : "rgba(255,255,255,0.45)";
   const lit = withAlpha(theme.accent, dark ? 0.16 : 0.12);
+
   const zoneStyle = useAnimatedStyle(
     () => ({
       left: x.get(),
@@ -236,6 +255,7 @@ function DropZone({
     }),
     [away, calm, lit],
   );
+
   return (
     <Animated.View
       style={[
@@ -282,12 +302,15 @@ export function SplitToast({ windowId }: { windowId: string }) {
   const toast = useToasts((s) => s.toasts[windowId] ?? null);
   const appear = useSharedValue(0);
   const [shown, setShown] = useState(toast);
+
   const fadeOut = (done: () => void) =>
     withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) }, (finished) => {
       if (finished) runOnJS(done)();
     });
+
   useEffect(() => {
     if (toast) return setShown(toast);
+
     if (!shown?.sticky) return;
     appear.set(fadeOut(() => setShown(null)));
   }, [toast]);
@@ -296,7 +319,9 @@ export function SplitToast({ windowId }: { windowId: string }) {
     setShown(toast);
     appear.set(0);
     appear.set(withSpring(1, SPLIT_TOAST_SPRING));
+
     if (toast.sticky) return;
+
     const timer = setTimeout(
       () => {
         appear.set(
@@ -308,13 +333,17 @@ export function SplitToast({ windowId }: { windowId: string }) {
       },
       toast.duration ?? (toast.action ? 4000 : 2600),
     );
+
     return () => clearTimeout(timer);
   }, [toast?.id]);
+
   const appearStyle = useAnimatedStyle(() => ({
     opacity: appear.get(),
     transform: [{ translateY: interpolate(appear.get(), [0, 1], [10, 0]) }, { scale: interpolate(appear.get(), [0, 1], [0.96, 1]) }],
   }));
+
   if (!shown) return null;
+
   return (
     <View pointerEvents={shown.action ? "box-none" : "none"} style={{ position: "absolute", left: 0, right: 0, bottom: 22, alignItems: "center" }}>
       <Animated.View style={appearStyle}>
@@ -354,6 +383,7 @@ export function SplitToast({ windowId }: { windowId: string }) {
 function ToastAction({ title, onPress }: { title: string; onPress(): void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <Pressable {...hoverProps} onPress={onPress}>
       {({ pressed }) => (

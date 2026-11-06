@@ -24,6 +24,7 @@ export interface HistoryPanelProps {
 
 export const time = (at: number) => new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 export const siteName = (url: string) => hostOf(url).replace(/^www\./, "");
+
 /** A page's title, or its site when the title is missing or just an address. */
 export const pageTitle = (title: string, url: string) => (!title || /^[a-z][a-z0-9+.-]*:\/\//i.test(title) ? siteName(url) : title);
 
@@ -52,6 +53,7 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
             <SectionLabel>{group.label}</SectionLabel>
             {group.entries.map((entry) => {
               const title = pageTitle(entry.title, entry.url);
+
               return (
                 <SiteRow
                   key={entry.url}
@@ -111,6 +113,7 @@ export function SearchField({
 }) {
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
+
   return (
     <View className="mb-1 flex-row items-center gap-2 rounded-full bg-default px-4">
       <Icon name="search" color={muted} size={18} />
@@ -142,6 +145,7 @@ export function SiteRow(props: {
 }) {
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
+
   return (
     <View className="min-h-14 flex-row items-center gap-3 border-b border-foreground/5">
       <Pressable

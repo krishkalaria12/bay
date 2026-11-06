@@ -12,11 +12,13 @@ import { STRIP_SLIDE } from "../window/constants";
 // Every item of every strip that can trade places: its row (`geometry`, the object its strip rendered it with), its
 // index there, and the offset it slides by.
 type Slot = { geometry: () => DragGeometry; index: () => number; shift: SharedValue<number>; to: number };
+
 const slots = new Set<Slot>();
 
 export function registerSlot(geometry: () => DragGeometry, index: () => number, shift: SharedValue<number>): () => void {
   const slot: Slot = { geometry, index, shift, to: 0 };
   slots.add(slot);
+
   return () => void slots.delete(slot);
 }
 
@@ -26,22 +28,28 @@ export function reorderOffsets({ slots: row, lefts }: DragGeometry, from: number
   const gap = row.length > 1 ? lefts[1]! - lefts[0]! - row[0]!.width - (row[0]!.marginRight ?? 0) - (row[1]!.marginLeft ?? 0) : 0;
   const order = row.map((_, i) => i).filter((i) => i !== from);
   order.splice(to, 0, from);
+
   const moved = dragGeometry(
     order.map((i) => row[i]!),
     gap,
   );
+
   const out: number[] = [];
   order.forEach((i, k) => (out[i] = moved.lefts[k]! - lefts[i]!));
+
   return out;
 }
 
 /** The dragged slot is over place `to` (`from`: back home): the others in its row slide where that puts them. */
 export function makeRoom(geometry: DragGeometry, from: number, to: number) {
   const offsets = reorderOffsets(geometry, from, to);
+
   for (const slot of slots) {
     const i = slot.index();
+
     if (slot.geometry() !== geometry || i === from || i < 0) continue;
     const target = offsets[i] ?? 0;
+
     if (slot.to === target) continue;
     slot.to = target;
     slot.shift.set(withSpring(target, STRIP_SLIDE));

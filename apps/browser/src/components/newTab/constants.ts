@@ -11,8 +11,10 @@ export const TELEMETRY_ASK_FRAME = { width: 300 };
 
 export const PERSONALIZE_INSET = 16;
 export const PERSONALIZE_BUTTON = 30;
+
 // The palette glyph is wider than tall: drop the button so its visible gaps to the right and bottom edges match.
 export const GLYPH_DROP = 1.5;
+
 // Animated's old spring: tension 90, friction 9.
 export const PERSONALIZE_SPRING = tensionSpring(90, 9);
 
@@ -23,6 +25,7 @@ export const POSTCARD_HOVER_SLOP = 24;
 export const POSTCARD_TOOLTIP = { height: 28, gap: 4 };
 export const POSTCARD_PAPER = "#FCFCFA";
 export const POSTCARD_INK = "#1D1B1A";
+
 // Animated's old spring: tension 55, friction 9.
 export const POSTCARD_PAGE_SPRING = tensionSpring(55, 9);
 export const POSTCARD_SECONDS = 86_400;

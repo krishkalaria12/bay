@@ -11,6 +11,7 @@ import { useSettingsNav } from "./windows.ts";
 // Render the pane's element tree with native controls represented by their names.
 // Its store selectors still read the supplied state; child components need no native runtime.
 const require = createRequire(import.meta.url);
+
 const tabsCode = ts.transpileModule(readFileSync(new URL("./panes/Tabs.tsx", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
 }).outputText;
@@ -18,9 +19,11 @@ const tabsCode = ts.transpileModule(readFileSync(new URL("./panes/Tabs.tsx", imp
 function renderTabs(tabLayout) {
   const patches = [];
   const state = { settings: { tabLayout, newTabPosition: "top" }, updateSettings: (patch) => patches.push(patch) };
+
   const controls = Object.fromEntries(
     ["Button", "Checkbox", "Group", "PopUp", "Row", "SectionHeader", "SettingToggle", "TextField", "Toggle"].map((name) => [name, name]),
   );
+
   const mocks = {
     "@bay/desktop": { Symbol: "Symbol" },
     "react-native": { View: "View", Text: "Text", Pressable: "Pressable" },
@@ -32,16 +35,21 @@ function renderTabs(tabLayout) {
     "../../../activity/activityStore": {},
     "../../../lib/keptAwakeSites": {},
   };
+
   const module = { exports: {} };
   new Function("require", "module", "exports", tabsCode)((id) => mocks[id] ?? require(id), module, module.exports);
+
   return { tree: module.exports.TabsPane(), patches };
 }
 
 function findTarget(element, id) {
-  if (!element || typeof element !== "object") return undefined;
-  if (element.props?.settingId === id) return element;
-  for (const child of [element.props?.children].flat()) {
+  if (!element?.props) return undefined;
+
+  if (element.props.settingId === id) return element;
+
+  for (const child of [element.props.children].flat()) {
     const target = findTarget(child, id);
+
     if (target) return target;
   }
 }

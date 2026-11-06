@@ -9,16 +9,22 @@ import { join, resolve } from "node:path";
 import { launch, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const [appPath] = process.argv.slice(2);
+
 if (!appPath) throw new Error("usage: node share-quote-test.mjs <Debug Bay.app>");
+
 const scratch = mkdtempSync(join(tmpdir(), "bay-share-quote-"));
+
 const server = createServer((_req, res) => {
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   res.end(`<!doctype html><title>Quote fixture</title><style>body{font:20px system-ui;padding:50px}</style>
     <p id="quote">A few meaningful words can change how we see the world.</p><div style="height:2000px"></div><p id="target">A passage worth sharing.</p>`);
 });
+
 await new Promise((done) => server.listen(0, "127.0.0.1", done));
+
 const url = `http://127.0.0.1:${server.address().port}/`;
 let app;
+
 try {
   app = await launch(resolve(appPath), {
     data: join(scratch, "data"),
@@ -30,16 +36,21 @@ try {
     }),
   });
   const nn = (body) => app.eval(body);
+
   const until = async (body) => {
     for (let i = 0; i < 100; i++) {
       const value = await nn(body);
+
       if (value) return value;
       await sleep(100);
     }
+
     throw new Error(`Timed out: ${body}; evidence: ${scratch}`);
   };
+
   await until('return nn.store.getState().tabs.quote?.title === "Quote fixture" && nn.webviews.has("quote")');
   const page = await app.page(url.replace("http://", ""));
+
   const select = (id, text) =>
     page.eval(`(() => {
       const element = document.getElementById(${JSON.stringify(id)});
@@ -48,6 +59,7 @@ try {
       const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
       return selection.toString();
     })()`);
+
   const copy = () => nn('return nnSelection.shareSelectionQuote("quote").then(() => nn.toasts.getState().toasts.quotes)');
   const clipboard = () => execFileSync("pbpaste", { encoding: "utf8" });
 

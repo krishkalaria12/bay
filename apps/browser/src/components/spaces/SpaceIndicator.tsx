@@ -22,6 +22,7 @@ function useIndicator(room: number) {
   const showName = !!textWidth && (textWidth <= nameRoom || nameRoom >= INDICATOR_MIN_CUT_NAME);
   const width = !shown ? 0 : showName ? Math.min(room, textWidth + 2 * INDICATOR_PAD) : INDICATOR_ICON_WIDTH;
   const color = incognito ? theme.textPrimary : profileNameColor(profile.color, theme.dark);
+
   return { incognito, title, textWidth, shown, showName, width, color };
 }
 
@@ -33,6 +34,7 @@ export function SpaceIndicator({ room }: { room: number }) {
   const windowId = useWindowId();
   const { hovered, hoverProps } = useHover();
   const { incognito, title, textWidth, shown, showName, width, color } = useIndicator(room);
+
   if (!shown) return null;
 
   return (
@@ -77,24 +79,29 @@ export function SpaceIndicator({ room }: { room: number }) {
 export async function openSpaceMenu(windowId: string) {
   const s = useBrowser.getState();
   const current = s.windows[windowId]?.spaceId;
+
   const items: MenuItem[] = [
     ...s.spaceOrder.map((id, i) => ({
       id: `switch:${id}`,
       title: s.spaces[id]!.name,
       checked: id === current,
       swatch: SPACE_COLORS[s.spaces[id]!.color]?.swatch,
-      ...(i < 9 ? { key: String(i + 1), modifiers: ["control" as const] } : {}),
+      ...(i < 9 ? { key: String(i + 1), modifiers: ["control" as const] } : undefined),
     })),
     { separator: true },
     { id: "new", title: "New Space", symbol: "plus" },
     { id: "theme", title: "Edit Theme…", symbol: "paintpalette", enabled: !!current },
     { id: "edit", title: "Edit Spaces…", symbol: "pencil" },
   ];
+
   const choice = await showMenu(items);
+
   if (!choice) return;
+
   if (choice.startsWith("switch:")) switchSpace(windowId, choice.slice("switch:".length), true);
   else if (choice === "new") {
     const id = await createSpace(windowId);
+
     if (id) switchSpace(windowId, id);
   } else if (choice === "theme" && current) openThemeEditor(windowId, current);
   else if (choice === "edit") openSettings("spaces", current);

@@ -53,6 +53,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
       ),
     );
     playIntroMusic(INTRO_CUES, introMusicMuted());
+
     return () => {
       cancelAnimation(icon);
       cancelAnimation(tagline);
@@ -68,12 +69,15 @@ export function Intro({ onDone }: { onDone: () => void }) {
       }),
     );
   };
+
   const screen = useAnimatedStyle(() => ({ opacity: interpolate(exit.get(), [0, 0.6, 1], [1, 1, 0]) }));
   const zoom = useAnimatedStyle(() => ({ transform: [{ scale: interpolate(exit.get(), [0, 1], [1, 1.08]) }] }));
+
   const iconStyle = useAnimatedStyle(() => ({
     opacity: interpolate(icon.get(), [0, 0.4, 1], [0, 1, 1], Extrapolation.CLAMP),
     transform: [{ scale: interpolate(icon.get(), [0, 1], [0.6, 1]) }],
   }));
+
   const taglineStyle = useAnimatedStyle(() => ({ opacity: tagline.get(), transform: [{ translateY: interpolate(tagline.get(), [0, 1], [6, 0]) }] }));
 
   const toggleMute = () => {
@@ -114,9 +118,11 @@ function Letter({ letter, index, color }: { letter: string; index: number; color
   const t = useSharedValue(0);
   useEffect(() => {
     t.set(withDelay(ms(INTRO_CUES.letters + index * INTRO_CUES.letterStep), withTiming(1, { duration: ms(INTRO_LETTER), easing: EASE })));
+
     return () => cancelAnimation(t);
   }, []);
   const style = useAnimatedStyle(() => ({ opacity: t.get(), transform: [{ translateY: interpolate(t.get(), [0, 1], [14, 0]) }] }));
+
   return <Animated.Text style={[{ fontSize: 64, fontWeight: "200", letterSpacing: -1.5, color }, style]}>{letter}</Animated.Text>;
 }
 
@@ -124,6 +130,7 @@ function MuteButton({ muted, onPress }: { muted: boolean; onPress: () => void })
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
   const label = muted ? "Unmute intro music" : "Mute intro music";
+
   return (
     <View {...hoverProps} tooltip={label}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>

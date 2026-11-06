@@ -3,11 +3,13 @@ import { test } from "node:test";
 import "../../../apps/browser/src/test-loader.mjs";
 
 const listeners = new Set();
+
 globalThis.nnTestNativeModules = {
   BayCEF: {
     addListener(name, listener) {
       assert.equal(name, "onEngineEvent");
       listeners.add(listener);
+
       return { remove: () => listeners.delete(listener) };
     },
   },
@@ -17,6 +19,7 @@ const { onEngineEvent } = await import("./engineInfo.ts");
 const { onHistoryChanged } = await import("./history.ts");
 const { onBookmarksChanged } = await import("./bookmarks.ts");
 const { onCliControlChanged } = await import("./nativeModule.ts");
+
 const emit = (topic, payload) => {
   for (const listener of listeners) listener({ topic, payload });
 };
@@ -57,13 +60,16 @@ test("generic listeners receive all topics and still parse their payloads", (t) 
 test("listeners retain independent parsed payloads", (t) => {
   let first;
   let second;
+
   const a = onEngineEvent((_topic, payload) => {
     first = payload;
     payload.nested.value = "changed";
   }, "history.changed");
+
   const b = onEngineEvent((_topic, payload) => {
     second = payload;
   });
+
   t.after(() => {
     a.remove();
     b.remove();
@@ -89,11 +95,13 @@ test("history, bookmarks and CLI subscribers filter before decoding and preserve
   const history = [];
   const bookmarks = [];
   const cli = [];
+
   const subs = [
     onHistoryChanged((change) => history.push(change)),
     onBookmarksChanged((profile) => bookmarks.push(profile)),
     onCliControlChanged((status) => cli.push(status)),
   ];
+
   t.after(() => {
     for (const sub of subs) sub.remove();
   });
@@ -113,6 +121,7 @@ test("history, bookmarks and CLI subscribers filter before decoding and preserve
   emit("history.changed", '{"profile":"personal","kind":"deleted","all":true}');
   emit("bookmarks.changed", '{"profile":"work"}');
   emit("cliControl", '{"state":"invalid"}');
+
   for (const state of ["off", "starting", "on", "external"]) emit("cliControl", JSON.stringify({ state, connections: 2 }));
   assert.deepEqual(history, [
     { kind: "visit", profile: "work", url: "https://example.com", title: "Example", visits: 1, at: 12 },

@@ -12,5 +12,6 @@ export type Section = (typeof SECTIONS)[number]["id"];
 
 export function sectionOf(value?: string): Section {
   if (value === "archived-tabs" || value === "archived") return "archive";
+
   return SECTIONS.find((section) => section.id === value)?.id ?? "media";
 }

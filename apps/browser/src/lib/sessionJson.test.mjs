@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as v from "valibot";
+
 await import("../test-native-stub.mjs");
+
 const { sessionJson } = await import("./persist.ts");
 const { useBrowser } = await import("../store/browserStore.ts");
 const { normalizeLocalFiles } = await import("../store/localFiles.ts");
@@ -13,6 +16,7 @@ function wholeDocument(s) {
   const kept = new Set(windows.map((w) => w.id));
   const tabs = Object.values(s.tabs).filter((t) => !incognito(t.spaceId) && s.windows[t.windowId]?.kind !== "small" && !t.peekOf);
   const saved = new Set(tabs.map((t) => t.id));
+
   return JSON.stringify({
     version: 2,
     spaces: s.spaces,
@@ -101,14 +105,17 @@ function tabSerializations(run) {
   const stringify = JSON.stringify;
   const ids = [];
   JSON.stringify = (value, ...args) => {
-    if (value && typeof value === "object" && typeof value.id === "string" && typeof value.url === "string") ids.push(value.id);
+    if (value && v.is(v.object({}), value) && v.is(v.string(), value.id) && v.is(v.string(), value.url)) ids.push(value.id);
+
     return stringify(value, ...args);
   };
+
   try {
     run();
   } finally {
     JSON.stringify = stringify;
   }
+
   return ids;
 }
 
@@ -122,11 +129,13 @@ test("later saves reuse the JSON of shared tabs retained by closeWindow", () => 
   assert.equal(sessionJson(S()), wholeDocument(S()));
   S().closeWindow(closing);
   assert.equal(S().windows[closing], undefined);
+
   for (const id of [first, second]) {
     assert.equal(S().tabs[id].windowId, "");
     assert.equal(S().tabs[id].unloaded, true);
     assert.ok(S().tabLists.default.includes(id));
   }
+
   assert.equal(sessionJson(S()), wholeDocument(S()));
   const sourceTab = S().tabs[first];
   S().toggleSidebar(keep);
@@ -153,6 +162,7 @@ test("later saves reuse the JSON of shared tabs retained by closeWindow", () => 
 
 test("the same record keeps distinct owned and detached bytes when its owner changes", () => {
   const s = fixture();
+
   // Preserve unusual key order and escaped keys/values through both serialization variants.
   const sourceTab = {
     0: "numeric key",
@@ -164,6 +174,7 @@ test("the same record keeps distinct owned and detached bytes when its owner cha
     url: "https://escaped.example/",
     windowId: "w1",
   };
+
   s.tabs = { escaped: sourceTab };
   s.tabLists = { 'default"\\\n': [sourceTab.id] };
   const owner = s.windows.w1;

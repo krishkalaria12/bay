@@ -1,11 +1,13 @@
 // Every sidebar space has its own native browser profile. Older shared profiles split on hydration.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const S = () => useBrowser.getState();
-const space = (id, profileId) => ({ id, name: id, color: "blue", icon: null, createdAt: 0, ...(profileId ? { profileId } : {}) });
+const space = (id, profileId) => ({ id, name: id, color: "blue", icon: null, createdAt: 0, ...(profileId ? { profileId } : undefined) });
 const history = [{ url: "https://visited.example/", title: "Visited", favicon: null, visits: 1, lastVisit: 10 }];
+
 const save = () =>
   JSON.parse(
     JSON.stringify({
@@ -111,6 +113,7 @@ test("migration avoids active native ids and native data still queued for deleti
     spaceOrder: ["default", "work", "shared", "other"],
     orphanedProfileData: ["work"],
   };
+
   S().hydrate(saved);
   const native = S().spaceOrder.map(model.engineProfile);
   assert.equal(new Set(native).size, native.length);

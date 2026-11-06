@@ -14,11 +14,13 @@ describe("CDP connection lifecycle", () => {
       port: 0,
       fetch(request, server) {
         if (server.upgrade(request, { data: undefined })) return;
+
         return new Response(null, { status: 404 });
       },
       websocket: {
         message(socket, raw) {
           const command = JSON.parse(String(raw));
+
           if (command.method === "Test.wait") return;
           else socket.send(JSON.stringify({ id: command.id, result: { targetInfos: [] } }));
         },
@@ -33,6 +35,7 @@ describe("CDP connection lifecycle", () => {
   });
   it("rejects browser shutdown commands", async () => {
     const cdp = new Cdp(endpoint.ws);
+
     try {
       await cdp.open(1000);
       await expect(cdp.send("Browser.close")).rejects.toBeInstanceOf(ForbiddenCommand);
@@ -42,6 +45,7 @@ describe("CDP connection lifecycle", () => {
   });
   it("rejects in-flight commands on connection loss", async () => {
     const cdp = new Cdp(endpoint.ws);
+
     try {
       await cdp.open(1000);
       const pending = cdp.send("Test.wait");
@@ -53,11 +57,14 @@ describe("CDP connection lifecycle", () => {
   });
   it("exits 130 on SIGINT and releases its connection", async () => {
     const cli = join(import.meta.dir, "../bin/bay.ts");
+
     const child = Bun.spawn([process.execPath, cli, "exec", 'console.log("ready"); await new Promise(() => {})', "--ws", endpoint.ws], {
       stdout: "pipe",
       stderr: "pipe",
     });
+
     const timer = setTimeout(() => child.kill("SIGKILL"), 2000);
+
     try {
       const reader = child.stdout.getReader();
       const { value } = await reader.read();
@@ -72,6 +79,7 @@ describe("CDP connection lifecycle", () => {
   });
   it("clears the default timeout so an embedded exec process can exit", async () => {
     const runnerUrl = new URL("../src/runner.ts", import.meta.url).href;
+
     const child = Bun.spawn(
       [
         process.execPath,
@@ -80,7 +88,9 @@ describe("CDP connection lifecycle", () => {
       ],
       { stdout: "pipe", stderr: "pipe" },
     );
+
     const timer = setTimeout(() => child.kill(), 2000);
+
     try {
       expect(await child.exited).toBe(0);
       expect(await new Response(child.stdout).text()).toBe("42\n");

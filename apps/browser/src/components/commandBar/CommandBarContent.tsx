@@ -37,15 +37,18 @@ export function useMenuPresence<T>(menu: T | null) {
   const [shown, setShown] = useState(menu);
   useEffect(() => {
     if (menu) setShown(menu);
+
     const timing = menu
       ? { duration: 170, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System }
       : { duration: 110, easing: Easing.in(Easing.quad), reduceMotion: ReduceMotion.System };
+
     progress.set(
       withTiming(menu ? 1 : 0, timing, (finished) => {
         if (finished && !menu) runOnJS(setShown)(null);
       }),
     );
   }, [menu, progress]);
+
   return { shown: menu ?? shown, progress, closing: !menu };
 }
 
@@ -102,24 +105,30 @@ export function PaletteContent({
   useLayoutEffect(() => {
     handlers.current = { hover, onHover, onChoose, onRowMenu };
   });
+
   const [rowActions] = useState<RowActions>(() => ({
     hover: (event, index) => handlers.current.hover(event, () => handlers.current.onHover(index)),
     choose: (suggestion, disposition) => handlers.current.onChoose(suggestion, disposition),
     menu: (suggestion) => handlers.current.onRowMenu(suggestion),
   }));
+
   const keepSelectedVisible = () => {
     const row = rows.current.get(selectedIndex);
     const visible = viewport.current;
+
     if (!row || !visible.height) return;
     const y = row.y < visible.y ? row.y : row.y + row.height > visible.y + visible.height ? row.y + row.height - visible.height : visible.y;
+
     if (visible.y !== y) {
       visible.y = y;
       scroll.current?.scrollTo({ y, animated: false });
     }
   };
+
   useEffect(keepSelectedVisible, [selectedIndex, sections]);
   // Each section's first row's index among all the rows.
   const firsts = sections.map((_, i) => sections.slice(0, i).reduce((count, s) => count + s.items.length, 0));
+
   const label =
     current?.kind === "page" && current.tabId
       ? "Switch to Tab"
@@ -158,6 +167,7 @@ export function PaletteContent({
       >
         {sections.map((section, sectionIndex) => {
           const titled = !!section.title && section.items.length > 0;
+
           return (
             <View
               key={section.id}
@@ -189,6 +199,7 @@ export function PaletteContent({
               ) : null}
               {section.items.map((suggestion, offset) => {
                 const rowIndex = firsts[sectionIndex]! + offset;
+
                 return (
                   <PaletteResultRow
                     key={`${suggestionKey(suggestion)}:${rowIndex}`}
@@ -276,12 +287,15 @@ const sameRow = (a: RowProps, b: RowProps) =>
 
 const PaletteResultRow = memo(function PaletteResultRow({ suggestion: s, index, pageContext, selected, colors, actions }: RowProps) {
   const theme = useTheme();
+
   const title =
     s.kind === "page" ? s.title || displayUrl(s.url) : s.kind === "search" ? s.query : s.kind === "calc" ? s.value : s.kind === "emoji" ? s.name : s.title;
+
   const shownUrl = s.kind === "page" || s.kind === "create" ? displayUrl(s.url) : "";
   // The typed search names its engine, as yab's does ("how to  Google"); the engine's own suggestions don't.
   const engine = s.kind === "search" && !s.suggested ? s.engine : "";
   const detail = s.kind === "calc" ? s.expression : (s.detail ?? (engine || (shownUrl !== title ? shownUrl : "")));
+
   return (
     <View onMouseEnter={(e: PointerHoverEvent) => actions.hover(e, index)}>
       <ContextMenuArea onContextMenu={() => actions.menu(s)}>
@@ -353,6 +367,7 @@ const PaletteResultRow = memo(function PaletteResultRow({ suggestion: s, index, 
 export function FooterButton({ label, icon, hint, onPress, round }: { label: string; icon?: string; hint?: string; onPress(): void; round?: boolean }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip={round ? "Bay Menu  ⌘/" : undefined}>
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => onPress()}>

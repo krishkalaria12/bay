@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decodeSharedCollection, encodeSharedCollection } from "@bay/core";
+
 const { useBrowser } = await import("./browserStore.ts");
 const { folderTabIds, childFolderIds } = await import("./folders.ts");
 const S = () => useBrowser.getState();
@@ -10,15 +11,18 @@ const shared = (children, kind = "folder") => ({ version: 1, kind, title: "Resea
 function setup() {
   S().hydrate({});
   const w = S().createWindow({ url: "https://existing.example" });
+
   return { w, spaceId: S().windows[w].spaceId, active: S().windows[w].activeTabIds[S().windows[w].spaceId] };
 }
 
 test("a compressed 30-tab nested collection imports saved rows in order without loading websites", () => {
   const { w, spaceId, active } = setup();
+
   const collection = shared([
     ...Array.from({ length: 10 }, (_, n) => link(n)),
     { kind: "folder", title: "Nested", children: Array.from({ length: 20 }, (_, n) => link(n + 10)) },
   ]);
+
   const folder = S().importSharedCollection(w, decodeSharedCollection(encodeSharedCollection(collection)));
   assert.equal(S().pinnedFolders[folder].name, collection.title);
   const [nested] = childFolderIds(S(), folder);
@@ -30,6 +34,7 @@ test("a compressed 30-tab nested collection imports saved rows in order without 
     Array.from({ length: 30 }, (_, n) => link(n).url),
   );
   assert.deepEqual(folderTabIds(S(), nested), ids.slice(10));
+
   for (const id of ids) {
     const tab = S().tabs[id];
     assert.equal(tab.pinnedRow, true);
@@ -38,6 +43,7 @@ test("a compressed 30-tab nested collection imports saved rows in order without 
     assert.equal(tab.pinnedUrl, tab.url);
     assert.equal(tab.spaceId, spaceId);
   }
+
   assert.equal(S().windows[w].activeTabIds[spaceId], active);
   assert.equal(S().sidebarUndo[w].length, 1);
   assert.equal(S().undoSidebarEdit(w), true);
@@ -49,6 +55,7 @@ test("a compressed 30-tab nested collection imports saved rows in order without 
 
 test("empty nested folders retain anchors around direct rows and sibling folders", () => {
   const { w } = setup();
+
   const folder = S().importSharedCollection(
     w,
     shared([
@@ -59,6 +66,7 @@ test("empty nested folders retain anchors around direct rows and sibling folders
       { kind: "folder", title: "Last empty", children: [] },
     ]),
   );
+
   const [first, middle, populated, last] = childFolderIds(S(), folder);
   const [a] = folderTabIds(S(), folder, false);
   assert.equal(S().pinnedFolders[first].beforeId, a);
@@ -81,6 +89,7 @@ test("Undo removes the whole import after an imported tab is opened and reports 
 
 test("split and selected tab snapshots import as independent folders and preserve their order", () => {
   const { w } = setup();
+
   for (const kind of ["split", "selection"]) {
     const collection = shared([link(8), link(3)], kind);
     const folder = S().importSharedCollection(w, collection);
@@ -89,12 +98,14 @@ test("split and selected tab snapshots import as independent folders and preserv
       collection.children.map((item) => item.title),
     );
   }
+
   assert.equal(Object.keys(S().splits).length, 0);
 });
 
 test("invalid payloads, excessive nesting, and private destinations leave the store untouched", () => {
   const { w } = setup();
   let children = [link(1)];
+
   for (let i = 0; i < 5; i++) children = [{ kind: "folder", title: "Deep", children }];
   const privateWindow = S().createWindow({ incognito: true });
   const before = S();

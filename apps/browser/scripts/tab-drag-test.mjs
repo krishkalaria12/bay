@@ -18,10 +18,12 @@ import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.
 
 const args = process.argv.slice(2);
 const appArg = args.find((a) => !a.startsWith("--"));
+
 if (!appArg) {
   console.error("usage: node tab-drag-test.mjs <Debug Bay.app> [--port=<DevTools port>] [--keep-data]");
   process.exit(2);
 }
+
 const appPath = resolve(appArg);
 const port = args.find((a) => a.startsWith("--port="))?.slice(7);
 const keep = args.includes("--keep-data");
@@ -38,6 +40,7 @@ const tab = (id, windowId, pinned = false) => ({
   title: id,
   lastActiveAt: id === "t1" ? 2 : 1,
 });
+
 const fixture = () =>
   session({
     // A window lists its space's tabs, so each window here has a space of its own.
@@ -119,8 +122,10 @@ const elsewhere = (id) => Object.values(st().windows).find((w) => w.id !== "w1" 
 const putAway = (id) => { const w = elsewhere(id); if (w) st().closeWindow(w); st().closeTab(id); return settle(500); };
 const listed = (id) => { const s = st(); const w = s.windows[id]; return (s.tabLists[w.spaceId] ?? []).filter((t) => s.tabs[t]?.spaceId === w.spaceId); };
 `;
+
 const run = (body) => app.eval(`${HELPERS}\n${body}`);
 const order = (w) => run(`return listed("${w}");`);
+
 const drag = (w, points) =>
   run(
     `return act("${w}", "windowDrags").then(() => act("${w}", "drag:${points.map((p) => p.join(",")).join(";")}")).then(() => settle(${points.length * 12 * 16 + 700})).then(() => act("${w}", "windowDrags")).then((t) => Number(t.split("\\n")[0]));`,
@@ -129,13 +134,17 @@ const drag = (w, points) =>
 // An 8-bit RGB(A) PNG's pixels (what devSnapshotWindow writes): { width, height, channels, data }.
 function readPng(path) {
   const buf = readFileSync(path);
+
   let width = 0,
     height = 0,
     channels = 4;
+
   const idat = [];
+
   for (let at = 8; at < buf.length;) {
     const length = buf.readUInt32BE(at),
       type = buf.toString("ascii", at + 4, at + 8);
+
     if (type === "IHDR") {
       width = buf.readUInt32BE(at + 8);
       height = buf.readUInt32BE(at + 12);
@@ -144,36 +153,46 @@ function readPng(path) {
     } else if (type === "IDAT") idat.push(buf.subarray(at + 8, at + 8 + length));
     at += 12 + length;
   }
+
   const raw = inflateSync(Buffer.concat(idat));
   const stride = width * channels;
   const data = Buffer.alloc(stride * height);
+
   for (let y = 0; y < height; y++) {
     const filter = raw[y * (stride + 1)];
+
     for (let x = 0; x < stride; x++) {
       const v = raw[y * (stride + 1) + 1 + x];
       const a = x >= channels ? data[y * stride + x - channels] : 0;
       const b = y ? data[(y - 1) * stride + x] : 0;
       const c = x >= channels && y ? data[(y - 1) * stride + x - channels] : 0;
+
       const p = a + b - c,
         pa = Math.abs(p - a),
         pb = Math.abs(p - b),
         pc = Math.abs(p - c);
+
       const pred = [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][filter];
       data[y * stride + x] = (v + pred) & 255;
     }
   }
+
   return { width, height, channels, data };
 }
+
 // How much a box varies (luminance's standard deviation), in points (the snapshot is at 2x): an icon drawn there
 // varies; covered by a card, it varies by as little as the card lets through.
 function contrast(png, [x0, y0, x1, y1]) {
   const values = [];
+
   for (let y = y0 * 2; y < y1 * 2; y++)
     for (let x = x0 * 2; x < x1 * 2; x++) {
       const i = (y * png.width + x) * png.channels;
       values.push(0.2126 * png.data[i] + 0.7152 * png.data[i + 1] + 0.0722 * png.data[i + 2]);
     }
+
   const mean = values.reduce((a, v) => a + v, 0) / values.length;
+
   return Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length);
 }
 
@@ -192,6 +211,7 @@ try {
 
   // The dragged tab's picture: a native panel that never takes the mouse or activates the app.
   const PREVIEW = `const preview = () => globalThis.expo.modules.BayShell.devDragPreviewState();`;
+
   const watch = (w, path, ms) =>
     run(`${PREVIEW}
     const seen = [];
@@ -200,12 +220,14 @@ try {
 
   await check("a tab dragged along the strip reorders and doesn't move the window", async () => {
     const frame = await run(`return st().windows.w1.frame;`);
+
     // The tab follows from where the drag started (a few points past the press), so go a little past t3's centre.
     const drags = await drag("w1", [
       [mid(2), 21],
       [mid(3), 21],
       [mid(4) + 30, 21],
     ]);
+
     assert.equal(drags, 0, "window drags");
     assert.deepEqual(await order("w1"), ["p1", "p2", "t2", "t3", "t1", "t4"]);
     assert.deepEqual(await run(`return st().windows.w1.frame;`), frame);
@@ -221,6 +243,7 @@ try {
       const ready = () => globalThis.nnChromeTabs.strips().some((s) => ${JSON.stringify(live)}.every((id) => s.tabs.some((t) => t.key === id)));
       const wait = (n) => (ready() || !n ? Promise.resolve(ready()) : settle(100).then(() => wait(n - 1)));
       return wait(100);`);
+
     // The third item (a tab) right past the fourth's middle, with plenty of moves on the way.
     const path = [
       [at(2), 21],
@@ -228,6 +251,7 @@ try {
       [at(3), 21],
       [at(3) + 40, 21],
     ];
+
     const seen = await run(`
       const cef = globalThis.expo.modules.BayCEF;
       const send = cef.tabStripCommand;
@@ -243,6 +267,7 @@ try {
         stop(); unsubscribe(); cef.tabStripCommand = send; nn.shell.dragPreview.begin = begin;
         return log;
       });`);
+
     const start = seen.drag.find(([on]) => on)?.[1];
     const drop = seen.drag.find(([on]) => !on)?.[1];
     assert.ok(start !== undefined && drop !== undefined, JSON.stringify(seen.drag));
@@ -298,11 +323,13 @@ try {
   await check("a lone tab dragged doesn't move its window", async () => {
     const lone = await run(`return items("w2");`);
     const x = Math.round((lone[0][0] + lone[0][1]) / 2);
+
     const drags = await drag("w2", [
       [x, 21],
       [x + 60, 24],
       [x + 140, 26],
     ]);
+
     assert.equal(drags, 0, "window drags");
     assert.deepEqual(await order("w2"), ["l1"]);
   });
@@ -313,6 +340,7 @@ try {
       [mid(1), 21],
       [mid(1) + 24, 21],
     ]);
+
     assert.equal(drags, 0, "window drags");
     assert.deepEqual((await order("w1")).slice(0, 2), ["p2", "p1"]);
   });
@@ -322,6 +350,7 @@ try {
       [strip[5][1] + 120, 21],
       [strip[5][1] + 200, 21],
     ]);
+
     assert.equal(drags, 1, "window drags");
   });
 
@@ -329,6 +358,7 @@ try {
   // zoomed. Presses go through the app's event queue here (DEV `mouse:`), where the drag region watches for them.
   await check("the empty strip moves the window over its whole height, and a double-click on it zooms", async () => {
     const x = strip[5][1] + 150;
+
     const result = await run(`
       return win("w1").then((n) => {
         const frame = () => C.chromeWindows().then((ws) => ws.find((w) => w.window === n).frame);
@@ -341,12 +371,15 @@ try {
           .then((f) => { out.zoomed = f; return click(38, 1).then(() => click(38, 2)); }).then(() => settle(900)).then(frame)
           .then((f) => { out.back = f; return out; });
       });`);
+
     assert.equal(result.drags, 2, "a press at the strip's top and one near its bottom each drag the window");
     // System Settings › Desktop & Dock › "Double-click a window's title bar to": Fill and Zoom change the frame.
     let action = null;
+
     try {
       action = execFileSync("defaults", ["read", "-g", "AppleActionOnDoubleClick"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     } catch {}
+
     if (action === "None" || action === "Minimize") return;
     assert.notEqual(result.zoomed, result.before, "a double-click zooms (the title-bar action)");
     assert.equal(result.back, result.before, "a second double-click puts it back");
@@ -411,10 +444,12 @@ try {
     const a1 = Math.round((from[0][0] + from[0][1]) / 2);
     // Between b1's and b2's middles.
     const between = dx + Math.round((into[0][1] + into[1][1]) / 2);
+
     const seen = await run(`${PREVIEW}
       const seen = [];
       const iv = setInterval(() => preview().then((p) => { const d = globalThis.nnTabDrag.getState(); seen.push({ shape: p.shape, insert: d.insert, over: d.overWindow }); }), 30);
       return act("w5", "drag:${a1},21;${a1},-20;${dx - 30},-20;${between},21;${between + 2},22;${between + 3},21").then(() => settle(1400)).then(() => { clearInterval(iv); return seen; });`);
+
     assert.ok(
       seen.some((s) => s.over === "w6" && s.insert?.windowId === "w6" && s.insert.beforeId === "b2"),
       JSON.stringify(seen.slice(-4)),
@@ -433,12 +468,14 @@ try {
       const now = await run(`return items("w1");`);
       const i = (await order("w1")).indexOf(id);
       const x = Math.round((now[i][0] + now[i][1]) / 2);
+
       return run(`${PREVIEW}
         const out = {};
         act("w1", "drag:${x},21;${x},220;640,560;640,600;640,640;${x},100;${x},21");
         setTimeout(() => preview().then((p) => (out.p = p)), 760);
         return settle(2200).then(() => out.p);`);
     };
+
     const before = await order("w1");
     // t4 was never shown: its icon and title.
     const never = await cardOf("t4");
@@ -459,10 +496,12 @@ try {
     const ids = await order("w1");
     const x = Math.round((now[3][0] + now[3][1]) / 2);
     assert.equal(ids[3], "t3");
+
     const state = await run(`
       const seen = [];
       const iv = setInterval(() => { const d = globalThis.nnTabDrag.getState(); seen.push({ lifted: d.lifted, onPage: d.onPage, target: d.target }); }, 60);
       return act("w1", "drag:${x},21;${x},120;${width - 260},380;${width - 255},390;${width - 250},400;${width - 250},402").then(() => settle(1700)).then(() => { clearInterval(iv); return seen; });`);
+
     assert.ok(
       state.some((s) => s.lifted && s.onPage),
       "lifted onto the page",
@@ -486,8 +525,8 @@ try {
     // Low in the split's left pane: below its targets, which are centred on the pane.
     const seen = await watch("w1", `${x},21;${x},200;${Math.round(width / 4)},560;${Math.round(width / 4)},740`, 1400);
     // Every shape it took since the drag began (the pill shows for only 30 ms).
-    const shapes = seen.at(-1).shapes;
-    assert.deepEqual(shapes.slice(0, 2), ["pill", "card"], `pill, then card: ${shapes}`);
+    const styles = seen.at(-1).shapes;
+    assert.deepEqual(styles.slice(0, 2), ["pill", "card"], `pill, then card: ${styles}`);
     assert.ok(
       seen.every((p) => !p.key && !p.activeApp && (p.shape === "hidden" || p.ignoresMouse)),
       "never key or active, takes no mouse",
@@ -534,8 +573,10 @@ try {
     // p2, p1, the split (t1 | t3), a new tab.
     assert.deepEqual(ids.slice(0, 4), ["p2", "p1", "t1", "t3"]);
     const now = await run(`return items("w1");`);
+
     const split = now[2],
       last = now[3];
+
     const y = 21;
     await drag("w1", [
       [Math.round(split[0] + 30), y],
@@ -588,17 +629,23 @@ try {
     await run(
       `for (const id of Object.keys(st().windows)) if (id !== "w1") st().closeWindow(id); st().updateSettings({ tabLayout: "sidebar" }); return settle(1500);`,
     );
+
     const rows = await run(`const c = globalThis.sidebarDrag; const out = [];
       return Promise.all([...c.items.values()].filter((i) => i.kind === "row" && i.view).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r({ id: i.tabIds[0], x, y, w, h })))));`);
+
     const row = rows.find((r) => r.id === "t2") ?? rows[0];
     assert.ok(row, "a sidebar row");
+
     const sx = Math.round(row.x + row.w / 2),
       sy = Math.round(row.y + row.h / 2);
+
     const left = Math.round(row.x + row.w + 140);
+
     const state = await run(`
       const seen = [];
       const iv = setInterval(() => { const d = globalThis.nnTabDrag.getState(); seen.push(d.target); }, 60);
       return act("w1", "drag:${sx},${sy};${sx + 40},${sy + 20};${left},380;${left + 4},390;${left + 6},396;${left + 6},398").then(() => settle(1700)).then(() => { clearInterval(iv); return seen; });`);
+
     assert.ok(
       state.some((t) => t?.side === "left"),
       `left target ${JSON.stringify(state.slice(-5))}`,
@@ -614,6 +661,7 @@ try {
       run(
         `return Promise.all([...globalThis.sidebarDrag.items.values()].filter((i) => (i.kind === "row" || i.kind === "group") && i.view).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r([i.key, x, y, w, h])))));`,
       );
+
     // Nothing pinned: the case whose pin target used to push the list down.
     await run(
       `const pinned = listed("w1").filter((id) => st().tabs[id].pinned); if (pinned.length) st().placeTabs(pinned, { pinned: false, beforeId: null }); return settle(800);`,
@@ -622,21 +670,26 @@ try {
     const top = start.find(([key]) => key.startsWith("t:"));
     assert.ok(top, JSON.stringify(start));
     const [key, x, y, w, h] = top;
+
     const sx = Math.round(x + w / 2),
       sy = Math.round(y + h / 2);
+
     // Pressed, moved a little within its own place, held, let go: the drag shows its pin target meanwhile.
     const during = await run(`act("w1", "drag:${sx},${sy};${sx},${sy + 8};${sx},${sy + 8};${sx},${sy + 8};${sx},${sy + 8}");
       return settle(150 + 12 * 16 * 2 + 150).then(() => Promise.all([...globalThis.sidebarDrag.items.values()].filter((i) => (i.kind === "row" || i.kind === "group") && i.view && i.key !== ${JSON.stringify(key)}).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r([i.key, x, y, w, h]))))))
         .then((rows) => ({ rows, ghost: !!globalThis.sidebarDrag.active, zone: !!globalThis.sidebarDrag.regions.get("tiles") }));`);
+
     await run(`return settle(1500);`);
     const end = await rows();
     const at = (list) => Object.fromEntries(list.map(([k, x, y]) => [k, [x, y]]));
     const [s0, s1, s2] = [at(start), at(during.rows), at(end)];
     assert.ok(during.ghost, "dragging when measured");
     assert.ok(during.zone, "the pin target showed");
+
     for (const k of Object.keys(s1)) {
       assert.ok(Math.abs(s1[k][1] - s0[k][1]) < 0.5 && Math.abs(s1[k][0] - s0[k][0]) < 0.5, `${k} moved during the drag: ${s0[k]} -> ${s1[k]}`);
     }
+
     for (const k of Object.keys(s0)) {
       assert.ok(s2[k] && Math.abs(s2[k][1] - s0[k][1]) < 0.5, `${k} moved after the drag: ${s0[k]} -> ${s2[k]}`);
     }
@@ -644,27 +697,35 @@ try {
 
   await check("sidebar: a row let go between two others settles into its place, where the row then is", async () => {
     await run(`for (const n of [1, 2, 3]) st().newTab("w1", { url: "data:text/html,<title>new " + n + "</title>" }); return settle(1200);`);
+
     const rows = await run(
       `return Promise.all([...globalThis.sidebarDrag.items.values()].filter((i) => i.kind === "row" && !i.parentGroup && i.view).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r({ id: i.tabIds[0], x, y, w, h })))));`,
     );
+
     rows.sort((a, b) => a.y - b.y);
     assert.ok(rows.length >= 3, JSON.stringify(rows));
     const row = rows[0];
+
     const sx = Math.round(row.x + row.w / 2),
       sy = Math.round(row.y + row.h / 2);
+
     // Down past the next row's middle, short of the one after.
     const to = Math.round(rows[1].y + rows[1].h * 0.8);
+
     const out = await run(`const c = globalThis.sidebarDrag; c.landed = null;
       return act("w1", "drag:${sx},${sy};${sx},${sy + 10};${sx},${to}").then(() => settle(1500)).then(() => {
         const l = c.landed; const it = l && c.items.get(l.key);
         return new Promise((r) => (it ? it.view.measureInWindow((x, y) => r({ landed: l, row: { x, y } })) : r({ landed: l })));
       });`);
+
     assert.equal(out.landed?.key, `t:${row.id}`, JSON.stringify(out));
     assert.ok(Math.abs(out.landed.x - out.row.x) < 0.5 && Math.abs(out.landed.y - out.row.y) < 0.5, JSON.stringify(out));
   });
 } finally {
   await app?.quit();
+
   if (!keep) rmSync(data, { recursive: true, force: true });
   else rep.say(`data: ${data}`);
 }
+
 process.exit(rep.summary() ? 0 : 1);

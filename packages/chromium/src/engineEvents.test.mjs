@@ -5,12 +5,16 @@ import "../../../apps/browser/src/test-loader.mjs";
 // The legacy architecture's module events reach every module's listeners for that name: both modules here hear each
 // event, as the app's do (a Chromium prompt came back after it was answered).
 const listeners = new Map();
+
 const addListener = (name, listener) => {
   if (!listeners.has(name)) listeners.set(name, new Set());
   listeners.get(name).add(listener);
+
   return { remove: () => listeners.get(name).delete(listener) };
 };
+
 const fire = (name, value) => [...(listeners.get(name) ?? [])].forEach((listener) => listener(value));
+
 globalThis.nnTestNativeModules = { BayCEF: { addListener }, BayWebKit: { addListener } };
 
 const { onDownload, onPermission, onPermissionDismissed } = await import("./nativeModule.ts");
@@ -18,9 +22,12 @@ const { onDownload, onPermission, onPermissionDismissed } = await import("./nati
 const received = (subscribe, name, ids) => {
   const seen = [];
   const subscription = subscribe((value) => seen.push(value.id));
+
   for (const id of ids) fire(name, { id });
   subscription.remove();
+
   for (const id of ids) fire(name, { id });
+
   return seen;
 };
 

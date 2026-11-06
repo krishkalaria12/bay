@@ -24,14 +24,17 @@ const LEAVE = Easing.bezier(0.4, 0, 0.2, 1);
 const CARD_RADIUS = layout.cardRadius + 2;
 
 let started = false;
+
 /** A peek goes with its window, or with the tab it came from (closed, or moved to another window). */
 export function startPeeks() {
   if (started) return;
   started = true;
   useBrowser.subscribe((s, prev) => {
     if (s.peeks === prev.peeks && s.tabs === prev.tabs && s.windows === prev.windows) return;
+
     for (const [windowId, peek] of Object.entries(s.peeks)) {
       const from = s.tabs[peek.fromId];
+
       if (!s.windows[windowId] || !from || from.windowId !== windowId) useBrowser.getState().closePeek(windowId);
     }
   });
@@ -53,6 +56,7 @@ export function PeekLayer({ windowId, peek, rect, origin, children }: Props) {
     shown.set(withSpring(1, PEEK_SPRING));
     let leaving = false;
     const closeNow = () => useBrowser.getState().closePeek(windowId);
+
     return takePeekDismissal(windowId, () => {
       if (leaving) return;
       leaving = true;
@@ -69,8 +73,10 @@ export function PeekLayer({ windowId, peek, rect, origin, children }: Props) {
   const dy = at.y - mid.y;
   const bow = Math.min(Math.hypot(dx, dy) * 0.4, PEEK_ARC) * (at.y < mid.y ? 1 : -1);
   const dim = useAnimatedStyle(() => ({ opacity: interpolate(shown.get(), [0, 0.5], [0, 1], Extrapolation.CLAMP) }));
+
   const card = useAnimatedStyle(() => {
     const t = shown.get();
+
     return {
       opacity: interpolate(t, [0, 0.3], [0, 1], Extrapolation.CLAMP),
       transform: [
@@ -80,14 +86,17 @@ export function PeekLayer({ windowId, peek, rect, origin, children }: Props) {
       ],
     };
   });
+
   const buttons = useAnimatedStyle(() => {
     const t = interpolate(shown.get(), [0.6, 1], [0, 1], Extrapolation.CLAMP);
+
     return { opacity: t, transform: [{ translateX: (1 - t) * -8 }] };
   });
 
   // Its page takes the keys, as a tab's does when shown: try until its view is ready.
   useEffect(() => {
     const timers = [0, 120, 360].map((ms) => setTimeout(() => void webviews.get(peek.tabId)?.focus(), ms));
+
     return () => timers.forEach(clearTimeout);
   }, [peek.tabId]);
 
@@ -126,6 +135,7 @@ export function PeekLayer({ windowId, peek, rect, origin, children }: Props) {
           tooltip="Open as Tab (⌘O)"
           onPress={() => {
             const target = useBrowser.getState().keepPeek(windowId);
+
             if (target) focus(target);
           }}
         />
@@ -141,6 +151,7 @@ function PeekButton({ icon, label, tooltip, onPress }: { icon: string; label: st
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const face = hovered ? (theme.dark ? "#3A3A3D" : "#F2F2F4") : theme.panel;
+
   return (
     <View tooltip={tooltip} {...hoverProps} style={{ alignSelf: "flex-start" }}>
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>

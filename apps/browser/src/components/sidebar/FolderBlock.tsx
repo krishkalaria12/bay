@@ -35,20 +35,28 @@ export const FolderBlock = memo(function PinnedFolderBlock({ folderId }: { folde
   const parentId = useQuietBrowser((s) => s.pinnedFolders[folderId]?.parentId);
   const depth = useQuietBrowser((s) => folderDepth(s, folderId));
   const heights = useQuietBrowser(useShallow((s) => entries.map((entry) => entryHeight(s, windowId, spaceId, entry))));
+
   const activeFolderId = useQuietBrowser((s) => {
     const id = s.windows[windowId]?.activeTabIds[spaceId];
+
     return id ? s.tabs[id]?.folderId : undefined;
   });
+
   const activeTab = useQuietBrowser((s) => {
     const id = s.windows[windowId]?.activeTabIds[spaceId];
+
     return id && folderTabIds(s, folderId).includes(id) ? id : undefined;
   });
+
   const selectedInside = useQuietBrowser((s) => {
     const selection = s.selection[windowId];
+
     return !!selection?.length && folderTabIds(s, folderId).some((id) => selection.includes(id));
   });
+
   const activeEntry = useQuietBrowser((s) => keptEntry(s, windowId, spaceId, entries));
   const tabIds = useQuietBrowser(useShallow((s) => folderTabIds(s, folderId)));
+
   const { ref, style, handle, headerRef } = useDragItem(`f:${folderId}`, {
     kind: "folder",
     tabIds,
@@ -57,6 +65,7 @@ export const FolderBlock = memo(function PinnedFolderBlock({ folderId }: { folde
     parentGroup: parentId ?? undefined,
     collapsed,
   });
+
   const { ref: tailRef, style: tailStyle } = useDragItem(`tail:folder:${folderId}`, { kind: "tail", tabIds: [], section: "pinned", parentGroup: folderId });
   const fold = useFold(collapsed);
 
@@ -72,6 +81,7 @@ export const FolderBlock = memo(function PinnedFolderBlock({ folderId }: { folde
           entries={entries.map((entry, index) => {
             // A closed ancestor keeps the active leaf visible, without showing the entire child folder.
             const keepLeaf = collapsed && entry === activeEntry && entry.startsWith("f:") && activeTab;
+
             return {
               key: entry,
               height: keepLeaf ? metrics.rowHeight : heights[index],
@@ -102,6 +112,7 @@ export const FolderBlock = memo(function PinnedFolderBlock({ folderId }: { folde
 function EmptyFolder() {
   const metrics = useSidebarMetrics();
   const theme = useTheme();
+
   return (
     <View pointerEvents="none" style={{ height: metrics.rowHeight, marginTop: layout.rowGap, justifyContent: "center", paddingLeft: 9 }}>
       <Text numberOfLines={1} style={{ fontSize: 13, color: theme.textTertiary }}>
@@ -123,6 +134,7 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
   // A closed folder peeks its tabs on hover (Arc's folder previews); an open one shows them already.
   const { hovered, hoverProps } = useRowHover(windowId, collapsed && !renaming && !empty ? { kind: "folder", id: folderId } : null);
   const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${(open.get() - 1) * 90}deg` }] }));
+
   if (!folder) return null;
   const target = { kind: "folder" as const, id: folderId };
   const label = folder.name || "New Folder";
@@ -144,6 +156,7 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
         <Pressable
           onPress={() => {
             dismissHover();
+
             if (!renaming) useBrowser.getState().updatePinnedFolder(folderId, { collapsed: !collapsed });
           }}
         >

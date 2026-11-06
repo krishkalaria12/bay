@@ -2,14 +2,17 @@
 // or put beside its opener in a split.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const { opensInPeek, shownPeek, siteOf } = await import("./peeks.ts");
 const { splitOf } = await import("./splits.ts");
 
 const S = () => useBrowser.getState();
+
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.
 (await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
+
 const short = (id) => S().tabs[id].url.replace(/^https:\/\/|\.com$/g, "");
 const order = (w) => model.listIds(S(), model.windowListKey(S(), S().windows[w])).map(short);
 const shown = (w) => short(model.activeTabId(S(), w));
@@ -23,6 +26,7 @@ const setup = () => {
   const b = S().newTab(w, { url: "https://b.com" });
   S().pinTabs([mail], true);
   S().activate(mail, w);
+
   return { w, mail, a, b };
 };
 
@@ -143,6 +147,7 @@ test("explicit Peek split stays beside its opener, while Open as Tab honors Litt
     const next = S().openPeek(mail, "https://news.com/story");
     const target = S().keepPeek(w);
     assert.equal(S().peeks[w], undefined);
+
     if (kind === "mostRecentSpace") {
       assert.equal(target, w);
       assert.equal(S().tabs[next].spaceId, S().tabs[mail].spaceId);
@@ -151,6 +156,7 @@ test("explicit Peek split stays beside its opener, while Open as Tab honors Litt
       assert.equal(S().windows[target].kind ?? "main", kind === "littleBay" ? "small" : "main");
       assert.equal(S().tabs[model.activeTabId(S(), target)].url, "https://news.com/story");
     }
+
     assert.equal(S().closedPeeks[w], undefined, "opening is not recorded as closing the Peek");
   }
 });

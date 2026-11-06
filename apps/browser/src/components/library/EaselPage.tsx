@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { WebView, type WebViewHandle } from "@bay/chromium";
 import {
   EaselCanvas,
@@ -28,6 +29,7 @@ import { EaselShareButton } from "./EaselShareButton";
 
 export const easelCanvases = new Map<string, EaselCanvasHandle>();
 export const easelCanvasStates = new Map<string, EaselState>();
+
 const TOOLS: { tool: EaselTool; icon: string; title: string }[] = [
   { tool: "select", icon: "cursorarrow", title: "Select (V)" },
   { tool: "hand", icon: "hand.draw", title: "Pan (H or hold Space)" },
@@ -37,6 +39,7 @@ const TOOLS: { tool: EaselTool; icon: string; title: string }[] = [
   { tool: "ellipse", icon: "circle", title: "Ellipse (O)" },
   { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)" },
 ];
+
 const COLORS = ["#242424", "#E5484D", "#E98C2B", "#EBCB43", "#42A372", "#3684D6", "#9163CB", "#FFFFFF"];
 const INITIAL_CANVAS: EaselState = { canUndo: false, canRedo: false, selection: [], zoom: 1, viewport: { x: 0, y: 0, zoom: 1 }, document: "" };
 
@@ -57,6 +60,7 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
   useEffect(startLibrary, []);
   useEffect(() => {
     if (canvas.current) easelCanvases.set(tabId, canvas.current);
+
     return () => {
       easelCanvases.delete(tabId);
       easelCanvasStates.delete(tabId);
@@ -76,32 +80,45 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
     );
 
   const selected = doc.items.find((i) => state.selection.length === 1 && i.id === state.selection[0]);
+
   const change = (next: EaselState) => {
     easelCanvasStates.set(tabId, next);
     setState(next);
+
     if (next.tool && next.tool !== tool) setTool(next.tool);
+
     if (next.document && next.document !== state.document) applyEaselDocument(doc.id, next.document);
   };
+
   const fail = (message: string) => showToast(windowId, "Couldn't Export Easel", message, { icon: "scribble.variable" });
   const finishExport = () => setBusy(false);
-  const failedExport = (error: unknown) => {
+
+  const failedExport = (cause: unknown) => {
     setBusy(false);
-    fail(String(error));
+    fail(String(cause));
   };
+
   const exportPNG = (share = false) => {
     setBusy(true);
+
     return writeEaselPNG(canvas.current, doc, windowId, share).then(finishExport, failedExport);
   };
+
   const exportHTML = () => {
     setBusy(true);
+
     return writeEaselHTML(doc, windowId).then(finishExport, failedExport);
   };
+
   const addLink = async () => {
     const url = await prompt({ title: "Add Link", message: "Paste the address of a webpage.", placeholder: "https://", confirmTitle: "Add", windowId });
+
     if (!url) return;
+
     if (!webLink(url)) return showToast(windowId, "Enter a Web Address", "Links must start with https:// or http://.");
     await canvas.current?.addLink(url, url);
   };
+
   const more = async () => {
     const choice = await showMenu([
       { id: "rename", title: "Rename Easel…" },
@@ -127,23 +144,35 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
       { separator: true },
       { id: "delete", title: "Delete Easel…" },
     ]);
+
     if (choice === "rename") void renameEasel(doc.id);
+
     if (choice?.startsWith("bg:")) updateEasel(doc.id, { background: choice.slice(3) });
+
     if (choice === "selectAll") void canvas.current?.selectAll();
+
     if (choice === "duplicate") void canvas.current?.duplicateSelection();
+
     if (choice === "front") void canvas.current?.bringToFront();
+
     if (choice === "back") void canvas.current?.sendToBack();
+
     if (choice === "deleteSelection") void canvas.current?.deleteSelection();
+
     if (choice === "html") void exportHTML();
+
     if (choice === "share") void exportPNG(true);
+
     if (choice === "delete") void removeEasel(doc.id);
   };
+
   const toggleLive = () => {
     if (!selected?.source) return;
     const live = !selected.live;
     updateEasel(doc.id, { items: doc.items.map((i) => (i.id === selected.id ? { ...i, live } : i)) });
     setActiveLive(live ? selected.id : null);
   };
+
   const liveItems = doc.items.filter((i) => i.live && i.source?.clip && webLink(i.source.url));
 
   return (
@@ -370,18 +399,23 @@ function LiveClip({
   const top = (item.y - viewport.y) * z;
   const width = item.width * z;
   const height = item.height * z;
+
   const sourceProfile = useBrowser((s) => {
     const fallback = engineProfile(s.windows[windowId]?.spaceId ?? "default");
+
     return source.profileId !== undefined ? (Object.values(s.spaces).some((p) => engineIdOf(p) === source.profileId) ? source.profileId : null) : fallback;
   });
+
   if (sourceProfile === null || left > pane.width || top > pane.height || left + width < 0 || top + height < 0) return null;
   const crop = liveClipTransform(source.clip!, { width, height }, scrollY);
   const viewportWidth = Math.max(source.viewportWidth ?? cw!, cx! + cw!);
   const viewportHeight = Math.max(source.viewportHeight ?? ch!, ch!);
+
   const position = () =>
     void web.current?.evaluate<number>(`window.scrollTo(0, ${Math.max(0, cy!)}); window.scrollY`).then((y) => {
-      if (typeof y === "number") setScrollY(y);
+      if (v.is(v.number(), y)) setScrollY(y);
     });
+
   return (
     <View style={{ position: "absolute", left, top, width, height, overflow: "hidden", borderRadius: 3 }}>
       <View

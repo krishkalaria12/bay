@@ -10,6 +10,7 @@ type EngineView = Pick<BrowserState, "tabs" | "settings">;
 // selectors across every mounted sidebar, strip and page. `tabs` here can be older than the store's only in other fields.
 export const useEngineView = create<EngineView>()(() => {
   const { tabs, settings } = useBrowser.getState();
+
   return { tabs, settings };
 });
 

@@ -5,5 +5,6 @@ import { isIncognitoSpace } from "../../store/model";
 export const publicSpaceIds = (s: Pick<BrowserState, "spaces" | "spaceOrder">) =>
   s.spaceOrder.filter((id) => {
     const space = s.spaces[id];
+
     return !!space && !isIncognitoSpace(space.id) && !isIncognitoSpace(space.profileId ?? "");
   });

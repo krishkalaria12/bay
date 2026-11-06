@@ -16,31 +16,44 @@ function page(body: string, { highlights = false } = {}) {
       pretendToBeVisual: true,
     },
   );
+
   const { window } = dom;
   // Layout isn't part of jsdom: every range is on screen.
+  // SAFETY: jsdom has no layout, so every range reports this on-screen rect.
   (window.Range.prototype as any).getBoundingClientRect = () => ({ top: 100, bottom: 120, left: 0, right: 10, width: 10, height: 20 });
+  // SAFETY: jsdom has no scrolling, so the find tests stub scrollBy as a no-op.
   window.scrollBy = (() => {}) as any;
+  // SAFETY: jsdom has no CSS.escape, so the tests use this identity escape for selectors.
   (window as any).CSS = { escape: (value: string) => value };
+  // SAFETY: page scripts call window.post, which jsdom has no bridge for, so the fixture provides it.
   (window as any).post = () => {};
+
   const marks = new Map<string, unknown[]>();
+
   if (highlights) {
+    // SAFETY: highlights tests mock CSS.highlights with this map, which the page code populates.
     (window as any).CSS.highlights = marks;
+    // SAFETY: highlights tests mock the Highlight constructor the page code builds matches with.
     (window as any).Highlight = class {
       ranges: unknown[];
       constructor(...ranges: unknown[]) {
         this.ranges = ranges;
       }
     };
+    // SAFETY: highlights tests mock the constructed-sheet class the page code adopts with find marks.
     (window as any).CSSStyleSheet = class {
       text = "";
       replaceSync(text: string) {
         this.text = text;
       }
     };
+    // SAFETY: the constructed-sheet mock records adopted sheets on the document, so the tests read them here.
     (window.document as any).adoptedStyleSheets = [];
   }
+
   const context = dom.getInternalVMContext();
   const run = (source: string) => JSON.parse(vm.runInContext(`JSON.stringify((() => { ${source}\n })())`, context));
+
   return { window, document: window.document, run, marks };
 }
 
@@ -73,14 +86,19 @@ test("find with no matches, an empty query, or after clearing reports none", () 
 test("find marks matches with highlights and a constructed style sheet, and clearing removes them", () => {
   const { run, document, marks } = page(`<p>ab ab ab</p>`, { highlights: true });
   run(findScript("ab"));
+  // SAFETY: the page stores a Highlight with these ranges in the highlights map, so the cast exposes them.
   assert.equal((marks.get("bay-find") as any).ranges.length, 3);
+  // SAFETY: the page keeps the current match's Highlight in the same map entry, so the cast exposes it.
   assert.equal((marks.get("bay-find-current") as any).ranges.length, 1);
+  // SAFETY: the page adopts one constructed sheet, so the document mock exposes it here.
   assert.equal((document as any).adoptedStyleSheets.length, 1);
+  // SAFETY: the adopted sheet's text is the find highlight rules, as stored by the page.
   assert.match((document as any).adoptedStyleSheets[0].text, /::highlight\(bay-find-current\)/);
   // The page's DOM is untouched.
   assert.equal(document.body.innerHTML, "<p>ab ab ab</p>");
   run(FIND_CLEAR_SCRIPT);
   assert.equal(marks.size, 0);
+  // SAFETY: clearing removes the adopted sheets, so the document mock is empty here.
   assert.equal((document as any).adoptedStyleSheets.length, 0);
 });
 
@@ -88,6 +106,7 @@ test("inspect describes the picked element with its font and matched rules", () 
   const { run, window, document } = page(`<main><p id="intro" class="lead">Hello <b>there</b></p></main>`);
   assert.equal(run(INSPECT_SCRIPT), null);
   run(START_PICKER_SCRIPT);
+  // SAFETY: the picker stores its current element under this symbol, so the test sets it here.
   (window as any)[Symbol.for("bay.picker")].current = document.getElementById("intro");
   const element = run(INSPECT_SCRIPT);
   assert.equal(element.name, "p#intro.lead");

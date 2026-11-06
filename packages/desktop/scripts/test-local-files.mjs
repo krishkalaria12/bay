@@ -9,8 +9,11 @@ const shell = resolve(import.meta.dirname, "..");
 const source = readFileSync(join(shell, "ios/LocalFiles.swift"), "utf8");
 const helper = source.split("public class LocalFilesModule:")[0].replaceAll("import ExpoModulesCore\n", "");
 const nativeViewsStart = source.indexOf("final class LocalFilesArea:");
+
 if (nativeViewsStart < 0) throw new Error("missing LocalFilesArea in LocalFiles.swift");
+
 const nativeViews = source.slice(nativeViewsStart);
+
 const shim = `
 // Only the Expo event bridge and app-owned window registry are stubbed. NSView, pasteboards,
 // NSDraggingInfo, the production LocalFilesArea handlers and bookmark code are real AppKit code.
@@ -31,7 +34,9 @@ enum ShellModule {
   }
 }
 `;
+
 const root = mkdtempSync(join(tmpdir(), "bay-local-files-test-"));
+
 try {
   const main = join(root, "main.swift");
   writeFileSync(main, helper + shim + nativeViews + readFileSync(join(shell, "tests/local-files.swift"), "utf8"));

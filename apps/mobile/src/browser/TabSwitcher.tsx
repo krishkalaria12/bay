@@ -30,6 +30,7 @@ export interface TabSwitcherProps {
 
 /** How far the stack scrolls per card, as a share of the card's width. */
 const STEP = 0.56;
+
 /** A card dragged up this far (share of its height), or flicked up this fast, closes. */
 const CLOSE_DISTANCE = 0.28;
 const CLOSE_VELOCITY = -900;
@@ -53,11 +54,14 @@ export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, onCloseAll, 
   const cardWidth = Math.round(width * 0.68);
   const cardHeight = Math.round(Math.min(height * 0.58, cardWidth * 2.05));
   const layout: Layout = { width, cardWidth, cardHeight, step: Math.round(cardWidth * STEP) };
+
   const activeIndex = Math.max(
     0,
     tabs.findIndex((tab) => tab.id === activeTabId),
   );
+
   const scrollX = useSharedValue(activeIndex * layout.step);
+
   const onScroll = useAnimatedScrollHandler((event) => {
     scrollX.value = event.contentOffset.x;
   });
@@ -136,6 +140,7 @@ function TabCard({
   const lift = useSharedValue(0);
 
   const close = () => onClose(tab.id);
+
   const pan = usePanGesture({
     // Up only: sideways drags scroll the stack, taps open the tab.
     activeOffsetY: [-14, 14],
@@ -147,6 +152,7 @@ function TabCard({
     },
     onDeactivate: (event) => {
       "worklet";
+
       if (!event.canceled && (event.translationY < -cardHeight * CLOSE_DISTANCE || event.velocityY < CLOSE_VELOCITY)) {
         lift.value = withTiming(-cardHeight * 1.6, { duration: 200 }, () => scheduleOnRN(close));
       } else {
@@ -160,16 +166,19 @@ function TabCard({
     const position = index - scrollX.value / step;
     const x = position >= 0 ? position * cardWidth * 1.04 : position * cardWidth * 0.3;
     const scale = interpolate(position, [-3, 0], [0.84, 1], Extrapolation.CLAMP);
+
     // The card stays put on screen while the scroll view moves its content: add the scroll back, then place it.
     return {
       transform: [{ translateX: scrollX.value + (width - cardWidth) / 2 + x }, { translateY: lift.value }, { scale }],
       opacity: interpolate(lift.value, [-cardHeight, 0], [0, 1], Extrapolation.CLAMP),
     };
   });
+
   // Only the cards in front and to come keep their title and close button; ones sliding under would show through.
   const header = useAnimatedStyle(() => ({
     opacity: interpolate(index - scrollX.value / step, [-0.6, 0], [0, 1], Extrapolation.CLAMP),
   }));
+
   const shade = useAnimatedStyle(() => ({
     opacity: interpolate(index - scrollX.value / step, [-3, 0], [0.45, 0], Extrapolation.CLAMP),
   }));

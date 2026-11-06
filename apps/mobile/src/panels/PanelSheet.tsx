@@ -29,7 +29,9 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
   // HeroUI renders a closed sheet's content anyway, so every panel's rows would render with the browser. Content
   // mounts on open and stays until the sheet finishes animating closed.
   const [shown, setShown] = useState(visible);
+
   if (visible && !shown) setShown(true);
+
   return (
     <BottomSheet
       isOpen={visible}
@@ -131,6 +133,7 @@ export function ActionRow({
   const danger = useThemeColor("danger");
   const foreground = useThemeColor("foreground");
   const grouped = useContext(InGroup);
+
   return (
     <Pressable
       testID={testID}
@@ -182,6 +185,8 @@ const InGroup = createContext(false);
 /** Rows on one rounded card, split by hairlines that start after the icons. */
 export function Group({ label, children, testID }: { label?: string; children: ReactNode; testID?: string }): JSX.Element {
   const rows = Children.toArray(children).filter(isValidElement);
+
+  // SAFETY: rows are the card's ActionRow children, whose props carry the icon name exactly when an icon is drawn.
   return (
     <View testID={testID}>
       {label ? <Typography className="mb-2 mt-5 px-1 text-[13px] font-medium text-muted">{label}</Typography> : null}

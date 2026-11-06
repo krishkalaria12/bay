@@ -2,19 +2,24 @@
 // groups: a group never holds one, and a folder stays when it's emptied.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const { folderTabIds } = await import("./folders.ts");
 const { folderEntries, numberedTabs, sidebarEntries, sidebarKeyboardRows } = await import("../components/sidebar/sidebarEntries.ts");
 
 const S = () => useBrowser.getState();
+
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.
 (await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
+
 const short = (id) => S().tabs[id].url.replace(/^https:\/\/|\.com$/g, "");
 const order = (w) => model.listIds(S(), model.windowListKey(S(), S().windows[w])).map(short);
+
 const entries = (w) => {
   const e = sidebarEntries(S(), w);
   const name = (entry) => (entry.startsWith("f:") ? `[${S().pinnedFolders[entry.slice(2)].name}]` : short(entry.slice(2)));
+
   return { tiles: e.tiles.map(short), pinned: e.pinned.map(name), list: e.list.map(name) };
 };
 
@@ -22,6 +27,7 @@ const setup = (...urls) => {
   S().hydrate({});
   const w = S().createWindow({ url: `https://${urls[0]}.com` });
   const ids = [S().windows[w].activeTabIds[S().windows[w].spaceId], ...urls.slice(1).map((u) => S().newTab(w, { url: `https://${u}.com` }))];
+
   return [w, ...ids];
 };
 
@@ -119,6 +125,7 @@ test("groups never take a pinned row", () => {
 test("cleaning up leaves pinned rows alone", () => {
   const [w, , b] = setup("a", "b", "c");
   S().pinRows([b], true);
+
   for (const t of Object.values(S().tabs)) S().updateTab(t.id, { lastActiveAt: 0 });
   S().cleanUpTabs(w, { inactiveForMs: 1 });
   assert.ok(S().tabs[b]);
@@ -153,12 +160,15 @@ test("a session keeps its folders, and drops the mark of a folder that's gone", 
 
 // A split pinned as one row (Arc's): every pane a pinned row, kept whole while unloaded.
 const { pinRowTitle, rowPinned } = await import("./splits.ts");
+
 const pinnedSplit = (...urls) => {
   const [w, a, b, ...rest] = setup(...urls);
   const split = S().createSplit([a, b]);
   S().pinRows([a], true);
+
   return { w, a, b, rest, split };
 };
+
 const rows = (w) => sidebarEntries(S(), w);
 
 test("pinning a split's pane pins the whole split as one row, and unpinning takes it back to the list", () => {

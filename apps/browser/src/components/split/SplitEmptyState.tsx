@@ -12,11 +12,14 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
   const theme = useTheme();
   const [typing, setTyping] = useState(focused);
   const [text, setText] = useState("");
+
   const suggestions = useBrowser(
     useShallow((s) => {
       const tab = s.tabs[tabId];
+
       if (!tab) return [];
       const inSplit = new Set(Object.values(s.splits).find((v) => v.tabIds.includes(tabId))?.tabIds ?? [tabId]);
+
       return spaceTabIds(s, tab.spaceId)
         .map((id) => s.tabs[id]!)
         .filter((t) => t.url && !inSplit.has(t.id))
@@ -25,6 +28,7 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
         .map((t) => t.id);
     }),
   );
+
   const go = () => {
     if (text.trim()) useBrowser.getState().navigate(tabId, text.trim());
   };
@@ -95,13 +99,16 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
 
 function Suggestion({ tabId, onPress }: { tabId: string; onPress: () => void }) {
   const tab = useBrowser((s) => s.tabs[tabId]);
+
   if (!tab) return null;
+
   return <Row icon={<Favicon url={tab.url} favicon={tab.favicon} spaceId={tab.spaceId} />} label={tabLabel(tab)} detail={tab.title} onPress={onPress} />;
 }
 
 function Row({ icon, label, detail, secondary, onPress }: { icon: React.ReactNode; label: string; detail?: string; secondary?: boolean; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>

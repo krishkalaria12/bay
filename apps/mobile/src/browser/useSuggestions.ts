@@ -21,8 +21,10 @@ export function useSuggestions(query: string, engine: SearchEngine, data: Browse
     if (!query.trim() || !ask) {
       fetcher.cancel();
       setRemote([]);
+
       return;
     }
+
     fetcher.request(engine, query, setRemote);
   }, [engine, query, ask]);
   useEffect(() => () => fetcher.cancel(), []);
@@ -34,13 +36,16 @@ export function useSuggestions(query: string, engine: SearchEngine, data: Browse
         .filter((entry) => entry.url !== currentUrl)
         .slice(0, 4)
         .map((entry): Row => ({ kind: "page", url: entry.url, title: entry.title, favicon: null, visited: true }));
+
       return { rows, completion: "" };
     }
+
     const result = buildSuggestions(
       query,
       { tabs: data.tabs.filter((tab) => tab.url), history: data.history, cleaned: data.archive },
       { engine, remote, limit: 7, currentTabId: data.activeTabId, currentUrl },
     );
+
     return { rows: result.items.filter(isRow), completion: result.completion };
   }, [currentUrl, data, engine, query, remote]);
 }

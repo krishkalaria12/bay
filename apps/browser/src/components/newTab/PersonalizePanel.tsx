@@ -21,6 +21,7 @@ export function PersonalizeButton({ windowId }: { windowId: string }) {
     },
     [windowId],
   );
+
   return (
     <>
       {open ? <PersonalizePanel windowId={windowId} onClose={() => setOpen(null)} /> : null}
@@ -62,10 +63,12 @@ function PersonalizePanel({ windowId, onClose }: { windowId: string; onClose: ()
   useEffect(() => {
     t.set(withSpring(1, PERSONALIZE_SPRING));
   }, []);
+
   const panelStyle = useAnimatedStyle(() => ({
     opacity: interpolate(t.get(), [0, 1], [0, 1], Extrapolation.CLAMP),
     transform: [{ translateY: interpolate(t.get(), [0, 1], [8, 0]) }, { scale: interpolate(t.get(), [0, 1], [0.97, 1]) }],
   }));
+
   return (
     <>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close Personalize" />
@@ -107,4 +110,6 @@ function PersonalizePanel({ windowId, onClose }: { windowId: string; onClose: ()
   );
 }
 
-if (__DEV__) (globalThis as { nnPersonalize?: unknown }).nnPersonalize = { open: setOpen };
+if (__DEV__)
+  // SAFETY: nnPersonalize is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  (globalThis as { nnPersonalize?: unknown }).nnPersonalize = { open: setOpen };

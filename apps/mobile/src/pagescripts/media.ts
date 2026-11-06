@@ -1,6 +1,7 @@
 // The mini player: each page reports its audio and video to the app ({ type: "media", playing, title, video })
 // whenever one plays, pauses or ends, so a tab playing in the background can be shown and controlled. Media events
 // don't bubble, so they're caught on the way down at the document. State lives under Symbol.for("bay.media").
+import * as v from "valibot";
 
 export interface MediaMessage {
   type: "media";
@@ -60,26 +61,27 @@ if (state && state.current) state.current.pause();
 return true;
 `;
 
+const mediaMessageSchema = v.object({
+  type: v.literal("media"),
+  playing: v.boolean(),
+  title: v.string(),
+  video: v.boolean(),
+});
+
 /** Parses a page message as a media report; null for anything else. Messages come from the page, so check them. */
 export function parseMediaMessage(message: string): MediaMessage | null {
+  let value: unknown;
+
   try {
-    const value: unknown = JSON.parse(message);
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      "type" in value &&
-      value.type === "media" &&
-      "playing" in value &&
-      typeof value.playing === "boolean" &&
-      "title" in value &&
-      typeof value.title === "string" &&
-      "video" in value &&
-      typeof value.video === "boolean"
-    ) {
-      return { type: "media", playing: value.playing, title: value.title.slice(0, 200), video: value.video };
-    }
+    value = JSON.parse(message);
   } catch {
     // Not JSON: not a media report.
+    return null;
   }
-  return null;
+
+  const parsed = v.safeParse(mediaMessageSchema, value);
+
+  if (!parsed.success) return null;
+
+  return { type: "media", playing: parsed.output.playing, title: parsed.output.title.slice(0, 200), video: parsed.output.video };
 }

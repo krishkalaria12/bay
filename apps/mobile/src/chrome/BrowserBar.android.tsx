@@ -30,6 +30,7 @@ function BarPressable({
   const themeForeground = useThemeColor("foreground");
   const foreground = privately ? "#F4F4F5" : themeForeground;
   const danger = useThemeColor("danger");
+
   return (
     <Pressable
       testID={button.id}
@@ -62,6 +63,7 @@ function BarPressable({
 
 export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const [left, search, right] = barButtons(props);
+
   return (
     <View className="flex-row items-center justify-center gap-4">
       <BarPressable button={left} icon={left.icon} privately={props.privately} />

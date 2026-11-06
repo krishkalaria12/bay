@@ -1,3 +1,4 @@
+import { lookup } from "@bay/core";
 import { Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -15,7 +16,7 @@ export type PaletteMenuAction = {
   hint?: string;
   separator?: boolean;
   checked?: boolean;
-  run(): void | Promise<unknown>;
+  run(): void | Promise<void>;
 };
 
 const MENU_KEYS = [
@@ -33,21 +34,24 @@ const MENU_KEYS = [
   { key: "Enter", metaKey: true },
   { key: "/", metaKey: true },
 ];
+
 // ⇧⌫ is claimed only while the search field is empty, so it still deletes text.
 const EMPTY_MENU_KEYS = [...MENU_KEYS, { key: "Backspace", shiftKey: true }];
 
 type KeyEvent = { key: string; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; ctrlKey?: boolean };
-const KEY_GLYPHS: Record<string, string> = { Enter: "↩", Backspace: "⌫" };
+
+const KEY_GLYPHS = { Enter: "↩", Backspace: "⌫" } satisfies Record<string, string>;
 
 // A key event as the keycap hint actions show, e.g. "⇧⌘C".
 export function hintOf({ key, metaKey, shiftKey, altKey, ctrlKey }: KeyEvent): string {
-  return `${ctrlKey ? "⌃" : ""}${altKey ? "⌥" : ""}${shiftKey ? "⇧" : ""}${metaKey ? "⌘" : ""}${KEY_GLYPHS[key] ?? key.toUpperCase()}`;
+  return `${ctrlKey ? "⌃" : ""}${altKey ? "⌥" : ""}${shiftKey ? "⇧" : ""}${metaKey ? "⌘" : ""}${lookup(KEY_GLYPHS, key) ?? key.toUpperCase()}`;
 }
 
 // Runs the action: null once done, else what went wrong.
 async function runAction(action: PaletteMenuAction): Promise<string | null> {
   try {
     await action.run();
+
     return null;
   } catch (failure) {
     return (failure instanceof Error ? failure.message : "Couldn't complete this action. Try again.").slice(0, 160);
@@ -93,22 +97,27 @@ export function PaletteActionMenu({
   const selectedIndex = Math.min(selected, filtered.length - 1);
   const selectedId = filtered[selectedIndex]?.id;
   const hover = usePointerHover(query);
+
   const growStyle = useAnimatedStyle(() => {
     "worklet";
     const p = progress.get();
+
     return { opacity: p, transform: [{ scale: interpolate(p, [0, 1], [0.94, 1]) }, { translateY: interpolate(p, [0, 1], [top === undefined ? 4 : -4, 0]) }] };
   });
 
   const keepSelectedVisible = () => {
     const row = selectedId ? rows.current.get(selectedId) : undefined;
     const visible = viewport.current;
+
     if (!row || !visible.height) return;
     const y = row.y < visible.y ? row.y : row.y + row.height > visible.y + visible.height ? row.y + row.height - visible.height : visible.y;
+
     if (y !== visible.y) {
       visible.y = y;
       scroller.current?.scrollTo({ y, animated: false });
     }
   };
+
   useEffect(keepSelectedVisible, [selectedId, query]);
 
   const run = async (action: PaletteMenuAction | undefined) => {
@@ -117,6 +126,7 @@ export function PaletteActionMenu({
     setBusy(true);
     const failure = await runAction(action);
     setBusy(false);
+
     if (failure === null) return onClose();
     setError(failure);
     input.current?.focus();
@@ -160,6 +170,7 @@ export function PaletteActionMenu({
               key={action.id}
               onLayout={(event) => {
                 rows.current.set(action.id, event.nativeEvent.layout);
+
                 if (action.id === selectedId) keepSelectedVisible();
               }}
               onMouseEnter={(e) => hover(e, () => setSelected(index))}
@@ -228,16 +239,22 @@ export function PaletteActionMenu({
             onKeyPress={onEscapeKey(onClose)}
             onKeyDown={(event) => {
               const { key, shiftKey, metaKey } = event.nativeEvent;
+
               if (key === "Escape" || (metaKey && (key.toLowerCase() === "k" || key === "/"))) {
                 onClose();
+
                 return;
               }
+
               // ⌘ shortcuts always reach their action; ⇧⌫ only once the search field is empty.
               if (metaKey || (shiftKey && key === "Backspace" && !query)) {
                 const action = actions.find((item) => item.hint === hintOf(event.nativeEvent));
+
                 if (action) void run(action);
+
                 return;
               }
+
               if (key === "Enter") void run(filtered[selectedIndex]);
               else if (filtered.length && (key === "ArrowUp" || key === "ArrowDown" || key === "Tab")) {
                 const direction = key === "ArrowUp" || (key === "Tab" && shiftKey) ? -1 : 1;

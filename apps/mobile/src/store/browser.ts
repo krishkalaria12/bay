@@ -16,7 +16,8 @@ const STATE_FILE = "browser.json";
 const repository: BrowserRepository = {
   async load() {
     const file = new File(Paths.document, STATE_FILE);
-    return file.exists ? (JSON.parse(await file.text()) as unknown) : null;
+
+    return file.exists ? JSON.parse(await file.text()) : null;
   },
   async save(data) {
     const draft = new File(Paths.document, `${STATE_FILE}.tmp`);
@@ -45,11 +46,13 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   dispatch(action) {
     set((state) => {
       const data = reduceBrowserData(state.data, action);
+
       return data === state.data ? state : { data };
     });
   },
   async load() {
     const fallback = get().data;
+
     try {
       const saved = await repository.load();
       const data = saved === null ? fallback : parseBrowserData(saved, fallback);
@@ -62,6 +65,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   openTab(url, background = false, isPrivate = false) {
     const tab = createTab(newId(), Date.now(), url, isPrivate);
     get().dispatch({ type: "new-tab", tab, background });
+
     return tab.id;
   },
   closeTab(id) {
@@ -70,6 +74,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   restoreTab(id) {
     const restoredId = newId();
     get().dispatch({ type: "restore-tab", id, restoredId, now: Date.now() });
+
     return restoredId;
   },
   reset() {
@@ -78,13 +83,16 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
 }));
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
 // One save at a time: two writing the same temporary file at once lose one of them.
 let saving: Promise<void> = Promise.resolve();
+
 function save(): void {
   clearTimeout(saveTimer);
   saveTimer = undefined;
+
   if (!useBrowserStore.getState().ready) return;
-  saving = saving.then(() => repository.save(useBrowserStore.getState().data)).catch((error: unknown) => console.warn("Couldn't save browsing state.", error));
+  saving = saving.then(() => repository.save(useBrowserStore.getState().data)).catch((cause: unknown) => console.warn("Couldn't save browsing state.", cause));
 }
 
 useBrowserStore.subscribe((state, previous) => {
@@ -96,13 +104,14 @@ useBrowserStore.subscribe((state, previous) => {
 // Page views delete only their own previous snapshot, so closed, archived and remounted tabs leave files behind;
 // keep just the ones a tab or archived tab still shows.
 let pruneTimer: ReturnType<typeof setTimeout> | undefined;
+
 useBrowserStore.subscribe((state, previous) => {
   if (!state.ready || (previous.ready && state.data.tabs === previous.data.tabs && state.data.archive === previous.data.archive)) return;
   clearTimeout(pruneTimer);
   pruneTimer = setTimeout(() => {
     const { tabs, archive } = useBrowserStore.getState().data;
     const keep = [...tabs, ...archive].flatMap((tab) => (tab.snapshot ? [tab.snapshot] : []));
-    pruneSnapshots(keep).catch((error: unknown) => console.warn("Couldn't prune tab snapshots.", error));
+    pruneSnapshots(keep).catch((cause: unknown) => console.warn("Couldn't prune tab snapshots.", cause));
   }, PRUNE_DELAY);
 });
 
@@ -112,6 +121,7 @@ AppState.addEventListener("change", (status) => {
   } else {
     // Saved straight away: Bay may be killed in the background, and the start page timer needs this on next launch.
     if (status === "background" && useBrowserStore.getState().ready) useBrowserStore.getState().dispatch({ type: "left", now: Date.now() });
+
     if (saveTimer) save();
   }
 });

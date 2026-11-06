@@ -5,7 +5,9 @@ interface Props {
   tilt?: number;
   class?: string;
 }
+
 const { color = "yellow", tilt = -2, class: className } = Astro.props;
+
 const bg = {
   yellow: "bg-note-yellow",
   pink: "bg-note-pink",
