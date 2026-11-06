@@ -70,7 +70,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-          # llvm-objcopy, which Chromium's Windows toolchain lacks (scripts/engine.py build_adblock).
+          # llvm-ar, llvm-nm and llvm-objcopy, which Chromium's Windows toolchain lacks (scripts/engine.py llvm_tools).
           components: llvm-tools
       - name: Verify state archive support
         if: env.DONE != 'true'
