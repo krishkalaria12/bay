@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/values.h"
@@ -25,7 +26,7 @@ namespace bay {
 class TabBroker final {
  public:
   struct Result {
-    content::WebContents* contents = nullptr;
+    raw_ptr<content::WebContents> contents = nullptr;
     uint64_t lease = 0;
     bool reused = false;
     std::string error;

@@ -39,7 +39,7 @@ class TracingSession {
   void Reset();
 
   raw_ptr<content::TracingController> controller_;
-  const void* owner_ = nullptr;
+  raw_ptr<const void> owner_ = nullptr;
   Phase phase_ = Phase::kIdle;
   uint64_t generation_ = 0;
   int checks_ = 0;

@@ -49,6 +49,9 @@ static_library("data_services") {
   # Native picker adapters use the host-only sync recovery continuation API.
   public_deps = [ ":sync_services" ]
   if (is_win) {
+    # Canonical package paths use the C++17 UTF-8 std::string interface, as
+    # on Linux below.
+    cflags_cc = [ "/Zc:char8_t-" ]
     defines = [
       "NOMINMAX",
       "WIN32_LEAN_AND_MEAN",
@@ -115,6 +118,7 @@ static_library("sync_services") {
       "packages/sync/windows/RecoveryKitWindows.cpp",
       "packages/sync/windows/SyncCryptoWindows.cpp",
     ]
+    cflags_cc = [ "/Zc:char8_t-" ]
     defines = [
       "NOMINMAX",
       "WIN32_LEAN_AND_MEAN",

@@ -21,6 +21,7 @@
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -75,7 +76,8 @@ struct Engine {
   ~Engine() { bay_blocker_free(blocker); }
   Engine(const Engine&) = delete;
   Engine& operator=(const Engine&) = delete;
-  BayBlocker* const blocker;
+  // Allocated and freed by the Rust library, outside PartitionAlloc.
+  RAW_PTR_EXCLUSION BayBlocker* const blocker;
 };
 
 // What the request filter reads: replaced whole, never changed in place.
@@ -89,7 +91,9 @@ struct Live {
 };
 
 std::mutex& LiveLock() {
-  static base::NoDestructor<std::mutex> lock;
+  // Never destroyed. NoDestructor refuses std::mutex where it is trivially
+  // destructible, as on Windows.
+  static std::mutex* lock = new std::mutex;
   return *lock;
 }
 std::shared_ptr<const Live>& LiveSlot() {

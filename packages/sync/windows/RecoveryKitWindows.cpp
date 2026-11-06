@@ -9,6 +9,7 @@
 
 #include <sddl.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #pragma comment(lib, "gdi32.lib")
 
 namespace bay::sync {
