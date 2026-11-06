@@ -1,7 +1,10 @@
+import { useBottomSheetScrollableCreator } from "@gorhom/bottom-sheet";
+import { LegendList } from "@legendapp/list/react-native";
 import { Typography } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PillButton } from "@/chrome/PillButton";
 import type { DownloadItem } from "@/store/types";
@@ -20,41 +23,55 @@ export interface DownloadsPanelProps {
 
 /** Downloads, newest first: tap a finished one to open it. Removing one only takes it off the list. */
 export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, onRemove, onClear }: DownloadsPanelProps): JSX.Element {
+  const insets = useSafeAreaInsets();
+  const Scrollable = useBottomSheetScrollableCreator();
+
   return (
-    <PanelSheet visible={visible} onClose={onClose} title="Downloads" testID="downloads-panel" height="70%">
+    <PanelSheet visible={visible} onClose={onClose} title="Downloads" testID="downloads-panel" height="70%" listMode>
       {downloads.length ? (
-        downloads.map((item, index) => (
-          <View key={item.id} className="flex-row items-center gap-2 border-b border-foreground/5">
-            <Pressable
-              testID={`download-${index}`}
-              accessibilityRole="button"
-              accessibilityLabel={`${item.filename}, ${downloadStatus(item)}`}
-              accessibilityState={{ disabled: item.state !== "finished" }}
-              disabled={item.state !== "finished"}
-              onPress={() => onOpen(item)}
-              className="min-h-14 flex-1 justify-center py-2"
-            >
-              <Typography numberOfLines={1}>{item.filename}</Typography>
-              <Typography testID={`download-${index}-status`} numberOfLines={1} className="text-sm text-muted">
-                {downloadStatus(item)}
-              </Typography>
-              {item.state === "downloading" ? <DownloadProgress item={item} /> : null}
-            </Pressable>
-            <PillButton
-              compact
-              testID={`download-${index}-${item.state === "downloading" ? "cancel" : "remove"}`}
-              label={item.state === "downloading" ? "Cancel" : "Remove"}
-              accessibilityLabel={item.state === "downloading" ? `Cancel ${item.filename}` : `Remove ${item.filename} from the list`}
-              onPress={() => (item.state === "downloading" ? onCancel(item) : onRemove(item))}
-            />
-          </View>
-        ))
+        <LegendList
+          data={downloads}
+          keyExtractor={(item) => item.id}
+          estimatedItemSize={56}
+          keyboardShouldPersistTaps="handled"
+          renderScrollComponent={Scrollable}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
+          ListFooterComponent={
+            downloads.some((item) => item.state !== "downloading") ? <ActionRow testID="downloads-clear" label="Clear list" onPress={onClear} /> : null
+          }
+          renderItem={({ item, index }) => (
+            <View className="flex-row items-center gap-2 border-b border-foreground/5">
+              <Pressable
+                testID={`download-${index}`}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.filename}, ${downloadStatus(item)}`}
+                accessibilityState={{ disabled: item.state !== "finished" }}
+                disabled={item.state !== "finished"}
+                onPress={() => onOpen(item)}
+                className="min-h-14 flex-1 justify-center py-2"
+              >
+                <Typography numberOfLines={1}>{item.filename}</Typography>
+                <Typography testID={`download-${index}-status`} numberOfLines={1} className="text-sm text-muted">
+                  {downloadStatus(item)}
+                </Typography>
+                {item.state === "downloading" ? <DownloadProgress item={item} /> : null}
+              </Pressable>
+              <PillButton
+                compact
+                testID={`download-${index}-${item.state === "downloading" ? "cancel" : "remove"}`}
+                label={item.state === "downloading" ? "Cancel" : "Remove"}
+                accessibilityLabel={item.state === "downloading" ? `Cancel ${item.filename}` : `Remove ${item.filename} from the list`}
+                onPress={() => (item.state === "downloading" ? onCancel(item) : onRemove(item))}
+              />
+            </View>
+          )}
+          style={{ flex: 1 }}
+        />
       ) : (
         <Typography testID="downloads-empty" className="text-muted">
           Files you download appear here.
         </Typography>
       )}
-      {downloads.some((item) => item.state !== "downloading") ? <ActionRow testID="downloads-clear" label="Clear list" onPress={onClear} /> : null}
     </PanelSheet>
   );
 }

@@ -22,6 +22,8 @@ export interface PanelSheetProps {
   header?: ReactNode;
   /** Drawn behind the sheet's content (iOS's Liquid Glass); the sheet's own background is transparent then. */
   backdrop?: ReactNode;
+  /** The children bring their own scrolling (a LegendList); the sheet doesn't wrap them in a scroll view. */
+  listMode?: boolean;
 }
 
 export function PanelSheetShared({
@@ -35,6 +37,7 @@ export function PanelSheetShared({
   onBack,
   header,
   backdrop,
+  listMode = false,
 }: PanelSheetProps): JSX.Element {
   const insets = useSafeAreaInsets();
   const foreground = useThemeColor("foreground");
@@ -101,12 +104,16 @@ export function PanelSheetShared({
                 <Icon name="close" color={muted} size={18} />
               </Pressable>
             </View>
-            <BottomSheetScrollView
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
-            >
-              {visible || shown ? children : null}
-            </BottomSheetScrollView>
+            {listMode ? (
+              <View className="flex-1">{visible || shown ? children : null}</View>
+            ) : (
+              <BottomSheetScrollView
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
+              >
+                {visible || shown ? children : null}
+              </BottomSheetScrollView>
+            )}
           </View>
         </BottomSheet.Content>
       </BottomSheet.Portal>

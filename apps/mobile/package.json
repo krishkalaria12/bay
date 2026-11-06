@@ -19,6 +19,7 @@
     "@expo/metro-runtime": "~58.0.14",
     "@expo/ui": "~58.0.25",
     "@gorhom/bottom-sheet": "^5.2.14",
+    "@legendapp/list": "^3.7.1",
     "expo": "~58.0.16",
     "expo-clipboard": "~58.0.4",
     "expo-constants": "~58.0.12",
