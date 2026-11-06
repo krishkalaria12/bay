@@ -32,11 +32,13 @@ import { copyPageUrl } from "../site/selection";
 
 // What the toolbar shows of its tab: the page's favicon and the tab's bookkeeping (last active, …) don't re-render it.
 type ToolbarTab = Pick<Tab, "id" | "url" | "title" | "windowId" | "zoom">;
+
 const toolbarTab = (t: Tab | undefined): ToolbarTab | undefined => t && { id: t.id, url: t.url, title: t.title, windowId: t.windowId, zoom: t.zoom };
 
 // Where the toolbar's buttons sit, each centred on its place along the bar.
 function buttonPlaces(geometry: ToolbarGeometry) {
   const place = (center: number | null) => ({ position: "absolute" as const, top: TOOLBAR_BUTTON_TOP, left: (center ?? 0) - layout.toolbarButton / 2 });
+
   return { sidebarButton: place(geometry.sidebarButton), back: place(geometry.back), forward: place(geometry.forward), reload: place(geometry.reload) };
 }
 
@@ -77,15 +79,18 @@ export function Toolbar({
     dim.set(withTiming(focused ? 1 : 0.5, { duration: 160, easing: Easing.out(Easing.quad) }));
   }, [focused]);
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }));
+
   // Kept stable by the compiler, as are the buttons' elements: a loading or history change re-renders only theirs.
   const focus = () => {
     if (!focused) useBrowser.getState().activate(tabId);
   };
+
   const at = buttonPlaces(geometry);
   // A toggle at the end (the sidebar on the right) is outermost: the split buttons, extensions and field move in for it.
   const end = geometry.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0;
   const right = (inSplit ? 12 + 2 * 28 : 12) + extensionsWidth + end;
   const urlStyle = { position: "absolute" as const, left: geometry.urlLeft, right, top: TOOLBAR_BUTTON_MID - 15 };
+
   if (!tab) return <View style={{ height: layout.toolbarHeight }} />;
 
   return (
@@ -120,6 +125,7 @@ export function Toolbar({
 
 function SidebarToggle({ style, palette, windowId }: { style: ViewStyle; palette: ToolbarPalette; windowId: string }) {
   const icon = useSidebarSymbol();
+
   return (
     <ToolbarButton style={style} palette={palette} icon={icon} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip="Auto-Hide Tabs (⌘S)" />
   );
@@ -139,6 +145,7 @@ export function ReloadButton({
   onFocus: () => void;
 }) {
   const web = () => webviews.get(tab.id);
+
   return (
     <ToolbarButton
       style={style}
@@ -148,7 +155,9 @@ export function ReloadButton({
       disabled={!tab.url}
       onPress={(m) => {
         onFocus();
+
         if (loading) return void web()?.stopLoading();
+
         if (m.metaKey) return void useBrowser.getState().newTab(tab.windowId, { url: tab.url, background: true, openerId: tab.id });
         void (m.shiftKey ? web()?.forceReload() : web()?.reload());
       }}
@@ -166,6 +175,7 @@ function ProgressBar({ progress, color }: { progress: number; color: string }) {
   const shownFor = useRef(Math.max(progress, 0.08));
   useEffect(() => {
     const to = Math.max(progress, 0.08);
+
     if (shownFor.current === to) return;
     shownFor.current = to;
     // Its width, not a scaleX: a scaleX version loses its transform when it mounts on macOS (it draws full width until
@@ -173,6 +183,7 @@ function ProgressBar({ progress, color }: { progress: number; color: string }) {
     width.set(withTiming(to, { duration: 200, easing: Easing.out(Easing.quad) }));
   }, [progress]);
   const widthStyle = useAnimatedStyle(() => ({ width: `${width.get() * 100}%` }));
+
   return <Animated.View style={[{ position: "absolute", left: 0, bottom: 0, height: 1.5, backgroundColor: color, opacity: 0.85 }, widthStyle]} />;
 }
 
@@ -194,17 +205,22 @@ export function HistoryButton({
   const openMenu = () => {
     onFocus();
     const open = useHistoryMenu.getState().menu;
+
     if (open?.tabId === tab.id && open.direction === direction) return closeHistoryMenu();
     void openHistoryMenu(tab.id, direction);
   };
+
   const onPress = async (m: ClickModifiers & { middle?: boolean }) => {
     onFocus();
     closeHistoryMenu();
     const mode = openModeFor(m);
+
     if (mode === "current" || mode === "split") return direction < 0 ? goBack(tab.id) : goForward(tab.id);
     const [target] = await historyItems(tab.id, direction, 1);
+
     if (target?.url) openUrl(target.url, tab.windowId, mode);
   };
+
   return (
     <MouseArea style={style} onMiddleClick={(e) => !disabled && void onPress({ ...e, middle: true })}>
       <ToolbarButton
@@ -245,26 +261,33 @@ export function UrlField({
   const glass = useLiquidGlass();
   const showFullUrl = useSettings((s) => s.showFullUrl);
   const bookmarked = useIsBookmarked(tab.url);
+
   const insecure = usePage(tab.id, (p) =>
     p.security && (p.security.level === "insecure" || p.security.level === "certificateError") ? p.security.level : null,
   );
+
   const popups = usePage(tab.id, (p) => p.popups.length);
   const capture = usePage(tab.id, (p) => p.mediaAccess);
   const controlsOpen = usePages((s) => s.popover[tab.id] === "siteControls");
+
   const openPanel = (text: string) => {
     onFocus();
     useBrowser.getState().openPanel(windowId, text);
   };
+
   const toggleBookmark = () => {
     const s = useBrowser.getState();
     // The whole tab (its favicon too) as it is now; the field itself follows only what it shows.
     const page = s.tabs[tab.id];
+
     if (page) s.toggleBookmark(bookmarkSpaceId(s, s.windows[windowId]), page);
   };
+
   const toggleSiteControls = () => {
     onFocus();
     setPopover(tab.id, currentPopover(tab.id) === "siteControls" ? null : "siteControls");
   };
+
   const { hovered, hoverProps } = useHover();
   const isFile = tab.url.startsWith("file:");
   const host = isFile ? "File" : breadcrumb(tab.url).host;
@@ -394,6 +417,7 @@ export function UrlField({
 function CaptureIndicator({ camera, microphone, screen, onPress }: { camera: boolean; microphone: boolean; screen: boolean; onPress: () => void }) {
   const icon = screen ? "rectangle.inset.filled.on.rectangle" : camera ? "video.fill" : "mic.fill";
   const what = [camera && "camera", microphone && "microphone", screen && "screen"].filter(Boolean).join(" and ");
+
   return (
     <Pressable onPress={onPress} tooltip={`This page is using your ${what}`} style={{ width: 24, height: 24, alignItems: "center", justifyContent: "center" }}>
       <Symbol name={icon} size={12} color={CAPTURE_RED} style={{ width: 18, height: 18 }} />

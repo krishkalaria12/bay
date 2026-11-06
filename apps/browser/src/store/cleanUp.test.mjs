@@ -2,13 +2,16 @@
 // the one on screen), each space after its own time if it has one.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const { cleanUpHours } = await import("./tabTidying.ts");
 const model = await import("./model.ts");
 
 const S = () => useBrowser.getState();
+
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.
 (await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
+
 const HOUR = 3_600_000;
 const urls = (w, spaceId) => model.viewTabIds(S(), w, spaceId).map((id) => S().tabs[id].url);
 
@@ -24,7 +27,9 @@ const setup = (hours) => {
   S().navigate(S().windows[w].activeTabIds[work], "https://c.com");
   const d = S().newTab(w, { url: "https://d.com", background: true });
   S().switchSpace(w, personal);
+
   for (const id of [b, d]) S().updateTab(id, { lastActiveAt: Date.now() - hours * HOUR });
+
   return { personal, work, w };
 };
 
@@ -92,22 +97,29 @@ function originalCandidates(s, windowId, inactiveForMs, now, spaceId) {
   const keep = (t) => shown.has(t.id) || model.pinnedPage(t) || t.kept || s.live[t.id]?.playingAudio;
   const out = new Set();
   const byPage = new Map();
+
   for (const id of view) {
     const t = s.tabs[id];
+
     if (t.url) {
       const key = t.url.replace(/#.*$/, "");
       byPage.set(key, [...(byPage.get(key) ?? []), t]);
     }
   }
+
   for (const same of byPage.values()) {
     if (same.length < 2) continue;
     const keeper = same.find(model.pinnedPage) ?? same.find((t) => t.id === active) ?? [...same].sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0];
+
     for (const t of same) if (t !== keeper && !keep(t) && !split.has(t.id)) out.add(t.id);
   }
+
   for (const id of view) {
     const t = s.tabs[id];
+
     if (!keep(t) && !grouped.has(id) && !split.has(id) && now - t.lastActiveAt >= inactiveForMs) out.add(id);
   }
+
   return view.filter((id) => out.has(id));
 }
 
@@ -121,6 +133,7 @@ function candidateFixture() {
   const active = base.windows[window].activeTabIds[space];
   const tab = base.tabs[active];
   const make = (id, patch = {}) => ({ ...tab, id, url: `https://${id}.test`, lastActiveAt: 90, ...patch });
+
   const state = (tabs, extra = {}) => ({
     ...base,
     tabs: Object.fromEntries(tabs.map((t) => [t.id, t])),
@@ -134,12 +147,14 @@ function candidateFixture() {
     live: {},
     ...extra,
   });
+
   return { space, work, window, other, make, state };
 }
 
 test("cleanup keeps duplicate precedence, group differences, other windows and splits", () => {
   const { window, other, make, state, space } = candidateFixture();
   const page = "https://same.test";
+
   const cases = [
     { tabs: [make("first", { url: page }), make("second", { url: page, pinnedRow: true })], want: ["first"] },
     { tabs: [make("pinned", { url: page, pinned: true }), make("active", { url: page }), make("newest", { url: page, lastActiveAt: 110 })], want: ["newest"] },
@@ -166,12 +181,14 @@ test("cleanup keeps duplicate precedence, group differences, other windows and s
     { tabs: [make("boundary", { lastActiveAt: 90 })], threshold: 10, want: ["boundary"] },
     { tabs: [make("blank", { url: "" })], threshold: 0, want: ["blank"] },
   ];
+
   for (const { tabs, extra, threshold = 100, want } of cases) {
     const s = state(tabs, extra);
     assert.deepEqual(cleanUpCandidates(s, window, threshold, 100), want);
     assert.equal(hasCleanUpCandidates(s, window, threshold, 100), want.length > 0);
     assert.deepEqual(cleanUpCandidates(s, window, threshold, 100), originalCandidates(s, window, threshold, 100));
   }
+
   const s = state([make("active"), make("other")]);
   s.windows[other] = { ...s.windows[other], spaceId: "another", activeTabIds: { [space]: "other" } };
   assert.equal(hasCleanUpCandidates(s, window, 0, 100), false, "remembered tabs in windows showing another space stay");
@@ -180,11 +197,15 @@ test("cleanup keeps duplicate precedence, group differences, other windows and s
 test("cleanup boolean and enumeration exactly match the original over deterministic randomized states", () => {
   const { window, other, make, state, space, work } = candidateFixture();
   let seed = 0x65ab713;
+
   const random = (n) => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+
     return seed % n;
   };
+
   const timestamps = [-Infinity, -10, 0, 90, 100, 101, Infinity, NaN];
+
   for (let fixture = 0; fixture < 300; fixture++) {
     const tabs = Array.from({ length: random(45) }, (_, i) =>
       make(`t${i}`, {
@@ -196,19 +217,26 @@ test("cleanup boolean and enumeration exactly match the original over determinis
         kept: random(8) === 0,
       }),
     );
+
     const s = state(tabs);
+
     for (const t of tabs) {
       if (random(7) === 0) s.live[t.id] = { playingAudio: true };
+
       if (random(4) === 0) (s.groups.g ??= { tabIds: [], pinned: random(2) === 0 }).tabIds.push(t.id);
+
       if (random(5) === 0) (s.splits.s ??= { tabIds: [] }).tabIds.push(t.id);
     }
+
     s.windows[window].activeTabIds = { [space]: `t${random(45)}`, [work]: `t${random(45)}` };
     s.windows[other].activeTabIds = { [space]: `t${random(45)}`, [work]: `t${random(45)}` };
     s.windows[other].spaceId = random(2) ? space : work;
+
     if (random(4) === 0) {
       s.windows[window].kind = "small";
       s.tabLists[window] = tabs.map((t) => t.id);
     }
+
     for (const id of [window, "missing"])
       for (const requestedSpace of [undefined, space, work])
         for (const threshold of [0, 10, 100, -1, NaN]) {

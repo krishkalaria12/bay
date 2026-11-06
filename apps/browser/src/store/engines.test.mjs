@@ -24,14 +24,18 @@ test("engine checks reuse URL parsing", () => {
       parses++;
     }
   };
+
   try {
     const url = "https://www.netflix.com/watch/cache-regression";
     const s = state([tab("cached", { url })]);
+
     for (let i = 0; i < 60; i++) {
       assert.equal(engineMark(s, "cached"), "webkit");
       assert.equal(protectedVideoSite(url), true);
     }
+
     assert.equal(parses, 1, "unchanged rows should not repeatedly construct URLs");
+
     for (let i = 0; i < 1100; i++) siteOf(`https://cache-test.example/${i}`);
     const before = parses;
     assert.equal(protectedVideoSite(url), true);
@@ -51,6 +55,7 @@ test("a tab keeps its engine, else follows its adoption, its opener, then its si
     tab("typed", { url: "https://www.netflix.com/" }),
     tab("copy", { adoptId: "clone:opener" }),
   ]);
+
   assert.equal(tabEngine(s, "fixed"), "chromium");
   assert.equal(tabEngine(s, "popup"), "webkit");
   assert.equal(tabEngine(s, "chrome"), "chromium");
@@ -62,10 +67,12 @@ test("a tab keeps its engine, else follows its adoption, its opener, then its si
 
 test("every other page opens in Chromium, and leftover choices don't count", () => {
   assert.equal(engineForUrl("https://example.com/"), "chromium");
+
   const leftover = {
     ...state([tab("t", { url: "https://example.com/" })]),
     settings: { pageEngine: "webkit", websiteEngines: { "https://example.com": "webkit" } },
   };
+
   assert.equal(tabEngine(leftover, "t"), "chromium");
   assert.equal(engineMark(leftover, "t"), null);
 });
@@ -97,6 +104,7 @@ test("the mark shows only on web pages away from Chromium", () => {
     tab("c", { engine: "chromium", url: "https://a.com/" }),
     tab("n", { engine: "webkit", url: "bay://history" }),
   ]);
+
   assert.equal(engineMark(s, "w"), "webkit");
   assert.equal(engineMark(s, "c"), null);
   assert.equal(engineMark(s, "n"), null);
@@ -116,20 +124,25 @@ function recorder() {
   let clock = 0;
   let next = 0;
   const pending = new Map();
+
   const visits = visitRecorder(
     (profile, visit) => written.push({ profile, ...visit }),
     { set: (run, ms) => (pending.set(++next, { run, at: clock + ms }), next), clear: (id) => pending.delete(id) },
     () => clock,
   );
+
   const advance = (ms) => {
     clock += ms;
+
     for (const [id, timer] of Array.from(pending)) {
       if (timer.at > clock) continue;
       pending.delete(id);
       timer.run();
     }
   };
+
   const page = (url, title, isLoading, committedUrl = url) => ({ url, title, isLoading, committedUrl });
+
   return { visits, written, advance, page };
 }
 
@@ -219,11 +232,13 @@ test("many tabs don't make an open tab record its page again", () => {
   const { visits, written, advance, page } = recorder();
   visits.note("keep", "", page("https://keep.com/", "K", false));
   advance(1500);
+
   for (let i = 0; i < 1200; i++) {
     visits.note(`t${i}`, "", page(`https://s${i}.com/`, "", false));
     advance(1500);
     visits.close(`t${i}`);
   }
+
   visits.note("keep", "", page("https://keep.com/", "K", false));
   advance(1500);
   assert.equal(written.filter((v) => v.url === "https://keep.com/").length, 1);
@@ -233,6 +248,7 @@ test("many tabs don't make an open tab record its page again", () => {
 test("without the WebKit module (Windows, Linux) every page stays in Chromium", () => {
   const s = state([tab("a", { url: "https://www.netflix.com/", engine: "webkit" }), tab("b", { url: "https://example.com/", adoptId: "webkit:3" })]);
   setWebKitAvailable(false);
+
   try {
     assert.equal(tabEngine(s, "a"), "chromium");
     assert.equal(tabEngine(s, "b"), "chromium");

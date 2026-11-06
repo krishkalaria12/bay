@@ -7,6 +7,7 @@ import { DEFAULT_WINDOW_UI } from "../../store/windowUi";
 // strip brings it back. The direction comes from the page (page_script.js › Scroll direction).
 
 export type PageScroll = "down" | "up" | "top";
+
 export type ToolbarMode = "shown" | "collapsed" | "peek";
 
 type Store = {
@@ -22,17 +23,24 @@ const without = (map: Record<string, true>, tabId: string) => {
   if (!map[tabId]) return map;
   const next = { ...map };
   delete next[tabId];
+
   return next;
 };
 
-export function noteScroll(tabId: string, data: unknown) {
-  const state = (data as { state?: unknown } | null)?.state;
+/** The page's scroll report, from page_script.js › Scroll direction. */
+export type ScrollMessage = { state?: string };
+
+export function noteScroll(tabId: string, message: ScrollMessage | null) {
+  const state = message?.state;
+
   if (state !== "down" && state !== "up" && state !== "top") return;
   useToolbarAutoHide.setState((s) => {
     // The page moved under a peeking bar: it goes with the scroll.
     const peek = without(s.peek, tabId);
+
     const scrolledDown =
       state === "down" ? (s.scrolledDown[tabId] ? s.scrolledDown : { ...s.scrolledDown, [tabId]: true as const }) : without(s.scrolledDown, tabId);
+
     return scrolledDown === s.scrolledDown && peek === s.peek ? s : { scrolledDown, peek };
   });
 }
@@ -42,6 +50,7 @@ export function revealToolbar(tabId: string) {
   useToolbarAutoHide.setState((s) => {
     const scrolledDown = without(s.scrolledDown, tabId);
     const peek = without(s.peek, tabId);
+
     return scrolledDown === s.scrolledDown && peek === s.peek ? s : { scrolledDown, peek };
   });
 }
@@ -49,6 +58,7 @@ export function revealToolbar(tabId: string) {
 export function setToolbarPeek(tabId: string, on: boolean) {
   useToolbarAutoHide.setState((s) => {
     if (!!s.peek[tabId] === on) return s;
+
     return { peek: on ? { ...s.peek, [tabId]: true } : without(s.peek, tabId) };
   });
 }
@@ -66,6 +76,7 @@ export type ToolbarModeInput = {
 
 export function toolbarMode(i: ToolbarModeInput): ToolbarMode {
   if (!i.enabled || !i.hasPage || !i.scrolledDown || i.needsBar) return "shown";
+
   return i.peek ? "peek" : "collapsed";
 }
 
@@ -78,16 +89,21 @@ useBrowser.subscribe((s, prev) => {
   if (s.tabs === prev.tabs) return;
   const { scrolledDown, peek } = useToolbarAutoHide.getState();
   const gone: string[] = [];
+
   // Allocates nothing while every entry still has its tab: this runs on every tab update.
   for (const id in scrolledDown) if (!s.tabs[id]) gone.push(id);
+
   for (const id in peek) if (!s.tabs[id]) gone.push(id);
+
   if (!gone.length) return;
   useToolbarAutoHide.setState((st) => {
     let { scrolledDown: d, peek: p } = st;
+
     for (const id of gone) {
       d = without(d, id);
       p = without(p, id);
     }
+
     return { scrolledDown: d, peek: p };
   });
 });

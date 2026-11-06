@@ -19,6 +19,7 @@ export const site = {
 /** The hero's screenshot: public/screenshots has its stable copy, for search engines (scripts/shots). */
 export const heroShotAlt =
   "The Bay browser for Mac in a violet and pink theme: favorites, a Launch folder of pinned tabs and today's tabs in the sidebar, beside the Bay website";
+
 export const heroShotUrl = `${site.url}/screenshots/bay-browser-for-mac.jpg`;
 
 /**
@@ -43,6 +44,9 @@ export const fromArc = [
   ["Little Arc", "Little Bay", "Links from Slack, Mail or Discord open in a small window."],
   ["Command Bar", "Command bar", "Addresses, searches, open tabs and the ones put away."],
 ] as const;
+
+/** One JSON-LD node: string keys holding JSON values, nested as deep as a page's schema goes. */
+export type JsonLd = { [key: string]: string | number | boolean | null | JsonLd | JsonLd[] };
 
 export const faqs = [
   {

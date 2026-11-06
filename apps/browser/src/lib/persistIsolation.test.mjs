@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const stub = await import("../test-native-stub.mjs");
 const { useBrowser } = await import("../store/browserStore.ts");
 const { loadSession, startPersistence } = await import("./persist.ts");

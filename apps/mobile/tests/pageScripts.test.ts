@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
+import * as v from "valibot";
 
 import { ARTICLE_HELPERS } from "../src/pagescripts/article.ts";
 import { MARKDOWN_SCRIPT } from "../src/pagescripts/markdown.ts";
@@ -20,33 +21,43 @@ function fixture(html = '<section id="card"><a id="link" href="/next">Next</a></
   let target = document.getElementById("link");
   // Hit testing needs a layout engine. Everything else (DOM, selectors, shadow roots, CSS and events) is jsdom.
   document.elementFromPoint = () => target!;
+  // SAFETY: jsdom has no CSS.escape, so the picker tests use this identity escape for selectors.
   window.CSS = { escape: (str: string) => str } as any;
   const listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
   const add = window.addEventListener.bind(window);
   const remove = window.removeEventListener.bind(window);
+  // SAFETY: the wrapper mirrors the original listener signature, so it is the same addEventListener implementation.
   window.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: any) => {
     if (!listeners.has(type)) listeners.set(type, new Set());
     listeners.get(type)!.add(listener);
     add(type, listener, options);
   }) as typeof add;
+  // SAFETY: the wrapper mirrors the original listener signature, so it is the same removeEventListener implementation.
   window.removeEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: any) => {
     listeners.get(type)?.delete(listener);
     remove(type, listener, options);
   }) as typeof remove;
   const messages: any[] = [];
+  // SAFETY: page scripts call window.post, which jsdom has no bridge for, so the fixture provides it here.
   (window as any).post = (message: any) => messages.push(message);
   const context = dom.getInternalVMContext();
+
   // Both native bridges serialize the return value before delivering it back to React Native.
   const run = (source: string) => {
     const json = vm.runInContext(`JSON.stringify((() => { ${source}\n })())`, context);
+
     return json === undefined ? undefined : JSON.parse(json);
   };
+
   const event = (type: string, values: any = {}) => {
     const result = new window.Event(type, { bubbles: true, cancelable: true });
     Object.assign(result, { clientX: 20, clientY: 30, touches: [], changedTouches: [], ...values });
     window.dispatchEvent(result);
+
     return { prevented: result.defaultPrevented };
   };
+
+  // SAFETY: the fixture exposes the jsdom window with added post and CSS behavior, so tests use it untyped.
   return {
     document,
     window: window as any,
@@ -141,6 +152,7 @@ test("picker handles touch taps directly, suppresses page actions and lets a dra
   const picker = f.window[Symbol.for("bay.picker")];
   f.run(STOP_PICKER_SCRIPT);
   f.run(STOP_PICKER_SCRIPT);
+
   for (const type of picker.events) assert.equal(f.listeners.get(type)?.has(picker.onTap), false, type);
   assert.equal(f.listeners.get("scroll")?.has(picker.onScroll), false);
   assert.equal(f.listeners.get("resize")?.has(picker.onResize), false);
@@ -174,8 +186,9 @@ test("replacing hidden rules supports undo and ignores invalid selectors", () =>
 });
 
 test("embedded vendor constructors and every generated script parse as standalone page code", () => {
-  assert.equal(typeof vm.runInNewContext(READABILITY), "function");
-  assert.equal(typeof vm.runInNewContext(TURNDOWN, { window: {} }), "function");
+  assert.equal(v.is(v.function(), vm.runInNewContext(READABILITY)), true);
+  assert.equal(v.is(v.function(), vm.runInNewContext(TURNDOWN, { window: {} })), true);
+
   for (const script of [
     MARKDOWN_SCRIPT,
     openReaderScript(DEFAULT_READER),
@@ -224,10 +237,13 @@ test("Markdown falls back to short page content when Readability finds no articl
 
 test("the favicon script picks the page's best non-SVG icon, else /favicon.ico", async () => {
   const { FAVICON_SCRIPT } = await import("../src/pagescripts/favicon.ts");
+
   const icon = (head: string) => {
     const dom = new JSDOM(`<head>${head}</head>`, { url: "https://example.com/a/b", runScripts: "outside-only" });
+
     return JSON.parse(vm.runInContext(`JSON.stringify((() => { ${FAVICON_SCRIPT}\n })())`, dom.getInternalVMContext())).href;
   };
+
   assert.equal(icon(""), "https://example.com/favicon.ico");
   assert.equal(
     icon('<link rel="icon" href="/16.png" sizes="16x16"><link rel="apple-touch-icon" href="/touch.png"><link rel="icon" href="/i.svg" type="image/svg+xml">'),

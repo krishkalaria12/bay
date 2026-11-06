@@ -16,6 +16,16 @@ import { InspectPanel } from "@/panels/InspectPanel";
 import { ReaderPanel } from "@/panels/ReaderPanel";
 import { useBrowserStore } from "@/store/browser";
 import type { BrowserTab } from "@/store/types";
+import * as v from "valibot";
+
+const pickedMessageSchema = v.object({
+  type: v.literal("picked"),
+  selector: v.string(),
+  label: v.string(),
+  tag: v.optional(v.unknown()),
+  width: v.optional(v.unknown()),
+  height: v.optional(v.unknown()),
+});
 
 export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoading: boolean, blocked: boolean, fail: (cause: unknown) => void) {
   const { data, dispatch } = useBrowserStore();
@@ -46,6 +56,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     setPicked(null);
     setInspected(null);
     setNotice("");
+
     return () => {
       if (view) {
         void runPageScript(view, STOP_PICKER_SCRIPT).catch(() => {});
@@ -60,35 +71,43 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);
+
     return () => clearTimeout(timer);
   }, [notice]);
 
   async function script<T>(source: string): Promise<T> {
     if (blocked) throw new Error("Unlock private tabs first.");
+
     if (!view) throw new Error("The page isn't ready.");
     const version = context.current;
     const result = await runPageScript<T>(view, source);
+
     if (context.current !== version) throw new Error("The page changed.");
+
     return result;
   }
+
   function task(action: () => Promise<void>): void {
     const version = context.current;
     void action().catch((cause) => {
       if (context.current === version) fail(cause);
     });
   }
+
   async function endPicking(): Promise<void> {
     await script(STOP_PICKER_SCRIPT);
     setPicking(false);
     setPicked(null);
     setInspected(null);
   }
+
   function startPicking(mode: "hide" | "inspect"): void {
     task(async () => {
       if (reader) await script(CLOSE_READER_SCRIPT);
       setReaderTab(null);
       const version = context.current;
       await script(START_PICKER_SCRIPT);
+
       if (context.current !== version) return;
       setPickMode(mode);
       setPicking(true);
@@ -96,53 +115,61 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
       setInspected(null);
     });
   }
+
   /** Opens the details of the picked element. */
   function inspect(): void {
     task(async () => {
       const element = await script<InspectedElement | null>(INSPECT_SCRIPT);
+
       if (element) setInspected(element);
     });
   }
+
   function parent(): void {
     task(async () => {
       if (!(await script<boolean>(PICK_PARENT_SCRIPT))) setNotice("No larger element to select.");
     });
   }
+
   function setRules(selectors: string[]): void {
     if (active.private) setPrivateRules((previous) => ({ ...previous, [active.id]: { ...previous[active.id], [host]: selectors } }));
     else dispatch({ type: "hidden-elements", host, selectors });
   }
+
   function pageMessage(message: string): void {
     if (!picking) return;
+
+    let value: unknown;
+
     try {
-      const value: unknown = JSON.parse(message);
-      if (
-        value &&
-        typeof value === "object" &&
-        "type" in value &&
-        value.type === "picked" &&
-        "selector" in value &&
-        typeof value.selector === "string" &&
-        value.selector.length < 4096 &&
-        "label" in value &&
-        typeof value.label === "string"
-      ) {
-        const fields = value as Record<string, unknown>;
-        const size = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.round(n) : 0);
-        const tag = typeof fields.tag === "string" ? fields.tag.slice(0, 40) : "";
-        setPicked({ type: "picked", selector: value.selector, label: value.label.slice(0, 200), tag, width: size(fields.width), height: size(fields.height) });
-        if (pickMode === "inspect") inspect();
-      }
+      value = JSON.parse(message);
     } catch {
-      /* A malformed page message has no action. */
+      // A malformed page message has no action.
+      return;
     }
+
+    const parsed = v.safeParse(pickedMessageSchema, value);
+
+    if (!parsed.success) return;
+
+    if (parsed.output.selector.length >= 4096) return;
+
+    const tag = v.is(v.string(), parsed.output.tag) ? parsed.output.tag.slice(0, 40) : "";
+    const width = v.is(v.number(), parsed.output.width) && Number.isFinite(parsed.output.width) ? Math.round(parsed.output.width) : 0;
+    const height = v.is(v.number(), parsed.output.height) && Number.isFinite(parsed.output.height) ? Math.round(parsed.output.height) : 0;
+
+    setPicked({ type: "picked", selector: parsed.output.selector, label: parsed.output.label.slice(0, 200), tag, width, height });
+
+    if (pickMode === "inspect") inspect();
   }
+
   function changeSettings(settings: ReaderSettings): void {
     dispatch({ type: "reader-settings", settings });
     task(async () => {
       await script(updateReaderScript(settings));
     });
   }
+
   return {
     reader,
     picking,
@@ -152,10 +179,12 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
       else if (inspected) setInspected(null);
       else if (picking) task(endPicking);
       else return false;
+
       return true;
     },
     selectorsFor(tab: BrowserTab): string[] {
       const site = hostOf(tab.url);
+
       return siteRules(tab.private ? privateRules[tab.id] : data.preferences.hiddenElements, site);
     },
     pageMessage,
@@ -165,16 +194,23 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
       task(async () => {
         if (reader) {
           setSettingsOpen(true);
+
           return;
         }
+
         const version = context.current;
+
         if (picking) await endPicking();
         const result = await script<{ ok: boolean }>(openReaderScript(data.preferences.reader));
+
         if (context.current !== version) return;
+
         if (!result.ok) {
           setNotice("No article found on this page.");
+
           return;
         }
+
         setReaderTab(active.id);
         setSettingsOpen(true);
       }),
@@ -248,6 +284,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     ),
   };
 }
+
 /** The picker's floating card: what's picked, in words, with its tag and size, over a row of actions. */
 function PickerCard({
   testID,
@@ -267,6 +304,7 @@ function PickerCard({
   const accent = useThemeColor("accent");
   // Android's surfaces are translucent; over page text that hurts reading, so this card is solid there.
   const solid = useColorScheme() === "dark" ? "#171717" : "#FFFFFF";
+
   return (
     <Surface radius={26} style={[{ padding: 14, gap: 12 }, Platform.OS === "android" && { backgroundColor: solid }]}>
       <View className="flex-row items-center gap-3">
@@ -304,6 +342,7 @@ function ToolButton({
 }) {
   const foreground = useThemeColor("foreground");
   const accentForeground = useThemeColor("accent-foreground");
+
   return (
     <Pressable
       testID={id}

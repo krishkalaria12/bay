@@ -12,42 +12,56 @@ import {
   type SharedItem,
   type SharedLink,
 } from "./sharedCollection.ts";
+import type { JsonValue } from "./json.ts";
+
+// Some malformed fixtures carry an explicit undefined field, so cases also allow it.
+type RawValue = JsonValue | undefined;
 
 const link = (url = "https://example.com/", title = "Example"): SharedLink => ({ kind: "link", title, url });
 const collection = (children: SharedItem[] = [link()]): SharedCollection => ({ version: 1, kind: "folder", title: "Reading", children });
-const compress = (value: unknown): string => LZString.compressToEncodedURIComponent(JSON.stringify(value));
+const compress = (value: RawValue): string => LZString.compressToEncodedURIComponent(JSON.stringify(value));
 
-function rejectsBoth(value: unknown, error: RegExp): void {
+function rejectsBoth(value: RawValue, error: RegExp): void {
+  // SAFETY: each case pairs a malformed collection shape with the exact error encodeSharedCollection must throw for it.
   assert.throws(() => encodeSharedCollection(value as SharedCollection), error);
   assert.throws(() => decodeSharedCollection(compress(value)), error);
 }
 
 function nested(depth: number): SharedCollection {
   let item: SharedItem = link();
+
   for (let i = 1; i < depth; i++) item = { kind: "folder", title: `Level ${i}`, children: [item] };
+
   return collection([item]);
 }
 
 function rawSizedCollection(size: number): SharedCollection {
   const result = collection(Array.from({ length: 100 }, () => link("https://example.com/", "文".repeat(1_000))));
   let needed = size - JSON.stringify(result).length;
+
+  // SAFETY: rawSizedCollection fills children only via link(), so every child entry is a SharedLink by construction.
   for (const item of result.children as SharedLink[]) {
     const added = Math.min(needed, 8_192 - item.url.length);
     item.url += "x".repeat(added);
     needed -= added;
+
     if (!needed) break;
   }
+
   assert.equal(needed, 0);
   assert.equal(JSON.stringify(result).length, size);
+
   return result;
 }
 
 test("30 nested Unicode tabs round-trip without losing folders, ordering, titles, or URL fragments", () => {
   const tabs = Array.from({ length: 30 }, (_, i) => link(`https://例え.jp/記事/${i}?q=☕&name=élève#段落-${i}`, `タブ ${i} · مرحبا · नमस्ते · 👩🏽‍💻`));
+
   const value = collection([
     ...tabs.slice(0, 10),
     { kind: "folder", title: "研究 📚", children: [...tabs.slice(10, 20), { kind: "folder", title: "Nested", children: tabs.slice(20) }] },
   ]);
+
   value.title = "共同研究 🌍 e\u0301";
   const token = encodeSharedCollection(value);
   assert.match(token, /^[A-Za-z0-9+-]+$/);
@@ -74,7 +88,10 @@ test("exports and imports rebuild only allowed fields at every level", () => {
       { kind: "folder", title: "Folder", databaseId: "secret-folder-id", children: [{ ...link(), history: ["secret-history"], favicon: "secret-icon" }] },
     ],
   };
+
   const clean = collection([{ kind: "folder", title: "Folder", children: [link()] }]);
+
+  // SAFETY: this value deliberately carries extra storage fields; the encoder must strip them before tokenizing.
   const token = encodeSharedCollection(value as SharedCollection);
   assert.equal(LZString.decompressFromEncodedURIComponent(token), JSON.stringify(clean));
   assert.deepEqual(decodeSharedCollection(compress(value)), clean);
@@ -94,26 +111,29 @@ test("extra fields cannot run toJSON or leak through prototypes during serializa
   assert.deepEqual(decodeSharedCollection(encodeSharedCollection(value)), collection());
   const polluted = JSON.parse('{"version":1,"kind":"folder","title":"Reading","children":[],"__proto__":{"polluted":true}}');
   assert.deepEqual(decodeSharedCollection(compress(polluted)), collection([]));
-  assert.equal(({} as Record<string, unknown>).polluted, undefined);
+  const plain: Record<string, JsonValue> = {};
+
+  assert.equal(plain.polluted, undefined);
 });
 
 test("malformed shapes and unsupported versions fail on export and import", () => {
-  const cases: [unknown, RegExp][] = [
+  const cases: [RawValue, RegExp][] = [
     [null, /collection must be an object/],
     [[], /collection must be an object/],
     [{ ...collection(), version: 2 }, /unsupported version/],
     [{ ...collection(), version: "1" }, /unsupported version/],
-    [{ ...collection(), version: undefined }, /unsupported version/],
+    [JSON.parse('{"kind":"folder","title":"Reading","children":[]}'), /unsupported version/],
     [{ ...collection(), kind: "link" }, /collection.kind/],
     [{ ...collection(), title: 12 }, /collection.title/],
     [{ ...collection(), children: {} }, /children must be an array/],
-    [collection([null as unknown as SharedItem]), /must be an object/],
-    [collection([{ kind: "split", title: "Invalid" } as unknown as SharedItem]), /kind must be link or folder/],
-    [collection([{ kind: "folder", title: "Invalid" } as unknown as SharedItem]), /children must be an array/],
-    [collection([{ ...link(), title: false } as unknown as SharedItem]), /title must be a string/],
-    [collection([{ ...link(), url: 123 } as unknown as SharedItem]), /nonempty HTTP/],
+    [{ version: 1, kind: "folder", title: "Reading", children: [null] }, /must be an object/],
+    [{ version: 1, kind: "folder", title: "Reading", children: [{ kind: "split", title: "Invalid" }] }, /kind must be link or folder/],
+    [{ version: 1, kind: "folder", title: "Reading", children: [{ kind: "folder", title: "Invalid" }] }, /children must be an array/],
+    [{ version: 1, kind: "folder", title: "Reading", children: [{ ...link(), title: false }] }, /title must be a string/],
+    [{ version: 1, kind: "folder", title: "Reading", children: [{ ...link(), url: 123 }] }, /nonempty HTTP/],
     [collection([link("")]), /nonempty HTTP/],
   ];
+
   for (const [value, error] of cases) rejectsBoth(value, error);
   assert.throws(() => encodeSharedCollection(collection(Array<SharedItem>(1))), /must be an object/);
 });
@@ -221,8 +241,10 @@ test("private URL checks remain consistent with React Native's regex URL shim", 
       return this.value.match(/https?:\/\/.*:(.*)@/)?.[1] ?? "";
     }
   }
+
   const browserURL = globalThis.URL;
-  globalThis.URL = ReactNativeURL as unknown as typeof URL;
+  Object.defineProperty(globalThis, "URL", { value: ReactNativeURL, configurable: true });
+
   try {
     for (const url of [
       "https://127.1/private",
@@ -240,13 +262,15 @@ test("private URL checks remain consistent with React Native's regex URL shim", 
       "https://ＬＯＣＡＬＨＯＳＴ/private",
     ])
       rejectsBoth(collection([link(url)]), /localhost|private network/);
+
     for (const url of ["HTTPS://user:secret@EXAMPLE.COM/", "HTTPS://@EXAMPLE.COM/"]) rejectsBoth(collection([link(url)]), /credentials/);
+
     for (const url of ["HTTPS://EXAMPLE.COM/path", "https://[2606:4700:4700::1111]/", "https://[::ffff:8.8.8.8]/", "https://例え.jp/記事"]) {
       const value = collection([link(url)]);
       assert.deepEqual(decodeSharedCollection(encodeSharedCollection(value)), value);
     }
   } finally {
-    globalThis.URL = browserURL;
+    Object.defineProperty(globalThis, "URL", { value: browserURL, configurable: true });
   }
 });
 
@@ -303,12 +327,16 @@ test("public HTTP(S), public literal IPs, IDNs, ports, queries, and fragments re
 
 test("malformed tokens, truncation, invalid JSON, and trailing compressed garbage throw useful errors", () => {
   for (const token of ["", "#abc", "%20", "a b", "abc/", "abc_", "💥", "abc$", "abc\n", null, undefined, 42]) {
+    // SAFETY: this array deliberately feeds non-strings to decodeSharedCollection's runtime token guard, which must reject them.
     assert.throws(() => decodeSharedCollection(token as string), /share token/);
   }
+
   const token = encodeSharedCollection(collection());
+
   for (const bad of ["A", "B", "D", "AAAA", token.slice(0, -3), `${token}AAAA`]) {
     assert.throws(() => decodeSharedCollection(bad), /compressed share token/);
   }
+
   assert.throws(() => decodeSharedCollection(LZString.compressToEncodedURIComponent("not JSON")), /not valid JSON/);
   assert.throws(() => decodeSharedCollection(LZString.compressToEncodedURIComponent("")), /compressed share token/);
 });
@@ -338,6 +366,7 @@ test("descendant depth 12 is allowed, depth 13 and cyclic structures are rejecte
 test("title and URL length boundaries apply to the root and nested items", () => {
   const value = collection([link(`https://example.com/${"x".repeat(8_192 - 20)}`, "x".repeat(1_024))]);
   value.title = "x".repeat(1_024);
+  // SAFETY: this test builds children only from link(), so the first child is a SharedLink by construction.
   assert.equal((value.children[0] as SharedLink).url.length, 8_192);
   assert.deepEqual(decodeSharedCollection(encodeSharedCollection(value)), value);
   rejectsBoth({ ...value, title: "x".repeat(1_025) }, /title exceeds 1024/);
@@ -361,6 +390,7 @@ test("a compressed bomb is rejected before lz-string allocates the decompressed 
     called = true;
     throw new Error("unbounded decompression");
   };
+
   try {
     assert.throws(() => decodeSharedCollection(token), /decompressed data exceeds 128000/);
     assert.equal(called, false);
@@ -373,12 +403,15 @@ test("the token boundary is 16000 characters and incompressible collections cann
   assert.throws(() => decodeSharedCollection("A".repeat(16_001)), /share token exceeds 16000/);
   assert.throws(() => decodeSharedCollection("A".repeat(16_000)), /compressed share token/);
   let state = 123456789;
+
   const random = () => {
     state ^= state << 13;
     state ^= state >>> 17;
     state ^= state << 5;
+
     return String.fromCharCode(33 + ((state >>> 0) % 90));
   };
+
   const value = collection(Array.from({ length: 30 }, () => link(undefined, Array.from({ length: 1_000 }, random).join(""))));
   assert.ok(JSON.stringify(value).length < 128_000);
   assert.ok(compress(value).length > 16_000);
@@ -390,6 +423,7 @@ test("web and app URL helpers preserve token bytes and use the official fragment
   const token = encodeSharedCollection(value);
   assert.equal(sharedCollectionUrl(value), `https://bay.krishkalaria.in/share/#${token}`);
   assert.equal(sharedCollectionAppUrl(token), `bay://share/#${token}`);
+
   for (const prefix of [
     "https://bay.krishkalaria.in/share#",
     "https://bay.krishkalaria.in/share/#",
@@ -399,6 +433,7 @@ test("web and app URL helpers preserve token bytes and use the official fragment
   ]) {
     assert.equal(sharedCollectionToken(`${prefix}${token}`), token);
   }
+
   assert.equal(sharedCollectionToken("bay://share/#a+b-c"), "a+b-c");
   assert.throws(() => sharedCollectionAppUrl("junk"), /Invalid shared collection/);
   assert.throws(() => sharedCollectionAppUrl(compress(collection([link("http://localhost/")]))), /localhost/);
@@ -406,6 +441,7 @@ test("web and app URL helpers preserve token bytes and use the official fragment
 
 test("token extraction rejects lookalike origins, credentials, ports, query strings, and normalized path tricks", () => {
   const token = encodeSharedCollection(collection());
+
   for (const base of [
     "http://bay.krishkalaria.in/share/",
     "https://evil.example/share/",
@@ -437,6 +473,7 @@ test("token extraction rejects lookalike origins, credentials, ports, query stri
     "https://bay.krishkalaria.in\\share/",
   ])
     assert.equal(sharedCollectionToken(`${base}#${token}`), null, base);
+
   for (const url of [
     "bay://share/",
     "bay://share/#",
@@ -449,13 +486,15 @@ test("token extraction rejects lookalike origins, credentials, ports, query stri
   ]) {
     assert.equal(sharedCollectionToken(url), null, url.slice(0, 80));
   }
-  assert.equal(sharedCollectionToken(null as unknown as string), null);
+
+  assert.equal(sharedCollectionToken(null), null);
   assert.equal(sharedCollectionToken(`bay://share/#${"A".repeat(16_000)}`)?.length, 16_000);
 });
 
 test("codec runs without URL, Buffer, base64 globals, or text encoding globals", () => {
   const names = ["URL", "Buffer", "btoa", "atob", "TextEncoder", "TextDecoder"];
   const descriptors = names.map((name) => Object.getOwnPropertyDescriptor(globalThis, name));
+
   try {
     for (const name of names) Object.defineProperty(globalThis, name, { configurable: true, value: undefined });
     const value = collection([link("https://example.com/世界", "Привет 🌻")]);
@@ -463,6 +502,7 @@ test("codec runs without URL, Buffer, base64 globals, or text encoding globals",
   } finally {
     names.forEach((name, index) => {
       const descriptor = descriptors[index];
+
       if (descriptor) Object.defineProperty(globalThis, name, descriptor);
       else Reflect.deleteProperty(globalThis, name);
     });
@@ -471,12 +511,15 @@ test("codec runs without URL, Buffer, base64 globals, or text encoding globals",
 
 test("dictionary length preflight accepts varied ASCII, Unicode, and escaped JSON payloads", () => {
   let state = 17;
+
   for (let i = 0; i < 100; i++) {
     let title = "";
+
     for (let j = 0; j < i * 10; j++) {
       state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
       title += String.fromCharCode(state % 65_536);
     }
+
     const value = collection([link(undefined, title)]);
     assert.deepEqual(decodeSharedCollection(encodeSharedCollection(value)), value);
   }

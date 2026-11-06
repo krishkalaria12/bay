@@ -72,11 +72,14 @@ export const usePages = create<Store>()(() => ({ pages: {}, browsers: {}, chrome
 export function patchPage(tabId: string, patch: Partial<PageState>) {
   usePages.setState((s) => {
     const current = s.pages[tabId] ?? IDLE_PAGE;
+
     for (const key in patch) {
+      // SAFETY: keyof PageState], patch[key as keyof PageState])) { assertion matches the runtime value validated at this call site.
       if (!Object.is(current[key as keyof PageState], patch[key as keyof PageState])) {
         return { pages: { ...s.pages, [tabId]: { ...current, ...patch } } };
       }
     }
+
     return s;
   });
 }
@@ -90,11 +93,14 @@ export function usePage<T>(tabId: string | undefined, select: (p: PageState) => 
 export function setBrowserId(tabId: string, browserId: number, chromeTabId?: number) {
   usePages.setState((s) => {
     const browsers = { ...s.browsers };
+
     for (const [id, tab] of Object.entries(browsers)) if (tab === tabId) delete browsers[Number(id)];
     browsers[browserId] = tabId;
     const chromeTabs = { ...s.chromeTabs };
+
     if (chromeTabId && chromeTabId > 0) chromeTabs[tabId] = chromeTabId;
     else delete chromeTabs[tabId];
+
     return { browsers, chromeTabs };
   });
 }
@@ -106,6 +112,7 @@ export function clearChromeTabId(tabId: string) {
     if (!(tabId in s.chromeTabs)) return s;
     const chromeTabs = { ...s.chromeTabs };
     delete chromeTabs[tabId];
+
     return { chromeTabs };
   });
 }
@@ -122,13 +129,17 @@ export function useFullscreenTab(windowId: string): string | undefined {
   // Both selectors return strings, so switching tabs doesn't re-render the callers (the window root).
   const fullscreen = usePages((s) => {
     let ids = "";
+
     for (const id in s.pages) if (s.pages[id]!.fullscreen) ids += `${id}\n`;
+
     return ids;
   });
+
   return useBrowser((s) => {
     if (!fullscreen) return undefined;
     const active = activeTabId(s, windowId);
     const shown = active ? (splitOf(s, active)?.tabIds ?? [active]) : [];
+
     return shown.find((id) => fullscreen.split("\n").includes(id));
   });
 }
@@ -136,25 +147,33 @@ export function useFullscreenTab(windowId: string): string | undefined {
 useBrowser.subscribe((s, prev) => {
   if (s.tabs === prev.tabs) return;
   const { pages, browsers, chromeTabs, popover } = usePages.getState();
+
   // Plain loops that allocate nothing while every entry still has its tab: this runs on every tab update.
   const stale = (ids: string[], tabOf: (id: string) => string) => {
     for (let i = 0; i < ids.length; i++) if (!s.tabs[tabOf(ids[i]!)]) return true;
+
     return false;
   };
+
   const pageIds = Object.keys(pages);
   const browserIds = Object.keys(browsers);
+
   if (!stale(pageIds, (id) => id) && !stale(browserIds, (id) => browsers[Number(id)]!)) return;
   const gone = pageIds.filter((id) => !s.tabs[id]);
   const goneBrowsers = Object.entries(browsers).filter(([, id]) => !s.tabs[id]);
   const nextPages = { ...pages };
   const nextPopover = { ...popover };
+
   for (const id of gone) {
     delete nextPages[id];
     delete nextPopover[id];
   }
+
   const nextBrowsers = { ...browsers };
+
   for (const [id] of goneBrowsers) delete nextBrowsers[Number(id)];
   const nextChromeTabs = { ...chromeTabs };
+
   for (const id of Object.keys(chromeTabs)) if (!s.tabs[id]) delete nextChromeTabs[id];
   usePages.setState({ pages: nextPages, browsers: nextBrowsers, chromeTabs: nextChromeTabs, popover: nextPopover });
 });

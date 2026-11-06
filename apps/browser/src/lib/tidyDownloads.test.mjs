@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { tidyNameAnswers, renameCalls } from "@bay/desktop";
+
 const { useBrowser } = await import("../store/browserStore.ts");
 const { useToasts } = await import("../components/ui/toasts.ts");
 const { resolveTidySuggestion, tidyFinishedDownload } = await import("./tidyDownloads.ts");
@@ -16,6 +17,7 @@ function setup(patch = {}, { enabled = true, answer = null } = {}) {
   renameCalls.length = 0;
   const w = S().createWindow({ url: "https://acme.com/reports" });
   const id = `d${++seq}`;
+
   const d = {
     id,
     url: "https://cdn.acme.com/IMG_20261024_8812.pdf",
@@ -31,8 +33,10 @@ function setup(patch = {}, { enabled = true, answer = null } = {}) {
     tabUrl: "https://acme.com/reports",
     ...patch,
   };
+
   S().updateTab(S().windows[w].activeTabIds[S().windows[w].spaceId], { title: "Q3 2026 Report | Acme" });
   S().upsertDownload(d);
+
   return { w, d, find: () => S().downloads.find((x) => x.id === id) };
 }
 
@@ -85,8 +89,10 @@ test("a file renamed while the model thinks keeps the person's name", async () =
   const { d, find } = setup();
   tidyNameAnswers.answer = () => {
     S().updateDownloadFile(d.id, { filename: "Mine.pdf", path: "/Downloads/Mine.pdf" });
+
     return "Acme Report";
   };
+
   await tidyFinishedDownload(d);
   assert.equal(find().filename, "Mine.pdf");
   assert.equal(renameCalls.length, 0);

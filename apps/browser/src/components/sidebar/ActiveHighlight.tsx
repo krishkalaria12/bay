@@ -16,13 +16,17 @@ export function ActiveHighlight({ active, tabIds, borderWidth }: { active: boole
   // row, made for every row of a long list as it mounts). It mounts in the render that first makes the row active,
   // where a mounted one would have started its slide in.
   const [ever, setEver] = useState(active);
+
   if (active && !ever) setEver(true);
+
   return ever ? <SlidingHighlight active={active} tabIds={tabIds} borderWidth={borderWidth} /> : null;
 }
 
 function SlidingHighlight({ active, tabIds, borderWidth }: { active: boolean; tabIds: string[]; borderWidth: number }) {
   const slide = useSwitchSlide(useWindowId(), tabIds, active, ROW_SLIDE);
+
   if (!active && !slide) return null;
+
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, slide]}>
       <SelectedFill borderWidth={borderWidth} />
@@ -33,6 +37,7 @@ function SlidingHighlight({ active, tabIds, borderWidth }: { active: boolean; ta
 /** The selected row's fill, its border and glow. */
 export function SelectedFill({ borderWidth }: { borderWidth: number }) {
   const theme = useTheme();
+
   return (
     <Surface
       fill={hex(theme.tabSelected)}

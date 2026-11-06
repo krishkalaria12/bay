@@ -1,7 +1,8 @@
 import { crashReports, systemInfo } from "@bay/desktop";
 import { advanceCrashCursor, capture, crashCursor, isSharing, loadChoice } from "./client";
 import { recordLog } from "./logs";
-import { errorCode, errorMessage, errorType, nativeCrashExceptions, parseStack, type ExceptionFrame } from "./sanitize";
+import * as v from "valibot";
+import { errorCode, errorMessage, errorType, nativeCrashExceptions, parseStack, type ExceptionFrame, type TelemetryError } from "./sanitize";
 import { MAX_ERRORS_PER_SESSION } from "./config";
 
 type Mechanism = "onerror" | "onunhandledrejection" | "react" | "console" | "native_crash";
@@ -13,18 +14,27 @@ function exceptionList(type: string, value: string, mechanism: Mechanism, handle
   return [{ type, value, mechanism: { type: mechanism, handled, synthetic: false }, stacktrace: { type: "raw", frames } }];
 }
 
-export function captureException(error: unknown, mechanism: Mechanism, { fatal = false, handled = false } = {}) {
+export function captureException(error: TelemetryError, mechanism: Mechanism, { fatal = false, handled = false } = {}) {
   if (!isSharing()) return;
+
   try {
-    if (error && typeof error === "object") {
-      if (reported.has(error)) return;
-      reported.add(error);
+    if (Array.isArray(error) || v.is(v.object({}), error)) {
+      // SAFETY: error is an object or array, so it can be tracked by identity.
+      if (reported.has(error as object)) return;
+
+      // SAFETY: error is an object or array, so it can be tracked by identity.
+      reported.add(error as object);
     }
+
     const type = errorType(error);
     const value = errorMessage(error) || type;
-    const frames = parseStack(error && typeof error === "object" ? (error as { stack?: unknown }).stack : undefined);
+
+    // SAFETY: error is an object or array, so reading its stack field is safe; otherwise stack is undefined.
+    const rawStack = Array.isArray(error) || v.is(v.object({}), error) ? (error as { stack?: unknown }).stack : undefined;
+    const frames = parseStack(v.is(v.string(), rawStack) ? rawStack : undefined);
     const code = errorCode(error);
     const key = `${type}|${value}|${code ?? ""}|${frames.at(-1)?.function ?? ""}`;
+
     if (seen.has(key) || seen.size >= MAX_ERRORS_PER_SESSION) return;
     seen.add(key);
     capture(
@@ -37,13 +47,14 @@ export function captureException(error: unknown, mechanism: Mechanism, { fatal =
 }
 
 type ErrorUtilsType = {
-  getGlobalHandler?: () => ((error: unknown, isFatal?: boolean) => void) | undefined;
-  setGlobalHandler?: (handler: (error: unknown, isFatal?: boolean) => void) => void;
+  getGlobalHandler?: () => ((error: TelemetryError, isFatal?: boolean) => void) | undefined;
+  setGlobalHandler?: (handler: (error: TelemetryError, isFatal?: boolean) => void) => void;
 };
+
 type HermesInternalType = {
   enablePromiseRejectionTracker?: (options: {
     allRejections: boolean;
-    onUnhandled: (id: number, rejection: unknown) => void;
+    onUnhandled: (id: number, rejection: TelemetryError) => void;
     onHandled: (id: number) => void;
   }) => void;
 };
@@ -54,6 +65,8 @@ export function installErrorReporting() {
   if (installed) return;
   installed = true;
   loadChoice();
+
+  // SAFETY: globalThis holds the host ErrorUtils and HermesInternal hooks when present.
   const g = globalThis as { ErrorUtils?: ErrorUtilsType; HermesInternal?: HermesInternalType };
 
   const previous = g.ErrorUtils?.getGlobalHandler?.();
@@ -66,6 +79,7 @@ export function installErrorReporting() {
     allRejections: true,
     onUnhandled: (id, rejection) => {
       captureException(rejection, "onunhandledrejection");
+
       if (__DEV__) console.warn(`Possible unhandled promise rejection (id: ${id})`, rejection);
     },
     onHandled: () => {},
@@ -77,14 +91,19 @@ export function installErrorReporting() {
     console[level] = (...args: unknown[]) => {
       if (!busy) {
         busy = true;
+
         try {
           const first = args[0];
+
           if (level === "error" && first instanceof Error) {
+            // SAFETY: first is an Error already narrowed by instanceof, so reading its React flag is safe.
             captureException(first, (first as { isComponentError?: boolean }).isComponentError ? "react" : "console");
           } else recordLog(level, args);
         } catch {}
+
         busy = false;
       }
+
       original.apply(console, args);
     };
   }
@@ -96,8 +115,10 @@ export async function reportNativeCrashes() {
   const reports = await crashReports(since).catch(() => []);
   const version = systemInfo().appVersion;
   let latest = since;
+
   for (const report of reports) {
     latest = Math.max(latest, report.time);
+
     if (report.appVersion && report.appVersion !== version) continue;
     const { name, signal, exceptions } = nativeCrashExceptions(report);
     capture(
@@ -115,5 +136,6 @@ export async function reportNativeCrashes() {
       },
     );
   }
+
   advanceCrashCursor(latest);
 }

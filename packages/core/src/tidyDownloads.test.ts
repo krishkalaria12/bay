@@ -23,6 +23,7 @@ test("looksGenerated knows a camera, a hash, a date and a save-panel name", () =
     "57557750-3c95-4ba0-957f-63e12bcba39e",
   ])
     assert.equal(looksGenerated(name), true, name);
+
   for (const name of ["Q4 2025 Roadmap", "How to feel less stressed", "NASA Artemis 2 launch", "My Report"]) assert.equal(looksGenerated(name), false, name);
 });
 
@@ -58,6 +59,7 @@ test("Arc's Midjourney prompt drops its handle, hash and dangling words", () => 
     filename: "rahulchowdhury._close_up_portrait_of_an_astronaut_floating_in_s_57557750-3c95-4ba0-957f-63e12bcba39e.png",
     pageTitle: "Midjourney",
   });
+
   assert.equal(tidy?.filename, "Close Up Portrait of an Astronaut Floating.png");
   assert.equal(tidy?.basis, "file");
 });

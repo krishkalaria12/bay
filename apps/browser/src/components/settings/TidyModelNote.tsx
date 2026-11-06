@@ -22,11 +22,15 @@ export function TidyModelNote({ available, fallback }: { available: string; fall
   const [status, setStatus] = useState(readStatus);
   useEffect(() => {
     const timer = setInterval(() => setStatus(readStatus()), 3000);
+
     return () => clearInterval(timer);
   }, []);
+
   if (status === "available") return available;
   const why = status && WHY[status];
+
   if (!why) return fallback;
+
   return (
     <>
       {fallback} {why}

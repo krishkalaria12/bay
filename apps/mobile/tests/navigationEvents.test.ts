@@ -11,6 +11,7 @@ const ev = (url: string, progress: number, isLoading: boolean) => ({ url, progre
 function run(events: ReturnType<typeof ev>[], hasRules = false, timing = initialTiming()): string[] {
   return events.map((event) => {
     const { watchMedia, hideElements } = scriptsFor(timing, event, hasRules);
+
     return (watchMedia ? "m" : "") + (hideElements ? "h" : "");
   });
 }
@@ -58,6 +59,7 @@ test("only changes the screen shows count as a new navigation state", () => {
   assert.equal(sameNavigation(before, { ...before }, false), true);
   assert.equal(sameNavigation(before, { ...before, progress: 0.6 }, false), false);
   assert.equal(sameNavigation(before, { ...before, progress: 0.6 }, true), true);
+
   for (const change of [{ url: B }, { title: "B" }, { isLoading: false }, { canGoBack: true }, { canGoForward: true }]) {
     assert.equal(sameNavigation(before, { ...before, ...change }, true), false);
   }

@@ -23,16 +23,19 @@ describe.skipIf(!macos)("CLI installer", () => {
     const source = join(root, "packages", packageName);
     mkdirSync(join(source, "bin"), { recursive: true });
     const executable = join(source, "bin", "bay");
+
     if (outsideLink) symlinkSync("/usr/bin/true", executable);
     else {
       writeFileSync(executable, `#!/bin/sh\nprintf 'bay ${version}\\n'\n`);
       chmodSync(executable, 0o755);
     }
+
     const output = join(root, `bay-cli-${version}-macos-arm64.tar.gz`);
     const tar = Bun.spawnSync(["/usr/bin/tar", "-czf", output, "-C", join(root, "packages"), packageName], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
     expect(tar.exitCode).toBe(0);
     const digest = new Bun.CryptoHasher("sha256").update(readFileSync(output)).digest("hex");
     writeFileSync(`${output}.sha256`, `${digest}\n`);
+
     return output;
   }
 
@@ -81,11 +84,14 @@ describe.skipIf(!macos)("CLI installer", () => {
   it("waits for a running install before it removes the command", async () => {
     expect(install("1.0.0").exitCode).toBe(0);
     const installing = Bun.spawn(["/usr/bin/lockf", "-k", join(home, ".lock"), "/bin/sleep", "30"]);
+
     while (!Bun.spawnSync(["/usr/bin/lockf", "-t", "0", join(home, ".lock"), "/usr/bin/true"]).exitCode) await Bun.sleep(20);
+
     const uninstall = Bun.spawn(["/bin/sh", installer, "--uninstall"], {
       env: { ...process.env, BAY_CLI_HOME: home, BAY_CLI_BIN_DIR: bin },
       stdout: "pipe",
     });
+
     await Bun.sleep(300);
     expect(readlinkSync(join(bin, "bay"))).toBe(join(home, "current", "bin", "bay"));
     installing.kill();

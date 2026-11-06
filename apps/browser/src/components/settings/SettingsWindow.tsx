@@ -79,6 +79,7 @@ export function SettingsWindow() {
   useEffect(() => trackSettingsSection(nav.pane), [nav.pane]);
   const scroll = useRef<ScrollView>(null);
   const content = useRef<View>(null);
+
   const scrollTo = useCallback((target: View) => {
     if (!content.current) return;
     target.measureLayout(
@@ -127,11 +128,14 @@ function SettingsSidebar() {
   const settings = findSettings(q);
   // Passwords and Autofill keep the space they were opened for.
   const open = (pane: SettingsPane, highlight?: SettingId) => nav.go(pane, pane === "passwords" || pane === "autofill" ? nav.spaceId : null, highlight);
+
   const submit = () => {
     const pane = sections[0]?.[0];
+
     if (pane) open(pane.id);
     else if (settings[0]) open(settings[0].pane, settings[0].id);
   };
+
   return (
     <View
       style={{
@@ -195,8 +199,10 @@ function SidebarItem({ item, selected, onPress }: { item: Item; selected: boolea
   // The chosen pane's row is filled; a hovered one, faintly.
   const ink = theme.dark ? "255,255,255" : "0,0,0";
   let fill: string | undefined;
+
   if (selected) fill = `rgba(${ink},${theme.dark ? 0.12 : 0.08})`;
   else if (hovered) fill = `rgba(${ink},${theme.dark ? 0.05 : 0.035})`;
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={item.title}>
@@ -219,6 +225,7 @@ function SettingResult({ entry, onPress }: { entry: SettingEntry; onPress: () =>
   const { hovered, hoverProps } = useHover();
   const pane = itemOf(entry.pane);
   const ink = theme.dark ? "255,255,255" : "0,0,0";
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${entry.title}, ${pane.title}`}>
@@ -255,6 +262,7 @@ function BackForward() {
   const theme = useTheme();
   const nav = useSettingsNav();
   const line = theme.dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)";
+
   return (
     <View style={{ height: 30, borderRadius: 15, flexDirection: "row", alignItems: "center", borderWidth: StyleSheet.hairlineWidth * 2, borderColor: line }}>
       <ArrowButton icon="chevron.left" label="Back" enabled={nav.back.length > 0} onPress={nav.goBack} />
@@ -266,6 +274,7 @@ function BackForward() {
 
 function ArrowButton({ icon, label, enabled, onPress }: { icon: string; label: string; enabled: boolean; onPress: () => void }) {
   const theme = useTheme();
+
   return (
     <Pressable onPress={onPress} disabled={!enabled} accessibilityLabel={label} tooltip={label}>
       {({ pressed }) => (

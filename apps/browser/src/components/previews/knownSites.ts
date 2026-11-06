@@ -1,15 +1,21 @@
 // Arc's Previews: a pinned or favorite tab on a site Bay knows shows what's new there on hover. The data comes from
 // the site itself, asked from inside its own signed-in tab (no tokens): Gmail's unread feed, GitHub's pull requests.
+import * as v from "valibot";
+import { lookup } from "@bay/core";
+import type { JsonValue } from "../../lib/json";
 import type { Tab } from "../../store/types";
 import { pinnedPage } from "../../store/model";
 
 export type PreviewSite = "gmail" | "github";
 
 export type Mail = { subject: string; from: string; snippet: string; url: string; at: number };
+
 export type GmailData = { unread: number; mails: Mail[] };
 
 export type Review = "approved" | "changes" | "required";
+
 export type Pull = { title: string; repo: string; number: number; url: string; at: number; review: Review | null };
+
 export type GithubData = { authored: Pull[]; requested: Pull[] };
 
 const hostOf = (url: string) => {
@@ -24,8 +30,11 @@ const hostOf = (url: string) => {
 export function previewSiteOf(tab: Pick<Tab, "pinned" | "pinnedRow" | "pinnedUrl" | "url"> | undefined): PreviewSite | null {
   if (!tab || !pinnedPage(tab)) return null;
   const host = hostOf(tab.pinnedUrl || tab.url);
+
   if (host === "mail.google.com") return "gmail";
+
   if (host === "github.com") return "github";
+
   return null;
 }
 
@@ -37,8 +46,11 @@ const SITE_HOST: Record<PreviewSite, string> = { gmail: "mail.google.com", githu
  */
 export function tabPlace(site: PreviewSite, url: string): "site" | "signIn" | "elsewhere" {
   const host = hostOf(url);
+
   if (host === SITE_HOST[site]) return /^https:\/\/github\.com\/(login|session)/.test(url) ? "signIn" : "site";
+
   if (host === "accounts.google.com" || /\/(login|signin)\b/.test(url)) return "signIn";
+
   return "elsewhere";
 }
 
@@ -65,30 +77,38 @@ export const gmailFeedUrl = (account: number) => `https://mail.google.com/mail/u
 // GitHub's search, as JSON (what its own page asks for): github.com/pulls became a dashboard that ignores its query
 // and loads its lists after the page, so its HTML had none (an empty review section read as "0 open", Oct 2026).
 const GITHUB_SEARCH = "https://github.com/search?type=pullrequests&q=";
+
 export const githubPullsUrls = [
   `${GITHUB_SEARCH}${encodeURIComponent("is:open is:pr author:@me archived:false")}`,
   `${GITHUB_SEARCH}${encodeURIComponent("is:open is:pr review-requested:@me archived:false")}`,
 ];
+
 export const githubPullsHeaders = { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" };
 
 /** A sign-in page in place of the data: the site sent the tab's request to its login, or (GitHub's search) answered a
  *  signed-out visitor. */
 export function signedOut(f: Fetched): boolean {
   if ("error" in f) return false;
+
   if (f.status === 401 || f.status === 403 || /\/(login|signin|ServiceLogin)\b|accounts\.google\.com/.test(f.url)) return true;
+
   return searchRoute(f.body)?.logged_in === false;
 }
 
 // MARK: Gmail
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" } satisfies Record<string, string>;
+
 const decode = (s: string) =>
   s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (all, e: string) => {
     if (e[0] === "#") return String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1)));
-    return ENTITIES[e.toLowerCase()] ?? all;
+
+    return lookup(ENTITIES, e.toLowerCase()) ?? all;
   });
+
 const tag = (xml: string, name: string) => {
   const m = new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`).exec(xml);
+
   return m ? decode(m[1]!.trim()) : "";
 };
 
@@ -96,6 +116,7 @@ const tag = (xml: string, name: string) => {
 export function parseGmailFeed(xml: string): GmailData | null {
   if (!/<feed[\s>]/.test(xml) || !/<fullcount>/.test(xml)) return null;
   const mails: Mail[] = [];
+
   for (const [, entry] of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)) {
     const author = tag(entry!, "author");
     const href = /<link[^>]*href="([^"]+)"/.exec(entry!)?.[1];
@@ -107,6 +128,7 @@ export function parseGmailFeed(xml: string): GmailData | null {
       at: Date.parse(tag(entry!, "issued") || tag(entry!, "modified")) || 0,
     });
   }
+
   return { unread: Number(tag(xml, "fullcount")) || mails.length, mails };
 }
 
@@ -119,11 +141,13 @@ const REVIEWS: [RegExp, Review][] = [
 ];
 
 // GitHub names the review state differently across its pages (reviewDecision, reviewState…): any of them will do.
-function reviewOf(item: Record<string, unknown>): Review | null {
+function reviewOf(item: Record<string, JsonValue>): Review | null {
   for (const [key, value] of Object.entries(item)) {
-    if (!/review/i.test(key) || typeof value !== "string") continue;
+    if (!/review/i.test(key) || !v.is(v.string(), value)) continue;
+
     for (const [pattern, review] of REVIEWS) if (pattern.test(value)) return review;
   }
+
   return null;
 }
 
@@ -138,8 +162,11 @@ type SearchResult = {
 // GitHub's search JSON: its route, or null when the body isn't that.
 function searchRoute(body: string): { logged_in?: unknown; results?: unknown } | null {
   try {
+    // SAFETY: { payload? assertion matches the runtime value validated at this call site.
     const route = (JSON.parse(body) as { payload?: { blackbirdSearchRoute?: unknown } })?.payload?.blackbirdSearchRoute;
-    return route && typeof route === "object" ? (route as { logged_in?: unknown; results?: unknown }) : null;
+
+    // SAFETY: { logged_in? assertion matches the runtime value validated at this call site.
+    return route && v.is(v.object({}), route) ? (route as { logged_in?: unknown; results?: unknown }) : null;
   } catch {
     return null;
   }
@@ -148,12 +175,16 @@ function searchRoute(body: string): { logged_in?: unknown; results?: unknown } |
 /** GitHub's pull request search (JSON): its pull requests, newest first ([] for none). Null when it isn't that. */
 export function parseGithubPulls(body: string): Pull[] | null {
   const route = searchRoute(body);
+
   if (!route || !Array.isArray(route.results)) return null;
   const pulls: Pull[] = [];
+
+  // SAFETY: SearchResult[]) { assertion matches the runtime value validated at this call site.
   for (const item of route.results as SearchResult[]) {
     const owner = item.repo?.repository?.owner_login;
     const name = item.repo?.repository?.name;
-    if (typeof item.number !== "number" || typeof owner !== "string" || typeof name !== "string") continue;
+
+    if (!v.is(v.number(), item.number) || !v.is(v.string(), owner) || !v.is(v.string(), name)) continue;
     const repo = `${owner}/${name}`;
     // The title comes highlighted (<em> around what matched).
     const title = decode(String(item.hl_title ?? item.title ?? "").replace(/<[^>]*>/g, ""));
@@ -163,8 +194,10 @@ export function parseGithubPulls(body: string): Pull[] | null {
       number: item.number,
       url: `https://github.com/${repo}/pull/${item.number}`,
       at: Date.parse(String(item.created ?? "")) || 0,
-      review: reviewOf(item as Record<string, unknown>),
+      // SAFETY: Record<string, unknown>), assertion matches the runtime value validated at this call site.
+      review: reviewOf(item as Record<string, JsonValue>),
     });
   }
+
   return pulls.sort((a, b) => b.at - a.at);
 }

@@ -30,6 +30,7 @@ import { suppressHover } from "./hover";
 import { DRAG_SCROLL_EDGE, PINNED_TILE_GAP } from "./constants";
 
 type Frame = { x: number; y: number; w: number; h: number };
+
 type Section = "tiles" | "pinned" | "pinnedGroups" | "list";
 
 export type ItemSpec = {
@@ -71,14 +72,22 @@ export type Ghost = {
 
 // The list stacks rows with `gap`; a zero-height tail cancels its gap with this negative margin.
 const ROW_GAP = layout.rowGap;
+
 // Rows make room and close up with Dia's slide (stripReorder.ts): gaps and sizes are margins, widths and heights.
 const spring = (value: SharedValue<number>, toValue: number) => value.set(withSpring(toValue, STRIP_SLIDE));
 
 const inside = (f: Frame, x: number, y: number, slop = 0) => x >= f.x - slop && x <= f.x + f.w + slop && y >= f.y - slop && y <= f.y + f.h + slop;
+
 const measure = (view: View | null): Promise<Frame | null> =>
   view ? new Promise((resolve) => view.measureInWindow((x, y, w, h) => resolve(w || h ? { x, y, w, h } : null))) : Promise.resolve(null);
 
+function asView(v: ScrollView | View | null): View {
+  // SAFETY: this.scroll is a mounted ScrollView host view; at runtime it exposes View.measureInWindow.
+  return v as View;
+}
+
 type Marks = { sources: Set<string>; dropInto: string | null; landing: string | null; pins: boolean };
+
 const NO_MARKS: Marks = { sources: new Set(), dropInto: null, landing: null, pins: false };
 const noMarks = create<Marks>()(() => NO_MARKS);
 
@@ -151,6 +160,7 @@ class DragController {
 
   async begin(key: string, x: number, y: number, selection: string[]) {
     const item = this.items.get(key);
+
     if (!item || item.kind === "tail") return;
     const selected = item.kind === "row" || item.kind === "tile" ? selection : [];
     const multi = selected.length > 1 && item.tabIds.some((id) => selected.includes(id));
@@ -160,19 +170,23 @@ class DragController {
     const token = (this.token = {});
     suppressHover(true);
     let seq = 0;
+
     if (item.kind === "row" || item.kind === "tile") {
       const single = this.sources.length === 1 ? (item.tabIds[0] ?? null) : null;
       seq = beginTabDrag(single, [...new Set(this.sources.flatMap((i) => i.tabIds))]);
     }
+
     this.pointer = { x, y };
     this.measured = false;
     this.startScrollY = this.scrollY;
     await this.measureAll();
+
     if (this.token !== token || !this.sources.length) return;
     const frame = item.frame ?? { x, y, w: 176, h: 33 };
     this.grab = { x: x - frame.x, y: y - frame.y };
     const count = new Set(this.sources.flatMap((s) => s.tabIds)).size;
     const height = item.kind === "group" || item.kind === "folder" ? Math.min(frame.h, item.headerFrame?.h ?? 33) : frame.h;
+
     // Its picture, taken if it leaves the sidebar: the ghost, where it is by then.
     if (seq) setDragPicture(seq, () => [this.pointer.x - this.grab.x, this.pointer.y - this.grab.y, frame.w, height], [x, y]);
     this.ghost = {
@@ -182,10 +196,12 @@ class DragController {
       height,
       position: { x: makeMutable(frame.x - this.rootFrame.x), y: makeMutable(frame.y - this.rootFrame.y) },
     };
+
     for (const s of this.sources) s.size.set(s.kind === "tile" ? (s.frame?.w ?? 0) : (s.frame?.h ?? 0));
     this.setLanding(null);
     this.setSources(new Set(this.sources.map((s) => s.key)));
     this.setGhost(this.ghost);
+
     for (const s of this.sources) spring(s.size, 0);
     this.measured = true;
     this.move(this.pointer.x, this.pointer.y);
@@ -195,13 +211,14 @@ class DragController {
   async tilesLaidOut() {
     const token = this.token;
     const frame = await measure(this.regions.get("tiles") ?? null);
+
     if (this.token !== token || !this.sources.length) return;
     this.regionFrames.set("tiles", frame);
     this.retarget();
   }
 
   private async measureAll() {
-    const [rootFrame, viewport] = await Promise.all([measure(this.root), measure(this.scroll as unknown as View)]);
+    const [rootFrame, viewport] = await Promise.all([measure(this.root), measure(asView(this.scroll))]);
     this.rootFrame = rootFrame ?? this.rootFrame;
     this.viewport = viewport;
     this.startScrollY = this.scrollY;
@@ -210,12 +227,14 @@ class DragController {
         [i.frame, i.headerFrame] = await Promise.all([measure(i.view), measure(i.header)]);
       }),
     );
+
     for (const [name, view] of this.regions) this.regionFrames.set(name, await measure(view));
   }
 
   move(x: number, y: number) {
     this.pointer = { x, y };
     updateTabDrag(x, y);
+
     if (!this.measured || !this.ghost) return;
     this.ghost.position.x.set(x - this.grab.x - this.rootFrame.x);
     this.ghost.position.y.set(y - this.grab.y - this.rootFrame.y);
@@ -231,6 +250,7 @@ class DragController {
     const ghost = this.ghost;
     // Page split drop takes precedence over sidebar drop.
     const splitDrop = commit ? endTabDrag() : (cancelTabDrag(), false);
+
     // Where it lands, measured before the store moves anything (a measure in the same batch as a commit sees the
     // layout before it): the room the list made for it, or its own place. A selection, a tile, or a drop into a
     // collapsed group or the pinned grid just shows in its place.
@@ -238,19 +258,24 @@ class DragController {
       !splitDrop && this.measured && ghost && sources.length === 1 && sources[0]!.kind !== "tile" && !this.into
         ? this.landingSpot(commit ? drop : { type: "none" })
         : null;
+
     const undoBefore = useBrowser.getState().folderMoveUndo;
+
     if (commit && !splitDrop && this.measured && sources.length) {
       const s = useBrowser.getState();
       const ids = sources.flatMap((i) => i.tabIds);
+
       if (drop.type === "tabs") s.placeTabs(ids, drop.placement);
       else if (drop.type === "group" && sources[0]!.groupId) s.moveGroup(sources[0]!.groupId, drop.placement);
       else if (drop.type === "folder") s.movePinnedFolder(drop.folderId, drop.beforeId, drop.parentId);
     }
+
     // The gaps close as the store moves the items into them, in the same commit: nothing moves on screen.
     for (const i of this.items.values()) {
       cancelAnimation(i.gap);
       i.gap.set(0);
     }
+
     for (const i of sources) cancelAnimation(i.size);
     this.sources = [];
     this.gapKey = null;
@@ -263,27 +288,35 @@ class DragController {
     this.setSources(new Set());
     this.setDropInto(null);
     this.marks.setState({ pins: false });
+
     if (useBrowser.getState().folderMoveUndo !== undoBefore) armSidebarMoveUndo(this.windowId);
+
     if (!spot || !ghost) {
       this.token = null;
       this.setLanding(null);
       this.setGhost(null);
+
       return;
     }
+
     // The ghost settles into its place while the item, laid out there, stays hidden; then the item shows.
     const token = (this.token = {});
     this.setLanding(ghost.item.key);
     this.setGhost({ ...ghost, landing: true });
+
     const done = () => {
       if (this.token !== token) return;
       this.token = null;
       this.setLanding(null);
       this.setGhost(null);
     };
+
     void spot.then((at) => {
       if (this.token !== token) return;
+
       // DEV: where it landed, for the drag test to compare with the item's place.
       if (__DEV__) this.landed = at && { key: ghost.item.key, x: at.x, y: at.y };
+
       if (!at) return done();
       ghost.position.x.set(withSpring(at.x - this.rootFrame.x, STRIP_SLIDE));
       ghost.position.y.set(
@@ -299,41 +332,54 @@ class DragController {
   // the collapsing source (their springs may be midway).
   private landingSpot(drop: Drop): Promise<{ x: number; y: number } | null> | null {
     const source = this.sources[0]!;
+
     // Pinned, its place is in the grid.
     if (drop.type === "tabs" && drop.placement.pinned) return null;
     const target = drop.type !== "none" && this.gapKey ? this.items.get(this.gapKey) : undefined;
     const ref = target ?? source;
     const top = ref.frame?.y;
+
     if (top === undefined) return null;
+
     const now = (v: SharedValue<number>) => {
       cancelAnimation(v);
+
       return v.get();
     };
+
     let closing = 0;
+
     for (const i of this.items.values()) if (i.frame && (i === ref || i.frame.y < top)) closing += now(i.gap);
     // A group's member sits in its fold's own wrapper, which can't shrink below nothing: the gap after it stays until
     // the member goes (Fold.tsx). A top-level row's negative margin cancels its gap.
     // Its group's last member, the group goes with it: all of the group's room closes.
     const group = source.parentGroup ? this.items.get(`g:${source.parentGroup}`) : undefined;
     const emptied = !!group && group.tabIds.every((id) => source.tabIds.includes(id)) && !!group.frame && group.frame.y < top && group !== ref;
+
     if (!emptied && source !== ref && source.frame && source.frame.y < top)
       closing += source.parentGroup ? Math.max(0, now(source.size) - ROW_GAP) + ROW_GAP : now(source.size);
+
     // A tail is a zero-height mark after its section's or group's last item: its x is the container's.
     const container =
       ref.kind === "tail"
         ? [...this.items.values()].find((i) => i !== source && i.kind !== "tail" && i.frame && i.section === ref.section && i.parentGroup === ref.parentGroup)
         : ref;
+
     // Dropped nowhere, the list goes back to how it was when the drag began: its place then.
     const home = target ? null : this.at(source.frame);
+
     if (home) return Promise.resolve({ x: home.x, y: home.y });
+
     return Promise.all([measure(ref.view), emptied ? measure(group!.view) : null]).then(([f, gone]) => {
       if (!f) return null;
+
       return { x: container?.frame?.x ?? f.x, y: f.y - closing - (gone ? gone.h + ROW_GAP : 0) + (ref.kind === "tail" ? ROW_GAP : 0) };
     });
   }
 
   private autoScroll(y: number) {
     const v = this.viewport;
+
     const speed = !v
       ? 0
       : y < v.y + DRAG_SCROLL_EDGE
@@ -341,11 +387,14 @@ class DragController {
         : y > v.y + v.h - DRAG_SCROLL_EDGE
           ? Math.ceil((y - (v.y + v.h - DRAG_SCROLL_EDGE)) / 4)
           : 0;
+
     clearInterval(this.scrollTimer);
     this.scrollTimer = undefined;
+
     if (!speed || !this.scroll) return;
     this.scrollTimer = setInterval(() => {
       const next = Math.max(0, this.scrollY + speed);
+
       if (next === this.scrollY) return;
       this.scroll?.scrollTo({ y: next, animated: false });
       this.scrollY = next;
@@ -362,23 +411,30 @@ class DragController {
     const source = this.sources[0]!;
     const sourceKeys = new Set(this.sources.map((s) => s.key));
     const state = useBrowser.getState();
+
     const inSourceFolder = (i: Item) => {
       if (source.kind !== "folder") return false;
       const id = i.folderId ?? i.parentGroup;
       let folder = id ? state.pinnedFolders[id] : undefined;
+
       while (folder) {
         if (folder.id === source.folderId) return true;
         folder = folder.parentId ? state.pinnedFolders[folder.parentId] : undefined;
       }
+
       return false;
     };
+
     const live = [...this.items.values()].filter(
       (i) => !sourceKeys.has(i.key) && i.frame && !inSourceFolder(i) && folderDragItemVisible(state, this.windowId, i),
     );
+
     const cy = (i: Item) => {
       const f = this.at(i.frame)!;
+
       return f.y + Math.min(f.h, i.headerFrame?.h ?? f.h) / 2;
     };
+
     const byY = (a: Item, b: Item) => this.at(a.frame)!.y - this.at(b.frame)!.y || a.frame!.x - b.frame!.x;
     // Before an item's first tab that isn't being dragged (a group's member dragged out above its own group).
     const dragged = new Set(this.sources.flatMap((s) => s.tabIds));
@@ -386,10 +442,12 @@ class DragController {
     const tabsDrag = source.kind === "row" || source.kind === "tile";
     // A split pins and unpins as a row does; it's never an Essential or dropped into a group.
     const rowsDrag = tabsDrag || source.kind === "split";
+
     const rowPitch =
       (source.kind === "group" || source.kind === "folder"
         ? (source.frame?.h ?? sidebarMetrics(useBrowser.getState().settings.density).rowHeight)
         : sidebarMetrics(useBrowser.getState().settings.density).rowHeight * Math.max(1, this.ghost?.count ?? 1)) + ROW_GAP;
+
     let drop: Drop = { type: "none" };
     let gapKey: string | null = null;
     let pitch = rowPitch;
@@ -397,15 +455,19 @@ class DragController {
 
     const sidebar = this.viewport ?? this.rootFrame;
     const tiles = this.at(this.regionFrames.get("tiles") ?? null);
+
     if (x > sidebar.x + sidebar.w + 40 || x < sidebar.x - 40 || useTabDrag.getState().outside) {
       drop = { type: "none" };
     } else if (tabsDrag && tiles && inside(tiles, x, y, 6)) {
       const cells = live.filter((i) => i.kind === "tile").sort(byY);
+
       const before = cells.find((t) => {
         const f = this.at(t.frame)!;
         const mid = f.y + f.h / 2;
+
         return mid > y + f.h / 2 || (Math.abs(mid - y) <= f.h / 2 && f.x + f.w / 2 > x);
       });
+
       drop = { type: "tabs", placement: { pinned: true, beforeId: firstTab(before) } };
       gapKey = before?.key ?? "tail:tiles";
       pitch = (cells[0]?.frame?.w ?? source.frame?.w ?? 50) + PINNED_TILE_GAP;
@@ -415,6 +477,7 @@ class DragController {
       const pinning = rowsDrag && !!divider && y < divider.y + divider.h / 2;
       // Onto a pinned folder's header (its middle third), or among its open rows.
       const folderDrag = source.kind === "folder";
+
       const folder =
         rowsDrag || folderDrag
           ? live
@@ -422,21 +485,29 @@ class DragController {
               .sort((a, b) => folderDepth(state, b.folderId!) - folderDepth(state, a.folderId!))
               .find((f) => {
                 const header = this.at(f.headerFrame);
+
                 if (header && inside(header, x, y)) return Math.abs(y - (header.y + header.h / 2)) < header.h / 3;
+
                 return !f.collapsed && inside(this.at(f.frame)!, x, y);
               })
           : undefined;
+
       const groups = live.filter((i) => i.kind === "group");
+
       const box = tabsDrag
         ? groups.find((g) => {
             const f = this.at(g.frame)!;
             const header = this.at(g.headerFrame);
+
             if (g.collapsed) return !!header && inside(header, x, y) && Math.abs(y - (header.y + header.h / 2)) < header.h / 3;
+
             return inside(f, x, y) && (!header || y > header.y + header.h * 0.75);
           })
         : undefined;
+
       if (folder) {
         const header = this.at(folder.headerFrame);
+
         if (header && y <= header.y + header.h) {
           drop = folderDrag
             ? { type: "folder", folderId: source.folderId!, parentId: folder.folderId!, beforeId: null }
@@ -463,6 +534,7 @@ class DragController {
         // A folder stays in the Pinned section; a group goes among the pinned groups or the list.
         const pinned = source.kind === "group" && !!list && y < list.y;
         let section: Section = "list";
+
         if (source.kind === "folder" || pinning) section = "pinned";
         else if (pinned) section = "pinnedGroups";
         const blocks = live.filter((i) => i.section === section && !i.parentGroup && i.kind !== "tail" && i.kind !== "tile").sort(byY);
@@ -480,17 +552,22 @@ class DragController {
     }
 
     const key = JSON.stringify(drop);
+
     if (key === this.dropKey && gapKey === this.gapKey) return;
+
     if (this.dropKey && drop.type !== "none" && useBrowser.getState().settings.tabReorderHaptics) hapticTick();
     this.dropKey = key;
     this.drop = drop;
     this.into = into;
     this.setDropInto(into);
     this.marks.setState({ pins: drop.type === "tabs" && drop.placement.pinned });
+
     if (gapKey !== this.gapKey) {
       const prev = this.gapKey && this.items.get(this.gapKey);
+
       if (prev) spring(prev.gap, 0);
       const next = gapKey && this.items.get(gapKey);
+
       if (next) spring(next.gap, pitch);
       this.gapKey = gapKey;
     }
@@ -502,16 +579,20 @@ const DragContext = createContext<DragController | null>(null);
 /** Native Finder drops are pins, separate from the internal tab-reordering gesture. */
 export function FinderDropZone({ windowId, spaceId, enabled = true, children }: { windowId: string; spaceId: string; enabled?: boolean; children: ReactNode }) {
   const theme = useTheme();
+
   const allowed = useBrowser(
     (s) => enabled && !!s.spaces[spaceId] && !!s.windows[windowId] && !s.windows[windowId]!.incognito && s.windows[windowId]!.kind !== "small",
   );
+
   const [active, setActive] = useState(false);
   const [error, setError] = useState("");
+
   return (
     <LocalFilesArea
       dropEnabled={allowed}
       onDropActive={(event) => {
         setActive(event.nativeEvent.active);
+
         if (event.nativeEvent.active) setError("");
       }}
       onFilesDropError={(event) => setError(event.nativeEvent.message)}
@@ -543,10 +624,14 @@ export function DragProvider({ children }: { children: (ghost: Ghost | null, con
     if (controller.active) controller.end(false);
   }, [controller, density, folded]);
   useEffect(() => {
-    if (__DEV__) (globalThis as { sidebarDrag?: DragController }).sidebarDrag = controller;
+    if (__DEV__)
+      // SAFETY: sidebarDrag is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+      (globalThis as { sidebarDrag?: DragController }).sidebarDrag = controller;
+
     // The sidebar going away mid-drag (its window closing, the layout switching) ends the drag and its picture.
     return () => void (controller.active && controller.end(false));
   }, [controller]);
+
   return (
     <DragContext.Provider value={controller}>
       {children(ghost, controller)}
@@ -564,6 +649,7 @@ function WindowDropHighlight() {
     glow.set(withTiming(over ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) }));
   }, [over]);
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.get() }));
+
   return (
     <Animated.View
       pointerEvents="none"
@@ -587,13 +673,16 @@ function WindowDropHighlight() {
 
 export function DragScope({ enabled, children }: { enabled: boolean; children: ReactNode }) {
   const controller = useContext(DragContext);
+
   return <DragContext.Provider value={enabled ? controller : null}>{children}</DragContext.Provider>;
 }
 
 export const useDragController = () => useContext(DragContext) ?? undefined;
 export const useDropInto = () => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.dropInto);
+
 /** The item with `key` is being dragged (hidden, its room closing). */
 export const useDragSource = (key: string) => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.sources.has(key));
+
 /** The drop would pin the dragged tabs. */
 export const useDropPins = () => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.pins);
 
@@ -608,6 +697,7 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
   useEffect(() => {
     if (!controller || !item) return;
     controller.items.set(key, item);
+
     return () => {
       if (controller.items.get(key) === item) controller.items.delete(key);
     };
@@ -616,6 +706,7 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
   // One responder for the item's life: a new one mid-gesture would drop the gesture.
   const begin = useEffectEvent((x: number, y: number) => void controller?.begin(key, x, y, selection()));
   const movable = useEffectEvent(() => spec.kind !== "tail");
+
   const responder = useMemo(
     () =>
       PanResponder.create({
@@ -628,6 +719,7 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
       }),
     [controller, begin, movable],
   );
+
   const ref = (view: View | null) => item && controller?.attach(item, "view", view);
   const headerRef = (view: View | null) => item && controller?.attach(item, "header", view);
 
@@ -638,13 +730,17 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
   const tail = spec.kind === "tail";
   const gap = item?.gap;
   const size = item?.size;
+
   // Every value it moves, every time, at rest too: a value the style stops giving keeps the last one it gave.
   const motion = useAnimatedStyle(() => {
     const room = gap ? gap.get() : 0;
     const lead = horizontal ? { marginLeft: room } : { marginTop: tail ? room - ROW_GAP : room };
+
     if (horizontal) return { ...lead, width: source && size ? size.get() : "auto" };
+
     return { ...lead, height: source && size ? size.get() : "auto" };
   }, [gap, size, horizontal, tail, source]);
+
   const style = item
     ? [
         motion,
@@ -657,6 +753,7 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
             : null,
       ]
     : null;
+
   // Flat, for callers to destructure: the compiler treats `x.ref` (and the rest of `x`) as a ref read.
   return { ref, style, handle: responder.panHandlers, headerRef, dragging: source };
 }

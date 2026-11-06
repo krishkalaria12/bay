@@ -12,6 +12,7 @@ import { groupLabel, hostOfTab, siteTidyPlan, tidyCandidates, tidyTabCounts, typ
 
 /** The wave's way back to flat (TidySquiggleView). */
 export const TIDY_SQUIGGLE_SETTLE_MS = 400;
+
 // A quick answer doesn't flash: the wave runs at least this long.
 const MINIMUM_RUN_MS = 900;
 
@@ -21,11 +22,13 @@ type TidyTabsState = {
   /** Per space, the tabs Tidy last left loose: it waits for another, so undoing a run offers it again. Not saved. */
   tidied: Record<string, ReadonlySet<string>>;
 };
+
 export const useTidyTabs = create<TidyTabsState>(() => ({ running: {}, tidied: {} }));
 
 function setRunning(spaceId: string, on: boolean) {
   useTidyTabs.setState(({ running }) => {
     const { [spaceId]: _, ...rest } = running;
+
     return { running: on ? { ...rest, [spaceId]: true } : rest };
   });
 }
@@ -35,39 +38,48 @@ function markTidied(s: BrowserState, windowId: string, spaceId: string) {
 }
 
 /** Whether the divider shows Tidy, and whether it's working. */
-export function useTidyOffer(windowId: string, spaceId: string): { offered: boolean; running: boolean } {
+export function useTidyOffer(windowId: string, spaceId: string) {
   const running = useTidyTabs((t) => !!t.running[spaceId]);
   const tidied = useTidyTabs((t) => t.tidied[spaceId] ?? null);
+
   const offered = useBrowser((s) => {
     if (!s.settings.tidyTabs) return false;
     const { tabCount, loose } = tidyTabCounts(s, windowId, spaceId);
+
     return offersTidy(tabCount, loose, tidied);
   });
+
   return { offered, running };
 }
 
 // Named groups the model may add to. A meeting's group closes with its meeting, and one a pinned tab opened belongs to it.
 function joinableGroups(s: BrowserState, spaceId: string) {
   const meetings = live().meetingGroups;
+
   return Object.values(s.groups).filter((g) => g.spaceId === spaceId && !!g.name && !g.pinned && !g.pinnedOpenerId && !meetings[g.id]);
 }
 
 const tabForModel = (s: BrowserState, id: string): TidyTab => {
   const t = s.tabs[id]!;
+
   return { title: t.customTitle || t.title, host: hostOfTab(t) };
 };
 
 async function modelPlan(model: NonNullable<typeof tidyTabsModel>, s: BrowserState, ids: string[], spaceId: string): Promise<TabTidyPlan | null> {
   const groups = joinableGroups(s, spaceId);
   const names = groups.map((g) => groupLabel(s, g));
+
   const prompt = tidyTabsPrompt(
     ids.map((id) => tabForModel(s, id)),
     names,
   );
+
   const answer = await model.group(prompt).catch(() => null);
+
   if (!answer) return null;
   const plan = planTidyTabs(answer, ids.length, names);
   const tabIds = (tabs: number[]) => tabs.map((tab) => ids[tab]!);
+
   return {
     newGroups: plan.newGroups.map((group) => ({ name: group.name, tabIds: tabIds(group.tabs) })),
     joins: plan.joins.map((join) => ({ groupId: groups[join.group]!.id, tabIds: tabIds(join.tabs) })),
@@ -80,16 +92,20 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 export async function runTidyTabs(windowId: string): Promise<void> {
   const before = useBrowser.getState();
   const w = before.windows[windowId];
+
   if (!w) return;
   const spaceId = w.spaceId;
+
   if (useTidyTabs.getState().running[spaceId]) return;
   const ids = tidyCandidates(before, windowId, spaceId).slice(0, MAX_TIDY_TABS);
   let plan: TabTidyPlan | null = null;
   // A private window's tabs don't go to the model, on this Mac or not.
   const model = w.incognito ? null : tidyTabsModel;
+
   if (ids.length >= 2 && model?.modelStatus() === "available") {
     const started = Date.now();
     setRunning(spaceId, true);
+
     try {
       plan = await modelPlan(model, before, ids, spaceId);
       await delay(MINIMUM_RUN_MS - (Date.now() - started));
@@ -99,16 +115,20 @@ export async function runTidyTabs(windowId: string): Promise<void> {
   }
 
   const s = useBrowser.getState();
+
   if (!s.windows[windowId]) return;
   const modelGrouped = !!plan && (plan.newGroups.length > 0 || plan.joins.length > 0);
   const stillOpen = ids.filter((id) => s.tabs[id]);
   const count = s.tidyTabs(windowId, modelGrouped ? plan! : siteTidyPlan(s, stillOpen));
   const after = useBrowser.getState();
   markTidied(after, windowId, spaceId);
+
   if (!count) {
     showToast(windowId, "Nothing to Tidy", "These tabs have too little in common to group.", { icon: "rectangle.stack" });
+
     return;
   }
+
   const moved = tidyCandidates(s, windowId, spaceId).length - tidyCandidates(after, windowId, spaceId).length;
   showToast(windowId, "Tabs Tidied", `${plural(moved, "tab")} sorted into ${plural(count, "group")}.`, {
     icon: "rectangle.stack",

@@ -49,7 +49,9 @@ export function LiveFolders({ windowId, spaced }: { windowId: string; spaced: bo
   const page = usePageSpaceId();
   const spaceId = useBrowser((s) => (s.windows[windowId]?.incognito ? "" : page));
   const ids = useLive(useShallow((s) => profileFolders(s, spaceId)));
+
   if (!ids.length) return null;
+
   return (
     <View style={{ marginBottom: spaced ? 14 : 7, gap: layout.rowGap }}>
       {ids.map((id) => (
@@ -68,26 +70,34 @@ function LiveFolderBlock({ folderId, windowId }: { folderId: string; windowId: s
   const rows = folder ? folderRows(folder, items, showAll) : [];
   const itemIds = new Set(items.map((i) => i.id));
   const spaceId = usePageSpaceId();
+
   const strays = useBrowser(
     useShallow((s) =>
       viewTabIds(s, windowId, spaceId).filter((id) => s.tabs[id]?.liveItem?.folderId === folderId && !itemIds.has(s.tabs[id]!.liveItem!.itemId)),
     ),
   );
+
   // The window's active tab, when it's this folder's: its tab and item.
   const activeTab = useBrowser((s) => {
     const id = activeTabId(s, windowId, spaceId) ?? "";
+
     return s.tabs[id]?.liveItem?.folderId === folderId ? id : null;
   });
+
   const activeItem = useBrowser((s) => (activeTab ? (s.tabs[activeTab]?.liveItem?.itemId ?? null) : null));
   const completed = useCompletedShown(folderId).length > 0;
   const fold = useFold(collapsed);
+
   if (!folder) return null;
 
   const entries: FoldEntry[] = rows.length
     ? rows.map((row) => ({ key: row.key, node: <FolderRowView row={row} folderId={folderId} windowId={windowId} /> }))
     : [{ key: "note", node: <FolderNote folderId={folderId} /> }];
+
   for (const id of strays) entries.push({ key: `stray:${id}`, node: <TabRow tabId={id} /> });
+
   if (completed) entries.push({ key: "completed", node: <CompletedFooter folderId={folderId} windowId={windowId} /> });
+
   // The active tab's row stays out while the folder is collapsed (its stack, for an item in one).
   const keep = !activeTab
     ? null
@@ -121,11 +131,14 @@ function FolderRowView({ row, folderId, windowId }: { row: FolderRow; folderId: 
 function FolderNote({ folderId }: { folderId: string }) {
   const status = useLive((s) => s.status[folderId]);
   const kind = useLive((s) => s.folders[folderId]?.kind);
+
   if (!status || status.state === "initializing" || (status.state === "updating" && !status.lastFetch)) return <NoteRow text="Loading…" spinner />;
+
   if (status.error)
     return (
       <NoteRow text={errorText(status.error.kind, status.error.source)} onPress={() => openSettings("liveFolders")} icon="exclamationmark.triangle.fill" />
     );
+
   return <NoteRow text={kind === "pullRequests" ? "No open pull requests" : "No recent documents"} />;
 }
 
@@ -139,6 +152,7 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
   const unread = useLive((s) => (s.unread[folderId]?.length ?? 0) > 0);
   const status = useLive((s) => s.status[folderId]);
   const { hovered, hoverProps } = useHover();
+
   if (!folder) return null;
   const updating = status?.state === "updating" || status?.state === "initializing";
   const sourceSite = SOURCES[folder.sources[0] ?? "github"].site;
@@ -217,15 +231,19 @@ function useSpin(on: boolean) {
     if (!on) return;
     turn.set(0);
     turn.set(withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1, false));
+
     return () => cancelAnimation(turn);
   }, [on]);
+
   return useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 360}deg` }] }));
 }
 
 function RefreshButton({ spinning, tooltip, onPress }: { spinning: boolean; tooltip: string; onPress(): void }) {
   const theme = useTheme();
   const spin = useSpin(spinning);
+
   if (!spinning) return <IconButton icon="arrow.clockwise" size={10} weight="semibold" box={22} radius={6} onPress={onPress} tooltip={tooltip} />;
+
   return (
     <View tooltip={tooltip} style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center" }}>
       <Animated.View style={spin}>
@@ -237,6 +255,7 @@ function RefreshButton({ spinning, tooltip, onPress }: { spinning: boolean; tool
 
 function SectionTitle({ title }: { title: string }) {
   const theme = useTheme();
+
   return (
     <View style={{ height: 22, justifyContent: "flex-end", paddingLeft: 9, paddingBottom: 2 }}>
       <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: "600", color: theme.textSecondary }}>
@@ -250,6 +269,7 @@ function NoteRow({ text, icon, spinner, onPress }: { text: string; icon?: string
   const theme = useTheme();
   const colors = useLiveColors();
   const { hovered, hoverProps } = useHover();
+
   const body = (
     <View
       style={{
@@ -269,12 +289,14 @@ function NoteRow({ text, icon, spinner, onPress }: { text: string; icon?: string
       </Text>
     </View>
   );
+
   return <View {...hoverProps}>{onPress ? <Pressable onPress={onPress}>{body}</Pressable> : body}</View>;
 }
 
 function Spinner() {
   const theme = useTheme();
   const spin = useSpin(true);
+
   return (
     <Animated.View style={[{ width: 16, height: 16, alignItems: "center", justifyContent: "center" }, spin]}>
       <Symbol name="arrow.triangle.2.circlepath" size={10} color={theme.textSecondary} style={{ width: 14, height: 14 }} />
@@ -286,6 +308,7 @@ function MoreRow({ folderId, section, count }: { windowId: string; folderId: str
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const key = `${folderId}:${section}`;
+
   return (
     <SidebarKeyboardRowView rowId={`more|${folderId}|${section}`} label={`Show ${count} more`} {...hoverProps}>
       <Pressable onPress={() => setLive((s) => ({ showAll: { ...s.showAll, [key]: true } }))}>
@@ -315,6 +338,7 @@ function StackRow({ folderId, windowId, stack }: { folderId: string; windowId: s
   const fold = useFold(collapsed);
   const { hovered, hoverProps } = useHover();
   const repo = stack.repo.split("/")[1] ?? stack.repo;
+
   return (
     <View>
       <SidebarKeyboardRowView rowId={`stack|${folderId}|${stack.id}`} label={`${repo} stack, ${collapsed ? "collapsed" : "expanded"}`} {...hoverProps}>
@@ -379,14 +403,18 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
   const colors = useLiveColors();
   const key = liveRowKey(folderId, item.id);
   const spaceId = usePageSpaceId();
+
   const tabId = useBrowser(
     (s) => viewTabIds(s, windowId, spaceId).find((id) => s.tabs[id]?.liveItem?.itemId === item.id && s.tabs[id]?.liveItem?.folderId === folderId) ?? null,
   );
+
   const active = useBrowser((s) => !!tabId && activeTabId(s, windowId, spaceId) === tabId);
   const unread = useLive((s) => !!s.unread[folderId]?.includes(item.id));
+
   const completion = useLive((s) =>
     s.completing[folderId]?.includes(item.id) ? (s.completed[folderId]?.find((c) => c.item.id === item.id)?.state ?? "merged") : null,
   );
+
   const { hovered, hoverProps } = useRowHover(windowId, completion ? null : { kind: "live", id: key });
   const fold = useSharedValue(1);
   useEffect(() => {
@@ -396,11 +424,14 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
     fold.set(withDelay(COMPLETION_MS - 420, withTiming(0, { duration: 360, easing: Easing.bezier(0.2, 0.9, 0.3, 1) })));
   }, [completion]);
   const completing = !!completion;
+
   // Every value, "auto" at rest: a value the style stops giving keeps the last one it gave.
   const foldStyle = useAnimatedStyle(() => {
     const f = completing ? fold.get() : 1;
+
     return { height: completing ? f * metrics.rowHeight : "auto", opacity: f, overflow: completing ? "hidden" : "visible" };
   }, [completing, metrics.rowHeight]);
+
   const fill = active ? theme.tabSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
 
   return (
@@ -471,6 +502,7 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
 function PositionChip({ position }: { position: number }) {
   const theme = useTheme();
   const colors = useLiveColors();
+
   return (
     <View
       style={{
@@ -503,20 +535,25 @@ function ItemIcon({ item, completion, colors }: { item: LiveItem; completion: Co
     pop.set(withSpring(1, LIVE_POP_SPRING));
   }, [completion]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: interpolate(pop.get(), [0, 1], [0.3, 1]) }] }));
+
   if (completion) {
     const glyph = COMPLETION_GLYPH[completion];
+
     return (
       <Animated.View style={[{ width: 16, height: 16, alignItems: "center", justifyContent: "center" }, popStyle]}>
         <Symbol name={glyph.symbol} size={14} weight="semibold" color={colors[glyph.color]} style={{ width: 16, height: 16 }} />
       </Animated.View>
     );
   }
+
   if (item.pr) {
     return (
       <Symbol name="arrow.triangle.pull" size={12} weight="semibold" color={item.pr.draft ? colors.draft : colors.success} style={{ width: 16, height: 16 }} />
     );
   }
+
   if (item.icon && /^https?:/.test(item.icon)) return <TabIcon url={item.url} favicon={item.icon} direct />;
+
   return <TabIcon url={item.source === "confluence" && !item.icon ? SOURCES.confluence.site : item.url} icon={item.icon} />;
 }
 
@@ -531,6 +568,7 @@ const BADGES: Record<NonNullable<ReturnType<typeof prBadge>>, { symbol: string |
 
 function Trailing({ item, completion, colors }: { item: LiveItem; completion: CompletedItem["state"] | null; colors: LiveColors }): ReactNode {
   const theme = useTheme();
+
   if (completion) {
     return (
       <Text style={{ fontSize: 11, fontWeight: "500", color: colors[COMPLETION_GLYPH[completion].color], marginRight: 4 }}>
@@ -538,9 +576,12 @@ function Trailing({ item, completion, colors }: { item: LiveItem; completion: Co
       </Text>
     );
   }
+
   const badge = item.pr ? prBadge(item.pr) : null;
+
   if (!badge) return null;
   const spec = BADGES[badge];
+
   return (
     <View tooltip={spec.tip} style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center" }}>
       {spec.symbol ? (
@@ -566,6 +607,7 @@ function useCompletedShown(folderId: string): CompletedItem[] {
   return useLive(
     useShallow((s) => {
       const completing = s.completing[folderId] ?? NONE;
+
       return (s.completed[folderId] ?? []).filter((c) => Date.now() - c.at < 24 * 3_600_000 && !completing.includes(c.item.id));
     }),
   );
@@ -577,15 +619,19 @@ function CompletedFooter({ folderId, windowId }: { folderId: string; windowId: s
   const shown = useCompletedShown(folderId);
   const [open, setOpen] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   if (!shown.length) return null;
+
   const enter = () => {
     clearTimeout(hideTimer.current);
     setOpen(true);
   };
+
   const leave = () => {
     clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => setOpen(false), 250);
   };
+
   return (
     <View onMouseEnter={enter} onMouseLeave={leave} style={{ gap: layout.rowGap }}>
       <View

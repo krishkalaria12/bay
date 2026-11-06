@@ -23,17 +23,23 @@ export function editBookmark(
 ) {
   const s = useBrowser.getState();
   const w = resolveWindowId(s, windowId);
+
   if (!w) return;
   const node = id ? s.bookmarks.nodes[id] : undefined;
+
   if (id && !node) return;
+
   const spaceId =
     add.spaceId ||
     Object.entries(s.bookmarks.roots).find(([, r]) => {
       let n = node;
+
       for (let i = 0; n?.parentId && i < 64; i++) n = s.bookmarks.nodes[n.parentId];
+
       return n && (r.bar === n.id || r.other === n.id);
     })?.[0] ||
     s.settings.defaultSpaceId;
+
   useBookmarkEditor.getState().set({
     windowId: w,
     bookmarkId: id,

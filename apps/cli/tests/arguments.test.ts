@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { resolve } from "node:path";
 
 const entry = resolve(import.meta.dir, "../bin/bay.ts");
+
 describe("CLI argument validation", () => {
   it.each(
     [

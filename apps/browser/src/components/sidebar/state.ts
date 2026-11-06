@@ -2,6 +2,7 @@ import type { View } from "react-native";
 import { create } from "zustand";
 
 export type Anchor = { x: number; y: number; width: number; height: number };
+
 export type Target = { kind: "tab" | "group" | "folder" | "live" | "space"; id: string };
 
 type SidebarUi = {
@@ -34,7 +35,9 @@ const rows = new Map<string, Map<string, View>>();
 
 export function registerRow(windowId: string, id: string, view: View | null) {
   let byId = rows.get(windowId);
+
   if (!byId) rows.set(windowId, (byId = new Map()));
+
   if (view) byId.set(id, view);
   else byId.delete(id);
 }
@@ -45,6 +48,8 @@ export function rowView(windowId: string, id: string): View | undefined {
 
 export function measureRow(windowId: string, id: string): Promise<Anchor | null> {
   const view = rowView(windowId, id);
+
   if (!view) return Promise.resolve(null);
+
   return new Promise((resolve) => view.measureInWindow((x, y, width, height) => resolve(width ? { x, y, width, height } : null)));
 }

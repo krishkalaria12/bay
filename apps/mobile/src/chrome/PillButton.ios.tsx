@@ -10,6 +10,7 @@ import { useStableCallback } from "./useStableCallback";
 export function PillButton({ testID, label, accessibilityLabel: a11yLabel, onPress }: PillButtonProps): JSX.Element {
   // Download rows re-render with every progress update; a changing handler can drop a tap.
   const press = useStableCallback(onPress);
+
   return (
     <View testID={testID} collapsable={false}>
       <Host matchContents>

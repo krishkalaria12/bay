@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const { tidyCandidates } = await import("./tabTidying.ts");
 
@@ -41,10 +42,12 @@ test("tidy tabs leaves tabs already in a group alone", () => {
 const list = (...paths) => {
   S().hydrate({});
   const w = S().createWindow({ url: `https://example.com/${paths[0]}` });
+
   const ids = [
     S().windows[w].activeTabIds[S().windows[w].spaceId],
     ...paths.slice(1).map((p) => S().newTab(w, { url: `https://example.com/${p}`, background: true })),
   ];
+
   return { w, ids };
 };
 

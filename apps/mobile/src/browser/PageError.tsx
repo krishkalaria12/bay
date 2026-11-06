@@ -12,6 +12,7 @@ export function PageError({ url, message, onRetry }: { url: string; message: str
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
   const text = describePageError(message);
+
   return (
     <View testID="page-error" className="absolute inset-0 items-center justify-center bg-background px-10">
       <Icon name={text.kind} color={muted} size={44} />

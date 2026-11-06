@@ -64,6 +64,7 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
   const done = d.state === "finished" && exists;
   const progress = d.total > 0 ? d.received / d.total : 0;
   const tidy = useTidySuggestion(d);
+
   return (
     <View {...hoverProps} style={{ width: PAGE_WIDTH - 32, maxWidth: "100%" }}>
       <MouseArea path={done ? d.path : null}>

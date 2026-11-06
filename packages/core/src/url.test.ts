@@ -38,6 +38,7 @@ test("fixupUrl leaves searches alone: file names, emails, prose, unknown schemes
   for (const text of ["index.html", "node.js", "hi@example.com", "what is apple.com", "note: buy milk", "c++", "javascript:alert(1)", "1.5", "e.g."]) {
     assert.equal(fixupUrl(text), null, text);
   }
+
   assert.equal(fixupUrl("docs.internal/setup"), "http://docs.internal/setup");
   assert.equal(fixupUrl("site.photography/about"), "https://site.photography/about");
 });
@@ -45,8 +46,10 @@ test("fixupUrl leaves searches alone: file names, emails, prose, unknown schemes
 const ascii = (unicode: string) => {
   const host = domainToASCII(unicode);
   assert.ok(host, `${unicode} should be a valid IDN`);
+
   return host;
 };
+
 const shown = (unicode: string) => displayHost(ascii(unicode));
 
 test("mixing Latin with Cyrillic or Greek stays punycode", () => {

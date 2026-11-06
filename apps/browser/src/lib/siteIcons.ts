@@ -1,3 +1,5 @@
+import { lookup } from "@bay/core";
+
 import type { ImageRequireSource } from "react-native";
 
 // Icons the app ships for the sites it suggests (onboarding's apps), so they show before Chrome has one for the
@@ -17,7 +19,7 @@ const OUTLOOK: Icon = require("../../assets/site-icons/outlook.png");
 
 // By host (no "www."), or host and first path segment ("docs.google.com/" is the root only: Sheets and Slides
 // live on that host too).
-const ICONS: Record<string, Icon> = {
+const ICONS = {
   "mail.google.com": require("../../assets/site-icons/gmail.png"),
   "calendar.google.com": require("../../assets/site-icons/calendar.png"),
   "docs.google.com/": require("../../assets/site-icons/docs.png"),
@@ -34,15 +36,19 @@ const ICONS: Record<string, Icon> = {
   "outlook.live.com": OUTLOOK,
   "youtube.com": require("../../assets/site-icons/youtube.png"),
   "open.spotify.com": require("../../assets/site-icons/spotify.png"),
-};
+} satisfies Record<string, Icon>;
 
 const PAGE = /^https?:\/\/(?:www\.)?([^/?#:@]+)(?::\d+)?(?:\/([^/?#]*))?/i;
 
 export function bundledSiteIcon(url: string, dark: boolean): ImageRequireSource | undefined {
   const match = PAGE.exec(url);
+
   if (!match) return undefined;
   const host = match[1]!.toLowerCase();
-  const icon = ICONS[`${host}/${match[2] ?? ""}`] ?? ICONS[host];
+  const icon = lookup(ICONS, `${host}/${match[2] ?? ""}`) ?? lookup(ICONS, host);
+
   if (icon === undefined) return undefined;
+
+  // SAFETY: Array.isArray excludes the [light, dark] tuple, leaving the single-require arm.
   return Array.isArray(icon) ? icon[dark ? 1 : 0] : (icon as ImageRequireSource);
 }

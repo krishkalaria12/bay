@@ -18,20 +18,27 @@ module.exports = function withBayEngine(config) {
     // download (BayDownloads.swift). Without this entry, registering one would crash, so BayDownloads checks for it.
     const downloadTasks = `${config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile"}.download.*`;
     const permitted = mod.modResults.BGTaskSchedulerPermittedIdentifiers ?? [];
+
     if (!permitted.includes(downloadTasks)) mod.modResults.BGTaskSchedulerPermittedIdentifiers = [...permitted, downloadTasks];
+
     return mod;
   });
   config = withGradleProperties(config, (mod) => {
     for (const [key, value] of Object.entries(gradleProperties)) {
       const item = mod.modResults.find((item) => item.type === "property" && item.key === key);
+
       if (item) item.value = value;
       else mod.modResults.push({ type: "property", key, value });
     }
+
     return mod;
   });
+
   return withAndroidManifest(config, (mod) => {
     const application = mod.modResults.manifest.application?.[0];
+
     if (application) application.$["android:usesCleartextTraffic"] = "true";
+
     return mod;
   });
 };

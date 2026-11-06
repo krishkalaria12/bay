@@ -2,6 +2,8 @@ import { requireNativeModule, requireNativeViewManager } from "expo-modules-core
 import type { Ref } from "react";
 import type { ViewProps } from "react-native";
 
+export type EaselFieldValue = string | number | boolean | null | undefined | EaselFieldValue[] | { [key: string]: EaselFieldValue };
+
 export type EaselSource = {
   url: string;
   title: string;
@@ -9,7 +11,7 @@ export type EaselSource = {
   viewportWidth?: number;
   viewportHeight?: number;
   profileId?: string;
-  [key: string]: unknown;
+  [key: string]: EaselFieldValue;
 };
 
 export type EaselItem = {
@@ -29,7 +31,7 @@ export type EaselItem = {
   points?: number[][];
   source?: EaselSource;
   live?: boolean;
-  [key: string]: unknown;
+  [key: string]: EaselFieldValue;
 };
 
 export type EaselDocument = {
@@ -41,11 +43,13 @@ export type EaselDocument = {
   updatedAt: number;
   spaceId: string;
   nativeEditId?: string;
-  [key: string]: unknown;
+  [key: string]: EaselFieldValue;
 };
 
 export type EaselTool = "select" | "hand" | "pen" | "text" | "rect" | "ellipse" | "arrow";
+
 export type EaselImage = { path: string; width: number; height: number };
+
 export type EaselState = {
   document: string;
   canUndo: boolean;
@@ -91,6 +95,7 @@ type NativeEaselProps = Omit<EaselCanvasProps, "onChange" | "onOpenLink"> & {
   onEaselChange?: (event: { nativeEvent: EaselState }) => void;
   onEaselOpenLink?: (event: { nativeEvent: { url: string } }) => void;
 };
+
 const NativeEasel = requireNativeViewManager<NativeEaselProps>("BayEasel");
 
 export function EaselCanvas({ onChange, onOpenLink, ...props }: EaselCanvasProps) {
@@ -118,12 +123,16 @@ export const isEaselWebSharingEnabled = () => Capture.isEaselWebSharingEnabled()
 
 /** Copies and normalizes a local image into the app's durable Library Media folder. */
 export const retainLibraryImage = (path: string) => Capture.retainLibraryImage(path);
+
 /** Deletes only files inside the app's Library Media folder. */
 export const removeLibraryImage = (path: string) => Capture.removeLibraryImage(path);
 export const libraryImageExists = (path: string) => Capture.libraryImageExists(path);
+
 /** Saves a standalone HTML canvas with embedded PNG media in Downloads. */
 export const exportEaselHTML = (document: string) => Capture.exportEaselHTML(document);
+
 /** Generates independent, cryptographically random public and management capabilities. */
 export const createEaselShareIdentity = () => Capture.createEaselShareIdentity();
+
 /** Returns null only for a missing registry; throws on read or decoding failures. */
 export const readEaselShareRecords = () => Capture.readEaselShareRecords();

@@ -17,9 +17,11 @@ const TABS = ["Memory", "Idle CPU", "Sidebar", "Command bar"];
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 const ramp = (t: number, at: number, len: number, easing = easeOut) => interpolate(t, [at, at + len], [0, 1], { ...clamp, easing });
 const pop = (t: number, at: number) => spring({ frame: t - at, fps: 30, config: { damping: 11, mass: 0.7 } });
+
 // A stable pseudo-random number in [0, 1) for an index.
 const rnd = (i: number) => {
   const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+
   return x - Math.floor(x);
 };
 
@@ -59,6 +61,7 @@ const CIRCLE = "M150 9C112 0 42 4 14 22C-6 36 4 62 46 72C88 81 160 77 188 60C206
 /** Children with the pen's loop drawn round them from `at`. */
 function Circled({ t, at, children, pad = 0.18 }: { t: number; at: number; children: ReactNode; pad?: number }) {
   const p = ramp(t, at, 16, (x) => x);
+
   return (
     <span style={{ position: "relative", display: "inline-block" }}>
       {children}
@@ -84,6 +87,7 @@ function Hand({
   tilt?: number;
 }) {
   const show = ramp(t, at, 14);
+
   return (
     <div
       style={{
@@ -127,6 +131,7 @@ function Count({
   const n = from + (to - from) * ramp(t, at, 30);
   const land = pop(t, at + 30);
   const s = 1 + 0.06 * Math.sin(Math.min(1, land) * Math.PI);
+
   return (
     <div
       style={{
@@ -151,6 +156,7 @@ function Count({
 /** The act's line at the bottom, as the other scenes' captions. */
 function Line({ t, children }: { t: number; children: ReactNode }) {
   const show = ramp(t, 10, 20);
+
   return (
     <div
       style={{
@@ -197,6 +203,7 @@ function Memory({ t }: { t: number }) {
   const grow2 = ramp(t, 30, 22);
   const strike = ramp(t, 50, 10, (x) => x);
   const bar: CSSProperties = { position: "absolute", left: 0, height: 92, borderRadius: 16 };
+
   return (
     <>
       <div style={{ position: "absolute", left: 170, top: 250, width: W, height: 470 }}>
@@ -268,16 +275,20 @@ function Memory({ t }: { t: number }) {
 // MARK: Act 2, idle CPU: two traces scrolling in, as Activity Monitor draws them
 
 const POINTS = 150;
+
 function trace(level: number, spikes: number, seed: number) {
   const d: string[] = [];
+
   for (let i = 0; i <= POINTS; i++) {
     const r = rnd(i + seed);
     const spike = rnd(i * 7 + seed) < spikes ? 0.55 + rnd(i * 3 + seed) * 0.45 : 0;
     const v = Math.min(1, level * (0.35 + r * 0.65) + spike * level * 1.6);
     d.push(`${i === 0 ? "M" : "L"}${((i / POINTS) * 1000).toFixed(1)} ${(100 - v * 100).toFixed(1)}`);
   }
+
   return d.join(" ");
 }
+
 const BUSY = trace(0.55, 0.16, 11);
 const CALM = trace(0.1, 0.03, 53);
 
@@ -313,6 +324,7 @@ function Lane({ t, top, label, sub, d, color, p }: { t: number; top: number; lab
 
 function IdleCpu({ t }: { t: number }) {
   const p = ramp(t, 4, 56, (x) => x);
+
   return (
     <>
       <div
@@ -368,11 +380,13 @@ function IdleCpu({ t }: { t: number }) {
 /** A flash that fades over 14 frames after each time in `at` (the last one that has passed). */
 function flash(t: number, at: number[]) {
   const last = at.filter((a) => a <= t).pop();
+
   return last === undefined ? 0 : Math.max(0, 1 - (t - last) / 14);
 }
 
 function FlashBox({ v, color }: { v: number; color: string }) {
   if (v <= 0) return null;
+
   return (
     <div
       style={{
@@ -391,6 +405,7 @@ function FlashBox({ v, color }: { v: number; color: string }) {
 /** One version's mock, under its pill, with a handwritten note beneath. */
 function Side({ t, left, version, on, note, children }: { t: number; left: number; version: string; on?: boolean; note: string; children: ReactNode }) {
   const show = ramp(t, on ? 6 : 0, 16);
+
   return (
     <div style={{ position: "absolute", left, top: 150, width: 560, opacity: show, transform: `translateY(${(1 - show) * 30}px)` }}>
       <div style={{ marginBottom: 20 }}>
@@ -416,22 +431,27 @@ const BASE_ROWS = [
   ["#0b3d91", "James Webb Space Telescope"],
   ["#f4b400", "Geist – Google Fonts"],
 ] as const;
+
 const NEW_ROWS = [
   { at: 20, color: "#6c5ce7", title: "Q3 2026 Report" },
   { at: 44, color: "#e50914", title: "Netflix" },
   { at: 68, color: "#f36f21", title: "AccuWeather – Lisbon" },
 ];
+
 const ROW = 54;
 
 function SidebarMock({ t, everyRow }: { t: number; everyRow: boolean }) {
   const events = NEW_ROWS.map((r) => r.at);
+
   const rows = [
     ...NEW_ROWS.filter((r) => r.at <= t)
       .reverse()
       .map((r) => ({ key: r.title, color: r.color, title: r.title, grow: ramp(t, r.at, 8), at: r.at })),
     ...BASE_ROWS.map(([color, title]) => ({ key: title, color, title, grow: 1, at: -1 })),
   ];
+
   let y = 0;
+
   return (
     <div
       style={{
@@ -470,6 +490,7 @@ function SidebarMock({ t, everyRow }: { t: number; everyRow: boolean }) {
           y += ROW * r.grow;
           const isNew = r.at >= 0;
           const v = everyRow ? flash(t, events) : isNew ? flash(t, [r.at]) : 0;
+
           return (
             <div
               key={r.key}
@@ -535,6 +556,7 @@ function SidebarAct({ t }: { t: number }) {
 // The command bar: "lisbon" typed a key at a time; the top row is the only one whose content changes.
 const KEYS = [12, 21, 30, 39, 48, 57];
 const QUERY = "lisbon";
+
 const RESULTS = [
   ["#1f5fe0", "Lisbon Travel – Lonely Planet", "lonelyplanet.com"],
   ["#e74c3c", "Time Out Lisbon", "timeout.com"],
@@ -548,6 +570,7 @@ function CommandBarMock({ t, everyRow }: { t: number; everyRow: boolean }) {
   const caret = Math.floor(t / 12) % 2 === 0;
   const keyFlash = flash(t, KEYS);
   const rows = [["#5c616d", typed ? `Search for “${typed}”` : "Search or enter address", "Google"] as const, ...RESULTS];
+
   return (
     <div
       style={{
@@ -580,6 +603,7 @@ function CommandBarMock({ t, everyRow }: { t: number; everyRow: boolean }) {
         {rows.map(([color, title, host], i) => {
           const changes = i === 0;
           const v = everyRow || changes ? keyFlash : 0;
+
           return (
             <div
               key={i}
@@ -645,15 +669,18 @@ export function PerformanceScene() {
   const frame = useBeat();
   const fade = useSceneFade();
   const current = STARTS.reduce((at, s, i) => (frame >= s ? i : at), 0);
+
   return (
     <Paper>
       <AbsoluteFill style={{ opacity: fade }}>
         {RENDER.map((Act, i) => {
           const t = frame - STARTS[i]!;
           const len = ACTS[i]!;
+
           if (t < -8 || t > len + 8) return null;
           const inOut = interpolate(t, [-8, 0, len - 6, len + 2], [0, 1, 1, 0], clamp);
           const drift = interpolate(t, [-8, 0, len - 6, len + 2], [30, 0, 0, -30], clamp);
+
           return (
             <AbsoluteFill key={i} style={{ opacity: inOut, transform: `translateX(${drift}px)` }}>
               <Act t={Math.max(0, t)} />
@@ -667,6 +694,7 @@ export function PerformanceScene() {
           {TABS.map((name, i) => {
             const on = i === current;
             const p = on ? ramp(frame - STARTS[i]!, 0, 14) : 0;
+
             return (
               <span key={name} style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em", color: on ? C.ink : C.faint }}>
                 <Marker color={[C.green, C.blue, C.yellow, C.pink][i]!} progress={p}>

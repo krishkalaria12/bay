@@ -19,6 +19,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const insecure = barInsecure(props);
   const onSearch = useStableCallback(search.onPress);
   const prominentTint = props.privately ? PRIVATE_TINT : undefined;
+
   return (
     <View className="flex-row items-center justify-center gap-4">
       <GlassIconButton

@@ -7,6 +7,7 @@ import { history, type HistoryDomain } from "../src/browsing.ts";
 
 it("reports the newest visit when aggregating domain history", () => {
   const root = mkdtempSync(join(tmpdir(), "bay-history-test-"));
+
   try {
     mkdirSync(join(root, "Chromium", "Default"), { recursive: true });
     writeFileSync(
@@ -21,6 +22,7 @@ it("reports the newest visit when aggregating domain history", () => {
     const db = new Database(join(root, "Chromium", "Default", "History"));
     const now = Math.floor(Date.now() / 1000) * 1000;
     const chromeTime = (now + 11_644_473_600_000) * 1000;
+
     try {
       db.exec(
         "CREATE TABLE urls(id INTEGER, url TEXT, title TEXT, visit_count INTEGER, hidden INTEGER); CREATE TABLE visits(id INTEGER, url INTEGER, visit_time INTEGER, transition INTEGER)",
@@ -30,6 +32,8 @@ it("reports the newest visit when aggregating domain history", () => {
     } finally {
       db.close();
     }
+
+    // SAFETY: history with domains:true returns only HistoryDomain rows (see HistoryOptions).
     const [domain] = history(root, { domains: true, space: "Personal" }) as HistoryDomain[];
     expect(domain?.top_title).toBe("New");
     expect(domain?.visits).toBe(2);

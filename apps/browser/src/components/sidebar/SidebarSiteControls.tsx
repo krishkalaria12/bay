@@ -11,6 +11,8 @@ export function SidebarSiteControls({ windowWidth, windowHeight }: { windowWidth
   const sidebar = useSidebarFieldShown() && sidebarOpen;
   const anchor = useUrlAnchors((s) => s[windowId]);
   const popover = usePopover(tabId);
+
   if (!sidebar || !tabId || popover !== "siteControls" || !anchor?.sidebar || !windowWidth || !windowHeight) return null;
+
   return <SiteControls key={tabId} tabId={tabId} {...sidebarSiteControlsGeometry(anchor, windowWidth, windowHeight)} />;
 }

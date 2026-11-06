@@ -17,6 +17,8 @@ export const INTERNAL_SCHEME = "bay://";
 export function internalPageOf(url: string | null | undefined): InternalPageId | null {
   if (!url?.toLowerCase().startsWith(INTERNAL_SCHEME)) return null;
   const page = url.slice(INTERNAL_SCHEME.length).split(/[/?#]/)[0]!.toLowerCase();
+
+  // SAFETY: `page in INTERNAL_PAGES` was just checked, so page names a known internal page id.
   return page in INTERNAL_PAGES ? (page as InternalPageId) : null;
 }
 

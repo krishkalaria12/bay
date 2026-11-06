@@ -18,9 +18,12 @@ import { JOINABLE_BEFORE_MS } from "./constants";
 export function useIsCalendarTab(tabId: string | null): boolean {
   const pinnedCalendar = useBrowser((s) => {
     const t = tabId ? s.tabs[tabId] : undefined;
+
     return !!t?.pinned && isCalendarUrl(t.pinnedUrl ?? t.url);
   });
+
   const on = useLive((s) => s.calendar.showPreview);
+
   return pinnedCalendar && on;
 }
 
@@ -38,6 +41,7 @@ export function CalendarPreview({ tabId, windowId, anchor }: { tabId: string; wi
   const date = new Date(now).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
   let body: React.ReactNode;
+
   if (!connected) body = <SignIn denied={access === "denied" || access === "restricted"} />;
   else if (!lastFetch && loading) body = <Empty text="Loading events" />;
   else if (error && !lastFetch) body = <Empty text="Couldn't load events" />;
@@ -74,9 +78,11 @@ function Refresh({ spinning }: { spinning: boolean }) {
     if (!spinning) return;
     turn.set(0);
     turn.set(withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1, false));
+
     return () => cancelAnimation(turn);
   }, [spinning]);
   const spin = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 360}deg` }] }));
+
   return (
     <Animated.View style={[{ marginRight: -6, marginVertical: -4 }, spin]}>
       <IconButton icon="arrow.clockwise" size={10} weight="semibold" box={22} radius={6} onPress={() => void refreshCalendar()} tooltip="Refresh" />
@@ -86,12 +92,14 @@ function Refresh({ spinning }: { spinning: boolean }) {
 
 function Empty({ text }: { text: string }) {
   const theme = useTheme();
+
   return <Text style={{ fontSize: 12.5, color: theme.textSecondary, paddingVertical: 6 }}>{text}</Text>;
 }
 
 function SignIn({ denied }: { denied: boolean }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   if (denied) {
     return (
       <Text style={{ fontSize: 12.5, lineHeight: 17, color: theme.textSecondary, paddingVertical: 4 }}>
@@ -99,6 +107,7 @@ function SignIn({ denied }: { denied: boolean }) {
       </Text>
     );
   }
+
   return (
     <View {...hoverProps} style={{ paddingVertical: 4 }}>
       <Text style={{ fontSize: 12.5, lineHeight: 17, color: theme.textSecondary }}>
@@ -113,6 +122,7 @@ function SignIn({ denied }: { denied: boolean }) {
 
 function AllDayRow({ event }: { event: CalendarEvent }) {
   const theme = useTheme();
+
   return (
     <View style={{ height: 22, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 4 }}>
       <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: event.color }} />
@@ -131,6 +141,7 @@ function EventRow({ event, now, windowId, tabId }: { event: CalendarEvent; now: 
   const joinable = !!link && isMeeting(event) && now >= event.start - JOINABLE_BEFORE_MS && now < event.end;
   const others = event.attendees.filter((a) => !a.me);
   const past = event.end <= now;
+
   return (
     <View {...hoverProps}>
       <Pressable
@@ -178,6 +189,7 @@ export function OverlappingAvatars({ people, size = 18 }: { people: CalendarEven
   const theme = useTheme();
   const shown = people.slice(0, 3);
   const more = people.length - shown.length;
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
       {shown.map((p, i) => (

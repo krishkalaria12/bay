@@ -15,6 +15,7 @@ test("opens website addresses and keeps paths, queries and ports", () => {
 test("searches with the chosen engine for anything that isn't a web address", () => {
   assert.equal(resolveAddress("find a page", google), "https://www.google.com/search?q=find%20a%20page");
   assert.equal(resolveAddress("?example.com", engineFor("duckduckgo")), "https://duckduckgo.com/?q=example.com");
+
   for (const input of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,hello", "https://user:secret@example.com"]) {
     assert.match(resolveAddress(input, google) ?? "", /^https:\/\/www\.google\.com\/search\?q=/);
   }

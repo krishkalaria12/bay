@@ -27,6 +27,7 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t 
 
 // The recordings (2848 × 1602, the window at 2x) fill a 16:9 window on the paper, above the caption.
 const STAGE: CSSProperties = { left: 240, top: 64, width: 1440, height: 810 };
+
 // Window points to stage pixels.
 const PT = 1440 / 1424;
 
@@ -36,6 +37,7 @@ const PT = 1440 / 1424;
  * `children` are drawn over the recording in stage pixels and move with the camera.
  */
 type Zoom = { at: number; len: number; scale: number; x: number; y: number; toX: number; toY: number };
+
 function Clip({ name, from, rate = 1, zoom, children }: { name: string; from: number; rate?: number; zoom?: Zoom; children?: ReactNode }) {
   const frame = useBeat();
   const { fps } = useVideoConfig();
@@ -44,6 +46,7 @@ function Clip({ name, from, rate = 1, zoom, children }: { name: string; from: nu
   const edge = (to: number, at: number) => Math.min(0, Math.max(1 - s, to - s * at));
   const tx = zoom ? edge(zoom.toX, zoom.x) * 100 : 0;
   const ty = zoom ? edge(zoom.toY, zoom.y) * 100 : 0;
+
   return (
     <div style={{ position: "absolute", inset: 0, transform: `translate(${tx}%, ${ty}%) scale(${s})`, transformOrigin: "0 0" }}>
       <OffthreadVideo
@@ -62,6 +65,7 @@ function Clip({ name, from, rate = 1, zoom, children }: { name: string; from: nu
 function ClipScene({ children, caption, extra }: { children: ReactNode; caption: ReactNode; extra?: ReactNode }) {
   const fade = useSceneFade();
   const rise = useIn(0, 22);
+
   return (
     <Paper>
       <AbsoluteFill style={{ opacity: fade }}>
@@ -79,6 +83,7 @@ function Click({ x, y, x0, y0, click }: { x: number; y: number; x0: number; y0: 
   const t = interpolate(frame, [click - 22, click - 2], [0, 1], { ...clamp, easing: easeOut });
   const pressed = interpolate(frame, [click - 2, click, click + 5], [0, 1, 0], clamp);
   const show = interpolate(frame, [click - 24, click - 18, click + 30, click + 40], [0, 1, 1, 0], clamp);
+
   return (
     <div style={{ opacity: show }}>
       <Pointer x={x0 + (x - x0) * t} y={y0 + (y - y0) * t} pressed={pressed} />
@@ -105,6 +110,7 @@ function Note({
   children: ReactNode;
 }) {
   const pop = useSpring(at, { damping: 12, mass: 0.8 });
+
   return (
     <div style={{ position: "absolute", left, top, transform: `scale(${pop})`, transformOrigin: "left bottom" }}>
       <Sticky tilt={tilt} color={color} style={{ width, fontSize: 40 }}>
@@ -122,6 +128,7 @@ function Intro() {
   const title = useIn(8, 22);
   const mark = useIn(22, 16);
   const sub = useIn(28, 20);
+
   return (
     <Paper>
       <AbsoluteFill style={{ opacity: fade, alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
@@ -150,6 +157,7 @@ function EndCard() {
   const pill = useSpring(18, { damping: 12, mass: 0.7 });
   const note = useIn(30, 16);
   const mark = useIn(16, 16);
+
   return (
     <Paper>
       <AbsoluteFill style={{ opacity: fade, alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
@@ -209,6 +217,7 @@ function TidyScene() {
   // Toward the sidebar, its whole tab list in view: the bottom-left corner stays put.
   const zoom: Zoom = { at: 0, len: 34, scale: 1.2, x: 0, y: 1, toX: 0, toY: 1 };
   const press = interpolate(frame, [TIDY_LEN + 10, TIDY_LEN + 14, TIDY_LEN + 22], [0, 1, 0], clamp);
+
   return (
     <ClipScene
       extra={
@@ -248,6 +257,7 @@ function TidyScene() {
 
 function DownloadsScene() {
   const mark = useIn(24, 16);
+
   return (
     <ClipScene
       extra={
@@ -281,6 +291,7 @@ function DownloadsScene() {
 
 function NetflixScene() {
   const mark = useIn(24, 16);
+
   return (
     <ClipScene
       extra={
@@ -308,6 +319,7 @@ function NetflixScene() {
 
 function LibraryScene() {
   const mark = useIn(24, 16);
+
   return (
     <ClipScene
       caption={
@@ -330,6 +342,7 @@ function LibraryScene() {
 
 function ThemeScene() {
   const mark = useIn(24, 16);
+
   return (
     <ClipScene
       caption={
@@ -362,6 +375,7 @@ function AlsoScene() {
   const fade = useSceneFade();
   const card = useIn(0, 22);
   const mark = useIn(14, 16);
+
   return (
     <Paper>
       <AbsoluteFill style={{ opacity: fade }}>
@@ -384,6 +398,7 @@ function AlsoScene() {
           </div>
           {ALSO.map((item, i) => {
             const t = interpolate(frame, [18 + i * 9, 34 + i * 9], [0, 1], { ...clamp, easing: easeOut });
+
             return (
               <div
                 key={item}
@@ -435,6 +450,7 @@ export const bay16Frames = (fps: number) => SCENES.reduce((n, [, len]) => n + to
 export function Bay16() {
   useFonts();
   const { width, fps } = useVideoConfig();
+
   return (
     <AbsoluteFill style={{ background: C.paper }}>
       {/* The score (scripts/music/bay-1.6.py), its swells on these scene changes. */}

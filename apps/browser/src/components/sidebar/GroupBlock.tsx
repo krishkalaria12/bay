@@ -31,13 +31,17 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
   const collapsed = useQuietBrowser((s) => !!s.groups[groupId]?.collapsed);
   const tabIds = useQuietBrowser((s) => s.groups[groupId]?.tabIds.join(",") ?? "");
   const entries = useGroupEntries(groupId);
+
   const selectedInside = useQuietBrowser((s) => {
     const selection = s.selection[windowId];
+
     return !!selection?.length && !!s.groups[groupId]?.tabIds.some((id) => selection.includes(id));
   });
+
   const spaceId = usePageSpaceId();
   // The window's active tab, when it's a member: it stays out while the group is collapsed, as in Arc and Dia.
   const activeEntry = useQuietBrowser((s) => keptEntry(s, windowId, spaceId, entries));
+
   const { ref, style, handle, headerRef } = useDragItem(`g:${groupId}`, {
     kind: "group",
     tabIds: tabIds.split(",").filter(Boolean),
@@ -45,6 +49,7 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
     groupId,
     collapsed,
   });
+
   const { ref: tailRef, style: tailStyle } = useDragItem(`tail:group:${groupId}`, { kind: "tail", tabIds: [], section, parentGroup: groupId });
 
   const fold = useFold(collapsed);
@@ -89,18 +94,22 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
   const tokens = useSidebarTokens();
   const group = useQuietBrowser((s) => s.groups[groupId]);
   const label = useQuietBrowser((s) => (s.groups[groupId] ? groupLabel(s, s.groups[groupId]!) : ""));
+
   // The first tab's icon fields only: its title, loading and bookkeeping changes don't re-render the header.
   const firstTab = useQuietBrowser(
     useShallow((s) => {
       const t = s.tabs[s.groups[groupId]?.tabIds[0] ?? ""];
+
       return t && { url: t.url, favicon: t.favicon, customIcon: t.customIcon, spaceId: t.spaceId };
     }),
   );
+
   const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "group" && u.renaming.id === groupId);
   const dropInto = useDropInto() === groupId;
   const { hovered, hoverProps } = useRowHover(windowId, collapsed && !renaming ? { kind: "group", id: groupId } : null);
   const countdown = useMeetingCountdown(groupId);
   const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${(open.get() - 1) * 90}deg` }] }));
+
   if (!group) return null;
   const target = { kind: "group" as const, id: groupId };
   // With no fill to carry it, a group's color shows on its name.
@@ -123,6 +132,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
         <Pressable
           onPress={() => {
             dismissHover();
+
             if (!renaming) useBrowser.getState().updateGroup(groupId, { collapsed: !collapsed });
           }}
         >

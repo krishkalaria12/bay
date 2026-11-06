@@ -30,12 +30,15 @@ export function handOff(tabId: string, profile: string) {
 export function startTabPages() {
   useBrowser.subscribe((s, prev) => {
     if (s.tabs === prev.tabs) return;
+
     for (const id of changedIds(s.tabs, prev.tabs)) {
       const tab = s.tabs[id];
       const before = prev.tabs[id];
       const profile = tab && engineProfile(tab.spaceId);
+
       if (tab && before && tab.windowId !== before.windowId && webviews.has(id) && profile === engineProfile(before.spaceId)) handOff(id, profile!);
       const kept = handedOff.get(id);
+
       if (kept !== undefined && !(wantsPage(tab) && profile === kept)) {
         handedOff.delete(id);
         releaseTabTransfer(id);

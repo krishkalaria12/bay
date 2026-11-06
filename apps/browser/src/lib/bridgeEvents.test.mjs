@@ -1,15 +1,18 @@
 // Page reports held at the bridge (lib/bridgeEvents.ts): they replay in order, as one batch, before anything else runs.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { afterHeldReports, createHold, holdPageReports } = await import("./bridgeEvents.ts");
 
 function setup() {
   const log = [];
   const hooks = {};
+
   const bridge = {
     __callFunction: (module, method, args) => {
       if (args[2]?.throws) throw new Error(args[2].throws);
       log.push(module === "RCTEventEmitter" ? args[1] : `${module}.${method}`);
+
       // A handler that sets off a native module's listener, which applies what's held first.
       if (args[2]?.reenter) {
         hooks.flush();
@@ -18,23 +21,29 @@ function setup() {
     },
     __invokeCallback: (id) => log.push(`callback ${id}`),
   };
+
   const scheduled = [];
   const errors = [];
   let depth = 0;
+
   const batch = (update) => {
     if (!depth) log.push("[");
     depth++;
+
     try {
       update();
     } finally {
       depth--;
+
       if (!depth) log.push("]");
     }
   };
+
   const held = createHold({ batch, schedule: (callback) => scheduled.push(callback), report: (e) => errors.push(e.message) });
   holdPageReports(bridge, held);
   hooks.flush = held.flush;
   const event = (name, body = {}) => bridge.__callFunction("RCTEventEmitter", "receiveEvent", [1, name, body]);
+
   return { log, bridge, scheduled, errors, held, event };
 }
 
@@ -86,6 +95,7 @@ test("a flush set off while one runs applies the rest first, in the same batch",
 
 test("a reporter that throws can't drop reports or the call that applied them", () => {
   const log = [];
+
   const bridge = {
     __callFunction: (_m, method, args) => {
       if (args[2]?.throws) throw new Error("boom");
@@ -93,6 +103,7 @@ test("a reporter that throws can't drop reports or the call that applied them", 
     },
     __invokeCallback: (id) => log.push(`callback ${id}`),
   };
+
   const scheduled = [];
   holdPageReports(
     bridge,
@@ -121,9 +132,11 @@ test("a reporter that throws can't drop reports or the call that applied them", 
 test("a native module's listener runs after the held reports, in one batch with them", () => {
   const { log, held, event } = setup();
   const added = new Map();
+
   const emitter = {
     addListener(name, listener) {
       added.set(name, [...(added.get(name) ?? []), listener]);
+
       return {
         remove: () =>
           added.set(
@@ -139,6 +152,7 @@ test("a native module's listener runs after the held reports, in one batch with 
       );
     },
   };
+
   afterHeldReports(emitter, held);
   const emit = (name, ...args) => added.get(name)?.forEach((l) => l(...args));
   const onStrip = (tx) => log.push(`strip ${tx.rev}`);

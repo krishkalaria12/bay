@@ -17,21 +17,27 @@ export function useFold(collapsed: boolean): FoldState {
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
+
       return;
     }
+
     setRunning(true);
+
     // A height: it reflows the rows below.
     const settle = () => {
       setSettled(collapsed);
       setRunning(false);
     };
+
     open.set(
       withTiming(collapsed ? 0 : 1, { duration: FOLD_MS, easing: FOLD_EASING }, (finished) => {
         if (finished) runOnJS(settle)();
       }),
     );
+
     return () => cancelAnimation(open);
   }, [collapsed]);
+
   return { open, moving: running || settled !== collapsed };
 }
 
@@ -92,7 +98,9 @@ export function Fold({
       >
         {entries.map(({ key, node }) => {
           const stays = key === kept;
+
           if (!stays && !mountAll) return null;
+
           return (
             <FoldItem
               key={key}
@@ -134,7 +142,9 @@ export function FoldAway({ collapsed, onLayout, children }: { collapsed: boolean
   const [height, setHeight] = useState(0);
   const mode: FoldMode = fold.moving ? "moving" : collapsed ? "closed" : "free";
   const style = useFoldStyle(fold.open, mode, height, 0);
+
   if (mode === "closed") return null;
+
   return (
     <Animated.View style={style} onLayout={onLayout} pointerEvents={collapsed ? "none" : "auto"}>
       <View style={mode === "moving" ? { position: "absolute", left: 0, right: 0, top: 0 } : null} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
@@ -151,8 +161,10 @@ type FoldMode = "free" | "moving" | "closed";
 function useFoldStyle(open: SharedValue<number>, mode: FoldMode, height: number, gap: number) {
   return useAnimatedStyle(() => {
     let o = open.get();
+
     if (mode === "free") o = 1;
     else if (mode === "closed") o = 0;
+
     return {
       height: mode === "free" ? "auto" : o * height,
       marginBottom: (o - 1) * gap,
@@ -179,6 +191,7 @@ function FoldItem({
   children: ReactNode;
 }) {
   const style = useFoldStyle(open, mode, height, gap);
+
   return (
     <Animated.View style={style} pointerEvents={pointerEvents}>
       {children}

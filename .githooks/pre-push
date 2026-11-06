@@ -1,5 +1,5 @@
 #!/bin/bash
-# Lint (warnings fail it) and the format check, as CI runs them: either failing stops the push.
+# Lint (warnings fail it) and the format check, as CI runs them, then the anti-slop rules: any failing stops the push.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 [[ -x ./node_modules/.bin/oxlint ]] || { echo "pre-push: oxlint missing; run pnpm install" >&2; exit 1; }
@@ -10,5 +10,9 @@ fi
 if ! ./node_modules/.bin/oxfmt --check >/dev/null 2>&1; then
   echo "pre-push: some files aren't formatted; run pnpm fmt and commit. They are:" >&2
   ./node_modules/.bin/oxfmt --list-different 2>/dev/null | awk '{ print "  " $0 }' >&2 || true
+  exit 1
+fi
+if ! ./node_modules/.bin/oxlint -c .oxlintrc.anti-slop.json; then
+  echo "pre-push: anti-slop failed; fix it (pnpm slop) before pushing." >&2
   exit 1
 fi

@@ -11,6 +11,7 @@ import type { ScopeColors } from "./scopeColors";
 export function SuggestionIcon({ suggestion: s, color }: { suggestion: Suggestion; color?: string }) {
   const theme = useTheme();
   const tint = color ?? theme.textSecondary;
+
   switch (s.kind) {
     case "page":
       return <Favicon url={s.url} favicon={s.favicon} />;
@@ -31,7 +32,9 @@ function labels(s: Suggestion): [string, string | null] {
   switch (s.kind) {
     case "page":
       if (s.tabId) return [s.title || displayUrl(s.url), "Switch to Tab"];
+
       if (s.cleanedId) return [s.title || displayUrl(s.url), "Restore Tab"];
+
       return s.title ? [s.title, displayUrl(s.url)] : [displayUrl(s.url), null];
     case "search":
       return [s.query, null];
@@ -67,6 +70,7 @@ export function SuggestionList({
   selectionColors?: ScopeColors | null;
 }) {
   if (!items.length) return null;
+
   return (
     <View style={{ paddingHorizontal: dropdown ? 6 : 9, paddingBottom: dropdown ? 6 : 2 }}>
       {items.map((s, i) => (
@@ -86,8 +90,10 @@ export function SuggestionList({
 
 function sameSuggestion(a: Suggestion, b: Suggestion): boolean {
   if (a === b) return true;
-  const ka = Object.keys(a) as (keyof Suggestion)[];
-  return ka.length === Object.keys(b).length && ka.every((k) => a[k] === b[k]);
+  const left = Object.entries(a);
+  const right = Object.entries(b);
+
+  return left.length === right.length && left.every(([key, value]) => right.some(([otherKey, otherValue]) => otherKey === key && otherValue === value));
 }
 
 const SuggestionRow = memo(
@@ -112,6 +118,7 @@ const SuggestionRow = memo(
     const hint = trailing ?? (s.kind === "action" ? s.hint : null);
     const onRemove = s.kind === "page" && s.visited && !s.tabId && !s.cleanedId ? () => actions.remove(s.url) : undefined;
     const removable = !!onRemove && (hovered || selected);
+
     return (
       <View
         onMouseEnter={() => {

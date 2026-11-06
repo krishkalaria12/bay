@@ -7,17 +7,20 @@ import { SIDEBAR_FIELD } from "./constants";
 
 export function useTabLayout(): "sidebar" | "top" {
   const windowId = useWindowId();
+
   return useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
 }
 
 // Closed, the sidebar keeps it: the page fills the window, and the field is in the sidebar's peek.
 export function addressBarInSidebar(s: BrowserState, windowId: string): boolean {
   const w = s.windows[windowId];
+
   return !!w && s.settings.addressBar === "sidebar" && (w.tabLayout ?? s.settings.tabLayout) === "sidebar";
 }
 
 export function useAddressBarInSidebar(): boolean {
   const windowId = useWindowId();
+
   return useBrowser((s) => addressBarInSidebar(s, windowId));
 }
 
@@ -28,17 +31,20 @@ export function sidebarFieldShown(s: BrowserState, windowId: string): boolean {
 
 export function useSidebarFieldShown(): boolean {
   const windowId = useWindowId();
+
   return useBrowser((s) => sidebarFieldShown(s, windowId));
 }
 
 // The sidebar docked on the window's right (Appearance › Sidebar): the page on the left, under the window buttons.
 export function sidebarOnRight(s: BrowserState, windowId: string): boolean {
   const w = s.windows[windowId];
+
   return !!w && s.settings.sidebarPosition === "right" && (w.tabLayout ?? s.settings.tabLayout) === "sidebar";
 }
 
 export function useSidebarOnRight(): boolean {
   const windowId = useWindowId();
+
   return useBrowser((s) => sidebarOnRight(s, windowId));
 }
 
@@ -63,6 +69,7 @@ export function sidebarSiteControlsGeometry(anchor: UrlAnchor, windowWidth: numb
   const buttonCenter = anchor.left + anchor.width - 17;
   const left = Math.max(8, Math.min(buttonCenter - width / 2, windowWidth - width - 8));
   const top = anchor.top + (anchor.sidebar?.height ?? SIDEBAR_FIELD.height) + 9;
+
   return { width, left, top, arrowLeft: buttonCenter - left, maxHeight: Math.max(0, windowHeight - top - 8) };
 }
 
@@ -70,6 +77,7 @@ export const useUrlAnchors = create<Record<string, UrlAnchor>>()(() => ({}));
 
 export function setUrlAnchor(windowId: string, anchor: UrlAnchor) {
   const current = useUrlAnchors.getState()[windowId];
+
   if (
     current &&
     current.left === anchor.left &&

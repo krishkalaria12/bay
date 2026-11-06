@@ -14,34 +14,42 @@ export interface ScriptTiming {
 export const initialTiming = (): ScriptTiming => ({ loading: true, watchedUrl: null, progress: 0, hidden: false });
 
 /** Updates `timing` for one navigation event and returns the scripts to run on the page. */
-export function scriptsFor(
-  timing: ScriptTiming,
-  state: { url: string; progress: number; isLoading: boolean },
-  hasRules: boolean,
-): { watchMedia: boolean; hideElements: boolean } {
+export function scriptsFor(timing: ScriptTiming, state: { url: string; progress: number; isLoading: boolean }, hasRules: boolean): MediaWatchPlan {
   let watchMedia = false;
   let hideElements = false;
+
   if (state.isLoading) {
     // A new load, or progress starting over, is a new document; so is an address change once it commits.
     if (!timing.loading || state.progress < timing.progress) timing.watchedUrl = null;
+
     // Media can play before a page finishes loading (a media file streams for as long as it plays).
     if (state.progress > 0.1 && state.url !== timing.watchedUrl) {
       timing.watchedUrl = state.url;
       watchMedia = true;
     }
+
     timing.progress = state.progress;
   } else if (timing.loading) {
     watchMedia = true;
     hideElements = shouldHide(timing, hasRules);
   }
+
   timing.loading = state.isLoading;
+
   return { watchMedia, hideElements };
+}
+
+interface MediaWatchPlan {
+  watchMedia: boolean;
+  hideElements: boolean;
 }
 
 /** Whether to run hide-elements now; skipped when there's nothing to apply or clear. */
 export function shouldHide(timing: ScriptTiming, hasRules: boolean): boolean {
   const run = hasRules || timing.hidden;
+
   if (run) timing.hidden = hasRules;
+
   return run;
 }
 

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 await import("../test-native-stub.mjs");
+
 const { useBrowser } = await import("./browserStore.ts");
 const { hasClearableTabs } = await import("./tabTidying.ts");
 

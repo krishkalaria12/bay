@@ -119,6 +119,7 @@ export function CalendarPane() {
 
 function CalendarList({ title, calendars, hidden }: { title: string; calendars: SystemCalendar[]; hidden: string[] }) {
   const theme = useTheme();
+
   return (
     <View style={{ paddingVertical: 6 }}>
       <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textSecondary, marginLeft: 12, marginBottom: 2 }}>{title}</Text>

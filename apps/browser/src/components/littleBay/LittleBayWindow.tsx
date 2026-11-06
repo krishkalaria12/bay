@@ -25,6 +25,7 @@ import { SMALL_BAR_HEIGHT, SMALL_BAR_INSET, SMALL_BAR_MID, SMALL_BUTTON, SMALL_F
 export function LittleBayWindow() {
   const theme = useTheme();
   const [size, setSize] = useState({ width: 0, height: 0 });
+
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={useWindowTint()} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
@@ -111,10 +112,12 @@ function PageField({ tab, windowId, hidden }: { tab: Tab; windowId: string; hidd
   const insecure = usePage(tab.id, (p) => !!p.security && (p.security.level === "insecure" || p.security.level === "certificateError"));
   const { hovered, hoverProps } = useHover();
   const field = useRef<View>(null);
+
   const anchor = () =>
     field.current?.measureInWindow((x, y, width, height) => {
       if (width) setUrlAnchor(windowId, { left: x, top: y, width, sidebar: { height } });
     });
+
   const isFile = tab.url.startsWith("file:");
   const host = !tab.url ? "" : isFile ? "File" : breadcrumb(tab.url).host;
   const title = tab.customTitle || tab.title;
@@ -170,6 +173,7 @@ function Progress({ progress, color }: { progress: number; color: string }) {
     width.set(withTiming(Math.max(progress, 0.08), { duration: 200, easing: Easing.out(Easing.quad) }));
   }, [progress]);
   const widthStyle = useAnimatedStyle(() => ({ width: `${width.get() * 96}%` }));
+
   return (
     <Animated.View style={[{ position: "absolute", left: 8, bottom: 0, height: 1.5, borderRadius: 1, backgroundColor: color, opacity: 0.85 }, widthStyle]} />
   );

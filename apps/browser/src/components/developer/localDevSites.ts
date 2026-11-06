@@ -1,4 +1,4 @@
-import type { BrowserState, BrowserShape } from "../../store/browserStore";
+import type { BrowserState, QuietBrowserState } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { useQuietBrowser } from "../../store/hooks";
 
@@ -7,6 +7,7 @@ import { useQuietBrowser } from "../../store/hooks";
 /** The site a URL is on, as Developer Mode keeps it: "localhost:3000", "app.test"; "" for anything but http(s). */
 export function siteKey(url: string): string {
   const m = /^https?:\/\/(?:[^@/?#]*@)?([^/?#]+)/i.exec(url);
+
   return m ? m[1]!.toLowerCase() : "";
 }
 
@@ -17,28 +18,34 @@ function hostname(site: string): string {
 /** A server on this machine or the local network: what someone building a site runs it on. */
 export function isLocalDevSite(url: string): boolean {
   const site = siteKey(url);
+
   if (!site) return false;
   const host = hostname(site);
+
   if (host === "localhost" || host === "[::1]" || host === "0.0.0.0" || /\.(localhost|local|test)$/.test(host)) return true;
+
   if (/^127\.\d+\.\d+\.\d+$/.test(host)) return true;
   // A private address only with a port: a router's or a printer's page is on one without.
   const port = site.length > host.length;
+
   return port && /^(10\.\d+|192\.168|172\.(1[6-9]|2\d|3[01]))\.\d+\.\d+$/.test(host);
 }
 
 export function isDeveloperUrl(s: Pick<BrowserState, "settings">, url: string): boolean {
   const site = siteKey(url);
+
   return !!site && (s.settings.developerSites ?? []).includes(site);
 }
 
-export function isDeveloperTab(s: BrowserShape, tabId: string | undefined): boolean {
+export function isDeveloperTab(s: QuietBrowserState, tabId: string | undefined): boolean {
   const url = tabId ? s.tabs[tabId]?.url : undefined;
+
   return !!url && isDeveloperUrl(s, url);
 }
 
 export const useIsDeveloperTab = (tabId: string | undefined) => useQuietBrowser((s) => isDeveloperTab(s, tabId));
 
 /** The window's shown tab is in Developer Mode: its address is over its page, not in the sidebar. */
-export function developerTabShown(s: BrowserShape, windowId: string): boolean {
+export function developerTabShown(s: QuietBrowserState, windowId: string): boolean {
   return isDeveloperTab(s, activeTabId(s, windowId));
 }

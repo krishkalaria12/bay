@@ -18,6 +18,7 @@ export function ReaderPanel({
   onExit: () => void;
 }): JSX.Element {
   const accent = useThemeColor("accent");
+
   return (
     <PanelSheet visible={visible} onClose={onClose} title="Reader" testID="reader-settings" height="60%">
       <ActionRow testID="reader-exit" label="Exit Reader" onPress={onExit} />
@@ -55,6 +56,7 @@ export function ReaderPanel({
       <View className="flex-row justify-between">
         {READER_THEMES.map((theme) => {
           const selected = settings.theme === theme.id;
+
           return (
             <Pressable
               key={theme.id}
@@ -82,6 +84,7 @@ export function ReaderPanel({
 
 function Choice({ id, label, selected, disabled, onPress }: { id: string; label: string; selected?: boolean; disabled?: boolean; onPress: () => void }) {
   const accent = useThemeColor("accent");
+
   return (
     <Pressable
       testID={id}

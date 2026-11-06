@@ -1,5 +1,6 @@
 import { engineHost, searchUrl, type SearchEngine } from "./engines.ts";
 import { hostOf, searchUrlFor } from "./input.ts";
+import * as v from "valibot";
 
 export type SiteSearch = { host: string; name: string; url: string; keyword?: string };
 
@@ -55,22 +56,27 @@ function normalize(text: string): string {
 
 function siteLabel(host: string): string {
   const parts = host.split(".");
+
   return parts.length >= 2 ? parts[parts.length - 2]! : host;
 }
 
 export function findScope(text: string, { engines, sites = POPULAR_SITE_SEARCHES, hosts = [] }: ScopeSources): SearchScope | null {
   const t = normalize(text);
+
   if (!t || /\s/.test(t)) return null;
   const host = hostOf(`https://${t}`) || t;
 
   for (const e of engines) {
     if (e.custom && e.keyword.toLowerCase() === t) return engineScope(e);
   }
+
   for (const e of engines) {
     if (e.custom) continue;
     const eHost = engineHost(e);
+
     if (e.keyword.toLowerCase() === host || eHost === host || (t.length >= 3 && t === siteLabel(eHost))) return engineScope(e);
   }
+
   for (const s of sites) {
     if (
       s.keyword === t ||
@@ -81,7 +87,9 @@ export function findScope(text: string, { engines, sites = POPULAR_SITE_SEARCHES
       return { kind: "site", name: s.name, host: s.host, url: s.url };
     }
   }
-  if (host.includes(".") && (typeof hosts === "function" ? hosts() : hosts).includes(host)) return { kind: "history", name: host, host, url: "" };
+
+  if (host.includes(".") && (v.is(v.function_(), hosts) ? hosts() : hosts).includes(host)) return { kind: "history", name: host, host, url: "" };
+
   return null;
 }
 
@@ -91,5 +99,6 @@ function engineScope(e: SearchEngine): SearchScope {
 
 export function scopedSearchUrl(scope: SearchScope, query: string, defaultEngine: Pick<SearchEngine, "url">): string {
   if (scope.kind === "history") return searchUrl(defaultEngine, `site:${scope.host} ${query.trim()}`);
+
   return searchUrlFor(scope.url, query);
 }

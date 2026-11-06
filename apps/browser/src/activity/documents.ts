@@ -1,8 +1,11 @@
+import { lookup } from "@bay/core";
+
 import type { LiveItem } from "./types";
 
 // MARK: Notion (POST /v1/search, GET /v1/users)
 
 type NotionRichText = { plain_text: string }[];
+
 type NotionPage = {
   object: "page" | "database";
   id: string;
@@ -17,6 +20,7 @@ type NotionPage = {
 };
 
 export type NotionSearch = { results: NotionPage[] };
+
 export type NotionUsers = { results: { id: string; name: string | null }[] };
 
 export const NOTION_SEARCH_BODY = {
@@ -26,6 +30,7 @@ export const NOTION_SEARCH_BODY = {
 
 function notionTitle(p: NotionPage): string {
   const title = p.title ?? Object.values(p.properties ?? {}).find((v) => v.type === "title")?.title ?? [];
+
   return (
     title
       .map((t) => t.plain_text)
@@ -36,6 +41,7 @@ function notionTitle(p: NotionPage): string {
 
 export function mapNotion(json: NotionSearch, users: NotionUsers | null, workspace: string | null): LiveItem[] {
   const names = new Map((users?.results ?? []).map((u) => [u.id, u.name]));
+
   return json.results
     .filter((p) => !p.archived && !p.in_trash)
     .map((p) => ({
@@ -68,6 +74,7 @@ export const CONFLUENCE_CQL = "type=page AND (contributor=currentUser() OR creat
 
 export function mapConfluence(json: ConfluenceSearch, site: string): LiveItem[] {
   const base = json._links?.base ?? `${site.replace(/\/$/, "")}/wiki`;
+
   return json.results.map((r) => ({
     id: `confluence:${r.id}`,
     source: "confluence" as const,
@@ -101,14 +108,14 @@ export const DRIVE_QUERY = {
   fields: "files(id,name,mimeType,webViewLink,iconLink,modifiedTime,lastModifyingUser(displayName))",
 };
 
-const DRIVE_KINDS: Record<string, string> = {
+const DRIVE_KINDS = {
   "application/vnd.google-apps.document": "Document",
   "application/vnd.google-apps.spreadsheet": "Spreadsheet",
   "application/vnd.google-apps.presentation": "Presentation",
   "application/vnd.google-apps.form": "Form",
   "application/vnd.google-apps.drawing": "Drawing",
   "application/pdf": "PDF",
-};
+} satisfies Record<string, string>;
 
 export function mapDrive(json: DriveFiles): LiveItem[] {
   return json.files.map((f) => ({
@@ -116,10 +123,10 @@ export function mapDrive(json: DriveFiles): LiveItem[] {
     source: "gdrive" as const,
     url: f.webViewLink,
     title: f.name || "Untitled",
-    subtitle: DRIVE_KINDS[f.mimeType] ?? "Google Drive",
+    subtitle: lookup(DRIVE_KINDS, f.mimeType) ?? "Google Drive",
     icon: null,
     updatedAt: Date.parse(f.modifiedTime) || 0,
-    doc: { kind: DRIVE_KINDS[f.mimeType] ?? "File", editedBy: f.lastModifyingUser?.displayName ?? null, place: null },
+    doc: { kind: lookup(DRIVE_KINDS, f.mimeType) ?? "File", editedBy: f.lastModifyingUser?.displayName ?? null, place: null },
   }));
 }
 
@@ -143,6 +150,7 @@ export type BitbucketStatuses = { values: { state: "SUCCESSFUL" | "FAILED" | "IN
 export function mapBitbucket(pr: BitbucketPR, statuses: BitbucketStatuses | null): LiveItem {
   const reviewers = (pr.participants ?? []).filter((p) => p.role === "REVIEWER");
   const repo = pr.destination.repository.full_name;
+
   return {
     id: `bitbucket:${repo}#${pr.id}`,
     source: "bitbucket",

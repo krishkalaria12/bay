@@ -2,11 +2,13 @@
 // run in order: each starts where the last left it.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { everySlowly, reschedule, slowTimersForTests } = await import("./throttledTimers.ts");
 
 const B = 1_000_000_020_000;
 let now = B + 7_000;
 const lab = slowTimersForTests(() => now);
+
 const at = (t) => {
   now = t;
   lab.fire();
@@ -39,12 +41,14 @@ test("a job with nothing to do schedules no timer until its watch says so", () =
   let wanted = false;
   let notify = () => {};
   const ran = [];
+
   const stop = everySlowly({
     every: 30_000,
     run: () => ran.push(now),
     needed: () => wanted,
     watch: (changed) => ((notify = changed), () => (notify = () => {})),
   });
+
   assert.equal(lab.pending(), null);
   wanted = true;
   notify();
@@ -71,6 +75,7 @@ test("a job whose run makes a watch reschedule does not skip the other jobs due 
   lab.clear();
   const ran = [];
   let notify = () => {};
+
   const stopA = everySlowly({
     every: 30_000,
     run: () => {
@@ -79,6 +84,7 @@ test("a job whose run makes a watch reschedule does not skip the other jobs due 
     },
     watch: (changed) => ((notify = changed), () => (notify = () => {})),
   });
+
   const stopB = everySlowly({ every: 60_000, run: () => ran.push("b") });
   const stopC = everySlowly({ every: 1_800_000, run: () => ran.push("c") });
   at(B + 1_800_000);
@@ -94,12 +100,14 @@ test("a watch that reschedules while a job is overdue keeps that job due", () =>
   const ran = [];
   let notify = () => {};
   const stopA = everySlowly({ every: 30_000, run: () => ran.push(now) });
+
   const stopW = everySlowly({
     every: 60_000,
     run: () => {},
     needed: () => false,
     watch: (changed) => ((notify = changed), () => (notify = () => {})),
   });
+
   const due = lab.pending();
   now = due + 65_000;
   notify();
@@ -115,12 +123,14 @@ test("a job that becomes needed after its slot passed waits for its next slot", 
   const ran = [];
   let wanted = false;
   let notify = () => {};
+
   const stop = everySlowly({
     every: 30_000,
     run: () => ran.push(now),
     needed: () => wanted,
     watch: (changed) => ((notify = changed), () => (notify = () => {})),
   });
+
   now = B + 2_000_000;
   wanted = true;
   notify();
@@ -144,12 +154,14 @@ test("a dormant job a callback wakes in the middle of a batch waits for its own 
   const ran = [];
   let wanted = false;
   let notify = () => {};
+
   const stopD = everySlowly({
     every: 60_000,
     run: () => ran.push("d"),
     needed: () => wanted,
     watch: (changed) => ((notify = changed), () => (notify = () => {})),
   });
+
   const stopA = everySlowly({
     every: 30_000,
     run: () => {
@@ -158,6 +170,7 @@ test("a dormant job a callback wakes in the middle of a batch waits for its own 
       notify();
     },
   });
+
   const slot = lab.pending();
   at(slot + 60_000);
   assert.deepEqual(ran, ["a"]);

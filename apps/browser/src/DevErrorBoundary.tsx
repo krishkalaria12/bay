@@ -2,6 +2,7 @@ import { Component, type ReactNode } from "react";
 import { ScrollView, Text } from "react-native";
 
 export class DevErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  // SAFETY: the initializer is null, which satisfies Error | null; the cast only pins the state field type.
   state = { error: null as Error | null };
 
   static getDerivedStateFromError(error: Error) {
@@ -9,11 +10,13 @@ export class DevErrorBoundary extends Component<{ children: ReactNode }, { error
   }
 
   componentDidCatch(error: Error) {
+    // SAFETY: globalThis is extensible; the cast only declares the optional __lastRenderError field this method sets.
     (globalThis as { __lastRenderError?: string }).__lastRenderError = `${error.message}\n${error.stack ?? ""}`;
   }
 
   render() {
     if (!this.state.error) return this.props.children;
+
     return (
       <ScrollView style={{ flex: 1, backgroundColor: "#1b1416", padding: 24 }}>
         <Text style={{ color: "#ff8a8a", fontSize: 14, fontFamily: "Menlo" }}>

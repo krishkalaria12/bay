@@ -30,6 +30,7 @@ export function SyncPane() {
   useEffect(() => {
     let live = true;
     void folderInfo(folder).then((i) => live && setInfo(i));
+
     return () => {
       live = false;
     };
@@ -38,6 +39,7 @@ export function SyncPane() {
   if (status === "unavailable") {
     return <Text style={{ marginTop: 20, fontSize: 12.5, color: theme.textSecondary }}>Sync isn’t available in this build.</Text>;
   }
+
   return (
     <View>
       <Text style={{ marginTop: 20, fontSize: 12.5, lineHeight: 17, color: theme.textSecondary }}>
@@ -52,6 +54,7 @@ export function SyncPane() {
 function SyncIcon({ on }: { on: boolean }) {
   const colors = useFormColors();
   const theme = useTheme();
+
   return (
     <View
       style={{
@@ -88,15 +91,19 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
     setFailure(null);
     const result = await turnOnSync(info.path);
     setBusy(false);
+
     if ("error" in result) setFailure(result.error);
     else showRecoveryKit();
   };
+
   const enterPhrase = () => showPhraseEntry(info, () => void chooseSyncFolder().then(() => folderInfo().then((i) => showPhraseEntry(i))));
+
   const otherOptions = async () => {
     const choice = await showMenu([
       { id: "new", title: "Set Up Without Another Device", enabled: !noICloud },
       { id: "phrase", title: "Enter Recovery Phrase" },
     ]);
+
     if (choice === "new") void turnOn();
     else if (choice === "phrase") enterPhrase();
   };
@@ -153,6 +160,7 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
 
 function statusLine(status: SyncStatus, lastSyncedAt: number | null, pending: number): string {
   const since = lastSyncedAt ? ago(lastSyncedAt) : null;
+
   const line = (() => {
     switch (status) {
       case "starting":
@@ -168,6 +176,7 @@ function statusLine(status: SyncStatus, lastSyncedAt: number | null, pending: nu
         return since && since !== "just now" ? `updated ${since}` : "updated just now";
     }
   })();
+
   return pending ? `${line} · waiting for ${pending === 1 ? "1 file" : `${pending} files`} to download` : line;
 }
 
@@ -186,6 +195,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 30_000);
+
     return () => clearInterval(t);
   }, []);
 
@@ -199,6 +209,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
       { separator: true },
       { id: "stop", title: "Stop Syncing…", symbol: "xmark.circle" },
     ]);
+
     if (choice === "kit") showRecoveryKit();
     else if (choice === "copy") await SyncNative?.copyRecoveryPhrase();
     else if (choice === "now") await syncNow();
@@ -207,6 +218,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
   };
 
   const locked = status === "locked";
+
   return (
     <>
       <Group style={{ marginTop: 18 }}>
@@ -231,6 +243,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
       <Group>
         {profiles.map((p) => {
           const link = links[p.id];
+
           return (
             <Row key={p.id} icon={<SpaceBadge profile={p} size={24} />} title={p.name}>
               <Toggle value={!!link?.enabled} disabled={!link} onChange={(on) => setProfileSynced(p.id, on)} />
@@ -279,11 +292,15 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
 
 export function ago(at: number, now = Date.now()): string {
   const s = Math.max(0, (now - at) / 1000);
+
   if (s < 60) return "just now";
   const m = Math.floor(s / 60);
+
   if (m < 60) return m === 1 ? "1 minute ago" : `${m} minutes ago`;
   const h = Math.floor(m / 60);
+
   if (h < 24) return h === 1 ? "1 hour ago" : `${h} hours ago`;
   const d = Math.floor(h / 24);
+
   return d === 1 ? "yesterday" : `${d} days ago`;
 }

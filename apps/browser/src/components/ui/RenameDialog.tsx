@@ -34,11 +34,14 @@ export function requestRename(options: Omit<Request, "resolve" | "confirmTitle" 
 export function RenameDialogHost({ pageLeft, pageRight }: { pageLeft: number; pageRight: number }) {
   const windowId = useWindowId();
   const request = useRequest((r) => (r.request?.windowId === windowId ? r.request : null));
+
   if (!request) return null;
+
   const done = (name: string | null) => {
     useRequest.setState({ request: null });
     request.resolve(name?.trim() || null);
   };
+
   return <RenameDialog key={request.title} request={request} onDone={done} pageLeft={pageLeft} pageRight={pageRight} />;
 }
 
@@ -58,6 +61,7 @@ function RenameDialog({
   const input = useRef<TextInput>(null);
   useEffect(() => {
     const t = setTimeout(() => input.current?.focus(), 0);
+
     return () => clearTimeout(t);
   }, []);
   const cancel = () => onDone(null);
@@ -127,8 +131,11 @@ function RenameDialog({
 // The confirming button is solid (light on dark windows, dark on light ones); Cancel is a faint fill that deepens on hover.
 function keyButtonColors(primary: boolean, dark: boolean, hovered: boolean, text: string) {
   if (primary && dark) return { fill: "#F2F2F2", ink: "#1C1C1E", cap: "rgba(0,0,0,0.12)" };
+
   if (primary) return { fill: "#1C1C1E", ink: "#FFFFFF", cap: "rgba(255,255,255,0.2)" };
+
   if (dark) return { fill: hovered ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.07)", ink: text, cap: "rgba(255,255,255,0.12)" };
+
   return { fill: hovered ? "rgba(0,0,0,0.09)" : "rgba(0,0,0,0.05)", ink: text, cap: "rgba(0,0,0,0.08)" };
 }
 
@@ -149,6 +156,7 @@ function KeyButton({
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const { fill, ink, cap } = keyButtonColors(!!primary, theme.dark, hovered, theme.textPrimary);
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} disabled={disabled}>

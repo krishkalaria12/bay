@@ -36,16 +36,22 @@ const NO_SUBSCRIPTION: EventSubscription = { remove() {} };
 export const isWebKitDownload = (id: string) => id.startsWith("wk-download-");
 export const isWebKitPermission = (id: string) => id.startsWith("wk-permission-");
 export const isWebKitExternalApp = (id: string) => id.startsWith("wk-external-");
+
 /** The site settings a WebKit page has: the rest are Chromium's. */
 export const WEBKIT_SITE_SETTINGS: readonly SiteSettingType[] = ["camera", "microphone"];
 
+// SAFETY: WebKit's addListener overload matches `name` to its payload type and callers instantiate T to that payload, so forwarding as the Download variant calls the matching native listener.
 export const webKitListener = <T>(name: "onDownload" | "onPermission" | "onPermissionDismissed", listener: (value: T) => void): EventSubscription =>
   WebKit ? WebKit.addListener(name as "onDownload", listener as (d: Download) => void) : NO_SUBSCRIPTION;
 
 /** A private window's WebKit store (in memory) goes with the window. */
 export const endWebKitPrivateSession = (session: string) => WebKit?.endPrivateSession(session) ?? Promise.resolve();
+
+// SAFETY: sitePermissions returns a Partial<SiteSettings> where missing keys read as the default at the call site, so treating the partial as complete matches how SiteControls reads it.
 export const getWebKitSiteSettings = async (profile: string, origin: string): Promise<SiteSettings> =>
   ((await WebKit?.sitePermissions(profile, origin)) ?? {}) as SiteSettings;
+
 export const setWebKitSiteSetting = (profile: string, origin: string, type: SiteSettingType, value: SiteSettingValue) =>
   WebKit?.setSitePermission(profile, origin, type, value) ?? Promise.resolve();
+
 export const webKitInfo = () => WebKit?.info() ?? Promise.resolve(null);

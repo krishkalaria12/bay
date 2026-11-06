@@ -2,4 +2,4 @@
 // A run from the source tree keeps the number below.
 declare const BAY_CLI_VERSION: string | undefined;
 
-export const VERSION = typeof BAY_CLI_VERSION === "string" && BAY_CLI_VERSION ? BAY_CLI_VERSION : "0.1.0";
+export const VERSION = typeof BAY_CLI_VERSION === "undefined" || !BAY_CLI_VERSION ? "0.1.0" : BAY_CLI_VERSION;

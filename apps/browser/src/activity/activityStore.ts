@@ -79,6 +79,8 @@ const PERSISTED = [
 function load(): Partial<LiveState> {
   try {
     const json = readDocument(LIVE_DOC);
+
+    // SAFETY: the live document is only ever written by this store, so it holds a serialized `LiveState`.
     return json ? (JSON.parse(json) as Partial<LiveState>) : {};
   } catch {
     return {};
@@ -109,11 +111,13 @@ export const live = () => useLive.getState();
 export const setLive = (patch: Partial<LiveState> | ((s: LiveState) => Partial<LiveState>)) => useLive.setState(patch);
 
 let timer: ReturnType<typeof setTimeout> | undefined;
+
 useLive.subscribe((s, prev) => {
   if (PERSISTED.every((k) => s[k] === prev[k])) return;
   clearTimeout(timer);
   timer = setTimeout(() => {
     const s = live();
+
     try {
       writeDocument(LIVE_DOC, JSON.stringify(Object.fromEntries(PERSISTED.map((k) => [k, s[k]]))));
     } catch (error) {
@@ -132,6 +136,7 @@ export const FOLDER_DEFAULTS: Record<LiveFolderKind, { name: string; sources: Li
 
 export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: LiveSourceId[]): string {
   const id = newId();
+
   const folder: LiveFolder = {
     id,
     spaceId,
@@ -143,11 +148,13 @@ export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: Li
     filters: { authored: true, reviewRequests: true },
     createdAt: Date.now(),
   };
+
   setLive((s) => ({
     folders: { ...s.folders, [id]: folder },
     folderOrder: [...s.folderOrder, id],
     status: { ...s.status, [id]: { state: "initializing", lastFetch: null, error: null } },
   }));
+
   return id;
 }
 
@@ -156,11 +163,14 @@ export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | 
   setLive((s) => (s.folders[id] ? { folders: { ...s.folders, [id]: { ...s.folders[id]!, ...patch } } } : {}));
   const fields = (["name", "icon"] as const).filter((key) => before && patch[key] !== undefined && before[key] !== patch[key]);
   const windowId = originWindowId ?? sidebarUndoWindow() ?? useBrowser.getState().ui.focusedWindowId;
+
   if (before && windowId && fields.length)
     useBrowser.getState().pushSidebarUndo(windowId, () => {
       const current = useLive.getState().folders[id];
+
       if (!current) return;
       const restore: Partial<LiveFolder> = {};
+
       for (const key of fields) if (current[key] === patch[key]) Object.assign(restore, { [key]: before[key] });
       setLive({ folders: { ...useLive.getState().folders, [id]: { ...current, ...restore } } });
     });
@@ -168,6 +178,7 @@ export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | 
 
 const without = <T>(record: Record<string, T>, key: string) => {
   const { [key]: _, ...rest } = record;
+
   return rest;
 };
 
@@ -189,8 +200,10 @@ export function moveFolder(id: string, delta: -1 | 1) {
     const order = [...s.folderOrder];
     const i = order.indexOf(id);
     const j = i + delta;
+
     if (i < 0 || j < 0 || j >= order.length) return {};
     [order[i], order[j]] = [order[j]!, order[i]!];
+
     return { folderOrder: order };
   });
 }
@@ -200,20 +213,24 @@ export function applyFetch(folderId: string, next: LiveItem[], gone: Record<stri
     if (!s.folders[folderId]) return {};
     const known = new Set(s.known[folderId] ?? []);
     const first = known.size === 0 && !s.status[folderId]?.lastFetch;
-    const fresh = next.filter((it) => !known.has(it.id)).map((it) => it.id);
+    const fresh = next.flatMap((it) => (known.has(it.id) ? [] : [it.id]));
     const unreadFresh = fresh.filter((id) => !quiet.has(id));
     const ids = new Set(next.map((it) => it.id));
     const prev = s.items[folderId] ?? [];
     const animating = new Set(s.completing[folderId] ?? []);
     const leaving = prev.filter((it) => !ids.has(it.id) && gone[it.id] && !animating.has(it.id));
     const merged = [...next];
+
     for (const it of prev)
       if (!ids.has(it.id) && (animating.has(it.id) || leaving.includes(it))) merged.splice(Math.min(prev.indexOf(it), merged.length), 0, it);
+
     const completed = [
       ...leaving.map((item) => ({ item, state: gone[item.id]!, at: now })),
       ...(s.completed[folderId] ?? []).filter((c) => !ids.has(c.item.id) && !leaving.some((l) => l.id === c.item.id)),
     ].slice(0, MAX_COMPLETED_ITEMS);
+
     const stillThere = new Set(merged.map((it) => it.id));
+
     return {
       items: { ...s.items, [folderId]: merged },
       known: { ...s.known, [folderId]: [...known, ...fresh].slice(-MAX_KNOWN_ITEMS) },
@@ -236,6 +253,7 @@ export function finishCompleting(folderId: string, ids: string[]) {
 export function setStatus(folderId: string, status: Partial<FolderStatus>) {
   setLive((s) => {
     const current = s.status[folderId] ?? { state: "idle" as const, lastFetch: null, error: null };
+
     return { status: { ...s.status, [folderId]: { ...current, ...status } } };
   });
 }
@@ -244,6 +262,7 @@ export function markRead(folderId: string, itemIds?: string[]) {
   setLive((s) => {
     const unread = s.unread[folderId] ?? [];
     const next = itemIds ? unread.filter((id) => !itemIds.includes(id)) : [];
+
     return next.length === unread.length ? {} : { unread: { ...s.unread, [folderId]: next } };
   });
 }
@@ -251,8 +270,10 @@ export function markRead(folderId: string, itemIds?: string[]) {
 export function setAccount(source: LiveSourceId, account: LiveAccount | null) {
   setLive((s) => {
     const accounts = { ...s.accounts };
+
     if (account) accounts[source] = account;
     else delete accounts[source];
+
     return { accounts };
   });
 }
@@ -267,6 +288,7 @@ export function dismissAlert(occurrence: string) {
 export function setMeetingGroup(group: MeetingGroup | null, groupId?: string) {
   setLive((s) => {
     if (group) return { meetingGroups: { ...s.meetingGroups, [group.groupId]: group } };
+
     return groupId && s.meetingGroups[groupId] ? { meetingGroups: without(s.meetingGroups, groupId) } : {};
   });
 }

@@ -13,10 +13,12 @@ import { webviews } from "./webviews";
 // other engine's view (ContentCard keys the tab's WebView by its engine); each engine keeps its own sign-ins.
 
 const store = () => useBrowser.getState();
+
 // Sites whose move was turned down to keep unsaved work: not moved again this run.
 const declinedSites = new Set<string>();
 const movingTabs = new Set<string>();
 const siteMoves = new Map<string, number>();
+
 // A redirect chain across sites with different engines can't bounce a tab between them.
 const SITE_MOVE_SPACING_MS = 10_000;
 const hostLabel = (site: string) => new URL(site).hostname.replace(/^www\./, "");
@@ -30,19 +32,23 @@ const UNSAVED_WORK = `(() => {
 
 async function hasUnsavedWork(tabId: string): Promise<boolean> {
   const web = webviews.get(tabId);
+
   if (!web) return false;
+
   return (await Promise.race([web.evaluate<boolean>(UNSAVED_WORK), new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500))])) === true;
 }
 
 /** A tab keeps the engine its first view chose. */
 export function persistEngine(tabId: string, engine: PageEngine) {
   const t = store().tabs[tabId];
+
   if (t && !t.engine) store().updateTab(tabId, { engine });
 }
 
 async function mayLeavePage(t: Tab, title: string, message: string, confirmTitle: string): Promise<boolean> {
   if (!wantsPage(t) || !(await hasUnsavedWork(t.id))) return true;
   const { confirmed } = await confirm({ title, message, confirmTitle, cancelTitle: "Stay on Page", windowId: t.windowId });
+
   return confirmed;
 }
 
@@ -52,38 +58,50 @@ const pageUrl = (t: Tab | undefined) => t?.url || t?.navigation?.url || "";
 export async function goBackAcrossEngines(tabId: string): Promise<boolean> {
   const back = pageOf(tabId).engineBack;
   const t = store().tabs[tabId];
+
   if (!back || !t) return false;
   const from = pageUrl(t);
+
   const leaving = await mayLeavePage(
     t,
     "Go back to the previous page?",
     `It opens in ${ENGINE_NAMES[back.engine]}, so changes you made on this page may not be saved.`,
     "Go Back",
   );
+
   const now = store().tabs[tabId];
+
   if (!leaving || !now || pageUrl(now) !== from || pageOf(tabId).engineBack !== back) return false;
   patchPage(tabId, { engineBack: null });
   store().updateTab(tabId, { engine: back.engine, adoptId: undefined, navigation: navigationTo(back.url, true) });
+
   return true;
 }
 
 /** Reloads the tab's page in `engine`, first asking when the page has input that would be lost. */
 async function openPageIn(tabId: string, engine: PageEngine, options: { checkWork?: boolean } = {}): Promise<boolean> {
   const t = store().tabs[tabId];
+
   if (!t) return false;
   const url = pageUrl(t);
+
   if (!canUseWebKit(url)) return false;
+
   if (tabEngine(store(), tabId) === engine) return true;
   const name = ENGINE_NAMES[engine];
+
   if (
     options.checkWork !== false &&
     !(await mayLeavePage(t, `Open this page in ${name}?`, `The page reloads in ${name}, so changes you made on it may not be saved.`, `Open in ${name}`))
   )
     return false;
   const now = store().tabs[tabId];
+
   if (!now || pageUrl(now) !== url) return false;
+
   if (tabEngine(store(), tabId) === engine) return true;
   store().updateTab(tabId, wantsPage(now) ? { engine, adoptId: undefined, navigation: navigationTo(now.url || url, true) } : { engine });
+
   return true;
 }
 
@@ -91,19 +109,25 @@ async function openPageIn(tabId: string, engine: PageEngine, options: { checkWor
 export async function playInWebKit(tabId: string) {
   const s = store();
   const t = s.tabs[tabId];
+
   if (!t || !canUseWebKit(t.url) || tabEngine(s, tabId) === "webkit") return;
   const site = siteOf(t.url);
+
   if (!site || declinedSites.has(site) || movingTabs.has(tabId)) return;
   movingTabs.add(tabId);
+
   try {
     if (!(await openPageIn(tabId, "webkit"))) {
       declinedSites.add(site);
+
       return;
     }
   } finally {
     movingTabs.delete(tabId);
   }
+
   const moved = store().tabs[tabId];
+
   if (moved)
     showToast(moved.windowId, "Opened in Safari's engine for protected media", `${hostLabel(site)} plays here. You may need to sign in once.`, {
       icon: "play.rectangle",
@@ -114,12 +138,16 @@ export async function playInWebKit(tabId: string) {
  *  commits, and Back returns to the page before in the engine it was in. Tabs a page opened keep their opener's engine. */
 export function followSiteChoice(tabId: string, engine: PageEngine, url: string, previousUrl: string) {
   const site = siteOf(url);
+
   if (!site || site === siteOf(previousUrl)) return;
   const t = store().tabs[tabId];
+
   if (!t || t.openerId) return;
   const chosen = chosenEngine(url);
+
   if (!chosen || chosen === engine) return;
   const now = Date.now();
+
   if (now - (siteMoves.get(tabId) ?? 0) < SITE_MOVE_SPACING_MS) return;
   siteMoves.set(tabId, now);
   void openPageIn(tabId, chosen, { checkWork: false }).then((moved) => {
@@ -129,7 +157,7 @@ export function followSiteChoice(tabId: string, engine: PageEngine, url: string,
 
 const visits = visitRecorder(
   (profile, visit) => void addHistoryVisits(profile, [{ url: visit.url, title: visit.title, visitTimes: [visit.at] }]).catch(() => {}),
-  { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
+  { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle) },
   Date.now,
 );
 
@@ -139,6 +167,7 @@ let unwatch: (() => void) | null = null;
 function watchClosedTabs() {
   unwatch ??= useBrowser.subscribe((s, prev) => {
     if (s.tabs === prev.tabs) return;
+
     for (const id of visitedTabs) {
       if (s.tabs[id]) continue;
       visitedTabs.delete(id);
@@ -150,6 +179,7 @@ function watchClosedTabs() {
 /** A WebKit page's visit goes into the profile's (Chromium's) history; a private window's never does. */
 export function noteWebKitPage(tabId: string, page: WebKitPage) {
   const t = store().tabs[tabId];
+
   if (!t) return;
   watchClosedTabs();
   visitedTabs.add(tabId);

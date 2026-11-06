@@ -22,6 +22,7 @@ export function HoverSlot({
   style?: StyleProp<ViewStyle>;
 }) {
   const showHover = hovered && hover != null && hover !== false;
+
   return (
     <View style={[{ minWidth: width, alignSelf: "stretch", flexDirection: "row", alignItems: "center", justifyContent: "flex-end" }, style]}>
       {children != null && children !== false ? (

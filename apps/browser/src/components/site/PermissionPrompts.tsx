@@ -44,6 +44,7 @@ function PromptBody({
   children: React.ReactNode;
 }) {
   const theme = useTheme();
+
   return (
     <View style={{ padding: 14, gap: 10 }}>
       <View style={{ flexDirection: "row", gap: 6 }}>
@@ -77,8 +78,10 @@ function PromptBody({
 export function PermissionPrompt({ tabId, left, top }: { tabId: string; left: number; top: number }) {
   const theme = useTheme();
   const request = usePage(tabId, (p) => p.permission);
+
   if (!request) return null;
   const { icons, question } = describePermission(request);
+
   return (
     <Popover key={request.id} width={300} top={top} left={left} modal={false}>
       <View>
@@ -95,6 +98,7 @@ export function PermissionPrompt({ tabId, left, top }: { tabId: string; left: nu
 function CloseButton({ onPress, color }: { onPress: () => void; color: string }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} style={{ position: "absolute", top: 8, right: 8 }} tooltip="Dismiss">
       <Pressable onPress={onPress}>
@@ -118,16 +122,20 @@ function CloseButton({ onPress, color }: { onPress: () => void; color: string })
 export function BlockedPopupsPrompt({ tabId, right, left, top }: { tabId: string; right?: number; left?: number; top: number }) {
   const theme = useTheme();
   const popups = usePage(tabId, (p) => p.popups);
+
   if (!popups.length) return null;
   const origin = popups[0]!.origin;
   const site = hostOf(origin);
   const web = () => webviews.get(tabId);
   const close = () => setPopover(tabId, null);
+
   const done = () => {
     patchPage(tabId, { popups: [] });
     close();
   };
+
   const profile = () => engineProfile(useBrowser.getState().tabs[tabId]?.spaceId ?? "");
+
   return (
     <Popover width={360} top={top} right={right} left={left} onDismiss={close}>
       <View style={{ paddingBottom: 6 }}>
@@ -169,6 +177,7 @@ export function BlockedPopupsPrompt({ tabId, right, left, top }: { tabId: string
               void web()?.openBlockedPopup(p.id, false);
               const rest = pageOf(tabId).popups.filter((x) => x.id !== p.id);
               patchPage(tabId, { popups: rest });
+
               if (!rest.length) close();
             }}
           />
@@ -184,6 +193,7 @@ export function BlockedPopupsPrompt({ tabId, right, left, top }: { tabId: string
 export async function shouldPromptForPopups(profile: string, origin: string): Promise<boolean> {
   try {
     const settings = await getSiteSettings(profile, origin);
+
     return settings.popups.isDefault;
   } catch {
     return true;
@@ -198,17 +208,21 @@ export function PasswordPrompt({ tabId, right, top }: { tabId: string; right: nu
   const theme = useTheme();
   const prompt = usePage(tabId, (p) => p.passwordPrompt);
   const [chosen, setChosen] = useState<string | null>(null);
+
   if (!prompt) return null;
   const site = hostOf(prompt.origin);
   const update = prompt.state === "update";
   const username = chosen ?? prompt.username;
+
   const answer = (action: PasswordPromptAnswer) => {
     void webviews.get(tabId)?.resolvePasswordPrompt(action, action === "save" || action === "update" ? { username } : undefined);
     setChosen(null);
     patchPage(tabId, { passwordPrompt: null });
   };
+
   const well = theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
   const choices = update && prompt.usernames.length > 1 ? prompt.usernames : [];
+
   return (
     <Popover key={`${prompt.origin}|${prompt.username}|${prompt.state}`} width={update ? 310 : 350} top={top} right={right} modal={false}>
       <View>
@@ -257,15 +271,19 @@ export function showAutofillPrompt(tabId: string, prompt: ChromeAutofillPrompt |
 export function AutofillPrompt({ tabId, right, top }: { tabId: string; right: number; top: number }) {
   const theme = useTheme();
   const prompt = usePage(tabId, (p) => p.autofillPrompt);
+
   if (!prompt) return null;
+
   const answer = (action: AutofillPromptAnswer) => {
     void webviews.get(tabId)?.resolveAutofillPrompt(prompt.id, action);
     patchPage(tabId, { autofillPrompt: null });
   };
+
   const well = theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
   const changes = prompt.changes ?? [];
   const values = (key: "to" | "from") => changes.filter((c) => c[key]).map((c) => c[key]);
   let sections: ReactNode;
+
   if (prompt.kind !== "updateAddress") sections = <PromptLines lines={prompt.lines} />;
   else if (prompt.newLabel) {
     sections = (
@@ -275,6 +293,7 @@ export function AutofillPrompt({ tabId, right, top }: { tabId: string; right: nu
       </>
     );
   } else sections = <PromptLines lines={values("to")} />;
+
   return (
     <Popover key={prompt.id} width={350} top={top} right={right} modal={false}>
       <View>
@@ -300,6 +319,7 @@ export function AutofillPrompt({ tabId, right, top }: { tabId: string; right: nu
 
 function PromptLines({ lines, label }: { lines: string[]; label?: string }) {
   const theme = useTheme();
+
   return (
     <View style={{ gap: 3 }}>
       {label ? <Text style={{ fontSize: 11, color: theme.textSecondary }}>{label}</Text> : null}
@@ -321,11 +341,14 @@ export function ExternalAppPrompt({ tabId, left, top }: { tabId: string; left: n
   const theme = useTheme();
   const request = usePage(tabId, (p) => p.externalApp);
   const [always, setAlways] = useState(false);
+
   if (!request) return null;
+
   const answer = (open: boolean) => {
     answerExternalApp(tabId, open, open && always);
     setAlways(false);
   };
+
   return (
     <Popover key={request.id} width={340} top={top} left={left} modal={false}>
       <View>
@@ -362,6 +385,7 @@ export function ExternalAppPrompt({ tabId, left, top }: { tabId: string; left: n
 
 export function answerExternalApp(tabId: string, open: boolean, remember = false) {
   const request = pageOf(tabId).externalApp;
+
   if (!request) return;
   patchPage(tabId, { externalApp: null });
   void resolveExternalApp(request.id, open, remember);
@@ -370,6 +394,7 @@ export function answerExternalApp(tabId: string, open: boolean, remember = false
 function UsernameChoice({ name, selected, onPress }: { name: string; selected: boolean; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>

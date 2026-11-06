@@ -14,11 +14,11 @@ export interface Tab {
   /** A JPEG file URI in the app cache, or null before a page has a drawable viewport. */
   snapshot(): Promise<string | null>;
   /**
-   * Runs a page script (the body of an async function) in the page and resolves with its JSON-serializable result.
+   * Runs a page script (the body of an async function) in the page and resolves with its result as JSON text.
    * iOS runs it in an isolated world the page can't see; Android's system WebView has none, so it runs in the main
    * world: keep state under a Symbol.for key there. `post(message)` sends a message to `onPageMessage`.
    */
-  evaluate(script: string): Promise<unknown>;
+  evaluate(script: string): Promise<string>;
 }
 
 export interface NavigationState {
@@ -81,7 +81,7 @@ export const EngineView = requireNativeView<EngineViewProps>("BayEngine");
 const nativeEngine = requireNativeModule<{
   clearData(): Promise<void>;
   pruneSnapshots(keep: string[]): Promise<void>;
-  setContentBlocking(listFiles: string[] | null, version: string): Promise<unknown>;
+  setContentBlocking(listFiles: string[] | null, version: string): Promise<number | null>;
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
   privateBrowsingSupported: boolean;
@@ -109,8 +109,15 @@ export function setBlockingPausedHosts(hosts: readonly string[]): void {
   nativeEngine.setBlockingPausedHosts([...hosts]);
 }
 
+/** The tracking-parameter table both engines strip from main-frame navigations. */
+export interface TrackingParameters {
+  global: string[];
+  prefixes: string[];
+  sites: { hosts: string[]; params: string[]; prefixes: string[] }[];
+}
+
 /** The tracking-parameter table (`TRACKING_PARAMS` from `@bay/core`) both engines strip from main-frame navigations. */
-export function setTrackingParameters(table: unknown): boolean {
+export function setTrackingParameters(table: TrackingParameters): boolean {
   return nativeEngine.setTrackingParameters(JSON.stringify(table));
 }
 
@@ -131,15 +138,17 @@ export function runPageScript<T>(tab: Tab, script: string, timeout = 10_000): Pr
     tab.evaluate(script).then(
       (json) => {
         clearTimeout(timer);
+
         try {
+          // SAFETY: evaluate resolves the page result as JSON text, so parsing it yields the caller's T by design.
           resolve(JSON.parse(String(json)) as T);
         } catch (error) {
           reject(error instanceof Error ? error : new Error(String(error)));
         }
       },
-      (error: unknown) => {
+      (cause: unknown) => {
         clearTimeout(timer);
-        reject(error instanceof Error ? error : new Error(String(error)));
+        reject(cause instanceof Error ? cause : new Error(String(cause)));
       },
     );
   });
@@ -174,6 +183,7 @@ export function addDownloadListener(listener: (update: DownloadUpdate) => void):
 /** iOS works with a download's file; Android with its saved content:// URI, or the system's download id before Android 10. */
 function downloadReference(download: { id: string; path?: string }): string {
   if (Platform.OS === "android") return download.path?.startsWith("content://") && download.id.startsWith("b-") ? download.path : download.id;
+
   return download.path ?? "";
 }
 

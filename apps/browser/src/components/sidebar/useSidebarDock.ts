@@ -18,5 +18,6 @@ export function useSidebarDock(open: boolean) {
       }),
     );
   }, [open, progress]);
+
   return { progress, mounted: open || mounted };
 }

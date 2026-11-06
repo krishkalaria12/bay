@@ -12,6 +12,7 @@ export const SYNC_AFTER_EDIT_MS = 3_000;
 // MARK: Adapters (adapters.ts)
 
 export const HISTORY_WINDOW_MS = 90 * 86_400_000;
+
 // Chrome stores visit times in microseconds and reports them in whole ms: the same visit reads back within this.
 export const SAME_VISIT_MS = 1;
 export const MAX_DEVICE_TABS = 30;

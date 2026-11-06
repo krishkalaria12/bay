@@ -37,6 +37,7 @@ export const getContentBlocker = () => Cef.getContentBlocker();
 export const setContentBlockerEnabled = (enabled: boolean) => Cef.setContentBlockerEnabled(enabled);
 export const setFilterListEnabled = (id: string, enabled: boolean) => Cef.setFilterListEnabled(id, enabled);
 export const isContentBlockerAllowed = (host: string) => Cef.isContentBlockerAllowed(host);
+
 /** Visit Anyway on a page the blocker stopped: until the app quits, or kept (`remember`). */
 export const setBlockedPageAllowed = (host: string, allowed: boolean, remember: boolean) => Cef.setBlockedPageAllowed(host, allowed, remember);
 export const setContentBlockerAllowed = (host: string, allowed: boolean) => Cef.setContentBlockerAllowed(host, allowed);

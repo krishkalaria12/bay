@@ -1,11 +1,25 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import * as v from "valibot";
 import { dataRoot, EndpointError, explicitDataRoot, requireControl, resolveEndpoint } from "./endpoint.ts";
+import { JsonValueSchema } from "./guard.ts";
 import { installOutputRedaction } from "./redact.ts";
 import { formatReport, runTest } from "./scriptsTest.ts";
-import { repairIfPresent, Store } from "./scriptsStore.ts";
+import { repairIfPresent, Store, type ScriptRecord, type StatusRecord } from "./scriptsStore.ts";
 import { build, checkMatch, defaultUrl, slug, urlRuns } from "./userscript.ts";
 import { numericOption, parseArguments } from "./args.ts";
+import { isRecord } from "./util.ts";
+
+const ProfileSchema = v.object({
+  ok: v.optional(JsonValueSchema),
+  error: v.optional(JsonValueSchema),
+  disabled: v.optional(JsonValueSchema),
+  removed: v.optional(JsonValueSchema),
+});
+
+type ProfileResult = v.InferOutput<typeof ProfileSchema>;
+
+type ScriptsStatus = { profiles?: Record<string, ProfileResult> };
 
 export const SCRIPTS_DESCRIPTION = `Write userscripts in TypeScript or JavaScript, test them against real pages, and install them so Bay runs them.
 
@@ -82,26 +96,33 @@ function complain(text: string): void {
 
 export async function runScriptsCommand(args: string[]): Promise<number> {
   const sub = args[0];
+
   if (!sub || sub === "--help" || sub === "-h") {
     say(SCRIPTS_DESCRIPTION);
+
     return 0;
   }
 
   if (sub === "new") {
     return runNew(args.slice(1));
   }
+
   if (sub === "test") {
     installOutputRedaction();
+
     return runTestCommand(args.slice(1));
   }
+
   if (sub === "install" || sub === "uninstall") {
     return runChange(sub, args.slice(1));
   }
+
   if (sub === "list") {
     return runList(args.slice(1));
   }
 
   complain(`bay scripts: unknown command ${JSON.stringify(sub)} (see bay scripts --help)`);
+
   return 1;
 }
 
@@ -114,15 +135,19 @@ export function runNew(args: string[]): number {
     },
     1,
   );
+
   if (values.help) {
     say("Scaffold NAME.user.ts in the current directory. Use --match PATTERN to choose where it runs.");
+
     return 0;
   }
+
   const name = (positionals[0] ?? "").trim();
   const matches = values.match ?? [];
 
   if (!name || name.includes("\n")) {
     complain("bay scripts new: give the script a name");
+
     return 1;
   }
 
@@ -136,16 +161,19 @@ export function runNew(args: string[]): number {
     }
   } catch (error) {
     complain(`bay scripts new: ${error instanceof Error ? error.message : String(error)}`);
+
     return 1;
   }
 
   const matchesLines = patterns.map((p) => `// @match       ${p}\n`).join("");
+
   const content = NEW_TEMPLATE.replace(/\{name\}/g, name)
     .replace("{matches}", matchesLines)
     .replace("{quoted}", JSON.stringify(name));
 
   if (existsSync(path)) {
     complain(`bay scripts new: ${path} already exists`);
+
     return 1;
   }
 
@@ -153,10 +181,12 @@ export function runNew(args: string[]): number {
     writeFileSync(path, content, { encoding: "utf8", flag: "wx" });
   } catch (error) {
     complain(`bay scripts new: ${error instanceof Error ? error.message : String(error)}`);
+
     return 1;
   }
 
   say(path);
+
   return 0;
 }
 
@@ -177,10 +207,13 @@ export async function runTestCommand(args: string[]): Promise<number> {
     },
     1,
   );
+
   if (values.help) {
     say(TEST_DESCRIPTION);
+
     return 0;
   }
+
   const file = positionals[0];
   const url = values.url;
   const expectExpr = values.expect;
@@ -194,31 +227,38 @@ export async function runTestCommand(args: string[]): Promise<number> {
 
   if (!file) {
     complain("bay scripts test: give FILE");
+
     return 1;
   }
 
   const root = dataRoot(dataDir);
   let built;
+
   try {
     built = await build(file, { sourcemap: true, dataDirs: [root] });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
+
     if (asJson) {
       say(JSON.stringify({ ok: false, ran: false, script: file, error: msg }, null, 2));
     } else {
       complain(`bay scripts: ${msg}`);
     }
+
     return 1;
   }
 
   const targetUrl = url || defaultUrl(built.meta);
+
   if (!targetUrl) {
     const msg = "no @match gives a concrete page to open; pass --url URL";
+
     if (asJson) {
       say(JSON.stringify({ ok: false, ran: false, script: file, error: msg }, null, 2));
     } else {
       complain(`bay scripts: ${msg}`);
     }
+
     return 1;
   }
 
@@ -227,22 +267,28 @@ export async function runTestCommand(args: string[]): Promise<number> {
   }
 
   let endpoint;
+
   try {
     endpoint = await resolveEndpoint({ ws, port, dataDir });
   } catch (error) {
     complain(`bay: ${error instanceof Error ? error.message : String(error)}`);
+
     return 2;
   }
 
   let report;
+
   try {
     report = await runTest(built, targetUrl, endpoint, expectExpr, wait, screenshot, keep);
   } catch (error) {
     if (error instanceof EndpointError) {
       complain(`bay: ${error.message}`);
+
       return 2;
     }
+
     complain(`bay scripts test: ${error instanceof Error ? error.message : String(error)}`);
+
     return 1;
   }
 
@@ -251,6 +297,7 @@ export async function runTestCommand(args: string[]): Promise<number> {
   } else {
     say(formatReport(report));
   }
+
   return report.ok ? 0 : 1;
 }
 
@@ -263,15 +310,19 @@ export async function runChange(kind: "install" | "uninstall", args: string[]): 
     },
     1,
   );
+
   if (values.help) {
     say(kind === "install" ? INSTALL_DESCRIPTION : "Remove an installed script by its @name or id.");
+
     return 0;
   }
+
   const targetArg = positionals[0];
   const dataDir = values["data-dir"];
 
   if (!targetArg) {
     complain(`bay scripts ${kind}: give ${kind === "install" ? "FILE" : "NAME"}`);
+
     return 1;
   }
 
@@ -283,13 +334,17 @@ export async function runChange(kind: "install" | "uninstall", args: string[]): 
       built = await build(targetArg, { dataDirs: [root] });
     } catch (error) {
       complain(`bay scripts: ${error instanceof Error ? error.message : String(error)}`);
+
       return 1;
     }
+
     for (const w of [...built.meta.warnings, ...built.warnings]) {
       say(`warning: ${w}`);
     }
+
     if (!built.meta.matches.length && !built.meta.includes.length) {
       complain("bay scripts: add an @match or @include line so the script runs somewhere");
+
       return 1;
     }
   }
@@ -298,6 +353,7 @@ export async function runChange(kind: "install" | "uninstall", args: string[]): 
     requireControl(root);
   } catch (error) {
     complain(`bay: ${error instanceof Error ? error.message : String(error)}`);
+
     return 2;
   }
 
@@ -309,28 +365,35 @@ export async function runChange(kind: "install" | "uninstall", args: string[]): 
   try {
     store.open(true);
     store.lock();
+
     if (built !== null) {
       const [record, gen] = store.apply({ add: built });
       generation = gen;
       summary = `${record.updated ? "updated" : "installed"} ${describe(record)}`;
     } else {
       const found = store.find(targetArg);
+
       if (!found) {
         const names =
           store
             .installed()
             .map((m) => m.name || m.id)
             .join(", ") || "none";
+
         complain(`bay scripts: no installed script is named ${JSON.stringify(targetArg)} (installed: ${names})`);
+
         return 1;
       }
+
       const [record, gen] = store.apply({ remove: String(found.id) });
       generation = gen;
       summary = `uninstalled ${record.name} (${record.id})`;
     }
+
     removedAll = !store.extensionPresent();
   } catch (error) {
     complain(`bay scripts: ${error instanceof Error ? error.message : String(error)}`);
+
     return 1;
   } finally {
     store.close();
@@ -342,6 +405,7 @@ export async function runChange(kind: "install" | "uninstall", args: string[]): 
   const alive = () => {
     try {
       requireControl(root);
+
       return true;
     } catch {
       return false;
@@ -349,46 +413,58 @@ export async function runChange(kind: "install" | "uninstall", args: string[]): 
   };
 
   const [outcome, status] = store.waitStatus(generation, alive);
+
   if (outcome === "quit") {
     say("Bay quit (or control was turned off) before applying it; it applies the change on its next launch");
+
     return 0;
   }
+
   if (outcome === "timeout") {
     say(`Bay hasn't reported generation ${generation} after 10 s: the outcome is unknown, it may still be applying it (see bay scripts list)`);
+
     return UNKNOWN_EXIT;
   }
+
   if (outcome === "superseded") {
     say(`a newer change (generation ${status?.generation}) replaced this one; Bay reported that one:`);
     removedAll = false;
   }
+
   return printProfiles(status || {}, removedAll);
 }
 
-export function describe(record: Record<string, unknown>): string {
+export function describe(record: ScriptRecord): string {
   const version = record.version ? ` ${record.version}` : "";
-  const matches = Array.isArray(record.matches) ? (record.matches as string[]) : [];
-  const includes = Array.isArray(record.includes) ? (record.includes as string[]) : [];
+  const matches = v.is(v.array(v.string()), record.matches) ? record.matches : [];
+  const includes = v.is(v.array(v.string()), record.includes) ? record.includes : [];
   const where = [...matches, ...includes].join(", ") || "nowhere";
   const runAt = record.run_at || "document-end";
   const world = String(record.world || "MAIN").toLowerCase();
+
   return `${record.name}${version} (${record.id}): ${where} [${runAt}, ${world} world]`;
 }
 
-export function profileLines(status: Record<string, unknown>, removed = false): [string[], boolean] {
-  const profiles = status.profiles as Record<string, unknown> | undefined;
+export function profileLines(status: ScriptsStatus, removed = false): [string[], boolean] {
+  const profiles = status.profiles;
   const lines: string[] = [];
   let failed = false;
-  if (typeof profiles !== "object" || !profiles || !Object.keys(profiles).length) {
+
+  if (!isRecord(profiles) || !Object.keys(profiles).length) {
     return [["Bay reported no profiles"], false];
   }
+
   for (const [name, result] of Object.entries(profiles)) {
-    if (typeof result !== "object" || result === null) {
+    const parsed = v.safeParse(ProfileSchema, result);
+
+    if (!parsed.success) {
       lines.push(`${name}: unknown result`);
     } else {
-      const res = result as Record<string, unknown>;
+      const res = parsed.output;
+
       if (res.error) {
         failed = true;
-        lines.push(`${name}: error ${res.error}`);
+        lines.push(`${name}: error ${String(res.error)}`);
       } else if (res.disabled) {
         lines.push(`${name}: turned off in Extensions, so the scripts don't run there`);
       } else if (res.removed) {
@@ -400,14 +476,17 @@ export function profileLines(status: Record<string, unknown>, removed = false): 
       }
     }
   }
+
   return [lines, failed];
 }
 
-export function printProfiles(status: Record<string, unknown>, removed = false): number {
+export function printProfiles(status: ScriptsStatus, removed = false): number {
   const [lines, failed] = profileLines(status, removed);
+
   for (const line of lines) {
     say(line);
   }
+
   return failed ? 1 : 0;
 }
 
@@ -417,15 +496,19 @@ export function runList(args: string[]): number {
     "data-dir": { type: "string" },
     help: { type: "boolean", short: "h" },
   });
+
   if (values.help) {
     say("List the installed scripts and what Bay last reported about them.");
+
     return 0;
   }
+
   const asJson = values.json ?? false;
   const dataDir = values["data-dir"];
 
   const root = dataRoot(dataDir);
   let trusted = explicitDataRoot(dataDir) !== null;
+
   if (!trusted) {
     try {
       requireControl(root);
@@ -436,22 +519,25 @@ export function runList(args: string[]): number {
   }
 
   let note: string | null = null;
+
   if (trusted) {
     try {
       note = repairIfPresent(root);
     } catch (error) {
       complain(`bay scripts: can't check the installed scripts (${error instanceof Error ? error.message : String(error)})`);
+
       return 1;
     }
+
     if (note && !asJson) {
       say(`repaired: ${note}`);
     }
   }
 
   const store = new Store(root);
-  let scripts: Array<Record<string, unknown>> = [];
+  let scripts: Array<ScriptRecord> = [];
   let generation = 0;
-  let status: Record<string, unknown> | null = null;
+  let status: StatusRecord | null = null;
   let removed = false;
 
   try {
@@ -462,6 +548,7 @@ export function runList(args: string[]): number {
     removed = generation > 0 && !store.extensionPresent();
   } catch (error) {
     complain(`bay scripts: ${error instanceof Error ? error.message : String(error)}`);
+
     return 1;
   } finally {
     store.close();
@@ -469,21 +556,26 @@ export function runList(args: string[]): number {
 
   if (asJson) {
     say(JSON.stringify({ scripts, generation, status, repaired: note }, null, 2));
+
     return 0;
   }
 
   if (!scripts.length) {
     say("no scripts installed");
   }
+
   for (const record of scripts) {
     say(describe(record));
     say(`  source: ${record.source_file}`);
   }
+
   if (generation) {
     const reported = status?.generation;
+
     if (reported === generation) {
       const [lines] = profileLines(status || {}, removed);
       say(`generation ${generation}, reported by Bay:`);
+
       for (const line of lines) {
         say(`  ${line}`);
       }
@@ -491,5 +583,6 @@ export function runList(args: string[]): number {
       say(`generation ${generation}, not reported by Bay yet${reported ? ` (it last reported ${reported})` : ""}`);
     }
   }
+
   return 0;
 }

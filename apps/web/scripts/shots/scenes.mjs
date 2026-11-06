@@ -21,6 +21,7 @@ const studio = () => [
   tab("hn", { pinnedRow: true }),
   tab("arena", { pinnedRow: true }),
 ];
+
 const launchFolder = { id: "launch", spaceId: "default", name: "Launch", icon: null, collapsed: false, createdAt: 1 };
 
 const hero = {
@@ -43,6 +44,7 @@ const hero = {
 
 // Each space's sidebar, cropped out of its window at Retina size.
 const sidebar = { left: 0, top: 0, width: 456, height: 1400 };
+
 const inSpace = (id, appearance) =>
   `const s = nn.store.getState(); s.updateSettings({ appearance: "${appearance}" }); nn.actions.switchSpace(s.windowOrder[0], "${id}");`;
 

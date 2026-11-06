@@ -46,6 +46,7 @@ export function useDownloads(onError: (message: string) => void) {
       dispatch({ type: "download", update, now: Date.now() });
       setToastId(update.id);
     });
+
     return () => subscription.remove();
   }, [dispatch]);
 
@@ -53,6 +54,7 @@ export function useDownloads(onError: (message: string) => void) {
   useEffect(() => {
     if (!settled) return;
     const timer = setTimeout(() => setToastId(null), TOAST_MS);
+
     return () => clearTimeout(timer);
   }, [settled, toastId]);
 
@@ -112,9 +114,11 @@ function DownloadBadge({ state }: { state: DownloadItem["state"] }): JSX.Element
   useEffect(() => {
     if (state !== "downloading") return;
     bob.value = withRepeat(withTiming(1, { duration: 650, easing: Easing.inOut(Easing.quad) }), -1, true);
+
     return () => cancelAnimation(bob);
   }, [state, bob]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value * 3 - 1.5 }] }));
+
   const icon =
     state === "downloading" ? (
       <Animated.View style={style}>
@@ -127,5 +131,6 @@ function DownloadBadge({ state }: { state: DownloadItem["state"] }): JSX.Element
     ) : (
       <Icon name="error" color={state === "failed" ? danger : muted} size={22} />
     );
+
   return <View className="size-9 items-center justify-center rounded-full bg-default">{icon}</View>;
 }

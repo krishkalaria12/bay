@@ -6,6 +6,7 @@ import { activeTabId, isIncognitoSpace } from "../../store/model";
 import { pinnedSplitOf, slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
 import { MAX_SPLIT_PANES } from "../../store/constants";
 import { showToast } from "../ui/toasts";
+
 export { showToast, hideToast, hideKeyedToast, useToasts, type ToastOptions } from "../ui/toasts";
 
 const store = () => useBrowser.getState();
@@ -14,10 +15,13 @@ const maxedOut = (windowId: string) => showToast(windowId, "Cannot Add New Pane"
 
 export function openSplitPane(windowId: string, options: OpenPaneOptions = {}): string | null {
   const result = store().openSplitPane(windowId, options);
+
   if (!result.ok) {
     if (result.reason === "max") maxedOut(windowId);
+
     return null;
   }
+
   return result.tabId;
 }
 
@@ -26,15 +30,19 @@ export const openNewTabInSplit = (windowId: string) => openSplitPane(windowId);
 /** The sidebar's + › Split View: a new pane beside the window's tab, or with no tab to split, just a new tab. */
 export function splitWithCurrentTab(windowId: string) {
   const result = store().openSplitPane(windowId);
+
   if (result.ok) return;
+
   if (result.reason === "max") maxedOut(windowId);
   else store().openNewTabPanel(windowId);
 }
 
 export function openInSplit(tabId: string, side: SplitSide = "right") {
   const tab = store().tabs[tabId];
+
   if (!tab) return;
   const active = activeTabId(store(), tab.windowId);
+
   if (!active || active === tabId) return;
   openSplitPane(tab.windowId, { tabId, anchorTabId: active, side });
 }
@@ -43,18 +51,23 @@ export function openInSplit(tabId: string, side: SplitSide = "right") {
 export function openLinkInSplit(sourceTabId: string, url: string, adoptId?: string) {
   const s = store();
   const source = s.tabs[sourceTabId];
+
   if (!source) return;
   const split = splitOf(s, sourceTabId);
   const next = split?.tabIds[split.tabIds.indexOf(sourceTabId) + 1];
+
   if (split && (next || split.tabIds.length >= MAX_SPLIT_PANES)) {
     const target = next ?? split.tabIds.at(-1)!;
+
     if (target !== sourceTabId) return s.navigate(target, url);
   }
+
   openSplitPane(source.windowId, { anchorTabId: sourceTabId, url, side: "right", background: true, adoptId });
 }
 
 export function dropTabIntoSplit(tabId: string, targetTabId: string, side: SplitSide) {
   const target = store().tabs[targetTabId];
+
   if (!target || tabId === targetTabId) return;
   openSplitPane(target.windowId, { tabId, anchorTabId: targetTabId, side });
 }
@@ -69,11 +82,13 @@ export async function showSplitMenu(tabId: string) {
   const s = store();
   const split = splitOf(s, tabId);
   const tab = s.tabs[tabId];
+
   if (!split || !tab) return;
   const horizontal = split.orientation === "horizontal";
   const index = split.tabIds.indexOf(tabId);
   const full = split.tabIds.length >= MAX_SPLIT_PANES;
   const stacked = slotsOf(split).some((slot) => slot.length === 2 && slot.includes(tabId));
+
   const items: MenuItem[] = [
     {
       id: "add",
@@ -112,8 +127,10 @@ export async function showSplitMenu(tabId: string) {
     { separator: true },
     { id: "close", title: "Close Pane", symbol: "xmark" },
   ];
+
   const choice = await showMenu(items);
   const st = store();
+
   switch (choice) {
     case "share":
       return void shareCollection(tab.windowId, { kind: "split", id: split.id });

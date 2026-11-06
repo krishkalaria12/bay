@@ -8,10 +8,12 @@ test("indexed group and split lookup preserves first-match order and invalidates
   const second = { id: "second", tabIds: ["b", "c"] };
   const groups = { first, second };
   const splits = { first, second };
+
   for (const id of ["a", "b", "c", "missing", undefined, ""]) {
     assert.strictEqual(groupOf({ groups }, id), id ? Object.values(groups).find((g) => g.tabIds.includes(id)) : undefined);
     assert.strictEqual(splitOf({ splits }, id), id ? Object.values(splits).find((s) => s.tabIds.includes(id)) : undefined);
   }
+
   assert.strictEqual(groupOf({ groups: { second, first } }, "b"), second);
   assert.strictEqual(splitOf({ splits: { second, first } }, "b"), second);
   assert.strictEqual(groupOf({ groups: { ...groups, first: { ...first, tabIds: ["a"] } } }, "b"), second);

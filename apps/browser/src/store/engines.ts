@@ -14,6 +14,7 @@ export const ENGINE_SYMBOLS: Record<PageEngine, string> = { chromium: "globe", w
 type EngineState = Pick<BrowserState, "tabs">;
 
 type Site = { key: string; host: string };
+
 // Every tab icon asks on every store update. URL parsing in Hermes otherwise repeats for all rows even when only
 // another page's progress changed. Cache only address-derived facts, so opener changes still apply.
 const sites = new Map<string, Site | null>();
@@ -22,16 +23,22 @@ const MAX_CACHED_SITES = 1024;
 function parsedSite(url: string | undefined | null): Site | null {
   if (!url) return null;
   const cached = sites.get(url);
+
   if (cached !== undefined) return cached;
   let site: Site | null = null;
+
   try {
     const u = new URL(url);
+
     if (u.protocol === "http:" || u.protocol === "https:") site = { key: `${u.protocol}//${u.host}`.toLowerCase(), host: u.hostname.toLowerCase() };
   } catch {}
+
   // Don't retain unusually large query strings after their tabs close.
   if (url.length > 4096) return site;
+
   if (sites.size >= MAX_CACHED_SITES) sites.delete(sites.keys().next().value!);
   sites.set(url, site);
+
   return site;
 }
 
@@ -42,6 +49,7 @@ export function siteOf(url: string | undefined | null): string | null {
 
 /** A page WebKit can show: a web page or a file, on a build that has WebKit. */
 export const canUseWebKit = (url: string | undefined | null) => hasWebKit() && !!url && /^(https?|file):/i.test(url);
+
 /** Bay's and Chrome's own pages, extensions and DevTools exist only in Chromium. */
 const chromiumOnly = (url: string | undefined | null) => !!url && /^(bay|chrome|chrome-extension|chrome-untrusted|devtools|view-source):/i.test(url);
 
@@ -65,8 +73,10 @@ const PROTECTED_VIDEO_SITES: readonly string[] = [
 
 export function protectedVideoSite(url: string | undefined | null): boolean {
   const site = parsedSite(url);
+
   if (!site?.key.startsWith("https://")) return false;
   const host = site.host;
+
   return PROTECTED_VIDEO_SITES.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
@@ -77,44 +87,62 @@ export const engineForUrl = (url: string | undefined | null): PageEngine => chos
 
 const fromAdoption = (s: EngineState, t: Tab, depth: number): PageEngine | undefined => {
   const id = t.adoptId;
+
   if (!id) return undefined;
+
   if (id.startsWith("webkit:")) return "webkit";
+
   if (id.startsWith("nncore:") || id.startsWith("tab:")) return "chromium";
+
   if (id.startsWith("clone:")) {
     const source = s.tabs[id.slice("clone:".length)];
+
     return source && depth < 8 ? engineOf(s, source, depth + 1) : undefined;
   }
+
   return undefined;
 };
 
 function engineOf(s: EngineState, t: Tab, depth: number): PageEngine {
   if (!hasWebKit() || chromiumOnly(t.navigation?.url ?? t.url)) return "chromium";
+
   if (t.engine) return t.engine;
   const adopted = fromAdoption(s, t, depth);
+
   if (adopted) return adopted;
   const opener = t.openerId ? s.tabs[t.openerId] : undefined;
+
   if (opener?.engine && (opener.url || opener.navigation)) return opener.engine;
+
   return engineForUrl(t.navigation?.url ?? t.url);
 }
 
 /** The tab's engine: the one it has, else its adopted page's, its opener's, then its address's. */
 export function tabEngine(s: EngineState, tabId: string): PageEngine {
   const t = s.tabs[tabId];
+
   return t ? engineOf(s, t, 0) : "chromium";
 }
 
 /** The engine a tab's icon is marked with: only a web page away from Chromium. */
 export function engineMark(s: EngineState, tabId: string): PageEngine | null {
   const t = s.tabs[tabId];
+
   if (!t || !canUseWebKit(t.url || t.navigation?.url)) return null;
   const engine = tabEngine(s, tabId);
+
   return engine === "chromium" ? null : engine;
 }
 
 export type WebKitPage = { url: string; title: string; isLoading: boolean; committedUrl: string };
+
 export type RecordedVisit = { url: string; title: string; at: number };
-type Visit = RecordedVisit & { staleTitle: string; profile: string | null; timer?: unknown };
-type VisitTimers = { set(run: () => void, ms: number): unknown; clear(handle: unknown): void };
+
+type TimerHandle = Parameters<typeof clearTimeout>[0];
+
+type Visit = RecordedVisit & { staleTitle: string; profile: string | null; timer?: TimerHandle };
+
+type VisitTimers = { set(run: () => void, ms: number): TimerHandle; clear(handle: TimerHandle): void };
 
 export const VISIT_SETTLE_MS = 1500;
 
@@ -123,29 +151,38 @@ export const VISIT_SETTLE_MS = 1500;
 export function visitRecorder(write: (profile: string, visit: RecordedVisit) => void, timers: VisitTimers, now: () => number) {
   const open = new Map<string, Visit>();
   const done = new Map<string, string>();
+
   const finish = (tabId: string, visit: Visit) => {
     if (visit.timer !== undefined) timers.clear(visit.timer);
     visit.timer = undefined;
+
     if (open.get(tabId) === visit) open.delete(tabId);
     done.set(tabId, visit.url);
+
     if (visit.profile !== null) write(visit.profile, { url: visit.url, title: visit.title, at: visit.at });
   };
+
   return {
     note(tabId: string, profile: string | null, page: WebKitPage) {
       const { url, title, isLoading, committedUrl } = page;
+
       if (!/^https?:/i.test(url) || url !== committedUrl) return;
       let visit = open.get(tabId);
+
       if (visit && visit.url !== url) {
         finish(tabId, visit);
         visit = undefined;
       }
+
       if (!visit) {
         if (done.get(tabId) === url) return;
         done.delete(tabId);
         visit = { url, title, at: now(), staleTitle: title, profile };
         open.set(tabId, visit);
       } else if (title) visit.title = title;
+
       if (title && title !== visit.staleTitle) return finish(tabId, visit);
+
       if (isLoading || visit.timer !== undefined) return;
       const settling = visit;
       settling.timer = timers.set(() => {
@@ -154,6 +191,7 @@ export function visitRecorder(write: (profile: string, visit: RecordedVisit) => 
     },
     close(tabId: string) {
       const visit = open.get(tabId);
+
       if (visit) finish(tabId, visit);
       open.delete(tabId);
       done.delete(tabId);

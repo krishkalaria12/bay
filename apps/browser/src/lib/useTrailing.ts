@@ -6,10 +6,14 @@ export function useTrailing(on: boolean, ms: number): boolean {
   useEffect(() => {
     if (on) {
       setTrailing(true);
+
       return;
     }
+
     const timer = setTimeout(() => setTrailing(false), ms);
+
     return () => clearTimeout(timer);
   }, [on, ms]);
+
   return on || trailing;
 }

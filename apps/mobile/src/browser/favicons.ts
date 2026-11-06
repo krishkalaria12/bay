@@ -14,16 +14,21 @@ const pending = new Set<string>();
 /** Saves the open page's icon if its site has none yet. */
 export function fetchFavicon(view: Tab, url: string): void {
   const host = siteHost(url);
+
   if (!host || pending.has(host) || useBrowserStore.getState().data.favicons[host]) return;
   pending.add(host);
   void (async () => {
     const icon = await runPageScript<FaviconSource | null>(view, FAVICON_SCRIPT);
+
     if (!icon || !/^https?:/.test(icon.href)) return;
+
     if (!folder.exists) folder.create({ intermediates: true, idempotent: true });
+
     const file = await File.downloadFileAsync(icon.href, new File(folder, encodeURIComponent(host)), {
       idempotent: true,
       headers: { "User-Agent": icon.userAgent, Accept: "image/*" },
     });
+
     if (file.size < 16 || file.size > MAX_BYTES) return file.delete();
     useBrowserStore.getState().dispatch({ type: "favicon", host, uri: file.uri });
   })()
@@ -34,10 +39,13 @@ export function fetchFavicon(view: Tab, url: string): void {
 // Clearing history or browsing data drops icons from the store; their files go with them.
 useBrowserStore.subscribe((state, previous) => {
   if (state.data.favicons === previous.data.favicons) return;
+
   for (const [host, uri] of Object.entries(previous.data.favicons)) {
     if (state.data.favicons[host] === uri) continue;
+
     try {
       const file = new File(uri);
+
       if (file.exists) file.delete();
     } catch {
       /* Already gone. */

@@ -25,8 +25,11 @@ const RULES: Record<keyof YouTubeCleanup, readonly string[]> = {
   ],
 };
 
+const KEYS = ["shorts", "suggestions", "distractions"] as const;
+
 /** The rules to hide on a YouTube page for the chosen cleanup; none on other sites. */
 export function youtubeSelectors(cleanup: YouTubeCleanup, host: string): string[] {
   if (!/^(www\.|m\.)?youtube\.com$/.test(host)) return [];
-  return (Object.keys(RULES) as (keyof YouTubeCleanup)[]).flatMap((key) => (cleanup[key] ? RULES[key] : []));
+
+  return KEYS.flatMap((key) => (cleanup[key] ? RULES[key] : []));
 }

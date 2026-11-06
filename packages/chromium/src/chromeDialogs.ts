@@ -79,7 +79,7 @@ type NativeActionState = {
 
 export const ChromeUI = requireNativeModule<NativeChromeUI>("BayChromeUI");
 
-if (__DEV__) (globalThis as { nnChromeUI?: unknown }).nnChromeUI = ChromeUI;
+if (__DEV__) Object.assign(globalThis, { nnChromeUI: ChromeUI });
 
 // MARK: Device choosers
 
@@ -99,8 +99,10 @@ export const stopCasting = (dialogId: number, routeId: string) => ChromeUI.stopC
 export const closeCastDialog = (dialogId: number) => ChromeUI.closeCastDialog(dialogId);
 export const watchCastRoutes = (profile: string) => ChromeUI.watchCastRoutes(profile);
 export const terminateCastRoute = (routeId: string) => ChromeUI.terminateCastRoute(routeId);
+
 export function preferredCastMode(modes: number): number {
   for (const mode of [CastMode.presentation, CastMode.tab, CastMode.screen, CastMode.remotePlayback]) if (modes & mode) return mode;
+
   return 0;
 }
 

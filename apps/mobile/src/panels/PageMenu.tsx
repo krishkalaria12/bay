@@ -60,6 +60,7 @@ function NavigationAction({
   onPress: () => void;
 }): JSX.Element {
   const foreground = useThemeColor("foreground");
+
   return (
     <Pressable
       testID={id}
@@ -95,6 +96,7 @@ function Tile({
 }): JSX.Element {
   const foreground = useThemeColor("foreground");
   const accent = useThemeColor("accent");
+
   return (
     <Pressable
       testID={id}
@@ -127,12 +129,14 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
   useEffect(() => {
     if (props.visible) setTools(false);
   }, [props.visible]);
+
   function act(action: () => void): () => void {
     return () => {
       props.onClose();
       action();
     };
   }
+
   if (tools) {
     return (
       <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setTools(false)} title="Page tools" testID="page-menu" height="64%">
@@ -150,6 +154,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
       </PanelSheet>
     );
   }
+
   return (
     <PanelSheet
       visible={props.visible}
@@ -229,12 +234,14 @@ function SiteHeader({ title, url, blocking }: { title: string; url: string; bloc
   const danger = useThemeColor("danger");
   const web = /^https?:/.test(url);
   const insecure = url.startsWith("http:");
+
   const status = [
     web ? (insecure ? "Not secure" : "Secure") : "",
     blocking === "on" ? "Ads and trackers blocked" : blocking === "paused" ? "Blocking paused" : "",
   ]
     .filter(Boolean)
     .join(" · ");
+
   return (
     <View className="flex-row items-center gap-3">
       {url ? <SiteIcon url={url} size={40} /> : null}

@@ -13,6 +13,7 @@ import { hostOf, isPlaying, mediaCommand, pauseAllMedia, toggleMediaTabMute, use
 export function useWindowMediaTabs(windowId: string): string[] {
   // Session updates include the playback clock. Only changing membership re-renders the list's parent.
   const candidates = useMedia(useShallow((m) => Object.keys(m.sessions).filter((id) => ["playing", "paused"].includes(m.sessions[id]!.playbackState))));
+
   return useBrowser(useShallow((s) => candidates.filter((id) => s.tabs[id]?.windowId === windowId)));
 }
 
@@ -20,15 +21,19 @@ export function MediaSessionButton({ windowId, count }: { windowId: string; coun
   const theme = useTheme();
   const anchor = useRef<View>(null);
   const { hovered, hoverProps } = useHover();
+
   const open = () => {
     if (useMedia.getState().sessionList?.windowId === windowId) {
       closeSessionList();
+
       return;
     }
+
     anchor.current?.measureInWindow((x, y, width, height) => {
       if (width) useMedia.setState({ sessionList: { windowId, anchor: { x, y, width, height } } });
     });
   };
+
   return (
     <View ref={anchor} {...hoverProps} tooltip={`Show all ${count} media tabs`}>
       <Pressable onPress={open} accessibilityRole="button" accessibilityLabel={`Show all ${count} media tabs`}>
@@ -56,6 +61,7 @@ function closeSessionList() {
 
 export function MediaSessionsOverlay({ windowId, windowWidth, windowHeight }: { windowId: string; windowWidth: number; windowHeight: number }) {
   const list = useMedia((m) => (m.sessionList?.windowId === windowId ? m.sessionList : null));
+
   return list && windowWidth && windowHeight ? (
     <SessionPanel key={windowId} windowId={windowId} anchor={list.anchor} windowWidth={windowWidth} windowHeight={windowHeight} />
   ) : null;
@@ -82,15 +88,19 @@ function SessionPanel({
     if (!ids.length || !windowExists) closeSessionList();
   }, [ids.length, windowExists]);
   useEffect(() => {
-    const timer = setTimeout(() => (scroll.current as unknown as { focus?: () => void } | null)?.focus?.(), 50);
+    // SAFETY: { focus? assertion matches the runtime value validated at this call site.
+    const timer = setTimeout(() => (scroll.current as { focus?: () => void } | null)?.focus?.(), 50);
+
     return () => clearTimeout(timer);
   }, []);
+
   if (!ids.length || !windowExists) return null;
   const width = Math.min(400, windowWidth - 16);
   const height = Math.min(56 + ids.length * 48, 344, windowHeight - 16);
   const x = right ? anchor.x + anchor.width - width : anchor.x;
   const left = Math.max(8, Math.min(windowWidth - width - 8, x));
   const top = Math.max(8, Math.min(windowHeight - height - 8, anchor.y - height - 8));
+
   return (
     <Popover width={width} top={top} left={left} onDismiss={closeSessionList}>
       <View style={{ height, padding: 8 }}>
@@ -125,12 +135,15 @@ function SessionRow({ tabId }: { tabId: string }) {
   const tab = useTab(tabId);
   const session = useSession(tabId);
   const { hovered, hoverProps } = useHover();
+
   if (!tab || !session) return null;
   const playing = isPlaying(session);
+
   const go = () => {
     closeSessionList();
     switchToTab(tabId);
   };
+
   return (
     <View
       {...hoverProps}

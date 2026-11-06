@@ -2,10 +2,12 @@ import { WebView, type OpenWindowRequest, type PageEngine } from "@bay/chromium"
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
+import * as v from "valibot";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { focus, switchToTab } from "../../lib/actions";
 import { noteFavicon } from "../../lib/favicons";
+import { JsonValueSchema } from "../../lib/json";
 import { isQuitting } from "../../lib/shellBridge";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
@@ -57,7 +59,7 @@ import { ZoomPopover } from "../site/ZoomControls";
 import { SelectionPopover } from "../site/SelectionPopover";
 import { LinkPreview } from "../site/LinkPreviewCard";
 import { setLinkPreview } from "../site/linkPreview";
-import { copyLinkToSelection, searchSelection, setPageSelection, startSelectionTools, type PageSelection } from "../site/selection";
+import { copyLinkToSelection, searchSelection, setPageSelection, startSelectionTools } from "../site/selection";
 import { startMedia, useAutoPictureInPicture } from "../media/pip";
 import { SharePicker, requestDisplayMedia } from "../media/SharePicker";
 import { ShareBar } from "../media/ShareBar";
@@ -88,21 +90,32 @@ import { useIsDeveloperTab } from "../developer/localDevSites";
 // Where the card's panes are: the active tab's (or its split's), or the full-screen tab's over everything.
 function cardPanes(split: SplitView | undefined, activeId: string | undefined, fullscreenTab: string | null | undefined, width: number, height: number) {
   const full: Rect = { x: 0, y: 0, width, height };
+
   if (fullscreenTab) {
     // A split stays laid out under its pane in full screen: the other pane is still shown (painting, and seen by the
     // user as far as Picture in Picture and Chrome go), only covered.
     const under = split?.tabIds.includes(fullscreenTab) ? splitGeometry(split, width, height).panes : {};
+
     return { panes: { ...under, [fullscreenTab]: full }, dividers: [] };
   }
+
   if (split) return splitGeometry(split, width, height);
+
   return { panes: activeId ? { [activeId]: full } : {}, dividers: [] };
 }
 
 // Where the warm tabs' pages paint, off screen: each the card's size, or its place in its split.
-function warmPaneRects(warm: string[], splits: SplitView[], width: number, height: number): Record<string, Rect> {
-  const out: Record<string, Rect> = {};
+export interface PaneRects {
+  [paneId: string]: Rect;
+}
+
+function warmPaneRects(warm: string[], splits: SplitView[], width: number, height: number): PaneRects {
+  const out: PaneRects = {};
+
   for (const id of warm) out[id] = { x: 0, y: 0, width, height };
+
   for (const v of splits) Object.assign(out, splitGeometry(v, width, height).panes);
+
   return out;
 }
 
@@ -110,6 +123,7 @@ function warmPaneRects(warm: string[], splits: SplitView[], width: number, heigh
 function successorOf(windowId: string, leaving: string[]): string | undefined {
   const s = useBrowser.getState();
   const next = activeTabId(removeTabs(s, leaving, false), windowId);
+
   return next && next !== activeTabId(s, windowId) ? next : undefined;
 }
 
@@ -140,12 +154,15 @@ export function ContentCard() {
   // The tabs whose page is in this window. Recomputed only when tabs change, not on every store update (page
   // progress, say).
   const mountedMemo = useRef<{ lists?: object; tabs?: object; ids: string[] }>({ ids: [] });
+
   const mounted = useQuietBrowser(
     useShallow((s) => {
       const memo = mountedMemo.current;
+
       if (memo.lists === s.tabLists && memo.tabs === s.tabs) return memo.ids;
       const ids = windowTabIds(s, windowId).filter((id) => wantsPage(s.tabs[id]));
       mountedMemo.current = { lists: s.tabLists, tabs: s.tabs, ids };
+
       return ids;
     }),
   );
@@ -158,8 +175,10 @@ export function ContentCard() {
 
   useEffect(() => {
     const s = useBrowser.getState();
+
     for (const id of Object.keys(panes)) {
       const t = s.tabs[id];
+
       if (t?.url && !t.navigation && !t.adoptId) s.updateTab(id, { ...wake(t), unloaded: undefined });
     }
   }, [panes]);
@@ -170,36 +189,48 @@ export function ContentCard() {
   // The tab the window shows once they go, painting meanwhile. Hidden until the drop, its page had no frame to show:
   // the window showed an empty card while Chrome drew one (~90 ms, with the new window being built meanwhile).
   const successor = leaving ? successorOf(windowId, leaving) : undefined;
+
   // Keep adjacent profile pages painting so a swipe doesn't reveal an unpainted page, and the successor of tabs being
   // dragged out so the drop shows it at once.
   const warm = useQuietBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
       const shown = w?.activeTabIds[w.spaceId];
+
       // Two spaces with one profile can remember the same favourite: its page is on screen once, in the shown one.
       const ids =
         !w || !pagerPages
           ? []
           : [...new Set(pagerPages.map((p) => (p.id === w.spaceId ? undefined : w.activeTabIds[p.id])).filter((id): id is string => !!id && id !== shown))];
+
       return successor && s.tabs[successor]?.windowId === windowId && !ids.includes(successor) ? [...ids, successor] : ids;
     }),
   );
+
   const warmSplits = useQuietBrowser(useShallow((s) => warm.map((id) => splitOf(s, id)).filter((v): v is SplitView => !!v)));
   const warmPanes = warmPaneRects(warm, warmSplits, size.width, size.height);
 
   const shownMemo = useRef<{ mounted?: string[]; panes?: object; tabs?: object; keys: string[] }>({ keys: [] });
+
   const shown = useQuietBrowser(
     useShallow((s) => {
       const memo = shownMemo.current;
+
       if (memo.mounted === mounted && memo.panes === framed && memo.tabs === s.tabs) return memo.keys;
+
       const keys = [...new Set([...mounted, ...Object.keys(framed)])]
-        .map((id) => s.tabs[id])
-        .filter((t) => !!t)
+        .flatMap((id) => {
+          const tab = s.tabs[id];
+
+          return tab ? [tab] : [];
+        })
         // Keep mount order stable; reordering native subviews while tabs move can shuffle them.
         .sort((a, b) => a!.createdAt - b!.createdAt)
         // A tab whose space changed profile is another view: its page is the other engine profile's.
         .map((t) => `${t!.id}|${t!.spaceId}|${engineProfile(t!.spaceId)}`);
+
       shownMemo.current = { mounted, panes: framed, tabs: s.tabs, keys };
+
       return keys;
     }),
   );
@@ -207,9 +238,11 @@ export function ContentCard() {
   const geometryFor = (rect: Rect | undefined): ToolbarGeometry => {
     if (small) return NO_TOOLBAR;
     const leading = !!rect && rect.x === 0 && rect.y === 0;
+
     if (addressInSidebar) return !sidebarOpen && leading ? NO_TOOLBAR_PAST_LIGHTS : NO_TOOLBAR;
     // The pane at the top right, beside a sidebar docked on the right: its toolbar's end holds the toggle.
     const trailing = !!rect && rect.y === 0 && rect.x + rect.width >= size.width - 1;
+
     return toolbarGeometry({
       sidebarButton: leading && tabLayout === "sidebar" && !sidebarRight,
       sidebarButtonEnd: trailing && sidebarRight,
@@ -242,6 +275,7 @@ export function ContentCard() {
         shown.map((key) => {
           const tabId = key.slice(0, key.indexOf("|"));
           const rect = framed[tabId];
+
           return (
             <TabPane
               key={key}
@@ -360,10 +394,12 @@ const TabPane = memo(function TabPane({
   // that was clicked. Not past the New Tab panel or a field being typed in (find, the address, a rename).
   useEffect(() => {
     if (!focused || !visible || isNewTab || small) return;
+
     const timer = setTimeout(() => {
       if (useBrowser.getState().windowUi[windowId]?.panel?.open || TextInput.State.currentlyFocusedInput()) return;
       void webviews.get(tabId)?.focus();
     }, 0);
+
     return () => clearTimeout(timer);
   }, [focused, visible]);
 
@@ -464,6 +500,7 @@ type TabWebViewProps = { tabId: string; visible: boolean; warm: boolean };
 // loads the page again.
 function TabWebView(props: TabWebViewProps) {
   const engine = useEngineView((s) => tabEngine(s, props.tabId));
+
   return <EngineWebView key={engine} engine={engine} {...props} />;
 }
 
@@ -486,12 +523,14 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
   useEffect(() => {
     if (!navigation) return;
     pending.current = navigation.url;
+
     if (pageOf(tabId).newTabShown) patchPage(tabId, { newTabShown: null });
     void webviews.get(tabId)?.loadUrl(navigation.url, { userInitiated: !!navigation.userInitiated });
   }, [seq]);
   const fromNewTab = useRef(pageOf(tabId).wasNewTab && !adoptId);
   useEffect(() => {
     persistEngine(tabId, engine);
+
     return () => noteGone(tabId);
   }, []);
   // This view goes while its tab keeps its page (lib/tabNavigation.ts): handed off before the native unmount (a layout
@@ -502,6 +541,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
     () => () => {
       const t = tab();
       const sameEngine = tabEngine(store(), tabId) === engine;
+
       if (wantsPage(t) && sameEngine && engineProfile(t.spaceId) === mountedProfile.current && !isQuitting()) handOff(tabId, mountedProfile.current);
     },
     [],
@@ -509,6 +549,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
 
   const onOpenWindow = (request: OpenWindowRequest) => {
     const t = tab();
+
     if (t) openFromPage(request, { windowId: t.windowId, spaceId: t.spaceId, tabId });
   };
 
@@ -530,28 +571,38 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       onReady={(browserId, chromeTabId) => {
         setBrowserId(tabId, browserId, chromeTabId);
         noteReady(tabId);
+
         if (tab()?.muted) void webviews.get(tabId)?.setMuted(true);
       }}
       onNavigationChange={({ url, title, canGoBack, canGoForward, isLoading, themeColor, themeColorSource, committedUrl }) => {
         const target = pending.current;
+
         // A fresh browser reports about:blank before the requested navigation commits.
         if (target !== null && isBlank(url) && !target.startsWith("about:")) {
           store().updateLive(tabId, { isLoading: true });
+
           return;
         }
+
         pending.current = null;
         const kept = pageOf(tabId).newTabShown;
+
         if (kept) {
           if (url === kept.url) {
             patchPage(tabId, { newTabShown: { ...kept, title } });
             store().updateLive(tabId, { isLoading, canGoBack, canGoForward, themeColor });
+
             return;
           }
+
           patchPage(tabId, { newTabShown: null });
         }
+
         if (fromNewTab.current && url && !isBlank(url)) patchPage(tabId, { backToNewTab: true });
         store().navigated(tabId, { url, title }, { isLoading, canGoBack, canGoForward, themeColor });
+
         if (engine === "webkit") noteWebKitPage(tabId, { url, title, isLoading, committedUrl: committedUrl ?? "" });
+
         if (lastPage.current !== null && pageKey(url) !== lastPage.current) {
           // Like Chrome's tab-modal dialogs, the open-app prompt stays within a site.
           if (pageOf(tabId).externalApp && hostOf(url) !== hostOf(lastPage.current)) answerExternalApp(tabId, false);
@@ -569,27 +620,35 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
             blockedPage: blocked && pageKey(blocked) === pageKey(url) ? blocked : null,
           });
           revealToolbar(tabId);
+
           if (!tab()?.peekOf) followSiteChoice(tabId, engine, url, lastPage.current);
         }
+
         lastPage.current = pageKey(url);
         patchPage(tabId, { themeColorSource: themeColorSource ?? null });
       }}
       onLoadError={({ url, blockedPage }) => {
         pending.current = null;
+
         if (blockedPage) patchPage(tabId, { blockedPage: url });
       }}
       onDownloadNavigation={({ committedUrl, skipped }) => {
         pending.current = null;
         const t = tab();
+
         if (!t) return;
         const s = store();
         s.updateLive(tabId, { isLoading: false });
+
         if (committedUrl) {
           if (t.url !== committedUrl) s.updateTab(tabId, { url: committedUrl });
+
           return;
         }
+
         const others = viewTabIds(s, t.windowId, t.spaceId).some((id) => id !== tabId);
         const opened = !!(t.openerId || t.adoptId) && !pageOf(tabId).wasNewTab;
+
         if (!skipped && opened && !s.live[tabId]?.canGoBack && others) return s.closeTab(tabId);
         patchPage(tabId, { backToNewTab: false, newTabShown: null });
         s.updateTab(tabId, { url: "", title: "", favicon: null });
@@ -604,6 +663,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       }}
       onMedia={({ playing, muted }) => {
         store().updateLive(tabId, { playingAudio: playing });
+
         // A new browser can drop mute state before its first page load.
         if (tab()?.muted && !muted) void webviews.get(tabId)?.setMuted(true);
       }}
@@ -616,6 +676,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         // The engine judged it another site (Chrome's own rule); the tab stayed. A tab that has just stopped peeking
         // still gets its click: the link loads in it.
         if (!/^https?:/i.test(url)) return;
+
         if (peeksLinks(store(), tabId)) store().openPeek(tabId, url, undefined, point);
         else store().navigate(tabId, url, { userInitiated: false });
       }}
@@ -633,6 +694,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       onPopupBlocked={(popup) => {
         const first = !pageOf(tabId).popups.length;
         patchPage(tabId, { popups: [...pageOf(tabId).popups, popup] });
+
         if (first) void shouldPromptForPopups(engineProfile(spaceId), popup.origin).then((ask) => ask && setPopover(tabId, "popups"));
       }}
       onPasswordPrompt={(prompt) => showPasswordPrompt(tabId, prompt)}
@@ -640,6 +702,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       onExternalApp={(externalApp) => patchPage(tabId, { externalApp })}
       onPageFocus={() => {
         const t = tab();
+
         if (t && splitOf(store(), tabId) && store().windows[t.windowId]?.activeTabIds[t.spaceId] !== tabId) store().activate(tabId);
       }}
       // Engine close callbacks also fire during quit; don't remove saved-session tabs then.
@@ -651,20 +714,36 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         else if (command === "escape") {
           // Esc in a page closes the theme editor over it; in a peek's page, the peek; in Little Bay's, Little Bay.
           const t = tab();
+
           if (closeCaptureOnEscape(tabId)) return;
+
           if (closeBoostEditorOnEscape(tabId)) return;
+
           if (t && closeThemeEditorOnEscape(t.windowId)) return;
+
           if (t?.peekOf) dismissPeek(t.windowId);
           else closeLittleBayOnEscape(tabId);
         }
       }}
       onPageMessage={(kind, data) => {
-        if (kind === "selection") setPageSelection(tabId, data as PageSelection | null);
-        else if (kind === "scroll") noteScroll(tabId, data);
-        else if (kind === "devMode") onDeveloperMessage(tabId, data);
+        const rect = v.object({ x: v.number(), y: v.number(), width: v.number(), height: v.number() });
+        const linkPreview = v.safeParse(v.nullable(v.object({ url: v.string(), rect })), data);
+
+        if (kind === "selection") {
+          const parsed = v.safeParse(v.nullable(v.object({ text: v.string(), rect })), data);
+
+          setPageSelection(tabId, parsed.success ? parsed.output : null);
+        } else if (kind === "scroll") {
+          const parsed = v.safeParse(v.nullable(v.object({ state: v.optional(v.string()) })), data);
+
+          noteScroll(tabId, parsed.success ? parsed.output : null);
+        } else if (kind === "devMode") onDeveloperMessage(tabId, data);
         else if (kind === "capture") onCaptureMessage(tabId, data);
-        else if (kind === "boost") onBoostMessage(tabId, data);
-        else if (kind === "linkPreview") setLinkPreview(tabId, data as { url: string; rect: { x: number; y: number; width: number; height: number } } | null);
+        else if (kind === "boost") {
+          const boostMessage = v.safeParse(JsonValueSchema, data);
+
+          if (boostMessage.success) onBoostMessage(tabId, boostMessage.output);
+        } else if (kind === "linkPreview") setLinkPreview(tabId, linkPreview.success ? linkPreview.output : null);
         else if (kind === "captureGesture") onCaptureGesture(tabId, data);
         else if (kind === "drm") void playInWebKit(tabId);
       }}
@@ -679,6 +758,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       }}
       onActivateRequest={() => {
         const t = tab();
+
         if (!t) return;
         switchToTab(tabId);
         focus(t.windowId);

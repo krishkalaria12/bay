@@ -12,10 +12,12 @@ export type SplitGeometry = { panes: Record<string, Rect>; dividers: Divider[] }
 function cut(total: number, sizes: number[], gap: number): { start: number; size: number }[] {
   const free = Math.max(0, total - gap * (sizes.length - 1));
   let at = 0;
+
   return sizes.map((f) => {
     const size = Math.round(free * f);
     const out = { start: at, size };
     at += size + gap;
+
     return out;
   });
 }
@@ -30,6 +32,7 @@ export function splitGeometry(split: SplitView, width: number, height: number, g
   slots.forEach((slot, i) => {
     const { start, size } = main[i]!;
     const slotRect: Rect = horizontal ? { x: start, y: 0, width: size, height } : { x: 0, y: start, width, height: size };
+
     if (slot.length === 1) panes[slot[0]!] = slotRect;
     else {
       const inner = cut(horizontal ? slotRect.height : slotRect.width, split.stack?.sizes ?? [0.5, 0.5], gap);
@@ -44,6 +47,7 @@ export function splitGeometry(split: SplitView, width: number, height: number, g
         rect: horizontal ? { x: slotRect.x, y: d.size, width: slotRect.width, height: gap } : { x: d.size, y: slotRect.y, width: gap, height: slotRect.height },
       });
     }
+
     if (i < slots.length - 1) {
       dividers.push({
         kind: "root",
@@ -53,6 +57,7 @@ export function splitGeometry(split: SplitView, width: number, height: number, g
       });
     }
   });
+
   return { panes, dividers };
 }
 
@@ -65,6 +70,7 @@ export function resize(sizes: number[], a: number, delta: number, total: number,
   const next = [...px];
   next[a] = left;
   next[a + 1] = pair - left;
+
   return next.map((p) => p / free);
 }
 
@@ -86,7 +92,9 @@ type ToolbarLayout = { sidebarButton: boolean; clearTrafficLights: boolean; side
 export function toolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
   const key = `${o.sidebarButton}|${o.clearTrafficLights}|${!!o.sidebarButtonEnd}`;
   let g = geometries.get(key);
+
   if (!g) geometries.set(key, (g = computeToolbarGeometry(o)));
+
   return g;
 }
 
@@ -94,6 +102,7 @@ function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
   const offset = o.clearTrafficLights ? TRAFFIC_LIGHTS_OFFSET : 0;
   const end = !!o.sidebarButtonEnd;
   const [c0, c1, c2, c3] = layout.toolbarIconCenters;
+
   if (o.sidebarButton)
     return {
       sidebarButton: offset + c0,
@@ -104,6 +113,7 @@ function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
       urlLeft: offset + layout.breadcrumbX - 8,
     };
   const shift = c1 - c0;
+
   return {
     sidebarButton: null,
     sidebarButtonEnd: end,
@@ -115,6 +125,7 @@ function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
 }
 
 export const NO_TOOLBAR: ToolbarGeometry = { sidebarButton: null, sidebarButtonEnd: false, back: 21, forward: 21, reload: 21, urlLeft: 8 };
+
 // No toolbar on the window's top-left pane with the sidebar on the right: the window buttons show over its corner on
 // hover, so what starts there (Developer Mode's bar, prompts) starts past them.
 export const NO_TOOLBAR_PAST_LIGHTS: ToolbarGeometry = { ...NO_TOOLBAR, urlLeft: TRAFFIC_LIGHTS_OFFSET };

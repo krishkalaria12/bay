@@ -15,6 +15,7 @@ function restPages(current: string | null, order: string[]): PagerPage[] {
   const i = order.indexOf(current);
   const before = i > 0 ? order[i - 1] : undefined;
   const after = i >= 0 ? order[i + 1] : undefined;
+
   return [...(before ? [{ id: before, slot: -1 }] : []), { id: current, slot: 0 }, ...(after ? [{ id: after, slot: 1 }] : [])];
 }
 
@@ -38,21 +39,26 @@ class SpacePager {
     this.state.setState({ pages: this.warmPages() });
     this.unsubscribe = useBrowser.subscribe((s, prev) => {
       const w = s.windows[windowId];
+
       if (!w) return this.dispose();
       // Native selection survives root swaps; React's selection reaches it through props.
       const was = prev.windows[windowId];
+
       if (w.spaceId !== was?.spaceId || w.incognito !== was?.incognito || s.spaceOrder !== prev.spaceOrder) {
         this.state.setState({ pages: this.warmPages() });
+
         // No surface (the sidebar closed, its peek showing) means no native controller to move the pages: they slide
         // here, as its would.
         if (!this.surfaces && this.index() >= 0) this.pos.set(withTiming(this.index(), { duration: 250, easing: Easing.out(Easing.cubic) }));
       }
+
       if (!this.switching && !w.incognito && w.spaceId !== was?.spaceId) this.selectExternal(w.spaceId, s.spaceOrder);
     });
   }
 
   attach() {
     this.surfaces++;
+
     return () => void this.surfaces--;
   }
 
@@ -69,17 +75,21 @@ class SpacePager {
   private selectExternal(spaceId: string, order: string[]) {
     const generation = ++this.externalGeneration;
     this.external = generation;
+
     const done = (ok: boolean) => {
       if (this.external !== generation) return;
       this.external = 0;
+
       // The latest state, not the requested profile: a gesture after the command wins.
       if (ok) this.commitNative(cef.pagerState(this.windowId));
     };
+
     cef.selectPager(this.windowId, spaceId, order.join("\n")).then(done, () => done(false));
   }
 
   private commitNative(snapshot: Pick<PagerStateEvent, "sequence" | "selected" | "profileId"> | null, event?: PagerStateEvent) {
     if (!snapshot || snapshot.sequence <= this.state.getState().ack) return;
+
     if (__DEV__) this.lastEvent = { native: event ?? null, snapshot };
     const s = useBrowser.getState();
     const w = s.windows[this.windowId];
@@ -89,26 +99,31 @@ class SpacePager {
     unstable_batchedUpdates(() => {
       if (w && !w.incognito && id && s.spaces[id] && id !== w.spaceId) {
         this.switching = true;
+
         try {
           s.switchSpace(this.windowId, id);
         } finally {
           this.switching = false;
         }
       }
+
       this.state.setState({ ack: snapshot.sequence });
     });
   }
 
   private index() {
     const current = this.current();
+
     return current ? useBrowser.getState().spaceOrder.indexOf(current) : -1;
   }
 
   private warmPages(): PagerPage[] | null {
     const i = this.index();
+
     if (i < 0) return null;
     const order = useBrowser.getState().spaceOrder;
-    return [i - 1, i, i + 1].filter((slot) => slot >= 0 && slot < order.length).map((slot) => ({ id: order[slot]!, slot }));
+
+    return [i - 1, i, i + 1].flatMap((slot) => (slot >= 0 && slot < order.length ? [{ id: order[slot]!, slot }] : []));
   }
 
   get active() {
@@ -118,10 +133,13 @@ class SpacePager {
   wheel(e: SwipeEvent) {
     const now = Date.now();
     const w = this.wheelState;
+
     if (now - w.trigger <= WHEEL_COOLDOWN_MS) return;
+
     if (now - w.last > WHEEL_BURST_MS) w.sum = 0;
     w.last = now;
     w.sum += e.direction === "back" ? -e.distance : e.distance;
+
     if (Math.abs(w.sum) <= WHEEL_THRESHOLD) return;
     const delta = w.sum < 0 ? -1 : 1;
     w.sum = 0;
@@ -135,6 +153,7 @@ class SpacePager {
     void cef.stepPager(this.windowId, delta, false, useBrowser.getState().spaceOrder.join("\n")).then((ok) => {
       if (ok) return;
       const next = useBrowser.getState().spaceOrder[this.index() + delta];
+
       if (this.index() >= 0 && next) useBrowser.getState().switchSpace(this.windowId, next);
     });
   }
@@ -142,7 +161,9 @@ class SpacePager {
   switchTo(spaceId: string) {
     const s = useBrowser.getState();
     const index = s.spaceOrder.indexOf(spaceId);
+
     if (!s.spaces[spaceId] || !this.current() || index < 0) return;
+
     if (!this.active) return s.switchSpace(this.windowId, spaceId);
     void cef.switchPager(this.windowId, index, s.spaceOrder.join("\n")).then((ok) => {
       if (!ok) useBrowser.getState().switchSpace(this.windowId, spaceId);
@@ -151,6 +172,7 @@ class SpacePager {
 
   private current() {
     const w = useBrowser.getState().windows[this.windowId];
+
     return w && !w.incognito ? w.spaceId : null;
   }
 
@@ -176,7 +198,9 @@ const pagers = new Map<string, SpacePager>();
 
 export function pagerFor(windowId: string): SpacePager {
   let pager = pagers.get(windowId);
+
   if (!pager) pagers.set(windowId, (pager = new SpacePager(windowId)));
+
   return pager;
 }
 
@@ -188,7 +212,13 @@ export function usePagerSurface(windowId: string) {
   useEffect(() => pagerFor(windowId).attach(), [windowId]);
 }
 
-export function usePagerPages(windowId: string): { pages: PagerPage[]; paging: boolean; pager: SpacePager } {
+export interface PagerPages {
+  pages: PagerPage[];
+  paging: boolean;
+  pager: SpacePager;
+}
+
+export function usePagerPages(windowId: string): PagerPages {
   const pager = pagerFor(windowId);
   const current = useBrowser((s) => s.windows[windowId]?.spaceId ?? null);
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
@@ -196,6 +226,7 @@ export function usePagerPages(windowId: string): { pages: PagerPage[]; paging: b
   // Every profile stays mounted at its absolute index, so a drag needs no JS to start.
   const all = !incognito && !!current && order.includes(current);
   const pages = all ? order.map((id, slot) => ({ id, slot })) : restPages(current, order).map((p) => (p.id === current ? p : { ...p, resting: true }));
+
   return { pages, paging: all, pager };
 }
 
@@ -204,25 +235,30 @@ export function usePagerNativeConfig(windowId: string, width?: number): NativePa
   const pager = pagerFor(windowId);
   // Through useStore, not pager.state(…): the React Compiler only knows a call named use… for a hook, and would skip it.
   const ack = useStore(pager.state, (s) => s.ack);
+
   const [selected, count, order] = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
       const i = w && !w.incognito ? s.spaceOrder.indexOf(w.spaceId) : -1;
+
       return [i, s.spaceOrder.length, s.spaceOrder.join("\n")] as const;
     }),
   );
+
   return selected >= 0 ? { key: windowId, selected, count, width: width || undefined, ack, order } : undefined;
 }
 
 // A page's place in the pager: off to the side at rest, outside the surface's clip.
 export function usePageStyle(windowId: string, slot: number, width: number) {
   const { pos } = pagerFor(windowId);
+
   return useAnimatedStyle(() => ({ transform: [{ translateX: (pos.get() - slot) * -width }] }), [slot, width]);
 }
 
 /** Opacity along the pager: `selected` with `slot` shown, easing to `rest` a page either side. */
 export function usePagerOpacity(windowId: string, slot: number | undefined, rest: number, selected: number) {
   const { pos } = pagerFor(windowId);
+
   return useAnimatedStyle(
     () => ({ opacity: slot === undefined ? rest : interpolate(pos.get(), [slot - 1, slot, slot + 1], [rest, selected, rest], Extrapolation.CLAMP) }),
     [slot, rest, selected],
@@ -230,5 +266,6 @@ export function usePagerOpacity(windowId: string, slot: number | undefined, rest
 }
 
 if (__DEV__) {
+  // SAFETY: { nnPager? assertion matches the runtime value validated at this call site.
   (globalThis as { nnPager?: unknown }).nnPager = (windowId: string) => pagerFor(windowId);
 }

@@ -8,17 +8,25 @@ import { hexFromHsl, hslOf } from "./windowTint";
 /** The colour at a point of the wheel: `angle` 0–1 clockwise from the right, `distance` 0–1 from the centre. */
 export function wheelColor(angle: number, distance: number): string {
   const clamp = (v: number) => Math.min(1, Math.max(0, v));
+
   return hexFromHsl(((angle % 1) + 1) % 1, SATURATION, BOTTOM_LIGHTNESS + (TOP_LIGHTNESS - BOTTOM_LIGHTNESS) * clamp(distance));
 }
 
 /** Where a colour sits on the wheel (the nearest point: its saturation isn't the wheel's). */
-export function wheelPosition(color: string): { angle: number; distance: number } {
+export interface WheelPosition {
+  angle: number;
+  distance: number;
+}
+
+export function wheelPosition(color: string): WheelPosition {
   const [h, , l] = hslOf(color);
+
   return { angle: h, distance: Math.min(1, Math.max(0, (l - BOTTOM_LIGHTNESS) / (TOP_LIGHTNESS - BOTTOM_LIGHTNESS))) };
 }
 
 // Colour harmonies: the other colours' hues, in degrees from the first's. A theme of n colours takes one with n − 1.
 export type Harmony = "complementary" | "singleAnalogous" | "splitComplementary" | "analogous" | "triadic" | "floating";
+
 const HARMONIES: { type: Harmony; angles: number[] }[] = [
   { type: "complementary", angles: [180] },
   { type: "singleAnalogous", angles: [310] },
@@ -27,6 +35,7 @@ const HARMONIES: { type: Harmony; angles: number[] }[] = [
   { type: "triadic", angles: [120, 240] },
   { type: "floating", angles: [] },
 ];
+
 const anglesOf = (type: Harmony) => HARMONIES.find((h) => h.type === type)!.angles;
 const fits = (count: number) => HARMONIES.filter((h) => h.angles.length === count - 1);
 
@@ -37,6 +46,7 @@ export const defaultHarmony = (count: number): Harmony => fits(count)[0]?.type ?
 export function nextHarmony(type: Harmony, count: number): Harmony {
   const list = fits(count);
   const i = list.findIndex((h) => h.type === type);
+
   return list[(i + 1) % list.length]?.type ?? "floating";
 }
 
@@ -47,6 +57,7 @@ export const harmonyAfterRemoving = (type: Harmony, count: number): Harmony =>
 /** The first colour, then the others its harmony places round the wheel from it, as light as it is. */
 export function harmonize(first: string, type: Harmony): string[] {
   const [h, s, l] = hslOf(first);
+
   return [first, ...anglesOf(type).map((deg) => hexFromHsl((h + deg / 360) % 1, s, l))];
 }
 

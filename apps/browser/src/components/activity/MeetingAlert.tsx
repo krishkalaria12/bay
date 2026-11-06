@@ -30,7 +30,9 @@ import { MEETING_ALERT_SPRING, MEETING_ALERT_WIDTH } from "./constants";
 export function MeetingAlert({ windowId, windowWidth }: { windowId: string; windowWidth: number }) {
   const event = useMeetingAlert((s) => s.event);
   const front = useBrowser((s) => s.ui.focusedWindowId === windowId);
+
   if (!event || !front) return null;
+
   return <AlertCard key={event.occurrence} event={event} windowId={windowId} windowWidth={windowWidth} />;
 }
 
@@ -45,6 +47,7 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
   const right = useSidebarOnRight();
   const sidebarWidth = useSidebarWidth(windowId);
   const appear = useSharedValue(0);
+
   const appearStyle = useAnimatedStyle(() => ({
     opacity: appear.get(),
     transform: [{ translateY: interpolate(appear.get(), [0, 1], [-10, 0]) }, { scale: interpolate(appear.get(), [0, 1], [0.97, 1]) }],
@@ -52,8 +55,10 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
 
   useEffect(() => {
     let cancelled = false;
+
     if (calendarTab && sidebarShown) void measureRow(windowId, calendarTab).then((a) => !cancelled && setAnchor(a));
     else setAnchor(null);
+
     return () => {
       cancelled = true;
     };
@@ -69,6 +74,7 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
   const who = attendeesLabel(event);
   // No calendar row to come out of: the page's top right corner, left of a sidebar docked on the right.
   const pageRight = windowWidth - (right && sidebarShown ? sidebarWidth : 0);
+
   const position = anchor
     ? { left: besideRow(anchor, MEETING_ALERT_WIDTH, right), top: Math.max(8, anchor.y - 4) }
     : { left: Math.max(8, pageRight - MEETING_ALERT_WIDTH - 14), top: 52 };

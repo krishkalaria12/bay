@@ -10,6 +10,7 @@ import { useBrowser } from "../../src/store/browserStore";
 writeDocument("bench-boot.json", JSON.stringify({ jsStart: Date.now() }));
 
 let pausedUntil = 0;
+
 const nn = {
   store: useBrowser,
   pages: usePages,
@@ -22,6 +23,7 @@ const nn = {
     pausedUntil = Date.now() + ms;
   },
 };
+
 globalThis.nn = nn;
 
 const idOf = (source) => source?.match(/^\/\/ *(\S+)/)?.[1];
@@ -29,12 +31,15 @@ let lastId = idOf(readDocument("bench-cmd.js")) ?? "";
 
 function poll() {
   const wait = pausedUntil - Date.now();
+
   if (wait > 0) return void setTimeout(poll, wait);
   const source = readDocument("bench-cmd.js");
   const id = idOf(source);
+
   if (source && id && id !== lastId) {
     lastId = id;
     const done = (body) => writeDocument("bench-result.json", JSON.stringify({ id, ...body }));
+
     try {
       Promise.resolve(new Function("nn", source)(nn)).then(
         (result) => done({ result: result ?? null }),
@@ -44,6 +49,8 @@ function poll() {
       done({ error: String(error) });
     }
   }
+
   setTimeout(poll, 50);
 }
+
 setTimeout(poll, 50);

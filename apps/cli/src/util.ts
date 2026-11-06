@@ -1,14 +1,28 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import * as v from "valibot";
+
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+export type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
 
 export function expandHome(path: string): string {
   if (path === "~") return homedir();
+
   if (path.startsWith("~/")) return resolve(homedir(), path.slice(2));
+
   return path;
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** Accepts parsed JSON (or anything) and reports plain objects; arrays and non-objects are out. */
+export function isRecord(value: unknown): value is JsonObject {
+  return v.is(v.object({}), value) && !Array.isArray(value);
+}
+
+export function isString(value: unknown): value is string {
+  return v.is(v.string(), value);
 }
 
 export function clip(text: string, max = 2000): string {
@@ -22,10 +36,12 @@ export async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       signal?.removeEventListener("abort", stopped);
       done();
     }, ms);
+
     const stopped = () => {
       clearTimeout(timer);
       fail(new DOMException("Aborted", "AbortError"));
     };
+
     if (signal?.aborted) return stopped();
     signal?.addEventListener("abort", stopped, { once: true });
   });
@@ -41,6 +57,7 @@ export function wildcardMatch(pattern: string, value: string): boolean {
   let s = 0;
   let star = -1;
   let mark = 0;
+
   while (s < value.length) {
     if (p < pattern.length && (pattern[p] === value[s] || pattern[p] === "?")) {
       p += 1;
@@ -57,7 +74,9 @@ export function wildcardMatch(pattern: string, value: string): boolean {
       return false;
     }
   }
+
   while (p < pattern.length && pattern[p] === "*") p += 1;
+
   return p === pattern.length;
 }
 

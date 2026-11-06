@@ -16,6 +16,7 @@ const RANGES = [
   { value: "month", title: "Last 4 weeks", ms: 28 * 86_400_000 },
   { value: "all", title: "All time", ms: Infinity },
 ] as const;
+
 type Range = (typeof RANGES)[number]["value"];
 
 export const useClearDataRequest = create<{ windowId: string | null; request(windowId: string | null): void }>((set) => ({
@@ -35,11 +36,14 @@ export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose
     setBusy(true);
     const ms = RANGES.find((r) => r.value === range)!.ms;
     const since = ms === Infinity ? undefined : Date.now() - ms;
+
     if (history) {
       useBrowser.getState().clearHistory(spaceId, since);
       pruneProfileFavicons(spaceId);
     }
+
     const types: BrowsingDataType[] = [...(history ? ["history" as const] : []), ...(siteData ? ["siteData" as const, "cache" as const] : [])];
+
     if (types.length && !isIncognitoSpace(spaceId)) await clearBrowsingData(engineProfile(spaceId), types, since);
     setBusy(false);
     onClose();
@@ -80,6 +84,7 @@ export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose
 
 function Option({ value, onChange, title, subtitle }: { value: boolean; onChange: (v: boolean) => void; title: string; subtitle: string }) {
   const theme = useTheme();
+
   return (
     <View>
       <Checkbox value={value} onChange={onChange} label={title} />

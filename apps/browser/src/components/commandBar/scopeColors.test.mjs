@@ -19,6 +19,7 @@ test("custom sites reuse a valid page color only from their own profile", () => 
     tabs: { work: { url: "https://docs.example/page", spaceId: "work" }, other: { url: "https://other.example/", spaceId: "default" } },
     live: { work: { themeColor: "#123456" }, other: { themeColor: "#ABCDEF" } },
   };
+
   assert.equal(scopeColorFor(scope("https://docs.example/?q=%s"), state, "work"), "#123456");
   assert.equal(scopeColorFor(scope("https://docs.example/?q=%s"), state, "default"), null);
   state.live.work.themeColor = "invalid";

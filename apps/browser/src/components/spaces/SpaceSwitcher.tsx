@@ -42,6 +42,7 @@ export function SpaceSwitcher({ windowId }: { windowId: string }) {
   const { pages } = usePagerPages(windowId);
   const fits = ids.length * SPACE_CELL + (ids.length - 1) * SPACE_GAP <= width - 2 * (layout.sidebarInset + SPACE_SIDE);
   const { reorder, dragging } = useSpaceReorder(SPACE_CELL + SPACE_GAP);
+
   return (
     <View style={{ height: PROFILE_DOTS_HEIGHT }}>
       {fits ? (
@@ -80,7 +81,9 @@ function SpaceIcon({
   const panHandlers = useSpaceDrag(reorder, id, "x");
   const offset = reorder.offsetOf(id);
   const dragStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }, { scale: lifted ? SPACE_LIFTED_SCALE : 1 }] }), [offset, lifted]);
+
   if (name === undefined) return null;
+
   return (
     <Animated.View {...panHandlers} style={[{ zIndex: lifted ? 1 : 0 }, dragStyle]}>
       <View ref={(v) => registerRow(windowId, id, v)} {...hoverProps} tooltip={lifted ? undefined : name}>
@@ -101,8 +104,10 @@ function NewButton({ windowId }: { windowId: string }) {
   const turn = useSharedValue(0);
   useEffect(() => turn.set(withTiming(open ? 1 : 0, { duration: NEW_MENU_MS, easing: Easing.out(Easing.cubic) })), [open]);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 45}deg` }] }));
+
   return (
-    <Animated.View ref={(v) => registerRow(windowId, NEW_MENU_ID, v as unknown as View | null)} style={style}>
+    // SAFETY: View | null)} style assertion matches the runtime value validated at this call site.
+    <Animated.View ref={(v) => registerRow(windowId, NEW_MENU_ID, v as View | null)} style={style}>
       {/* Just the +: no hover or press fill behind it, it turns to × instead. */}
       <Pressable onPress={() => void openNewMenu(windowId)} accessibilityRole="button" accessibilityLabel="New" tooltip={open ? undefined : "New"}>
         {({ pressed }) => (
@@ -121,7 +126,9 @@ export { openNewMenu };
 export async function openSpaceMenu(windowId: string, id: string) {
   const s = useBrowser.getState();
   const space = s.spaces[id];
+
   if (!space) return;
+
   const choice = await showMenu([
     { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
     { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
@@ -133,11 +140,14 @@ export async function openSpaceMenu(windowId: string, id: string) {
     { id: "settings", title: "Settings…", symbol: "gearshape" },
     { id: "delete", title: "Delete Space…", symbol: "trash", enabled: s.spaceOrder.length > 1 },
   ]);
+
   if (!choice) return;
+
   // A folder goes in the window's space: show this one first.
   const here = () => {
     if (useBrowser.getState().windows[windowId]?.spaceId !== id) switchSpace(windowId, id);
   };
+
   if (choice === "rename") void renameSpace(windowId, id);
   else if (choice === "icon") void openIconPicker(windowId, { kind: "space", id });
   else if (choice === "look") openThemeEditor(windowId, id);
@@ -153,7 +163,9 @@ export async function openSpaceMenu(windowId: string, id: string) {
 
 export async function renameSpace(windowId: string, id: string) {
   const space = useBrowser.getState().spaces[id];
+
   if (!space) return;
+
   const name = await requestRename({
     windowId,
     title: `Rename ${space.name}`,
@@ -161,5 +173,6 @@ export async function renameSpace(windowId: string, id: string) {
     placeholder: "Space name",
     icon: <SpaceGlyph spaceId={id} size={26} />,
   });
+
   if (name) useBrowser.getState().updateSpace(id, { name });
 }

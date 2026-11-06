@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { forgettable, isSearchResultsPage, rowMenuActions } from "./rowActions.ts";
 
 const calls = [];
+
 const handlers = {
   choose: (s, disposition) => calls.push(["choose", s.url, disposition]),
   openInBackground: (url) => calls.push(["background", url]),
@@ -10,6 +11,7 @@ const handlers = {
   closeTab: (id) => calls.push(["close", id]),
   forget: (s) => calls.push(["forget", s.url]),
 };
+
 const page = (overrides = {}) => ({ kind: "page", url: "https://x.com/", title: "X", favicon: null, visited: true, ...overrides });
 const summary = (actions) => actions.map(({ title, hint, separator }) => [title, hint ?? null, !!separator]);
 
@@ -47,6 +49,7 @@ test("frequent sites forget the whole site", () => {
 
 test("actions run their handlers with the row's URL", () => {
   calls.length = 0;
+
   for (const action of rowMenuActions(page(), false, [], handlers)) action.run();
   assert.deepEqual(calls, [
     ["choose", "https://x.com/", undefined],
@@ -69,6 +72,7 @@ test("emoji rows only copy the emoji, including from the new tab panel", () => {
   const emoji = { kind: "emoji", value: "👩🏽‍💻", name: "woman technologist: medium skin tone" };
   const chosen = [];
   const copyHandlers = { ...handlers, choose: (...args) => chosen.push(args) };
+
   for (const newTabPanel of [false, true]) {
     const actions = rowMenuActions(emoji, newTabPanel, [], copyHandlers);
     assert.deepEqual(summary(actions), [["Copy Emoji", "↩", false]]);
@@ -76,6 +80,7 @@ test("emoji rows only copy the emoji, including from the new tab panel", () => {
     actions[0].run();
     assert.equal(forgettable(emoji), false);
   }
+
   assert.deepEqual(chosen, [[emoji], [emoji]]);
 });
 

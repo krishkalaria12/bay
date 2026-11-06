@@ -27,6 +27,10 @@ export type AppIcon = { id: string; name: string; preview: string | null };
 
 export type NotificationPermission = "granted" | "denied" | "notDetermined" | "provisional";
 
+export type NotificationData = Record<string, string | number | boolean>;
+
+export type ScriptResult = Record<string, string | number | boolean | undefined>;
+
 export type NotificationOptions = {
   id?: string;
   title: string;
@@ -38,7 +42,7 @@ export type NotificationOptions = {
   windowId?: string;
   origin?: string;
   dismissible?: boolean;
-  data?: Record<string, unknown>;
+  data?: NotificationData;
 };
 
 export type NotificationResponse = {
@@ -134,7 +138,7 @@ type AppModule = {
   removeNotifications(ids: string[]): Promise<void>;
   openNotificationSettings(): Promise<void>;
   setScriptState(state: ScriptState): Promise<void>;
-  replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;
+  replyToScript(id: string, result: ScriptResult | null, error: string | null): Promise<void>;
   systemInfo(): SystemInfo;
   openExternalURL(url: string): Promise<boolean>;
   launchEnvironment(name: string): string | null;
@@ -163,6 +167,7 @@ export const disintegrate = (windowId: string, rects: { x: number; y: number; wi
     windowId,
     rects.map((r) => [r.x, r.y, r.width, r.height]),
   );
+
 export const onUpdatePending = (listener: (pending: PendingUpdate | null) => void) => App.addListener("onUpdatePending", (e) => listener(e.pending ?? null));
 export const setAutomaticUpdateChecks = (on: boolean) => App.setAutomaticUpdateChecks(on);
 export const setAutomaticUpdateDownloads = (on: boolean) => App.setAutomaticUpdateDownloads(on);
@@ -190,11 +195,12 @@ export const openNotificationSettings = () => App.openNotificationSettings();
 export const onNotificationResponse = (listener: (e: NotificationResponse) => void) => App.addListener("onNotificationResponse", listener);
 
 export const setScriptState = (state: ScriptState) => App.setScriptState(state);
-export const replyToScript = (id: string, result: Record<string, unknown> | null, error: string | null = null) => App.replyToScript(id, result, error);
+export const replyToScript = (id: string, result: ScriptResult | null, error: string | null = null) => App.replyToScript(id, result, error);
 export const onScriptCommand = (listener: (e: ScriptCommand) => void) => App.addListener("onScriptCommand", listener);
 
 export const systemInfo = () => App.systemInfo();
 export const openExternalURL = (url: string) => App.openExternalURL(url);
+
 export type IntroMusicCues = {
   icon: number;
   letters: number;
@@ -204,16 +210,21 @@ export type IntroMusicCues = {
   exit: number;
   end: number;
 };
+
 export const playIntroMusic = (cues: IntroMusicCues, muted: boolean) => void App.playIntroMusic(cues, muted);
 export const setIntroMusicMuted = (muted: boolean) => void App.setIntroMusicMuted(muted);
 export const stopIntroMusic = (fade = 0.4) => void App.stopIntroMusic(fade);
 export const devRenderIntroMusic = (cues: IntroMusicCues, path: string) => App.devRenderIntroMusic(cues, path);
 export const launchEnvironment = (name: string) => App.launchEnvironment(name);
 export const devRunAppleScript = (source: string) => App.devRunAppleScript(source);
+
 export const devSnapshotWindow = (windowId: string, path: string, transparent = false) =>
   transparent ? App.devSnapshotWindow(windowId, path, true) : App.devSnapshotWindow(windowId, path);
+
 export type KeyTiming = { due: number; handled: number; drawn: number };
+
 export const devTypeKeys = (windowId: string, text: string, interval: number) => App.devTypeKeys(windowId, text, interval);
+
 export type KeyPress = {
   key: string;
   keyCode: number;
@@ -225,6 +236,7 @@ export type KeyPress = {
   wait?: number;
   dry?: boolean;
 };
+
 export type KeyPressResult = {
   handledBy?: "page" | "window" | "menu" | "none";
   firstResponder?: string;
@@ -232,5 +244,6 @@ export type KeyPressResult = {
   matched?: { title: string; action: string; command?: string; arg?: string; enabled: boolean }[];
   error?: string;
 };
+
 export const devKeyEquivalent = (windowId: string, press: KeyPress): Promise<KeyPressResult> => App.devKeyEquivalent(windowId, press);
 export const devMenuCommand = (command: string, arg: string | null = null) => App.devMenuCommand(command, arg);

@@ -39,6 +39,7 @@ import { basename, join, resolve } from "node:path";
 import { X509Certificate, createHash, createSign, generateKeyPairSync } from "node:crypto";
 import { brotliCompressSync, crc32, deflateSync, gzipSync, inflateSync } from "node:zlib";
 import { attach as attachInstance, launch as launchInstance, onScreenWindows as windowsOf, reporter, sleep } from "../../../scripts/lib/instance.mjs";
+import * as v from "valibot";
 
 // MARK: What each check needs
 
@@ -120,6 +121,7 @@ const usesPageA = [
   "title-bar-close",
   "last-used-profile",
 ];
+
 const needs = {
   ...Object.fromEntries(
     [
@@ -147,55 +149,71 @@ const needs = {
   // Personal set its cookie and the window showed Play when the app quit.
   "relaunch-profile": ["last-used-profile", "quit"],
 };
+
 // Every check's name and section, from this file's source (no app needed).
 function checkIndex() {
   let section = "Checks";
   const index = [];
+
   for (const line of readFileSync(new URL(import.meta.url), "utf8").split("\n")) {
     const mark = /^\s*\/\/ MARK: (.*)$/.exec(line)?.[1];
+
     if (mark) section = mark.replace(/ \(.*$/, "");
     const name = /^\s*await (?:check|mediaCheck)\("([a-z0-9-]+)"/.exec(line)?.[1];
+
     if (name) index.push({ name, section });
   }
+
   return index;
 }
+
 function listChecks() {
   const index = checkIndex();
   const width = Math.max(...index.map((c) => c.name.length));
+
   for (const { name, section } of index) console.log(`${name.padEnd(width)}  ${section.padEnd(28)}  ${(needs[name] ?? []).join(", ")}`);
   console.log(`${index.length} checks (name, section, needs). Every run starts with boot.`);
   process.exit(0);
 }
+
 // The checks a run runs: those asked for, the ones they need, and boot.
 function selection(asked) {
   const index = checkIndex().map((c) => c.name);
   const unknown = asked.filter((n) => !index.includes(n));
+
   if (unknown.length) {
     console.error(`no such check: ${unknown.join(", ")} (--list shows them)`);
     process.exit(64);
   }
+
   if (!asked.length) return { run: new Set(index), deps: new Map() };
   const run = new Set(["boot", ...asked]);
   const deps = new Map(); // dependency → the asked checks that need it
+
   const add = (name, by) => {
     for (const dep of needs[name] ?? []) {
       if (!asked.includes(dep)) deps.set(dep, [...(deps.get(dep) ?? []), by]);
+
       if (!run.has(dep)) {
         run.add(dep);
         add(dep, by);
       }
     }
   };
+
   for (const name of asked) add(name, name);
+
   return { run, deps };
 }
 
 const argv = process.argv.slice(2);
 const flag = (name) => (argv.includes(name) ? (argv.splice(argv.indexOf(name), 1), true) : false);
+
 if (flag("--help") || flag("-h")) {
   const lines = readFileSync(new URL(import.meta.url), "utf8")
     .split("\n")
     .slice(1);
+
   console.log(
     lines
       .slice(
@@ -207,13 +225,19 @@ if (flag("--help") || flag("-h")) {
   );
   process.exit(0);
 }
+
 if (flag("--list")) listChecks();
+
 const attaching = argv[0] === "--attach";
+
 if (attaching) argv.shift();
+
 const keep = flag("--keep") || attaching;
+
 // With --attach the scratch dir comes first and the app is the kept instance's. --keep reuses a kept instance of the
 // same app (another build's is quit first: a cold run then starts on that data dir).
 let kept = null;
+
 if (attaching || keep) {
   try {
     kept = attachInstance(join(resolve(argv[attaching ? 0 : 1] ?? "."), "data"));
@@ -223,33 +247,44 @@ if (attaching || keep) {
       process.exit(66);
     }
   }
+
   if (kept && !attaching && kept.app !== resolve(argv[0])) {
     await kept.quit();
     kept = null;
   }
 }
+
 const [appArg, scratchArg, ...only] = attaching ? [kept.app, ...argv] : argv;
 const { run: selected, deps } = selection(only);
+
 if (!appArg || !scratchArg) {
   console.error("usage: acceptance.mjs <Bay.app> <scratch dir> [--keep] [check…] | --attach <scratch dir> [check…] | --list | --help");
   process.exit(64);
 }
+
 const app = resolve(appArg);
+
 mkdirSync(resolve(scratchArg), { recursive: true });
+
 // Real, so a copied app's path matches the path its process reports (/tmp is a link to /private/tmp).
 const scratch = realpathSync(resolve(scratchArg));
 const data = join(scratch, "data");
 let port;
 const downloadsDir = join(scratch, "downloads");
+
 // BAY_TRAFFIC_LIGHTS_LOG (every launch): each change to a window's buttons and each AppKit layout pass of them.
 // A kept instance keeps writing to its file (checks read what's added after they start).
 const lightsLog = join(scratch, "traffic-lights.log");
+
 if (!kept) {
   rmSync(lightsLog, { force: true });
   rmSync(data, { recursive: true, force: true });
 }
+
 rmSync(downloadsDir, { recursive: true, force: true });
+
 mkdirSync(downloadsDir, { recursive: true });
+
 mkdirSync(data, { recursive: true });
 
 const results = [];
@@ -261,46 +296,62 @@ const stamp = () => new Date().toISOString().slice(11, 23);
 
 // Requests that reached a host other than the fixture's own (the ad hosts mapped here, content-blocker-blocks).
 const adServed = [];
+
 // Every request's path and query, counted (js-reload-keeps-pages: a page loaded once).
 const served = new Map();
+
 // Responses held until the cookie regression has written an unrelated allowed cookie.
 const heldCookieResponses = new Map();
 const cookieEchoes = new Map();
+
 const server = createServer((req, res) => {
   if (!req.headers.host?.startsWith("127.0.0.1")) adServed.push(`${req.headers.host}${req.url}`);
   served.set(req.url, (served.get(req.url) ?? 0) + 1);
   const url = new URL(req.url, "http://x");
+
   const page = (title, body, extra = "") =>
     `<!doctype html><html><head><title>${title}</title><link rel="icon" href="/icon.png">${extra}</head><body>${body}</body></html>`;
+
   if (url.pathname === "/icon.png") {
     // A 1×1 red PNG.
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64");
     res.writeHead(200, { "content-type": "image/png" });
+
     return res.end(png);
   }
+
   if (url.pathname === "/redirect-ad") {
     res.writeHead(302, { location: `http://ib.adnxs.com/ut/v3${url.search}` });
+
     return res.end();
   }
+
   if (url.pathname.startsWith("/rewrite-chain-")) {
     res.setHeader("access-control-allow-origin", "*");
     res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
     res.setHeader("access-control-allow-headers", "authorization, content-type");
     res.setHeader("cache-control", "no-store");
+
     if (req.method === "OPTIONS") return res.end();
     const kind = url.searchParams.get("kind");
+
     if (url.pathname === "/rewrite-chain-start") {
       const destination =
         kind === "post-direct"
           ? `/rewrite-chain-echo?kind=${kind}&fbclid=tracker`
           : `http://pvpoke-re.com:${server.address().port}/rewrite-chain-middle?kind=${kind}`;
+
       res.writeHead(kind === "auth" ? 302 : 303, { location: destination });
+
       return res.end();
     }
+
     if (url.pathname === "/rewrite-chain-middle") {
       res.writeHead(307, { location: `/rewrite-chain-echo?kind=${kind}&fbclid=tracker` });
+
       return res.end();
     }
+
     if (url.pathname === "/rewrite-chain-echo") {
       const chunks = [];
       req.on("data", (chunk) => chunks.push(chunk));
@@ -316,78 +367,104 @@ const server = createServer((req, res) => {
           }),
         );
       });
+
       return;
     }
   }
+
   // The content blocker's body and header rules (content-blocker-rewrites).
   if (url.pathname === "/body-page") {
     const legacy = url.searchParams.get("charset") === "windows-1252";
+
     const html =
       `<!doctype html><html><head><title>Body kept</title><script>var adserverDomain = 1; document.title = "Body ad ran"</script>` +
       `<script>window.kept = "caf\u00e9"</script></head><body>text</body></html>`;
+
     const bytes = Buffer.from(html, legacy ? "latin1" : "utf8");
     const encoding = url.searchParams.get("encoding");
     const body = encoding === "gzip" ? gzipSync(bytes) : encoding === "br" ? brotliCompressSync(bytes) : bytes;
     res.writeHead(200, {
       "content-type": `text/html; charset=${legacy ? "windows-1252" : "utf-8"}`,
       "content-length": String(body.length),
-      ...(encoding ? { "content-encoding": encoding } : {}),
+      ...(encoding ? { "content-encoding": encoding } : undefined),
     });
+
     if (url.searchParams.has("chunks")) {
       res.write(body.subarray(0, 20));
+
       return setTimeout(() => res.end(body.subarray(20)), 200);
     }
+
     return res.end(body);
   }
+
   if (url.pathname === "/body.js") {
     res.writeHead(200, { "content-type": "text/javascript", "access-control-allow-origin": "*" });
+
     return res.end(`try{GameMaster.load()}catch(e){}`);
   }
+
   if (url.pathname === "/body-big.js") {
     res.writeHead(200, { "content-type": "text/javascript" });
     res.write(`try{GameMaster.load()}catch(e){}`);
+
     return res.end(Buffer.alloc(11 * 1024 * 1024, "/"));
   }
+
   if (url.pathname === "/body-stream.js") {
     // Never ends: a stream's first event has to arrive by itself.
     res.writeHead(200, { "content-type": "text/event-stream" });
+
     return res.write(`data: try{GameMaster\n\n`);
   }
+
   if (url.pathname === "/location-redirect") {
     res.writeHead(302, { location: "/location-target", "content-type": "text/html" });
+
     return res.end();
   }
+
   if (url.pathname === "/set-cookie-page") {
     res.writeHead(200, { "content-type": "text/html", "set-cookie": `blocked=${url.search.slice(1)}; path=/` });
+
     return res.end("<!doctype html><title>Set cookie</title>");
   }
+
   if (url.pathname === "/cookie-write") {
     res.writeHead(200, {
       "content-type": "text/html",
       "cache-control": "no-store",
       "set-cookie": `${url.searchParams.get("name") ?? "session"}=${url.searchParams.get("value") ?? "kept"}; path=/`,
     });
+
     return res.end("<!doctype html><title>Cookie write</title>");
   }
+
   if (url.pathname === "/cookie-hold") {
     const token = url.searchParams.get("token");
     heldCookieResponses.set(token, res);
     res.on("close", () => {
       if (heldCookieResponses.get(token) === res) heldCookieResponses.delete(token);
     });
+
     return;
   }
+
   if (url.pathname === "/cookie-release") {
     const token = url.searchParams.get("token");
     const held = heldCookieResponses.get(token);
     heldCookieResponses.delete(token);
+
     if (held && !held.destroyed) {
       held.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
       held.end("released");
     }
+
     res.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
+
     return res.end("released");
   }
+
   if (url.pathname === "/cookie-redirect") {
     res.writeHead(302, {
       location: url.searchParams.get("to"),
@@ -396,8 +473,10 @@ const server = createServer((req, res) => {
       "access-control-allow-credentials": "true",
       "set-cookie": "redirected=blocked; path=/",
     });
+
     return res.end();
   }
+
   if (url.pathname === "/cookie-loop") {
     const host = req.headers.host.startsWith("streamin.me") ? "adpage.test" : "streamin.me";
     res.writeHead(302, {
@@ -405,10 +484,13 @@ const server = createServer((req, res) => {
       "cache-control": "no-store",
       "access-control-allow-origin": "*",
     });
+
     return res.end();
   }
+
   if (url.pathname === "/cookie-echo") {
     if (url.searchParams.has("taint")) cookieEchoes.set(url.searchParams.get("taint"), req.headers.cookie ?? "none");
+
     if (url.searchParams.has("origin")) {
       res.writeHead(200, {
         "content-type": "application/json",
@@ -416,25 +498,35 @@ const server = createServer((req, res) => {
         "access-control-allow-origin": req.headers.origin ?? "*",
         "access-control-allow-credentials": "true",
       });
+
       return res.end(
         JSON.stringify({ cookie: req.headers.cookie ?? null, origin: req.headers.origin ?? null, fetchSite: req.headers["sec-fetch-site"] ?? null }),
       );
     }
+
     res.writeHead(200, { "content-type": "text/plain", "access-control-allow-origin": "*" });
+
     return res.end(req.headers.cookie ?? "none");
   }
+
   if (url.pathname === "/worker-cookie") {
     res.writeHead(200, { "content-type": "text/html", "set-cookie": `tracked=doubleclick.net; path=/; secure; samesite=none` });
+
     return res.end("<!doctype html><title>Worker cookie</title>");
   }
+
   if (url.pathname === "/index.js") {
     res.writeHead(200, { "content-type": "text/javascript", "access-control-allow-origin": "*", "cache-control": "no-store" });
+
     return res.end(`window.workerScript = true;`);
   }
+
   if (url.pathname === "/file.bin") {
     res.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": 'attachment; filename="nncore-test.bin"' });
+
     return res.end(Buffer.alloc(64 * 1024, 7));
   }
+
   if (url.pathname === "/slow.bin") {
     // 2 MB over about 8 s, for pausing, resuming and cancelling a download that is still running.
     res.writeHead(200, {
@@ -443,28 +535,38 @@ const server = createServer((req, res) => {
       "content-disposition": 'attachment; filename="nncore-slow.bin"',
     });
     let sent = 0;
+
     const timer = setInterval(() => {
       if (res.destroyed || sent >= 40) {
         clearInterval(timer);
+
         if (!res.destroyed) res.end();
+
         return;
       }
+
       sent++;
       res.write(Buffer.alloc(50 * 1024, 3));
     }, 200);
+
     req.on("close", () => clearInterval(timer));
+
     return;
   }
+
   if (url.pathname === "/webstore/crx") {
     // The Web Store's update URL in this run (--apps-gallery-update-url): Chrome installs what it serves, as the .crx
     // of a Web Store install (extension-download-hidden).
     res.writeHead(200, { "content-type": "application/x-chrome-extension" });
+
     return res.end(fixtureCrx());
   }
+
   if (url.pathname === "/tone.wav") {
     // Six seconds of a quiet 440 Hz tone, past the page script's floor for now playing (the tab is muted while it plays).
     const rate = 8000,
       n = rate * 6;
+
     const wav = Buffer.alloc(44 + n * 2);
     wav.write("RIFF", 0);
     wav.writeUInt32LE(36 + n * 2, 4);
@@ -478,11 +580,15 @@ const server = createServer((req, res) => {
     wav.writeUInt16LE(16, 34);
     wav.write("data", 36);
     wav.writeUInt32LE(n * 2, 40);
+
     for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 3000), 44 + i * 2);
     res.writeHead(200, { "content-type": "audio/wav", "content-length": String(wav.length) });
+
     return res.end(wav);
   }
+
   res.writeHead(200, { "content-type": "text/html" });
+
   // Camera and microphone (fake devices only: every hidden instance gets --use-fake-device-for-media-stream). `ask(c)`
   // records the getUserMedia answer and the tracks' states; /element is the <usermedia> element (Chrome's embedded flow).
   if (url.pathname === "/cam")
@@ -502,6 +608,7 @@ const server = createServer((req, res) => {
     </script>`,
       ),
     );
+
   if (url.pathname === "/element")
     return res.end(
       page(
@@ -519,16 +626,20 @@ const server = createServer((req, res) => {
     </script>`,
       ),
     );
+
   if (url.pathname === "/blocking") return res.end(page("Blocking", `<img src="/nnblock-1.png"><img src="/nnblock-2.png"><img src="/icon.png">`));
+
   // A page whose own markup asks for ads as it loads, each request tagged with the page's query (the content
   // blocker's first page in a profile, a restored tab at launch).
   // The content blocker's scriptlet probe: uBO's unbreak list sets UOLPD on biologianet.com (mapped here), so a script
   // in the head sees it only if the blocker's scriptlets ran before the page's own first script.
   if (url.pathname === "/scriptlet-probe")
     return res.end(page("Scriptlet probe", "probe", `<script>document.title = "probe " + typeof window.UOLPD;</script>`));
+
   // The same probe in a srcdoc frame, which runs as its creator's origin: a known way around a blocker's scriptlets.
   if (url.pathname === "/scriptlet-srcdoc")
     return res.end(page("Srcdoc waiting", `<iframe srcdoc="<script>parent.document.title = 'srcdoc ' + typeof window.UOLPD;</script>"></iframe>`));
+
   // A worker the page starts: uBO's list has a $csp rule against them on leitor.net (mapped here), so the document's
   // response gets a policy that refuses it, and the page sees the violation.
   if (url.pathname === "/csp-probe")
@@ -543,10 +654,13 @@ const server = createServer((req, res) => {
       </script>`,
       ),
     );
+
   // A page linked with tracking parameters: the request records which reached the server.
   if (url.pathname === "/tracked") return res.end(page("Tracked", "tracked"));
+
   if (url.pathname === "/adfirst") {
     const tag = url.search.slice(1);
+
     return res.end(
       page(
         "Ad first",
@@ -556,6 +670,7 @@ const server = createServer((req, res) => {
       ),
     );
   }
+
   if (url.pathname === "/login")
     return res.end(
       page(
@@ -563,9 +678,12 @@ const server = createServer((req, res) => {
         `<form action="/b" method="get"><input name="u" id="u" autocomplete="username"><input type="password" name="p" id="p" autocomplete="current-password"><button id="go">Sign in</button></form>`,
       ),
     );
+
   if (url.pathname === "/text")
     return res.end(page("Text", `<p id="t" style="font: 20px sans-serif; margin: 40px">Hello selection world, select me please</p>`));
+
   if (url.pathname === "/capture-target") return res.end(page("Capture Target", "the tab that tab capture picks"));
+
   // One flat colour (?c=rrggbb), titled ?t: a captured tab whose frames say which tab they are.
   if (url.pathname === "/solid")
     return res.end(
@@ -575,6 +693,7 @@ const server = createServer((req, res) => {
         `<style>html, body { margin: 0; height: 100%; background: #${url.searchParams.get("c") ?? "808080"} }</style>`,
       ),
     );
+
   // A page that shares a tab (getDisplayMedia, the app's picker answers) and reads its stream's middle pixel.
   if (url.pathname === "/capturer")
     return res.end(
@@ -593,7 +712,9 @@ const server = createServer((req, res) => {
     </script>`,
       ),
     );
+
   if (url.pathname === "/media") return res.end(page("Media", `<audio id="tone" src="/tone.wav" loop></audio>`));
+
   // A form with one field Chrome remembers.
   if (url.pathname === "/form")
     return res.end(
@@ -602,6 +723,7 @@ const server = createServer((req, res) => {
         `<form action="/form" method="get" autocomplete="on"><input id="c" name="city" autocomplete="on" style="font-size: 20px; margin: 80px; width: 300px"><button id="b">go</button></form>`,
       ),
     );
+
   // A video drawn from a canvas (start(true) adds a WebAudio tone): Picture in Picture without a media file. With
   // ?docpip the page handles Media Session's "enterpictureinpicture" with a document Picture in Picture window.
   if (url.pathname === "/video")
@@ -639,10 +761,13 @@ const server = createServer((req, res) => {
     </script>`,
       ),
     );
+
   // An extension's rules on a page (content-blocked-count): an image they block, a script they send to a stand-in.
   if (url.pathname === "/nn-ads") return res.end(page("Ads", `<img src="/nnblock-ad.png"><script src="/nnredirect-ad.js"></script>`));
+
   if (url.pathname === "/a")
     return res.end(page("Page A", `<a id="next" href="/b">to B</a> <a id="blank" target="_blank" href="/c">blank</a> <a id="cmd" href="/d">cmd</a>`));
+
   // A page whose toolbar colour comes from the page script alone (a fixed header, no <meta name="theme-color">).
   if (url.pathname === "/red-header")
     return res.end(
@@ -651,15 +776,22 @@ const server = createServer((req, res) => {
         `<div style="position: fixed; top: 0; left: 0; right: 0; height: 60px; background: rgb(200, 0, 0)"></div><p style="margin-top: 80px">red</p>`,
       ),
     );
+
   if (url.pathname === "/painted") return res.end(page("Painted", "painted", "<style>html, body { background: rgb(60, 60, 60) }</style>"));
+
   if (url.pathname === "/b") return res.end(page("Page B", "B"));
+
   if (url.pathname === "/c") return res.end(page("Page C", "C"));
+
   if (url.pathname === "/d") return res.end(page("Page D", "D"));
+
   if (url.pathname === "/e") return res.end(page("Page E", "E"));
+
   if (url.pathname === "/cookie") return res.end(page("Cookie", `<script>document.cookie="who=" + location.search.slice(1) + "; path=/"</script>`));
   // Chrome's address and card forms (served over HTTPS too: Chrome offers to save cards from secure pages only). A
   // POST to /saved, so the values stay out of URLs; ?email adds an email field.
   const field = (id, autocomplete, label) => `<label>${label} <input id="${id}" name="${id}" autocomplete="${autocomplete}"></label><br>`;
+
   if (url.pathname === "/address")
     return res.end(
       page(
@@ -667,6 +799,7 @@ const server = createServer((req, res) => {
         `<form action="/saved" method="post">${field("name", "name", "Name")}${url.searchParams.has("email") ? field("email", "email", "Email") : ""}${field("street", "street-address", "Street")}${field("city", "address-level2", "City")}${field("state", "address-level1", "State")}${field("zip", "postal-code", "ZIP")}${field("country", "country-name", "Country")}<button id="go">Save</button></form>`,
       ),
     );
+
   if (url.pathname === "/card")
     return res.end(
       page(
@@ -674,30 +807,40 @@ const server = createServer((req, res) => {
         `<form action="/saved" method="post">${field("ccname", "cc-name", "Name on card")}${field("ccnumber", "cc-number", "Number")}${field("ccmonth", "cc-exp-month", "Month")}${field("ccyear", "cc-exp-year", "Year")}<button id="go">Pay</button></form>`,
       ),
     );
+
   if (url.pathname === "/saved") {
     req.resume();
+
     return res.end(page("Saved", "saved"));
   }
+
   return res.end(page(url.pathname, url.pathname));
 });
+
 // Record WebSocket handshakes independently from ordinary HTTP requests. An allowed handshake reaches this fixture;
 // blocked handshakes must fail before the server sees them. No real WebSocket peer or external network is needed.
 server.on("upgrade", (req, socket) => {
   adServed.push(`${req.headers.host}${req.url}`);
   socket.end("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
 });
+
 // A kept instance's switches name the fixture's ports (host rules, the Web Store URL): the same ports again.
 const listen = (srv, at) =>
   new Promise((r, j) => {
     srv.once("error", (e) => j(new Error(`fixture port ${at}: ${e.message} (the kept instance needs it back; quit it and run without --attach)`)));
     srv.listen(at, "127.0.0.1", r);
   });
+
 await listen(server, kept?.meta.http ?? 0);
+
 const base = `http://127.0.0.1:${server.address().port}`;
+
 // The same pages over HTTPS, with a certificate made for this run that only this run's instances trust
 // (--ignore-certificate-errors-spki-list: Chrome then treats the page as secure, as the autofill checks need).
 const tlsDir = join(scratch, "tls");
+
 mkdirSync(tlsDir, { recursive: true });
+
 if (!kept || !existsSync(join(tlsDir, "cert.pem")))
   execFileSync(
     "openssl",
@@ -720,10 +863,14 @@ if (!kept || !existsSync(join(tlsDir, "cert.pem")))
     ],
     { stdio: "ignore" },
   );
+
 const tlsCert = readFileSync(join(tlsDir, "cert.pem"));
 const tlsServer = createHttpsServer({ key: readFileSync(join(tlsDir, "key.pem")), cert: tlsCert }, (req, res) => server.emit("request", req, res));
+
 await listen(tlsServer, kept?.meta.https ?? 0);
+
 const secureBase = `https://127.0.0.1:${tlsServer.address().port}`;
+
 const tlsSpki = createHash("sha256")
   .update(new X509Certificate(tlsCert).publicKey.export({ type: "spki", format: "der" }))
   .digest("base64");
@@ -739,12 +886,15 @@ let exe,
   child,
   launchedAt,
   exited = null;
+
 let instance = null;
+
 // Cast without network devices: the engine's test sink, and Chrome's own Cast/DIAL discovery off (on a Mac it can
 // raise the Local Network prompt). A Bluetooth chooser without an adapter (no Bluetooth permission prompt). Passed with
 // the other test switches below.
 process.env.BAY_CHROMIUM_SWITCHES =
   `--bay-test-media-route-provider --disable-media-route-providers-for-test --bay-test-bluetooth-chooser ${process.env.BAY_CHROMIUM_SWITCHES ?? ""}`.trim();
+
 // The content blocker's check: ad hosts (and a site to allow) answered by the fixture server, never the network.
 process.env.BAY_CHROMIUM_SWITCHES += ` --host-resolver-rules=${[
   "ib.adnxs.com",
@@ -765,10 +915,13 @@ process.env.BAY_CHROMIUM_SWITCHES += ` --host-resolver-rules=${[
   .map((host) => `MAP ${host} 127.0.0.1:${server.address().port}`)
   .concat(["blocker-cookie.workers.dev", "tls.skidrowreloaded.com"].map((host) => `MAP ${host} 127.0.0.1:${tlsServer.address().port}`))
   .join(", ")}`;
+
 // The Web Store's update URL: a .crx downloaded from it is a Web Store install's (extension-download-hidden).
 process.env.BAY_CHROMIUM_SWITCHES += ` --apps-gallery-update-url=${base}/webstore/crx`;
+
 // The HTTPS fixture's certificate (autofill-save-prompts).
 process.env.BAY_CHROMIUM_SWITCHES += ` --ignore-certificate-errors-spki-list=${tlsSpki}`;
+
 // Starts the app on the run's data dir (again for the relaunch checks), with a fresh DevTools port. `opts.app` runs
 // another bundle (the media checks' copy), `opts.switches` adds Chromium switches. The pid is the DevTools port's
 // listener, checked against the bundle's binary (scripts/lib/instance.mjs): never another run's instance.
@@ -782,7 +935,7 @@ async function launch(logName = "app.out.log", env = {}, args = [], opts = {}) {
       BAY_TEST_REAUTH: "granted",
       BAY_DOWNLOADS_DIR: downloadsDir,
       // Passed through for experiments (e.g. BAY_ALLOW_OCCLUSION=1).
-      ...Object.fromEntries(["BAY_ALLOW_OCCLUSION", "BAY_TRACE_VISIBILITY", "BAY_TRACE_PIP"].filter((k) => process.env[k]).map((k) => [k, process.env[k]])),
+      ...Object.fromEntries(["BAY_ALLOW_OCCLUSION", "BAY_TRACE_VISIBILITY", "BAY_TRACE_PIP"].flatMap((k) => (process.env[k] ? [[k, process.env[k]]] : []))),
       BAY_TRAFFIC_LIGHTS_LOG: lightsLog,
       ...env,
     },
@@ -794,6 +947,7 @@ async function launch(logName = "app.out.log", env = {}, args = [], opts = {}) {
   });
   adopt(instance);
 }
+
 // The globals the checks use, from a launched or kept instance.
 function adopt(i) {
   instance = i;
@@ -811,23 +965,29 @@ function adopt(i) {
   exited = null;
   writeFileSync(join(scratch, "app.pid"), String(own));
 }
+
 if (kept) adopt(kept);
 else await launch();
+
 const alive = () => {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
   }
 };
+
 setInterval(() => {
   if (!exited && !alive()) exited = { pid };
 }, 300).unref();
+
 const appLog = { join: () => (existsSync(stdout) ? readFileSync(stdout, "utf8") : "") };
 
 async function evalApp(body, timeoutMs = 20000) {
   if (exited) throw new Error(`app exited ${JSON.stringify(exited)}`);
+
   try {
     return await instance.eval(body, { timeout: timeoutMs });
   } catch (e) {
@@ -839,34 +999,44 @@ async function evalApp(body, timeoutMs = 20000) {
 async function until(what, fn, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   let last;
+
   while (Date.now() < deadline) {
     last = await fn();
+
     if (last) return last;
     await sleep(200);
   }
+
   throw new Error(`timed out waiting for ${what} (last: ${JSON.stringify(last)})`);
 }
 
 async function targets() {
   const res = await fetch(`http://127.0.0.1:${port}/json/list`);
+
   return res.json();
 }
 
 async function cdp(target, method, params = {}) {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = () => j(new Error(`DevTools connection to ${target.url} failed (${method})`)))));
+
   const reply = new Promise((r) => {
     ws.onmessage = (m) => {
       const msg = JSON.parse(m.data);
+
       if (msg.id === 1) r(msg);
     };
+
     // The target went (its page closed) with the call unanswered: say so now rather than wait out the 10 s.
     ws.onclose = () => r({ error: `the target closed before replying (${method})` });
   });
+
   ws.send(JSON.stringify({ id: 1, method, params }));
   const msg = await Promise.race([reply, sleep(10000).then(() => ({ error: "cdp timeout" }))]);
   ws.close();
+
   if (msg.error) throw new Error(JSON.stringify(msg.error));
+
   return msg.result;
 }
 
@@ -876,22 +1046,30 @@ function firstPixel(base64) {
   const png = Buffer.from(base64, "base64");
   let ihdr = null;
   const idat = [];
+
   for (let off = 8; off < png.length;) {
     const len = png.readUInt32BE(off),
       type = png.toString("latin1", off + 4, off + 8);
+
     if (type === "IHDR") ihdr = png.subarray(off + 8, off + 8 + len);
+
     if (type === "IDAT") idat.push(png.subarray(off + 8, off + 8 + len));
+
     if (type === "IEND") break;
     off += 12 + len;
   }
+
   const depth = ihdr[8],
     channels = { 2: 3, 6: 4 }[ihdr[9]];
+
   if (depth !== 8 || !channels) throw new Error(`PNG depth ${depth}, color type ${ihdr[9]}`);
   const px = inflateSync(Buffer.concat(idat)).subarray(1, 1 + channels);
+
   return [px[0], px[1], px[2], channels === 4 ? px[3] : 255];
 }
 
 const pageTarget = async (urlPart) => (await targets()).find((t) => t.type === "page" && t.url.includes(urlPart));
+
 // A page's window.close(), a turn after DevTools' reply. Closed inside the evaluate, the page asks to close (its frame's
 // pipe, RequestClose) right behind the reply (the DevTools session's pipe): Mojo doesn't order the two, and when the
 // close comes first Chrome closes the tab at once (the renderer already ran unload) and the queued reply is dropped,
@@ -899,12 +1077,15 @@ const pageTarget = async (urlPart) => (await targets()).find((t) => t.type === "
 const closeFromPage = (target) => cdp(target, "Runtime.evaluate", { expression: "setTimeout(() => window.close()); true" });
 const cef = (call) => evalApp(`return globalThis.expo.modules.BayCEF.${call}`);
 const exts = (call) => evalApp(`return globalThis.expo.modules.BayExtensions.${call}`);
+
 // Written into the scratch dir: the app reading the checkout under ~/Documents would raise macOS's folder-access
 // prompt (and block the main thread on it) for every re-signed build.
 const extPath = join(scratch, "fixture-ext");
+
 function writeFixtureExtension() {
   rmSync(extPath, { recursive: true, force: true });
   mkdirSync(extPath, { recursive: true });
+
   const files = {
     "manifest.json": JSON.stringify({
       manifest_version: 3,
@@ -927,16 +1108,21 @@ function writeFixtureExtension() {
     ]),
     "worker.js": "",
   };
+
   for (const [name, text] of Object.entries(files)) writeFileSync(join(extPath, name), text);
 }
+
 writeFixtureExtension();
+
 // An extension made here (no Web Store): an action popup; rules that block /nnblock-* and send /nnredirect-* to its
 // stand-in script; an options page; with `welcome`, a worker that opens a tab when installed, as Dark Reader opens its
 // help page.
 const extPopupPath = join(scratch, "fixture-ext-popup");
+
 function writePopupExtension({ welcome = false } = {}) {
   rmSync(extPopupPath, { recursive: true, force: true });
   mkdirSync(extPopupPath, { recursive: true });
+
   const files = {
     "manifest.json": JSON.stringify({
       manifest_version: 3,
@@ -966,20 +1152,27 @@ function writePopupExtension({ welcome = false } = {}) {
       },
     ]),
   };
+
   for (const [name, text] of Object.entries(files)) writeFileSync(join(extPopupPath, name), text);
 }
+
 // A signed CRX3 of a one-file extension: a store-only zip, one RSA proof over its signed data and the archive.
 let crxCache = null;
+
 function fixtureCrx() {
   if (crxCache) return crxCache;
   const files = { "manifest.json": JSON.stringify({ manifest_version: 3, name: "NNCore crx fixture", version: "1.0" }) };
+
   const locals = [],
     centrals = [];
+
   let offset = 0;
+
   for (const [name, text] of Object.entries(files)) {
     const data = Buffer.from(text),
       nameBytes = Buffer.from(name),
       sum = crc32(data);
+
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
@@ -1000,9 +1193,11 @@ function fixtureCrx() {
     centrals.push(central, nameBytes);
     offset += local.length + nameBytes.length + data.length;
   }
+
   const directory = Buffer.concat(centrals),
     end = Buffer.alloc(22),
     count = Object.keys(files).length;
+
   end.writeUInt32LE(0x06054b50, 0);
   end.writeUInt16LE(count, 8);
   end.writeUInt16LE(count, 10);
@@ -1011,56 +1206,76 @@ function fixtureCrx() {
   const zip = Buffer.concat([...locals, directory, end]);
   const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const der = publicKey.export({ type: "spki", format: "der" });
+
   const varint = (n) => {
     const out = [];
+
     while (n > 127) {
       out.push((n & 127) | 128);
       n = Math.floor(n / 128);
     }
+
     out.push(n);
+
     return Buffer.from(out);
   };
+
   const field = (number, bytes) => Buffer.concat([varint(number * 8 + 2), varint(bytes.length), bytes]);
   const signedData = field(1, createHash("sha256").update(der).digest().subarray(0, 16));
   const size = Buffer.alloc(4);
   size.writeUInt32LE(signedData.length);
+
   const signature = createSign("sha256")
     .update(Buffer.concat([Buffer.from("CRX3 SignedData\x00", "latin1"), size, signedData, zip]))
     .sign(privateKey);
+
   const header = Buffer.concat([field(2, Buffer.concat([field(1, der), field(2, signature)])), field(10000, signedData)]);
   const prefix = Buffer.alloc(12);
   prefix.write("Cr24", 0, "latin1");
   prefix.writeUInt32LE(3, 4);
   prefix.writeUInt32LE(header.length, 8);
+
   return (crxCache = Buffer.concat([prefix, header, zip]));
 }
+
 // The app's windows on screen (CoreGraphics' window numbers).
 const onScreenWindows = () => windowsOf(pid);
+
 // The module's browser id of an app tab.
 const browserOf = (tabId) =>
   evalApp(`return nn.pageState.getState().browsers ? Object.entries(nn.pageState.getState().browsers).find(([, t]) => t === "${tabId}")?.[0] ?? null : null`);
+
 // The DevTools target of one app tab (several tabs can show the same URL): marked through the app, then found.
 async function pageFor(tabId, urlPart) {
   const candidates = (await targets()).filter((t) => t.type === "page" && t.url.includes(urlPart));
+
   if (candidates.length <= 1) return candidates[0];
   await evalApp(`return nn.webviews.get(${JSON.stringify(tabId)})?.executeJavaScript(${JSON.stringify(`window.__nnTab = ${JSON.stringify(tabId)}`)})`);
   await sleep(200);
+
   for (const t of candidates) {
     const r = await cdp(t, "Runtime.evaluate", { expression: "String(window.__nnTab)", returnByValue: true }).catch(() => null);
+
     if (r?.result?.value === tabId) return t;
   }
+
   return candidates[0];
 }
+
 // The window the run works in: the first one, then the one its first tab is in.
 let mainWindow = null;
 let first;
+
 // Personal's profile id, from last-used-profile (relaunch-profile switches back to it).
 let personal = null;
+
 // The dev event log (NNCoreWebView's devEvents) of an app tab.
 const eventsOf = async (tabId) => {
   const browser = await browserOf(tabId);
+
   return browser ? evalApp(`return globalThis.expo.modules.BayCEF.devEvents(${browser})`) : [];
 };
+
 const state = () =>
   evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(mainWindow)}] ?? Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small").sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))[0];
     const key = w?.kind === "small" ? w.id : w?.spaceId;
@@ -1072,6 +1287,7 @@ const state = () =>
 // the tab it shows. Windows on a space share its list, so "the window's tab" is the shown one.
 const windowTabsJs = (w) =>
   `(() => { const s = nn.store.getState(); const w = s.windows[${w}]; return w ? (s.tabLists[w.kind === "small" ? w.id : w.spaceId] ?? []).filter((id) => s.tabs[id]?.spaceId === w.spaceId) : []; })()`;
+
 const shownTabJs = (w) => `(() => { const w = nn.store.getState().windows[${w}]; return w?.activeTabIds[w.spaceId] ?? null; })()`;
 
 // A tab of the main window at `url`, loaded; foreground or behind.
@@ -1079,18 +1295,23 @@ const openTab = async (url, title, background = false) => {
   const before = new Set((await state()).tabs.map((t) => t.id));
   await evalApp(`nn.actions.openUrls([${JSON.stringify(url)}], ${JSON.stringify(mainWindow)}); return true`);
   const tab = await until(`a tab for ${url}`, async () => (await state()).tabs.find((t) => !before.has(t.id) && t.title === title && !t.loading), 15000);
+
   if (background) {
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await until("A shown", async () => (await state()).active === first.id);
   }
+
   return tab;
 };
+
 const closeTab = (id) => evalApp(`nn.store.getState().closeTab("${id}"); return true`);
+
 // A tab's WebView is mounted (a background or restored tab mounts when shown).
 const shownAndMounted = async (id) => {
   await evalApp(`nn.actions.switchToTab(${JSON.stringify(id)}); return true`);
   await until(`${id}'s WebView`, () => evalApp(`return !!nn.webviews.get(${JSON.stringify(id)})`), 15000);
 };
+
 // A new foreground tab on `url` in the run's window, mounted and loaded (for checks after move-tab-to-window took
 // the first tab to a window of its own).
 const freshTab = async (url) => {
@@ -1099,34 +1320,42 @@ const freshTab = async (url) => {
   await until(`${url} loaded`, () =>
     evalApp(`const s = nn.store.getState(); return s.tabs[${JSON.stringify(id)}]?.url && !s.live[${JSON.stringify(id)}]?.isLoading ? true : null`),
   );
+
   return id;
 };
+
 const backToA = async () => {
   await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/a", { userInitiated: true }); return true`);
   await until("A again", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Page A" && !t.loading));
   await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
 };
+
 // The last event of a kind an app tab sent, and the app's own media state for it.
 const lastEvent = async (tabId, name, test = () => true) => (await eventsOf(tabId)).findLast((x) => x.name === name && test(x.payload ?? {})) ?? null;
 const live = (tabId) => evalApp(`return nn.store.getState().live["${tabId}"] ?? null`);
 const pipWindows = () => cef(`devPictureInPicture()`).catch(() => null);
+
 const startVideo = async (tabId, audio) => {
   const t = await pageFor(tabId, `${base}/video`);
   const r = await cdp(t, "Runtime.evaluate", { expression: `start(${audio})`, awaitPromise: true, userGesture: true, returnByValue: true });
+
   if (r.result?.value !== "ok") throw new Error(`the video didn't play: ${JSON.stringify(r.result ?? r)}`);
   await until(
     "the video's first frames",
     async () => (await cdp(t, "Runtime.evaluate", { expression: "document.getElementById('v').videoWidth", returnByValue: true })).result?.value > 0,
     8000,
   );
+
   return t;
 };
+
 // Quits the app (the quit Apple event, then signals: scripts/lib/instance.mjs) before a check starts it again.
 const stopApp = async () => {
   if (!exited) await instance.quit();
   await until("the app to exit", async () => exited || !alive(), 5000);
   exited ??= { pid }; // at once, not at the next 300 ms poll: appUp relaunches on it
 };
+
 // Starts the app on the run's data dir when it isn't running (the quit checks), and waits for its window.
 const appUp = async (logName) => {
   if (exited) await launch(logName);
@@ -1137,12 +1366,14 @@ const appUp = async (logName) => {
         return await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`, 3000);
       } catch (e) {
         if (exited) throw e;
+
         return null;
       }
     },
     90000,
   );
   mainWindow = null;
+
   return (mainWindow = await until("a window", async () => (await state()).windowId, 30000));
 };
 
@@ -1150,18 +1381,23 @@ const appUp = async (logName) => {
 // connection, each change logged with the time and the check running (the app logs its side as [nncore-vis]).
 let currentCheck = "";
 let visibilityWatch = null;
+
 function watchVisibility(target) {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
+
   let last = null,
     seq = 0;
+
   ws.onmessage = (m) => {
     const msg = JSON.parse(m.data);
     const value = msg.result?.result?.value;
+
     if (value && value !== last) {
       log(`  [vis ${stamp()}] ${last ?? "-"} → ${value} during ${currentCheck}`);
       last = value;
     }
   };
+
   const timer = setInterval(() => {
     if (ws.readyState === 1)
       ws.send(
@@ -1172,10 +1408,12 @@ function watchVisibility(target) {
         }),
       );
   }, 250);
+
   ws.onclose = () => clearInterval(timer);
   visibilityWatch = {
     stop: () => {
       clearInterval(timer);
+
       try {
         ws.close();
       } catch {}
@@ -1185,13 +1423,16 @@ function watchVisibility(target) {
 
 // What a kept instance already has: boot's window, open-url's page A (wherever it is now).
 const recovered = new Set();
+
 async function recoverKept() {
   await until("the kept instance's dev harness", () => evalApp("return true", 3000).catch(() => null), 30000);
   mainWindow = (await state()).windowId;
   recovered.add("boot");
+
   const a = await evalApp(`const s = nn.store.getState(); const ids = [...${windowTabsJs(JSON.stringify(mainWindow))}, ...Object.keys(s.tabs)];
     const id = ids.find((i) => s.tabs[i]?.url?.startsWith(${JSON.stringify(`${base}/a`)}) && s.tabs[i]?.title === "Page A");
     return id ? { id, url: s.tabs[id].url, title: "Page A" } : null`);
+
   if (a) {
     first = a;
     recovered.add("open-url");
@@ -1200,9 +1441,12 @@ async function recoverKept() {
 
 async function check(name, fn) {
   if (!selected.has(name)) return;
+
   if ((process.env.SKIP ?? "").split(",").includes(name)) return;
+
   if (recovered.has(name)) return;
   currentCheck = name;
+
   if (process.env.BAY_TRACE_VISIBILITY) log(`  [check ${stamp()}] ${name}`);
   const started = Date.now();
   await report.check(
@@ -1210,16 +1454,20 @@ async function check(name, fn) {
     async () => {
       const evidence = await fn();
       results.push({ name, ok: true, evidence, ms: Date.now() - started });
+
       return evidence;
     },
     {
       async onFail(e) {
         let snapshot = null;
+
         try {
           snapshot = await state();
         } catch {}
+
         results.push({ name, ok: false, error: String(e?.message ?? e), state: snapshot, ms: Date.now() - started });
         log(`state: ${JSON.stringify(snapshot)}`);
+
         if (first)
           try {
             log(`events of ${first.id}: ${JSON.stringify((await eventsOf(first.id)).slice(-12))}`);
@@ -1233,8 +1481,10 @@ async function check(name, fn) {
 
 try {
   if (kept) await recoverKept();
+
   if (kept) report.say(`attached to pid ${pid}${recovered.size ? ` (has ${[...recovered].join(", ")})` : ""}`);
   const running = [...deps.keys()].filter((dep) => !recovered.has(dep));
+
   if (running.length) report.say(`first, as ${[...new Set(running.flatMap((d) => deps.get(d)))].join(", ")} need: ${running.join(", ")}`);
   // MARK: Windows, tabs and navigation
 
@@ -1246,21 +1496,26 @@ try {
           return await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`, 3000);
         } catch (e) {
           if (exited) throw e;
+
           return null;
         }
       },
       90000,
     );
+
     if (info.engine !== "nncore") throw new Error(`engine ${info.engine}`);
     const s = await until("a window", async () => ((await state()).windowId ? state() : null), 30000);
     const front = execFileSync("lsappinfo", ["front"]).toString();
     const asn = execFileSync("lsappinfo", ["info", "-only", "pid", front.trim()]).toString();
+
     if (asn.includes(`=${child.pid}`)) throw new Error("the app took focus");
     mainWindow = s.windowId;
     // One JS runtime: a second one (the launch callbacks sent twice) makes a second window with its own id prefix.
     await sleep(2000);
     const native = await evalApp(`return nn.shell.windowIds()`);
+
     if (native.length !== 1) throw new Error(`windows ${JSON.stringify(native)} (a second JS runtime?)`);
+
     return { chromium: info.chromiumVersion, windows: s.windows, tabs: s.tabs.length, pid: child.pid };
   });
 
@@ -1272,8 +1527,10 @@ try {
     const home = (await state()).windowId;
     const titles = (w) => evalApp(`const s = nn.store.getState(); return ${windowTabsJs(JSON.stringify(w))}.map((i) => s.tabs[i]?.title)`);
     const shows = (w, title) => until(`${title} in ${w}`, async () => ((await titles(w)).includes(title) ? true : null), 15000);
+
     const cookie = async (urlPart) =>
       (await cdp(await until(urlPart, () => pageTarget(urlPart)), "Runtime.evaluate", { expression: "document.cookie", returnByValue: true })).result.value;
+
     const open = (o) => evalApp(`return nn.actions.openWindow(${JSON.stringify(o)})`);
     const close = (w) => evalApp(`nn.store.getState().closeWindow(${JSON.stringify(w)}); return true`);
     const personalTab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(home)}, { url: "${base}/cookie?personal" })`);
@@ -1282,11 +1539,13 @@ try {
     // Private windows.
     const p1 = await open({ incognito: true, url: `${base}/cookie?private1` });
     await shows(p1, "Cookie");
+
     if ((await cookie("/cookie?private1")).includes("personal")) throw new Error("a private window sees Personal's cookie");
     await close(p1);
     const p2 = await open({ incognito: true, url: `${base}/b?private2` });
     await shows(p2, "Page B");
     steps.push("private, reopened at once");
+
     if ((await cookie("/b?private2")).includes("personal")) throw new Error("the reopened private window sees Personal's cookie");
     // Its last tab closed (Chrome closes its Browser), then a new tab in the same window.
     await evalApp(`const s = nn.store.getState(); s.closeTabs(${windowTabsJs(JSON.stringify(p2))}); return true`);
@@ -1299,20 +1558,24 @@ try {
     const p4 = await open({ incognito: true, url: `${base}/d?private4` });
     await shows(p4, "Page D");
     steps.push("private, reopened later");
+
     if ((await cookie("/d?private4")).includes("personal")) throw new Error("a later private window sees Personal's cookie");
     // ⌘W on the last private window and ⇧⌘N in the same turn, a few times: Chrome is still destroying the old
     // profile when the new window asks for one.
     let last = p4;
+
     for (let round = 0; round < 4; round++) {
       const next = await evalApp(
         `const s = nn.store.getState(); s.closeWindow(${JSON.stringify(last)}); return nn.actions.openWindow({ incognito: true, url: "${base}/e?churn${round}" })`,
       );
+
       await shows(next, "Page E");
       await sleep(round % 2 ? 200 : 1500);
       await evalApp(`nn.store.getState().newTab(${JSON.stringify(next)}, { url: "${base}/b?churn${round}" }); return true`);
       await shows(next, "Page B");
       last = next;
     }
+
     steps.push("private, closed and reopened in one turn (4 rounds)");
     await close(last);
     // A second profile's windows.
@@ -1331,13 +1594,16 @@ try {
     const spare = await cookie("/c?spare3");
     await close(w3);
     await evalApp(`nn.store.getState().closeTab(${JSON.stringify(personalTab)}); return true`);
+
     if (!spare.includes("spare") || spare.includes("personal")) throw new Error(`the profile's window sees "${spare}"`);
+
     return { steps, spareCookie: spare };
   });
 
   await check("window-size", async () => {
     // AppKit constrains CEF's 1360 × 860 frame to the screen's usable height.
     const frame = await evalApp(`return nn.shell.windowFrame(${JSON.stringify(mainWindow)})`);
+
     const screens = JSON.parse(
       execFileSync(
         "osascript",
@@ -1353,27 +1619,37 @@ try {
         { encoding: "utf8" },
       ),
     );
+
     const screen =
       frame &&
       screens.find(
         ([x, y, w, h]) => frame[0] + frame[2] / 2 >= x && frame[0] + frame[2] / 2 <= x + w && frame[1] + frame[3] / 2 >= y && frame[1] + frame[3] / 2 <= y + h,
       );
+
     const height = screen && Math.min(860, screen[4]);
+
     if (frame?.[2] !== 1360 || frame?.[3] !== height) throw new Error(`frame ${JSON.stringify(frame)}, expected 1360 × ${height}`);
+
     return { frame };
   });
 
   await check("open-url", async () => {
     await evalApp(`nn.actions.openUrls(["${base}/a"], ${JSON.stringify(mainWindow)}); return true`);
+
     const s = await until("tab A titled", async () => {
       const s = await state();
       const t = s.tabs.find((t) => t.url?.startsWith(`${base}/a`));
+
       return t && t.title === "Page A" && !t.loading ? { s, t } : null;
     });
+
     first = s.t;
     const t = await pageTarget(`${base}/a`);
+
     if (!t) throw new Error("no CDP target for A");
+
     if (process.env.BAY_TRACE_VISIBILITY) watchVisibility(t);
+
     return { tab: s.t.id, title: s.t.title, active: s.s.active === s.t.id };
   });
 
@@ -1381,12 +1657,14 @@ try {
     // Diagnostic: how Chrome sees the shown page of a hidden (background-mode) window.
     const t = await pageFor(first.id, `${base}/a`);
     const vis = (await cdp(t, "Runtime.evaluate", { expression: "document.visibilityState + '/' + document.hasFocus()", returnByValue: true })).result.value;
+
     const windows = (await evalApp(`return globalThis.expo.modules.BayCEF.chromeWindows()`)).map((w) => ({
       visible: w.visible,
       alpha: w.alpha,
       key: w.key,
       frame: w.frame,
     }));
+
     return { page: vis, windows };
   });
 
@@ -1405,9 +1683,11 @@ try {
     const windowNumber = await evalApp(`return globalThis.expo.modules.BayCEF.devWindowNumber(${browser})`);
     const chromeSees = async () => (await evalApp(`return globalThis.expo.modules.BayCEF.chromeWindows()`)).find((x) => x.window === windowNumber);
     await evalApp(`return globalThis.expo.modules.BayCEF.devWindow(${windowNumber}, "cover")`);
+
     let samples = [],
       escape = null,
       w = null;
+
     try {
       // macOS reports the window occluded (Chrome's occlusion checker follows it, and waits a second more before
       // telling the page; with the background switch it doesn't run).
@@ -1415,14 +1695,17 @@ try {
         "macOS to see the window occluded",
         async () => {
           const x = await chromeSees();
+
           return x && !x.occlusionVisible && (!allow || x.chromeOccluded) ? x : null;
         },
         10000,
       );
+
       for (let i = 0; i < 8; i++) {
         samples.push(await vis());
         await sleep(400);
       }
+
       if (!allow) {
         // Input still reaches the covered page: an Esc it leaves alone comes back to the app.
         const s = await state();
@@ -1438,15 +1721,19 @@ try {
     } finally {
       await evalApp(`return globalThis.expo.modules.BayCEF.devWindow(${windowNumber}, "uncover")`);
     }
+
     const back = await until("visible again", async () => ((await vis()) === "visible" ? "visible" : null), 10000);
     const expected = allow ? "hidden" : "visible";
+
     if (allow ? !samples.slice(4).every((v) => v === "hidden") : !samples.every((v) => v === "visible"))
       throw new Error(`while covered the page was ${JSON.stringify(samples)}, expected ${expected}`);
+
     return { chromeOccluded: w.chromeOccluded, macOSVisible: w.occlusionVisible, samples, escape, back };
   });
 
   await check("favicon", async () => {
     const t = await until("a favicon", async () => (await state()).tabs.find((t) => t.id === first?.id && t.favicon));
+
     return { favicon: String(t.favicon).slice(0, 60) };
   });
 
@@ -1463,10 +1750,12 @@ try {
     await until("reloaded", async () => {
       const t = await pageTarget(`${base}/b`);
       const r = t && (await cdp(t, "Runtime.evaluate", { expression: "String(window.__mark)", returnByValue: true }));
+
       return r?.result?.value === "undefined";
     });
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/a", { userInitiated: true }); return true`);
     await until("A again", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Page A" && !t.loading));
+
     return { ok: true };
   });
 
@@ -1474,14 +1763,19 @@ try {
     const before = (await state()).tabs.length;
     const t = await pageTarget(`${base}/a`);
     await cdp(t, "Runtime.evaluate", { expression: "document.getElementById('blank').click()", userGesture: true });
+
     const s = await until("a new tab for C", async () => {
       const s = await state();
       const c = s.tabs.find((x) => x.url?.startsWith(`${base}/c`) && x.title === "Page C");
+
       return s.tabs.length > before && c ? { s, c } : null;
     });
+
     await sleep(2500);
     const later = (await state()).tabs.find((x) => x.id === s.c.id);
+
     if (!later) throw new Error("the popup's tab went away");
+
     return { tabs: s.s.tabs.length, adoptId: s.c.adoptId ?? null, stays: !!later };
   });
 
@@ -1489,31 +1783,40 @@ try {
     const t = await pageTarget(`${base}/a`);
     await cdp(t, "Runtime.evaluate", { expression: `window.open("${base}/e", "_blank")`, userGesture: true });
     const e = await until("E in a tab", async () => (await state()).tabs.find((x) => x.url?.startsWith(`${base}/e`) && x.title === "Page E"));
+
     return { tab: e.id, adoptId: e.adoptId ?? null };
   });
 
   await check("cmd-click", async () => {
     const activeBefore = (await state()).active;
     const t = await pageTarget(`${base}/a`);
+
     const r = await cdp(t, "Runtime.evaluate", {
       expression: "JSON.stringify(document.getElementById('cmd').getBoundingClientRect())",
       returnByValue: true,
     });
+
     const box = JSON.parse(r.result.value);
+
     const x = box.x + 4,
       y = box.y + box.height / 2;
+
     for (const type of ["mousePressed", "mouseReleased"]) await cdp(t, "Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1, modifiers: 4 });
     const d = await until("D in a background tab", async () => (await state()).tabs.find((x) => x.url?.startsWith(`${base}/d`)));
     const s = await state();
+
     if (s.active !== activeBefore) throw new Error("the ⌘-clicked tab came to the front");
+
     return { tab: d.id, adoptId: d.adoptId ?? null, background: true };
   });
 
   await check("evaluate", async () => {
     // The page channel (NNCore's renderer side): evaluate runs in the page's main world and answers with post.
     const title = await evalApp(`return nn.webviews.get("${first.id}").evaluate("post('result', JSON.stringify(document.title))")`);
+
     if (title !== "Page A") throw new Error(`evaluate gave ${JSON.stringify(title)}`);
     const script = await evalApp(`return nn.webviews.get("${first.id}").evaluate("post('result', JSON.stringify(typeof window.Notification))")`);
+
     return { title, notification: script };
   });
 
@@ -1521,10 +1824,13 @@ try {
     const tx = await evalApp(`return globalThis.expo.modules.BayCEF.tabStrips()`);
     const s = await state();
     const strip = tx.strips.find((x) => x.tabs.some((t) => t.key === first.id));
+
     if (!strip) throw new Error(`no strip names ${first.id}: ${JSON.stringify(tx)}`);
     const keys = strip.tabs.map((t) => t.key);
     const missing = s.tabs.filter((t) => t.url && !keys.includes(t.id)).map((t) => t.id);
+
     if (missing.length) throw new Error(`tabs missing from the strip: ${missing}`);
+
     return { rev: tx.rev, strips: tx.strips.length, tabs: keys.length, active: strip.tabs.find((t) => t.active)?.key };
   });
 
@@ -1535,6 +1841,7 @@ try {
     await until("switched", async () => (await state()).active === other.id);
     const back = await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await until("switched back", async () => (await state()).active === first.id);
+
     return { to: other.id, back };
   });
 
@@ -1546,6 +1853,7 @@ try {
     // ⌘T opens the New Tab palette over the current page; a tab comes when something is chosen.
     const panelOpen = () => evalApp(`return !!nn.store.getState().windowUi[${JSON.stringify(s.windowId)}]?.panel.open`);
     await until("the New Tab palette (⌘T)", async () => (await panelOpen()) || null);
+
     if ((await state()).active !== s.active) throw new Error("⌘T left the page it opened over");
     await evalApp(`nn.store.getState().closePanel(${JSON.stringify(s.windowId)}); return true`);
     await until("the palette closed", async () => !(await panelOpen()));
@@ -1555,13 +1863,16 @@ try {
     const w = await evalApp(`return nn.shell.devKeyEquivalent("${s.windowId}", { key: "w", keyCode: 13, modifiers: ["command"], focus: "window" })`);
     await until("the tab closed (⌘W)", async () => !(await state()).tabs.some((tab) => tab.id === opened));
     const afterW = await state();
+
     return { t: t.fired?.map((f) => f.command), w: w.fired?.map((f) => f.command), tabs: [before, afterW.tabs.length] };
   });
 
   await check("cmd-l-from-page", async () => {
     const s = await state();
     const r = await evalApp(`return nn.shell.devKeyEquivalent("${s.windowId}", { key: "l", keyCode: 37, modifiers: ["command"], focus: "page" })`);
+
     if (!r.fired?.some((f) => f.command === "focusCommandBar")) throw new Error(`⌘L didn't reach the menu: ${JSON.stringify(r)}`);
+
     return { handledBy: r.handledBy, fired: r.fired.map((f) => f.command) };
   });
 
@@ -1569,27 +1880,33 @@ try {
     const s = await state();
     // ⌃Tab opens the tab switcher (it switches when ⌃ is released); ⌘⇧] goes to the next tab at once.
     const ctrlTab = await evalApp(`return nn.shell.devKeyEquivalent("${s.windowId}", { key: "\t", keyCode: 48, modifiers: ["control"], focus: "page" })`);
+
     if (!ctrlTab.fired?.some((f) => f.command === "tabSwitcher")) throw new Error(`⌃Tab: ${JSON.stringify(ctrlTab)}`);
     // Esc in the switcher, as the user ends it without switching (left open, it covers the page for later checks).
     await evalApp(`nn.switcher.cancelSwitcher(); return true`);
     const next = await evalApp(`return nn.shell.devKeyEquivalent("${s.windowId}", { key: "}", keyCode: 30, modifiers: ["command", "shift"], focus: "page" })`);
+
     const after = await until(
       "the next tab",
       async () => {
         const n = await state();
+
         return n.active !== s.active ? n : null;
       },
       5000,
     );
+
     return { ctrlTab: ctrlTab.fired.map((f) => f.command), next: (next.fired ?? []).map((f) => f.command), from: s.active, to: after.active };
   });
 
   await check("window-close", async () => {
     const e = (await state()).tabs.find((x) => x.url?.startsWith(`${base}/e`));
+
     if (!e) throw new Error("no window.open tab to close");
     const t = await pageTarget(`${base}/e`);
     await closeFromPage(t);
     await until("the tab gone from the store", async () => !(await state()).tabs.some((x) => x.id === e.id));
+
     return { closed: e.id };
   });
 
@@ -1602,6 +1919,7 @@ try {
     const box = JSON.parse(r.result.value);
     await cdp(t, "Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x + 3, y: box.y + box.height / 2 });
     const status = await until("a status", async () => (await evalApp(`return nn.pageState.getState().pages["${first.id}"]?.status ?? ""`)) || null, 8000);
+
     return { status };
   });
 
@@ -1610,6 +1928,7 @@ try {
     const e = await until("onLoadError", async () => (await eventsOf(first.id)).find((x) => x.name === "loadError"), 10000);
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/a", { userInitiated: true }); return true`);
     await until("A again", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Page A" && !t.loading));
+
     return { loadError: e.payload };
   });
 
@@ -1626,12 +1945,15 @@ try {
       async () => (await state()).tabs.find((t) => t.id === first.id && /^(chrome|bay):\/\/version/.test(t.url ?? "") && t.title === "About Version"),
       20000,
     );
+
     try {
       const t = await pageFor(first.id, "chrome://version");
       const text = (await cdp(t, "Runtime.evaluate", { expression: "document.body?.innerText ?? ''", returnByValue: true })).result?.value ?? "";
       const product = text.split("\n").find((l) => /^\w+\t\d+\.\d+\./.test(l) && !l.startsWith("CEF"));
       const credit = text.match(/Copyright \d+ The Chromium Authors/)?.[0];
+
       if (!(product ?? "").startsWith("Bay\t") || !credit) throw new Error(`version page: ${product} / ${credit}`);
+
       return { product, credit };
     } finally {
       // (backToA is defined further down.)
@@ -1649,24 +1971,30 @@ try {
     await until("A shown", async () => (await state()).active === first.id);
     await sleep(300);
     let t = await pageFor(first.id, `${base}/a`);
+
     const rightClick = async () => {
       const r = await cdp(t, "Runtime.evaluate", {
         expression: `(() => { const el = document.getElementById('next'); const range = document.createRange(); range.selectNodeContents(el);
         getSelection().removeAllRanges(); getSelection().addRange(range); return JSON.stringify(el.getBoundingClientRect()); })()`,
         returnByValue: true,
       });
+
       const box = JSON.parse(r.result.value);
       const at = { x: box.x + 3, y: box.y + box.height / 2, button: "right", clickCount: 1 };
       let e = null;
+
       for (let attempt = 0; attempt < 3 && !e; attempt++) {
         await cdp(t, "Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y });
         await cdp(t, "Input.dispatchMouseEvent", { type: "mousePressed", ...at });
         await cdp(t, "Input.dispatchMouseEvent", { type: "mouseReleased", ...at });
         e = await until("a context menu", async () => (await eventsOf(first.id)).findLast((x) => x.name === "contextMenu"), 4000).catch(() => null);
       }
+
       return e;
     };
+
     let e = await rightClick();
+
     if (!e) {
       // Once more on a freshly loaded page (seen flaky in long runs only).
       log("  context menu: none after 3 right-clicks; reloading the page and trying again");
@@ -1675,15 +2003,19 @@ try {
       t = await pageFor(first.id, `${base}/a`);
       e = await rightClick();
     }
+
     if (!e) {
       const vis = (await cdp(t, "Runtime.evaluate", { expression: "document.visibilityState + '/' + document.hasFocus()", returnByValue: true })).result.value;
       throw new Error(`no context menu reported (page ${vis}); events: ${JSON.stringify((await eventsOf(first.id)).slice(-6).map((x) => x.name))}`);
     }
+
     const selection = !!(await eventsOf(first.id)).findLast((x) => x.name === "pageMessage" && x.payload?.kind === "selection");
     const labels = e.payload.items.filter((i) => !i.separator).map((i) => i.label);
     const search = labels.filter((l) => /^Search .* for /.test(l));
+
     if (!search.some((l) => l.startsWith("Search Acceptance for “to B”"))) throw new Error(`no app search item: ${JSON.stringify(labels)}`);
     await cdp(t, "Runtime.evaluate", { expression: "getSelection().removeAllRanges()" });
+
     return { items: labels.length, search, selectionMessage: selection };
   });
 
@@ -1697,7 +2029,9 @@ try {
           .findLast((l) => l.includes("context menu (not shown): ")),
       5000,
     );
+
     if (!line.includes("Search Acceptance for “to B”")) throw new Error(`activation.log: ${line}`);
+
     return { line: line.slice(line.indexOf("context menu")) };
   });
 
@@ -1705,6 +2039,7 @@ try {
     // Duplicate copies the tab's back/forward list (clone:), and ⇧⌘T brings a closed tab back with its own list
     // (restore:, through Chrome's TabRestoreService entry tagged with the tab's id).
     const copyId = await evalApp(`const c = nn.store.getState().duplicateTab("${first.id}"); return typeof c === "string" ? c : c?.id ?? null`);
+
     if (!copyId) throw new Error("no copy");
     await until(
       "the copy on A with history",
@@ -1716,17 +2051,21 @@ try {
     await sleep(500);
     const before = new Set((await state()).tabs.map((t) => t.id));
     await evalApp(`nn.store.getState().reopenClosedTab(${JSON.stringify(mainWindow)}); return true`);
+
     const back = await until(
       "the reopened tab with history",
       async () => {
         const s = await state();
+
         return s.tabs.find((t) => !before.has(t.id) && t.title === "Page A" && t.back && !t.loading);
       },
       15000,
     );
+
     await evalApp(`nn.store.getState().closeTab("${back.id}"); return true`);
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await until("first tab active", async () => (await state()).active === first.id);
+
     return { copy: copyId, reopened: back.id };
   });
 
@@ -1741,28 +2080,38 @@ try {
         "window.__usb = 'pending'; navigator.usb.requestDevice({ filters: [] }).then(() => (window.__usb = 'picked'), (e) => (window.__usb = e.name))",
       userGesture: true,
     });
+
     const chooser = await until(
       "the app's chooser",
       async () => {
         const c = await evalApp(`return globalThis.nnDeviceChoosers?.useChoosers.getState().byTab["${first.id}"] ?? null`);
+
         if (c) return c;
         const r = await cdp(t, "Runtime.evaluate", { expression: "String(window.__usb)", returnByValue: true });
+
         if (r.result.value !== "pending") throw new Error(`no chooser; the page got ${r.result.value}`);
+
         return null;
       },
       10000,
     );
+
     await evalApp(`return globalThis.nnDeviceChoosers.cancelDeviceChooser(${chooser.id}).then(() => true)`);
+
     const result = await until(
       "the page's answer",
       async () => {
         const r = await cdp(t, "Runtime.evaluate", { expression: "window.__usb", returnByValue: true });
+
         return r.result.value !== "pending" ? r.result.value : null;
       },
       8000,
     );
+
     await until("the sheet gone", async () => !(await evalApp(`return globalThis.nnDeviceChoosers.useChoosers.getState().byTab["${first.id}"] ?? null`)), 5000);
+
     if (result !== "NotFoundError") throw new Error(`page got ${result}`);
+
     return { chooser: { id: chooser.id, title: chooser.title, options: chooser.options?.length }, page: result };
   });
 
@@ -1770,18 +2119,22 @@ try {
   // ChromeBluetoothChooserController, no IOBluetooth, no macOS prompt; what its answers tell the page's side is recorded).
   const chromeUI = (call) => evalApp(`return globalThis.expo.modules.BayChromeUI.${call}`);
   const chooserOf = (tabId) => evalApp(`return globalThis.nnDeviceChoosers?.useChoosers.getState().byTab["${tabId}"] ?? null`);
+
   const bluetoothChooser = async (unauthorized) => {
     if (!(await chromeUI(`devShowBluetoothChooser(${await browserOf(first.id)}, ${unauthorized})`)))
       throw new Error("devShowBluetoothChooser said no (switch off?)");
+
     return until(
       "the app's Bluetooth chooser",
       async () => {
         const c = await chooserOf(first.id);
+
         return c && (unauthorized ? c.unauthorized : c.options?.length) ? c : null;
       },
       10000,
     );
   };
+
   const chooserEvents = () => chromeUI(`devChooserEvents()`);
   const chooserGone = () => until("the sheet gone", async () => !(await chooserOf(first.id)), 5000);
 
@@ -1790,28 +2143,35 @@ try {
     // rescan and the list comes back; its pick (selectDevice) answers the page's side with that device.
     await evalApp(`globalThis.__nnChooser = []; globalThis.__nnChooserSub?.remove();
       globalThis.__nnChooserSub = globalThis.expo.modules.BayChromeUI.addListener("onDeviceChooser", (e) => globalThis.__nnChooser.push(e)); return true`);
+
     try {
       const before = (await chooserEvents()).length;
       const chooser = await bluetoothChooser(false);
       const sent = (await evalApp(`return globalThis.__nnChooser`)).length;
       await chromeUI(`refreshDeviceChooser(${chooser.id}).then(() => true)`);
       const rescan = await until("Chrome's rescan", async () => (await chooserEvents()).slice(before).find((e) => e.event === "rescan") ?? null, 5000);
+
       const refreshed = await until(
         "the list sent again",
         async () => {
           const list = await evalApp(`return globalThis.__nnChooser`);
+
           return list.slice(sent).find((c) => c.open && c.options?.length && !c.refreshing) ?? null;
         },
         5000,
       );
+
       await chromeUI(`selectDevice(${chooser.id}, 0).then(() => true)`);
       const selected = await until("the pick answered", async () => (await chooserEvents()).slice(before).find((e) => e.event === "selected") ?? null, 5000);
       await chooserGone();
+
       if (selected.device !== "nn-test-device") throw new Error(`picked ${selected.device}`);
+
       return { title: chooser.title, options: refreshed.options.map((o) => o.name), rescan: !!rescan, selected: selected.device };
     } finally {
       await evalApp(`globalThis.__nnChooserSub?.remove(); return true`).catch(() => null);
       const c = await chooserOf(first.id).catch(() => null);
+
       if (c) await chromeUI(`cancelDeviceChooser(${c.id}).then(() => true)`).catch(() => null);
     }
   });
@@ -1824,27 +2184,33 @@ try {
     const launches = () => evalApp(`return globalThis.expo.modules.BayCEF.devExternalLaunches()`);
     const isSettings = (x) => /Privacy_Bluetooth/.test(x.url ?? "");
     const t = await pageFor(first.id, `${base}/a`);
+
     try {
       const before = (await launches()).filter(isSettings).length;
       const events = (await chooserEvents()).length;
       const bt = await bluetoothChooser(true);
       await chromeUI(`openBluetoothSettings(${bt.id}).then(() => true)`);
+
       const recorded = await until(
         "the Bluetooth settings pane recorded",
         async () => {
           const list = (await launches()).filter(isSettings);
+
           return list.length > before ? list.at(-1) : null;
         },
         5000,
       );
+
       if ((await chooserOf(first.id))?.id !== bt.id) throw new Error("the chooser closed on openBluetoothSettings");
       await chromeUI(`cancelDeviceChooser(${bt.id}).then(() => true)`);
       await chooserGone();
+
       const cancelled = await until(
         "the cancel answered",
         async () => (await chooserEvents()).slice(events).find((e) => e.event === "cancelled") ?? null,
         5000,
       );
+
       await cdp(t, "Runtime.evaluate", {
         expression:
           "window.__usb = 'pending'; navigator.usb.requestDevice({ filters: [] }).then(() => (window.__usb = 'picked'), (e) => (window.__usb = e.name))",
@@ -1854,13 +2220,17 @@ try {
       await chromeUI(`openBluetoothSettings(${usb.id}).then(() => true)`);
       await sleep(500);
       const after = (await launches()).filter(isSettings).length;
+
       if (after !== before + 1) throw new Error(`the WebUSB chooser recorded ${after - before - 1} settings pane(s)`);
+
       if ((await chooserOf(first.id))?.id !== usb.id) throw new Error("the WebUSB chooser closed on openBluetoothSettings");
       await chromeUI(`cancelDeviceChooser(${usb.id}).then(() => true)`);
       await chooserGone();
+
       return { unauthorized: bt.unauthorized, recorded: recorded.url, cancelled: !!cancelled, webUSB: "ignored" };
     } finally {
       const c = await chooserOf(first.id).catch(() => null);
+
       if (c) await chromeUI(`cancelDeviceChooser(${c.id}).then(() => true)`).catch(() => null);
     }
   });
@@ -1870,15 +2240,19 @@ try {
     // onCastRoutes, and closing it from the app closes Chrome's.
     const browser = await browserOf(first.id);
     const shown = await evalApp(`return globalThis.expo.modules.BayChromeUI.showCastDialog(${browser})`);
+
     if (!shown) throw new Error("showCastDialog said no (media router off?)");
+
     const dialog = await until(
       "the app's Cast dialog",
       async () => evalApp(`return globalThis.nnCast?.useCast.getState().dialogs["${first.id}"] ?? null`),
       10000,
     );
+
     const routes = await evalApp(`return globalThis.nnCast.useCast.getState().routes`);
     await evalApp(`return globalThis.expo.modules.BayChromeUI.closeCastDialog(${dialog.id}).then(() => true)`);
     await until("the dialog closed", async () => !(await evalApp(`return globalThis.nnCast.useCast.getState().dialogs["${first.id}"] ?? null`)), 5000);
+
     return { header: dialog.header, sinks: dialog.sinks?.length ?? 0, routeProfiles: Object.keys(routes ?? {}) };
   });
 
@@ -1890,13 +2264,16 @@ try {
     const browser = await browserOf(first.id);
     const routesNow = () => evalApp(`return Object.values(globalThis.nnCast.useCast.getState().routes).flat()`);
     const dialogNow = () => evalApp(`return globalThis.nnCast.useCast.getState().dialogs["${first.id}"] ?? null`);
+
     const openDialog = async () => {
       if (!(await evalApp(`return globalThis.expo.modules.BayChromeUI.showCastDialog(${browser})`))) throw new Error("showCastDialog said no");
+
       return until(
         "the test sink in the app's dialog",
         async () => {
           const d = await dialogNow();
           const sink = d?.sinks?.find((s) => s.name === "Bay Test Sink" && s.state === "available");
+
           return sink ? { dialog: d, sink } : null;
         },
         10000,
@@ -1904,32 +2281,41 @@ try {
         throw new Error(`${e.message}; dialog ${JSON.stringify(await dialogNow())}`);
       });
     };
+
     const casting = async (dialogId, sink) => {
       await evalApp(`return globalThis.expo.modules.BayChromeUI.startCasting(${dialogId}, ${JSON.stringify(sink.id)}, 2).then(() => true)`);
+
       return until("the route in onCastRoutes", async () => (await routesNow()).find((r) => r.sink === sink.id) ?? null, 10000);
     };
+
     try {
       const { dialog, sink } = await openDialog();
+
       if (!(sink.modes & 2)) throw new Error(`the test sink can't cast a tab (modes ${sink.modes})`);
       const route = await casting(dialog.id, sink);
+
       const connected = await until(
         "the sink connected in the dialog",
         async () => {
           const d = await dialogNow();
           const s = d?.sinks?.find((x) => x.id === sink.id);
+
           return s?.routeId === route.id && s.state === "connected" ? { dialog: d, sink: s } : null;
         },
         10000,
       );
+
       await evalApp(`return globalThis.expo.modules.BayChromeUI.stopCasting(${dialog.id}, ${JSON.stringify(route.id)}).then(() => true)`);
       await until("the route gone after stopCasting", async () => !(await routesNow()).some((r) => r.id === route.id), 10000);
       // Again, then the dialog closed and the route ended from the toolbar's menu.
       const second = await casting(dialog.id, sink);
       await evalApp(`return globalThis.expo.modules.BayChromeUI.closeCastDialog(${dialog.id}).then(() => true)`);
       await until("the dialog closed", async () => !(await dialogNow()), 5000);
+
       if (!(await routesNow()).some((r) => r.id === second.id)) throw new Error("closing the dialog ended the route");
       await evalApp(`return globalThis.expo.modules.BayChromeUI.terminateCastRoute(${JSON.stringify(second.id)}).then(() => true)`);
       await until("the route gone after terminateCastRoute", async () => !(await routesNow()).some((r) => r.id === second.id), 10000);
+
       return {
         sink: { name: sink.name, modes: sink.modes },
         started: { route: route.description, source: route.source, castingStarted: connected.dialog.castingStarted, state: connected.sink.state },
@@ -1938,7 +2324,9 @@ try {
       };
     } finally {
       const d = await dialogNow().catch(() => null);
+
       if (d) await evalApp(`return globalThis.expo.modules.BayChromeUI.closeCastDialog(${d.id}).then(() => true)`).catch(() => null);
+
       for (const r of await routesNow().catch(() => []))
         await evalApp(`return globalThis.expo.modules.BayChromeUI.terminateCastRoute(${JSON.stringify(r.id)}).then(() => true)`).catch(() => null);
     }
@@ -1952,6 +2340,7 @@ try {
     const tab = await openTab(`${base}/red-header?commit`, "Red header");
     const color = () => evalApp(`return nn.store.getState().live["${tab.id}"]?.themeColor ?? null`);
     const settled = (title) => until(title, async () => (await state()).tabs.find((t) => t.id === tab.id && t.title === title && !t.loading));
+
     try {
       await until("the red header's colour", async () => (await color()) === "#C80000", 5000);
       const failed = "http://127.0.0.1:9/theme-commit";
@@ -1973,9 +2362,12 @@ try {
       await settled("Red header");
       const back = await pageFor(tab.id, "/red-header?bf");
       const cached = (await cdp(back, "Runtime.evaluate", { expression: "String(window.__bf)", returnByValue: true })).result.value === "1";
+
       if (!cached) throw new Error("Back didn't restore the page from the back/forward cache");
       const restored = await until("the restored page's colour", async () => ((await color()) === "#C80000" ? "#C80000" : null), 2000).catch(color);
+
       if (error === "#C80000" || restored !== "#C80000") throw new Error(`the error page shows ${error}, the page back from the cache ${restored}`);
+
       return { error, restored };
     } finally {
       await closeTab(tab.id);
@@ -1988,20 +2380,24 @@ try {
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/text", { userInitiated: true }); return true`);
     await until("the text page", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Text" && !t.loading));
+
     try {
       const t = await pageFor(first.id, `${base}/text`);
       const r = await cdp(t, "Runtime.evaluate", { expression: "JSON.stringify(document.getElementById('t').getBoundingClientRect())", returnByValue: true });
       const box = JSON.parse(r.result.value);
       const y = box.y + box.height / 2;
       await cdp(t, "Input.dispatchMouseEvent", { type: "mousePressed", x: box.x + 2, y, button: "left", buttons: 1, clickCount: 1 });
+
       for (let k = 1; k <= 8; k++)
         await cdp(t, "Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x + 2 + ((box.width - 10) * k) / 8, y, button: "left", buttons: 1 });
       await cdp(t, "Input.dispatchMouseEvent", { type: "mouseReleased", x: box.x + box.width - 8, y, button: "left", buttons: 0, clickCount: 1 });
+
       const e = await until(
         "onPageMessage selection",
         async () => (await eventsOf(first.id)).findLast((x) => x.name === "pageMessage" && x.payload?.kind === "selection" && x.payload?.data),
         6000,
       );
+
       return { text: String(JSON.stringify(e.payload.data)).slice(0, 80) };
     } finally {
       await backToA();
@@ -2013,8 +2409,10 @@ try {
     // the app's answer saves it (resolvePasswordPrompt).
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/login", { userInitiated: true }); return true`);
     await until("the login page", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Login" && !t.loading));
+
     try {
       const t = await pageFor(first.id, `${base}/login`);
+
       for (const [field, text] of [
         ["u", "nnformuser"],
         ["p", "form-s3cret"],
@@ -2022,6 +2420,7 @@ try {
         await cdp(t, "Runtime.evaluate", { expression: `document.getElementById('${field}').focus()` });
         await cdp(t, "Input.insertText", { text });
       }
+
       const r = await cdp(t, "Runtime.evaluate", { expression: "JSON.stringify(document.getElementById('go').getBoundingClientRect())", returnByValue: true });
       const box = JSON.parse(r.result.value);
       const at = { x: box.x + box.width / 2, y: box.y + box.height / 2, button: "left", clickCount: 1 };
@@ -2030,6 +2429,7 @@ try {
       const e = await until("onPasswordPrompt", async () => (await eventsOf(first.id)).findLast((x) => x.name === "passwordPrompt"), 10000);
       // packages/cef's PasswordPrompt: state, origin, username, passwordLength, federation, usernames.
       const p = e.payload;
+
       if (
         p.state !== "save" ||
         p.username !== "nnformuser" ||
@@ -2040,20 +2440,24 @@ try {
       )
         throw new Error(`prompt ${JSON.stringify(p)}`);
       await evalApp(`return nn.webviews.get("${first.id}").resolvePasswordPrompt("save")`);
+
       const saved = await until(
         "the saved login",
         async () => {
           const list = await evalApp(`return globalThis.expo.modules.BayCEF.listPasswords("")`);
+
           return list.passwords?.find((x) => x.username === "nnformuser") ?? null;
         },
         10000,
       );
+
       // The same user with a new password: "update", answered with the app's edited password.
       const seen = (await eventsOf(first.id)).filter((x) => x.name === "passwordPrompt").length;
       await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/login?again", { userInitiated: true }); return true`);
       await until("the login page again", async () => (await state()).tabs.find((t) => t.id === first.id && t.url?.endsWith("/login?again") && !t.loading));
       const t2 = await pageFor(first.id, `${base}/login?again`);
       await cdp(t2, "Runtime.evaluate", { expression: "document.getElementById('u').value = ''; document.getElementById('p').value = ''" });
+
       for (const [field, text] of [
         ["u", "nnformuser"],
         ["p", "form-s3cret-2"],
@@ -2061,27 +2465,34 @@ try {
         await cdp(t2, "Runtime.evaluate", { expression: `document.getElementById('${field}').focus()` });
         await cdp(t2, "Input.insertText", { text });
       }
+
       const r2 = await cdp(t2, "Runtime.evaluate", {
         expression: "JSON.stringify(document.getElementById('go').getBoundingClientRect())",
         returnByValue: true,
       });
+
       const box2 = JSON.parse(r2.result.value);
       const at2 = { x: box2.x + box2.width / 2, y: box2.y + box2.height / 2, button: "left", clickCount: 1 };
       await cdp(t2, "Input.dispatchMouseEvent", { type: "mousePressed", ...at2, buttons: 1 });
       await cdp(t2, "Input.dispatchMouseEvent", { type: "mouseReleased", ...at2, buttons: 0 });
       const u = await until("the update prompt", async () => (await eventsOf(first.id)).filter((x) => x.name === "passwordPrompt")[seen], 10000);
+
       if (u.payload.state !== "update" || !u.payload.usernames.includes("nnformuser") || u.payload.passwordLength !== 13)
         throw new Error(`update prompt ${JSON.stringify(u.payload)}`);
       await evalApp(`return nn.webviews.get("${first.id}").resolvePasswordPrompt("update", { password: "edited-s3cret" })`);
+
       const edited = await until(
         "the edited password",
         async () => {
           const r = await cef(`getPassword("", ${JSON.stringify(saved.origin)}, "nnformuser")`);
+
           return r?.password === "edited-s3cret" ? r : null;
         },
         10000,
       );
+
       await evalApp(`return globalThis.expo.modules.BayCEF.deletePassword("", ${JSON.stringify(saved.origin)}, "nnformuser")`);
+
       return {
         prompt: { state: p.state, passwordLength: p.passwordLength, usernames: p.usernames },
         update: u.payload.state,
@@ -2101,6 +2512,7 @@ try {
     // mediaCaptureSourceId), and the engine grants that source to the page (resolveDisplayMedia): the page captures it.
     const target = await openTab(`${base}/capture-target?picker`, "Capture Target", true);
     await pageFor(first.id, `${base}/a`);
+
     try {
       await evalApp(`return globalThis.expo.modules.BayCEF.setDisplayMediaPicker(true).then(() => true)`);
       await evalApp(`return nn.webviews.get("${first.id}").reload()`);
@@ -2114,19 +2526,25 @@ try {
       });
       const request = await until("onDisplayMediaRequest", async () => (await eventsOf(first.id)).findLast((x) => x.name === "displayMediaRequest"), 10000);
       const sourceId = await evalApp(`return nn.webviews.get("${target.id}").mediaCaptureSourceId()`);
+
       if (!sourceId) throw new Error("no capture source id for the target tab");
       // As the app's picker answers (it closes the sheet too).
       await evalApp(`globalThis.nnSharePicker.answerDisplayMedia("${first.id}", ${JSON.stringify(sourceId)}); return true`);
+
       const live = await until(
         "a live capture",
         async () => {
           const v = (await cdp(page, "Runtime.evaluate", { expression: "window.__cap", returnByValue: true })).result.value;
+
           if (v !== "pending" && v !== "live") throw new Error(`getDisplayMedia: ${v}`);
+
           return v === "live" ? v : null;
         },
         15000,
       );
+
       await cdp(page, "Runtime.evaluate", { expression: "window.__stream?.getTracks().forEach((x) => x.stop()); true" });
+
       return {
         sources: Array.isArray(request.payload.sources) ? request.payload.sources.length : request.payload.sources,
         sourceId: String(sourceId).slice(0, 40),
@@ -2148,56 +2566,70 @@ try {
     await until("A loaded", async () => (await state()).tabs.find((x) => x.id === first.id && x.title === "Page A" && !x.loading), 10000);
     await sleep(500);
     const t = await pageFor(first.id, `${base}/a`);
+
     try {
       await cdp(t, "Runtime.evaluate", {
         expression:
           "window.__cap = 'pending'; navigator.mediaDevices.getDisplayMedia({ video: true }).then((s) => { window.__stream = s; s.getVideoTracks()[0].onended = () => (window.__cap = 'ended'); window.__cap = 'live'; }, (e) => (window.__cap = e.name)); true",
         userGesture: true,
       });
+
       const live = await until(
         "a live capture",
         async () => {
           const v = (await cdp(t, "Runtime.evaluate", { expression: "window.__cap", returnByValue: true })).result.value;
+
           if (v !== "pending" && v !== "live") throw new Error(`getDisplayMedia: ${v}`);
+
           return v === "live" ? v : null;
         },
         15000,
       );
+
       const access = await until(
         "onMediaAccess",
         async () => {
           for (const id of [first.id, target.id]) {
             const e = (await eventsOf(id)).findLast((x) => x.name === "mediaAccess");
+
             if (e) return { tab: id === first.id ? "capturer" : "captured", access: e.payload };
           }
+
           return null;
         },
         8000,
       );
+
       const sourceId = await evalApp(`return nn.webviews.get("${target.id}")?.mediaCaptureSourceId() ?? null`);
       const capturer = await browserOf(first.id);
       const instead = await browserOf(other.id);
       const changed = await evalApp(`return globalThis.expo.modules.BayChromeUI.changeCaptureSource(${capturer}, ${instead})`);
+
       if (changed !== true)
         throw new Error(`changeCaptureSource answered ${changed} (Chrome's last-used profile: ${(await cef(`engineInfo()`)).lastUsedProfile})`);
       await sleep(1000);
       const stopped = await evalApp(`return globalThis.expo.modules.BayChromeUI.stopCapture(${capturer})`);
+
       const ended = await until(
         "the track ended",
         async () => ((await cdp(t, "Runtime.evaluate", { expression: "window.__cap", returnByValue: true })).result.value === "ended" ? true : null),
         8000,
       );
+
       // Chrome's picker, which the test switch answered, is gone: with the screen locked its close animation never
       // ended, and the dialog left over the page kept Chrome's autofill dropdown from opening there for the rest of the run.
       const windowNumber = await cef(`devWindowNumber(${capturer})`);
+
       const picker = await until(
         "the picker closed",
         async () => {
           const children = JSON.parse(await cef(`devWindow(${windowNumber}, "children")`));
+
           return children.some((c) => c.visible && c.title.startsWith("Choose what to share")) ? null : "closed";
         },
         5000,
       );
+
       return { live, access, sourceId: sourceId ? String(sourceId).slice(0, 40) : null, changed, stopped, ended, picker };
     } finally {
       await cdp(t, "Runtime.evaluate", { expression: "window.__stream?.getTracks().forEach((x) => x.stop())" }).catch(() => null);
@@ -2214,73 +2646,94 @@ try {
     // third tab (blue) for the second call moves that call only: each call's own frames say what it gets.
     const opened = [];
     const pages = {};
+
     try {
       await evalApp(`return globalThis.expo.modules.BayCEF.setDisplayMediaPicker(true).then(() => true)`);
+
       for (const [c, t] of [
         ["ff0000", "Red"],
         ["00ff00", "Green"],
         ["0000ff", "Blue"],
       ])
         opened.push(await openTab(`${base}/solid?c=${c}&t=${t}`, t, true));
+
       for (const t of ["CallA", "CallB"]) opened.push(await openTab(`${base}/capturer?t=${t}`, t, true));
       const [red, green, blue, callA, callB] = opened;
       const hooks = await evalApp(`return { picker: !!globalThis.nnSharePicker?.shareTab, bar: !!globalThis.nnShareBar }`);
+
       const share = async (call, target) => {
         await evalApp(`nn.actions.switchToTab("${call.id}"); return true`);
         await until(`${call.title} shown`, async () => (await state()).active === call.id);
         const page = await pageFor(call.id, `/capturer?t=${call.title}`);
         await cdp(page, "Runtime.evaluate", { expression: "share()", userGesture: true });
         await until(`${call.title}'s picker`, async () => (await eventsOf(call.id)).findLast((x) => x.name === "displayMediaRequest"), 10000);
+
         // As a click on the target in the app's picker.
         if (hooks.picker) await evalApp(`return globalThis.nnSharePicker.shareTab("${call.id}", "${target.id}")`);
         else {
           const source = await evalApp(`return nn.webviews.get("${target.id}").mediaCaptureSourceId()`);
           await evalApp(`globalThis.nnSharePicker.answerDisplayMedia("${call.id}", ${JSON.stringify(source)}); return true`);
         }
+
         await until(
           `${call.title} live`,
           async () => {
             const v = (await cdp(page, "Runtime.evaluate", { expression: "window.__cap", returnByValue: true })).result.value;
+
             if (v !== "pending" && v !== "live") throw new Error(`${call.title} getDisplayMedia: ${v}`);
+
             return v === "live" ? v : null;
           },
           15000,
         );
+
         return page;
       };
+
       pages.A = await share(callA, red);
       pages.B = await share(callB, green);
+
       const colour = async (page) => {
         const p = (await cdp(page, "Runtime.evaluate", { expression: "pixel()", awaitPromise: true, returnByValue: true })).result.value;
         const i = p.indexOf(Math.max(...p));
+
         return p[i] > 150 && p.filter((x) => x > 100).length === 1 ? ["red", "green", "blue"][i] : `rgb(${p})`;
       };
+
       const both = async () => ({ A: await colour(pages.A), B: await colour(pages.B) });
+
       const before = await until(
         "red and green",
         async () => {
           const c = await both();
+
           return c.A === "red" && c.B === "green" ? c : null;
         },
         10000,
       );
+
       const recorded =
         hooks.bar &&
         (await evalApp(
           `const s = globalThis.nnShareBar.tabShares(); return [s["${callA.id}"]?.capturedTabId === "${red.id}", s["${callB.id}"]?.capturedTabId === "${green.id}"]`,
         ));
+
       if (hooks.bar && !(recorded[0] && recorded[1])) throw new Error(`app records before: ${JSON.stringify(recorded)}`);
       await evalApp(`nn.actions.switchToTab("${blue.id}"); return true`);
       await until("blue shown", async () => (await state()).active === blue.id);
+
       const changed = hooks.bar
         ? await evalApp(`return globalThis.nnShareBar.shareInstead("${callB.id}", "${blue.id}")`)
         : await evalApp(`return globalThis.expo.modules.BayChromeUI.changeCaptureSource(${await browserOf(callB.id)}, ${await browserOf(blue.id)})`);
+
       if (changed !== true) throw new Error(`share instead answered ${JSON.stringify(changed)}`);
+
       try {
         await until(
           "B on blue",
           async () => {
             const c = await both();
+
             return c.B === "blue" ? c : null;
           },
           8000,
@@ -2288,22 +2741,28 @@ try {
       } catch {
         // Checked below, once it settles.
       }
+
       await sleep(1000);
       const settled = await both();
+
       if (settled.A !== "red" || settled.B !== "blue") throw new Error(`after B's share instead: A ${settled.A} (want red), B ${settled.B} (want blue)`);
       let records = null;
+
       if (hooks.bar) {
         // Past the moment the switch turns B's capture off (ShareBar's SHARE_END_MS): the share stays, on blue.
         await sleep(2000);
         records = await evalApp(
           `const s = globalThis.nnShareBar.tabShares(); return { A: s["${callA.id}"]?.capturedTabId ?? null, B: s["${callB.id}"]?.capturedTabId ?? null }`,
         );
+
         if (records.A !== red.id || records.B !== blue.id) throw new Error(`app records ${JSON.stringify(records)} (want A ${red.id}, B ${blue.id})`);
       }
+
       return { before, after: settled, changed, records: records && { A: "red", B: "blue" } };
     } finally {
       for (const page of Object.values(pages))
         await cdp(page, "Runtime.evaluate", { expression: "window.__stream?.getTracks().forEach((x) => x.stop()); true" }).catch(() => null);
+
       for (const t of opened) await closeTab(t.id).catch(() => null);
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`).catch(() => null);
     }
@@ -2317,6 +2776,7 @@ try {
     // attach and each new NavigationEntry), not from the app's teardown that comes after.
     const shell = "globalThis.expo.modules.BayShell";
     const s = (expr) => evalApp(`const s = nn.store.getState(); return ${expr}`);
+
     const toB = async (tabId, tag) => {
       await until(
         `A?${tag} loaded`,
@@ -2330,6 +2790,7 @@ try {
         15000,
       );
     };
+
     // The reopened tab (shown): Page B with Back, and Back reaches A.
     const backReachesA = async (tabId, tag) => {
       await evalApp(`nn.actions.switchToTab("${tabId}"); return true`);
@@ -2339,15 +2800,19 @@ try {
         15000,
       );
       const canGoBack = await s(`!!s.live["${tabId}"]?.canGoBack`);
+
       if (!canGoBack) return { canGoBack };
       await evalApp(`return nn.webviews.get("${tabId}").goBack()`);
+
       const a = await until(
         `Back to A?${tag}`,
         async () => (await s(`s.tabs["${tabId}"]?.title === "Page A" && s.tabs["${tabId}"]?.url`)) || null,
         10000,
       ).catch(() => null);
+
       return { canGoBack, back: a ? new URL(a).pathname + new URL(a).search : null };
     };
+
     const windowCase = async (tag, close) => {
       const w = await evalApp(`return nn.store.getState().createWindow({ url: "${base}/a?${tag}", background: true })`);
       const tabId = await evalApp(`return ${shownTabJs(JSON.stringify(w))}`);
@@ -2356,28 +2821,35 @@ try {
       await close(w, tabId);
       await until(`window ${tag} closed`, async () => !(await s(`!!s.windows["${w}"]`)), 15000);
       await evalApp(`nn.store.getState().reopenClosedWindow(); return true`);
+
       const reopened = await until(
         "the reopened window",
         async () => (await s(`Object.keys(s.windows)`)).find((id) => !windowsBefore.has(id) && id !== w),
         10000,
       );
+
       const again = await until(
         "its tab",
         async () => s(`${windowTabsJs(JSON.stringify(reopened))}.find((id) => s.tabs[id]?.url?.includes("/b?${tag}")) ?? null`),
         10000,
       );
+
       try {
         return await backReachesA(again, tag);
       } finally {
         await evalApp(`nn.store.getState().closeWindow("${reopened}"); return true`);
       }
     };
+
     const closeButton = async (tabId) => {
       const number = await evalApp(`return globalThis.expo.modules.BayCEF.devWindowNumber(${await browserOf(tabId)})`);
+
       return evalApp(`return globalThis.expo.modules.BayCEF.devWindow(${number}, "close-button")`);
     };
+
     const warn = await s(`s.settings.warnBeforeClosingWindow`);
     const results = {};
+
     try {
       results.appCommand = await windowCase("r1", (w) => evalApp(`nn.store.getState().closeWindow("${w}"); return true`));
       // Closing a main window doesn't warn, however many tabs it shows: they're its space's and stay. A private window's go.
@@ -2391,6 +2863,7 @@ try {
         await closeButton(tabId);
       });
       const asked = await evalApp(`return globalThis.__nnAsked ?? null`);
+
       if (asked) throw new Error(`closing a main window asked: ${asked}`);
       const secret = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${base}/a?private-close" })`);
       await evalApp(`nn.store.getState().newTab("${secret}", { url: "${base}/c?private-close", background: true }); return true`);
@@ -2406,6 +2879,7 @@ try {
         await sleep(300);
         await closeButton(tabId);
       });
+
       // Tabs Chrome closes itself: an extension's chrome.tabs.remove, and a page's window.close().
       const tabCase = async (tag, close) => {
         const tab = await openTab(`${base}/a?${tag}`, "Page A", true);
@@ -2415,31 +2889,38 @@ try {
         const before = new Set(await s(windowTabsJs(JSON.stringify(mainWindow))));
         await evalApp(`nn.store.getState().reopenClosedTab("${mainWindow}"); return true`);
         const again = await until("the reopened tab", async () => (await s(windowTabsJs(JSON.stringify(mainWindow)))).find((id) => !before.has(id)), 10000);
+
         try {
           return await backReachesA(again, tag);
         } finally {
           await closeTab(again);
         }
       };
+
       const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
+
       if (installed?.error) throw new Error(installed.error);
+
       try {
         const worker = await until(
           "the extension's worker",
           async () => (await targets()).find((t) => t.type === "service_worker" && t.url.includes(installed.id)) ?? null,
           15000,
         );
+
         results.tabsRemove = await tabCase("r4", async () => {
           const r = await cdp(worker, "Runtime.evaluate", {
             expression: `chrome.tabs.query({}).then((ts) => { const t = ts.find((t) => (t.url || "").includes("/b?r4")); return t ? chrome.tabs.remove(t.id).then(() => t.id) : null; })`,
             awaitPromise: true,
             returnByValue: true,
           });
+
           if (!r.result.value) throw new Error(`chrome.tabs.remove: ${JSON.stringify(r)}`);
         });
       } finally {
         await exts(`uninstall("${installed.id}", "")`);
       }
+
       // window.close() closes a tab a script opened (whatever its history).
       results.windowClose = await (async () => {
         const opener = await pageFor(first.id, `${base}/a`);
@@ -2454,6 +2935,7 @@ try {
         const now = new Set(await s(windowTabsJs(JSON.stringify(mainWindow))));
         await evalApp(`nn.store.getState().reopenClosedTab("${mainWindow}"); return true`);
         const again = await until("the reopened tab", async () => (await s(windowTabsJs(JSON.stringify(mainWindow)))).find((id) => !now.has(id)), 10000);
+
         try {
           return await backReachesA(again, "r5");
         } finally {
@@ -2465,8 +2947,11 @@ try {
         `if (globalThis.__nnConfirm) ${shell}.confirm = globalThis.__nnConfirm; nn.store.getState().updateSettings({ warnBeforeClosingWindow: ${warn} }); nn.actions.switchToTab("${first.id}"); return true`,
       ).catch(() => null);
     }
+
     const failed = Object.entries(results).filter(([, r]) => !r.canGoBack || !r.back?.startsWith("/a?"));
+
     if (failed.length) throw new Error(`no Back to A after: ${failed.map(([k, r]) => `${k} ${JSON.stringify(r)}`).join(", ")}`);
+
     return results;
   });
 
@@ -2476,11 +2961,15 @@ try {
     const tab = await openTab(`${base}/d?discard`, "Page D", true);
     const browser = await browserOf(tab.id);
     const renderer = async () => (await evalApp(`return globalThis.expo.modules.BayCEF.listTasks()`)).some((t) => t.browserIds?.includes(Number(browser)));
+
     const flags = () =>
       evalApp(`const l = globalThis.nnLifecycle.state(); return { sleeping: !!l.discarded["${tab.id}"], loaded: l.loaded.includes("${tab.id}") }`);
+
     const raw = (opts = "") => evalApp(`return nn.webviews.get("${tab.id}").discard(${opts})`);
+
     try {
       const out = {};
+
       if (!(await renderer())) throw new Error("no renderer before the discard");
       // unload: NNCore keeps the tab (and a regular profile): it says so, and nothing changes.
       out.unload = await raw("{ unload: true }");
@@ -2495,6 +2984,7 @@ try {
       out.again = await raw();
       // A refusal (as Chrome's for a tab outside a tab strip), through the app's policy: nothing recorded.
       const other = await openTab(`${base}/e?refused`, "Page E", true);
+
       try {
         out.refusedSlept = await evalApp(
           `const h = nn.webviews.get("${other.id}"); h.discard = () => Promise.resolve("refused"); return globalThis.nnLifecycle.sleepTab("${other.id}")`,
@@ -2503,25 +2993,34 @@ try {
       } finally {
         await closeTab(other.id);
       }
+
       // Wake: shown, Chrome loads it again and the app's flag clears.
       await evalApp(`nn.actions.switchToTab("${tab.id}"); return true`);
       out.woke = await until(
         "awake",
         async () => {
           const f = await flags();
+
           return !f.sleeping && (await renderer()) ? { renderer: true, ...f } : null;
         },
         10000,
       ).catch(async () => ({ renderer: await renderer(), ...(await flags()) }));
       const problems = [];
+
       if (out.unload !== "unsupported" || !out.afterUnload.renderer || out.afterUnload.sleeping)
         problems.push(`unload: ${JSON.stringify([out.unload, out.afterUnload])}`);
+
       if (out.slept !== true || out.afterSleep.renderer !== "gone" || !out.afterSleep.sleeping)
         problems.push(`discard: ${JSON.stringify([out.slept, out.afterSleep])}`);
+
       if (out.again !== "already") problems.push(`again: ${JSON.stringify(out.again)}`);
+
       if (out.refusedSlept !== false || out.refusedFlags) problems.push(`refused: ${JSON.stringify([out.refusedSlept, out.refusedFlags])}`);
+
       if (out.woke.sleeping || !out.woke.renderer || !out.woke.loaded) problems.push(`wake: ${JSON.stringify(out.woke)}`);
+
       if (problems.length) throw new Error(problems.join("; "));
+
       return out;
     } finally {
       await closeTab(tab.id);
@@ -2534,6 +3033,7 @@ try {
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await until("A shown", async () => (await state()).active === first.id);
     const picture = await evalApp(`return nn.webviews.get("${first.id}").capturePicture(0.3)`);
+
     if (
       !picture?.data ||
       !Buffer.from(picture.data, "base64")
@@ -2541,6 +3041,7 @@ try {
         .equals(Buffer.from([0xff, 0xd8]))
     )
       throw new Error(`no JPEG: ${JSON.stringify(picture)?.slice(0, 120)}`);
+
     return { bytes: Buffer.from(picture.data, "base64").length, frame: picture.frame };
   });
 
@@ -2548,6 +3049,7 @@ try {
     // A page that stops answering: Chrome's hang monitor (onUnresponsive), the app's "wait" (resolveUnresponsive),
     // and the page answering again (onResponsive).
     const busy = await openTab(`${base}/b?busy`, "Page B");
+
     try {
       // No DevTools client on the page meanwhile: Chrome ignores a hang while a debugger is attached.
       await evalApp(`return nn.webviews.get("${busy.id}").focus()`);
@@ -2562,15 +3064,19 @@ try {
       // Input the busy page can't answer: Chrome's hang monitor starts with it.
       const sent = await evalApp(`return nn.shell.devKeyEquivalent("${s.windowId}", { key: "a", keyCode: 0, modifiers: [], focus: "page" })`);
       const busyNow = "-";
+
       const hung = await until("onUnresponsive", async () => (await eventsOf(busy.id)).find((x) => x.name === "unresponsive"), 35000).catch(async (e) => {
         throw new Error(
           `${e.message}; page ${busyNow}; key ${JSON.stringify(sent)}; events ${JSON.stringify((await eventsOf(busy.id)).map((x) => x.name).slice(-8))}; active ${(await state()).active === busy.id}`,
         );
       });
+
       await evalApp(`return nn.webviews.get("${busy.id}").resolveUnresponsive(false)`);
+
       const back = await until("onResponsive", async () => (await eventsOf(busy.id)).find((x) => x.name === "responsive"), 45000).catch(async (e) => {
         throw new Error(`${e.message}; events ${JSON.stringify((await eventsOf(busy.id)).map((x) => x.name).slice(-10))}`);
       });
+
       return { unresponsive: !!hung, responsive: !!back };
     } finally {
       await closeTab(busy.id);
@@ -2585,21 +3091,25 @@ try {
       `globalThis.__nnDismissed = []; globalThis.__nnDismissSub?.remove(); globalThis.__nnDismissSub = globalThis.expo.modules.BayCEF.addListener("onPermissionDismissed", (e) => globalThis.__nnDismissed.push(e)); return true`,
     );
     const asker = await openTab(`${base}/c?asker`, "Page C");
+
     try {
       const t = await pageFor(asker.id, `${base}/c?asker`);
       await cdp(t, "Runtime.evaluate", { expression: "navigator.requestMIDIAccess({ sysex: true }).catch(() => {}); true", userGesture: true });
       const request = await until("the prompt", async () => evalApp(`return nn.pageState.getState().pages["${asker.id}"]?.permission ?? null`), 10000);
       await closeTab(asker.id);
+
       const dismissed = await until(
         "onPermissionDismissed",
         async () => {
           const list = await evalApp(`return globalThis.__nnDismissed`);
+
           return list.find((x) => x.id === request.id) ?? null;
         },
         10000,
       ).catch(async (e) => {
         throw new Error(`${e.message}; request ${request.id}; got ${JSON.stringify(await evalApp(`return globalThis.__nnDismissed`))}`);
       });
+
       return { request: request.id, dismissed };
     } finally {
       await evalApp(`globalThis.__nnDismissSub?.remove(); return true`);
@@ -2610,18 +3120,23 @@ try {
   await check("kill-task", async () => {
     // Chrome's task manager ends a tab's renderer (killTask): the tab shows its crash (onCrashed).
     const victim = await openTab(`${base}/c?kill`, "Page C", true);
+
     try {
       const browser = Number(await browserOf(victim.id));
+
       const task = await until(
         "the tab's task",
         async () => {
           const tasks = await evalApp(`return globalThis.expo.modules.BayCEF.listTasks()`);
+
           return tasks.find((x) => (x.browserIds ?? []).includes(browser)) ?? null;
         },
         10000,
       );
+
       const killed = await evalApp(`return globalThis.expo.modules.BayCEF.killTask(${task.id})`);
       const crashed = await until("onCrashed", async () => (await eventsOf(victim.id)).find((x) => x.name === "crashed"), 10000);
+
       return { task: task.title ?? task.id, killed, crashed: crashed.payload.reason };
     } finally {
       await closeTab(victim.id);
@@ -2634,25 +3149,32 @@ try {
     await evalApp(`globalThis.__nnEvents = []; globalThis.__nnSubs?.forEach((x) => x.remove());
       globalThis.__nnSubs = [globalThis.expo.modules.BayCEF.addListener("onContentBlocker", (e) => globalThis.__nnEvents.push(["blocker", e])),
         globalThis.expo.modules.BayExtensions.addListener("onChanged", (e) => globalThis.__nnEvents.push(["extensions", e]))]; return true`);
+
     try {
       await evalApp(`return globalThis.expo.modules.BayCEF.setContentBlockerEnabled(false)`);
       await evalApp(`return globalThis.expo.modules.BayCEF.setContentBlockerEnabled(true)`);
       const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
       const configured = await exts(`configure("${installed.id}", "", { incognito: true })`);
+
       if (configured?.error) throw new Error(`configure: ${configured.error}`);
       await exts(`uninstall("${installed.id}", "")`);
+
       const events = await until(
         "both events",
         async () => {
           const list = await evalApp(`return globalThis.__nnEvents`);
+
           return list.some((x) => x[0] === "blocker") && list.filter((x) => x[0] === "extensions").length >= 2 ? list : null;
         },
         15000,
       ).catch(async (e) => {
         throw new Error(`${e.message}; got ${JSON.stringify(await evalApp(`return globalThis.__nnEvents`)).slice(0, 300)}`);
       });
+
       const sources = await evalApp(`return globalThis.expo.modules.BayCEF.displayMediaSources()`);
+
       if (!sources.some((x) => x.kind === "screen")) throw new Error("no screen among the display media sources");
+
       return {
         blocker: events.filter((x) => x[0] === "blocker").length,
         extensions: events.filter((x) => x[0] === "extensions").map((x) => x[1].event),
@@ -2674,6 +3196,7 @@ try {
     writeFileSync(join(data, "file-chooser.txt"), file + "\n");
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await evalApp(`return nn.webviews.get("${first.id}").runPageCommand("savePage")`);
+
     try {
       const saved = await until("the saved page", async () => existsSync(file) && readFileSync(file, "utf8").includes("Page A"), 15000);
       // The popover opens as the app hears of the download; closed before that, it would open over the page later.
@@ -2682,6 +3205,7 @@ try {
         () => evalApp(`return nn.store.getState().downloads.some((d) => d.state === "finished" && (d.path ?? d.filename ?? "").endsWith("saved-page.html"))`),
         10000,
       );
+
       return { saved };
     } finally {
       await closeDownloads();
@@ -2696,15 +3220,18 @@ try {
     const before = new Set((await state()).tabs.map((x) => x.id));
     await cdp(t, "Runtime.evaluate", { expression: `window.__popup = window.open("${base}/c?focus-me", "_blank"); true`, userGesture: true });
     const popup = await until("the popup", async () => (await state()).tabs.find((x) => !before.has(x.id) && x.title === "Page C" && !x.loading), 10000);
+
     try {
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
       await until("A shown", async () => (await state()).active === first.id);
       await cdp(t, "Runtime.evaluate", { expression: "window.__popup.focus(); true", userGesture: true });
+
       const e = await until("onActivateRequest", async () => (await eventsOf(popup.id)).findLast((x) => x.name === "activateRequest"), 8000).catch(
         async (err) => {
           throw new Error(`${err.message}; popup events ${JSON.stringify((await eventsOf(popup.id)).map((x) => x.name).slice(-8))}`);
         },
       );
+
       return { reason: e.payload.reason };
     } finally {
       await closeTab(popup.id);
@@ -2722,6 +3249,7 @@ try {
         const tabs = await evalApp(
           `const s = nn.store.getState(); const w = s.windows["${a}"]; return (s.tabLists[w?.spaceId] ?? []).map((i) => s.tabs[i]?.title)`,
         );
+
         return tabs.includes("Cookie") ? true : null;
       },
       10000,
@@ -2730,6 +3258,7 @@ try {
     await evalApp(`nn.store.getState().closeWindow("${a}"); return true`);
     await sleep(2000);
     const b = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${base}/b?private2" })`);
+
     try {
       await until(
         "the second private window's page",
@@ -2737,13 +3266,16 @@ try {
           const tabs = await evalApp(
             `const s = nn.store.getState(); const w = s.windows["${b}"]; return (s.tabLists[w?.spaceId] ?? []).map((i) => s.tabs[i]?.title)`,
           );
+
           return tabs.includes("Page B") ? true : null;
         },
         10000,
       );
       const pt = await pageTarget(`${base}/b?private2`);
       const cookie = (await cdp(pt, "Runtime.evaluate", { expression: "document.cookie", returnByValue: true })).result.value;
+
       if (cookie.includes("private1")) throw new Error(`the first private window's cookie survived: ${cookie}`);
+
       return { cookie: cookie || "(none)" };
     } finally {
       await evalApp(`nn.store.getState().closeWindow("${b}"); return true`);
@@ -2758,22 +3290,29 @@ try {
     const titles = (w) => evalApp(`const s = nn.store.getState(); return ${windowTabsJs(JSON.stringify(w))}.map((i) => s.tabs[i]?.title)`);
     let last = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${base}/e?churn-start" })`);
     const waits = [];
+
     try {
       await until("the first private page", async () => ((await titles(last)).includes("Page E") ? true : null), 15000);
+
       for (let round = 0; round < 50; round++) {
         const started = Date.now();
+
         const next = await evalApp(
           `nn.store.getState().closeWindow(${JSON.stringify(last)}); return nn.actions.openWindow({ incognito: true, url: "${base}/e?churn${round}" })`,
         );
+
         last = next;
         await until(`round ${round}: a live tab`, async () => ((await titles(next)).includes("Page E") ? true : null), 15000);
         waits.push(Date.now() - started);
+
         if (round % 2) {
           await sleep(1200);
           const after = await titles(next);
+
           if (!after.includes("Page E")) throw new Error(`round ${round}: the tab went: ${JSON.stringify(after)}`);
         }
       }
+
       // Then 10 windows each closed as soon as it's made, before its profile or tab could come: the last one still
       // gets a live tab, and keeps it.
       for (let round = 0; round < 10; round++)
@@ -2782,8 +3321,11 @@ try {
         );
       await until("the burst's last window: a live tab", async () => ((await titles(last)).includes("Page E") ? true : null), 15000);
       await sleep(1500);
+
       if (!(await titles(last)).includes("Page E")) throw new Error(`the burst's last tab went: ${JSON.stringify(await titles(last))}`);
+
       if (exited) throw new Error("the app exited");
+
       return { rounds: 50, burst: 10, slowestMs: Math.max(...waits), medianMs: waits.sort((a, b) => a - b)[25] };
     } finally {
       await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(last)}); return true`).catch(() => null);
@@ -2796,20 +3338,26 @@ try {
     // The extension's action (executeExtensionAction) opens its popup, and its side panel opens beside the page:
     // both are standalone WebViews, whose tabs stay out of the window's tab strip and close with them.
     const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
     const windowsBefore = (await cef(`chromeWindows()`)).length;
+
     try {
       await evalApp(`return nn.extensions.refreshExtensions("").then(() => true)`);
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
+
       const openPopup = () =>
         evalApp(`const lists = nn.extensions.useExtensions.getState().lists; const ext = Object.values(lists).flat().find((x) => x.id === "${installed.id}");
         return nn.extensions.activateExtension(${JSON.stringify(mainWindow)}, ext, { x: 100, y: 40, width: 20, height: 20 }).then(() => !!nn.extensions.useExtensions.getState().popup)`);
+
       await openPopup();
+
       const popupTarget = await until(
         "the popup page",
         async () => (await targets()).find((t) => t.type === "page" && t.url.includes(`${installed.id}/popup.html`)),
         10000,
       );
+
       const strips = await cef(`tabStrips()`);
       const inStrip = strips.strips.some((st) => st.tabs.some((x) => x.key == null));
       const popupVisible = (await cdp(popupTarget, "Runtime.evaluate", { expression: "document.visibilityState", returnByValue: true })).result.value;
@@ -2822,30 +3370,38 @@ try {
       await until("the popup reopened", async () => (await targets()).find((t) => t.type === "page" && t.url.includes(`${installed.id}/popup.html`)), 10000);
       await evalApp(`nn.extensions.closeExtensionPopup(); return true`);
       await until("the popup gone", async () => !(await targets()).some((t) => t.url.includes(`${installed.id}/popup.html`)), 8000);
+
       if (!(await evalApp(`return nn.extensions.useExtensions.getState().popup === null`))) throw new Error("the dismissed popup state survived");
       await evalApp(
         `return nn.extensions.openSidePanel(${JSON.stringify(mainWindow)}, "${installed.id}").then(() => !!nn.extensions.useExtensions.getState().sidePanels[${JSON.stringify(mainWindow)}])`,
       );
+
       const panelTarget = await until(
         "the side panel page",
         async () => (await targets()).find((t) => t.type === "page" && t.url.includes(`${installed.id}/panel.html`)),
         10000,
       );
+
       const panelVisible = (await cdp(panelTarget, "Runtime.evaluate", { expression: "document.visibilityState", returnByValue: true })).result.value;
       const stripsWithPanel = await cef(`tabStrips()`);
       const panelInStrip = stripsWithPanel.strips.some((st) => st.tabs.length !== strips.strips.find((x) => x.strip === st.strip)?.tabs.length);
       await evalApp(`nn.extensions.closeSidePanel(${JSON.stringify(mainWindow)}); return true`);
       await until("the panel gone", async () => !(await targets()).some((t) => t.url.includes(`${installed.id}/panel.html`)), 8000);
+
       const windowsAfter = await until(
         "the standalone window closed",
         async () => {
           const n = (await cef(`chromeWindows()`)).length;
+
           return n <= windowsBefore ? n : null;
         },
         8000,
       ).catch(async () => (await cef(`chromeWindows()`)).length);
+
       if (inStrip || panelInStrip) throw new Error("a standalone WebView's tab is in the window's strip");
+
       if (popupVisible !== "visible" || panelVisible !== "visible") throw new Error(`popup ${popupVisible}, panel ${panelVisible}`);
+
       return { popup: popupVisible, selfClosed: true, panel: panelVisible, windowsBefore, windowsAfter };
     } finally {
       await evalApp(`nn.extensions.closeExtensionPopup(); nn.extensions.closeSidePanel(${JSON.stringify(mainWindow)}); return true`).catch(() => null);
@@ -2859,12 +3415,15 @@ try {
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await until("A shown", async () => (await state()).active === first.id);
     const zoom = () => evalApp(`return nn.store.getState().tabs["${first.id}"]?.zoom ?? 1`);
+
     const reset = async () => {
       await evalApp(`return nn.webviews.get("${first.id}").zoomStep(0)`);
       await until("zoom 100%", async () => ((await zoom()) === 1 ? true : null), 5000);
     };
+
     const browser = await browserOf(first.id);
     const scroll = (steps) => evalApp(`return globalThis.expo.modules.BayCEF.devScrollZoom(${JSON.stringify(steps)}, ${browser})`);
+
     const gesture = (trackpad) => [
       { phase: "mayBegin", dy: 0, trackpad },
       { phase: "began", dy: 12, trackpad },
@@ -2872,18 +3431,22 @@ try {
       { phase: "ended", dy: 0, trackpad },
       ...Array.from({ length: 3 }, () => ({ phase: "momentum", dy: 30 })),
     ];
+
     await reset();
     const trackpad = await scroll(gesture(true));
     await sleep(800);
     const afterTrackpad = await zoom();
+
     const wheel = await scroll([
       { phase: "wheel", dy: 1 },
       { phase: "wheel", dy: 1 },
     ]);
+
     const afterWheel = await until(
       "zoomed",
       async () => {
         const z = await zoom();
+
         return z > 1 ? z : null;
       },
       5000,
@@ -2895,14 +3458,19 @@ try {
         .filter((l) => l.includes("[scroll-zoom]"))
         .slice(-3)
         .map((l) => l.replace(/^.*\[scroll-zoom\] /, ""));
+
       const ui = await evalApp(`return nn.store.getState().windowUi[${JSON.stringify(mainWindow)}] ?? null`).catch(() => null);
       throw new Error(
         `${e.message}; trackpad ${JSON.stringify(trackpad)} wheel ${JSON.stringify(wheel)} zoom ${await zoom()} why ${JSON.stringify(why)} ui ${JSON.stringify(ui)} events ${JSON.stringify((await eventsOf(first.id)).filter((x) => x.name === "zoom").slice(-2))}`,
       );
     });
+
     await reset();
+
     if (trackpad.some(Boolean) || afterTrackpad !== 1) throw new Error(`a trackpad ⌘-scroll zoomed: ${JSON.stringify(trackpad)} → ${afterTrackpad}`);
+
     if (!wheel.some(Boolean)) throw new Error(`the wheel didn't zoom: ${JSON.stringify(wheel)}`);
+
     return { trackpad, wheel, afterWheel };
   });
 
@@ -2915,6 +3483,7 @@ try {
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/a?after-print", { userInitiated: true }); return true`);
     await until("the preview closed", async () => !(await targets()).some((t) => t.url.startsWith("chrome://print")), 10000);
     await backToA();
+
     return { preview: preview.url };
   });
 
@@ -2923,19 +3492,25 @@ try {
     // (onInstallPrompt), and the app's answer grants it (resolveInstallPrompt). Its action opening its side panel
     // (chrome.sidePanel.open from the action's click): the app shows the panel (onSidePanel).
     const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
+
     try {
       await evalApp(`return nn.extensions.refreshExtensions("").then(() => true)`);
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
+
       const activate = () =>
         evalApp(`const lists = nn.extensions.useExtensions.getState().lists; const ext = Object.values(lists).flat().find((x) => x.id === "${installed.id}");
         return nn.extensions.activateExtension(${JSON.stringify(mainWindow)}, ext, { x: 100, y: 40, width: 20, height: 20 }).then(() => true)`);
+
       await activate();
+
       const popup = await until(
         "the popup page",
         async () => (await targets()).find((t) => t.type === "page" && t.url.includes(`${installed.id}/popup.html`)),
         10000,
       );
+
       // Not granted yet (an earlier install of the same extension may have it): Chrome asks again.
       await cdp(popup, "Runtime.evaluate", { expression: "chrome.permissions.remove({ permissions: ['bookmarks'] }).then(() => true)", awaitPromise: true });
       await cdp(popup, "Runtime.evaluate", {
@@ -2946,39 +3521,49 @@ try {
       const request = await until("the app's install dialog", async () => evalApp(`return nn.extensions.useExtensions.getState().install ?? null`), 10000);
       const requestId = request.requestId ?? request.prompt?.requestId ?? request.request?.requestId;
       await exts(`resolveInstallPrompt(${JSON.stringify(requestId)}, true)`);
+
       const granted = await until(
         "the page's answer",
         async () => {
           const v = (await cdp(popup, "Runtime.evaluate", { expression: "window.__perm", returnByValue: true })).result.value;
+
           return v !== "pending" ? v : null;
         },
         10000,
       );
+
       if (granted !== "true") throw new Error(`permissions.request answered ${granted}`);
       await evalApp(`nn.extensions.closeExtensionPopup(); return true`);
+
       // The action's click opens the side panel instead of a popup.
       const worker = await until(
         "the extension's worker",
         async () => {
           for (const t of (await targets()).filter((t) => t.type === "service_worker" && t.url.includes(installed.id))) {
             const r = await cdp(t, "Runtime.evaluate", { expression: "typeof chrome?.sidePanel?.open", returnByValue: true }).catch(() => null);
+
             if (r?.result?.value === "function") return t;
           }
+
           return null;
         },
         15000,
       );
+
       await cdp(worker, "Runtime.evaluate", {
         expression: "chrome.action.setPopup({ popup: '' }); chrome.action.onClicked.addListener((tab) => chrome.sidePanel.open({ tabId: tab.id })); true",
       });
       await sleep(300);
       await activate();
+
       const panel = await until(
         "the side panel",
         async () => (await targets()).find((t) => t.type === "page" && t.url.includes(`${installed.id}/panel.html`)),
         10000,
       );
+
       const shown = await evalApp(`return !!nn.extensions.useExtensions.getState().sidePanels[${JSON.stringify(mainWindow)}]`);
+
       return { prompt: request.type ?? request.prompt?.type ?? Object.keys(request), granted, panel: !!panel, shown };
     } finally {
       await evalApp(`nn.extensions.closeExtensionPopup(); nn.extensions.closeSidePanel(${JSON.stringify(mainWindow)}); return true`).catch(() => null);
@@ -2989,15 +3574,18 @@ try {
   await check("crash", async () => {
     // A renderer crash reaches the app (onCrashed → the sad tab), and the app keeps running.
     await evalApp(`nn.actions.openUrls(["${base}/crash-me"], ${JSON.stringify(mainWindow)}); return true`);
+
     // Its page committed and loaded (its title), not only the tab's URL: on a fresh instance the first navigation is
     // slow, and Page.crash then took the initial empty document's renderer, which the navigation replaced.
     const tab = await until("the tab to crash", async () =>
       (await state()).tabs.find((x) => x.url?.includes("crash-me") && x.title === "/crash-me" && x.loading === false),
     );
+
     const t = await pageTarget("crash-me");
     // Page.crash never answers (the page is gone): not waited for.
     cdp(t, "Page.crash").catch(() => null);
     const crashed = await until("onCrashed", async () => evalApp(`return nn.pageState.getState().pages["${tab.id}"]?.crashed ?? null`), 10000);
+
     return { crashed };
   });
 
@@ -3016,7 +3604,9 @@ try {
     await until("profile back", async () => (await state()).profileId === s.profileId);
     await sleep(500);
     const after = await lights();
+
     if (during !== before || after !== before) throw new Error(`lights moved: ${before} → ${during} → ${after}`);
+
     return { lights: before };
   });
 
@@ -3024,56 +3614,76 @@ try {
     // Chrome's password store through //chrome/browser/bay (nn_passwords_*).
     const origin = "https://example.test";
     const saved = await cef(`savePassword("", "${origin}", "nnuser", "s3cret")`);
+
     if (saved?.error) throw new Error(saved.error);
+
     const list = await until("the saved login", async () => {
       const r = await cef(`listPasswords("")`);
+
       return r.passwords?.find((p) => p.username === "nnuser") ? r : null;
     });
+
     const revealed = await cef(`getPassword("", "${origin}", "nnuser")`);
     await cef(`deletePassword("", "${origin}", "nnuser")`);
     const after = await cef(`listPasswords("")`);
+
     if (after.passwords?.some((p) => p.username === "nnuser")) throw new Error("not deleted");
     const autofill = await cef(`getPasswordAutofill("")`);
     await cef(`setPasswordAutofill("", false)`);
     const off = await cef(`getPasswordAutofill("")`);
     await cef(`setPasswordAutofill("", true)`);
+
     return { listed: list.passwords.length, revealed: revealed?.password ?? revealed, autofill, off };
   });
 
   await check("autofill", async () => {
     const saved = await cef(`saveAddress("", { fullName: "Test User", city: "Tel Aviv", country: "IL" })`);
+
     if (saved?.error) throw new Error(saved.error);
+
     const list = await until("the address", async () => {
       const r = await cef(`listAddresses("")`);
+
       return r.addresses?.length ? r : null;
     });
+
     const id = list.addresses[0].id;
     await cef(`deleteAutofillEntry("", "${id}")`);
     const settings = await cef(`getAutofillSettings("")`);
+
     return { addresses: list.addresses.length, first: list.addresses[0].fullName ?? list.addresses[0].name, settings };
   });
 
   await check("zoom-levels", async () => {
     await cef(`setZoom("", "zoom.test", 1.5)`);
+
     const levels = await until("the zoom level", async () => {
       const l = await cef(`getZoomLevels("")`);
+
       return l["zoom.test"] ? l : null;
     });
+
     await cef(`setZoom("", "zoom.test", 1)`);
+
     return { levels };
   });
 
   await check("extensions", async () => {
     const inspected = await exts(`inspectUnpacked(${JSON.stringify(extPath)})`);
     const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
+
     const list = await until("the extension listed", async () => {
       const r = await exts(`list("")`);
+
       return r.extensions?.find((e) => e.id === installed.id) ? r : null;
     });
+
     await exts(`setEnabled("${installed.id}", "", false)`);
     await exts(`uninstall("${installed.id}", "")`);
     const engines = await exts(`searchEngineList("")`);
+
     return { id: installed.id, name: inspected.name, listed: list.extensions.length, engines: !!engines.list };
   });
 
@@ -3082,67 +3692,93 @@ try {
     // takes it) lands in Chrome: list reads each back, onChanged says "configured", and site access "on click"
     // stops the extension's content script on a fresh page until "on all sites" lets it run again.
     const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
     const id = installed.id;
     const info = async () => (await exts(`list("")`)).extensions?.find((e) => e.id === id) ?? null;
+
     const configure = async (options) => {
       const r = await exts(`configure("${id}", "", ${JSON.stringify(options)})`);
+
       if (r?.error) throw new Error(`configure ${JSON.stringify(options)}: ${r.error}`);
     };
+
     // The content script's mark on a freshly loaded page (it runs at document_idle), or null after a grace period.
     const scriptRan = async (tag) => {
       const tab = await openTab(`${base}/e?cfg-${tag}`, "Page E");
+
       try {
         const t = await pageFor(tab.id, `/e?cfg-${tag}`);
         const deadline = Date.now() + 2500;
+
         while (Date.now() < deadline) {
           const r = await cdp(t, "Runtime.evaluate", { expression: "document.documentElement.dataset.nnext ?? null", returnByValue: true });
+
           if (r.result.value) return r.result.value;
           await sleep(200);
         }
+
         return null;
       } finally {
         await closeTab(tab.id);
       }
     };
+
     await evalApp(`globalThis.__nnCfg = []; globalThis.__nnCfgSub?.remove();
       globalThis.__nnCfgSub = globalThis.expo.modules.BayExtensions.addListener("onChanged", (e) => globalThis.__nnCfg.push(e)); return true`);
+
     try {
       const before = await until("the extension listed", info);
+
       if (!before.siteAccess) throw new Error("the fixture has no site access to change");
+
       if (!(await scriptRan("before"))) throw new Error("the content script didn't run before any change");
       const set = { pinned: !before.pinned, incognito: !before.incognito, fileAccess: !before.fileAccess };
+
       for (const [key, value] of Object.entries(set)) {
         await configure({ [key]: value });
         await until(`${key} = ${value}`, async () => (await info())?.[key] === value);
       }
+
       await configure({ siteAccess: "onClick" });
+
       const onClick = await until("site access on click", async () => {
         const e = await info();
+
         return e?.siteAccess === "ON_CLICK" ? e : null;
       });
+
       const ranOnClick = await scriptRan("onclick");
+
       if (ranOnClick) throw new Error(`the content script ran with site access on click (${ranOnClick})`);
       await configure({ siteAccess: "allSites" });
+
       const allSites = await until("site access on all sites", async () => {
         const e = await info();
+
         return e?.siteAccess === "ON_ALL_SITES" ? e : null;
       });
+
       const ranAgain = await scriptRan("allsites");
+
       if (!ranAgain) throw new Error("the content script didn't run again on all sites");
+
       const configured = await until(
         "onChanged configured",
         async () => {
           const list = await evalApp(`return globalThis.__nnCfg`);
           const mine = list.filter((x) => x.event === "configured" && x.id === id);
+
           return mine.length >= 5 ? mine : null;
         },
         10000,
       ).catch(async (e) => {
         throw new Error(`${e.message}; got ${JSON.stringify(await evalApp(`return globalThis.__nnCfg`)).slice(0, 300)}`);
       });
+
       // Back as it was (pinning and incognito are profile prefs that would outlive an uninstall-free run).
       await configure({ pinned: before.pinned, incognito: before.incognito, fileAccess: before.fileAccess });
+
       return {
         set,
         siteAccess: [before.siteAccess, onClick.siteAccess, allSites.siteAccess],
@@ -3159,6 +3795,7 @@ try {
   await check("extension-private-windows", async () => {
     // Chrome's private-access preference gates content scripts, actions and hosted popups, for both manifest modes.
     const results = [];
+
     for (const mode of ["spanning", "split"]) {
       const folder = join(scratch, `fixture-ext-private-${mode}`);
       cpSync(extPath, folder, { recursive: true });
@@ -3167,47 +3804,62 @@ try {
       manifest.incognito = mode;
       writeFileSync(manifestPath, JSON.stringify(manifest));
       const installed = await exts(`install(${JSON.stringify(folder)}, "")`);
+
       if (installed?.error) throw new Error(installed.error);
       const id = installed.id;
       let windowId;
       const info = async () => (await exts(`list("")`)).extensions?.find((e) => e.id === id);
+
       const setPrivate = async (allowed) => {
         const result = await exts(`configure("${id}", "", { incognito: ${allowed} })`);
+
         if (result?.error) throw new Error(result.error);
         await until(`private access ${allowed}`, async () => (await info())?.incognito === allowed);
         await evalApp(`return nn.extensions.refreshExtensions("").then(() => true)`);
       };
+
       const visit = async (tag) => {
         const url = `${base}/e?private-extension-${mode}-${tag}`;
         const tabId = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(windowId)}, { url: ${JSON.stringify(url)} })`);
         const page = await until("the private fixture page", () => pageFor(tabId, url));
         let mark = null;
         const deadline = Date.now() + 2500;
+
         while (Date.now() < deadline) {
           mark = (await cdp(page, "Runtime.evaluate", { expression: "document.documentElement.dataset.nnext ?? null", returnByValue: true })).result.value;
+
           if (mark) break;
           await sleep(200);
         }
+
         const browserId = Number(await browserOf(tabId));
         const states = await evalApp(`return globalThis.expo.modules.BayChromeUI.actionStates(${browserId}, ["${id}"])`);
         const shown = await evalApp(`return nn.extensions.windowExtensions(nn.store.getState(), ${JSON.stringify(windowId)}).some((e) => e.id === "${id}")`);
+
         return { mark, states, shown };
       };
+
       try {
         const before = await until("the private fixture listed", info);
+
         if (before.incognito !== false || before.incognitoAllowed !== true) throw new Error(`private access should start off: ${JSON.stringify(before)}`);
         windowId = await evalApp(`return nn.actions.openWindow({ incognito: true })`);
         await evalApp(`return nn.extensions.refreshExtensions("").then(() => true)`);
         const off = await visit("off");
+
         if (off.mark || off.shown || off.states[id]) throw new Error(`extension ran before permission: ${JSON.stringify(off)}`);
         await setPrivate(true);
         const on = await visit("on");
+
         if (!on.mark || !on.shown || !on.states[id]) throw new Error(`extension didn't run with permission: ${JSON.stringify(on)}`);
+
         const opened = await evalApp(`const ext = nn.extensions.findExtension("", "${id}");
           return nn.extensions.activateExtension(${JSON.stringify(windowId)}, ext, { x: 100, y: 40, width: 20, height: 20 })
             .then(() => nn.extensions.useExtensions.getState().popup?.extensionId === "${id}")`);
+
         if (!opened) throw new Error("the private extension action didn't open its popup");
         const popup = await until("the private popup renderer", async () => (await targets()).find((t) => t.url.includes(`${id}/popup.html`)), 10000);
+
         // The target exists before the page has its extension bindings: asked until they answer.
         const privateContext =
           (await until("the popup's extension bindings", async () => {
@@ -3215,57 +3867,72 @@ try {
               expression: "String(globalThis.chrome?.extension?.inIncognitoContext)",
               returnByValue: true,
             });
+
             return ["true", "false"].includes(context.result.value) ? context.result.value : null;
           })) === "true";
+
         if (privateContext !== (mode === "split")) throw new Error(`${mode} popup used the wrong profile: ${privateContext}`);
         await setPrivate(false);
         await until("revocation closing the private popup", async () => await evalApp(`return nn.extensions.useExtensions.getState().popup === null`), 10000);
         const revoked = await visit("revoked");
+
         if (revoked.mark || revoked.shown || revoked.states[id]) throw new Error(`extension ran after revocation: ${JSON.stringify(revoked)}`);
         results.push({ mode, defaultOff: true, contentScript: on.mark, popupPrivateContext: privateContext, revoked: true });
       } finally {
         await evalApp(`nn.extensions.closeExtensionPopup(); return true`).catch(() => null);
+
         if (windowId) await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(windowId)}); return true`).catch(() => null);
         await exts(`uninstall("${id}", "")`).catch(() => null);
         await evalApp(`nn.actions.switchToTab("${first.id}"); return true`).catch(() => null);
       }
     }
+
     return results;
   });
 
   await check("chrome-windows-create", async () => {
     // A window an extension makes (chrome.windows.create): its tab lands in the app's window, live (tab:<id>).
     const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
+
     // The installed copy's worker (an earlier install's target can linger, without the chrome API).
     const worker = await until(
       "the extension's worker",
       async () => {
         for (const t of (await targets()).filter((t) => t.type === "service_worker" && t.url.includes(installed.id))) {
           const r = await cdp(t, "Runtime.evaluate", { expression: "typeof chrome?.windows?.create", returnByValue: true }).catch(() => null);
+
           if (r?.result?.value === "function") return t;
         }
+
         return null;
       },
       15000,
     );
+
     const made = await cdp(worker, "Runtime.evaluate", {
       expression: `chrome.windows.create({ url: "${base}/e?window" }).then((w) => JSON.stringify({ id: w.id, tabs: w.tabs?.length }))`,
       awaitPromise: true,
       returnByValue: true,
     });
+
     log("  chrome.windows.create:", JSON.stringify(made.result?.value ?? made.exceptionDetails?.exception?.description ?? made));
+
     const tab = await until(
       "the window's tab in the app",
       async () => {
         const tabs = await evalApp(
           `const s = nn.store.getState(); return Object.values(s.tabs).map((t) => ({ id: t.id, url: t.url, adoptId: t.adoptId, windowId: t.windowId }))`,
         );
+
         return tabs.find((t) => t.url?.includes("e?window")) ?? null;
       },
       15000,
     );
+
     await exts(`uninstall("${installed.id}", "")`);
+
     return { tab: tab.id, adoptId: tab.adoptId ?? null, window: tab.windowId };
   });
 
@@ -3273,31 +3940,39 @@ try {
     // A private window an extension makes (chrome.windows.create({incognito: true}), allowed in private windows): its
     // tab lands in a private window of the app, live, never in a normal window. With one open, it goes there.
     const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
     await exts(`configure("${installed.id}", "", { incognito: true })`);
+
     const privateTabs = () =>
       evalApp(
         `const s = nn.store.getState(); return Object.values(s.tabs).map((t) => ({ id: t.id, url: t.url, title: t.title, windowId: t.windowId, incognito: !!s.windows[t.windowId]?.incognito, adoptId: t.adoptId }))`,
       );
+
     const opened = [];
+
     try {
       const worker = await until(
         "the extension's worker",
         async () => {
           for (const t of (await targets()).filter((t) => t.type === "service_worker" && t.url.includes(installed.id))) {
             const r = await cdp(t, "Runtime.evaluate", { expression: "typeof chrome?.windows?.create", returnByValue: true }).catch(() => null);
+
             if (r?.result?.value === "function") return t;
           }
+
           return null;
         },
         15000,
       );
+
       const create = async (tag) => {
         const made = await cdp(worker, "Runtime.evaluate", {
           expression: `chrome.windows.create({ url: "${base}/cookie?${tag}", incognito: true }).then((w) => JSON.stringify({ incognito: w.incognito }), (e) => "error: " + e.message)`,
           awaitPromise: true,
           returnByValue: true,
         });
+
         const tab = await until(
           `the ${tag} tab in the app`,
           async () => (await privateTabs()).find((t) => t.url?.includes(`cookie?${tag}`) && t.title === "Cookie") ?? null,
@@ -3305,20 +3980,28 @@ try {
         ).catch((e) => {
           throw new Error(`${e.message}; windows.create: ${made.result?.value ?? JSON.stringify(made.exceptionDetails ?? made)}`);
         });
+
         opened.push(tab.windowId);
+
         return { tab, created: made.result?.value };
       };
+
       // Personal's cookie, which a private page must not see.
       await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/cookie?personal", { userInitiated: true }); return true`);
       await until("Personal's cookie", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Cookie" && !t.loading));
       const lone = await create("private-ext1");
+
       if (!lone.tab.incognito) throw new Error(`the private tab landed in a normal window: ${JSON.stringify(lone)}`);
+
       const cookie = (await cdp(await pageTarget("cookie?private-ext1"), "Runtime.evaluate", { expression: "document.cookie", returnByValue: true })).result
         .value;
+
       if (cookie.includes("personal")) throw new Error(`the private page sees Personal's cookie: ${cookie}`);
       const second = await create("private-ext2");
+
       if (!second.tab.incognito || second.tab.windowId !== lone.tab.windowId)
         throw new Error(`the second private tab: ${JSON.stringify(second)} (first in ${lone.tab.windowId})`);
+
       return { first: { window: lone.tab.windowId, adoptId: lone.tab.adoptId ?? null, cookie: cookie || "(none)" }, second: { sameWindow: true } };
     } finally {
       for (const w of new Set(opened)) await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(w)}); return true`).catch(() => null);
@@ -3331,15 +4014,19 @@ try {
   const withPopupExtension = async (options, fn) => {
     writePopupExtension(options);
     const installed = await exts(`install(${JSON.stringify(extPopupPath)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
+
     try {
       await evalApp(`return nn.extensions.refreshExtensions("").then(() => true)`);
+
       return await fn(installed.id);
     } finally {
       await evalApp(`nn.extensions.closeExtensionPopup(); return true`).catch(() => null);
       await exts(`uninstall("${installed.id}", "")`).catch(() => null);
     }
   };
+
   // The Chrome window id of the run's window for Personal (tabStrips' strip).
   const mainStrip = async () => (await cef(`tabStrips()`)).strips.find((st) => st.appWindow === mainWindow && st.profile === "");
 
@@ -3350,12 +4037,16 @@ try {
     // window. Esc in it closes it (Chrome's close reaches the app), as in Chrome.
     return withPopupExtension({}, async (id) => {
       const tab = await freshTab(`${base}/b?under-popup`);
+
       try {
         const windowsBefore = (await cef(`chromeWindows()`)).length;
+
         const opened = await evalApp(`const ext = Object.values(nn.extensions.useExtensions.getState().lists).flat().find((x) => x.id === "${id}");
           return nn.extensions.activateExtension(${JSON.stringify(mainWindow)}, ext, { x: 100, y: 40, width: 20, height: 20 }).then(() => !!nn.extensions.useExtensions.getState().popup)`);
+
         if (!opened) throw new Error("no popup in the app");
         const popup = await until("the popup page", async () => (await targets()).find((t) => t.type === "page" && t.url.includes(`${id}/popup.html`)), 10000);
+
         // Its target comes before its page can answer.
         const seen = JSON.parse(
           await until(
@@ -3372,14 +4063,21 @@ try {
             5000,
           ),
         );
+
         const strip = await mainStrip();
+
         if (seen.window !== strip?.strip) throw new Error(`the popup's current window is ${seen.window}, the app's is ${strip?.strip}`);
+
         if (seen.tabs.length !== 1 || seen.tabs[0] !== `${base}/b?under-popup`) throw new Error(`the popup's active tab: ${JSON.stringify(seen.tabs)}`);
+
         if (seen.popups !== 1) throw new Error(`chrome.extension.getViews({ type: "popup" }): ${seen.popups}`);
         const strips = await cef(`tabStrips()`);
+
         if (strips.strips.some((st) => st.tabs.some((x) => x.key == null))) throw new Error("the popup is a tab in a strip");
         const windowsWith = (await cef(`chromeWindows()`)).length;
+
         if (windowsWith !== windowsBefore) throw new Error(`windows ${windowsBefore} → ${windowsWith} with the popup open`);
+
         // The popup may go before DevTools acknowledges the key.
         for (const type of ["rawKeyDown", "keyUp"])
           await cdp(popup, "Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 53 }).catch(
@@ -3387,6 +4085,7 @@ try {
           );
         await until("Esc closing the popup", async () => ((await evalApp(`return nn.extensions.useExtensions.getState().popup === null`)) ? true : null), 8000);
         await until("the popup page gone", async () => !(await targets()).some((t) => t.url.includes(`${id}/popup.html`)), 8000);
+
         return { window: seen.window, activeTab: seen.tabs[0], popups: seen.popups, windows: windowsWith };
       } finally {
         await closeTab(tab).catch(() => null);
@@ -3401,8 +4100,10 @@ try {
     // as the "added" bubble does) land in the app's window; no window the app didn't show comes on screen.
     const appWindows = async () => (await cef(`chromeWindows()`)).map((w) => w.window);
     const before = new Set([...onScreenWindows(), ...(await appWindows())]);
+
     return withPopupExtension({ welcome: true }, async (id) => {
       const opened = [];
+
       try {
         const welcome = await until(
           "the extension's install tab in the app",
@@ -3410,23 +4111,30 @@ try {
             const tabs = await evalApp(
               `const s = nn.store.getState(); return Object.values(s.tabs).map((t) => ({ id: t.id, url: t.url, windowId: t.windowId }))`,
             );
+
             return tabs.find((t) => t.url?.includes("e?installed")) ?? null;
           },
           15000,
         );
+
         opened.push(welcome.id);
+
         if (welcome.windowId !== mainWindow) throw new Error(`the install tab is in ${welcome.windowId}, not the run's window`);
+
         const worker = await until(
           "the extension's worker",
           async () => {
             for (const t of (await targets()).filter((t) => t.type === "service_worker" && t.url.includes(id))) {
               const r = await cdp(t, "Runtime.evaluate", { expression: "typeof chrome?.windows?.getAll", returnByValue: true }).catch(() => null);
+
               if (r?.result?.value === "function") return t;
             }
+
             return null;
           },
           15000,
         );
+
         const listed = JSON.parse(
           (
             await cdp(worker, "Runtime.evaluate", {
@@ -3436,27 +4144,35 @@ try {
             })
           ).result.value,
         );
+
         const strips = new Set((await cef(`tabStrips()`)).strips.map((st) => st.strip));
         const hidden = listed.filter((w) => !strips.has(w));
+
         if (hidden.length)
           throw new Error(`chrome.windows.getAll lists windows the app doesn't show: ${JSON.stringify(hidden)} (app's: ${JSON.stringify([...strips])})`);
         await cdp(worker, "Runtime.evaluate", { expression: "chrome.runtime.openOptionsPage().then(() => true)", awaitPromise: true });
+
         const options = await until(
           "the options page in the app",
           async () => {
             const tabs = await evalApp(
               `const s = nn.store.getState(); return Object.values(s.tabs).map((t) => ({ id: t.id, url: t.url, windowId: t.windowId }))`,
             );
+
             return tabs.find((t) => t.url?.includes(`${id}/options.html`)) ?? null;
           },
           15000,
         );
+
         opened.push(options.id);
+
         if (options.windowId !== mainWindow) throw new Error(`the options page is in ${options.windowId}, not the run's window`);
         await sleep(1000);
         const app = new Set(await appWindows());
         const stray = onScreenWindows().filter((w) => !before.has(w) && !app.has(w));
+
         if (stray.length) throw new Error(`windows on screen the app didn't show: ${JSON.stringify(stray)}`);
+
         return { listed, installTab: welcome.url, options: options.url };
       } finally {
         for (const tab of opened) await closeTab(tab).catch(() => null);
@@ -3469,21 +4185,28 @@ try {
     // script sent to the extension's stand-in (as blockers answer some ad scripts), each once.
     return withPopupExtension({}, async () => {
       const tab = await freshTab(`${base}/nn-ads`);
+
       try {
         const target = await until("the page", () => pageTarget("/nn-ads"));
         const standIn = (await cdp(target, "Runtime.evaluate", { expression: "window.__nnStandIn === true", returnByValue: true })).result.value;
+
         if (!standIn) throw new Error("the script wasn't sent to the stand-in");
+
         const blocked = await until(
           "the count",
           async () => {
             const n = await evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tab)}]?.blocked ?? 0`);
+
             return n >= 2 ? n : null;
           },
           8000,
         ).catch(async () => evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tab)}]?.blocked ?? 0`));
+
         await sleep(500);
         const settled = await evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tab)}]?.blocked ?? 0`);
+
         if (settled !== 2) throw new Error(`blocked ${settled} (then ${blocked}), not 2 (the image and the redirected script)`);
+
         return { blocked: settled, standIn };
       } finally {
         await closeTab(tab).catch(() => null);
@@ -3499,6 +4222,7 @@ try {
     const open = () => evalApp(`return !!nn.store.getState().windowUi[${JSON.stringify(mainWindow)}]?.downloadsOpen`);
     const wasOpen = await open();
     const tab = await freshTab(`${base}/b?crx`);
+
     try {
       const target = await until("the page", () => pageTarget("/b?crx"));
       const url = `${base}/webstore/crx?nn=${Date.now()}`;
@@ -3513,12 +4237,16 @@ try {
         10000,
       );
       const seen = [];
+
       for (let i = 0; i < 10; i++) {
         seen.push(...(await listed()));
         await sleep(300);
       }
+
       if (seen.some((u) => u.includes("/webstore/crx"))) throw new Error(`the .crx is one of the user's downloads: ${JSON.stringify([...new Set(seen)])}`);
+
       if (!wasOpen && (await open())) throw new Error("the downloads popover opened");
+
       return { downloads: new Set(seen).size };
     } finally {
       await closeTab(tab).catch(() => null);
@@ -3535,44 +4263,58 @@ try {
     writeFileSync(crxPath, fixtureCrx());
     const profile = await evalApp(`return nn.store.getState().createSpace({ name: "Installs" })`);
     const opened = [];
+
     const bubbleIn = async () => {
       for (const w of await cef(`chromeWindows()`)) {
         const children = JSON.parse(await cef(`devWindow(${w.window}, "children")`));
+
         if (children.some((c) => /has been added/.test(c.title))) return w.window;
       }
+
       return null;
     };
+
     const profileWindow = async (path) => {
       const before = new Set((await cef(`chromeWindows()`)).map((w) => w.window));
       const id = await evalApp(`return nn.actions.openWindow({ spaceId: ${JSON.stringify(profile)}, url: "${base}${path}" })`);
       opened.push(id);
       await until(`${path} shown`, () => pageTarget(path));
       const native = await until("its window", async () => (await cef(`chromeWindows()`)).find((w) => !before.has(w.window))?.window ?? null);
+
       return { id, native };
     };
+
     const install = async (closeFirst) => {
       await evalApp(`nn.extensions.cancelInstall(); globalThis.__nnCrx = null;
         globalThis.expo.modules.BayExtensions.installCrx(${JSON.stringify(crxPath)}, ${JSON.stringify(profile)}).then((r) => (globalThis.__nnCrx = r)); return true`);
+
       const prompt = await until(
         "the install prompt",
         async () => {
           const p = await evalApp(`return nn.extensions.useExtensions.getState().install?.prompt ?? null`);
+
           return p?.name === "NNCore crx fixture" ? p : null;
         },
         15000,
       );
+
       if (closeFirst) await closeFirst();
       await exts(`resolveInstallPrompt(${JSON.stringify(prompt.requestId)}, true)`);
       const result = await until("the install", () => evalApp(`return globalThis.__nnCrx`), 15000);
+
       if (!result.id) throw new Error(`install: ${JSON.stringify(result)}`);
+
       return result.id;
     };
+
     let id = null;
+
     try {
       // A window of the profile on screen: the bubble shows over it; the window closes with the bubble up.
       const first = await profileWindow("/b?installs-1");
       id = await install();
       const shown = await until("the bubble", () => bubbleIn(), 8000);
+
       if (shown !== first.native) throw new Error(`the bubble is in window ${shown}, not the profile's ${first.native}`);
       await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(first.id)}); return true`);
       await sleep(1500);
@@ -3594,16 +4336,22 @@ try {
       });
       await sleep(2000);
       const early = await bubbleIn();
+
       if (early) throw new Error(`the bubble showed in window ${early} with no window of the profile`);
       const stray = onScreenWindows().filter((w) => !before.has(w));
+
       if (stray.length) throw new Error(`windows on screen the app didn't show: ${JSON.stringify(stray)}`);
       const third = await profileWindow("/d?installs-3");
       const later = await until("the waiting bubble", () => bubbleIn(), 8000);
+
       if (later !== third.native) throw new Error(`the waiting bubble is in window ${later}, not the profile's ${third.native}`);
+
       return { immediate: shown, waited: later };
     } finally {
       await evalApp(`nn.extensions.cancelInstall(); return true`).catch(() => null);
+
       for (const w of opened) await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(w)}); return true`).catch(() => null);
+
       if (id) await exts(`uninstall("${id}", ${JSON.stringify(profile)})`).catch(() => null);
     }
   });
@@ -3612,10 +4360,12 @@ try {
     // B7: Chrome's page menu has no "Open in Reading Mode" (or "Listen to this page"): both open Chrome's side panel,
     // which the app's windows don't have, so picking one did nothing. CEF's menu had neither. No separator is doubled.
     const tab = await freshTab(`${base}/text`);
+
     try {
       const target = await until("the page", () => pageTarget("/text"));
       const before = (await eventsOf(tab)).filter((x) => x.name === "contextMenu").length;
       let menu = null;
+
       for (let attempt = 0; attempt < 3 && !menu; attempt++) {
         const at = { x: 300, y: 300, button: "right", clickCount: 1 };
         await cdp(target, "Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y });
@@ -3625,18 +4375,23 @@ try {
           "a context menu",
           async () => {
             const menus = (await eventsOf(tab)).filter((x) => x.name === "contextMenu");
+
             return menus.length > before ? menus.at(-1) : null;
           },
           4000,
         ).catch(() => null);
       }
+
       if (!menu) throw new Error("no context menu reported");
       const items = menu.payload.items;
       const flat = (list) => list.flatMap((i) => [i, ...flat(i.submenu ?? [])]);
       const found = flat(items).filter((i) => i.id === 50169 || /reading mode|listen to this page/i.test(i.label ?? ""));
+
       if (found.length) throw new Error(`still there: ${JSON.stringify(found.map((i) => i.label))}`);
       const doubled = items.some((i, n) => i.separator && (n === 0 || n === items.length - 1 || items[n + 1]?.separator));
+
       if (doubled) throw new Error(`a doubled or end separator: ${JSON.stringify(items.map((i) => (i.separator ? "—" : i.label)))}`);
+
       return { items: items.filter((i) => !i.separator).map((i) => i.label) };
     } finally {
       await closeTab(tab).catch(() => null);
@@ -3652,11 +4407,14 @@ try {
       "the blocker's state",
       async () => {
         const s = await cef(`getContentBlocker()`);
+
         return s?.stats?.ready ? s : null;
       },
       30000,
     );
+
     const enabledLists = state.lists.filter((l) => l.enabled).length;
+
     if (state.lists.length < 20 || enabledLists < 5 || !(state.stats.networkFilters > 20000))
       throw new Error(
         `the content blocker has no bundled lists on a fresh install: ${state.lists.length} lists, ${enabledLists} on, ${state.stats.networkFilters} network filters`,
@@ -3664,10 +4422,12 @@ try {
     // Cookie banners are blocked by default (there's no setting for it): EasyList's and uBO's cookie notice lists are on.
     const cookieLists = ["fanboy-cookiemonster", "ublock-cookies-easylist"];
     const cookiesOff = cookieLists.filter((id) => !state.lists.find((l) => l.id === id)?.enabled);
+
     if (cookiesOff.length) throw new Error(`cookie notice lists off on a fresh profile: ${cookiesOff}`);
     await cef(`setContentBlockerAllowed("allowed.test", true)`);
     const allowed = await cef(`isContentBlockerAllowed("allowed.test")`);
     await cef(`setContentBlockerAllowed("allowed.test", false)`);
+
     return { enabled: state.enabled, lists: state.lists.length, on: enabledLists, networkFilters: state.stats.networkFilters, version: state.version, allowed };
   });
 
@@ -3679,15 +4439,21 @@ try {
         .filter((l) => l.enabled)
         .map((l) => l.id)
         .sort();
+
     const before = await enabled();
     const off = (await cef(`getContentBlocker()`)).lists.find((l) => !l.enabled);
     await cef(`devContentBlockerFailNextMessage()`);
+
     const error = await evalApp(
       `return globalThis.expo.modules.BayCEF.setFilterListEnabled(${JSON.stringify(off.id)}, true).then(() => null, (e) => e.message)`,
     );
+
     const after = await enabled();
+
     if (!error) throw new Error("the failed change reported no error");
+
     if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error(`the lists changed: ${before} → ${after}`);
+
     return { error, enabled: after.length };
   });
 
@@ -3706,9 +4472,11 @@ try {
     const firstPage = `${origin}/adfirst?${firstTag}`;
     // Another profile's page in a window of its own: closing its only tab in the main window would close that window.
     const ownWindow = profileId ? await evalApp(`return nn.actions.openWindow({ spaceId: ${JSON.stringify(profileId)}, url: "${firstPage}" })`) : null;
+
     const tab = ownWindow
       ? await until("the profile's tab", () => evalApp(`return ${shownTabJs(JSON.stringify(ownWindow))}`))
       : await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${firstPage}" })`);
+
     try {
       // A profile loaded just now blocks from its first page (one blocker serves every profile): none of the first
       // page's ads goes out.
@@ -3721,7 +4489,9 @@ try {
       );
       await sleep(500);
       const first = adsServedFor(firstTag);
+
       if (first.length) throw new Error(`the first page's ads went out: ${JSON.stringify(first)}`);
+
       const round = async (tag) => {
         tag = `${tag0}-${tag}`;
         await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, "${page}?${tag}", { userInitiated: true }); return true`);
@@ -3730,8 +4500,10 @@ try {
           return t?.url?.endsWith(${JSON.stringify(`?${tag}`)}) && !s.live[${JSON.stringify(tab)}]?.isLoading ? true : null`),
         );
         const t = await until("its target", () => pageTarget(`/adpage?${tag}`));
+
         const reached = async (url) => {
           const before = adServed.length;
+
           const r = (
             await cdp(t, "Runtime.evaluate", {
               expression: `fetch("${url}", { mode: "no-cors" }).then(() => "loaded", () => "failed")`,
@@ -3739,13 +4511,16 @@ try {
               returnByValue: true,
             })
           ).result.value;
+
           return { fetch: r, reached: adServed.slice(before).some((s) => url.includes(s.split("?")[0])) };
         };
+
         // The release smoke test's ad script as a <script>: blocked (it fails to load), or answered by a stand-in (an
         // adsbygoogle that does nothing) when the blocker has redirect resources; either way it never leaves the browser.
         const script = async () => {
           const before = adServed.length;
           const url = `http://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?${tag}`;
+
           const r = (
             await cdp(t, "Runtime.evaluate", {
               expression: `new Promise((r) => { const s = document.createElement("script"); s.src = "${url}";
@@ -3754,27 +4529,35 @@ try {
               returnByValue: true,
             })
           ).result.value;
+
           return { script: r, reached: adServed.slice(before).some((s) => s.startsWith("pagead2.")) };
         };
+
         const extraRequest = async (kind) => {
           const before = adServed.length;
+
           const expression =
             kind === "redirect"
               ? `fetch("http://adpage.test:${server.address().port}/redirect-ad?${tag}", { mode: "no-cors" }).then(() => "loaded", () => "failed")`
               : `new Promise((resolve) => { const socket = new WebSocket("ws://ib.adnxs.com/ut/v3?${tag}");
                 socket.onopen = () => { socket.close(); resolve("opened"); }; socket.onerror = () => resolve("failed"); })`;
+
           const outcome = (await cdp(t, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
+
           return { outcome, reached: adServed.slice(before).some((s) => s.startsWith("ib.adnxs.com") && s.endsWith(`?${tag}`)) };
         };
+
         // Pages the tab opens itself, last: a tracked link (fbclid and gclid are uBO privacy list $removeparam rules) and
         // the scriptlet probe. Both are navigations of the tab, not fetches of the page.
         const open = async (url, title) => {
           await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+
           return until(`${title} (${tag})`, () =>
             evalApp(`const s = nn.store.getState(); const t = s.tabs[${JSON.stringify(tab)}];
             return t?.title?.startsWith(${JSON.stringify(title)}) && !s.live[${JSON.stringify(tab)}]?.isLoading ? { url: t.url, title: t.title } : null`),
           );
         };
+
         const results = {
           adnxs: await reached(`http://ib.adnxs.com/ut/v3?${tag}`),
           gpt: await reached(`http://securepubads.g.doubleclick.net/tag/js/gpt.js?${tag}`),
@@ -3782,12 +4565,15 @@ try {
           redirect: await extraRequest("redirect"),
           websocket: await extraRequest("websocket"),
         };
+
         const trackedTab = await open(`${origin}/tracked?id=${tag}&fbclid=IwAR0bay&gclid=Cj0bay`, "Tracked");
         const trackedServed = served.has(`/tracked?id=${tag}`);
         results.tracked = { url: trackedTab.url, served: trackedServed, cleaned: trackedServed && !trackedTab.url.includes("fbclid") };
         results.scriptlet = (await open(`http://biologianet.com:${server.address().port}/scriptlet-probe?${tag}`, "probe")).title;
+
         return results;
       };
+
       const stopped = (r) =>
         !r.adnxs.reached &&
         !r.gpt.reached &&
@@ -3798,12 +4584,15 @@ try {
         !r.websocket.reached &&
         r.tracked.cleaned &&
         r.scriptlet === "probe object";
+
       const blocked = await round("blocked");
       await cef(`setContentBlockerAllowed("adpage.test", true)`);
       const allowed = await round("allowed");
       await cef(`setContentBlockerAllowed("adpage.test", false)`);
       const again = await round("again");
+
       if (!stopped(blocked)) throw new Error(`not blocked: ${JSON.stringify(blocked)}`);
+
       if (
         !allowed.adnxs.reached ||
         !allowed.gpt.reached ||
@@ -3814,7 +4603,9 @@ try {
         !allowed.tracked.url.includes("fbclid")
       )
         throw new Error(`allowing the site let nothing through: ${JSON.stringify(allowed)}`);
+
       if (!stopped(again)) throw new Error(`blocked again? ${JSON.stringify(again)}`);
+
       return { firstPage: "blocked", blocked, allowed, again };
     } finally {
       if (ownWindow) await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(ownWindow)}); return true`);
@@ -3831,35 +4622,44 @@ try {
     const origin = `http://adpage.test:${port}`;
     const tag = `policies-${Date.now()}`;
     const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${origin}/adpage?${tag}" })`);
+
     const titled = (prefix) =>
       until(`the title ${prefix}`, () =>
         evalApp(
           `const t = nn.store.getState().tabs[${JSON.stringify(tab)}]; return t?.title?.startsWith(${JSON.stringify(prefix)}) && t.title !== "CSP waiting" && t.title !== "Srcdoc waiting" ? t.title : null`,
         ),
       );
+
     const go = (url) => evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
     const tabIds = async () => (await state()).tabs.map((t) => t.id);
+
     const closeNewTabs = async (known) => {
       for (const id of (await tabIds()).filter((id) => !known.includes(id))) await closeTab(id);
     };
+
     try {
       await until("the page", () => pageTarget(`/adpage?${tag}`));
+
       const opens = async (url) => {
         const t = await until("the opener", () => pageTarget(`/adpage?${tag}`));
         const known = await tabIds();
         const served = adServed.length;
         await cdp(t, "Runtime.evaluate", { expression: `window.open(${JSON.stringify(url)}); 1`, userGesture: true });
+
         return { known, served };
       };
+
       const adHost = "22bettracking.online";
       const adUrl = `http://${adHost}:${port}/ad?${tag}`;
       // Refused: the host never hears of it and no tab stays.
       let opened = await opens(adUrl);
       await sleep(1500);
+
       const refused = {
         reached: adServed.slice(opened.served).some((s) => s.startsWith(adHost)),
         tabs: (await tabIds()).filter((id) => !opened.known.includes(id)).length,
       };
+
       if (refused.reached || refused.tabs) throw new Error(`the popup got through: ${JSON.stringify(refused)}`);
       // Any other page opens.
       opened = await opens(`${origin}/b?popup-${tag}`);
@@ -3874,16 +4674,20 @@ try {
 
       await go(`http://leitor.net:${port}/csp-probe?${tag}`);
       const policy = await titled("csp ");
+
       if (policy !== "csp worker-src") throw new Error(`no policy on the document: ${policy}`);
       await cef(`setContentBlockerAllowed("leitor.net", true)`);
       await go(`http://leitor.net:${port}/csp-probe?paused-${tag}`);
       const paused = await titled("csp ");
       await cef(`setContentBlockerAllowed("leitor.net", false)`);
+
       if (paused !== "csp none") throw new Error(`a policy on a paused site: ${paused}`);
 
       await go(`http://biologianet.com:${port}/scriptlet-srcdoc?${tag}`);
       const srcdoc = await titled("srcdoc ");
+
       if (srcdoc !== "srcdoc object") throw new Error(`no scriptlet in the srcdoc frame: ${srcdoc}`);
+
       return { refused, policy, paused, srcdoc };
     } finally {
       await cef(`setContentBlockerAllowed("adpage.test", false)`).catch(() => null);
@@ -3904,24 +4708,30 @@ try {
     const blockedPage = () => evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tab)}]?.blockedPage ?? null`);
     const tabUrl = () => evalApp(`return nn.store.getState().tabs[${JSON.stringify(tab)}]?.url ?? null`);
     const go = (url) => evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+
     const isBlocked = async (url) => {
       const served = adServed.length;
       await go(url);
       await until(`the block page for ${url}`, async () => (await blockedPage()) === url, 10000);
+
       if ((await tabUrl()) !== url) throw new Error(`the tab left the blocked URL: ${await tabUrl()}`);
       const reached = adServed.slice(served).some((s) => s.endsWith(`?${tag}`) && !s.startsWith("adpage.test"));
+
       if (reached) throw new Error(`a blocked page reached its server: ${url}`);
     };
+
     const opens = async (url) => {
       const served = adServed.length;
       await go(url);
       await until(`${url} loading`, () => adServed.slice(served).some((s) => url.endsWith(s)), 10000);
       await until("no block page", async () => !(await blockedPage()), 5000);
     };
+
     const allowedPages = async () => (await cef(`getContentBlocker()`)).allowedPages;
     const hostRule = "000491b06a.com";
     const allRule = "buzzadnetwork.com";
     const pageOf = (host) => `http://${host}:${port}/b?${tag}`;
+
     try {
       await until("the first page", () => pageTarget(`/adpage?${tag}`));
       await isBlocked(pageOf(hostRule));
@@ -3935,6 +4745,7 @@ try {
       await isBlocked(pageOf(hostRule));
       await evalApp(`nn.webviews.get(${JSON.stringify(tab)}).reload(); return true`);
       await sleep(800);
+
       if ((await blockedPage()) !== pageOf(hostRule)) throw new Error("Reload left the block page");
       // Visit Anyway for this run, then blocked again.
       await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, true, false)`);
@@ -3942,19 +4753,23 @@ try {
       await until("the first page again", async () => !(await blockedPage()) && (await tabUrl()) === start, 10000);
       await opens(pageOf(hostRule));
       const kept = await allowedPages();
+
       if (kept.includes(hostRule)) throw new Error("Visit Anyway was saved");
       await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, false, false)`);
       await isBlocked(`http://${hostRule}:${port}/c?${tag}`);
       // Always Allow is saved, and listed so it can be undone.
       await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, true, true)`);
+
       if (!(await allowedPages()).includes(allRule)) throw new Error("Always Allow wasn't listed");
       await opens(pageOf(allRule));
       await cef(`setBlockedPageAllowed(${JSON.stringify(allRule)}, false, false)`);
+
       if ((await allowedPages()).includes(allRule)) throw new Error("Block Again left it listed");
       // A paused site isn't blocked.
       await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, true)`);
       await opens(`http://${allRule}:${port}/c?${tag}`);
       await cef(`setContentBlockerAllowed(${JSON.stringify(allRule)}, false)`);
+
       return { blocked: [hostRule, allRule], back: true, visitAnyway: true, alwaysAllow: true, paused: true };
     } finally {
       await cef(`setBlockedPageAllowed(${JSON.stringify(hostRule)}, false, false)`).catch(() => null);
@@ -3968,21 +4783,26 @@ try {
     await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
     const origin = `http://adpage.test:${server.address().port}`;
     const tab = await openTab(`${origin}/adpage?redirect-state`, "/adpage");
+
     try {
       const target = await until("the redirect fixture", () => pageTarget("/adpage?redirect-state"));
       const rounds = {};
       const failures = [];
+
       for (const kind of ["auth", "post-direct", "post-chain"]) {
         const options =
           kind === "auth"
             ? { headers: { authorization: "Bearer redirect-secret" } }
             : { method: "POST", headers: { "content-type": "application/json" }, body: '{"secret":"upload"}' };
+
         const evaluated = await cdp(target, "Runtime.evaluate", {
           expression: `fetch(${JSON.stringify(`${origin}/rewrite-chain-start?kind=${kind}`)}, ${JSON.stringify(options)}).then((response) => response.json())`,
           awaitPromise: true,
           returnByValue: true,
         });
+
         const response = evaluated.result.value;
+
         if (
           !response ||
           response.method !== "GET" ||
@@ -3993,9 +4813,12 @@ try {
         ) {
           failures.push(`${kind}: ${JSON.stringify(response ?? evaluated)}`);
         }
+
         rounds[kind] = response;
       }
+
       if (failures.length) throw new Error(`redirects restored request state: ${failures.join("; ")}`);
+
       return rounds;
     } finally {
       await closeTab(tab.id).catch(() => null);
@@ -4011,27 +4834,35 @@ try {
     const results = {};
     const failures = [];
     const target = () => pageFor(tab.id, "/");
+
     const evaluate = async (expression) =>
       (await cdp(await target(), "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
+
     const go = async (url, title) => {
       const finalURL = new URL(url).searchParams.get("to") ?? url;
       await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab.id)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
       await until(`the cookie fixture ${url}`, async () => {
         const item = (await state()).tabs.find((item) => item.id === tab.id);
+
         return item && item.url === finalURL && !item.loading && item.title === title;
       });
     };
+
     const paused = (value) => cef(`setContentBlockerAllowed("streamin.me", ${value})`);
     const request = (path) => evaluate(`fetch(${JSON.stringify(path)}).then((response) => response.text())`);
+
     const seed = async (name, value) => {
       await paused(true);
       await request(`/cookie-write?name=${name}&value=${value}`);
       await paused(false);
     };
+
     const expect = (name, value, condition) => {
       results[name] = value;
+
       if (!condition(value)) failures.push(`${name}: ${JSON.stringify(value)}`);
     };
+
     try {
       await seed("session", "original");
       await request("/cookie-write?name=session&value=rejected");
@@ -4060,9 +4891,11 @@ try {
 
       await go("https://blocker-cookie.workers.dev/worker-cookie", "Worker cookie");
       await go(`${allowedOrigin}/adpage?cookie-credentials`, "/adpage");
+
       const script = (anonymous, redirect) => {
         const destination = "https://blocker-cookie.workers.dev/index.js?cookie-credentials";
         const url = redirect ? `${allowedOrigin}/cookie-redirect?to=${encodeURIComponent(destination)}` : destination;
+
         return evaluate(`new Promise((resolve) => {
           const script = document.createElement("script");
           ${anonymous ? 'script.crossOrigin = "anonymous";' : ""}
@@ -4072,6 +4905,7 @@ try {
           document.head.append(script);
         })`);
       };
+
       expect("withCredentials", await script(false, false), (value) => value === "failed");
       expect("anonymous", await script(true, false), (value) => value === "loaded");
       expect("anonymousRedirect", await script(true, true), (value) => value === "loaded");
@@ -4080,11 +4914,14 @@ try {
       // initiating origin. Both hops also change the response-cookie policy.
       await request("/cookie-write?name=taint&value=source");
       expect("taintSeed", await evaluate("document.cookie"), (cookie) => cookie.includes("taint=source"));
+
       const returningChain = (tag, query = "taint") => {
         const end = `${allowedOrigin}/cookie-echo?${query}=${tag}`;
         const middle = `${filteredOrigin}/cookie-redirect?to=${encodeURIComponent(end)}`;
+
         return `${allowedOrigin}/cookie-redirect?to=${encodeURIComponent(middle)}`;
       };
+
       expect("taintedReturn", await request(returningChain("cors")), (value) => value === "none");
       await evaluate(`fetch(${JSON.stringify(returningChain("no-cors"))}, { mode: "no-cors" }).then(() => true)`);
       // Chromium retains the initial no-CORS loader's credential decision on
@@ -4099,13 +4936,17 @@ try {
       const loopPath = `/cookie-loop?token=${Date.now()}`;
       expect("redirectLoop", await evaluate(`fetch(${JSON.stringify(loopPath)}).then(() => "loaded", () => "failed")`), (value) => value === "failed");
       expect("redirectLoopRequests", served.get(loopPath), (count) => count > 1 && count <= 21);
+
       if (failures.length) throw new Error(`cookie rules changed unrelated state: ${failures.join("; ")}`);
+
       return results;
     } finally {
       await paused(false).catch(() => null);
+
       for (const held of heldCookieResponses.values()) held.destroy();
       heldCookieResponses.clear();
       cookieEchoes.clear();
+
       for (const [domain, names] of [
         ["streamin.me", ["session", "concurrent", "filteredRedirect"]],
         ["adpage.test", ["allowedRedirect", "redirected", "taint"]],
@@ -4113,6 +4954,7 @@ try {
       ]) {
         for (const name of names) await cdp(await target(), "Network.deleteCookies", { name, domain, path: "/" }).catch(() => null);
       }
+
       await closeTab(tab.id).catch(() => null);
     }
   });
@@ -4124,34 +4966,43 @@ try {
     await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
     const port = server.address().port;
     const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "http://adpage.test:${port}/adpage?rewrites" })`);
+
     const go = async (url, title) => {
       await evalApp(`nn.store.getState().navigate(${JSON.stringify(tab)}, ${JSON.stringify(url)}, { userInitiated: true }); return true`);
+
       return until(`${title ?? "the page"} at ${url}`, () =>
         evalApp(`const s = nn.store.getState(); const t = s.tabs[${JSON.stringify(tab)}];
         return t?.url === ${JSON.stringify(url)} && !s.live[${JSON.stringify(tab)}]?.isLoading && (${JSON.stringify(title ?? "")} === "" || t.title?.startsWith(${JSON.stringify(title ?? "")}))
           ? t.title : null`),
       );
     };
+
     const run = async (urlPart, expression) => {
       const t = await until(`the page ${urlPart}`, () => pageTarget(urlPart));
+
       return (await cdp(t, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
     };
+
     try {
       const html = `http://skidrowreloaded.com:${port}/body-page`;
       const pages = {};
       // Chrome only takes brotli over TLS.
       const urls = ["plain", "encoding=gzip", "charset=windows-1252", "chunks", "chunks&encoding=gzip"].map((query) => `${html}?${query}`);
+
       for (const url of [...urls, "https://tls.skidrowreloaded.com/body-page?encoding=br"]) {
         const query = url.slice(url.indexOf("?"));
         const title = await go(url, "Body");
         pages[query] = { title, kept: await run(query, `window.kept`), ad: await run(query, `document.documentElement.outerHTML.includes("adserverDomain")`) };
       }
+
       for (const [query, page] of Object.entries(pages)) {
         if (page.title !== "Body kept" || page.kept !== "caf\u00e9" || page.ad) throw new Error(`HTML rule on ${query}: ${JSON.stringify(page)}`);
       }
+
       await cef(`setContentBlockerAllowed("skidrowreloaded.com", true)`);
       const paused = await go(`${html}?paused`, "Body");
       await cef(`setContentBlockerAllowed("skidrowreloaded.com", false)`);
+
       if (paused !== "Body ad ran") throw new Error(`a paused site's body changed: ${paused}`);
 
       // No port in the URL: the rule's `||host/` needs its path right after the host, and the host map finds the server.
@@ -4159,40 +5010,51 @@ try {
       await go(`${replaced}/b`, "Page B");
       const fetched = (path) => `fetch("${path}").then((r) => r.text())`;
       const script = await run(`pvpoke-re.com`, fetched("/body.js?v=1"));
+
       if (script !== "try{return;GameMaster.load()}catch(e){}") throw new Error(`$replace: ${script}`);
       const big = await run(`pvpoke-re.com`, `${fetched("/body-big.js?v=1")}.then((text) => [text.length, text.slice(0, 10)])`);
+
       if (big[0] !== 32 + 11 * 1024 * 1024 || big[1] !== "try{GameMa") throw new Error(`a body past the limit changed: ${big}`);
+
       const stream = await run(
         `pvpoke-re.com`,
         `new Promise((resolve) => { const s = new EventSource("/body-stream.js?v=1"); s.onmessage = (e) => { s.close(); resolve(e.data); }; })`,
       );
+
       if (stream !== "try{GameMaster") throw new Error(`a stream: ${stream}`);
 
       const redirected = `http://eturbonews.com:${port}/location-redirect`;
       const before = served.get("/location-target") ?? 0;
       await go(redirected);
+
       if ((served.get("/location-target") ?? 0) !== before) throw new Error("the redirect was followed");
 
       const cookie = `http://streamin.me:${port}`;
       await go(`${cookie}/set-cookie-page?gone`, "Set cookie");
+
       const echoed = await until("the cookie's removal", async () => {
         const sent = await run(`streamin.me`, fetched("/cookie-echo"));
+
         return sent === "none" ? sent : null;
       });
 
       // The rule is a third party's script whose Cookie has doubleclick.net in it, and Chrome only adds that later.
       await go(`http://adpage.test:${port}/adpage?rewrites`);
+
       const loads = (tag) =>
         run(
           `/adpage?rewrites`,
           `new Promise((resolve) => { const s = document.createElement("script"); s.src = "https://blocker-cookie.workers.dev/index.js?${tag}";
           s.onload = () => resolve("loaded"); s.onerror = () => resolve("failed"); document.head.append(s); })`,
         );
+
       const without = await loads("without");
       await go(`https://blocker-cookie.workers.dev/worker-cookie`, "Worker cookie");
       await go(`http://adpage.test:${port}/adpage?rewrites`);
       const withCookie = await loads("with");
+
       if (without !== "loaded" || withCookie !== "failed") throw new Error(`$requestheader: ${without}, ${withCookie}`);
+
       return { pages, paused, big: big[0], stream, echoed, without, withCookie };
     } finally {
       await closeTab(tab).catch(() => null);
@@ -4210,7 +5072,9 @@ try {
     // The same in a profile made now (the release smoke test's page is in its Work profile): the blocker serves every
     // profile, and must block there from its very first page, and follow the one allow-list.
     const id = await evalApp(`return nn.store.getState().createSpace({ name: "Blocker" })`);
+
     if (!id) throw new Error("no profile made");
+
     return { profile: id, ...(await contentBlockerRounds(id)) };
   });
 
@@ -4219,9 +5083,11 @@ try {
     // its last window): the blocker filters private windows' requests as every other profile's.
     const origin = `http://adpage.test:${server.address().port}`;
     const out = [];
+
     for (const step of ["first", "after-release"]) {
       const tag = `private-${step}-${Date.now()}`;
       const w = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${origin}/adfirst?${tag}" })`);
+
       try {
         await until(
           `the ${step} private page`,
@@ -4232,13 +5098,16 @@ try {
         );
         await sleep(500);
         const served = adsServedFor(tag);
+
         if (served.length) throw new Error(`the ${step} private window's ads went out: ${JSON.stringify(served)}`);
         out.push(step);
       } finally {
         await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(w)}); return true`);
       }
+
       await sleep(2000); // its profile goes (private-release)
     }
+
     return { blocked: out };
   });
 
@@ -4254,17 +5123,23 @@ try {
     await sleep(1500);
     const found = {};
     let pages = 0;
+
     for (const profile of profiles) {
       const r = JSON.parse(
         await cef(`engineCall("nn_history_query", ${JSON.stringify(profile)}, ${JSON.stringify(JSON.stringify({ maxUrls: 1000, maxVisits: 1 }))})`),
       );
+
       const urls = (r.entries ?? []).map((e) => e.u ?? "");
       pages += urls.filter((u) => u.startsWith("http")).length;
       const internal = urls.filter((u) => u.startsWith("chrome-extension://") && !userOpened(u));
+
       if (internal.length) found[profile || "personal"] = internal;
     }
+
     if (Object.keys(found).length) throw new Error(`extension pages in history: ${JSON.stringify(found)}`);
+
     if (!pages) throw new Error("no history at all (the check proves nothing)");
+
     return { profiles: profiles.length, webPages: pages };
   });
 
@@ -4272,28 +5147,34 @@ try {
     // A crashed tab's Reload brings the page back and drops the sad tab (pageState.crashed), as CEF: its first
     // report after the crash names no URL, so the app takes the reload for a new page.
     const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${base}/crash-reload" })`);
+
     try {
       await until("the page", async () => (await state()).tabs.find((t) => t.id === tab && t.title === "/crash-reload" && !t.loading));
       await cdp(await pageTarget("/crash-reload"), "Page.crash").catch(() => null);
       const crashed = await until("the sad tab", () => evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tab)}]?.crashed ?? null`), 10000);
       await evalApp(`return nn.webviews.get(${JSON.stringify(tab)}).reload()`);
+
       const title = await until("the page again", async () => {
         const t = await pageTarget("/crash-reload");
         const r = t && (await cdp(t, "Runtime.evaluate", { expression: "document.title", returnByValue: true }).catch(() => null));
+
         return r?.result?.value === "/crash-reload" ? r.result.value : null;
       });
+
       const after = await until(
         "no sad tab",
         async () => {
           const p = await evalApp(
             `return { crashed: nn.pageState.getState().pages[${JSON.stringify(tab)}]?.crashed ?? null, url: nn.store.getState().tabs[${JSON.stringify(tab)}]?.url }`,
           );
+
           return !p.crashed && p.url?.endsWith("/crash-reload") ? p : null;
         },
         5000,
       ).catch(async () => {
         throw new Error(`still crashed: ${JSON.stringify(await evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tab)}]?.crashed`))}`);
       });
+
       return { crashed: crashed.reason, title, url: after.url };
     } finally {
       await evalApp(`nn.store.getState().closeTab(${JSON.stringify(tab)}); return true`);
@@ -4304,6 +5185,7 @@ try {
     // chrome://crash crashes the page without committing: the tab keeps its URL (a reload or the restored session
     // doesn't crash it again), as CEF.
     const tab = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${base}/crash-url" })`);
+
     try {
       await until("the page", async () => (await state()).tabs.find((t) => t.id === tab && t.title === "/crash-url" && !t.loading));
       await evalApp(
@@ -4312,16 +5194,20 @@ try {
       await until("the sad tab", () => evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tab)}]?.crashed ?? null`), 10000);
       await sleep(1000);
       const url = await evalApp(`return nn.store.getState().tabs[${JSON.stringify(tab)}]?.url`);
+
       if (!url?.startsWith(`${base}/crash-url`)) throw new Error(`the tab's URL became ${url}`);
       await evalApp(`return nn.webviews.get(${JSON.stringify(tab)}).reload()`);
       await until("the page again, not crashed", async () => {
         const p = await evalApp(
           `return { crashed: nn.pageState.getState().pages[${JSON.stringify(tab)}]?.crashed ?? null, url: nn.store.getState().tabs[${JSON.stringify(tab)}]?.url }`,
         );
+
         const t = await pageTarget("/crash-url");
         const r = t && (await cdp(t, "Runtime.evaluate", { expression: "document.title", returnByValue: true }).catch(() => null));
+
         return !p.crashed && p.url?.startsWith(`${base}/crash-url`) && r?.result?.value === "/crash-url" ? p : null;
       });
+
       return { url };
     } finally {
       await evalApp(`nn.store.getState().closeTab(${JSON.stringify(tab)}); return true`);
@@ -4341,51 +5227,67 @@ try {
     });
     const t = await until("the popup's page", () => pageTarget("/popup-page"));
     await until("a popup window", async () => ((await popups()) === before + 1 ? true : null), 10000);
+
     const page = (
       await cdp(t, "Runtime.evaluate", { expression: `JSON.stringify({ size: innerWidth + "x" + innerHeight, opener: !!window.opener })`, returnByValue: true })
     ).result.value;
+
     await cdp(t, "Runtime.evaluate", { expression: `window.opener.postMessage("from-popup", "*")` });
+
     const message = await until(
       "the opener's message",
       async () => (await cdp(opener, "Runtime.evaluate", { expression: "window.__msg", returnByValue: true })).result.value,
     );
+
     const asTab = (await state()).tabs.some((x) => x.url?.includes("/popup-page"));
     await closeFromPage(t);
     await until("the popup window closed", async () => ((await popups()) === before && !(await pageTarget("/popup-page")) ? true : null), 10000);
     const { size, opener: hasOpener } = JSON.parse(page);
+
     if (asTab) throw new Error("the popup became a tab");
+
     if (size !== "480x360" || !hasOpener) throw new Error(`popup page ${page}`);
+
     return { size, opener: hasOpener, message };
   });
 
   await check("download", async () => {
     // Chrome's download manager through //chrome/browser/bay (nn_downloads_*): the app's list fills in.
     await evalApp(`nn.actions.openUrls(["${base}/file.bin"], ${JSON.stringify(mainWindow)}); return true`);
+
     const d = await until(
       "the finished download",
       async () => {
         const list = await evalApp(
           `return nn.store.getState().downloads.map((d) => ({ id: d.id, state: d.state, filename: d.filename, path: d.path, received: d.received }))`,
         );
+
         return list.find((x) => x.filename?.includes("nncore-test") && x.state === "finished") ?? null;
       },
       20000,
     );
+
     await closeDownloads();
+
     if (!d.path.startsWith(downloadsDir)) throw new Error(`downloaded to ${d.path}, not the scratch dir`);
+
     return d;
   });
 
   await check("site-settings", async () => {
     const origin = "https://settings.test";
     await cef(`setSiteSetting("", "${origin}", "popups", "allow")`);
+
     const settings = await until("the setting", async () => {
       const s = await cef(`getSiteSettings("", "${origin}")`);
+
       return s?.popups?.value === "allow" ? s : null;
     });
+
     const origins = await cef(`getSiteSettingsOrigins("")`);
     await cef(`resetSiteSettings("", "${origin}")`);
     const cleared = await cef(`clearSiteData("", "${origin}")`);
+
     return { popups: settings.popups, origins: origins.length, cleared };
   });
 
@@ -4394,11 +5296,15 @@ try {
     const origin = "https://more.test";
     await cef(`savePassword("", "${origin}", "olduser", "pw1")`);
     const updated = await cef(`updatePassword("", "${origin}", "olduser", "newuser", "pw2")`);
+
     if (updated?.error) throw new Error(`update: ${updated.error}`);
+
     const revealed = await until("the edited login", async () => {
       const r = await cef(`getPassword("", "${origin}", "newuser")`);
+
       return r?.password === "pw2" ? r : null;
     });
+
     const unlocked = await cef(`unlockPasswords("")`);
     const never = await cef(`getNeverSavePasswordOrigins("")`);
     const allowed = await cef(`allowSavingPasswords("", "https://never.test")`);
@@ -4408,25 +5314,33 @@ try {
     const exported = await cef(`exportPasswords("")`);
     const written = await until("the export file", async () => existsSync(file) && readFileSync(file, "utf8").includes("newuser"), 10000);
     await cef(`deletePassword("", "${origin}", "newuser")`);
+
     return { updated: revealed.password, unlocked, never: never?.origins?.length ?? never, allowed, exported: exported?.status ?? exported, written };
   });
 
   await check("autofill-cards", async () => {
     // Cards in Chrome's personal data manager: save (with a published test number), list, reveal, delete; settings.
     const saved = await cef(`saveCard("", { name: "Acceptance Test", expMonth: 12, expYear: 2031 }, "4111111111111111")`);
+
     if (saved?.error) throw new Error(`save: ${saved.error}`);
+
     const card = await until("the card listed", async () => {
       const r = await cef(`listCards("")`);
+
       return r?.cards?.find((c) => c.id === saved.id) ?? null;
     });
+
     const number = await cef(`revealCardNumber("", "${saved.id}")`);
+
     if (number?.number !== "4111111111111111") throw new Error(`reveal: ${JSON.stringify(number)}`);
     await cef(`deleteAutofillEntry("", "${saved.id}")`);
     await until("the card gone", async () => !(await cef(`listCards("")`))?.cards?.some((c) => c.id === saved.id));
     await cef(`setAutofillSettings("", null, false)`);
     const off = await cef(`getAutofillSettings("")`);
     await cef(`setAutofillSettings("", null, true)`);
+
     if (off.cards !== false) throw new Error(`cards setting: ${JSON.stringify(off)}`);
+
     return { card: { last4: card.lastFour ?? card.last4 ?? null, name: card.name }, revealed: true, cardsOff: true };
   });
 
@@ -4446,23 +5360,28 @@ try {
     const answer = (id, action) => evalApp(`return nn.webviews.get(${JSON.stringify(first.id)}).resolveAutofillPrompt(${id}, ${JSON.stringify(action)})`);
     const addresses = async (profile = "") => (await cef(`listAddresses(${JSON.stringify(profile)})`))?.addresses ?? [];
     const cards = async (profile = "") => (await cef(`listCards(${JSON.stringify(profile)})`))?.cards ?? [];
+
     const sendForm = async (path, title, values) => {
       await evalApp(`nn.store.getState().navigate(${JSON.stringify(first.id)}, ${JSON.stringify(secureBase + path)}, { userInitiated: true }); return true`);
       await until(title, async () => (await state()).tabs.find((x) => x.id === first.id && x.title === title && x.url?.endsWith(path) && !x.loading), 15000);
       const t = await pageFor(first.id, path);
+
       for (const [id, text] of values) {
         await cdp(t, "Runtime.evaluate", { expression: `document.getElementById(${JSON.stringify(id)}).focus()` });
         await cdp(t, "Input.insertText", { text });
       }
+
       const box = JSON.parse(
         (await cdp(t, "Runtime.evaluate", { expression: "JSON.stringify(document.getElementById('go').getBoundingClientRect())", returnByValue: true })).result
           .value,
       );
+
       const at = { x: box.x + box.width / 2, y: box.y + box.height / 2, button: "left", clickCount: 1 };
       await cdp(t, "Input.dispatchMouseEvent", { type: "mousePressed", ...at, buttons: 1 });
       await cdp(t, "Input.dispatchMouseEvent", { type: "mouseReleased", ...at, buttons: 0 });
       await until("the form sent", async () => (await state()).tabs.find((x) => x.id === first.id && x.title === "Saved" && !x.loading), 15000);
     };
+
     const address = [
       ["name", "Test User"],
       ["street", "1 Satire Way"],
@@ -4471,14 +5390,17 @@ try {
       ["zip", "62701"],
       ["country", "United States"],
     ];
+
     const card = (number, name) => [
       ["ccname", name],
       ["ccnumber", number],
       ["ccmonth", "12"],
       ["ccyear", "2031"],
     ];
+
     let profileB = null;
     let other = null;
+
     try {
       await evalApp(`nn.actions.switchToTab(${JSON.stringify(first.id)}); return true`);
       await until("A shown", async () => (await state()).active === first.id);
@@ -4487,6 +5409,7 @@ try {
       // A new address: "Save address?" on the page, saved on accept.
       await sendForm("/address", "Address", address);
       const save = await offerAfter(saveSeen, "the save-address offer");
+
       if (save.kind !== "saveAddress" || !save.title || !save.accept || !save.decline || !JSON.stringify(save.lines).includes("Springfield"))
         throw new Error(`save offer ${JSON.stringify(save)}`);
       const shown = await until("the offer in the app", async () => ((await appPrompt())?.id === save.id ? true : null), 5000);
@@ -4500,13 +5423,16 @@ try {
       let seen = await lastId();
       await sendForm("/address?email", "Address", [...address.slice(0, 1), ["email", email], ...address.slice(1)]);
       const update = await offerAfter(seen, "the update-address offer");
+
       if (update.kind !== "updateAddress" || !JSON.stringify(update.changes ?? []).includes(email)) throw new Error(`update offer ${JSON.stringify(update)}`);
       other = await openTab(`${base}/b`, "Page B");
       await until("the offer closed by the tab switch", () => closed(update.id), 8000);
       await evalApp(`nn.actions.switchToTab(${JSON.stringify(first.id)}); return true`);
       await until("A shown again", async () => (await state()).active === first.id);
       await sleep(1500);
+
       if (await appPrompt()) throw new Error(`the offer came back after the tab switch: ${JSON.stringify(await appPrompt())}`);
+
       if ((await addresses()).some((a) => a.email === email)) throw new Error("the ignored update was saved");
 
       // Again, pending through a profile switch: still offered when the profile is back, and accepting it updates
@@ -4514,6 +5440,7 @@ try {
       seen = await lastId();
       await sendForm("/address?email", "Address", [...address.slice(0, 1), ["email", email], ...address.slice(1)]);
       const update2 = await offerAfter(seen, "the update offer again");
+
       if (update2.kind !== "updateAddress") throw new Error(`second update offer ${JSON.stringify(update2)}`);
       const s = await state();
       profileB = await evalApp(`return nn.store.getState().createSpace({ name: "Prompts" })`);
@@ -4524,17 +5451,22 @@ try {
       await until("profile A back", async () => (await state()).profileId === s.profileId && (await state()).active === first.id);
       await sleep(500);
       const kept = await appPrompt();
+
       if (kept?.id !== update2.id) throw new Error(`after the profile switch the page offers ${JSON.stringify(kept)}`);
+
       if (await closed(update2.id)) throw new Error("the profile switch closed the offer");
       await answer(update2.id, "accept");
       const updated = await until("the address updated", async () => (await addresses()).find((a) => a.email === email) ?? null);
+
       if ((await addresses()).length !== 1) throw new Error(`addresses ${JSON.stringify(await addresses())}`);
+
       if ((await addresses(profileB)).length) throw new Error("profile B got the address");
 
       // A card: "Save card?", saved on accept; a second one declined ("No thanks") saves nothing.
       seen = await lastId();
       await sendForm("/card", "Card", card("4111111111111111", "Test User"));
       const cardOffer = await offerAfter(seen, "the save-card offer");
+
       if (cardOffer.kind !== "saveCard" || !JSON.stringify(cardOffer.lines).includes("1111")) throw new Error(`card offer ${JSON.stringify(cardOffer)}`);
       await answer(cardOffer.id, "accept");
       const savedCard = await until("the card saved", async () => (await cards()).find((c) => c.last4 === "1111") ?? null);
@@ -4544,9 +5476,11 @@ try {
       await answer(declined.id, "decline");
       await until("the declined offer closed", () => closed(declined.id), 5000);
       await sleep(1000);
+
       if ((await cards()).some((c) => c.last4 === "4444")) throw new Error("the declined card was saved");
       // A stale answer (an offer already answered) changes nothing.
       await answer(cardOffer.id, "accept");
+
       return {
         save: { title: save.title, accept: save.accept, decline: save.decline, lines: save.lines, shown },
         saved: { name: saved.name, city: saved.city },
@@ -4556,8 +5490,11 @@ try {
       };
     } finally {
       for (const a of await addresses().catch(() => [])) await cef(`deleteAutofillEntry("", ${JSON.stringify(a.id)})`).catch(() => null);
+
       for (const c of await cards().catch(() => [])) await cef(`deleteAutofillEntry("", ${JSON.stringify(c.id)})`).catch(() => null);
+
       if (other) await closeTab(other.id).catch(() => null);
+
       if (profileB) await evalApp(`nn.store.getState().deleteSpace(${JSON.stringify(profileB)}); return true`).catch(() => null);
       await backToA();
     }
@@ -4568,10 +5505,13 @@ try {
     await evalApp(`return globalThis.expo.modules.BayCEF.clearBrowsingData("", ["cache", "history"], null)`, 90000);
     await cef(`setSiteSetting("", "https://reset.test", "sound", "block")`);
     await cef(`resetSiteSettings("", "https://reset.test")`);
+
     const reset = await until("the site reset", async () => {
       const r = await cef(`getSiteSettings("", "https://reset.test")`);
+
       return r?.sound?.isDefault ? r.sound : null;
     });
+
     const before = await cef(`getContentBlocker()`);
     await cef(`setContentBlockerEnabled(false)`);
     const off = await until("the blocker off", async () => ((await cef(`getContentBlocker()`)).enabled === false ? true : null), 15000);
@@ -4579,34 +5519,42 @@ try {
     await until("the blocker on", async () => ((await cef(`getContentBlocker()`)).enabled === true ? true : null), 15000);
     const list = before.lists.find((l) => !l.enabled) ?? before.lists[0];
     await cef(`setFilterListEnabled(${JSON.stringify(list.id)}, ${!list.enabled})`);
+
     const toggled = await until(
       "the list toggled",
       async () => ((await cef(`getContentBlocker()`)).lists.find((l) => l.id === list.id)?.enabled === !list.enabled ? true : null),
       20000,
     );
+
     await cef(`setFilterListEnabled(${JSON.stringify(list.id)}, ${list.enabled})`);
     await cef(`removeExternalAppAllowance("", "https://none.test", "nncore-no-such-app")`);
     const siteData = await evalApp(`return nn.webviews.get("${first.id}")?.clearSiteData() ?? null`);
+
     if (!siteData || siteData.error) throw new Error(`clearSiteData: ${JSON.stringify(siteData)}`);
+
     return { reset: reset.value, blockerOff: off, list: list.id, toggled, siteData };
   });
 
   await check("download-controls", async () => {
     // A running download paused, resumed and cancelled from the app (nn_downloads_pause/_resume/_cancel).
     await evalApp(`nn.actions.openUrls(["${base}/slow.bin"], ${JSON.stringify(mainWindow)}); return true`);
+
     const find = () =>
       evalApp(
         `return nn.store.getState().downloads.map((d) => ({ id: d.id, state: d.state, paused: d.paused, filename: d.filename, received: d.received }))`,
       ).then((l) => l.find((x) => x.filename?.includes("nncore-slow")) ?? null);
+
     try {
       const d = await until(
         "the slow download running",
         async () => {
           const x = await find();
+
           return x?.state === "downloading" && !x.paused && x.received > 0 ? x : null;
         },
         15000,
       );
+
       await cef(`pauseDownload("${d.id}")`);
       await until("paused", async () => ((await find())?.paused ? true : null), 8000);
       await cef(`resumeDownload("${d.id}")`);
@@ -4614,19 +5562,23 @@ try {
         "running again",
         async () => {
           const x = await find();
+
           return x?.state === "downloading" && !x.paused ? true : null;
         },
         8000,
       );
       await cef(`cancelDownload("${d.id}")`);
+
       const last = await until(
         "cancelled",
         async () => {
           const x = await find();
+
           return x?.state === "cancelled" ? x : null;
         },
         8000,
       );
+
       return { id: d.id, state: last.state };
     } finally {
       // The new download opened the popover over the page; it stayed open for the rest of the run.
@@ -4637,10 +5589,13 @@ try {
   await check("tasks-components", async () => {
     const tasks = await until("tasks", async () => {
       const t = await cef(`listTasks()`);
+
       return t.length ? t : null;
     });
+
     const components = await cef(`components()`);
     const allowances = await cef(`getExternalAppAllowances("")`);
+
     return { tasks: tasks.length, browserTasks: tasks.filter((t) => t.browserIds.length).length, components: components.length, allowances: allowances.length };
   });
 
@@ -4648,6 +5603,7 @@ try {
     // A page navigating to a download stays where it was, and the app hears of it (onDownloadNavigation).
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/file.bin?nav", { userInitiated: true }); return true`);
     const e = await until("onDownloadNavigation", async () => (await eventsOf(first.id)).find((x) => x.name === "downloadNavigation"), 15000);
+
     return e.payload;
   });
 
@@ -4656,7 +5612,9 @@ try {
     const during = await cef(`isTracing()`);
     const path = await cef(`endTracing(false)`);
     const after = await cef(`isTracing()`);
+
     if (!started || !during || after) throw new Error(`tracing ${started} ${during} ${after}`);
+
     return { started, during, after, path };
   });
 
@@ -4666,15 +5624,19 @@ try {
     await cef(`listPasswords("scratch-delete")`);
     await until("the profile loaded", async () => existsSync(folder), 10000);
     const result = await cef(`deleteProfileData("scratch-delete")`);
+
     if (result.remaining.length) throw new Error(`remaining ${JSON.stringify(result)}`);
     // Chrome removes the folder once the profile is destroyed (its Browsers closed, its services gone).
     const gone = await until("the folder gone", async () => !existsSync(folder), 15000).catch(() => false);
+
     if (!gone) throw new Error("the profile's folder is still there");
     // And it stays gone: nothing working for the profile (the content blocker's messages) loads it back.
     await sleep(3000);
+
     if (existsSync(folder)) throw new Error("the profile's folder came back");
     // The app window still shows its own profile (Chrome's deletion moves "last used", not the window).
     const shown = (await cef(`chromeWindows()`)).filter((w) => w.visible || w.alpha >= 0).map((w) => w.profile);
+
     return { ...result, folderGone: true, windowProfiles: shown };
   });
 
@@ -4693,6 +5655,7 @@ try {
     await evalApp(`return nn.webviews.get("${first.id}").focus()`);
     await sleep(300);
     const sent = await evalApp(`return nn.shell.devKeyEquivalent("${s.windowId}", { key: "\u001b", keyCode: 53, modifiers: [], focus: "page" })`);
+
     const escape = await until(
       "onCommand escape",
       async () => (await eventsOf(first.id)).find((x) => x.name === "command" && x.payload?.command === "escape"),
@@ -4707,21 +5670,25 @@ try {
         `${e.message}; key: ${JSON.stringify(sent)}; window profile: ${profile}; active: ${(await state()).active}; Chrome's active: ${JSON.stringify(chromeActive)}; page ${vis}`,
       );
     });
+
     const t = await pageFor(first.id, `${base}/a`);
     await cdp(t, "Runtime.evaluate", { expression: "location.href = 'nncore-no-such-app://hello'", userGesture: true });
     const external = await until("onExternalApp", async () => evalApp(`return nn.pageState.getState().pages["${first.id}"]?.externalApp ?? null`), 10000);
     const securityEvent = (await eventsOf(first.id)).some((x) => x.name === "security");
+
     if (!securityEvent) throw new Error("no onSecurity");
     const focused = (await eventsOf(first.id)).some((x) => x.name === "focus");
     // A background tab's window.focus() asks the app to bring it forward (onActivateRequest "page").
     const other = (await state()).tabs.find((x) => x.id !== first.id && x.url?.startsWith(`${base}/d`));
     let activate = null;
+
     if (other) {
       const ot = await pageTarget(`${base}/d`);
       await cdp(ot, "Runtime.evaluate", { expression: "window.focus()", userGesture: true });
       activate = await until("onActivateRequest", async () => (await eventsOf(other.id)).find((x) => x.name === "activateRequest"), 3000).catch(() => null);
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     }
+
     return {
       zoom: zoom.payload.zoom,
       security: security?.level,
@@ -4738,14 +5705,19 @@ try {
     // their dark text over Bay's dark card, as on App Store Connect. Keep the engine's light/dark canvas defaults.
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await until("A shown", async () => (await state()).active === first.id);
+
     const pixel = async (t) => {
       const shot = await cdp(t, "Page.captureScreenshot", { format: "png", clip: { x: 600, y: 400, width: 1, height: 1, scale: 1 } });
+
       return firstPixel(shot.data);
     };
+
     const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 3);
+
     const expectPixel = (name, actual, expected) => {
       if (!near(actual, expected)) throw new Error(`${name} shows ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
     };
+
     const unpainted = await pixel(await pageFor(first.id, `${base}/a`));
     expectPixel("the default light canvas", unpainted, [255, 255, 255, 255]);
     await evalApp(`return nn.webviews.get("${first.id}").reload()`);
@@ -4755,6 +5727,7 @@ try {
     expectPixel("the reloaded light canvas", reloaded, [255, 255, 255, 255]);
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/painted", { userInitiated: true }); return true`);
     let painted;
+
     try {
       await until("the painted page", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Painted" && !t.loading), 10000);
       await sleep(500);
@@ -4763,11 +5736,13 @@ try {
     } finally {
       await backToA();
     }
+
     await sleep(500);
     const t = await pageFor(first.id, `${base}/a`);
     const after = await pixel(t);
     expectPixel("the light canvas after a painted page", after, [255, 255, 255, 255]);
     let dark, translucent, light;
+
     try {
       // A site can opt into dark controls and canvas regardless of the app's appearance. This must remain native,
       // rather than forcing a white page background or injecting CSS that overrides the site's own styling.
@@ -4786,9 +5761,11 @@ try {
         expression: "document.documentElement.style.removeProperty('color-scheme'); document.body.style.removeProperty('background-color')",
       });
     }
+
     await sleep(200);
     light = await pixel(t);
     expectPixel("the restored light canvas", light, [255, 255, 255, 255]);
+
     return { unpainted, reloaded, painted, afterPainted: after, dark, translucent, light };
   });
 
@@ -4805,53 +5782,70 @@ try {
         return false;
       }
     };
+
     const wasRunning = running();
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await until("A shown", async () => (await state()).active === first.id);
+
     const ask = async (n) => {
       await evalApp(`nn.pageState.setState((s) => ({ pages: { ...s.pages, "${first.id}": { ...s.pages["${first.id}"], externalApp: null } } })); return true`);
       const t = await pageFor(first.id, `${base}/a`);
+
       // A click first: Chrome takes one external link per user interaction (its anti-flood guard); a DevTools
       // userGesture isn't one.
       for (const type of ["mousePressed", "mouseReleased"]) await cdp(t, "Input.dispatchMouseEvent", { type, x: 600, y: 400, button: "left", clickCount: 1 });
       await cdp(t, "Runtime.evaluate", { expression: `location.href = 'shortcuts://nncore-acceptance-${n}'`, userGesture: true });
+
       return until(`prompt ${n}`, async () => evalApp(`return nn.pageState.getState().pages["${first.id}"]?.externalApp ?? null`), 10000);
     };
+
     const decline = async (request) => {
       await evalApp(`nn.pageState.setState((s) => ({ pages: { ...s.pages, "${first.id}": { ...s.pages["${first.id}"], externalApp: null } } }));
         return globalThis.expo.modules.BayCEF.resolveExternalApp(${JSON.stringify(request.id)}, false, true).then(() => true)`);
       await sleep(1500);
     };
+
     const firstAsk = await ask(1);
+
     if (!firstAsk.app || !firstAsk.appPath?.endsWith("Shortcuts.app"))
       throw new Error(`no app found: ${JSON.stringify({ ...firstAsk, icon: !!firstAsk.icon })}`);
+
     if (!firstAsk.remember) throw new Error('no "always allow" offered for a trustworthy origin');
     await decline(firstAsk);
     const allowances = await cef(`getExternalAppAllowances("")`);
+
     if (JSON.stringify(allowances).includes("shortcuts")) throw new Error(`Chrome recorded an allowance: ${JSON.stringify(allowances)}`);
     const again = await ask(2);
+
     if (again.id === firstAsk.id) throw new Error("the second link reused the first request");
     await decline(again);
     const third = await ask(3);
     await evalApp(`nn.pageState.setState((s) => ({ pages: { ...s.pages, "${first.id}": { ...s.pages["${first.id}"], externalApp: null } } }));
       return globalThis.expo.modules.BayCEF.resolveExternalApp(${JSON.stringify(third.id)}, true, true).then(() => true)`);
+
     const launch = await until(
       "the recorded launch",
       async () => (await cef(`devExternalLaunches()`)).find((l) => l.url?.includes("nncore-acceptance-3")) ?? null,
       8000,
     );
+
     const remembered = await until(
       "Chrome's allowance",
       async () => {
         const list = await cef(`getExternalAppAllowances("")`);
+
         return list.find((a) => a.scheme === "shortcuts") ?? null;
       },
       8000,
     );
+
     await cef(`removeExternalAppAllowance("", ${JSON.stringify(remembered.origin)}, "shortcuts")`);
     const after = await cef(`getExternalAppAllowances("")`);
+
     if (after.some((a) => a.scheme === "shortcuts")) throw new Error(`the allowance stayed: ${JSON.stringify(after)}`);
+
     if (!wasRunning && running()) throw new Error("Shortcuts was launched");
+
     return {
       app: firstAsk.app,
       origin: firstAsk.origin,
@@ -4878,20 +5872,24 @@ try {
     });
     const e = await until("onNotification", async () => (await eventsOf(first.id)).findLast((x) => x.name === "notification"), 8000);
     await evalApp(`return nn.webviews.get("${first.id}").notificationAction(${JSON.stringify(e.payload.id)}, "click")`);
+
     const clicked = await until(
       "the page's click",
       async () => {
         const r = await cdp(t, "Runtime.evaluate", { expression: "window.__clicked", returnByValue: true });
+
         return r.result.value === true ? true : null;
       },
       8000,
     );
+
     await cdp(t, "Runtime.evaluate", {
       expression: "window.__n2 = new Notification('Second'); setTimeout(() => window.__n2.close(), 300); true",
       userGesture: true,
     });
     const closed = await until("onNotificationClose", async () => (await eventsOf(first.id)).find((x) => x.name === "notificationClose"), 8000);
     await cef(`setSiteSetting("", "${base}", "notifications", "default")`);
+
     return { title: e.payload.title, body: e.payload.body, clicked, closed: !!closed };
   });
 
@@ -4907,6 +5905,7 @@ try {
         "navigator.mediaSession.metadata = new MediaMetadata({ title: 'NN Tone', artist: 'Acceptance' }); window.__play = 'pending'; document.getElementById('tone').play().then(() => (window.__play = 'ok'), (e) => (window.__play = e.name)); true",
       userGesture: true,
     });
+
     try {
       const playing = await until(
         "onNowPlaying playing",
@@ -4916,17 +5915,21 @@ try {
           ),
         10000,
       );
+
       await evalApp(`return nn.webviews.get("${first.id}").mediaCommand("pause")`);
       await until(
         "paused by the app",
         async () => {
           const r = await cdp(t, "Runtime.evaluate", { expression: "document.getElementById('tone').paused", returnByValue: true });
+
           return r.result.value === true ? true : null;
         },
         8000,
       );
       const media = (await eventsOf(first.id)).filter((x) => x.name === "media").length;
+
       if (!media) throw new Error("no onMedia while playing");
+
       return { title: playing.payload.state.title, artist: playing.payload.state.artist, mediaEvents: media };
     } finally {
       await evalApp(`return nn.webviews.get("${first.id}").setMuted(false)`).catch(() => null);
@@ -4943,41 +5946,51 @@ try {
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/media", { userInitiated: true }); return true`);
     await until("the media page", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Media" && !t.loading), 10000);
+
     try {
       await evalApp(`return nn.webviews.get("${first.id}").setMuted(true)`);
       const mutedEvent = await until("onMedia muted", async () => lastEvent(first.id, "media", (p) => p.muted === true), 5000);
       const t = await pageFor(first.id, `${base}/media`);
       await cdp(t, "Runtime.evaluate", { expression: "document.getElementById('tone').play(); true", userGesture: true });
+
       const on = await until(
         "onMedia playing",
         async () => {
           const e = await lastEvent(first.id, "media");
+
           return e?.payload.playing && e.payload.muted ? e : null;
         },
         8000,
       );
+
       await until("live.playingAudio", async () => (await live(first.id))?.playingAudio === true, 5000);
       const pausedAt = Date.now();
       await cdp(t, "Runtime.evaluate", { expression: "document.getElementById('tone').pause(); true" });
+
       const off = await until(
         "onMedia stopped",
         async () => {
           const e = await lastEvent(first.id, "media");
+
           return e && !e.payload.playing ? e : null;
         },
         8000,
       );
+
       const stoppedAfterMs = Date.now() - pausedAt;
       await until("live.playingAudio off", async () => (await live(first.id))?.playingAudio === false, 5000);
       await evalApp(`return nn.webviews.get("${first.id}").setMuted(false)`);
+
       const unmuted = await until(
         "onMedia unmuted",
         async () => {
           const e = await lastEvent(first.id, "media");
+
           return e && e.payload.muted === false ? e : null;
         },
         5000,
       );
+
       return { muted: mutedEvent.payload, playing: on.payload, stopped: off.payload, stoppedAfterMs, unmuted: unmuted.payload };
     } finally {
       await evalApp(`return nn.webviews.get("${first.id}").setMuted(false)`).catch(() => null);
@@ -4990,34 +6003,42 @@ try {
     // page's own documentPictureInPicture.requestWindow → onPictureInPicture (document). Chrome's window is styled as
     // on CEF (rounded, kept on top), and in a hidden run it is transparent and lets clicks through.
     const tab = await openTab(`${base}/video`, "Video");
+
     try {
       await evalApp(`return nn.webviews.get("${tab.id}").setMuted(true)`);
       const t = await startVideo(tab.id, false);
       const requested = await evalApp(`return nn.webviews.get("${tab.id}").requestPictureInPicture()`);
+
       if (requested !== true) throw new Error(`requestPictureInPicture answered ${requested}`);
       const on = await until("onPictureInPicture video", async () => lastEvent(tab.id, "pictureInPicture", (p) => p.kind === "video" && p.active), 5000);
       const element = (await cdp(t, "Runtime.evaluate", { expression: "document.pictureInPictureElement?.id ?? null", returnByValue: true })).result.value;
+
       // Chrome's window, styled as packages/cef styles it (NNCorePictureInPicture), invisible and click-through here.
       const video = await until("Chrome's PiP window, styled", async () => (await pipWindows())?.find((w) => w.video && w.styled) ?? null, 5000).catch(
         async (e) => {
           throw new Error(`${e.message}: ${JSON.stringify(await pipWindows())}`);
         },
       );
+
       if (!video.rounded || !video.keepOnTop || video.rim !== 1 || video.level < 3 || video.host !== "127.0.0.1" || !video.backToTab)
         throw new Error(`not styled as on CEF: ${JSON.stringify(video)}`);
       await sleep(800);
       const videoShown = (await pipWindows())?.find((w) => w.window === video.window) ?? video;
+
       if (videoShown.alpha !== 0 || !videoShown.ignoresMouseEvents) throw new Error(`a hidden run's PiP window shows: ${JSON.stringify(videoShown)}`);
       const menu = await cef(`devPictureInPictureAction("menu")`);
       await evalApp(`return nn.webviews.get("${tab.id}").exitPictureInPicture()`);
+
       const off = await until(
         "onPictureInPicture video off",
         async () => {
           const e = await lastEvent(tab.id, "pictureInPicture");
+
           return e && e.payload.kind === "video" && !e.payload.active ? e : null;
         },
         5000,
       );
+
       // Document Picture in Picture, opened by the page.
       const doc = await cdp(t, "Runtime.evaluate", {
         expression: "documentPictureInPicture.requestWindow({ width: 320, height: 180 }).then(() => 'ok', (e) => e.name)",
@@ -5025,6 +6046,7 @@ try {
         userGesture: true,
         returnByValue: true,
       });
+
       const docOn = await until(
         "onPictureInPicture document",
         async () => lastEvent(tab.id, "pictureInPicture", (p) => p.kind === "document" && p.active),
@@ -5032,22 +6054,28 @@ try {
       ).catch((e) => {
         throw new Error(`${e.message}; requestWindow: ${JSON.stringify(doc.result)}`);
       });
+
       const docWindow = await until("the document PiP window", async () => (await pipWindows())?.find((w) => w.document) ?? null, 5000).catch(async (e) => {
         throw new Error(`${e.message}: ${JSON.stringify(await pipWindows())}`);
       });
+
       // Past Chrome's 500 ms fade-in, which would show it again.
       await sleep(800);
       const docShown = (await pipWindows())?.find((w) => w.window === docWindow.window) ?? docWindow;
+
       if (docShown.alpha !== 0 || !docShown.ignoresMouseEvents) throw new Error(`a hidden run's document PiP window shows: ${JSON.stringify(docShown)}`);
       await evalApp(`return nn.webviews.get("${tab.id}").exitPictureInPicture()`);
+
       const docOff = await until(
         "onPictureInPicture document off",
         async () => {
           const e = await lastEvent(tab.id, "pictureInPicture");
+
           return e && e.payload.kind === "document" && !e.payload.active ? e : null;
         },
         5000,
       );
+
       return {
         requested,
         on: on.payload,
@@ -5069,11 +6097,13 @@ try {
     // shows another tab, and takes it back when shown again; a page handling Media Session's "enterpictureinpicture"
     // opens its own document Picture in Picture instead (as on CEF). The tab is muted: nothing is heard.
     const results = {};
+
     for (const [path, kind] of [
       ["/video?auto", "video"],
       ["/video?docpip", "document"],
     ]) {
       const tab = await openTab(`${base}${path}`, "Video");
+
       try {
         await evalApp(`return nn.webviews.get("${tab.id}").setMuted(true)`);
         await startVideo(tab.id, true);
@@ -5087,20 +6117,25 @@ try {
         await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
         const out = await until(`auto PiP (${kind})`, async () => lastEvent(tab.id, "pictureInPicture", (p) => p.kind === kind && p.active), 8000);
         await evalApp(`nn.actions.switchToTab("${tab.id}"); return true`);
+
         const back = await until(
           `auto PiP ended (${kind})`,
           async () => {
             const e = await lastEvent(tab.id, "pictureInPicture");
+
             return e && e.payload.kind === kind && !e.payload.active ? e : null;
           },
           8000,
         );
+
         results[kind] = { out: out.payload, back: back.payload };
       } finally {
         await closeTab(tab.id);
       }
     }
+
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
+
     return results;
   });
 
@@ -5110,30 +6145,40 @@ try {
     // (onActivateRequest "pictureInPicture"); then Chrome's own close button (X), which leaves the video playing
     // (the release smoke test's BAY_PIP_SELFTEST=close).
     const tab = await openTab(`${base}/video?window`, "Video");
+
     const selftest = join(data, "pip-selftest.json"),
       button = join(data, "pip-button-selftest.json");
+
     rmSync(selftest, { force: true });
     rmSync(button, { force: true });
+
     try {
       await evalApp(`return nn.webviews.get("${tab.id}").setMuted(true)`);
       const t = await startVideo(tab.id, false);
+
       const open = async () => {
         if ((await evalApp(`return nn.webviews.get("${tab.id}").requestPictureInPicture()`)) !== true) throw new Error("requestPictureInPicture failed");
         await until("the styled PiP window", async () => (await pipWindows())?.find((w) => w.video && w.styled && w.visible) ?? null, 5000);
       };
+
       await open();
+
       if ((await cef(`devPictureInPictureAction("selftest")`)) !== "started") throw new Error("no self-test");
       const result = await until("the PiP self-test", async () => (existsSync(selftest) ? JSON.parse(readFileSync(selftest, "utf8")) : null), 20000);
       const failed = result.steps.filter((x) => !x.pass);
+
       if (failed.length) throw new Error(`self-test steps failed: ${JSON.stringify(failed)}`);
       const activate = await lastEvent(tab.id, "activateRequest", (p) => p.reason === "pictureInPicture");
+
       if (!activate) throw new Error("Back to Tab sent no onActivateRequest");
       await until("PiP closed by Back to Tab", async () => lastEvent(tab.id, "pictureInPicture", (p) => !p.active), 5000);
       // Chrome's own close button.
       await sleep(500);
       await open();
+
       if ((await cef(`devPictureInPictureAction("close")`)) !== "started") throw new Error("no button self-test");
       const closed = await until("the close click", async () => (existsSync(button) ? JSON.parse(readFileSync(button, "utf8")) : null), 10000);
+
       const time = async () =>
         (
           await cdp(t, "Runtime.evaluate", {
@@ -5141,10 +6186,13 @@ try {
             returnByValue: true,
           })
         ).result.value;
+
       const before = await time();
       await sleep(1000);
       const after = await time();
+
       if (!closed.closed || after.pip || after.paused || after.time === before.time) throw new Error(`close: ${JSON.stringify({ closed, before, after })}`);
+
       return { steps: result.steps.map((x) => x.step), closeButton: closed.point, playing: [before.time.toFixed(1), after.time.toFixed(1)] };
     } finally {
       await closeTab(tab.id);
@@ -5156,8 +6204,10 @@ try {
     // onPageFocus: a click into the other page of a split (Chrome's focus path as in a key window: devFocusPage) makes
     // that tab the active one, as the app does on CEF. The app's own focus() isn't the user's and sends none.
     const other = await openTab(`${base}/b?focus`, "Page B", true);
+
     try {
       const split = await evalApp(`return nn.store.getState().createSplit(["${first.id}", "${other.id}"])`);
+
       if (!split) throw new Error("no split");
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
       await until("A active, both shown", async () => (await state()).active === first.id && (await evalApp(`return !!nn.webviews.get("${other.id}")`)), 8000);
@@ -5168,20 +6218,27 @@ try {
       const fromApp = (await eventsOf(other.id)).filter((x) => x.name === "focus").length - before;
       await evalApp(`return nn.webviews.get("${first.id}").focus()`);
       await sleep(600);
+
       if ((await state()).active !== first.id) throw new Error("the app's focus() switched tabs");
       const took = await cef(`devFocusPage(${await browserOf(other.id)})`);
+
       const focus = await until(
         "onPageFocus",
         async () => {
           const all = (await eventsOf(other.id)).filter((x) => x.name === "focus");
+
           return all.length > before + fromApp ? all.at(-1) : null;
         },
         5000,
       );
+
       await until("the clicked pane active", async () => (await state()).active === other.id, 5000);
+
       if (fromApp) throw new Error(`the app's own focus() sent onPageFocus (${fromApp})`);
       const front = execFileSync("lsappinfo", ["front"]).toString();
+
       if (execFileSync("lsappinfo", ["info", "-only", "pid", front.trim()]).toString().includes(`=${child.pid}`)) throw new Error("the app took focus");
+
       return { took, focus: focus.name, active: "clicked pane" };
     } finally {
       await closeTab(other.id);
@@ -5195,16 +6252,20 @@ try {
   // screen. A test instance acts the window's full screen out (no Space on the owner's screen): devWindow "fullScreen"
   // reads it, "fakeFullScreen:<1|0>" stands in for the green button and ⌃⌘F.
   const fsFlag = (tabId) => evalApp(`return !!nn.pageState.getState().pages[${JSON.stringify(tabId)}]?.fullscreen`);
+
   const fsWindow = async (tabId, action = "fullScreen") => {
     const n = await cef(`devWindowNumber(${await browserOf(tabId)})`);
     const out = await cef(`devWindow(${n}, ${JSON.stringify(action)})`);
+
     try {
       return JSON.parse(out);
     } catch {
       throw new Error(`devWindow ${action}: ${JSON.stringify(out)} (a build without page full screen?)`);
     }
   };
+
   const fsElement = async (t) => (await cdp(t, "Runtime.evaluate", { expression: "!!document.fullscreenElement", returnByValue: true })).result.value;
+
   const fsRequest = (t) =>
     cdp(t, "Runtime.evaluate", {
       expression: "document.documentElement.requestFullscreen().then(() => 'ok', (e) => e.name)",
@@ -5212,7 +6273,9 @@ try {
       userGesture: true,
       returnByValue: true,
     });
+
   const fsEvents = async (tabId) => (await eventsOf(tabId)).filter((x) => x.name === "fullscreen").map((x) => x.payload.fullscreen);
+
   // The page in full screen: its event, the app's flag and the page itself agree.
   const fsEnter = async (tabId, t) => {
     const asked = await fsRequest(t);
@@ -5220,7 +6283,9 @@ try {
       throw new Error(`${e.message}; requestFullscreen: ${JSON.stringify(asked.result?.value)}`);
     });
   };
+
   const fsLeft = (tabId, t, what) => until(what, async () => !(await fsFlag(tabId)) && !(await fsElement(t)), 6000);
+
   const fsEscape = async (t) => {
     for (const type of ["rawKeyDown", "keyUp"])
       await cdp(t, "Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 53 });
@@ -5231,6 +6296,7 @@ try {
     // for A (not for B, the tab Chrome selected by then), so A comes back with its toolbar and sidebar. The window
     // leaves the macOS full screen it entered for A.
     const tab = await openTab(`${base}/b?fs-switch`, "Page B");
+
     try {
       const t = await pageFor(tab.id, "/b?fs-switch");
       await fsEnter(tab.id, t);
@@ -5248,9 +6314,13 @@ try {
       await sleep(600);
       const back = { flag: await fsFlag(tab.id), element: await fsElement(t), window: await fsWindow(tab.id) };
       const bGot = (await fsEvents(first.id)).slice(bBefore.length);
+
       if (back.flag || back.element || back.window.fullScreen) throw new Error(`A back in full screen: ${JSON.stringify(back)}`);
+
       if (bGot.length) throw new Error(`B got A's full-screen events: ${JSON.stringify(bGot)}`);
+
       if (!during.fullScreen || !during.pageFullScreen?.entered) throw new Error(`the window didn't go full screen for A: ${JSON.stringify(during)}`);
+
       return { during, aEvents: await fsEvents(tab.id), bEvents: bGot.length, back };
     } finally {
       await closeTab(tab.id);
@@ -5264,20 +6334,24 @@ try {
     // its tab closing while the window's transition runs.
     const tab = await openTab(`${base}/b?fs-native`, "Page B");
     const out = {};
+
     try {
       const t = await pageFor(tab.id, "/b?fs-native");
       const win = () => fsWindow(tab.id);
+
       const settled = (what, test) =>
         until(
           what,
           async () => {
             const w = await win();
+
             return !w.pageFullScreen?.transitioning && test(w) ? w : null;
           },
           6000,
         ).catch(async (e) => {
           throw new Error(`${e.message}; window ${JSON.stringify(await win())}`);
         });
+
       // From a normal window: in with the page, out with Esc.
       await fsEnter(tab.id, t);
       out.entered = await settled("the window in full screen", (w) => w.fullScreen && w.chromeCounts && w.pageFullScreen?.entered);
@@ -5299,6 +6373,7 @@ try {
       await fsLeft(tab.id, t, "Esc in a window already full screen");
       await sleep(400);
       out.alreadyEsc = await win();
+
       if (!out.alreadyEsc.fullScreen) throw new Error(`Esc took the user's full-screen window out: ${JSON.stringify(out.alreadyEsc)}`);
       // ... and the green button there ends both.
       await fsEnter(tab.id, t);
@@ -5315,11 +6390,13 @@ try {
         during: mid.pageFullScreen,
         after: await settled("the window out after the transition", (w) => !w.fullScreen && !w.pageFullScreen?.entered),
       };
+
       if (!mid.pageFullScreen?.transitioning) throw new Error(`the transition had ended before the page left: ${JSON.stringify(mid)}`);
       // Its tab closes while the window goes full screen.
       await fsEnter(tab.id, t);
       const n = await cef(`devWindowNumber(${await browserOf(tab.id)})`);
       const closing = JSON.parse(await cef(`devWindow(${n}, "fullScreen")`)).pageFullScreen;
+
       if (!closing?.transitioning) throw new Error(`the transition had ended before the close: ${JSON.stringify(closing)}`);
       await closeTab(tab.id);
       // The window finishes going in (AppKit ignores a toggle mid-transition), then comes back out: two transitions.
@@ -5327,6 +6404,7 @@ try {
         "the window out after its tab closed mid-transition",
         async () => {
           const w = JSON.parse(await cef(`devWindow(${n}, "fullScreen")`));
+
           return !w.fullScreen && !w.pageFullScreen?.transitioning && w.pageFullScreen?.page == null ? w : null;
         },
         6000,
@@ -5336,6 +6414,7 @@ try {
       // A transition slower than the 3 s the window waits for one: the page's exit, after those 3 s and before the
       // window is in full screen, still takes the window out once it is.
       const slow = await openTab(`${base}/b?fs-slow`, "Page B");
+
       try {
         const st = await pageFor(slow.id, "/b?fs-slow");
         await fsWindow(slow.id, "fakeFullScreenMs:4500");
@@ -5347,6 +6426,7 @@ try {
           "the window out after a slow transition",
           async () => {
             const w = await fsWindow(slow.id);
+
             return !w.fullScreen && !w.pageFullScreen?.transitioning ? w : null;
           },
           15000,
@@ -5357,9 +6437,11 @@ try {
         await fsWindow(slow.id, "fakeFullScreenMs:0").catch(() => null);
         await closeTab(slow.id);
       }
+
       // The page leaves, then comes back while the window's slow way out runs (past 3 s): that transition's late end is
       // the app's own, not the user leaving by hand, so the page stays in full screen and the window goes back in.
       const again = await openTab(`${base}/b?fs-again`, "Page B");
+
       try {
         const at = await pageFor(again.id, "/b?fs-again");
         await fsEnter(again.id, at);
@@ -5367,6 +6449,7 @@ try {
           "the window in full screen",
           async () => {
             const w = await fsWindow(again.id);
+
             return w.fullScreen && !w.pageFullScreen?.transitioning ? w : null;
           },
           6000,
@@ -5380,6 +6463,7 @@ try {
           "the window back in full screen for the page",
           async () => {
             const w = await fsWindow(again.id);
+
             return w.fullScreen && !w.pageFullScreen?.transitioning ? w : null;
           },
           15000,
@@ -5387,16 +6471,20 @@ try {
           throw new Error(`${e.message}; page ${await fsFlag(again.id)}/${await fsElement(at)}, window ${JSON.stringify(await fsWindow(again.id))}`);
         });
         await sleep(800);
+
         if (!(await fsFlag(again.id)) || !(await fsElement(at)))
           throw new Error(`the late end of the app's transition took the page out: ${JSON.stringify(await fsWindow(again.id))}`);
       } finally {
         await fsWindow(again.id, "fakeFullScreenMs:0").catch(() => null);
         await closeTab(again.id);
       }
+
       const log = readFileSync(join(data, "activation.log"), "utf8")
         .split("\n")
         .filter((l) => l.includes("toggleFullScreen")).length;
+
       out.actedToggles = log;
+
       return out;
     } finally {
       await cef(`devWindow(${await cef(`devWindowNumber(${await browserOf(first.id)})`)}, "fakeFullScreenMs:0")`).catch(() => null);
@@ -5413,10 +6501,12 @@ try {
     const s = await state();
     let profileB = null;
     const out = {};
+
     try {
       const t = await pageFor(tab.id, "/b?fs-hide");
       // The app's New Tab page.
       await fsEnter(tab.id, t);
+
       const lock = (
         await cdp(t, "Runtime.evaluate", {
           expression: "Promise.resolve(document.body.requestPointerLock()).then(() => !!document.pointerLockElement, (e) => e.name)",
@@ -5425,6 +6515,7 @@ try {
           returnByValue: true,
         })
       ).result.value;
+
       const keys = (
         await cdp(t, "Runtime.evaluate", {
           expression: "navigator.keyboard.lock().then(() => 'locked', (e) => e.name)",
@@ -5433,6 +6524,7 @@ try {
           returnByValue: true,
         })
       ).result.value;
+
       const ntp = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(s.windowId)})`);
       await until("the New Tab page shown", async () => (await state()).active === ntp);
       await fsLeft(tab.id, t, "the New Tab page ended the page's full screen");
@@ -5442,11 +6534,13 @@ try {
         pointerLockAfter: (await cdp(t, "Runtime.evaluate", { expression: "!!document.pointerLockElement", returnByValue: true })).result.value,
         window: await fsWindow(tab.id),
       };
+
       if (out.newTab.pointerLockAfter) throw new Error(`pointer lock kept: ${JSON.stringify(out.newTab)}`);
       await closeTab(ntp);
       await evalApp(`nn.actions.switchToTab("${tab.id}"); return true`);
       await until("the page shown again", async () => (await state()).active === tab.id);
       await sleep(500);
+
       if ((await fsFlag(tab.id)) || (await fsElement(t))) throw new Error("the page came back in full screen");
       // Another Space.
       await fsEnter(tab.id, t);
@@ -5458,10 +6552,12 @@ try {
       await until("the first Space back", async () => (await state()).profileId === s.profileId && (await state()).active === tab.id);
       await sleep(500);
       out.space = { flag: await fsFlag(tab.id), element: await fsElement(t), window: await fsWindow(tab.id) };
+
       if (out.space.flag || out.space.element || out.space.window.fullScreen)
         throw new Error(`back from the Space in full screen: ${JSON.stringify(out.space)}`);
       // A split: the other pane hides while this one fills the window; this one stays in full screen.
       const split = await evalApp(`return nn.store.getState().createSplit(["${tab.id}", "${first.id}"])`);
+
       if (!split) throw new Error("no split");
       await evalApp(`nn.actions.switchToTab("${tab.id}"); return true`);
       await until("the split shown", async () => (await state()).active === tab.id && (await evalApp(`return !!nn.webviews.get("${first.id}")`)), 8000);
@@ -5469,12 +6565,15 @@ try {
       await fsEnter(tab.id, t);
       await sleep(1000);
       out.split = { flag: await fsFlag(tab.id), element: await fsElement(t) };
+
       if (!out.split.flag || !out.split.element) throw new Error(`the split pane's full screen ended: ${JSON.stringify(out.split)}`);
       await cdp(t, "Runtime.evaluate", { expression: "document.exitFullscreen().then(() => 'ok', (e) => e.name)", awaitPromise: true, returnByValue: true });
       await fsLeft(tab.id, t, "the split pane out of full screen");
+
       return out;
     } finally {
       await evalApp(`nn.actions.switchSpace(${JSON.stringify(s.windowId)}, ${JSON.stringify(s.profileId)}); return true`).catch(() => null);
+
       if (profileB) await evalApp(`nn.store.getState().deleteSpace(${JSON.stringify(profileB)}); return true`).catch(() => null);
       await closeTab(tab.id);
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
@@ -5486,9 +6585,11 @@ try {
     // doesn't pop out into Picture in Picture and Chrome still counts that page as shown. The tab is muted.
     const video = await openTab(`${base}/video?split`, "Video");
     const tab = await openTab(`${base}/b?fs-split`, "Page B");
+
     try {
       await evalApp(`return nn.webviews.get("${video.id}").setMuted(true)`);
       const split = await evalApp(`return nn.store.getState().createSplit(["${tab.id}", "${video.id}"])`);
+
       if (!split) throw new Error("no split");
       await evalApp(`nn.actions.switchToTab("${tab.id}"); return true`);
       await until("the split shown", async () => (await state()).active === tab.id && (await evalApp(`return !!nn.webviews.get("${video.id}")`)), 8000);
@@ -5499,20 +6600,25 @@ try {
       const t = await pageFor(tab.id, "/b?fs-split");
       await fsEnter(tab.id, t);
       await sleep(1500);
+
       const pip = (await eventsOf(video.id))
         .filter((x) => x.name === "pictureInPicture")
         .slice(pipBefore)
         .map((x) => x.payload);
+
       const sibling = (
         await cdp(v, "Runtime.evaluate", {
           expression: "({ pip: !!document.pictureInPictureElement, visibility: document.visibilityState, paused: v.paused })",
           returnByValue: true,
         })
       ).result.value;
+
       await cdp(t, "Runtime.evaluate", { expression: "document.exitFullscreen().then(() => 'ok', (e) => e.name)", awaitPromise: true, returnByValue: true });
       await fsLeft(tab.id, t, "the pane out of full screen");
+
       if (pip.length || sibling.pip || sibling.visibility !== "visible" || sibling.paused)
         throw new Error(`the other pane counted as hidden: ${JSON.stringify({ pip, sibling })}`);
+
       return { sibling };
     } finally {
       await closeTab(tab.id);
@@ -5530,6 +6636,7 @@ try {
     // shows again. The tab is muted: nothing is heard.
     const n = await cef(`devWindowNumber(${await browserOf(first.id)})`);
     const win = (action) => cef(`devWindow(${n}, ${JSON.stringify(action)})`);
+
     const pressF = async (t) => {
       for (const type of ["keyDown", "keyUp"])
         await cdp(t, "Input.dispatchKeyEvent", {
@@ -5541,17 +6648,21 @@ try {
           nativeVirtualKeyCode: 3,
         });
     };
+
     const pipEvents = async (tabId) => (await eventsOf(tabId)).filter((x) => x.name === "pictureInPicture");
     const gaps = [-150, 0, 40, 120, 300];
     const out = {};
+
     try {
       await win("fakeOcclusion:visible");
       await win("fakeFullScreenMs:700");
+
       for (const [path, name] of [
         ["/video?fkey", "plain"],
         ["/video?fkey&handlers", "handlers"],
       ]) {
         const tab = await openTab(`${base}${path}`, "Video");
+
         try {
           await evalApp(`return nn.webviews.get("${tab.id}").setMuted(true)`);
           const t = await startVideo(tab.id, true);
@@ -5563,15 +6674,18 @@ try {
           );
           await sleep(300);
           const seen = new Set((await pipEvents(tab.id)).map((x) => x.t));
+
           const settled = (what, test) =>
             until(
               what,
               async () => {
                 const w = await fsWindow(tab.id);
+
                 return !w.pageFullScreen?.transitioning && test(w) ? w : null;
               },
               6000,
             );
+
           for (let i = 0; i < 20; i++) {
             const gap = gaps[i % gaps.length];
             await win(`fakeFullScreenOcclusionMs:${gap}`);
@@ -5583,36 +6697,44 @@ try {
             // The occlusion's return, and anything it sets off.
             await sleep(Math.max(0, gap) + 600);
             const fresh = (await pipEvents(tab.id)).filter((x) => !seen.has(x.t));
+
             const page = (
               await cdp(t, "Runtime.evaluate", {
                 expression: "({ pip: !!document.pictureInPictureElement, paused: v.paused, fs: !!document.fullscreenElement })",
                 returnByValue: true,
               })
             ).result.value;
+
             if (fresh.length || page.pip || page.fs || page.paused) {
               const timeline = (await eventsOf(tab.id))
                 .filter((x) => x.name === "fullscreen" || x.name === "pictureInPicture")
                 .slice(-6)
                 .map((x) => `${x.t} ${x.name} ${JSON.stringify(x.payload)}`);
+
               throw new Error(
                 `${name}, round ${i} (visible again ${gap} ms after the transition): ${JSON.stringify({ pip: fresh.map((x) => x.payload), page, timeline })}`,
               );
             }
           }
+
           out[name] = { rounds: 20, pipWindows: (await pipWindows())?.length ?? null };
+
           if (name !== "plain") continue;
           // The user leaves the window: the video pops out, and comes back with the window.
           await win("fakeOcclusion:occluded");
+
           const popped = await until(
             "auto PiP on leaving the window",
             async () => lastEvent(tab.id, "pictureInPicture", (p) => p.kind === "video" && p.active),
             5000,
           );
+
           await win("fakeOcclusion:visible");
           await until(
             "auto PiP ended with the window back",
             async () => {
               const e = await lastEvent(tab.id, "pictureInPicture");
+
               return e && e.t > popped.t && !e.payload.active ? e : null;
             },
             5000,
@@ -5621,8 +6743,10 @@ try {
           // With the setting off nothing pops out, and a window the user opened by hand still closes when they come
           // back to the page (another tab and back, the window covered and back).
           await evalApp(`nn.store.getState().updateSettings({ autoPictureInPicture: false }); return true`);
+
           try {
             out.manual = {};
+
             for (const [what, leave, back] of [
               ["tab", () => evalApp(`nn.actions.switchToTab("${first.id}"); return true`), () => evalApp(`nn.actions.switchToTab("${tab.id}"); return true`)],
               ["window", () => win("fakeOcclusion:occluded"), () => win("fakeOcclusion:visible")],
@@ -5637,6 +6761,7 @@ try {
                   `the hand-opened PiP closed coming back (${what})`,
                   async () => {
                     const e = await lastEvent(tab.id, "pictureInPicture");
+
                     return e && e.t > opened.t && !e.payload.active ? e : null;
                   },
                   5000,
@@ -5650,6 +6775,7 @@ try {
           await closeTab(tab.id);
         }
       }
+
       return out;
     } finally {
       for (const action of ["fakeFullScreenOcclusionMs:-1", "fakeFullScreenMs:0", "fakeOcclusion:off"]) await win(action).catch(() => null);
@@ -5665,25 +6791,34 @@ try {
     // (BayChromeUI.showAutofillSuggestions, reported by the engine's tab:didShowAutofillSuggestions:); and the
     // saved passwords from the command's "passwords".
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
+
     const go = async (path, title) => {
       await evalApp(`nn.store.getState().navigate("${first.id}", "${base}${path}", { userInitiated: true }); return true`);
       await until(title, async () => (await state()).tabs.find((t) => t.id === first.id && t.title === title && t.url?.endsWith(path) && !t.loading), 10000);
       await sleep(500);
+
       return pageFor(first.id, `${base}${path}`);
     };
+
     const shownSince = async (count, needle) => {
       const all = (await eventsOf(first.id)).filter((x) => x.name === "autofillSuggestions");
+
       return all.length > count && JSON.stringify(all.at(-1).payload.items).includes(needle) ? all.at(-1) : null;
     };
+
     const shownCount = async () => (await eventsOf(first.id)).filter((x) => x.name === "autofillSuggestions").length;
+
     const key = async (t, k) => {
       const code = { ArrowDown: 40, Enter: 13, Escape: 27 }[k];
       const at = { key: k, code: k, windowsVirtualKeyCode: code, nativeVirtualKeyCode: code };
-      await cdp(t, "Input.dispatchKeyEvent", { type: "rawKeyDown", ...at, ...(k === "Enter" ? { text: "\r" } : {}) });
+      await cdp(t, "Input.dispatchKeyEvent", { type: "rawKeyDown", ...at, ...(k === "Enter" ? { text: "\r" } : undefined) });
+
       if (k === "Enter") await cdp(t, "Input.dispatchKeyEvent", { type: "char", ...at, text: "\r" });
       await cdp(t, "Input.dispatchKeyEvent", { type: "keyUp", ...at });
     };
+
     const value = async (t) => (await cdp(t, "Runtime.evaluate", { expression: "document.getElementById('c').value", returnByValue: true })).result.value;
+
     try {
       let t = await go("/form", "Form");
       await cdp(t, "Runtime.evaluate", { expression: "document.getElementById('c').value = 'Springfield'; document.getElementById('b').click(); 1" });
@@ -5700,10 +6835,12 @@ try {
       await sleep(800);
       t = await pageFor(first.id, `${base}/form`);
       let count = await shownCount();
+
       const box = JSON.parse(
         (await cdp(t, "Runtime.evaluate", { expression: "JSON.stringify(document.getElementById('c').getBoundingClientRect())", returnByValue: true })).result
           .value,
       );
+
       const at = { x: box.x + 20, y: box.y + box.height / 2, button: "left", clickCount: 1 };
       await cdp(t, "Input.dispatchMouseEvent", { type: "mousePressed", ...at, buttons: 1 });
       await cdp(t, "Input.dispatchMouseEvent", { type: "mouseReleased", ...at, buttons: 0 });
@@ -5714,18 +6851,22 @@ try {
       // (AutofillPopupControllerImpl::AcceptSuggestion), which takes longer in a busy app: well past that.
       await sleep(1500);
       await key(t, "Enter");
+
       const picked = await until("the picked entry in the field", async () => ((await value(t)) === "Springfield" ? true : null), 4000).catch(async (e) => {
         throw new Error(`${e.message}; field "${await value(t)}"`);
       });
+
       // The app's Autofill command on the focused field.
       await cdp(t, "Runtime.evaluate", { expression: "const c = document.getElementById('c'); c.value = ''; c.blur(); c.focus(); 1", userGesture: true });
       await sleep(400);
       count = await shownCount();
       const browser = await browserOf(first.id);
       const shown = await evalApp(`return globalThis.expo.modules.BayChromeUI.showAutofillSuggestions(${browser}, false)`);
+
       const command = await until("the dropdown from showAutofillSuggestions", async () => shownSince(count, "Springfield"), 6000).catch((e) => {
         throw new Error(`${e.message}; showAutofillSuggestions answered ${shown}`);
       });
+
       // Saved passwords (the command's "passwords"), on a sign-in form.
       await cef(`savePassword("", ${JSON.stringify(base)}, "nnfill", "fill-s3cret")`);
       t = await go("/login?fill", "Login");
@@ -5737,6 +6878,7 @@ try {
       await sleep(400);
       count = await shownCount();
       await evalApp(`nn.runCommand({ command: "autofill", arg: "passwords", windowId: ${JSON.stringify(mainWindow)} }); return true`);
+
       const passwords = await until("the saved passwords", async () => shownSince(count, "nnfill"), 6000).catch(async (e) => {
         const direct = await evalApp(`return globalThis.expo.modules.BayChromeUI.showAutofillSuggestions(${browser}, true)`);
         await sleep(1500);
@@ -5744,7 +6886,9 @@ try {
           `${e.message}; direct ${direct}; saved ${JSON.stringify(await cef(`listPasswords("")`)).slice(0, 300)}; shown ${JSON.stringify((await eventsOf(first.id)).filter((x) => x.name === "autofillSuggestions").map((x) => x.payload))}`,
         );
       });
+
       const labels = (e) => e.payload.items.map((i) => `${i.label} (${i.type})`);
+
       return { click: labels(clicked), picked, command: labels(command), shown, passwords: labels(passwords) };
     } finally {
       await cef(`deletePassword("", ${JSON.stringify(base)}, "nnfill")`).catch(() => null);
@@ -5758,7 +6902,9 @@ try {
     const favicon = await evalApp(`return nn.webviews.get("${first.id}").downloadFavicon("${base}/icon.png")`);
     const fetched = await cef(`fetchFavicon("${base}/icon.png", "")`);
     const isData = (r) => JSON.stringify(r ?? null).includes("data:image/png");
+
     if (!isData(image) || !isData(favicon) || !isData(fetched)) throw new Error(`not data URLs: ${JSON.stringify({ image, favicon, fetched }).slice(0, 300)}`);
+
     return { image: true, favicon: true, fetched: true };
   });
 
@@ -5775,13 +6921,16 @@ try {
         out.write(type, 4, "ascii");
         body.copy(out, 8);
         out.writeUInt32BE(crc32(out.subarray(4, 8 + body.length)), 8 + body.length);
+
         return out;
       };
+
       const header = Buffer.alloc(13);
       header.writeUInt32BE(side, 0);
       header.writeUInt32BE(side, 4);
       header.set([8, 2, 0, 0, 0], 8);
       const row = Buffer.concat([Buffer.from([0]), Buffer.concat(Array.from({ length: side }, () => Buffer.from(rgb)))]);
+
       return Buffer.concat([
         Buffer.from("89504e470d0a1a0a", "hex"),
         chunk("IHDR", header),
@@ -5789,20 +6938,24 @@ try {
         chunk("IEND", Buffer.alloc(0)),
       ]);
     };
+
     const icon = png(16, [0, 160, 0]);
     // An .ico holding that PNG, served as text/plain: Chrome decodes favicons by their bytes.
     const ico = Buffer.concat([Buffer.from([0, 0, 1, 0, 1, 0, 16, 16, 0, 0, 1, 0, 32, 0]), Buffer.alloc(8), icon]);
     ico.writeUInt32LE(icon.length, 14);
     ico.writeUInt32LE(22, 18);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#0a0"/></svg>`;
+
     // A TIFF: AppKit decodes it, Chrome never takes one as a favicon.
     const pngPath = join(scratch, "favicon-fetch.png"),
       tiffPath = join(scratch, "favicon-fetch.tiff");
+
     writeFileSync(pngPath, icon);
     execFileSync("sips", ["-s", "format", "tiff", pngPath, "--out", tiffPath], { stdio: "ignore" });
     const tiff = readFileSync(tiffPath);
     const seen = [];
     const hung = new Set();
+
     const icons = createServer((req, res) => {
       const url = new URL(req.url, "http://x");
       seen.push({
@@ -5811,33 +6964,50 @@ try {
         cookie: req.headers.cookie ?? null,
         authorization: req.headers.authorization ?? null,
       });
+
       const send = (status, type, body, headers = {}) => {
         res.writeHead(status, { "content-type": type, ...headers });
         res.end(body);
       };
+
       if (url.pathname === "/set-cookie") return send(200, "text/html", "<!doctype html><title>Favicon Cookie</title>", { "set-cookie": "nnfav=1; path=/" });
+
       if (url.pathname === "/icon.png") return send(200, "image/png", icon);
+
       if (url.pathname === "/icon.ico") return send(200, "text/plain", ico);
+
       if (url.pathname === "/icon.svg") return send(200, "image/svg+xml", svg);
+
       if (url.pathname === "/svg-as-text") return send(200, "text/plain", svg);
+
       if (url.pathname === "/icon.tiff") return send(200, "image/png", tiff);
+
       if (url.pathname === "/redirect") return send(302, "text/plain", "", { location: "/icon.png?redirected" });
+
       if (url.pathname === "/missing") return send(404, "image/png", icon);
+
       if (url.pathname === "/auth") return send(401, "image/png", icon, { "www-authenticate": 'Basic realm="nnfav"' });
+
       if (url.pathname === "/oversized") return send(200, "image/png", Buffer.concat([icon, Buffer.alloc(3 * 1024 * 1024)]));
+
       if (url.pathname === "/hang") return hung.add(res);
       send(404, "text/plain", "no");
     });
+
     await new Promise((r) => icons.listen(0, "127.0.0.1", r));
     // *.localhost is loopback to Chrome, but not ATS-exempt as 127.0.0.1 is.
     const favBase = `http://nnfav.localhost:${icons.address().port}`;
+
     const fetchIcon = async (url, profile = "") => {
       const started = Date.now();
       const r = await evalApp(`return globalThis.expo.modules.BayCEF.fetchFavicon(${JSON.stringify(url)}, ${JSON.stringify(profile)})`, 60000);
-      return { uri: typeof r?.uri === "string" ? r.uri.slice(0, 22) : null, width: r?.width ?? null, ms: Date.now() - started };
+
+      return { uri: v.is(v.string(), r?.uri) ? r.uri.slice(0, 22) : null, width: r?.width ?? null, ms: Date.now() - started };
     };
+
     const ok = (r) => r.uri === "data:image/png;base64,";
     let privateWindow = null;
+
     try {
       // The time-out runs alongside everything else (in the app: the dev harness answers one script at a time).
       await evalApp(`const h = (globalThis.nnFaviconHang = { started: Date.now() });
@@ -5845,10 +7015,14 @@ try {
         return true`);
       // A cookie the profile holds for the host: the icon request never carries it.
       const cookieTab = await openTab(`${favBase}/set-cookie`, "Favicon Cookie");
+
       const cookie = (await cdp(await pageFor(cookieTab.id, "/set-cookie"), "Runtime.evaluate", { expression: "document.cookie", returnByValue: true })).result
         .value;
+
       await closeTab(cookieTab.id);
+
       if (!cookie.includes("nnfav=1")) throw new Error(`the profile has no cookie for the host: "${cookie}"`);
+
       const accepted = {
         png: await fetchIcon(`${favBase}/icon.png?cookie`),
         ico: await fetchIcon(`${favBase}/icon.ico`),
@@ -5856,6 +7030,7 @@ try {
         redirect: await fetchIcon(`${favBase}/redirect`),
         https: await fetchIcon("https://github.githubassets.com/favicons/favicon.svg"),
       };
+
       const refused = {
         missing: await fetchIcon(`${favBase}/missing`),
         auth: await fetchIcon(`${favBase}/auth`),
@@ -5865,6 +7040,7 @@ try {
         noHost: await fetchIcon("http://nnfav-nowhere.invalid/favicon.ico"),
         notHttp: await fetchIcon("file:///System/Library/CoreServices/Finder.app/Contents/Resources/Finder.icns"),
       };
+
       const bad = [
         ...Object.entries(accepted)
           .filter(([, r]) => !ok(r))
@@ -5873,47 +7049,63 @@ try {
           .filter(([, r]) => r.uri !== null)
           .map(([k]) => `${k} loaded`),
       ];
+
       if (bad.length) throw new Error(bad.join("; "));
       const iconRequest = seen.find((s) => s.path === "/icon.png?cookie");
+
       if (!iconRequest || iconRequest.cookie) throw new Error(`the icon request carried cookies: ${JSON.stringify(iconRequest)}`);
+
       if (!seen.some((s) => s.path === "/icon.png?redirected")) throw new Error("the redirect wasn't followed");
+
       if (seen.some((s) => s.authorization)) throw new Error("credentials were sent");
       // A remote plain-http icon (the dogfood repro's): required when this script reaches it too, else only reported.
       const remoteUrl = "http://neverssl.com/favicon.ico";
+
       const reachable = await fetch(remoteUrl, { signal: AbortSignal.timeout(8000) }).then(
         (r) => r.ok,
         () => false,
       );
+
       const remoteFetch = await fetchIcon(remoteUrl);
+
       if (reachable && !ok(remoteFetch)) throw new Error(`${remoteUrl} not loaded (${JSON.stringify(remoteFetch)})`);
       const remote = `${ok(remoteFetch) ? "ok" : "null"}${reachable ? "" : " (not reachable from this script)"}`;
       // A private window's profile: fetched through it, handed back as data (Chrome's favicon store refuses it). A
       // private profile no window shows is never made for a fetch.
       const noWindow = await fetchIcon(`${favBase}/icon.png?no-private-window`, "incognito:nnfav");
+
       if (noWindow.uri !== null) throw new Error("a fetch made a private profile");
       privateWindow = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${favBase}/icon.png?private-page" })`);
+
       const privateProfile = await until(
         "the private window's profile",
         () => evalApp(`return nn.store.getState().windows["${privateWindow}"]?.spaceId ?? null`),
         10000,
       );
+
       await until("the private page", () => (seen.some((s) => s.path === "/icon.png?private-page") ? true : null), 10000);
       const privately = await fetchIcon(`${favBase}/icon.png?private`, privateProfile);
+
       if (!ok(privately)) throw new Error(`the private window's fetch failed: ${JSON.stringify(privately)}`);
+
       const stored = JSON.parse(
         await cef(
           `engineCall("nn_favicons_set", ${JSON.stringify(privateProfile)}, ${JSON.stringify(JSON.stringify({ page: `${favBase}/private-page`, icon: `${favBase}/icon.png?private`, png: "AA==" }))})`,
         ).catch((e) => JSON.stringify({ refused: String(e) })),
       );
+
       if (!stored?.error) throw new Error(`a private profile wrote Chrome's favicon store: ${JSON.stringify(stored)}`);
+
       // The time-out: nil after Chrome's 30 s, never a hang.
       const timedOut = await until(
         "the hung request's end",
         () => evalApp(`const h = globalThis.nnFaviconHang; return h.ms ? { uri: h.uri ? h.uri.slice(0, 22) : null, ms: h.ms } : null`),
         50000,
       );
+
       if (timedOut.uri !== null || timedOut.ms < 25000 || timedOut.ms > 50000) throw new Error(`the hung request: ${JSON.stringify(timedOut)}`);
       const ms = (o) => Object.fromEntries(Object.entries(o).map(([k, r]) => [k, r.ms]));
+
       return {
         accepted: ms(accepted),
         refused: ms(refused),
@@ -5923,6 +7115,7 @@ try {
       };
     } finally {
       if (privateWindow) await evalApp(`nn.store.getState().closeWindow("${privateWindow}"); return true`).catch(() => null);
+
       for (const res of hung) res.destroy();
       icons.close();
     }
@@ -5932,24 +7125,31 @@ try {
     // An installed extension's action state and side panel for a tab, reload, and its DNR blocks counted on the page
     // (onContentBlocked).
     const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
     const browser = await browserOf(first.id);
     const states = await evalApp(`return globalThis.expo.modules.BayChromeUI.actionStates(${browser}, ["${installed.id}"])`);
+
     if (!states?.[installed.id]) throw new Error(`no action state: ${JSON.stringify(states)}`);
     const panel = await evalApp(`return globalThis.expo.modules.BayChromeUI.sidePanelURL(${browser}, "${installed.id}")`);
     const reloaded = await exts(`reload("${installed.id}", "")`);
+
     if (reloaded?.error) throw new Error(`reload: ${reloaded.error}`);
     await sleep(1000);
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/blocking", { userInitiated: true }); return true`);
+
     const blocked = await until(
       "onContentBlocked",
       async () => (await eventsOf(first.id)).findLast((x) => x.name === "contentBlocked" && x.payload?.count >= 2),
       10000,
     ).catch(() => null);
+
     await exts(`uninstall("${installed.id}", "")`);
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/a", { userInitiated: true }); return true`);
     await until("A again", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Page A" && !t.loading));
+
     if (!blocked) throw new Error("no onContentBlocked count for the extension's blocked images");
+
     return { state: states[installed.id], panel, reloaded: true, blocked: blocked.payload };
   });
 
@@ -5957,6 +7157,7 @@ try {
     // The app freezes a background page (setFrozen) and wakes it; the page sees freeze and resume.
     const s = await state();
     const other = s.tabs.find((x) => x.id !== first.id && x.id !== s.active && x.url?.startsWith(`${base}/d`));
+
     if (!other) throw new Error("no background tab");
     const t = await pageTarget(`${base}/d`);
     await cdp(t, "Runtime.evaluate", {
@@ -5966,15 +7167,18 @@ try {
     await evalApp(`return nn.webviews.get("${other.id}")?.setFrozen(true)`);
     await sleep(1500);
     await evalApp(`return nn.webviews.get("${other.id}")?.setFrozen(false)`);
+
     const life = await until(
       "freeze and resume",
       async () => {
         const r = await cdp(t, "Runtime.evaluate", { expression: "JSON.stringify(window.__life)", returnByValue: true });
         const l = JSON.parse(r.result.value ?? "[]");
+
         return l.includes("freeze") && l.includes("resume") ? l : null;
       },
       8000,
     );
+
     return { life };
   });
 
@@ -5982,14 +7186,17 @@ try {
     // A tab in the background discarded by Chrome keeps its place; the app hears onDiscarded.
     const s = await state();
     let other = null;
+
     for (const x of s.tabs.filter((x) => x.id !== first.id && x.id !== s.active && x.url?.startsWith(base)))
       if (await evalApp(`return !!nn.webviews.get(${JSON.stringify(x.id)})`)) {
         other = x;
         break;
       }
+
     if (!other) throw new Error("no background tab to discard");
     const ok = await evalApp(`return nn.webviews.get("${other.id}").discard()`);
     const e = await until("onDiscarded", async () => (await eventsOf(other.id)).find((x) => x.name === "discarded"), 8000);
+
     return { ok, url: e.payload.url };
   });
 
@@ -6006,14 +7213,17 @@ try {
     });
     const request = await until("the prompt", async () => evalApp(`return nn.pageState.getState().pages["${first.id}"]?.permission ?? null`), 10000);
     await cef(`resolvePermission("${request.id}", "deny", false)`);
+
     const answer = await until(
       "the page's answer",
       async () => {
         const r = await cdp(t, "Runtime.evaluate", { expression: "String(window.__geo)", returnByValue: true });
+
         return r.result.value !== "undefined" ? r.result.value : null;
       },
       10000,
     );
+
     return { permissions: request.permissions, origin: request.origin, answer };
   });
 
@@ -6025,22 +7235,27 @@ try {
     await until("A loaded", async () => (await state()).tabs.find((t) => t.id === first.id && !t.loading), 10000);
     const t = await pageFor(first.id, `${base}/a`);
     await cdp(t, "Runtime.evaluate", { expression: `window.open("${base}/c?blocked")` });
+
     const popups = await until(
       "the blocked popup",
       async () => {
         const p = await evalApp(`return nn.pageState.getState().pages["${first.id}"]?.popups ?? []`);
+
         return p.length ? p : null;
       },
       10000,
     );
+
     await evalApp(`return nn.webviews.get("${first.id}").openBlockedPopup("${popups[0].id}")`);
     const opened = await until("the popup as a tab", async () => (await state()).tabs.find((x) => x.url?.includes("c?blocked")), 10000);
+
     return { popup: popups[0].url, tab: opened.id };
   });
 
   await check("second-profile", async () => {
     const s = await state();
     const id = await evalApp(`return nn.store.getState().createSpace({ name: "Work" })`);
+
     if (!id) throw new Error("no profile made");
     await evalApp(`nn.actions.switchSpace("${s.windowId}", "${id}"); return true`);
     await until("profile shown", async () => (await state()).profileId === id);
@@ -6051,41 +7266,51 @@ try {
     const a = targetsNow.find((t) => t.url.startsWith(`${base}/a`));
     const cookieA = (await cdp(a, "Runtime.evaluate", { expression: "document.cookie", returnByValue: true })).result.value;
     const cookieB = (await cdp(b, "Runtime.evaluate", { expression: "document.cookie", returnByValue: true })).result.value;
+
     if (cookieA.includes("who=B")) throw new Error("profile A sees B's cookie");
     const windows = await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`);
     await evalApp(`nn.actions.switchSpace("${s.windowId}", "${s.profileId}"); return true`);
+
     return { profile: id, tab: tb.id, cookieB, cookieA, chromeWindows: windows.chromeWindows };
   });
 
   await check("settings-window", async () => {
     const before = await evalApp(`return nn.shell.windowIds()`);
     await evalApp(`nn.openSettings(); return true`);
+
     const after = await until("a settings window", async () => {
       const ids = await evalApp(`return nn.shell.windowIds()`);
+
       return ids.length > before.length ? ids : null;
     });
+
     return { before, after };
   });
   await check("incognito-window", async () => {
     const id = await evalApp(`return nn.actions.openWindow({ incognito: true, url: "${base}/b?private" })`);
+
     const t = await until("a private tab", async () => {
       const tabs = await evalApp(
         `const s = nn.store.getState(); return ${windowTabsJs(JSON.stringify(id))}.map((i) => ({ url: s.tabs[i]?.url, title: s.tabs[i]?.title, profile: s.tabs[i]?.spaceId }))`,
       );
+
       return tabs.find((x) => x.title === "Page B") ?? null;
     });
+
     return { window: id, tab: t };
   });
 
   // A window whose content mounts late (a window opened under load: devMountDelay in main.tsx holds it back 5 s).
   const slowMount = async (body) => {
     await evalApp(`globalThis.nnDevMountDelayMs = 5000; return true`);
+
     try {
       return await body();
     } finally {
       await evalApp(`globalThis.nnDevMountDelayMs = 0; return true`);
     }
   };
+
   const closeWindowOf = (tabId) =>
     evalApp(
       `const s = nn.store.getState(); const w = s.tabs[${JSON.stringify(tabId)}]?.windowId; if (w && w !== ${JSON.stringify(mainWindow)}) s.closeWindow(w); return true`,
@@ -6097,17 +7322,21 @@ try {
     // A tab moved to a window that mounts its view late keeps its page (the same WebContents: its history, its state):
     // the page waits for the tab's next view however long that takes.
     const tab = await openTab(`${base}/a?slow`, "Page A");
+
     try {
       await evalApp(`nn.store.getState().navigate("${tab.id}", "${base}/b?slow", { userInitiated: true }); return true`);
       await until("B", async () => (await state()).tabs.find((t) => t.id === tab.id && t.title === "Page B" && !t.loading));
       await cdp(await pageFor(tab.id, "/b?slow"), "Runtime.evaluate", { expression: "window.__kept = 42" });
       const browser = await browserOf(tab.id);
+
       const windowId = await slowMount(async () => {
         const id = await evalApp(`return nn.store.getState().moveTabsToWindow(["${tab.id}"], null)`);
         // Past the mount delay.
         await sleep(6000);
+
         return id;
       });
+
       await until(
         "the tab's view in the new window",
         () => evalApp(`return !!nn.webviews.get("${tab.id}") && nn.store.getState().tabs["${tab.id}"]?.windowId === "${windowId}"`),
@@ -6115,11 +7344,15 @@ try {
       );
       await sleep(500);
       const t = await pageFor(tab.id, "/b?slow");
+
       const page =
         t && (await cdp(t, "Runtime.evaluate", { expression: "({ kept: String(window.__kept), entries: history.length })", returnByValue: true })).result.value;
+
       const after = await browserOf(tab.id);
+
       if (page?.kept !== "42" || page?.entries !== 2 || String(after) !== String(browser))
         throw new Error(`the page reloaded or went: ${JSON.stringify({ page, browser, after })}`);
+
       return { windowId, page, browser };
     } finally {
       await closeWindowOf(tab.id);
@@ -6134,6 +7367,7 @@ try {
     const space = await evalApp(`return nn.store.getState().createSpace({ name: "Last tab" })`);
     const own = await evalApp(`return nn.actions.openWindow({ spaceId: ${JSON.stringify(space)}, url: "${base}/a?last" })`);
     const tab = { id: await until("its tab", () => evalApp(`return ${shownTabJs(JSON.stringify(own))}`)) };
+
     try {
       await until(
         "the tab's view in its window",
@@ -6143,12 +7377,15 @@ try {
       await sleep(500);
       await cdp(await pageFor(tab.id, "/a?last"), "Runtime.evaluate", { expression: "window.__kept = 42" });
       const browser = await browserOf(tab.id);
+
       const windowId = await slowMount(async () => {
         const id = await evalApp(`return nn.store.getState().moveTabsToWindow(["${tab.id}"], null)`);
         await until("its first window off the tab", () => evalApp(`return ${shownTabJs(JSON.stringify(own))} !== "${tab.id}"`), 5000);
         await sleep(6000);
+
         return id;
       });
+
       await until(
         "the tab's view in the new window",
         () => evalApp(`return !!nn.webviews.get("${tab.id}") && nn.store.getState().tabs["${tab.id}"]?.windowId === "${windowId}"`),
@@ -6158,7 +7395,9 @@ try {
       const t = await pageFor(tab.id, "/a?last");
       const page = t && (await cdp(t, "Runtime.evaluate", { expression: "String(window.__kept)", returnByValue: true })).result.value;
       const after = await browserOf(tab.id);
+
       if (page !== "42" || String(after) !== String(browser)) throw new Error(`the page reloaded or went: ${JSON.stringify({ page, browser, after })}`);
+
       return { windowId, page, browser };
     } finally {
       await closeWindowOf(tab.id);
@@ -6173,16 +7412,19 @@ try {
     // A moved tab closed before its new view took its page: the page (and its renderer) goes with the tab.
     const tab = await openTab(`${base}/c?parked`, "Page C");
     const target = await pageFor(tab.id, "/c?parked");
+
     try {
       return await slowMount(async () => {
         await evalApp(`nn.store.getState().moveTabsToWindow(["${tab.id}"], null); return true`);
         // Its view gone (the new window's is 5 s away): the page lives on, parked.
         await until("the old view gone", () => evalApp(`return !nn.webviews.get("${tab.id}")`), 3000);
         await sleep(300);
+
         if (!(await targets()).some((x) => x.id === target.id)) throw new Error("the page went before its tab closed");
         await closeTab(tab.id);
         const closed = Date.now();
         await until("the parked page gone", async () => !(await targets()).some((x) => x.id === target.id), 1500);
+
         return { goneAfterMs: Date.now() - closed };
       });
     } finally {
@@ -6205,12 +7447,15 @@ try {
     await sleep(1500);
     const t2 = await pageTarget(`${base}/a`);
     const kept = (await cdp(t2, "Runtime.evaluate", { expression: "String(window.__kept)", returnByValue: true })).result.value;
+
     if (kept !== "42") throw new Error(`the page reloaded or went: ${kept}`);
     const tx = await evalApp(`return globalThis.expo.modules.BayCEF.tabStrips()`);
     const browser = await browserOf(first.id);
     const windowNumber = await evalApp(`return globalThis.expo.modules.BayCEF.devWindowNumber(${browser})`);
     const holding = tx.strips.find((x) => x.tabs.some((tab) => tab.browser === Number(browser)));
+
     if (!holding || holding.window !== windowNumber) throw new Error(`the tab's strip is window ${holding?.window}, its view is in ${windowNumber}`);
+
     return { windowId, kept, strip: holding.strip, window: holding.window };
   });
 
@@ -6222,26 +7467,33 @@ try {
     const browser = await browserOf(first.id);
     const windowNumber = await evalApp(`return globalThis.expo.modules.BayCEF.devWindowNumber(${browser})`);
     const clicked = await evalApp(`return globalThis.expo.modules.BayCEF.devWindow(${windowNumber}, "close-button")`);
+
     const after = await until(
       "one window fewer",
       async () => {
         const now = await evalApp(`return nn.shell.windowIds()`);
+
         return now.length < ids.length ? now : null;
       },
       10000,
     );
+
     return { clicked, before: ids.length, after: after.length };
   });
 
   await check("little-bay", async () => {
     await evalApp(`nn.runCommand({ command: "newLittleBay" }); return true`);
+
     const id = await until("a Little Bay window", async () => {
       const w = await evalApp(`return Object.values(nn.store.getState().windows).find((w) => w.kind === "small")?.id ?? null`);
+
       return w;
     });
+
     const tabId = await until("its tab", async () => evalApp(`return ${shownTabJs(JSON.stringify(id))}`));
     await evalApp(`nn.store.getState().navigate("${tabId}", "${base}/b?small", { userInitiated: true }); return true`);
     await until("Page B in Little Bay", async () => evalApp(`return nn.store.getState().tabs["${tabId}"]?.title === "Page B"`));
+
     return { window: id, tab: tabId };
   });
 
@@ -6250,20 +7502,26 @@ try {
     // native messaging manifests in the user data dir (only those whose host exists, listed as ours), and Chrome
     // runs a host from that dir for an extension it names (an echo host here: no real app is started).
     const dir = join(data, "Chromium", "NativeMessagingHosts");
+
     const known = {
       "com.1password.1password": "/Applications/1Password.app/Contents/Library/LoginItems/1Password Browser Helper.app/Contents/MacOS/1Password-BrowserSupport",
       "com.8bit.bitwarden": "/Applications/Bitwarden.app/Contents/MacOS/desktop_proxy",
       "org.keepassxc.keepassxc_browser": "/Applications/KeePassXC.app/Contents/MacOS/keepassxc-proxy",
       "me.proton.pass.nm": "/Applications/Proton Pass.app/Contents/Resources/assets/proton_pass_nm_host",
     };
+
     const expected = Object.keys(known)
       .filter((name) => existsSync(known[name]))
       .sort();
+
     const managed = JSON.parse(existsSync(join(dir, ".bay-managed.json")) ? readFileSync(join(dir, ".bay-managed.json"), "utf8") : "[]");
+
     for (const name of expected) {
       const manifest = JSON.parse(readFileSync(join(dir, `${name}.json`), "utf8"));
+
       if (manifest.name !== name || manifest.type !== "stdio" || !existsSync(manifest.path)) throw new Error(`${name}: ${JSON.stringify(manifest)}`);
     }
+
     if (JSON.stringify(managed.slice().sort()) !== JSON.stringify(expected))
       throw new Error(`managed ${JSON.stringify(managed)}, expected ${JSON.stringify(expected)}`);
 
@@ -6273,6 +7531,7 @@ try {
     manifest.permissions = [...manifest.permissions, "nativeMessaging"];
     writeFileSync(join(ext, "manifest.json"), JSON.stringify(manifest, null, 2));
     const installed = await exts(`install(${JSON.stringify(ext)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
     const host = join(scratch, "echo-host.sh");
     writeFileSync(host, "#!/bin/sh\nexec cat\n", { mode: 0o755 });
@@ -6323,24 +7582,30 @@ process.stdin.on("data", (chunk) => {
         allowed_origins: [`chrome-extension://${installed.id}/`],
       }),
     );
+
     try {
       const worker = await until(
         "the extension's worker",
         async () => {
           for (const t of (await targets()).filter((t) => t.type === "service_worker" && t.url.includes(installed.id))) {
             const r = await cdp(t, "Runtime.evaluate", { expression: "typeof chrome?.runtime?.sendNativeMessage", returnByValue: true }).catch(() => null);
+
             if (r?.result?.value === "function") return t;
           }
+
           return null;
         },
         15000,
       );
+
       const reply = await cdp(worker, "Runtime.evaluate", {
         expression: `chrome.runtime.sendNativeMessage("com.bay.acceptance.echo", { ping: 42 }).then((r) => JSON.stringify(r), (e) => "error: " + e.message)`,
         awaitPromise: true,
         returnByValue: true,
       });
+
       const echoed = reply.result?.value;
+
       if (echoed !== JSON.stringify({ ping: 42 })) throw new Error(`echo host: ${echoed}`);
       await cdp(worker, "Runtime.evaluate", {
         expression: `globalThis.__nativeEOF = { echoed: null, disconnected: false, error: null };
@@ -6352,17 +7617,22 @@ process.stdin.on("data", (chunk) => {
           });
           port.postMessage({ ping: 43 }); true`,
       });
+
       const eof = await until(
         "the native helper's Port disconnect",
         async () => {
           const result = (await cdp(worker, "Runtime.evaluate", { expression: "globalThis.__nativeEOF", returnByValue: true })).result.value;
+
           return result?.disconnected ? result : null;
         },
         10000,
       );
+
       if (eof.echoed !== JSON.stringify({ ping: 43 })) throw new Error(`native Port lost its reply before EOF: ${JSON.stringify(eof)}`);
       const engine = await cef(`engineInfo()`);
+
       if (exited || !engine) throw new Error("the app or engine stopped after native helper EOF");
+
       return { hosts: expected, echoed, eof };
     } finally {
       rmSync(hostManifest, { force: true });
@@ -6386,30 +7656,42 @@ process.stdin.on("data", (chunk) => {
        JSON.stringify(out)`,
       ]).toString(),
     );
+
     const expected = [];
+
     for (let [language, region, script] of system) {
       if (!language) continue;
+
       if (language === "zh" && !region) region = script === "Hant" ? "TW" : "CN";
+
       for (const tag of region ? [`${language}-${region}`, language] : [language]) if (!expected.includes(tag)) expected.push(tag);
     }
+
     let header = null;
+
     const echo = createServer((req, res) => {
       header = req.headers["accept-language"] ?? "";
       res.writeHead(200, { "content-type": "text/html" });
       res.end("<!doctype html><title>Languages</title>");
     });
+
     await new Promise((r) => echo.listen(0, "127.0.0.1", r));
     const tab = await openTab(`http://127.0.0.1:${echo.address().port}/languages`, "Languages");
+
     try {
       const t = await pageFor(tab.id, "/languages");
       const languages = (await cdp(t, "Runtime.evaluate", { expression: "navigator.languages", returnByValue: true })).result.value;
+
       const sent = (header ?? "")
         .split(",")
         .map((s) => s.split(";")[0].trim())
         .filter(Boolean);
+
       if (JSON.stringify(languages) !== JSON.stringify(expected))
         throw new Error(`navigator.languages ${JSON.stringify(languages)}, expected ${JSON.stringify(expected)}`);
+
       if (JSON.stringify(sent) !== JSON.stringify(expected)) throw new Error(`Accept-Language "${header}", expected ${JSON.stringify(expected)}`);
+
       return { languages, header };
     } finally {
       await closeTab(tab.id);
@@ -6424,7 +7706,9 @@ process.stdin.on("data", (chunk) => {
     const privateHistory = await parse(`engineCall("nn_history_query", "incognito-check", null)`);
     const notAllowed = await parse(`engineCall("nn_passwords_list", "", null)`);
     const history = await parse(`engineCall("nn_history_query", "", ${JSON.stringify(JSON.stringify({ maxUrls: 5, maxVisits: 1 }))})`);
+
     if (!privateHistory.error || !notAllowed.error || history.error) throw new Error(JSON.stringify({ privateHistory, notAllowed, history }));
+
     return { privateHistory: privateHistory.error, notAllowed: notAllowed.error, historyEntries: history.entries?.length };
   });
 
@@ -6442,6 +7726,7 @@ process.stdin.on("data", (chunk) => {
     await handle("toggle");
     await until("DevTools closed again", async () => ((await devtools()) === 0 ? true : null), 10000);
     await evalApp(`nn.store.getState().closeTab("${tab}"); return true`);
+
     return { opened };
   });
 
@@ -6454,26 +7739,33 @@ process.stdin.on("data", (chunk) => {
     await evalApp(`nn.store.getState().navigate("${tab}", "${base}/file.bin?memory", { userInitiated: true }); return true`);
     await until("the download", async () => (files() > before ? true : null), 15000);
     const saved = JSON.parse(readFileSync(join(data, "Chromium", "NavigationDownloads.json"), "utf8"));
+
     if (!saved[`${base}/file.bin?memory`]) throw new Error(`not remembered: ${JSON.stringify(saved)}`);
     // A tab the app restores on it (its saved tab, as a relaunch or a reopened window brings back: not the user asking,
     // which downloads it again, as on CEF).
     await evalApp(
       `nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${base}/file.bin?memory", snapshot: { url: "${base}/file.bin?memory", title: "file.bin" } }); return true`,
     );
+
     const skipped = await until(
       "downloadNavigation skipped",
       async () => {
         for (const t of (await state()).tabs) {
           const e = (await eventsOf(t.id)).find((x) => x.name === "downloadNavigation" && x.payload?.skipped);
+
           if (e) return { tab: t.id, payload: e.payload };
         }
+
         return null;
       },
       10000,
     );
+
     await sleep(1500);
     const after = files();
+
     if (after !== before + 1) throw new Error(`downloaded ${after - before} times`);
+
     return { skipped, downloads: after - before };
   });
 
@@ -6490,15 +7782,20 @@ process.stdin.on("data", (chunk) => {
         a = await cef(`listAddresses("")`),
         z = await cef(`getZoomLevels("")`),
         o = await cef(`getSiteSettingsOrigins("")`);
+
       return p.passwords?.length && a.addresses?.length && z["original.test"] && o.length ? true : null;
     });
     const result = await evalApp(`return globalThis.expo.modules.BayCEF.deleteProfileData("")`, 60000);
+
     const p = await cef(`listPasswords("")`),
       a = await cef(`listAddresses("")`),
       z = await cef(`getZoomLevels("")`),
       o = await cef(`getSiteSettingsOrigins("")`);
+
     const left = { passwords: p.passwords?.length, addresses: a.addresses?.length, zoom: Object.keys(z).length, origins: o.length };
+
     if (result?.remaining?.length || Object.values(left).some(Boolean)) throw new Error(JSON.stringify({ result, left }));
+
     return { remaining: result.remaining, left };
   });
 
@@ -6523,6 +7820,7 @@ process.stdin.on("data", (chunk) => {
       10000,
     );
     await sleep(1000);
+
     return { personal, play };
   });
 
@@ -6541,20 +7839,26 @@ process.stdin.on("data", (chunk) => {
     await until("the app to exit", async () => exited, 20000);
     await sleep(4000); // a crash in teardown writes its report a moment after the process is gone
     const saved = readFileSync(join(data, "session.json"), "utf8").includes("quit-marker");
+
     if (!saved) throw new Error("the session wasn't saved on quit");
     // This instance's reports only (another run may be going alongside). ExcUserFault reports are os_fault logs
     // the process survives; they're listed, crashes fail the check.
     const dir = join(process.env.HOME, "Library/Logs/DiagnosticReports");
+
     const ours = readdirSync(dir).filter((f) => {
       if (!f.includes(basename(exe)) || statSync(join(dir, f)).mtimeMs < launchedAt) return false;
+
       try {
         return new RegExp(`"pid"\\s*:\\s*${child.pid}\\b`).test(readFileSync(join(dir, f), "utf8").slice(0, 8000));
       } catch {
         return false;
       }
     });
+
     const crashes = ours.filter((f) => !f.startsWith("ExcUserFault_"));
+
     if (crashes.length) throw new Error(`crash report: ${crashes}`);
+
     return { exitedAfterMs: Date.now() - started, sessionSaved: saved, faults: ours.filter((f) => f.startsWith("ExcUserFault_")) };
   });
 
@@ -6569,6 +7873,7 @@ process.stdin.on("data", (chunk) => {
           return await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`, 3000);
         } catch (e) {
           if (exited) throw e;
+
           return null;
         }
       },
@@ -6586,15 +7891,20 @@ process.stdin.on("data", (chunk) => {
     const info = await evalApp(`return globalThis.expo.modules.BayCEF.chromeWindows()`);
     // The next check launches the app again only once this one has gone.
     await stopApp();
+
     if (!cookie.includes("who=personal") || cookie.includes("who=play")) throw new Error(`Personal's page sees "${cookie}"`);
+
     return { cookie, windows: info.map((w) => w.profile) };
   });
 
   const pressQuit = (windowId) =>
     evalApp(`return nn.shell.devKeyEquivalent("${windowId}", { key: "q", keyCode: 12, modifiers: ["command"], focus: "window" })`, 5000).catch(() => null);
+
   const savedSession = () => (existsSync(join(data, "session.json")) ? readFileSync(join(data, "session.json"), "utf8") : "");
+
   const restored = async (urlPart) => {
     await appUp("app-restored.out.log");
+
     return until(`${urlPart} restored`, async () => (await state()).tabs.find((t) => t.url?.includes(urlPart)) ?? null, 15000);
   };
 
@@ -6616,16 +7926,20 @@ process.stdin.on("data", (chunk) => {
     const prompts = [];
     ws.onmessage = (m) => {
       const msg = JSON.parse(m.data);
+
       if (msg.method !== "Page.javascriptDialogOpening") return;
       prompts.push({ type: msg.params.type, leave });
       ws.send(JSON.stringify({ id: 100 + prompts.length, method: "Page.handleJavaScriptDialog", params: { accept: leave } }));
     };
+
     ws.send(JSON.stringify({ id: 1, method: "Page.enable" }));
+
     try {
       await sleep(300);
       await pressQuit(windowId);
       await until("the beforeunload prompt", async () => prompts.length === 1, 10000);
       await sleep(1500);
+
       if (exited) throw new Error("the app quit though the page said Stay");
       await evalApp(`nn.actions.openUrls(["${base}/c?after-stay"], "${windowId}"); return true`);
       await until("the tab after Stay saved", async () => savedSession().includes("after-stay"), 10000);
@@ -6634,8 +7948,10 @@ process.stdin.on("data", (chunk) => {
       await pressQuit(windowId);
       await until("the app to exit", async () => exited, 20000);
       const exitMs = Date.now() - started;
+
       if (!savedSession().includes("after-stay")) throw new Error("the second quit didn't save the session");
       const tab = await restored("after-stay");
+
       return { prompts, exitMs, restored: tab.url };
     } finally {
       try {
@@ -6651,11 +7967,14 @@ process.stdin.on("data", (chunk) => {
     const windowId = await appUp("app-blocker-restored.out.log");
     const tag = `restored-${Date.now()}`;
     const url = `http://adpage.test:${server.address().port}/adfirst?${tag}`;
+
     const loaded = (id) =>
       evalApp(`const s = nn.store.getState(); const t = s.tabs[${JSON.stringify(id)}];
       return t?.title === "Ad first" && !s.live[${JSON.stringify(id)}]?.isLoading ? true : null`);
+
     const id = await evalApp(`const s = nn.store.getState(); const id = s.newTab(${JSON.stringify(windowId)}, { url: ${JSON.stringify(url)} });
       nn.store.getState().activate(id); return id`);
+
     await until("the ad page", () => loaded(id), 15000);
     const beforeQuit = adsServedFor(tag);
     await until("the ad page saved", async () => savedSession().includes(tag), 10000);
@@ -6665,6 +7984,7 @@ process.stdin.on("data", (chunk) => {
     const tab = await restored(tag);
     await until("the restored page loaded", () => loaded(tab.id), 20000);
     const loadedAfterMs = Date.now() - relaunched;
+
     if (beforeQuit.length) throw new Error(`ads went out before the quit: ${JSON.stringify(beforeQuit)}`);
     await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
     const racedAtLaunch = adsServedFor(tag).length;
@@ -6682,9 +8002,12 @@ process.stdin.on("data", (chunk) => {
     );
     await sleep(500);
     const documents = adServed.filter((s) => s.startsWith("adpage.test") && s.endsWith(`?${again}`)).length - pagesBefore;
+
     if (documents < 1) throw new Error("the next page's document never reached the server");
     const afterReady = adsServedFor(again);
+
     if (afterReady.length) throw new Error(`ads went out once the content blocker was ready: ${JSON.stringify(afterReady)}`);
+
     return { restored: tab.url, loadedAfterMs, racedAtLaunch, nextDocuments: documents };
   });
 
@@ -6693,10 +8016,12 @@ process.stdin.on("data", (chunk) => {
     // TabRestoreService entry carries the closed tab's id, nn_tab_restore_tag), and after a quit too, from Chrome's file.
     let windowId = await appUp("app-closed-tabs.out.log");
     const s = (expr) => evalApp(`const s = nn.store.getState(); return ${expr}`);
+
     const entries = (id) =>
       evalApp(
         `return nn.webviews.get(${JSON.stringify(id)})?.navigationEntries().then((e) => e.map((x) => { const u = new URL(x.url); return u.pathname + u.search; })) ?? null`,
       );
+
     const onSamePage = async (tag) => {
       const id = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(windowId)}, { url: "${base}/a?${tag}" })`);
       await until(
@@ -6710,33 +8035,44 @@ process.stdin.on("data", (chunk) => {
         async () => (await s(`s.tabs["${id}"]?.title === "Page B" && s.live["${id}"]?.canGoBack && !s.live["${id}"]?.isLoading`)) || null,
         15000,
       );
+
       return id;
     };
+
     const a = await onSamePage("first-closed"),
       b = await onSamePage("second-closed");
+
     await sleep(1000);
+
     const closed = Object.fromEntries(
       await evalApp(`const s = nn.store.getState(); s.closeTab("${a}"); s.closeTab("${b}");
       return nn.store.getState().closedTabs.filter((c) => c.tabId === "${a}" || c.tabId === "${b}").map((c) => [c.tabId, c.id])`),
     );
+
     if (!closed[a] || !closed[b]) throw new Error(`closed entries: ${JSON.stringify(closed)}`);
     await sleep(1500);
+
     const reopen = async (entryId, expected) => {
       const id = await evalApp(`const s = nn.store.getState(); const before = new Set(Object.keys(s.tabs));
         s.restoreClosed(${JSON.stringify(entryId)}, ${JSON.stringify(windowId)});
         const id = Object.keys(nn.store.getState().tabs).find((t) => !before.has(t)); nn.store.getState().activate(id); return id`);
+
       const list = await until(
         `the reopened tab's list`,
         async () => {
           const e = await entries(id);
+
           return e?.includes("/b?same") ? e : null;
         },
         15000,
       );
+
       if (JSON.stringify(list) !== JSON.stringify(expected)) throw new Error(`reopened ${entryId}: ${JSON.stringify(list)}, not ${JSON.stringify(expected)}`);
       await evalApp(`nn.store.getState().closeTab("${id}"); return true`);
+
       return list;
     };
+
     const first = await reopen(closed[a], ["/a?first-closed", "/b?same"]);
     await sleep(1500);
     // ⌘Q, as the owner quits, then the other one.
@@ -6744,6 +8080,7 @@ process.stdin.on("data", (chunk) => {
     await until("the quit", async () => exited, 30000);
     windowId = await appUp("app-closed-tabs-2.out.log");
     const second = await reopen(closed[b], ["/a?second-closed", "/b?same"]);
+
     return { first, afterQuit: second };
   });
 
@@ -6752,10 +8089,12 @@ process.stdin.on("data", (chunk) => {
     // visited again in Chrome's history, and the tab keeps it.
     const windowId = await appUp("app-js-reload.out.log");
     const path = `/b?kept-${Date.now()}`;
+
     const visits = async () =>
       JSON.parse(await cef(`engineCall("nn_history_query", "", "{}")`))
         .entries.filter((e) => e.u === `${base}${path}`)
         .map((e) => e.v.length);
+
     const id = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(windowId)}, { url: "${base}${path}" })`);
     await until("the page", async () => (await state()).tabs.find((t) => t.id === id && t.title === "Page B" && !t.loading), 15000);
     await until("its visit", async () => (await visits()).length || null);
@@ -6774,6 +8113,7 @@ process.stdin.on("data", (chunk) => {
           );
         } catch (e) {
           if (exited) throw e;
+
           return null;
         }
       },
@@ -6781,7 +8121,9 @@ process.stdin.on("data", (chunk) => {
     );
     await sleep(2000);
     const out = { loads: served.get(path), visits: await visits(), url: (await state()).tabs.find((t) => t.id === id)?.url };
+
     if (out.loads !== 1 || JSON.stringify(out.visits) !== "[1]" || out.url !== `${base}${path}`) throw new Error(`after the reload: ${JSON.stringify(out)}`);
+
     return out;
   });
 
@@ -6798,8 +8140,10 @@ process.stdin.on("data", (chunk) => {
     ).catch(() => null);
     await until("the app to exit", async () => exited, 20000);
     const exitMs = Date.now() - started;
+
     if (!savedSession().includes("d?stalled")) throw new Error(`the quit didn't wait for the app's save (exited after ${exitMs} ms)`);
     const tab = await restored("d?stalled");
+
     return { exitMs, restored: tab.url };
   });
 
@@ -6813,6 +8157,7 @@ process.stdin.on("data", (chunk) => {
       for (;;) {}`,
       1000,
     ).catch(() => null);
+
     try {
       const line = await until(
         "the quit alert's log",
@@ -6823,9 +8168,13 @@ process.stdin.on("data", (chunk) => {
             .find((l) => l.includes("[shell] quit alert:")) ?? null,
         Math.max(0, 6000 - (Date.now() - started)),
       );
+
       const ms = Date.now() - started;
+
       if (ms > 6000) throw new Error(`the alert came after ${ms} ms`);
+
       if (exited) throw new Error("the app quit without the answer");
+
       return { ms, line: line.slice(line.indexOf("[shell]")) };
     } finally {
       child.kill("SIGKILL");
@@ -6846,6 +8195,7 @@ process.stdin.on("data", (chunk) => {
           return await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`, 3000);
         } catch (e) {
           if (exited) throw e;
+
           return null;
         }
       },
@@ -6853,41 +8203,52 @@ process.stdin.on("data", (chunk) => {
     );
     const windowId = await until("a window", async () => (await state()).windowId, 30000);
     const installed = await exts(`install(${JSON.stringify(extPath)}, "")`);
+
     if (installed?.error) throw new Error(installed.error);
     await evalApp(`globalThis.__nnTabs = []; globalThis.__nnTabsSub?.remove();
       globalThis.__nnTabsSub = globalThis.expo.modules.BayExtensions.addListener("onTabs", (e) => globalThis.__nnTabs.push(e)); return true`);
+
     try {
       const worker = await until(
         "the extension's worker",
         async () => {
           for (const t of (await targets()).filter((t) => t.type === "service_worker" && t.url.includes(installed.id))) {
             const r = await cdp(t, "Runtime.evaluate", { expression: "typeof chrome?.tabs?.create", returnByValue: true }).catch(() => null);
+
             if (r?.result?.value === "function") return t;
           }
+
           return null;
         },
         15000,
       );
+
       const create = async (url) => {
         const made = await cdp(worker, "Runtime.evaluate", {
           expression: `chrome.tabs.create({ url: "${url}" }).then((t) => JSON.stringify({ id: t.id, windowId: t.windowId }), (e) => "error: " + e.message)`,
           awaitPromise: true,
           returnByValue: true,
         });
+
         return made.result?.value ?? made.exceptionDetails?.exception?.description;
       };
+
       // Every tab of the window closed: the app keeps the window with a new-tab placeholder (no page).
       await evalApp(`const s = nn.store.getState(); s.closeTabs(${windowTabsJs(JSON.stringify(windowId))}); return true`);
+
       const empty = await until(
         "the window without pages",
         async () => {
           const s = await state();
+
           return s.windowId === windowId && s.tabs.every((t) => !t.url) ? s : null;
         },
         10000,
       );
+
       await sleep(1000);
       const created = await create(`${base}/e?empty-window`);
+
       const event = await until(
         "onTabs",
         async () => (await evalApp(`return globalThis.__nnTabs`)).find((e) => e.url?.includes("e?empty-window")) ?? null,
@@ -6895,11 +8256,13 @@ process.stdin.on("data", (chunk) => {
       ).catch(async (e) => {
         throw new Error(`${e.message}; tabs.create: ${created}; strips ${JSON.stringify(await cef(`tabStrips()`))}`);
       });
+
       const opened = await until(
         "the URL as an app tab",
         async () => (await state()).tabs.find((t) => t.url?.includes("e?empty-window") && t.title === "Page E") ?? null,
         10000,
       );
+
       // Every window closed.
       await evalApp(`const s = nn.store.getState(); Object.keys(s.windows).forEach((id) => s.closeWindow(id)); return true`);
       await until("no app windows", async () => ((await evalApp(`return Object.keys(nn.store.getState().windows).length`)) === 0 ? true : null), 10000);
@@ -6907,6 +8270,7 @@ process.stdin.on("data", (chunk) => {
       const noWindow = await create(`${base}/e?no-window`);
       await sleep(1500);
       const noWindowEvent = (await evalApp(`return globalThis.__nnTabs`)).some((e) => e.url?.includes("e?no-window"));
+
       return {
         placeholderTabs: empty.tabs.length,
         tabsCreate: created,
@@ -6929,37 +8293,51 @@ process.stdin.on("data", (chunk) => {
     const w = (await state()).windowId;
     const W = JSON.stringify(w);
     const from = existsSync(lightsLog) ? readFileSync(lightsLog, "utf8").length : 0;
+
     const run = async (body) => {
       const result = await evalApp(body);
       await sleep(500);
+
       return result;
     };
+
     const tabs = [];
+
     for (let i = 0; i < 4; i++) tabs.push(await run(`return nn.store.getState().newTab(${W}, { url: "${base}/a?lights${i}" })`));
+
     for (const id of [tabs[0], tabs[2], tabs[1], tabs[3]]) await run(`nn.actions.switchToTab("${id}"); return true`);
     await run(`return nn.store.getState().createSplit(["${tabs[2]}", "${tabs[3]}"])`);
     await run(`nn.store.getState().closeTab("${tabs[3]}"); return true`);
     await run(`nn.store.getState().toggleSidebar(${W}); return true`);
     await run(`nn.actions.switchToTab("${tabs[0]}"); return true`);
     await run(`nn.store.getState().toggleSidebar(${W}); return true`);
+
     for (const id of [tabs[0], tabs[1], tabs[2]]) await run(`nn.store.getState().closeTab("${id}"); return true`);
     const other = await run(`return nn.actions.openWindow()`);
     await run(`nn.store.getState().closeWindow(${JSON.stringify(other)}); return true`);
     const lines = readFileSync(lightsLog, "utf8").slice(from).split("\n").filter(Boolean);
     const sample = (line) => line.match(/ -> (.*?) \| /)?.[1] ?? line;
+
     const bad = lines.filter((line) => {
       const state = sample(line);
+
       return !state.startsWith("close=(18.0,20.0) ") || !state.endsWith(" hidden=0 alpha=1.00") || / _NSTheme\w*Widget set/.test(line);
     });
+
     // Each window's buttons are in one place throughout (minimise and zoom too).
     const places = new Map();
+
     for (const line of lines) {
       const window = line.match(/window=(\d+)/)?.[1];
       places.set(window, (places.get(window) ?? new Set()).add(sample(line)));
     }
-    const moved = [...places].filter(([, set]) => set.size > 1).map(([window, set]) => ({ window, places: [...set] }));
+
+    const moved = [...places].flatMap(([window, set]) => (set.size > 1 ? [{ window, places: [...set] }] : []));
+
     if (!lines.some((line) => line.includes(" layout -> "))) throw new Error("no layout pass logged (is BAY_TRAFFIC_LIGHTS_LOG set?)");
+
     if (bad.length || moved.length) throw new Error(`traffic lights left their spot: ${JSON.stringify({ moved, bad: bad.slice(0, 6) })}`);
+
     return {
       samples: lines.length,
       layoutPasses: lines.filter((line) => line.includes(" layout -> ")).length,
@@ -6979,6 +8357,7 @@ process.stdin.on("data", (chunk) => {
           return await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`, 3000);
         } catch (e) {
           if (exited) throw e;
+
           return null;
         }
       },
@@ -6986,11 +8365,15 @@ process.stdin.on("data", (chunk) => {
     );
     await sleep(2000);
     const pages = (await targets()).filter((t) => t.type === "page").map((t) => t.url);
+
     if (pages.some((u) => /yes/i.test(u))) throw new Error(`a page for the defaults' value: ${JSON.stringify(pages)}`);
+
     const argv = execFileSync("ps", ["-o", "args=", "-p", String(pid)])
       .toString()
       .trim();
+
     if (!argv.includes("-NSAppSleepDisabled YES")) throw new Error(`the process arguments lost the defaults: ${argv}`);
+
     return { pages: pages.length, argv: argv.slice(argv.indexOf("-NS")) };
   });
 
@@ -7009,6 +8392,7 @@ process.stdin.on("data", (chunk) => {
           return await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`, 3000);
         } catch (e) {
           if (exited) throw e;
+
           return null;
         }
       },
@@ -7020,26 +8404,32 @@ process.stdin.on("data", (chunk) => {
     await evalApp(`nn.actions.switchToTab("${tab.id}"); return true`);
     await sleep(500);
     const t = await pageFor(tab.id, "/a?menu");
+
     const rightClick = async () => {
       const box = JSON.parse(
         (await cdp(t, "Runtime.evaluate", { expression: "JSON.stringify(document.getElementById('next').getBoundingClientRect())", returnByValue: true }))
           .result.value,
       );
+
       const at = { x: box.x + 3, y: box.y + box.height / 2, button: "right", clickCount: 1 };
       await cdp(t, "Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y });
       await cdp(t, "Input.dispatchMouseEvent", { type: "mousePressed", ...at });
       await cdp(t, "Input.dispatchMouseEvent", { type: "mouseReleased", ...at });
     };
+
     await rightClick();
     const menu = await until("the menu dumped", async () => (existsSync(menuLog) ? JSON.parse(readFileSync(menuLog, "utf8")) : null), 8000);
     const open = menu.items.find((i) => i.label === "Open Link in New Tab");
+
     if (!menu.url?.endsWith("/a?menu") || !menu.link?.endsWith("/b") || !open || open.type !== 1 || !menu.items.some((i) => i.type === 4))
       throw new Error(`menu ${JSON.stringify(menu).slice(0, 600)}`);
     const before = new Set((await state()).tabs.map((x) => x.id));
     writeFileSync(`${menuLog}.pick`, "Open Link in New Tab\t0\n");
     await rightClick();
     const opened = await until("the picked item's tab", async () => (await state()).tabs.find((x) => !before.has(x.id) && x.url?.endsWith("/b")), 8000);
+
     if (existsSync(`${menuLog}.pick`)) throw new Error("the pick file wasn't taken");
+
     return { items: menu.items.length, link: menu.link, picked: opened.url };
   });
 
@@ -7050,10 +8440,12 @@ process.stdin.on("data", (chunk) => {
     const tab = await until("A", async () => (await state()).tabs.find((t) => t.url?.endsWith("/a?menu") && !t.loading));
     await evalApp(`nn.actions.switchToTab("${tab.id}"); return true`);
     const t = await pageFor(tab.id, "/a?menu");
+
     const box = JSON.parse(
       (await cdp(t, "Runtime.evaluate", { expression: "JSON.stringify(document.getElementById('next').getBoundingClientRect())", returnByValue: true })).result
         .value,
     );
+
     const at = { x: box.x + 3, y: box.y + box.height / 2, button: "right", clickCount: 1 };
     const windowsBefore = await evalApp(`return Object.keys(nn.store.getState().windows)`);
     const tabsBefore = await evalApp(`return Object.keys(nn.store.getState().tabs)`);
@@ -7061,10 +8453,12 @@ process.stdin.on("data", (chunk) => {
     await cdp(t, "Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y });
     await cdp(t, "Input.dispatchMouseEvent", { type: "mousePressed", ...at });
     await cdp(t, "Input.dispatchMouseEvent", { type: "mouseReleased", ...at });
+
     const newTabs = () =>
       evalApp(`const s = nn.store.getState(), before = new Set(${JSON.stringify(tabsBefore)});
       return Object.values(s.tabs).filter((t) => !before.has(t.id)).map((t) => ({ id: t.id, url: t.url, title: t.title, windowId: t.windowId,
         incognito: !!s.windows[t.windowId]?.incognito, newWindow: !${JSON.stringify(windowsBefore)}.includes(t.windowId) }))`);
+
     const landed = await until(
       "the link's page in the app",
       async () => (await newTabs()).find((t) => t.url?.endsWith("/b") && t.title === "Page B") ?? null,
@@ -7072,10 +8466,13 @@ process.stdin.on("data", (chunk) => {
     ).catch(async (e) => {
       throw new Error(`${e.message}; new tabs ${JSON.stringify(await newTabs())}`);
     });
+
     await sleep(500);
     const all = await newTabs();
+
     if (!landed.incognito || !landed.newWindow || all.some((x) => !x.incognito)) throw new Error(`Open Link in Incognito Window: ${JSON.stringify(all)}`);
     await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(landed.windowId)}); return true`);
+
     return landed;
   });
   // MARK: Camera and microphone (the 0.2.21 crash: Allow on a camera + microphone prompt aborted the app)
@@ -7088,9 +8485,11 @@ process.stdin.on("data", (chunk) => {
   // so the permission element's flow takes its "ask macOS" step, the one 0.2.21 answered with a second Accept.
   // Each check asks from an origin of its own (*.localhost: secure, and a grant doesn't carry to the next check).
   const mediaChecks = ["camera-mic-allow", "permission-answer-once", "permission-element-allow"];
+
   if (!only.length || mediaChecks.some((c) => only.includes(c))) {
     const mediaApp = join(scratch, "media-app", basename(app));
     let media = null;
+
     try {
       rmSync(join(scratch, "media-app"), { recursive: true, force: true });
       mkdirSync(join(scratch, "media-app"), { recursive: true });
@@ -7102,6 +8501,7 @@ process.stdin.on("data", (chunk) => {
       );
       execFileSync("codesign", ["-f", "-s", "-", "--options", "runtime", "--entitlements", entitlements, mediaApp], { stdio: "ignore" });
       const signed = execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", mediaApp], { stdio: ["ignore", "pipe", "ignore"] }).toString();
+
       if (/device\.(camera|audio-input)/.test(signed)) throw new Error("the media copy kept a device entitlement");
       await stopApp();
       await launch("app-media.out.log", {}, [], { app: mediaApp, switches: "--bay-test-system-media-permission=ask" });
@@ -7112,6 +8512,7 @@ process.stdin.on("data", (chunk) => {
             return await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`, 3000);
           } catch (e) {
             if (exited) throw e;
+
             return null;
           }
         },
@@ -7126,13 +8527,16 @@ process.stdin.on("data", (chunk) => {
           const url = `http://media${++site}.localhost:${port}${path}`;
           const before = new Set((await state()).tabs.map((t) => t.id));
           await evalApp(`nn.actions.openUrls([${JSON.stringify(url)}], ${JSON.stringify(mainWindow)}); return true`);
+
           const tab = await until(
             `a tab for ${url}`,
             async () => (await state()).tabs.find((t) => !before.has(t.id) && t.title === title && !t.loading),
             15000,
           );
+
           await evalApp(`nn.actions.switchToTab("${tab.id}"); return true`);
           await until("it shown", async () => (await state()).active === tab.id);
+
           return { ...tab, target: await until("its page", () => pageTarget(url), 10000) };
         },
         js: async (t, expression) =>
@@ -7145,6 +8549,7 @@ process.stdin.on("data", (chunk) => {
             "the page's getUserMedia answer",
             async () => {
               const a = JSON.parse(await this.js(t, "JSON.stringify(window.__asks)"))[i];
+
               return a && a.state !== "pending" ? a : null;
             },
             15000,
@@ -7154,27 +8559,35 @@ process.stdin.on("data", (chunk) => {
     } catch (e) {
       media = { error: String(e?.message ?? e) };
     }
+
     const mediaCheck = (name, fn) =>
       check(name, async () => {
         if (media?.error) throw new Error(`media copy: ${media.error}`);
+
         return fn();
       });
 
     await mediaCheck("camera-mic-allow", async () => {
       // The owner's case: one prompt for a camera + microphone request, Allow, and the stream starts with both tracks.
       const tab = await media.open("/cam", "Cam");
+
       try {
         await media.js(tab.target, `ask({ audio: true, video: true })`);
         const request = await until("the prompt", () => media.prompt(tab.id), 10000);
+
         if (request.permissions.length !== 2 || !request.permissions.includes("camera") || !request.permissions.includes("microphone"))
           throw new Error(`one prompt for both, got ${JSON.stringify(request.permissions)}`);
         await media.answer(tab.id, request.id, "accept");
         const answer = await media.answered(tab.target);
+
         if (answer.state !== "ok" || answer.audio?.[0] !== "live" || answer.video?.[0] !== "live") throw new Error(`getUserMedia: ${JSON.stringify(answer)}`);
         await sleep(1000);
         const again = await media.prompt(tab.id);
+
         if (again) throw new Error(`a second prompt: ${JSON.stringify(again)}`);
+
         if (exited) throw new Error("the app exited");
+
         return { permissions: request.permissions, audio: answer.audio, video: answer.video };
       } finally {
         await media.js(tab.target, "stopAll()").catch(() => null);
@@ -7187,6 +8600,7 @@ process.stdin.on("data", (chunk) => {
       // engine, decide nothing twice (0.2.21 aborted deciding a request twice). A late click meant for that prompt
       // doesn't answer the tab's next one either.
       const tab = await media.open("/cam", "Cam");
+
       try {
         await media.js(tab.target, `ask({ audio: true, video: true })`);
         const request = await until("the prompt", () => media.prompt(tab.id), 10000);
@@ -7196,25 +8610,32 @@ process.stdin.on("data", (chunk) => {
         await cef(`resolvePermission("${request.id}", "accept", true)`);
         await cef(`resolvePermission("${request.id}", "deny", true)`);
         const answer = await media.answered(tab.target);
+
         if (answer.state !== "ok" || answer.audio?.[0] !== "live" || answer.video?.[0] !== "live") throw new Error(`getUserMedia: ${JSON.stringify(answer)}`);
         await media.js(
           tab.target,
           `navigator.requestMIDIAccess({ sysex: true }).then(() => (window.__midi = "granted"), (e) => (window.__midi = e.name)); true`,
         );
+
         const next = await until(
           "the next prompt",
           async () => {
             const p = await media.prompt(tab.id);
+
             return p && p.id !== request.id ? p : null;
           },
           10000,
         );
+
         await media.answer(tab.id, request.id, "accept");
         await sleep(800);
         const still = await media.prompt(tab.id);
+
         if (still?.id !== next.id) throw new Error(`a late answer to ${request.id} answered ${next.id}`);
         await media.answer(tab.id, next.id, "dismiss");
+
         if (exited) throw new Error("the app exited");
+
         return { first: request.permissions, next: next.permissions, alive: true };
       } finally {
         await media.js(tab.target, "stopAll()").catch(() => null);
@@ -7227,25 +8648,34 @@ process.stdin.on("data", (chunk) => {
       // asked yet, shows its "ask macOS" step for the same requests. One app prompt, one Allow, no second prompt, and
       // the element's stream starts with both tracks.
       const tab = await media.open("/element", "Element");
+
       try {
         await sleep(1200); // the element only takes a click once it's been visible a moment
         const at = await media.js(tab.target, "box()");
+
         for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
           await cdp(tab.target, "Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "left", clickCount: 1 });
         const request = await until("the prompt", () => media.prompt(tab.id), 10000);
         await media.answer(tab.id, request.id, "accept");
+
         const events = await until(
           "the element's stream",
           async () => {
             const ev = JSON.parse(await media.js(tab.target, "JSON.stringify(__ev)"));
+
             return ev.length ? ev : null;
           },
           10000,
         );
+
         const again = await media.prompt(tab.id);
+
         if (again) throw new Error(`a second prompt: ${JSON.stringify(again)}`);
+
         if (events[0]?.audio?.[0] !== "live" || events[0]?.video?.[0] !== "live") throw new Error(`the element: ${JSON.stringify(events)}`);
+
         if (exited) throw new Error("the app exited");
+
         return { permissions: request.permissions, stream: events[0] };
       } finally {
         await media.js(tab.target, "stopAll()").catch(() => null);
@@ -7269,16 +8699,21 @@ process.stdin.on("data", (chunk) => {
     await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = j)));
     ws.send(JSON.stringify({ id: 1, method: "Browser.crash" }));
     await until("the instance gone", async () => exited, 15000);
+
     try {
       ws.close();
     } catch {}
+
     const record = join(data, "crashes", `crash-${crashed}.txt`);
     await until("its crash record", async () => existsSync(record), 5000);
     await sleep(3000);
     const fresh = reports().filter((f) => !before.has(f));
     const frontAfter = execFileSync("lsappinfo", ["front"]).toString().trim();
+
     if (fresh.length) throw new Error(`macOS made a crash report: ${fresh}`);
+
     if (frontAfter !== front) throw new Error(`the frontmost app changed: ${front} → ${frontAfter}`);
+
     return { record: readFileSync(record, "utf8").split("\n")[0], front: "unchanged" };
   });
 } finally {
@@ -7286,6 +8721,7 @@ process.stdin.on("data", (chunk) => {
   writeFileSync(join(scratch, "results.json"), JSON.stringify(results, null, 2));
   const passed = results.filter((r) => r.ok).length;
   report.summary();
+
   if (keep && !exited) {
     instance.save({ http: server.address().port, https: tlsServer.address().port });
     report.say(`kept pid ${pid}: --attach ${scratch} [check…] runs more; scripts/agent/nn quit ${data} ends it`);
@@ -7294,6 +8730,7 @@ process.stdin.on("data", (chunk) => {
     await instance.quit(); // also stops its Metro proxy when the app is already gone (crash-guard ends the run)
     rmSync(join(scratch, "media-app"), { recursive: true, force: true });
   }
+
   server.closeAllConnections?.();
   server.close();
   tlsServer.closeAllConnections?.();

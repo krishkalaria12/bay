@@ -7,6 +7,7 @@ import { measureRow, useSidebarUi } from "../sidebar/state";
 import { openThemeEditor } from "../spaces/ThemeEditor";
 
 if (__DEV__) {
+  // SAFETY: `nnLayout` is a debug-only global that no ambient declaration owns; the devtools console reads it.
   (globalThis as { nnLayout?: unknown }).nnLayout = {
     pages: usePages,
     anchors: useUrlAnchors,

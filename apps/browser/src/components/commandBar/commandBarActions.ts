@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import type { CommandAction } from "@bay/core";
 import type { BrowserCommand } from "@bay/desktop";
 import { runCommand } from "../../lib/appCommands";
@@ -12,8 +13,10 @@ import { pinnableSplit, pinRowTitle } from "../../store/splits";
 
 const siteHasBoosts = (url: string | undefined) => {
   const host = boostHost(url);
+
   return !!host && boostsForHost(useBoosts.getState(), host).length > 0;
 };
+
 const siteBoostsOn = (url: string) => useBoosts.getState().on && boostsForHost(useBoosts.getState(), boostHost(url)).some((b) => b.enabled);
 
 type Context = { s: BrowserState; windowId: string; tab: Tab | undefined };
@@ -194,22 +197,34 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
   const tab = activeTab(s, windowId);
   const c: Context = { s, windowId, tab };
   const out: CommandAction[] = [];
+
   for (const d of DEFS) {
     if (d.needs === "page" && !tab?.url) continue;
+
     if (d.needs === "tab" && !tab) continue;
+
     if (d.needs === "split" && !(tab && pinnableSplit(s, tab.id))) continue;
+
     if (d.needs === "site" && !siteKey(tab?.url ?? "")) continue;
+
     if (d.needs === "spaces" && w?.incognito) continue;
+
     if (d.needs === "boost" && !boostHost(tab?.url)) continue;
+
     if (d.needs === "boosted" && !siteHasBoosts(tab?.url)) continue;
-    out.push({
+
+    const action: CommandAction = {
       id: actionId(d),
-      title: typeof d.title === "string" ? d.title : d.title(c),
+      title: v.is(v.string(), d.title) ? d.title : d.title(c),
       icon: d.icon,
-      ...(d.hint ? { hint: d.hint } : {}),
-      ...(d.keywords ? { keywords: d.keywords } : {}),
-    });
+    };
+
+    if (d.hint) action.hint = d.hint;
+
+    if (d.keywords) action.keywords = d.keywords;
+    out.push(action);
   }
+
   if (w && !w.incognito) {
     s.spaceOrder.forEach((id, i) => {
       if (id === w.spaceId) return;
@@ -223,11 +238,13 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
       });
     });
   }
+
   return out;
 }
 
 export function runBarAction(id: string, windowId: string) {
   const i = id.indexOf(":");
+  // SAFETY: actionId builds ids from a BrowserCommand (optionally suffixed `:arg`), so the prefix before ':' is one.
   const command = (i < 0 ? id : id.slice(0, i)) as BrowserCommand;
   const arg = i < 0 ? null : id.slice(i + 1);
   runCommand({ command, arg, windowId });

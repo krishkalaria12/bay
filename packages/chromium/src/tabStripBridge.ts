@@ -86,6 +86,7 @@ let lastCommand = Math.floor(Math.random() * 1e6) * 1e3;
 export function sendTabStripCommand(command: TabStripCommand): number {
   const id = ++lastCommand;
   void Cef.tabStripCommand(id, command);
+
   return id;
 }
 

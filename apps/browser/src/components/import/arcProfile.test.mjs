@@ -7,20 +7,24 @@ globalThis.require = createRequire(import.meta.url);
 
 const tokens = new Set();
 const writes = [];
+
 globalThis.nnTestNativeModules = {
   BayImport: {
     writeImported: async (token, profile, kinds) => {
       assert.ok(tokens.delete(token), "each native token is consumed once");
       writes.push({ token, profile, kinds });
+
       return JSON.stringify({ cookies: 1, addresses: 1, cards: 0 });
     },
     discardImported: (token) => tokens.delete(token),
   },
 };
+
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { engineProfile, favoriteTabIds } = await import("../../store/model.ts");
 const { applyArcProfile } = await import("./apply.ts");
 const S = () => useBrowser.getState();
+
 const source = () => ({
   browserId: "arc",
   profileId: "Default",
@@ -37,11 +41,13 @@ const source = () => ({
   addressCount: 1,
   cardCount: 0,
 });
+
 const destinations = () => {
   S().hydrate({});
   const first = S().settings.defaultSpaceId;
   const second = S().createSpace({ name: "Work" });
   S().createWindow({ spaceId: first });
+
   return [first, second].map((spaceId, i) => ({
     spaceId,
     space: {
@@ -60,11 +66,14 @@ test("Arc spaces receive independent profile data and fresh native tokens, retai
   tokens.add("first");
   const dest = destinations();
   let reads = 0;
+
   const total = await applyArcProfile(dest, source(), "Arc", async () => {
     reads++;
     tokens.add("second");
+
     return { vaultToken: "second", failed: [] };
   });
+
   assert.equal(reads, 1);
   assert.deepEqual(
     writes.map((w) => w.token),

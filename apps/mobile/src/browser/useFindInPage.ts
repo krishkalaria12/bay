@@ -28,11 +28,14 @@ export function useFindInPage(view: Tab | undefined, pageKey: string) {
   useEffect(() => {
     if (!open || !view) return;
     const id = ++request.current;
+
     if (!query) {
       setResult(null);
       void runPageScript(view, FIND_CLEAR_SCRIPT).catch(() => {});
+
       return;
     }
+
     const search = () => {
       pending.current = null;
       clearTimeout(timer);
@@ -41,8 +44,10 @@ export function useFindInPage(view: Tab | undefined, pageKey: string) {
         () => id === request.current && setResult({ count: 0, index: -1, query }),
       );
     };
+
     const timer = setTimeout(search, SEARCH_DELAY_MS);
     pending.current = search;
+
     return () => {
       clearTimeout(timer);
       pending.current = null;
@@ -65,6 +70,7 @@ export function useFindInPage(view: Tab | undefined, pageKey: string) {
     step(step: 1 | -1): void {
       // Return right after typing searches now rather than stepping through the old matches.
       if (pending.current) return pending.current();
+
       if (!view || !current?.count) return;
       const id = ++request.current;
       runPageScript<FindResult>(view, findStepScript(step)).then(
@@ -78,6 +84,7 @@ export function useFindInPage(view: Tab | undefined, pageKey: string) {
       setOpen(false);
       setQuery("");
       setResult(null);
+
       if (view) void runPageScript(view, FIND_CLEAR_SCRIPT).catch(() => {});
     },
   };

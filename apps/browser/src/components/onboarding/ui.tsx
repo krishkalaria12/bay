@@ -84,6 +84,7 @@ export function Reveal({ delay = 0, children, style }: { delay?: number; childre
     t.set(withDelay(delay, withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) })));
   }, []);
   const reveal = useAnimatedStyle(() => ({ opacity: t.get(), transform: [{ translateY: interpolate(t.get(), [0, 1], [8, 0]) }] }));
+
   return <Animated.View style={[style, reveal]}>{children}</Animated.View>;
 }
 
@@ -94,6 +95,7 @@ export function StepProgress({ onColor = false }: { onColor?: boolean }) {
   const steps: OnboardingStep[] = STEPS.filter((s) => s !== "intro");
   const index = steps.indexOf(step);
   const track = onColor ? "rgba(255,255,255,0.22)" : colors.progressTrack;
+
   return (
     <View style={{ gap: 8 }}>
       <View style={{ flexDirection: "row", gap: 4 }}>
@@ -110,6 +112,7 @@ export function StepProgress({ onColor = false }: { onColor?: boolean }) {
 
 export function StepTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   const colors = useOnboardingColors();
+
   return (
     <View style={{ gap: 10 }}>
       <Text style={{ fontSize: 26, lineHeight: 31, fontWeight: "300", letterSpacing: -0.4, color: colors.title }}>{title}</Text>
@@ -121,6 +124,7 @@ export function StepTitle({ title, subtitle }: { title: string; subtitle?: strin
 export function PrimaryButton({ title, onPress, disabled, icon }: { title: string; onPress: () => void; disabled?: boolean; icon?: string }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} style={{ opacity: disabled ? 0.4 : 1 }}>
       <Pressable disabled={disabled} onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
@@ -150,6 +154,7 @@ export function PrimaryButton({ title, onPress, disabled, icon }: { title: strin
 export function SecondaryButton({ title, onPress, filled, disabled }: { title: string; onPress: () => void; filled?: boolean; disabled?: boolean }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable disabled={disabled} onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
@@ -178,6 +183,7 @@ export function SecondaryButton({ title, onPress, filled, disabled }: { title: s
 export function BackButton({ onPress, disabled }: { onPress: () => void; disabled?: boolean }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip="Back">
       <Pressable disabled={disabled} onPress={onPress} accessibilityRole="button" accessibilityLabel="Back">
@@ -222,6 +228,7 @@ export function StepActions({
   skip?: boolean;
 }) {
   const step = useOnboarding((s) => s.step);
+
   return (
     <>
       {isFirstStep(step) ? null : <BackButton onPress={previousStep} disabled={busy} />}
@@ -251,6 +258,7 @@ export function SelectTile({
 }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable
@@ -293,6 +301,7 @@ export function SelectTile({
 
 export function SectionLabel({ title }: { title: string }) {
   const colors = useOnboardingColors();
+
   return <Text style={{ fontSize: 12.5, color: colors.subtitle }}>{title}</Text>;
 }
 
@@ -303,6 +312,7 @@ export function CheckMark({ on, size = 18 }: { on: boolean; size?: number }) {
     t.set(withTiming(on ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) }));
   }, [on]);
   const mark = useAnimatedStyle(() => ({ opacity: t.get(), transform: [{ scale: interpolate(t.get(), [0, 1], [0.6, 1]) }] }));
+
   return (
     <View
       style={{
@@ -358,6 +368,7 @@ export function CheckRow({
 }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} style={{ opacity: disabled ? 0.5 : 1 }}>
       <Pressable

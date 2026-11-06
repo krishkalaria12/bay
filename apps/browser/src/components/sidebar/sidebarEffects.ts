@@ -23,14 +23,18 @@ export function startSidebarEffects() {
   useBrowser.subscribe((s, prev) => {
     for (const id of changedIds(s.tabs, prev.tabs)) {
       const muted = s.tabs[id]?.muted;
+
       if (muted !== undefined && prev.tabs[id] && prev.tabs[id]!.muted !== muted) void webviews.get(id)?.setMuted(muted);
     }
   });
 
   onAppEvent((e) => {
     if (e.type === "resignActive" || e.type === "screenLocked") useBrowser.getState().closeAbandonedNewTabs();
+
     if (e.type === "controlReleased" || e.type === "resignActive") commitSwitcher();
+
     if (e.type === "switcherMouseUp" || (e.type === "switcherKey" && e.key === "escape")) cancelSwitcher();
+
     if (e.type === "switcherKey" && e.key !== "escape") moveSwitcher(e.key === "next" ? 1 : -1);
   });
 

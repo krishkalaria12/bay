@@ -8,6 +8,7 @@ const dismissers = new Map<string, () => void>();
 
 export function dismissPeek(windowId: string) {
   const dismiss = dismissers.get(windowId);
+
   if (dismiss) dismiss();
   else useBrowser.getState().closePeek(windowId);
 }
@@ -15,6 +16,7 @@ export function dismissPeek(windowId: string) {
 /** The window's peek on screen takes its dismissals, until the returned function is called. */
 export function takePeekDismissal(windowId: string, dismiss: () => void) {
   dismissers.set(windowId, dismiss);
+
   return () => {
     if (dismissers.get(windowId) === dismiss) dismissers.delete(windowId);
   };

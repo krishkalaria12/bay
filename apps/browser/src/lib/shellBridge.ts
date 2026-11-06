@@ -47,6 +47,7 @@ export const isQuitting = () => quitting;
 
 export function startNativeSync() {
   const store = useBrowser;
+
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
   onCommand(runCommand);
@@ -65,14 +66,19 @@ export function startNativeSync() {
 
   onAppEvent((e) => {
     const s = store.getState();
+
     if (e.type === "appearance") s.setAppDark(e.dark);
+
     if (e.type === "reopen") createWindow();
+
     if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
+
     if (e.type === "willQuit") {
       quitting = true;
       flushPersistence({ final: true });
       void replyToTerminate(true);
     }
+
     if (e.type === "quitCancelled") {
       quitting = false;
       resumePersistence();
@@ -81,8 +87,11 @@ export function startNativeSync() {
 
   onWindowEvent((e) => {
     const s = store.getState();
+
     if (e.type === "focus") s.setFocusedWindow(e.id);
+
     if (e.type === "frame") s.setWindowFrame(e.id, e.frame);
+
     if (e.type === "close") {
       if (quitting) return;
       open.delete(e.id);
@@ -102,9 +111,12 @@ export function startNativeSync() {
     // Open the focused window last so it comes to front.
     const focused = s.ui.focusedWindowId;
     const order = s.windowOrder.filter((id) => id !== focused);
+
     if (focused && s.windows[focused]) order.push(focused);
+
     for (const id of order) {
       const w = s.windows[id]!;
+
       if (!open.has(id)) {
         open.add(id);
         titles.set(id, windowTitle(s, id));
@@ -113,16 +125,21 @@ export function startNativeSync() {
         void openWindow(id, { frame: w.frame, incognito: w.incognito, title: titles.get(id), focus: id === s.ui.focusedWindowId, profile, ...small });
       }
     }
+
     for (const id of Array.from(open)) {
       if (s.windows[id]) continue;
       open.delete(id);
       titles.delete(id);
       void closeWindow(id);
+
       if (prev?.windows[id]?.incognito) void releaseProfile(incognitoSpaceId(id));
     }
+
     if (prev && s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows && s.spaces === prev.spaces) return;
+
     for (const id of open) {
       const title = windowTitle(s, id);
+
       if (titles.get(id) !== title) {
         titles.set(id, title);
         void setWindowTitle(id, title);
@@ -133,6 +150,7 @@ export function startNativeSync() {
   let lastMenu = "";
   let lastBookmarkMenus: unknown[] = [];
   let menuTimer: ReturnType<typeof setTimeout> | undefined;
+
   const syncMenu = () => {
     menuTimer = undefined;
     const state = menuState(store.getState());
@@ -142,6 +160,7 @@ export function startNativeSync() {
     const bookmarkMenus = [bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks];
     const json = JSON.stringify(rest);
     const bookmarksChanged = !bookmarkMenus.every((menu, i) => menu === lastBookmarkMenus[i]);
+
     if (json === lastMenu && !bookmarksChanged) return;
     lastMenu = json;
     lastBookmarkMenus = bookmarkMenus;
@@ -177,11 +196,13 @@ export function startNativeSync() {
   });
   void windowIds().then((ids) => {
     const s = store.getState();
+
     for (const id of ids) {
       if (!s.windows[id]) {
         if (!isUtilityWindowId(id)) void closeWindow(id);
         continue;
       }
+
       // One that already existed kept the title it had (openWindow leaves it be): send the current one.
       const title = windowTitle(s, id);
       titles.set(id, title);
@@ -226,7 +247,9 @@ const PAGE_COMMANDS = [
   "stop",
   "caretBrowsing",
 ];
+
 const INTERNAL_PAGE_COMMANDS = ["copyUrl", "copyUrlAsMarkdown", "bookmarkPage", "addBookmarkToFolder"];
+
 const WINDOW_COMMANDS = [
   ...PAGE_COMMANDS,
   "focusCommandBar",
@@ -267,20 +290,24 @@ function menuBookmarks(b: Bookmarks, folderId: string, depth = 0): MenuBookmark[
 }
 
 type BookmarkMenus = Pick<MenuState, "bookmarkFolders" | "recentBookmarks" | "bookmarksBar" | "otherBookmarks">;
+
 const bookmarkMenuCache = new WeakMap<Bookmarks, Map<string, BookmarkMenus>>();
 
 function bookmarkMenus(b: Bookmarks, spaceId: string): BookmarkMenus {
   let perProfile = bookmarkMenuCache.get(b);
+
   if (!perProfile) bookmarkMenuCache.set(b, (perProfile = new Map()));
   const cached = perProfile.get(spaceId);
+
   if (cached) return cached;
   const roots = b.roots[spaceId];
+
   const menus: BookmarkMenus = roots
     ? {
         bookmarkFolders: [
           { id: roots.bar, title: "Bookmarks Bar" },
           { id: roots.other, title: "Other Bookmarks" },
-          ...[...folderChildren(b, roots.bar), ...folderChildren(b, roots.other)].filter((n) => n.kind === "folder").map((n) => ({ id: n.id, title: n.title })),
+          ...[...folderChildren(b, roots.bar), ...folderChildren(b, roots.other)].flatMap((n) => (n.kind === "folder" ? [{ id: n.id, title: n.title }] : [])),
         ],
         recentBookmarks: Object.values(b.nodes)
           .filter((n): n is Extract<BookmarkNode, { kind: "url" }> => n.kind === "url" && isInTree(b, n.id, [roots.bar, roots.other]))
@@ -291,7 +318,9 @@ function bookmarkMenus(b: Bookmarks, spaceId: string): BookmarkMenus {
         otherBookmarks: menuBookmarks(b, roots.other),
       }
     : { bookmarkFolders: [], recentBookmarks: [], bookmarksBar: [], otherBookmarks: [] };
+
   perProfile.set(spaceId, menus);
+
   return menus;
 }
 
@@ -304,46 +333,67 @@ export function menuState(s: BrowserState): MenuState {
   const regularWindows = s.windowOrder.filter((id) => !s.windows[id]!.incognito && s.windows[id]!.kind !== "small");
 
   const disabled: string[] = [];
+
   if (!tab || !splitOf(s, tab.id)) disabled.push("focusNextPane", "focusPreviousPane", "removeFromSplit");
+
   if (w && (w.tabLayout ?? s.settings.tabLayout) === "top") disabled.push("toggleAddressBar");
+
   if (!w) disabled.push(...WINDOW_COMMANDS, "toggleTabLayout", "openSplitPane");
   else {
     if (!tab?.url) disabled.push(...PAGE_COMMANDS);
     else if (isInternalTab(tab)) disabled.push(...PAGE_COMMANDS.filter((c) => !INTERNAL_PAGE_COMMANDS.includes(c)));
+
     if (!tab || !canGoBack(tab.id, live ?? IDLE_LIVE)) disabled.push("back");
+
     if (!tab || !canGoForward(tab.id, live ?? IDLE_LIVE)) disabled.push("forward");
+
     if (!live?.isLoading) disabled.push("stop");
+
     if (w.incognito) disabled.push("moveTabToSpace", "moveTabToWindow", "switchSpace", "nextSpace", "previousSpace");
     else if (tab) disabled.push(`moveTabToSpace:${tab.spaceId}`);
+
     if (regularWindows.length < 2) disabled.push("mergeAllWindows");
   }
+
   if (!s.closedTabs.length && !s.closedWindows.length && !s.closedGroups.length) disabled.push("reopenClosedTab");
+
   if (!s.closedWindows.length) disabled.push("reopenClosedWindow");
 
   const checked = [`setAppearance:${s.settings.appearance}`];
+
   if (s.settings.showFullUrl) checked.push("toggleFullUrl");
+
   if (s.settings.addressBar === "sidebar") checked.push("toggleAddressBar");
+
   if (s.settings.sidebarPosition === "right") checked.push("toggleSidebarPosition");
   checked.push(`setBookmarksBar:${s.settings.bookmarksBar}`);
+
   if ((w?.tabLayout ?? s.settings.tabLayout) === "sidebar") checked.push("toggleTabLayout");
+
   if (w && !w.sidebarOpen) checked.push("toggleSidebar");
 
   const titles: Record<string, string> = {};
+
   if (tab?.pinned) titles.togglePin = "Remove from Essentials";
+
   if (tab?.pinnedRow || (tab && pinnableSplit(s, tab.id))) titles.togglePinRow = pinRowTitle(s, tab.id);
+
   if (tab?.muted) titles.toggleMute = "Unmute Site";
+
   if (tab?.url && isBookmarked(s.bookmarks, bookmarkProfile, tab.url)) {
     titles.bookmarkPage = "Edit Bookmark…";
   }
 
   if (!s.settings.openLinksInLittleBay) titles.toggleOpenLinksInLittleBay = "Open Links from Other Apps in Little Bay";
   const meeting = meetingToJoin();
+
   if (meeting) titles.joinMeeting = `Join “${meeting.title || "Untitled event"}”`;
   else disabled.push("joinMeeting");
 
   const sidebar = sidebarMenuState(s, windowId);
   disabled.push(...sidebar.disabled);
   Object.assign(titles, sidebar.titles);
+
   if (w?.kind === "small") {
     disabled.push(...LITTLE_BAY_DISABLED_COMMANDS);
     // ⌘O is Open File in a main window and Open in Bay in Little Bay, as in Little Arc.
@@ -377,9 +427,11 @@ export function menuState(s: BrowserState): MenuState {
 
 function isInTree(b: Bookmarks, id: string, roots: string[]): boolean {
   let node = b.nodes[id];
+
   for (let i = 0; node && i < 64; i++) {
     if (roots.includes(node.id)) return true;
     node = node.parentId ? b.nodes[node.parentId] : undefined;
   }
+
   return false;
 }

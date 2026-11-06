@@ -16,8 +16,10 @@ const launchTabs = new Set<string>();
 
 export function quietLaunchTabs() {
   const s = useBrowser.getState();
+
   for (const windowId of s.windowOrder) {
     const id = activeTabId(s, windowId);
+
     if (id) launchTabs.add(id);
   }
 }
@@ -33,6 +35,7 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
   useEffect(() => {
     if (!focused || launchTabs.has(tabId)) return;
     const state = useBrowser.getState();
+
     if (activeTabId(state, windowId) !== tabId || state.tabs[tabId]?.url || state.windowUi[windowId]?.panel.open || themeEditorOpen(windowId)) return;
     state.openPanel(windowId, "");
   }, [tabId, windowId, focused]);

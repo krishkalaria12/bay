@@ -14,16 +14,22 @@ import { launch, reporter, sleep } from "../../../scripts/lib/instance.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const appPath = resolve(process.argv[2] ?? "apps/browser/build-extension-import/Build/Products/Debug/Bay.app");
 const parent = resolve(process.argv[3] ?? tmpdir());
+
 mkdirSync(parent, { recursive: true });
+
 const scratch = mkdtempSync(join(parent, "bay-firefox-runtime-"));
 const report = reporter(join(scratch, "runtime.log"), { name: "Firefox compatibility runtime" });
 const support = join(scratch, "source");
 const profile = join(support, "Firefox/Profiles/runtime");
 const extensions = join(profile, "extensions");
 const fixture = join(scratch, "fixture");
+
 mkdirSync(extensions, { recursive: true });
+
 mkdirSync(fixture, { recursive: true });
+
 const addonId = "runtime-fixture@example.org";
+
 const files = {
   "manifest.json": JSON.stringify({
     manifest_version: 3,
@@ -64,23 +70,30 @@ browser.runtime.onInstalled.addListener(async () => {
   }
 })();`,
 };
+
 for (const [name, body] of Object.entries(files)) writeFileSync(join(fixture, name), body);
+
 const xpi = join(extensions, "runtime.xpi");
+
 execFileSync("python3", [
   "-c",
   "import pathlib,sys,zipfile; root=pathlib.Path(sys.argv[1]); z=zipfile.ZipFile(sys.argv[2], 'w', zipfile.ZIP_DEFLATED); [z.write(p,p.name) for p in root.iterdir()]; z.close()",
   fixture,
   xpi,
 ]);
+
 writeFileSync(
   join(profile, "extensions.json"),
   JSON.stringify({ addons: [{ id: addonId, type: "extension", location: "app-profile", active: true, path: xpi }] }),
 );
+
 writeFileSync(join(support, "Firefox/profiles.ini"), "[Profile0]\nName=Runtime\nIsRelative=1\nPath=Profiles/runtime\nDefault=1\n");
+
 const digest = () => createHash("sha256").update(readFileSync(xpi)).digest("hex");
 const originalDigest = digest();
 const helper = join(scratch, "prepare-firefox");
 const core = join(root, "packages/import/ios/Core");
+
 execFileSync(
   "xcrun",
   [
@@ -102,16 +115,22 @@ execFileSync(
   ],
   { timeout: 60_000 },
 );
+
 const prepare = () => JSON.parse(execFileSync(helper, [profile, addonId, join(scratch, "owned")], { encoding: "utf8", timeout: 30_000 }));
 const prepared = prepare();
 const retry = prepare();
+
 assert.equal(prepared.id, retry.id);
+
 assert.notEqual(prepared.path, retry.path);
+
 assert.equal(digest(), originalDigest);
+
 report.record("prepared copies preserve identity and source XPI", { evidence: { id: prepared.id, sourceDigest: originalDigest } });
 
 let app;
 let page;
+
 try {
   app = await launch(appPath, {
     data: join(scratch, "data"),
@@ -125,6 +144,7 @@ try {
     const result = await app.eval(`return globalThis.expo.modules.BayExtensions.install(${JSON.stringify(prepared.path)}, '')`);
     assert.equal(result.error, undefined);
     assert.equal(result.id, prepared.id);
+
     return result;
   });
   await report.check("real worker and extension page execute Firefox equivalents", async () => {
@@ -133,11 +153,14 @@ try {
     page = await app.page(url, { timeout: 15_000 });
     let result;
     const deadline = Date.now() + 20_000;
+
     while (Date.now() < deadline) {
       result = await page.eval("globalThis.runtimeResult");
+
       if (result) break;
       await sleep(100);
     }
+
     assert.ok(result, "the probe page did not complete");
     report.log(result);
     assert.equal(result.error, undefined);
@@ -151,20 +174,26 @@ try {
     assert.equal(result.url, url);
     assert.equal(result.badge, "FF");
     assert.equal(result.dom, "Firefox runtime probe");
+
     return result;
   });
   await report.check("new native import clearly reports an older engine", async () => {
     const result = await app.eval(
       `return globalThis.expo.modules.BayImport.writeExtension('firefox', 'Profiles/runtime', ${JSON.stringify(addonId)}, '').then(json => ({reply: JSON.parse(json)})).catch(error => ({error: String(error)}));`,
     );
+
     if (result.error) assert.match(result.error, /engine does not support extension imports/);
     else assert.equal(result.reply.id, prepared.id);
+
     return result;
   });
   assert.equal(digest(), originalDigest);
 } finally {
   page?.close();
+
   if (app) report.log("quit", await app.quit());
 }
+
 writeFileSync(join(scratch, "results.json"), JSON.stringify(report.results, null, 2));
+
 if (!report.summary()) process.exitCode = 1;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { tidyTabsAnswers } from "@bay/desktop";
+
 const { useBrowser } = await import("../store/browserStore.ts");
 const { useToasts } = await import("../components/ui/toasts.ts");
 const { runTidyTabs, useTidyTabs } = await import("./tidyTabs.ts");
@@ -19,6 +20,7 @@ function setup(urls, { status = "available", answer = async () => null } = {}) {
   tidyTabsAnswers.prompts.length = 0;
   const w = S().createWindow({ url: urls[0] });
   const ids = [S().windows[w].activeTabIds[S().windows[w].spaceId], ...urls.slice(1).map((url) => S().newTab(w, { url, background: true }))];
+
   return { w, ids };
 }
 
@@ -28,6 +30,7 @@ const idsMatching = (prompt, pattern) =>
     .split("\n")
     .filter((line) => pattern.test(line))
     .map((line) => Number.parseInt(line, 10));
+
 const planets = async (prompt) => [{ name: "Planets", tabs: idsMatching(prompt, /nasa|wikipedia/) }];
 
 const SITES = ["https://nasa.gov/nasa", "https://wikipedia.org/saturn", "https://nasa.gov/jupiter", "https://booking.com/lisbon", "https://example.com/x"];
@@ -48,6 +51,7 @@ test("the model's groups sort tabs by topic across sites", async () => {
 
 const offered = (w) => {
   const { tabCount, loose } = tidyTabCounts(S(), w);
+
   return offersTidy(tabCount, loose, useTidyTabs.getState().tidied[S().windows[w].spaceId] ?? null);
 };
 
@@ -69,6 +73,7 @@ test("without the model, or when it can't answer, tabs group by site", async () 
     const { w, ids } = setup(SITES, options);
     await runTidyTabs(w);
     assert.deepEqual([...groupOfTab(ids[0]).tabIds].sort(), [ids[0], ids[2]].sort(), JSON.stringify(options));
+
     if (options.status === "off") assert.equal(tidyTabsAnswers.prompts.length, 0);
   }
 });
@@ -103,9 +108,11 @@ test("a window closed while the model thinks is left alone", async () => {
   const { w, ids } = setup(SITES, {
     answer: async () => {
       S().closeWindow(w);
+
       return [{ name: "Planets", tabs: [0, 1] }];
     },
   });
+
   await runTidyTabs(w);
   assert.equal(groupOfTab(ids[0]), undefined);
 });

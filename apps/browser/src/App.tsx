@@ -47,6 +47,7 @@ export function WindowRoot({ windowId }: { windowId?: string }) {
         <UtilityWindow id={windowId!} />
       </ThemeScope>
     );
+
   return <BrowserWindowRoot windowId={windowId} />;
 }
 
@@ -54,7 +55,9 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   const id = useBrowser((s) => windowId ?? s.ui.focusedWindowId ?? s.windowOrder[0] ?? null);
   const exists = useBrowser((s) => !!id && !!s.windows[id]);
   const small = useBrowser((s) => !!id && s.windows[id]?.kind === "small");
+
   if (!id || !exists) return null;
+
   return (
     <WindowContext.Provider value={id}>
       <ThemeScope>{small ? <LittleBayWindow /> : <BrowserWindow />}</ThemeScope>
@@ -96,14 +99,18 @@ function BrowserWindow() {
   // on the card's (no clipping: the resize handle reaches past it). On the right it's already held at the slot's
   // start, so it goes out past the window's edge as the slot narrows.
   const hiddenBy = right ? 0 : sidebarWidth - layout.cardInset;
+
   const slotStyle = useAnimatedStyle(() => {
     "worklet";
+
     // In page full screen the slot sits outside the window at the sidebar's full width.
     return { width: fullscreen ? sidebarWidth : interpolate(dock.progress.get(), [0, 1], [layout.cardInset, sidebarWidth]) };
   });
+
   const dockedStyle = useAnimatedStyle(() => {
     "worklet";
     const p = dock.progress.get();
+
     return { opacity: interpolate(p, [0, 0.6, 1], [0, 1, 1]), transform: [{ translateX: interpolate(p, [0, 1], [-hiddenBy, 0]) }] };
   });
 
@@ -188,7 +195,9 @@ function BrowserWindow() {
 // sit over the page's corner; with the top strip closed, only while the pointer is over the window's top, as Zen has it.
 function trafficLightsMode(o: { addressInSidebar: boolean; fullscreen: boolean; sidebarOpen: boolean; topTabs: boolean; peekOut: boolean }): TrafficLightsMode {
   if (!o.addressInSidebar || o.fullscreen || o.sidebarOpen) return "shown";
+
   if (o.topTabs) return "hover";
+
   return o.peekOut ? "shown" : "hidden";
 }
 
@@ -196,8 +205,11 @@ function trafficLightsMode(o: { addressInSidebar: boolean; fullscreen: boolean; 
 // it's out (nnPeekOut(windowId)).
 const devPeeks = new Map<string, () => void>();
 const devPeeksOut = new Map<string, boolean>();
+
 if (__DEV__) {
+  // SAFETY: globalThis is extensible; the cast only declares the optional nnPeek field this statement sets.
   (globalThis as { nnPeek?: unknown }).nnPeek = (windowId: string) => devPeeks.get(windowId)?.();
+  // SAFETY: globalThis is extensible; the cast only declares the optional nnPeekOut field this statement sets.
   (globalThis as { nnPeekOut?: unknown }).nnPeekOut = (windowId: string) => devPeeksOut.get(windowId) ?? false;
 }
 
@@ -210,43 +222,56 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
   useEffect(() => {
     if (!__DEV__) return;
     devPeeks.set(windowId, show);
+
     return () => void devPeeks.delete(windowId);
   }, [windowId, show]);
   // Holding Option shows it, as Arc's did, and letting go hides it unless the pointer has gone into it meanwhile.
   const pointerIn = useRef(false);
   const heldOut = useRef(false);
   const optionOn = useBrowser((s) => s.settings.showSidebarOnOption);
+
   const optionEvent = useEffectEvent((type: string, from?: string) => {
     if (type === "optionHeld" && from === windowId && optionOn && enabled) {
       heldOut.current = true;
       show();
     } else if (type === "optionReleased" && heldOut.current) {
       heldOut.current = false;
+
       if (!pointerIn.current) hide();
     }
   });
+
   useEffect(() => {
     const sub = onAppEvent((e) => optionEvent(e.type, "windowId" in e ? e.windowId : undefined));
+
     return () => sub.remove();
   }, []);
+
   const enter = () => {
     pointerIn.current = true;
     show();
   };
+
   const leave = () => {
     pointerIn.current = false;
     hide();
   };
+
   useEffect(() => {
     onOut(live);
+
     if (__DEV__) devPeeksOut.set(windowId, live);
+
     return () => onOut(false);
   }, [live, onOut]);
+
   const slideStyle = useAnimatedStyle(() => {
     "worklet";
     const p = slide.get();
+
     return { opacity: p, transform: [{ translateX: interpolate(p, [0, 1], [(right ? 1 : -1) * (sidebarWidth + 12), 0]) }] };
   });
+
   const side = right ? "right" : "left";
 
   return (

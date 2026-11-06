@@ -20,6 +20,7 @@ export default defineConfig({
       // Lists Bay's screenshot for image search. The Sitemap type leaves `img` out, but the writer takes it.
       serialize(item) {
         if (item.url !== `${site}/`) return item;
+
         return { ...item, img: [{ url: `${site}/screenshots/bay-browser-for-mac.jpg` }] };
       },
     }),

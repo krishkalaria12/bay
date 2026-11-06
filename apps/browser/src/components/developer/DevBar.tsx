@@ -53,13 +53,17 @@ export function DevBar({
   const controlsOpen = usePages((s) => s.popover[tabId] === "siteControls");
   const [width, setWidth] = useState(0);
   const sidebarSymbol = useSidebarSymbol();
+
   const focus = () => {
     if (!focused) useBrowser.getState().activate(tabId);
   };
+
   const height = navigation ? layout.toolbarHeight : DEV_BAR_HEIGHT;
+
   if (!tab) return <View style={{ height }} />;
   const center = navigation ? TOOLBAR_BUTTON_MID : DEV_BAR_HEIGHT / 2;
   const at = (x: number | null) => ({ position: "absolute" as const, top: center - layout.toolbarButton / 2, left: (x ?? 0) - layout.toolbarButton / 2 });
+
   const button = (icon: string, tooltip: string, onPress: () => void, active = false) => (
     <ToolbarButton
       palette={palette}
@@ -136,12 +140,14 @@ function Address({ url, tabId, windowId, onFocus }: { url: string; tabId: string
   const { hovered, hoverProps } = useHover();
   const scheme = /^[a-z][\w+.-]*:\/\//i.exec(url)?.[0] ?? "";
   const secure = url.startsWith("https:") || isLocalDevSite(url);
+
   return (
     <View {...hoverProps} style={{ flex: 1, height: 28 }}>
       <ContextMenuArea
         style={{ flex: 1 }}
         onContextMenu={() => {
           const tab = useBrowser.getState().tabs[tabId];
+
           if (tab) void showUrlBarMenu(tab);
         }}
       >
@@ -176,6 +182,7 @@ function Hatch({ width, height, color }: { width: number; height: number; color:
   if (!width) return null;
   const length = height * Math.SQRT2 + 2;
   const count = Math.ceil((width + height) / STRIPE_GAP);
+
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: "hidden" }]}>
       {Array.from({ length: count }, (_, i) => (

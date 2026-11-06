@@ -19,6 +19,7 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
     props.onClose();
     action();
   }
+
   return (
     <PanelSheet visible={props.visible} onClose={props.onClose} title="Tabs" testID="tabs-menu" height="45%">
       <ActionRow testID="tabs-menu-new" icon="add" label="New tab" onPress={() => act(props.onNewTab)} />

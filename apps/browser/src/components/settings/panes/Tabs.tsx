@@ -125,21 +125,28 @@ function AwakeSites() {
   const theme = useTheme();
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+
   const add = () => {
     const site = normalizeAwakeSite(input);
+
     if (!site) {
       setError("Enter a website such as example.com.");
+
       return;
     }
+
     const s = useBrowser.getState();
+
     if (!s.settings.awakeSites.includes(site)) s.updateSettings({ awakeSites: [...s.settings.awakeSites, site] });
     setInput("");
     setError(null);
   };
+
   const remove = (site: string) => {
     const s = useBrowser.getState();
     s.updateSettings({ awakeSites: s.settings.awakeSites.filter((item) => item !== site) });
   };
+
   return (
     <View>
       <SectionHeader
@@ -175,16 +182,21 @@ function AwakeSites() {
 function LayoutChoice({ layout, title, selected }: { layout: "sidebar" | "top"; title: string; selected: boolean }) {
   const theme = useTheme();
   const colors = useFormColors();
+
   const choose = () => {
     const s = useBrowser.getState();
     s.updateSettings({ tabLayout: layout });
+
     for (const w of Object.values(s.windows)) {
       if ((w.tabLayout ?? s.settings.tabLayout) !== layout) useBrowser.getState().toggleTabLayout(w.id);
     }
+
     useBrowser.getState().updateSettings({ tabLayout: layout });
   };
+
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
+
   return (
     <Pressable onPress={choose} style={{ flex: 1, alignItems: "center", gap: 8 }}>
       <View
@@ -226,6 +238,7 @@ function LayoutChoice({ layout, title, selected }: { layout: "sidebar" | "top"; 
 // The calendar's own setting (Settings › Calendar), listed with the other previews.
 function CalendarPreviewToggle() {
   const on = useLive((s) => s.calendar.showPreview);
+
   return (
     <Row title="Calendar" description="Today's events, with Join.">
       <Toggle value={on} onChange={(v) => updateCalendarSettings({ showPreview: v })} />

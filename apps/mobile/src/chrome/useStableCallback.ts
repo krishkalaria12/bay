@@ -7,5 +7,6 @@ export function useStableCallback(callback: (() => void) | undefined): () => voi
   useLayoutEffect(() => {
     latest.current = callback;
   });
+
   return useCallback(() => latest.current?.(), []);
 }

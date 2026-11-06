@@ -34,21 +34,25 @@ export interface ListValidators {
 /** The server's list matches the saved copy: same ETag, or with no ETag on either side, the same Last-Modified. */
 export function listUnchanged(saved: ListValidators, current: ListValidators): boolean {
   if (saved.etag && current.etag) return saved.etag === current.etag;
+
   return Boolean(saved.lastModified && saved.lastModified === current.lastModified);
 }
 
 /** A short name for list text (FNV-1a), so an engine can tell an update from text it has already compiled. */
 export function listVersion(text: string): string {
   let hash = 0x811c9dc5;
+
   for (let index = 0; index < text.length; index++) {
     hash ^= text.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193);
   }
+
   return `${text.length.toString(36)}-${(hash >>> 0).toString(36)}`;
 }
 
 /** A download is plausible filter text, not an error page: judged from its first bytes and its size. */
 export function looksLikeFilterList(head: string, size: number): boolean {
   const start = head.trimStart().slice(0, 200).toLowerCase();
+
   return size > 1000 && !start.startsWith("<!doctype") && !start.startsWith("<html");
 }

@@ -8,10 +8,14 @@ import { join, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "../../..");
 const crate = join(root, "packages/adblock");
 const env = { ...process.env };
+
 env.DEVELOPER_DIR ??= "/Applications/Xcode.app/Contents/Developer";
+
 execFileSync("cargo", ["build", "--locked", "--manifest-path", join(crate, "Cargo.toml")], { stdio: "inherit", env });
+
 const library = join(env.CARGO_TARGET_DIR ?? join(crate, "target"), "debug");
 const temporary = mkdtempSync(join(tmpdir(), "bay-content-blocker-test-"));
+
 try {
   const binary = join(temporary, "content-blocker-test");
   execFileSync(

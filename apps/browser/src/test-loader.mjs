@@ -8,6 +8,7 @@ const native = new Set(["@bay/desktop", "@bay/chromium", "expo-modules-core"]);
 registerHooks({
   resolve(specifier, context, next) {
     if (native.has(specifier)) return { url: stub, shortCircuit: true };
+
     try {
       return next(specifier, context);
     } catch (error) {
@@ -18,6 +19,7 @@ registerHooks({
           } catch {}
         }
       }
+
       throw error;
     }
   },

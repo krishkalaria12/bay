@@ -50,6 +50,7 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
             <SectionLabel>{group.label}</SectionLabel>
             {group.entries.map((item) => {
               const title = pageTitle(item.title, item.url);
+
               return (
                 <SiteRow
                   key={item.id}

@@ -21,6 +21,7 @@ const filler = Array.from({ length: 1000 }, (_, i) => ({ s: `Site ${i}`, ts: [`s
 
 function heliumFile(entries: unknown[]): string {
   const body = JSON.stringify([...entries, ...filler], null, 1).replace(/"\n(\s*)([\]}])/g, '",\n$1$2');
+
   return `// Generated at 2026-10-14T11:11:02.825Z\n// MIT License\n//\n\n${body}\n`;
 }
 
@@ -44,9 +45,12 @@ const fixture = slimBangs(
     { s: "Taken", ts: ["gh"], u: "https://taken.example/?q={searchTerms}" },
   ]),
 )!;
+
 const table = bangTable(fixture);
+
 const url = (text: string) => {
   const match = findBang(text, table);
+
   return match && match.url;
 };
 
@@ -85,6 +89,7 @@ test("an unknown bang, a lone '!' or a '!' inside a word is no bang", () => {
   ]) {
     assert.equal(findBang(text, table), null, text);
   }
+
   assert.equal(findBang("!gh react", null), null);
 });
 
@@ -111,6 +116,7 @@ test("terms in the path keep '/' and escape what would end the path, spaces as %
 
 test("a template with the terms in its scheme, host, port or user is left out, so the query can't pick the host", () => {
   for (const t of ["rtfd", "hypestat", "noslash", "port", "user"]) assert.equal(table.get(t), undefined, t);
+
   for (const text of [
     "!rtfd evil.example/",
     "!hypestat @evil.example/",
@@ -123,7 +129,9 @@ test("a template with the terms in its scheme, host, port or user is left out, s
   ]) {
     assert.equal(findBang(text, table), null, text);
   }
+
   const stored = bangTable("rtfd\tRead the Docs\t{s}.rtfd.io/\nhs\thypestat\twww.{s}.hypestat.com/\nus\tUser\t{s}@example.com/");
+
   for (const t of ["rtfd", "hs", "us"]) assert.equal(stored.get(t), undefined, t);
 });
 
@@ -131,6 +139,7 @@ test("the resolved URL must keep the template's scheme, host and port", () => {
   assert.ok(staysOnSite("https://github.com/search?q=a", "https://github.com/search?q={searchTerms}"));
   assert.ok(staysOnSite("https://GitHub.com/a", "https://github.com/{searchTerms}"));
   assert.ok(staysOnSite("https://github.com\\@evil.example/", "https://github.com/{searchTerms}"));
+
   for (const url of [
     "https://github.com@evil.example/",
     "https://evil.example/github.com/",
@@ -142,6 +151,7 @@ test("the resolved URL must keep the template's scheme, host and port", () => {
   ]) {
     assert.ok(!staysOnSite(url, "https://github.com/{searchTerms}"), url);
   }
+
   const sneaky = { size: 1, get: () => ({ trigger: "x", name: "X", template: "https://x.example{searchTerms}", home: "https://x.example/" }) };
   assert.equal(findBang("!x @evil.example", sneaky), null);
   assert.equal(findBang("!x", sneaky), null);
@@ -188,6 +198,7 @@ test("the stored document carries its ETag with the list it belongs to", () => {
   assert.equal(readBangDocument(doc)?.etag, '"v2"');
   assert.equal(readBangDocument(doc)?.table.get("gh")?.name, "GitHub");
   assert.equal(readBangDocument(bangDocument(null, fixture))?.etag, null);
+
   for (const bad of [null, "", fixture, doc.slice(0, 2000), `bay-bangs 2\t"v2"\n${fixture}`, `bay-bangs 1\t"v2"\tx\n${fixture}`])
     assert.equal(readBangDocument(bad), null);
 });
@@ -219,6 +230,7 @@ test("the command bar's top row is the bang's search, then the site's pages from
       { url: "https://react.dev/", title: "React", favicon: null, visits: 30, lastVisit: 1 },
     ],
   };
+
   const result = buildSuggestions("!gh react", source, { now: 2, bangs: table, remote: ["react native"] });
   assert.deepEqual(result.items, [
     { kind: "search", query: "react", url: "https://github.com/search?q=react", engine: "GitHub", bang: true },
@@ -242,6 +254,7 @@ test("configured search shortcuts also supply bangs and override bundled destina
     { name: "Work GitHub", keyword: "gh", url: "https://github.work.example/search?q=%s" },
     { name: "Docs", keyword: "!docs", url: "https://docs.example/%s" },
   ]);
+
   const combined = joinBangTables([custom, table]);
   assert.equal(findBang("!gh react hooks", combined)?.url, "https://github.work.example/search?q=react+hooks");
   assert.equal(findBang("!docs api/v2", combined)?.url, "https://docs.example/api/v2");
@@ -256,6 +269,7 @@ test("configured bangs reject templates whose query controls the destination hos
     { name: "Bad trigger", keyword: "bad!", url: "https://example.com/?q=%s" },
     { name: "No terms", keyword: "empty", url: "https://example.com/" },
   ]);
+
   assert.equal(invalid.size, 0);
   assert.equal(findBang("!gh react", joinBangTables([invalid, table]))?.url, "https://github.com/search?q=react");
 });

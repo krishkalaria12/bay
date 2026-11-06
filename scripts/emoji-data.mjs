@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const source = process.argv[2];
+
 if (!source) {
   console.error("usage: node scripts/emoji-data.mjs <emoji-test.txt>");
   process.exit(1);
@@ -27,15 +28,20 @@ const GROUPS = [
 
 const byGroup = new Map(GROUPS.map((g) => [g.id, []]));
 let group = null;
+
 for (const line of readFileSync(source, "utf8").split("\n")) {
   const heading = line.match(/^# group: (.+)$/);
+
   if (heading) {
     group = GROUPS.find((g) => g.from.includes(heading[1].trim()))?.id ?? null;
     continue;
   }
+
   const entry = line.match(/^[0-9A-F ]+; fully-qualified\s+# (\S+) E[\d.]+ (.+)$/);
+
   if (!entry || !group) continue;
   const [, emoji, name] = entry;
+
   if (name.includes("skin tone")) continue;
   byGroup.get(group).push(
     `${emoji} ${name
@@ -56,6 +62,9 @@ export const EMOJI_GROUPS: EmojiGroup[] = ${JSON.stringify(
   1,
 )};
 `;
+
 const target = join(dirname(fileURLToPath(import.meta.url)), "../packages/core/src/emojiData.ts");
+
 writeFileSync(target, out);
+
 console.log(`${[...byGroup.values()].reduce((n, list) => n + list.length, 0)} emoji in ${GROUPS.length} groups: ${target}`);

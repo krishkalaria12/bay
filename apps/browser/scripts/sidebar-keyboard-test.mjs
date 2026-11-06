@@ -8,41 +8,55 @@ import { join, resolve } from "node:path";
 import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const [appArg, evidenceArg] = process.argv.slice(2);
+
 if (!appArg) throw new Error("usage: sidebar-keyboard-test.mjs <Debug Bay.app> [evidence directory]");
+
 const evidence = evidenceArg ? resolve(evidenceArg) : mkdtempSync(join(tmpdir(), "bay-sidebar-keyboard-"));
 const report = reporter(join(evidence, "sidebar-keyboard.log"), { name: "sidebar-keyboard" });
+
 const server = createServer((_req, res) => {
   res.writeHead(200, { "content-type": "text/html" });
   res.end(
     '<!doctype html><title>Keyboard fixture</title><h1>Keyboard fixture</h1><input id="editor" value="page text"><div contenteditable>editable page</div>',
   );
 });
+
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
+
 const origin = `http://127.0.0.1:${server.address().port}`;
 let app;
 const run = (body) => app.eval(body);
+
 const until = async (description, body) => {
   for (const end = Date.now() + 10000; Date.now() < end; await sleep(80)) {
     const value = await run(body);
+
     if (value) return value;
   }
+
   throw new Error(`timed out: ${description}`);
 };
+
 const press = async (key, keyCode, modifiers = []) => {
   assert.equal(await run(`return globalThis.expo.modules.BayApp.devPostKey("w1", ${JSON.stringify(key)}, ${keyCode}, ${JSON.stringify(modifiers)})`), true);
   await sleep(350);
 };
+
 const focus = () => press("menu:.", 47, ["command"]);
 const row = () => run("return nn.sidebarUi.getState().keyboard.w1");
+
 const target = async (id) => {
   await focus();
   await press(String.fromCharCode(0xf729), 115);
+
   for (let i = 0; i < 180; i++) {
     if ((await row())?.rowId === id) return;
     await press(String.fromCharCode(0xf701), 125);
   }
+
   throw new Error(`could not navigate to ${id}`);
 };
+
 try {
   app = await launch(resolve(appArg), {
     data: join(evidence, "data"),
@@ -55,6 +69,7 @@ try {
     ready: "return !!nn.sidebarKeyboard && !!globalThis.expo.modules.BayApp.devPostKey",
   });
   await run(`nn.developer.setDeveloperMode(${JSON.stringify(origin)}, false); return true`);
+
   const fixture = await run(`const s=nn.store.getState();
     const add=name=>s.newTab("w1",{url:${JSON.stringify(origin)}+"/"+name,background:true});
     const favorite=add("favorite"), pinned=add("pinned"), leaf=add("leaf");
@@ -67,18 +82,22 @@ try {
     for(let i=0;i<50;i++) add("tail"+i);
     nn.live.store.setLive({folders:{keyboardLive:{id:"keyboardLive",spaceId:"default",kind:"documents",name:"Keyboard documents",icon:null,collapsed:false,sources:["notion"],filters:{authored:true,reviewRequests:true},createdAt:1}},folderOrder:["keyboardLive"],items:{keyboardLive:[{id:"liveDocument",title:"Live document",url:${JSON.stringify(origin)}+"/live",source:"notion"}]},status:{keyboardLive:{state:"idle",lastFetch:Date.now(),error:null}}});
     s.activate("page","w1"); return {favorite,pinned,leaf,parent,child,group,a,b,c,d,split,loose};`);
+
   await sleep(1500);
   await report.check("Command-period claims sidebar and arrows leave selection and active page intact", async () => {
     await focus();
     assert.equal((await row()).active, true);
     await press(String.fromCharCode(0xf700), 126);
+
     const state = await run(
       "return {active:nn.store.getState().windows.w1.activeTabIds.default,selected:nn.store.getState().selection.w1??[],keyboard:nn.sidebarUi.getState().keyboard.w1}",
     );
+
     assert.equal(state.active, "page");
     assert.deepEqual(state.selected, []);
     assert.equal(state.keyboard.active, true);
     await run(`return nn.shell.devSnapshotWindow("w1", ${JSON.stringify(join(evidence, "focus-ring.png"))})`);
+
     return state;
   });
   await report.check("folder hierarchy is navigable through AppKit after actual row focus settles", async () => {
@@ -149,17 +168,21 @@ try {
     await press(String.fromCharCode(0xf72b), 119);
     const id = (await row()).rowId;
     assert.equal(id, await run('return nn.sidebarKeyboard.keyboardRows("w1").at(-1).id'));
+
     const frame = await run(
       `const row=globalThis.sidebarDrag.items.get(${JSON.stringify(id)}); return new Promise(resolve=>row.view.measureInWindow((x,y,width,height)=>resolve({x,y,width,height})));`,
     );
+
     assert.ok(frame.y >= 125 && frame.y + frame.height < 735, `focused row must be inside the visible list: ${JSON.stringify(frame)}`);
     await run(`return nn.shell.devSnapshotWindow("w1", ${JSON.stringify(join(evidence, "last-row.png"))})`);
+
     return { last: id, frame };
   });
   await report.check("page input retains focus and its text undo after unrelated sidebar edit", async () => {
     await press("\u001b", 53);
     await run('nn.store.getState().activate("page","w1"); return nn.webviews.get("page")?.focus()');
     const page = await app.page("/page");
+
     try {
       await page.eval('document.getElementById("editor").focus(); document.execCommand("insertText",false," changed"); true');
       const before = await page.eval('document.getElementById("editor").value');
@@ -177,4 +200,5 @@ try {
   await app?.quit();
   server.close();
 }
+
 process.exitCode = report.summary() ? 0 : 1;

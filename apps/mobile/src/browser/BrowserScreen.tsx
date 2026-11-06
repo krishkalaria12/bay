@@ -43,10 +43,12 @@ const MAX_LIVE = 4;
 const BAR_HEIGHT = 52;
 const views = new Map<string, Tab>();
 const visited = new Map<string, string>();
+
 // Tabs whose current load failed: the engine shows its own error document, whose title and snapshot aren't the page's.
 const failed = new Set<string>();
 
 type Overlay = "none" | "search" | "tabs";
+
 type Panel = "archive" | "settings" | "page" | "downloads" | "tabs" | "history" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
@@ -102,16 +104,21 @@ export function BrowserScreen(): JSX.Element {
   const startFresh = useRef<() => void>(() => {});
   startFresh.current = () => {
     const { data: current } = useBrowserStore.getState();
+
     if (startPageAfterHours === null || current.leftAt === null) return;
+
     if (Date.now() - current.leftAt < startPageAfterHours * 60 * 60 * 1000) return;
+
     if (current.tabs.find((tab) => tab.id === current.activeTabId)?.url === "") return;
     const empty = current.tabs.find((tab) => !tab.url && !tab.private);
+
     if (empty) dispatch({ type: "activate-tab", id: empty.id, now: Date.now() });
     else openTab("");
     setOverlay("none");
     setPanel(null);
     setLink(null);
   };
+
   useEffect(() => {
     if (ready) startFresh.current();
   }, [ready]);
@@ -119,6 +126,7 @@ export function BrowserScreen(): JSX.Element {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") startFresh.current();
     });
+
     return () => subscription.remove();
   }, []);
   const blockerStatus = useBlockerStatus((state) => state.status);
@@ -127,16 +135,20 @@ export function BrowserScreen(): JSX.Element {
   useEffect(() => {
     if (!lockEnabled) {
       setLocked(false);
+
       return;
     }
+
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active") setLocked(true);
     });
+
     return () => subscription.remove();
   }, [lockEnabled]);
 
   async function authenticate(): Promise<boolean> {
     const result = await LocalAuthentication.authenticateAsync({ promptMessage: "Unlock private tabs" });
+
     return result.success;
   }
 
@@ -177,26 +189,35 @@ export function BrowserScreen(): JSX.Element {
     // Hidden tabs report progress too; the screen only renders when something it shows changes.
     setNavigation((previous) => {
       const before = previous[tabId];
+
       return before && sameNavigation(before, state, tabId !== active.id) ? previous : { ...previous, [tabId]: state };
     });
     const started = state.isLoading && !navigation[tabId]?.isLoading;
+
     if (started) {
       // A new document has no media until it reports some.
       media.loadStarted(tabId);
       failed.delete(tabId);
       setError((current) => (current?.tabId === tabId ? null : current));
     }
+
     if (state.blank) return dispatch({ type: "update-tab", id: tabId, update: { url: "", title: "" } });
+
     if (!isWebURL(state.url)) return;
+
     if (failed.has(tabId)) return dispatch({ type: "update-tab", id: tabId, update: { url: state.url } });
-    dispatch({ type: "update-tab", id: tabId, update: { url: state.url, ...(state.title ? { title: state.title } : {}) } });
+    dispatch({ type: "update-tab", id: tabId, update: { url: state.url, ...(state.title ? { title: state.title } : undefined) } });
+
     // Private pages stay out of history.
     if (data.tabs.find((tab) => tab.id === tabId)?.private) return;
+
     if (state.title && visited.get(tabId) === state.url) dispatch({ type: "page-title", url: state.url, title: state.title });
+
     if (!state.isLoading && visited.get(tabId) !== state.url) {
       visited.set(tabId, state.url);
       dispatch({ type: "visit", url: state.url, title: state.title, favicon: null, now: Date.now() });
       const view = views.get(tabId);
+
       if (view) fetchFavicon(view, state.url);
       setTimeout(() => capture(tabId), 700);
     }
@@ -204,6 +225,7 @@ export function BrowserScreen(): JSX.Element {
 
   function onScroll(tabId: string, { offsetY, deltaY }: PageScroll): void {
     if (tabId !== active.id || reading.picking) return;
+
     if (offsetY < 24 || deltaY < -8) barHidden.value = withTiming(0, { duration: 180 });
     else if (deltaY > 8) barHidden.value = withTiming(1, { duration: 220 });
   }
@@ -224,13 +246,17 @@ export function BrowserScreen(): JSX.Element {
   function open(target: OpenTarget, privately: boolean): void {
     Keyboard.dismiss();
     setOverlay("none");
+
     if (target.kind === "tab") return activate(target.id);
+
     if (target.kind === "archived") return void restoreTab(target.id);
     // The current tab takes the page unless the search was for a new tab, or private mode changed.
     const reuse = (!searchInNewTab || !hasPage) && Boolean(active.private) === privately;
+
     if (reuse) return navigate(active.id, target.url);
     const emptyTab = hasPage ? null : active.id;
     openTab(target.url, false, privately);
+
     if (emptyTab) closeTab(emptyTab);
   }
 
@@ -245,6 +271,7 @@ export function BrowserScreen(): JSX.Element {
 
   function swipeTabs(step: 1 | -1): void {
     const next = data.tabs[data.tabs.findIndex((tab) => tab.id === active.id) + step];
+
     if (!next) return;
     capture(active.id);
     activate(next.id);
@@ -262,6 +289,7 @@ export function BrowserScreen(): JSX.Element {
 
   function run(command: (tab: Tab) => Promise<void>): void {
     const view = views.get(active.id);
+
     if (view) command(view).catch((cause: unknown) => fail(active.id, cause));
   }
 
@@ -280,19 +308,23 @@ export function BrowserScreen(): JSX.Element {
   function archiveTab(id: string): void {
     const tab = data.tabs.find((entry) => entry.id === id);
     closeTab(id);
+
     if (!tab?.url || tab.private) return;
     toast.show("Tab archived", { label: "Undo", onPress: () => void restoreTab(id) });
   }
 
   function archiveAll(): void {
     const archived = data.tabs.filter((tab) => tab.url && !tab.private).map((tab) => tab.id);
+
     for (const tab of data.tabs) closeTab(tab.id);
     setOverlay("none");
+
     if (!archived.length) return;
     toast.show(archived.length === 1 ? "1 tab archived" : `${archived.length} tabs archived`, {
       label: "Undo",
       onPress: () => {
         for (const id of archived) restoreTab(id);
+
         // Closing every tab left a blank one behind.
         for (const tab of useBrowserStore.getState().data.tabs) if (!tab.url) closeTab(tab.id);
       },
@@ -334,30 +366,41 @@ export function BrowserScreen(): JSX.Element {
     if (panel || link) {
       setPanel(null);
       setLink(null);
+
       return true;
     }
+
     if (reading.back()) return true;
+
     if (overlay !== "none") {
       setOverlay("none");
+
       return true;
     }
+
     if (find.open) {
       find.done();
+
       return true;
     }
+
     if (page.canGoBack) {
       views
         .get(active.id)
         ?.goBack()
         .catch(() => {});
+
       return true;
     }
+
     return false;
   };
+
   useFocusEffect(
     useCallback(() => {
       if (Platform.OS !== "android") return;
       const subscription = BackHandler.addEventListener("hardwareBackPress", () => backRef.current());
+
       return () => subscription.remove();
     }, []),
   );
@@ -380,6 +423,7 @@ export function BrowserScreen(): JSX.Element {
           {mounted.map((id) => {
             const tab = data.tabs.find((entry) => entry.id === id)!;
             const visible = showPages && id === active.id && hasPage;
+
             return (
               <TabPage
                 key={id}
@@ -648,6 +692,7 @@ export function BrowserScreen(): JSX.Element {
         history={data.history}
         onOpen={(url) => {
           setOverlay("none");
+
           // A page on screen stays; the history page opens beside it.
           if (hasPage) openTab(url);
           else navigate(active.id, url);
@@ -696,6 +741,7 @@ function blockerDetail(status: BlockerStatus): string {
 function translateUrl(url: string): string {
   if (/^https:\/\/[^/]+\.translate\.goog\//.test(url)) return url;
   const language = Intl.DateTimeFormat().resolvedOptions().locale.split("-")[0] || "en";
+
   return `https://translate.google.com/translate?sl=auto&tl=${language}&u=${encodeURIComponent(url)}`;
 }
 
@@ -703,9 +749,12 @@ function translateUrl(url: string): string {
 async function resolveDestination(url: string): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
+
   try {
     let response = await fetch(url, { method: "HEAD", signal: controller.signal });
+
     if (response.status === 405 || response.status === 501) response = await fetch(url, { signal: controller.signal });
+
     return response.url || url;
   } catch {
     throw new Error("Couldn't reach this link. Check your connection and try again.");

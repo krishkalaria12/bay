@@ -65,6 +65,7 @@ export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, 
  */
 export function DownloadProgress({ item }: { item: DownloadItem }): JSX.Element {
   const fraction = item.total && !item.waiting ? Math.min(1, item.received / item.total) : null;
+
   return (
     <View testID="download-progress" className="mt-2 h-1 overflow-hidden rounded-full bg-default">
       {fraction === null ? <SweepingBar /> : <FillingBar fraction={fraction} />}
@@ -78,6 +79,7 @@ function FillingBar({ fraction }: { fraction: number }): JSX.Element {
     progress.value = withTiming(fraction, { duration: 450, easing: Easing.out(Easing.cubic) });
   }, [fraction, progress]);
   const style = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+
   return <Animated.View className="h-1 rounded-full bg-accent" style={style} />;
 }
 
@@ -88,9 +90,11 @@ function SweepingBar(): JSX.Element {
   const position = useSharedValue(0);
   useEffect(() => {
     position.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.cubic) }), -1, false);
+
     return () => cancelAnimation(position);
   }, [position]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: (position.value * (1 + SWEEP) - SWEEP) * width }] }), [width]);
+
   return (
     <View className="h-1 flex-1" onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
       <Animated.View className="h-1 rounded-full bg-accent" style={[{ width: `${SWEEP * 100}%` }, style]} />
@@ -101,8 +105,11 @@ function SweepingBar(): JSX.Element {
 /** "1.2 MB", "340 KB". */
 export function formatBytes(bytes: number): string {
   if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+
   if (bytes >= 1_000) return `${Math.round(bytes / 1_000)} KB`;
+
   return `${bytes} bytes`;
 }
 
@@ -111,7 +118,9 @@ export function downloadStatus(item: DownloadItem): string {
   switch (item.state) {
     case "downloading":
       if (item.waiting) return item.waiting;
+
       if (item.total) return `${Math.floor((item.received / item.total) * 100)}% · ${formatBytes(item.received)} of ${formatBytes(item.total)}`;
+
       return item.received ? `${formatBytes(item.received)} so far` : "Starting…";
     case "finished":
       return formatBytes(item.total || item.received);

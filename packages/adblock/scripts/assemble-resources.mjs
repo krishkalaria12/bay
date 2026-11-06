@@ -17,6 +17,7 @@ const UBO_TAG = process.argv[2] ?? "1.75.0";
 const UBO_RAW = `https://raw.githubusercontent.com/gorhill/uBlock/${UBO_TAG}/`;
 const BRAVE_RESOURCES = "https://raw.githubusercontent.com/brave/adblock-resources/master/dist/resources.json";
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "resources");
+
 // adblock-rust permission bit for uBO's "trusted" scriptlets; only uBO's own lists are given it (see blocker.rs).
 const TRUSTED = 0b1;
 
@@ -35,7 +36,9 @@ const MIME_BY_EXTENSION = {
 
 async function fetchOk(url, as = "text") {
   const response = await fetch(url);
+
   if (!response.ok) throw new Error(`${response.status} for ${url}`);
+
   return as === "text" ? response.text() : Buffer.from(await response.arrayBuffer());
 }
 
@@ -54,11 +57,14 @@ async function scriptletResources(root) {
   await fetchModuleTree(root, "src/js/resources/scriptlets.js");
   await import(pathToFileURL(join(root, "src/js/resources/scriptlets.js")).href);
   const { registeredScriptlets } = await import(pathToFileURL(join(root, "src/js/resources/base.js")).href);
+
   return registeredScriptlets.map((details) => {
     const source = details.fn.toString();
     // adblock-rust calls a scriptlet by its function name; helpers (`*.fn`, functions or classes) are only pasted in.
     const helper = details.name.endsWith(".fn");
+
     if (!helper && !/^function\s+[^\s(){}]+\s*\(/.test(source)) throw new Error(`${details.name} isn't a named function`);
+
     return {
       name: details.name,
       aliases: details.aliases ?? [],
@@ -74,13 +80,16 @@ async function redirectResources(root) {
   await fetchModuleTree(root, "src/js/redirect-resources.js");
   const { default: map } = await import(pathToFileURL(join(root, "src/js/redirect-resources.js")).href);
   const resources = [];
+
   for (const [name, details] of map) {
     // `empty` (an empty response) has no extension.
     const mime = name.includes(".") ? MIME_BY_EXTENSION[name.split(".").pop()] : "text/plain";
+
     if (!mime) {
       console.warn(`skipped ${name}: no MIME type for it`);
       continue;
     }
+
     try {
       const content = await fetchOk(`${UBO_RAW}src/web_accessible_resources/${name}`, "bytes");
       const alias = details.alias ?? [];
@@ -89,15 +98,18 @@ async function redirectResources(root) {
       console.warn(`skipped ${name}: ${error.message}`);
     }
   }
+
   return resources;
 }
 
 const root = await mkdtemp(join(tmpdir(), "bay-ubo-"));
+
 try {
   const scriptlets = await scriptletResources(root);
   const redirects = await redirectResources(root);
   const brave = JSON.parse(await fetchOk(BRAVE_RESOURCES));
   const byName = new Map();
+
   for (const resource of [...scriptlets, ...redirects, ...brave]) if (!byName.has(resource.name)) byName.set(resource.name, resource);
   const resources = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   await mkdir(OUT, { recursive: true });

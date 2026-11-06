@@ -13,10 +13,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const [home, secret = "e2e-test-secret", portArg = "80"] = process.argv.slice(2);
+
 if (!home || home === "-h" || home === "--help") {
   const header = readFileSync(new URL(import.meta.url), "utf8")
     .split("\n")
     .slice(1);
+
   console.log(
     header
       .slice(
@@ -32,16 +34,23 @@ if (!home || home === "-h" || home === "--help") {
 const root = path.resolve(home);
 const key = pbkdf2Sync(secret, "saltysalt", 1003, 16, "sha1");
 const port = Number(portArg);
+
 if (!/^[+-]?\d+$/.test(portArg) || !Number.isSafeInteger(port)) throw new Error("fixture server port must be an integer");
+
 rmSync(root, { recursive: true, force: true });
+
 const chrome = path.join(root, "Library", "Application Support", "Google", "Chrome");
 const profile = path.join(chrome, "Default");
+
 mkdirSync(path.join(profile, "Network"), { recursive: true });
+
 writeFileSync(path.join(chrome, "Local State"), JSON.stringify({ profile: { info_cache: { Default: { name: "E2E" } }, last_used: "Default" } }));
+
 writeFileSync(path.join(profile, "Preferences"), JSON.stringify({ profile: { name: "E2E" } }));
 
 function v10(plain) {
   const cipher = createCipheriv("aes-128-cbc", key, Buffer.alloc(16, 0x20));
+
   return Buffer.concat([Buffer.from("v10"), cipher.update(plain), cipher.final()]);
 }
 
@@ -57,6 +66,7 @@ function webkit(unix) {
 const now = Date.now() / 1000;
 const future = now + 30 * 86400;
 const cookies = new DatabaseSync(path.join(profile, "Network", "Cookies"));
+
 try {
   cookies.exec(`
 CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);
@@ -64,6 +74,7 @@ INSERT INTO meta VALUES ('version', '24');
 CREATE TABLE cookies(creation_utc INTEGER NOT NULL,host_key TEXT NOT NULL,top_frame_site_key TEXT NOT NULL,name TEXT NOT NULL,value TEXT NOT NULL,encrypted_value BLOB NOT NULL,path TEXT NOT NULL,expires_utc INTEGER NOT NULL,is_secure INTEGER NOT NULL,is_httponly INTEGER NOT NULL,last_access_utc INTEGER NOT NULL,has_expires INTEGER NOT NULL,is_persistent INTEGER NOT NULL,priority INTEGER NOT NULL,samesite INTEGER NOT NULL,source_scheme INTEGER NOT NULL,source_port INTEGER NOT NULL,last_update_utc INTEGER NOT NULL,source_type INTEGER NOT NULL,has_cross_site_ancestor INTEGER NOT NULL);
 BEGIN;
 `);
+
   // Five cookies import; the rest are refused or skipped on purpose.
   // host, top frame, name, plaintext, ciphertext, path, expiry (0 = session), secure, httponly,
   // priority, samesite, source scheme, source port (0 = the fixture server's).
@@ -78,7 +89,9 @@ BEGIN;
     [".com", "", "nn_supercookie", "", hashed(".com", "everywhere"), "/", future, 1, 0, 1, 0, 2, 443],
     ["partitioned.example", "https://top.example", "nn_chips", "", hashed("partitioned.example", "chips"), "/", future, 1, 0, 1, 0, 2, 443],
   ];
+
   const insert = cookies.prepare("INSERT INTO cookies VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0)");
+
   for (const [host, top, name, value, encrypted, cookiePath, expiry, secure, httpOnly, priority, sameSite, scheme, sourcePort] of rows) {
     const persistent = expiry ? 1 : 0;
     insert.run(
@@ -102,12 +115,14 @@ BEGIN;
       webkit(now - 60),
     );
   }
+
   cookies.exec("COMMIT;");
 } finally {
   cookies.close();
 }
 
 const webData = new DatabaseSync(path.join(profile, "Web Data"));
+
 try {
   webData.exec(`
 CREATE TABLE addresses (guid VARCHAR PRIMARY KEY, use_count INTEGER NOT NULL DEFAULT 0, use_date INTEGER NOT NULL DEFAULT 0, date_modified INTEGER NOT NULL DEFAULT 0, language_code VARCHAR, label VARCHAR, initial_creator_id INTEGER DEFAULT 0, record_type INTEGER);
@@ -119,6 +134,7 @@ BEGIN;
   webData.prepare("INSERT INTO addresses VALUES (?,1,0,0,'en','',0,0)").run(guid);
   // Chrome's FieldType numbers: name, company, street, city, state, zip, country, phone, email.
   const insert = webData.prepare("INSERT INTO address_type_tokens VALUES (?,?,?,0,NULL)");
+
   for (const [type, value] of [
     [7, "Test User"],
     [60, "Bay Test Co"],
@@ -132,6 +148,7 @@ BEGIN;
   ]) {
     insert.run(guid, type, value);
   }
+
   webData
     .prepare("INSERT INTO credit_cards VALUES ('00000000-0000-4000-8000-00000000e2c1','Test User',12,2031,?,0,'',0,0,'',NULL)")
     .run(v10(Buffer.from("4111111111111111")));
@@ -139,4 +156,5 @@ BEGIN;
 } finally {
   webData.close();
 }
+
 console.log(root);

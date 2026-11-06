@@ -7,9 +7,11 @@ import type { CapsuleStyle } from "@/chrome/BrowserBar.types";
 
 const DISTANCE = 64;
 const VELOCITY = 600;
+
 /** How far the capsule slides out, and in from the other side, when the tab changes. */
 const SLIDE = 56;
 const SPRING = { damping: 18, stiffness: 240, mass: 0.8 };
+
 /** Two tabs on the same site show the same capsule, so nothing changes to wait for: slide in after this long. */
 const ENTER_FALLBACK_MS = 250;
 
@@ -42,8 +44,10 @@ export function TabSwipe({
 
   // After a switch the capsule waits off to one side, hidden, for the new tab's text.
   const entering = useRef<{ from: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+
   function enter(): void {
     const pending = entering.current;
+
     if (!pending) return;
     clearTimeout(pending.timer);
     entering.current = null;
@@ -55,11 +59,13 @@ export function TabSwipe({
       opacity.value = withTiming(1, { duration: 180 });
     }, pending.from);
   }
+
   function switched(step: 1 | -1, from: number): void {
     if (entering.current) clearTimeout(entering.current.timer);
     entering.current = { from, timer: setTimeout(enter, ENTER_FALLBACK_MS) };
     onSwipe(step);
   }
+
   // Runs once React has drawn the new text.
   useEffect(enter, [contentKey]);
   useEffect(
@@ -85,15 +91,19 @@ export function TabSwipe({
       "worklet";
       const { translationX: distance, velocityX: velocity } = event;
       let step: 1 | -1 | 0 = 0;
+
       if (!event.canceled) {
         if ((distance <= -DISTANCE || velocity <= -VELOCITY) && edges.value.next) step = 1;
         else if ((distance >= DISTANCE || velocity >= VELOCITY) && edges.value.previous) step = -1;
       }
+
       if (step === 0) {
         offset.value = withSpring(0, SPRING);
         opacity.value = withTiming(1, { duration: 160 });
+
         return;
       }
+
       // Next tab: out to the left, in from the right; previous: the other way round.
       const direction = step === 1 ? -1 : 1;
       opacity.value = withTiming(0, { duration: 110 });

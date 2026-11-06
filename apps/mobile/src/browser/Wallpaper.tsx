@@ -49,6 +49,7 @@ export function Wallpaper({
   scale?: number;
 }): JSX.Element | null {
   const colors = wallpaperPalette(id, useColorScheme() === "dark");
+
   if (id === "photo" && photo) {
     return (
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -67,7 +68,9 @@ export function Wallpaper({
       </View>
     );
   }
+
   if (!colors) return <View style={StyleSheet.absoluteFill} className="bg-background" pointerEvents="none" />;
+
   return (
     <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 
 const S = () => useBrowser.getState();
@@ -8,11 +9,14 @@ const _setup = (...urls) => {
   S().hydrate({});
   const w = S().createWindow({ url: `https://${urls[0]}.com` });
   const ids = [S().windows[w].activeTabIds[S().windows[w].spaceId], ...urls.slice(1).map((u) => S().newTab(w, { url: `https://${u}.com` }))];
+
   // give tabs titles
   for (const id of ids) {
     const t = S().tabs[id];
+
     if (t) S().updateTab(id, { title: t.url.includes("mail") ? "Inbox – Gmail" : t.url });
   }
+
   return [w, ...ids];
 };
 

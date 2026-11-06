@@ -6,6 +6,7 @@ import type { ScopeColors } from "./scopeColors";
 
 export function ScopeChip({ scope, large, colors }: { scope: SearchScope; large: boolean; colors?: ScopeColors | null }) {
   const theme = useTheme();
+
   return (
     <View
       style={{

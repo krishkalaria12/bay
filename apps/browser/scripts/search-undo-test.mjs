@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 if (!process.argv[2]) throw new Error("Provide the Debug Bay.app path");
+
 const scratch = mkdtempSync(join(tmpdir(), "bay-search-undo-"));
 const report = reporter(join(scratch, "undo.log"), { name: "search-undo" });
 let app;
@@ -16,18 +17,24 @@ const run = (body) => app.eval(body);
 const driver = 'nn.omnibox.get("w1:palette")';
 const state = () => run(`return ${driver}?.state()`);
 const menu = (perform) => run(`return globalThis.expo.modules.BayApp.devMenuItems("textInput:w1", ${JSON.stringify(perform ?? null)})`);
+
 async function until(label, read) {
   for (const end = Date.now() + 5000; Date.now() < end; await sleep(50)) if (await read()) return;
   throw new Error(`Timed out: ${label}`);
 }
+
 const text = (expected) => until(`field contains ${JSON.stringify(expected)}`, async () => (await state())?.typed === expected);
+
 const key = (shift = false) =>
   run(`return nn.shell.devKeyEquivalent("w1", {key:"z", keyCode:6, modifiers:${JSON.stringify(shift ? ["command", "shift"] : ["command"])}, asKey:true})`);
+
 const left = async (count = 1) => {
   for (let i = 0; i < count; i++) await run('return globalThis.expo.modules.BayApp.devPostKey("w1", "\\uF702", 123, ["function"])');
   await sleep(100);
 };
+
 const backspace = () => run('return globalThis.expo.modules.BayApp.devPostKey("w1", "\\u007F", 51, [])');
+
 async function open() {
   await run('nn.store.getState().closePanel("w1"); return true');
   await until("old field unmounted", () => run(`return !${driver}`));
@@ -124,6 +131,7 @@ try {
   });
   await report.check("repeated Undo before the field reports back keeps Redo", async () => {
     await open();
+
     for (const value of ["alpha", "beta", "gamma"]) {
       await menu(["Select All"]);
       await run(`nn.shell.copyText(${JSON.stringify(value)}); return true`);
@@ -131,6 +139,7 @@ try {
       await menu(["Paste"]);
       await text(value);
     }
+
     const press = 'nn.shell.devKeyEquivalent("w1", {key:"z", keyCode:6, modifiers:["command"], asKey:true})';
     await run(`return Promise.all([${press}, ${press}])`);
     await text("alpha");
@@ -316,5 +325,7 @@ try {
   if (clipboard !== undefined) execFileSync("pbcopy", { input: clipboard });
   await app?.quit();
 }
+
 process.exitCode = report.summary() ? 0 : 1;
+
 console.log(`Evidence: ${scratch}`);

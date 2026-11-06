@@ -31,5 +31,6 @@ test("error pages aren't taken for lists", () => {
 
 test("every list has a unique id and an HTTPS address", () => {
   assert.equal(new Set(FILTER_LISTS.map((list) => list.id)).size, FILTER_LISTS.length);
+
   for (const list of FILTER_LISTS) assert.match(list.url, /^https:\/\//);
 });

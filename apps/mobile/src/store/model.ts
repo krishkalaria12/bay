@@ -1,3 +1,5 @@
+import * as v from "valibot";
+import { SIMPLE_PREFERENCE_KEYS, TAB_UPDATE_FIELDS } from "./types.ts";
 import type {
   ArchivedTab,
   BrowserData,
@@ -5,6 +7,8 @@ import type {
   BrowserTab,
   DownloadItem,
   HistoryEntry,
+  JsonObject,
+  JsonValue,
   PinnedSite,
   SimplePreferences,
   TabUpdate,
@@ -30,12 +34,14 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   startPageAfterHours: null,
   youtube: { shorts: false, suggestions: false, distractions: false },
 };
+
 export const TEXT_SIZE = { min: 80, max: 200, step: 10 } as const;
 export const START_PAGE_HOURS = [null, 1, 4, 12] as const;
+
 /** Bay's own wallpapers; "photo" is the user's. */
 export const WALLPAPERS = ["bay", "dusk", "forest", "plain"] as const;
-const builtIn = (id: unknown): id is WallpaperId => (WALLPAPERS as readonly unknown[]).includes(id);
-const isFileUri = (uri: unknown): uri is string => typeof uri === "string" && uri.startsWith("file://");
+const builtIn = (id: JsonValue): id is WallpaperId => v.is(v.picklist(WALLPAPERS), id);
+const isFileUri = (uri: JsonValue): uri is string => v.is(v.string(), uri) && uri.startsWith("file://");
 const DAY = 24 * 60 * 60 * 1000;
 const HISTORY_LIMIT = 1000;
 const ARCHIVE_LIMIT = 200;
@@ -45,8 +51,10 @@ const FAVICON_LIMIT = 500;
 /** The key icons are kept under: a URL's host without "www.". */
 export function siteHost(url: string): string {
   const match = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#:]+)/i.exec(url);
+
   return (match?.[1] ?? "").toLowerCase().replace(/^www\./, "");
 }
+
 const DOWNLOAD_STATES = ["downloading", "finished", "failed", "cancelled"] as const;
 
 /** A download update from the engine (`DownloadUpdate` in @bay/engine). */
@@ -64,7 +72,7 @@ export interface DownloadEvent {
 }
 
 export function createTab(id: string, now: number, url = "", isPrivate = false): BrowserTab {
-  return { id, url, title: "", favicon: null, createdAt: now, lastVisit: now, snapshot: null, ...(isPrivate ? { private: true } : {}) };
+  return { id, url, title: "", favicon: null, createdAt: now, lastVisit: now, snapshot: null, ...(isPrivate ? { private: true } : undefined) };
 }
 
 export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFERENCES): BrowserData {
@@ -123,16 +131,25 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return { ...data, tabs: [...data.tabs, action.tab], activeTabId: action.background ? data.activeTabId : action.tab.id };
     case "activate-tab": {
       if (!data.tabs.some((tab) => tab.id === action.id)) return data;
+
       return { ...data, activeTabId: action.id, tabs: data.tabs.map((tab) => (tab.id === action.id ? { ...tab, lastVisit: action.now } : tab)) };
     }
+
     case "update-tab": {
       const tab = data.tabs.find((entry) => entry.id === action.id);
-      if (!tab || Object.entries(action.update).every(([key, value]) => tab[key as keyof BrowserTab] === value)) return data;
+
+      if (!tab) return data;
+      const fields = TAB_UPDATE_FIELDS.filter((field) => Object.hasOwn(action.update, field));
+
+      if (fields.every((field) => tab[field] === action.update[field])) return data;
+
       return { ...data, tabs: data.tabs.map((entry) => (entry.id === action.id ? { ...entry, ...action.update } : entry)) };
     }
+
     case "visit": {
       if (!isWebAddress(action.url)) return data;
       const previous = data.history.find((entry) => entry.url === action.url);
+
       const visit: HistoryEntry = {
         url: action.url,
         title: action.title,
@@ -140,20 +157,27 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         visits: (previous?.visits ?? 0) + 1,
         lastVisit: action.now,
       };
+
       return { ...data, history: [visit, ...data.history.filter((entry) => entry.url !== action.url)].slice(0, HISTORY_LIMIT) };
     }
+
     case "page-title": {
       // Titles often arrive after the load finishes and the visit is saved.
       const entry = data.history.find((item) => item.url === action.url);
+
       if (!entry || !action.title || entry.title === action.title) return data;
+
       return { ...data, history: data.history.map((item) => (item === entry ? { ...item, title: action.title } : item)) };
     }
+
     case "close-tab": {
       const index = data.tabs.findIndex((tab) => tab.id === action.id);
+
       if (index < 0) return data;
       const tab = data.tabs[index];
       const remaining = data.tabs.filter((entry) => entry.id !== action.id);
       const tabs = remaining.length ? remaining : [action.fallback];
+
       return {
         ...data,
         tabs,
@@ -162,10 +186,13 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         archive: tab.url && !tab.private ? archiveTabs(data.archive, [tab], action.now) : data.archive,
       };
     }
+
     case "restore-tab": {
       const archived = data.archive.find((tab) => tab.id === action.id);
+
       if (!archived) return data;
       const { closedAt: _closedAt, ...tab } = archived;
+
       return {
         ...data,
         tabs: [...data.tabs, { ...tab, id: action.restoredId, lastVisit: action.now }],
@@ -173,10 +200,13 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         archive: data.archive.filter((entry) => entry.id !== action.id),
       };
     }
+
     case "pin-site": {
       const tab = data.tabs.find((entry) => entry.id === action.tabId);
+
       if (!tab?.url) return data;
       const existing = data.pinnedSites.some((site) => site.url === tab.url);
+
       return {
         ...data,
         pinnedSites: existing
@@ -184,14 +214,17 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
           : [...data.pinnedSites, { id: action.pinId, url: tab.url, title: tab.title, favicon: tab.favicon }],
       };
     }
+
     case "remove-pin":
       return { ...data, pinnedSites: data.pinnedSites.filter((site) => site.id !== action.id) };
     case "add-pin": {
       if (data.pinnedSites.some((site) => site.url === action.site.url)) return data;
       const pinnedSites = [...data.pinnedSites];
       pinnedSites.splice(action.index, 0, action.site);
+
       return { ...data, pinnedSites };
     }
+
     case "remove-history":
       return { ...data, history: data.history.filter((entry) => entry.url !== action.url) };
     case "remove-archived":
@@ -201,23 +234,32 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     case "wallpaper": {
       // A new photo replaces the old one; picking a built-in keeps the photo for switching back.
       const photo = action.id === "photo" ? (action.photo ?? data.preferences.wallpaperPhoto) : data.preferences.wallpaperPhoto;
+
       if (!(builtIn(action.id) || (action.id === "photo" && isFileUri(photo)))) return data;
+
       if (action.id === data.preferences.wallpaper && photo === data.preferences.wallpaperPhoto) return data;
+
       return { ...data, preferences: { ...data.preferences, wallpaper: action.id, wallpaperPhoto: photo } };
     }
+
     case "clear-history": {
       if (!data.history.length) return data;
       // Icons stay for sites a tab, the archive or a pin still shows.
       const shown = new Set([...data.tabs, ...data.archive, ...data.pinnedSites].map((entry) => siteHost(entry.url)));
+
       return { ...data, history: [], favicons: Object.fromEntries(Object.entries(data.favicons).filter(([host]) => shown.has(host))) };
     }
+
     case "favicon": {
       if ((data.favicons[action.host] ?? null) === action.uri) return data;
       const { [action.host]: _previous, ...rest } = data.favicons;
+
       if (action.uri === null) return { ...data, favicons: rest };
+
       // Oldest first, so the cap drops the icons fetched longest ago.
       return { ...data, favicons: Object.fromEntries([...Object.entries(rest), [action.host, action.uri]].slice(-FAVICON_LIMIT)) };
     }
+
     case "search-engine":
       return action.id && action.id !== data.preferences.searchEngineId ? { ...data, preferences: { ...data.preferences, searchEngineId: action.id } } : data;
     case "archive-days":
@@ -228,12 +270,16 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return action.enabled === data.preferences.blockContent ? data : { ...data, preferences: { ...data.preferences, blockContent: action.enabled } };
     case "pause-blocking": {
       const host = action.host.toLowerCase().replace(/^www\./, "");
+
       if (!host || data.preferences.blockingPausedHosts.includes(host) === action.paused) return data;
+
       const blockingPausedHosts = action.paused
         ? [...data.preferences.blockingPausedHosts, host]
         : data.preferences.blockingPausedHosts.filter((entry) => entry !== host);
+
       return { ...data, preferences: { ...data.preferences, blockingPausedHosts } };
     }
+
     case "lock-private-tabs":
       return action.enabled === data.preferences.lockPrivateTabs ? data : { ...data, preferences: { ...data.preferences, lockPrivateTabs: action.enabled } };
     case "left":
@@ -241,34 +287,46 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     case "preferences": {
       // Only the updated keys come from the parse, so untouched preferences (and their arrays) stay the same objects.
       const parsed = parsePreferences({ ...data.preferences, ...action.update });
-      const keys = Object.keys(action.update) as (keyof SimplePreferences)[];
+      const keys = SIMPLE_PREFERENCE_KEYS.filter((key) => Object.hasOwn(action.update, key));
+
       if (keys.every((key) => JSON.stringify(parsed[key]) === JSON.stringify(data.preferences[key]))) return data;
+
       return { ...data, preferences: { ...data.preferences, ...Object.fromEntries(keys.map((key) => [key, parsed[key]])) } };
     }
+
     case "reader-settings": {
       const reader = parseReaderSettings(action.settings, data.preferences.reader);
       const previous = data.preferences.reader;
+
       return reader.theme === previous.theme && reader.font === previous.font && reader.size === previous.size
         ? data
         : { ...data, preferences: { ...data.preferences, reader } };
     }
+
     case "hidden-elements": {
       const host = normalizeHost(action.host);
+
       if (!host) return data;
       const selectors = parseSelectors(action.selectors);
       const previous = Object.hasOwn(data.preferences.hiddenElements, host) ? data.preferences.hiddenElements[host] : [];
+
       if (selectors.length === previous.length && selectors.every((selector, index) => selector === previous[index])) return data;
       const hiddenElements = { ...data.preferences.hiddenElements };
+
       if (selectors.length) hiddenElements[host] = selectors;
       else delete hiddenElements[host];
+
       return { ...data, preferences: { ...data.preferences, hiddenElements } };
     }
+
     case "download": {
       const { update } = action;
       const previous = data.downloads.find((item) => item.id === update.id);
       const state = update.state === "started" || update.state === "progress" ? "downloading" : update.state;
+
       // The engine says nothing more after a final state; a late progress update can't revive it.
       if (previous && previous.state !== "downloading") return data;
+
       const item: DownloadItem = {
         id: update.id,
         url: update.url || previous?.url || "",
@@ -278,11 +336,12 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         received: update.received,
         total: update.total || previous?.total || 0,
         ...(update.path ? { path: update.path } : previous?.path ? { path: previous.path } : {}),
-        ...(update.error ? { error: update.error } : {}),
-        ...(update.waiting && state === "downloading" ? { waiting: update.waiting } : {}),
+        ...(update.error ? { error: update.error } : undefined),
+        ...(update.waiting && state === "downloading" ? { waiting: update.waiting } : undefined),
         startedAt: previous?.startedAt ?? action.now,
-        ...(update.private ? { private: true } : {}),
+        ...(update.private ? { private: true } : undefined),
       };
+
       // Engines repeat unchanged progress; keep the same data so nothing re-renders.
       if (
         previous &&
@@ -297,26 +356,33 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         item.private === previous.private
       )
         return data;
+
       return {
         ...data,
         downloads: (previous ? data.downloads.map((entry) => (entry.id === update.id ? item : entry)) : [item, ...data.downloads]).slice(0, DOWNLOAD_LIMIT),
       };
     }
+
     case "remove-download":
       return data.downloads.some((item) => item.id === action.id) ? { ...data, downloads: data.downloads.filter((item) => item.id !== action.id) } : data;
     case "clear-downloads": {
       // Downloads still running stay listed.
       const downloads = data.downloads.filter((item) => item.state === "downloading");
+
       return downloads.length === data.downloads.length ? data : { ...data, downloads };
     }
+
     case "archive-stale": {
       if (data.preferences.archiveAfterDays === null) return data;
       const cutoff = action.now - data.preferences.archiveAfterDays * DAY;
+
       const stale = data.tabs.filter(
         (tab) => !tab.private && tab.id !== data.activeTabId && tab.url && tab.lastVisit < cutoff && !data.pinnedSites.some((pin) => pin.url === tab.url),
       );
+
       if (!stale.length) return data;
       const ids = new Set(stale.map((tab) => tab.id));
+
       return {
         ...data,
         tabs: data.tabs.filter((tab) => !ids.has(tab.id)),
@@ -326,29 +392,33 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+function isRecord(value: JsonValue): value is JsonObject {
+  return v.is(v.object({}), value) && !Array.isArray(value);
 }
 
-function isTimestamp(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+function isTimestamp(value: JsonValue): value is number {
+  return v.is(v.number(), value) && Number.isFinite(value) && value >= 0;
 }
 
-function parseReaderSettings(value: unknown, fallback = DEFAULT_PREFERENCES.reader): ReaderSettings {
-  const settings = isRecord(value) ? value : {};
+const READER_THEME_IDS = ["light", "paper", "sepia", "mint", "gray", "dark", "black"] as const;
+const READER_FONT_IDS = ["serif", "sans", "mono"] as const;
+
+function parseReaderSettings(value: JsonValue, fallback = DEFAULT_PREFERENCES.reader): ReaderSettings {
+  const settings: JsonObject = isRecord(value) ? value : {};
+
   return {
-    theme: ["light", "paper", "sepia", "mint", "gray", "dark", "black"].includes(settings.theme as string)
-      ? (settings.theme as ReaderSettings["theme"])
-      : fallback.theme,
-    font: ["serif", "sans", "mono"].includes(settings.font as string) ? (settings.font as ReaderSettings["font"]) : fallback.font,
-    size: typeof settings.size === "number" && Number.isFinite(settings.size) ? Math.min(28, Math.max(14, Math.round(settings.size))) : fallback.size,
+    theme: v.is(v.picklist(READER_THEME_IDS), settings.theme) ? settings.theme : fallback.theme,
+    font: v.is(v.picklist(READER_FONT_IDS), settings.font) ? settings.font : fallback.font,
+    size: v.is(v.number(), settings.size) && Number.isFinite(settings.size) ? Math.min(28, Math.max(14, Math.round(settings.size))) : fallback.size,
   };
 }
 
-function normalizeHost(value: unknown): string | null {
-  if (typeof value !== "string" || !value) return null;
+function normalizeHost(value: JsonValue): string | null {
+  if (!v.is(v.string(), value) || !value) return null;
   const host = value.toLowerCase().replace(/^www\./, "");
+
   if (!/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:]+\])$/.test(host)) return null;
+
   try {
     return new URL(`https://${host}`).hostname === host ? host : null;
   } catch {
@@ -356,12 +426,12 @@ function normalizeHost(value: unknown): string | null {
   }
 }
 
-function parseSelectors(value: unknown): string[] {
+function parseSelectors(value: JsonValue): string[] {
   return Array.isArray(value)
     ? [
         ...new Set(
           value
-            .filter((selector): selector is string => typeof selector === "string")
+            .filter((selector): selector is string => v.is(v.string(), selector))
             .map((selector) => selector.trim())
             .filter(Boolean),
         ),
@@ -369,45 +439,51 @@ function parseSelectors(value: unknown): string[] {
     : [];
 }
 
-function parseHiddenElements(value: unknown): Record<string, string[]> {
+function parseHiddenElements(value: JsonValue): Record<string, string[]> {
   if (!isRecord(value)) return {};
+
   const entries = Object.entries(value).flatMap(([key, value]) => {
     const host = normalizeHost(key);
     const selectors = parseSelectors(value);
+
     return host && selectors.length ? [[host, selectors] as const] : [];
   });
+
   return Object.fromEntries(entries);
 }
 
-function isWebAddress(value: unknown): value is string {
-  if (typeof value !== "string") return false;
+function isWebAddress(value: JsonValue): value is string {
+  if (!v.is(v.string(), value)) return false;
+
   try {
     const url = new URL(value);
+
     return ["http:", "https:"].includes(url.protocol) && Boolean(url.hostname);
   } catch {
     return false;
   }
 }
 
-function parseTab(value: unknown): BrowserTab | null {
+function parseTab(value: JsonValue): BrowserTab | null {
   if (
     !isRecord(value) ||
-    typeof value.id !== "string" ||
+    !v.is(v.string(), value.id) ||
     !value.id ||
-    typeof value.title !== "string" ||
+    !v.is(v.string(), value.title) ||
     !(value.url === "" || isWebAddress(value.url)) ||
     !isTimestamp(value.createdAt) ||
     !isTimestamp(value.lastVisit)
   )
     return null;
+
   return {
     id: value.id,
     url: value.url,
     title: value.title,
     createdAt: value.createdAt,
     lastVisit: value.lastVisit,
-    favicon: typeof value.favicon === "string" ? value.favicon : null,
-    snapshot: typeof value.snapshot === "string" && value.snapshot.startsWith("file://") ? value.snapshot : null,
+    favicon: v.is(v.string(), value.favicon) ? value.favicon : null,
+    snapshot: v.is(v.string(), value.snapshot) && value.snapshot.startsWith("file://") ? value.snapshot : null,
   };
 }
 
@@ -415,6 +491,7 @@ function parseTab(value: unknown): BrowserTab | null {
 function archiveTabs(archive: ArchivedTab[], tabs: BrowserTab[], now: number): ArchivedTab[] {
   const urls = new Set(tabs.map((tab) => tab.url));
   const ids = new Set(tabs.map((tab) => tab.id));
+
   return [
     ...uniqueBy(tabs, (tab) => tab.url).map((tab) => ({ ...tab, closedAt: now })),
     ...archive.filter((entry) => !urls.has(entry.url) && !ids.has(entry.id)),
@@ -423,74 +500,89 @@ function archiveTabs(archive: ArchivedTab[], tabs: BrowserTab[], now: number): A
 
 function uniqueBy<T>(entries: T[], key: (entry: T) => string): T[] {
   const seen = new Set<string>();
+
   return entries.filter((entry) => {
     const value = key(entry);
+
     if (seen.has(value)) return false;
     seen.add(value);
+
     return true;
   });
 }
 
 /** Validate disk state and repair collection invariants before any screen consumes it. */
-export function parseBrowserData(value: unknown, fallback: BrowserData): BrowserData {
+export function parseBrowserData(value: JsonValue, fallback: BrowserData): BrowserData {
   if (!isRecord(value) || value.version !== 1) throw new Error("The saved browsing state could not be read.");
+
   const tabs = uniqueBy(
     (Array.isArray(value.tabs) ? value.tabs : []).map(parseTab).filter((tab): tab is BrowserTab => tab !== null),
     (tab) => tab.id,
   );
+
   const history: HistoryEntry[] = (Array.isArray(value.history) ? value.history : []).filter(isRecord).flatMap((entry) =>
     isWebAddress(entry.url) &&
-    typeof entry.title === "string" &&
+    v.is(v.string(), entry.title) &&
     isTimestamp(entry.lastVisit) &&
-    typeof entry.visits === "number" &&
+    v.is(v.number(), entry.visits) &&
     Number.isFinite(entry.visits) &&
     entry.visits > 0
       ? [
           {
             url: entry.url,
             title: entry.title,
-            favicon: typeof entry.favicon === "string" ? entry.favicon : null,
+            favicon: v.is(v.string(), entry.favicon) ? entry.favicon : null,
             lastVisit: entry.lastVisit,
             visits: Math.floor(entry.visits),
           },
         ]
       : [],
   );
+
   const pinnedSites: PinnedSite[] = (Array.isArray(value.pinnedSites) ? value.pinnedSites : [])
     .filter(isRecord)
     .flatMap((entry) =>
-      typeof entry.id === "string" && entry.id && isWebAddress(entry.url) && typeof entry.title === "string"
-        ? [{ id: entry.id, url: entry.url, title: entry.title, favicon: typeof entry.favicon === "string" ? entry.favicon : null }]
+      v.is(v.string(), entry.id) && entry.id && isWebAddress(entry.url) && v.is(v.string(), entry.title)
+        ? [{ id: entry.id, url: entry.url, title: entry.title, favicon: v.is(v.string(), entry.favicon) ? entry.favicon : null }]
         : [],
     );
+
   const archive: ArchivedTab[] = (Array.isArray(value.archive) ? value.archive : []).flatMap((entry) => {
     const tab = parseTab(entry);
+
     return tab?.url && isRecord(entry) && isTimestamp(entry.closedAt) ? [{ ...tab, closedAt: entry.closedAt }] : [];
   });
+
   const downloads: DownloadItem[] = (Array.isArray(value.downloads) ? value.downloads : []).filter(isRecord).flatMap((entry) => {
-    if (typeof entry.id !== "string" || !entry.id || typeof entry.filename !== "string" || !isTimestamp(entry.startedAt)) return [];
-    if (!DOWNLOAD_STATES.includes(entry.state as DownloadItem["state"])) return [];
-    const bytes = (n: unknown) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0);
+    if (!v.is(v.string(), entry.id) || !entry.id || !v.is(v.string(), entry.filename) || !isTimestamp(entry.startedAt)) return [];
+
+    if (!v.is(v.picklist(DOWNLOAD_STATES), entry.state)) return [];
+    const bytes = (value: JsonValue) => (v.is(v.number(), value) && Number.isFinite(value) && value > 0 ? value : 0);
     // A download Bay was running when it quit can't be resumed.
     const interrupted = entry.state === "downloading";
+
     return [
       {
         id: entry.id,
-        url: typeof entry.url === "string" ? entry.url : "",
+        url: v.is(v.string(), entry.url) ? entry.url : "",
         filename: entry.filename,
-        state: interrupted ? "failed" : (entry.state as DownloadItem["state"]),
+        state: interrupted ? "failed" : entry.state,
         received: bytes(entry.received),
         total: bytes(entry.total),
-        ...(typeof entry.path === "string" && entry.path ? { path: entry.path } : {}),
-        ...(interrupted ? { error: "Bay closed before it finished." } : typeof entry.error === "string" ? { error: entry.error } : {}),
+        ...(v.is(v.string(), entry.path) && entry.path ? { path: entry.path } : undefined),
+        ...(interrupted ? { error: "Bay closed before it finished." } : v.is(v.string(), entry.error) ? { error: entry.error } : {}),
         startedAt: entry.startedAt,
       },
     ];
   });
+
   const preferences = parsePreferences(isRecord(value.preferences) ? value.preferences : {});
+
+  const activeTab = tabs.find((tab) => tab.id === value.activeTabId);
+
   return {
     tabs: tabs.length ? tabs : fallback.tabs,
-    activeTabId: tabs.some((tab) => tab.id === value.activeTabId) ? (value.activeTabId as string) : (tabs[0]?.id ?? fallback.activeTabId),
+    activeTabId: activeTab?.id ?? tabs[0]?.id ?? fallback.activeTabId,
     history: uniqueBy(history, (entry) => entry.url)
       .sort((a, b) => b.lastVisit - a.lastVisit)
       .slice(0, HISTORY_LIMIT),
@@ -508,46 +600,49 @@ export function parseBrowserData(value: unknown, fallback: BrowserData): Browser
     preferences,
     favicons: Object.fromEntries(
       Object.entries(isRecord(value.favicons) ? value.favicons : {})
-        .filter((entry): entry is [string, string] => /^[a-z0-9.-]+$/.test(entry[0]) && typeof entry[1] === "string" && entry[1].startsWith("file://"))
+        .filter((entry): entry is [string, string] => /^[a-z0-9.-]+$/.test(entry[0]) && v.is(v.string(), entry[1]) && entry[1].startsWith("file://"))
         .slice(-FAVICON_LIMIT),
     ),
-    leftAt: typeof value.leftAt === "number" && Number.isFinite(value.leftAt) ? value.leftAt : null,
+    leftAt: v.is(v.number(), value.leftAt) && Number.isFinite(value.leftAt) ? value.leftAt : null,
   };
 }
 
+const THEME_CHOICES = ["system", "light", "dark"] as const;
+
 /** Saved preferences with anything unknown or out of range replaced by its default. */
-export function parsePreferences(savedPreferences: Record<string, unknown>): BrowserPreferences {
+export function parsePreferences(savedPreferences: JsonObject): BrowserPreferences {
   return {
     searchEngineId:
-      typeof savedPreferences.searchEngineId === "string" && savedPreferences.searchEngineId
+      v.is(v.string(), savedPreferences.searchEngineId) && savedPreferences.searchEngineId
         ? savedPreferences.searchEngineId
         : DEFAULT_PREFERENCES.searchEngineId,
-    archiveAfterDays: [null, 1, 7, 30].includes(savedPreferences.archiveAfterDays as number | null)
-      ? (savedPreferences.archiveAfterDays as number | null)
-      : DEFAULT_PREFERENCES.archiveAfterDays,
-    blockContent: typeof savedPreferences.blockContent === "boolean" ? savedPreferences.blockContent : DEFAULT_PREFERENCES.blockContent,
+    archiveAfterDays: v.is(v.picklist([1, 7, 30]), savedPreferences.archiveAfterDays)
+      ? savedPreferences.archiveAfterDays
+      : savedPreferences.archiveAfterDays === null
+        ? null
+        : DEFAULT_PREFERENCES.archiveAfterDays,
+    blockContent: v.is(v.boolean(), savedPreferences.blockContent) ? savedPreferences.blockContent : DEFAULT_PREFERENCES.blockContent,
     blockingPausedHosts: Array.isArray(savedPreferences.blockingPausedHosts)
-      ? [...new Set(savedPreferences.blockingPausedHosts.filter((host): host is string => typeof host === "string" && /^[a-z0-9.-]+$/.test(host)))]
+      ? [...new Set(savedPreferences.blockingPausedHosts.filter((host): host is string => v.is(v.string(), host) && /^[a-z0-9.-]+$/.test(host)))]
       : [],
     lockPrivateTabs: savedPreferences.lockPrivateTabs === true,
     reader: parseReaderSettings(savedPreferences.reader),
     hiddenElements: parseHiddenElements(savedPreferences.hiddenElements),
-    wallpaper:
-      builtIn(savedPreferences.wallpaper) || (savedPreferences.wallpaper === "photo" && isFileUri(savedPreferences.wallpaperPhoto))
-        ? (savedPreferences.wallpaper as WallpaperId)
+    wallpaper: builtIn(savedPreferences.wallpaper)
+      ? savedPreferences.wallpaper
+      : savedPreferences.wallpaper === "photo" && isFileUri(savedPreferences.wallpaperPhoto)
+        ? "photo"
         : DEFAULT_PREFERENCES.wallpaper,
     wallpaperPhoto: isFileUri(savedPreferences.wallpaperPhoto) ? savedPreferences.wallpaperPhoto : null,
-    theme: (["system", "light", "dark"] as unknown[]).includes(savedPreferences.theme) ? (savedPreferences.theme as BrowserPreferences["theme"]) : "system",
+    theme: v.is(v.picklist(THEME_CHOICES), savedPreferences.theme) ? savedPreferences.theme : "system",
     textSize:
-      typeof savedPreferences.textSize === "number" && savedPreferences.textSize >= TEXT_SIZE.min && savedPreferences.textSize <= TEXT_SIZE.max
+      v.is(v.number(), savedPreferences.textSize) && savedPreferences.textSize >= TEXT_SIZE.min && savedPreferences.textSize <= TEXT_SIZE.max
         ? Math.round(savedPreferences.textSize / TEXT_SIZE.step) * TEXT_SIZE.step
         : DEFAULT_PREFERENCES.textSize,
     searchSuggestions: savedPreferences.searchSuggestions !== false,
     skipAmp: savedPreferences.skipAmp !== false,
     pullToRefresh: savedPreferences.pullToRefresh !== false,
-    startPageAfterHours: (START_PAGE_HOURS as readonly unknown[]).includes(savedPreferences.startPageAfterHours)
-      ? (savedPreferences.startPageAfterHours as number | null)
-      : null,
+    startPageAfterHours: START_PAGE_HOURS.find((hours) => hours === savedPreferences.startPageAfterHours) ?? null,
     youtube: {
       shorts: isRecord(savedPreferences.youtube) && savedPreferences.youtube.shorts === true,
       suggestions: isRecord(savedPreferences.youtube) && savedPreferences.youtube.suggestions === true,
@@ -559,8 +654,10 @@ export function parsePreferences(savedPreferences: Record<string, unknown>): Bro
 /** What is saved: everything except private tabs. When a private tab is current, the newest saved tab is. */
 export function persistedBrowserData(data: BrowserData): BrowserData {
   const downloads = data.downloads.some((item) => item.private) ? data.downloads.filter((item) => !item.private) : data.downloads;
+
   if (!data.tabs.some((tab) => tab.private)) return downloads === data.downloads ? data : { ...data, downloads };
   const tabs = data.tabs.filter((tab) => !tab.private);
   const activeTabId = tabs.some((tab) => tab.id === data.activeTabId) ? data.activeTabId : (tabs[tabs.length - 1]?.id ?? "");
+
   return { ...data, tabs, activeTabId, downloads };
 }

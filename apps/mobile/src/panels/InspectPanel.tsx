@@ -20,6 +20,7 @@ export interface InspectPanelProps {
 /** What the picked element is: its font first (the font identifier), then size, colours and the CSS that matches. */
 export function InspectPanel({ element, title, onClose, onParent, onCopy }: InspectPanelProps): JSX.Element {
   const font = element?.font;
+
   return (
     <PanelSheet visible={element !== null} onClose={onClose} title="Inspect" testID="inspect-panel" height="62%">
       {element && font ? (
@@ -124,6 +125,7 @@ const GENERIC_FAMILIES = new Set([
 function fontKind(font: InspectedFont): string {
   const kind = font.web ? "Web font" : GENERIC_FAMILIES.has(font.rendered.toLowerCase()) ? "The system's default font" : "Installed font";
   const first = font.stack[0];
+
   return first && first !== font.rendered ? `${kind}; ${first} isn't available` : kind;
 }
 

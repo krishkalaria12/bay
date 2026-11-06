@@ -5,8 +5,9 @@ import { useState } from "react";
  * query starts over with the next, and no frame shows it left over from the last (as an effect resetting it would).
  * React's "adjusting some state when a prop changes", for a reset that's all it does.
  */
-export function useResetOn(key: unknown, reset: () => void) {
+export function useResetOn<T>(key: T, reset: () => void) {
   const [last, setLast] = useState(key);
+
   if (!Object.is(key, last)) {
     setLast(key);
     reset();

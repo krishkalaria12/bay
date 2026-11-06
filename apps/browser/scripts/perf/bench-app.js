@@ -4,19 +4,27 @@
 // the probe's counters. js-bench.mjs loads it and calls nnBench.run(name, options).
 
 const P = globalThis.nnPerf;
+
 if (!P) throw new Error("perf probe is off (no perf-probe file in the data folder)");
+
 const store = nn.store;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const S = () => store.getState();
 const windowId = () => S().ui.focusedWindowId;
+const isStr = (x) => Object.prototype.toString.call(x) === "[object String]";
+const isFn = (x) => x instanceof Function;
+
 const activeId = () => {
   const s = S();
   const w = s.windows[windowId()];
+
   return w.activeTabIds[w.spaceId];
 };
+
 const tabsInView = () => {
   const s = S();
   const w = s.windows[windowId()];
+
   return (s.tabLists[w.kind === "small" ? w.id : w.spaceId] ?? []).filter((id) => s.tabs[id]?.spaceId === w.spaceId);
 };
 
@@ -24,15 +32,18 @@ const tabsInView = () => {
 function timed(fn) {
   const t = P.now();
   P.batch(fn);
+
   return P.now() - t;
 }
 
 async function until(test, timeoutMs, step = 25) {
   const end = Date.now() + timeoutMs;
+
   while (Date.now() < end) {
     if (test()) return true;
     await sleep(step);
   }
+
   return false;
 }
 
@@ -45,16 +56,20 @@ async function quiet(ms = 400) {
 // bookmarks cache, 0.8 s for the session), so an idle window doesn't catch saves left over from startup.
 async function writesSettled(quietMs = 3000, timeoutMs = 30000) {
   const end = Date.now() + timeoutMs;
+
   while (Date.now() < end) {
     P.reset();
     await sleep(quietMs);
+
     if (!Object.keys(P.read().writes).length) return true;
   }
+
   return false;
 }
 
 function hostOf(fiber) {
   for (let f = fiber.child; f; f = f.child) if (f.tag === 5) return f;
+
   return null;
 }
 
@@ -63,6 +78,7 @@ const scenarios = {
     await until(() => P.marks.firstWindow, 20000);
     const info = nn.shell.systemInfo();
     const read = P.read();
+
     return { marks: { ...P.marks, processStart: info.processStart ?? null, firstCommit: P.firstCommit }, stats: read };
   },
 
@@ -71,6 +87,7 @@ const scenarios = {
     await writesSettled();
     P.reset();
     await sleep(seconds * 1000);
+
     return { stats: P.read() };
   },
 
@@ -82,12 +99,14 @@ const scenarios = {
     await sleep(200);
     P.reset();
     const steps = [];
+
     for (let i = 0; i < count; i++) {
       steps.push(timed(() => S().openPanel(w)));
       await sleep(150);
       S().closePanel(w);
       await sleep(150);
     }
+
     return { steps, historyEntries: S().history[S().windows[w].spaceId]?.length ?? 0, stats: P.read() };
   },
 
@@ -98,19 +117,23 @@ const scenarios = {
     await sleep(200);
     S().openPanel(w);
     const id = `${w}:palette`;
+
     if (!(await until(() => nn.omnibox.get(id), 3000))) throw new Error("omnibox driver missing");
     await sleep(500);
     const driver = nn.omnibox.get(id);
     P.reset();
     const keys = [];
+
     for (let i = 1; i <= query.length; i++) {
       keys.push(timed(() => driver.type(query.slice(0, i))));
       await sleep(gapMs);
     }
+
     const stats = P.read();
     const items = driver.state().items.length;
     S().closePanel(w);
     await sleep(200);
+
     return { keys, items, stats };
   },
 
@@ -120,6 +143,7 @@ const scenarios = {
     const view = tabsInView().filter((id) => !s.tabs[id].pinned);
     const ids = view.slice(30, 30 + count);
     const start = activeId();
+
     // First pass wakes the tabs (each loads its page); the measured pass switches between loaded tabs.
     for (const id of ids) {
       timed(() => {
@@ -128,9 +152,11 @@ const scenarios = {
       });
       await sleep(250);
     }
+
     await quiet();
     P.reset();
     const steps = [];
+
     for (const id of ids) {
       steps.push(
         timed(() => {
@@ -140,9 +166,11 @@ const scenarios = {
       );
       await sleep(150);
     }
+
     const stats = P.read();
     timed(() => S().activate(start));
     await quiet();
+
     return { steps, stats };
   },
 
@@ -152,54 +180,68 @@ const scenarios = {
     P.reset();
     const open = [];
     const ids = [];
+
     for (let i = 0; i < count; i++) {
       let id;
       open.push(timed(() => (id = S().newTab(w, { url: `${origin}/p/new-${i}-${Date.now()}` }))));
-      ids.push(typeof id === "string" ? id : (id?.id ?? activeId()));
+      ids.push(isStr(id) ? id : (id?.id ?? activeId()));
       await sleep(150);
     }
+
     await quiet();
     const openStats = P.read();
     P.reset();
     const close = [];
+
     for (const id of ids.reverse()) {
       close.push(timed(() => S().closeTab(id)));
       await sleep(150);
     }
+
     await sleep(500);
+
     return { open, close, openStats, closeStats: P.read() };
   },
 
   async scroll({ distance = 2400, steps = 60 } = {}) {
     await quiet();
     const page = P.findFibers("SidebarPage").find((f) => f.memoizedProps?.current);
+
     if (!page) throw new Error("no current SidebarPage");
     let scroller = null;
+
     const visit = (f) => {
       for (let c = f; c && !scroller; c = c.sibling) {
-        if (c.stateNode && typeof c.stateNode.scrollTo === "function") scroller = c.stateNode;
+        if (c.stateNode && isFn(c.stateNode.scrollTo)) scroller = c.stateNode;
         else visit(c.child);
       }
     };
+
     visit(page.child);
+
     if (!scroller) throw new Error("no ScrollView");
     scroller.scrollTo({ y: 0, animated: false });
     await sleep(300);
     P.reset();
+
     for (let i = 1; i <= steps; i++) {
       scroller.scrollTo({ y: (distance * i) / steps, animated: false });
       await sleep(16);
     }
+
     for (let i = steps - 1; i >= 0; i--) {
       scroller.scrollTo({ y: (distance * i) / steps, animated: false });
       await sleep(16);
     }
+
     await sleep(300);
+
     return { stats: P.read() };
   },
 
   async pageLoad({ origin, runs = 3 } = {}) {
     const results = [];
+
     for (let r = 0; r < runs; r++) {
       await quiet(600);
       const tab = activeId();
@@ -212,18 +254,21 @@ const scenarios = {
       await sleep(1000);
       results.push({ loadMs, stats: P.read() });
     }
+
     return { runs: results };
   },
 
   async hover({ rows = 24, gapMs = 60, from = 8 } = {}) {
     await quiet();
     const fibers = P.findFibers("TabRow", 400).filter((f) => f.alternate || true);
-    const hosts = fibers.map(hostOf).filter((h) => h && typeof h.memoizedProps?.onMouseEnter === "function");
+    const hosts = fibers.map(hostOf).filter((h) => h && isFn(h.memoizedProps?.onMouseEnter));
     const list = hosts.slice(from, from + rows);
+
     if (list.length < 2) throw new Error(`only ${list.length} hoverable rows`);
     P.reset();
     const steps = [];
     let prev = null;
+
     for (const h of list) {
       steps.push(
         timed(() => {
@@ -234,8 +279,10 @@ const scenarios = {
       prev = h;
       await sleep(gapMs);
     }
+
     steps.push(timed(() => prev.memoizedProps.onMouseLeave?.({ nativeEvent: {} })));
     await sleep(800);
+
     return { steps, stats: P.read() };
   },
 
@@ -243,12 +290,14 @@ const scenarios = {
     const w = windowId();
     await quiet();
     const out = [];
+
     for (const command of ["nextProfile", "previousProfile"]) {
       P.reset();
       const ms = timed(() => nn.runCommand({ command, arg: null, windowId: w }));
       await sleep(settleMs);
       out.push({ command, ms, profile: S().windows[w].spaceId, stats: P.read() });
     }
+
     return { runs: out };
   },
 
@@ -258,19 +307,24 @@ const scenarios = {
     await quiet();
     const s = S();
     const bg = tabsInView().find((id) => id !== activeId() && s.live[id] && !s.tabs[id].pinned);
+
     if (!bg) throw new Error("no background tab to update");
     P.reset();
     const steps = [];
+
     for (let i = 0; i < count; i++) {
       steps.push(timed(() => S().updateLive(bg, { progress: 0.05 + (i % 10) / 10 })));
       await sleep(5);
     }
+
     timed(() => S().updateLive(bg, { progress: 0 }));
+
     return { steps, stats: P.read() };
   },
 
   async idleLate({ waitSeconds = 20, seconds = 10 } = {}) {
     await sleep(waitSeconds * 1000);
+
     return scenarios.idle({ seconds });
   },
 
@@ -281,26 +335,35 @@ const scenarios = {
     const trail = [];
     const t0 = Date.now();
     let last = activeId();
+
     const stop = store.subscribe((st, prev) => {
       const now = activeId();
+
       if (now !== last) trail.push({ t: Date.now() - t0, from: last, to: now });
       last = now;
       const a = st.windows[w];
       const b = prev.windows[w];
+
       if (a !== b && a && b) {
         const fields = Object.keys(a).filter((k) => a[k] !== b[k]);
+
         if (!fields.includes("activeTabIds") || now === activeId()) trail.push({ t: Date.now() - t0, window: fields.join(",") });
       }
     });
+
     const opened = [];
+
     for (let i = 0; i < count; i++) {
       trail.push({ t: Date.now() - t0, open: i });
       timed(() => opened.push(S().newTab(w, { url: `${origin}/p/trail-${i}-${Date.now()}` })));
       await sleep(600);
     }
+
     await sleep(1000);
     stop();
-    for (const id of opened) if (typeof id === "string") S().closeTab(id);
+
+    for (const id of opened) if (isStr(id)) S().closeTab(id);
+
     return { opened, trail };
   },
 
@@ -309,38 +372,52 @@ const scenarios = {
   async slowOpen({ count = 10, slowMs = 100, gapMs = 300, origin } = {}) {
     const w = windowId();
     await quiet();
+
     const stop = store.subscribe((s, prev) => {
       if (s.windows === prev.windows) return;
       const end = P.now() + slowMs;
+
       while (P.now() < end);
     });
+
     let switches = 0;
+
     const count0 = store.subscribe((s, prev) => {
       const a = s.windows[w]?.activeTabIds[s.windows[w].spaceId];
       const b = prev.windows[w]?.activeTabIds[prev.windows[w].spaceId];
+
       if (a !== b) switches++;
     });
+
     const opened = [];
+
     for (let i = 0; i < count; i++) {
       timed(() => opened.push(S().newTab(w, { url: `${origin}/p/slow-${i}-${Date.now()}` })));
       await sleep(gapMs);
     }
+
     await sleep(3000);
     stop();
     count0();
     const settledSwitches = switches;
-    for (const id of opened) if (typeof id === "string") S().closeTab(id);
+
+    for (const id of opened) if (isStr(id)) S().closeTab(id);
+
     return { opened: opened.length, switches: settledSwitches };
   },
 
   async persistence() {
     const s = S();
+
     const time = (value) => {
       const t = P.now();
       const json = JSON.stringify(value);
+
       return { ms: P.now() - t, bytes: json.length };
     };
+
     const tabs = Object.values(s.tabs);
+
     return {
       history: time({ version: 2, history: s.history }),
       bookmarks: time({ version: 2, bookmarks: s.bookmarks }),
@@ -364,6 +441,7 @@ Object.assign(scenarios, renderScenarios());
 // Hermes' runtime compiler takes async methods but not async arrows.
 scenarios.traced = function ({ scenario, ...options }) {
   P.traceTimers = true;
+
   return scenarios[scenario](options).finally(() => (P.traceTimers = false));
 };
 
@@ -372,10 +450,12 @@ scenarios.traced = function ({ scenario, ...options }) {
 // `read` around the host's CDP calls.
 function renderScenarios() {
   const settle = (ms = 1500) => sleep(ms).then(() => P.read());
+
   return {
     async mark({ settleMs = 0 } = {}) {
       if (settleMs) await quiet(settleMs);
       P.reset();
+
       return true;
     },
     async read({ settleMs = 1000 } = {}) {
@@ -383,30 +463,38 @@ function renderScenarios() {
     },
     async wake({ gapMs = 400 } = {}) {
       const start = activeId();
+
       for (const id of tabsInView()) {
         timed(() => S().activate(id));
         await sleep(gapMs);
       }
+
       timed(() => S().activate(start));
       await quiet(1000);
+
       return tabsInView().filter((id) => S().live[id]).length;
     },
     async tabSwitch({ count = 10, gapMs = 300 } = {}) {
       const s = S();
+
       const ids = tabsInView()
         .filter((id) => !s.tabs[id].pinned)
         .slice(0, count);
+
       const start = activeId();
       await quiet(800);
       P.reset();
       const steps = [];
+
       for (const id of ids) {
         steps.push(timed(() => S().activate(id)));
         await sleep(gapMs);
       }
+
       const stats = await settle(800);
       timed(() => S().activate(start));
       await quiet(800);
+
       return { steps, stats };
     },
     async openCloseTab({ count = 5, origin, gapMs = 400 } = {}) {
@@ -415,38 +503,47 @@ function renderScenarios() {
       P.reset();
       const ids = [];
       const open = [];
+
       for (let i = 0; i < count; i++) {
         let id;
         open.push(timed(() => (id = S().newTab(w, { url: `${origin}/p/r-${i}-${Date.now()}` }))));
-        ids.push(typeof id === "string" ? id : activeId());
+        ids.push(isStr(id) ? id : activeId());
         await sleep(gapMs);
       }
+
       const openStats = await settle(1000);
       P.reset();
       const close = [];
+
       for (const id of ids.reverse()) {
         close.push(timed(() => S().closeTab(id)));
         await sleep(gapMs);
       }
+
       return { open, close, openStats, closeStats: await settle(1000) };
     },
     async typeIn({ mode = "navigate", query = "github.com/facebook/react", gapMs = 60 } = {}) {
       const w = windowId();
       await quiet(600);
+
       if (mode === "navigate") S().openPanel(w);
       else if (mode === "newTab") S().openNewTabPanel(w);
       else throw new Error(`unknown palette mode ${mode}`);
+
       try {
         const id = `${w}:palette`;
+
         if (!(await until(() => nn.omnibox.get(id), 4000))) throw new Error(`no omnibox driver ${id}`);
         await sleep(800);
         const driver = nn.omnibox.get(id);
         P.reset();
         const keys = [];
+
         for (let i = 1; i <= query.length; i++) {
           keys.push(timed(() => driver.type(query.slice(0, i))));
           await sleep(gapMs);
         }
+
         return { keys, stats: await settle(600) };
       } finally {
         S().closePanel(w);
@@ -458,17 +555,20 @@ function renderScenarios() {
       const w = windowId();
       const id = S().newTab(w, { url: `${origin}${path}`, background: true });
       await sleep(settleMs);
-      return typeof id === "string" ? id : null;
+
+      return isStr(id) ? id : null;
     },
     async openActive({ path, origin, settleMs = 2000 } = {}) {
       const w = windowId();
       const id = S().newTab(w, { url: `${origin}${path}` });
       await quiet(settleMs);
-      return typeof id === "string" ? id : null;
+
+      return isStr(id) ? id : null;
     },
     async closeTab({ id } = {}) {
       if (id && S().tabs[id]) S().closeTab(id);
       await sleep(400);
+
       return true;
     },
     // A background tab loading a page (progress, title, favicon, loading state): only its row should render.
@@ -476,9 +576,11 @@ function renderScenarios() {
       await quiet(800);
       const s = S();
       const id = tabsInView().find((t) => t !== activeId() && !s.tabs[t].pinned && s.live[t]);
+
       if (!id) throw new Error("no loaded background tab");
       P.reset();
       S().navigate(id, `${origin}/heavy?run=bg-${Date.now()}`);
+
       return { stats: await settle(4000) };
     },
     async idleFor({ seconds = 60 } = {}) {
@@ -486,6 +588,7 @@ function renderScenarios() {
       await writesSettled();
       P.reset();
       await sleep(seconds * 1000);
+
       return { stats: P.read() };
     },
     async split({ origin } = {}) {
@@ -498,6 +601,7 @@ function renderScenarios() {
       P.reset();
       const closeMs = splitId ? timed(() => S().separateSplit(splitId)) : null;
       const closeStats = await settle(1500);
+
       return { ms, stats, closeMs, closeStats };
     },
     async sidebar() {
@@ -509,11 +613,13 @@ function renderScenarios() {
       P.reset();
       const openMs = timed(() => S().toggleSidebar(w));
       const openStats = await settle(1200);
+
       return { ms, stats, openMs, openStats };
     },
     // A download's progress as the engine reports it (onDownload → upsertDownload), ten updates a second.
     async downloads({ updates = 40, gapMs = 100 } = {}) {
       const total = 50_000_000;
+
       const d = {
         id: `bench-${Date.now()}`,
         url: "http://127.0.0.1/file.zip",
@@ -527,18 +633,22 @@ function renderScenarios() {
         mimeType: "application/zip",
         profile: S().windows[windowId()].spaceId,
       };
+
       await quiet(800);
       P.reset();
       const steps = [];
+
       for (let i = 0; i <= updates; i++) {
         const received = Math.round((total * i) / updates);
         steps.push(timed(() => S().upsertDownload({ ...d, received, speed: 5_000_000, state: i === updates ? "complete" : "downloading" })));
         await sleep(gapMs);
       }
+
       const stats = await settle(1000);
       S().removeDownload(d.id);
       S().setDownloadsOpen(windowId(), false);
       await sleep(400);
+
       return { steps, stats };
     },
   };
@@ -548,4 +658,5 @@ globalThis.nnBench = {
   names: Object.keys(scenarios),
   run: (name, options) => scenarios[name](options ?? {}),
 };
+
 return globalThis.nnBench.names;

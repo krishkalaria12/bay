@@ -18,16 +18,22 @@ export function DragGhost({ ghost }: { ghost: Ghost }) {
   const { item, count, width, height, position } = ghost;
   const tab = useBrowser((s) => s.tabs[item.tabIds[0] ?? ""]);
   const folder = useBrowser((s) => (item.folderId ? s.pinnedFolders[item.folderId] : undefined));
+
   const label = useBrowser((s) => {
     const group = item.groupId ? s.groups[item.groupId] : undefined;
+
     if (group) return groupLabel(s, group);
+
     if (folder) return folder.name || "New Folder";
+
     return tab ? tabTitle(tab) : "";
   });
+
   const tile = item.kind === "tile";
   // Over the page the tab shows as the page's own card (SplitChrome.tsx).
   const onPage = useTabDrag((d) => d.onPage);
   const at = useAnimatedStyle(() => ({ transform: [{ translateX: position.x.get() }, { translateY: position.y.get() }] }), [position]);
+
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, top: 0, width, height, opacity: onPage ? 0 : 1 }, at]}>
       <Surface

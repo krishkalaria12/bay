@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { captureName, placeCapture } = await import("./regionGeometry.ts");
 const { CAPTURE_BAR_GAP, CAPTURE_BAR_HEIGHT, CAPTURE_MARGIN } = await import("./constants.ts");
 

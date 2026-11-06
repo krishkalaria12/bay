@@ -10,10 +10,12 @@ import { MONO_FONT } from "../../lib/constants";
 export function PrivacyStep() {
   const [share, setShare] = useState(() => useTelemetry.getState().sharing);
   const colors = useOnboardingColors();
+
   const done = () => {
     setSharing(share, "onboarding");
     nextStep(share ? ["Sharing crash reports"] : []);
   };
+
   return (
     <StepLayout actions={<StepActions onContinue={done} />} preview={<Receipt on={share} />}>
       <Reveal delay={60}>
@@ -32,6 +34,7 @@ const NEVER = ["Sites you visit", "What you type", "Your tabs", "Your name"];
 
 function ReceiptLine({ label, mark, dim }: { label: string; mark: string; dim: boolean }) {
   const colors = useOnboardingColors();
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, opacity: dim ? 0.35 : 1 }}>
       <Text style={{ fontFamily: MONO_FONT, fontSize: 11, color: colors.title }}>{label}</Text>
@@ -46,6 +49,7 @@ function ReceiptLine({ label, mark, dim }: { label: string; mark: string; dim: b
 function Receipt({ on }: { on: boolean }) {
   const colors = useOnboardingColors();
   const rule = <View style={{ height: 1, borderBottomWidth: 1, borderStyle: "dashed", borderColor: colors.rowBorder, marginVertical: 10 }} />;
+
   return (
     <View
       style={{

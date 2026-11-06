@@ -1,19 +1,21 @@
 import { useEffect } from "react";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { perfProbeEnabled } from "../../lib/perfProbe";
+import type { JsonValue } from "../../lib/json";
 
 export type OmniboxDriver = {
   type(text: string): void;
   clear(): void;
   key(key: string, mods?: { metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean }): void;
   submit(): void;
-  state(): unknown;
+  state(): JsonValue;
   measure(): Promise<{ x: number; y: number; width: number; height: number }>;
 };
 
 const drivers = new Map<string, OmniboxDriver>();
 
 export type OmniboxTrace = { bar: string; typed: string; heard: number; committed: number };
+
 let trace: OmniboxTrace[] | null = null;
 
 export function traceOmnibox(entry: OmniboxTrace) {
@@ -28,6 +30,7 @@ export const omniboxDrivers = {
     stop: () => {
       const out = trace ?? [];
       trace = null;
+
       return out;
     },
   },
@@ -37,6 +40,7 @@ export function useOmniboxDriver(id: string, driver: OmniboxDriver) {
   const current = useEffectEvent(() => driver);
   useEffect(() => {
     if (!__DEV__ && !perfProbeEnabled) return;
+
     const proxy: OmniboxDriver = {
       type: (text) => current().type(text),
       clear: () => current().clear(),
@@ -45,7 +49,9 @@ export function useOmniboxDriver(id: string, driver: OmniboxDriver) {
       state: () => current().state(),
       measure: () => current().measure(),
     };
+
     drivers.set(id, proxy);
+
     return () => {
       if (drivers.get(id) === proxy) drivers.delete(id);
     };

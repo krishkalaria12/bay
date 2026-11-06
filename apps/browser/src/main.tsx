@@ -21,26 +21,41 @@ import { startCliControl } from "./components/cli/driverControl";
 import { startUserScripts } from "./components/cli/userScripts";
 
 probeStore("browser", useBrowser);
+
 // Reports stay silent until the user shares them.
 installErrorReporting();
+
 setStoreBatching(unstable_batchedUpdates);
+
 startPersistence();
+
 // Before the native sync: a moved tab's page is handed off before the window it left closes (lib/tabNavigation.ts).
 startTabPages();
+
 startNativeSync();
+
 // After the first window is made: the tab each window starts on doesn't open the command bar.
 quietLaunchTabs();
+
 startAppIntegration();
+
 startCliControl();
+
 startUserScripts();
+
 startTabLifecycle();
+
 startTranslate();
+
 startSync();
+
 startTelemetry();
+
 if (__DEV__ || perfProbeEnabled) require("./lib/devHarness").startDevHarness();
 
 // Development: `globalThis.nnDevMountDelayMs` holds a window's content back that long after its root starts, as a
 // window opened under load mounts late (acceptance move-tab-slow-mount).
+// SAFETY: globalThis is extensible; the cast only declares the optional nnDevMountDelayMs field the dev harness sets.
 const devMountDelay = () => (__DEV__ ? ((globalThis as { nnDevMountDelayMs?: number }).nnDevMountDelayMs ?? 0) : 0);
 
 function Root({ windowId }: { windowId: string }) {
@@ -49,13 +64,16 @@ function Root({ windowId }: { windowId: string }) {
   useEffect(() => {
     if (!held) return;
     const timer = setTimeout(() => setHeld(false), delay);
+
     return () => clearTimeout(timer);
   }, []);
   useEffect(() => {
     perfMark("firstWindow");
     markFirstWindow();
   }, []);
+
   if (held) return null;
+
   return __DEV__ ? (
     <DevErrorBoundary>
       <WindowRoot windowId={windowId} />
@@ -66,4 +84,5 @@ function Root({ windowId }: { windowId: string }) {
 }
 
 AppRegistry.registerComponent("main", () => Root);
+
 perfMark("bundleEnd");

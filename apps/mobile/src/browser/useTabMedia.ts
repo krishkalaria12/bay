@@ -37,6 +37,7 @@ export function useTabMedia({ tabs, views, onScreenTabId, locked }: TabMediaOpti
 
   function command(tabId: string, source: string): void {
     const view = views.get(tabId);
+
     if (!view) return;
     // Resolves null when the page's media is gone.
     runPageScript<boolean | null>(view, source).then(
@@ -61,11 +62,14 @@ export function useTabMedia({ tabs, views, onScreenTabId, locked }: TabMediaOpti
   const control = useRef<(action: MediaControl) => void>(() => {});
   control.current = (action) => {
     if (!sessionTab) return;
+
     if (action === "toggle") command(sessionTab.id, TOGGLE_MEDIA_SCRIPT);
     else stop(sessionTab.id);
   };
+
   useEffect(() => {
     const subscription = addMediaControlListener((action) => control.current(action));
+
     return () => subscription.remove();
   }, []);
 
@@ -76,10 +80,13 @@ export function useTabMedia({ tabs, views, onScreenTabId, locked }: TabMediaOpti
     /** Takes a page message; false when it isn't a media report. */
     pageMessage(tabId: string, message: string): boolean {
       const report = parseMediaMessage(message);
+
       if (!report) return false;
+
       if (!report.playing && stopped.has(tabId)) return true;
       stopped.delete(tabId);
       setReports((previous) => ({ ...previous, [tabId]: { ...report, at: Date.now() } }));
+
       return true;
     },
     /** A new document has no media until it reports some. */
@@ -97,5 +104,6 @@ export function useTabMedia({ tabs, views, onScreenTabId, locked }: TabMediaOpti
 
 function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
   const { [key]: _removed, ...rest } = record;
+
   return rest;
 }

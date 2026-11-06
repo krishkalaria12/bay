@@ -76,8 +76,11 @@ const DAY = 86_400_000;
 const pageKey = (url: string) => url.replace(/#.*$/, "").replace(/\/$/, "");
 
 type HistoryRow = SuggestionSource["history"][number];
+
 type BookmarkRow = NonNullable<SuggestionSource["bookmarks"]>[number];
+
 type TabRow = SuggestionSource["tabs"][number];
+
 type CleanedRow = NonNullable<SuggestionSource["cleaned"]>[number];
 
 type PageText = {
@@ -94,11 +97,13 @@ const pageTexts = new WeakMap<object, PageText>();
 
 function pageText(row: { url: string; title: string }): PageText {
   let text = pageTexts.get(row);
+
   if (!text) {
     const shown = displayUrl(row.url);
     text = { url: row.url, key: pageKey(row.url), shown, shownLower: shown.toLowerCase(), titleLower: row.title.toLowerCase() };
     pageTexts.set(row, text);
   }
+
   return text;
 }
 
@@ -118,10 +123,12 @@ type Candidate = {
 };
 
 type Lookup = { get(key: string): Candidate | undefined; has(key: string): boolean };
+
 type Pool = { list: Candidate[]; byKey: Lookup };
 
 // Bookmark candidates, deduplicated, built once per bookmarks list: a visit replaces the history list, not this.
 type BookmarkBase = { list: Candidate[]; byKey: Map<string, Candidate>; keys: Set<string>; cursor: number; done: boolean };
+
 // A pool under construction for one history list and one bookmarks list, resumed where the last slice stopped.
 type Builder = {
   base: BookmarkBase;
@@ -137,13 +144,16 @@ const bases = new WeakMap<readonly BookmarkRow[], BookmarkBase>();
 const builders = new WeakMap<readonly HistoryRow[], WeakMap<readonly BookmarkRow[], Builder>>();
 const NO_BOOKMARKS: readonly BookmarkRow[] = [];
 const NO_CLEANED: readonly CleanedRow[] = [];
+
 // A history row's candidate, kept while its bookmark flag holds, so a new history list reuses them.
 const historyCandidates = new WeakMap<HistoryRow, Candidate>();
 const SLICE_CHECK = 64;
 
 function baseFor(bookmarks: readonly BookmarkRow[]): BookmarkBase {
   let base = bases.get(bookmarks);
+
   if (!base) bases.set(bookmarks, (base = { list: [], byKey: new Map(), keys: new Set(), cursor: 0, done: false }));
+
   return base;
 }
 
@@ -153,57 +163,75 @@ function advance(b: Builder, bookmarks: readonly BookmarkRow[], deadline: number
   let n = 0;
   const late = () => ++n % SLICE_CHECK === 0 && Date.now() > deadline;
   const base = b.base;
+
   while (!base.done && base.cursor < bookmarks.length) {
     const row = bookmarks[base.cursor++]!;
     const text = pageText(row);
     base.keys.add(text.key);
+
     if (!base.byKey.has(text.key)) {
       const c: Candidate = { url: row.url, title: row.title, favicon: row.favicon, visits: 0, lastVisit: 0, bookmarked: true, text };
       base.list.push(c);
       base.byKey.set(text.key, c);
     }
+
     if (late()) return false;
   }
+
   base.done = true;
+
   while (b.historyCursor < b.history.length) {
     const h = b.history[b.historyCursor++]!;
     const text = pageText(h);
+
     if (!b.byKey.has(text.key)) {
       const bookmarked = base.keys.has(text.key);
       let c = historyCandidates.get(h);
+
       if (!c || c.bookmarked !== bookmarked) {
         c = { url: h.url, title: h.title, favicon: h.favicon, visits: h.visits, lastVisit: h.lastVisit, bookmarked, text };
         historyCandidates.set(h, c);
       }
+
       b.list.push(c);
       b.byKey.set(text.key, c);
     }
+
     if (late()) return false;
   }
+
   while (b.bookmarkCursor < base.list.length) {
     const c = base.list[b.bookmarkCursor++]!;
+
     if (!b.byKey.has(c.text.key)) b.list.push(c);
+
     if (late()) return false;
   }
+
   const history = b.byKey;
   b.pool = {
     list: b.list,
     byKey: { get: (key) => history.get(key) ?? base.byKey.get(key), has: (key) => history.has(key) || base.byKey.has(key) },
   };
+
   return true;
 }
 
 function builderFor(history: readonly HistoryRow[], bookmarks: readonly BookmarkRow[]): Builder {
   let byBookmarks = builders.get(history);
+
   if (!byBookmarks) builders.set(history, (byBookmarks = new WeakMap()));
   let b = byBookmarks.get(bookmarks);
+
   if (!b) byBookmarks.set(bookmarks, (b = { base: baseFor(bookmarks), history, list: [], byKey: new Map(), historyCursor: 0, bookmarkCursor: 0, pool: null }));
+
   return b;
 }
 
 function poolFor(history: readonly HistoryRow[], bookmarks: readonly BookmarkRow[]): Pool {
   const b = builderFor(history, bookmarks);
   advance(b, bookmarks, Infinity);
+
   return b.pool!;
 }
 
@@ -212,15 +240,20 @@ function poolFor(history: readonly HistoryRow[], bookmarks: readonly BookmarkRow
 export function prepareSuggestions(source: SuggestionSource, deadline: number): boolean {
   const bookmarks = source.bookmarks ?? NO_BOOKMARKS;
   const b = builderFor(source.history, bookmarks);
+
   if (b.pool) return true;
+
   for (const rows of [source.history, bookmarks]) {
     let n = 0;
+
     for (const row of rows) {
       if (pageTexts.has(row)) continue;
       pageText(row);
+
       if (++n % SLICE_CHECK === 0 && Date.now() > deadline) return false;
     }
   }
+
   return advance(b, bookmarks, deadline);
 }
 
@@ -229,22 +262,29 @@ function tabsOver(pool: Pool, tabs: readonly TabRow[], cleaned: readonly Cleaned
   const tabIds = new Map<string, string>();
   const cleanedIds = new Map<string, string>();
   const extra: Candidate[] = [];
+
   for (const t of tabs) {
     if (!t.url || t.id === currentTabId) continue;
     const text = pageText(t);
+
     if (tabIds.has(text.key)) continue;
     tabIds.set(text.key, t.id);
+
     if (!pool.byKey.has(text.key))
       extra.push({ url: t.url, title: t.title, favicon: t.favicon, visits: 0, lastVisit: now, bookmarked: false, tabId: t.id, text });
   }
+
   for (const c of cleaned) {
     if (!c.url) continue;
     const text = pageText(c);
+
     if (tabIds.has(text.key) || cleanedIds.has(text.key)) continue;
     cleanedIds.set(text.key, c.id);
+
     if (!pool.byKey.has(text.key))
       extra.push({ url: c.url, title: c.title, favicon: c.favicon, visits: 0, lastVisit: c.closedAt, bookmarked: false, cleanedId: c.id, text });
   }
+
   return { tabIds, cleanedIds, extra };
 }
 
@@ -254,15 +294,19 @@ function tabOnSite(tabs: readonly TabRow[], host: string, currentTabId?: string)
   if (!host) return undefined;
   let best: TabRow | undefined;
   let bestPinned = false;
+
   for (const t of tabs) {
     if (!t.url || t.id === currentTabId) continue;
     const pinned = !!t.pinnedUrl && hostOf(t.pinnedUrl) === host;
+
     if (!pinned && hostOfPage(pageText(t)) !== host) continue;
+
     if (!best || (pinned && !bestPinned) || (pinned === bestPinned && (t.lastActiveAt ?? 0) > (best.lastActiveAt ?? 0))) {
       best = t;
       bestPinned = pinned;
     }
   }
+
   return best;
 }
 
@@ -272,6 +316,7 @@ function wordStartsWith(text: string, word: string): boolean {
   for (let i = text.indexOf(word); i >= 0; i = text.indexOf(word, i + 1)) {
     if (i === 0 || !isWordChar(text.charCodeAt(i - 1))) return true;
   }
+
   return false;
 }
 
@@ -299,25 +344,32 @@ function matchScore(t: PageText, query: Query): number {
   const shown = t.shownLower;
   const title = t.titleLower;
   const { q, segmentStarts } = query;
+
   if (!shown.includes(query.needle) && !title.includes(query.needle)) return 0;
   let s = 0;
+
   if (shown.startsWith(q)) s = 100;
   else if (segmentStarts && (shown.includes(segmentStarts[0]) || shown.includes(segmentStarts[1]))) s = 60;
   else if (q.length >= 2 && shown.includes(q)) s = 30;
+
   if (title.startsWith(q)) s += 40;
   else if (q.length >= 2 ? title.includes(q) : query.word && wordStartsWith(title, q)) s += 20;
+
   if (s > 0 || query.tokens.length < 2) return s;
+
   for (const token of query.tokens) {
     if (token.word && wordStartsWith(title, token.text)) s += 15;
     else if (token.word && wordStartsWith(shown, token.text)) s += 10;
     else if (token.text.length >= 3 && (title.includes(token.text) || shown.includes(token.text))) s += 5;
     else return 0;
   }
+
   return s;
 }
 
 function frecency(c: Candidate, tabId: string | undefined, cleanedId: string | undefined, now: number): number {
   const ageDays = c.lastVisit ? Math.max(0, (now - c.lastVisit) / DAY) : 10;
+
   return Math.log2(1 + c.visits) * 8 - Math.min(ageDays, 30) + (c.bookmarked ? 20 : 0) + (tabId ? 6 : cleanedId ? 4 : 0);
 }
 
@@ -325,9 +377,11 @@ let lastMatches: { pool: Pool; q: string; tokens: string[]; pages: Candidate[] }
 
 function narrowing(pool: Pool, q: string, tokens: readonly string[]): Candidate[] | null {
   const last = lastMatches;
+
   if (!last || last.pool !== pool || !q.startsWith(last.q)) return null;
   const i = last.tokens.length - 1;
   const word = last.tokens[i]!;
+
   return i === 0 || word === tokens[i] || word.length >= 3 ? last.pages : null;
 }
 
@@ -341,10 +395,13 @@ class TopList {
   }
   offer(r: Ranked) {
     const items = this.items;
+
     if (items.length === this.size && items[items.length - 1]!.s >= r.s) return;
     let i = items.length;
+
     while (i > 0 && items[i - 1]!.s < r.s) i--;
     items.splice(i, 0, r);
+
     if (items.length > this.size) items.pop();
   }
 }
@@ -355,8 +412,8 @@ const pageSuggestion = (c: Candidate, tabId = c.tabId, cleanedId = c.cleanedId):
   title: c.title,
   favicon: c.favicon,
   ...(tabId ? { tabId } : cleanedId ? { cleanedId } : {}),
-  ...(c.bookmarked ? { bookmarked: true } : {}),
-  ...(c.visits > 0 ? { visited: true } : {}),
+  ...(c.bookmarked ? { bookmarked: true } : undefined),
+  ...(c.visits > 0 ? { visited: true } : undefined),
 });
 
 export function suggestionKey(s: Suggestion): string {
@@ -379,15 +436,18 @@ export function suggestionKey(s: Suggestion): string {
 export function buildSuggestions(raw: string, source: SuggestionSource, options: SuggestOptions = {}): SuggestionResult {
   const { limit = 8, remoteLimit = 4, now = Date.now(), engine = BUILT_IN_ENGINES[0]!, preference = "website", remote = [], actions = [], scope } = options;
   const query = raw.trim();
+
   if (!query) return { items: [], completion: "" };
   const q = query.toLowerCase();
   const tokens = q.split(/\s+/).filter(Boolean);
 
   const bang = scope ? null : findBang(query, options.bangs);
+
   if (bang) return bangSuggestions(bang, source, options, limit);
 
   if (!scope && query.startsWith("?")) {
     const text = query.slice(1).trim();
+
     if (!text) return { items: [], completion: "" };
     const out = new Output(limit);
     out.push({ kind: "search", query: text, url: searchUrl(engine, text), engine: engine.name });
@@ -396,24 +456,30 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
         .slice(0, remoteLimit)
         .map((t): Suggestion => ({ kind: "search", query: t, url: searchUrl(engine, t), engine: engine.name, suggested: true })),
     );
+
     return { items: out.items, completion: "" };
   }
 
   const pool = poolFor(source.history, source.bookmarks ?? NO_BOOKMARKS);
   const { tabIds, cleanedIds, extra } = tabsOver(pool, source.tabs, source.cleaned ?? NO_CLEANED, now, options.currentTabId);
   const currentKey = options.currentUrl ? pageKey(options.currentUrl) : null;
+
   const known = (url: string) => {
     const key = pageKey(url);
     const c = pool.byKey.get(key) ?? extra.find((x) => x.text.key === key);
+
     return c && pageSuggestion(c, tabIds.get(key), cleanedIds.get(key));
   };
 
   // Only a bare host as typed looks for the site's tab: a scheme or a path asks for that address.
   const toAddress = (url: string, favicon: string | null): Suggestion => {
     const row = known(url);
+
     if (row?.kind === "page" && row.tabId) return row;
     const tab = /^[^/?#]+$/.test(query) ? tabOnSite(source.tabs, hostOf(url), options.currentTabId) : undefined;
+
     if (tab) return { kind: "page", url: tab.url, title: tab.customTitle || tab.title, favicon: tab.favicon, tabId: tab.id };
+
     return row ?? { kind: "page", url, title: "", favicon };
   };
 
@@ -428,28 +494,37 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   // One word that isn't a path: the sites whose address it starts, each counted over all its pages.
   const sites = !scope && oneWord && !/[/?#:]/.test(q) ? new Map<string, Site>() : null;
   let inline: Ranked | null = null;
+
   for (const list of [pages, extra]) {
     for (const c of list) {
       const m = matchScore(c.text, parsed);
+
       if (m <= 0) continue;
+
       if (list === pages) matched.push(c);
       const tabId = c.tabId ?? tabIds.get(c.text.key);
       const cleanedId = tabId ? undefined : (c.cleanedId ?? cleanedIds.get(c.text.key));
       const derank = currentKey !== null && c.text.key === currentKey ? 80 : 0;
       const r: Ranked = { c, tabId, cleanedId, m, s: m + frecency(c, tabId, cleanedId, now) - derank };
       top.offer(r);
+
       if (sites) addSite(sites, c, q);
+
       if (onSite) {
         const host = hostOfPage(c.text);
+
         if (host === scope!.host || host.endsWith(`.${scope!.host}`)) onSite.offer(r);
       }
+
       if (completes && (!inline || r.s > inline.s) && inlineMatch(c.text, q)) inline = r;
     }
   }
+
   lastMatches = q.length >= 2 ? { pool, q, tokens, pages: matched } : null;
   const ranked = top.items;
 
   const out = new Output(limit);
+
   const remoteRows = (url: (text: string) => string, name: string) =>
     dedupeSuggestions(remote, query)
       .slice(0, remoteLimit)
@@ -460,6 +535,7 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
     out.push({ kind: "search", query, url: scopedUrl(query), engine: scope.name });
     out.push(...remoteRows(scopedUrl, scope.name));
     out.push(...onSite!.items.map((x) => pageSuggestion(x.c, x.tabId, x.cleanedId)));
+
     return { items: out.items, completion: "" };
   }
 
@@ -478,6 +554,7 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   const completion = target ? target.text.slice(query.length) : "";
 
   let first: Suggestion;
+
   if (creates.length && /^\S+\s+\S/.test(query)) first = createRow(creates[0]!);
   else if (actionMatches[0]?.exact) first = actionRow(actionMatches[0].action);
   else if (target && completion) first = toAddress(target.url, target.favicon);
@@ -486,13 +563,14 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   else first = search;
 
   out.push(...emoji);
+
   if (answer)
     out.push({
       kind: "calc",
       expression: answer.expression,
       value: answer.display,
       url: searchUrl(engine, answer.expression),
-      ...(currency ? { detail: currency.detail } : {}),
+      ...(currency ? { detail: currency.detail } : undefined),
     });
   out.push(first);
   out.push(search);
@@ -513,19 +591,24 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   out.push(...ahead);
   out.push(...remoteRows((text) => searchUrl(engine, text), engine.name));
   out.push(...pageRows);
+
   return { items: out.items, completion: answer || emoji.length ? "" : completion };
 }
 
 function bangSuggestions(match: BangMatch, source: SuggestionSource, options: SuggestOptions, limit: number): SuggestionResult {
   const { bang, query } = match;
   const out = new Output(limit);
+
   if (!query) {
     out.push({ kind: "page", url: bang.home, title: bang.name, favicon: null });
+
     return { items: out.items, completion: "" };
   }
+
   out.push({ kind: "search", query, url: match.url, engine: bang.name, bang: true });
   const scope: SearchScope = { kind: "site", name: bang.name, host: hostOf(bang.home), url: bang.template };
   out.push(...buildSuggestions(query, source, { ...options, scope, remote: [], bangs: null }).items.slice(1));
+
   return { items: out.items, completion: "" };
 }
 
@@ -535,16 +618,21 @@ type Site = { origin: string; prefix: boolean; visits: number; lastVisit: number
 // before the domain's end ("cloud" in dash.cloudflare.com, not "com").
 function addSite(sites: Map<string, Site>, c: Candidate, q: string) {
   const origin = originOfPage(c.text);
+
   if (!origin) return;
   const host = hostPart(c.text.shownLower);
   const prefix = host.startsWith(q);
   const names = host.split(".").slice(1, -1);
+
   if (!prefix && (q.length < 3 || !names.some((name) => name.startsWith(q)))) return;
   const site = sites.get(origin);
+
   if (!site) {
     sites.set(origin, { origin, prefix, visits: c.visits, lastVisit: c.lastVisit, bookmarked: c.bookmarked, favicon: c.favicon });
+
     return;
   }
+
   site.visits += c.visits;
   site.lastVisit = Math.max(site.lastVisit, c.lastVisit);
   site.bookmarked ||= c.bookmarked;
@@ -554,8 +642,10 @@ function addSite(sites: Map<string, Site>, c: Candidate, q: string) {
 function topSites(sites: Map<string, Site>, now: number, count: number): Site[] {
   const score = (site: Site) => {
     const ageDays = site.lastVisit ? Math.max(0, (now - site.lastVisit) / DAY) : 10;
+
     return (site.prefix ? 40 : 0) + Math.log2(1 + site.visits) * 8 - Math.min(ageDays, 30) + (site.bookmarked ? 20 : 0);
   };
+
   return [...sites.values()].sort((a, b) => score(b) - score(a)).slice(0, count);
 }
 
@@ -564,15 +654,24 @@ const siteRow = (site: Site): Suggestion => ({ kind: "page", url: `${site.origin
 
 function inlineMatch(t: PageText, q: string): boolean {
   if (hostPart(t.shownLower).startsWith(q) && originOfPage(t)) return true;
+
   return q.includes("/") && !/[?#]/.test(t.shown) && t.shownLower.startsWith(q);
 }
 
 const hostPart = (shown: string) => /^[^/?#]*/.exec(shown)![0];
 
-function inlineTarget(q: string, c: Candidate): { text: string; url: string; favicon: string | null } {
+interface InlineTarget {
+  text: string;
+  url: string;
+  favicon: string | null;
+}
+
+function inlineTarget(q: string, c: Candidate): InlineTarget {
   const origin = originOfPage(c.text);
   const host = hostPart(c.text.shown);
+
   if (origin && host.toLowerCase().startsWith(q)) return { text: host, url: `${origin}/`, favicon: c.favicon };
+
   return { text: c.text.shown, url: c.url, favicon: c.favicon };
 }
 
@@ -586,6 +685,7 @@ class Output {
   push(...rows: Suggestion[]) {
     for (const row of rows) {
       const key = suggestionKey(row);
+
       if (this.items.length >= this.limit || this.seen.has(key)) continue;
       this.seen.add(key);
       this.items.push(row);
@@ -605,16 +705,19 @@ const actionRow = (a: CommandAction): Suggestion => ({
   kind: "action",
   id: a.id,
   title: a.title,
-  ...(a.icon ? { icon: a.icon } : {}),
-  ...(a.hint ? { hint: a.hint } : {}),
+  ...(a.icon ? { icon: a.icon } : undefined),
+  ...(a.hint ? { hint: a.hint } : undefined),
 });
 
 function dedupeSuggestions(remote: readonly string[], query: string): string[] {
   const seen = new Set([query.trim().toLowerCase()]);
+
   return remote.filter((s) => {
     const key = s.trim().toLowerCase();
+
     if (!key || seen.has(key)) return false;
     seen.add(key);
+
     return true;
   });
 }

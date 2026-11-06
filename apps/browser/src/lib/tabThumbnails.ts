@@ -24,6 +24,7 @@ function remember(tabId: string) {
       if (!picture || !useBrowser.getState().tabs[tabId]) return;
       pictures.delete(tabId);
       pictures.set(tabId, picture);
+
       for (const old of pictures.keys()) {
         if (pictures.size <= MAX_TAB_PICTURES) break;
         pictures.delete(old);
@@ -38,17 +39,22 @@ export function startTabPictures() {
   started = true;
   useBrowser.subscribe((s, prev) => {
     if (s.windows === prev.windows && s.tabs === prev.tabs && s.tabLists === prev.tabLists) return;
+
     for (const [windowId, timer] of timers)
       if (!s.windows[windowId]) {
         clearTimeout(timer);
         timers.delete(windowId);
       }
+
     for (const w of Object.values(s.windows)) {
       const id = w.activeTabIds[w.spaceId];
+
       if (!id || w.incognito) continue;
       // A tab just shown (another tab, or another profile's page), or the one shown going to another page.
       const was = prev.windows[w.id];
+
       if (id === was?.activeTabIds[was.spaceId] && s.tabs[id]?.url === prev.tabs[id]?.url) continue;
+
       if (isIncognitoSpace(s.tabs[id]?.spaceId ?? "")) continue;
       clearTimeout(timers.get(w.id));
       timers.set(
@@ -56,10 +62,12 @@ export function startTabPictures() {
         setTimeout(() => {
           timers.delete(w.id);
           const now = useBrowser.getState().windows[w.id];
+
           if (now?.activeTabIds[now.spaceId] === id) remember(id);
         }, PICTURE_SETTLE_MS),
       );
     }
+
     if (s.tabs !== prev.tabs) for (const id of pictures.keys()) if (!s.tabs[id]) pictures.delete(id);
   });
 }

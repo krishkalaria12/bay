@@ -7,7 +7,7 @@ export function nestedFoldersFixture() {
     id,
     title,
     url: `data:text/html,${encodeURIComponent(`<!doctype html><title>${title}</title><body style="font:20px system-ui;padding:48px;background:#f6f3ed;color:#282b32"><h1>${title}</h1><p>Bay nested folders fixture. This page is fake and works offline.</p><input aria-label="Draft" value="Try editing, then Undo"><p>Move tabs and folders in the sidebar. Five folder levels are supported.</p>`)}`,
-    ...(folderId ? { pinnedRow: true, folderId } : {}),
+    ...(folderId ? { pinnedRow: true, folderId } : undefined),
   });
   return session({
     spaces: [{ id: "default", name: "Folder playground", color: "blue", icon: "🗂️" }],

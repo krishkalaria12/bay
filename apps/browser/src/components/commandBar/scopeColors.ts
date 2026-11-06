@@ -5,7 +5,7 @@ import { isLightColor } from "../../lib/windowTint";
 export type ScopeColors = { background: string; text: string };
 
 // Recognizable site accents, including when the site has not been opened yet.
-const SITE_COLORS: Record<string, string> = {
+const SITE_COLORS = {
   "youtube.com": "#D90000",
   "google.com": "#1967D2",
   "wikipedia.org": "#54595D",
@@ -21,21 +21,26 @@ const SITE_COLORS: Record<string, string> = {
   "bing.com": "#007D83",
   "notion.so": "#37352F",
   "figma.com": "#A259FF",
-};
+} satisfies Record<string, string>;
 
 const normalizedHost = (url: string) => hostOf(url).replace(/^www\./, "");
 
 export function scopeColorFor(scope: SearchScope | null, state: Pick<BrowserState, "tabs" | "live">, spaceId: string): string | null {
   if (!scope || scope.kind === "history") return null;
   const host = normalizedHost(scope.url);
+
   if (!host) return null;
-  for (const site in SITE_COLORS) if (host === site || host.endsWith(`.${site}`)) return SITE_COLORS[site]!;
+
+  for (const [site, color] of Object.entries(SITE_COLORS)) if (host === site || host.endsWith(`.${site}`)) return color;
+
   // Reuse a custom site's page color in this profile, without opening or fetching the site.
   for (const id in state.tabs) {
     const tab = state.tabs[id]!;
     const color = state.live[id]?.themeColor;
+
     if (tab.spaceId === spaceId && normalizedHost(tab.url) === host && color && /^#[\da-f]{6}(?:[\da-f]{2})?$/i.test(color)) return color.slice(0, 7);
   }
+
   return null;
 }
 

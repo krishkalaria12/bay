@@ -13,22 +13,26 @@ describe("exec evaluation", () => {
     ["return 7", 7],
     ["const value = 7;", undefined],
   ])("returns the completion value of %s", async (source, value) => {
-    expect(await compileCode(source as string, "example.ts")({})).toEqual(value);
+    // SAFETY: every it.each row pairs a TypeScript source string with its completion value; source is always that string.
+    const actual: unknown = await compileCode(source as string, "example.ts")({});
+
+    expect(actual).toEqual(value);
   });
 
   it("uses the last opened tab when no page is visible", async () => {
     const session = new Session({ ws: "ws://localhost", source: "test", explicit: true, active: null });
     const namespace = buildNamespace(session, "example.ts");
     const tab = new Tab(session, "new");
+    // SAFETY: namespace.js("42") requests the number 42; the stub returns 42 for any T, and the test awaits it as a number.
     tab.evaluate = async <T>() => 42 as T;
     session.opened.push(tab);
-    expect(await (namespace.js as (expression: string) => Promise<unknown>)("42")).toBe(42);
+    expect(await namespace.js("42")).toBe(42);
   });
 
   it("reports no page without an active or opened tab", async () => {
     const session = new Session({ ws: "ws://localhost", source: "test", explicit: true, active: null });
     const namespace = buildNamespace(session, "example.ts");
-    await expect((namespace.js as (expression: string) => Promise<unknown>)("42")).rejects.toThrow(new NoPageTab(NO_PAGE_TAB));
+    await expect(namespace.js("42")).rejects.toThrow(new NoPageTab(NO_PAGE_TAB));
   });
 
   it("does not print a literal undefined in JSON mode", () => {

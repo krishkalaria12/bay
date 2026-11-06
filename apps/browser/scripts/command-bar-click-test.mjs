@@ -7,11 +7,14 @@ import { join, resolve } from "node:path";
 import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const [appPath] = process.argv.slice(2);
+
 if (!appPath) throw new Error("Provide the Debug Bay.app path");
+
 const scratch = mkdtempSync(join(tmpdir(), "bay-palette-click-"));
 const data = join(scratch, "data");
 const rep = reporter(join(scratch, "palette-click-test.log"), { name: "palette-click-test" });
 let app;
+
 try {
   app = await launch(resolve(appPath), {
     data,
@@ -26,12 +29,16 @@ try {
     }),
   });
   const run = (body) => app.eval(body);
+
   const native = `const C = globalThis.expo.modules.BayCEF;
     const win = () => C.chromeWindows().then(ws => ws.find(w => w.hasRoot).window);`;
+
   const click = (x, y) => run(`${native} return win().then(n => C.devWindow(n, "click:${x},${y}"));`);
+
   const state = () =>
     run(`const s = nn.store.getState(); return {
     active: s.windows.w1.activeTabIds.default, open: !!s.windowUi.w1?.panel.open };`);
+
   const open = async (mode) => {
     await run(`const s = nn.store.getState(); s.activate("today", "w1");
       s.${mode === "newTab" ? "openNewTabPanel" : "openPanel"}("w1"); return true;`);
@@ -42,13 +49,16 @@ try {
   for (const position of ["left", "right"]) {
     await run(`nn.store.getState().updateSettings({ sidebarPosition: "${position}", sidebarWidth: 280 }); return true;`);
     await sleep(500);
+
     for (const mode of ["navigate", "newTab"]) {
       for (const tab of ["essential", "pin", "today"]) {
         await rep.check(`${position} sidebar, ${mode}, ${tab}`, async () => {
           await open(mode);
+
           const point = await run(`const item = globalThis.sidebarDrag.items.get("t:${tab}");
             if (!item?.view) throw new Error("missing row ${tab}");
             return new Promise(resolve => item.view.measureInWindow((x, y, w, h) => resolve([x + 24, y + h / 2])));`);
+
           const hit = await click(...point);
           await sleep(350);
           assert.deepEqual(await state(), { active: tab, open: false }, `one click on ${tab}, hit: ${hit}`);
@@ -66,6 +76,7 @@ try {
 
   await run(`nn.store.getState().updateSettings({ tabLayout: "top" }); return true;`);
   await sleep(500);
+
   for (const mode of ["navigate", "newTab"]) {
     await rep.check(`top strip, ${mode}, essential`, async () => {
       await open(mode);
@@ -91,4 +102,5 @@ try {
   await app?.quit();
   rmSync(data, { recursive: true, force: true });
 }
+
 process.exit(rep.summary() ? 0 : 1);

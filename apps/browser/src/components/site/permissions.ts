@@ -14,18 +14,23 @@ export function startPermissionPrompts() {
   startDeviceChoosers();
   onPermission((request) => {
     const tabId = tabForBrowser(request.browserId);
+
     if (!tabId) {
       orphans.push(request);
+
       return;
     }
+
     enqueue(tabId, request);
   });
   onPermissionDismissed(({ id }) => drop(id));
   // Attach queued requests once their tab browser ids arrive.
   usePages.subscribe((s, prev) => {
     if (s.browsers === prev.browsers || !orphans.length) return;
+
     for (const request of orphans.splice(0)) {
       const tabId = tabForBrowser(request.browserId);
+
       if (tabId) enqueue(tabId, request);
     }
   });
@@ -39,6 +44,7 @@ function enqueue(tabId: string, request: PermissionRequest) {
 function next(tabId: string) {
   const queue = queues.get(tabId) ?? [];
   patchPage(tabId, { permission: queue.shift() ?? null });
+
   if (queue.length) queues.set(tabId, queue);
   else queues.delete(tabId);
 }
@@ -47,6 +53,7 @@ function drop(id: string) {
   for (const [tabId, page] of Object.entries(usePages.getState().pages)) {
     if (page.permission?.id === id) next(tabId);
   }
+
   for (const [tabId, queue] of queues)
     queues.set(
       tabId,
@@ -59,11 +66,14 @@ function drop(id: string) {
 // none is answered without being shown.
 export function answerPermission(tabId: string, requestId: string, result: PermissionResult) {
   const request = pageOf(tabId).permission;
+
   if (!request || request.id !== requestId) return;
   void resolvePermission(request.id, result, result !== "dismiss");
+
   if (result === "accept" && request.permissions.includes("notifications")) {
     void ensureNotificationPermission(useBrowser.getState().tabs[tabId]?.windowId);
   }
+
   next(tabId);
 }
 
@@ -71,6 +81,7 @@ export function dismissPermissions(tabId: string) {
   for (const r of queues.get(tabId) ?? []) void resolvePermission(r.id, "dismiss");
   queues.delete(tabId);
   const current = pageOf(tabId).permission;
+
   if (current) {
     void resolvePermission(current.id, "dismiss");
     patchPage(tabId, { permission: null });
@@ -111,16 +122,24 @@ const KINDS: Record<PermissionKind, Describe> = {
 
 const list = (words: string[]) => (words.length < 2 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`);
 
-export function describePermission(request: PermissionRequest): { icons: string[]; question: string } {
+/** A permission prompt's icons and its question. */
+export type PermissionDescription = { icons: string[]; question: string };
+
+export function describePermission(request: PermissionRequest): PermissionDescription {
   let site = request.origin;
+
   try {
     site = new URL(request.origin).hostname.replace(/^www\./, "") || request.origin;
   } catch {}
+
   const kinds = request.permissions.map((k) => KINDS[k] ?? { icon: "questionmark.circle", noun: k });
   const icons = [...new Set(kinds.map((k) => k.icon))];
   const single = kinds.length === 1 ? kinds[0]!.question : undefined;
+
   if (single) return { icons, question: single(site) };
   const nouns = kinds.map((k) => k.noun).filter((n): n is string => !!n);
+
   if (nouns.length === kinds.length) return { icons, question: `Allow ${site} to access your ${list(nouns)}?` };
+
   return { icons, question: `Allow ${site} to use ${list(request.permissions.map((k) => KINDS[k]?.noun ?? k))}?` };
 }

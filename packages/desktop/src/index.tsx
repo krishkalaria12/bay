@@ -2,12 +2,19 @@ import { requireNativeModule, requireNativeViewManager, requireOptionalNativeMod
 import type { ViewProps } from "react-native";
 
 export * from "./system";
+
 export * from "./appMenu";
+
 export * from "./liveActivity";
+
 export * from "./screenCapture";
+
 export * from "./easel";
+
 export * from "./localFiles";
+
 export * from "./cli";
+
 export * from "./userScripts";
 
 export type BrowserCommand =
@@ -195,6 +202,7 @@ export type OpenWindowOptions = {
 };
 
 export type MenuEntry = { id: string; title: string; current?: boolean };
+
 export type MenuBookmark = { id: string; title: string; url?: string; children?: MenuBookmark[] };
 
 export type MenuState = {
@@ -257,7 +265,7 @@ const Shell = requireNativeModule<{
   setTrafficLightsMode(id: string, mode: TrafficLightsMode, color: string | null): Promise<void>;
   dragPreviewBegin?(windowId: string, chip: Rect4, grab: [number, number]): Promise<void>;
   dragPreviewPage?(base64: string, frame: Rect4): Promise<void>;
-  dragPreviewUpdate?(shape: DragPreviewShape, point: [number, number]): Promise<void>;
+  dragPreviewUpdate?(style: DragPreviewStyle, point: [number, number]): Promise<void>;
   dragPreviewCancel?(): Promise<void>;
   raiseView?(tag: number, levels: number, raised: boolean): Promise<void>;
   dragPreviewPlaceholder?(title: string, favicon: string | null): Promise<void>;
@@ -279,6 +287,7 @@ const Shell = requireNativeModule<{
 
 export const readDocument = (name: string) => Shell.readDocument(name);
 export const writeDocument = (name: string, contents: string) => Shell.writeDocument(name, contents);
+
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
 export const saveDocument = (name: string, contents: string) => Shell.saveDocument(name, contents);
 export const removeDocument = (name: string) => Shell.removeDocument(name);
@@ -317,20 +326,26 @@ export type WindowProfileProps = ViewProps & {
   profile: string;
   neighbours: string[];
 };
+
 export const WindowProfile = requireNativeViewManager<WindowProfileProps>("BayWindowProfile");
 
 export const closeWindow = (id: string) => Shell.closeWindow(id);
 export const focusWindow = (id: string) => Shell.focusWindow(id);
 export const setWindowTitle = (id: string, title: string) => Shell.setWindowTitle(id, title);
 export const setTrafficLightsCenter = (id: string, center: [number, number] | null) => Shell.setTrafficLightsCenter(id, center);
+
 /**
  * The window buttons: "shown"; "hover", only while the pointer is over the window's top (Zen's, with the page under
  * them); "hidden" (Arc's with the sidebar closed, shown with its peek).
  */
 export type TrafficLightsMode = "shown" | "hover" | "hidden";
+
 export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode, color?: string) => Shell.setTrafficLightsMode(id, mode, color ?? null);
+
 type Rect4 = [number, number, number, number];
-export type DragPreviewShape = "hidden" | "pill" | "card";
+
+export type DragPreviewStyle = "hidden" | "pill" | "card";
+
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›
 // DragPreview). Rects and points are in the source window from its top-left; `end`'s frame (the new window's, as
 // asked for) is on screen, in AppKit's coordinates. Optional: builds from before it have no picture, nothing else
@@ -338,18 +353,20 @@ export type DragPreviewShape = "hidden" | "pill" | "card";
 export const dragPreview = {
   begin: (windowId: string, chip: Rect4, grab: [number, number]) => void Shell.dragPreviewBegin?.(windowId, chip, grab),
   page: (base64: string, frame: Rect4) => void Shell.dragPreviewPage?.(base64, frame),
-  update: (shape: DragPreviewShape, point: [number, number]) => void Shell.dragPreviewUpdate?.(shape, point),
+  update: (style: DragPreviewStyle, point: [number, number]) => void Shell.dragPreviewUpdate?.(style, point),
   /** `windowId`: the new window the tab went to; the picture grows into it. */
   end: (windowId: string | null = null, frame: Rect4 | null = null) => void Shell.dragPreviewEnd?.(windowId, frame),
   cancel: () => void Shell.dragPreviewCancel?.(),
   /** A tab with no picture: its icon (a data: or file: URL) and title where its page would be. */
   placeholder: (title: string, favicon: string | null) => void Shell.dragPreviewPlaceholder?.(title, favicon),
 };
+
 /** Draws the view with React tag `tag` (and `levels` of its ancestors) over its siblings, or back in React's order:
  * React Native macOS's zIndex doesn't reorder them. A no-op on builds without it. */
 export const raiseView = (tag: number | null, levels: number, raised: boolean) => {
   if (tag != null) void Shell.raiseView?.(tag, levels, raised);
 };
+
 /** The window's frame now, on screen (AppKit's coordinates); null on builds without it. */
 export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFrame?.(id) ?? Promise.resolve(null);
 export const windowIds = () => Shell.windowIds();
@@ -358,15 +375,19 @@ export const setAppearance = (mode: "auto" | "light" | "dark") => Shell.setAppea
 export const isDarkAppearance = () => Shell.isDarkAppearance();
 
 type MenuBookmarkKey = "bookmarkFolders" | "recentBookmarks" | "bookmarksBar" | "otherBookmarks";
+
 /**
  * Sends the menu state with the bookmark lists only when `bookmarksChanged`, so the native menus rebuild (and the
  * bridge carries) thousands of bookmarks only when they change.
  */
 export function setMenuStateParts(state: MenuState, bookmarksChanged: boolean) {
   const { bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks, ...rest } = state;
+
   if (bookmarksChanged) void Shell.setMenuBookmarks({ bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks });
+
   return Shell.setMenuState(rest);
 }
+
 export const replyToTerminate = (ok: boolean) => Shell.replyToTerminate(ok);
 
 export const confirm = (options: ConfirmOptions) => Shell.confirm(options);
@@ -375,6 +396,7 @@ export const prompt = (options: PromptOptions) => Shell.prompt(options);
 export const onCommand = (listener: (e: CommandEvent) => void) => Shell.addListener("onCommand", listener);
 export const onWindowEvent = (listener: (e: WindowEvent) => void) => Shell.addListener("onWindowEvent", listener);
 export const onAppEvent = (listener: (e: AppEvent) => void) => Shell.addListener("onAppEvent", listener);
+
 export const onOpenURLs = (listener: (urls: string[], sourceApp?: string) => void) =>
   Shell.addListener("onOpenURLs", ({ urls, sourceApp }) => listener(urls, sourceApp));
 
@@ -503,8 +525,10 @@ export type InlineWrite = 0 | 1 | 2;
 
 export const completeInline = (tag: number, typed: string, completion: string) => InlineCompletionModule.complete(tag, typed, completion);
 export const showTextInputMenu = (tag: number, items: MenuItem[]) => InlineCompletionModule.showMenu(tag, items);
+
 export const recordTextInputEdit = (tag: number, before: string, after: string, start: number, end: number, state: string) =>
   InlineCompletionModule.recordEdit(tag, before, after, start, end, state);
+
 export const onTextInputRestore = (tag: number, listener: (state: string) => void) =>
   InlineCompletionModule.addListener("onTextInputRestore", (e) => {
     if (e.tag === tag) listener(e.state);
@@ -521,6 +545,7 @@ type TranslationModule = {
   translate(source: string, target: string, texts: string[]): Promise<string[]>;
   translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;
 };
+
 const TranslationNative = requireNativeModule<TranslationModule>("BayTranslate");
 
 // Null before macOS 26, which has no translation API for apps.
@@ -530,6 +555,7 @@ type TidyNamesModule = {
   readonly available: boolean;
   suggest(filename: string, pageTitle: string, pageUrl: string): Promise<string | null>;
 };
+
 const TidyNamesNative = requireNativeModule<TidyNamesModule>("BayTidyNames");
 
 // Null before macOS 26, where Tidy Downloads leans on the local cleaner alone. Its answer is null while Apple
@@ -538,14 +564,17 @@ export const tidyNames: Omit<TidyNamesModule, "available"> | null = TidyNamesNat
 
 /** Where Apple Intelligence stands on this Mac. */
 export type TidyModelStatus = "available" | "off" | "preparing" | "ineligible" | "needsNewerMacOS" | "unavailable";
+
 type TidyTabsModule = {
   modelStatus(): TidyModelStatus;
   /** Named groups of tab ids from the prompt, or null when the model couldn't answer. */
   group(prompt: string): Promise<{ name: string; tabs: number[] }[] | null>;
 };
+
 // Optional: a platform or a build without it groups tabs by site.
 export const tidyTabsModel = requireOptionalNativeModule<TidyTabsModule>("BayTidyTabs");
 
 export type TidySquiggleProps = ViewProps & { running: boolean; color: string };
+
 /** The divider's wave while the model works. Null without the model, which is the only thing that takes long enough to need it. */
 export const TidySquiggle = tidyTabsModel ? requireNativeViewManager<TidySquiggleProps>("BayTidyTabs") : null;

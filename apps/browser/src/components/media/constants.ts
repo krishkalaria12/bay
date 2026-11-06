@@ -20,6 +20,7 @@ export const MARQUEE_FADE_STEPS = 8;
 // MARK: Sharing and casting (ShareBar.tsx, SharePicker.tsx, CastPicker.tsx)
 
 export const SHARE_BAR_HEIGHT = 38;
+
 // A share ends when its capture does. "Share this tab instead" stops the old source before it starts the new one, so the
 // capture goes off for a moment: a share is forgotten only once it stays off.
 export const SHARE_END_MS = 1500;

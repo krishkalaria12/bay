@@ -28,6 +28,7 @@ export function runNewLiveFolder(windowId: string, choice: string): boolean {
   if (choice === "live:pullRequests") newLiveFolder(windowId, "pullRequests");
   else if (choice === "live:documents") newLiveFolder(windowId, "documents");
   else return false;
+
   return true;
 }
 
@@ -39,10 +40,12 @@ const SOURCE_GROUPS: Record<"pullRequests" | "documents", LiveSourceId[]> = {
 export async function openLiveFolderMenu(windowId: string, folderId: string) {
   const s = live();
   const folder = s.folders[folderId];
+
   if (!folder) return;
   const index = s.folderOrder.indexOf(folderId);
   const pr = folder.kind === "pullRequests";
   const status = s.status[folderId];
+
   const choice = await showMenu([
     { id: "status", title: statusText(folderId), enabled: false },
     { id: "refresh", title: "Refresh", symbol: "arrow.clockwise", enabled: status?.state !== "updating" },
@@ -75,20 +78,26 @@ export async function openLiveFolderMenu(windowId: string, folderId: string) {
     { id: "settings", title: "Live Folder Settings…", symbol: "gearshape" },
     { id: "delete", title: "Delete Live Folder", symbol: "trash" },
   ]);
+
   if (!choice) return;
+
   if (choice === "refresh") void refreshFolder(folderId);
   else if (choice.startsWith("filter:")) {
+    // SAFETY: target type assertion matches the runtime value validated at this call site.
     const key = choice.slice(7) as "authored" | "reviewRequests";
     updateFolder(folderId, { filters: { ...folder.filters, [key]: !folder.filters[key] } });
     void refreshFolder(folderId);
   } else if (choice.startsWith("source:")) {
+    // SAFETY: LiveSourceId assertion matches the runtime value validated at this call site.
     const id = choice.slice(7) as LiveSourceId;
+
     if (!s.accounts[id]) return openSettings("liveFolders");
     const sources = folder.sources.includes(id) ? folder.sources.filter((x) => x !== id) : [...folder.sources, id];
     updateFolder(folderId, { sources: sources.length ? sources : folder.sources });
     void refreshFolder(folderId);
   } else if (choice === "rename") {
     const name = await prompt({ title: "Rename Live Folder", value: folder.name, placeholder: "Live folder name", confirmTitle: "Rename", windowId });
+
     if (name?.trim()) updateFolder(folderId, { name: name.trim() }, windowId);
   } else if (choice === "icon") void openIconPicker(windowId, { kind: "live", id: `livefolder|${folderId}` });
   else if (choice === "read") markRead(folderId);
@@ -101,6 +110,7 @@ export async function openLiveFolderMenu(windowId: string, folderId: string) {
 
 export async function openLiveItemMenu(windowId: string, folderId: string, item: LiveItem, tabId: string | null) {
   const unread = !!live().unread[folderId]?.includes(item.id);
+
   const choice = await showMenu([
     { id: "open", title: tabId ? "Show Tab" : "Open", symbol: "arrow.up.forward.square" },
     { id: "background", title: "Open in Background", enabled: !tabId },
@@ -110,6 +120,7 @@ export async function openLiveItemMenu(windowId: string, folderId: string, item:
     { id: "unread", title: unread ? "Mark as Read" : "Mark as Unread", symbol: unread ? "circle" : "circle.fill" },
     ...(tabId ? [sep, { id: "close", title: "Close Tab", symbol: "xmark", key: "w", modifiers: ["command" as const] }] : []),
   ]);
+
   if (choice === "open") openLiveItem(windowId, folderId, item);
   else if (choice === "background") openLiveItem(windowId, folderId, item, { background: true });
   else if (choice === "copy") copyText(cleanUrl(item.url));
@@ -126,8 +137,10 @@ export function calendarMenuItem(): MenuItem {
   const owned = calendars.filter((c) => c.owned);
   const others = calendars.filter((c) => !c.owned);
   const hidden = new Set(settings.hiddenCalendarIds);
+
   const calendarItems = (list: typeof calendars): MenuItem[] =>
     list.map((c) => ({ id: `cal:toggle:${c.id}`, title: c.title, swatch: c.color, checked: !hidden.has(c.id) }));
+
   return {
     id: "cal",
     title: "Calendar",
@@ -159,6 +172,7 @@ export function calendarMenuItem(): MenuItem {
 export function runCalendarMenu(choice: string): boolean {
   if (!choice.startsWith("cal:")) return false;
   const settings = live().calendar;
+
   if (choice === "cal:connect") void connectCalendar();
   else if (choice.startsWith("cal:lead:")) updateCalendarSettings({ alertLead: choice.slice(9) });
   else if (choice === "cal:preview") updateCalendarSettings({ showPreview: !settings.showPreview });
@@ -167,5 +181,6 @@ export function runCalendarMenu(choice: string): boolean {
     const id = choice.slice(11);
     setCalendarHidden(id, !settings.hiddenCalendarIds.includes(id));
   } else if (choice === "cal:settings") openSettings("calendar");
+
   return true;
 }

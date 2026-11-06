@@ -23,6 +23,7 @@ export function useToast() {
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), toast.action ? 8000 : 2500);
+
     return () => clearTimeout(timer);
   }, [toast]);
 
@@ -36,6 +37,7 @@ export function useToast() {
 export function Toast({ text, action, onDone, testID = "toast" }: { text: string; action?: ToastAction; onDone?: () => void; testID?: string }): JSX.Element {
   const foreground = useThemeColor("foreground");
   const accent = useThemeColor("accent");
+
   return (
     <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOutDown.duration(150)}>
       <Surface radius={22} style={{ paddingLeft: 16, paddingRight: action ? 6 : 16, paddingVertical: action ? 6 : 12 }}>

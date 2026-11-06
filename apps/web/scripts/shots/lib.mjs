@@ -40,6 +40,7 @@ let nextTab = 0;
 /** A tab of a known site: `tab("github", { title: "…", url: "…", pinned: true })`. */
 export function tab(key, extra = {}) {
   const [url, title, favicon] = site[key];
+
   return { id: `t${++nextTab}`, url, favicon, pinnedUrl: extra.pinned || extra.pinnedRow ? url : null, ...extra, title: extra.title ?? title };
 }
 
@@ -67,12 +68,14 @@ for w in list where (w[kCGWindowOwnerPID as String] as? Int) == ${pid} && (w[kCG
   let b = w[kCGWindowBounds as String] as! [String: Double]
   if b["Width"]! > 200 && b["Height"]! > 200 { print(w[kCGWindowNumber as String] as! Int, Int(b["X"]!), Int(b["Y"]!), Int(b["Width"]!), Int(b["Height"]!)) }
 }`;
+
   return execFileSync("swift", ["-e", script], { encoding: "utf8" })
     .trim()
     .split("\n")
     .filter(Boolean)
     .map((line) => {
       const [id, x, y, width, height] = line.split(" ").map(Number);
+
       return { id, x, y, width, height };
     });
 }
@@ -89,6 +92,7 @@ export async function photograph(pid, window, file, crop) {
   const pointer = execFileSync("cliclick", ["p:."], { encoding: "utf8" }).trim();
   events(`set frontmost of (first process whose unix id is ${pid}) to true`);
   execFileSync("cliclick", [`m:${window.x + 200},4`]);
+
   try {
     await sleep(900);
     execFileSync("screencapture", ["-x", "-o", "-l", String(window.id), "-t", "png", raw]);
@@ -96,7 +100,9 @@ export async function photograph(pid, window, file, crop) {
     execFileSync("cliclick", [`m:${pointer}`]);
     events(`set frontmost of (first process whose unix id is ${previous}) to true`);
   }
+
   let image = sharp(raw);
+
   if (crop) image = image.extract(crop);
   await image.webp({ quality: 92, alphaQuality: 100, effort: 6 }).toFile(file);
   rmSync(raw);

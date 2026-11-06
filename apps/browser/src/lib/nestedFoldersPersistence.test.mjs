@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const stub = await import("../test-native-stub.mjs");
 const { useBrowser } = await import("../store/browserStore.ts");
 const { flushPersistence, loadSession, startPersistence } = await import("./persist.ts");
@@ -9,6 +10,7 @@ const S = () => useBrowser.getState();
 test("version-two sessions persist nesting and empty sibling positions without saving undo history", () => {
   stub.docs.clear();
   const stop = startPersistence();
+
   try {
     const w = S().createWindow({ url: "https://saved.example" });
     const tab = S().windows[w].activeTabIds[S().windows[w].spaceId];

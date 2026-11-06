@@ -21,10 +21,12 @@ export const PALETTE_ROW_HEIGHT = 38;
 export const CALCULATION_ROW_HEIGHT = 72;
 export const CURRENCY_ROW_HEIGHT = 90;
 export const calculationRowHeight = (answer: { detail?: string }) => (answer.detail ? CURRENCY_ROW_HEIGHT : CALCULATION_ROW_HEIGHT);
+
 // As yab's: one height whatever it lists (room for about nine rows), the list scrolling inside, so the palette
 // neither grows nor moves as you type.
 export const PALETTE_HEIGHT = 470;
 export const PALETTE_LIST_TOP = 6;
+
 // A section's title over its rows (Recent Tabs, Frequent), as yab labels them.
 export const PALETTE_TITLE_HEIGHT = 26;
 

@@ -44,10 +44,13 @@ const chunk = (icons: string[], columns: number, key: string): Row[] =>
 
 export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, rows, highlight, bold, prefer = "symbols", autoFocus }: GridProps) {
   const theme = useTheme();
+
   const [tab, setTab] = useState<"emoji" | "symbols">(() => {
     if (!current) return prefer;
+
     return current.startsWith(SYMBOL_PREFIX) ? "symbols" : "emoji";
   });
+
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState(EMOJI_GROUPS[0]!.id);
   const list = useRef<LegendListRef>(null);
@@ -58,6 +61,7 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
   const { data, groupAt } = useMemo(() => {
     let data: Row[];
     const groupAt: { id: string; y: number }[] = [];
+
     if (tab === "symbols") {
       data = chunk(
         symbols.filter((s) => !q || s.name.includes(q) || s.words.includes(q)).map((s) => SYMBOL_PREFIX + s.name),
@@ -81,11 +85,14 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
         ),
       ]);
     }
+
     let y = 0;
+
     for (const row of data) {
       if ("header" in row) groupAt.push({ id: row.key, y });
       y += "header" in row ? HEADER : cell;
     }
+
     return { data, groupAt };
   }, [tab, q, symbols, columns, cell]);
 
@@ -113,6 +120,7 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
           onKeyPress={onEscape ? onEscapeKey(onEscape) : undefined}
           onSubmitEditing={() => {
             const first = data.find((r) => "icons" in r);
+
             if (first && "icons" in first && first.icons[0]) onChoose(first.icons[0]);
           }}
           style={{ flex: 1, fontSize: 13, marginLeft: 6, color: theme.textPrimary, paddingVertical: 0 }}
@@ -133,6 +141,7 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
             ? (e) => {
                 const y = e.nativeEvent.contentOffset.y + 1;
                 const shown = [...groupAt].reverse().find((g) => g.y <= y)?.id;
+
                 if (shown && shown !== group) setGroup(shown);
               }
             : undefined
@@ -190,6 +199,7 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
 function Segmented({ value, onChange }: { value: "emoji" | "symbols"; onChange: (tab: "emoji" | "symbols") => void }) {
   const theme = useTheme();
   const accent = formColors(theme).accent;
+
   return (
     <View style={{ flexDirection: "row", padding: 2, borderRadius: 9, backgroundColor: theme.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}>
       {(["emoji", "symbols"] as const).map((t) => (
@@ -230,6 +240,7 @@ function Cell({
 }) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
+
   return (
     <Pressable onPress={onPress}>
       <View

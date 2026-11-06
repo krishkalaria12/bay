@@ -10,18 +10,21 @@ let pending: { cancel(): void } | null = null;
 
 function query(url: string): Map<string, string> {
   const search = url.split("#")[0]!.split("?")[1] ?? "";
-  return new Map(
-    search
-      .split("&")
-      .filter(Boolean)
-      .map((pair) => pair.split("=").map((v) => decodeURIComponent(v.replace(/\+/g, " "))) as [string, string]),
-  );
+
+  // SAFETY: each &-separated pair splits into a key and value; decoding maps the two parts in order into a tuple.
+  const pairs = search
+    .split("&")
+    .filter(Boolean)
+    .map((pair) => pair.split("=").map((v) => decodeURIComponent(v.replace(/\+/g, " "))) as [string, string]);
+
+  return new Map(pairs);
 }
 
 export function connectGoogleDrive(windowId: string, clientId: string, clientSecret: string): Promise<void> {
   pending?.cancel();
   const verifier = random(64);
   const state = random(24);
+
   const url = `${endpoints.googleAuth}?${form({
     client_id: clientId.trim(),
     redirect_uri: GOOGLE_REDIRECT,
@@ -33,27 +36,36 @@ export function connectGoogleDrive(windowId: string, clientId: string, clientSec
     access_type: "offline",
     prompt: "consent",
   })}`;
+
   const tabId = useBrowser.getState().newTab(windowId, { url });
+
   return new Promise<void>((resolve, reject) => {
     const stop = useBrowser.subscribe((s, prev) => {
       if (s.tabs === prev.tabs) return;
       const tab = s.tabs[tabId];
+
       if (!tab) return finish(new Error("Sign-in was cancelled"));
+
       if (!tab.url.startsWith(GOOGLE_REDIRECT)) return;
       const params = query(tab.url);
+
       if (params.get("state") !== state) return finish(new Error("Sign-in didn't match this request"));
       const code = params.get("code");
       stop();
       useBrowser.getState().closeTab(tabId);
+
       if (!code) return finish(new Error(params.get("error") ?? "Google didn't grant access"));
       connectGoogle(clientId.trim(), clientSecret.trim(), code, verifier, GOOGLE_REDIRECT).then(() => finish(), finish);
     });
-    const finish = (error?: unknown) => {
+
+    const finish = (error?: Error) => {
       stop();
       pending = null;
+
       if (error) reject(error);
       else resolve();
     };
+
     pending = { cancel: () => finish(new Error("Cancelled")) };
   });
 }

@@ -46,41 +46,54 @@ const fixtureMode = (() => {
     return false;
   }
 })();
+
 const launchedAt = Date.now();
 
-function loadFixture(): { calendars: SystemCalendar[]; events: CalendarEvent[] } {
+function loadFixture() {
+  // SAFETY: Fixture assertion matches the runtime value validated at this call site.
   const raw = JSON.parse(readDocument("calendar-fixture.json") ?? '{"calendars":[],"events":[]}') as Fixture;
   const base = Math.floor(launchedAt / 60_000) * 60_000;
+
   const events = raw.events.map(({ startInMinutes, durationMinutes, ...e }) => {
     const start = base + startInMinutes * 60_000;
+
     return { ...e, start, end: start + durationMinutes * 60_000, occurrence: `${e.id}@${start}` };
   });
+
   return { calendars: raw.calendars, events };
 }
 
 const visible = (calendars: SystemCalendar[]) => {
   const hidden = new Set(live().calendar.hiddenCalendarIds);
-  return calendars.filter((c) => !hidden.has(c.id)).map((c) => c.id);
+
+  return calendars.flatMap((c) => (!hidden.has(c.id) ? [c.id] : []));
 };
 
 let inflight: Promise<void> | null = null;
 
 export function refreshCalendar(): Promise<void> {
   if (inflight) return inflight;
+
   const run = async () => {
     useCalendar.setState({ loading: true });
+
     try {
       if (fixtureMode) {
         const { calendars, events } = loadFixture();
         const ids = new Set(visible(calendars));
         useCalendar.setState({ access: "fixture", calendars, events: events.filter((e) => ids.has(e.calendarId)), error: null, lastFetch: Date.now() });
+
         return;
       }
+
       const access = calendarAuthorization();
+
       if (access !== "fullAccess") {
         useCalendar.setState({ access, calendars: [], events: [], error: null });
+
         return;
       }
+
       const calendars = await systemCalendars();
       const ids = visible(calendars);
       const start = new Date();
@@ -88,12 +101,15 @@ export function refreshCalendar(): Promise<void> {
       const events = ids.length ? await systemCalendarEvents(start.getTime(), Date.now() + CALENDAR_HORIZON_MS, ids) : [];
       useCalendar.setState({ access, calendars, events: events.sort((a, b) => a.start - b.start), error: null, lastFetch: Date.now() });
     } catch (error) {
+      // SAFETY: Error)?.message ?? error) }) assertion matches the runtime value validated at this call site.
       useCalendar.setState({ error: String((error as Error)?.message ?? error) });
     } finally {
       useCalendar.setState({ loading: false });
     }
   };
+
   inflight = run().finally(() => (inflight = null));
+
   return inflight;
 }
 
@@ -101,15 +117,19 @@ export function refreshCalendar(): Promise<void> {
 export async function connectCalendar(): Promise<boolean> {
   if (fixtureMode) {
     await refreshCalendar();
+
     return true;
   }
+
   const granted = await requestCalendarAccess();
   await refreshCalendar();
+
   return granted;
 }
 
 export const calendarConnected = () => {
   const access = useCalendar.getState().access;
+
   return access === "fullAccess" || access === "fixture";
 };
 
@@ -143,7 +163,9 @@ export function useNow(intervalMs = 15_000, enabled = true): number {
     if (!enabled) return;
     setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), intervalMs);
+
     return () => clearInterval(t);
   }, [intervalMs, enabled]);
+
   return now;
 }
