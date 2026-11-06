@@ -115,7 +115,8 @@ jobs:
           $code = $LASTEXITCODE
           "code=$code" >> $env:GITHUB_OUTPUT
           # 124 is a deliberate pause: save the tree and let the next stage resume.
-          # Every other failure stops this job and cancels the remaining stages.
+          # Every other failure stops this job and cancels the remaining stages,
+          # after the tree is saved so the run with the fix resumes from here.
           if ($code -notin @(0, 124)) { exit $code }
           exit 0
       - name: Archive engine
@@ -131,7 +132,7 @@ jobs:
           compression-level: 0
           retention-days: 7
       - name: Compress state
-        if: steps.compile.outputs.code == '0' || steps.compile.outputs.code == '124'
+        if: ${{ !cancelled() && steps.compile.outputs.code != '' }}
         run: |
           New-Item $env:STATE_DIR -ItemType Directory -Force | Out-Null
           python scripts/windows/engine-state.py create --root $env:ENGINE_ROOT --archive "$env:STATE_DIR\state.tar.gz"
@@ -139,7 +140,7 @@ jobs:
           Get-Item "$env:STATE_DIR\state.tar.gz" | Format-Table Name, @{ n = 'SizeGB'; e = { [int]($_.Length / 1GB) } }
           exit 0
       - name: Upload state
-        if: steps.compile.outputs.code == '0' || steps.compile.outputs.code == '124'
+        if: ${{ !cancelled() && steps.compile.outputs.code != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.STATE_ARTIFACT }}

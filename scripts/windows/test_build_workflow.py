@@ -50,10 +50,11 @@ class WindowsBuildWorkflowTests(unittest.TestCase):
                 self.assertEqual(output.read_text().strip(), f'code={code}')
                 self.assertIn(f'fixture compile exit {code}', (root / 'compile.log').read_text())
 
-    def test_downstream_work_is_gated_by_valid_compile_outcomes(self):
+    def test_state_is_saved_after_any_compile_and_the_engine_only_after_success(self):
         for name in ('Compress state', 'Upload state'):
             condition = re.search(r'^        if: (.*)$', step(name), re.M).group(1)
-            self.assertEqual(condition, "steps.compile.outputs.code == '0' || steps.compile.outputs.code == '124'")
+            # A compile error still fails the job, but its progress is kept for the fix.
+            self.assertEqual(condition, "${{ !cancelled() && steps.compile.outputs.code != '' }}")
         for name in ('Archive engine', 'Upload engine'):
             self.assertIn("if: steps.compile.outputs.code == '0'", step(name))
         self.assertIn('fail-fast: true', WORKFLOW.read_text())
