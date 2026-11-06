@@ -13,6 +13,7 @@ import { useThemeColor } from "heroui-native";
 import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
+import { tick } from "@/chrome/haptics";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
@@ -479,7 +480,10 @@ export function BrowserScreen(): JSX.Element {
                 }}
                 onScroll={(scroll) => onScroll(id, scroll)}
                 onLinkPress={(press) => {
-                  if (id === active.id) setLink(press);
+                  if (id === active.id) {
+                    tick();
+                    setLink(press);
+                  }
                 }}
                 onPageRequest={(request) => onPageRequest(id, request)}
                 onFullscreenChange={(fullscreen) =>
@@ -599,7 +603,10 @@ export function BrowserScreen(): JSX.Element {
                   insecure={active.url.startsWith("http:")}
                   privately={Boolean(active.private)}
                   onTabs={showTabs}
-                  onTabsLongPress={() => setPanel("tabs")}
+                  onTabsLongPress={() => {
+                    tick();
+                    setPanel("tabs");
+                  }}
                   tabCount={data.tabs.length}
                   onSearch={() => search(false)}
                   onMore={() => {
@@ -664,6 +671,7 @@ export function BrowserScreen(): JSX.Element {
         onReload={() => run((tab) => tab.reload())}
         onStop={() => run((tab) => tab.stop())}
         onPin={() => {
+          tick();
           const pinned = data.pinnedSites.some((site) => site.url === active.url);
           dispatch({ type: "pin-site", tabId: active.id, pinId: newId() });
           toast.show(pinned ? "Unpinned" : "Pinned");

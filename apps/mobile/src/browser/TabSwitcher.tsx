@@ -14,6 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
 import type { BrowserTab } from "@/store/types";
 import { SiteIcon } from "./SiteIcon";
@@ -139,7 +140,10 @@ function TabCard({
   const { width, cardWidth, cardHeight, step } = layout;
   const lift = useSharedValue(0);
 
-  const close = () => onClose(tab.id);
+  const close = () => {
+    tick();
+    onClose(tab.id);
+  };
 
   const pan = usePanGesture({
     // Up only: sideways drags scroll the stack, taps open the tab.

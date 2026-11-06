@@ -20,9 +20,22 @@ export interface PanelSheetProps {
   onBack?: () => void;
   /** Drawn in place of the title (which still names the close button). */
   header?: ReactNode;
+  /** Drawn behind the sheet's content (iOS's Liquid Glass); the sheet's own background is transparent then. */
+  backdrop?: ReactNode;
 }
 
-export function PanelSheet({ visible, onClose, title, testID, children, height = "65%", dismissible = true, onBack, header }: PanelSheetProps): JSX.Element {
+export function PanelSheetShared({
+  visible,
+  onClose,
+  title,
+  testID,
+  children,
+  height = "65%",
+  dismissible = true,
+  onBack,
+  header,
+  backdrop,
+}: PanelSheetProps): JSX.Element {
   const insets = useSafeAreaInsets();
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
@@ -51,8 +64,9 @@ export function PanelSheet({ visible, onClose, title, testID, children, height =
           enableContentPanningGesture={false}
           onClose={() => setShown(false)}
           contentContainerClassName="h-full"
-          backgroundClassName="rounded-t-[28px] bg-background"
+          backgroundClassName={backdrop ? "rounded-t-[28px] bg-transparent" : "rounded-t-[28px] bg-background"}
         >
+          {backdrop}
           <View testID={testID} className="flex-1">
             <View className="flex-row items-center gap-3 px-5 pb-3">
               <View className="flex-1 flex-row items-center gap-1">
