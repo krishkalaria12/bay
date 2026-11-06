@@ -68,7 +68,7 @@ public class BayEngineModule: Module {
     }
 
     View(BayEngineView.self) {
-      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage")
+      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange")
       Prop("pullToRefreshEnabled", true) { (view: BayEngineView, enabled: Bool) in
         view.pullToRefreshEnabled = enabled
       }

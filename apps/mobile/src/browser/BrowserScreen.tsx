@@ -71,6 +71,8 @@ export function BrowserScreen(): JSX.Element {
   const [locked, setLocked] = useState(false);
   // Each tab's colour at the top of its page, so the strip behind the status bar continues the page.
   const [pageColors, setPageColors] = useState<Record<string, [number, number, number] | null>>({});
+  // Tabs whose video is fullscreen (A2, Android): chrome stays hidden until it reports leaving fullscreen.
+  const [fullscreenByTab, setFullscreenByTab] = useState<Record<string, boolean>>({});
   const barHidden = useSharedValue(0);
 
   useEffect(() => {
@@ -414,6 +416,7 @@ export function BrowserScreen(): JSX.Element {
   // A locked private tab or an error page shows Bay's own screen there, not the page.
   const topColor = locked && active.private ? null : error?.tabId === active.id ? null : (pageColors[active.id] ?? null);
   const tabError = error?.tabId === active.id ? error : null;
+  const fullscreen = fullscreenByTab[active.id] ?? false;
 
   return (
     <View className="flex-1 bg-background">
@@ -449,6 +452,9 @@ export function BrowserScreen(): JSX.Element {
                 onLinkPress={(press) => {
                   if (id === active.id) setLink(press);
                 }}
+                onFullscreenChange={(fullscreen) =>
+                  setFullscreenByTab((previous) => (previous[id] === fullscreen ? previous : { ...previous, [id]: fullscreen }))
+                }
               />
             );
           })}
@@ -468,7 +474,7 @@ export function BrowserScreen(): JSX.Element {
         </View>
       ) : null}
 
-      {hasPage && showPages ? (
+      {hasPage && showPages && !fullscreen ? (
         <View
           className="absolute inset-x-0 top-0 bg-background"
           style={{ height: insets.top, backgroundColor: topColor ? `rgb(${topColor.join(",")})` : undefined }}
@@ -525,7 +531,7 @@ export function BrowserScreen(): JSX.Element {
         <FindBar query={find.query} count={find.count} index={find.index} onChange={find.change} onStep={find.step} onDone={find.done} />
       ) : null}
 
-      {overlay !== "search" && !find.open ? (
+      {overlay !== "search" && !find.open && !fullscreen ? (
         <Animated.View className="absolute inset-x-0 gap-3 px-4" style={[{ bottom: Math.max(insets.bottom, 12) + 4 }, barStyle]} pointerEvents="box-none">
           {hasPage && showPages && !(locked && active.private) ? reading.controls : null}
           {player ? (

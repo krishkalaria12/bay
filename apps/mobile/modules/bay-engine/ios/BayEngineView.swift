@@ -13,6 +13,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   let onScroll = EventDispatcher()
   let onLinkPress = EventDispatcher()
   let onPageMessage = EventDispatcher()
+  // Declared for the shared API (A2); WebKit presents element fullscreen itself and never emits it.
+  let onFullscreenChange = EventDispatcher()
   private lazy var messageProxy = BayPageMessageProxy(view: self)
   private let refreshControl = UIRefreshControl()
   /// When the current pull to refresh started: the spinner stays at least briefly, so a cached reload doesn't flash it.
@@ -105,6 +107,10 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     webView.navigationDelegate = self
     webView.uiDelegate = self
     webView.allowsBackForwardNavigationGestures = true
+    // Sites' custom players call `element.requestFullscreen()`, which WebKit only honours when this is on
+    // (native `<video>` fullscreen already works with `allowsInlineMediaPlayback`). Android gets the same
+    // behaviour from `onShowCustomView` in its WebChromeClient.
+    webView.isElementFullscreenEnabled = true
     webView.accessibilityElementsHidden = !isActive
     webView.isHidden = isSuspended
     webView.scrollView.delegate = self

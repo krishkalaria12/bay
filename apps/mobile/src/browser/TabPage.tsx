@@ -29,6 +29,7 @@ export interface TabPageProps {
   onError: (error: NavigationError) => void;
   onScroll: (scroll: PageScroll) => void;
   onLinkPress: (press: LinkPress) => void;
+  onFullscreenChange: (fullscreen: boolean) => void;
 }
 
 export function TabPage({
@@ -40,6 +41,7 @@ export function TabPage({
   onError,
   onScroll,
   onLinkPress,
+  onFullscreenChange,
   hiddenSelectors,
   tweaks,
   pullToRefresh,
@@ -145,6 +147,7 @@ export function TabPage({
         onNavigationError={({ nativeEvent }) => onError(nativeEvent)}
         onScroll={({ nativeEvent }) => onScroll(nativeEvent)}
         onLinkPress={({ nativeEvent }) => onLinkPress(nativeEvent)}
+        onFullscreenChange={({ nativeEvent }) => onFullscreenChange(nativeEvent.fullscreen)}
       />
     </View>
   );

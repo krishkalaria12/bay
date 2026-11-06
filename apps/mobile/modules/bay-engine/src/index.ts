@@ -75,6 +75,12 @@ export interface EngineViewProps extends ViewProps {
   onLinkPress?: (event: NativeSyntheticEvent<LinkPress>) => void;
   /** A message a page script sent with `post(message)`, as JSON text. */
   onPageMessage?: (event: NativeSyntheticEvent<{ message: string }>) => void;
+  /** A site's video went fullscreen (Android) or came back out of it. iOS fullscreen is system-presented. */
+  onFullscreenChange?: (event: NativeSyntheticEvent<FullscreenChange>) => void;
+}
+
+export interface FullscreenChange {
+  fullscreen: boolean;
 }
 
 /** Keep mounted while search, start page, or tab chrome overlays it. After `initialUrl`, navigation uses the ref. */

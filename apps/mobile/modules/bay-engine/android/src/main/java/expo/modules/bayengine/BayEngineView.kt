@@ -6,17 +6,24 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.webkit.CookieManager
@@ -32,6 +39,9 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.ProfileStore
 import androidx.webkit.ScriptHandler
 import androidx.webkit.WebSettingsCompat
@@ -58,6 +68,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   val onScroll by EventDispatcher()
   val onLinkPress by EventDispatcher()
   val onPageMessage by EventDispatcher()
+  val onFullscreenChange by EventDispatcher()
   // The system WebView has no isolated worlds: page scripts run in the main world and answer through this bridge,
   // which ignores anything without this view's token. The token rotates on every main-frame navigation, so a
   // previous page's scripts can't answer for the next one. A page can still see `__bayPage` and the Symbol.for
@@ -98,6 +109,11 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private var refreshing = false
   private var refreshStartedAt = 0L
   private var refreshSawLoading = false
+  /** Video fullscreen (A2): the custom view and its hidden callback, plus the orientation to restore. */
+  private var customView: View? = null
+  private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+  private var originalOrientation: Int? = null
+  private var backCallback: OnBackPressedCallback? = null
   private val spinner = ValueAnimator.ofFloat(0f, 360f).apply {
     duration = 750
     repeatCount = ValueAnimator.INFINITE
@@ -261,6 +277,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         pageToken = UUID.randomUUID().toString()
         pageUrl = url
         navigationGeneration += 1
+        hideFullscreen()
         loading = true
         emitState()
       }
@@ -345,6 +362,15 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
           false
         }
       }
+
+      // Video fullscreen (A2): a site's player view (and native <video> fullscreen) arrives here. iOS handles
+      // this natively too, with isElementFullscreenEnabled on the WebKit side.
+      override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+        if (view == null || callback == null) return
+        showFullscreen(view, callback)
+      }
+
+      override fun onHideCustomView() = hideFullscreen()
     }
   }
 
@@ -440,6 +466,95 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       current = current.baseContext
     }
     return null
+  }
+
+  // MARK: Video fullscreen (A2)
+
+  private fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
+    if (disposed || customView != null) {
+      callback.onCustomViewHidden()
+      return
+    }
+    val activity = activityFor(context) ?: run {
+      callback.onCustomViewHidden()
+      return
+    }
+    customView = view
+    customViewCallback = callback
+    view.keepScreenOn = true
+    val decor = activity.window.decorView as ViewGroup
+    decor.addView(view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    originalOrientation = activity.requestedOrientation
+    // Landscape for video; the app stays portrait-locked overall (landscape *is* B10), so on a
+    // portrait-locked activity this stays portrait and the video letterboxes instead of rotating.
+    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+    hideSystemUI(activity)
+    registerFullscreenBack(activity)
+    onFullscreenChange(mapOf("fullscreen" to true))
+  }
+
+  private fun hideFullscreen() {
+    val view = customView ?: return
+    customView = null
+    val callback = customViewCallback
+    customViewCallback = null
+    backCallback?.remove()
+    backCallback = null
+    val activity = activityFor(context)
+    if (activity != null) {
+      (view.parent as? ViewGroup)?.removeView(view)
+      if (originalOrientation != null) {
+        activity.requestedOrientation = originalOrientation!!
+        originalOrientation = null
+      }
+      showSystemUI(activity)
+    }
+    callback?.onCustomViewHidden()
+    if (!disposed) onFullscreenChange(mapOf("fullscreen" to false))
+  }
+
+  private fun registerFullscreenBack(activity: Activity) {
+    val callback = backCallback
+    if (callback != null) return
+    val appCompat = activity as? AppCompatActivity
+    val back = object : OnBackPressedCallback(true) {
+      override fun handleOnBackPressed() {
+        if (customView != null) {
+          hideFullscreen()
+        } else {
+          isEnabled = false
+          appCompat?.onBackPressedDispatcher?.onBackPressed()
+          isEnabled = true
+        }
+      }
+    }
+    // AppCompatActivity exposes the dispatcher; without it fullscreen still exits via the site's own control.
+    appCompat?.onBackPressedDispatcher?.addCallback(activity, back)
+    backCallback = back
+  }
+
+  private fun hideSystemUI(activity: Activity) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      val controller = activity.window.insetsController
+      controller?.hide(WindowInsets.Type.systemBars())
+      controller?.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    } else {
+      @Suppress("DEPRECATION")
+      activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or
+        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+    }
+  }
+
+  private fun showSystemUI(activity: Activity) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      activity.window.insetsController?.show(WindowInsets.Type.systemBars())
+    } else {
+      @Suppress("DEPRECATION")
+      activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+    }
   }
 
   /** The address without tracking parameters, or upgraded to HTTPS; null when it should load as it is. */
@@ -675,6 +790,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     scrollHandler.removeCallbacksAndMessages(null)
     refreshing = false
     spinner.cancel()
+    hideFullscreen()
     BayFileChooser.cancelPending()
     webView.animate().cancel()
     webView.stopLoading()
