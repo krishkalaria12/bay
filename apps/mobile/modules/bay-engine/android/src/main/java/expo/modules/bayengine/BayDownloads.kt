@@ -2,6 +2,7 @@ package expo.modules.bayengine
 
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -9,9 +10,11 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
+import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import expo.modules.kotlin.Promise
 import java.net.URLDecoder
+import java.util.UUID
 
 /**
  * Page downloads. Android 10 and later use Bay's own downloader (BayDownloader); older versions fall back to the
@@ -19,6 +22,10 @@ import java.net.URLDecoder
  * notification. The page's cookies and user agent go with the request, so signed-in downloads work. Progress is polled
  * on a background thread while anything is downloading (the query is a cross-process SQLite read) and goes to
  * JavaScript as the module's `onDownload` event, only when a download's status or byte counts change.
+ *
+ * `blob:` and `data:` downloads (A3) live inside the page, so neither BayDownloader nor DownloadManager can fetch
+ * them. The engine view fetches them in the page and calls [saveBlob] with the bytes; iOS's WKDownload handles
+ * the same anchors natively.
  */
 object BayDownloads {
   /** Set by the module: sends an `onDownload` event. */
@@ -38,7 +45,8 @@ object BayDownloads {
     val filename = filenameFor(url, contentDisposition, mimeType)
     val uri = Uri.parse(url)
     if (uri.scheme?.lowercase() !in listOf("http", "https")) {
-      // blob: and data: addresses live inside the page; the system downloader can't fetch them.
+      // blob: and data: addresses live inside the page and are saved through saveBlob instead (the view fetches
+      // them in the page). Reaching here means an anchor slipped past the interceptor.
       emit?.invoke(mapOf("id" to "unsupported-${System.nanoTime()}", "url" to url.take(200), "filename" to filename,
         "state" to "failed", "received" to 0.0, "total" to 0.0, "private" to isPrivate, "error" to "Bay can't save this kind of download yet."))
       return
@@ -150,6 +158,85 @@ object BayDownloads {
     DownloadManager.ERROR_HTTP_DATA_ERROR, DownloadManager.ERROR_CANNOT_RESUME -> "The connection dropped and the download couldn't resume."
     in 400..599 -> "The site refused the download ($reason)."
     else -> "The download failed."
+  }
+
+  /**
+   * Writes a page-generated file (a `blob:` or `data:` download the view already fetched) into the public
+   * Downloads folder: MediaStore like BayDownloader on Android 10+, a MediaStore row with a DATA path on older
+   * versions; the result is a content:// URI either way, so the toast and [open] work the same.
+   * The write is small and fast, so it runs on the downloads thread and reports started → finished in one go;
+   * there's nothing to cancel.
+   */
+  fun saveBlob(context: Context, rawFilename: String, mimeType: String?, bytes: ByteArray, url: String, isPrivate: Boolean) {
+    val filename = filenameForBlob(rawFilename, mimeType)
+    val id = "b-${UUID.randomUUID()}"
+    val appContext = context.applicationContext
+    emit?.invoke(mapOf("id" to id, "url" to url.take(200), "filename" to filename, "state" to "started",
+      "received" to 0.0, "total" to bytes.size.toDouble(), "private" to isPrivate, "waiting" to "Starting…"))
+    handler.post {
+      try {
+        val (finalName, item) = insertBlob(appContext, filename, mimeType, bytes)
+        emit?.invoke(mapOf("id" to id, "url" to url.take(200), "filename" to finalName, "state" to "finished",
+          "received" to bytes.size.toDouble(), "total" to bytes.size.toDouble(), "private" to isPrivate, "path" to item.toString()))
+      } catch (error: Exception) {
+        emit?.invoke(mapOf("id" to id, "url" to url.take(200), "filename" to filename, "state" to "failed",
+          "received" to 0.0, "total" to bytes.size.toDouble(), "private" to isPrivate, "error" to (error.message ?: "Bay couldn't save to Downloads.")))
+      }
+    }
+  }
+
+  private fun insertBlob(context: Context, filename: String, mimeType: String?, bytes: ByteArray): Pair<String, Uri> {
+    val resolver = context.contentResolver
+    val cleanMime = mimeType?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() && it != "application/octet-stream" }
+    fun values(): ContentValues {
+      val values = ContentValues()
+      values.put(MediaStore.Downloads.DISPLAY_NAME, filename)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        values.put(MediaStore.Downloads.IS_PENDING, 1)
+      } else {
+        // Pre-Q has no RELATIVE_PATH: name the file directly in the public Downloads folder.
+        val file = java.io.File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), filename)
+        values.put(MediaStore.Downloads.DATA, file.absolutePath)
+      }
+      if (cleanMime != null) values.put(MediaStore.Downloads.MIME_TYPE, cleanMime)
+      return values
+    }
+    val item = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values())
+      ?: throw java.io.IOException("Bay couldn't save to Downloads.")
+    try {
+      resolver.openOutputStream(item)?.use { output ->
+        output.write(bytes)
+      } ?: throw java.io.IOException("Bay couldn't save to Downloads.")
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        resolver.update(item, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+        var finalName = filename
+        resolver.query(item, arrayOf(MediaStore.Downloads.DISPLAY_NAME), null, null, null)?.use { cursor ->
+          if (cursor.moveToFirst()) cursor.getString(0)?.let { finalName = it }
+        }
+        return finalName to item
+      }
+      return filename to item
+    } catch (error: Exception) {
+      runCatching { resolver.delete(item, null, null) }
+      throw error
+    }
+  }
+
+  /** A page-provided name (the anchor's `download` attribute), sanitized like [filenameFor]. */
+  internal fun filenameForBlob(raw: String, mimeType: String?): String {
+    val cleaned = raw.substringAfterLast('/').substringAfterLast('\\')
+      .replace(Regex("[\\x00-\\x1f\"*:<>?|]"), "_").trim().trim('.')
+    var name: String = if (cleaned.isNullOrEmpty()) "download" else cleaned
+    val type = mimeType?.substringBefore(';')?.trim()?.lowercase()
+    if (!name.contains('.') && type != null && type != "application/octet-stream") {
+      MimeTypeMap.getSingleton().getExtensionFromMimeType(type)?.let { name += ".$it" }
+    }
+    if (name.length > 150) {
+      val extension = name.substringAfterLast('.', "").take(10)
+      name = name.take(150 - extension.length - 1).trimEnd('.') + if (extension.isEmpty()) "" else ".$extension"
+    }
+    return name
   }
 
   /**

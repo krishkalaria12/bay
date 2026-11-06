@@ -246,6 +246,13 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     setOnScrollChangeListener { _, _, _, _, _ -> scheduleScroll() }
     webViewClient = object : WebViewClient() {
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+        val scheme = request.url.scheme?.lowercase()
+        if (scheme == "blob" || scheme == "data") {
+          // A main-frame jump to a page blob (window.location = "blob:…") would otherwise be dropped. The blob
+          // belongs to the current page, so fetch it there and hand it to native as a download instead.
+          if (request.isForMainFrame) downloadBlobOrData(view, request.url.toString())
+          return true
+        }
         if (!isWebURL(request.url)) return true
         if (!request.isForMainFrame || request.method != "GET") return false
         val replacement = replacementFor(request.url.toString())
@@ -280,6 +287,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         hideFullscreen()
         loading = true
         emitState()
+        installBlobInterceptor(view)
       }
 
       override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) = emitState()
@@ -290,6 +298,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         }
         loading = false
         emitState()
+        installBlobInterceptor(view)
       }
 
       override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -456,6 +465,21 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     fun post(token: String, json: String) {
       if (token == pageToken) post { if (!disposed) onPageMessage(mapOf("message" to json)) }
     }
+
+    /** A blob: or data: download fetched by the page (A3), handed over as base64 for Bay to save. */
+    @JavascriptInterface
+    fun blobDownload(token: String, filename: String?, mime: String?, base64: String?) {
+      if (token != pageToken || base64 == null) return
+      // The whole file crosses the bridge at once; refuse pathological sizes rather than OOM the app.
+      if (base64.length > MAX_BLOB_BASE64) return
+      val bytes = try {
+        android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+      } catch (_: Exception) {
+        return
+      }
+      val appContext = context.applicationContext ?: context
+      BayDownloads.saveBlob(appContext, filename ?: "download", mime, bytes, this@BayEngineView.pageUrl ?: "", this@BayEngineView.usesPrivateProfile)
+    }
   }
 
   /** Unwraps the activity behind a view's context, or null outside one. */
@@ -555,6 +579,77 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
         View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
     }
+  }
+
+  // MARK: blob: and data: downloads (A3)
+
+  /**
+   * Intercepts `<a download href="blob:…">` and `data:` clicks that the system WebView never reports to the
+   * download listener, fetches the bytes in the page, and hands them to [PageBridge.blobDownload] as base64.
+   * The token lives in the Symbol state (not a closure) so re-installing after a token rotation updates it
+   * without re-binding listeners.
+   */
+  private fun installBlobInterceptor(view: WebView) {
+    if (disposed) return
+    val token = JSONObject.quote(pageToken)
+    view.evaluateJavascript(
+      """
+      (() => {
+        const state = (window[Symbol.for("bay.blob")] ??= { installed: false, token: null });
+        state.token = $token;
+        if (state.installed) return true;
+        state.installed = true;
+        document.addEventListener("click", async (event) => {
+          const anchor = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+          if (!anchor) return;
+          const href = anchor.href || "";
+          if (!href.startsWith("blob:") && !href.startsWith("data:")) return;
+          if (!anchor.hasAttribute("download") && !href.startsWith("blob:")) return;
+          event.preventDefault();
+          event.stopPropagation();
+          try {
+            const response = await fetch(href);
+            const blob = await response.blob();
+            const filename = anchor.getAttribute("download") || anchor.download || "download";
+            const mime = blob.type || anchor.type || "application/octet-stream";
+            const bytes = new Uint8Array(await blob.arrayBuffer());
+            let binary = "";
+            const chunk = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunk) {
+              binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+            }
+            __bayPage.blobDownload(state.token, filename.slice(0, 500), mime.slice(0, 200), btoa(binary));
+          } catch (error) {}
+        }, true);
+        return true;
+      })();
+      """.trimIndent(),
+      null,
+    )
+  }
+
+  /** A main-frame jump to a blob: (window.location), fetched from the page that created it. */
+  private fun downloadBlobOrData(view: WebView, href: String) {
+    val token = JSONObject.quote(pageToken)
+    val quoted = JSONObject.quote(href)
+    view.evaluateJavascript(
+      """
+      (async () => {
+        try {
+          const response = await fetch($quoted);
+          const blob = await response.blob();
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          let binary = "";
+          const chunk = 0x8000;
+          for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+          }
+          __bayPage.blobDownload($token, "download", blob.type || "application/octet-stream", btoa(binary));
+        } catch (error) {}
+      })();
+      """.trimIndent(),
+      null,
+    )
   }
 
   /** The address without tracking parameters, or upgraded to HTTPS; null when it should load as it is. */
@@ -809,6 +904,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     private var privateViews = 0
     /** Encodes and writes snapshots off the main thread, one at a time. */
     private val snapshotWriter = Executors.newSingleThreadExecutor()
+    /** Base64 cap for a blob download crossing the bridge (~50 MB of file bytes). */
+    private const val MAX_BLOB_BASE64 = 70_000_000
     val privateBrowsingSupported: Boolean
       get() = WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
   }
