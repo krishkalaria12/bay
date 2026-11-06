@@ -2233,7 +2233,7 @@ void NativeHost::InvokeView(const std::string& method,
       std::move(callback).Run(Failure("mount_failed", mounted.error));
       return;
     }
-    auto* contents = mounted.contents;
+    content::WebContents* contents = mounted.contents;
     PageInteractionEvents::SetPeekLinks(
         contents, props.FindBool("peekLinks").value_or(false));
     engine_services_->TrackTab(contents);
