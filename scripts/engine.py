@@ -554,6 +554,8 @@ def build(root, env, targets, jobs, platform="win", ci_minutes=None):
         require_tools(("git", "gn", "autoninja"), env)
     verify_checkout(root, platform)
     (root / "bay-engine-build.json").unlink(missing_ok=True)
+    # A step added since prepare touches files the base lacks: record them before applying it (it keeps the rest).
+    series(root, env, "capture-base", "--phase", "chromium")
     series(root, env, "apply", "--phase", "chromium")
     series(root, env, "check")
     generate_gn(root, env, platform)
