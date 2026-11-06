@@ -2,7 +2,10 @@ package expo.modules.bayengine
 
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -21,6 +24,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.net.http.SslError
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -301,6 +305,46 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     webChromeClient = object : WebChromeClient() {
       override fun onProgressChanged(view: WebView, newProgress: Int) = emitState()
       override fun onReceivedTitle(view: WebView, title: String?) = emitState()
+
+      // File upload (A1): the system's picker for <input type="file">. WebKit opens it natively on iOS.
+      override fun onShowFileChooser(
+        webview: WebView?,
+        filePathCallback: ValueCallback<Array<Uri>>,
+        fileChooserParams: FileChooserParams?,
+      ): Boolean {
+        BayFileChooser.cancelPending()
+        val activity = activityFor(context)
+        if (activity == null) {
+          filePathCallback.onReceiveValue(null)
+          return false
+        }
+        BayFileChooser.setPending(filePathCallback)
+        val intent = try {
+          fileChooserParams?.createIntent()
+        } catch (_: Exception) {
+          null
+        } ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+          addCategory(Intent.CATEGORY_OPENABLE)
+          val types = fileChooserParams?.acceptTypes?.filter { it.isNotBlank() } ?: emptyList()
+          when {
+            types.isEmpty() -> type = "*/*"
+            types.size == 1 -> type = types[0]
+            else -> {
+              type = "*/*"
+              putExtra(Intent.EXTRA_MIME_TYPES, types.toTypedArray())
+            }
+          }
+          putExtra(Intent.EXTRA_ALLOW_MULTIPLE, fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE)
+        }
+        return try {
+          activity.startActivityForResult(intent, BayFileChooser.REQUEST_CODE)
+          true
+        } catch (_: Exception) {
+          BayFileChooser.setPending(null)
+          filePathCallback.onReceiveValue(null)
+          false
+        }
+      }
     }
   }
 
@@ -386,6 +430,16 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     fun post(token: String, json: String) {
       if (token == pageToken) post { if (!disposed) onPageMessage(mapOf("message" to json)) }
     }
+  }
+
+  /** Unwraps the activity behind a view's context, or null outside one. */
+  private fun activityFor(ctx: Context): Activity? {
+    var current: Context? = ctx
+    while (current is ContextWrapper) {
+      if (current is Activity) return current
+      current = current.baseContext
+    }
+    return null
   }
 
   /** The address without tracking parameters, or upgraded to HTTPS; null when it should load as it is. */
@@ -621,6 +675,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     scrollHandler.removeCallbacksAndMessages(null)
     refreshing = false
     spinner.cancel()
+    BayFileChooser.cancelPending()
     webView.animate().cancel()
     webView.stopLoading()
     webView.setOnLongClickListener(null)

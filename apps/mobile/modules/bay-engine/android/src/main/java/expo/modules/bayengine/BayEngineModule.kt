@@ -17,6 +17,8 @@ class BayEngineModule : Module() {
 
     Events("onDownload", "onMediaControl")
 
+    OnActivityResult { _, payload -> BayFileChooser.deliver(payload) }
+
     OnCreate {
       BayDownloads.emit = { body -> sendEvent("onDownload", body) }
       BayMedia.emit = { action -> sendEvent("onMediaControl", mapOf("action" to action)) }
