@@ -1,6 +1,8 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "bay/core/nn_tab_events.h"
 
+#include "bay/core/nn_request_filter.h"
+
 #include "base/logging.h"
 #include "chrome/browser/bay/nn_engine.h"
 #include "chrome/browser/profiles/profile.h"
@@ -96,4 +98,8 @@ content::WebContents* ShownHostPageForProfile(Profile* profile) {
 void LogNavigationHoldInfo(const std::string& message) {
   LOG(INFO) << message;
 }
+// The macOS host counts a tab's blocked requests (tab:didBlockRequests:lastURL:);
+// the desktop host has no such count yet, so a stand-in has nothing to add to.
+void NoteContentBlockerRedirect(content::GlobalRenderFrameHostId frame,
+                                const GURL& url) {}
 }  // namespace nncore

@@ -280,6 +280,8 @@ events now, so the caption buttons follow maximize and restore.
 - A window Chrome opens while no Bay window has an id (before the coordinator
   adopts the startup window) is closed with its pages.
 - The taskbar jump list is still to do.
+- The content blocker blocks requests, but the host gets no per-tab count of
+  them (macOS reports one through `tab:didBlockRequests:lastURL:`).
 
 ## Validation still required on Windows
 

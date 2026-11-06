@@ -652,13 +652,19 @@ class BuildTests(unittest.TestCase):
             with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, \
                  mock.patch.object(engine, "require_linux_integration"), \
                  mock.patch.object(engine, "require_tools"), mock.patch.object(engine, "verify_checkout"), \
-                 mock.patch.object(engine, "series"), mock.patch.object(engine, "generate_gn"), \
+                 mock.patch.object(engine, "series") as series, mock.patch.object(engine, "generate_gn"), \
                  mock.patch.object(engine, "source_digest", return_value="digest"), \
                  mock.patch.object(engine, "build_adblock"), mock.patch.object(engine, "run") as run:
                 root = Path(directory)
                 env = engine.environment(root, platform)
                 engine.build(root, env, [], 4, platform)
                 self.assertEqual(run.call_args.args[0], ["autoninja", "-C", "out/Release_GN_x64", "-j", "4", *targets])
+                # A resumed tree records the files a newly added step touches before applying it.
+                self.assertEqual(series.call_args_list, [
+                    mock.call(root, env, "capture-base", "--phase", "chromium"),
+                    mock.call(root, env, "apply", "--phase", "chromium"),
+                    mock.call(root, env, "check"),
+                ])
                 stamp = root / "bay-engine-build.json"
                 self.assertEqual(json.loads(stamp.read_text())["lock"], engine.platform_lock(platform))
                 run.side_effect = RuntimeError("build failed")
