@@ -16,6 +16,11 @@ export const site = {
   requirement: "macOS 14 Sonoma or later",
 } as const;
 
+/** The hero's screenshot: public/screenshots has its stable copy, for search engines (scripts/shots). */
+export const heroShotAlt =
+  "The Bay browser for Mac in a violet and pink theme: favorites, a Launch folder of pinned tabs and today's tabs in the sidebar, beside the Bay website";
+export const heroShotUrl = `${site.url}/screenshots/bay-browser-for-mac.jpg`;
+
 /**
  * Spread on every download link: it redirects off the site to a large file, so the client router must
  * leave it to the browser (a full navigation, which downloads) and never prefetch it.
@@ -110,6 +115,7 @@ export const graph = [
     description: site.description,
     url: site.url,
     image: `${site.url}/og.png`,
+    screenshot: { "@type": "ImageObject", url: heroShotUrl, caption: heroShotAlt },
     applicationCategory: "BrowserApplication",
     operatingSystem: "macOS 14 or later",
     downloadUrl: new URL(site.downloadUrl, site.url).href,

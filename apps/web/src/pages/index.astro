@@ -8,9 +8,13 @@ import Shot from "../components/Shot.astro";
 import Sticky from "../components/Sticky.astro";
 import LiveFigure from "../components/live/LiveFigure";
 import appIcon from "../assets/app-icon.png";
+import heroShot from "../assets/shots/bay-browser-for-mac.webp";
+import spaceStudio from "../assets/shots/bay-spaces-studio.webp";
+import spaceHome from "../assets/shots/bay-spaces-home.webp";
+import spaceLisbon from "../assets/shots/bay-spaces-lisbon.webp";
 import blocker from "../assets/shots/blocker.jpg";
 import commandBar from "../assets/shots/command-bar.jpg";
-import { faqPage, faqs, ids, downloadLink, site } from "../site";
+import { faqPage, faqs, heroShotAlt, ids, downloadLink, site } from "../site";
 
 const cards = [
   {
@@ -68,6 +72,13 @@ const extras = [
   ["Sits still", "Idles under half a percent of CPU with a tab open."],
 ];
 
+// One space's sidebar each, real and cropped from its window; the middle one sits a little higher.
+const spaceShots = [
+  { src: spaceStudio, alt: "Bay's sidebar in a violet and pink Studio space: favorites, a Launch folder of pinned tabs and today's tabs" },
+  { src: spaceHome, alt: "Bay's sidebar in dark mode, in an indigo Home space with its own favorites and pinned tabs", raised: true },
+  { src: spaceLisbon, alt: "Bay's sidebar in a green and blue Lisbon trip space with a Plans folder of pinned tabs" },
+];
+
 const schema = [
   {
     "@type": "WebPage",
@@ -108,15 +119,19 @@ const schema = [
         <a href={site.nightlyDownloadUrl} {...downloadLink} data-download-location="hero-nightly" class="font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink">Download Nightly</a>{" "}to
         test the latest changes. Nightly builds may have bugs.
       </p>
-      <div class="mx-auto mt-20 max-w-[960px] animate-rise text-left [animation-delay:200ms]">
-        <LiveFigure
-          client:load
-          preset="hero"
-          label="A working Bay window: a sidebar with favorites, a Lisbon trip folder and today's tabs, beside a flight search"
-          note="it’s real, click around"
-          noteClass="-top-11 right-4 rotate-[-3deg] sm:right-14"
+      <figure class="relative mt-20 animate-rise [animation-delay:200ms]">
+        <figcaption class="hand absolute -top-10 right-4 rotate-[-3deg] text-[23px] leading-none sm:right-14 sm:text-[26px]">a real screenshot, no mockups</figcaption>
+        <Image
+          src={heroShot}
+          alt={heroShotAlt}
+          widths={[640, 960, 1280, 1600, 2240]}
+          sizes="(min-width: 1192px) 1112px, calc(100vw - 40px)"
+          class="h-auto w-full [filter:drop-shadow(0_30px_40px_rgba(30,32,60,0.3))]"
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
         />
-      </div>
+      </figure>
     </section>
 
     <!-- Three ideas -->
@@ -185,15 +200,21 @@ const schema = [
       </p>
       <p>Right-click a space for its theme. Press + and there’s a new one. Favorites and pinned tabs follow you into every window.</p>
       <Fragment slot="visual">
-        <LiveFigure
-          client:visible
-          preset="spaces"
-          label="A working Bay window with its space switcher at the foot of the sidebar"
-          note="click a space, or swipe the sidebar"
-          spot="spaces"
-          noteClass="-bottom-12 left-0 rotate-[-2deg]"
-          bend={0.3}
-        />
+        <div class="grid grid-cols-3 items-center gap-3 sm:gap-5">
+          {
+            spaceShots.map((shot) => (
+              <Image
+                src={shot.src}
+                alt={shot.alt}
+                widths={[228, 456]}
+                sizes="(min-width: 1024px) 205px, 30vw"
+                class:list={["h-auto w-full rounded-xl [filter:drop-shadow(0_20px_24px_rgba(30,32,60,0.28))]", shot.raised && "-translate-y-5"]}
+                loading="lazy"
+                decoding="async"
+              />
+            ))
+          }
+        </div>
       </Fragment>
     </Feature>
 
@@ -380,7 +401,7 @@ const schema = [
       <h2 id="real" class="mt-2 text-[34px] leading-[1.05] font-bold tracking-[-0.03em] sm:text-[44px]">
         The <span class="marker">real</span> thing.
       </h2>
-      <p class="mt-3 max-w-xl text-[17px] text-muted">The windows above are drawn for this page. These are Bay itself.</p>
+      <p class="mt-3 max-w-xl text-[17px] text-muted">Some of the windows above are drawn for this page. These are Bay itself.</p>
       <div class="mt-10 grid gap-6 lg:grid-cols-2">
         <Shot src={blocker} alt="Bay's site panel open over a dictionary page, showing Block Ads and Trackers switched on with 3 blocked on this page">
           <Sticky color="pink" tilt={-5} class="absolute -bottom-6 -left-3 w-40 p-3.5 text-[21px] leading-tight sm:-left-6">
