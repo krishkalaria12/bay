@@ -1,4 +1,13 @@
-import { runPageScript, EngineView, type LinkPress, type NavigationError, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
+import {
+  runPageScript,
+  EngineView,
+  type LinkPress,
+  type NavigationError,
+  type NavigationState,
+  type PageRequest,
+  type PageScroll,
+  type Tab,
+} from "@bay/engine";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -29,6 +38,7 @@ export interface TabPageProps {
   onError: (error: NavigationError) => void;
   onScroll: (scroll: PageScroll) => void;
   onLinkPress: (press: LinkPress) => void;
+  onPageRequest: (request: PageRequest) => void;
   onFullscreenChange: (fullscreen: boolean) => void;
 }
 
@@ -41,6 +51,7 @@ export function TabPage({
   onError,
   onScroll,
   onLinkPress,
+  onPageRequest,
   onFullscreenChange,
   hiddenSelectors,
   tweaks,
@@ -147,6 +158,7 @@ export function TabPage({
         onNavigationError={({ nativeEvent }) => onError(nativeEvent)}
         onScroll={({ nativeEvent }) => onScroll(nativeEvent)}
         onLinkPress={({ nativeEvent }) => onLinkPress(nativeEvent)}
+        onPageRequest={({ nativeEvent }) => onPageRequest(nativeEvent)}
         onFullscreenChange={({ nativeEvent }) => onFullscreenChange(nativeEvent.fullscreen)}
       />
     </View>

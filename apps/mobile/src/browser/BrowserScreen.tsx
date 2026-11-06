@@ -1,6 +1,6 @@
 import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
 import { hostOf } from "@bay/core/src/input.ts";
-import { clearData, privateBrowsingSupported, type LinkPress, type NavigationState, type PageScroll, type Tab } from "@bay/engine";
+import { clearData, privateBrowsingSupported, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
@@ -16,6 +16,7 @@ import { BrowserBar } from "@/chrome/BrowserBar";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
+import { PageRequestPanel } from "@/panels/PageRequest";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
 import { newId, useBrowserStore } from "@/store/browser";
@@ -65,6 +66,10 @@ export function BrowserScreen(): JSX.Element {
   const [searchPrivately, setSearchPrivately] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [link, setLink] = useState<LinkPress | null>(null);
+  // Dialogs pages are waiting on (`alert`/`confirm`/`prompt`, I3), in the order they asked; the engine holds each
+  // page paused until its answer goes back, so they queue rather than replace each other.
+  const [pageRequests, setPageRequests] = useState<Array<{ tabId: string; request: PageRequest }>>([]);
+  const pageRequest = pageRequests[0] ?? null;
   // A main-frame load failure, shown in place of that tab's page.
   const [error, setError] = useState<{ tabId: string; url: string; message: string } | null>(null);
   const toast = useToast();
@@ -199,6 +204,8 @@ export function BrowserScreen(): JSX.Element {
     if (started) {
       // A new document has no media until it reports some.
       media.loadStarted(tabId);
+      // The engine cancels a pending dialog when a tab loads, so its sheet goes with it.
+      setPageRequests((previous) => (previous.some((entry) => entry.tabId === tabId) ? previous.filter((entry) => entry.tabId !== tabId) : previous));
       failed.delete(tabId);
       setError((current) => (current?.tabId === tabId ? null : current));
     }
@@ -315,6 +322,21 @@ export function BrowserScreen(): JSX.Element {
     toast.show("Tab archived", { label: "Undo", onPress: () => void restoreTab(id) });
   }
 
+  function onPageRequest(tabId: string, request: PageRequest): void {
+    setPageRequests((previous) => (previous.some((entry) => entry.request.id === request.id) ? previous : [...previous, { tabId, request }]));
+  }
+
+  function answerPageRequest(accepted: boolean, value?: string): void {
+    const current = pageRequests[0];
+
+    if (!current) return;
+    setPageRequests((previous) => previous.filter((entry) => entry.request.id !== current.request.id));
+    void views
+      .get(current.tabId)
+      ?.answerPageRequest(current.request.id, accepted, value)
+      .catch(() => {});
+  }
+
   function archiveAll(): void {
     const archived = data.tabs.filter((tab) => tab.url && !tab.private).map((tab) => tab.id);
 
@@ -364,6 +386,13 @@ export function BrowserScreen(): JSX.Element {
   // Android Back, newest state each press; registered once while the screen is focused.
   const backRef = useRef<() => boolean>(() => false);
   backRef.current = () => {
+    // Back cancels a page's dialog first: the page is paused until Bay answers it.
+    if (pageRequests.length) {
+      answerPageRequest(false);
+
+      return true;
+    }
+
     // Back closes an open sheet first, as on every Android sheet.
     if (panel || link) {
       setPanel(null);
@@ -452,6 +481,7 @@ export function BrowserScreen(): JSX.Element {
                 onLinkPress={(press) => {
                   if (id === active.id) setLink(press);
                 }}
+                onPageRequest={(request) => onPageRequest(id, request)}
                 onFullscreenChange={(fullscreen) =>
                   setFullscreenByTab((previous) => (previous[id] === fullscreen ? previous : { ...previous, [id]: fullscreen }))
                 }
@@ -726,6 +756,7 @@ export function BrowserScreen(): JSX.Element {
         onShare={() => link && void share(link.url)}
         onResolveDestination={() => resolveDestination(link?.url ?? "")}
       />
+      <PageRequestPanel request={pageRequest?.request ?? null} onAnswer={answerPageRequest} />
     </View>
   );
 }

@@ -13,6 +13,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   let onScroll = EventDispatcher()
   let onLinkPress = EventDispatcher()
   let onPageMessage = EventDispatcher()
+  let onPageRequest = EventDispatcher()
   // Declared for the shared API (A2); WebKit presents element fullscreen itself and never emits it.
   let onFullscreenChange = EventDispatcher()
   private lazy var messageProxy = BayPageMessageProxy(view: self)
@@ -121,6 +122,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   private func replaceWebView() {
+    cancelPageRequests()
     observations = []
     webView.configuration.userContentController.removeScriptMessageHandler(forName: "bay", contentWorld: .defaultClient)
     webView.navigationDelegate = nil
@@ -140,6 +142,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   deinit {
     pendingScroll?.cancel()
+    cancelPageRequests()
   }
 
   override func layoutSubviews() {
@@ -149,6 +152,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   func load(_ address: String) throws {
     guard let url = URL(string: address), isWebURL(url) else { throw InvalidAddressException() }
+    cancelPageRequests()
     startedLoading = true
     webView.load(URLRequest(url: url))
   }
@@ -409,6 +413,50 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     onLinkPress(["url": address, "title": address, "x": NSNull(), "y": NSNull()])
     // The shared sheet is the menu, so the native one is empty rather than default.
     completionHandler(UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in UIMenu(children: []) })
+  }
+
+  // MARK: Page requests (I3): alert/confirm/prompt held until the shared sheet answers.
+
+  /// One pending dialog, unified as (accepted, prompt value). Alert ignores both, confirm uses accepted, prompt uses both.
+  private var pendingPageRequests: [String: (Bool, String?) -> Void] = [:]
+
+  func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+               initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+    let id = UUID().uuidString
+    pendingPageRequests[id] = { _, _ in completionHandler() }
+    emitPageRequest(id: id, kind: "alert", message: message, defaultValue: nil)
+  }
+
+  func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+               initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+    let id = UUID().uuidString
+    pendingPageRequests[id] = { accepted, _ in completionHandler(accepted) }
+    emitPageRequest(id: id, kind: "confirm", message: message, defaultValue: nil)
+  }
+
+  func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
+               initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?, Bool) -> Void) {
+    let id = UUID().uuidString
+    pendingPageRequests[id] = { accepted, value in
+      if accepted { completionHandler(value, true) } else { completionHandler(nil, false) }
+    }
+    emitPageRequest(id: id, kind: "prompt", message: prompt, defaultValue: defaultText)
+  }
+
+  private func emitPageRequest(id: String, kind: String, message: String, defaultValue: String?) {
+    var body: [String: Any] = ["id": id, "kind": kind, "message": String(message.prefix(2000)), "url": webView.url?.absoluteString ?? ""]
+    if let defaultValue { body["defaultValue"] = String(defaultValue.prefix(2000)) }
+    onPageRequest(body)
+  }
+
+  func answerPageRequest(id: String, accepted: Bool, value: String?) {
+    pendingPageRequests.removeValue(forKey: id)?(accepted, value)
+  }
+
+  private func cancelPageRequests() {
+    let pending = pendingPageRequests
+    pendingPageRequests.removeAll()
+    for (_, handler) in pending { handler(false, nil) }
   }
 
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

@@ -28,6 +28,8 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.net.http.SslError
@@ -68,6 +70,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   val onScroll by EventDispatcher()
   val onLinkPress by EventDispatcher()
   val onPageMessage by EventDispatcher()
+  val onPageRequest by EventDispatcher()
   val onFullscreenChange by EventDispatcher()
   // The system WebView has no isolated worlds: page scripts run in the main world and answer through this bridge,
   // which ignores anything without this view's token. The token rotates on every main-frame navigation, so a
@@ -122,6 +125,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private var customViewCallback: WebChromeClient.CustomViewCallback? = null
   private var originalOrientation: Int? = null
   private var backCallback: OnBackPressedCallback? = null
+  /** Page requests (I3): results held until the shared sheet answers; one per dialog. */
+  private val pendingPageRequests = ConcurrentHashMap<String, android.webkit.JsResult>()
   private val spinner = ValueAnimator.ofFloat(0f, 360f).apply {
     duration = 750
     repeatCount = ValueAnimator.INFINITE
@@ -388,6 +393,31 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       }
 
       override fun onHideCustomView() = hideFullscreen()
+
+      // Page requests (I3): alert/confirm/prompt are held for the shared sheet instead of the default Material dialogs.
+      override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+        if (result == null) return false
+        val id = UUID.randomUUID().toString()
+        pendingPageRequests[id] = result
+        emitPageRequest(id, "alert", message ?: "", null, url)
+        return true
+      }
+
+      override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+        if (result == null) return false
+        val id = UUID.randomUUID().toString()
+        pendingPageRequests[id] = result
+        emitPageRequest(id, "confirm", message ?: "", null, url)
+        return true
+      }
+
+      override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: JsPromptResult?): Boolean {
+        if (result == null) return false
+        val id = UUID.randomUUID().toString()
+        pendingPageRequests[id] = result
+        emitPageRequest(id, "prompt", message ?: "", defaultValue, url)
+        return true
+      }
     }
   }
 
@@ -398,6 +428,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   fun load(address: String) {
     check(!disposed) { "This page view has been disposed." }
     require(isWebURL(Uri.parse(address))) { "Only HTTP and HTTPS addresses can be opened." }
+    cancelPageRequests()
     recoveryURL = null
     startedLoading = true
     val target = replacementFor(address) ?: address
@@ -498,6 +529,32 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       current = current.baseContext
     }
     return null
+  }
+
+  // MARK: Page requests (I3)
+
+  private fun emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, url: String?) {
+    val body = mutableMapOf<String, Any>("id" to id, "kind" to kind, "message" to message.take(2000), "url" to (url ?: pageUrl ?: ""))
+    if (defaultValue != null) body["defaultValue"] = defaultValue.take(2000)
+    onPageRequest(body)
+  }
+
+  fun answerPageRequest(id: String, accepted: Boolean, value: String?) {
+    val result = pendingPageRequests.remove(id) ?: return
+    try {
+      if (result is JsPromptResult) {
+        if (accepted) result.confirm(value ?: "") else result.cancel()
+      } else {
+        if (accepted) result.confirm() else result.cancel()
+      }
+    } catch (_: Exception) {
+    }
+  }
+
+  private fun cancelPageRequests() {
+    val pending = pendingPageRequests.values.toList()
+    pendingPageRequests.clear()
+    for (result in pending) try { result.cancel() } catch (_: Exception) {}
   }
 
   // MARK: Video fullscreen (A2)
@@ -959,6 +1016,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   fun dispose() {
     disposed = true
+    cancelPageRequests()
     cancelScripts("The page closed before the script finished.")
     scrollHandler.removeCallbacksAndMessages(null)
     refreshing = false
