@@ -418,17 +418,84 @@ class BuildTests(unittest.TestCase):
              mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
              mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
              mock.patch.object(engine, "build_adblock"), \
+             mock.patch.object(engine, "compile_changes_first", return_value=True) as first, \
              mock.patch.object(engine, "run_until", return_value=False) as run_until:
             root = Path(directory)
             self.assertIs(engine.build(root, engine.environment(root), [], 4, ci_minutes=5), False)
+            self.assertEqual(first.call_args.args[1:4], (engine.LOCK["outputDirectory"], ["chrome"], 4))
+            self.assertEqual(first.call_args.args[5], 5)
             self.assertEqual(run_until.call_args.args[0], ["autoninja", "-C", engine.LOCK["outputDirectory"], "-j", "4", "chrome"])
+            self.assertLessEqual(run_until.call_args.args[3], 5)
             self.assertFalse((root / "bay-engine-build.json").exists())
+
+    def test_timed_build_stops_before_the_full_build_when_changes_fail_or_use_the_time(self):
+        for outcome in (subprocess.CalledProcessError(1, ["ninja"]), False):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory, \
+                 mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
+                 mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
+                 mock.patch.object(engine, "build_adblock"), \
+                 mock.patch.object(engine, "compile_changes_first", side_effect=[outcome]), \
+                 mock.patch.object(engine, "run_until") as run_until:
+                root = Path(directory)
+                if outcome is False:
+                    self.assertIs(engine.build(root, engine.environment(root), [], 4, ci_minutes=5), False)
+                else:
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        engine.build(root, engine.environment(root), [], 4, ci_minutes=5)
+                run_until.assert_not_called()
+                self.assertFalse((root / "bay-engine-build.json").exists())
+
+    def test_changes_first_compiles_every_object_from_bay_and_patched_sources_and_keeps_going(self):
+        out = "out/Release_GN_x64"
+        series = "step-a:\n  chrome/browser/ui/browser.cc\n  chrome/browser/ui/browser.h\nlayer:\n  chrome/browser/bay/\n"
+        objects = {"../../chrome/browser/ui/browser.cc": "obj/chrome/browser/ui/ui/browser.obj",
+                   "../../chrome/browser/bay/nn_engine.cc": "obj/chrome/browser/bay/bay/nn_engine.obj",
+                   "../../chrome/browser/bay/data/vendor/q r.cpp": "obj/chrome/browser/bay/data/x/q r.obj",
+                   "../../chrome/browser/ui/other.cc": "obj/chrome/browser/ui/ui/other.obj"}
+        inputs = [*objects, *objects.values(), "../../chrome/browser/ui/browser.h"]
+        queries = []
+
+        def fake_run(command, **kwargs):
+            command = [str(part) for part in command]
+            if "series.py" in command[1]:
+                self.assertEqual(command[2:], ["files", "--platform", "win"])
+                return subprocess.CompletedProcess(command, 0, series)
+            self.assertEqual(command[1:4], ["-C", out, "-t"])
+            if command[4] == "inputs":
+                self.assertEqual(command[5:], ["chrome"])
+                return subprocess.CompletedProcess(command, 0, "\n".join(inputs) + "\n")
+            self.assertEqual(command[4], "query")
+            queries.append(command[5:])
+            # Objects outside the targets' inputs, such as another toolchain's, are left out.
+            answer = "".join(f"{source}:\n  outputs:\n    {objects[source]}\n    host/{objects[source]}\n"
+                             for source in command[5:])
+            return subprocess.CompletedProcess(command, 0, answer)
+
+        with tempfile.TemporaryDirectory() as directory:
+            src = Path(directory)
+            (src / out).mkdir(parents=True)
+            with mock.patch.object(engine.shutil, "which", return_value="ninja") as which, \
+                 mock.patch.object(engine.subprocess, "run", side_effect=fake_run), \
+                 mock.patch.object(engine, "run_until", return_value=True) as run_until:
+                self.assertIs(engine.compile_changes_first(src, out, ["chrome"], 4, {}, 30), True)
+            self.assertEqual(which.call_args.kwargs, {"path": str(src / "third_party/ninja")})
+            # Headers and unpatched sources are never queried.
+            self.assertEqual(queries, [["../../chrome/browser/bay/data/vendor/q r.cpp",
+                                        "../../chrome/browser/bay/nn_engine.cc",
+                                        "../../chrome/browser/ui/browser.cc"]])
+            self.assertEqual(run_until.call_args.args,
+                             (["ninja", "-C", out, "-f", "bay_changes.ninja", "-k", "0", "-j", "4", "bay_changes"],
+                              src, {}, 30))
+            self.assertEqual((src / out / "bay_changes.ninja").read_text(),
+                             "include build.ninja\nbuild bay_changes: phony obj/chrome/browser/bay/bay/nn_engine.obj "
+                             "obj/chrome/browser/bay/data/x/q$ r.obj obj/chrome/browser/ui/ui/browser.obj\n")
 
     def test_compile_error_is_not_reported_as_a_resumable_pause(self):
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
              mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
              mock.patch.object(engine, "build_adblock"), \
+             mock.patch.object(engine, "compile_changes_first", return_value=True), \
              mock.patch.object(engine, "run_until", side_effect=subprocess.CalledProcessError(1, ["autoninja"])):
             root = Path(directory)
             with self.assertRaises(subprocess.CalledProcessError):
