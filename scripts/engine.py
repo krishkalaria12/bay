@@ -18,12 +18,14 @@ import json
 import os
 import pathlib
 import platform as host_platform
+import posixpath
 import shutil
 import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 import zipfile
 
@@ -455,6 +457,58 @@ def build_adblock(src, output_directory, env, platform):
     shutil.copy2(crate / "target" / target / "release" / library, destination / library)
 
 
+SOURCE_SUFFIXES = (".c", ".cc", ".cpp")
+
+
+def series_touches(path, paths):
+    """Whether `path` is one of the series' paths or inside one of its directories (which end in /)."""
+    return any(path == entry or (entry.endswith("/") and path.startswith(entry)) for entry in paths)
+
+
+def chromium_ninja(src):
+    ninja = shutil.which("ninja", path=str(src / "third_party/ninja"))
+    if not ninja:
+        raise RuntimeError("Chromium's ninja is missing from third_party/ninja")
+    return ninja
+
+
+def changed_objects(ninja, src, output_directory, targets, env):
+    """The objects `targets` compile from source files that Bay's series adds or changes."""
+    def tool(*arguments):
+        return subprocess.run([ninja, "-C", output_directory, "-t", *arguments], cwd=src, env=env,
+                              capture_output=True, text=True, check=True).stdout.splitlines()
+    listing = subprocess.run([sys.executable, str(REPO / "engine/patches/series.py"), "files",
+                              "--platform", env.get("BAY_ENGINE_PLATFORM", "win")],
+                             env=env, capture_output=True, text=True, check=True).stdout
+    paths = [line.strip() for line in listing.splitlines() if line.startswith("  ")]
+    inputs = set(tool("inputs", *targets))
+    prefix = posixpath.relpath(".", output_directory) + "/"
+    sources = sorted(path for path in inputs if path.startswith(prefix) and path.endswith(SOURCE_SUFFIXES)
+                     and series_touches(path[len(prefix):].replace("\\", "/"), paths))
+    objects = set()
+    # Keep each command well inside Windows' command line limit.
+    for start in range(0, len(sources), 100):
+        objects.update(line.strip() for line in tool("query", *sources[start:start + 100])
+                       if line.startswith("    ") and line.strip() in inputs)
+    return sorted(objects)
+
+
+def compile_changes_first(src, output_directory, targets, jobs, env, minutes):
+    """Compile Bay's own and patched sources before the rest, reporting every error among them at once."""
+    ninja = chromium_ninja(src)
+    objects = changed_objects(ninja, src, output_directory, targets, env)
+    print(f"compiling {len(objects)} objects from Bay's changes first", flush=True)
+    if not objects:
+        return True
+    escaped = " ".join(path.replace("$", "$$").replace(" ", "$ ").replace(":", "$:") for path in objects)
+    manifest = src / output_directory / "bay_changes.ninja"
+    manifest.write_text(f"include build.ninja\nbuild bay_changes: phony {escaped}\n", encoding="utf-8")
+    command = [ninja, "-C", output_directory, "-f", manifest.name, "-k", "0"]
+    if jobs:
+        command += ["-j", str(jobs)]
+    return run_until([*command, "bay_changes"], src, env, minutes)
+
+
 def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     lock = platform_lock(platform)
     require_linux_integration(env, platform)
@@ -468,14 +522,20 @@ def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     src = pathlib.Path(env["CHROMIUM_SRC"])
     require_tools(("cargo",), env)
     build_adblock(src, lock["outputDirectory"], env, platform)
+    targets = targets or (["chrome", "chrome_sandbox"] if platform == "linux" else ["chrome"])
     args = ["autoninja", "-C", lock["outputDirectory"]]
     if jobs:
         args += ["-j", str(jobs)]
-    args += targets or (["chrome", "chrome_sandbox"] if platform == "linux" else ["chrome"])
+    args += targets
     if ci_minutes is None:
         run(args, cwd=src, env=env)
-    elif not run_until(args, src, env, ci_minutes):
-        return False
+    else:
+        deadline = time.monotonic() + ci_minutes * 60
+        if not compile_changes_first(src, lock["outputDirectory"], targets, jobs, env, ci_minutes):
+            return False
+        minutes = (deadline - time.monotonic()) / 60
+        if minutes <= 0 or not run_until(args, src, env, minutes):
+            return False
     (root / "bay-engine-build.json").write_text(json.dumps(build_identity(platform), indent=2) + "\n")
     return True
 
