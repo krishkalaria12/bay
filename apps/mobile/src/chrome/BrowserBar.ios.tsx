@@ -2,6 +2,7 @@ import { Button, HStack, Host, Image, Text } from "@expo/ui/swift-ui";
 import { accessibilityLabel, buttonStyle, controlSize, font, frame, tint, truncationMode } from "@expo/ui/swift-ui/modifiers";
 import type { JSX } from "react";
 import { View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { barButtons, barInsecure, barNewTab, barSite, type BrowserBarProps } from "./BrowserBar.types";
 import { GlassIconButton } from "./GlassIconButton";
@@ -31,7 +32,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
       >
         {left.badge ? <TabCount count={left.badge} /> : null}
       </GlassIconButton>
-      <View testID={search.id} collapsable={false}>
+      <Animated.View testID={search.id} collapsable={false} style={props.capsuleStyle}>
         <Host matchContents>
           <Button
             onPress={onSearch}
@@ -57,7 +58,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
             )}
           </Button>
         </Host>
-      </View>
+      </Animated.View>
       <GlassIconButton id={right.id} label={right.label} systemImage={symbols[right.icon]} prominentTint={prominentTint} onPress={right.onPress} />
     </View>
   );

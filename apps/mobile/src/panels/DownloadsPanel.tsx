@@ -1,7 +1,9 @@
 import { Typography } from "heroui-native";
-import type { JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import { Pressable, View } from "react-native";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 
+import { PillButton } from "@/chrome/PillButton";
 import type { DownloadItem } from "@/store/types";
 
 import { ActionRow, PanelSheet } from "./PanelSheet";
@@ -36,16 +38,15 @@ export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, 
               <Typography testID={`download-${index}-status`} numberOfLines={1} className="text-sm text-muted">
                 {downloadStatus(item)}
               </Typography>
+              {item.state === "downloading" ? <DownloadProgress item={item} /> : null}
             </Pressable>
-            <Pressable
+            <PillButton
+              compact
               testID={`download-${index}-${item.state === "downloading" ? "cancel" : "remove"}`}
-              accessibilityRole="button"
+              label={item.state === "downloading" ? "Cancel" : "Remove"}
               accessibilityLabel={item.state === "downloading" ? `Cancel ${item.filename}` : `Remove ${item.filename} from the list`}
               onPress={() => (item.state === "downloading" ? onCancel(item) : onRemove(item))}
-              className="min-h-11 items-center justify-center rounded-full bg-default px-3"
-            >
-              <Typography className="text-sm">{item.state === "downloading" ? "Cancel" : "Remove"}</Typography>
-            </Pressable>
+            />
           </View>
         ))
       ) : (
@@ -55,6 +56,49 @@ export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, 
       )}
       {downloads.some((item) => item.state !== "downloading") ? <ActionRow testID="downloads-clear" label="Clear list" onPress={onClear} /> : null}
     </PanelSheet>
+  );
+}
+
+/**
+ * A running download's bar: it eases to each new fraction, and while the size is unknown or the download is waiting
+ * (starting, no connection) a short segment sweeps across instead, so it never looks frozen.
+ */
+export function DownloadProgress({ item }: { item: DownloadItem }): JSX.Element {
+  const fraction = item.total && !item.waiting ? Math.min(1, item.received / item.total) : null;
+
+  return (
+    <View testID="download-progress" className="mt-2 h-1 overflow-hidden rounded-full bg-default">
+      {fraction === null ? <SweepingBar /> : <FillingBar fraction={fraction} />}
+    </View>
+  );
+}
+
+function FillingBar({ fraction }: { fraction: number }): JSX.Element {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withTiming(fraction, { duration: 450, easing: Easing.out(Easing.cubic) });
+  }, [fraction, progress]);
+  const style = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+
+  return <Animated.View className="h-1 rounded-full bg-accent" style={style} />;
+}
+
+const SWEEP = 0.35;
+
+function SweepingBar(): JSX.Element {
+  const [width, setWidth] = useState(0);
+  const position = useSharedValue(0);
+  useEffect(() => {
+    position.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.cubic) }), -1, false);
+
+    return () => cancelAnimation(position);
+  }, [position]);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: (position.value * (1 + SWEEP) - SWEEP) * width }] }), [width]);
+
+  return (
+    <View className="h-1 flex-1" onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      <Animated.View className="h-1 rounded-full bg-accent" style={[{ width: `${SWEEP * 100}%` }, style]} />
+    </View>
   );
 }
 
@@ -73,7 +117,11 @@ export function formatBytes(bytes: number): string {
 export function downloadStatus(item: DownloadItem): string {
   switch (item.state) {
     case "downloading":
-      return item.total ? `${formatBytes(item.received)} of ${formatBytes(item.total)}` : `${formatBytes(item.received)} so far`;
+      if (item.waiting) return item.waiting;
+
+      if (item.total) return `${Math.floor((item.received / item.total) * 100)}% · ${formatBytes(item.received)} of ${formatBytes(item.total)}`;
+
+      return item.received ? `${formatBytes(item.received)} so far` : "Starting…";
     case "finished":
       return formatBytes(item.total || item.received);
     case "cancelled":

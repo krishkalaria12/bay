@@ -2,8 +2,8 @@
 //
 // The engine side gives a download its URL, the page that started it (tabUrl) and its referrer. This module turns
 // those, and the name the server sent, into a shorter name a person would choose: IMG_20261024_8812.pdf on a page
-// called "Q3 2026 Report" becomes "Q3 2026 Report.pdf". It never renames anything itself; the app offers the name and
-// applies it only when the person accepts (downloads/DownloadRow.tsx).
+// called "Q3 2026 Report" becomes "Q3 2026 Report.pdf". It never renames anything itself; the app does, and offers
+// the way back (apps/browser/src/lib/tidyDownloads.ts).
 //
 // It is deterministic on purpose. A local cleaner runs in a millisecond, on every Mac, and the on-device model in
 // packages/desktop/ios/TidyNamesModule.swift refines the answer where Apple Intelligence has one. Neither sends the
@@ -32,7 +32,9 @@ const COMPOUND_EXTENSION = /\.(tar\.(?:gz|bz2|xz|zst)|tbz2|txz)$/i;
 const SIMPLE_EXTENSION = /\.([a-z0-9]{1,10})$/i;
 
 /** `IMG_8812.JPG` → `{ stem: "IMG_8812", extension: "JPG" }`; an archive keeps its whole `.tar.gz`. */
-export function splitFilename(filename: string) {
+export type FilenameParts = { stem: string; extension: string };
+
+export function splitFilename(filename: string): FilenameParts {
   const base = filename.split(/[\\/]/).pop() ?? "";
   const compound = COMPOUND_EXTENSION.exec(base);
 
@@ -126,8 +128,14 @@ const EPOCH = /(?<!\d)\d{10,13}(?!\d)/g;
 const LONG_NUMBER = /(?<!\d)\d{5,}(?!\d)/g;
 const CAMERA = /(?:^|[^a-z0-9])(?:img|dscf?|pxl|gopr|dji)[\s_-]?\d+(?=$|[^a-z0-9])/gi;
 const SCREENSHOT = /(?:^|[^a-z0-9])(?:screenshot|screen shot|cleanshot|snip|screen recording)(?:$|[^a-z0-9])(?:\s*(?:at\s+)?\d[\d\s.:_-]*)?/gi;
-const VERSION = /(?:^|[^a-z0-9])(?:v|ver|version)[\s._-]?\d+(?=$|[^a-z0-9])/gi;
+
+// Not one whose dots were kept (VERSION_DOT): "v22.11.0" stays, "v3" goes.
+const VERSION = /(?:^|[^a-z0-9])(?:v|ver|version)[\s._-]?\d+(?=$|[^a-z0-9․])/gi;
 const DUPLICATE = /\s*\(\d+\)\s*$/;
+
+// "Cra-0.1.30": a dotted version keeps its dots through the word breaks below.
+const DOTTED_VERSION = /(?<![\d.])\d+(?:\.\d+){1,3}(?![\d.])/g;
+const VERSION_DOT = "․";
 
 const NOISY_WORD =
   /(?:^|[\s._-])(?:final|copy|untitled|original|download|export|output|tmp|temp|image|images|photo|photos|pic|pics|picture|file|files|document|scan)(?=$|[\s._-])/i;
@@ -144,6 +152,7 @@ const HEX_TEST = /(?<![0-9a-f])[0-9a-f]{12,}(?![0-9a-f])/i;
 const DATE_TEST = /(?:19|20)\d{2}[-_.]?(?:0[1-9]|1[0-2])[-_.]?(?:0[1-9]|[12]\d|3[01])/;
 const EPOCH_TEST = /(?<!\d)\d{10,13}(?!\d)/;
 const LONG_NUMBER_TEST = /(?<!\d)\d{5,}(?!\d)/;
+const SCREENSHOT_NAME = /(?:^|[^a-z0-9])(?:screenshot|screen shot|cleanshot|snip|screen recording)(?:$|[^a-z0-9])/i;
 
 function hasCameraName(stem: string): boolean {
   return /(?:^|[^a-z0-9])(?:img|dscf?|pxl|gopr|dji)[\s._-]?\d+(?=$|[^a-z0-9])/i.test(stem);
@@ -178,6 +187,9 @@ export function looksGenerated(stem: string): boolean {
   // A single run of words with short counters ("gw_hura_s_02" is caught by its underscores).
   if (!/\s/.test(name) && /(?:^|[\s._-])\d{1,3}(?:$|[\s._-])/.test(name) && /[a-z]/i.test(name)) return true;
 
+  // A web address's slug: "hello-world-master".
+  if (!/\s/.test(name) && /[a-z]{2,}-[a-z0-9]/i.test(name)) return true;
+
   return false;
 }
 
@@ -207,6 +219,9 @@ function titleCase(words: string[]): string {
     .map((word, index) => {
       // Keep a short acronym the server or the page already had: NASA, PDF, USA.
       if (/^[A-Z0-9]{2,5}$/.test(word) && /[A-Z]/.test(word)) return word;
+
+      // And a brand's own capitals: VSCode.
+      if (/^[A-Z]{2,}[a-z]/.test(word)) return word;
       const lower = word.toLowerCase();
 
       if (index > 0 && index < words.length - 1 && SMALL_WORDS.has(lower)) return lower;
@@ -230,6 +245,9 @@ function cleanWords(input: string, options: CleanOptions = {}): string[] {
   text = text.replace(HEX, " ");
   text = text.replace(DATE, " ");
   text = text.replace(/([a-z])([A-Z])/g, "$1 $2");
+
+  // A screenshot's "at 12.34.56" is a time; anywhere else, dots between numbers are a version.
+  if (!SCREENSHOT_NAME.test(text)) text = text.replace(DOTTED_VERSION, (version) => version.replaceAll(".", VERSION_DOT));
   // Now that dates and hashes are out, the separators are just word breaks; the rest of the patterns can use
   // ordinary boundaries without an underscore hiding a word.
   text = text.replace(/[._~-]+/g, " ");
@@ -244,7 +262,7 @@ function cleanWords(input: string, options: CleanOptions = {}): string[] {
     text = text.replace(NOISY_WORD_ALL, " ");
   }
 
-  text = text.replace(/[^\p{L}\p{N}\p{M}'’ ]+/gu, " ");
+  text = text.replace(new RegExp(`[^\\p{L}\\p{N}\\p{M}'’ ${VERSION_DOT}]+`, "gu"), " ");
   let words = text.split(/\s+/).filter(Boolean);
   const keepShortNumbers = words.some((word) => !/^\d+$/.test(word));
   words = words
@@ -287,7 +305,7 @@ function cleanWords(input: string, options: CleanOptions = {}): string[] {
   // "final final" and "copy copy" reads like a save dialog, not a title.
   words = words.filter((word, index) => index === 0 || word.toLowerCase() !== words[index - 1]!.toLowerCase());
 
-  return words;
+  return words.map((word) => word.replaceAll(VERSION_DOT, "."));
 }
 
 function limitStem(stem: string, max = 64): string {
@@ -298,34 +316,76 @@ function limitStem(stem: string, max = 64): string {
   return (space > max * 0.5 ? cut.slice(0, space) : cut).replace(/[\s\-–—,.;:]+$/, "");
 }
 
+// A word in common, or one spelling out the other ("hura" and "Huracan"). Single letters prove nothing.
+function sharesWord(a: string[], b: string[]): boolean {
+  const others = b.map((word) => word.toLowerCase());
+
+  return a.some((word) => {
+    const lower = word.toLowerCase();
+
+    return lower.length > 1 && others.some((other) => other.length > 1 && (other.startsWith(lower) || lower.startsWith(other)));
+  });
+}
+
 function isGeneric(words: string[]): boolean {
   if (!words.length) return true;
 
   return words.every((word) => GENERIC_NAMES.has(word.toLowerCase()) || /^\d+$/.test(word));
 }
 
-/** A proposed stem (a model's answer, a page's title) as a copyable name with the download's own extension. */
-export function tidyNameFor(stemOrName: string, originalFilename: string, basis: TidyName["basis"] = "page"): TidyName | null {
+function named(stem: string, originalFilename: string, basis: TidyName["basis"]): TidyName | null {
   const original = splitFilename(decoded(originalFilename));
 
-  if (!original.extension) return null;
-  let proposed = stemOrName.trim();
-
-  if (!proposed) return null;
-  const proposedExtension = SIMPLE_EXTENSION.exec(proposed);
-
-  if (proposedExtension && proposedExtension.index > 0) proposed = proposed.slice(0, proposedExtension.index);
-  const words = cleanWords(proposed);
-
-  if (!words.length || isGeneric(words)) return null;
-  const stem = limitStem(titleCase(words));
-
-  if (!stem) return null;
+  if (!original.extension || !stem) return null;
   const filename = `${stem}.${original.extension}`;
 
   if (normalised(filename) === normalised(decoded(originalFilename))) return null;
 
   return { filename, stem, extension: original.extension, basis };
+}
+
+/**
+ * A model's answer as a name with the download's own extension, or null when it can't be one. It already reads like a
+ * person's ("DM with Sara", "Fly.io Invoice Nov 3"), so it only loses what a file name can't hold; the word-level
+ * cleaning is for the names machines make. The page's title is in its prompt, so an answer is never trusted to be safe.
+ */
+export function tidyNameFor(answer: string, originalFilename: string, basis: TidyName["basis"] = "page"): TidyName | null {
+  // No hidden files: the leading dots go before ".hidden" could be taken for an extension.
+  let proposed = (answer.split(/\r?\n/)[0] ?? "")
+    .trim()
+    .replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, "")
+    .replace(/^[\s.]+/, "");
+
+  // The ".30" of "Cra 0.1.30" is part of the name, not an extension to swap out.
+  const proposedExtension = SIMPLE_EXTENSION.exec(proposed);
+
+  if (proposedExtension && proposedExtension.index > 0 && !/^\d+$/.test(proposedExtension[1]!)) proposed = proposed.slice(0, proposedExtension.index);
+
+  const stem = limitStem(
+    proposed
+      .replace(/[/\\:*?"<>|\p{Cc}]+/gu, " ")
+      .replace(/\s+/g, " ")
+      .replace(/^[\s.]+/, "")
+      .replace(/[\s.]+$/, ""),
+  );
+
+  if (isGeneric(stem.split(" ").filter(Boolean))) return null;
+
+  return named(stem, originalFilename, basis);
+}
+
+/**
+ * tidyNameFor for an answer that has to keep the file's subject. The model leans hard on the page's title, and a file
+ * isn't always what its page is about: Cra-0.1.30.dmg from a page called "Q3 2026 Report" came back as "Acme Q3 2026
+ * Report". When the file's own name says something, the answer has to share a word with it (or spell one out, "hura"
+ * and "Huracan"). A name that says nothing (IMG_8812, 387494875) leaves the model free.
+ */
+export function modelTidyName(answer: string, originalFilename: string): TidyName | null {
+  const fileWords = cleanWords(splitFilename(decoded(originalFilename)).stem);
+
+  if (!isGeneric(fileWords) && !sharesWord(fileWords, cleanWords(answer, { title: true }))) return null;
+
+  return tidyNameFor(answer, originalFilename, "page");
 }
 
 // MARK: Suggestion
@@ -360,14 +420,15 @@ export function tidyDownloadName(input: TidyNameInput): TidyName | null {
       isGeneric(fileWords) ||
       spellsOut ||
       /untitled|screenshot|screen shot|original|download/i.test(original.stem) ||
-      // "gw_hura_s_02" has a word but is mostly a camera's or a generator's counter: the page names the subject.
-      (fileWords.length <= 3 && pageWords.length > fileWords.length));
+      // "report_1" has a word but is mostly a counter, and the page spells out which report. A page about something
+      // else (Cra-0.1.30.dmg on "Q3 2026 Report") doesn't name the file.
+      (fileWords.length <= 3 && pageWords.length > fileWords.length && sharesWord(fileWords, pageWords)));
 
   const words = preferPage ? pageWords : fileWords;
 
   if (!words.length || isGeneric(words)) return null;
 
-  return tidyNameFor(words.join(" "), filename, preferPage ? "page" : "file");
+  return named(limitStem(titleCase(words)), filename, preferPage ? "page" : "file");
 }
 
 /**

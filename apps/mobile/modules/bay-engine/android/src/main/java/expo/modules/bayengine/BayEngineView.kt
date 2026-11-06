@@ -1,5 +1,6 @@
 package expo.modules.bayengine
 
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
@@ -10,8 +11,11 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.LinearInterpolator
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
@@ -26,6 +30,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.ProfileStore
 import androidx.webkit.ScriptHandler
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import expo.modules.kotlin.AppContext
@@ -72,12 +77,25 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private var pullStartY = 0f
   private var pulling = false
   private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-  private val pullThreshold = 56 * density
+  private val pullThreshold = 64 * density
   private val pullPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    color = Color.GRAY
-    strokeWidth = 3 * density
+    // Mid grey reads on light and dark pages alike; the gap behind it is the page's own top colour (TabPage).
+    color = Color.rgb(142, 142, 147)
+    strokeWidth = 2.5f * density
     style = Paint.Style.STROKE
     strokeCap = Paint.Cap.ROUND
+  }
+  /** Past the trigger point in the current pull (one haptic tick when it's crossed). */
+  private var pullArmed = false
+  /** Released past the trigger: the page stays down with a spinning arc until the reload has started and finished. */
+  private var refreshing = false
+  private var refreshStartedAt = 0L
+  private var refreshSawLoading = false
+  private val spinner = ValueAnimator.ofFloat(0f, 360f).apply {
+    duration = 750
+    repeatCount = ValueAnimator.INFINITE
+    interpolator = LinearInterpolator()
+    addUpdateListener { onSpin() }
   }
   var pullToRefreshEnabled = true
   /** The page this view shows, read on WebView's network threads to judge subresources. */
@@ -141,6 +159,13 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       WebViewCompat.addDocumentStartJavaScript(this, BayContentBlocker.COSMETIC_SCRIPT, setOf("*"))
     }
+    // Google won't sign anyone in from what it can tell is an app's embedded WebView ("This browser or app may not be
+    // secure", OAuth's disallowed_useragent): it looks for the `; wv` and `Version/4.0` tokens in the user agent and
+    // the X-Requested-With header naming the app. Bay is a browser, so it presents as Chrome does.
+    settings.userAgentString = settings.userAgentString.replace("; wv)", ")").replace(Regex(" Version/[\\d.]+"), "")
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+      WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
+    }
     settings.javaScriptEnabled = true
     settings.domStorageEnabled = true
     settings.allowFileAccess = false
@@ -151,16 +176,21 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     settings.displayZoomControls = false
     overScrollMode = OVER_SCROLL_NEVER
     setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-      // A private page's cookies are in its own profile.
-      val cookies = if (usesPrivateProfile) {
-        ProfileStore.getInstance().getProfile(PRIVATE_PROFILE)?.cookieManager?.getCookie(url)
-      } else {
-        CookieManager.getInstance().getCookie(url)
-      }
-      BayDownloads.start(context, url, userAgent, contentDisposition, mimeType, cookies, usesPrivateProfile)
-      // The navigation became a download and never finishes, so the page stops loading here.
+      // A private page's cookies are in its own profile. Asked per address, so a redirect to another host gets its own.
+      val cookieManager = if (usesPrivateProfile) ProfileStore.getInstance().getProfile(PRIVATE_PROFILE)?.cookieManager else CookieManager.getInstance()
+      // File hosts often refuse a download that doesn't say which page it came from.
+      BayDownloads.start(context, url, userAgent, contentDisposition, mimeType, { address -> cookieManager?.getCookie(address) }, this.url, usesPrivateProfile)
+      // The navigation became a download and never finishes, so the page stops loading here, back on the page it
+      // started from. A tab that had no page yet (a download link typed into a new tab) says so, so it goes back to
+      // the start page instead of keeping the file's address and downloading it again when it's restored.
       loading = false
-      emitState()
+      val committed = copyBackForwardList().currentItem?.url
+      if (committed == null) {
+        onNavigationStateChange(mapOf("url" to "", "title" to "", "progress" to 0.0, "isLoading" to false,
+          "canGoBack" to false, "canGoForward" to false, "blank" to true))
+      } else {
+        emitState(committed)
+      }
     }
     setOnTouchListener { _, event ->
       if (event.actionMasked == MotionEvent.ACTION_DOWN) {
@@ -476,7 +506,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
-    if (!pullToRefreshEnabled || disposed || webView.url == null || loading) return super.onInterceptTouchEvent(event)
+    if (!pullToRefreshEnabled || disposed || webView.url == null || loading || refreshing) return super.onInterceptTouchEvent(event)
     // A second finger is a pinch, never a pull.
     if (event.pointerCount > 1) return super.onInterceptTouchEvent(event)
     when (event.actionMasked) {
@@ -484,6 +514,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         pullStartX = event.x
         pullStartY = event.y
         pulling = false
+        pullArmed = false
       }
       MotionEvent.ACTION_MOVE -> {
         val distance = event.y - pullStartY
@@ -502,27 +533,66 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     when (event.actionMasked) {
       MotionEvent.ACTION_MOVE -> {
         webView.translationY = ((event.y - pullStartY) * 0.5f).coerceIn(0f, pullThreshold * 1.5f)
+        val armed = webView.translationY >= pullThreshold
+        if (armed && !pullArmed) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        pullArmed = armed
         invalidate()
       }
       MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
         val shouldReload = event.actionMasked == MotionEvent.ACTION_UP && webView.translationY >= pullThreshold
         pulling = false
+        pullArmed = false
         parent?.requestDisallowInterceptTouchEvent(false)
-        webView.animate().translationY(0f).setDuration(160).withEndAction { invalidate() }.start()
-        if (shouldReload) reload()
+        if (shouldReload) {
+          // Hold the page just below the spinner while it reloads, as iOS does.
+          refreshing = true
+          refreshSawLoading = false
+          refreshStartedAt = SystemClock.uptimeMillis()
+          webView.animate().translationY(pullThreshold).setDuration(180).setInterpolator(DecelerateInterpolator()).start()
+          spinner.start()
+          reload()
+        } else {
+          settlePage()
+        }
       }
     }
     return true
   }
 
+  private fun settlePage() {
+    webView.animate().translationY(0f).setDuration(240).setInterpolator(DecelerateInterpolator()).withEndAction { invalidate() }.start()
+  }
+
+  /** Each spinner frame: ends the refresh once the reload has run (shown at least briefly), or gives up on one that never starts. */
+  private fun onSpin() {
+    if (!refreshing) return
+    if (loading) refreshSawLoading = true
+    val shown = SystemClock.uptimeMillis() - refreshStartedAt
+    if ((refreshSawLoading && !loading && shown >= 450) || (!refreshSawLoading && shown >= 4_000) || shown >= 20_000) endRefresh()
+    invalidate()
+  }
+
+  private fun endRefresh() {
+    refreshing = false
+    spinner.cancel()
+    settlePage()
+  }
+
   override fun dispatchDraw(canvas: Canvas) {
     super.dispatchDraw(canvas)
-    if (webView.translationY > 0f) {
-      val radius = 8 * density
-      val x = width * 0.5f
-      val y = webView.translationY * 0.5f
-      val sweep = 300 * min(1f, webView.translationY / pullThreshold)
-      canvas.drawArc(x - radius, y - radius, x + radius, y + radius, -90f, sweep, false, pullPaint)
+    val offset = webView.translationY
+    if (offset <= 0f) return
+    val radius = 10 * density
+    val x = width * 0.5f
+    val y = offset * 0.5f
+    val progress = min(1f, offset / pullThreshold)
+    if (refreshing) {
+      pullPaint.alpha = 255
+      canvas.drawArc(x - radius, y - radius, x + radius, y + radius, spinner.animatedValue as Float - 90f, 270f, false, pullPaint)
+    } else {
+      // Fades in and draws itself as the page comes down, turning a little so it feels alive.
+      pullPaint.alpha = (255 * progress).toInt()
+      canvas.drawArc(x - radius, y - radius, x + radius, y + radius, -90f + 120f * progress, 300f * progress, false, pullPaint)
     }
   }
 
@@ -542,6 +612,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     disposed = true
     cancelScripts("The page closed before the script finished.")
     scrollHandler.removeCallbacksAndMessages(null)
+    refreshing = false
+    spinner.cancel()
     webView.animate().cancel()
     webView.stopLoading()
     webView.setOnLongClickListener(null)

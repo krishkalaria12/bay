@@ -1,16 +1,18 @@
 import { create } from "zustand";
 import { useEffect } from "react";
-import { isUserNamedDownload, tidyDownloadName, tidyNameFor, type TidyName } from "@bay/core";
+import { isUserNamedDownload, modelTidyName, tidyDownloadName, type TidyName } from "@bay/core";
 import { renameFile, tidyNames } from "@bay/desktop";
 import { onDownload } from "@bay/chromium";
 import type { Download } from "@bay/chromium";
-import { showToast } from "../components/split/splitActions";
+import { showToast } from "../components/ui/toasts";
 import { downloadsIn } from "../store/windowUi";
 import { engineProfile } from "../store/model";
 import { useBrowser, type BrowserState } from "../store/browserStore";
-import { isInternalTab } from "../components/pages/pageUrls";
+import { isInternalTab } from "../components/pages/internalPages";
 
 // MARK: Page context
+
+type DownloadPageContext = { title?: string; url?: string };
 
 function stripHash(url: string): string {
   return url.split("#")[0] ?? "";
@@ -23,10 +25,7 @@ function sameDocument(a: string, b: string): boolean {
   return x === y;
 }
 
-// The page a download came from, when one of the tabs or history entries still names it.
-export type DownloadPage = { title?: string; url?: string };
-
-export function pageForDownload(d: Download, s: BrowserState = useBrowser.getState()): DownloadPage {
+export function pageForDownload(d: Download, s: BrowserState = useBrowser.getState()): DownloadPageContext {
   const urls = [d.tabUrl, d.referrer].filter((u): u is string => !!u && u !== d.url);
 
   if (!urls.length) return {};
@@ -70,12 +69,22 @@ export function windowForDownload(s: BrowserState, d: Download): string | null {
 
 // MARK: Suggestion store
 
+// What the local cleaner would call a download: instant, so every row of a long list can ask. The model is only asked
+// for a download Bay is about to rename (tidyFinishedDownload), never for the list's old rows.
 type TidyEntry = { filename: string; value: TidyName | null };
 
 export const useTidyNames = create<{ entries: Record<string, TidyEntry> }>(() => ({ entries: {} }));
 
-// In-flight suggestions, so the offer and a row asking at once share one answer.
-const resolving = new Map<string, Promise<TidyName | null>>();
+function cleanedName(d: Download, s: BrowserState): TidyName | null {
+  const page = pageForDownload(d, s);
+
+  return tidyDownloadName({
+    filename: d.filename,
+    pageTitle: page.title,
+    pageUrl: page.url ?? d.tabUrl ?? d.referrer,
+    mimeType: d.mimeType,
+  });
+}
 
 export function resolveTidySuggestion(d: Download, s: BrowserState = useBrowser.getState()): Promise<TidyName | null> {
   if (!s.settings.tidyDownloads || d.state !== "finished" || !d.path) return Promise.resolve(null);
@@ -84,46 +93,19 @@ export function resolveTidySuggestion(d: Download, s: BrowserState = useBrowser.
   const existing = useTidyNames.getState().entries[d.id];
 
   if (existing && existing.filename === d.filename) return Promise.resolve(existing.value);
-  const key = `${d.id}\n${d.filename}`;
-  const pending = resolving.get(key);
+  const value = cleanedName(d, s);
+  useTidyNames.setState((state) => ({ entries: { ...state.entries, [d.id]: { filename: d.filename, value } } }));
 
-  if (pending) return pending;
-  const next = suggest(d, s).finally(() => resolving.delete(key));
-  resolving.set(key, next);
-
-  return next;
+  return Promise.resolve(value);
 }
 
-async function suggest(d: Download, s: BrowserState): Promise<TidyName | null> {
+// The model's better name where it has one, the local cleaner's otherwise. Neither leaves this Mac.
+async function refinedName(d: Download, s: BrowserState, cleaned: TidyName): Promise<TidyName> {
+  if (!tidyNames) return cleaned;
   const page = pageForDownload(d, s);
+  const answer = await tidyNames.suggest(d.filename, page.title ?? "", page.url ?? d.tabUrl ?? d.referrer ?? "").catch(() => null);
 
-  const heuristic = tidyDownloadName({
-    filename: d.filename,
-    pageTitle: page.title,
-    pageUrl: page.url ?? d.tabUrl ?? d.referrer,
-    mimeType: d.mimeType,
-  });
-
-  let result = heuristic;
-
-  if (heuristic && tidyNames) {
-    const refined = await tidyNames.suggest(d.filename, page.title ?? "", page.url ?? d.tabUrl ?? d.referrer ?? "", heuristic.stem);
-
-    if (refined) {
-      const candidate = tidyNameFor(refined, d.filename, "page");
-
-      if (candidate) result = candidate;
-    }
-  }
-
-  const current = useBrowser.getState().downloads.find((x) => x.id === d.id);
-
-  if (!current || current.filename !== d.filename) return null;
-  useTidyNames.setState((state) => ({
-    entries: { ...state.entries, [d.id]: { filename: d.filename, value: result } },
-  }));
-
-  return result;
+  return (answer && modelTidyName(answer, d.filename)) || cleaned;
 }
 
 export function useTidySuggestion(d: Download | undefined): TidyName | null {
@@ -155,6 +137,20 @@ export async function applyTidyName(d: Download, suggestion: TidyName): Promise<
   return path;
 }
 
+function clipped(name: string): string {
+  return name.length <= 44 ? name : `${name.slice(0, 28)}…${name.slice(-15)}`;
+}
+
+function showRenamed(d: Download, original: { filename: string; path: string }, path: string, windowId: string) {
+  const renamed = useBrowser.getState().downloads.find((x) => x.id === d.id) ?? { ...d, filename: baseName(path), path };
+  showToast(windowId, `Renamed to “${renamed.filename}”`, `Was “${clipped(original.filename)}”`, {
+    icon: "wand.and.stars",
+    key: `tidy-undo:${d.id}`,
+    duration: 8000,
+    action: { title: "Undo", run: () => void undoTidyName(renamed, original, windowId) },
+  });
+}
+
 export async function tidyRename(d: Download, suggestion: TidyName, windowId: string): Promise<void> {
   const original = { filename: d.filename, path: d.path };
   const path = await applyTidyName(d, suggestion);
@@ -165,13 +161,7 @@ export async function tidyRename(d: Download, suggestion: TidyName, windowId: st
     return;
   }
 
-  const renamed = useBrowser.getState().downloads.find((x) => x.id === d.id) ?? { ...d, filename: baseName(path), path };
-  showToast(windowId, "Tidy Download", `Renamed to “${renamed.filename}”`, {
-    icon: "wand.and.stars",
-    key: `tidy-undo:${d.id}`,
-    duration: 6000,
-    action: { title: "Undo", run: () => void undoTidyName(renamed, original, windowId) },
-  });
+  showRenamed(d, original, path, windowId);
 }
 
 async function undoTidyName(d: Download, original: { filename: string; path: string }, windowId: string) {
@@ -184,39 +174,49 @@ async function undoTidyName(d: Download, original: { filename: string; path: str
   }
 
   useBrowser.getState().updateDownloadFile(d.id, { filename: baseName(path), path });
+  showToast(windowId, "Download Name Reverted", clipped(baseName(path)), { icon: "arrow.uturn.backward" });
 }
 
-// MARK: Offering
+// MARK: Renaming finished downloads
 
-const offered = new Set<string>();
+const handled = new Set<string>();
 
-export async function offerTidyName(d: Download, s: BrowserState = useBrowser.getState()): Promise<void> {
+/** This download won't be renamed when it finishes. */
+export const keepDownloadName = (id: string) => void handled.add(id);
+
+/**
+ * A download finished: with Tidy Downloads on it gets a readable name right away, as in Arc, and a toast with the way
+ * back. Once for each download, so an undo sticks. A name a person chose, or one already readable, is left alone.
+ */
+export async function tidyFinishedDownload(d: Download, s: BrowserState = useBrowser.getState()): Promise<void> {
   if (!s.settings.tidyDownloads || d.state !== "finished" || !d.path) return;
 
-  if (offered.has(d.id)) return;
-  offered.add(d.id);
+  if (handled.has(d.id)) return;
+  handled.add(d.id);
 
   if (isUserNamedDownload(d.filename, d.suggestedFilename)) return;
   const windowId = windowForDownload(s, d);
+  const cleaned = cleanedName(d, s);
 
-  if (!windowId) return;
-  const suggestion = await resolveTidySuggestion(d, s);
-  const current = useBrowser.getState().downloads.find((x) => x.id === d.id);
+  if (!windowId || !cleaned) return;
+  const name = await refinedName(d, s, cleaned);
+  // The model takes a moment: the file may have been renamed, removed or the setting turned off meanwhile.
+  const now = useBrowser.getState();
+  const current = now.downloads.find((x) => x.id === d.id);
 
-  if (!current || current.filename !== d.filename || !suggestion) return;
-  showToast(windowId, "Tidy Downloads", `Rename to “${suggestion.filename}”?`, {
-    icon: "wand.and.stars",
-    key: `tidy:${d.id}`,
-    duration: 8000,
-    action: { title: "Rename", run: () => void tidyRename(current, suggestion, windowId) },
-  });
+  if (!now.settings.tidyDownloads || !current || current.filename !== d.filename || current.state !== "finished") return;
+  const original = { filename: current.filename, path: current.path };
+  const path = await applyTidyName(current, name);
+
+  // Nobody asked for this rename, so a file that can't take the name just keeps its own.
+  if (path) showRenamed(current, original, path, windowId);
 }
 
-export function startTidyDownloadOffers(): void {
+export function startTidyDownloads(): void {
   // Only downloads that finish while Bay watches: the engine replays its finished history at every launch.
   const live = new Set<string>();
   onDownload((d) => {
     if (d.state === "downloading") live.add(d.id);
-    else if (live.delete(d.id) && d.state === "finished") void offerTidyName(d);
+    else if (live.delete(d.id) && d.state === "finished") void tidyFinishedDownload(d);
   });
 }

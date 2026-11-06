@@ -294,7 +294,8 @@ const PaletteResultRow = memo(function PaletteResultRow({ suggestion: s, index, 
   const shownUrl = s.kind === "page" || s.kind === "create" ? displayUrl(s.url) : "";
   // The typed search names its engine, as yab's does ("how to  Google"); the engine's own suggestions don't.
   const engine = s.kind === "search" && !s.suggested ? s.engine : "";
-  const detail = s.kind === "calc" ? s.expression : (s.detail ?? (engine || (shownUrl !== title ? shownUrl : "")));
+  const switches = s.kind === "page" && !!s.tabId;
+  const detail = switches ? "" : s.kind === "calc" ? s.expression : (s.detail ?? (engine || (shownUrl !== title ? shownUrl : "")));
 
   return (
     <View onMouseEnter={(e: PointerHoverEvent) => actions.hover(e, index)}>
@@ -348,7 +349,12 @@ const PaletteResultRow = memo(function PaletteResultRow({ suggestion: s, index, 
                 ) : (
                   <View style={{ flex: 1 }} />
                 )}
-                {s.kind === "action" && s.hint && pageContext ? (
+                {switches ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={{ fontSize: 12, color: colors?.text ?? theme.textSecondary }}>Switch to Tab</Text>
+                    <Keycaps hint="→" color={colors?.text} />
+                  </View>
+                ) : s.kind === "action" && s.hint && pageContext ? (
                   <Keycaps hint={s.hint} />
                 ) : selected ? (
                   <Keycaps hint="↩" color={colors?.text} />

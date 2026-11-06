@@ -9,7 +9,15 @@ import { matchQuickCreate } from "./quickCreate.ts";
 import { scopedSearchUrl, type SearchScope } from "./siteSearch.ts";
 
 export type SuggestionSource = {
-  tabs: readonly { id: string; url: string; title: string; favicon: string | null }[];
+  tabs: readonly {
+    id: string;
+    url: string;
+    title: string;
+    favicon: string | null;
+    customTitle?: string | null;
+    pinnedUrl?: string | null;
+    lastActiveAt?: number;
+  }[];
   history: readonly { url: string; title: string; favicon: string | null; visits: number; lastVisit: number }[];
   bookmarks?: readonly { url: string; title: string; favicon: string | null }[];
   // Tabs the clean up put away (Arc's archive), newest first: a row for one restores it rather than opening its page.
@@ -280,6 +288,28 @@ function tabsOver(pool: Pool, tabs: readonly TabRow[], cleaned: readonly Cleaned
   return { tabIds, cleanedIds, extra };
 }
 
+// The tab a site's address goes to when none is on that very page: one pinned to the site (an Essential, wherever it
+// has wandered), else the one on the site used last.
+function tabOnSite(tabs: readonly TabRow[], host: string, currentTabId?: string): TabRow | undefined {
+  if (!host) return undefined;
+  let best: TabRow | undefined;
+  let bestPinned = false;
+
+  for (const t of tabs) {
+    if (!t.url || t.id === currentTabId) continue;
+    const pinned = !!t.pinnedUrl && hostOf(t.pinnedUrl) === host;
+
+    if (!pinned && hostOfPage(pageText(t)) !== host) continue;
+
+    if (!best || (pinned && !bestPinned) || (pinned === bestPinned && (t.lastActiveAt ?? 0) > (best.lastActiveAt ?? 0))) {
+      best = t;
+      bestPinned = pinned;
+    }
+  }
+
+  return best;
+}
+
 const isWordChar = (code: number) => (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
 
 function wordStartsWith(text: string, word: string): boolean {
@@ -441,6 +471,18 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
     return c && pageSuggestion(c, tabIds.get(key), cleanedIds.get(key));
   };
 
+  // Only a bare host as typed looks for the site's tab: a scheme or a path asks for that address.
+  const toAddress = (url: string, favicon: string | null): Suggestion => {
+    const row = known(url);
+
+    if (row?.kind === "page" && row.tabId) return row;
+    const tab = /^[^/?#]+$/.test(query) ? tabOnSite(source.tabs, hostOf(url), options.currentTabId) : undefined;
+
+    if (tab) return { kind: "page", url: tab.url, title: tab.customTitle || tab.title, favicon: tab.favicon, tabId: tab.id };
+
+    return row ?? { kind: "page", url, title: "", favicon };
+  };
+
   const websiteFirst = preference === "website";
   const oneWord = tokens.length === 1;
   const completes = websiteFirst && !scope && oneWord;
@@ -515,8 +557,8 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
 
   if (creates.length && /^\S+\s+\S/.test(query)) first = createRow(creates[0]!);
   else if (actionMatches[0]?.exact) first = actionRow(actionMatches[0].action);
-  else if (target && completion) first = known(target.url) ?? { kind: "page", url: target.url, title: "", favicon: target.favicon };
-  else if (typedUrl) first = known(typedUrl) ?? { kind: "page", url: typedUrl, title: "", favicon: null };
+  else if (target && completion) first = toAddress(target.url, target.favicon);
+  else if (typedUrl) first = toAddress(typedUrl, null);
   else if (websiteFirst && best && best.m >= 40) first = pageSuggestion(best.c, best.tabId, best.cleanedId);
   else first = search;
 

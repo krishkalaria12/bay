@@ -10,7 +10,6 @@ import {
   type ExtensionSearchEngine,
   type SearchEngine,
 } from "@bay/core";
-import type { PageEngine } from "@bay/chromium";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browserStore";
 import { layout } from "../lib/constants";
@@ -55,6 +54,8 @@ export type Settings = {
   // Off by default; reversible via Reset Name. macOS 26 with Apple Intelligence in Arc;
   // Bay ships a heuristic that runs everywhere.
   tidyTabTitles: boolean;
+  // Arc Max's Tidy Tabs: the divider's Tidy button. The sidebar menu and command bar offer it either way.
+  tidyTabs: boolean;
   cleanUpInactiveTabsAfterHours: number | null;
   awakeSites: string[];
   mutedSites: string[];
@@ -107,12 +108,6 @@ export type Settings = {
   littleBayMenuBarItem: boolean;
   // A Little Bay left alone this long is put away, its page in the Library's archive (littleBay/putAway.ts); null never.
   littleBayPutAwayAfterHours: number | null;
-
-  // Where pages open (store/engines.ts): the default engine, website rules ("https://host[:port]" to an engine), and
-  // whether streaming sites open in WebKit, where their protected video plays.
-  pageEngine: PageEngine;
-  websiteEngines: Record<string, PageEngine>;
-  protectedVideoInWebKit: boolean;
 };
 
 export type LittleBayShortcut = { key: string; keyCode: number; modifiers: ("control" | "option" | "shift" | "command")[] };
@@ -145,6 +140,8 @@ export const DEFAULT_SETTINGS: Settings = {
   optShiftClickOpensInGroup: true,
   autoGroupMeetingTabs: true,
   tidyTabTitles: false,
+  // On, as in Arc: it waits for a click.
+  tidyTabs: true,
   // On, as Arc's archive (its default is 12 hours). A saved session keeps its choice.
   cleanUpInactiveTabsAfterHours: 12,
   awakeSites: [...DEFAULT_AWAKE_SITES],
@@ -180,9 +177,6 @@ export const DEFAULT_SETTINGS: Settings = {
   littleBayMenuBarItem: false,
   // Arc's: six hours.
   littleBayPutAwayAfterHours: 6,
-  pageEngine: "chromium",
-  websiteEngines: {},
-  protectedVideoInWebKit: true,
 };
 
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];

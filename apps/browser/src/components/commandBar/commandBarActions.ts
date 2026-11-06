@@ -5,7 +5,6 @@ import { runCommand } from "../../lib/appCommands";
 import { isBookmarked } from "../../store/bookmarks";
 import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTab, bookmarkSpaceId } from "../../store/model";
-import { canSwitchEngine, tabEngine } from "../../store/engines";
 import { isDeveloperUrl, siteKey } from "../developer/localDevSites";
 import type { Tab } from "../../store/types";
 import { boostHost } from "../../lib/boosts";
@@ -29,7 +28,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "site" | "tab" | "split" | "spaces" | "boost" | "boosted" | "engine";
+  needs?: "page" | "site" | "tab" | "split" | "spaces" | "boost" | "boosted";
 };
 
 const page = "page" as const;
@@ -60,7 +59,7 @@ const DEFS: ActionDef[] = [
   { command: "renameTab", title: "Rename Tab", icon: "pencil", needs: "tab" },
   { command: "searchTabs", title: "Search Tabs", icon: "magnifyingglass", hint: "⇧⌘A" },
   { command: "cleanUpTabs", title: "Clean Up Tabs", icon: "sparkles", hint: "⌥⌘K" },
-  { command: "tidyTabs", title: "Tidy Tabs", icon: "rectangle.stack", keywords: ["group tabs", "organize tabs", "group by site"] },
+  { command: "tidyTabs", title: "Tidy Tabs", icon: "rectangle.stack", keywords: ["group tabs", "organize tabs", "sort tabs", "group by topic"] },
   { command: "newGroupWithTabs", title: "New Group with Tab", icon: "folder.badge.plus", hint: "⌃⌘N", keywords: ["tab group"], needs: "tab" },
   { command: "reload", title: "Reload Page", icon: "arrow.clockwise", hint: "⌘R", keywords: ["refresh"], needs: page },
   { command: "forceReload", title: "Force Reload Page", icon: "arrow.clockwise", hint: "⇧⌘R", keywords: ["hard reload", "hard refresh"], needs: page },
@@ -70,13 +69,6 @@ const DEFS: ActionDef[] = [
     icon: "speaker.slash",
     keywords: ["mute", "unmute", "silence"],
     needs: page,
-  },
-  {
-    command: "togglePageEngine",
-    title: ({ s, tab }) => (tab && tabEngine(s, tab.id) === "webkit" ? "Open Page in Chromium" : "Open Page in WebKit"),
-    icon: "safari",
-    keywords: ["webkit", "chromium", "safari", "engine", "drm", "netflix", "protected video"],
-    needs: "engine",
   },
   { command: "copyUrl", title: "Copy URL", icon: "link", hint: "⇧⌘C", keywords: ["copy link"], needs: page },
   { command: "copyUrlAsMarkdown", title: "Copy URL as Markdown", icon: "link", hint: "⌥⇧⌘C", keywords: ["markdown link"], needs: page },
@@ -221,14 +213,16 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
 
     if (d.needs === "boosted" && !siteHasBoosts(tab?.url)) continue;
 
-    if (d.needs === "engine" && !canSwitchEngine(tab?.url)) continue;
-    out.push({
+    const action: CommandAction = {
       id: actionId(d),
       title: v.is(v.string(), d.title) ? d.title : d.title(c),
       icon: d.icon,
-      ...(d.hint ? { hint: d.hint } : undefined),
-      ...(d.keywords ? { keywords: d.keywords } : undefined),
-    });
+    };
+
+    if (d.hint) action.hint = d.hint;
+
+    if (d.keywords) action.keywords = d.keywords;
+    out.push(action);
   }
 
   if (w && !w.incognito) {
@@ -250,7 +244,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
 
 export function runBarAction(id: string, windowId: string) {
   const i = id.indexOf(":");
-  // SAFETY: BrowserCommand assertion matches the runtime value validated at this call site.
+  // SAFETY: actionId builds ids from a BrowserCommand (optionally suffixed `:arg`), so the prefix before ':' is one.
   const command = (i < 0 ? id : id.slice(0, i)) as BrowserCommand;
   const arg = i < 0 ? null : id.slice(i + 1);
   runCommand({ command, arg, windowId });

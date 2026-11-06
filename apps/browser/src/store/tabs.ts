@@ -31,7 +31,7 @@ import { forgetOpeners, insertionIndex, openerSuccessor, switchKeepsOpeners } fr
 import { groupWithOpener, onUrlChange, pruneSelection, samePage } from "./tabTidying";
 import { searchUrlPrefix } from "./settings";
 import { mainWindowFor } from "./littleBay";
-import { tabEngine, typedNavigationEngine } from "./engines";
+import { engineForUrl, tabEngine } from "./engines";
 import { pinnedSplitOf, removeFromSplits, splitOf } from "./splits";
 import type { BrowserWindow, ClosedTab, Tab, TabLive, TabSnapshot } from "./types";
 import { MAX_CLOSED_TABS } from "./constants";
@@ -111,13 +111,12 @@ export function windowFor(s: BrowserState, tab: Tab, requested?: string | null):
 
   if (canShow(s, asked, tab)) return asked;
   const key = tabListKey(s, tab);
-  const order: BrowserWindow[] = [];
 
-  for (const id of new Set([...s.ui.focusOrder, tab.windowId, ...s.windowOrder])) {
+  const order = [...new Set([...s.ui.focusOrder, tab.windowId, ...s.windowOrder])].flatMap((id) => {
     const w = s.windows[id];
 
-    if (canShow(s, w, tab)) order.push(w);
-  }
+    return w && canShow(s, w, tab) ? [w] : [];
+  });
 
   return order.find((w) => windowListKey(s, w!) === key && w!.id === s.ui.focusedWindowId) ?? order.find((w) => windowListKey(s, w!) === key) ?? order[0];
 }
@@ -134,7 +133,9 @@ export function activated(s: BrowserState, id: string, windowId?: string | null)
   // A favourite shared with the space on screen (the same profile) opens in it, and is that space's from now on: the
   // window stays where it is. Its page is the same engine profile's, so nothing reloads.
   const spaceId = tab.pinned && !w.incognito && tab.spaceId !== w.spaceId && sharesProfile(s, tab.spaceId, w.spaceId) ? w.spaceId : tab.spaceId;
-  const nextTab: Tab = { ...rest, spaceId, windowId: w.id, lastActiveAt: Date.now(), ...(lazy ? wake(tab) : undefined) };
+  const nextTab: Tab = { ...rest, spaceId, windowId: w.id, lastActiveAt: Date.now() };
+
+  if (lazy) Object.assign(nextTab, wake(tab));
 
   const window: BrowserWindow = {
     ...w,
@@ -144,11 +145,14 @@ export function activated(s: BrowserState, id: string, windowId?: string | null)
 
   const ui = s.windowUi[w.id];
 
-  return {
+  const result: Partial<BrowserState> = {
     tabs: { ...s.tabs, [id]: nextTab },
     windows: { ...s.windows, [w.id]: window },
-    ...(ui?.panel.open ? { windowUi: { ...s.windowUi, [w.id]: { ...ui, panel: { open: false, initialText: "" } } } } : undefined),
   };
+
+  if (ui?.panel.open) result.windowUi = { ...s.windowUi, [w.id]: { ...ui, panel: { open: false, initialText: "" } } };
+
+  return result;
 }
 
 export const apply = (s: BrowserState, patch: Partial<BrowserState>): BrowserState => ({ ...s, ...patch });
@@ -170,7 +174,8 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
 
         if (!t || !gone.has(id) || (!t.url && !t.pinned)) return;
         const group = Object.values(s.groups).find((g) => g.tabIds.includes(id));
-        closed.push({
+
+        const entry: ClosedTab = {
           kind: "tab",
           id: newId("ct"),
           tab: snapshotTab(t),
@@ -179,8 +184,10 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
           index,
           group: group ? { id: group.id, name: group.name, icon: group.icon, color: group.color } : null,
           closedAt: now,
-          ...(s.windows[key]?.kind === "small" ? { small: true } : undefined),
-        });
+        };
+
+        if (s.windows[key]?.kind === "small") entry.small = true;
+        closed.push(entry);
       });
     }
 
@@ -237,11 +244,7 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
 
 /** The window's shown tab for each space, with each of `gone` replaced by the tab it shows next: one its
  *  opener opened, else the next one (awake first), else the one before. */
-export interface SpaceTabIds {
-  [spaceId: string]: string;
-}
-
-export function successors(s: BrowserState, w: BrowserWindow, gone: Set<string>): SpaceTabIds {
+export function successors(s: BrowserState, w: BrowserWindow, gone: Set<string>) {
   const activeTabIds = { ...w.activeTabIds };
 
   for (const [spaceId, activeId] of Object.entries(w.activeTabIds)) {
@@ -350,8 +353,14 @@ function backToPin(s: BrowserState, t: Tab): Partial<Tab> {
 
   if (!home || !t.url || samePage(t.url, home)) return {};
   const entry = s.history[t.spaceId]?.find((h) => samePage(h.url, home));
+  const patch: Partial<Tab> = { ...onUrlChange(s, t, home), url: home };
 
-  return { ...onUrlChange(s, t, home), url: home, ...(entry ? { title: entry.title, favicon: entry.favicon ?? t.favicon } : undefined) };
+  if (entry) {
+    patch.title = entry.title;
+    patch.favicon = entry.favicon ?? t.favicon;
+  }
+
+  return patch;
 }
 
 function lastRegularTab(s: BrowserState, w: BrowserWindow, id: string, closing: Set<string>): string | undefined {
@@ -537,8 +546,15 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     // Typing an address starts a new task (a New Tab page gets one lookup first, as in Chrome).
     const base = userInitiated && tab.url ? forgetOpeners(s, tabListKey(s, tab)) : s;
     // A typed address opens in its site's engine (store/engines.ts); moving engines drops the page the tab adopted.
-    const engine = userInitiated ? typedNavigationEngine(s, tab, url) : undefined;
-    const page = engine ? { engine, ...(engine !== tabEngine(s, id) ? { adoptId: undefined } : undefined) } : {};
+    const engine = userInitiated ? engineForUrl(url) : undefined;
+    const page: Partial<Tab> = {};
+
+    if (engine) {
+      page.engine = engine;
+
+      if (engine !== tabEngine(s, id)) page.adoptId = undefined;
+    }
+
     set(
       apply(base, {
         tabs: {
@@ -566,10 +582,15 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     const nextLive = live && livePatch ? merge(live, livePatch) : live;
 
     if (next === tab && nextLive === live) return;
-    set((s) => ({
-      ...(next !== tab ? { tabs: withChangedEntry(s.tabs, id, next) } : undefined),
-      ...(nextLive !== live ? { live: withChangedEntry(s.live, id, nextLive!) } : undefined),
-    }));
+    set((s) => {
+      const patch: Partial<BrowserState> = {};
+
+      if (next !== tab) patch.tabs = withChangedEntry(s.tabs, id, next);
+
+      if (nextLive !== live) patch.live = withChangedEntry(s.live, id, nextLive!);
+
+      return patch;
+    });
   },
 
   updateLive(id, patch) {

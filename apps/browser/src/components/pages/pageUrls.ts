@@ -1,29 +1,11 @@
 import { focus } from "../../lib/actions";
 import { useBrowser } from "../../store/browserStore";
 import { activeTabId, resolveWindowId, viewTabIds } from "../../store/model";
-import type { Tab } from "../../store/types";
+import { INTERNAL_SCHEME, internalPageOf, tabDestination, type InternalPageId } from "./internalPages";
 
-export type InternalPageId = "history" | "bookmarks" | "downloads" | "library" | "easel";
+export * from "./internalPages";
 
-export const INTERNAL_PAGES: Record<InternalPageId, { title: string }> = {
-  library: { title: "Library" },
-  easel: { title: "Easel" },
-  history: { title: "History" },
-  bookmarks: { title: "Bookmarks" },
-  downloads: { title: "Downloads" },
-};
-
-const SCHEME = "bay://";
-
-export const internalUrl = (page: InternalPageId, query?: string) => `${SCHEME}${page}${query ? `?q=${encodeURIComponent(query)}` : ""}`;
-
-export function internalPageOf(url: string | null | undefined): InternalPageId | null {
-  if (!url?.toLowerCase().startsWith(SCHEME)) return null;
-  const page = url.slice(SCHEME.length).split(/[/?#]/)[0]!.toLowerCase();
-
-  // SAFETY: `page in INTERNAL_PAGES` above proves `page` is one of INTERNAL_PAGES' keys.
-  return page in INTERNAL_PAGES ? (page as InternalPageId) : null;
-}
+export const internalUrl = (page: InternalPageId, query?: string) => `${INTERNAL_SCHEME}${page}${query ? `?q=${encodeURIComponent(query)}` : ""}`;
 
 export function internalQuery(url: string): string {
   const q = /[?&]q=([^&#]*)/.exec(url)?.[1];
@@ -34,10 +16,6 @@ export function internalQuery(url: string): string {
     return q ?? "";
   }
 }
-
-export const tabDestination = (t: Pick<Tab, "url" | "navigation">) => t.navigation?.url ?? t.url;
-
-export const isInternalTab = (t: Pick<Tab, "url" | "navigation">) => internalPageOf(tabDestination(t)) !== null;
 
 export function openInternalPage(page: InternalPageId, windowId?: string | null, options: { query?: string; background?: boolean } = {}) {
   const s = useBrowser.getState();

@@ -1,7 +1,7 @@
 import { customBangTable, displayUrl, hostOf, joinBangTables, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
-import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/desktop";
+import { ContextMenuArea, Symbol, copyText, onTextInputRestore, recordTextInputEdit, showTextInputMenu } from "@bay/desktop";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { TextInput, View } from "react-native";
+import { findNodeHandle, TextInput, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../../telemetry/track";
@@ -13,7 +13,7 @@ import { createBangSubmitter, loadBangs, mayBeBang, topResultUrl } from "./bangs
 import { scopeColorFor, scopeColorsFor } from "./scopeColors";
 import { traceOmnibox, useOmniboxDriver } from "./devDriver";
 import { dispositionFor, openFromBar, openInBackground, restoreFromBar, switchFromBar, type Disposition } from "./open";
-import { clipboardPasteAction, pasteMenuItem, pasteTarget, readClipboard } from "./paste";
+import { clipboardPasteAction, pasteMenuItem, pasteTarget } from "./paste";
 import { ScopeChip } from "./ScopeChip";
 import { SuggestionIcon, SuggestionList, type RowActions } from "./SuggestionRow";
 import { useDropdownStart } from "./dropdownStart";
@@ -32,6 +32,8 @@ import { isEscapeKey } from "../../lib/escapeKey";
 type Variant = "palette" | "sidebar";
 
 type Selection = { start: number; end: number };
+
+const scopeState = (scope: SearchScope | null, from: string) => (scope ? JSON.stringify({ scope, from }) : "");
 
 // The text an arrowed-to row puts in the field, to open as is or keep editing.
 function fillText(s: Suggestion | undefined, dropdown: boolean): string | null {
@@ -111,6 +113,8 @@ export function Omnibox({
   const scopeFrom = useRef("");
   const [pendingSelection, setPendingSelection] = useState<Selection | null>(initial ? { start: 0, end: initial.length } : null);
   const selection = useRef<Selection>({ start: 0, end: typed.length });
+  // A key's selection event arrives ahead of its text change, so that change happened at the selection before this one.
+  const selectionBefore = useRef<Selection>({ start: 0, end: typed.length });
   const input = useRef<TextInput>(null);
   const root = useRef<View>(null);
 
@@ -125,7 +129,9 @@ export function Omnibox({
 
   useEffect(() => () => bangEnter.cancel(), [bangEnter, bangsEnabled, engines]);
 
-  const { items: suggested, completion } = useSuggestions({
+  // The palette scrolls a longer list than the sidebar's dropdown: as yab's, every engine suggestion (Google gives
+  // ten at most) right after the search row, then matching pages.
+  const suggestionOptions: Parameters<typeof useSuggestions>[0] = {
     text: typed,
     active: edited || !!scope,
     windowId,
@@ -133,10 +139,15 @@ export function Omnibox({
     currentTabId: tabId,
     currentUrl: currentUrl || undefined,
     scope,
-    // The palette scrolls a longer list than the sidebar's dropdown: as yab's, every engine suggestion (Google gives
-    // ten at most) right after the search row, then matching pages.
-    ...(palette ? { limit: 20, remoteLimit: 8, pagesAhead: 8 } : undefined),
-  });
+  };
+
+  if (palette) {
+    suggestionOptions.limit = 20;
+    suggestionOptions.remoteLimit = 8;
+    suggestionOptions.pagesAhead = 8;
+  }
+
+  const { items: suggested, completion } = useSuggestions(suggestionOptions);
 
   const start = useDropdownStart(dropdown && !edited && !scope, tabId, spaceId);
   const idleSections = usePaletteStart(windowId, spaceId, tabId);
@@ -169,6 +180,32 @@ export function Omnibox({
     selection.current = pendingSelection;
     setPendingSelection(null);
   }, [pendingSelection]);
+
+  // The field's history keeps the scope with each text, so Undo and Redo move in and out of it too.
+  const recordEdit = (before: string, after: string, options?: { state?: string; at?: Selection }) => {
+    const tag = findNodeHandle(input.current);
+
+    if (tag == null) return;
+    const { start, end } = options?.at ?? selection.current;
+    void recordTextInputEdit(tag, before, after, start, end, options?.state ?? scopeState(scope, scopeFrom.current));
+  };
+
+  const restoreScope = useEffectEvent((state: string) => {
+    // SAFETY: state was stored with `JSON.stringify({ scope, from })` by scopeState above.
+    const restored = state ? (JSON.parse(state) as { scope: SearchScope; from: string }) : null;
+
+    if (restored) scopeFrom.current = restored.from;
+    setScope(restored?.scope ?? null);
+  });
+
+  useEffect(() => {
+    const tag = findNodeHandle(input.current);
+
+    if (tag == null) return;
+    const subscription = onTextInputRestore(tag, restoreScope);
+
+    return () => subscription.remove();
+  }, [restoreScope]);
 
   const reset = () => {
     bangEnter.cancel();
@@ -267,6 +304,7 @@ export function Omnibox({
       case "emoji":
         if (s.kind === "calc" && disposition !== "current") return go(s.url, disposition, background);
         copyText(s.value);
+        recordEdit(typed, s.value);
         setTyped(s.value);
         setSuppressCompletion(true);
         setPendingSelection({ start: 0, end: s.value.length });
@@ -288,6 +326,7 @@ export function Omnibox({
 
   const enterScope = (next: SearchScope) => {
     scopeFrom.current = typed;
+    recordEdit(typed, "", { state: scopeState(next, typed) });
     setScope(next);
     setTyped("");
     setEdited(true);
@@ -296,6 +335,7 @@ export function Omnibox({
   };
 
   const leaveScope = (restoreText: boolean) => {
+    recordEdit(typed, restoreText ? scopeFrom.current : typed, { state: "" });
     setScope(null);
 
     if (restoreText) setTyped(scopeFrom.current);
@@ -386,6 +426,7 @@ export function Omnibox({
       if (tabScope) return enterScope(tabScope);
 
       if (shownCompletion && preview === null) {
+        recordEdit(typed, value);
         setTyped(value);
         setSuppressCompletion(true);
         setPendingSelection({ start: value.length, end: value.length });
@@ -417,35 +458,12 @@ export function Omnibox({
 
   const onContextMenu = async () => {
     const paste = await clipboardPasteAction();
-    const { start, end } = selection.current;
-    const hasSelection = end > start;
+    const tag = findNodeHandle(input.current);
 
-    const choice = await showMenu([
-      ...pasteMenuItem(paste),
-      ...(paste ? [{ separator: true as const }] : []),
-      { id: "cut", title: "Cut", enabled: hasSelection },
-      { id: "copy", title: "Copy", enabled: hasSelection },
-      { id: "paste", title: "Paste", enabled: !!paste },
-      { separator: true },
-      { id: "selectAll", title: "Select All", enabled: !!value },
-    ]);
+    if (tag == null) return;
+    const choice = await showTextInputMenu(tag, pasteMenuItem(paste));
 
     if (choice === "pasteAndGo" && paste) return go(pasteTarget(paste));
-
-    if (choice === "copy" || choice === "cut") copyText(value.slice(start, end));
-
-    if (choice === "cut" || choice === "paste") {
-      bangEnter.cancel();
-      const insert = choice === "paste" ? (await readClipboard()).replace(/\s*\n\s*/g, " ") : "";
-      const next = value.slice(0, start) + insert + value.slice(end);
-      setTyped(next);
-      setEdited(true);
-      setSuppressCompletion(true);
-      setSelected(0);
-      setPendingSelection({ start: start + insert.length, end: start + insert.length });
-    }
-
-    if (choice === "selectAll") setPendingSelection({ start: 0, end: value.length });
     input.current?.focus();
   };
 
@@ -472,6 +490,7 @@ export function Omnibox({
 
     bangEnter.cancel();
     keyAt.current = Date.now();
+    recordEdit(preview ?? typed, change.typed, { at: selectionBefore.current });
     setEdited(true);
     setTyped(change.typed);
     setSuppressCompletion(change.suppress || (preview !== null && next.length < preview.length));
@@ -517,6 +536,8 @@ export function Omnibox({
     input.current?.focus();
     const { start, end } = selection.current;
     input.current?.setSelection(start, end);
+    // Changes nothing, but gives the field its own empty history before the first edit.
+    recordEdit(typed, typed);
   };
 
   const field = (
@@ -525,6 +546,7 @@ export function Omnibox({
       onLayout={focusOnce}
       value={value}
       onSelectionChange={(e) => {
+        selectionBefore.current = selection.current;
         selection.current = e.nativeEvent.selection;
       }}
       onChangeText={onChangeText}
@@ -564,11 +586,14 @@ export function Omnibox({
   );
 
   if (palette) {
+    const switchingTo = current?.kind === "page" && current.tabId && typed.trim() ? current : null;
+    const fieldPage = pageContext ? { url: currentUrl, favicon: currentFavicon } : switchingTo;
+
     return (
       <View ref={root}>
         <PaletteContent
           pageContext={pageContext}
-          leadingIcon={pageContext ? <Favicon url={currentUrl} favicon={currentFavicon} size={20} spaceId={spaceId} /> : undefined}
+          leadingIcon={fieldPage ? <Favicon url={fieldPage.url} favicon={fieldPage.favicon} size={20} spaceId={spaceId} /> : undefined}
           field={
             <ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}>
               <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>

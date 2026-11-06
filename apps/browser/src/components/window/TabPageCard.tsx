@@ -14,7 +14,7 @@ import { layout } from "../../lib/constants";
 import { startChromeTabs } from "../../lib/engineTabs";
 import { handOff, wantsPage } from "../../lib/tabNavigation";
 import { noteDiscarded, noteGone, noteReady } from "../../lib/tabLifecycle";
-import { clearEngineOffer, followSiteChoice, noteWebKitPage, offerWebKit, persistEngine } from "../../lib/pageEngines";
+import { followSiteChoice, noteWebKitPage, persistEngine, playInWebKit } from "../../lib/pageEngines";
 import { webviewRef, webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browserStore";
 import { useActiveTabId, useSidebarOpen, useTab, useWindowId, useQuietBrowser } from "../../store/hooks";
@@ -46,7 +46,6 @@ import { InternalPage } from "../pages/index";
 import {
   AutofillPrompt,
   BlockedPopupsPrompt,
-  EngineOfferPrompt,
   ExternalAppPrompt,
   PasswordPrompt,
   PermissionPrompt,
@@ -468,7 +467,6 @@ const TabPane = memo(function TabPane({
                 <PasswordPrompt tabId={tabId} right={barEnd} top={4} />
                 <AutofillPrompt tabId={tabId} right={barEnd} top={4} />
                 {!newTabShown && <ExternalAppPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
-                {!newTabShown && <EngineOfferPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
                 {popover === "siteControls" && (!addressInSidebar || !sidebarOpen || devBar) && <SiteControls tabId={tabId} {...popoverSide} top={2} />}
                 {popover === "popups" && <BlockedPopupsPrompt tabId={tabId} {...popoverSide} top={2} />}
                 {popover === "zoom" && <ZoomPopover tabId={tabId} {...popoverSide} top={2} />}
@@ -612,7 +610,6 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
           setPopover(tabId, null);
           setPageSelection(tabId, null);
           setLinkPreview(tabId, null);
-          clearEngineOffer(tabId);
           const blocked = pageOf(tabId).blockedPage;
           patchPage(tabId, {
             popups: [],
@@ -748,7 +745,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
           if (boostMessage.success) onBoostMessage(tabId, boostMessage.output);
         } else if (kind === "linkPreview") setLinkPreview(tabId, linkPreview.success ? linkPreview.output : null);
         else if (kind === "captureGesture") onCaptureGesture(tabId, data);
-        else if (kind === "drm") offerWebKit(tabId, data);
+        else if (kind === "drm") void playInWebKit(tabId);
       }}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url) => {

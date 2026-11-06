@@ -92,7 +92,18 @@ export const endWebKitPrivateSession = (session) => (endedWebKitSessions.push(se
 export const WEBKIT_SITE_SETTINGS = ["camera", "microphone"];
 export const getWebKitSiteSettings = () => Promise.resolve({});
 export const setWebKitSiteSetting = () => Promise.resolve();
-export const renameFile = (path, _name) => Promise.resolve(path);
+
+// Tidy Downloads: renames go on the path's folder unless it's /gone/; a test can read what was asked.
+export const renameCalls = [];
+
+export const renameFile = (path, name) => {
+  renameCalls.push({ path, name });
+
+  if (path.startsWith("/gone/")) return Promise.resolve(null);
+
+  return Promise.resolve(`${path.split("/").slice(0, -1).join("/")}/${name}`);
+};
+
 export const onDownload = () => ({ remove() {} });
 export const deletedProfileData = [];
 export const profileDataLeft = new Map();
@@ -400,7 +411,27 @@ export const setSidebarKeyboard = (windowId, active) => (sidebarKeyboardCalls.pu
 export const engineBoostCalls = [];
 export const setBoosts = (boosts) => (engineBoostCalls.push(boosts), Promise.resolve());
 
-export const tidyNames = null;
+// Tidy Downloads' model: a test sets `answer`, a name or a function returning one; none means no model on this Mac.
+export const tidyNameAnswers = { answer: null, asked: 0 };
+
+export const tidyNames = {
+  suggest: async () => {
+    tidyNameAnswers.asked++;
+    const { answer } = tidyNameAnswers;
+
+    return answer instanceof Function ? answer() : answer;
+  },
+};
+
+// Tidy Tabs' model: a test sets `answer` (a function of the prompt) and `status`.
+export const tidyTabsAnswers = { status: "off", answer: async () => null, prompts: [] };
+
+export const tidyTabsModel = {
+  modelStatus: () => tidyTabsAnswers.status,
+  group: (prompt) => (tidyTabsAnswers.prompts.push(prompt), tidyTabsAnswers.answer(prompt)),
+};
+
+export const TidySquiggle = null;
 export const userScriptsAvailable = () => false;
 export const watchUserScripts = () => {};
 export const readUserScripts = async () => ({ state: "empty" });

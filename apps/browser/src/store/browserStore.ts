@@ -1,4 +1,3 @@
-import * as v from "valibot";
 import { create, type StateCreator } from "zustand";
 import { createSidebarUndoSlice, withSidebarUndoActions, type SidebarUndoSlice } from "./sidebarUndo";
 import { createBookmarksSlice, EMPTY_BOOKMARKS, engineRoots, rootIdsFor, type BookmarksSlice } from "./bookmarks";
@@ -19,6 +18,7 @@ import type { BrowserWindow, PinnedFolder, Tab, TabGroup } from "./types";
 import { createUiSlice, type UiSlice } from "./windowUi";
 import { createWindowsSlice, type WindowsSlice } from "./windows";
 import { createSharedCollectionsSlice, type SharedCollectionsSlice } from "./sharedCollections";
+import * as v from "valibot";
 
 export type BrowserState = SidebarUndoSlice &
   SpacesSlice &
@@ -73,7 +73,7 @@ type SavedWindow = BrowserWindow & { tabIds?: string[] };
 
 // Groups and pinned folders were once saved with the window they were in; they belong to their space now.
 function withoutWindowId<T extends { windowId?: string }>(saved: T): Omit<T, "windowId"> {
-  // SAFETY: the spread copies saved's own windowId field so deleting it drops exactly that field.
+  // SAFETY: copy spreads T, whose windowId is optional per the constraint; the intersection keeps T's other fields deleteable.
   const copy = { ...saved } as { windowId?: string } & Omit<T, "windowId">;
   delete copy.windowId;
 
@@ -93,7 +93,7 @@ export const batchStoreUpdates = (update: () => void) => batch(update);
 const batched =
   <T>(creator: StateCreator<T>): StateCreator<T> =>
   (set, get, api) => {
-    // SAFETY: set forwards all its arguments unchanged to the wrapped setter, so the batching wrapper satisfies the set signature.
+    // SAFETY: batchedSet forwards set's full tuple; the inner cast restores the tuple arity Zustand's generic set expects.
     const batchedSet = ((...args: Parameters<typeof set>) => batch(() => (set as (...a: typeof args) => void)(...args))) as typeof set;
     api.setState = batchedSet;
 
@@ -137,6 +137,7 @@ export const useBrowser = create<BrowserState>()(
           settings.searchShortcutMode = settings.searchShortcutMode === "duckduckgo" ? "duckduckgo" : "arc";
           settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
           settings.tidyDownloads = v.is(v.boolean(), settings.tidyDownloads) ? settings.tidyDownloads : DEFAULT_SETTINGS.tidyDownloads;
+          settings.tidyTabs = v.is(v.boolean(), settings.tidyTabs) ? settings.tidyTabs : DEFAULT_SETTINGS.tidyTabs;
 
           if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
           settings.externalLinkDefault = normalizeLinkDestination(settings.externalLinkDefault);
@@ -155,7 +156,8 @@ export const useBrowser = create<BrowserState>()(
 
             // A peek is thrown away with its window's session (store/peeks.ts).
             if (!spaceOk(t.spaceId) || (isIncognitoSpace(t.spaceId) && !own) || t.peekOf) continue;
-            const { adoptId: _, wakeAdoptId: _wake, ...rest } = t;
+            // Its engine comes from its address again, so a page a website rule once moved isn't stuck there.
+            const { adoptId: _, wakeAdoptId: _wake, engine: _engine, ...rest } = t;
             tabs[t.id] = {
               ...rest,
               windowId: own ? t.windowId : "",
@@ -204,7 +206,7 @@ export const useBrowser = create<BrowserState>()(
 
           type SavedGroup = TabGroup & { windowId?: string };
 
-          // SAFETY: data.groups is the persisted groups record keyed by group id, so its values are SavedGroup.
+          // SAFETY: data.groups may carry an older windowId field, stripped by withoutWindowId in the map below.
           const groups = Object.fromEntries(
             Object.values((data.groups ?? {}) as Record<string, SavedGroup>)
               .map((saved) => {

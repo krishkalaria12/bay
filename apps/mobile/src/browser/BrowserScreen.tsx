@@ -166,6 +166,12 @@ export function BrowserScreen(): JSX.Element {
   const fail = useCallback((_tabId: string, cause: unknown) => showToast(cause instanceof Error ? cause.message : "Something went wrong."), [showToast]);
 
   const downloads = useDownloads((message) => toast.show(message));
+  // The download toast rides on the bottom bar, so a download started (or finished) while the bar is scrolled away
+  // brings it back; otherwise the tap looks like it did nothing.
+  const downloadToastKey = downloads.toast ? `${downloads.toast.id} ${downloads.toast.state}` : null;
+  useEffect(() => {
+    if (downloadToastKey) barHidden.value = withTiming(0, { duration: 180 });
+  }, [downloadToastKey, barHidden]);
   const find = useFindInPage(views.get(active.id), `${active.id} ${active.url}`);
   const reading = useReadingTools(active, views.get(active.id), page.isLoading, locked && Boolean(active.private), (cause) => fail(active.id, cause));
 
@@ -194,6 +200,8 @@ export function BrowserScreen(): JSX.Element {
       failed.delete(tabId);
       setError((current) => (current?.tabId === tabId ? null : current));
     }
+
+    if (state.blank) return dispatch({ type: "update-tab", id: tabId, update: { url: "", title: "" } });
 
     if (!isWebURL(state.url)) return;
 
@@ -259,6 +267,8 @@ export function BrowserScreen(): JSX.Element {
   }
 
   // The bar swipe moves through tabs in the switcher's order.
+  const activeIndex = data.tabs.findIndex((tab) => tab.id === active.id);
+
   function swipeTabs(step: 1 | -1): void {
     const next = data.tabs[data.tabs.findIndex((tab) => tab.id === active.id) + step];
 
@@ -424,6 +434,7 @@ export function BrowserScreen(): JSX.Element {
                 hiddenSelectors={[...reading.selectorsFor(tab), ...youtubeSelectors(data.preferences.youtube, hostOf(tab.url))]}
                 tweaks={{ textSize: data.preferences.textSize, skipAmp: data.preferences.skipAmp }}
                 pullToRefresh={data.preferences.pullToRefresh}
+                pageColor={pageColors[id] ?? null}
                 onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
                 onPageMessage={(message) => {
                   if (!media.pageMessage(id, message) && id === active.id) reading.pageMessage(message);
@@ -532,6 +543,7 @@ export function BrowserScreen(): JSX.Element {
           ) : null}
           {downloads.toast && !(locked && downloads.toast.private) ? (
             <DownloadToast
+              key={downloads.toast.id}
               item={downloads.toast}
               onOpen={() => downloads.toast && downloads.open(downloads.toast)}
               onShowAll={() => {
@@ -542,20 +554,23 @@ export function BrowserScreen(): JSX.Element {
           ) : null}
           {toast.toast ? <Toast key={toast.toast.key} text={toast.toast.text} action={toast.toast.action} onDone={toast.dismiss} /> : null}
           {hasPage && showPages ? (
-            <TabSwipe onSwipe={swipeTabs}>
-              <BrowserBar
-                mode="page"
-                site={locked && active.private ? undefined : host}
-                insecure={active.url.startsWith("http:")}
-                privately={Boolean(active.private)}
-                onTabs={showTabs}
-                onTabsLongPress={() => setPanel("tabs")}
-                tabCount={data.tabs.length}
-                onSearch={() => search(false)}
-                onMore={() => {
-                  if (!(locked && active.private)) setPanel("page");
-                }}
-              />
+            <TabSwipe onSwipe={swipeTabs} hasPrevious={activeIndex > 0} hasNext={activeIndex < data.tabs.length - 1} contentKey={`${active.id} ${host ?? ""}`}>
+              {(capsuleStyle) => (
+                <BrowserBar
+                  capsuleStyle={capsuleStyle}
+                  mode="page"
+                  site={locked && active.private ? undefined : host}
+                  insecure={active.url.startsWith("http:")}
+                  privately={Boolean(active.private)}
+                  onTabs={showTabs}
+                  onTabsLongPress={() => setPanel("tabs")}
+                  tabCount={data.tabs.length}
+                  onSearch={() => search(false)}
+                  onMore={() => {
+                    if (!(locked && active.private)) setPanel("page");
+                  }}
+                />
+              )}
             </TabSwipe>
           ) : (
             <BrowserBar

@@ -24,12 +24,8 @@ test("engine badge subscribers skip transient updates and follow all engine inpu
     S().updateTab(id, { engine: "webkit" });
     assert.equal(calls, 1);
     assert.equal(engineMark(useEngineView.getState(), id), "webkit");
-    S().updateSettings({ pageEngine: "webkit" });
-    assert.equal(calls, 2);
-    assert.equal(engineMark(useEngineView.getState(), id), null);
     S().hydrate({});
     assert.strictEqual(useEngineView.getState().tabs, S().tabs);
-    assert.strictEqual(useEngineView.getState().settings, S().settings);
     assert.equal(engineMark(useEngineView.getState(), id), null);
   } finally {
     stop();
@@ -76,4 +72,15 @@ test("engine selectors skip a tab switch's stamp and titles, and follow what sel
   } finally {
     stop();
   }
+});
+
+test("a restored tab takes its engine from its address, not the one it was saved with", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://example.com" });
+  const id = S().windows[w].activeTabIds.default;
+  S().updateTab(id, { engine: "webkit", url: "https://example.com/" });
+  const saved = S();
+  S().hydrate({ windows: saved.windows, tabs: saved.tabs, windowOrder: saved.windowOrder, spaces: saved.spaces, spaceOrder: saved.spaceOrder });
+  assert.equal(S().tabs[id].engine, undefined);
+  assert.equal(engineMark(useEngineView.getState(), id), null);
 });

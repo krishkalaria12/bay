@@ -1,4 +1,4 @@
-import { requireNativeModule, requireNativeViewManager, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule, requireNativeViewManager, requireOptionalNativeModule, type EventSubscription } from "expo-modules-core";
 import type { ViewProps } from "react-native";
 
 export * from "./system";
@@ -83,7 +83,6 @@ export type BrowserCommand =
   | "addBookmarkToFolder"
   | "openBookmark"
   | "toggleMute"
-  | "togglePageEngine"
   | "downloads"
   | "mergeAllWindows"
   | "switchSpace"
@@ -517,11 +516,23 @@ export const DockSelection = requireNativeViewManager<DockSelectionProps>("BayDo
 
 const InlineCompletionModule = requireNativeModule<{
   complete(tag: number, typed: string, completion: string): Promise<InlineWrite>;
+  showMenu(tag: number, items: MenuItem[]): Promise<string | null>;
+  recordEdit(tag: number, before: string, after: string, start: number, end: number, state: string): Promise<void>;
+  addListener(name: "onTextInputRestore", listener: (e: { tag: number; state: string }) => void): EventSubscription;
 }>("BayInlineCompletion");
 
 export type InlineWrite = 0 | 1 | 2;
 
 export const completeInline = (tag: number, typed: string, completion: string) => InlineCompletionModule.complete(tag, typed, completion);
+export const showTextInputMenu = (tag: number, items: MenuItem[]) => InlineCompletionModule.showMenu(tag, items);
+
+export const recordTextInputEdit = (tag: number, before: string, after: string, start: number, end: number, state: string) =>
+  InlineCompletionModule.recordEdit(tag, before, after, start, end, state);
+
+export const onTextInputRestore = (tag: number, listener: (state: string) => void) =>
+  InlineCompletionModule.addListener("onTextInputRestore", (e) => {
+    if (e.tag === tag) listener(e.state);
+  });
 
 type TranslationModule = {
   readonly available: boolean;
@@ -542,11 +553,28 @@ export const translation: Omit<TranslationModule, "available"> | null = Translat
 
 type TidyNamesModule = {
   readonly available: boolean;
-  suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;
+  suggest(filename: string, pageTitle: string, pageUrl: string): Promise<string | null>;
 };
 
 const TidyNamesNative = requireNativeModule<TidyNamesModule>("BayTidyNames");
 
-// Null unless launched with BAY_TIDY_DOWNLOADS_AI=true on a Mac with Apple Intelligence; Tidy Downloads then leans on
-// the local cleaner alone.
+// Null before macOS 26, where Tidy Downloads leans on the local cleaner alone. Its answer is null while Apple
+// Intelligence is off or still downloading.
 export const tidyNames: Omit<TidyNamesModule, "available"> | null = TidyNamesNative.available ? TidyNamesNative : null;
+
+/** Where Apple Intelligence stands on this Mac. */
+export type TidyModelStatus = "available" | "off" | "preparing" | "ineligible" | "needsNewerMacOS" | "unavailable";
+
+type TidyTabsModule = {
+  modelStatus(): TidyModelStatus;
+  /** Named groups of tab ids from the prompt, or null when the model couldn't answer. */
+  group(prompt: string): Promise<{ name: string; tabs: number[] }[] | null>;
+};
+
+// Optional: a platform or a build without it groups tabs by site.
+export const tidyTabsModel = requireOptionalNativeModule<TidyTabsModule>("BayTidyTabs");
+
+export type TidySquiggleProps = ViewProps & { running: boolean; color: string };
+
+/** The divider's wave while the model works. Null without the model, which is the only thing that takes long enough to need it. */
+export const TidySquiggle = tidyTabsModel ? requireNativeViewManager<TidySquiggleProps>("BayTidyTabs") : null;

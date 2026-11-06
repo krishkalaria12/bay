@@ -47,7 +47,15 @@ const SECTIONS: Item[][] = [
     { id: "liveFolders", title: "Live Folders", icon: "dot.radiowaves.left.and.right", color: "#FF9F0A", words: "github pull requests notion documents" },
     { id: "links", title: "Links", icon: "macwindow.on.rectangle", color: "#64D2FF", words: "little bay small window other apps" },
     ...(hasWebKit()
-      ? [{ id: "engines" as const, title: "Engines", icon: "safari.fill", color: "#0A84FF", words: "webkit chromium netflix streaming drm protected video" }]
+      ? [
+          {
+            id: "engines" as const,
+            title: "Protected Media",
+            icon: "safari.fill",
+            color: "#0A84FF",
+            words: "engine webkit chromium safari netflix streaming drm protected video",
+          },
+        ]
       : []),
     { id: "passwords", title: "Passwords", icon: "key.fill", color: "#8E8E93", words: "passkeys logins" },
     { id: "autofill", title: "Autofill", icon: "creditcard.fill", color: "#30D158", words: "addresses cards payment" },

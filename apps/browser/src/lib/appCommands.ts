@@ -33,7 +33,6 @@ import { rowPinned } from "../store/splits";
 import { isSmall, mainWindowFor } from "../store/littleBay";
 import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
 import { joinMeetingNow } from "../activity/meetingAlerts";
-import { togglePageEngine } from "./pageEngines";
 
 export function runCommand(event: CommandEvent) {
   return withSidebarUndoWindow(event.windowId ?? undefined, () => dispatchCommand(event));
@@ -310,8 +309,6 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
 
     case "toggleMute":
       return page ? toggleMute(page.id) : undefined;
-    case "togglePageEngine":
-      return page ? void togglePageEngine(page.id) : undefined;
     case "newEasel":
       return newEasel(windowId);
     case "openLibrary":
@@ -396,7 +393,6 @@ const LITTLE_BAY_PAGE_COMMANDS = new Set<string>([
   "addBookmarkToFolder",
   "openBookmark",
   "toggleMute",
-  "togglePageEngine",
   "cast",
   "openExtension",
   "addExtension",

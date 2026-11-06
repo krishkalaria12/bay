@@ -8,6 +8,9 @@
 //! - `$reason=` only words uBO's block page, so it goes. `$strict3p` becomes `$3p`, which covers fewer requests.
 //! - `$csp` rejects a type option, and a `$csp` rule only applies to documents, so `$doc` goes.
 //! - `$popunder` appears only on exceptions, and popunders aren't blocked: those rules go.
+//! - A line that's only a hostname (`ads.example`, `*.ads.example`) becomes `||ads.example^`, as uBO reads it.
+//!   adblock-rust would match it anywhere in a URL: Peter Lowe's list (now served as bare hostnames) has `t.co`, which
+//!   blocked every `ggpht.com`, `googleusercontent.com` and `microsoft.com` request, YouTube's avatars among them.
 //!
 //! [`block_documents_of_hostname_rules`] is uBO's strict blocking, for an engine that asks about pages being visited.
 
@@ -65,7 +68,27 @@ enum Line {
     Unchanged,
 }
 
+/// The host of a line that's only a hostname, optionally `*.`-prefixed; None for anything else. File-name patterns
+/// such as EasyPrivacy's `_chartbeat.js` stay patterns: a hostname doesn't start with `_`.
+fn bare_hostname(line: &str) -> Option<&str> {
+    let host = line.strip_prefix("*.").unwrap_or(line);
+    let (_, tld) = host.rsplit_once('.')?;
+    let valid = !host.starts_with(['.', '-', '_'])
+        && (tld.bytes().all(|b| b.is_ascii_alphabetic()) || tld.starts_with("xn--"))
+        && tld.len() >= 2
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_');
+    valid.then_some(host)
+}
+
 fn adapt_line(line: &str, adapted: &mut Adapted) -> Line {
+    if let Some(host) = bare_hostname(line) {
+        adapted.main.push_str("||");
+        adapted.main.push_str(host);
+        adapted.main.push_str("^\n");
+        return Line::Rewritten;
+    }
     const WORTH_PARSING: &[&str] = &[
         "popup",
         "popunder",
@@ -216,6 +239,19 @@ mod tests {
 
     fn main(line: &str) -> String {
         adapt(line).main
+    }
+
+    #[test]
+    fn a_bare_hostname_is_a_hostname_rule() {
+        assert_eq!(main("t.co"), "||t.co^\n");
+        assert_eq!(main("*.t.co"), "||t.co^\n");
+        // Not hostnames: left for the parser as they are.
+        assert_eq!(main("||t.co^"), "||t.co^\n");
+        assert_eq!(main("/ads/banner."), "/ads/banner.\n");
+        assert_eq!(main("example##.ad"), "example##.ad\n");
+        assert_eq!(main("adserver"), "adserver\n");
+        assert_eq!(main("_chartbeat.js"), "_chartbeat.js\n");
+        assert_eq!(main("banner.468"), "banner.468\n");
     }
 
     #[test]

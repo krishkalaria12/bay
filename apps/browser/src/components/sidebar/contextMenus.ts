@@ -9,8 +9,6 @@ import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { folderChildren } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browserStore";
-import { canSwitchEngine, ENGINE_NAMES, ENGINE_SYMBOLS, otherEngine, tabEngine } from "../../store/engines";
-import { togglePageEngine } from "../../lib/pageEngines";
 import {
   activeTabId,
   bookmarkSpaceId,
@@ -25,6 +23,7 @@ import {
   windowTitle,
 } from "../../store/model";
 import { awayFromPin, cleanedTabsFor, groupLabel, groupOf, keptDeletedGroups, selectedTabIds } from "../../store/tabTidying";
+import { runTidyTabs } from "../../lib/tidyTabs";
 import { pinRowTitle, rowPinned, splitOf } from "../../store/splits";
 import type { GroupColor, Tab } from "../../store/types";
 import {
@@ -181,8 +180,6 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const keptAwake = siteKeptAwake(tab.url, s.settings.awakeSites);
   const awake = !!webviews.get(tab.id) && !useLifecycle.getState().discarded[tab.id];
 
-  const engine = canSwitchEngine(tab.url) ? otherEngine(tabEngine(s, tab.id)) : null;
-
   // The everyday actions up top; the rest under More, so the menu stays short.
   const more: MenuItem[] = [
     ...(pinnedPage(tab) ? [] : [{ id: "keep", title: tab.kept ? "Don’t Keep Tab" : "Keep Tab", symbol: "anchor" }]),
@@ -198,7 +195,6 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "mute", title: tab.muted ? "Unmute Site" : "Mute Site", symbol: tab.muted ? "speaker.wave.2" : "speaker.slash", enabled: !!tab.url },
     { id: "keepSiteAwake", title: "Keep This Site Awake", symbol: "sun.max", checked: keptAwake, enabled: !!site },
     { id: "sleep", title: "Put Tab to Sleep", symbol: "moon", enabled: !current && awake },
-    ...(engine ? [{ id: "engine", title: `Open Page in ${ENGINE_NAMES[engine]}`, symbol: ENGINE_SYMBOLS[engine] }] : []),
     sep,
     { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
     { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
@@ -290,7 +286,6 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice === "icon") void openIconPicker(windowId, t);
   else if (choice === "resetIcon") s.updateTab(tab.id, { customIcon: null });
   else if (choice === "mute") toggleMute(tab.id);
-  else if (choice === "engine") void togglePageEngine(tab.id);
   // Like ⌘D: bookmarks the page (or finds its bookmark) and opens the dialog; never removes one.
   else if (choice === "bookmark") bookmarkTab(windowId, tab.id);
   else if (choice.startsWith("folder:")) void bookmarkTabs(windowId, [tab.id], choice.slice(7));
@@ -408,7 +403,7 @@ export async function openGroupMenu(windowId: string, groupId: string) {
   if (choice === "rename") void startRename(windowId, target);
   else if (choice === "icon") void openIconPicker(windowId, target);
   else if (choice.startsWith("color:")) {
-    // SAFETY: choice is built as "color:<hex>" by the menu above; the suffix is a validated GroupColor string.
+    // SAFETY: the slice is `""` (neutral) or one of the `colors` ids this menu built above; `updateGroup` accepts that set.
     s.updateGroup(groupId, { color: (choice.slice(6) || null) as GroupColor | null });
   } else if (choice === "newTab") {
     store().openNewTabPanel(windowId, groupId);
@@ -503,7 +498,7 @@ export async function openSidebarMenu(windowId: string) {
   else if (choice === "newFolder") newPinnedFolderWith(windowId);
   else if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice === "clean") s.cleanUpTabs(windowId);
-  else if (choice === "tidy") s.tidyTabs(windowId);
+  else if (choice === "tidy") void runTidyTabs(windowId);
   else if (choice === "mute") muteAll(windowId, !muted);
   else if (choice === "closeAll") closeAllTabs(windowId);
 }
@@ -596,7 +591,7 @@ export async function openOverflowMenu(windowId: string) {
   else if (choice.startsWith("cleaned:")) s.restoreCleaned(choice.slice(8), windowId);
   else if (choice === "restoreAll") s.restoreCleaned(undefined, windowId);
   else if (choice === "clean") s.cleanUpTabs(windowId);
-  else if (choice === "tidy") s.tidyTabs(windowId);
+  else if (choice === "tidy") void runTidyTabs(windowId);
   else if (choice === "daily") s.updateSettings({ cleanUpInactiveTabsAfterHours: daily ? null : 24 });
   else if (choice === "mute") muteAll(windowId, !muted);
   else if (choice === "closeAll") closeAllTabs(windowId);

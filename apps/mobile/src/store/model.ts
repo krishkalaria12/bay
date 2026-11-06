@@ -67,6 +67,7 @@ export interface DownloadEvent {
   total: number;
   path?: string;
   error?: string;
+  waiting?: string;
   private: boolean;
 }
 
@@ -336,6 +337,7 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         total: update.total || previous?.total || 0,
         ...(update.path ? { path: update.path } : previous?.path ? { path: previous.path } : {}),
         ...(update.error ? { error: update.error } : undefined),
+        ...(update.waiting && state === "downloading" ? { waiting: update.waiting } : undefined),
         startedAt: previous?.startedAt ?? action.now,
         ...(update.private ? { private: true } : undefined),
       };
@@ -350,6 +352,7 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
         item.filename === previous.filename &&
         item.url === previous.url &&
         item.error === previous.error &&
+        item.waiting === previous.waiting &&
         item.private === previous.private
       )
         return data;

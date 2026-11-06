@@ -5,18 +5,16 @@ import { layout } from "../../lib/constants";
 import type { QuietBrowserState } from "../../store/browserStore";
 import { folderTabIds } from "../../store/folders";
 import { activeTabId, spaceFolded } from "../../store/model";
-import { GROUP_BORDER, GROUP_PAD, NEW_TAB_GAP } from "./constants";
+import { NEW_TAB_GAP } from "./constants";
 import { folderEntries, groupEntries, sidebarEntries } from "./sidebarEntries";
 
 const GAP = layout.rowGap;
 
 export type Section = "pinned" | "pinnedGroups" | "list";
 
-/** Where a tab's row sits: its section, and its top and height within that section. */
-export type RowSpan = { section: Section; top: number; height: number };
+export type RowSpan = { top: number; height: number };
 
-/** A row's top and height, in the section that holds it. */
-type Span = { top: number; height: number };
+export type SectionRowSpan = RowSpan & { section: Section };
 
 // The entry of a group that holds the window's active tab: it stays out while the group is collapsed.
 export function keptEntry(s: QuietBrowserState, windowId: string, spaceId: string, entries: string[]): string | null {
@@ -34,14 +32,14 @@ export function keptEntry(s: QuietBrowserState, windowId: string, spaceId: strin
   );
 }
 
-// A group's members: every row open; only the kept one collapsed (none: nothing, its padding included).
+// A group's members: every row open; only the kept one collapsed.
 function membersHeight(s: QuietBrowserState, windowId: string, spaceId: string, groupId: string): number {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
   const entries = groupEntries(s, groupId);
 
-  if (!s.groups[groupId]?.collapsed) return entries.length ? entries.length * ROW + (entries.length - 1) * GAP + GROUP_PAD : GROUP_PAD;
+  if (!s.groups[groupId]?.collapsed) return entries.length ? entries.length * ROW + (entries.length - 1) * GAP : 0;
 
-  return keptEntry(s, windowId, spaceId, entries) ? ROW + GROUP_PAD : 0;
+  return keptEntry(s, windowId, spaceId, entries) ? ROW : 0;
 }
 
 // A pinned folder's rows below its header: every row open, each after a gap (an open empty one: its "Drag tabs here"
@@ -55,7 +53,7 @@ function folderMembersHeight(s: QuietBrowserState, windowId: string, spaceId: st
   return keptEntry(s, windowId, spaceId, entries) ? ROW + GAP : 0;
 }
 
-/** A list entry's height: a tab or split row, a pinned folder (its header and rows), or a group block (its border, header and members). */
+/** A list entry's height: a tab or split row, a pinned folder (its header and rows), or a group (its heading and members). */
 export function entryHeight(s: QuietBrowserState, windowId: string, spaceId: string, entry: string): number {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
 
@@ -63,7 +61,7 @@ export function entryHeight(s: QuietBrowserState, windowId: string, spaceId: str
 
   if (!entry.startsWith("g:")) return ROW;
 
-  return GROUP_BORDER * 2 + ROW + membersHeight(s, windowId, spaceId, entry.slice(2));
+  return ROW + membersHeight(s, windowId, spaceId, entry.slice(2));
 }
 
 /** The room `entries` take in a list (gaps between them included). */
@@ -75,7 +73,7 @@ export function entriesHeight(s: QuietBrowserState, windowId: string, spaceId: s
  * The row showing `tabId` in its section, from the section's top; null for a pinned tile or a live folder's row.
  * `newTabAtTop`: the list starts with the New Tab row.
  */
-export function rowSpan(s: QuietBrowserState, windowId: string, spaceId: string, tabId: string, newTabAtTop: boolean): RowSpan | null {
+export function rowSpan(s: QuietBrowserState, windowId: string, spaceId: string, tabId: string, newTabAtTop: boolean): SectionRowSpan | null {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
   const folded = spaceFolded(s, spaceId);
   const { pinned, pinnedGroups, list } = sidebarEntries(s, windowId, spaceId);
@@ -101,16 +99,15 @@ export function rowSpan(s: QuietBrowserState, windowId: string, spaceId: string,
       if (entry.startsWith("g:") && s.groups[id]?.tabIds.includes(tabId)) {
         const members = groupEntries(s, id);
         const at = members.findIndex((e) => e === `t:${tabId}` || (e.startsWith("s:") && !!s.splits[e.slice(2)]?.tabIds.includes(tabId)));
-        const header = top + GROUP_BORDER;
 
         if (s.groups[id]!.collapsed) {
           // A collapsed group shows only the kept row; any other member is behind its header.
           const kept = keptEntry(s, windowId, spaceId, members) === members[at];
 
-          return kept ? { section, top: header + ROW, height: ROW } : { section, top: header, height: ROW };
+          return kept ? { section, top: top + ROW, height: ROW } : { section, top, height: ROW };
         }
 
-        return { section, top: header + ROW + at * (ROW + GAP), height: ROW };
+        return { section, top: top + ROW + at * (ROW + GAP), height: ROW };
       }
 
       top += entryHeight(s, windowId, spaceId, entry) + GAP;
@@ -121,7 +118,7 @@ export function rowSpan(s: QuietBrowserState, windowId: string, spaceId: string,
 }
 
 // Follow the same nested rows that FolderBlock renders. A hidden leaf reveals its nearest closed header.
-function folderRowSpan(s: QuietBrowserState, windowId: string, spaceId: string, folderId: string, tabId: string, top: number): Span {
+function folderRowSpan(s: QuietBrowserState, windowId: string, spaceId: string, folderId: string, tabId: string, top: number): RowSpan {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
   const entries = folderEntries(s, folderId);
   const kept = keptEntry(s, windowId, spaceId, entries);

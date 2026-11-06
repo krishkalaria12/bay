@@ -393,7 +393,17 @@ function useSearchHighlight(settingId?: SettingId) {
   return { ref, marked };
 }
 
-export function SectionHeader({ settingId, title, description, action }: { settingId?: SettingId; title: string; description?: string; action?: ReactNode }) {
+export function SectionHeader({
+  settingId,
+  title,
+  description,
+  action,
+}: {
+  settingId?: SettingId;
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+}) {
   const theme = useTheme();
   const colors = useFormColors();
   const { ref, marked } = useSearchHighlight(settingId);

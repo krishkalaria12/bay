@@ -19,11 +19,10 @@ import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
 import { useBrowser, type BrowserState } from "../store/browserStore";
 import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId, tabLabel, windowTitle } from "../store/model";
-import { canSwitchEngine, tabEngine } from "../store/engines";
 import { pinnableSplit, pinRowTitle, splitOf } from "../store/splits";
 import { canGoBack, canGoForward } from "../components/window/historyMenu";
 import type { Bookmarks, BookmarkNode } from "../store/types";
-import { startTidyDownloadOffers } from "./tidyDownloads";
+import { startTidyDownloads } from "./tidyDownloads";
 import { isUtilityWindowId } from "../components/settings/windows";
 import { isInternalTab } from "../components/pages/pageUrls";
 import { sidebarMenuState } from "../components/sidebar/sidebarCommands";
@@ -59,7 +58,7 @@ export function startNativeSync() {
   startLittleBayPutAway();
   onOpenURLs(openExternalUrls);
   onDownload((d) => store.getState().upsertDownload(d));
-  startTidyDownloadOffers();
+  startTidyDownloads();
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
   void setAppearance(store.getState().settings.appearance);
@@ -230,7 +229,6 @@ const PAGE_COMMANDS = [
   "bookmarkPage",
   "addBookmarkToFolder",
   "toggleMute",
-  "togglePageEngine",
   "findAndReplace",
   "jumpToSelection",
   "viewSource",
@@ -381,10 +379,6 @@ export function menuState(s: BrowserState): MenuState {
   if (tab?.pinnedRow || (tab && pinnableSplit(s, tab.id))) titles.togglePinRow = pinRowTitle(s, tab.id);
 
   if (tab?.muted) titles.toggleMute = "Unmute Site";
-
-  if (tab && tabEngine(s, tab.id) === "webkit") titles.togglePageEngine = "Open Page in Chromium";
-
-  if (!canSwitchEngine(tab?.url)) disabled.push("togglePageEngine");
 
   if (tab?.url && isBookmarked(s.bookmarks, bookmarkProfile, tab.url)) {
     titles.bookmarkPage = "Edit Bookmark…";

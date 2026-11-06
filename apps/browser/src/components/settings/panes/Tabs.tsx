@@ -5,6 +5,7 @@ import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browserStore";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, TextField, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
+import { TidyModelNote } from "../TidyModelNote";
 import { CLEAN_UP_CHOICES } from "../constants";
 import { updateCalendarSettings, useLive } from "../../../activity/activityStore";
 import { normalizeAwakeSite } from "../../../lib/keptAwakeSites";
@@ -52,9 +53,20 @@ export function TabsPane() {
         />
       </Group>
 
-      <SectionHeader title="Tab groups" />
+      <SectionHeader
+        title="Tab groups"
+        description={
+          <TidyModelNote available="Apple's on-device model sorts your tabs by topic. Nothing leaves this Mac." fallback="Tidy sorts your tabs by site." />
+        }
+      />
       <Group>
         <SettingToggle setting="autoGroupMeetingTabs" settingId={SETTINGS.autoGroupMeetingTabs.id} title={SETTINGS.autoGroupMeetingTabs.title} />
+        <SettingToggle
+          setting="tidyTabs"
+          settingId={SETTINGS.tidyTabs.id}
+          title={SETTINGS.tidyTabs.title}
+          description="Show Tidy on the sidebar's line once six tabs are open. It sorts your loose tabs into named groups; ⌘Z puts them back."
+        />
         <SettingToggle
           setting="tidyTabTitles"
           settingId={SETTINGS.tidyTabTitles.id}

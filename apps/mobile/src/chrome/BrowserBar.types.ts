@@ -1,3 +1,8 @@
+import type { useAnimatedStyle } from "react-native-reanimated";
+
+/** The search capsule's motion while the bar is swiped to change tabs (TabSwipe). */
+export type CapsuleStyle = ReturnType<typeof useAnimatedStyle>;
+
 /** Lens's floating bar: archive, search and settings on the start page and tab switcher; tabs, search and more over a page. */
 export type BrowserBarProps = (
   | {
@@ -25,6 +30,7 @@ export type BrowserBarProps = (
 ) & {
   /** Dark controls over a private page. */
   privately?: boolean;
+  capsuleStyle?: CapsuleStyle;
 };
 
 export interface BarButton {

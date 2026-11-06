@@ -5,32 +5,25 @@ import ExpoModulesCore
 ///
 /// The app's local cleaner (packages/core/src/tidyDownloads.ts) always runs first and gives an instant answer. On
 /// Macs where the system model is available this refines that answer with the page's title and address. Neither
-/// half sends anything off the Mac, and the person still chooses whether the file is renamed.
-///
-/// Off unless the app is launched with BAY_TIDY_DOWNLOADS_AI=true; without it the local cleaner works alone.
+/// half sends anything off the Mac, and every rename can be undone.
 public class TidyNamesModule: Module {
-  static var enabled: Bool { ProcessInfo.processInfo.environment["BAY_TIDY_DOWNLOADS_AI"] == "true" }
-
   public func definition() -> ModuleDefinition {
     Name("BayTidyNames")
 
+    // Whether this macOS has the model at all: `suggest` answers nil while Apple Intelligence is off or still downloading.
     Constant("available") { () -> Bool in
-      guard Self.enabled, #available(macOS 26.0, *) else { return false }
-      return SystemLanguageModel.default.availability == .available
+      if #available(macOS 26.0, *) { return true }
+      return false
     }
 
-    AsyncFunction("suggest") { (filename: String, pageTitle: String, pageUrl: String, candidate: String) async -> String? in
-      guard Self.enabled, #available(macOS 26.0, *) else { return nil }
+    AsyncFunction("suggest") { (filename: String, pageTitle: String, pageUrl: String) async -> String? in
+      guard #available(macOS 26.0, *) else { return nil }
       guard SystemLanguageModel.default.availability == .available else { return nil }
       let session = LanguageModelSession(instructions: Self.instructions)
-      let prompt = """
-        Original file name: \(filename)
-        Page title: \(pageTitle.isEmpty ? "unknown" : pageTitle)
-        Page address: \(pageUrl.isEmpty ? "unknown" : pageUrl)
-        Local clean-up suggested: \(candidate.isEmpty ? "none" : candidate)
-        """
+      let site = URL(string: pageUrl)?.host ?? ""
       do {
-        let response = try await session.respond(to: prompt, options: GenerationOptions(temperature: 0.3, maximumResponseTokens: 32))
+        let response = try await session.respond(
+          to: "Rename: \(filename), \(pageTitle), \(site)", options: GenerationOptions(temperature: 0.3, maximumResponseTokens: 32))
         return Self.clean(response.content)
       } catch {
         // The model can refuse or be unready; the local cleaner's answer stands.
@@ -39,15 +32,23 @@ public class TidyNamesModule: Module {
     }
   }
 
+  // The examples are what make it good: told only the rules, this model answered "Invoice", and "Cra" for Cra-0.1.30.dmg.
   private static let instructions = """
-    You name files that people download in a web browser.
-    Answer with one short, readable file name in title case, 2 to 8 words.
-    Keep what the file is about. When the original name is machine-made (camera counters, timestamps, IDs, hashes,
-    prompts, underscores), prefer the page title's subject.
-    Drop site names, usernames, dates, timestamps, camera names, IDs, hashes, counters and words like final, copy,
-    download or original.
-    Answer with the name only: no file extension, no quotes, no slash or colon, no sentence.
-    If the original name is already what a person would choose, answer exactly KEEP.
+    You rename files as they finish downloading, so they are helpful, concise and readable: two to five words in title case.
+    For a name that says nothing (image.png, download.pdf, IDs), use what the page's title says.
+    Keep names that already say what the file is mostly as they are, and keep a version number. Add who a file is from when the page says so.
+    A page's title may be about something else, like an inbox: use it only when it says what the file is.
+    Remove machine-made cruft such as IDs, (1), copy, final, master, stock-photo prefixes and seconds in times; write dates short and human ("Aug 14"); fix casing and spacing.
+    Answer with the new name only: no file extension, no quotes, no slash or colon, no sentence.
+
+    Examples, as file, page title, site → new name:
+    Bay-0.1.30.dmg, Bay · A fast browser, bay.app → Bay 0.1.30
+    invoice_884213_2026-10-02.pdf, Your invoice from Acme Hosting - Gmail, mail.google.com → Acme Hosting Invoice Oct 2
+    IMG_20260912_141533.jpg, Photos from the beach trip - Google Drive, drive.google.com → Beach Trip Sep 12
+    image.png, Logo feedback - Slack, app.slack.com → Logo Feedback
+    spoon-knife-main.zip, octocat/Spoon-Knife: a demo repository, github.com → Spoon Knife
+    budget_final_2.xlsx, Inbox (3) - Gmail, mail.google.com → Budget
+    annual-report-final(1).pdf, Annual report 2025 | Nordic Rail, nordicrail.com → Nordic Rail Annual Report 2025
     """
 
   private static func clean(_ answer: String) -> String? {
@@ -55,8 +56,7 @@ public class TidyNamesModule: Module {
     var text = line.trimmingCharacters(in: .whitespacesAndNewlines)
     text = text.trimmingCharacters(in: CharacterSet(charactersIn: "\"'“”‘’"))
     text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    let decision = text.trimmingCharacters(in: CharacterSet(charactersIn: ".!")).uppercased()
-    if text.isEmpty || decision == "KEEP" { return nil }
+    if text.isEmpty { return nil }
     text = text.replacingOccurrences(of: "/", with: " ").replacingOccurrences(of: ":", with: " ")
     text = text.replacingOccurrences(of: "\n", with: " ")
     text = text.trimmingCharacters(in: .whitespacesAndNewlines)

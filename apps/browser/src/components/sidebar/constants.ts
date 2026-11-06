@@ -40,8 +40,8 @@ export const SLEEPING_OPACITY = 0.45;
 
 // MARK: Groups and live folders (geometry.ts, Fold.tsx, LiveFolderBlock.tsx)
 
-export const GROUP_PAD = 2;
-export const GROUP_BORDER = 0.5;
+// With no box around a group, this is what shows which tabs are its own.
+export const GROUP_INDENT = 12;
 
 // Dia 1.50.1 (owner recording, 60 fps): a group opens or closes in about 150 ms.
 export const FOLD_MS = 150;
@@ -136,6 +136,9 @@ export const NEW_MENU_MS = 170;
 
 // The room the divider's line leaves for Clear at its end.
 export const CLEAR_WIDTH = 44;
+
+// Tidy, before Clear: its label, and the hairline between them.
+export const TIDY_WIDTH = 42;
 
 // The room the divider leaves under its line while Clear shows (Clear's text reaches below the line).
 export const CLEAR_GAP = 6;

@@ -2,6 +2,7 @@ import type { BrowserCommand, MenuEntry } from "@bay/desktop";
 import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId, pinnedPage, plural } from "../../store/model";
 import { awayFromPin, groupOf, selectedTabIds } from "../../store/tabTidying";
+import { runTidyTabs } from "../../lib/tidyTabs";
 import { newGroupWithSelection, openIconPicker, startRename } from "./actions";
 import { closeAllTabs, tabsAround } from "./contextMenus";
 import { setSidebarUi } from "./state";
@@ -41,7 +42,7 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
 
       return true;
     case "tidyTabs":
-      s.tidyTabs(windowId);
+      void runTidyTabs(windowId);
 
       return true;
     case "closeAllTabs":

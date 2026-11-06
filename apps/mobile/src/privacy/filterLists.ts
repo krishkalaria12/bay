@@ -12,6 +12,12 @@ export const FILTER_LISTS = [
 
 export type FilterListId = (typeof FILTER_LISTS)[number]["id"];
 
+/**
+ * Bumped whenever the engines read the same list text differently, so the rules they cached for a list version are
+ * rebuilt. 2: a bare hostname line is a hostname rule (Peter Lowe's `t.co` had blocked YouTube's avatars).
+ */
+export const ENGINE_RULES = 2;
+
 /** Lists are refreshed once a day, like Lens. */
 export const REFRESH_AFTER = 24 * 60 * 60 * 1000;
 

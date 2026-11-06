@@ -1,26 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  chosenEngine,
-  engineForUrl,
-  engineMark,
-  protectedVideoSite,
-  recommendedEngineFor,
-  ruleFor,
-  siteOf,
-  tabEngine,
-  typedNavigationEngine,
-  visitRecorder,
-} from "./engines.ts";
+import { chosenEngine, engineForUrl, engineMark, protectedVideoSite, siteOf, tabEngine, visitRecorder } from "./engines.ts";
 import { makeTab, snapshotTab } from "./model.ts";
 import { setWebKitAvailable } from "@bay/chromium";
 
 const tab = (id, patch = {}) => ({ id, url: "", navigation: null, openerId: null, ...patch });
-
-const state = (tabs, settings = {}) => ({
-  tabs: Object.fromEntries(tabs.map((t) => [t.id, t])),
-  settings: { pageEngine: "chromium", websiteEngines: {}, protectedVideoInWebKit: false, ...settings },
-});
+const state = (tabs) => ({ tabs: Object.fromEntries(tabs.map((t) => [t.id, t])) });
 
 test("a site is its scheme, host and port, and nothing else", () => {
   assert.equal(siteOf("https://www.Netflix.com/watch/1?x=2#y"), "https://www.netflix.com");
@@ -30,7 +15,7 @@ test("a site is its scheme, host and port, and nothing else", () => {
   assert.equal(siteOf("not a url"), null);
 });
 
-test("engine checks reuse URL parsing without caching settings decisions", () => {
+test("engine checks reuse URL parsing", () => {
   const OriginalURL = globalThis.URL;
   let parses = 0;
   globalThis.URL = class extends OriginalURL {
@@ -42,17 +27,14 @@ test("engine checks reuse URL parsing without caching settings decisions", () =>
 
   try {
     const url = "https://www.netflix.com/watch/cache-regression";
-    const s = state([tab("cached", { url })], { protectedVideoInWebKit: true });
+    const s = state([tab("cached", { url })]);
 
     for (let i = 0; i < 60; i++) {
       assert.equal(engineMark(s, "cached"), "webkit");
-      assert.equal(ruleFor(s, url), undefined);
       assert.equal(protectedVideoSite(url), true);
     }
 
     assert.equal(parses, 1, "unchanged rows should not repeatedly construct URLs");
-    assert.equal(engineMark({ ...s, settings: { ...s.settings, protectedVideoInWebKit: false } }, "cached"), null);
-    assert.equal(engineMark({ ...s, settings: { ...s.settings, websiteEngines: { "https://www.netflix.com": "chromium" } } }, "cached"), null);
 
     for (let i = 0; i < 1100; i++) siteOf(`https://cache-test.example/${i}`);
     const before = parses;
@@ -63,30 +45,16 @@ test("engine checks reuse URL parsing without caching settings decisions", () =>
   }
 });
 
-test("rules match the exact site, never its subdomains", () => {
-  const s = state([], { websiteEngines: { "https://netflix.com": "webkit" } });
-  assert.equal(ruleFor(s, "https://netflix.com/browse"), "webkit");
-  assert.equal(ruleFor(s, "https://www.netflix.com/browse"), undefined);
-  assert.equal(ruleFor(s, "http://netflix.com/"), undefined);
-  assert.equal(engineForUrl(s, "https://www.netflix.com/"), "chromium");
-  assert.equal(engineForUrl({ settings: { ...s.settings, pageEngine: "webkit" } }, "https://example.com/"), "webkit");
-});
-
-test("a tab keeps its engine, else follows its adoption, its opener, then rules", () => {
-  const rules = { websiteEngines: { "https://www.netflix.com": "webkit" } };
-
-  const s = state(
-    [
-      tab("fixed", { engine: "chromium", url: "https://www.netflix.com/" }),
-      tab("popup", { adoptId: "webkit:3" }),
-      tab("chrome", { adoptId: "nncore:9", url: "https://www.netflix.com/" }),
-      tab("opener", { engine: "webkit", url: "https://www.netflix.com/" }),
-      tab("link", { openerId: "opener", url: "https://example.com/" }),
-      tab("typed", { url: "https://www.netflix.com/" }),
-      tab("copy", { adoptId: "clone:opener" }),
-    ],
-    rules,
-  );
+test("a tab keeps its engine, else follows its adoption, its opener, then its site", () => {
+  const s = state([
+    tab("fixed", { engine: "chromium", url: "https://www.netflix.com/" }),
+    tab("popup", { adoptId: "webkit:3" }),
+    tab("chrome", { adoptId: "nncore:9", url: "https://www.netflix.com/" }),
+    tab("opener", { engine: "webkit", url: "https://www.netflix.com/" }),
+    tab("link", { openerId: "opener", url: "https://example.com/" }),
+    tab("typed", { url: "https://www.netflix.com/" }),
+    tab("copy", { adoptId: "clone:opener" }),
+  ]);
 
   assert.equal(tabEngine(s, "fixed"), "chromium");
   assert.equal(tabEngine(s, "popup"), "webkit");
@@ -97,22 +65,19 @@ test("a tab keeps its engine, else follows its adoption, its opener, then rules"
   assert.equal(tabEngine(s, "gone"), "chromium");
 });
 
-test("typing an address follows a rule, else keeps the page's engine", () => {
-  const s = state([tab("w", { engine: "webkit", url: "https://www.netflix.com/" }), tab("blank")], {
-    websiteEngines: { "https://www.youtube.com": "chromium" },
-  });
+test("every other page opens in Chromium, and leftover choices don't count", () => {
+  assert.equal(engineForUrl("https://example.com/"), "chromium");
 
-  assert.equal(typedNavigationEngine(s, s.tabs.w, "https://www.youtube.com/"), "chromium");
-  assert.equal(typedNavigationEngine(s, s.tabs.w, "https://example.com/"), "webkit");
-  assert.equal(typedNavigationEngine(s, s.tabs.blank, "https://example.com/"), "chromium");
+  const leftover = {
+    ...state([tab("t", { url: "https://example.com/" })]),
+    settings: { pageEngine: "webkit", websiteEngines: { "https://example.com": "webkit" } },
+  };
+
+  assert.equal(tabEngine(leftover, "t"), "chromium");
+  assert.equal(engineMark(leftover, "t"), null);
 });
 
-test("streaming sites open in WebKit by default, until the setting is turned off", () => {
-  assert.equal(engineForUrl({ settings: { pageEngine: "chromium", websiteEngines: {} } }, "https://www.netflix.com/"), "webkit");
-  assert.equal(engineForUrl(state([], { protectedVideoInWebKit: false }), "https://www.netflix.com/"), "chromium");
-});
-
-test("streaming sites open in WebKit when the setting is on, over https, subdomains included", () => {
+test("streaming sites open in WebKit, over https, subdomains included", () => {
   assert.equal(protectedVideoSite("https://www.netflix.com/watch/1"), true);
   assert.equal(protectedVideoSite("https://netflix.com/"), true);
   assert.equal(protectedVideoSite("https://open.spotify.com/track/1"), true);
@@ -120,36 +85,20 @@ test("streaming sites open in WebKit when the setting is on, over https, subdoma
   assert.equal(protectedVideoSite("https://netflix.com.example.com/"), false);
   assert.equal(protectedVideoSite("https://notnetflix.com/"), false);
   assert.equal(protectedVideoSite("http://www.netflix.com/"), false);
-  const off = state([], { protectedVideoInWebKit: false });
-
-  const on = state([tab("typed", { url: "https://www.netflix.com/" }), tab("page", { engine: "chromium", url: "https://example.com/" })], {
-    protectedVideoInWebKit: true,
-  });
-
-  assert.equal(chosenEngine(off, "https://www.netflix.com/"), undefined);
-  assert.equal(engineForUrl(on, "https://www.netflix.com/browse"), "webkit");
-  assert.equal(tabEngine(on, "typed"), "webkit");
-  assert.equal(typedNavigationEngine(on, on.tabs.page, "https://www.disneyplus.com/"), "webkit");
-  assert.equal(recommendedEngineFor(on, "https://www.netflix.com/"), "webkit");
-  assert.equal(recommendedEngineFor(on, "https://example.com/"), "chromium");
-});
-
-test("a website rule wins over the streaming default", () => {
-  const s = state([], { protectedVideoInWebKit: true, websiteEngines: { "https://www.netflix.com": "chromium" } });
-  assert.equal(chosenEngine(s, "https://www.netflix.com/"), "chromium");
-  assert.equal(engineForUrl(s, "https://www.netflix.com/"), "chromium");
-  assert.equal(engineForUrl(s, "https://netflix.com/"), "webkit");
-  assert.equal(ruleFor(s, "https://netflix.com/"), undefined);
+  assert.equal(chosenEngine("https://example.com/"), undefined);
+  assert.equal(chosenEngine("https://www.netflix.com/"), "webkit");
+  assert.equal(engineForUrl("https://www.netflix.com/browse"), "webkit");
+  assert.equal(tabEngine(state([tab("typed", { url: "https://www.netflix.com/" })]), "typed"), "webkit");
 });
 
 test("Chromium's own pages always open in Chromium", () => {
-  const s = state([tab("v", { engine: "webkit", url: "bay://version" }), tab("w", { engine: "webkit", url: "https://a.com/" })], { pageEngine: "webkit" });
+  const s = state([tab("v", { engine: "webkit", url: "bay://version" }), tab("w", { engine: "webkit", url: "https://a.com/" })]);
   assert.equal(tabEngine(s, "v"), "chromium");
-  assert.equal(typedNavigationEngine(s, s.tabs.w, "bay://extensions"), "chromium");
-  assert.equal(typedNavigationEngine(s, s.tabs.w, "chrome-extension://abc/options.html"), "chromium");
+  assert.equal(engineForUrl("bay://extensions"), "chromium");
+  assert.equal(engineForUrl("chrome-extension://abc/options.html"), "chromium");
 });
 
-test("the mark shows only on web pages away from the default engine", () => {
+test("the mark shows only on web pages away from Chromium", () => {
   const s = state([
     tab("w", { engine: "webkit", url: "https://a.com/" }),
     tab("c", { engine: "chromium", url: "https://a.com/" }),
@@ -297,20 +246,14 @@ test("many tabs don't make an open tab record its page again", () => {
 });
 
 test("without the WebKit module (Windows, Linux) every page stays in Chromium", () => {
-  const s = state([tab("a", { url: "https://www.netflix.com/", engine: "webkit" }), tab("b", { url: "https://example.com/", adoptId: "webkit:3" })], {
-    pageEngine: "webkit",
-    websiteEngines: { "https://example.com": "webkit" },
-    protectedVideoInWebKit: true,
-  });
-
+  const s = state([tab("a", { url: "https://www.netflix.com/", engine: "webkit" }), tab("b", { url: "https://example.com/", adoptId: "webkit:3" })]);
   setWebKitAvailable(false);
 
   try {
     assert.equal(tabEngine(s, "a"), "chromium");
     assert.equal(tabEngine(s, "b"), "chromium");
-    assert.equal(engineForUrl(s, "https://www.netflix.com/"), "chromium");
-    assert.equal(chosenEngine(s, "https://example.com/"), undefined);
-    assert.equal(typedNavigationEngine(s, s.tabs.b, "https://www.netflix.com/"), "chromium");
+    assert.equal(engineForUrl("https://www.netflix.com/"), "chromium");
+    assert.equal(chosenEngine("https://www.netflix.com/"), undefined);
     assert.equal(engineMark(s, "a"), null);
   } finally {
     setWebKitAvailable(true);

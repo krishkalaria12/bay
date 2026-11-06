@@ -74,6 +74,80 @@ test("open tabs are marked so the bar can switch to them, except the bar's own t
   assert.equal(own.items[0]?.kind === "page" && own.items[0].tabId, undefined);
 });
 
+test("a site's address goes to the tab already on that site, wherever in the site it is", () => {
+  const essential = { id: "x", url: "https://x.com/krish", title: "Krish / X", favicon: "x.ico", pinnedUrl: "https://x.com/home", lastActiveAt: now - 5000 };
+  const tabs = [{ id: "later", url: "https://x.com/notifications", title: "Notifications / X", favicon: null, lastActiveAt: now }, essential];
+
+  for (const typed of ["x", "x.com"]) {
+    const { items } = buildSuggestions(typed, { tabs, history }, { now });
+    assert.deepEqual(items[0], { kind: "page", url: essential.url, title: "Krish / X", favicon: "x.ico", tabId: "x" });
+  }
+
+  // Without a pin, the tab used last; its www doesn't matter.
+  const youtube = [
+    { id: "old", url: "https://www.youtube.com/watch?v=1", title: "One", favicon: null, lastActiveAt: now - 1000 },
+    { id: "new", url: "https://www.youtube.com/watch?v=2", title: "Two", favicon: null, lastActiveAt: now },
+  ];
+
+  const first = buildSuggestions("youtube.com", { tabs: youtube, history }, { now }).items[0];
+  assert.equal(first?.kind === "page" && first.tabId, "new");
+
+  // An Essential that has left its site still answers for it, and a custom name is its title.
+  const away = [
+    {
+      id: "cal",
+      url: "https://accounts.google.com/signin",
+      title: "Sign in",
+      customTitle: "Calendar",
+      favicon: null,
+      pinnedUrl: "https://calendar.google.com/",
+    },
+  ];
+
+  const cal = buildSuggestions("calendar.google.com", { tabs: away, history }, { now }).items[0];
+  assert.equal(cal?.kind === "page" && cal.tabId, "cal");
+  assert.equal(cal?.kind === "page" && cal.title, "Calendar");
+});
+
+test("a tab on the very page wins, and the site's address stays a row of its own", () => {
+  const tabs = [
+    { id: "deep", url: "https://x.com/krish", title: "Krish / X", favicon: null, pinnedUrl: "https://x.com/home" },
+    { id: "root", url: "https://x.com/", title: "X", favicon: null },
+  ];
+
+  const first = buildSuggestions("x.com", { tabs, history }, { now }).items[0];
+  assert.equal(first?.kind === "page" && first.tabId, "root");
+
+  const list = rows(
+    buildSuggestions("x.com", { tabs: tabs.slice(0, 1), history: [{ url: "https://x.com/", title: "X", favicon: null, visits: 3, lastVisit: now }] }, { now })
+      .items,
+  );
+
+  assert.deepEqual(list.slice(0, 3), ["tab:https://x.com/krish", "search:x.com", "https://x.com/"]);
+});
+
+test("only a bare host as typed looks for a site's tab: a scheme or a path is that address", () => {
+  const tabs = [{ id: "x", url: "https://x.com/krish", title: "Krish / X", favicon: null, pinnedUrl: "https://x.com/home" }];
+
+  for (const typed of ["https://x.com", "x.com/explore"]) {
+    const first = buildSuggestions(typed, { tabs, history }, { now }).items[0];
+    assert.equal(first?.kind === "page" && first.tabId, undefined, typed);
+  }
+
+  // Not the bar's own tab, another site, or a subdomain.
+  const own = buildSuggestions("x.com", { tabs, history }, { now, currentTabId: "x" }).items[0];
+  assert.equal(own?.kind === "page" && own.tabId, undefined);
+  const other = buildSuggestions("github.com", { tabs, history }, { now }).items[0];
+  assert.equal(other?.kind === "page" && other.tabId, undefined);
+  const mail = [{ id: "m", url: "https://mail.google.com/", title: "Mail", favicon: null }];
+  const mailFirst = buildSuggestions("google.com", { tabs: mail, history: [] }, { now }).items[0];
+  assert.equal(mailFirst?.kind === "page" && mailFirst.tabId, undefined);
+  // A scheme with no host doesn't match every tab that has none.
+  const blank = [{ id: "b", url: "about:blank", title: "", favicon: null }];
+  const blankFirst = buildSuggestions("about:config", { tabs: blank, history: [] }, { now }).items[0];
+  assert.equal(blankFirst?.kind === "page" && blankFirst.tabId, undefined);
+});
+
 test("cleaned up tabs are found and marked so the bar can restore them", () => {
   const cleaned = [{ id: "c1", url: "https://linear.app/team/issue/BAY-12", title: "BAY-12 Archive search", favicon: null, closedAt: now - DAY }];
   const { items } = buildSuggestions("archive", { tabs: [], history, cleaned }, { now });

@@ -3,7 +3,7 @@ import { SETTINGS, type SettingEntry } from "./definitions";
 
 export type { SettingEntry } from "./definitions";
 
-// Settings › Engines is macOS's (WebKit), so a build without it doesn't list its settings.
+// Settings › Protected Media is macOS's (WebKit), so a build without it doesn't list its settings.
 const SEARCH_SETTINGS: SettingEntry[] = Object.values(SETTINGS).filter((e) => e.pane !== "engines" || hasWebKit());
 
 // Typing a lot of the alphabet shouldn't list half the settings: a handful, best first.

@@ -54,9 +54,9 @@ export function openFromPage({ url, adoptId, disposition, point }: OpenWindowReq
   }
 
   const background = disposition === "background";
-  // A site chosen for the other engine (a streaming site, a website rule) loads afresh there, instead of in the page
-  // the opener's engine made for it.
-  const engine = from.tabId && disposition !== "popup" ? chosenEngine(s, url) : undefined;
+  // A site that needs the other engine (a streaming site) loads afresh there, instead of in the page the opener's
+  // engine made for it.
+  const engine = from.tabId && disposition !== "popup" ? chosenEngine(url) : undefined;
 
   if (engine && engine !== tabEngine(s, from.tabId!)) {
     const id = s.newTab(w.id, { url, openerId: from.tabId, spaceId: from.spaceId, background });
