@@ -1,6 +1,8 @@
 import BackgroundTasks
 import ExpoModulesCore
 import QuickLook
+import UIKit
+import UserNotifications
 import WebKit
 
 /// Page downloads: files a page sends as attachments, or that WebKit can't show, saved to Documents/Downloads, which
@@ -23,6 +25,8 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
     var filename: String
     var destination: URL?
     var observation: NSKeyValueObservation?
+    /// True once a failed download has been resumed from its resumeData; a second failure is final.
+    var resumed = false
     /// The download's BGContinuedProcessingTask on iOS 26, once the system starts it.
     var task: AnyObject?
   }
@@ -30,6 +34,8 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
   private var entries: [ObjectIdentifier: Entry] = [:]
   private var downloads: [String: WKDownload] = [:]
   private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+  /// Whether Bay has asked for notification permission (once per launch, on the first download).
+  private var askedToNotify = false
 
   /// Continued-processing task identifiers: Info.plist allows `<bundle id>.download.*` (app.plugin.js).
   private static let taskPrefix = "\(Bundle.main.bundleIdentifier ?? "bay").download."
@@ -45,6 +51,7 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
 
   func track(_ download: WKDownload, url: URL?, isPrivate: Bool) {
     download.delegate = self
+    askToNotify()
     let id = UUID().uuidString
     let filename = Self.cleanFilename(url?.lastPathComponent ?? "")
     entries[ObjectIdentifier(download)] = Entry(id: id, url: url?.absoluteString ?? "", isPrivate: isPrivate, filename: filename)
@@ -74,9 +81,17 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
                 completionHandler: @escaping (URL?) -> Void) {
     if let status = (response as? HTTPURLResponse)?.statusCode, !(200...299).contains(status) {
       // nil cancels the download. Reported and forgotten here, so the didFailWithError that may follow finds nothing.
-      report(download, state: "failed", received: 0, total: 0, error: "The site refused the download (\(status)).")
+      let message = "The site refused the download (\(status))."
+      let entry = entries[ObjectIdentifier(download)]
+      report(download, state: "failed", received: 0, total: 0, error: message)
       finish(download, success: false)
+      if let entry { notifyDone(id: entry.id, filename: entry.filename, isPrivate: entry.isPrivate, success: false, size: 0, error: message) }
       completionHandler(nil)
+      return
+    }
+    // A resumed download continues into the file it already has; a fresh name would start it over.
+    if let entry = entries[ObjectIdentifier(download)], entry.resumed, let resumed = entry.destination {
+      completionHandler(resumed)
       return
     }
     let destination = Self.uniqueDestination(for: suggestedFilename)
@@ -87,22 +102,37 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
   }
 
   func downloadDidFinish(_ download: WKDownload) {
-    let size = entries[ObjectIdentifier(download)]?.destination.flatMap {
+    let entry = entries[ObjectIdentifier(download)]
+    let size = entry?.destination.flatMap {
       (try? FileManager.default.attributesOfItem(atPath: $0.path)[.size] as? NSNumber)?.int64Value
     } ?? 0
     report(download, state: "finished", received: size, total: size)
     finish(download, success: true)
+    if let entry { notifyDone(id: entry.id, filename: entry.filename, isPrivate: entry.isPrivate, success: true, size: size, error: nil) }
   }
 
   func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
     let nsError = error as NSError
     let cancelled = nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    // A dropped connection leaves resume data: continue the same file once, in place, instead of starting over.
+    // The partial file stays (deleting it would lose what resume continues from).
+    if !cancelled, let resumeData, entries[ObjectIdentifier(download)]?.resumed == false {
+      entries[ObjectIdentifier(download)]?.resumed = true
+      download.resume(using: resumeData)
+      return
+    }
+    let entry = entries[ObjectIdentifier(download)]
+    let message = cancelled ? nil : Self.failure(nsError)
     report(download, state: cancelled ? "cancelled" : "failed", received: download.progress.completedUnitCount,
-           total: download.progress.totalUnitCount, error: cancelled ? nil : Self.failure(nsError))
-    if let destination = entries[ObjectIdentifier(download)]?.destination {
+           total: download.progress.totalUnitCount, error: message)
+    if let destination = entry?.destination {
       try? FileManager.default.removeItem(at: destination)
     }
     finish(download, success: false)
+    if let entry, !cancelled {
+      notifyDone(id: entry.id, filename: entry.filename, isPrivate: entry.isPrivate, success: false,
+                 size: download.progress.completedUnitCount, error: message)
+    }
   }
 
   private func finish(_ download: WKDownload, success: Bool) {
@@ -114,6 +144,32 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
       }
     }
     if entries.isEmpty { releaseBackgroundTime() }
+  }
+
+  // MARK: Finished notification
+
+  /// Asks for notification permission once, on the first download, as Android asks for POST_NOTIFICATIONS: without it
+  /// the finished notification below is silently dropped.
+  private func askToNotify() {
+    guard !askedToNotify else { return }
+    askedToNotify = true
+    let center = UNUserNotificationCenter.current()
+    center.getNotificationSettings { settings in
+      if settings.authorizationStatus == .notDetermined {
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+      }
+    }
+  }
+
+  /// A finished or failed download says so outside Bay, as Android's notification does. Only while Bay isn't on
+  /// screen: in the foreground the download toast already says it. Tapping the notification opens Bay.
+  private func notifyDone(id: String, filename: String, isPrivate: Bool, success: Bool, size: Int64, error: String?) {
+    guard UIApplication.shared.applicationState != .active else { return }
+    let content = UNMutableNotificationContent()
+    content.title = Self.systemTitle(filename, isPrivate: isPrivate)
+    content.body = success ? "Download complete · \(Self.formatBytes(size))" : (error ?? "The download failed.")
+    content.sound = .default
+    UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "bay-download-\(id)", content: content, trigger: nil))
   }
 
   private func report(_ download: WKDownload, state: String, received: Int64, total: Int64, error: String? = nil, waiting: String? = nil) {
