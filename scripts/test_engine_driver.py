@@ -323,18 +323,44 @@ class BuildTests(unittest.TestCase):
                                           ("linux", "x86_64-unknown-linux-gnu", "libbay_adblock.a")):
             with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, \
                  mock.patch.object(engine, "REPO", Path(directory) / "repo"), \
+                 mock.patch.object(engine, "llvm_objcopy", return_value="llvm-objcopy"), \
                  mock.patch.object(engine, "run") as run:
                 built = Path(directory) / "repo/packages/adblock/target" / target / "release" / library
                 built.parent.mkdir(parents=True)
                 built.write_text("library")
                 src = Path(directory) / "src"
                 engine.build_adblock(src, "out/Release", {"PATH": "x"}, platform)
-                command = run.call_args.args[0]
-                self.assertEqual(command[:2], ["cargo", "rustc"])
-                self.assertIn(target, command)
-                self.assertIn("--locked", command)
-                self.assertEqual("RUSTFLAGS" in run.call_args.kwargs["env"], platform == "win")
-                self.assertEqual((src / "out/Release/bay_adblock" / library).read_text(), "library")
+                cargo, rename = run.call_args_list
+                self.assertEqual(cargo.args[0][:2], ["cargo", "rustc"])
+                self.assertIn(target, cargo.args[0])
+                self.assertIn("--locked", cargo.args[0])
+                self.assertEqual("RUSTFLAGS" in cargo.kwargs["env"], platform == "win")
+                copied = src / "out/Release/bay_adblock" / library
+                self.assertEqual(copied.read_text(), "library")
+                # Chromium's Rust std in the same binary defines rust_eh_personality too.
+                self.assertEqual(rename.args[0], ["llvm-objcopy", "--redefine-sym",
+                                                  "rust_eh_personality=bay_adblock_rust_eh_personality", str(copied)])
+
+    def test_llvm_objcopy_prefers_chromium_and_falls_back_to_rust_llvm_tools(self):
+        with tempfile.TemporaryDirectory() as directory:
+            src, sysroot = Path(directory) / "src", Path(directory) / "rust"
+            rust_tool = sysroot / "lib/rustlib/x86_64-pc-windows-msvc/bin/llvm-objcopy.exe"
+            rust_tool.parent.mkdir(parents=True)
+            rust_tool.write_text("")
+            printed = subprocess.CompletedProcess([], 0, stdout=f"{sysroot}\n")
+            with mock.patch.object(engine.subprocess, "run", return_value=printed) as rustc:
+                self.assertEqual(engine.llvm_objcopy(src, {}), str(rust_tool))
+            self.assertEqual(rustc.call_args.args[0], ["rustc", "--print", "sysroot"])
+            chromium_tool = src / "third_party/llvm-build/Release+Asserts/bin/llvm-objcopy"
+            chromium_tool.parent.mkdir(parents=True)
+            chromium_tool.write_text("")
+            chromium_tool.chmod(0o755)
+            self.assertEqual(engine.llvm_objcopy(src, {}), str(chromium_tool))
+            chromium_tool.unlink()
+            rust_tool.unlink()
+            with mock.patch.object(engine.subprocess, "run", return_value=printed), \
+                 self.assertRaisesRegex(RuntimeError, "llvm-tools"):
+                engine.llvm_objcopy(src, {})
 
     def test_windows_download_bootstraps_depot_tools_before_automate(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "clone_pin"), \

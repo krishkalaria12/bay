@@ -455,6 +455,23 @@ def build_adblock(src, output_directory, env, platform):
     destination = src / output_directory / "bay_adblock"
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copy2(crate / "target" / target / "release" / library, destination / library)
+    # The browser already links Chromium's own Rust std, and this library carries a second. Their one unmangled
+    # clash is rust_eh_personality, so rename this copy and its references to keep both.
+    run([llvm_objcopy(src, env), "--redefine-sym", "rust_eh_personality=bay_adblock_rust_eh_personality",
+         str(destination / library)], env=env)
+
+
+def llvm_objcopy(src, env):
+    """Chromium's llvm-objcopy (its Linux toolchain has one), else the one Rust's llvm-tools component installs."""
+    found = shutil.which("llvm-objcopy", path=str(src / "third_party/llvm-build/Release+Asserts/bin"))
+    if found:
+        return found
+    sysroot = subprocess.run(["rustc", "--print", "sysroot"], env=env, check=True,
+                             capture_output=True, text=True).stdout.strip()
+    rust_tools = sorted(pathlib.Path(sysroot).glob("lib/rustlib/*/bin/llvm-objcopy*"))
+    if rust_tools:
+        return str(rust_tools[0])
+    raise RuntimeError("llvm-objcopy is missing: add Rust's llvm-tools component (rustup component add llvm-tools)")
 
 
 SOURCE_SUFFIXES = (".c", ".cc", ".cpp")
