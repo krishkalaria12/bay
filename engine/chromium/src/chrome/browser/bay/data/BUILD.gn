@@ -16,6 +16,13 @@ if (is_linux) {
   }
 }
 
+# This is portable package code and vendored libraries, not Chromium code, so
+# Chromium's style and raw_ptr checks don't apply to it.
+chromium_style_checks = []
+if (is_clang) {
+  chromium_style_checks += [ "//build/config/clang:find_bad_constructs" ]
+}
+
 static_library("data_services") {
   sources = [
     "data_services.cc",
@@ -36,6 +43,7 @@ static_library("data_services") {
   ]
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
+  configs -= chromium_style_checks
   include_dirs = [ "vendor" ]
 
   # Native picker adapters use the host-only sync recovery continuation API.
@@ -100,6 +108,7 @@ static_library("sync_services") {
   ]
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
+  configs -= chromium_style_checks
   include_dirs = [ "vendor" ]
   if (is_win) {
     sources += [
