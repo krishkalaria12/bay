@@ -209,13 +209,14 @@ export type MediaControl = "toggle" | "stop";
 
 /**
  * Tells the system what's playing, or null when nothing is. On Android this runs a media playback service with a media
- * notification, so pages keep playing while Bay is in the background; iOS plays in the background on its own.
+ * notification, so pages keep playing while Bay is in the background; on iOS it posts Now Playing info and remote
+ * commands for the lock screen and Control Center, while pages keep playing in the background on their own.
  */
 export function setMediaSession(session: { title: string; site: string; playing: boolean } | null): void {
   void nativeEngine.setMediaSession?.(session?.title ?? null, session?.site ?? "", session?.playing ?? false).catch(() => {});
 }
 
-/** Calls `listener` when the media notification's play/pause or stop is pressed (Android). */
+/** Calls `listener` when the system media controls ask for play/pause or stop (notification on Android, lock screen on iOS). */
 export function addMediaControlListener(listener: (action: MediaControl) => void): { remove(): void } {
   return nativeEngine.addListener("onMediaControl", (event) => listener(event.action));
 }

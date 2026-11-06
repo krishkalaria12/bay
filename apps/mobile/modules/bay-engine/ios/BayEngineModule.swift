@@ -12,7 +12,16 @@ public class BayEngineModule: Module {
       // Pages' audio keeps playing with the silent switch on and while Bay is in the background, as in Safari.
       try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
       BayDownloads.shared.emit = { body in self?.sendEvent("onDownload", body) }
+      BayMedia.shared.emit = { action in self?.sendEvent("onMediaControl", ["action": action]) }
     }
+
+    AsyncFunction("setMediaSession") { (title: String?, site: String, playing: Bool) in
+      if let title {
+        BayMedia.shared.update(title: title, site: site, playing: playing)
+      } else {
+        BayMedia.shared.clear()
+      }
+    }.runOnQueue(.main)
 
     AsyncFunction("openDownload") { (path: String, promise: Promise) in
       BayDownloads.shared.open(path, promise: promise)
