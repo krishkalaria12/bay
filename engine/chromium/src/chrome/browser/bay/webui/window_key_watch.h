@@ -107,7 +107,7 @@ class WindowKeyWatch : public ui::EventHandler, public views::WidgetObserver {
   base::OneShotTimer alt_hold_timer_;
   base::RepeatingCallback<bool()> alt_held_;
   base::RepeatingClosure alt_released_;
-  const void* owner_ = nullptr;
+  raw_ptr<const void> owner_ = nullptr;
   raw_ptr<views::Widget> window_ = nullptr;
   Sink sink_;
 };

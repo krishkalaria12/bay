@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/pickle.h"
 #include "base/scoped_observation.h"
@@ -156,7 +157,7 @@ bool HasKey(const Tab& tab, const std::string& key) {
 }
 
 struct Candidate {
-  const Tab* tab = nullptr;
+  raw_ptr<const Tab> tab = nullptr;
   bool top_level = false;
 };
 
