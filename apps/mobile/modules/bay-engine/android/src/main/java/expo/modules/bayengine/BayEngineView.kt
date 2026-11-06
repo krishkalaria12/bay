@@ -55,8 +55,11 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   val onLinkPress by EventDispatcher()
   val onPageMessage by EventDispatcher()
   // The system WebView has no isolated worlds: page scripts run in the main world and answer through this bridge,
-  // which ignores anything without this view's token.
-  private val pageToken = UUID.randomUUID().toString()
+  // which ignores anything without this view's token. The token rotates on every main-frame navigation, so a
+  // previous page's scripts can't answer for the next one. A page can still see `__bayPage` and the Symbol.for
+  // state keys; the token is never exposed to it, and JavaScript validates every message it forwards. True
+  // isolation waits for our Chromium (phase 7, A5).
+  @Volatile private var pageToken = UUID.randomUUID().toString()
   private val scriptHandler = Handler(Looper.getMainLooper())
   private val pendingScripts = ConcurrentHashMap<String, Promise>()
   private var loading = false
@@ -248,6 +251,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
       override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
         cancelScripts("The page navigated before the script finished.")
+        // A new document gets a new bridge token (A5): a previous page's scripts can't answer for this one. The
+        // interceptor and the media watcher are (re)installed below with this token; hash/history navigations
+        // keep the document (and its watcher), so they don't rotate here.
+        pageToken = UUID.randomUUID().toString()
         pageUrl = url
         navigationGeneration += 1
         loading = true

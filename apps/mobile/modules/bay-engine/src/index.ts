@@ -15,8 +15,10 @@ export interface Tab {
   snapshot(): Promise<string | null>;
   /**
    * Runs a page script (the body of an async function) in the page and resolves with its result as JSON text.
-   * iOS runs it in an isolated world the page can't see; Android's system WebView has none, so it runs in the main
-   * world: keep state under a Symbol.for key there. `post(message)` sends a message to `onPageMessage`.
+   * iOS runs it in an isolated world the page can't see. Android's system WebView has none, so it runs in the main
+   * world behind a token-checked bridge: the token rotates on each main-frame navigation, but a page can still see
+   * `__bayPage` and the Symbol.for state keys (it can't guess the token). True isolation waits for our Chromium
+   * (A5, phase 7); keep state under a Symbol.for key there. `post(message)` sends a message to `onPageMessage`.
    */
   evaluate(script: string): Promise<string>;
 }
