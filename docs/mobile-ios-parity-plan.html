@@ -677,10 +677,11 @@
           <tbody>
             <tr>
               <td class="id">A1</td>
-              <th scope="row">File upload</th>
+              <th scope="row">File upload <span class="status landed">Landed</span></th>
               <td>
-                <code>WebChromeClient</code> only overrides progress and title (<code>BayEngineView.kt:294</code>). With no <code>onShowFileChooser</code>, a
-                site's file picker never opens. WebKit does this itself on iOS.
+                Android now opens the system picker: <code>WebChromeClient.onShowFileChooser</code> forwards to <code>BayFileChooser</code>, which launches
+                <code>FileChooserParams.createIntent()</code> (falling back to <code>ACTION_GET_CONTENT</code> with the page's <code>accept</code> types) and
+                delivers the chosen files back through the module's <code>OnActivityResult</code>. WebKit already had this on iOS.
               </td>
               <td><span class="tag android">Android only</span></td>
               <td>S</td>
@@ -688,10 +689,11 @@
             </tr>
             <tr>
               <td class="id">A2</td>
-              <th scope="row">Video fullscreen</th>
+              <th scope="row">Video fullscreen <span class="status landed">Landed</span></th>
               <td>
-                No <code>onShowCustomView</code>, so fullscreen buttons do nothing. iOS has native video fullscreen, though
-                <code>isElementFullscreenEnabled</code> is unset there, so sites' custom players can't go fullscreen on either app.
+                Both now go fullscreen: iOS sets <code>isElementFullscreenEnabled</code>, and Android's <code>onShowCustomView</code>/<code>onHideCustomView</code>
+                add the player's view to the window's decor view, request landscape, hide the system bars, and exit on Back. Both report through
+                <code>onFullscreenChange</code>, and <code>BrowserScreen</code> hides the bar and top strip while a tab reports fullscreen.
               </td>
               <td><span class="tag api">Shared + 2 native</span></td>
               <td>M</td>
@@ -699,11 +701,11 @@
             </tr>
             <tr>
               <td class="id">A3</td>
-              <th scope="row"><code>blob:</code> and <code>data:</code> downloads</th>
+              <th scope="row"><code>blob:</code> and <code>data:</code> downloads <span class="status landed">Landed</span></th>
               <td>
-                <code>BayDownloads.kt:40</code> still fails them with "Bay can't save this kind of download yet", before they reach the new
-                <code>BayDownloader</code>, which only fetches <code>http</code> and <code>https</code>. <code>WKDownload</code> is the route for these on iOS,
-                and stage 1 keeps it for them.
+                Page-generated files are fetched in the page and saved natively: a capture-phase click interceptor (plus a one-shot fetch for a main-frame
+                <code>blob:</code> jump) posts the bytes as base64 to <code>BayDownloads.saveBlob</code>, which writes them to MediaStore (Android 10+) or a
+                MediaStore <code>DATA</code> row (older). <code>WKDownload</code> remains the route for these on iOS.
               </td>
               <td><span class="tag android">Android only</span></td>
               <td>M</td>
@@ -711,10 +713,10 @@
             </tr>
             <tr>
               <td class="id">A4</td>
-              <th scope="row">Edge swipe back and forward</th>
+              <th scope="row">Edge swipe back and forward <span class="status landed">Landed</span></th>
               <td>
-                iOS sets <code>allowsBackForwardNavigationGestures</code>. Android has only the system back gesture and no forward swipe, as
-                <code>mobile-plan.html</code> already notes. Lens swipes sideways anywhere.
+                Both now have native edge gestures: iOS via <code>allowsBackForwardNavigationGestures</code>, Android via a 24dp edge swipe in
+                <code>BayEngineView</code> (history-armed, the page follows the finger, a haptic at the trigger point, coexisting with pull to refresh).
               </td>
               <td><span class="tag android">Android only</span></td>
               <td>M</td>
@@ -722,10 +724,10 @@
             </tr>
             <tr>
               <td class="id">A5</td>
-              <th scope="row">Isolated page scripts</th>
+              <th scope="row">Isolated page scripts <span class="status landed">Landed</span></th>
               <td>
-                iOS runs page scripts in a world the page can't see. The system WebView has none, so Android uses a token-checked bridge in the main world.
-                Accept this until our Chromium arrives.
+                Accepted until our Chromium arrives (phase 7): Android keeps the token-checked main-world bridge, the token now rotates on each main-frame
+                navigation, and the engine README documents the limit. iOS already runs page scripts in an isolated world.
               </td>
               <td><span class="tag android">Android only</span></td>
               <td>L</td>
