@@ -455,23 +455,44 @@ def build_adblock(src, output_directory, env, platform):
     destination = src / output_directory / "bay_adblock"
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copy2(crate / "target" / target / "release" / library, destination / library)
-    # The browser already links Chromium's own Rust std, and this library carries a second. Their one unmangled
-    # clash is rust_eh_personality, so rename this copy and its references to keep both.
-    run([llvm_objcopy(src, env), "--redefine-sym", "rust_eh_personality=bay_adblock_rust_eh_personality",
-         str(destination / library)], env=env)
+    rename_personality(src, destination, library, env)
 
 
-def llvm_objcopy(src, env):
-    """Chromium's llvm-objcopy (its Linux toolchain has one), else the one Rust's llvm-tools component installs."""
-    found = shutil.which("llvm-objcopy", path=str(src / "third_party/llvm-build/Release+Asserts/bin"))
-    if found:
-        return found
+def rename_personality(src, directory, library, env):
+    """Rename rust_eh_personality in every object of the library that defines or references it.
+
+    The browser already links Chromium's own Rust std, and the library carries a second; this is their one unmangled
+    clash. Only those members are rewritten because llvm-objcopy rejects a whole Windows staticlib, whose raw-dylib
+    import members it can't read.
+    """
+    tools = llvm_tools(src, env)
+    listing = subprocess.run([tools["llvm-nm"], "-A", library], cwd=directory, env=env,
+                             check=True, capture_output=True, text=True).stdout
+    # Each line reads "<library>:<member>: [address] <type> <symbol>".
+    members = [line.split(":")[1] for line in listing.splitlines() if line.endswith(" rust_eh_personality")]
+    for member in members:
+        run([tools["llvm-ar"], "x", library, member], cwd=directory, env=env)
+        run([tools["llvm-objcopy"], "--redefine-sym", "rust_eh_personality=bay_adblock_rust_eh_personality", member],
+            cwd=directory, env=env)
+        run([tools["llvm-ar"], "r", library, member], cwd=directory, env=env)
+        (directory / member).unlink()
+
+
+LLVM_TOOLS = ("llvm-ar", "llvm-nm", "llvm-objcopy")
+
+
+def llvm_tools(src, env):
+    """LLVM_TOOLS from Chromium's toolchain (its Linux one has them), else from Rust's llvm-tools component."""
     sysroot = subprocess.run(["rustc", "--print", "sysroot"], env=env, check=True,
                              capture_output=True, text=True).stdout.strip()
-    rust_tools = sorted(pathlib.Path(sysroot).glob("lib/rustlib/*/bin/llvm-objcopy*"))
-    if rust_tools:
-        return str(rust_tools[0])
-    raise RuntimeError("llvm-objcopy is missing: add Rust's llvm-tools component (rustup component add llvm-tools)")
+    directories = [src / "third_party/llvm-build/Release+Asserts/bin",
+                   *sorted(pathlib.Path(sysroot).glob("lib/rustlib/*/bin"))]
+    for directory in directories:
+        tools = {name: shutil.which(name, path=str(directory)) for name in LLVM_TOOLS}
+        if all(tools.values()):
+            return tools
+    raise RuntimeError("llvm-ar, llvm-nm and llvm-objcopy are missing: "
+                       "add Rust's llvm-tools component (rustup component add llvm-tools)")
 
 
 SOURCE_SUFFIXES = (".c", ".cc", ".cpp")
