@@ -6,7 +6,7 @@ private final class InvalidAddressException: Exception, @unchecked Sendable {
   override var reason: String { "Only HTTP and HTTPS addresses can be opened." }
 }
 
-class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate {
   private(set) var webView: WKWebView
   let onNavigationStateChange = EventDispatcher()
   let onNavigationError = EventDispatcher()
@@ -72,7 +72,6 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     // secure", OAuth's disallowed_useragent): WKWebView's user agent ends at "Mobile/15E148", without Safari's
     // "Version/… Safari/…" tokens. Bay is a browser, so it presents as Safari does (Android drops `; wv` likewise).
     configuration.applicationNameForUserAgent = safariUserAgentSuffix
-    configuration.userContentController.addUserScript(linkStyle)
     return WKWebView(frame: .zero, configuration: configuration)
   }
 
@@ -83,21 +82,11 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     return "Version/\(version) Mobile/15E148 Safari/604.1"
   }()
 
-  // Link long-presses open Bay's link menu (see longPress), so WebKit's callout and link-text selection are off.
-  private static let linkStyle = WKUserScript(
-    source: """
-      const style = document.createElement('style');
-      style.textContent = 'a[href], a[href] * { -webkit-touch-callout: none !important; -webkit-user-select: none !important; }';
-      document.documentElement.appendChild(style);
-      """,
-    injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: .defaultClient)
-
   /// The page's scriptlets (`##+js`), set before WebKit creates its document so they run in the page's own world ahead
   /// of its scripts. Replaced on every main-frame navigation.
   private func applyScriptlets(for url: URL) {
     let controller = webView.configuration.userContentController
     controller.removeAllUserScripts()
-    controller.addUserScript(Self.linkStyle)
     guard let script = BayContentBlocker.shared.scriptlets(for: url) else { return }
     NSLog("BayContentBlocker: scriptlets for %@: %d chars", url.host ?? "", script.count)
     controller.addUserScript(WKUserScript(source: "try{\(script)}catch(e){}", injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
@@ -117,10 +106,6 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     webView.scrollView.contentInsetAdjustmentBehavior = .never
     webView.scrollView.alwaysBounceVertical = true
     webView.scrollView.refreshControl = pullToRefreshEnabled ? refreshControl : nil
-    let press = UILongPressGestureRecognizer(target: self, action: #selector(longPress(_:)))
-    press.minimumPressDuration = 0.5
-    press.delegate = self
-    webView.addGestureRecognizer(press)
     // Page scripts run in this isolated world (see evaluate), so only they can post to the app.
     webView.configuration.userContentController.add(messageProxy, contentWorld: .defaultClient, name: "bay")
     addSubview(webView)
@@ -410,31 +395,20 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     return nil
   }
 
-  // Links: WebKit's callout is turned off by the injected style below, and this recognizer asks the page, in an
-  // isolated script world, which link is under the finger. Elsewhere WebKit keeps its own text selection.
-  @objc private func longPress(_ gesture: UILongPressGestureRecognizer) {
-    guard gesture.state == .began, webView.url != nil else { return }
-    let point = gesture.location(in: webView)
-    let zoom = max(webView.scrollView.zoomScale, 0.01)
-    let script = """
-      const a = document.elementFromPoint(x, y)?.closest('a[href]');
-      return a ? [a.href, (a.innerText || a.title || a.getAttribute('aria-label') || '').trim()] : null;
-      """
-    webView.callAsyncJavaScript(script, arguments: ["x": point.x / zoom, "y": point.y / zoom], in: nil, in: .defaultClient) { [weak self] result in
-      guard let self, case .success(let value) = result, let link = value as? [Any], link.count == 2,
-            let address = link[0] as? String, let url = URL(string: address), self.isWebURL(url) else { return }
-      let text = (link[1] as? String).flatMap { $0.isEmpty ? nil : String($0.prefix(240)) } ?? address
-      self.onLinkPress([
-        "url": url.absoluteString, "title": text,
-        "x": min(1, max(0, point.x / max(1, self.bounds.width))),
-        "y": min(1, max(0, point.y / max(1, self.bounds.height)))
-      ])
+  // Links: WebKit's context-menu delegate covers every frame and shadow DOM, so Bay's link menu fires for iframe
+  // links too (Android's hit test already covers them). The RN sheet is the one design; the native menu is
+  // suppressed with an empty configuration after emitting onLinkPress. Text selection outside links is untouched.
+  func webView(_ webView: WKWebView, contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo,
+               completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
+    guard let linkURL = elementInfo.linkURL, isWebURL(linkURL) else {
+      // Not a web link (text, image without a link): keep WebKit's default handling (selection, image menu).
+      completionHandler(nil)
+      return
     }
-  }
-
-  func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
-                         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-    true
+    let address = linkURL.absoluteString
+    onLinkPress(["url": address, "title": address, "x": NSNull(), "y": NSNull()])
+    // The shared sheet is the menu, so the native one is empty rather than default.
+    completionHandler(UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in UIMenu(children: []) })
   }
 
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
