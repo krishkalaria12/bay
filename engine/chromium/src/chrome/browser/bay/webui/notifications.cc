@@ -42,8 +42,9 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_WIN)
-#include <shellapi.h>
 #include <windows.h>
+
+#include <shellapi.h>
 #include <windows.ui.notifications.h>
 #include <wrl/client.h>
 #include "base/win/core_winrt_util.h"

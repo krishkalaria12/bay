@@ -179,8 +179,10 @@ bool AddToPath(const base::FilePath& bin,
   if (!current.empty() && current.back() != L';')
     current += L';';
   current += bin.value();
-  if (environment.WriteValue(L"Path", current.c_str(), REG_EXPAND_SZ) !=
-      ERROR_SUCCESS) {
+  if (environment.WriteValue(
+          L"Path", current.c_str(),
+          static_cast<DWORD>((current.size() + 1) * sizeof(wchar_t)),
+          REG_EXPAND_SZ) != ERROR_SUCCESS) {
     *error = "Couldn't add the CLI folder to your user PATH.";
     return false;
   }
