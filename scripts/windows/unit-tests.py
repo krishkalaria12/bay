@@ -12,15 +12,15 @@ import subprocess
 import sys
 import time
 
-# Bay's light Windows test targets (chrome/browser/bay/webui/BUILD.gn): storage, paths, state and parsing.
+# Bay's light Windows test targets (chrome/browser/bay/webui/BUILD.gn): storage, paths, state and parsing. None needs
+# //chrome/test:test_support_unit, which builds Chrome's own WebUI tests too (3,000 steps, and one doesn't compile
+# against Bay's patched extensions page).
 TESTS = [
     "document_store_unittests",
     "runtime_unittests",
     "local_files_unittests",
     "window_placement_unittests",
     "content_blocker_rules_unittests",
-    "keychain_unittests",
-    "default_browser_unittests",
 ]
 OUTPUT_DIRECTORY = "out/Release_GN_x64"
 
