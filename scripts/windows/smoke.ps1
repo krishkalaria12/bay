@@ -12,11 +12,13 @@ foreach ($name in @('chrome.dll', 'chrome_elf.dll', 'icudtl.dat', 'resources.pak
     if (-not (Test-Path (Join-Path $directory $name))) { throw "Missing runtime file $name" }
 }
 $data = Join-Path ([IO.Path]::GetTempPath()) ('Bay-smoke-' + [guid]::NewGuid())
+# Chromium logs chrome://bay's console errors here, the only place a hidden coordinator's start-up error shows.
+$log = Join-Path $data 'chrome_debug.log'
 $previousData = $env:BAY_DATA_DIR
 $process = $null
 try {
     $env:BAY_DATA_DIR = $data
-    $arguments = @("--user-data-dir=`"$data`"", '--enable-features=Webium,SurfaceEmbed')
+    $arguments = @("--user-data-dir=`"$data`"", '--enable-features=Webium,SurfaceEmbed', '--enable-logging', "--log-file=`"$log`"")
     if ($HostingSpike) { $arguments += '--bay-hosting-spike' }
     $process = Start-Process -FilePath $AppPath -ArgumentList $arguments -WorkingDirectory $directory -PassThru
     $deadline = (Get-Date).AddSeconds($StartupSeconds)
@@ -41,6 +43,11 @@ try {
             $process.CloseMainWindow() | Out-Null
             if (-not $process.WaitForExit(5000)) { Stop-Process -Id $process.Id -Force }
         }
+    }
+    if (Test-Path $log) {
+        $errors = @(Select-String -Path $log -Pattern 'CONSOLE|:ERROR:|:FATAL:' | Select-Object -First 200)
+        Write-Output "Bay logged $($errors.Count) errors and console messages (first 200):"
+        foreach ($line in $errors) { Write-Output $line.Line }
     }
     # The profile lives outside an installed/user profile. Preserve it on failure
     # so Crashpad dumps and Chromium logs can be inspected.
