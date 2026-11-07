@@ -73,6 +73,15 @@ class WindowsBuildWorkflowTests(unittest.TestCase):
         self.assertIn('"DONE=true" >> $env:GITHUB_ENV', reuse)
         self.assertIn('select(.workflow_run.repository_id == .workflow_run.head_repository_id)', reuse)
 
+    def test_unit_tests_run_after_a_finished_engine_and_before_the_tree_is_saved(self):
+        source = WORKFLOW.read_text()
+        tests = step("Run Bay's unit tests")
+        self.assertLess(source.index('name: Upload engine'), source.index("name: Run Bay's unit tests"))
+        self.assertLess(source.index("name: Run Bay's unit tests"), source.index('name: Compress state'))
+        self.assertIn("if: env.DONE != 'true' && steps.compile.outputs.code == '0'", tests)
+        self.assertIn('continue-on-error: true', tests)
+        self.assertIn('python scripts/windows/unit-tests.py --root $env:ENGINE_ROOT --minutes $minutes', tests)
+
 
 if __name__ == '__main__':
     unittest.main()
