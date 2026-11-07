@@ -4,6 +4,9 @@ Bay for iPhone and Android, built and tested together. Expo SDK 58 + Expo Router
 
 This is a standalone project with its own `pnpm-workspace.yaml` and lockfile. The repo root's workspace excludes it because the desktop app pins react-native-macos 0.81 in a hoisted `node_modules`. Always run `pnpm` from `apps/mobile`.
 
+# Libraries
+If the work can be done through any of the expo libraries, then you can use it.
+
 ## Design
 
 - **One design on both platforms: Lens** (see the reference below): the same screens, layout and behaviour on iPhone and Android.
