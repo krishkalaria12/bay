@@ -367,8 +367,12 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     if (terminalError) releaseClose();
     else unsubscribeClose = releaseClose;
     requestSnapshot();
-  } catch {
-    fail(new BrowserClientError("transport_closed", "browser runtime transport could not connect"));
+  } catch (error) {
+    // The transport closed before this client subscribed; its error names why.
+    const code = errorCode(error);
+    let cause = "";
+    if (error instanceof Error) cause = typeof code === "string" ? ` (${code}): ${error.message}` : `: ${error.message}`;
+    fail(new BrowserClientError("transport_closed", `browser runtime transport could not connect${cause}`));
   }
   return {
     ready,

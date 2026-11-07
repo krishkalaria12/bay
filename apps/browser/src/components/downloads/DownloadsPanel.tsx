@@ -94,7 +94,8 @@ function downloadsFolderFor(windowId: string): string | null {
   const folder = downloadsFolder();
   if (folder) return folder;
   const latest = downloadsIn(useBrowser.getState(), windowId).find((d) => d.state === "finished" && d.path);
-  return latest ? latest.path.slice(0, latest.path.lastIndexOf("/")) : null;
+  // Windows paths use backslashes.
+  return latest ? latest.path.slice(0, Math.max(latest.path.lastIndexOf("/"), latest.path.lastIndexOf("\\"))) : null;
 }
 
 async function openDownloadsFolder(windowId: string) {

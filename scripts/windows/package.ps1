@@ -57,7 +57,9 @@ try {
         & $signtool sign @signArgs (Join-Path $stage 'Bay.exe')
         if ($LASTEXITCODE -ne 0) { throw 'Could not determine the signing publisher' }
     }
-    $publisher = if ($Unsigned) { @() } else { @((Get-AuthenticodeSignature (Join-Path $stage 'Bay.exe')).SignerCertificate.Thumbprint) }
+    # @() around the whole statement: an if returns its array unrolled (none becomes $null,
+    # one a string), and the update policy needs a JSON array either way.
+    $publisher = @(if (-not $Unsigned) { (Get-AuthenticodeSignature (Join-Path $stage 'Bay.exe')).SignerCertificate.Thumbprint })
     $publisherSubject = if ($Unsigned) { '' } else { (Get-AuthenticodeSignature (Join-Path $stage 'Bay.exe')).SignerCertificate.Subject }
     $origins = @(@($FeedUrl, $DownloadBaseUrl) | Where-Object { $_ } | ForEach-Object {
         ([uri]$_).GetLeftPart([UriPartial]::Authority).TrimEnd('/').ToLowerInvariant()

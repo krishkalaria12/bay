@@ -7,11 +7,20 @@ type FileDescriptor = Pick<LocalFilePin, "path" | "name" | "kind">;
 type FileState = { localFiles: Record<string, LocalFilePin> };
 const safeId = (id: unknown): id is string => typeof id === "string" && !!id && !["__proto__", "constructor", "prototype"].includes(id);
 
+/** Pins sync between devices, so a path may be another platform's: /posix, a Windows drive (C:\ or C:/) or a share
+ * (\\server\share). Each keeps its own form, with its separators tidied. Access is the native host's alone. */
 export function localFilePath(path: unknown): string | null {
-  if (typeof path !== "string" || !path.startsWith("/") || path.includes("\0")) return null;
-  const parts = path.split("/").filter(Boolean);
+  if (typeof path !== "string" || path.includes("\0")) return null;
+  const posix = path.startsWith("/");
+  const drive = /^[A-Za-z]:[\\/]/.test(path);
+  const share = path.startsWith("\\\\");
+  if (!posix && !drive && !share) return null;
+  // A backslash is an ordinary character in a POSIX name.
+  const parts = path.split(posix ? "/" : /[\\/]/).filter(Boolean);
   if (parts.some((part) => part === "." || part === "..")) return null;
-  return `/${parts.join("/")}`;
+  if (posix) return `/${parts.join("/")}`;
+  if (drive) return `${parts[0]}\\${parts.slice(1).join("\\")}`;
+  return `\\\\${parts.join("\\")}`;
 }
 
 /** Whitelist metadata at disk and sync boundaries. Never copy an input record wholesale. */

@@ -55,10 +55,23 @@ class WindowsBuildWorkflowTests(unittest.TestCase):
             condition = re.search(r'^        if: (.*)$', step(name), re.M).group(1)
             # A compile error still fails the job, but its progress is kept for the fix.
             self.assertEqual(condition, "${{ !cancelled() && steps.compile.outputs.code != '' }}")
-        for name in ('Archive engine', 'Upload engine'):
-            self.assertIn("if: steps.compile.outputs.code == '0'", step(name))
+        # A stage after the engine exists skips Compile, whose null output equals '0'.
+        compiled = "env.DONE != 'true' && steps.compile.outputs.code == '0'"
+        self.assertIn(f"if: {compiled}\n", step('Archive engine'))
+        # A reused engine is published as this run's without being archived again.
+        self.assertIn(f"if: steps.reuse.outputs.reused == 'true' || ({compiled})\n", step('Upload engine'))
         self.assertIn('fail-fast: true', WORKFLOW.read_text())
         self.assertNotIn('continue-on-error:', step('Compile'))
+
+    def test_an_engine_with_the_same_id_is_reused_before_any_restore(self):
+        source = WORKFLOW.read_text()
+        reuse = step('Reuse an engine built from these sources')
+        self.assertLess(source.index('Reuse an engine built from these sources'), source.index('Download saved state'))
+        self.assertIn('python scripts/windows/engine.py pin', reuse)
+        # Only an archive named for this checkout's id counts; it then skips every compile step.
+        self.assertIn('Test-Path "dist/engine/$id.zip"', reuse)
+        self.assertIn('"DONE=true" >> $env:GITHUB_ENV', reuse)
+        self.assertIn('select(.workflow_run.repository_id == .workflow_run.head_repository_id)', reuse)
 
 
 if __name__ == '__main__':

@@ -303,6 +303,25 @@ std::optional<int> NNMainDelegate::BasicStartupComplete() {
       }
       command->AppendSwitchPath(switches::kUserDataDir, directory);
     }
+#if BUILDFLAG(IS_WIN)
+    // Every launch writes Bay.log in the data folder and keeps the launch
+    // before it as Bay.previous.log, so a start-up failure or a crash can be
+    // read afterwards. Warnings and errors only: chrome://bay's console errors
+    // are among them, and websites' console messages (always INFO) stay out.
+    // An --enable-logging on the command line replaces all of this.
+    if (!command->HasSwitch(switches::kEnableLogging)) {
+      const auto directory =
+          command->GetSwitchValuePath(switches::kUserDataDir);
+      const auto log = directory.AppendASCII("Bay.log");
+      // A running Bay holds its log open, so this fails for a launch that only
+      // hands its arguments to it, and that launch appends instead.
+      base::Move(log, directory.AppendASCII("Bay.previous.log"));
+      command->AppendSwitch(switches::kEnableLogging);
+      command->AppendSwitchPath(switches::kLogFile, log);
+      if (!command->HasSwitch(switches::kLoggingLevel))
+        command->AppendSwitchASCII(switches::kLoggingLevel, "1");
+    }
+#endif
   }
   return ChromeMainDelegate::BasicStartupComplete();
 }

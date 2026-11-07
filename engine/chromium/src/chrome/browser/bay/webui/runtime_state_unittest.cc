@@ -1814,7 +1814,9 @@ void AddServices(base::DictValue& state) {
     "alerts":{"event":null},
     "sync":{"status":"off","enabled":false,"folder":null,"profiles":{"default":{"syncId":"s","enabled":true}},
       "lastSyncedAt":null,"error":null,"pending":0,"devices":[],"remoteTabs":{},"remoteProfiles":[]},
-    "telemetry":{"sharing":false,"decided":true,"askDone":true}
+    "telemetry":{"sharing":false,"decided":true,"askDone":true},
+    "onboarding":{"windowId":"normal","step":"search","picked":{"import":["Your things from Chrome"]},"session":1},
+    "cli":{"state":"on","connections":1,"generation":2,"port":9222}
   })"));
 }
 TEST(RuntimeStateTest, ServicesAllowlistUiFieldsAndProjectWithBrowserPrivacy) {
@@ -1840,11 +1842,20 @@ TEST(RuntimeStateTest, ServicesAllowlistUiFieldsAndProjectWithBrowserPrivacy) {
   EXPECT_TRUE(own->FindDict("services")->FindDict("live")->FindDict("meetingGroups")->contains("private-meeting"));
 
   // A credential or recovery field added to any record fails closed.
-  for (const char* path : {"live.accounts.github", "sync", "telemetry", "live.folders.public-folder", "calendar"}) {
+  for (const char* path : {"live.accounts.github", "sync", "telemetry", "live.folders.public-folder", "calendar",
+                           "onboarding", "cli"}) {
     auto leaked = state.Clone();
     leaked.FindDictByDottedPath(std::string("services.") + path)->Set("token", "secret");
     EXPECT_FALSE(IsRuntimeState(leaked)) << path;
   }
+  // Before onboarding has a window and before the terminal server reports.
+  auto fresh = state.Clone();
+  fresh.FindDictByDottedPath("services.onboarding")->Set("windowId", base::Value());
+  fresh.FindDict("services")->Set("cli", base::Value());
+  EXPECT_TRUE(IsRuntimeState(fresh));
+  auto picked = state.Clone();
+  picked.FindDictByDottedPath("services.onboarding.picked")->Set("import", base::ListValue().Append(1));
+  EXPECT_FALSE(IsRuntimeState(picked));
   auto unknown = state.Clone();
   unknown.FindDict("services")->Set("vault", base::DictValue());
   EXPECT_FALSE(IsRuntimeState(unknown));
@@ -2022,7 +2033,7 @@ TEST(RuntimeLocalFilesTest, ValidatesMetadataAndFiltersPathsIncludingUndo) {
     EXPECT_FALSE(projection->FindDict("sidebarUndo")->contains("normal"));
     const auto json = base::WriteJson(*projection);
     ASSERT_TRUE(json);
-    EXPECT_EQ(json->find("/Users/test/private-notes"), std::string::npos);
+    EXPECT_EQ(json->find("private-notes"), std::string::npos);
   }
   auto& edit = (*state.FindDict("sidebarUndo")->FindList("normal"))[0].GetDict();
   edit.Set("id", 123);
@@ -2041,6 +2052,21 @@ TEST(RuntimeLocalFilesTest, ValidatesMetadataAndFiltersPathsIncludingUndo) {
   stored->Set("spaceId", "default");
   stored->Set("path", "/tmp/../secret");
   EXPECT_FALSE(IsRuntimeState(state));
+  stored->Set("path", "/tmp/./secret");
+  EXPECT_FALSE(IsRuntimeState(state));
+  stored->Set("path", "notes/secret");
+  EXPECT_FALSE(IsRuntimeState(state));
+  // A pin synced from a Windows device keeps its path on every platform.
+  for (const char* path : {"C:\\Users\\test\\notes", "C:/Users/test/notes",
+                           "\\\\server\\share\\notes", "/tmp/back\\slash"}) {
+    stored->Set("path", path);
+    EXPECT_TRUE(IsRuntimeState(state)) << path;
+  }
+  for (const char* path : {"C:notes", "C:\\Users\\..\\secret", "C:/Users/./secret",
+                           "\\\\server\\..\\secret", "1:\\notes"}) {
+    stored->Set("path", path);
+    EXPECT_FALSE(IsRuntimeState(state)) << path;
+  }
 }
 
 TEST(RuntimeLocalFilesTest, GatesCommandsByOriginAndRejectsNativeFields) {

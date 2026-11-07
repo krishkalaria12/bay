@@ -423,6 +423,29 @@ test("a synchronous transport close releases subscriptions and skips bootstrap",
   assert.equal(reads, 0);
 });
 
+test("a transport that closed before subscribing reports why", async () => {
+  const closed = Object.assign(new Error("Browser runtime closed; pending mutation outcomes may be uncertain"), { code: "new_epoch" });
+  const transport = {
+    subscribeCommits() {
+      throw closed;
+    },
+    subscribeClose() {
+      return () => {};
+    },
+    getSnapshot() {
+      throw new Error("should not read");
+    },
+    dispatch() {
+      throw new Error("should not dispatch");
+    },
+  };
+  const client = createBrowserClient({ clientId: "window-1", transport });
+  await assert.rejects(client.ready, {
+    code: "transport_closed",
+    message: "browser runtime transport could not connect (new_epoch): Browser runtime closed; pending mutation outcomes may be uncertain",
+  });
+});
+
 test("a gap before the scheduled send holds that command through resync", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());

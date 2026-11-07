@@ -65,6 +65,34 @@ jobs:
         if: env.DONE != 'true'
         with:
           python-version: "3.12"
+      - name: Reuse an engine built from these sources
+        id: reuse
+        if: env.DONE != 'true'
+        run: |
+          # The engine's id hashes every source it is built from, so an earlier run's engine with
+          # this id is this engine: republish it instead of restoring and compiling the tree. A
+          # change outside those sources (the app, the installer) then goes straight to packaging,
+          # and the installer job checks the id again.
+          $pin = python scripts/windows/engine.py pin
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $id = ($pin | Out-String | ConvertFrom-Json).id
+          $repo = $env:GITHUB_REPOSITORY
+          $recent = '[.artifacts[] | select(.expired | not) | select(.workflow_run.repository_id == .workflow_run.head_repository_id)] | sort_by(.created_at) | reverse | .[:3] | .[].workflow_run.id'
+          $runs = gh api "repos/$repo/actions/artifacts?name=$env:ENGINE_ARTIFACT&per_page=100" --jq $recent
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($run in $runs) {
+            Remove-Item dist/engine -Recurse -Force -ErrorAction SilentlyContinue
+            gh run download $run -R $repo -n $env:ENGINE_ARTIFACT -D dist/engine
+            if (!$LASTEXITCODE -and (Test-Path "dist/engine/$id.zip")) {
+              "Reusing $id from run $run"
+              "DONE=true" >> $env:GITHUB_ENV
+              "reused=true" >> $env:GITHUB_OUTPUT
+              exit 0
+            }
+          }
+          Remove-Item dist/engine -Recurse -Force -ErrorAction SilentlyContinue
+          "No recent run built $id; compiling it"
+          exit 0
       - name: Install Rust for the native content blocker
         if: env.DONE != 'true'
         uses: dtolnay/rust-toolchain@stable
@@ -122,10 +150,12 @@ jobs:
           if ($code -notin @(0, 124)) { exit $code }
           exit 0
       - name: Archive engine
-        if: steps.compile.outputs.code == '0'
+        # A later stage skips Compile, and a skipped step's null output equals '0' in a
+        # condition, so check DONE too.
+        if: env.DONE != 'true' && steps.compile.outputs.code == '0'
         run: python scripts/windows/engine.py archive --root $env:ENGINE_ROOT --output dist/engine
       - name: Upload engine
-        if: steps.compile.outputs.code == '0'
+        if: steps.reuse.outputs.reused == 'true' || (env.DONE != 'true' && steps.compile.outputs.code == '0')
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ENGINE_ARTIFACT }}

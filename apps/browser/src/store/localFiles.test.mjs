@@ -91,6 +91,19 @@ test("disk metadata whitelisting rejects traversal, poisoned ids, private spaces
   assert.equal(localFilePath("/a//b/"), "/a/b");
 });
 
+test("pins keep a Windows device's paths in their own form", () => {
+  assert.equal(localFilePath("C:\\Users\\owner\\Notes.pdf"), "C:\\Users\\owner\\Notes.pdf");
+  assert.equal(localFilePath("C:/Users//owner/"), "C:\\Users\\owner");
+  assert.equal(localFilePath("C:\\"), "C:\\");
+  assert.equal(localFilePath("\\\\server\\share\\Work"), "\\\\server\\share\\Work");
+  assert.equal(localFilePath("/tmp/back\\slash"), "/tmp/back\\slash");
+  for (const path of ["C:notes", "notes\\secret", "C:\\Users\\..\\secret", "C:/Users/./secret", "\\\\server\\..\\x", "1:\\notes"])
+    assert.equal(localFilePath(path), null, path);
+  const id = setup();
+  const [pin] = S().pinLocalFiles(id, [{ path: "D:\\Work\\Plan.docx", name: "Plan.docx", kind: "file" }]);
+  assert.equal(S().localFiles[pin].path, "D:\\Work\\Plan.docx");
+});
+
 test("removing a space removes its pins while closing a window keeps them", () => {
   const w = setup();
   const other = S().createSpace({ name: "Other" });

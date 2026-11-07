@@ -248,7 +248,8 @@ class ArtifactTests(unittest.TestCase):
             root = pathlib.Path(directory)
             artifact, web, destination = root / "engine", root / "web", root / "app"
             manifest = self.make_artifact(artifact)
-            for name in ("chrome.exe", "chrome_elf.dll", "notification_helper.exe", "resources.pak", "icudtl.dat", "bay-ui/native_host.mojom-webui.js"):
+            for name in ("chrome.exe", engine.VERSION_ASSEMBLY, "chrome_elf.dll", "notification_helper.exe", "resources.pak",
+                         "icudtl.dat", "bay-ui/native_host.mojom-webui.js"):
                 path = artifact / "runtime" / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(name.encode())
@@ -262,6 +263,8 @@ class ArtifactTests(unittest.TestCase):
             self.assertEqual((destination / "Bay.exe").read_bytes(), b"chrome.exe")
             self.assertFalse((destination / "chrome.exe").exists())
             self.assertEqual((destination / "notification_helper.exe").read_bytes(), b"notification_helper.exe")
+            # Without it beside Bay.exe, Windows refuses to start the app (side-by-side configuration).
+            self.assertTrue((destination / engine.VERSION_ASSEMBLY).is_file())
             self.assertEqual((destination / "bay-ui/native_host.mojom-webui.js").read_text(), "bay-ui/native_host.mojom-webui.js")
             self.assertTrue((destination / "bay-ui/index.html").is_file())
             self.assertEqual(build_app.web_artifacts.verify_manifest(destination)["engineId"], "fixture")
@@ -344,7 +347,8 @@ class ArtifactTests(unittest.TestCase):
             (root / "bay-engine-build.json").write_text(json.dumps({"lock": engine.LOCK, "sourceDigest": "digest"}))
             binaries = root / "chromium_git/chromium/src" / engine.LOCK["outputDirectory"]
             binaries.mkdir(parents=True)
-            for name in ("chrome.exe", "chrome.dll", "chrome_elf.dll", "notification_helper.exe", "icudtl.dat", "resources.pak", "chrome.pdb"):
+            for name in ("chrome.exe", engine.VERSION_ASSEMBLY, "chrome.dll", "chrome_elf.dll", "notification_helper.exe",
+                         "icudtl.dat", "resources.pak", "chrome.pdb"):
                 (binaries / name).write_bytes(name.encode())
             (binaries / "locales").mkdir()
             generated = binaries / "gen/chrome/browser/bay/webui/resources/tsc"
@@ -357,6 +361,7 @@ class ArtifactTests(unittest.TestCase):
                 self.assertIn("runtime/bay-ui/helper.js", archive.namelist())
                 self.assertIn("runtime/bay-ui/native_host.mojom-webui.js", archive.namelist())
                 self.assertIn("runtime/notification_helper.exe", archive.namelist())
+                self.assertIn(f"runtime/{engine.VERSION_ASSEMBLY}", archive.namelist())
                 self.assertNotIn("runtime/chrome.pdb", archive.namelist())
                 self.assertNotIn("runtime/xdg-settings", archive.namelist())
                 self.assertNotIn("runtime/xdg-mime", archive.namelist())
