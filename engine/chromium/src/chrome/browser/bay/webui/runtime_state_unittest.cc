@@ -2033,7 +2033,7 @@ TEST(RuntimeLocalFilesTest, ValidatesMetadataAndFiltersPathsIncludingUndo) {
     EXPECT_FALSE(projection->FindDict("sidebarUndo")->contains("normal"));
     const auto json = base::WriteJson(*projection);
     ASSERT_TRUE(json);
-    EXPECT_EQ(json->find("/Users/test/private-notes"), std::string::npos);
+    EXPECT_EQ(json->find("private-notes"), std::string::npos);
   }
   auto& edit = (*state.FindDict("sidebarUndo")->FindList("normal"))[0].GetDict();
   edit.Set("id", 123);
@@ -2052,6 +2052,21 @@ TEST(RuntimeLocalFilesTest, ValidatesMetadataAndFiltersPathsIncludingUndo) {
   stored->Set("spaceId", "default");
   stored->Set("path", "/tmp/../secret");
   EXPECT_FALSE(IsRuntimeState(state));
+  stored->Set("path", "/tmp/./secret");
+  EXPECT_FALSE(IsRuntimeState(state));
+  stored->Set("path", "notes/secret");
+  EXPECT_FALSE(IsRuntimeState(state));
+  // A pin synced from a Windows device keeps its path on every platform.
+  for (const char* path : {"C:\\Users\\test\\notes", "C:/Users/test/notes",
+                           "\\\\server\\share\\notes", "/tmp/back\\slash"}) {
+    stored->Set("path", path);
+    EXPECT_TRUE(IsRuntimeState(state)) << path;
+  }
+  for (const char* path : {"C:notes", "C:\\Users\\..\\secret", "C:/Users/./secret",
+                           "\\\\server\\..\\secret", "1:\\notes"}) {
+    stored->Set("path", path);
+    EXPECT_FALSE(IsRuntimeState(state)) << path;
+  }
 }
 
 TEST(RuntimeLocalFilesTest, GatesCommandsByOriginAndRejectsNativeFields) {

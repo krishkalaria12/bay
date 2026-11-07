@@ -9,6 +9,7 @@
 #include <vector>
 #include "base/functional/function_ref.h"
 #include "base/json/json_writer.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 
 namespace bay {
@@ -158,26 +159,34 @@ bool ShareToken(const base::DictValue& command) {
       return false;
   return true;
 }
+// Pins sync between devices, so a path here may be another platform's: /posix,
+// a Windows drive (C:\ or C:/) or share (\\server\share). Any of them is
+// metadata only; access needs this device's own grant. No part may be . or ..
+bool AbsoluteLocalPath(std::string_view path) {
+  const bool posix = path.starts_with('/');
+  const bool drive = path.size() >= 3 && base::IsAsciiAlpha(path[0]) &&
+                     path[1] == ':' && (path[2] == '\\' || path[2] == '/');
+  const bool share = path.starts_with("\\\\");
+  if (!posix && !drive && !share)
+    return false;
+  // A backslash is an ordinary character in a POSIX name.
+  for (const auto part : base::SplitStringPiece(path, posix ? "/" : "\\/",
+                                                base::KEEP_WHITESPACE,
+                                                base::SPLIT_WANT_ALL))
+    if (part == "." || part == "..")
+      return false;
+  return true;
+}
 // Metadata only. Native file grants and handles never cross this boundary.
 bool LocalFileDescriptor(const base::DictValue& file) {
   const auto* path = file.FindString("path");
   const auto* kind = file.FindString("kind");
-  if (!path || path->empty() || (*path)[0] != '/' ||
-      path->size() > 1024 * 1024 || path->find('\0') != std::string::npos ||
+  if (!path || path->size() > 1024 * 1024 ||
+      path->find('\0') != std::string::npos ||
       !CommandText(file, "name", 1024) ||
       !kind || (*kind != "file" && *kind != "folder"))
     return false;
-  std::string_view remaining(*path);
-  while (!remaining.empty()) {
-    const auto slash = remaining.find('/');
-    const auto part = remaining.substr(0, slash);
-    if (part == "." || part == "..")
-      return false;
-    if (slash == std::string_view::npos)
-      break;
-    remaining.remove_prefix(slash + 1);
-  }
-  return true;
+  return AbsoluteLocalPath(*path);
 }
 // Service snapshots contain UI data only. Every record shape is allowlisted so
 // adding a credential or recovery field cannot silently publish it to windows.
