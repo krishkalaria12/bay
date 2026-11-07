@@ -37,6 +37,7 @@ public class BayEngineModule: Module {
       ) {
         do {
           try BayEngineSnapshots.clear()
+          try BayEngineTabStates.clear()
           promise.resolve()
         } catch {
           promise.reject(error)
@@ -46,6 +47,10 @@ public class BayEngineModule: Module {
 
     AsyncFunction("pruneSnapshots") { (keep: [String]) in
       BayEngineSnapshots.prune(keeping: keep)
+    }
+
+    AsyncFunction("pruneTabStates") { (keep: [String]) in
+      BayEngineTabStates.prune(keeping: keep)
     }
 
     Constant("privateBrowsingSupported") { true }
@@ -90,6 +95,9 @@ public class BayEngineModule: Module {
       Prop("suspended", false) { (view: BayEngineView, suspended: Bool) in
         view.isSuspended = suspended
       }
+      Prop("stateKey") { (view: BayEngineView, key: String?) in
+        view.stateKey = key
+      }
       Prop("initialUrl") { (view: BayEngineView, url: String?) in
         view.loadInitial(url)
       }
@@ -100,6 +108,7 @@ public class BayEngineModule: Module {
       AsyncFunction("reload") { (view: BayEngineView) in _ = view.webView.reload() }
       AsyncFunction("stop") { (view: BayEngineView) in view.stop() }
       AsyncFunction("snapshot") { (view: BayEngineView, promise: Promise) in view.snapshot(promise) }
+      AsyncFunction("saveState") { (view: BayEngineView) in view.saveState() }.runOnQueue(.main)
       AsyncFunction("evaluate") { (view: BayEngineView, script: String, promise: Promise) in view.evaluate(script, promise) }
       AsyncFunction("answerPageRequest") { (view: BayEngineView, id: String, accepted: Bool, value: String?, username: String?, password: String?) in
         view.answerPageRequest(id: id, accepted: accepted, value: value, username: username, password: password)
@@ -122,6 +131,60 @@ enum BayEngineSnapshots {
     let cutoff = Date().addingTimeInterval(-30)
     let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
     for file in files where !names.contains(file.lastPathComponent) {
+      let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantFuture
+      if modified < cutoff { try? FileManager.default.removeItem(at: file) }
+    }
+  }
+
+  static func clear() throws {
+    if let directory, FileManager.default.fileExists(atPath: directory.path) {
+      try FileManager.default.removeItem(at: directory)
+    }
+  }
+}
+
+/// Tab state files (B6): WebKit's `interactionState` archived per tab id, in the caches directory, so a relaunch or a
+/// remounted tab gets its history, scroll position and form text back. Private tabs never write one.
+enum BayEngineTabStates {
+  static var directory: URL? {
+    FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+      .appendingPathComponent("bay-engine-tab-states", isDirectory: true)
+  }
+
+  /// Tab ids are the key; anything else is refused, so a key can never name a file outside the directory.
+  private static func isSafeKey(_ key: String) -> Bool {
+    !key.isEmpty && key.count <= 120 && key.range(of: "^[A-Za-z0-9._-]+$", options: .regularExpression) != nil
+  }
+
+  private static func file(for key: String) -> URL? {
+    guard isSafeKey(key), let directory else { return nil }
+    return directory.appendingPathComponent("\(key).state")
+  }
+
+  static func save(_ state: Any, key: String) {
+    guard let file = file(for: key) else { return }
+    do {
+      try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+      // WebKit's state is its own opaque archive, so secure coding can't be required to read it back.
+      let data = try NSKeyedArchiver.archivedData(withRootObject: state, requiringSecureCoding: false)
+      try data.write(to: file, options: .atomic)
+    } catch {
+      NSLog("BayEngineTabStates: couldn't save %@: %@", key, error.localizedDescription)
+    }
+  }
+
+  static func load(key: String) -> Any? {
+    guard let file = file(for: key), let data = try? Data(contentsOf: file) else { return nil }
+    return try? NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(data)
+  }
+
+  /// Deletes states whose tab ids aren't in `keep`. Recent files stay: their tab may not have been told yet.
+  static func prune(keeping keep: [String]) {
+    guard let directory else { return }
+    let names = Set(keep.filter(isSafeKey))
+    let cutoff = Date().addingTimeInterval(-30)
+    let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+    for file in files where !names.contains(file.deletingPathExtension().lastPathComponent) {
       let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantFuture
       if modified < cutoff { try? FileManager.default.removeItem(at: file) }
     }

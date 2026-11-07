@@ -14,6 +14,11 @@ export interface Tab {
   /** A JPEG file URI in the app cache, or null before a page has a drawable viewport. */
   snapshot(): Promise<string | null>;
   /**
+   * Saves the page's history, scroll position and form text for `stateKey` now. Native saves on its own as pages load
+   * and when the app leaves the foreground; this is for a last save just before the view unmounts.
+   */
+  saveState(): Promise<void>;
+  /**
    * Answers a dialog the page asked for (`onPageRequest`): `accepted` is OK vs Cancel, `value` is the prompt's
    * entered text when accepted (empty string for an empty field). An HTTP sign-in uses `username` and `password`
    * instead of `value`. Resolves when the engine delivers the answer.
@@ -66,6 +71,11 @@ export interface EngineViewProps extends ViewProps {
   ref?: Ref<Tab>;
   /** Opened once when the view is created, so a new tab needs no ref call before it is mounted. Later changes are ignored; navigate through the ref. */
   initialUrl?: string;
+  /**
+   * Restores this tab's last page state (back/forward history, scroll position and form text) before `initialUrl` and
+   * saves it as the page changes. Ignored for private tabs, which leave nothing behind. Tab ids are the natural key.
+   */
+  stateKey?: string;
   /** A private page keeps nothing: it uses a separate data store (iOS) or profile (Android), wiped when the last private page closes. Set at creation. */
   private?: boolean;
   /** Defaults to true. Hidden tabs pass false so assistive technology skips them. */
@@ -113,6 +123,7 @@ export const EngineView = requireNativeView<EngineViewProps>("BayEngine");
 const nativeEngine = requireNativeModule<{
   clearData(): Promise<void>;
   pruneSnapshots(keep: string[]): Promise<void>;
+  pruneTabStates(keep: string[]): Promise<void>;
   setContentBlocking(listFiles: string[] | null, version: string): Promise<number | null>;
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
@@ -161,6 +172,11 @@ export function clearData(): Promise<void> {
 /** Deletes tab snapshots that aren't in `keep` (file URIs), except ones written in the last 30 seconds. */
 export function pruneSnapshots(keep: readonly string[]): Promise<void> {
   return nativeEngine.pruneSnapshots([...keep]);
+}
+
+/** Deletes saved page states whose tab keys aren't in `keep`. */
+export function pruneTabStates(keep: readonly string[]): Promise<void> {
+  return nativeEngine.pruneTabStates([...keep]);
 }
 
 /** Runs a page script on a tab and resolves with its parsed result; rejects after `timeout` ms (a navigation can drop it). */

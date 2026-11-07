@@ -887,7 +887,7 @@
             </tr>
             <tr>
               <td class="id">B6</td>
-              <th scope="row">Tabs lose their state <span class="kind">Sites break</span></th>
+              <th scope="row">Tabs lose their state <span class="kind">Sites break</span> <span class="status landed">Landed</span></th>
               <td>
                 Only four tabs stay loaded (<code>BrowserScreen.tsx:42</code>) and only each tab's address is saved. Beyond that, or after a relaunch, back
                 history, scroll position and form text are gone. A page the system killed shows an error screen instead of reloading.
@@ -1432,6 +1432,7 @@
           <li>
             <span class="tag api">Shared + 2 native</span> Save and restore tab state (B6): <code>interactionState</code> on iOS and <code>saveState</code> on
             Android, in their own files, never for private tabs. Reload pages the system killed.
+            <span class="status landed">Landed</span>
           </li>
           <li><span class="tag api">Shared + 2 native</span> New windows open real tabs that keep their opener (B19).</li>
         </ul>

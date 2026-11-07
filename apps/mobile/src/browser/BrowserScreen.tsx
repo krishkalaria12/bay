@@ -136,7 +136,12 @@ export function BrowserScreen(): JSX.Element {
   }, [ready]);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") startFresh.current();
+      if (state === "active") {
+        startFresh.current();
+      } else {
+        // The system may end Bay while it is in the background: keep each page's history, scroll and form text.
+        for (const view of views.values()) void view.saveState().catch(() => {});
+      }
     });
 
     return () => subscription.remove();

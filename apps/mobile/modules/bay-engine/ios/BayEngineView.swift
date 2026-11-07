@@ -27,6 +27,16 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   private var snapshotURL: URL?
   private var startedLoading = false
   private var pendingInitialURL: String?
+  /// The tab's saved state (B6), restored before its first load; the tab id, or nil for private tabs.
+  var stateKey: String? {
+    didSet {
+      if stateKey != oldValue { restoreState() }
+    }
+  }
+  /// A saved page came back, so `initialUrl` must not load over it.
+  private var restoredState = false
+  /// Automatic reloads after the system kills a page's renderer (one, then the error screen).
+  private var rendererReloads = 0
   /// The tab's first navigation became a download, so it has no page; reported as `blank` while that's still so.
   private var firstNavigationBecameDownload = false
   /// Hosts this view moved from HTTP to HTTPS, with when; an HTTPS page that sends the view straight back keeps HTTP.
@@ -39,9 +49,13 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     }
   }
 
-  /// Hidden tabs stay mounted; keep them out of VoiceOver.
+  /// Hidden tabs stay mounted; keep them out of VoiceOver. Leaving the screen is also a good moment to save (B6):
+  /// the tab may be the next one unmounted for memory.
   var isActive = true {
-    didSet { webView.accessibilityElementsHidden = !isActive }
+    didSet {
+      webView.accessibilityElementsHidden = !isActive
+      if !isActive { saveState() }
+    }
   }
 
   /// Hidden tabs that aren't playing media are hidden from WebKit too, which then throttles their timers and animations.
@@ -163,10 +177,34 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     guard !startedLoading, let address, !address.isEmpty else { return }
     pendingInitialURL = address
     DispatchQueue.main.async { [weak self] in
-      guard let self, !self.startedLoading, let address = self.pendingInitialURL else { return }
+      guard let self, !self.startedLoading else { return }
+      // A restored page supplies its own address and history; only fall back if WebKit drops it.
+      if self.restoredState {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+          guard let self, !self.startedLoading, self.webView.url == nil, self.webView.backForwardList.currentItem == nil,
+                let address = self.pendingInitialURL else { return }
+          self.pendingInitialURL = nil
+          try? self.load(address)
+        }
+        return
+      }
+      guard let address = self.pendingInitialURL else { return }
       self.pendingInitialURL = nil
       try? self.load(address)
     }
+  }
+
+  /// Restores the tab's back/forward history, scroll position and form text saved by a previous view (B6).
+  private func restoreState() {
+    guard let key = stateKey, let state = BayEngineTabStates.load(key: key), !startedLoading else { return }
+    webView.interactionState = state
+    restoredState = true
+  }
+
+  /// Saves the page state for `stateKey` now (B6); private tabs leave nothing behind.
+  func saveState() {
+    guard !isPrivate, let key = stateKey, let state = webView.interactionState else { return }
+    BayEngineTabStates.save(state, key: key)
   }
 
   /// Runs a page script in the isolated world and resolves with its result as JSON text.
@@ -529,6 +567,12 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     emitError(error)
   }
 
+  /// A finished load is worth keeping: history, scroll position and form text go to the tab's state file (B6).
+  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    rendererReloads = 0
+    saveState()
+  }
+
   private func emitError(_ error: Error) {
     refreshControl.endRefreshing()
     let nativeError = error as NSError
@@ -544,6 +588,12 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
     refreshControl.endRefreshing()
+    // The system killed the page to reclaim memory; reopen it once before showing the error screen (B6).
+    if rendererReloads < 1, webView.url != nil {
+      rendererReloads += 1
+      webView.reload()
+      return
+    }
     onNavigationError(["url": webView.url?.absoluteString ?? "", "code": "renderer-terminated",
                        "message": "The page stopped responding. Reload to try again."])
   }

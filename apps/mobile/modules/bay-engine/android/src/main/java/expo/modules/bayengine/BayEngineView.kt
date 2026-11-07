@@ -13,9 +13,12 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Parcel
 import android.os.SystemClock
+import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -85,6 +88,17 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private var recoveryURL: String? = null
   private var disposed = false
   private var startedLoading = false
+  /** The tab's saved state (B6): its tab id, or null for private tabs. */
+  var stateKey: String? = null
+    set(value) {
+      if (field == value) return
+      field = value
+      if (!startedLoading) restoreState()
+    }
+  /** A saved page came back, so `initialUrl` must not load over it. */
+  private var restoredState = false
+  /** Automatic reloads after the system kills a page's renderer (one, then the error screen). */
+  private var rendererReloads = 0
   private var navigationGeneration = 0
   private var lastTouchX = 0f
   private var lastTouchY = 0f
@@ -159,6 +173,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     set(value) {
       field = value
       webView.importantForAccessibility = if (value) IMPORTANT_FOR_ACCESSIBILITY_AUTO else IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+      // Leaving the screen is a good moment to save (B6): the tab may be the next one unmounted for memory.
+      if (!value) saveState()
     }
   /**
    * Hidden tabs that aren't playing media pause: Chromium then reports the page hidden and stops its animation frames
@@ -327,7 +343,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
           view.evaluateJavascript(BayContentBlocker.COSMETIC_SCRIPT, null)
         }
         loading = false
+        rendererReloads = 0
         emitState()
+        // A finished load is worth keeping, so a relaunch or a remounted tab gets its history back (B6).
+        saveState()
         installBlobInterceptor(view)
       }
 
@@ -343,7 +362,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
       override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
         cancelScripts("The page renderer stopped.")
-        recoveryURL = view.url
+        val failedURL = view.url ?: pageUrl
+        recoveryURL = failedURL
         navigationGeneration += 1
         removeView(view)
         view.destroy()
@@ -352,8 +372,16 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         webView = createWebView()
         addView(webView)
         loading = false
+        // The system killed the page to reclaim memory; reopen it once before showing the error screen (B6).
+        if (rendererReloads < 1 && !failedURL.isNullOrEmpty()) {
+          rendererReloads += 1
+          load(failedURL)
+          // `load` clears it, but a retry that fails still needs the address to reload.
+          recoveryURL = failedURL
+          return true
+        }
         emitState()
-        onNavigationError(mapOf("url" to (recoveryURL ?: ""), "code" to "renderer-terminated",
+        onNavigationError(mapOf("url" to (failedURL ?: ""), "code" to "renderer-terminated",
           "message" to "The page stopped responding. Reload to try again."))
         return true
       }
@@ -805,7 +833,40 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   fun loadInitial(address: String?) {
     if (startedLoading || disposed || address.isNullOrEmpty() || !isWebURL(Uri.parse(address))) return
     // Wait a turn so the other initial props (`private` in particular) apply first.
-    post { if (!startedLoading && !disposed) load(address) }
+    post {
+      if (startedLoading || disposed) return@post
+      // A restored page supplies its own address and history; only fall back if WebView drops it.
+      if (restoredState) {
+        val saved = address
+        postDelayed({
+          if (!startedLoading && !disposed && webView.url == null && webView.copyBackForwardList().currentItem == null) load(saved)
+        }, 1_000)
+        return@post
+      }
+      load(address)
+    }
+  }
+
+  /** Restores the tab's back/forward history from its state file (B6), before its first load. */
+  private fun restoreState() {
+    if (isPrivate) return
+    val key = stateKey ?: return
+    val bundle = BayEngineTabStates.load(context, key) ?: return
+    val restored = runCatching { webView.restoreState(bundle) }.getOrNull()
+    if (restored == null || (restored.size == 0 && webView.url == null)) return
+    startedLoading = true
+    loading = false
+    restoredState = true
+    emitState()
+  }
+
+  /** Saves the page state for `stateKey` now (B6); private tabs leave nothing behind. */
+  fun saveState() {
+    if (disposed || isPrivate) return
+    val key = stateKey ?: return
+    val bundle = Bundle()
+    webView.saveState(bundle)
+    BayEngineTabStates.save(context, key, bundle)
   }
 
   fun reload() {
@@ -1124,5 +1185,69 @@ internal object BayEngineSnapshots {
   fun clear(context: Context) {
     val directory = directory(context)
     if (directory.exists() && !directory.deleteRecursively()) throw IOException("Couldn't clear the snapshot cache.")
+  }
+}
+
+/**
+ * Tab state files (B6): `WebView.saveState` bundles per tab id, so a relaunch or a remounted tab gets its back/forward
+ * history back. Private tabs never write one.
+ */
+internal object BayEngineTabStates {
+  fun directory(context: Context) = File(context.filesDir, "bay-engine-tab-states")
+
+  /** Tab ids are the key; anything else is refused, so a key can never name a file outside the directory. */
+  private fun isSafeKey(key: String): Boolean =
+    key.isNotEmpty() && key.length <= 120 && Regex("^[A-Za-z0-9._-]+$").matches(key)
+
+  private fun file(context: Context, key: String): File? =
+    if (isSafeKey(key)) File(directory(context), "$key.state") else null
+
+  fun save(context: Context, key: String, bundle: Bundle) {
+    val target = file(context, key) ?: return
+    try {
+      val directory = directory(context)
+      if (!directory.isDirectory && !directory.mkdirs()) return
+      val parcel = Parcel.obtain()
+      try {
+        parcel.writeBundle(bundle)
+        target.writeBytes(parcel.marshall())
+      } finally {
+        parcel.recycle()
+      }
+    } catch (error: Exception) {
+      Log.w("BayEngine", "Couldn't save tab state for $key", error)
+    }
+  }
+
+  fun load(context: Context, key: String): Bundle? {
+    val source = file(context, key) ?: return null
+    if (!source.isFile) return null
+    return try {
+      val bytes = source.readBytes()
+      val parcel = Parcel.obtain()
+      try {
+        parcel.unmarshall(bytes, 0, bytes.size)
+        parcel.setDataPosition(0)
+        parcel.readBundle(BayEngineView::class.java.classLoader)
+      } finally {
+        parcel.recycle()
+      }
+    } catch (error: Exception) {
+      null
+    }
+  }
+
+  /** Deletes states whose tab ids aren't in `keep`. Recent files stay: their tab may not have been told yet. */
+  fun prune(context: Context, keep: List<String>) {
+    val names = keep.filter(::isSafeKey).toHashSet()
+    val cutoff = System.currentTimeMillis() - 30_000
+    directory(context).listFiles()?.forEach { file ->
+      if (file.nameWithoutExtension !in names && file.lastModified() < cutoff) file.delete()
+    }
+  }
+
+  fun clear(context: Context) {
+    val directory = directory(context)
+    if (directory.exists() && !directory.deleteRecursively()) throw IOException("Couldn't clear saved tab states.")
   }
 }

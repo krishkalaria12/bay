@@ -52,6 +52,7 @@ class BayEngineModule : Module() {
             try {
               CookieManager.getInstance().flush()
               BayEngineSnapshots.clear(context)
+              BayEngineTabStates.clear(context)
               promise.resolve(null)
             } catch (error: Exception) {
               promise.reject("E_CLEAR_DATA", "Couldn't clear website data.", error)
@@ -64,6 +65,8 @@ class BayEngineModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     AsyncFunction("pruneSnapshots") { keep: List<String> -> appContext.reactContext?.let { pruneSnapshots(it, keep) } }
+
+    AsyncFunction("pruneTabStates") { keep: List<String> -> appContext.reactContext?.let { BayEngineTabStates.prune(it, keep) } }
 
     Constant("privateBrowsingSupported") { BayEngineView.privateBrowsingSupported }
 
@@ -88,6 +91,7 @@ class BayEngineModule : Module() {
       Prop("private") { view: BayEngineView, isPrivate: Boolean -> view.isPrivate = isPrivate }
       Prop("active") { view: BayEngineView, active: Boolean -> view.isActive = active }
       Prop("suspended") { view: BayEngineView, suspended: Boolean -> view.isSuspended = suspended }
+      Prop("stateKey") { view: BayEngineView, key: String? -> view.stateKey = key }
       Prop("initialUrl") { view: BayEngineView, url: String? -> view.loadInitial(url) }
       AsyncFunction("load") { view: BayEngineView, url: String -> view.load(url) }
       AsyncFunction("goBack") { view: BayEngineView -> view.webView.goBack() }
@@ -95,6 +99,7 @@ class BayEngineModule : Module() {
       AsyncFunction("reload") { view: BayEngineView -> view.reload() }
       AsyncFunction("stop") { view: BayEngineView -> view.stop() }
       AsyncFunction("snapshot") { view: BayEngineView, promise: Promise -> view.snapshot(promise) }.runOnQueue(Queues.MAIN)
+      AsyncFunction("saveState") { view: BayEngineView -> view.saveState() }.runOnQueue(Queues.MAIN)
       AsyncFunction("evaluate") { view: BayEngineView, script: String, promise: Promise -> view.evaluate(script, promise) }.runOnQueue(Queues.MAIN)
       AsyncFunction("answerPageRequest") { view: BayEngineView, id: String, accepted: Boolean, value: String?, username: String?, password: String? -> view.answerPageRequest(id, accepted, value, username, password) }.runOnQueue(Queues.MAIN)
       OnViewDestroys { view: BayEngineView -> view.dispose() }

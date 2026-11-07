@@ -1,4 +1,4 @@
-import { pruneSnapshots } from "@bay/engine";
+import { pruneSnapshots, pruneTabStates } from "@bay/engine";
 import { File, Paths } from "expo-file-system";
 import { AppState } from "react-native";
 import { create } from "zustand";
@@ -125,6 +125,8 @@ useBrowserStore.subscribe((state, previous) => {
     const { tabs, archive } = useBrowserStore.getState().data;
     const keep = [...tabs, ...archive].flatMap((tab) => (tab.snapshot ? [tab.snapshot] : []));
     pruneSnapshots(keep).catch((cause: unknown) => console.warn("Couldn't prune tab snapshots.", cause));
+    // Saved page state is only worth keeping for open, non-private tabs; archived tabs reopen with their address.
+    pruneTabStates(tabs.filter((tab) => !tab.private).map((tab) => tab.id)).catch((cause: unknown) => console.warn("Couldn't prune saved tab states.", cause));
   }, PRUNE_DELAY);
 });
 

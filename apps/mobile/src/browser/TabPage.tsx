@@ -71,7 +71,11 @@ export function TabPage({
     if (!current) return;
     register(current);
 
-    return () => register(null);
+    return () => {
+      // Save before the view goes: tabs beyond MAX_LIVE unmount while their page is still current.
+      void current.saveState().catch(() => {});
+      register(null);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -133,6 +137,7 @@ export function TabPage({
       <EngineView
         ref={view}
         initialUrl={initialUrl || undefined}
+        stateKey={tab.private ? undefined : tab.id}
         private={tab.private ?? false}
         active={visible}
         suspended={suspended}
