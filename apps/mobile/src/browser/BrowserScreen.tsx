@@ -619,6 +619,11 @@ export function BrowserScreen(): JSX.Element {
                   }
                 }}
                 onPageRequest={(request) => onPageRequest(id, request)}
+                onNewWindow={(window) => {
+                  // New windows (B19) become a real tab: the opener's own page is untouched, a private opener stays
+                  // private, and the tab opens to the front — the way a popup sign-in takes the screen.
+                  if (isWebURL(window.url)) openTab(window.url, false, Boolean(window.private));
+                }}
                 onFullscreenChange={(fullscreen) =>
                   setFullscreenByTab((previous) => (previous[id] === fullscreen ? previous : { ...previous, [id]: fullscreen }))
                 }

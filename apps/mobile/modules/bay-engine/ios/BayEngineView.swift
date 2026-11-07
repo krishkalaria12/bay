@@ -14,6 +14,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   let onLinkPress = EventDispatcher()
   let onPageMessage = EventDispatcher()
   let onPageRequest = EventDispatcher()
+  // New windows (B19): `target=_blank` / `window.open`, answered by a real tab (see createWebViewWith).
+  let onNewWindow = EventDispatcher()
   // Declared for the shared API (A2); WebKit presents element fullscreen itself and never emits it.
   let onFullscreenChange = EventDispatcher()
   private lazy var messageProxy = BayPageMessageProxy(view: self)
@@ -496,7 +498,9 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
                for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
     if navigationAction.targetFrame == nil, let url = navigationAction.request.url {
       if isWebURL(url) {
-        webView.load(navigationAction.request)
+        // New windows (B19): a real tab, in this view's own session, that keeps this page as its opener. Loading it
+        // here replaced the opener's page, which is how popup sign-ins lost it.
+        onNewWindow(["url": url.absoluteString, "private": isPrivate])
       } else if isExternalURL(url) {
         requestExternal(url)
       }

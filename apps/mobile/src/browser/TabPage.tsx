@@ -4,6 +4,7 @@ import {
   type LinkPress,
   type NavigationError,
   type NavigationState,
+  type NewWindow,
   type PageRequest,
   type PageScroll,
   type Tab,
@@ -42,6 +43,7 @@ export interface TabPageProps {
   onScroll: (scroll: PageScroll) => void;
   onLinkPress: (press: LinkPress) => void;
   onPageRequest: (request: PageRequest) => void;
+  onNewWindow: (window: NewWindow) => void;
   onFullscreenChange: (fullscreen: boolean) => void;
 }
 
@@ -56,6 +58,7 @@ export function TabPage({
   onScroll,
   onLinkPress,
   onPageRequest,
+  onNewWindow,
   onFullscreenChange,
   hiddenSelectors,
   tweaks,
@@ -170,6 +173,7 @@ export function TabPage({
         onNavigationError={({ nativeEvent }) => onError(nativeEvent)}
         onScroll={({ nativeEvent }) => onScroll(nativeEvent)}
         onLinkPress={({ nativeEvent }) => onLinkPress(nativeEvent)}
+        onNewWindow={({ nativeEvent }) => onNewWindow(nativeEvent)}
         onPageRequest={({ nativeEvent }) => onPageRequest(nativeEvent)}
         onFullscreenChange={({ nativeEvent }) => onFullscreenChange(nativeEvent.fullscreen)}
       />

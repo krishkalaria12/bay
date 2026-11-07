@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Message
 import android.os.Parcel
 import android.os.SystemClock
 import android.util.Log
@@ -79,6 +80,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   val onLinkPress by EventDispatcher()
   val onPageMessage by EventDispatcher()
   val onPageRequest by EventDispatcher()
+  val onNewWindow by EventDispatcher()
   val onFullscreenChange by EventDispatcher()
   // The system WebView has no isolated worlds: page scripts run in the main world and answer through this bridge,
   // which ignores anything without this view's token. The token rotates on every main-frame navigation, so a
@@ -262,6 +264,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     }
     settings.javaScriptEnabled = true
     settings.domStorageEnabled = true
+    // New windows (B19) open real tabs: a page's `target=_blank` / `window.open` never navigates this view itself.
+    settings.setSupportMultipleWindows(true)
     settings.allowFileAccess = false
     settings.allowContentAccess = false
     settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -434,6 +438,47 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     webChromeClient = object : WebChromeClient() {
       override fun onProgressChanged(view: WebView, newProgress: Int) = emitState()
       override fun onReceivedTitle(view: WebView, title: String?) = emitState()
+
+      // New windows (B19): a page's `target=_blank` / `window.open` becomes a real tab (through `onNewWindow`),
+      // not a navigation of this view — popup sign-ins used to replace the page that opened them. The popup's own
+      // WebView is a throwaway for its first real navigation; once JavaScript opens the tab, it dies.
+      override fun onCreateWindow(
+        parent: WebView?,
+        isDialogWindow: Boolean,
+        isUserGesture: Boolean,
+        resultMsg: Message?,
+      ): Boolean {
+        val popup = WebView(context)
+        popup.settings.javaScriptEnabled = true
+        popup.settings.domStorageEnabled = true
+        popup.settings.setSupportMultipleWindows(true)
+
+        // A popup from a private tab must live in the same private profile as its opener.
+        if (usesPrivateProfile) {
+          ProfileStore.getInstance().getOrCreateProfile(PRIVATE_PROFILE)
+          WebViewCompat.setProfile(popup, PRIVATE_PROFILE)
+        }
+        CookieManager.getInstance().setAcceptThirdPartyCookies(popup, false)
+
+        popup.webViewClient = object : WebViewClient() {
+          override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            // `about:blank` is where every popup starts; the page's own first navigation is a real address.
+            if (url.startsWith("http", ignoreCase = true)) {
+              onNewWindow(mapOf("url" to url, "private" to usesPrivateProfile))
+              view.stopLoading()
+              view.destroy()
+            }
+          }
+
+          override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
+        }
+        popup.webChromeClient = object : WebChromeClient() {}
+
+        resultMsg?.obj = popup
+        resultMsg?.sendToTarget()
+
+        return true
+      }
 
       // File upload (A1): the system's picker for <input type="file">. WebKit opens it natively on iOS.
       override fun onShowFileChooser(

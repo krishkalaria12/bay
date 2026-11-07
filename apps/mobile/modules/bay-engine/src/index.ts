@@ -105,6 +105,14 @@ export interface EngineViewProps extends ViewProps {
   onPageRequest?: (event: NativeSyntheticEvent<PageRequest>) => void;
   /** A site's video went fullscreen (Android) or came back out of it. iOS fullscreen is system-presented. */
   onFullscreenChange?: (event: NativeSyntheticEvent<FullscreenChange>) => void;
+  /** A new window (`target=_blank`, `window.open`) that becomes a real tab (B19); the opener is the tab that sent it. */
+  onNewWindow?: (event: NativeSyntheticEvent<NewWindow>) => void;
+}
+
+export interface NewWindow {
+  url: string;
+  /** In the opener's own browsing session: private stays private, here and in the tab it opens (B19). */
+  private: boolean;
 }
 
 export interface FullscreenChange {
