@@ -56,7 +56,8 @@ class WindowsBuildWorkflowTests(unittest.TestCase):
             # A compile error still fails the job, but its progress is kept for the fix.
             self.assertEqual(condition, "${{ !cancelled() && steps.compile.outputs.code != '' }}")
         for name in ('Archive engine', 'Upload engine'):
-            self.assertIn("if: steps.compile.outputs.code == '0'", step(name))
+            # A stage after the engine exists skips Compile, whose null output equals '0'.
+            self.assertIn("if: env.DONE != 'true' && steps.compile.outputs.code == '0'", step(name))
         self.assertIn('fail-fast: true', WORKFLOW.read_text())
         self.assertNotIn('continue-on-error:', step('Compile'))
 

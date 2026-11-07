@@ -122,10 +122,12 @@ jobs:
           if ($code -notin @(0, 124)) { exit $code }
           exit 0
       - name: Archive engine
-        if: steps.compile.outputs.code == '0'
+        # A later stage skips Compile, and a skipped step's null output equals '0' in a
+        # condition, so check DONE too.
+        if: env.DONE != 'true' && steps.compile.outputs.code == '0'
         run: python scripts/windows/engine.py archive --root $env:ENGINE_ROOT --output dist/engine
       - name: Upload engine
-        if: steps.compile.outputs.code == '0'
+        if: env.DONE != 'true' && steps.compile.outputs.code == '0'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ENGINE_ARTIFACT }}
