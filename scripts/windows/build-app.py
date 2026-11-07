@@ -22,7 +22,8 @@ cli_spec.loader.exec_module(cli_bundle)
 def stage(engine, web_directory, destination, cli_directory=None):
     manifest = fetch.verify(engine, fetch.engine.artifact_id())
     runtime = engine / "runtime"
-    for name in ("chrome.exe", "chrome.dll", "chrome_elf.dll", "notification_helper.exe", "resources.pak", "icudtl.dat", "bay-ui/native_host.mojom-webui.js"):
+    for name in ("chrome.exe", fetch.engine.VERSION_ASSEMBLY, "chrome.dll", "chrome_elf.dll", "notification_helper.exe",
+                 "resources.pak", "icudtl.dat", "bay-ui/native_host.mojom-webui.js"):
         if not (runtime / name).is_file():
             raise ValueError(f"Chrome engine runtime is missing {name}")
     if any(path.name.lower().startswith(("libcef", "nncore", "bootstrap")) for path in runtime.iterdir() if path.is_file()):

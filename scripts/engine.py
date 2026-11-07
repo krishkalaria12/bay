@@ -44,6 +44,9 @@ def platform_lock(platform="win"):
 
 # Retain the Windows import interface used by artifact consumers.
 LOCK = platform_lock()
+# chrome.exe loads chrome_elf.dll through the private assembly named for its version
+# (chrome/app/version_assembly), which this manifest beside it describes.
+VERSION_ASSEMBLY = f"{LOCK['chromium']}.manifest"
 WEB_SPEC = importlib.util.spec_from_file_location("bay_web_artifacts", DRIVER_PATH.parent / "windows/web-artifacts.py")
 web_artifacts = importlib.util.module_from_spec(WEB_SPEC)
 WEB_SPEC.loader.exec_module(web_artifacts)
@@ -589,7 +592,8 @@ def archive(root, output, platform="win"):
         return archive_linux(root, output)
     src = root / "chromium_git/chromium/src"
     binaries = src / LOCK["outputDirectory"]
-    for required in ("chrome.exe", "chrome.dll", "chrome_elf.dll", "notification_helper.exe", "icudtl.dat", "resources.pak", "locales"):
+    for required in ("chrome.exe", VERSION_ASSEMBLY, "chrome.dll", "chrome_elf.dll", "notification_helper.exe", "icudtl.dat",
+                     "resources.pak", "locales"):
         if not (binaries / required).exists():
             raise RuntimeError(f"missing engine output: {binaries / required}")
     files = {}
@@ -599,6 +603,7 @@ def archive(root, output, platform="win"):
     for path in binaries.iterdir():
         if path.is_file() and path.suffix.lower() in (".dll", ".exe", ".pak", ".dat", ".bin", ".json"):
             files[f"runtime/{path.name}"] = path
+    files[f"runtime/{VERSION_ASSEMBLY}"] = binaries / VERSION_ASSEMBLY
     for name in ("locales", "swiftshader", "resources", "WidevineCdm", "MEIPreload", "PrivacySandboxAttestationsPreloaded", "hyphen-data"):
         if (binaries / name).is_dir():
             for path in (binaries / name).rglob("*"):
