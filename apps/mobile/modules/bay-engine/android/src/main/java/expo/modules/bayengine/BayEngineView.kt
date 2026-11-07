@@ -297,18 +297,24 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     }
     setOnLongClickListener {
       val hit = hitTestResult
-      if (hit.type != WebView.HitTestResult.SRC_ANCHOR_TYPE && hit.type != WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+      if (hit.type != WebView.HitTestResult.SRC_ANCHOR_TYPE && hit.type != WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE && hit.type != WebView.HitTestResult.IMAGE_TYPE) {
         false
       } else {
         val generation = navigationGeneration
         val pointX = (lastTouchX / max(1, width)).coerceIn(0f, 1f)
         val pointY = (lastTouchY / max(1, height)).coerceIn(0f, 1f)
-        val fallback = if (hit.type == WebView.HitTestResult.SRC_ANCHOR_TYPE) hit.extra else null
+        val fallback = when (hit.type) {
+          WebView.HitTestResult.SRC_ANCHOR_TYPE -> hit.extra
+          WebView.HitTestResult.IMAGE_TYPE -> hit.extra
+          else -> null
+        }
+        // An image's own address (B13): the menu offers image actions; image-in-link stays a link menu.
+        val isImage = hit.type == WebView.HitTestResult.IMAGE_TYPE
         val handler = Handler(Looper.getMainLooper()) { message ->
           val url = message.data.getString("url") ?: fallback
           if (!disposed && this === webView && generation == navigationGeneration && url != null && isWebURL(Uri.parse(url))) {
             val title = message.data.getString("title")?.takeIf { it.isNotBlank() } ?: url
-            onLinkPress(mapOf("url" to url, "title" to title.take(240), "x" to pointX, "y" to pointY))
+            onLinkPress(mapOf("url" to url, "title" to title.take(240), "x" to pointX, "y" to pointY, "image" to isImage))
           }
           true
         }

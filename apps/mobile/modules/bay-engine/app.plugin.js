@@ -19,6 +19,8 @@ module.exports = function withBayEngine(config) {
       ...mod.modResults.NSAppTransportSecurity,
       NSAllowsArbitraryLoadsInWebContent: true,
     };
+    // Saving images (B13): the photo library asks for it from the moment it's needed, as Safari's image menu does.
+    mod.modResults.NSPhotoLibraryAddUsageDescription = "Bay saves images you ask for to your photo library.";
     // iOS 26 keeps a download running after Bay leaves the screen as a continued-processing task, one identifier per
     // download (BayDownloads.swift). Without this entry, registering one would crash, so BayDownloads checks for it.
     const downloadTasks = `${config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile"}.download.*`;

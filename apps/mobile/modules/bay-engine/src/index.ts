@@ -65,6 +65,11 @@ export interface LinkPress {
   /** Normalized coordinates within EngineView. Null when the engine cannot expose the press location. */
   x: number | null;
   y: number | null;
+  /**
+   * The press is on a bare image, not a link (B13): `url` is the image's own address, so the menu offers opening,
+   * copying, sharing and saving the image rather than the link rows.
+   */
+  image: boolean;
 }
 
 export interface EngineViewProps extends ViewProps {
@@ -137,6 +142,7 @@ const nativeEngine = requireNativeModule<{
   privateBrowsingSupported: boolean;
   openDownload(reference: string): Promise<void>;
   cancelDownload(id: string): Promise<void>;
+  saveImage(url: string): Promise<void>;
   addListener(event: "onDownload", listener: (update: DownloadUpdate) => void): { remove(): void };
   addListener(event: "onMediaControl", listener: (event: { action: MediaControl }) => void): { remove(): void };
   setMediaSession?(title: string | null, site: string, playing: boolean): Promise<void>;
@@ -249,6 +255,11 @@ export function openDownload(download: { id: string; path?: string }): Promise<v
 
 export function cancelDownload(id: string): Promise<void> {
   return nativeEngine.cancelDownload(id);
+}
+
+/** Saves a web image (B13): into the photo library on iOS, through the system downloader on Android. */
+export function saveImage(url: string): Promise<void> {
+  return nativeEngine.saveImage(url);
 }
 
 /** What the system's media controls asked for. */

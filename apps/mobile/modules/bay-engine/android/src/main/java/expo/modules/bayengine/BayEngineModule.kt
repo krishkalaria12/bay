@@ -39,6 +39,12 @@ class BayEngineModule : Module() {
 
     AsyncFunction("cancelDownload") { id: String -> appContext.reactContext?.let { BayDownloads.cancel(it, id) } }
 
+    AsyncFunction("saveImage") { url: String, promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
+      else BayDownloads.saveImage(context, url, promise)
+    }.runOnQueue(Queues.MAIN)
+
     AsyncFunction("clearData") { promise: Promise ->
       val context = appContext.reactContext
       if (context == null) {

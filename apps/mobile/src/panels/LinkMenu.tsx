@@ -14,10 +14,14 @@ export interface LinkMenuProps {
   privately: boolean;
   /** The linked site keeps its desktop page (B12); the preview shows the desktop one too. */
   desktopMode: boolean;
+  /** A bare image's press (B13): `url` is the image's own address, so the rows answer as images. */
+  image: boolean;
   onOpenTab: () => void;
   onOpenBackground: () => void;
   onCopy: () => void;
   onShare: () => void;
+  /** Only for images (B13): asks the engine to save the image (Photos on iOS, Downloads on Android). */
+  onSave: () => void;
   onResolveDestination: () => Promise<string>;
 }
 
@@ -69,18 +73,28 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
       <Typography testID="link-menu-url" className="mb-3 text-sm text-muted" numberOfLines={3}>
         {props.url}
       </Typography>
-      <ActionRow testID="link-open-tab" label="Open in new tab" onPress={() => act(props.onOpenTab)} />
-      <ActionRow testID="link-open-background" label="Open in background" onPress={() => act(props.onOpenBackground)} />
-      <ActionRow testID="link-copy" label="Copy link" onPress={() => act(props.onCopy)} />
-      <ActionRow testID="link-share" label="Share" onPress={() => act(props.onShare)} />
-      <ActionRow
-        testID="link-destination"
-        label={resolving ? "Checking destination…" : "Where does it go?"}
-        disabled={resolving}
-        onPress={() => {
-          void resolveDestination();
-        }}
-      />
+      <ActionRow testID="link-open-tab" label={props.image ? "Open image" : "Open in new tab"} onPress={() => act(props.onOpenTab)} />
+      {props.image ? (
+        <>
+          <ActionRow testID="link-image-copy" label="Copy image address" onPress={() => act(props.onCopy)} />
+          <ActionRow testID="link-image-share" label="Share image" onPress={() => act(props.onShare)} />
+          <ActionRow testID="link-image-save" label="Save image" onPress={() => act(props.onSave)} />
+        </>
+      ) : (
+        <>
+          <ActionRow testID="link-open-background" label="Open in background" onPress={() => act(props.onOpenBackground)} />
+          <ActionRow testID="link-copy" label="Copy link" onPress={() => act(props.onCopy)} />
+          <ActionRow testID="link-share" label="Share" onPress={() => act(props.onShare)} />
+          <ActionRow
+            testID="link-destination"
+            label={resolving ? "Checking destination…" : "Where does it go?"}
+            disabled={resolving}
+            onPress={() => {
+              void resolveDestination();
+            }}
+          />
+        </>
+      )}
       {destination ? (
         <View className="mt-3 rounded-2xl bg-default p-3">
           <Typography className="mb-1 text-sm text-muted">Destination</Typography>

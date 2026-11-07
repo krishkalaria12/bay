@@ -9,8 +9,9 @@ import {
   type Tab,
 } from "@bay/engine";
 import { useEffect, useRef, useState, type JSX } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 
+import { WATCH_IMAGES_SCRIPT } from "@/pagescripts/images";
 import { WATCH_MEDIA_SCRIPT } from "@/pagescripts/media";
 import { hideElementsScript } from "@/pagescripts/picker";
 import { PAGE_COLOR_SCRIPT, pageTweaksScript } from "@/pagescripts/tweaks";
@@ -161,6 +162,8 @@ export function TabPage({
             applyTweaks(nativeEvent.url);
             void runPageScript<[number, number, number] | null>(view.current, PAGE_COLOR_SCRIPT).then(onPageColor, () => {});
             void runPageScript(view.current, WATCH_MEDIA_SCRIPT).catch(() => {});
+            // Image long-presses (B13): on iOS the page reports them, since WebKit exposes nothing for images.
+            if (Platform.OS === "ios") void runPageScript(view.current, WATCH_IMAGES_SCRIPT).catch(() => {});
           }
         }}
         onPageMessage={({ nativeEvent }) => onPageMessage(nativeEvent.message)}

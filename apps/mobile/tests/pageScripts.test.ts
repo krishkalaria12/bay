@@ -7,6 +7,7 @@ import * as v from "valibot";
 import { ARTICLE_HELPERS } from "../src/pagescripts/article.ts";
 import { MARKDOWN_SCRIPT } from "../src/pagescripts/markdown.ts";
 import { hideElementsScript, PICK_PARENT_SCRIPT, START_PICKER_SCRIPT, STOP_PICKER_SCRIPT } from "../src/pagescripts/picker.ts";
+import { parseImagePress, WATCH_IMAGES_SCRIPT } from "../src/pagescripts/images.ts";
 import { CLOSE_READER_SCRIPT, DEFAULT_READER, openReaderScript, updateReaderScript } from "../src/pagescripts/reader.ts";
 import { PAGE_COLOR_SCRIPT, pageTweaksScript } from "../src/pagescripts/tweaks.ts";
 import { READABILITY, TURNDOWN } from "../src/pagescripts/vendor.generated.ts";
@@ -279,4 +280,63 @@ test("the top colour comes from the background under the top edge, then theme-co
   // Half-transparent backgrounds don't count: the page behind them shows through.
   const faint = fixture('<div id="link" style="background: rgba(0, 0, 0, 0.3)">Hi</div>');
   assert.equal(faint.run(PAGE_COLOR_SCRIPT), null);
+});
+test("the image watcher arms once and reports long presses on bare images only", () => {
+  const f = fixture(`<img id="image" src="/photo.jpg" alt="A quiet bay"><a id="wrap" href="/next"><img id="inlink" src="/tied.jpg"></a><p id="link">Hi</p>`);
+  const timers: { fn: () => void; ms: number }[] = [];
+  f.window.setTimeout = (fn: () => void, ms: number) => {
+    timers.push({ fn, ms });
+
+    return timers.length;
+  };
+  f.window.clearTimeout = (id: any) => {};
+
+  assert.equal(f.run(WATCH_IMAGES_SCRIPT), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.messages)), [{ type: "image", ready: true }]);
+
+  const fire = (el: any, type: string, touches: any[]) => {
+    const touch = new f.window.Event(type, { bubbles: true, cancelable: true });
+    Object.assign(touch, { touches });
+
+    el.dispatchEvent(touch);
+  };
+  const image = f.document.getElementById("image");
+  const inLink = f.document.getElementById("inlink");
+  const text = f.document.getElementById("link");
+
+  // Two fingers anywhere isn't a long press, and neither is text or an image a link already covers.
+  fire(image, "touchstart", [{}, {}]);
+  assert.equal(timers.length, 0);
+  fire(text, "touchstart", [{}]);
+  fire(inLink, "touchstart", [{}]);
+  assert.equal(timers.length, 0);
+
+  // A bare image held for the watcher's window reports it.
+  fire(image, "touchstart", [{}]);
+  assert.deepEqual(
+    timers.map((timer) => timer.ms),
+    [400],
+  );
+  f.messages.length = 0;
+  timers[0]!.fn();
+  assert.deepEqual(JSON.parse(JSON.stringify(f.messages)), [{ type: "image", src: "https://example.com/photo.jpg", title: "A quiet bay" }]);
+  // The report marks nothing: parseImagePress vouches for it separately.
+  assert.ok(parseImagePress(JSON.stringify(f.messages[0])));
+});
+
+test("an image press parses only a real web address into a link press", () => {
+  assert.deepEqual(parseImagePress(JSON.stringify({ type: "image", src: "https://a.com/p.jpeg?a=1", title: " The page " })), {
+    url: "https://a.com/p.jpeg?a=1",
+    title: "The page",
+    x: null,
+    y: null,
+    image: true,
+  });
+  // A bare title falls back to the address, as links do.
+  assert.equal(parseImagePress(JSON.stringify({ type: "image", src: "http://A.com/p.png", title: "" }))?.title, "http://a.com/p.png");
+  // The arming ping, other types and junk are not presses.
+  assert.equal(parseImagePress(JSON.stringify({ type: "image", ready: true })), null);
+  assert.equal(parseImagePress(JSON.stringify({ type: "image", src: "javascript:evil()", title: "" })), null);
+  assert.equal(parseImagePress(JSON.stringify({ type: "image", src: "data:image/png;base64,x", title: "" })), null);
+  assert.equal(parseImagePress("not json"), null);
 });

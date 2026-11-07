@@ -11,6 +11,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.provider.MediaStore
+import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
 import expo.modules.kotlin.Promise
 import java.net.URLDecoder
@@ -276,6 +277,23 @@ object BayDownloads {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && BayDownloader.cancel(id)) return
     val number = id.toLongOrNull() ?: return
     context.getSystemService(DownloadManager::class.java)?.remove(number)
+  }
+
+  /**
+   * Saves a web image (B13) through Bay's downloader, so its toast, the panel and the notification follow it. The
+   * image's own HTTP address is required: page-local `blob:` and `data:` images have nothing to save from here.
+   */
+  fun saveImage(context: Context, url: String, promise: Promise) {
+    val uri = Uri.parse(url)
+    if (uri.scheme?.lowercase() !in listOf("http", "https")) {
+      promise.reject("E_IMAGE_URL", "Bay can only save web images.", null)
+      return
+    }
+    val extension = MimeTypeMap.getFileExtensionFromUrl(url)?.lowercase()
+    val type = extension?.let { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
+    // The image may load only with its site's cookies (a signed-in gallery), so the page's cookies go along.
+    BayDownloader.start(context, url, null, null, type, { CookieManager.getInstance().getCookie(url) }, null, false)
+    promise.resolve(null)
   }
 
   /** Opens a finished download in the app the system picks for its type: a saved file's content:// URI, or a system download id. */

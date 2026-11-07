@@ -1,5 +1,6 @@
 import AVFoundation
 import ExpoModulesCore
+import Photos
 import WebKit
 
 public class BayEngineModule: Module {
@@ -29,6 +30,10 @@ public class BayEngineModule: Module {
 
     AsyncFunction("cancelDownload") { (id: String) in
       BayDownloads.shared.cancel(id)
+    }.runOnQueue(.main)
+
+    AsyncFunction("saveImage") { (url: String, promise: Promise) in
+      BayImages.save(url, promise: promise)
     }.runOnQueue(.main)
 
     AsyncFunction("clearData") { (promise: Promise) in
@@ -113,6 +118,50 @@ public class BayEngineModule: Module {
       AsyncFunction("answerPageRequest") { (view: BayEngineView, id: String, accepted: Bool, value: String?, username: String?, password: String?) in
         view.answerPageRequest(id: id, accepted: accepted, value: value, username: username, password: password)
       }.runOnQueue(.main)
+    }
+  }
+}
+
+// Saving images (B13): fetched, then added to the user's photo library, as Safari's image menu does.
+enum BayImages {
+  static func save(_ urlString: String, promise: Promise) {
+    guard
+      let url = URL(string: urlString),
+      let scheme = url.scheme?.lowercased(),
+      scheme == "http" || scheme == "https"
+    else {
+      promise.reject("E_IMAGE_URL", "Bay can only save web images.")
+      return
+    }
+    // Some CDNs answer only a browser; URLSession's own agent gets 403s, so Bay presents as it loads the page.
+    var request = URLRequest(url: url)
+    request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+    URLSession.shared.dataTask(with: request) { data, _, error in
+      guard error == nil, let data, let image = UIImage(data: data) else {
+        DispatchQueue.main.async { promise.reject("E_IMAGE_FETCH", "The image couldn't be downloaded.") }
+        return
+      }
+      let adding = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+      if adding == .authorized || adding == .limited {
+        add(image, promise: promise)
+      } else {
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+          DispatchQueue.main.async {
+            if status == .authorized || status == .limited { add(image, promise: promise) }
+            else { promise.reject("E_PHOTOS_DENIED", "Bay needs Photos access to save images.") }
+          }
+        }
+      }
+    }.resume()
+  }
+
+  private static func add(_ image: UIImage, promise: Promise) {
+    PHPhotoLibrary.shared().performChanges {
+      PHAssetChangeRequest.creationRequestForAsset(from: image)
+    } completionHandler: { done, _ in
+      DispatchQueue.main.async {
+        if done { promise.resolve() } else { promise.reject("E_PHOTOS_SAVE", "The image couldn't be saved.") }
+      }
     }
   }
 }

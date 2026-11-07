@@ -1,6 +1,6 @@
 import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
 import { hostOf } from "@bay/core/src/input.ts";
-import { clearData, privateBrowsingSupported, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
+import { clearData, privateBrowsingSupported, saveImage, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -21,6 +21,7 @@ import { HistoryPanel } from "@/panels/HistoryPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { youtubeSelectors } from "@/pagescripts/youtube";
+import { parseImagePress } from "@/pagescripts/images";
 import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
@@ -556,7 +557,15 @@ export function BrowserScreen(): JSX.Element {
                 pageColor={pageColors[id] ?? null}
                 onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
                 onPageMessage={(message) => {
-                  if (!media.pageMessage(id, message) && id === active.id) reading.pageMessage(message);
+                  if (!media.pageMessage(id, message) && id === active.id) {
+                    // A bare image's long press (B13), reported by the page on iOS; Android's hit test covers it natively.
+                    const press = Platform.OS === "ios" ? parseImagePress(message) : null;
+
+                    if (press) {
+                      tick();
+                      setLink(press);
+                    } else reading.pageMessage(message);
+                  }
                 }}
                 register={(view) => (view ? views.set(id, view) : views.delete(id))}
                 onNavigation={(state) => onNavigation(id, state)}
@@ -876,10 +885,17 @@ export function BrowserScreen(): JSX.Element {
         privately={Boolean(active.private)}
         // A link to a site that keeps its desktop page (B12) previews it that way too.
         desktopMode={siteSettingFor(data.preferences.siteSettings, link?.url ?? "").desktopMode}
+        image={link?.image ?? false}
         onOpenTab={() => link && openTab(link.url)}
         onOpenBackground={() => link && openTab(link.url, true)}
         onCopy={() => link && copy(link.url)}
         onShare={() => link && void share(link.url)}
+        onSave={() => {
+          if (!link) return;
+          void saveImage(link.url)
+            .then(() => toast.show(Platform.OS === "ios" ? "Saved to your photo library" : "Saved in Downloads"))
+            .catch(() => toast.show("The image couldn't be saved"));
+        }}
         onResolveDestination={() => resolveDestination(link?.url ?? "")}
       />
       <PageRequestPanel request={pageRequest?.request ?? null} onAnswer={answerPageRequest} />

@@ -37,6 +37,10 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   private var restoredState = false
   /// Automatic reloads after the system kills a page's renderer (one, then the error screen).
   private var rendererReloads = 0
+  /// The page's image long-press watcher (B13) reports `{ type: "image" }`: `ready` once armed, then one report per
+  /// bare-image press, so WebKit's own image menu can be kept down while Bay's menu answers.
+  private var imageMenuReady = false
+  private var imagePressAt: Date?
   /// The tab's first navigation became a download, so it has no page; reported as `blank` while that's still so.
   private var firstNavigationBecameDownload = false
   /// Hosts this view moved from HTTP to HTTPS, with when; an HTTPS page that sends the view straight back keeps HTTP.
@@ -247,7 +251,22 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   fileprivate func receive(_ message: WKScriptMessage) {
     guard message.frameInfo.isMainFrame, let text = message.body as? String else { return }
+    if let image = imageMessage(text) {
+      // `ready` says the watcher is armed on this document; anything with a source is one long press.
+      if image["src"] == nil { imageMenuReady = true } else { imagePressAt = Date() }
+    }
     onPageMessage(["message": text])
+  }
+
+  /// Parses a page message as an image-watcher report (B13); nil for anything else.
+  private func imageMessage(_ text: String) -> [String: Any]? {
+    guard
+      let data = text.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      (object["type"] as? String) == "image"
+    else { return nil }
+
+    return object
   }
 
   func stop() {
@@ -489,12 +508,18 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   func webView(_ webView: WKWebView, contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo,
                completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
     guard let linkURL = elementInfo.linkURL, isWebURL(linkURL) else {
-      // Not a web link (text, image without a link): keep WebKit's default handling (selection, image menu).
-      completionHandler(nil)
+      // A bare image (B13): when the page's watcher reported this same press a moment ago, the menu is Bay's own and
+      // WebKit's default image menu is kept down. Otherwise (text selection, or the watcher missed it) WebKit's
+      // default handling stays (selection, image menu).
+      if imageMenuReady, let pressed = imagePressAt, Date().timeIntervalSince(pressed) < 3 {
+        completionHandler(UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in UIMenu(children: []) })
+      } else {
+        completionHandler(nil)
+      }
       return
     }
     let address = linkURL.absoluteString
-    onLinkPress(["url": address, "title": address, "x": NSNull(), "y": NSNull()])
+    onLinkPress(["url": address, "title": address, "x": NSNull(), "y": NSNull(), "image": false])
     // The shared sheet is the menu, so the native one is empty rather than default.
     completionHandler(UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in UIMenu(children: []) })
   }
