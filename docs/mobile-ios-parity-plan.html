@@ -336,8 +336,8 @@
         >, which stays the roadmap
       </p>
       <p class="meta">
-        Updated 7 November 2026: I1–I6 are now done in code (see <a href="#progress">Since the plan</a>); still to verify on a device, like everything
-        below. Earlier: 6 November 2026 against <code>main</code> at <code>47589d3b</code>, after PRs #12 and #11 landed.
+        Updated 7 November 2026: I1–I6 are now done in code (see <a href="#progress">Since the plan</a>); still to verify on a device, like everything below.
+        Earlier: 6 November 2026 against <code>main</code> at <code>47589d3b</code>, after PRs #12 and #11 landed.
       </p>
 
       <p class="lead">
@@ -458,9 +458,11 @@
               </td>
               <td><code>1c3b7072</code>, <code>f8b63568</code>, <code>4aa4561b</code></td>
               <td>
-                <span class="status landed">Landed</span> Added 7 November: <code>PanelSheet</code> now has a glass background on iOS (<code>PanelSheet.ios.tsx</code>
-                over the shared contents, solid on Android), and haptics via <code>expo-haptics</code> on tab close, pin and long-press. The new page-request sheet
-                reuses <code>PillButton</code> for its OK/Cancel buttons.
+                <span class="status landed">Landed</span> Added 7 November: <code>PanelSheet</code> now has a glass background on iOS (<code
+                  >PanelSheet.ios.tsx</code
+                >
+                over the shared contents, solid on Android), and haptics via <code>expo-haptics</code> on tab close, pin and long-press. The new page-request
+                sheet reuses <code>PillButton</code> for its OK/Cancel buttons.
               </td>
             </tr>
             <tr>
@@ -471,22 +473,18 @@
                 <code>WKWebView</code> media, so Bay posts it itself from the page's media report.
               </td>
               <td><code>93920de1</code></td>
-              <td>
-                <span class="status landed">Landed</span> In code only; needs a real iPhone to check against what WebKit shows on its own (stage 0).
-              </td>
+              <td><span class="status landed">Landed</span> In code only; needs a real iPhone to check against what WebKit shows on its own (stage 0).</td>
             </tr>
             <tr>
               <th scope="row">I3 <code>alert</code>, <code>confirm</code>, <code>prompt</code></th>
               <td>
                 Both engines emit <code>onPageRequest</code> and hold the page paused until <code>answerPageRequest</code> delivers the answer (iOS's
                 <code>runJavaScript…Panel</code> delegate methods, Android's <code>WebChromeClient</code> <code>onJs…</code> methods). One shared sheet
-                (<code>PageRequest.tsx</code>) presents them on both apps, with a queue per tab; dismissing it or pressing Android Back cancels the dialog, and a
-                navigation cancels it too.
+                (<code>PageRequest.tsx</code>) presents them on both apps, with a queue per tab; dismissing it or pressing Android Back cancels the dialog, and
+                a navigation cancels it too.
               </td>
               <td><code>936d624e</code></td>
-              <td>
-                <span class="status landed">Landed</span> In code only; needs a real page that calls <code>alert</code> on a device on both apps.
-              </td>
+              <td><span class="status landed">Landed</span> In code only; needs a real page that calls <code>alert</code> on a device on both apps.</td>
             </tr>
             <tr>
               <th scope="row">I4 Link menu misses some links</th>
@@ -496,15 +494,13 @@
                 context-menu info carries no anchor text.
               </td>
               <td><code>4840aa3b</code></td>
-              <td>
-                <span class="status landed">Landed</span> In code only; needs an iframe link long-pressed on a real iPhone (stage 1's new check).
-              </td>
+              <td><span class="status landed">Landed</span> In code only; needs an iframe link long-pressed on a real iPhone (stage 1's new check).</td>
             </tr>
             <tr>
               <th scope="row">I5 Depth of ad blocking</th>
               <td>
-                Accepted as an engine limit (D4): a web view can't intercept subresources, so iOS stays on static WebKit rules plus scriptlets. No code
-                changed. iOS's measured score stands at 73% (97 of 132); the same test on Android still needs a device.
+                Accepted as an engine limit (D4): a web view can't intercept subresources, so iOS stays on static WebKit rules plus scriptlets. No code changed.
+                iOS's measured score stands at 73% (97 of 132); the same test on Android still needs a device.
               </td>
               <td>—</td>
               <td>
@@ -609,13 +605,11 @@
               <td class="id">I1</td>
               <th scope="row">System media controls <span class="status landed">Landed</span></th>
               <td>
-                Android has a media notification with play, pause and stop (<code>BayMediaService.kt</code>). iOS now posts Now Playing info and remote
-                commands from <code>BayMedia.swift</code> (<code>93920de1</code>), so <code>useTabMedia</code>'s call through <code>setMediaSession</code> works and
+                Android has a media notification with play, pause and stop (<code>BayMediaService.kt</code>). iOS now posts Now Playing info and remote commands
+                from <code>BayMedia.swift</code> (<code>93920de1</code>), so <code>useTabMedia</code>'s call through <code>setMediaSession</code> works and
                 <code>onMediaControl</code> is sent. WebKit doesn't populate the Now Playing center for <code>WKWebView</code> media, so Bay posts it itself.
               </td>
-              <td>
-                Done in code. Still to check on a real iPhone what WebKit shows on the lock screen on its own, per stage 0.
-              </td>
+              <td>Done in code. Still to check on a real iPhone what WebKit shows on the lock screen on its own, per stage 0.</td>
               <td><span class="tag ios">iOS only</span></td>
               <td>S</td>
               <td>1</td>
@@ -626,8 +620,8 @@
               <td>
                 Android 10 and later now download in a foreground service with a progress notification (<code>BayDownloader.kt</code>), and
                 <code>DownloadManager</code> remains only on Android 9 and older. iOS runs <code>WKDownload</code> in the background as a
-                <code>BGContinuedProcessingTask</code> on iOS 26 (background time before that), resumes once from <code>resumeData</code> instead of deleting the
-                partial file, and posts a finished notification when Bay isn't on screen (<code>6c3d571f</code>).
+                <code>BGContinuedProcessingTask</code> on iOS 26 (background time before that), resumes once from <code>resumeData</code> instead of deleting
+                the partial file, and posts a finished notification when Bay isn't on screen (<code>6c3d571f</code>).
               </td>
               <td>
                 Done, except the background <code>URLSession</code> for downloads that survive the app being killed: that stays deferred unless device testing
@@ -642,7 +636,8 @@
               <th scope="row"><code>alert</code>, <code>confirm</code>, <code>prompt</code> <span class="status landed">Landed</span></th>
               <td>
                 Both engines emit <code>onPageRequest</code> and hold the page paused until <code>answerPageRequest</code> answers: iOS implements the three
-                <code>runJavaScript…Panel</code> delegate methods, Android the three <code>WebChromeClient</code> <code>onJs…</code> methods (<code>936d624e</code>).
+                <code>runJavaScript…Panel</code> delegate methods, Android the three <code>WebChromeClient</code> <code>onJs…</code> methods
+                (<code>936d624e</code>).
               </td>
               <td>
                 Done as the shared <a href="#page-requests">Page requests</a> sheet (<code>PageRequest.tsx</code>), which also replaces Android's
@@ -657,8 +652,8 @@
               <th scope="row">Link menu misses some links <span class="status landed">Landed</span></th>
               <td>
                 iOS now gets the link from WebKit's <code>contextMenuConfigurationForElement</code> (<code>4840aa3b</code>), whose <code>linkURL</code> covers
-                iframes and shadow DOM. The injected callout style, the long-press gesture recognizer and the main-frame hit test are removed. The menu title
-                is the URL, since the context-menu info carries no anchor text.
+                iframes and shadow DOM. The injected callout style, the long-press gesture recognizer and the main-frame hit test are removed. The menu title is
+                the URL, since the context-menu info carries no anchor text.
               </td>
               <td>Done. Stage 1's new check (an iframe link on a real iPhone) still has to run.</td>
               <td><span class="tag ios">iOS only</span></td>
@@ -1427,7 +1422,9 @@
             <span class="tag api">Shared + 2 native</span> Page requests, with dialogs (I3), HTTP sign-in (B3), other-app links (B5), and location, camera and
             microphone (B7). <span class="status landed">All landed</span> (the dialog sheet, HTTP sign-in, app links and device permissions on both apps).
           </li>
-          <li><span class="tag android">Android only</span> File upload (A1) and <code>blob:</code> downloads (A3). <span class="status landed">Both landed</span></li>
+          <li>
+            <span class="tag android">Android only</span> File upload (A1) and <code>blob:</code> downloads (A3). <span class="status landed">Both landed</span>
+          </li>
           <li><span class="tag api">Shared + 2 native</span> Fullscreen video (A2), then landscape (B10). <span class="status landed">Both landed</span></li>
           <li>
             <span class="tag api">Shared + 2 native</span> Save and restore tab state (B6): <code>interactionState</code> on iOS and <code>saveState</code> on
@@ -1471,8 +1468,10 @@
         <h3>Stage 4: Features people expect</h3>
         <p>
           In order: Peek (B11), per-site settings and desktop mode (B12), image long-press (B13), Android edge swipes (A4), share to Bay (B14), quick actions
-          then widgets (B15), voice search (B16), richer media controls (B17), languages and accessibility (B18). <span class="status landed">Stage 4's
-          features all landed: Peek, per-site settings, image long-press, share, quick actions with widgets, voice search and media controls</span>.
+          then widgets (B15), voice search (B16), richer media controls (B17), languages and accessibility (B18).
+          <span class="status landed"
+            >Stage 4's features all landed: Peek, per-site settings, image long-press, share, quick actions with widgets, voice search and media controls</span
+          >.
         </p>
         <div class="done-when">
           <p><strong>Done when:</strong> each has an e2e test on both, as usual.</p>
@@ -1481,7 +1480,10 @@
 
       <section class="stage">
         <h3>Then the existing roadmap</h3>
-        <p>On-device translation (A6), phase 7 (our Chromium, which also resolves A5), phase 8 (store release), phase 9 (sync; spaces and folders landed locally, cross-device sync still to come, B21).</p>
+        <p>
+          On-device translation (A6), phase 7 (our Chromium, which also resolves A5), phase 8 (store release), phase 9 (sync; spaces and folders landed locally,
+          cross-device sync still to come, B21).
+        </p>
       </section>
 
       <h2 id="risks">Risks</h2>

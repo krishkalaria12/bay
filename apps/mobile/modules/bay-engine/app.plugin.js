@@ -177,7 +177,7 @@ function findTargetKeyFor(project, targetName) {
   const targets = project.pbxNativeTargetSection() ?? {};
 
   for (const [key, target] of Object.entries(targets)) {
-    if (/_comment$/.test(key)) continue;
+    if (!key.endsWith("_comment")) continue;
 
     if (unquote(target?.name) === targetName) return key;
   }

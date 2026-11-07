@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 
 import { FIND_CLEAR_SCRIPT, findScript, findStepScript } from "../src/pagescripts/find.ts";
 import { INSPECT_SCRIPT } from "../src/pagescripts/inspect.ts";
-import { parseMediaMessage, PIP_MEDIA_SCRIPT, seekMediaScript, WATCH_MEDIA_SCRIPT } from "../src/pagescripts/media.ts";
+import { parseMediaMessage, PIP_MEDIA_SCRIPT, seekMediaScript } from "../src/pagescripts/media.ts";
 import { START_PICKER_SCRIPT } from "../src/pagescripts/picker.ts";
 
 function page(body: string, { highlights = false } = {}) {

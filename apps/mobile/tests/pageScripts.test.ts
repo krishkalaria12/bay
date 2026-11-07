@@ -289,7 +289,7 @@ test("the image watcher arms once and reports long presses on bare images only",
 
     return timers.length;
   };
-  f.window.clearTimeout = (id: any) => {};
+  f.window.clearTimeout = (_id: any) => {};
 
   assert.equal(f.run(WATCH_IMAGES_SCRIPT), true);
   assert.deepEqual(JSON.parse(JSON.stringify(f.messages)), [{ type: "image", ready: true }]);
