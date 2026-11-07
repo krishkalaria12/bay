@@ -1,5 +1,7 @@
 import type { AppRuntimeTransport } from "@bay/platform/runtimeTransport";
+import { isWindows } from "@bay/platform";
 import type { BrowserStore } from "../store/browserStore";
+import type { CreateWindowOptions } from "../store/windows";
 import type { BrowserProjection } from "./projection";
 import type { BrowserCommand } from "./userCommands";
 
@@ -28,9 +30,15 @@ export async function startSharedRuntime({
 }
 
 /** Disk hydration precedes revision zero only for a new browser epoch. The
- * coordinator's recovery projection is installed by createBrowserCoordinator. */
-export function prepareCoordinatorStore(store: BrowserStore, recoveryState: BrowserProjection | undefined, restore: (store: BrowserStore) => unknown) {
+ * coordinator's recovery projection is installed by createBrowserCoordinator.
+ * With no window to restore, Windows' first one fills the screen, as its browsers' do. */
+export function prepareCoordinatorStore(
+  store: BrowserStore,
+  recoveryState: BrowserProjection | undefined,
+  restore: (store: BrowserStore) => unknown,
+  firstWindow: CreateWindowOptions = isWindows ? { maximized: true } : {},
+) {
   if (recoveryState !== undefined) return;
   restore(store);
-  if (!store.getState().windowOrder.length) store.getState().createWindow();
+  if (!store.getState().windowOrder.length) store.getState().createWindow(firstWindow);
 }

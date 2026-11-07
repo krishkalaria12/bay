@@ -66,6 +66,13 @@ test("new coordinator restores disk before creating its initial window", () => {
   assert.equal(Object.values(store.getState().tabs)[0].url, "https://restored.test");
 });
 
+test("with nothing to restore, the first window opens as the platform asks", () => {
+  const store = createBrowserStore();
+  prepareCoordinatorStore(store, undefined, () => {}, { maximized: true });
+  const [id] = store.getState().windowOrder;
+  assert.equal(store.getState().windows[id].maximized, true);
+});
+
 test("coordinator recovery skips disk hydration and initial-window creation", () => {
   const original = createBrowserStore();
   original.getState().createWindow();
