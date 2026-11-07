@@ -17,6 +17,7 @@ mkdir -p "$dest"
 
 missing=0
 while IFS=$'\t' read -r id urls; do
+  urls=${urls%$'\r'}  # Python on Windows ends its lines with CRLF.
   file="$dest/$id.txt"
   if [ -s "$file" ] && [ -z "$(find "$file" -mtime +"$max_age_days" 2>/dev/null)" ]; then continue; fi
   got=""
