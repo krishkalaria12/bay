@@ -11,6 +11,7 @@
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "bay/core/nn_installed_bubble.h"
@@ -50,7 +51,10 @@
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #endif
 #if BUILDFLAG(IS_WIN)
+#include <iterator>
+
 #include "base/base_paths_win.h"
+#include "chrome/chrome_elf/chrome_elf_main.h"  // nogncheck
 #include "chrome/browser/bay/webui/frame_win.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #endif
@@ -253,6 +257,9 @@ class NNDesktopContentBrowserClient : public ChromeContentBrowserClient {
   }
 };
 
+// The browser process writes Bay.log (Windows), so its level is Bay's.
+bool g_bay_writes_log = false;
+
 }  // namespace
 
 NNMainDelegate::NNMainDelegate(const StartupTimestamps& timestamps)
@@ -309,9 +316,13 @@ std::optional<int> NNMainDelegate::BasicStartupComplete() {
     // read afterwards. Warnings and errors only: chrome://bay's console errors
     // are among them, and websites' console messages (always INFO) stay out.
     // An --enable-logging on the command line replaces all of this.
-    if (!command->HasSwitch(switches::kEnableLogging)) {
-      const auto directory =
-          command->GetSwitchValuePath(switches::kUserDataDir);
+    // chrome_elf picks Windows' data folder from the launch's own command line
+    // (...\Bay\User Data by default), not the switch above: the log goes in it.
+    wchar_t data[MAX_PATH], invalid[MAX_PATH];
+    if (!command->HasSwitch(switches::kEnableLogging) &&
+        GetUserDataDirectoryThunk(data, std::size(data), invalid,
+                                  std::size(invalid))) {
+      const base::FilePath directory(data);
       const auto log = directory.AppendASCII("Bay.log");
       // A running Bay holds its log open, so this fails for a launch that only
       // hands its arguments to it, and that launch appends instead.
@@ -320,6 +331,7 @@ std::optional<int> NNMainDelegate::BasicStartupComplete() {
       command->AppendSwitchPath(switches::kLogFile, log);
       if (!command->HasSwitch(switches::kLoggingLevel))
         command->AppendSwitchASCII(switches::kLoggingLevel, "1");
+      g_bay_writes_log = true;
     }
 #endif
   }
@@ -331,6 +343,10 @@ void NNMainDelegate::PreSandboxStartup() {
     InstallExtensionInstalledHook();
   }
   ChromeMainDelegate::PreSandboxStartup();
+  // Chromium drops --log-level whenever a verbose level is set too: Bay's log
+  // keeps websites' console messages (INFO) out either way.
+  if (g_bay_writes_log)
+    logging::SetMinLogLevel(logging::LOGGING_WARNING);
 }
 void NNMainDelegate::CreateThreadPool(std::string_view name) {
   ChromeMainDelegate::CreateThreadPool(name);
