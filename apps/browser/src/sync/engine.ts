@@ -153,7 +153,8 @@ function trackMutation<T>(run: () => Promise<T>): Promise<T> {
 function load() {
   try {
     const json = readDocument(SYNC_DOC);
-    if (json !== null) {
+    // An empty file holds no settings (one turned up on a Windows install): start as if there were none.
+    if (json) {
       const parsed: unknown = JSON.parse(json);
       if (!isRecord(parsed) || parsed.v !== 1 || typeof parsed.enabled !== "boolean") throw new Error("Invalid sync metadata");
       const restored = { ...emptyDoc(), ...parsed, scopes: {} } as SyncDoc;
