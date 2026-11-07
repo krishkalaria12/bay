@@ -1,10 +1,11 @@
-import { View } from "@bay/platform";
+import { isMac, View } from "@bay/platform";
+import { WindowBackdrop } from "@bay/shaders";
 import { Surface, VisualEffect, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { tensionSpring } from "../../lib/springPresets";
-import { hex } from "../../lib/theme";
+import { hex, useTheme, useWindowTint } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
 import { Intro } from "./Intro";
 import { dismissOnboarding, FIRST_STEP, goToStep, useOnboarding } from "./state";
@@ -30,6 +31,8 @@ export function OnboardingOverlay() {
 
 function Overlay({ session }: { session: number }) {
   const colors = useOnboardingColors();
+  const theme = useTheme();
+  const windowTint = useWindowTint();
   const step = useOnboarding((s) => s.step);
   const leaving = useOnboarding((s) => s.leaving);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -69,8 +72,19 @@ function Overlay({ session }: { session: number }) {
       style={[StyleSheet.absoluteFill, presenceStyle]}
       onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
     >
-      <VisualEffect material="fullScreenUI" blendingMode="withinWindow" style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} />
+      {isMac ? (
+        <>
+          <VisualEffect material="fullScreenUI" blendingMode="withinWindow" style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} />
+        </>
+      ) : (
+        // The web hosts can't blur the window behind: the card sits on the space's own gradient (the WebGL backdrop
+        // shader, over its CSS gradient), softened so the card stands out.
+        <>
+          <WindowBackdrop {...theme.backdrop} colors={windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.backdropScrim }]} />
+        </>
+      )}
       <WindowDragRegion style={StyleSheet.absoluteFill} />
       {step !== "intro" && width > 0 && (
         <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]} pointerEvents="box-none">

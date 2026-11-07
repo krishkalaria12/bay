@@ -12,6 +12,7 @@ export function onboardingColors(dark: boolean) {
     ? {
         background: "#000000",
         overlay: "rgba(0,0,0,0.6)", // BackgroundOverlay
+        backdropScrim: "rgba(0,0,0,0.35)",
         card: "#161616",
         cardBorder: "rgba(254,255,255,0.3)", // BackgroundBorder
         title: "#FEFFFF",
@@ -45,6 +46,7 @@ export function onboardingColors(dark: boolean) {
     : {
         background: "#FEFFFF",
         overlay: "rgba(254,255,255,0.6)",
+        backdropScrim: "rgba(254,255,255,0.3)",
         card: "#FFFFFF",
         cardBorder: "rgba(0,0,0,0.08)",
         title: "#000000",
