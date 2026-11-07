@@ -370,12 +370,17 @@ class BuildTests(unittest.TestCase):
             self.assertFalse((directory / defines).exists() or (directory / uses).exists())
 
     def test_llvm_tools_prefer_chromium_and_fall_back_to_rust_llvm_tools(self):
+        suffix = ".exe" if os.name == "nt" else ""  # Windows' which() finds only PATHEXT extensions.
+
         def install(directory, names=engine.LLVM_TOOLS):
             directory.mkdir(parents=True, exist_ok=True)
             for name in names:
-                (directory / name).write_text("")
-                (directory / name).chmod(0o755)
-            return {name: str(directory / name) for name in engine.LLVM_TOOLS}
+                (directory / (name + suffix)).write_text("")
+                (directory / (name + suffix)).chmod(0o755)
+            return {name: os.path.normcase(directory / (name + suffix)) for name in engine.LLVM_TOOLS}
+
+        def found(tools):
+            return {name: os.path.normcase(path) for name, path in tools.items()}
 
         with tempfile.TemporaryDirectory() as directory:
             src, sysroot = Path(directory) / "src", Path(directory) / "rust"
@@ -388,9 +393,9 @@ class BuildTests(unittest.TestCase):
                 rust = install(sysroot / "lib/rustlib/x86_64-pc-windows-msvc/bin")
                 # Chromium's Windows toolchain has none of the three, and an incomplete set is skipped.
                 install(chromium, ["llvm-objcopy"])
-                self.assertEqual(engine.llvm_tools(src, {}), rust)
+                self.assertEqual(found(engine.llvm_tools(src, {})), rust)
                 chromium_tools = install(chromium)
-                self.assertEqual(engine.llvm_tools(src, {}), chromium_tools)
+                self.assertEqual(found(engine.llvm_tools(src, {})), chromium_tools)
 
     def test_windows_download_bootstraps_depot_tools_before_automate(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "clone_pin"), \
