@@ -23,6 +23,13 @@ export type ServiceState = {
   onboarding: OnboardingRequest;
   cli: CliControlStatus | null;
 };
+// What a window's settings pane shows of terminal control. The engine's status also names its control file, which
+// stays with the coordinator: the native runtime accepts only these fields from a service.
+const WINDOW_CLI_FIELDS = new Set(["state", "connections", "generation", "port", "reason"]);
+function windowCliStatus(server: CliControlStatus | null): CliControlStatus | null {
+  if (!server) return null;
+  return Object.fromEntries(Object.entries(server).filter(([key]) => WINDOW_CLI_FIELDS.has(key))) as CliControlStatus;
+}
 const installed = new Map<string, object>();
 const detach = <T>(value: DeepReadonly<T>): T => JSON.parse(JSON.stringify(value)) as T;
 export function installServiceState(state: DeepReadonly<Partial<ServiceState>>) {
@@ -51,7 +58,7 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
       sync: useSync.getState(),
       telemetry: useTelemetry.getState(),
       onboarding: useOnboardingRequest.getState(),
-      cli: useCli.getState().server,
+      cli: windowCliStatus(useCli.getState().server),
     };
     store.setState({ services });
   };

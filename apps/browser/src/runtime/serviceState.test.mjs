@@ -57,9 +57,10 @@ test("the coordinator's terminal status reaches window documents", async () => {
   const browser = createBrowserStore();
   browser.getState().hydrate({});
   const stop = startServiceStateOwner(browser, { restore: false });
-  useCli.setState({ server: { state: "on", connections: 2 } });
+  // The engine's status also names its control file, which stays with the coordinator.
+  useCli.setState({ server: { state: "on", connections: 2, generation: 1, port: 9222, file: "C:\\Users\\me\\AppData\\Local\\Bay\\cli.json" } });
   const published = browser.getState().services.cli;
-  assert.deepEqual(published, { state: "on", connections: 2 });
+  assert.deepEqual(published, { state: "on", connections: 2, generation: 1, port: 9222 });
   stop();
   useCli.setState({ server: null });
   installServiceState({ cli: published });
