@@ -371,13 +371,7 @@ export async function createAppRuntimeTransport<State, Command, Value>({
         active();
         commitFrom<State>(commit, assigned.epoch);
         const json = toJSON(commit, COMMIT_LIMIT);
-        try {
-          await ack(() => remote.publish(json));
-        } catch (error) {
-          // Temporary Windows diagnostic: the state the native runtime refused.
-          if (error instanceof NativeBridgeError && error.code === "invalid_commit") console.error(`[runtime] rejected commit ${json}`);
-          throw error;
-        }
+        await ack(() => remote.publish(json));
       },
       async resolve(token, reply) {
         active();
