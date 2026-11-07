@@ -41,6 +41,7 @@ chromium win chromium-cef-gn-asserts-cef-off.patch
 chromium win,linux chromium-devtools-opener-cef-off.patch
 chromium win,linux chromium-window-features-cef-off.patch
 chromium win,linux chromium-runtime-views-cef-off.patch
+chromium win chromium-policy-path-parser-cef-off.patch
 chromium win,linux chromium-webui-post-tab-model.patch
 chromium win,linux chromium-lens-homework-detached-tab.patch
 chromium linux chromium-crashpad-handler-linux.patch
