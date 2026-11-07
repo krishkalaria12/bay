@@ -77,9 +77,7 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
     onError,
   });
   try {
-    await coordinator.announceReady();
-    startCliControl({ activeTab: false });
-    startUserScripts();
+    // Before the windows open: a first run's window then starts on onboarding rather than showing the browser first.
     startApplicationLifecycle({
       returning,
       start(step, picked) {
@@ -87,6 +85,9 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
         if (windowId) requestOnboarding(windowId, step, picked);
       },
     });
+    await coordinator.announceReady();
+    startCliControl({ activeTab: false });
+    startUserScripts();
     return coordinator;
   } catch (error) {
     coordinator.dispose();
