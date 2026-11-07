@@ -13,6 +13,7 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
@@ -41,6 +42,8 @@ interface Layout {
   cardWidth: number;
   cardHeight: number;
   step: number;
+  /** The safe distance from the screen's left edge; the stack sits this far in, so cards keep off the notch. */
+  left: number;
 }
 
 /**
@@ -50,11 +53,16 @@ interface Layout {
  */
 export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, onCloseAll, privateLocked }: TabSwitcherProps): JSX.Element {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
-  const cardWidth = Math.round(width * 0.68);
-  const cardHeight = Math.round(Math.min(height * 0.58, cardWidth * 2.05));
-  const layout: Layout = { width, cardWidth, cardHeight, step: Math.round(cardWidth * STEP) };
+  // Landscape (B10) keeps the cards clear of the notch on either side, and turns them smaller and squarer so the
+  // next one still peeks in from the right, like the switcher does in portrait.
+  const innerWidth = width - insets.left - insets.right;
+  const portrait = height >= width;
+  const cardWidth = Math.round(innerWidth * (portrait ? 0.68 : 0.42));
+  const cardHeight = Math.round(Math.min(height * (portrait ? 0.58 : 0.72), cardWidth * (portrait ? 2.05 : 1.35)));
+  const layout: Layout = { width: innerWidth, left: insets.left, cardWidth, cardHeight, step: Math.round(cardWidth * STEP) };
 
   const activeIndex = Math.max(
     0,
@@ -69,7 +77,10 @@ export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, onCloseAll, 
 
   return (
     <View testID="tab-switcher" className="flex-1 justify-center">
-      <View className="absolute inset-x-0 top-2 flex-row items-center justify-between px-5">
+      <View
+        className="absolute inset-x-0 top-2 flex-row items-center justify-between px-5"
+        style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
+      >
         <Text testID="tab-switcher-count" accessibilityRole="header" style={{ color: foreground, fontSize: 17, fontWeight: "600" }}>
           {tabs.length === 1 ? "1 tab" : `${tabs.length} tabs`}
         </Text>
@@ -95,7 +106,7 @@ export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, onCloseAll, 
         snapToInterval={layout.step}
         decelerationRate="normal"
         style={{ flexGrow: 0 }}
-        contentContainerStyle={{ width: width + (tabs.length - 1) * layout.step, height: cardHeight + 44 }}
+        contentContainerStyle={{ width: layout.width + (tabs.length - 1) * layout.step, height: cardHeight + 44 }}
       >
         {tabs.map((tab, index) => (
           <TabCard
@@ -137,7 +148,7 @@ function TabCard({
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
   const title = tab.title || (tab.url ? displayUrl(tab.url) : "New tab");
-  const { width, cardWidth, cardHeight, step } = layout;
+  const { width, cardWidth, cardHeight, step, left } = layout;
   const lift = useSharedValue(0);
 
   const close = () => {
@@ -171,9 +182,10 @@ function TabCard({
     const x = position >= 0 ? position * cardWidth * 1.04 : position * cardWidth * 0.3;
     const scale = interpolate(position, [-3, 0], [0.84, 1], Extrapolation.CLAMP);
 
-    // The card stays put on screen while the scroll view moves its content: add the scroll back, then place it.
+    // The card sits clear of the notch side and stays put on screen while the scroll view moves its content: add the
+    // scroll back, then place it.
     return {
-      transform: [{ translateX: scrollX.value + (width - cardWidth) / 2 + x }, { translateY: lift.value }, { scale }],
+      transform: [{ translateX: scrollX.value + left + (width - cardWidth) / 2 + x }, { translateY: lift.value }, { scale }],
       opacity: interpolate(lift.value, [-cardHeight, 0], [0, 1], Extrapolation.CLAMP),
     };
   });

@@ -3,7 +3,9 @@
     "name": "Bay",
     "slug": "bay",
     "version": "1.0.0",
-    "orientation": "portrait",
+    // Rotating shows landscape (B10): mostly for fullscreen video, with the chrome keeping clear of the notch on
+    // either side. "default" turns this into all orientations with no Android lock attribute.
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     // Bay's own links, plus the web schemes it answers as a browser: iOS reads them for the default-browser offer and
     // the Android VIEW filter takes them with BROWSABLE, so links from other apps open here (B9).

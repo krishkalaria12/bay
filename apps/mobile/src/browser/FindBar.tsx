@@ -30,7 +30,7 @@ export function FindBar({ query, count, index, onChange, onStep, onDone }: FindB
   const status = !query || count === null ? "" : count === 0 ? "No matches" : `${index + 1} of ${count}`;
 
   return (
-    <Animated.View style={[{ position: "absolute", left: 8, right: 8 }, position]} testID="find-bar">
+    <Animated.View style={[{ position: "absolute", left: 8 + insets.left, right: 8 + insets.right }, position]} testID="find-bar">
       <Surface radius={24} style={{ padding: 8 }}>
         <View className="flex-row items-center gap-1">
           <View className="h-11 flex-1 flex-row items-center rounded-full border border-black/10 bg-white/60 pl-4 pr-3 dark:border-white/10 dark:bg-white/10">

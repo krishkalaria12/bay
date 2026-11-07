@@ -102,7 +102,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
   return (
     <View style={StyleSheet.absoluteFill} testID="search-card">
       <Pressable testID="search-dismiss" accessibilityLabel="Close search" style={StyleSheet.absoluteFill} onPress={onDismiss} />
-      <Animated.View style={[{ position: "absolute", left: 8, right: 8 }, cardPosition]}>
+      <Animated.View style={[{ position: "absolute", left: 8 + insets.left, right: 8 + insets.right }, cardPosition]}>
         <Surface radius={30} style={{ padding: 10 }} testID={privately ? "search-card-private" : undefined}>
           {privately ? <View className="absolute inset-0 rounded-[30px] bg-neutral-900/95" pointerEvents="none" /> : null}
           <View

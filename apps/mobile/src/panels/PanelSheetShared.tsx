@@ -71,7 +71,7 @@ export function PanelSheetShared({
         >
           {backdrop}
           <View testID={testID} className="flex-1">
-            <View className="flex-row items-center gap-3 px-5 pb-3">
+            <View className="flex-row items-center gap-3 px-5 pb-3" style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}>
               <View className="flex-1 flex-row items-center gap-1">
                 {onBack ? (
                   <Pressable
@@ -109,7 +109,7 @@ export function PanelSheetShared({
             ) : (
               <BottomSheetScrollView
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
+                contentContainerStyle={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
               >
                 {visible || shown ? children : null}
               </BottomSheetScrollView>

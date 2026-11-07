@@ -743,8 +743,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     val decor = activity.window.decorView as ViewGroup
     decor.addView(view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
     originalOrientation = activity.requestedOrientation
-    // Landscape for video; the app stays portrait-locked overall (landscape *is* B10), so on a
-    // portrait-locked activity this stays portrait and the video letterboxes instead of rotating.
+    // Landscape for the video; the app follows the system orientation (B10), so this turns the whole activity
+    // sideways for the player and restores whatever was current when the player's view hides.
     activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
     hideSystemUI(activity)
     registerFullscreenBack(activity)

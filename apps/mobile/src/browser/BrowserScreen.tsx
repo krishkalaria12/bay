@@ -601,7 +601,7 @@ export function BrowserScreen(): JSX.Element {
       {ready && !hasPage && overlay === "none" ? (
         <Pressable testID="start-screen" accessibilityLabel="Tap to search" style={StyleSheet.absoluteFill} onPress={() => search(false)}>
           <View className="flex-1 items-center justify-end" style={{ paddingBottom: insets.bottom + BAR_HEIGHT + 40 }}>
-            <View className="mb-8 w-full">
+            <View className="mb-8 w-full" style={{ paddingLeft: insets.left, paddingRight: insets.right }}>
               <StartPage
                 pins={data.pinnedSites}
                 history={data.history}
@@ -639,7 +639,11 @@ export function BrowserScreen(): JSX.Element {
       ) : null}
 
       {overlay !== "search" && !find.open && !fullscreen ? (
-        <Animated.View className="absolute inset-x-0 gap-3 px-4" style={[{ bottom: Math.max(insets.bottom, 12) + 4 }, barStyle]} pointerEvents="box-none">
+        <Animated.View
+          className="absolute inset-x-0 gap-3"
+          style={[{ bottom: Math.max(insets.bottom, 12) + 4, paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }, barStyle]}
+          pointerEvents="box-none"
+        >
           {hasPage && showPages && !(locked && active.private) ? reading.controls : null}
           {player ? (
             <MiniPlayer
