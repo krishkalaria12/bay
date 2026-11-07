@@ -349,8 +349,9 @@ function currentAttempt(attempt: QuitAttempt) {
 }
 
 async function checkpoint(attempt: QuitAttempt) {
-  if (!SyncNative || !started) return;
-  if (metadataLoadError) throw metadataLoadError;
+  // Sync writes nothing while its metadata can't be read, so its files stay as they were and quitting goes on: a file
+  // that stays unreadable must not keep Bay from ever quitting. Settings shows the locked state and its error.
+  if (!SyncNative || !started || metadataLoadError) return;
   const initialCycle = activeCycle;
   await startup;
   currentAttempt(attempt);
