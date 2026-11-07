@@ -843,6 +843,7 @@ export function BrowserScreen(): JSX.Element {
         onClose={() => setLink(null)}
         url={link?.url ?? ""}
         title={link?.title ?? ""}
+        privately={Boolean(active.private)}
         onOpenTab={() => link && openTab(link.url)}
         onOpenBackground={() => link && openTab(link.url, true)}
         onCopy={() => link && copy(link.url)}

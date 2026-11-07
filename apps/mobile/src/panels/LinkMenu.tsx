@@ -1,4 +1,5 @@
-import { Typography } from "heroui-native";
+import { EngineView, type PageRequest, type Tab } from "@bay/engine";
+import { Typography, useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { View } from "react-native";
 
@@ -9,6 +10,8 @@ export interface LinkMenuProps {
   onClose: () => void;
   url: string;
   title: string;
+  /** Matches the tab whose page the link sits on; the preview keeps nothing either way (its engine has no stateKey). */
+  privately: boolean;
   onOpenTab: () => void;
   onOpenBackground: () => void;
   onCopy: () => void;
@@ -18,7 +21,7 @@ export interface LinkMenuProps {
 
 export function LinkMenu(props: LinkMenuProps): JSX.Element {
   return (
-    <PanelSheet visible={props.visible} onClose={props.onClose} title="Link" testID="link-menu" height="65%">
+    <PanelSheet visible={props.visible} onClose={props.onClose} title="Link" testID="link-menu" height="85%">
       {props.visible ? <LinkActions key={props.url} {...props} /> : null}
     </PanelSheet>
   );
@@ -60,6 +63,7 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
   return (
     <>
       {props.title && props.title !== props.url ? <Typography numberOfLines={2}>{props.title}</Typography> : null}
+      <Peek url={props.url} privately={props.privately} />
       <Typography testID="link-menu-url" className="mb-3 text-sm text-muted" numberOfLines={3}>
         {props.url}
       </Typography>
@@ -89,5 +93,53 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
         </Typography>
       ) : null}
     </>
+  );
+}
+
+const PREVIEW_HEIGHT = 200;
+
+/**
+ * Peek (B11): the link's page, live, in a card of its own. Nothing of it stays (no stateKey, a private store when the
+ * tab is private) and nothing of it is answerable (dialogs, sign-ins and app links are turned down as soon as they
+ * arrive), so a preview can't change the session.
+ */
+function Peek({ url, privately }: { url: string; privately: boolean }): JSX.Element {
+  const accent = useThemeColor("accent");
+  const view = useRef<Tab>(null);
+  const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState(0);
+
+  // Only the preview's own questions arrive here, and no one is there to answer them: refuse everything at once, or
+  // the page sits waiting forever.
+  function refuse(request: PageRequest): void {
+    void view.current?.answerPageRequest(request.id, false).catch(() => {});
+  }
+
+  return (
+    <View
+      testID="link-preview"
+      className="mb-3 overflow-hidden rounded-2xl bg-default"
+      style={{ height: PREVIEW_HEIGHT }}
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <EngineView
+        ref={view}
+        initialUrl={url}
+        private={privately}
+        active
+        pullToRefreshEnabled={false}
+        style={{ flex: 1 }}
+        onNavigationStateChange={({ nativeEvent: state }) => {
+          setProgress(state.progress);
+          setLoading(state.isLoading);
+        }}
+        onPageRequest={({ nativeEvent }) => refuse(nativeEvent)}
+      />
+      {loading ? (
+        <View className="absolute top-0 left-0 h-0.5 rounded-full" style={{ width: `${Math.max(8, progress * 100)}%`, backgroundColor: accent }} />
+      ) : null}
+    </View>
   );
 }
