@@ -264,13 +264,34 @@ bool SafeServiceRecord(const base::Value& value, const char* shape) {
   return false;
 }
 bool SafeServices(const base::DictValue& services) {
-  if (!ServiceFields(services, {"live", "calendar", "alerts", "sync", "telemetry"}))
+  if (!ServiceFields(services, {"live", "calendar", "alerts", "sync", "telemetry",
+                                "onboarding", "cli"}))
     return false;
   for (const auto [name, value] : services) {
+    // The terminal control server is null until it first reports.
+    if (name == "cli" && value.is_none())
+      continue;
     if (!value.is_dict())
       return false;
     const auto& d = value.GetDict();
-    if (name == "telemetry") {
+    if (name == "onboarding") {
+      // Where a window draws onboarding, and the step summaries it shows.
+      const auto* window = d.Find("windowId");
+      const auto* picked = d.FindDict("picked");
+      if (!ServiceFields(d, {"windowId", "step", "picked", "session"}) || !window ||
+          !(window->is_none() || window->is_string()) || !d.FindString("step") ||
+          !picked || !d.FindDouble("session"))
+        return false;
+      for (const auto [step, lines] : *picked) {
+        if (!lines.is_list()) return false;
+        for (const auto& line : lines.GetList())
+          if (!line.is_string()) return false;
+      }
+    } else if (name == "cli") {
+      if (!ServiceFields(d, {"state", "connections", "generation", "port", "reason"}) ||
+          !d.FindString("state"))
+        return false;
+    } else if (name == "telemetry") {
       if (!ServiceFields(d, {"sharing", "decided", "askDone"})) return false;
       for (const auto [key, value] : d) if (!value.is_bool()) return false;
     } else if (name == "live") {
