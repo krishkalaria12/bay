@@ -3,7 +3,7 @@ import { WindowBackdrop } from "@bay/shaders";
 import { onAppEvent, setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "@bay/platform/motion";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { CommandPanel } from "./components/commandBar/CommandBarPanel";
 import { ContentCard } from "./components/window/TabPageCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
@@ -23,6 +23,7 @@ import { useFullscreenTab } from "./components/window/pageState";
 import { SpaceSwipe, SpaceTint } from "./components/spaces/SpaceSwipe";
 import { CaptionButtons } from "./components/window/CaptionButtons";
 import { useWindowButtonLayout } from "./components/window/windowButtons";
+import { useCaptionRevealed } from "./components/window/captionReveal";
 import { TopStripPeek, TopTabStrip } from "./components/tabStrip/TabStrip";
 import { TOP_CARD_INSET } from "./components/window/constants";
 import { TOP_STRIP_HEIGHT } from "./components/window/constants";
@@ -43,6 +44,9 @@ import { layout } from "./lib/constants";
 import { useEffectEvent } from "./lib/useEffectEvent";
 import { useBrowserRead as useBrowser } from "./store/read";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
+
+// The caption bar opening and closing, and the page with it.
+const CAPTION_SLIDE = { duration: 180 };
 
 export function WindowRoot({ windowId }: { windowId?: string }) {
   if (isUtilityWindowId(windowId))
@@ -88,16 +92,24 @@ function BrowserWindow() {
     left: !topTabs && addressInSidebar && (right || !showSidebar),
     right: !topTabs && addressInSidebar && (!right || !showSidebar),
   };
-  // Where the page would run up under caption buttons, it starts below a bar of their own, as in Zen: the bar lines up
-  // with the sidebar's toolbar row and moves the window, and the buttons never cover the page.
+  // Where the page would run up under caption buttons, they live in a bar of their own over it, as in Zen: hidden in
+  // the card's top gap until the pointer reaches the window's top, then open, pushing the page down rather than
+  // covering it. Open, it lines up with the sidebar's toolbar row; it always moves the window.
   const buttons = useWindowButtonLayout();
   const captionBar =
     capabilities.captionButtons && !fullscreen && ((pageCorner.left && buttons.left.length > 0) || (pageCorner.right && buttons.right.length > 0));
+  const captionRevealed = useCaptionRevealed(windowId, captionBar);
   const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
   const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
+  const captionBarHeight = captionRevealed ? captionHeight : layout.cardTop;
   let pageTop: number = layout.cardTop;
   if (showStrip) pageTop = TOP_STRIP_HEIGHT;
-  else if (captionBar) pageTop = captionHeight;
+  else if (captionBar) pageTop = captionBarHeight;
+  const pageInset = useSharedValue(pageTop);
+  useEffect(() => {
+    pageInset.set(withTiming(pageTop, CAPTION_SLIDE));
+  }, [pageTop, pageInset]);
+  const pageInsetStyle = useAnimatedStyle(() => ({ paddingTop: pageInset.get() }));
   const [peekOut, setPeekOut] = useState(false);
   const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, topTabs, peekOut });
   const windowTint = useWindowTint();
@@ -153,24 +165,26 @@ function BrowserWindow() {
           ) : null}
         </Animated.View>
       )}
-      <View
+      <Animated.View
         style={
           fullscreen
             ? { flex: 1 }
-            : {
-                flex: 1,
-                flexDirection: "row",
-                paddingTop: pageTop,
-                paddingBottom: showStrip ? TOP_CARD_INSET : layout.cardInset,
-                // The sidebar's slot (topTabs aside) holds the inset on its side, even closed.
-                paddingLeft: showStrip ? TOP_CARD_INSET : !topTabs && !right ? 0 : layout.cardInset,
-                paddingRight: showStrip ? TOP_CARD_INSET : right ? 0 : layout.cardInset,
-              }
+            : [
+                {
+                  flex: 1,
+                  flexDirection: "row",
+                  paddingBottom: showStrip ? TOP_CARD_INSET : layout.cardInset,
+                  // The sidebar's slot (topTabs aside) holds the inset on its side, even closed.
+                  paddingLeft: showStrip ? TOP_CARD_INSET : !topTabs && !right ? 0 : layout.cardInset,
+                  paddingRight: showStrip ? TOP_CARD_INSET : right ? 0 : layout.cardInset,
+                },
+                pageInsetStyle,
+              ]
         }
       >
         <ContentCard />
         {!fullscreen && <ExtensionSidePanel />}
-      </View>
+      </Animated.View>
       {/* No toolbar or sidebar to move the window by: the gap over the page does. */}
       {addressInSidebar && !sidebarOpen && !fullscreen ? (
         <WindowDragRegion style={{ position: "absolute", top: 0, left: 0, right: 0, height: layout.cardTop }} />
@@ -187,13 +201,21 @@ function BrowserWindow() {
           style={{
             position: "absolute",
             top: 0,
-            height: captionHeight,
+            height: captionBarHeight,
             left: showSidebar && !right ? sidebarWidth : 0,
             right: showSidebar && right ? sidebarWidth : 0,
           }}
         />
       ) : null}
-      {!fullscreen && <CaptionButtons windowId={windowId} height={captionHeight} glyphCenter={captionCenter} />}
+      {!fullscreen && (
+        <CaptionButtons
+          windowId={windowId}
+          height={captionHeight}
+          glyphCenter={captionCenter}
+          reveal={captionBar ? captionBarHeight : 0}
+          hidden={captionBar && !captionRevealed}
+        />
+      )}
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />

@@ -4,6 +4,7 @@
 
 #include <optional>
 
+#include "base/functional/callback.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace views {
@@ -28,11 +29,19 @@ class FrameWin {
 
   // `maximize`: the UI's maximize button in DIPs from the window's client
   // origin, or nullopt while it shows no caption buttons. `dark`: the UI's
-  // theme, which the backdrop follows. Returns false for a widget that is not
-  // a Bay frame.
+  // theme, which the backdrop follows. `reveal`: in DIPs from the window's
+  // top, the band whose pointer the UI follows to show its hidden caption bar,
+  // or 0 for none. Returns false for a widget that is not a Bay frame.
   static bool SetCaption(views::Widget* widget,
                          std::optional<gfx::Rect> maximize,
-                         bool dark);
+                         bool dark,
+                         int reveal);
+
+  // Told when the pointer enters or leaves a window's reveal band. Chromium
+  // sends the UI no mouse events over its drag regions, so the frame follows
+  // the pointer there.
+  static void SetRevealObserver(
+      base::RepeatingCallback<void(views::Widget*, bool)> observer);
 };
 
 }  // namespace bay

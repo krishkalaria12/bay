@@ -18,6 +18,9 @@ type Props = {
   height: number;
   /** From the window's top: where the glyphs centre, level with the bar beside them. */
   glyphCenter?: number;
+  /** A bar that hides until the pointer reaches it: the band the frame watches, and whether the bar is shut. */
+  reveal?: number;
+  hidden?: boolean;
 };
 
 /** Ordered caption groups on hosts where the app draws its caption. The
@@ -27,7 +30,7 @@ export function CaptionButtons(props: Props) {
   return capabilities.captionButtons ? <Caption {...props} /> : null;
 }
 
-function Caption({ windowId, height, glyphCenter }: Props) {
+function Caption({ windowId, height, glyphCenter, reveal = 0, hidden = false }: Props) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const buttons = useWindowButtonLayout();
@@ -39,11 +42,11 @@ function Caption({ windowId, height, glyphCenter }: Props) {
   useEffect(() => {
     dark.current = theme.dark;
   }, [theme.dark]);
-  const shown = !state.fullscreen;
+  const shown = !state.fullscreen && !hidden;
   useEffect(() => {
     const maximize: [number, number, number, number] | null = shown ? captionMaximizeRect(buttons, width, height) : null;
-    void setWindowCaption(windowId, { maximize, dark: theme.dark }).catch(() => {});
-  }, [windowId, width, height, shown, theme.dark, buttons]);
+    void setWindowCaption(windowId, { maximize, dark: theme.dark, reveal }).catch(() => {});
+  }, [windowId, width, height, shown, theme.dark, buttons, reveal]);
   useEffect(() => () => void setWindowCaption(windowId, { maximize: null, dark: dark.current }).catch(() => {}), [windowId]);
 
   if (!shown) return null;
