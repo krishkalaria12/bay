@@ -30,10 +30,14 @@ try {
         if ($process.MainWindowHandle -ne [IntPtr]::Zero) { $windowAppeared = $true; break }
     }
     if (-not $windowAppeared) { throw "Bay did not create a desktop window in $StartupSeconds seconds" }
-    Start-Sleep -Seconds 2
+    # Time for the UI and its coordinator to start, publish and fail if they will.
+    Start-Sleep -Seconds 5
     $process.Refresh()
     if ($process.HasExited) { throw "Bay exited after creating its window: $($process.ExitCode)" }
-    Write-Output 'Liveness passed: Bay created a desktop window and remained running'
+    # A window that stays open can still show "Bay could not start".
+    $uiErrors = @(Select-String -Path $log -Pattern ':ERROR:CONSOLE.*source: chrome://bay' -ErrorAction SilentlyContinue)
+    if ($uiErrors.Count) { throw "Bay's UI logged $($uiErrors.Count) errors; they are listed below" }
+    Write-Output 'Liveness passed: Bay created a desktop window, remained running and its UI logged no errors'
     Write-Output 'This does not pass the Windows hosting gate; record that separately using packaging/windows/hosting-gate.md'
 } finally {
     $env:BAY_DATA_DIR = $previousData
