@@ -38,6 +38,7 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
   const needle = query.trim().toLowerCase();
   const matches = needle ? items.filter((item) => item.title.toLowerCase().includes(needle) || item.url.toLowerCase().includes(needle)) : items;
   const groups = groupByDay(matches, Date.now(), (item) => item.closedAt);
+
   const rows: Row[] = groups.flatMap((group) => [
     { kind: "label" as const, label: group.label },
     ...group.entries.map((item) => ({ kind: "entry" as const, item })),

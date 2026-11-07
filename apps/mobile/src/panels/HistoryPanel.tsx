@@ -39,6 +39,7 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
   const needle = query.trim().toLowerCase();
   const matches = needle ? history.filter((entry) => entry.title.toLowerCase().includes(needle) || entry.url.toLowerCase().includes(needle)) : history;
   const groups = groupByDay(matches.slice(0, SHOWN), Date.now(), (entry) => entry.lastVisit);
+
   const rows: Row[] = groups.flatMap((group) => [
     { kind: "label" as const, label: group.label },
     ...group.entries.map((entry) => ({ kind: "entry" as const, entry })),
