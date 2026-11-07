@@ -163,6 +163,11 @@ Before a beta release, use clean Windows 10 and Windows 11 installations:
 - Uninstall, check registrations disappear and reinstall to confirm the profile
   survives. Inspect Crashpad dumps with the matching PDB ZIP.
 
+Every launch logs warnings and errors, including chrome://bay's console errors,
+to `%LOCALAPPDATA%\Bay\Bay.log`, and keeps the launch before it as
+`Bay.previous.log`. Launch with `--enable-logging --log-level=0` to log
+everything to `chrome_debug.log` in the same folder instead.
+
 Cross-platform tests do not establish these GUI/runtime results. Signing also
 does not guarantee SmartScreen reputation for a new publisher.
 
