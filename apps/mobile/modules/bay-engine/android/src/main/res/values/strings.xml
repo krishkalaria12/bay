@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shortcuts_new_tab_short">New tab</string>
+    <string name="shortcuts_new_tab_long">Open a new tab in Bay</string>
+    <string name="shortcuts_private_tab_short">Private</string>
+    <string name="shortcuts_private_tab_long">Open a new private tab in Bay</string>
+    <string name="search_widget_description">Search in Bay</string>
+</resources>

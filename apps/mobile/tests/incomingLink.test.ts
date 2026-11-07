@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { incomingLink } from "../src/browser/incomingLink.ts";
+import { incomingLink, bayCommand } from "../src/browser/incomingLink.ts";
 
 test("accepts web links as delivered and keeps their shape", () => {
   assert.equal(incomingLink("https://example.com/article?a=1#note"), "https://example.com/article?a=1#note");
@@ -35,4 +35,22 @@ test("a bay share link (B14) answers with the page it carries", () => {
   assert.equal(incomingLink("bay://share"), null);
   // Only the share shape carries a page; other bay links stay alone.
   assert.equal(incomingLink("bay://new-tab"), null);
+});
+
+test("a bay command (B15) names its action and leaves everything else alone", () => {
+  assert.equal(bayCommand("bay://new-tab"), "new-tab");
+  assert.equal(bayCommand("bay://private-tab"), "private-tab");
+  assert.equal(bayCommand("bay://search"), "search");
+  // Scheme and host are spelled by the OSes; the parser is case-insensitive like URL is.
+  assert.equal(bayCommand("BAY://NEW-TAB"), "new-tab");
+  assert.equal(bayCommand(null), null);
+  assert.equal(bayCommand(""), null);
+  // Pages, shares and junk are not commands.
+  assert.equal(bayCommand("https://example.com/"), null);
+  assert.equal(bayCommand("bay://share?url=https%3A%2F%2Fa.com%2F"), null);
+  assert.equal(bayCommand("bay://example.com"), null);
+  assert.equal(bayCommand("not a url"), null);
+  // Only the bare command: anything with a path or a query would say what it answers, which these don't.
+  assert.equal(bayCommand("bay://search?q=hi"), null);
+  assert.equal(bayCommand("bay://new-tab/next"), null);
 });

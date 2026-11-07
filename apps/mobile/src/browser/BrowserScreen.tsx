@@ -47,7 +47,7 @@ import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
 import { fetchFavicon } from "./favicons";
 import type { ImportedTab } from "./importTabs";
-import { incomingLink } from "./incomingLink";
+import { bayCommand, incomingLink, type BayCommand } from "./incomingLink";
 import { sameNavigation } from "./navigationEvents";
 import { MiniPlayer } from "./MiniPlayer";
 import { PageError } from "./PageError";
@@ -332,11 +332,31 @@ export function BrowserScreen(): JSX.Element {
     if (emptyTab) closeTab(emptyTab);
   }
 
-  // Opens the link other apps handed Bay (B9): a blank tab takes it, otherwise it opens in a fresh one, keeping the
-  // session. State is read live, since a warm link can arrive years into the subscription.
+  // Quick actions and the search widget (B15) hand their `bay://` commands to the same desk as incoming links (B9):
+  // a fresh tab, a private tab, or the search card over the current tab, exactly as the bar and the tabs menu open
+  // them. A private tab here is a private tab or nothing: the menus don't offer one the engine can't keep private.
+  function openIncomingCommand(command: Exclude<BayCommand, "search">): void {
+    setOverlay("none");
+    setPanel(null);
+    setLink(null);
+
+    if (command === "new-tab") openTab("");
+    else if (privateBrowsingSupported) openTab("", false, true);
+  }
+
   function openIncomingLink(): void {
-    const url = incomingLink(incoming.current);
+    const incomingUrl = incoming.current;
     incoming.current = null;
+    const command = bayCommand(incomingUrl);
+
+    if (command) {
+      if (command === "search") search(false);
+      else openIncomingCommand(command);
+
+      return;
+    }
+
+    const url = incomingLink(incomingUrl);
 
     if (!url) return;
     setOverlay("none");

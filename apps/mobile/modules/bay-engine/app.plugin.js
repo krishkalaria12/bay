@@ -12,11 +12,13 @@ const gradleProperties = {
   "android.enableShrinkResourcesInReleaseBuilds": "true",
 };
 
-// The share extension (B14) has one Swift file and one Info.plist, kept as plain committed files next to the app so
-// prebuild never regenerates them; the wiring below points the target at them. The relative paths are against the
-// project, which prebuild places in `ios`.
+// The share extension (B14) and the search widget (B15) each have one Swift file and one Info.plist, kept as plain
+// committed files next to the app so prebuild never regenerates them; the wiring below points the targets at them.
+// The relative paths are against the project, which prebuild places in `ios`.
 const shareExtensionSources = ["../share-extension/BayShare/BayShareController.swift"];
 const shareExtensionInfoPlist = '"../share-extension/BayShare/BayShare-Info.plist"';
+const widgetExtensionSources = ["../widget-extension/BayWidget/BayWidget.swift"];
+const widgetExtensionInfoPlist = '"../widget-extension/BayWidget/BayWidget-Info.plist"';
 
 // A browser accepts HTTP pages. TLS validation and mixed-content restrictions still apply.
 module.exports = function withBayEngine(config) {
@@ -27,6 +29,13 @@ module.exports = function withBayEngine(config) {
     };
     // Saving images (B13): the photo library asks for it from the moment it's needed, as Safari's image menu does.
     mod.modResults.NSPhotoLibraryAddUsageDescription = "Bay saves images you ask for to your photo library.";
+    // App-icon quick actions (B15): each type is the bundle id and a command; BayShortcuts opens the matching
+    // `bay://` command, which BrowserScreen answers like any incoming link.
+    const bundleId = config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile";
+    mod.modResults.UIApplicationShortcutItems = [
+      { UIApplicationShortcutItemType: `${bundleId}.new-tab`, UIApplicationShortcutItemTitle: "New tab" },
+      { UIApplicationShortcutItemType: `${bundleId}.private-tab`, UIApplicationShortcutItemTitle: "Private tab" },
+    ];
     // iOS 26 keeps a download running after Bay leaves the screen as a continued-processing task, one identifier per
     // download (BayDownloads.swift). Without this entry, registering one would crash, so BayDownloads checks for it.
     const downloadTasks = `${config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile"}.download.*`;
@@ -69,56 +78,100 @@ module.exports = function withBayEngine(config) {
         activity["intent-filter"] = [...(activity["intent-filter"] ?? []), shared];
       }
 
+      // App-icon quick actions (B15): the res files (shortcuts.xml, search widget) live in the engine's own res
+      // dir, which resource linking merges into the app; the manifest only points at them.
+      if (!activity["meta-data"]?.some((entry) => entry.$["android:name"] === "android.app.shortcuts")) {
+        activity["meta-data"] = [...(activity["meta-data"] ?? []), { $: { "android:name": "android.app.shortcuts", "android:resource": "@xml/shortcuts" } }];
+      }
+
       application.$["android:usesCleartextTraffic"] = "true";
+    }
+
+    // The home-screen search widget (B15): a receiver for the launcher's updates; tapping it opens `bay://search`.
+    if (application && !application.receiver?.some((entry) => entry.$["android:name"] === "expo.modules.bayengine.BaySearchWidget")) {
+      application.receiver = [
+        ...(application.receiver ?? []),
+        {
+          $: { "android:name": "expo.modules.bayengine.BaySearchWidget", "android:exported": "false", "android:label": "Search Bay" },
+          "intent-filter": [{ action: [{ $: { "android:name": "android.appwidget.action.APPWIDGET_UPDATE" } }] }],
+          "meta-data": [{ $: { "android:name": "android.appwidget.provider", "android:resource": "@xml/search_widget_info" } }],
+        },
+      ];
     }
 
     return mod;
   });
 
   return withXcodeProject(config, (mod) => {
-    addShareExtension(mod.modResults, config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile");
+    const bundleId = config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile";
+
+    addAppExtension(mod.modResults, bundleId, {
+      targetName: "BayShare",
+      subfolder: "../share-extension/BayShare",
+      bundleIdSuffix: "share",
+      plist: shareExtensionInfoPlist,
+      sources: shareExtensionSources,
+    });
+    addAppExtension(mod.modResults, bundleId, {
+      targetName: "BayWidgets",
+      subfolder: "../widget-extension/BayWidget",
+      bundleIdSuffix: "widgets",
+      plist: widgetExtensionInfoPlist,
+      sources: widgetExtensionSources,
+    });
 
     return mod;
   });
 };
 
-// The share extension (B14) is the only way to appear in a share sheet on iOS. Keeping its Swift file and Info.plist
-// as plain files next to the app (share-extension/, which prebuild never touches) keeps the handoff logic versioned
-// with the engine's; this wires the Xcode target itself. node-xcode's addTarget does most of it: the target, its
-// product, the embed phase on Bay and the Sources phase for the Swift file. The rest is done by hand here, for two
-// node-xcode quirks: `updateBuildProperty` matches targets by comment, where the created name is already quoted, and
-// `addTargetDependency` writes nothing at all when a fresh project lacks its sections.
-function addShareExtension(project, bundleId) {
-  const targets = project.pbxNativeTargetSection() ?? {};
+// The share extension (B14) is the only way to appear in a share sheet on iOS, and the search widget (B15) only
+// through a WidgetKit target. Both keep their sources as plain files next to the app (share-extension/ and
+// widget-extension/, which prebuild never touches), and this wires the Xcode targets themselves. node-xcode's
+// addTarget does most of it: the target, its product, the embed phase on Bay and the Sources phase's files. The
+// rest is done by hand here, for two node-xcode quirks: `updateBuildProperty` matches targets by comment, where
+// the created name is already quoted, and `addTargetDependency` writes nothing at all when a fresh project lacks
+// its sections.
+function addAppExtension(project, bundleId, { targetName, subfolder, bundleIdSuffix, plist, sources }) {
+  if (findTargetKeyFor(project, targetName)) return;
 
-  if (Object.values(targets).some((target) => target?.productType === '"com.apple.product-type.app-extension"')) return;
-
-  const share = project.addTarget("BayShare", "app_extension", "../share-extension/BayShare", `${bundleId}.share`);
+  const extension = project.addTarget(targetName, "app_extension", subfolder, `${bundleId}.${bundleIdSuffix}`);
 
   // So building Bay builds the extension before embedding it. A fresh Expo project has neither section yet.
   const objects = project.hash.project.objects;
   objects.PBXContainerItemProxy ??= {};
   objects.PBXTargetDependency ??= {};
-  project.addTargetDependency(project.getFirstTarget().uuid, [share.uuid]);
+  project.addTargetDependency(project.getFirstTarget().uuid, [extension.uuid]);
 
-  // The Sources phase: addTarget creates none, so the one Swift file gets one of its own.
-  project.addBuildPhase(shareExtensionSources, "PBXSourcesBuildPhase", "Sources", share.uuid);
+  // The Sources phase: addTarget creates none, so the extension's Swift files get one of their own.
+  project.addBuildPhase(sources, "PBXSourcesBuildPhase", "Sources", extension.uuid);
 
-  // The extension matches Bay's own deployment target and builds like it does; its plist, source and bundle id
-  // come from addTarget (an id) and the constants above.
+  // The extension matches Bay's own deployment target and builds like it does; its plist, sources and bundle id
+  // come from addTarget and the constants above.
   const minimum = unquote(project.getBuildProperty("IPHONEOS_DEPLOYMENT_TARGET"));
   const settings = {
-    INFOPLIST_FILE: shareExtensionInfoPlist,
+    INFOPLIST_FILE: plist,
     SWIFT_VERSION: '"5.0"',
     TARGETED_DEVICE_FAMILY: '"1,2"',
     IPHONEOS_DEPLOYMENT_TARGET: `"${minimum}"`,
   };
 
-  for (const item of project.pbxXCConfigurationList()[share.pbxNativeTarget.buildConfigurationList].buildConfigurations) {
+  for (const item of project.pbxXCConfigurationList()[extension.pbxNativeTarget.buildConfigurationList].buildConfigurations) {
     const config = project.pbxXCBuildConfigurationSection()[unquote(typeof item === "string" ? item : item.value)];
 
     if (config) Object.assign(config.buildSettings, settings);
   }
+}
+
+function findTargetKeyFor(project, targetName) {
+  const targets = project.pbxNativeTargetSection() ?? {};
+
+  for (const [key, target] of Object.entries(targets)) {
+    if (/_comment$/.test(key)) continue;
+
+    if (unquote(target?.name) === targetName) return key;
+  }
+
+  return null;
 }
 
 function unquote(value) {
