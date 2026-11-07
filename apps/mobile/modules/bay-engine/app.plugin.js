@@ -29,6 +29,9 @@ module.exports = function withBayEngine(config) {
     };
     // Saving images (B13): the photo library asks for it from the moment it's needed, as Safari's image menu does.
     mod.modResults.NSPhotoLibraryAddUsageDescription = "Bay saves images you ask for to your photo library.";
+    // Voice search (B16): the microphone and speech recognition are asked for when the user taps the mic button.
+    mod.modResults.NSMicrophoneUsageDescription = "Bay uses the microphone to search by voice.";
+    mod.modResults.NSSpeechRecognitionUsageDescription = "Bay turns your words into a search on the device.";
     // App-icon quick actions (B15): each type is the bundle id and a command; BayShortcuts opens the matching
     // `bay://` command, which BrowserScreen answers like any incoming link.
     const bundleId = config.ios?.bundleIdentifier ?? "in.krishkalaria.bay.mobile";

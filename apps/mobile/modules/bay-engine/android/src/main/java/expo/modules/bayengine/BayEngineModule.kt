@@ -18,7 +18,9 @@ class BayEngineModule : Module() {
 
     Events("onDownload", "onMediaControl")
 
-    OnActivityResult { _, payload -> BayFileChooser.deliver(payload) }
+    OnActivityResult { _, payload ->
+      if (!BayFileChooser.deliver(payload)) BayVoice.deliver(payload)
+    }
 
     OnCreate {
       BayDownloads.emit = { body -> sendEvent("onDownload", body) }
@@ -54,6 +56,11 @@ class BayEngineModule : Module() {
     AsyncFunction("takeShare") { promise: Promise ->
       val url = appContext.currentActivity?.intent?.sharedUrl()
       promise.resolve(url?.let { shareLink(it) })
+    }.runOnQueue(Queues.MAIN)
+
+    // Voice search (B16): one system recognition, resolved with the transcript or null.
+    AsyncFunction("startListening") { promise: Promise ->
+      BayVoice.listen(appContext.currentActivity, promise)
     }.runOnQueue(Queues.MAIN)
 
     AsyncFunction("clearData") { promise: Promise ->

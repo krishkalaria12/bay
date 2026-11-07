@@ -1,5 +1,6 @@
 import type { SearchEngine } from "@bay/core/src/engines.ts";
 import { displayUrl } from "@bay/core/src/suggest.ts";
+import { startListening } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import { useThemeColor } from "heroui-native";
 import { useRef, useState, type ComponentRef, type JSX } from "react";
@@ -51,6 +52,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
   const [query, setQuery] = useState(initialText);
   // No inline completion over a prefilled address, or straight after deleting.
   const [suppressed, setSuppressed] = useState(Boolean(initialText));
+  const [listening, setListening] = useState(false);
   const { rows, completion: suggested } = useSuggestions(query, engine, data, initialText);
   const completion = suppressed ? "" : suggested;
   // A prefilled address starts selected, so typing replaces it (as in Safari and Lens). selectTextOnFocus alone can
@@ -74,6 +76,16 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
     setSuppressed(true);
     setQuery(text);
     input.current?.focus();
+  }
+
+  // Voice search (B16): asks the engine to listen once; what it hears replaces the field, like a paste.
+  async function listen(): Promise<void> {
+    if (listening) return;
+    setListening(true);
+    const text = await startListening().catch(() => null);
+    setListening(false);
+
+    if (text) fill(text);
   }
 
   function submit(): void {
@@ -154,6 +166,17 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                 <Icon name="close" color={secondary} size={20} />
               </Pressable>
             ) : null}
+            <Pressable
+              testID="voice-search"
+              accessibilityRole="button"
+              accessibilityLabel={listening ? "Listening" : "Voice search"}
+              accessibilityState={{ disabled: listening }}
+              disabled={listening}
+              className="h-11 w-11 items-center justify-center"
+              onPress={() => void listen()}
+            >
+              <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={22} />
+            </Pressable>
             {privateAvailable ? (
               <Pressable
                 testID="private-toggle"

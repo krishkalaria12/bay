@@ -37,6 +37,7 @@ export type IconName =
   | "download"
   | "check"
   | "translate"
+  | "mic"
   | "textSize"
   | "palette"
   | "tune"

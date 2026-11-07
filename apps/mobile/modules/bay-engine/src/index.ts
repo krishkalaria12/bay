@@ -143,6 +143,7 @@ const nativeEngine = requireNativeModule<{
   openDownload(reference: string): Promise<void>;
   cancelDownload(id: string): Promise<void>;
   saveImage(url: string): Promise<void>;
+  startListening(): Promise<string | null>;
   addListener(event: "onDownload", listener: (update: DownloadUpdate) => void): { remove(): void };
   addListener(event: "onMediaControl", listener: (event: { action: MediaControl }) => void): { remove(): void };
   addListener(event: "onShare", listener: (event: { url: string }) => void): { remove(): void };
@@ -262,6 +263,15 @@ export function cancelDownload(id: string): Promise<void> {
 /** Saves a web image (B13): into the photo library on iOS, through the system downloader on Android. */
 export function saveImage(url: string): Promise<void> {
   return nativeEngine.saveImage(url);
+}
+
+/**
+ * Listens once and resolves with what was said (B16), or null when it wasn't heard / wasn't allowed. On-device
+ * where the OS supports it (iOS asks for microphone and speech permission; Android for the record-audio runtime
+ * permission), and shows the system's own recogniser UI on both.
+ */
+export function startListening(): Promise<string | null> {
+  return nativeEngine.startListening();
 }
 
 /** What the system's media controls asked for. */

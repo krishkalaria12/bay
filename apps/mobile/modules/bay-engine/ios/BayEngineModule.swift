@@ -36,6 +36,11 @@ public class BayEngineModule: Module {
       BayImages.save(url, promise: promise)
     }.runOnQueue(.main)
 
+    // Voice search (B16): one listen, resolved with the transcript or null.
+    AsyncFunction("startListening") { (promise: Promise) in
+      BayVoice.listen(promise: promise)
+    }.runOnQueue(.main)
+
     AsyncFunction("clearData") { (promise: Promise) in
       WKWebsiteDataStore.default().removeData(
         ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast

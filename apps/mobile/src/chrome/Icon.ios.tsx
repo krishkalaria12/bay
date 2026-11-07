@@ -43,6 +43,7 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   download: "arrow.down.circle",
   check: "checkmark.circle",
   translate: "translate",
+  mic: "mic",
   textSize: "textformat.size",
   palette: "paintpalette",
   tune: "slider.horizontal.3",
