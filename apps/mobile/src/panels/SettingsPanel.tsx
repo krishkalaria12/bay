@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type JSX } from "react";
 import { Image, Pressable, View } from "react-native";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
+import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
 import { Icon } from "@/chrome/Icon";
 import { START_PAGE_HOURS, TEXT_SIZE, WALLPAPERS } from "@/store/model";
 import type { SimplePreferences, ThemeChoice, WallpaperId } from "@/store/types";
@@ -91,6 +92,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Saved logins (B20), reloaded each time the sheet opens on the privacy page.
+  const [logins, setLogins] = useState<SavedLogin[] | null>(null);
   const mounted = useRef(true);
   useEffect(
     () => () => {
@@ -104,6 +107,17 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     setConfirming(false);
     setError(null);
   }, [props.visible]);
+
+  useEffect(() => {
+    if (!props.visible || page !== "privacy") return;
+
+    void savedLogins().then(setLogins, () => setLogins([]));
+  }, [props.visible, page]);
+
+  async function forgetSaved(login: SavedLogin): Promise<void> {
+    await forgetLogin(login.origin, login.username).catch(() => {});
+    void savedLogins().then(setLogins, () => undefined);
+  }
 
   async function clearData(): Promise<void> {
     if (busy) return;
@@ -192,6 +206,24 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                 ))}
               </Group>
               <Note>Pause blocking from a site's menu when it doesn't work right.</Note>
+            </>
+          ) : null}
+          {logins && logins.length ? (
+            <>
+              <Group label="Saved passwords">
+                {logins.map((login) => (
+                  <ActionRow
+                    key={`${login.origin}\n${login.username}`}
+                    testID={`saved-login-${login.origin}-${login.username}`}
+                    label={login.username}
+                    detail={login.origin}
+                    value="Delete"
+                    destructive
+                    onPress={() => void forgetSaved(login)}
+                  />
+                ))}
+              </Group>
+              <Note>Saved only on this phone, in its secure store, and signed in silently on a site you've saved before.</Note>
             </>
           ) : null}
         </>

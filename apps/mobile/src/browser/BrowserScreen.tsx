@@ -37,6 +37,8 @@ import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/priv
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
 import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
+import { saveLogin, savedLoginFor } from "./credentials";
+import { originOf } from "./logins";
 import { PrivateLock } from "./PrivateLock";
 import { SearchCard, type OpenTarget } from "./SearchCard";
 import { StartPage } from "./StartPage";
@@ -437,10 +439,32 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function onPageRequest(tabId: string, request: PageRequest): void {
+    // A site Bay already saved a login for signs in without being asked again (B20). A private tab's logins stay in
+    // the private session, so it is never answered this way.
+    if (request.kind === "auth") {
+      const origin = originOf(request.url);
+      const privately = Boolean(useBrowserStore.getState().data.tabs.find((tab) => tab.id === tabId)?.private);
+
+      if (origin && !privately) {
+        void savedLoginFor(origin).then((login) => {
+          if (login) {
+            void views
+              .get(tabId)
+              ?.answerPageRequest(request.id, true, undefined, login.username, login.password)
+              .catch(() => {});
+          } else {
+            setPageRequests((previous) => (previous.some((entry) => entry.request.id === request.id) ? previous : [...previous, { tabId, request }]));
+          }
+        });
+
+        return;
+      }
+    }
+
     setPageRequests((previous) => (previous.some((entry) => entry.request.id === request.id) ? previous : [...previous, { tabId, request }]));
   }
 
-  function answerPageRequest(accepted: boolean, value?: string, username?: string, password?: string): void {
+  function answerPageRequest(accepted: boolean, value?: string, username?: string, password?: string, save?: boolean): void {
     const current = pageRequests[0];
 
     if (!current) return;
@@ -449,6 +473,13 @@ export function BrowserScreen(): JSX.Element {
       .get(current.tabId)
       ?.answerPageRequest(current.request.id, accepted, value, username, password)
       .catch(() => {});
+    // Saved logins (B20) are filed when the user chose to save them on the sign-in sheet. Never from a private tab.
+    if (save && accepted && current.request.kind === "auth" && username && password) {
+      const origin = originOf(current.request.url);
+      const privately = Boolean(useBrowserStore.getState().data.tabs.find((tab) => tab.id === current.tabId)?.private);
+
+      if (origin && !privately) void saveLogin({ origin, username, password, savedAt: Date.now() }).catch(() => {});
+    }
   }
 
   function archiveAll(): void {

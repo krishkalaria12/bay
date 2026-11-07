@@ -6,14 +6,17 @@ import { View } from "react-native";
 
 import { PillButton } from "@/chrome/PillButton";
 
-import { PanelSheet } from "./PanelSheet";
+import { ActionRow, PanelSheet } from "./PanelSheet";
 import type { PageRequest } from "@bay/engine";
 
 export interface PageRequestPanelProps {
   /** The dialog the page is waiting on, or null when no page is asking. */
   request: PageRequest | null;
-  /** Answers the dialog: accepted is OK vs Cancel, value is the prompt's entered text, username and password the sign-in. */
-  onAnswer: (accepted: boolean, value?: string, username?: string, password?: string) => void;
+  /**
+   * Answers the dialog: accepted is OK vs Cancel, value is the prompt's entered text, username and password the sign-in;
+   * save (auth only) asks Bay to keep the sign-in for next time.
+   */
+  onAnswer: (accepted: boolean, value?: string, username?: string, password?: string, save?: boolean) => void;
 }
 
 /** What a page asking for a device says, in Bay's own words on both apps. */
@@ -59,12 +62,14 @@ function RequestBody({
   onAnswer,
 }: {
   request: PageRequest;
-  onAnswer: (accepted: boolean, value?: string, username?: string, password?: string) => void;
+  onAnswer: (accepted: boolean, value?: string, username?: string, password?: string, save?: boolean) => void;
 }): JSX.Element {
   const foreground = useThemeColor("foreground");
   const [value, setValue] = useState(request.defaultValue ?? "");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  // Saved passwords (B20): signing in can file the login for next time.
+  const [save, setSave] = useState(false);
 
   function submit(): void {
     onAnswer(
@@ -72,6 +77,7 @@ function RequestBody({
       request.kind === "prompt" ? value : undefined,
       request.kind === "auth" ? username : undefined,
       request.kind === "auth" ? password : undefined,
+      request.kind === "auth" ? save : undefined,
     );
   }
 
@@ -141,6 +147,14 @@ function RequestBody({
               returnKeyType="go"
               onSubmitEditing={submit}
               style={{ flex: 1, color: foreground, fontSize: 16, paddingVertical: 10 }}
+            />
+          </View>
+          <View className="mt-2">
+            <ActionRow
+              testID="page-request-save-password"
+              label={`Save password for ${hostOf(request.url) || "this site"}`}
+              toggle={save}
+              onPress={() => setSave((on) => !on)}
             />
           </View>
         </>
