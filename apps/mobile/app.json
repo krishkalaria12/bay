@@ -13,7 +13,8 @@
       "infoPlist": {
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": true,
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": ["audio"],
+        "NSLocationWhenInUseUsageDescription": "Bay shares your location with sites you allow."
       }
     },
     "android": {
@@ -22,7 +23,13 @@
         "backgroundColor": "#ffffff"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "in.krishkalaria.bay.mobile"
+      "package": "in.krishkalaria.bay.mobile",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
     "plugins": [
       "./modules/bay-engine/app.plugin.js",
@@ -55,8 +62,8 @@
         "expo-image-picker",
         {
           "photosPermission": false,
-          "cameraPermission": false,
-          "microphonePermission": false
+          "cameraPermission": "Bay uses the camera when a site asks to take a photo or video.",
+          "microphonePermission": "Bay uses the microphone when a site asks to record audio."
         }
       ]
     ],

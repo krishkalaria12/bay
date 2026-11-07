@@ -899,7 +899,7 @@
             </tr>
             <tr>
               <td class="id">B7</td>
-              <th scope="row">Location, camera, microphone <span class="kind">Sites break</span></th>
+              <th scope="row">Location, camera, microphone <span class="kind">Sites break</span> <span class="status landed">Landed</span></th>
               <td>
                 iOS has no usage strings in <code>app.json</code> and <code>expo-image-picker</code> removes the camera one on purpose. A file input's "Take
                 Photo" may crash there, so stage 0 tests it. Android has no <code>onPermissionRequest</code> or location handler, so both are refused.
@@ -1425,7 +1425,7 @@
           </li>
           <li>
             <span class="tag api">Shared + 2 native</span> Page requests, with dialogs (I3), HTTP sign-in (B3), other-app links (B5), and location, camera and
-            microphone (B7). <span class="status landed">I3, B3 and B5 landed</span> (the dialog sheet, HTTP sign-in and app links on both apps); B7 is still to do.
+            microphone (B7). <span class="status landed">All landed</span> (the dialog sheet, HTTP sign-in, app links and device permissions on both apps).
           </li>
           <li><span class="tag android">Android only</span> File upload (A1) and <code>blob:</code> downloads (A3). <span class="status landed">Both landed</span></li>
           <li><span class="tag api">Shared + 2 native</span> Fullscreen video (A2), then landscape (B10). <span class="status landed">A2 landed</span></li>

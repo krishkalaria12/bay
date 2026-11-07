@@ -509,11 +509,12 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   private func emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, realm: String? = nil,
-                               externalUrl: String? = nil) {
+                               externalUrl: String? = nil, permission: String? = nil) {
     var body: [String: Any] = ["id": id, "kind": kind, "message": String(message.prefix(2000)), "url": webView.url?.absoluteString ?? ""]
     if let defaultValue { body["defaultValue"] = String(defaultValue.prefix(2000)) }
     if let realm, !realm.isEmpty { body["realm"] = String(realm.prefix(200)) }
     if let externalUrl { body["externalUrl"] = String(externalUrl.prefix(2048)) }
+    if let permission { body["permission"] = permission }
     onPageRequest(body)
   }
 
@@ -546,6 +547,27 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
       return
     }
     pendingPageRequests.removeValue(forKey: id)?(accepted, value)
+  }
+
+  /// Camera and microphone (B7): the shared sheet asks before WebKit grants the page access. Location is WebKit's own
+  /// system prompt, which uses the app's `NSLocationWhenInUseUsageDescription`.
+  @available(iOS 15.0, *)
+  func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+               initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+               decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+    let permission: String
+
+    switch type {
+    case .camera: permission = "camera"
+    case .microphone: permission = "microphone"
+    case .cameraAndMicrophone: permission = "camera-microphone"
+    @unknown default:
+      decisionHandler(.deny)
+      return
+    }
+    let id = UUID().uuidString
+    pendingPageRequests[id] = { accepted, _ in decisionHandler(accepted ? .grant : .deny) }
+    emitPageRequest(id: id, kind: "permission", message: "", defaultValue: nil, permission: permission)
   }
 
   private func cancelPageRequests() {

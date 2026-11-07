@@ -16,10 +16,18 @@ export interface PageRequestPanelProps {
   onAnswer: (accepted: boolean, value?: string, username?: string, password?: string) => void;
 }
 
+/** What a page asking for a device says, in Bay's own words on both apps. */
+const permissionMessages: Record<NonNullable<PageRequest["permission"]>, string> = {
+  camera: "This site would like to use your camera.",
+  microphone: "This site would like to use your microphone.",
+  location: "This site would like to use your location.",
+  "camera-microphone": "This site would like to use your camera and microphone.",
+};
+
 /**
- * A page's `alert`/`confirm`/`prompt` (I3) or the server's HTTP sign-in (B3), as one shared sheet on both apps instead
- * of WebKit's or WebView's own dialogs. The engine holds the page paused until this answers, so dismissing the sheet
- * cancels the dialog, as a dismissed browser dialog would.
+ * A page's `alert`/`confirm`/`prompt` (I3), the server's HTTP sign-in (B3), a link to another app (B5) or a device
+ * permission (B7), as one shared sheet on both apps instead of WebKit's or WebView's own dialogs. The engine holds the
+ * page paused until this answers, so dismissing the sheet cancels the dialog, as a dismissed browser dialog would.
  */
 export function PageRequestPanel({ request, onAnswer }: PageRequestPanelProps): JSX.Element {
   const host = request ? hostOf(request.url) : "";
@@ -72,6 +80,10 @@ function RequestBody({
       {request.kind === "auth" ? (
         <Typography testID="page-request-realm" className="text-sm text-muted">
           {request.realm ? `Enter the username and password for “${request.realm}”.` : "Enter the username and password for this site."}
+        </Typography>
+      ) : request.kind === "permission" ? (
+        <Typography testID="page-request-permission-message" style={{ fontSize: 16, lineHeight: 22 }}>
+          {permissionMessages[request.permission ?? "camera"]}
         </Typography>
       ) : request.kind === "external" ? (
         <>
@@ -135,12 +147,19 @@ function RequestBody({
       ) : null}
       <View className="mt-4 flex-row items-center justify-end gap-2">
         {request.kind !== "alert" ? (
-          <PillButton testID="page-request-cancel" label="Cancel" accessibilityLabel="Cancel" onPress={() => onAnswer(false)} />
+          <PillButton
+            testID="page-request-cancel"
+            label={request.kind === "permission" ? "Don't Allow" : "Cancel"}
+            accessibilityLabel={request.kind === "permission" ? "Don't Allow" : "Cancel"}
+            onPress={() => onAnswer(false)}
+          />
         ) : null}
         <PillButton
           testID="page-request-ok"
-          label={request.kind === "auth" ? "Sign in" : request.kind === "external" ? "Open" : "OK"}
-          accessibilityLabel={request.kind === "auth" ? "Sign in" : request.kind === "external" ? "Open in another app" : "OK"}
+          label={request.kind === "auth" ? "Sign in" : request.kind === "external" ? "Open" : request.kind === "permission" ? "Allow" : "OK"}
+          accessibilityLabel={
+            request.kind === "auth" ? "Sign in" : request.kind === "external" ? "Open in another app" : request.kind === "permission" ? "Allow" : "OK"
+          }
           onPress={submit}
         />
       </View>

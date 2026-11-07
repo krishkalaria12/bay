@@ -1,5 +1,6 @@
 package expo.modules.bayengine
 
+import android.Manifest
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -30,10 +31,12 @@ import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.webkit.CookieManager
+import android.webkit.GeolocationPermissions
 import android.webkit.JavascriptInterface
 import android.webkit.HttpAuthHandler
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
+import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.net.http.SslError
@@ -53,6 +56,7 @@ import androidx.webkit.ScriptHandler
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import expo.modules.interfaces.permissions.Permissions
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.viewevent.EventDispatcher
@@ -146,6 +150,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private val pendingAuthRequests = ConcurrentHashMap<String, HttpAuthHandler>()
   /** Links to other apps (B5), held until the shared sheet answers; one per link. */
   private val pendingExternalRequests = ConcurrentHashMap<String, String>()
+  /** Camera and microphone requests (B7), held until the shared sheet answers and the system grants them. */
+  private val pendingMediaRequests = ConcurrentHashMap<String, PendingMedia>()
+  /** Location requests (B7), held until the shared sheet answers and the system grants it. */
+  private val pendingLocationRequests = ConcurrentHashMap<String, PendingLocation>()
   private val spinner = ValueAnimator.ofFloat(0f, 360f).apply {
     duration = 750
     repeatCount = ValueAnimator.INFINITE
@@ -228,6 +236,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     settings.allowFileAccess = false
     settings.allowContentAccess = false
     settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+    // Camera, microphone and location (B7) are asked for through the shared sheet; the page gets access only when allowed.
+    settings.setGeolocationEnabled(true)
     // Pinch to zoom, without the old on-screen +/- buttons. A site's viewport limits still apply.
     settings.builtInZoomControls = true
     settings.displayZoomControls = false
@@ -463,6 +473,41 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         emitPageRequest(id, "prompt", message ?: "", defaultValue, url)
         return true
       }
+
+      // Camera and microphone (B7): the shared sheet asks, then the system runtime permission is requested before the
+      // page gets access. A request with no camera or microphone resource is refused outright.
+      override fun onPermissionRequest(request: PermissionRequest?) {
+        if (request == null) return
+        val resources = request.resources.orEmpty().filter {
+          it == PermissionRequest.RESOURCE_VIDEO_CAPTURE || it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
+        }.toTypedArray()
+        if (resources.isEmpty()) {
+          runCatching { request.deny() }
+          return
+        }
+        val video = resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+        val audio = resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+        val permission = when {
+          video && audio -> "camera-microphone"
+          video -> "camera"
+          else -> "microphone"
+        }
+        val system = buildList {
+          if (video) add(Manifest.permission.CAMERA)
+          if (audio) add(Manifest.permission.RECORD_AUDIO)
+        }.toTypedArray()
+        val id = UUID.randomUUID().toString()
+        pendingMediaRequests[id] = PendingMedia(request, resources, system)
+        emitPageRequest(id, "permission", "", null, webView.url ?: pageUrl, permission = permission)
+      }
+
+      // Location (B7): the shared sheet asks, then the system location permission is requested.
+      override fun onGeolocationPermissionsShowPrompt(origin: String?, callback: GeolocationPermissions.Callback?) {
+        if (origin == null || callback == null) return
+        val id = UUID.randomUUID().toString()
+        pendingLocationRequests[id] = PendingLocation(origin, callback)
+        emitPageRequest(id, "permission", "", null, webView.url ?: pageUrl, permission = "location")
+      }
     }
   }
 
@@ -578,11 +623,12 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   // MARK: Page requests (I3)
 
-  private fun emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, url: String?, realm: String? = null, externalUrl: String? = null) {
+  private fun emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, url: String?, realm: String? = null, externalUrl: String? = null, permission: String? = null) {
     val body = mutableMapOf<String, Any>("id" to id, "kind" to kind, "message" to message.take(2000), "url" to (url ?: pageUrl ?: ""))
     if (defaultValue != null) body["defaultValue"] = defaultValue.take(2000)
     if (!realm.isNullOrEmpty()) body["realm"] = realm.take(200)
     if (externalUrl != null) body["externalUrl"] = externalUrl.take(2048)
+    if (permission != null) body["permission"] = permission
     onPageRequest(body)
   }
 
@@ -590,6 +636,32 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     val external = pendingExternalRequests.remove(id)
     if (external != null) {
       if (accepted) openExternal(external)
+      return
+    }
+    val media = pendingMediaRequests[id]
+    if (media != null) {
+      if (!accepted) {
+        pendingMediaRequests.remove(id)
+        runCatching { media.request.deny() }
+        return
+      }
+      requestSystemPermissions(media.permissions) { granted ->
+        val pending = pendingMediaRequests.remove(id)
+        if (pending != null) runCatching { if (granted) pending.request.grant(pending.resources) else pending.request.deny() }
+      }
+      return
+    }
+    val location = pendingLocationRequests[id]
+    if (location != null) {
+      if (!accepted) {
+        pendingLocationRequests.remove(id)
+        runCatching { location.callback.invoke(location.origin, false, false) }
+        return
+      }
+      requestSystemPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), requireAll = false) { granted ->
+        val pending = pendingLocationRequests.remove(id)
+        if (pending != null) runCatching { pending.callback.invoke(pending.origin, granted, false) }
+      }
       return
     }
     val auth = pendingAuthRequests.remove(id)
@@ -619,6 +691,39 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     pendingAuthRequests.clear()
     for (handler in pendingAuth) try { handler.cancel() } catch (_: Exception) {}
     pendingExternalRequests.clear()
+    val pendingMedia = pendingMediaRequests.values.toList()
+    pendingMediaRequests.clear()
+    for (media in pendingMedia) runCatching { media.request.deny() }
+    val pendingLocation = pendingLocationRequests.values.toList()
+    pendingLocationRequests.clear()
+    for (location in pendingLocation) runCatching { location.callback.invoke(location.origin, false, false) }
+  }
+
+  /** Asks the system for runtime permissions (B7); `done` receives whether they were granted (`requireAll` or any). */
+  private fun requestSystemPermissions(permissions: Array<String>, requireAll: Boolean = true, done: (Boolean) -> Unit) {
+    val manager = appContext.permissions
+    if (manager == null) {
+      done(false)
+      return
+    }
+    val granted = {
+      if (requireAll) permissions.all { manager.hasGrantedPermissions(it) }
+      else permissions.any { manager.hasGrantedPermissions(it) }
+    }
+    if (granted()) {
+      done(true)
+      return
+    }
+    Permissions.askForPermissionsWithPermissionsManager(manager, object : Promise {
+      // The aggregate result doesn't distinguish an approximate location from a refusal, so ask the manager again.
+      override fun resolve(value: Any?) {
+        done(granted())
+      }
+
+      override fun reject(code: String?, message: String?, cause: Throwable?) {
+        done(false)
+      }
+    }, *permissions)
   }
 
   // MARK: Video fullscreen (A2)
@@ -1167,6 +1272,17 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     webView.destroy()
     releasePrivateProfile()
   }
+
+  private class PendingMedia(
+    val request: PermissionRequest,
+    val resources: Array<String>,
+    val permissions: Array<String>,
+  )
+
+  private class PendingLocation(
+    val origin: String,
+    val callback: GeolocationPermissions.Callback,
+  )
 
   companion object {
     private const val PRIVATE_PROFILE = "bay-private"
