@@ -103,6 +103,9 @@ chromium mac chromium-devtools-background-target.patch
 chromium all chromium-scripts-policy.patch
 chromium win,linux chromium-page-interactions-webui.patch
 chromium win,linux chromium-bay-page-activation.patch
+# Chrome's own WebUI tests, which Bay's unit tests build through Chrome's test support, kept compiling after
+# ungoogled-chromium's UI removals: the tests of removed UI go, and the search engine helper gets its new field.
+chromium win,linux chromium-webui-tests-ungoogled.patch
 
 layer all engine/chromium
 layer all engine/nncore
