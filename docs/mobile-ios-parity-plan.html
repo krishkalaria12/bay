@@ -336,8 +336,8 @@
         >, which stays the roadmap
       </p>
       <p class="meta">
-        Updated 6 November 2026 against <code>main</code> at <code>47589d3b</code>, after PRs #12 and #11 landed. See <a href="#progress">Since the plan</a>.
-        Line numbers and counts below are current.
+        Updated 7 November 2026: I1–I6 are now done in code (see <a href="#progress">Since the plan</a>); still to verify on a device, like everything
+        below. Earlier: 6 November 2026 against <code>main</code> at <code>47589d3b</code>, after PRs #12 and #11 landed.
       </p>
 
       <p class="lead">
@@ -345,15 +345,16 @@
         break everyday sites.
       </p>
       <p>
-        Since then, Google sign-in (B1) has a fix in code on both apps, and two of the iOS gaps are partly closed: background downloads (I2) and Liquid Glass
-        (I6). None of the iOS code has been compiled yet.
+        Since then, Google sign-in (B1) has a fix in code on both apps, and as of 7 November all six iOS gaps are done in code: system media controls (I1),
+        background downloads with resume and a finished notification (I2), page dialogs (I3), the link menu (I4), ad blocking accepted as an engine limit (I5)
+        and Liquid Glass sheets with haptics (I6). None of the new iOS code has been compiled on a device yet.
       </p>
 
       <div class="numbers">
         <div><b>7,055</b><span>lines of TypeScript that run on both apps: every screen, panel, page script and the store (6,438 on 5 November)</span></div>
         <div><b>218 / 230</b><span>lines of UI written for iOS only / Android only (192 / 203)</span></div>
-        <div><b>5 + 1</b><span>real iOS gaps: five features behind Android, plus Liquid Glass coverage. Two are now partly done.</span></div>
-        <div><b>6</b><span>things Android lacks and iOS has or is closer on. None closed yet.</span></div>
+        <div><b>0</b><span>real iOS gaps left: all six (I1–I6) are done in code as of 7 November; I5 is accepted as an engine limit (D4).</span></div>
+        <div><b>1</b><span>things Android lacks and iOS has or is closer on, left of six: only on-device translation (A6) remains.</span></div>
       </div>
 
       <div class="callout">
@@ -441,10 +442,12 @@
                 and error messages now match Android, and an error status from the server (anything outside 2xx) fails the download instead of saving the error
                 page.
               </td>
-              <td><code>38bd632b</code></td>
+              <td><code>38bd632b</code>, <code>6c3d571f</code></td>
               <td>
-                <span class="status partial">Partly done</span> Missing: background <code>URLSession</code>, <code>resumeData</code> (a failed file is still
-                deleted) and a finished notification. A download stops if the app is killed, and on iOS 25 or older when background time runs out.
+                <span class="status landed">Landed</span> Added 7 November: a failed download resumes once from its <code>resumeData</code> in place instead of
+                deleting the partial file, and a finished or failed download posts a notification when Bay isn't on screen (permission asked on the first
+                download, as on Android). Still missing, deliberately deferred: a background <code>URLSession</code> that survives the app being killed — the
+                plan only calls for it if that turns out to matter, and Expo's app delegate doesn't forward the completion handler it needs.
               </td>
             </tr>
             <tr>
@@ -453,10 +456,59 @@
                 Open, Cancel and Remove in the download toast and panel are glass capsules (<code>PillButton.ios.tsx</code>). Pull to refresh gives a light
                 haptic at the trigger point.
               </td>
-              <td><code>1c3b7072</code>, <code>f8b63568</code></td>
+              <td><code>1c3b7072</code>, <code>f8b63568</code>, <code>4aa4561b</code></td>
               <td>
-                <span class="status partial">Partly done</span> <code>PanelSheet</code> is still solid, and there are no haptics on tab close, pin or
-                long-press.
+                <span class="status landed">Landed</span> Added 7 November: <code>PanelSheet</code> now has a glass background on iOS (<code>PanelSheet.ios.tsx</code>
+                over the shared contents, solid on Android), and haptics via <code>expo-haptics</code> on tab close, pin and long-press. The new page-request sheet
+                reuses <code>PillButton</code> for its OK/Cancel buttons.
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">I1 System media controls</th>
+              <td>
+                iOS implements <code>setMediaSession</code>: <code>BayMedia.swift</code> posts Now Playing info and registers play/pause/toggle/stop remote
+                commands, so the lock screen and Control Center work like Android's media notification. WebKit doesn't populate the Now Playing center for
+                <code>WKWebView</code> media, so Bay posts it itself from the page's media report.
+              </td>
+              <td><code>93920de1</code></td>
+              <td>
+                <span class="status landed">Landed</span> In code only; needs a real iPhone to check against what WebKit shows on its own (stage 0).
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">I3 <code>alert</code>, <code>confirm</code>, <code>prompt</code></th>
+              <td>
+                Both engines emit <code>onPageRequest</code> and hold the page paused until <code>answerPageRequest</code> delivers the answer (iOS's
+                <code>runJavaScript…Panel</code> delegate methods, Android's <code>WebChromeClient</code> <code>onJs…</code> methods). One shared sheet
+                (<code>PageRequest.tsx</code>) presents them on both apps, with a queue per tab; dismissing it or pressing Android Back cancels the dialog, and a
+                navigation cancels it too.
+              </td>
+              <td><code>936d624e</code></td>
+              <td>
+                <span class="status landed">Landed</span> In code only; needs a real page that calls <code>alert</code> on a device on both apps.
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">I4 Link menu misses some links</th>
+              <td>
+                iOS now gets the link from WebKit's <code>contextMenuConfigurationForElement</code>, whose <code>linkURL</code> covers iframes and shadow DOM.
+                The injected callout style, the long-press gesture recognizer and the main-frame hit test are gone; the menu title is the URL, since the
+                context-menu info carries no anchor text.
+              </td>
+              <td><code>4840aa3b</code></td>
+              <td>
+                <span class="status landed">Landed</span> In code only; needs an iframe link long-pressed on a real iPhone (stage 1's new check).
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">I5 Depth of ad blocking</th>
+              <td>
+                Accepted as an engine limit (D4): a web view can't intercept subresources, so iOS stays on static WebKit rules plus scriptlets. No code
+                changed. iOS's measured score stands at 73% (97 of 132); the same test on Android still needs a device.
+              </td>
+              <td>—</td>
+              <td>
+                <span class="status landed">Landed</span> Decision recorded; Android score and any generic-hiding page script wait on real-device evidence.
               </td>
             </tr>
             <tr>
@@ -555,14 +607,14 @@
           <tbody>
             <tr>
               <td class="id">I1</td>
-              <th scope="row">System media controls</th>
+              <th scope="row">System media controls <span class="status landed">Landed</span></th>
               <td>
-                Android has a media notification with play, pause and stop (<code>BayMediaService.kt</code>). On iOS <code>setMediaSession</code> doesn't exist,
-                so <code>index.ts:207</code>'s optional call does nothing, and <code>onMediaControl</code> is never sent.
+                Android has a media notification with play, pause and stop (<code>BayMediaService.kt</code>). iOS now posts Now Playing info and remote
+                commands from <code>BayMedia.swift</code> (<code>93920de1</code>), so <code>useTabMedia</code>'s call through <code>setMediaSession</code> works and
+                <code>onMediaControl</code> is sent. WebKit doesn't populate the Now Playing center for <code>WKWebView</code> media, so Bay posts it itself.
               </td>
               <td>
-                First test what WebKit already shows on the lock screen. Add <code>MPNowPlayingInfoCenter</code> and <code>MPRemoteCommandCenter</code> only if
-                it isn't enough. No JavaScript changes: <code>useTabMedia</code> already calls through.
+                Done in code. Still to check on a real iPhone what WebKit shows on the lock screen on its own, per stage 0.
               </td>
               <td><span class="tag ios">iOS only</span></td>
               <td>S</td>
@@ -570,17 +622,16 @@
             </tr>
             <tr>
               <td class="id">I2</td>
-              <th scope="row">Downloads that outlive the app <span class="status partial">Partly done</span></th>
+              <th scope="row">Downloads that outlive the app <span class="status landed">Landed</span></th>
               <td>
                 Android 10 and later now download in a foreground service with a progress notification (<code>BayDownloader.kt</code>), and
-                <code>DownloadManager</code> remains only on Android 9 and older. iOS still runs <code>WKDownload</code> inside the app, but keeps it going in
-                the background: as a <code>BGContinuedProcessingTask</code> on iOS 26, and with the usual background time before that (<code>38bd632b</code>).
-                On failure, <code>BayDownloads.swift</code> still deletes the partial file and ignores <code>resumeData</code>. A killed app loses the download.
+                <code>DownloadManager</code> remains only on Android 9 and older. iOS runs <code>WKDownload</code> in the background as a
+                <code>BGContinuedProcessingTask</code> on iOS 26 (background time before that), resumes once from <code>resumeData</code> instead of deleting the
+                partial file, and posts a finished notification when Bay isn't on screen (<code>6c3d571f</code>).
               </td>
               <td>
-                What's left, if downloads killed with the app or long downloads on older iOS turn out to matter: send normal GET downloads to a background
-                <code>URLSession</code> with the page's cookies and user agent, as <code>BayDownloader.kt</code> does. Keep <code>WKDownload</code> for
-                <code>blob:</code> and POST. Use <code>resumeData</code> and add a finished notification.
+                Done, except the background <code>URLSession</code> for downloads that survive the app being killed: that stays deferred unless device testing
+                shows it matters, since Expo's app delegate doesn't forward the completion handler it needs.
               </td>
               <td><span class="tag ios">iOS only</span></td>
               <td>M</td>
@@ -588,43 +639,43 @@
             </tr>
             <tr>
               <td class="id">I3</td>
-              <th scope="row"><code>alert</code>, <code>confirm</code>, <code>prompt</code></th>
+              <th scope="row"><code>alert</code>, <code>confirm</code>, <code>prompt</code> <span class="status landed">Landed</span></th>
               <td>
-                <code>BayEngineView.swift</code> has none of the <code>runJavaScript…Panel</code> delegate methods, so WebKit acts as if alerts were dismissed
-                and confirms were cancelled. A site's "are you sure?" silently answers no. Android's WebView shows its own default dialogs.
+                Both engines emit <code>onPageRequest</code> and hold the page paused until <code>answerPageRequest</code> answers: iOS implements the three
+                <code>runJavaScript…Panel</code> delegate methods, Android the three <code>WebChromeClient</code> <code>onJs…</code> methods (<code>936d624e</code>).
               </td>
-              <td>Build it once as the shared <a href="#page-requests">Page requests</a> sheet, which also replaces Android's Material-looking dialogs.</td>
+              <td>
+                Done as the shared <a href="#page-requests">Page requests</a> sheet (<code>PageRequest.tsx</code>), which also replaces Android's
+                Material-looking dialogs. Dialogs queue per tab; dismissing the sheet or pressing Android Back cancels, as does a navigation.
+              </td>
               <td><span class="tag api">Shared + 2 native</span></td>
               <td>M</td>
               <td>2</td>
             </tr>
             <tr>
               <td class="id">I4</td>
-              <th scope="row">Link menu misses some links</th>
+              <th scope="row">Link menu misses some links <span class="status landed">Landed</span></th>
               <td>
-                iOS finds the link with <code>elementFromPoint(…).closest('a[href]')</code> in the main frame (<code>BayEngineView.swift:414</code>). That
-                misses links in iframes and shadow DOM, while the injected CSS has already turned off WebKit's callout in iframes. Long-pressing an iframe link
-                therefore does nothing. Android's hit test covers these.
+                iOS now gets the link from WebKit's <code>contextMenuConfigurationForElement</code> (<code>4840aa3b</code>), whose <code>linkURL</code> covers
+                iframes and shadow DOM. The injected callout style, the long-press gesture recognizer and the main-frame hit test are removed. The menu title
+                is the URL, since the context-menu info carries no anchor text.
               </td>
-              <td>
-                Use WebKit's <code>contextMenuConfigurationForElement</code>, whose <code>linkURL</code> covers every frame. This should also remove the
-                injected style and most of the gesture code.
-              </td>
+              <td>Done. Stage 1's new check (an iframe link on a real iPhone) still has to run.</td>
               <td><span class="tag ios">iOS only</span></td>
               <td>S</td>
               <td>1</td>
             </tr>
             <tr>
               <td class="id">I5</td>
-              <th scope="row">Depth of ad blocking</th>
+              <th scope="row">Depth of ad blocking <span class="status landed">Landed</span></th>
               <td>
                 Android checks every request in adblock-rust, answers <code>$redirect</code> rules with stand-ins, and adds generic hiding from each page's
                 classes and ids. iOS uses static WebKit rules plus scriptlets, because a web view can't intercept subresources. Measured score: 73% (97 of 132)
                 on iOS; the plan records no Android score.
               </td>
               <td>
-                Accept the engine limit. Run the same test on both and record the numbers. Add generic hiding from a page script only if real sites show a
-                difference.
+                Accepted as an engine limit (D4), so no code changed. Still to run: the same test on Android and recording the number; generic hiding from a
+                page script only if real sites show a difference.
               </td>
               <td><span class="tag ios">iOS only</span></td>
               <td>S</td>
@@ -632,17 +683,13 @@
             </tr>
             <tr>
               <td class="id">I6</td>
-              <th scope="row">Liquid Glass coverage <span class="note">(design)</span> <span class="status partial">Partly done</span></th>
+              <th scope="row">Liquid Glass coverage <span class="note">(design)</span> <span class="status landed">Landed</span></th>
               <td>
-                Glass appears on the bar buttons, panels drawn with <code>Surface</code>, and now the download buttons (<code>PillButton.ios.tsx</code>,
-                <code>1c3b7072</code>). <code>PanelSheet</code> is still a solid <code>bg-background</code> sheet, and menus, Settings and the tab switcher
-                chrome are identical on both apps. <code>mobile-plan.html</code> chose shared sheets, so this was planned. The only haptic is the pull to
-                refresh tick (<code>f8b63568</code>).
+                Glass appears on the bar buttons, panels drawn with <code>Surface</code>, the download buttons (<code>PillButton.ios.tsx</code>) and now the
+                sheets themselves: <code>PanelSheet.ios.tsx</code> draws a Liquid Glass background over the shared contents while Android stays solid
+                (<code>4aa4561b</code>). Haptics via <code>expo-haptics</code> cover tab close, pin and long-press, on top of the pull-to-refresh tick.
               </td>
-              <td>
-                Add a glass sheet background in <code>.ios.tsx</code>, keeping the shared contents, plus haptics on tab close, pin and long-press. Reuse
-                <code>PillButton</code> for other capsule buttons.
-              </td>
+              <td>Done; the page-request sheet reuses <code>PillButton</code> for OK/Cancel. Needs the screenshot comparison against Android (stage 0/1).</td>
               <td><span class="tag ios">iOS only</span></td>
               <td>M</td>
               <td>1</td>
@@ -691,7 +738,9 @@
               <td class="id">A2</td>
               <th scope="row">Video fullscreen <span class="status landed">Landed</span></th>
               <td>
-                Both now go fullscreen: iOS sets <code>isElementFullscreenEnabled</code>, and Android's <code>onShowCustomView</code>/<code>onHideCustomView</code>
+                Both now go fullscreen: iOS sets <code>isElementFullscreenEnabled</code>, and Android's <code>onShowCustomView</code>/<code
+                  >onHideCustomView</code
+                >
                 add the player's view to the window's decor view, request landscape, hide the system bars, and exit on Back. Both report through
                 <code>onFullscreenChange</code>, and <code>BrowserScreen</code> hides the bar and top strip while a tab reports fullscreen.
               </td>
@@ -1344,16 +1393,19 @@
       <section class="stage">
         <h3>Stage 1: Close the standalone iOS gaps</h3>
         <ul class="tasks">
-          <li><span class="tag ios">iOS only</span> Link menu through WebKit's context menu delegate (I4).</li>
-          <li><span class="tag ios">iOS only</span> Lock-screen media controls, if stage 0 shows WebKit's aren't enough (I1).</li>
+          <li><span class="tag ios">iOS only</span> Link menu through WebKit's context menu delegate (I4). <span class="status landed">Landed</span></li>
           <li>
-            <span class="tag ios">iOS only</span> Background downloads, resume, finished notification (I2).
-            <span class="status partial">Partly done</span> Running in the background has landed. Background <code>URLSession</code>,
-            <code>resumeData</code> and the notification are still to do, if stage 0 shows they're needed.
+            <span class="tag ios">iOS only</span> Lock-screen media controls (I1). <span class="status landed">Landed</span> Now Playing info and remote
+            commands are in; stage 0 still compares them with what WebKit shows on its own.
           </li>
           <li>
-            <span class="tag ios">iOS only</span> Glass sheets and haptics (I6). <span class="status partial">Partly done</span> The glass download buttons and
-            the pull to refresh haptic have landed. Sheets and the other haptics are still to do.
+            <span class="tag ios">iOS only</span> Background downloads, resume, finished notification (I2). <span class="status landed">Landed</span> Background
+            running, <code>resumeData</code> and the notification are in. A background <code>URLSession</code> that survives the app being killed stays deferred
+            unless device testing shows it matters.
+          </li>
+          <li>
+            <span class="tag ios">iOS only</span> Glass sheets and haptics (I6). <span class="status landed">Landed</span> Glass sheets and haptics on tab
+            close, pin and long-press are in.
           </li>
         </ul>
         <div class="done-when">
@@ -1373,10 +1425,10 @@
           </li>
           <li>
             <span class="tag api">Shared + 2 native</span> Page requests, with dialogs (I3), HTTP sign-in (B3), other-app links (B5), and location, camera and
-            microphone (B7).
+            microphone (B7). <span class="status landed">I3 landed</span> (the dialog sheet on both apps); B3, B5 and B7 are still to do.
           </li>
-          <li><span class="tag android">Android only</span> File upload (A1) and <code>blob:</code> downloads (A3).</li>
-          <li><span class="tag api">Shared + 2 native</span> Fullscreen video (A2), then landscape (B10).</li>
+          <li><span class="tag android">Android only</span> File upload (A1) and <code>blob:</code> downloads (A3). <span class="status landed">Both landed</span></li>
+          <li><span class="tag api">Shared + 2 native</span> Fullscreen video (A2), then landscape (B10). <span class="status landed">A2 landed</span></li>
           <li>
             <span class="tag api">Shared + 2 native</span> Save and restore tab state (B6): <code>interactionState</code> on iOS and <code>saveState</code> on
             Android, in their own files, never for private tabs. Reload pages the system killed.
