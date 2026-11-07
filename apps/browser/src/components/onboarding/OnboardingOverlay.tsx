@@ -86,7 +86,8 @@ function Overlay({ session }: { session: number }) {
               shadowOffset={[0, 18]}
               style={{ flex: 1, overflow: "hidden" }}
             >
-              <View key={step} style={{ flex: 1 }}>
+              {/* Chromium joins drag regions whatever lies over them: the card opts out, or its icon drags move the window. */}
+              <View key={step} mouseDownCanMoveWindow={false} style={{ flex: 1 }}>
                 {step === "import" && <ImportStep />}
                 {step === "personalize" && <PersonalizeStep />}
                 {step === "search" && <SearchStep />}
