@@ -219,11 +219,11 @@ bool DocumentStore::Dispatch(const std::string& module,
   // Bound before the reply takes `value`: arguments have no set order, and
   // Windows' compiler evaluates them right to left, which moved the contents
   // out first and saved every document empty.
-  auto write = base::BindOnce(
+  auto save = base::BindOnce(
       &DocumentStore::Write,
       directory_.Append(base::FilePath::FromUTF8Unsafe(*name)), value);
   DiskRunner()->PostTaskAndReplyWithResult(
-      FROM_HERE, std::move(write),
+      FROM_HERE, std::move(save),
       base::BindOnce(&DocumentStore::Written, directory_, *name,
                      std::move(value), std::move(callback)));
   return true;
