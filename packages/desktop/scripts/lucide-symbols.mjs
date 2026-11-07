@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Writes src/lucideSymbols.web.ts: the Lucide icons (https://lucide.dev, ISC) the Linux host draws for the SF Symbol
-// names the app uses. Windows draws Segoe Fluent Icons instead (fluentGlyphs.web.ts).
+// names the app uses. Windows draws its caption buttons in Segoe Fluent Icons (fluentGlyphs.web.ts) and the rest from here.
 //
 //   mkdir /tmp/lucide && cd /tmp/lucide && npm pack lucide && tar xzf lucide-*.tgz
 //   node packages/desktop/scripts/lucide-symbols.mjs /tmp/lucide/package
