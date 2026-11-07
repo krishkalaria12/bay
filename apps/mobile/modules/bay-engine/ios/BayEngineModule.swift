@@ -103,7 +103,7 @@ public class BayEngineModule: Module {
       AsyncFunction("evaluate") { (view: BayEngineView, script: String, promise: Promise) in view.evaluate(script, promise) }
       AsyncFunction("answerPageRequest") { (view: BayEngineView, id: String, accepted: Bool, value: String?, username: String?, password: String?) in
         view.answerPageRequest(id: id, accepted: accepted, value: value, username: username, password: password)
-      }
+      }.runOnQueue(.main)
     }
   }
 }

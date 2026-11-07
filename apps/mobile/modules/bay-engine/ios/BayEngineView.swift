@@ -224,8 +224,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   /// WebKit draws on the main thread; the resize, JPEG encoding and file write run in the background. A suspended
   /// (hidden) page resolves nil: WebKit may not have drawn it.
-  func snapshot(_ promise: Promise) {
-    guard !isSuspended, bounds.width > 0, bounds.height > 0, webView.url != nil else {
+  func snapshot(_ promise: Promise) {    guard !isSuspended, bounds.width > 0, bounds.height > 0, webView.url != nil else {
       promise.resolve(nil as String?)
       return
     }
@@ -271,6 +270,23 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     ["http", "https"].contains(url.scheme?.lowercased() ?? "") && url.host?.isEmpty == false
   }
 
+  /// A scheme that belongs to another app: tel:, mailto:, maps, an app's own scheme. Web and data schemes stay here.
+  private func isExternalURL(_ url: URL) -> Bool {
+    guard let scheme = url.scheme?.lowercased(), !scheme.isEmpty else { return false }
+    let inPage: Set<String> = ["http", "https", "about", "javascript", "data", "blob", "file", "ws", "wss", "chrome", "chrome-extension"]
+    return !inPage.contains(scheme) && scheme.range(of: "^[a-z][a-z0-9+.-]*$", options: .regularExpression) != nil
+  }
+
+  /// Asks whether to hand a link to another app, then cancels the page's navigation either way.
+  private func requestExternal(_ url: URL) {
+    let id = UUID().uuidString
+    pendingPageRequests[id] = { accepted, _ in
+      guard accepted else { return }
+      DispatchQueue.main.async { UIApplication.shared.open(url) }
+    }
+    emitPageRequest(id: id, kind: "external", message: "", defaultValue: nil, externalUrl: url.absoluteString)
+  }
+
   private func emitState() {
     endRefreshingWhenLoaded()
     // A tab with no page yet whose navigation became a download (a download link typed into a new tab) says so, so it
@@ -314,8 +330,13 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-    // External schemes require an explicit handoff UI in a later phase.
-    guard let url = navigationAction.request.url, isWebURL(url) else {
+    // A link to another app asks first (B5), then stays cancelled here; the web page it came from stays open.
+    guard let url = navigationAction.request.url else {
+      decisionHandler(.cancel)
+      return
+    }
+    if !isWebURL(url) {
+      if navigationAction.targetFrame?.isMainFrame != false, isExternalURL(url) { requestExternal(url) }
       decisionHandler(.cancel)
       return
     }
@@ -393,8 +414,12 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-    if navigationAction.targetFrame == nil, let url = navigationAction.request.url, isWebURL(url) {
-      webView.load(navigationAction.request)
+    if navigationAction.targetFrame == nil, let url = navigationAction.request.url {
+      if isWebURL(url) {
+        webView.load(navigationAction.request)
+      } else if isExternalURL(url) {
+        requestExternal(url)
+      }
     }
     return nil
   }
@@ -445,10 +470,12 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     emitPageRequest(id: id, kind: "prompt", message: prompt, defaultValue: defaultText)
   }
 
-  private func emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, realm: String? = nil) {
+  private func emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, realm: String? = nil,
+                               externalUrl: String? = nil) {
     var body: [String: Any] = ["id": id, "kind": kind, "message": String(message.prefix(2000)), "url": webView.url?.absoluteString ?? ""]
     if let defaultValue { body["defaultValue"] = String(defaultValue.prefix(2000)) }
     if let realm, !realm.isEmpty { body["realm"] = String(realm.prefix(200)) }
+    if let externalUrl { body["externalUrl"] = String(externalUrl.prefix(2048)) }
     onPageRequest(body)
   }
 

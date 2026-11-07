@@ -91,16 +91,18 @@ export interface FullscreenChange {
   fullscreen: boolean;
 }
 
-/** A page's `alert`/`confirm`/`prompt` (I3) or the server's HTTP sign-in request (B3), delivered as a dialog the shared sheet presents. */
+/** A page's `alert`/`confirm`/`prompt` (I3), the server's HTTP sign-in (B3), or a link to another app (B5), delivered as a dialog the shared sheet presents. */
 export interface PageRequest {
   /** Answer this id back with `Tab.answerPageRequest`. */
   id: string;
-  kind: "alert" | "confirm" | "prompt" | "auth";
+  kind: "alert" | "confirm" | "prompt" | "auth" | "external";
   message: string;
   /** The prompt's initial text; only present for `prompt`. */
   defaultValue?: string;
   /** The server's realm, shown when it names the protected area; only present for `auth`. */
   realm?: string;
+  /** The address that belongs to another app (tel:, mailto:, maps, an app's own scheme); only present for `external`. */
+  externalUrl?: string;
   /** The page address that asked. */
   url: string;
 }

@@ -73,6 +73,13 @@ function RequestBody({
         <Typography testID="page-request-realm" className="text-sm text-muted">
           {request.realm ? `Enter the username and password for “${request.realm}”.` : "Enter the username and password for this site."}
         </Typography>
+      ) : request.kind === "external" ? (
+        <>
+          <Typography testID="page-request-external-message">This link opens in another app. Bay stays on this page.</Typography>
+          <Typography testID="page-request-external" className="mt-2 text-sm text-muted" numberOfLines={2}>
+            {request.externalUrl ?? ""}
+          </Typography>
+        </>
       ) : request.message ? (
         <Typography testID="page-request-message" style={{ fontSize: 16, lineHeight: 22 }}>
           {request.message}
@@ -132,8 +139,8 @@ function RequestBody({
         ) : null}
         <PillButton
           testID="page-request-ok"
-          label={request.kind === "auth" ? "Sign in" : "OK"}
-          accessibilityLabel={request.kind === "auth" ? "Sign in" : "OK"}
+          label={request.kind === "auth" ? "Sign in" : request.kind === "external" ? "Open" : "OK"}
+          accessibilityLabel={request.kind === "auth" ? "Sign in" : request.kind === "external" ? "Open in another app" : "OK"}
           onPress={submit}
         />
       </View>

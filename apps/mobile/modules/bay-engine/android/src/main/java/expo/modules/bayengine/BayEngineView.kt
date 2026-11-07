@@ -130,6 +130,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private val pendingPageRequests = ConcurrentHashMap<String, android.webkit.JsResult>()
   /** HTTP sign-in challenges (B3), held until the shared sheet answers; one per challenge. */
   private val pendingAuthRequests = ConcurrentHashMap<String, HttpAuthHandler>()
+  /** Links to other apps (B5), held until the shared sheet answers; one per link. */
+  private val pendingExternalRequests = ConcurrentHashMap<String, String>()
   private val spinner = ValueAnimator.ofFloat(0f, 360f).apply {
     duration = 750
     repeatCount = ValueAnimator.INFINITE
@@ -269,7 +271,11 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
           if (request.isForMainFrame) downloadBlobOrData(view, request.url.toString())
           return true
         }
-        if (!isWebURL(request.url)) return true
+        if (!isWebURL(request.url)) {
+          // A link to another app asks first (B5); the page stays where it is either way.
+          if (request.isForMainFrame && isExternalURL(request.url)) requestExternal(request.url.toString())
+          return true
+        }
         if (!request.isForMainFrame || request.method != "GET") return false
         val replacement = replacementFor(request.url.toString())
         if (replacement == null) {
@@ -544,14 +550,20 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   // MARK: Page requests (I3)
 
-  private fun emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, url: String?, realm: String? = null) {
+  private fun emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, url: String?, realm: String? = null, externalUrl: String? = null) {
     val body = mutableMapOf<String, Any>("id" to id, "kind" to kind, "message" to message.take(2000), "url" to (url ?: pageUrl ?: ""))
     if (defaultValue != null) body["defaultValue"] = defaultValue.take(2000)
     if (!realm.isNullOrEmpty()) body["realm"] = realm.take(200)
+    if (externalUrl != null) body["externalUrl"] = externalUrl.take(2048)
     onPageRequest(body)
   }
 
   fun answerPageRequest(id: String, accepted: Boolean, value: String?, username: String?, password: String?) {
+    val external = pendingExternalRequests.remove(id)
+    if (external != null) {
+      if (accepted) openExternal(external)
+      return
+    }
     val auth = pendingAuthRequests.remove(id)
     if (auth != null) {
       try {
@@ -578,6 +590,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     val pendingAuth = pendingAuthRequests.values.toList()
     pendingAuthRequests.clear()
     for (handler in pendingAuth) try { handler.cancel() } catch (_: Exception) {}
+    pendingExternalRequests.clear()
   }
 
   // MARK: Video fullscreen (A2)
@@ -1026,6 +1039,40 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   private fun isWebURL(url: Uri): Boolean = url.scheme?.lowercase() in listOf("http", "https") && !url.host.isNullOrEmpty()
+
+  /** A scheme that belongs to another app (B5): tel:, mailto:, maps, an app's own scheme. Web and page data stay here. */
+  private fun isExternalURL(url: Uri): Boolean {
+    val scheme = url.scheme?.lowercase() ?: return false
+    val inPage = setOf("http", "https", "about", "javascript", "data", "blob", "file", "ws", "wss", "chrome", "chrome-extension")
+    return scheme !in inPage && Regex("^[a-z][a-z0-9+.-]*$").matches(scheme)
+  }
+
+  /** Asks whether to hand a link to another app; the page's navigation is cancelled either way. */
+  private fun requestExternal(url: String) {
+    val id = UUID.randomUUID().toString()
+    pendingExternalRequests[id] = url
+    emitPageRequest(id, "external", "", null, webView.url ?: pageUrl, externalUrl = url)
+  }
+
+  private fun openExternal(url: String) {
+    val activity = activityFor(context) ?: return
+    val parsed = if (url.startsWith("intent:", ignoreCase = true)) {
+      try {
+        Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+      } catch (_: Exception) {
+        null
+      }
+    } else {
+      null
+    }
+    val intent = parsed ?: Intent(Intent.ACTION_VIEW, Uri.parse(url))
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+      activity.startActivity(intent)
+    } catch (_: Exception) {
+      // No app handles the link; the page stays open.
+    }
+  }
 
   /** `pending` is the address of a load that hasn't committed yet; the current page's URL and title don't apply. */
   private fun emitState(pending: String? = null) {
