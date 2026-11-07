@@ -15,6 +15,7 @@ import { CLOSE_READER_SCRIPT, openReaderScript, updateReaderScript, type ReaderS
 import { InspectPanel } from "@/panels/InspectPanel";
 import { ReaderPanel } from "@/panels/ReaderPanel";
 import { useBrowserStore } from "@/store/browser";
+import { siteSettingFor } from "@/store/model";
 import type { BrowserTab } from "@/store/types";
 import * as v from "valibot";
 
@@ -163,6 +164,48 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     if (pickMode === "inspect") inspect();
   }
 
+  /** Turns Reader on for this page; when it already reads, it only opens (or keeps closed) its settings panel. */
+  async function turnReaderOn(openSettings: boolean): Promise<boolean> {
+    if (reader) {
+      if (openSettings) setSettingsOpen(true);
+
+      return true;
+    }
+
+    const version = context.current;
+
+    if (picking) await endPicking();
+    const result = await script<{ ok: boolean }>(openReaderScript(data.preferences.reader));
+
+    if (context.current !== version) return true;
+
+    if (!result.ok) return false;
+
+    setReaderTab(active.id);
+    if (openSettings) setSettingsOpen(true);
+
+    return true;
+  }
+
+  // A site that keeps Reader open (B12): as each page here finishes loading, Reader opens by itself — once per
+  // address, so coming back later stays quiet, and nothing pops while the page is still loading or locked.
+  const autoReaderUrl = useRef<string | null>(null);
+  useEffect(() => {
+    const wanted = siteSettingFor(data.preferences.siteSettings, active.url).reader;
+
+    if (!wanted || reader || isLoading || !active.url || blocked || !view) return;
+    if (autoReaderUrl.current === active.url) return;
+    autoReaderUrl.current = active.url;
+
+    const version = context.current;
+    void (async () => {
+      const result = await runPageScript<{ ok: boolean }>(view, openReaderScript(data.preferences.reader));
+
+      if (context.current === version && result.ok) setReaderTab(active.id);
+    })().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active.url, reader, isLoading, blocked, view]);
+
   function changeSettings(settings: ReaderSettings): void {
     dispatch({ type: "reader-settings", settings });
     task(async () => {
@@ -192,27 +235,14 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     showHidden: () => setRules([]),
     openReader: () =>
       task(async () => {
-        if (reader) {
-          setSettingsOpen(true);
-
-          return;
-        }
-
-        const version = context.current;
-
-        if (picking) await endPicking();
-        const result = await script<{ ok: boolean }>(openReaderScript(data.preferences.reader));
-
-        if (context.current !== version) return;
-
-        if (!result.ok) {
-          setNotice("No article found on this page.");
-
-          return;
-        }
-
-        setReaderTab(active.id);
-        setSettingsOpen(true);
+        if (!(await turnReaderOn(true))) setNotice("No article found on this page.");
+      }),
+    /** Left from the site's panel (B12): Reader goes off even when this site asked for it. */
+    closeReader: () =>
+      task(async () => {
+        await script(CLOSE_READER_SCRIPT);
+        setReaderTab(null);
+        setSettingsOpen(false);
       }),
     copyMarkdown: () =>
       task(async () => {

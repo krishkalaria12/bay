@@ -69,6 +69,8 @@ export interface BrowserPreferences {
   reader: ReaderSettings;
   /** Element selectors hidden on each host. Private edits stay in memory outside this document. */
   hiddenElements: Record<string, string[]>;
+  /** Overrides kept per site (host without www.); a host not in the map follows the global settings. */
+  siteSettings: Record<string, SiteSetting>;
   /** The start page's wallpaper: one of Bay's (each follows light and dark mode) or the user's photo. */
   wallpaper: WallpaperId;
   /** The user's photo, copied into the app's documents (a file:// URI). */
@@ -89,6 +91,16 @@ export interface BrowserPreferences {
 }
 
 export type ThemeChoice = "system" | "light" | "dark";
+
+/** What one site keeps instead of the global settings (B12). A host without an entry keeps every global choice. */
+export type SiteSetting = {
+  /** Page zoom in percent (80–200), or null for the global zoom. */
+  textSize: number | null;
+  /** Reader opens by itself as each article here finishes loading. */
+  reader: boolean;
+  /** The site answers with its desktop page: the engine presents itself as a desktop browser. */
+  desktopMode: boolean;
+};
 
 /** What to hide on YouTube, with Brave's lists. Kept a type alias so it stays assignable to `JsonValue`. */
 export type YouTubeCleanup = {

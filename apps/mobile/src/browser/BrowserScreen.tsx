@@ -15,7 +15,7 @@ import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { tick } from "@/chrome/haptics";
-import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, TabsMenu } from "@/panels";
+import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
@@ -23,6 +23,7 @@ import { PageRequestPanel } from "@/panels/PageRequest";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
 import { newId, useBrowserStore } from "@/store/browser";
+import { siteSettingFor, type SiteSetting } from "@/store/model";
 import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
 import { PrivateLock } from "./PrivateLock";
 import { SearchCard, type OpenTarget } from "./SearchCard";
@@ -55,7 +56,7 @@ const failed = new Set<string>();
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "settings" | "page" | "downloads" | "tabs" | "history" | "import" | null;
+type Panel = "archive" | "settings" | "page" | "site" | "downloads" | "tabs" | "history" | "import" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -430,6 +431,8 @@ export function BrowserScreen(): JSX.Element {
   }
 
   const host = hostOf(active.url);
+  // What this site (B12) keeps instead of the globals: a per-site zoom, auto Reader and desktop mode.
+  const siteSetting = siteSettingFor(data.preferences.siteSettings, active.url);
   const pausedEntry = blockingPausedHosts.find((entry) => host === entry || host.endsWith(`.${entry}`));
   const blocking = !blockContent ? "off" : pausedEntry ? "paused" : "on";
 
@@ -438,6 +441,11 @@ export function BrowserScreen(): JSX.Element {
     dispatch({ type: "pause-blocking", host: pausedEntry ?? host, paused: !pausedEntry });
     // The change applies to new loads; reload so this page shows it.
     run((tab) => tab.reload());
+  }
+
+  // Site settings (B12) are written whole: the store keeps an entry only while some value differs from the globals.
+  function changeSiteSetting(update: Partial<SiteSetting>): void {
+    dispatch({ type: "site-settings", host, update: { ...siteSetting, ...update } });
   }
 
   async function setLockPrivateTabs(enabled: boolean): Promise<void> {
@@ -538,7 +546,12 @@ export function BrowserScreen(): JSX.Element {
                 // The active tab stays live behind the switcher and search so its snapshot and return are instant.
                 suspended={id !== active.id && !playing.includes(id)}
                 hiddenSelectors={[...reading.selectorsFor(tab), ...youtubeSelectors(data.preferences.youtube, hostOf(tab.url))]}
-                tweaks={{ textSize: data.preferences.textSize, skipAmp: data.preferences.skipAmp }}
+                // A site's own zoom (B12) takes over the global one.
+                tweaks={{
+                  textSize: siteSettingFor(data.preferences.siteSettings, tab.url).textSize ?? data.preferences.textSize,
+                  skipAmp: data.preferences.skipAmp,
+                }}
+                desktopMode={siteSettingFor(data.preferences.siteSettings, tab.url).desktopMode}
                 pullToRefresh={data.preferences.pullToRefresh}
                 pageColor={pageColors[id] ?? null}
                 onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
@@ -744,6 +757,7 @@ export function BrowserScreen(): JSX.Element {
         onToggleBlocking={toggleBlocking}
         hiddenCount={reading.selectorsFor(active).length}
         onShowHidden={reading.showHidden}
+        onSiteSettings={() => setPanel("site")}
         privateAvailable={privateBrowsingSupported}
         onNewTab={() => search(true)}
         onNewPrivateTab={() => search(true, true)}
@@ -774,6 +788,22 @@ export function BrowserScreen(): JSX.Element {
         onNewPrivateTab={() => search(true, true)}
         onArchiveTab={() => archiveTab(active.id)}
         onArchiveAll={archiveAll}
+      />
+      <SiteSettingsPanel
+        visible={panel === "site"}
+        onClose={() => closePanel("site")}
+        url={active.url}
+        textSize={siteSetting.textSize}
+        globalTextSize={data.preferences.textSize}
+        reader={siteSetting.reader}
+        desktop={siteSetting.desktopMode}
+        onTextSize={(textSize) => changeSiteSetting({ textSize })}
+        onReader={(reader) => {
+          changeSiteSetting({ reader });
+          if (reader && !reading.reader) reading.openReader();
+          else if (!reader && reading.reader) reading.closeReader();
+        }}
+        onDesktop={(desktopMode) => changeSiteSetting({ desktopMode })}
       />
       <ArchivePanel
         visible={panel === "archive"}
@@ -844,6 +874,8 @@ export function BrowserScreen(): JSX.Element {
         url={link?.url ?? ""}
         title={link?.title ?? ""}
         privately={Boolean(active.private)}
+        // A link to a site that keeps its desktop page (B12) previews it that way too.
+        desktopMode={siteSettingFor(data.preferences.siteSettings, link?.url ?? "").desktopMode}
         onOpenTab={() => link && openTab(link.url)}
         onOpenBackground={() => link && openTab(link.url, true)}
         onCopy={() => link && copy(link.url)}

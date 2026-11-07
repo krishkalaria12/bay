@@ -40,6 +40,8 @@ export interface PageMenuProps {
   onCopyMarkdown: () => void;
   onFind: () => void;
   onInspect: () => void;
+  /** This site's own settings (B12): zoom, Reader and desktop mode, kept for this host. */
+  onSiteSettings: () => void;
   onSettings: () => void;
   onHistory: () => void;
   onDownloads: () => void;
@@ -219,6 +221,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
         <Tile id="page-translate" icon="translate" label="Translate" onPress={act(props.onTranslate)} />
         <Tile id="page-copy" icon="link" label="Copy link" onPress={act(props.onCopy)} />
         <Tile id="page-more-tools" icon="more" label="Tools" onPress={() => setTools(true)} />
+        <Tile id="page-site-settings" icon="tune" label="This site" onPress={act(props.onSiteSettings)} />
         <Tile id="page-history" icon="history" label="History" onPress={act(props.onHistory)} />
         <Tile id="page-downloads" icon="download" label="Downloads" onPress={act(props.onDownloads)} />
         <Tile id="page-close-tab" icon="archive" label="Archive" onPress={act(props.onCloseTab)} />

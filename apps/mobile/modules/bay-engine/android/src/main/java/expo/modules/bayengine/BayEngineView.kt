@@ -201,8 +201,32 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
       }
     }
   override val shouldUseAndroidLayout = true
+  /** The system WebView's user agent, cleaned up as Bay's own mobile Chrome one (B1): no `; wv`, no `Version/…`. */
+  private val mobileUserAgent: String =
+    WebSettings.getDefaultUserAgent(context).replace("; wv)", ")").replace(Regex(" Version/[\\d.]+"), "")
+  /** Desktop site (B12): the site answers with its desktop page, so the engine presents itself as a desktop browser. */
+  var desktopMode = false
+    set(value) {
+      if (field == value) return
+      field = value
+      with(webView.settings) {
+        userAgentString = if (value) desktopUserAgent() else mobileUserAgent
+        // A desktop page lays itself out wide and starts shrunk to fit the window; mobile pages carry their own viewport.
+        useWideViewPort = value
+        loadWithOverviewMode = value
+      }
+      // Reloads so the site's server is asked again with the new agent; before the first load there is no page to ask.
+      if (startedLoading) webView.reload()
+    }
   var webView = createWebView()
     private set
+
+  /** Chrome on macOS, at this WebView's own Chrome version (B12). */
+  private fun desktopUserAgent(): String {
+    val version = Regex("Chrome/([\\d.]+)").find(mobileUserAgent)?.groupValues?.get(1) ?: return mobileUserAgent
+
+    return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$version Safari/537.36"
+  }
 
   private fun createWebView(): WebView = WebView(context).apply {
     // A profile must be set before anything else touches the WebView.
@@ -227,7 +251,12 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     // Google won't sign anyone in from what it can tell is an app's embedded WebView ("This browser or app may not be
     // secure", OAuth's disallowed_useragent): it looks for the `; wv` and `Version/4.0` tokens in the user agent and
     // the X-Requested-With header naming the app. Bay is a browser, so it presents as Chrome does.
-    settings.userAgentString = settings.userAgentString.replace("; wv)", ")").replace(Regex(" Version/[\\d.]+"), "")
+    settings.userAgentString = mobileUserAgent
+    if (desktopMode) {
+      settings.userAgentString = desktopUserAgent()
+      settings.useWideViewPort = true
+      settings.loadWithOverviewMode = true
+    }
     if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
       WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
     }

@@ -12,6 +12,8 @@ export interface LinkMenuProps {
   title: string;
   /** Matches the tab whose page the link sits on; the preview keeps nothing either way (its engine has no stateKey). */
   privately: boolean;
+  /** The linked site keeps its desktop page (B12); the preview shows the desktop one too. */
+  desktopMode: boolean;
   onOpenTab: () => void;
   onOpenBackground: () => void;
   onCopy: () => void;
@@ -63,7 +65,7 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
   return (
     <>
       {props.title && props.title !== props.url ? <Typography numberOfLines={2}>{props.title}</Typography> : null}
-      <Peek url={props.url} privately={props.privately} />
+      <Peek url={props.url} privately={props.privately} desktopMode={props.desktopMode} />
       <Typography testID="link-menu-url" className="mb-3 text-sm text-muted" numberOfLines={3}>
         {props.url}
       </Typography>
@@ -101,9 +103,9 @@ const PREVIEW_HEIGHT = 200;
 /**
  * Peek (B11): the link's page, live, in a card of its own. Nothing of it stays (no stateKey, a private store when the
  * tab is private) and nothing of it is answerable (dialogs, sign-ins and app links are turned down as soon as they
- * arrive), so a preview can't change the session.
+ * arrive), so a preview can't change the session. Sites that keep their desktop page preview that way too (B12).
  */
-function Peek({ url, privately }: { url: string; privately: boolean }): JSX.Element {
+function Peek({ url, privately, desktopMode }: { url: string; privately: boolean; desktopMode: boolean }): JSX.Element {
   const accent = useThemeColor("accent");
   const view = useRef<Tab>(null);
   const [loading, setLoading] = useState(true);
@@ -128,6 +130,7 @@ function Peek({ url, privately }: { url: string; privately: boolean }): JSX.Elem
         ref={view}
         initialUrl={url}
         private={privately}
+        desktopMode={desktopMode}
         active
         pullToRefreshEnabled={false}
         style={{ flex: 1 }}

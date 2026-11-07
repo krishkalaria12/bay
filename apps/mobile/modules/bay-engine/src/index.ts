@@ -84,6 +84,11 @@ export interface EngineViewProps extends ViewProps {
   suspended?: boolean;
   /** Defaults to true. Both engines support native back/forward edge gestures: iOS via WebKit, Android via its edge swipe. */
   pullToRefreshEnabled?: boolean;
+  /**
+   * Desktop site (B12): the page asks its site again with a desktop browser's agent, so the server answers with the desktop layout,
+   * rendered shrunk to fit. A private engine still keeps its private store. Changing it reloads the page.
+   */
+  desktopMode?: boolean;
   onNavigationStateChange?: (event: NativeSyntheticEvent<NavigationState>) => void;
   /** Main-frame failures only. Native certificate validation is never bypassed. */
   onNavigationError?: (event: NativeSyntheticEvent<NavigationError>) => void;

@@ -130,6 +130,7 @@ test("saved state is validated and repaired", () => {
     lockPrivateTabs: false,
     reader: { theme: "paper", font: "serif", size: 19 },
     hiddenElements: {},
+    siteSettings: {},
     wallpaper: "bay",
     wallpaperPhoto: null,
     theme: "system",
@@ -454,4 +455,41 @@ test("site icons are kept per host, and clearing history drops the ones nothing 
   assert.deepEqual(data.favicons, {});
   const saved = { version: 1, ...data, favicons: { "b.com": "file:///b", "c.com": "https://tracker.example/c.png" } };
   assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).favicons, { "b.com": "file:///b" });
+});
+
+test("site settings are kept per host, and an all-default entry means none at all", () => {
+  let data = initialBrowserData(page("a", "https://www.a.com/"));
+
+  const siteOf = () => data.preferences.siteSettings["a.com"];
+  assert.equal(siteOf(), undefined);
+
+  data = reduceBrowserData(data, { type: "site-settings", host: "www.a.com", update: { textSize: null, reader: true, desktopMode: false } });
+  assert.deepEqual(siteOf(), { textSize: null, reader: true, desktopMode: false });
+
+  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 123, reader: true, desktopMode: false } });
+  // Zoom snaps to the steps and the range the global zoom uses.
+  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: false });
+
+  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 120, reader: true, desktopMode: true } });
+  assert.deepEqual(siteOf(), { textSize: 120, reader: true, desktopMode: true });
+
+  // Everything back to the globals drops the entry, regardless of where it was written from.
+  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: null, reader: false, desktopMode: false } });
+  assert.equal(siteOf(), undefined);
+
+  // Unknown hosts or values change nothing.
+  assert.equal(reduceBrowserData(data, { type: "site-settings", host: "", update: { textSize: null, reader: true, desktopMode: false } }), data);
+
+  const saved = {
+    version: 1,
+    ...data,
+    preferences: { ...data.preferences, siteSettings: { "a.com": { textSize: 500, reader: "yes", desktopMode: 2 }, junk: 3 } },
+  };
+  assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).preferences.siteSettings, {
+    "a.com": { textSize: 200, reader: false, desktopMode: false },
+  });
+  data = reduceBrowserData(data, { type: "site-settings", host: "a.com", update: { textSize: 120, reader: true, desktopMode: true } });
+  assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify({ version: 1, ...data })), data).preferences.siteSettings, {
+    "a.com": { textSize: 120, reader: true, desktopMode: true },
+  });
 });

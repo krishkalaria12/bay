@@ -70,6 +70,17 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     }
   }
 
+  /// Desktop site (B12): the page asks its site again with a desktop browser's agent, so the server answers with
+  /// the desktop layout. The page reloads when this changes.
+  var desktopMode = false {
+    didSet {
+      guard desktopMode != oldValue else { return }
+      // A custom agent replaces WebKit's own wholesale (the `applicationNameForUserAgent` suffix lives inside it).
+      webView.customUserAgent = desktopMode ? Self.macOSUserAgent : nil
+      if startedLoading { webView.reload() }
+    }
+  }
+
   required init(appContext: AppContext? = nil) {
     webView = Self.makeWebView(isPrivate: false)
     super.init(appContext: appContext)
@@ -87,8 +98,18 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     // secure", OAuth's disallowed_useragent): WKWebView's user agent ends at "Mobile/15E148", without Safari's
     // "Version/… Safari/…" tokens. Bay is a browser, so it presents as Safari does (Android drops `; wv` likewise).
     configuration.applicationNameForUserAgent = safariUserAgentSuffix
-    return WKWebView(frame: .zero, configuration: configuration)
+    let webView = WKWebView(frame: .zero, configuration: configuration)
+    webView.customUserAgent = desktopMode ? Self.macOSUserAgent : nil
+
+    return webView
   }
+
+  /// Safari on macOS, at the version this device's Safari shows: what a desktop browser presents (B12).
+  private static let macOSUserAgent: String = {
+    let parts = UIDevice.current.systemVersion.split(separator: ".")
+    let version = "\(parts.first ?? "26").\(parts.count > 1 ? parts[1] : "0")"
+    return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/\(version) Safari/605.1.15"
+  }()
 
   /// "Version/26.0 Mobile/15E148 Safari/604.1", with this iOS's major and minor version, as Safari sends.
   private static let safariUserAgentSuffix: String = {

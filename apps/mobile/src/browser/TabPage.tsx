@@ -33,6 +33,8 @@ export interface TabPageProps {
   visible: boolean;
   /** Paused in the background (see EngineView `suspended`). */
   suspended: boolean;
+  /** The site gets its desktop page (B12). */
+  desktopMode: boolean;
   register: (view: Tab | null) => void;
   onNavigation: (state: NavigationState) => void;
   onError: (error: NavigationError) => void;
@@ -46,6 +48,7 @@ export function TabPage({
   tab,
   visible,
   suspended,
+  desktopMode,
   register,
   onNavigation,
   onError,
@@ -141,6 +144,7 @@ export function TabPage({
         private={tab.private ?? false}
         active={visible}
         suspended={suspended}
+        desktopMode={desktopMode}
         pullToRefreshEnabled={pullToRefresh}
         style={{ flex: 1 }}
         onNavigationStateChange={({ nativeEvent }) => {

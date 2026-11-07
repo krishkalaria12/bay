@@ -11,9 +11,12 @@ import type {
   JsonValue,
   PinnedSite,
   SimplePreferences,
+  SiteSetting,
   TabUpdate,
   WallpaperId,
 } from "./types";
+
+export type { SiteSetting };
 import type { ReaderSettings } from "../pagescripts/reader.ts";
 
 export const DEFAULT_PREFERENCES: BrowserPreferences = {
@@ -24,6 +27,7 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   lockPrivateTabs: false,
   reader: { theme: "paper", font: "serif", size: 19 },
   hiddenElements: {},
+  siteSettings: {},
   wallpaper: "bay",
   wallpaperPhoto: null,
   theme: "system",
@@ -37,6 +41,14 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
 
 export const TEXT_SIZE = { min: 80, max: 200, step: 10 } as const;
 export const START_PAGE_HOURS = [null, 1, 4, 12] as const;
+
+/** What a site with no entry of its own keeps: every global choice. */
+export const EMPTY_SITE_SETTING: SiteSetting = { textSize: null, reader: false, desktopMode: false };
+
+/** A site's stored setting, or the default when it has none. */
+export function siteSettingFor(siteSettings: Record<string, SiteSetting>, url: string): SiteSetting {
+  return siteSettings[siteHost(url)] ?? EMPTY_SITE_SETTING;
+}
 
 /** Bay's own wallpapers; "photo" is the user's. */
 export const WALLPAPERS = ["bay", "dusk", "forest", "plain"] as const;
@@ -90,6 +102,7 @@ export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFER
       blockingPausedHosts: [...preferences.blockingPausedHosts],
       reader: { ...preferences.reader },
       hiddenElements: Object.fromEntries(Object.entries(preferences.hiddenElements).map(([host, selectors]) => [host, [...selectors]])),
+      siteSettings: Object.fromEntries(Object.entries(preferences.siteSettings).map(([host, setting]) => [host, { ...setting }])),
     },
   };
 }
@@ -123,6 +136,7 @@ export type BrowserAction =
   | { type: "left"; now: number }
   | { type: "reader-settings"; settings: ReaderSettings }
   | { type: "hidden-elements"; host: string; selectors: string[] }
+  | { type: "site-settings"; host: string; update: SiteSetting }
   | { type: "download"; update: DownloadEvent; now: number }
   | { type: "remove-download"; id: string }
   | { type: "clear-downloads" };
@@ -334,6 +348,23 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return { ...data, preferences: { ...data.preferences, hiddenElements } };
     }
 
+    case "site-settings": {
+      const host = normalizeHost(action.host);
+
+      if (!host) return data;
+      const setting = parseSiteSetting(action.update);
+      const previous = Object.hasOwn(data.preferences.siteSettings, host) ? data.preferences.siteSettings[host] : null;
+
+      if (sameSiteSetting(previous, setting)) return data;
+      const siteSettings = { ...data.preferences.siteSettings };
+
+      // An entry with nothing of its own left adds nothing; the site follows the globals again.
+      if (isDefaultSiteSetting(setting)) delete siteSettings[host];
+      else siteSettings[host] = setting;
+
+      return { ...data, preferences: { ...data.preferences, siteSettings } };
+    }
+
     case "download": {
       const { update } = action;
       const previous = data.downloads.find((item) => item.id === update.id);
@@ -462,6 +493,41 @@ function parseHiddenElements(value: JsonValue): Record<string, string[]> {
     const selectors = parseSelectors(value);
 
     return host && selectors.length ? [[host, selectors] as const] : [];
+  });
+
+  return Object.fromEntries(entries);
+}
+
+/** One site's setting as saved: zoom snapped to the steps, the rest plainly true or false. */
+export function parseSiteSetting(value: JsonValue): SiteSetting {
+  const setting: JsonObject = isRecord(value) ? value : {};
+
+  return {
+    textSize:
+      v.is(v.number(), setting.textSize) && Number.isFinite(setting.textSize)
+        ? Math.min(TEXT_SIZE.max, Math.max(TEXT_SIZE.min, Math.round(setting.textSize / TEXT_SIZE.step) * TEXT_SIZE.step))
+        : null,
+    reader: setting.reader === true,
+    desktopMode: setting.desktopMode === true,
+  };
+}
+
+function isDefaultSiteSetting(setting: SiteSetting): boolean {
+  return setting.textSize === null && !setting.reader && !setting.desktopMode;
+}
+
+function sameSiteSetting(previous: SiteSetting | null, setting: SiteSetting): boolean {
+  return previous !== null && previous.textSize === setting.textSize && previous.reader === setting.reader && previous.desktopMode === setting.desktopMode;
+}
+
+function parseSiteSettings(value: JsonValue): Record<string, SiteSetting> {
+  if (!isRecord(value)) return {};
+
+  const entries = Object.entries(value).flatMap(([key, value]) => {
+    const host = normalizeHost(key);
+    const setting = parseSiteSetting(value);
+
+    return host && !isDefaultSiteSetting(setting) ? [[host, setting] as const] : [];
   });
 
   return Object.fromEntries(entries);
@@ -643,6 +709,7 @@ export function parsePreferences(savedPreferences: JsonObject): BrowserPreferenc
     lockPrivateTabs: savedPreferences.lockPrivateTabs === true,
     reader: parseReaderSettings(savedPreferences.reader),
     hiddenElements: parseHiddenElements(savedPreferences.hiddenElements),
+    siteSettings: parseSiteSettings(savedPreferences.siteSettings),
     wallpaper: builtIn(savedPreferences.wallpaper)
       ? savedPreferences.wallpaper
       : savedPreferences.wallpaper === "photo" && isFileUri(savedPreferences.wallpaperPhoto)
