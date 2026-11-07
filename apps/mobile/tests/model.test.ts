@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, reduceBrowserData, siteHost, type DownloadEvent } from "../src/store/model.ts";
+import {
+  createTab,
+  initialBrowserData,
+  parseBrowserData,
+  persistedBrowserData,
+  reduceBrowserData,
+  siteHost,
+  SPACE_COLORS,
+  type DownloadEvent,
+} from "../src/store/model.ts";
 import type { JsonValue } from "../src/store/types.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -141,7 +150,12 @@ test("saved state is validated and repaired", () => {
     startPageAfterHours: null,
     youtube: { shorts: false, suggestions: false, distractions: false },
   });
-  assert.throws(() => parseBrowserData({ version: 2 }, fallback));
+  assert.equal(data.spaces[0]?.id, "personal");
+  assert.equal(data.activeSpaceId, "personal");
+  assert.equal(data.activeTabIds["personal"], "a");
+  assert.equal(data.folders.length, 0);
+  assert.throws(() => parseBrowserData({ version: 99 }, fallback));
+  assert.throws(() => parseBrowserData({}, fallback));
 });
 
 test("a title that arrives after the visit updates its history entry", () => {
@@ -492,4 +506,140 @@ test("site settings are kept per host, and an all-default entry means none at al
   assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify({ version: 1, ...data })), data).preferences.siteSettings, {
     "a.com": { textSize: 120, reader: true, desktopMode: true },
   });
+});
+
+test("spaces keep their own active tab, switching and closing stay within them", () => {
+  let data = initialBrowserData(createTab("a", 0, "https://a.com/"));
+  data = reduceBrowserData(data, { type: "new-tab", tab: createTab("b", 1, "https://b.com/"), background: false });
+  assert.equal(data.activeTabId, "b");
+
+  // A new space brings a blank tab and takes the screen.
+  data = reduceBrowserData(data, {
+    type: "create-space",
+    space: { id: "work", name: "Work", color: "green" },
+    blankTab: createTab("c", 5, "", false, "work"),
+  });
+  assert.deepEqual(
+    data.spaces.map((space) => space.name),
+    ["Personal", "Work"],
+  );
+  assert.equal(data.activeSpaceId, "work");
+  assert.equal(data.activeTabId, "c");
+  assert.equal(data.activeTabIds["work"], "c");
+
+  data = reduceBrowserData(data, { type: "new-tab", tab: createTab("d", 6, "https://d.com/", false, "work"), background: false });
+  assert.equal(data.activeTabId, "d");
+  // Switching back to Personal resurrects its last visited tab (b), not a fresh blank one.
+  data = reduceBrowserData(data, { type: "select-space", id: "personal" });
+  assert.equal(data.activeSpaceId, "personal");
+  assert.equal(data.activeTabId, "b");
+
+  // Closing that tab doesn't leak into Work's stack.
+  data = reduceBrowserData(data, { type: "close-tab", id: "b", now: 10, fallback: createTab("fallback", 10, "", false, "personal") });
+  assert.equal(data.activeTabId, "a");
+  assert.deepEqual(
+    data.tabs.filter((tab) => tab.spaceId === "work").map((tab) => tab.id),
+    ["c", "d"],
+  );
+});
+
+test("deleting a space files its tabs into the first space and keeps its current tab's page", () => {
+  let data = initialBrowserData(createTab("a", 0, "https://a.com/"));
+  data = reduceBrowserData(data, { type: "new-tab", tab: createTab("b", 1, "https://b.com/"), background: false });
+  data = reduceBrowserData(data, {
+    type: "create-space",
+    space: { id: "work", name: "Work", color: "orange" },
+    blankTab: createTab("c", 2, "https://c.com/", false, "work"),
+  });
+  data = reduceBrowserData(data, { type: "new-folder", folder: { id: "articles", spaceId: "work", name: "Articles" } });
+  data = reduceBrowserData(data, { type: "move-tab", id: "c", spaceId: "work", folderId: "articles" });
+  // Deleting Work moves c into Personal and clears its folder.
+  data = reduceBrowserData(data, { type: "delete-space", id: "work" });
+  assert.deepEqual(
+    data.spaces.map((space) => space.name),
+    ["Personal"],
+  );
+  assert.equal(data.activeSpaceId, "personal");
+  const moved = data.tabs.find((tab) => tab.id === "c");
+  assert.equal(moved?.spaceId, "personal");
+  assert.equal(moved?.folderId, null);
+  assert.equal(data.folders.length, 0);
+  assert.equal(data.activeTabId, "c");
+  // Deleting the last remaining space is a no-op.
+  assert.equal(reduceBrowserData(data, { type: "delete-space", id: "personal" }), data);
+});
+
+test("folders hold tabs inside a space and round-trip through saved state", () => {
+  let data = initialBrowserData(createTab("a", 0, "https://a.com/"));
+  data = reduceBrowserData(data, { type: "new-folder", folder: { id: "f1", spaceId: "personal", name: "Reading" } });
+  data = reduceBrowserData(data, { type: "move-tab", id: "a", spaceId: "personal", folderId: "f1" });
+  assert.equal(data.tabs[0]?.folderId, "f1");
+
+  // Deleting the folder files the tab back to the top level.
+  data = reduceBrowserData(data, { type: "delete-folder", id: "f1" });
+  assert.equal(data.tabs[0]?.folderId, null);
+
+  // v1 state migrates with everything in Personal.
+  const saved = parseBrowserData(JSON.parse(JSON.stringify({ version: 1, tabs: data.tabs, activeTabId: data.activeTabId })), data);
+  assert.deepEqual(
+    saved.spaces.map((space) => space.id),
+    ["personal"],
+  );
+  assert.deepEqual(
+    saved.tabs.map((tab) => tab.spaceId),
+    ["personal"],
+  );
+
+  // v2 state keeps its spaces, folders and the tabs' assignments.
+  const v2 = parseBrowserData(
+    JSON.parse(
+      JSON.stringify({
+        version: 2,
+        ...data,
+        spaces: [
+          { id: "personal", name: "Personal", color: "gray" },
+          { id: "work", name: "Work", color: "orange" },
+          { id: "bogus", name: "Bogus", color: "pink" },
+        ],
+        folders: [
+          { id: "w1", spaceId: "work", name: "Docs" },
+          { id: "bad", spaceId: "missing", name: "Bad" },
+        ],
+        activeSpaceId: "work",
+        activeTabIds: { work: "missing", personal: "a" },
+        tabs: [{ ...data.tabs[0], spaceId: "work", folderId: "w1" }],
+        activeTabId: "a",
+      }),
+    ),
+    data,
+  );
+  assert.deepEqual(
+    v2.spaces.map((space) => [space.id, space.color]),
+    [
+      ["personal", "gray"],
+      ["work", "orange"],
+      ["bogus", "gray"],
+    ],
+  );
+  assert.deepEqual(
+    v2.folders.map((folder) => folder.id),
+    ["w1"],
+  );
+  assert.equal(v2.activeTabIds["work"], "a");
+  assert.equal(v2.tabs[0]?.folderId, "w1");
+});
+
+test("persisting drops private tabs but keeps the spaces they sat in", () => {
+  let data = initialBrowserData(createTab("a", 0, "https://a.com/"));
+  data = reduceBrowserData(data, { type: "new-tab", tab: createTab("p", 1, undefined, true), background: false });
+  const persisted = persistedBrowserData(data);
+  assert.deepEqual(
+    persisted.tabs.map((tab) => tab.id),
+    ["a"],
+  );
+  assert.equal(persisted.activeTabId, "a");
+});
+
+test("spaces colours cover the palette and don't drift", () => {
+  assert.deepEqual(SPACE_COLORS, ["blue", "green", "orange", "red", "violet", "gray"]);
 });

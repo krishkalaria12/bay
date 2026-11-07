@@ -78,7 +78,24 @@ export function BrowserScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const muted = useThemeColor("muted");
   const accent = useThemeColor("accent");
-  const { ready, data, dispatch, openTab, closeTab, restoreTab, reset, importTabs } = useBrowserStore();
+  const {
+    ready,
+    data,
+    dispatch,
+    openTab,
+    closeTab,
+    restoreTab,
+    reset,
+    importTabs,
+    selectSpace,
+    createSpace,
+    renameSpace,
+    deleteSpace,
+    moveTab,
+    newFolder,
+    renameFolder,
+    deleteFolder,
+  } = useBrowserStore();
   const [live, setLive] = useState<string[]>([]);
   const [navigation, setNavigation] = useState<Record<string, NavigationState>>({});
   const [overlay, setOverlay] = useState<Overlay>("none");
@@ -109,6 +126,9 @@ export function BrowserScreen(): JSX.Element {
   }, []);
 
   const active = data.tabs.find((tab) => tab.id === data.activeTabId) ?? data.tabs[0]!;
+  const spaceTabs = data.tabs.filter((tab) => tab.spaceId === data.activeSpaceId);
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const switcherTabs = spaceTabs.filter((tab) => !activeFolderId || tab.folderId === activeFolderId);
   const page = navigation[active.id] ?? { ...blankNavigation, url: active.url, title: active.title };
   const hasPage = Boolean(active.url);
   const engine = engineFor(data.preferences.searchEngineId);
@@ -483,9 +503,10 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function archiveAll(): void {
-    const archived = data.tabs.filter((tab) => tab.url && !tab.private).map((tab) => tab.id);
+    const space = data.tabs.filter((tab) => tab.spaceId === data.activeSpaceId);
+    const archived = space.filter((tab) => tab.url && !tab.private).map((tab) => tab.id);
 
-    for (const tab of data.tabs) closeTab(tab.id);
+    for (const tab of space) closeTab(tab.id);
     setOverlay("none");
 
     if (!archived.length) return;
@@ -495,7 +516,7 @@ export function BrowserScreen(): JSX.Element {
         for (const id of archived) restoreTab(id);
 
         // Closing every tab left a blank one behind.
-        for (const tab of useBrowserStore.getState().data.tabs) if (!tab.url) closeTab(tab.id);
+        for (const tab of useBrowserStore.getState().data.tabs) if (!tab.url && tab.spaceId === data.activeSpaceId) closeTab(tab.id);
       },
     });
   }
@@ -717,7 +738,25 @@ export function BrowserScreen(): JSX.Element {
 
       {overlay === "tabs" ? (
         <View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, paddingBottom: insets.bottom + BAR_HEIGHT + 16 }]}>
-          <TabSwitcher tabs={data.tabs} activeTabId={active.id} onSelect={activate} onClose={archiveTab} onCloseAll={archiveAll} privateLocked={locked} />
+          <TabSwitcher
+            tabs={switcherTabs}
+            activeTabId={active.id}
+            onSelect={activate}
+            onClose={archiveTab}
+            onCloseAll={archiveAll}
+            privateLocked={locked}
+            spaces={data.spaces}
+            activeSpaceId={data.activeSpaceId}
+            onSelectSpace={(id) => {
+              if (id !== data.activeSpaceId) {
+                setActiveFolderId(null);
+                selectSpace(id);
+              }
+            }}
+            folders={data.folders.filter((folder) => folder.spaceId === data.activeSpaceId)}
+            activeFolderId={activeFolderId}
+            onSelectFolder={setActiveFolderId}
+          />
         </View>
       ) : null}
 
@@ -868,12 +907,36 @@ export function BrowserScreen(): JSX.Element {
       <TabsMenu
         visible={panel === "tabs"}
         onClose={() => closePanel("tabs")}
-        tabCount={data.tabs.length}
+        tabCount={spaceTabs.length}
         privateAvailable={privateBrowsingSupported}
         onNewTab={() => search(true)}
         onNewPrivateTab={() => search(true, true)}
         onArchiveTab={() => archiveTab(active.id)}
         onArchiveAll={archiveAll}
+        spaces={data.spaces}
+        activeSpaceId={data.activeSpaceId}
+        onSelectSpace={(id) => {
+          if (id !== data.activeSpaceId) {
+            setActiveFolderId(null);
+            selectSpace(id);
+          }
+        }}
+        onNewSpace={createSpace}
+        onRenameSpace={renameSpace}
+        onDeleteSpace={deleteSpace}
+        folders={data.folders.filter((folder) => folder.spaceId === data.activeSpaceId)}
+        activeFolderId={activeFolderId}
+        onSelectFolder={setActiveFolderId}
+        onNewFolder={newFolder}
+        onRenameFolder={renameFolder}
+        onDeleteFolder={(id) => {
+          setActiveFolderId((current) => (current === id ? null : current));
+          deleteFolder(id);
+        }}
+        onMoveTab={(spaceId, folderId) => {
+          moveTab(active.id, spaceId, folderId);
+          setActiveFolderId(folderId);
+        }}
       />
       <SiteSettingsPanel
         visible={panel === "site"}

@@ -3,7 +3,9 @@ import { SIMPLE_PREFERENCE_KEYS, TAB_UPDATE_FIELDS } from "./types.ts";
 import type {
   ArchivedTab,
   BrowserData,
+  BrowserFolder,
   BrowserPreferences,
+  BrowserSpace,
   BrowserTab,
   DownloadItem,
   HistoryEntry,
@@ -12,6 +14,7 @@ import type {
   PinnedSite,
   SimplePreferences,
   SiteSetting,
+  SpaceColor,
   TabUpdate,
   WallpaperId,
 } from "./types";
@@ -69,6 +72,12 @@ export function siteHost(url: string): string {
 
 const DOWNLOAD_STATES = ["downloading", "finished", "failed", "cancelled"] as const;
 
+/** The one space every tab started in: documents saved before spaces existed (v1) land here. */
+export const PERSONAL_SPACE_ID = "personal";
+export const PERSONAL_SPACE: BrowserSpace = { id: PERSONAL_SPACE_ID, name: "Personal", color: "blue" };
+export const SPACE_COLORS: readonly SpaceColor[] = ["blue", "green", "orange", "red", "violet", "gray"];
+const SPACE_COLOR_PICKLIST: readonly SpaceColor[] = SPACE_COLORS;
+
 /** A download update from the engine (`DownloadUpdate` in @bay/engine). */
 export interface DownloadEvent {
   id: string;
@@ -83,13 +92,17 @@ export interface DownloadEvent {
   private: boolean;
 }
 
-export function createTab(id: string, now: number, url = "", isPrivate = false): BrowserTab {
-  return { id, url, title: "", favicon: null, createdAt: now, lastVisit: now, snapshot: null, ...(isPrivate ? { private: true } : undefined) };
+export function createTab(id: string, now: number, url = "", isPrivate = false, spaceId = PERSONAL_SPACE_ID): BrowserTab {
+  return { id, url, title: "", favicon: null, createdAt: now, lastVisit: now, snapshot: null, spaceId, ...(isPrivate ? { private: true } : undefined) };
 }
 
 export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFERENCES): BrowserData {
   return {
     tabs: [tab],
+    spaces: [{ ...PERSONAL_SPACE }],
+    activeSpaceId: PERSONAL_SPACE_ID,
+    activeTabIds: { [PERSONAL_SPACE_ID]: tab.id },
+    folders: [],
     activeTabId: tab.id,
     history: [],
     pinnedSites: [],
@@ -117,6 +130,15 @@ export type BrowserAction =
   | { type: "page-title"; url: string; title: string }
   | { type: "close-tab"; id: string; now: number; fallback: BrowserTab }
   | { type: "restore-tab"; id: string; restoredId: string; now: number }
+  | { type: "create-space"; space: BrowserSpace; blankTab: BrowserTab }
+  | { type: "rename-space"; id: string; name: string }
+  | { type: "reorder-space"; id: string; to: number }
+  | { type: "delete-space"; id: string }
+  | { type: "select-space"; id: string; blankTab?: BrowserTab }
+  | { type: "new-folder"; folder: BrowserFolder }
+  | { type: "rename-folder"; id: string; name: string }
+  | { type: "delete-folder"; id: string }
+  | { type: "move-tab"; id: string; spaceId: string; folderId: string | null }
   | { type: "pin-site"; tabId: string; pinId: string }
   | { type: "remove-pin"; id: string }
   | { type: "add-pin"; site: PinnedSite; index: number }
@@ -144,7 +166,14 @@ export type BrowserAction =
 export function reduceBrowserData(data: BrowserData, action: BrowserAction): BrowserData {
   switch (action.type) {
     case "new-tab":
-      return { ...data, tabs: [...data.tabs, action.tab], activeTabId: action.background ? data.activeTabId : action.tab.id };
+      return data.tabs.some((tab) => tab.id === action.tab.id)
+        ? data
+        : {
+            ...data,
+            tabs: [...data.tabs, action.tab],
+            activeTabId: action.background ? data.activeTabId : action.tab.id,
+            activeTabIds: action.background ? data.activeTabIds : { ...data.activeTabIds, [action.tab.spaceId]: action.tab.id },
+          };
     case "import-tabs": {
       // A link that is already open stays where it is; importing again shouldn't duplicate tabs.
       const open = new Set(data.tabs.map((tab) => tab.url));
@@ -159,9 +188,16 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       return tabs.length ? { ...data, archive: archiveTabs(data.archive, tabs, action.now) } : data;
     }
     case "activate-tab": {
-      if (!data.tabs.some((tab) => tab.id === action.id)) return data;
+      const tab = data.tabs.find((entry) => entry.id === action.id);
 
-      return { ...data, activeTabId: action.id, tabs: data.tabs.map((tab) => (tab.id === action.id ? { ...tab, lastVisit: action.now } : tab)) };
+      if (!tab) return data;
+
+      return {
+        ...data,
+        activeTabId: action.id,
+        activeTabIds: { ...data.activeTabIds, [tab.spaceId]: action.id },
+        tabs: data.tabs.map((entry) => (entry.id === action.id ? { ...entry, lastVisit: action.now } : entry)),
+      };
     }
 
     case "update-tab": {
@@ -207,10 +243,29 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       const remaining = data.tabs.filter((entry) => entry.id !== action.id);
       const tabs = remaining.length ? remaining : [action.fallback];
 
+      // The space's own current pointer follows whichever neighbour is closest in list order; when the space
+      // empties out the caller-supplied fallback (in the same space) is appended by the caller already, so its
+      // activeTabIds entry is simply dropped and re-set by the next activation.
+      const activeTabIds = { ...data.activeTabIds };
+
+      if (data.activeTabIds[tab.spaceId] === action.id) {
+        const inSpace = remaining.filter((entry) => entry.spaceId === tab.spaceId);
+
+        if (inSpace.length) activeTabIds[tab.spaceId] = inSpace[Math.min(index, inSpace.length - 1)].id;
+        else delete activeTabIds[tab.spaceId];
+      }
+
+      // When the tab on screen closes, its space is next in line; without a same-space tab left, find any tab.
+      const nextActive =
+        data.activeTabId === action.id
+          ? (tabs.find((entry) => entry.spaceId === tab.spaceId)?.id ?? tabs[Math.min(index, tabs.length - 1)].id)
+          : data.activeTabId;
+
       return {
         ...data,
         tabs,
-        activeTabId: data.activeTabId === action.id ? tabs[Math.min(index, tabs.length - 1)].id : data.activeTabId,
+        activeTabId: nextActive,
+        activeTabIds,
         // Private tabs leave nothing behind.
         archive: tab.url && !tab.private ? archiveTabs(data.archive, [tab], action.now) : data.archive,
       };
@@ -222,11 +277,140 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       if (!archived) return data;
       const { closedAt: _closedAt, ...tab } = archived;
 
+      const restored = {
+        ...tab,
+        id: action.restoredId,
+        spaceId: data.spaces.some((space) => space.id === tab.spaceId) ? tab.spaceId : PERSONAL_SPACE_ID,
+        lastVisit: action.now,
+      };
+
       return {
         ...data,
-        tabs: [...data.tabs, { ...tab, id: action.restoredId, lastVisit: action.now }],
-        activeTabId: action.restoredId,
+        tabs: [...data.tabs, restored],
+        activeTabId: restored.id,
+        activeTabIds: { ...data.activeTabIds, [restored.spaceId]: restored.id },
         archive: data.archive.filter((entry) => entry.id !== action.id),
+      };
+    }
+
+    case "create-space":
+      return {
+        ...data,
+        spaces: [...data.spaces, action.space],
+        tabs: [...data.tabs, action.blankTab],
+        activeSpaceId: action.space.id,
+        activeTabIds: { ...data.activeTabIds, [action.space.id]: action.blankTab.id },
+        activeTabId: action.blankTab.id,
+      };
+
+    case "rename-space": {
+      if (!data.spaces.some((space) => space.id === action.id) || !action.name.trim()) return data;
+
+      return { ...data, spaces: data.spaces.map((space) => (space.id === action.id ? { ...space, name: action.name.trim().slice(0, 40) } : space)) };
+    }
+
+    case "reorder-space": {
+      const from = data.spaces.findIndex((space) => space.id === action.id);
+
+      if (from < 0) return data;
+      const to = Math.max(0, Math.min(action.to, data.spaces.length - 1));
+
+      if (from === to) return data;
+      const spaces = [...data.spaces];
+      const [moved] = spaces.splice(from, 1);
+      spaces.splice(to, 0, moved);
+
+      return { ...data, spaces };
+    }
+
+    case "delete-space": {
+      const remaining = data.spaces.filter((space) => space.id !== action.id);
+
+      if (remaining.length === 0 || !data.spaces.some((space) => space.id === action.id)) return data;
+      const destination = remaining[0]!.id;
+      const activeSpaceId = data.activeSpaceId === action.id ? destination : data.activeSpaceId;
+      const afterTabs = data.tabs.map((tab) => (tab.spaceId === action.id ? { ...tab, spaceId: destination, folderId: null } : tab));
+      const activeTabIds = Object.fromEntries(Object.entries(data.activeTabIds).filter(([spaceId]) => spaceId !== action.id));
+
+      return {
+        ...data,
+        spaces: remaining,
+        folders: data.folders.filter((folder) => folder.spaceId !== action.id),
+        tabs: afterTabs,
+        activeSpaceId,
+        activeTabIds,
+        // The tab the screen is sitting on now lives in the destination space, so the active pointer survives as is.
+        activeTabId: data.activeTabId,
+      };
+    }
+
+    case "select-space": {
+      if (!data.spaces.some((space) => space.id === action.id)) return data;
+      const inSpace = data.tabs.filter((tab) => tab.spaceId === action.id);
+      const retained = data.activeTabIds[action.id];
+      let activeTabId = retained && inSpace.some((tab) => tab.id === retained) ? retained : inSpace[inSpace.length - 1]?.id;
+      let { tabs } = data;
+
+      if (!activeTabId) {
+        if (!action.blankTab) return data;
+        tabs = [...tabs, action.blankTab];
+        activeTabId = action.blankTab.id;
+      }
+
+      return {
+        ...data,
+        tabs,
+        activeSpaceId: action.id,
+        activeTabId,
+        activeTabIds: { ...data.activeTabIds, [action.id]: activeTabId },
+      };
+    }
+
+    case "new-folder":
+      if (!data.spaces.some((space) => space.id === action.folder.spaceId)) return data;
+
+      return { ...data, folders: [...data.folders, action.folder] };
+
+    case "rename-folder": {
+      if (!data.folders.some((folder) => folder.id === action.id) || !action.name.trim()) return data;
+
+      return { ...data, folders: data.folders.map((folder) => (folder.id === action.id ? { ...folder, name: action.name.trim().slice(0, 40) } : folder)) };
+    }
+
+    case "delete-folder": {
+      if (!data.folders.some((folder) => folder.id === action.id)) return data;
+
+      return {
+        ...data,
+        folders: data.folders.filter((folder) => folder.id !== action.id),
+        tabs: data.tabs.map((tab) => (tab.folderId === action.id ? { ...tab, folderId: null } : tab)),
+      };
+    }
+
+    case "move-tab": {
+      const tab = data.tabs.find((entry) => entry.id === action.id);
+
+      if (!tab || !data.spaces.some((space) => space.id === action.spaceId)) return data;
+      if (tab.spaceId === action.spaceId && tab.folderId === action.folderId) return data;
+      const activeTabIds = { ...data.activeTabIds };
+
+      // The space left behind keeps its own current tab (nearest remaining in list order).
+      if (data.activeTabIds[tab.spaceId] === action.id) {
+        const left = data.tabs.filter((entry) => entry.spaceId === tab.spaceId && entry.id !== action.id);
+
+        if (left.length) activeTabIds[tab.spaceId] = left[left.length - 1]!.id;
+        else delete activeTabIds[tab.spaceId];
+      }
+
+      const tabs = data.tabs.map((entry) => (entry.id === action.id ? { ...entry, spaceId: action.spaceId, folderId: action.folderId } : entry));
+      // If the tab on screen moves, its space follows it.
+      const following = data.activeTabId === action.id && action.spaceId !== data.activeSpaceId;
+
+      return {
+        ...data,
+        tabs,
+        activeTabIds,
+        activeSpaceId: following ? action.spaceId : data.activeSpaceId,
       };
     }
 
@@ -428,10 +612,12 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
 
       if (!stale.length) return data;
       const ids = new Set(stale.map((tab) => tab.id));
+      const activeTabIds = Object.fromEntries(Object.entries(data.activeTabIds).filter(([spaceId, tabId]) => !ids.has(tabId) && spaceId.length > 0));
 
       return {
         ...data,
         tabs: data.tabs.filter((tab) => !ids.has(tab.id)),
+        activeTabIds,
         archive: archiveTabs(data.archive, stale, action.now),
       };
     }
@@ -565,6 +751,7 @@ function parseTab(value: JsonValue): BrowserTab | null {
     lastVisit: value.lastVisit,
     favicon: v.is(v.string(), value.favicon) ? value.favicon : null,
     snapshot: v.is(v.string(), value.snapshot) && value.snapshot.startsWith("file://") ? value.snapshot : null,
+    spaceId: PERSONAL_SPACE_ID,
   };
 }
 
@@ -594,10 +781,49 @@ function uniqueBy<T>(entries: T[], key: (entry: T) => string): T[] {
 
 /** Validate disk state and repair collection invariants before any screen consumes it. */
 export function parseBrowserData(value: JsonValue, fallback: BrowserData): BrowserData {
-  if (!isRecord(value) || value.version !== 1) throw new Error("The saved browsing state could not be read.");
+  if (!isRecord(value) || (value.version !== 1 && value.version !== 2)) throw new Error("The saved browsing state could not be read.");
+
+  // Spaces and folders (B21): documents saved before them existed (v1) have none; everything falls into the
+  // personal space.
+  const savedSpaces = (Array.isArray(value.spaces) ? value.spaces : []).flatMap((entry): BrowserSpace[] =>
+    isRecord(entry) && v.is(v.string(), entry.id) && entry.id
+      ? [
+          {
+            id: entry.id,
+            name: v.is(v.string(), entry.name) && entry.name ? entry.name.slice(0, 40) : "Space",
+            color: v.is(v.picklist(SPACE_COLOR_PICKLIST), entry.color) ? entry.color : "gray",
+          },
+        ]
+      : [],
+  );
+  const spaces: BrowserSpace[] = savedSpaces.length ? savedSpaces : [{ id: PERSONAL_SPACE_ID, name: "Personal", color: "blue" }];
+  const spaceIds = new Set(spaces.map((space) => space.id));
+
+  const savedFolders = (Array.isArray(value.folders) ? value.folders : []).flatMap((entry): BrowserFolder[] =>
+    isRecord(entry) &&
+    v.is(v.string(), entry.id) &&
+    entry.id &&
+    v.is(v.string(), entry.spaceId) &&
+    spaceIds.has(entry.spaceId) &&
+    v.is(v.string(), entry.name) &&
+    entry.name
+      ? [{ id: entry.id, spaceId: entry.spaceId, name: entry.name.slice(0, 40) }]
+      : [],
+  );
 
   const tabs = uniqueBy(
-    (Array.isArray(value.tabs) ? value.tabs : []).map(parseTab).filter((tab): tab is BrowserTab => tab !== null),
+    (Array.isArray(value.tabs) ? value.tabs : [])
+      .map((entry) => {
+        const tab = parseTab(entry);
+
+        if (!tab) return null;
+        const spaceId = isRecord(entry) && v.is(v.string(), entry.spaceId) && spaceIds.has(entry.spaceId) ? entry.spaceId : PERSONAL_SPACE_ID;
+        const folderId =
+          isRecord(entry) && v.is(v.string(), entry.folderId) && savedFolders.some((folder) => folder.id === entry.folderId) ? entry.folderId : null;
+
+        return { ...tab, spaceId, ...(folderId ? { folderId } : {}) };
+      })
+      .filter((tab): tab is BrowserTab => tab !== null),
     (tab) => tab.id,
   );
 
@@ -660,10 +886,25 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
   const preferences = parsePreferences(isRecord(value.preferences) ? value.preferences : {});
 
   const activeTab = tabs.find((tab) => tab.id === value.activeTabId);
+  const activeSpaceId = v.is(v.string(), value.activeSpaceId) && spaceIds.has(value.activeSpaceId) ? value.activeSpaceId : spaces[0]!.id;
+  const activeTabIds = Object.fromEntries(
+    Object.entries(isRecord(value.activeTabIds) ? value.activeTabIds : {}).filter(
+      (entry): entry is [string, string] => spaceIds.has(entry[0]) && tabs.some((tab) => tab.id === entry[1]),
+    ),
+  );
+  const resolvedActiveTabId = activeTab?.id ?? tabs.find((tab) => tab.spaceId === activeSpaceId)?.id ?? tabs[0]?.id ?? fallback.activeTabId;
+
+  if (resolvedActiveTabId && !(activeSpaceId in activeTabIds)) {
+    activeTabIds[activeSpaceId] = resolvedActiveTabId;
+  }
 
   return {
+    spaces,
+    activeSpaceId,
+    activeTabIds,
+    folders: savedFolders,
     tabs: tabs.length ? tabs : fallback.tabs,
-    activeTabId: activeTab?.id ?? tabs[0]?.id ?? fallback.activeTabId,
+    activeTabId: resolvedActiveTabId,
     history: uniqueBy(history, (entry) => entry.url)
       .sort((a, b) => b.lastVisit - a.lastVisit)
       .slice(0, HISTORY_LIMIT),
@@ -740,6 +981,7 @@ export function persistedBrowserData(data: BrowserData): BrowserData {
   if (!data.tabs.some((tab) => tab.private)) return downloads === data.downloads ? data : { ...data, downloads };
   const tabs = data.tabs.filter((tab) => !tab.private);
   const activeTabId = tabs.some((tab) => tab.id === data.activeTabId) ? data.activeTabId : (tabs[tabs.length - 1]?.id ?? "");
+  const activeTabIds = Object.fromEntries(Object.entries(data.activeTabIds).filter(([, tabId]) => tabs.some((tab) => tab.id === tabId)));
 
-  return { ...data, tabs, activeTabId, downloads };
+  return { ...data, tabs, activeTabId, activeTabIds, downloads };
 }

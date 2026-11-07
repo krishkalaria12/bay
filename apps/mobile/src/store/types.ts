@@ -7,6 +7,22 @@ export interface JsonObject {
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
 
+export type SpaceColor = "gray" | "blue" | "green" | "orange" | "red" | "violet";
+
+/** One named slice of the browser: spaces keep their own tabs, like desktop's (B21). */
+export interface BrowserSpace {
+  id: string;
+  name: string;
+  color: SpaceColor;
+}
+
+/** A named group of tabs inside a space. Kept local; sync can map a space with its folders later. */
+export interface BrowserFolder {
+  id: string;
+  spaceId: string;
+  name: string;
+}
+
 export interface BrowserTab {
   id: string;
   url: string;
@@ -17,6 +33,10 @@ export interface BrowserTab {
   snapshot: string | null;
   /** Private tabs are never saved, archived or added to history. */
   private?: boolean;
+  /** Which space this tab belongs to; the switcher shows one space at a time (B21). */
+  spaceId: string;
+  /** A folder inside the space, when the tab has been filed into one; null at the space's top level. */
+  folderId?: string | null;
 }
 
 export interface HistoryEntry {
@@ -118,6 +138,12 @@ export type WallpaperId = "bay" | "dusk" | "forest" | "plain" | "photo";
 
 export interface BrowserData {
   tabs: BrowserTab[];
+  /** Every tab is listed in its own space; the switcher shows a space at a time (B21). */
+  spaces: BrowserSpace[];
+  activeSpaceId: string;
+  /** The tab last active in each space; a space reopens where it was left. */
+  activeTabIds: Record<string, string>;
+  folders: BrowserFolder[];
   activeTabId: string;
   history: HistoryEntry[];
   pinnedSites: PinnedSite[];

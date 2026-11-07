@@ -1,7 +1,7 @@
 import { displayUrl } from "@bay/core/src/suggest.ts";
 import { useThemeColor } from "heroui-native";
 import type { JSX } from "react";
-import { Image, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   Extrapolation,
@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
-import type { BrowserTab } from "@/store/types";
+import type { BrowserFolder, BrowserSpace, BrowserTab, SpaceColor } from "@/store/types";
 import { SiteIcon } from "./SiteIcon";
 
 export interface TabSwitcherProps {
@@ -28,7 +28,24 @@ export interface TabSwitcherProps {
   onCloseAll: () => void;
   /** Private pages are hidden while private tabs are locked. */
   privateLocked: boolean;
+  /** Spaces (B21): one visible stack at a time, like desktop. */
+  spaces: readonly BrowserSpace[];
+  activeSpaceId: string;
+  onSelectSpace: (id: string) => void;
+  /** Folders inside the active space; the active one filters the stack. */
+  folders: readonly BrowserFolder[];
+  activeFolderId: string | null;
+  onSelectFolder: (id: string | null) => void;
 }
+
+const SPACE_COLORS: Record<SpaceColor, string> = {
+  gray: "#9CA3AF",
+  blue: "#3B82F6",
+  green: "#22C55E",
+  orange: "#F97316",
+  red: "#EF4444",
+  violet: "#8B5CF6",
+};
 
 /** How far the stack scrolls per card, as a share of the card's width. */
 const STEP = 0.56;
@@ -51,7 +68,20 @@ interface Layout {
  * the ones before it slide underneath to the left, smaller and dimmer. Every card follows the scroll on the UI thread.
  * Swipe a card up to close it.
  */
-export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, onCloseAll, privateLocked }: TabSwitcherProps): JSX.Element {
+export function TabSwitcher({
+  tabs,
+  activeTabId,
+  onSelect,
+  onClose,
+  onCloseAll,
+  privateLocked,
+  spaces,
+  activeSpaceId,
+  onSelectSpace,
+  folders,
+  activeFolderId,
+  onSelectFolder,
+}: TabSwitcherProps): JSX.Element {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const foreground = useThemeColor("foreground");
@@ -96,6 +126,84 @@ export function TabSwitcher({ tabs, activeTabId, onSelect, onClose, onCloseAll, 
           </Pressable>
         ) : null}
       </View>
+      {/* Spaces (B21): one stack per space, rather than one flat list for every tab. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="absolute inset-x-0 top-16"
+        style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
+      >
+        <View className="flex-row gap-2">
+          {spaces.map((space) => {
+            const active = space.id === activeSpaceId;
+
+            return (
+              <Pressable
+                key={space.id}
+                testID={`space-chip-${space.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={space.name}
+                accessibilityState={{ selected: active }}
+                onPress={() => onSelectSpace(space.id)}
+                className="h-10 flex-row items-center gap-2 rounded-full px-4 active:opacity-60"
+                style={{
+                  backgroundColor: active ? `${SPACE_COLORS[space.color]}33` : undefined,
+                  borderWidth: 1,
+                  borderColor: active ? SPACE_COLORS[space.color] : muted + "55",
+                }}
+              >
+                <View className="h-2 w-2 rounded-full" style={{ backgroundColor: SPACE_COLORS[space.color] }} />
+                <Text style={{ color: foreground, fontSize: 14, fontWeight: active ? "600" : "500" }}>{space.name}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+      {/* Folders (B21) inside the active space: a filter across the stack. */}
+      {folders.length ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="absolute inset-x-0 top-[7rem]"
+          style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
+        >
+          <View className="flex-row gap-2">
+            <Pressable
+              testID="folder-chip-all"
+              accessibilityRole="button"
+              accessibilityLabel="All"
+              accessibilityState={{ selected: activeFolderId === null }}
+              onPress={() => onSelectFolder(null)}
+              className="h-9 flex-row items-center rounded-full px-3 active:opacity-60"
+              style={{
+                backgroundColor: activeFolderId === null ? foreground + "14" : undefined,
+                borderWidth: 1,
+                borderColor: activeFolderId === null ? foreground : muted + "55",
+              }}
+            >
+              <Text style={{ color: foreground, fontSize: 13, fontWeight: activeFolderId === null ? "600" : "500" }}>All</Text>
+            </Pressable>
+            {folders.map((folder) => {
+              const active = folder.id === activeFolderId;
+
+              return (
+                <Pressable
+                  key={folder.id}
+                  testID={`folder-chip-${folder.id}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={folder.name}
+                  accessibilityState={{ selected: active }}
+                  onPress={() => onSelectFolder(folder.id)}
+                  className="h-9 flex-row items-center rounded-full px-3 active:opacity-60"
+                  style={{ backgroundColor: active ? foreground + "14" : undefined, borderWidth: 1, borderColor: active ? foreground : muted + "55" }}
+                >
+                  <Text style={{ color: foreground, fontSize: 13, fontWeight: active ? "600" : "500" }}>{folder.name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+      ) : null}
       <Animated.ScrollView
         horizontal
         onScroll={onScroll}

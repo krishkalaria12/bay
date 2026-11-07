@@ -3,7 +3,7 @@ import { File, Paths } from "expo-file-system";
 import { AppState } from "react-native";
 import { create } from "zustand";
 
-import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, reduceBrowserData, type BrowserAction } from "./model";
+import { createTab, initialBrowserData, parseBrowserData, persistedBrowserData, reduceBrowserData, SPACE_COLORS, type BrowserAction } from "./model";
 import type { BrowserData, BrowserRepository } from "./types";
 
 const SAVE_DELAY = 400;
@@ -21,7 +21,7 @@ const repository: BrowserRepository = {
   },
   async save(data) {
     const draft = new File(Paths.document, `${STATE_FILE}.tmp`);
-    await draft.write(JSON.stringify({ version: 1, ...persistedBrowserData(data) }));
+    await draft.write(JSON.stringify({ version: 2, ...persistedBrowserData(data) }));
     await draft.move(new File(Paths.document, STATE_FILE), { overwrite: true });
   },
 };
@@ -40,6 +40,15 @@ interface BrowserStore {
   restoreTab(id: string): string;
   /** Forget every tab, page and pin; the preferences stay. */
   reset(): void;
+  /** Switches to a space; the tab it was last sitting on (or a fresh one) becomes current. */
+  selectSpace(id: string): void;
+  createSpace(): void;
+  renameSpace(id: string, name: string): void;
+  deleteSpace(id: string): void;
+  moveTab(id: string, spaceId: string, folderId: string | null): void;
+  newFolder(name: string): void;
+  renameFolder(id: string, name: string): void;
+  deleteFolder(id: string): void;
 }
 
 export const useBrowserStore = create<BrowserStore>((set, get) => ({
@@ -65,7 +74,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
     }
   },
   openTab(url, background = false, isPrivate = false) {
-    const tab = createTab(newId(), Date.now(), url, isPrivate);
+    const tab = createTab(newId(), Date.now(), url, isPrivate, get().data.activeSpaceId);
     get().dispatch({ type: "new-tab", tab, background });
 
     return tab.id;
@@ -74,7 +83,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
     const now = Date.now();
     const before = get().data;
     const count = target === "tabs" ? before.tabs.length : before.archive.length;
-    const created = tabs.map((entry) => ({ ...createTab(newId(), now, entry.url), title: entry.title }));
+    const created = tabs.map((entry) => ({ ...createTab(newId(), now, entry.url, false, before.activeSpaceId), title: entry.title }));
 
     get().dispatch(target === "tabs" ? { type: "import-tabs", tabs: created } : { type: "import-archive", tabs: created, now });
     const after = get().data;
@@ -82,7 +91,9 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
     return (target === "tabs" ? after.tabs.length : after.archive.length) - count;
   },
   closeTab(id) {
-    get().dispatch({ type: "close-tab", id, now: Date.now(), fallback: createTab(newId(), Date.now()) });
+    const tab = get().data.tabs.find((entry) => entry.id === id);
+
+    get().dispatch({ type: "close-tab", id, now: Date.now(), fallback: createTab(newId(), Date.now(), "", false, tab?.spaceId) });
   },
   restoreTab(id) {
     const restoredId = newId();
@@ -92,6 +103,39 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   },
   reset() {
     set((state) => ({ data: initialBrowserData(createTab(newId(), Date.now()), { ...state.data.preferences, hiddenElements: {} }) }));
+  },
+  selectSpace(id) {
+    const data = get().data;
+    const hasTab = data.tabs.some((tab) => tab.spaceId === id);
+
+    get().dispatch({ type: "select-space", id, ...(hasTab ? {} : { blankTab: createTab(newId(), Date.now(), "", false, id) }) });
+  },
+  createSpace() {
+    const data = get().data;
+    const index = data.spaces.length + 1;
+    const space = { id: newId(), name: `Space ${index}`, color: SPACE_COLORS[(index - 1) % SPACE_COLORS.length]! };
+
+    get().dispatch({ type: "create-space", space, blankTab: createTab(newId(), Date.now(), "", false, space.id) });
+  },
+  renameSpace(id, name) {
+    get().dispatch({ type: "rename-space", id, name });
+  },
+  deleteSpace(id) {
+    get().dispatch({ type: "delete-space", id });
+  },
+  moveTab(id, spaceId, folderId) {
+    get().dispatch({ type: "move-tab", id, spaceId, folderId });
+  },
+  newFolder(name) {
+    const data = get().data;
+
+    get().dispatch({ type: "new-folder", folder: { id: newId(), spaceId: data.activeSpaceId, name } });
+  },
+  renameFolder(id, name) {
+    get().dispatch({ type: "rename-folder", id, name });
+  },
+  deleteFolder(id) {
+    get().dispatch({ type: "delete-folder", id });
   },
 }));
 
