@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { prepareApplicationQuit } from "./quitPreparation.ts";
+import { prepareApplicationQuit, quitAnyway } from "./quitPreparation.ts";
 
 const deferred = () => {
   let resolve, reject;
@@ -113,4 +113,22 @@ test("checkpoint failure rejects shutdown without starting subsequent stages", a
     await rejected;
     if (stage !== "telemetry") assert.equal(h.calls.includes("telemetry"), false);
   }
+});
+
+test("a failed save asks whether to quit anyway, and keeps Bay open unless the person agrees", async () => {
+  const asked = [];
+  const ask = (answer) => async (options) => {
+    asked.push(options);
+    return { confirmed: answer, suppressed: false };
+  };
+  assert.equal(await quitAnyway(new Error("Bay's documents are not ready"), ask(true)), true);
+  assert.match(asked[0].message, /Bay's documents are not ready/);
+  assert.equal(asked[0].confirmTitle, "Quit Anyway");
+  assert.equal(await quitAnyway("disk full", ask(false)), false);
+  assert.equal(
+    await quitAnyway(new Error("x"), async () => {
+      throw new Error("no dialog");
+    }),
+    false,
+  );
 });
