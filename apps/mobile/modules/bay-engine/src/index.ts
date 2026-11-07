@@ -15,9 +15,10 @@ export interface Tab {
   snapshot(): Promise<string | null>;
   /**
    * Answers a dialog the page asked for (`onPageRequest`): `accepted` is OK vs Cancel, `value` is the prompt's
-   * entered text when accepted (empty string for an empty field). Resolves when the engine delivers the answer.
+   * entered text when accepted (empty string for an empty field). An HTTP sign-in uses `username` and `password`
+   * instead of `value`. Resolves when the engine delivers the answer.
    */
-  answerPageRequest(requestId: string, accepted: boolean, value?: string): Promise<void>;
+  answerPageRequest(requestId: string, accepted: boolean, value?: string, username?: string, password?: string): Promise<void>;
   /**
    * Runs a page script (the body of an async function) in the page and resolves with its result as JSON text.
    * iOS runs it in an isolated world the page can't see. Android's system WebView has none, so it runs in the main
@@ -80,7 +81,7 @@ export interface EngineViewProps extends ViewProps {
   onLinkPress?: (event: NativeSyntheticEvent<LinkPress>) => void;
   /** A message a page script sent with `post(message)`, as JSON text. */
   onPageMessage?: (event: NativeSyntheticEvent<{ message: string }>) => void;
-  /** A site asked a question and waits: `alert`/`confirm`/`prompt`. Answer with `Tab.answerPageRequest`. */
+  /** A site asked a question and waits: `alert`/`confirm`/`prompt`, or the server's HTTP sign-in. Answer with `Tab.answerPageRequest`. */
   onPageRequest?: (event: NativeSyntheticEvent<PageRequest>) => void;
   /** A site's video went fullscreen (Android) or came back out of it. iOS fullscreen is system-presented. */
   onFullscreenChange?: (event: NativeSyntheticEvent<FullscreenChange>) => void;
@@ -90,14 +91,16 @@ export interface FullscreenChange {
   fullscreen: boolean;
 }
 
-/** A page's `alert`/`confirm`/`prompt` (I3), delivered as a dialog the shared sheet presents. */
+/** A page's `alert`/`confirm`/`prompt` (I3) or the server's HTTP sign-in request (B3), delivered as a dialog the shared sheet presents. */
 export interface PageRequest {
   /** Answer this id back with `Tab.answerPageRequest`. */
   id: string;
-  kind: "alert" | "confirm" | "prompt";
+  kind: "alert" | "confirm" | "prompt" | "auth";
   message: string;
   /** The prompt's initial text; only present for `prompt`. */
   defaultValue?: string;
+  /** The server's realm, shown when it names the protected area; only present for `auth`. */
+  realm?: string;
   /** The page address that asked. */
   url: string;
 }

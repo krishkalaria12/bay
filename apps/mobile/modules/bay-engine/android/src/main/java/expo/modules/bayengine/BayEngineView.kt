@@ -28,6 +28,7 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.HttpAuthHandler
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.RenderProcessGoneDetail
@@ -127,6 +128,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private var backCallback: OnBackPressedCallback? = null
   /** Page requests (I3): results held until the shared sheet answers; one per dialog. */
   private val pendingPageRequests = ConcurrentHashMap<String, android.webkit.JsResult>()
+  /** HTTP sign-in challenges (B3), held until the shared sheet answers; one per challenge. */
+  private val pendingAuthRequests = ConcurrentHashMap<String, HttpAuthHandler>()
   private val spinner = ValueAnimator.ofFloat(0f, 360f).apply {
     duration = 750
     repeatCount = ValueAnimator.INFINITE
@@ -287,6 +290,14 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         handler.cancel()
         if (fallBackToHttp(error.url)) return
         onNavigationError(mapOf("url" to error.url, "code" to "ssl-${error.primaryError}", "message" to "This site's security certificate isn't valid."))
+      }
+
+      // HTTP sign-in (B3): Basic, Digest and NTLM challenges wait for the shared sheet instead of failing the load.
+      override fun onReceivedHttpAuthRequest(view: WebView?, handler: HttpAuthHandler?, host: String?, realm: String?) {
+        if (handler == null) return
+        val id = UUID.randomUUID().toString()
+        pendingAuthRequests[id] = handler
+        emitPageRequest(id, "auth", "", null, view?.url ?: pageUrl, realm)
       }
 
       override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
@@ -533,13 +544,22 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
 
   // MARK: Page requests (I3)
 
-  private fun emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, url: String?) {
+  private fun emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, url: String?, realm: String? = null) {
     val body = mutableMapOf<String, Any>("id" to id, "kind" to kind, "message" to message.take(2000), "url" to (url ?: pageUrl ?: ""))
     if (defaultValue != null) body["defaultValue"] = defaultValue.take(2000)
+    if (!realm.isNullOrEmpty()) body["realm"] = realm.take(200)
     onPageRequest(body)
   }
 
-  fun answerPageRequest(id: String, accepted: Boolean, value: String?) {
+  fun answerPageRequest(id: String, accepted: Boolean, value: String?, username: String?, password: String?) {
+    val auth = pendingAuthRequests.remove(id)
+    if (auth != null) {
+      try {
+        if (accepted) auth.proceed(username ?: "", password ?: "") else auth.cancel()
+      } catch (_: Exception) {
+      }
+      return
+    }
     val result = pendingPageRequests.remove(id) ?: return
     try {
       if (result is JsPromptResult) {
@@ -555,6 +575,9 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     val pending = pendingPageRequests.values.toList()
     pendingPageRequests.clear()
     for (result in pending) try { result.cancel() } catch (_: Exception) {}
+    val pendingAuth = pendingAuthRequests.values.toList()
+    pendingAuthRequests.clear()
+    for (handler in pendingAuth) try { handler.cancel() } catch (_: Exception) {}
   }
 
   // MARK: Video fullscreen (A2)

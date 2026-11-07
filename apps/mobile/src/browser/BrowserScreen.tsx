@@ -342,14 +342,14 @@ export function BrowserScreen(): JSX.Element {
     setPageRequests((previous) => (previous.some((entry) => entry.request.id === request.id) ? previous : [...previous, { tabId, request }]));
   }
 
-  function answerPageRequest(accepted: boolean, value?: string): void {
+  function answerPageRequest(accepted: boolean, value?: string, username?: string, password?: string): void {
     const current = pageRequests[0];
 
     if (!current) return;
     setPageRequests((previous) => previous.filter((entry) => entry.request.id !== current.request.id));
     void views
       .get(current.tabId)
-      ?.answerPageRequest(current.request.id, accepted, value)
+      ?.answerPageRequest(current.request.id, accepted, value, username, password)
       .catch(() => {});
   }
 

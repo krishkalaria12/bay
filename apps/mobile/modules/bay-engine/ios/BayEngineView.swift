@@ -419,6 +419,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
   /// One pending dialog, unified as (accepted, prompt value). Alert ignores both, confirm uses accepted, prompt uses both.
   private var pendingPageRequests: [String: (Bool, String?) -> Void] = [:]
+  /// HTTP Basic/Digest challenges held until the shared sheet answers; a nil credential cancels the challenge.
+  private var pendingAuthRequests: [String: (URLCredential?) -> Void] = [:]
 
   func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
                initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
@@ -443,13 +445,41 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     emitPageRequest(id: id, kind: "prompt", message: prompt, defaultValue: defaultText)
   }
 
-  private func emitPageRequest(id: String, kind: String, message: String, defaultValue: String?) {
+  private func emitPageRequest(id: String, kind: String, message: String, defaultValue: String?, realm: String? = nil) {
     var body: [String: Any] = ["id": id, "kind": kind, "message": String(message.prefix(2000)), "url": webView.url?.absoluteString ?? ""]
     if let defaultValue { body["defaultValue"] = String(defaultValue.prefix(2000)) }
+    if let realm, !realm.isEmpty { body["realm"] = String(realm.prefix(200)) }
     onPageRequest(body)
   }
 
-  func answerPageRequest(id: String, accepted: Bool, value: String?) {
+  /// The server's HTTP sign-in (Basic, Digest or NTLM), answered from the shared sheet. Server-trust challenges keep
+  /// WebKit's own certificate validation.
+  func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
+               completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+    let space = challenge.protectionSpace
+    let signInMethods = [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodNTLM]
+    guard signInMethods.contains(space.authenticationMethod) else {
+      completionHandler(.performDefaultHandling, nil)
+      return
+    }
+    let id = UUID().uuidString
+    pendingAuthRequests[id] = { credential in
+      if let credential {
+        completionHandler(.useCredential, credential)
+      } else {
+        completionHandler(.cancelAuthenticationChallenge, nil)
+      }
+    }
+    emitPageRequest(id: id, kind: "auth", message: "", defaultValue: nil, realm: space.realm)
+  }
+
+  func answerPageRequest(id: String, accepted: Bool, value: String?, username: String?, password: String?) {
+    if let pending = pendingAuthRequests.removeValue(forKey: id) {
+      // Kept for the session so the page's other requests don't ask again, never saved to disk.
+      let credential = accepted ? URLCredential(user: username ?? "", password: password ?? "", persistence: .forSession) : nil
+      pending(credential)
+      return
+    }
     pendingPageRequests.removeValue(forKey: id)?(accepted, value)
   }
 
@@ -457,6 +487,10 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     let pending = pendingPageRequests
     pendingPageRequests.removeAll()
     for (_, handler) in pending { handler(false, nil) }
+
+    let pendingAuth = pendingAuthRequests
+    pendingAuthRequests.removeAll()
+    for (_, handler) in pendingAuth { handler(nil) }
   }
 
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

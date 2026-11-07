@@ -101,8 +101,8 @@ public class BayEngineModule: Module {
       AsyncFunction("stop") { (view: BayEngineView) in view.stop() }
       AsyncFunction("snapshot") { (view: BayEngineView, promise: Promise) in view.snapshot(promise) }
       AsyncFunction("evaluate") { (view: BayEngineView, script: String, promise: Promise) in view.evaluate(script, promise) }
-      AsyncFunction("answerPageRequest") { (view: BayEngineView, id: String, accepted: Bool, value: String?) in
-        view.answerPageRequest(id: id, accepted: accepted, value: value)
+      AsyncFunction("answerPageRequest") { (view: BayEngineView, id: String, accepted: Bool, value: String?, username: String?, password: String?) in
+        view.answerPageRequest(id: id, accepted: accepted, value: value, username: username, password: password)
       }
     }
   }

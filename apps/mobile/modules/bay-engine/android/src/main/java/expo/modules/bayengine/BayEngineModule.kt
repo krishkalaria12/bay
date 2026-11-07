@@ -96,7 +96,7 @@ class BayEngineModule : Module() {
       AsyncFunction("stop") { view: BayEngineView -> view.stop() }
       AsyncFunction("snapshot") { view: BayEngineView, promise: Promise -> view.snapshot(promise) }.runOnQueue(Queues.MAIN)
       AsyncFunction("evaluate") { view: BayEngineView, script: String, promise: Promise -> view.evaluate(script, promise) }.runOnQueue(Queues.MAIN)
-      AsyncFunction("answerPageRequest") { view: BayEngineView, id: String, accepted: Boolean, value: String? -> view.answerPageRequest(id, accepted, value) }
+      AsyncFunction("answerPageRequest") { view: BayEngineView, id: String, accepted: Boolean, value: String?, username: String?, password: String? -> view.answerPageRequest(id, accepted, value, username, password) }
       OnViewDestroys { view: BayEngineView -> view.dispose() }
     }
   }
