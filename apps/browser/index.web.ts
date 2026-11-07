@@ -60,7 +60,8 @@ async function start() {
   } else {
     throw new Error("Bay's UI must run in chrome://bay. The local preview is available only on localhost.");
   }
-  if (getNativeHostInfo().platform === "linux") await loadLinuxFont();
+  // The desktop hosts draw the UI in the Inter Bay ships, as macOS draws it in SF Pro.
+  if (getNativeHostInfo().platform !== "macos") await loadBundledFont();
   const initializationError = getNativeHostInfo().constants.BayShell?.initializationError;
   if (typeof initializationError === "string" && initializationError) throw new Error(initializationError);
   if (getNativeHostInfo().constants.BayShell?.hostingSpike === true) {
@@ -127,7 +128,7 @@ async function start() {
 /** Linux has no one system UI face (Cantarell, Noto Sans, DejaVu Sans...), so Bay draws Inter, the nearest to macOS's
  *  SF Pro, as "Bay UI": first in react-native-web's system stack (patches/react-native-web) and the body's font. It is
  *  local, so waiting for it before the first render costs milliseconds and avoids a flash of the fallback face. */
-async function loadLinuxFont() {
+async function loadBundledFont() {
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = "/fonts/bay-ui.css";

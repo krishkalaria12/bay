@@ -3,6 +3,7 @@ import { onDownload, releaseProfile } from "@bay/chromium";
 import { capabilities, isMac } from "@bay/platform";
 import {
   closeWindow,
+  confirm,
   focusWindow,
   onAppEvent,
   onCommand,
@@ -44,7 +45,7 @@ import { startSidebarMoveUndoSync } from "./folderUndo";
 import type { PersistenceOwner } from "./persist";
 import { prepareSyncForQuit, resumeSyncAfterQuit } from "../sync/engine";
 import { prepareTelemetryForQuit, resumeTelemetryAfterQuit } from "../telemetry/usage";
-import { prepareApplicationQuit } from "./quitPreparation";
+import { prepareApplicationQuit, quitAnyway } from "./quitPreparation";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
@@ -129,9 +130,11 @@ export function startNativeSync({
           (prepared) => {
             if (prepared && isCurrent()) return replyToTerminate(true);
           },
-          (error) => {
+          async (error) => {
             console.error("Couldn't save app data before quitting", error);
-            if (isCurrent()) return replyToTerminate(false);
+            if (!isCurrent()) return;
+            const quit = await quitAnyway(error, confirm);
+            if (isCurrent()) return replyToTerminate(quit);
           },
         )
         .catch((error) => console.error("Couldn't reply to app shutdown", error));

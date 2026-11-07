@@ -64,7 +64,8 @@ const strokes = { light: 1.6, regular: 1.9, medium: 2.1, semibold: 2.3, bold: 2.
 /** A stroke never renders thinner than about one device pixel, so small glyphs stay crisp. */
 const MIN_STROKE_PX = 1.1;
 function Symbol({ name, size = 16, weight = "regular", color = "currentColor", style, ...props }: SymbolProps) {
-  const windowsFont = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+  // Windows' own caption glyphs for its caption buttons; every other symbol is the same Lucide drawing as on Linux.
+  const windowsFont = name.startsWith("window.") && typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
   const maskId = `bay-symbol-${useId().replace(/[^\w-]/g, "")}`;
   return (
     <View {...props} accessible={false} pointerEvents="none" style={[{ alignItems: "center", justifyContent: "center" }, style]}>

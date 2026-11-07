@@ -1,4 +1,4 @@
-import { View } from "@bay/platform";
+import { capabilities, View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { onAppEvent, setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
@@ -22,6 +22,7 @@ import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
 import { useFullscreenTab } from "./components/window/pageState";
 import { SpaceSwipe, SpaceTint } from "./components/spaces/SpaceSwipe";
 import { CaptionButtons } from "./components/window/CaptionButtons";
+import { useWindowButtonLayout } from "./components/window/windowButtons";
 import { TopStripPeek, TopTabStrip } from "./components/tabStrip/TabStrip";
 import { TOP_CARD_INSET } from "./components/window/constants";
 import { TOP_STRIP_HEIGHT } from "./components/window/constants";
@@ -82,13 +83,21 @@ function BrowserWindow() {
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left.
   const right = useSidebarOnRight();
   const addressInSidebar = useAddressBarInSidebar();
-  // Caption buttons sit in the desktop layout's corners: over the page there when it has no toolbar to hold them.
-  const captionOnHover = {
+  // The top corners the page reaches: it has no toolbar there to hold caption buttons.
+  const pageCorner = {
     left: !topTabs && addressInSidebar && (right || !showSidebar),
     right: !topTabs && addressInSidebar && (!right || !showSidebar),
   };
+  // Where the page would run up under caption buttons, it starts below a bar of their own, as in Zen: the bar lines up
+  // with the sidebar's toolbar row and moves the window, and the buttons never cover the page.
+  const buttons = useWindowButtonLayout();
+  const captionBar =
+    capabilities.captionButtons && !fullscreen && ((pageCorner.left && buttons.left.length > 0) || (pageCorner.right && buttons.right.length > 0));
   const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
   const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
+  let pageTop: number = layout.cardTop;
+  if (showStrip) pageTop = TOP_STRIP_HEIGHT;
+  else if (captionBar) pageTop = captionHeight;
   const [peekOut, setPeekOut] = useState(false);
   const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, topTabs, peekOut });
   const windowTint = useWindowTint();
@@ -151,7 +160,7 @@ function BrowserWindow() {
             : {
                 flex: 1,
                 flexDirection: "row",
-                paddingTop: showStrip ? TOP_STRIP_HEIGHT : layout.cardTop,
+                paddingTop: pageTop,
                 paddingBottom: showStrip ? TOP_CARD_INSET : layout.cardInset,
                 // The sidebar's slot (topTabs aside) holds the inset on its side, even closed.
                 paddingLeft: showStrip ? TOP_CARD_INSET : !topTabs && !right ? 0 : layout.cardInset,
@@ -173,7 +182,18 @@ function BrowserWindow() {
       )}
       {!sidebarOpen &&
         (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} onOut={setPeekOut} />)}
-      {!fullscreen && <CaptionButtons windowId={windowId} height={captionHeight} glyphCenter={captionCenter} onHover={captionOnHover} />}
+      {captionBar ? (
+        <WindowDragRegion
+          style={{
+            position: "absolute",
+            top: 0,
+            height: captionHeight,
+            left: showSidebar && !right ? sidebarWidth : 0,
+            right: showSidebar && right ? sidebarWidth : 0,
+          }}
+        />
+      ) : null}
+      {!fullscreen && <CaptionButtons windowId={windowId} height={captionHeight} glyphCenter={captionCenter} />}
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />

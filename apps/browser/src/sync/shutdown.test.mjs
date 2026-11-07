@@ -231,14 +231,14 @@ test("locked sync retains ciphertext and metadata sequence counters", async (con
 });
 
 for (const rawMetadata of ["", "{broken", "null", "[]", "{}", '{"v":1,"enabled":true,"types":null}'])
-  test(`invalid sync metadata is preserved and prevents final or background saves: ${rawMetadata}`, async (context) => {
+  test(`invalid sync metadata is preserved, prevents final or background saves and lets Bay quit: ${rawMetadata}`, async (context) => {
     context.mock.method(console, "warn", () => {});
     const { engine, state } = await fixture(context, { rawMetadata });
     const before = new Map(shell.docs);
     engine.setTypeSynced("history", false);
     engine.setSyncFolder("/other");
     await engine.syncNow();
-    await assert.rejects(engine.prepareSyncForQuit(), /saved sync metadata/);
+    await engine.prepareSyncForQuit();
     engine.resumeSyncAfterQuit();
     await tick();
     assert.deepEqual(shell.docs, before);

@@ -18,8 +18,6 @@ type Props = {
   height: number;
   /** From the window's top: where the glyphs centre, level with the bar beside them. */
   glyphCenter?: number;
-  /** A page runs up under the window's corner: the buttons show only while the pointer is over them. */
-  onHover?: boolean | { left: boolean; right: boolean };
 };
 
 /** Ordered caption groups on hosts where the app draws its caption. The
@@ -29,7 +27,7 @@ export function CaptionButtons(props: Props) {
   return capabilities.captionButtons ? <Caption {...props} /> : null;
 }
 
-function Caption({ windowId, height, glyphCenter, onHover = false }: Props) {
+function Caption({ windowId, height, glyphCenter }: Props) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const buttons = useWindowButtonLayout();
@@ -54,16 +52,7 @@ function Caption({ windowId, height, glyphCenter, onHover = false }: Props) {
     <>
       {(["left", "right"] as const).map((side) =>
         buttons[side].length ? (
-          <CaptionGroup
-            key={side}
-            side={side}
-            buttons={buttons[side]}
-            windowId={windowId}
-            maximized={state.maximized}
-            height={height}
-            glyphTop={glyphTop}
-            onHover={typeof onHover === "boolean" ? onHover : onHover[side]}
-          />
+          <CaptionGroup key={side} side={side} buttons={buttons[side]} windowId={windowId} maximized={state.maximized} height={height} glyphTop={glyphTop} />
         ) : null,
       )}
     </>
@@ -77,7 +66,6 @@ function CaptionGroup({
   maximized,
   height,
   glyphTop,
-  onHover,
 }: {
   side: "left" | "right";
   buttons: readonly WindowButton[];
@@ -85,15 +73,9 @@ function CaptionGroup({
   maximized: boolean;
   height: number;
   glyphTop: number;
-  onHover: boolean;
 }) {
-  const { hovered, hoverProps } = useHover();
   return (
-    <View
-      {...hoverProps}
-      mouseDownCanMoveWindow={false}
-      style={{ position: "absolute", top: 0, [side]: 0, height, flexDirection: "row", opacity: onHover && !hovered ? 0 : 1 }}
-    >
+    <View mouseDownCanMoveWindow={false} style={{ position: "absolute", top: 0, [side]: 0, height, flexDirection: "row" }}>
       {buttons.map((button) => (
         <CaptionButton
           key={button}

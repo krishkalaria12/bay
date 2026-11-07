@@ -282,6 +282,10 @@ events now, so the caption buttons follow maximize and restore.
 - The taskbar jump list is still to do.
 - The content blocker blocks requests, but the host gets no per-tab count of
   them (macOS reports one through `tab:didBlockRequests:lastURL:`).
+- The caption bar above the page always shows. Zen hides it until the pointer
+  reaches the window's top; Bay can't yet, because Chromium sends the UI no
+  mouse events over the bar's drag region, so the frame would need to report
+  the pointer there.
 
 ## Validation still required on Windows
 

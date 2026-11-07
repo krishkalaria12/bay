@@ -60,21 +60,22 @@ class TreeHost final : public views::DesktopWindowTreeHostWin {
   }
   bool GetClientAreaInsets(gfx::Insets* insets,
                            int frame_thickness) const override {
-    if (IsFullscreen()) {
-      *insets = gfx::Insets();
-    } else {
-      // Any top inset while restored makes Windows draw its own title bar.
-      // Maximized windows overhang the monitor by the frame on every edge.
-      *insets =
-          gfx::Insets::TLBR(IsMaximized() ? frame_thickness : 0,
-                            frame_thickness, frame_thickness, frame_thickness);
-    }
+    // Maximized windows overhang the monitor by the frame on every edge.
+    // Restored, the client area is the whole window: any top inset makes
+    // Windows draw its own title bar, and a translucent window's side and
+    // bottom frame shows as solid bands in the frame's colour. Its resize
+    // edges are hit-tested inside the client area instead.
+    *insets = IsMaximized() && !IsFullscreen() ? gfx::Insets(frame_thickness)
+                                               : gfx::Insets();
     return true;
   }
   bool GetDwmFrameInsetsInPixels(gfx::Insets* insets) const override {
-    // Glass extended into the client would make DWM draw its caption buttons
-    // over the UI. The backdrop shows through the transparent UI without it.
-    *insets = gfx::Insets();
+    // Glass along the top would make DWM draw its caption buttons over the UI.
+    // One pixel at the bottom keeps the frameless window's shadow, as Chromium
+    // does for its frameless windows; the backdrop shows through the
+    // transparent UI without more.
+    *insets = IsMaximized() || IsFullscreen() ? gfx::Insets()
+                                              : gfx::Insets::TLBR(0, 0, 1, 0);
     return true;
   }
   bool ShouldWindowContentsBeTransparent() const override {
@@ -88,21 +89,25 @@ class TreeHost final : public views::DesktopWindowTreeHostWin {
     if (component == HTNOWHERE || component == HTTRANSPARENT || IsFullscreen())
       return component;
     if (!IsMaximized()) {
-      // The top resize edge lies inside the client area once the title bar is
-      // gone. The side and bottom edges stay in the nonclient frame.
+      // With no frame outside the client area, its resize edges lie inside it.
       const UINT dpi = ::GetDpiForWindow(GetHWND());
       const int border = ::GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) +
                          ::GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-      if (point.y() < border) {
-        RECT client;
-        ::GetClientRect(GetHWND(), &client);
-        const int corner = ::GetSystemMetricsForDpi(SM_CXSIZE, dpi);
+      const int corner = ::GetSystemMetricsForDpi(SM_CXSIZE, dpi);
+      RECT client;
+      ::GetClientRect(GetHWND(), &client);
+      if (point.y() < border || point.y() >= client.bottom - border) {
+        const bool top = point.y() < border;
         if (point.x() < corner)
-          return HTTOPLEFT;
+          return top ? HTTOPLEFT : HTBOTTOMLEFT;
         if (point.x() >= client.right - corner)
-          return HTTOPRIGHT;
-        return HTTOP;
+          return top ? HTTOPRIGHT : HTBOTTOMRIGHT;
+        return top ? HTTOP : HTBOTTOM;
       }
+      if (point.x() < border)
+        return HTLEFT;
+      if (point.x() >= client.right - border)
+        return HTRIGHT;
     }
     // Windows 11 shows Snap Layouts over HTMAXBUTTON. Mouse messages for it
     // still reach the page as nonclient events, so the UI's button handles
