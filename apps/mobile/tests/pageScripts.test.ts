@@ -281,6 +281,7 @@ test("the top colour comes from the background under the top edge, then theme-co
   const faint = fixture('<div id="link" style="background: rgba(0, 0, 0, 0.3)">Hi</div>');
   assert.equal(faint.run(PAGE_COLOR_SCRIPT), null);
 });
+
 test("the image watcher arms once and reports long presses on bare images only", () => {
   const f = fixture(`<img id="image" src="/photo.jpg" alt="A quiet bay"><a id="wrap" href="/next"><img id="inlink" src="/tied.jpg"></a><p id="link">Hi</p>`);
   const timers: { fn: () => void; ms: number }[] = [];
@@ -289,6 +290,7 @@ test("the image watcher arms once and reports long presses on bare images only",
 
     return timers.length;
   };
+
   f.window.clearTimeout = (_id: any) => {};
 
   assert.equal(f.run(WATCH_IMAGES_SCRIPT), true);
@@ -300,6 +302,7 @@ test("the image watcher arms once and reports long presses on bare images only",
 
     el.dispatchEvent(touch);
   };
+
   const image = f.document.getElementById("image");
   const inLink = f.document.getElementById("inlink");
   const text = f.document.getElementById("link");

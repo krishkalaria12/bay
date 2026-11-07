@@ -20,6 +20,7 @@ import type {
 } from "./types";
 
 export type { SiteSetting };
+
 import type { ReaderSettings } from "../pagescripts/reader.ts";
 
 export const DEFAULT_PREFERENCES: BrowserPreferences = {
@@ -187,6 +188,7 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
 
       return tabs.length ? { ...data, archive: archiveTabs(data.archive, tabs, action.now) } : data;
     }
+
     case "activate-tab": {
       const tab = data.tabs.find((entry) => entry.id === action.id);
 
@@ -391,6 +393,7 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
       const tab = data.tabs.find((entry) => entry.id === action.id);
 
       if (!tab || !data.spaces.some((space) => space.id === action.spaceId)) return data;
+
       if (tab.spaceId === action.spaceId && tab.folderId === action.folderId) return data;
       const activeTabIds = { ...data.activeTabIds };
 
@@ -796,6 +799,7 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
         ]
       : [],
   );
+
   const spaces: BrowserSpace[] = savedSpaces.length ? savedSpaces : [{ id: PERSONAL_SPACE_ID, name: "Personal", color: "blue" }];
   const spaceIds = new Set(spaces.map((space) => space.id));
 
@@ -814,14 +818,19 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
   const tabs = uniqueBy(
     (Array.isArray(value.tabs) ? value.tabs : [])
       .map((entry) => {
-        const tab = parseTab(entry);
+        const parsed = parseTab(entry);
 
-        if (!tab) return null;
+        if (!parsed) return null;
         const spaceId = isRecord(entry) && v.is(v.string(), entry.spaceId) && spaceIds.has(entry.spaceId) ? entry.spaceId : PERSONAL_SPACE_ID;
+
         const folderId =
           isRecord(entry) && v.is(v.string(), entry.folderId) && savedFolders.some((folder) => folder.id === entry.folderId) ? entry.folderId : null;
 
-        return { ...tab, spaceId, ...(folderId ? { folderId } : {}) };
+        const parsedTab: BrowserTab = { ...parsed, spaceId };
+
+        if (folderId) parsedTab.folderId = folderId;
+
+        return parsedTab;
       })
       .filter((tab): tab is BrowserTab => tab !== null),
     (tab) => tab.id,
@@ -887,11 +896,13 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
 
   const activeTab = tabs.find((tab) => tab.id === value.activeTabId);
   const activeSpaceId = v.is(v.string(), value.activeSpaceId) && spaceIds.has(value.activeSpaceId) ? value.activeSpaceId : spaces[0]!.id;
+
   const activeTabIds = Object.fromEntries(
     Object.entries(isRecord(value.activeTabIds) ? value.activeTabIds : {}).filter(
       (entry): entry is [string, string] => spaceIds.has(entry[0]) && tabs.some((tab) => tab.id === entry[1]),
     ),
   );
+
   const resolvedActiveTabId = activeTab?.id ?? tabs.find((tab) => tab.spaceId === activeSpaceId)?.id ?? tabs[0]?.id ?? fallback.activeTabId;
 
   if (resolvedActiveTabId && !(activeSpaceId in activeTabIds)) {

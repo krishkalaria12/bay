@@ -165,6 +165,7 @@ export function TabPage({
             applyTweaks(nativeEvent.url);
             void runPageScript<[number, number, number] | null>(view.current, PAGE_COLOR_SCRIPT).then(onPageColor, () => {});
             void runPageScript(view.current, WATCH_MEDIA_SCRIPT).catch(() => {});
+
             // Image long-presses (B13): on iOS the page reports them, since WebKit exposes nothing for images.
             if (Platform.OS === "ios") void runPageScript(view.current, WATCH_IMAGES_SCRIPT).catch(() => {});
           }

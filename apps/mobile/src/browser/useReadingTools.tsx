@@ -182,6 +182,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     if (!result.ok) return false;
 
     setReaderTab(active.id);
+
     if (openSettings) setSettingsOpen(true);
 
     return true;
@@ -194,6 +195,7 @@ export function useReadingTools(active: BrowserTab, view: Tab | undefined, isLoa
     const wanted = siteSettingFor(data.preferences.siteSettings, active.url).reader;
 
     if (!wanted || reader || isLoading || !active.url || blocked || !view) return;
+
     if (autoReaderUrl.current === active.url) return;
     autoReaderUrl.current = active.url;
 

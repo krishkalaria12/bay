@@ -71,6 +71,7 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
             autoFocus
             onSubmitEditing={() => {
               const trimmed = name.trim();
+
               if (!trimmed) return;
 
               if (page === "renameSpace" && activeSpace) act(() => props.onRenameSpace(activeSpace.id, trimmed));

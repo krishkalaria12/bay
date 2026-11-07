@@ -108,7 +108,11 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
     const data = get().data;
     const hasTab = data.tabs.some((tab) => tab.spaceId === id);
 
-    get().dispatch({ type: "select-space", id, ...(hasTab ? {} : { blankTab: createTab(newId(), Date.now(), "", false, id) }) });
+    if (hasTab) {
+      get().dispatch({ type: "select-space", id });
+    } else {
+      get().dispatch({ type: "select-space", id, blankTab: createTab(newId(), Date.now(), "", false, id) });
+    }
   },
   createSpace() {
     const data = get().data;

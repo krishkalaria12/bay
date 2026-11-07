@@ -108,6 +108,7 @@ function SiteZoom({
   const foreground = useThemeColor("foreground");
   // Untouched zooms stay null until the buttons are used, so a look costs nothing.
   const [value, setValue] = useState(textSize ?? globalTextSize);
+
   const step = (dir: 1 | -1): void => {
     const next = Math.min(TEXT_SIZE.max, Math.max(TEXT_SIZE.min, value + dir * TEXT_SIZE.step));
     setValue(next);

@@ -499,6 +499,7 @@ test("site settings are kept per host, and an all-default entry means none at al
     ...data,
     preferences: { ...data.preferences, siteSettings: { "a.com": { textSize: 500, reader: "yes", desktopMode: 2 }, junk: 3 } },
   };
+
   assert.deepEqual(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).preferences.siteSettings, {
     "a.com": { textSize: 200, reader: false, desktopMode: false },
   });
@@ -613,6 +614,7 @@ test("folders hold tabs inside a space and round-trip through saved state", () =
     ),
     data,
   );
+
   assert.deepEqual(
     v2.spaces.map((space) => [space.id, space.color]),
     [

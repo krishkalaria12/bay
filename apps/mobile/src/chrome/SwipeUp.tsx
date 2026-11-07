@@ -17,7 +17,9 @@ export function SwipeUp({ onSwipeUp, children }: { onSwipeUp?: () => void; child
     failOffsetX: [-24, 24],
     onDeactivate: (event) => {
       "worklet";
+
       if (!onSwipeUp || event.canceled) return;
+
       if (event.translationY <= -SWIPE || event.velocityY <= -VELOCITY) scheduleOnRN(onSwipeUp);
     },
   });

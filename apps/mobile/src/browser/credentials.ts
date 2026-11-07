@@ -12,6 +12,8 @@ import { formatSavedLogins, parseSavedLogins, type SavedLogin } from "./logins";
 function secureStore(): typeof import("expo-secure-store") {
   // Required lazily so this module stays importable where the native module isn't (unit tests, tooling).
   // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // SAFETY: the lazy require and the printed module type are the same published module surface; their runtime
+  // properties are exactly the async accessors typed on it.
   return require("expo-secure-store") as typeof import("expo-secure-store");
 }
 

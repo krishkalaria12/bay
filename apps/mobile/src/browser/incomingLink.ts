@@ -55,5 +55,6 @@ export function bayCommand(value: string | null): BayCommand | null {
   // Hosts are case-insensitive, and non-special schemes don't get normalised by the URL parser.
   const host = parsed.host.toLowerCase();
 
+  // SAFETY: the host was checked to be one of the three commands above (bay scheme, no path, no query).
   return host === "new-tab" || host === "private-tab" || host === "search" ? (host as BayCommand) : null;
 }

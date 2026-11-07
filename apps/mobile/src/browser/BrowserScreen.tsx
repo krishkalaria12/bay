@@ -78,6 +78,7 @@ export function BrowserScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const muted = useThemeColor("muted");
   const accent = useThemeColor("accent");
+
   const {
     ready,
     data,
@@ -96,6 +97,7 @@ export function BrowserScreen(): JSX.Element {
     renameFolder,
     deleteFolder,
   } = useBrowserStore();
+
   const [live, setLive] = useState<string[]>([]);
   const [navigation, setNavigation] = useState<Record<string, NavigationState>>({});
   const [overlay, setOverlay] = useState<Overlay>("none");
@@ -207,6 +209,7 @@ export function BrowserScreen(): JSX.Element {
   useEffect(() => {
     function take(url: string | null): void {
       incoming.current = url;
+
       // Ready is read live: the subscription is set up once, before the tabs load.
       if (useBrowserStore.getState().ready) openIncomingLink();
     }
@@ -493,6 +496,7 @@ export function BrowserScreen(): JSX.Element {
       .get(current.tabId)
       ?.answerPageRequest(current.request.id, accepted, value, username, password)
       .catch(() => {});
+
     // Saved logins (B20) are filed when the user chose to save them on the sign-in sheet. Never from a private tab.
     if (save && accepted && current.request.kind === "auth" && username && password) {
       const origin = originOf(current.request.url);
@@ -949,6 +953,7 @@ export function BrowserScreen(): JSX.Element {
         onTextSize={(textSize) => changeSiteSetting({ textSize })}
         onReader={(reader) => {
           changeSiteSetting({ reader });
+
           if (reader && !reading.reader) reading.openReader();
           else if (!reader && reading.reader) reading.closeReader();
         }}

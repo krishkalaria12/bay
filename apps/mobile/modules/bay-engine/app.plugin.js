@@ -73,6 +73,7 @@ module.exports = function withBayEngine(config) {
       // config change it makes rather than the system recreating it mid-playback.
       activity.$["android:supportsPictureInPicture"] = "true";
       const changes = String(activity.$["android:configChanges"] ?? "");
+
       if (!changes.split("|").includes("pictureInPicture")) {
         activity.$["android:configChanges"] = changes ? `${changes}|pictureInPicture` : "pictureInPicture";
       }
@@ -159,6 +160,7 @@ function addAppExtension(project, bundleId, { targetName, subfolder, bundleIdSuf
   // The extension matches Bay's own deployment target and builds like it does; its plist, sources and bundle id
   // come from addTarget and the constants above.
   const minimum = unquote(project.getBuildProperty("IPHONEOS_DEPLOYMENT_TARGET"));
+
   const settings = {
     INFOPLIST_FILE: plist,
     SWIFT_VERSION: '"5.0"',
@@ -167,7 +169,7 @@ function addAppExtension(project, bundleId, { targetName, subfolder, bundleIdSuf
   };
 
   for (const item of project.pbxXCConfigurationList()[extension.pbxNativeTarget.buildConfigurationList].buildConfigurations) {
-    const config = project.pbxXCBuildConfigurationSection()[unquote(typeof item === "string" ? item : item.value)];
+    const config = project.pbxXCBuildConfigurationSection()[unquote(item?.value ?? item)];
 
     if (config) Object.assign(config.buildSettings, settings);
   }
@@ -186,7 +188,5 @@ function findTargetKeyFor(project, targetName) {
 }
 
 function unquote(value) {
-  if (typeof value !== "string") return value;
-
-  return value.replace(/^"(.*)"$/, "$1");
+  return String(value ?? "").replace(/^"(.*)"$/, "$1");
 }

@@ -53,7 +53,9 @@ function page(body: string, { highlights = false } = {}) {
 
   const context = dom.getInternalVMContext();
   const run = (source: string) => JSON.parse(vm.runInContext(`JSON.stringify((() => { ${source}\n })())`, context));
+
   // Some page scripts use await (toggle, picture in picture); these run the same way, wrapped in an async IIFE.
+  // SAFETY: the context evaluates to a promise resolving to the JSON text; the cast pins its static type.
   const runAsync = async (source: string) =>
     JSON.parse((await vm.runInContext(`(async () => JSON.stringify(await (async () => { ${source}\n })()))()`, context)) as Promise<string>);
 
@@ -142,6 +144,7 @@ test("seeking moves the media the page reported, and clamps at the start", () =>
   const { run, document } = page(`<video id="film" src="/film.mp4"></video>`);
   // SAFETY: the media watcher stores the last played media as state.current; the seek tests place it by hand.
   run(`window[Symbol.for("bay.media")] = { current: document.getElementById("film") }; return true;`);
+  // SAFETY: the fixture HTML contains `#film`, so querySelector can't come back empty for it.
   const film = document.getElementById("film") as HTMLVideoElement;
   film.currentTime = 42.5;
 
@@ -164,8 +167,10 @@ test("picture in picture is only asked for when the page offers it", async () =>
   film.asked = 0;
   // SAFETY: jsdom's document has no picture in picture flag; the tests turn it on so the script asks.
   (document as any).pictureInPictureEnabled = true;
+  // SAFETY: players get requestPictureInPicture from the platform in a browser; out of jsdom it's a stub.
   (film as any).requestPictureInPicture = () => {
     film.asked++;
+
     return Promise.resolve(film);
   };
 
