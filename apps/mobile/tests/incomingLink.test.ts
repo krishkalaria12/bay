@@ -26,3 +26,13 @@ test("leaves everything that isn't a web page alone", () => {
   // Credentials are refused, as the engines refuse them everywhere.
   assert.equal(incomingLink("https://user:pass@example.com/"), null);
 });
+
+test("a bay share link (B14) answers with the page it carries", () => {
+  assert.equal(incomingLink("bay://share?url=https%3A%2F%2Fa.com%2Fstory%3Fa%3D1"), "https://a.com/story?a=1");
+  // The page is validated like any incoming link.
+  assert.equal(incomingLink("bay://share?url=example.com"), null);
+  assert.equal(incomingLink("bay://share?url=mailto%3Aa%40example.com"), null);
+  assert.equal(incomingLink("bay://share"), null);
+  // Only the share shape carries a page; other bay links stay alone.
+  assert.equal(incomingLink("bay://new-tab"), null);
+});

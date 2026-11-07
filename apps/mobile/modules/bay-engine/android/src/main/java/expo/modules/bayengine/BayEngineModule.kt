@@ -1,6 +1,7 @@
 package expo.modules.bayengine
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.WebStorage
@@ -24,6 +25,10 @@ class BayEngineModule : Module() {
       BayMedia.emit = { action -> sendEvent("onMediaControl", mapOf("action" to action)) }
     }
 
+    // A link shared into Bay (B14) comes as a SEND intent on a running app. Bay's share links travel as a page in
+    // `bay://share?url=…`, which JS answers through the same incoming-link rule (B9).
+    OnNewIntent { intent -> intent.sharedUrl()?.let { sendEvent("onShare", mapOf("url" to shareLink(it))) } }
+
     OnDestroy { BayMedia.clear() }
 
     AsyncFunction("setMediaSession") { title: String?, site: String, playing: Boolean ->
@@ -43,6 +48,12 @@ class BayEngineModule : Module() {
       val context = appContext.reactContext
       if (context == null) promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
       else BayDownloads.saveImage(context, url, promise)
+    }.runOnQueue(Queues.MAIN)
+
+    // A share intent that launched Bay cold (B14) never fires OnNewIntent; JavaScript asks for it once on mount.
+    AsyncFunction("takeShare") { promise: Promise ->
+      val url = appContext.currentActivity?.intent?.sharedUrl()
+      promise.resolve(url?.let { shareLink(it) })
     }.runOnQueue(Queues.MAIN)
 
     AsyncFunction("clearData") { promise: Promise ->
@@ -112,6 +123,20 @@ class BayEngineModule : Module() {
     }
   }
 }
+
+/**
+ * Share intents (B14): a SEND action whose text holds a web address; apps share pages as a title around their link.
+ * Bay's own share links travel as `bay://share?url=…`, answered by JavaScript's incoming-link rule (B9).
+ */
+private val sharedPattern = Regex("https?://[^\\s\"<>()\\[\\]]+")
+
+private fun Intent.sharedUrl(): String? {
+  if (action != Intent.ACTION_SEND) return null
+
+  return sharedPattern.find(getStringExtra(Intent.EXTRA_TEXT) ?: return null)?.value?.trimEnd(')', '.', ',', ';', '"', '\'')
+}
+
+private fun shareLink(url: String): String = "bay://share?url=" + Uri.encode(url, "")
 
 /** Deletes snapshots that aren't in `keep` (file URIs). Recent files stay: their tab may not have been told yet. */
 private fun pruneSnapshots(context: Context, keep: List<String>) {

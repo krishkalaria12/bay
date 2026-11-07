@@ -145,6 +145,8 @@ const nativeEngine = requireNativeModule<{
   saveImage(url: string): Promise<void>;
   addListener(event: "onDownload", listener: (update: DownloadUpdate) => void): { remove(): void };
   addListener(event: "onMediaControl", listener: (event: { action: MediaControl }) => void): { remove(): void };
+  addListener(event: "onShare", listener: (event: { url: string }) => void): { remove(): void };
+  takeShare(): Promise<string | null>;
   setMediaSession?(title: string | null, site: string, playing: boolean): Promise<void>;
 }>("BayEngine");
 
@@ -277,4 +279,17 @@ export function setMediaSession(session: { title: string; site: string; playing:
 /** Calls `listener` when the system media controls ask for play/pause or stop (notification on Android, lock screen on iOS). */
 export function addMediaControlListener(listener: (action: MediaControl) => void): { remove(): void } {
   return nativeEngine.addListener("onMediaControl", (event) => listener(event.action));
+}
+
+/** Calls `listener` when another app hands Bay a link to share (B14): an Android SEND intent on a running app. */
+export function addShareListener(listener: (url: string) => void): { remove(): void } {
+  return nativeEngine.addListener("onShare", (event) => listener(event.url));
+}
+
+/**
+ * A share that launched Bay cold (B14) never fires the running-app event; this reads and takes it once on mount.
+ * The iOS share extension opens `bay://share?url=…` instead, which the normal linking pipeline answers.
+ */
+export function takeShare(): Promise<string | null> {
+  return nativeEngine.takeShare();
 }

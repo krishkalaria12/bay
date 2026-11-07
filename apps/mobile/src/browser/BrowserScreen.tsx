@@ -1,6 +1,17 @@
 import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
 import { hostOf } from "@bay/core/src/input.ts";
-import { clearData, privateBrowsingSupported, saveImage, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
+import {
+  clearData,
+  privateBrowsingSupported,
+  saveImage,
+  addShareListener,
+  takeShare,
+  type LinkPress,
+  type NavigationState,
+  type PageRequest,
+  type PageScroll,
+  type Tab,
+} from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -180,8 +191,15 @@ export function BrowserScreen(): JSX.Element {
 
     void Linking.getInitialURL().then(take);
     const subscription = Linking.addEventListener("url", (event) => take(event.url));
+    // Shares from other apps (B14): an Android SEND intent on a running app, and one that launched Bay cold read
+    // once on mount. iOS's extension opens `bay://share?url=…`, which the two lines above answer.
+    const shares = addShareListener(take);
+    void takeShare().then(take);
 
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      shares.remove();
+    };
   }, []);
 
   useEffect(() => {
