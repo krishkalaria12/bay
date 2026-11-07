@@ -11,7 +11,7 @@ import MediaPlayer
 final class BayMedia: NSObject {
   static let shared = BayMedia()
 
-  /// Set by the module: sends an `onMediaControl` event with "toggle" or "stop".
+  /// Set by the module: sends an `onMediaControl` event with "toggle", "stop", "skip-forward" or "skip-backward".
   var emit: ((String) -> Void)?
 
   private var registered = false
@@ -65,14 +65,25 @@ final class BayMedia: NSObject {
       DispatchQueue.main.async { emit("stop") }
       return .success
     }
+    // The mini player's skip (B17): ten seconds either way, matching the page's seek.
+    center.skipForwardCommand.addTarget { _ in
+      DispatchQueue.main.async { emit("skip-forward") }
+      return .success
+    }
+    center.skipBackwardCommand.addTarget { _ in
+      DispatchQueue.main.async { emit("skip-backward") }
+      return .success
+    }
     // Remote commands start disabled on some iOS versions; the lock screen needs them on to show the buttons.
     center.playCommand.isEnabled = true
     center.pauseCommand.isEnabled = true
     center.togglePlayPauseCommand.isEnabled = true
     center.stopCommand.isEnabled = true
+    center.skipForwardCommand.isEnabled = true
+    center.skipForwardCommand.skipInterval = 10
+    center.skipBackwardCommand.isEnabled = true
+    center.skipBackwardCommand.skipInterval = 10
     // The hardware headset button is a play/pause toggle in every other browser.
     center.changePlaybackPositionCommand.isEnabled = false
-    center.skipForwardCommand.isEnabled = false
-    center.skipBackwardCommand.isEnabled = false
   }
 }

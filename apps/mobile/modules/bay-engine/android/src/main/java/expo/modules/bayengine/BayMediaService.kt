@@ -61,6 +61,8 @@ class BayMediaService : Service() {
       setCallback(object : MediaSession.Callback() {
         override fun onPlay() = control(ACTION_TOGGLE)
         override fun onPause() = control(ACTION_TOGGLE)
+        override fun onSkipToNext() = control(ACTION_SKIP_FORWARD)
+        override fun onSkipToPrevious() = control(ACTION_SKIP_BACKWARD)
         override fun onStop() = control(ACTION_STOP)
       })
       isActive = true
@@ -77,6 +79,8 @@ class BayMediaService : Service() {
   private fun control(action: String) {
     when (action) {
       ACTION_TOGGLE -> BayMedia.emit?.invoke("toggle")
+      ACTION_SKIP_FORWARD -> BayMedia.emit?.invoke("skip-forward")
+      ACTION_SKIP_BACKWARD -> BayMedia.emit?.invoke("skip-backward")
       ACTION_STOP -> BayMedia.emit?.invoke("stop")
     }
   }
@@ -107,7 +111,10 @@ class BayMediaService : Service() {
     )
     session.setPlaybackState(
       PlaybackState.Builder()
-        .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_STOP)
+        .setActions(
+          PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
+            PlaybackState.ACTION_STOP or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS,
+        )
         .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
         .build(),
     )
@@ -121,6 +128,9 @@ class BayMediaService : Service() {
       .setContentIntent(open)
       .setOngoing(playing)
       .setVisibility(Notification.VISIBILITY_PUBLIC)
+      // The mini player's skip (B17): ten seconds either way, answering next/previous. Compact view shows the
+      // transport trio; stop stays in the expanded row.
+      .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Back", action(ACTION_SKIP_BACKWARD)).build())
       .addAction(
         Notification.Action.Builder(
           null as android.graphics.drawable.Icon?,
@@ -128,8 +138,9 @@ class BayMediaService : Service() {
           action(ACTION_TOGGLE),
         ).build(),
       )
+      .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Forward", action(ACTION_SKIP_FORWARD)).build())
       .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Stop", action(ACTION_STOP)).build())
-      .setStyle(Notification.MediaStyle().setMediaSession(session.sessionToken).setShowActionsInCompactView(0, 1))
+      .setStyle(Notification.MediaStyle().setMediaSession(session.sessionToken).setShowActionsInCompactView(0, 1, 2))
       .build()
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
@@ -145,6 +156,8 @@ class BayMediaService : Service() {
     private const val CHANNEL = "bay-media"
     private const val NOTIFICATION_ID = 4107
     private const val ACTION_TOGGLE = "expo.modules.bayengine.media.TOGGLE"
+    private const val ACTION_SKIP_FORWARD = "expo.modules.bayengine.media.SKIP_FORWARD"
+    private const val ACTION_SKIP_BACKWARD = "expo.modules.bayengine.media.SKIP_BACKWARD"
     private const val ACTION_STOP = "expo.modules.bayengine.media.STOP"
   }
 }

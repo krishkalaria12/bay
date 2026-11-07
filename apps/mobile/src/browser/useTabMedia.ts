@@ -2,7 +2,7 @@ import { hostOf } from "@bay/core/src/input.ts";
 import { addMediaControlListener, runPageScript, setMediaSession, type MediaControl, type Tab } from "@bay/engine";
 import { useEffect, useRef, useState } from "react";
 
-import { parseMediaMessage, PAUSE_MEDIA_SCRIPT, TOGGLE_MEDIA_SCRIPT, type MediaMessage } from "@/pagescripts/media";
+import { parseMediaMessage, PAUSE_MEDIA_SCRIPT, PIP_MEDIA_SCRIPT, seekMediaScript, TOGGLE_MEDIA_SCRIPT, type MediaMessage } from "@/pagescripts/media";
 import type { BrowserTab } from "@/store/types";
 
 type Reports = Record<string, MediaMessage & { at: number }>;
@@ -64,6 +64,7 @@ export function useTabMedia({ tabs, views, onScreenTabId, locked }: TabMediaOpti
     if (!sessionTab) return;
 
     if (action === "toggle") command(sessionTab.id, TOGGLE_MEDIA_SCRIPT);
+    else if (action === "skip-forward" || action === "skip-backward") command(sessionTab.id, seekMediaScript(action === "skip-forward" ? 10 : -10));
     else stop(sessionTab.id);
   };
 
@@ -76,7 +77,9 @@ export function useTabMedia({ tabs, views, onScreenTabId, locked }: TabMediaOpti
   return {
     /** Tabs playing right now; they stay loaded so their sound doesn't stop. */
     playingTabIds: ids.filter((id) => reports[id]!.playing),
-    player: playerTab ? { tab: playerTab, title: reports[playerTab.id]!.title || playerTab.title, playing: reports[playerTab.id]!.playing } : null,
+    player: playerTab
+      ? { tab: playerTab, title: reports[playerTab.id]!.title || playerTab.title, playing: reports[playerTab.id]!.playing, video: reports[playerTab.id]!.video }
+      : null,
     /** Takes a page message; false when it isn't a media report. */
     pageMessage(tabId: string, message: string): boolean {
       const report = parseMediaMessage(message);
@@ -98,6 +101,10 @@ export function useTabMedia({ tabs, views, onScreenTabId, locked }: TabMediaOpti
       );
     },
     toggle: (tabId: string) => command(tabId, TOGGLE_MEDIA_SCRIPT),
+    /** Skips ten seconds either way, like the system's skip buttons. */
+    seek: (tabId: string, seconds: number) => command(tabId, seekMediaScript(seconds)),
+    /** Asks the page's video element for picture in picture; a no-op where the page can't. */
+    pictureInPicture: (tabId: string) => command(tabId, PIP_MEDIA_SCRIPT),
     stop,
   };
 }

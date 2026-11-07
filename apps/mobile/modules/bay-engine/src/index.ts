@@ -275,7 +275,7 @@ export function startListening(): Promise<string | null> {
 }
 
 /** What the system's media controls asked for. */
-export type MediaControl = "toggle" | "stop";
+export type MediaControl = "toggle" | "stop" | "skip-forward" | "skip-backward";
 
 /**
  * Tells the system what's playing, or null when nothing is. On Android this runs a media playback service with a media

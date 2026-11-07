@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 
 import { FIND_CLEAR_SCRIPT, findScript, findStepScript } from "../src/pagescripts/find.ts";
 import { INSPECT_SCRIPT } from "../src/pagescripts/inspect.ts";
-import { parseMediaMessage } from "../src/pagescripts/media.ts";
+import { parseMediaMessage, PIP_MEDIA_SCRIPT, seekMediaScript, WATCH_MEDIA_SCRIPT } from "../src/pagescripts/media.ts";
 import { START_PICKER_SCRIPT } from "../src/pagescripts/picker.ts";
 
 function page(body: string, { highlights = false } = {}) {
@@ -53,8 +53,11 @@ function page(body: string, { highlights = false } = {}) {
 
   const context = dom.getInternalVMContext();
   const run = (source: string) => JSON.parse(vm.runInContext(`JSON.stringify((() => { ${source}\n })())`, context));
+  // Some page scripts use await (toggle, picture in picture); these run the same way, wrapped in an async IIFE.
+  const runAsync = async (source: string) =>
+    JSON.parse((await vm.runInContext(`(async () => JSON.stringify(await (async () => { ${source}\n })()))()`, context)) as Promise<string>);
 
-  return { window, document: window.document, run, marks };
+  return { window, document: window.document, run, runAsync, marks };
 }
 
 test("find counts matches case-insensitively in visible text only", () => {
@@ -133,4 +136,39 @@ test("media reports from the page are checked before they're used", () => {
   });
   assert.equal(parseMediaMessage(JSON.stringify({ type: "media", playing: "yes", title: "Song", video: false })), null);
   assert.equal(parseMediaMessage("not json"), null);
+});
+
+test("seeking moves the media the page reported, and clamps at the start", () => {
+  const { run, document } = page(`<video id="film" src="/film.mp4"></video>`);
+  // SAFETY: the media watcher stores the last played media as state.current; the seek tests place it by hand.
+  run(`window[Symbol.for("bay.media")] = { current: document.getElementById("film") }; return true;`);
+  const film = document.getElementById("film") as HTMLVideoElement;
+  film.currentTime = 42.5;
+
+  assert.equal(run(seekMediaScript(10)), true);
+  assert.equal(film.currentTime, 52.5);
+  // A backward step deeper than the position clamps to zero, like the element's own seeking.
+  assert.equal(run(seekMediaScript(-55)), true);
+  assert.equal(film.currentTime, 0);
+});
+
+test("picture in picture is only asked for when the page offers it", async () => {
+  const { run, runAsync, document } = page(`<video id="film" src="/film.mp4"></video>`);
+  // SAFETY: the media watcher stores the last played media as state.current; the tests place it by hand.
+  run(`window[Symbol.for("bay.media")] = { current: document.getElementById("film") }; return true;`);
+  // jsdom (and a page whose video won't leave it) answers nothing.
+  assert.equal(await runAsync(PIP_MEDIA_SCRIPT), false);
+
+  // SAFETY: jsdom media elements have no picture in picture; the tests give this film a stub to count the asks.
+  const film = document.getElementById("film") as HTMLVideoElement & { asked: number };
+  film.asked = 0;
+  // SAFETY: jsdom's document has no picture in picture flag; the tests turn it on so the script asks.
+  (document as any).pictureInPictureEnabled = true;
+  (film as any).requestPictureInPicture = () => {
+    film.asked++;
+    return Promise.resolve(film);
+  };
+
+  assert.equal(await runAsync(PIP_MEDIA_SCRIPT), true);
+  assert.equal(film.asked, 1);
 });

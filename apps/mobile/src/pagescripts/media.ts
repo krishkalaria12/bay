@@ -61,6 +61,31 @@ if (state && state.current) state.current.pause();
 return true;
 `;
 
+/** Seeks the page's media by `seconds` (negative rewinds), clamped to the media's own bounds. */
+export function seekMediaScript(seconds: number): string {
+  return `
+const state = window[Symbol.for("bay.media")];
+const media = state && state.current;
+if (!media || !media.isConnected) return null;
+media.currentTime = Math.max(0, media.currentTime + ${seconds});
+return true;
+`;
+}
+
+/** Asks the page's own video element for picture in picture; false where it can't (audio, or the engine won't). */
+export const PIP_MEDIA_SCRIPT = `
+const state = window[Symbol.for("bay.media")];
+const media = state && state.current;
+if (!media || !media.isConnected || !("pictureInPictureEnabled" in document) || !document.pictureInPictureEnabled) return false;
+if (typeof media.requestPictureInPicture !== "function") return false;
+try {
+  await media.requestPictureInPicture();
+  return true;
+} catch {
+  return false;
+}
+`;
+
 const mediaMessageSchema = v.object({
   type: v.literal("media"),
   playing: v.boolean(),

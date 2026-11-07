@@ -98,6 +98,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     if isPrivate { configuration.websiteDataStore = BayPrivateBrowsing.dataStore() }
     // Video plays in the page when it asks to (playsinline), as in Safari.
     configuration.allowsInlineMediaPlayback = true
+    // Videos can leave the page into picture in picture (B17), as in Safari.
+    configuration.allowsPictureInPictureMediaPlayback = true
     // Google won't sign anyone in from what it can tell is an app's embedded web view ("This browser or app may not be
     // secure", OAuth's disallowed_useragent): WKWebView's user agent ends at "Mobile/15E148", without Safari's
     // "Version/… Safari/…" tokens. Bay is a browser, so it presents as Safari does (Android drops `; wv` likewise).

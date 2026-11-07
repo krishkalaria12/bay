@@ -38,6 +38,7 @@ export type IconName =
   | "check"
   | "translate"
   | "mic"
+  | "pip"
   | "textSize"
   | "palette"
   | "tune"

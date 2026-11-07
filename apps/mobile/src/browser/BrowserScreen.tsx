@@ -710,11 +710,14 @@ export function BrowserScreen(): JSX.Element {
               title={player.title}
               site={hostOf(player.tab.url)}
               playing={player.playing}
+              video={player.video}
               onOpen={() => {
                 setOverlay("none");
                 activate(player.tab.id);
               }}
               onToggle={() => media.toggle(player.tab.id)}
+              onSeek={(seconds) => media.seek(player.tab.id, seconds)}
+              onPictureInPicture={() => media.pictureInPicture(player.tab.id)}
               onClose={() => media.stop(player.tab.id)}
             />
           ) : null}

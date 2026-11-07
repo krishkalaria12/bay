@@ -44,6 +44,7 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   check: "checkmark.circle",
   translate: "translate",
   mic: "mic",
+  pip: "rectangle.inset.bottomright.filled",
   textSize: "textformat.size",
   palette: "paintpalette",
   tune: "slider.horizontal.3",
