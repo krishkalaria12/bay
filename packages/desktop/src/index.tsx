@@ -162,7 +162,9 @@ export type WindowEvent =
   | { type: "closeRequest"; id: string }
   // Windows' shared runtime: openWindow named this open utility window again, with these options.
   | { type: "opened"; id: string; options: OpenWindowOptions }
-  | ({ type: "state"; id: string } & WindowState);
+  | ({ type: "state"; id: string } & WindowState)
+  // Windows: the pointer entered or left the band the window's caption names (`reveal`).
+  | { type: "caption"; id: string; revealed: boolean };
 
 /** A window's placement, as its caption buttons show it (Windows). */
 export type WindowState = {
@@ -178,7 +180,9 @@ export type WindowButton = "minimize" | "maximize" | "close";
 export type WindowButtonLayout = { left: readonly WindowButton[]; right: readonly WindowButton[] };
 /** The caption the UI draws (Windows): its maximize button, in the window from the top-left, for Snap Layouts; and
  *  its theme, which the system backdrop follows. */
-export type WindowCaption = { maximize: [number, number, number, number] | null; dark: boolean };
+/** `reveal`: from the window's top, the band the frame watches for the pointer, for a caption bar that hides until
+ *  the pointer reaches it. Omitted or 0, none. */
+export type WindowCaption = { maximize: [number, number, number, number] | null; dark: boolean; reveal?: number };
 
 export type AppEvent =
   | { type: "reopen" }

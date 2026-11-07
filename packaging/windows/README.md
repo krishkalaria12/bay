@@ -164,7 +164,8 @@ Before a beta release, use clean Windows 10 and Windows 11 installations:
   survives. Inspect Crashpad dumps with the matching PDB ZIP.
 
 Every launch logs warnings and errors, including chrome://bay's console errors,
-to `%LOCALAPPDATA%\Bay\Bay.log`, and keeps the launch before it as
+to `Bay.log` in Bay's data folder (`%LOCALAPPDATA%\Bay\User Data` unless
+`--user-data-dir` names another), and keeps the launch before it as
 `Bay.previous.log`. Launch with `--enable-logging --log-level=0` to log
 everything to `chrome_debug.log` in the same folder instead.
 

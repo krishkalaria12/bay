@@ -14,6 +14,7 @@
 #include "base/no_destructor.h"
 #include "base/scoped_observation.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
@@ -21,6 +22,9 @@
 
 class BrowserWindowInterface;
 class Profile;
+namespace views {
+class Widget;
+}  // namespace views
 namespace content {
 class WebContents;
 }
@@ -142,6 +146,10 @@ class WindowRegistry final : public BrowserCollectionObserver {
                       bool foreground);
   void ScheduleLaunchPageAdoption();
   void ReleasePrivateProfile(base::WeakPtr<Profile> profile);
+#if BUILDFLAG(IS_WIN)
+  // The frame's pointer entered or left the window's hidden caption bar band.
+  void CaptionRevealed(views::Widget* widget, bool revealed);
+#endif
   void OnBrowserCreated(BrowserWindowInterface* browser) override;
   void OnBrowserClosed(BrowserWindowInterface* browser) override;
   void OnBrowserActivated(BrowserWindowInterface* browser) override;

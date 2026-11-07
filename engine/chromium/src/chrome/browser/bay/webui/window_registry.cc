@@ -163,6 +163,10 @@ WindowRegistry::WindowRegistry() {
   observation_.Observe(GlobalBrowserCollection::GetInstance());
   TabBroker::Get().SetProfileReleasedCallback(base::BindRepeating(
       &WindowRegistry::ReleasePrivateProfile, base::Unretained(this)));
+#if BUILDFLAG(IS_WIN)
+  FrameWin::SetRevealObserver(base::BindRepeating(
+      &WindowRegistry::CaptionRevealed, base::Unretained(this)));
+#endif
 }
 WindowRegistry::~WindowRegistry() = default;
 
@@ -608,19 +612,39 @@ WindowRegistry::Result WindowRegistry::SetCaption(const std::string& id,
   const auto* fields = caption ? caption->GetIfDict() : nullptr;
   const auto dark = fields ? fields->FindBool("dark") : std::nullopt;
   const auto* maximize = fields ? fields->Find("maximize") : nullptr;
+  // Optional: the hidden caption bar's band, in DIPs from the window's top.
+  const auto reveal = fields ? fields->FindDouble("reveal") : std::nullopt;
   std::optional<gfx::Rect> bounds;
   if (maximize && !maximize->is_none())
     bounds = ReadWindowFrame(maximize);
-  if (!dark || !maximize || (!maximize->is_none() && !bounds))
+  if (!dark || !maximize || (!maximize->is_none() && !bounds) ||
+      (reveal && (*reveal < 0 || *reveal > 1000)))
     return Failure("Invalid window caption");
 #if BUILDFLAG(IS_WIN)
   auto* window = WebUIBrowserWindow::FromBrowser(browser);
   if (!window || !window->widget() ||
-      !FrameWin::SetCaption(window->widget(), bounds, *dark))
+      !FrameWin::SetCaption(window->widget(), bounds, *dark,
+                            static_cast<int>(reveal.value_or(0))))
     return Failure("This window has no Bay frame");
 #endif
   return Success();
 }
+#if BUILDFLAG(IS_WIN)
+void WindowRegistry::CaptionRevealed(views::Widget* widget, bool revealed) {
+  for (const auto& [browser, entry] : entries_) {
+    auto* window = WebUIBrowserWindow::FromBrowser(browser);
+    if (!window || window->widget() != widget)
+      continue;
+    const auto id = IdFor(browser);
+    if (!id.empty())
+      Broadcast(base::DictValue()
+                    .Set("type", "caption")
+                    .Set("id", id)
+                    .Set("revealed", revealed));
+    return;
+  }
+}
+#endif
 base::DictValue WindowRegistry::StateValue(
     BrowserWindowInterface* browser) const {
   auto* window = browser->GetWindow();

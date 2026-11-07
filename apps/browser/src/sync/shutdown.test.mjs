@@ -230,7 +230,13 @@ test("locked sync retains ciphertext and metadata sequence counters", async (con
   assert.equal(state.calls.forget.length, 0);
 });
 
-for (const rawMetadata of ["", "{broken", "null", "[]", "{}", '{"v":1,"enabled":true,"types":null}'])
+test("an empty sync.json starts sync off rather than locked", async (context) => {
+  const { engine } = await fixture(context, { rawMetadata: "" });
+  assert.equal(engine.useSync.getState().status, "off");
+  await engine.prepareSyncForQuit();
+});
+
+for (const rawMetadata of ["{broken", "null", "[]", "{}", '{"v":1,"enabled":true,"types":null}'])
   test(`invalid sync metadata is preserved, prevents final or background saves and lets Bay quit: ${rawMetadata}`, async (context) => {
     context.mock.method(console, "warn", () => {});
     const { engine, state } = await fixture(context, { rawMetadata });
