@@ -376,6 +376,29 @@ test("the archive keeps one entry per address, and entries can be removed or cle
   );
 });
 
+test("importing links opens unknown pages in the background and can archive them instead", () => {
+  let data = initialBrowserData(page("a", "https://a.com/"));
+
+  data = reduceBrowserData(data, {
+    type: "import-tabs",
+    tabs: [page("b", "https://b.com/"), page("a2", "https://a.com/"), page("c", "https://c.com/")],
+  });
+  assert.deepEqual(
+    data.tabs.map((tab) => tab.id),
+    ["a", "b", "c"],
+  );
+  assert.equal(data.activeTabId, "a");
+
+  data = reduceBrowserData(data, { type: "import-archive", tabs: [page("d", "https://d.com/"), page("e", "https://e.com/")], now: 5 });
+  assert.deepEqual(
+    data.archive.map((tab) => [tab.id, tab.closedAt]),
+    [
+      ["d", 5],
+      ["e", 5],
+    ],
+  );
+});
+
 test("the wallpaper is one of Bay's built-ins", () => {
   let data = initialBrowserData(page("a", "https://a.com/"));
   assert.equal(data.preferences.wallpaper, "bay");

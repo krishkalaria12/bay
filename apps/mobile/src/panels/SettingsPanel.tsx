@@ -37,6 +37,8 @@ export interface SettingsPanelProps {
   preferences: SimplePreferences;
   onPreferencesChange: (update: Partial<SimplePreferences>) => void;
   onClearData: () => Promise<void>;
+  /** Opens the import sheet for tabs exported from another browser. */
+  onImport: () => void;
   downloadCount: number;
   onDownloads: () => void;
   historyCount: number;
@@ -374,6 +376,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             />
           </Group>
           <Group label="Your data">
+            <ActionRow testID="settings-import" icon="add" label="Import tabs" chevron disabled={busy} onPress={props.onImport} />
             <ActionRow
               testID="settings-history"
               icon="history"

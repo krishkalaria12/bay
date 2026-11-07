@@ -34,6 +34,8 @@ interface BrowserStore {
   dispatch(action: BrowserAction): void;
   load(): Promise<void>;
   openTab(url: string, background?: boolean, isPrivate?: boolean): string;
+  /** Opens imported links as background tabs, or files them in the archive; returns how many were added. */
+  importTabs(tabs: readonly { url: string; title: string }[], target: "tabs" | "archive"): number;
   closeTab(id: string): void;
   restoreTab(id: string): string;
   /** Forget every tab, page and pin; the preferences stay. */
@@ -67,6 +69,17 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
     get().dispatch({ type: "new-tab", tab, background });
 
     return tab.id;
+  },
+  importTabs(tabs, target) {
+    const now = Date.now();
+    const before = get().data;
+    const count = target === "tabs" ? before.tabs.length : before.archive.length;
+    const created = tabs.map((entry) => ({ ...createTab(newId(), now, entry.url), title: entry.title }));
+
+    get().dispatch(target === "tabs" ? { type: "import-tabs", tabs: created } : { type: "import-archive", tabs: created, now });
+    const after = get().data;
+
+    return (target === "tabs" ? after.tabs.length : after.archive.length) - count;
   },
   closeTab(id) {
     get().dispatch({ type: "close-tab", id, now: Date.now(), fallback: createTab(newId(), Date.now()) });

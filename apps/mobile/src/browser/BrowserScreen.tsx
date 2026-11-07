@@ -17,6 +17,7 @@ import { tick } from "@/chrome/haptics";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
+import { ImportPanel } from "@/panels/ImportPanel";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
@@ -31,6 +32,7 @@ import { TabSwipe } from "./TabSwipe";
 import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
 import { fetchFavicon } from "./favicons";
+import type { ImportedTab } from "./importTabs";
 import { sameNavigation } from "./navigationEvents";
 import { MiniPlayer } from "./MiniPlayer";
 import { PageError } from "./PageError";
@@ -51,7 +53,7 @@ const failed = new Set<string>();
 
 type Overlay = "none" | "search" | "tabs";
 
-type Panel = "archive" | "settings" | "page" | "downloads" | "tabs" | "history" | null;
+type Panel = "archive" | "settings" | "page" | "downloads" | "tabs" | "history" | "import" | null;
 
 const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLoading: false, canGoBack: false, canGoForward: false };
 
@@ -59,7 +61,7 @@ export function BrowserScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const muted = useThemeColor("muted");
   const accent = useThemeColor("accent");
-  const { ready, data, dispatch, openTab, closeTab, restoreTab, reset } = useBrowserStore();
+  const { ready, data, dispatch, openTab, closeTab, restoreTab, reset, importTabs } = useBrowserStore();
   const [live, setLive] = useState<string[]>([]);
   const [navigation, setNavigation] = useState<Record<string, NavigationState>>({});
   const [overlay, setOverlay] = useState<Overlay>("none");
@@ -321,6 +323,19 @@ export function BrowserScreen(): JSX.Element {
 
     if (!tab?.url || tab.private) return;
     toast.show("Tab archived", { label: "Undo", onPress: () => void restoreTab(id) });
+  }
+
+  function importLinks(tabs: readonly ImportedTab[], target: "tabs" | "archive"): void {
+    const count = importTabs(tabs, target);
+    setPanel(null);
+
+    if (!count) {
+      toast.show("Those links are already here");
+
+      return;
+    }
+
+    toast.show(target === "tabs" ? `Opened ${count} ${count === 1 ? "tab" : "tabs"}` : `Archived ${count} ${count === 1 ? "tab" : "tabs"}`);
   }
 
   function onPageRequest(tabId: string, request: PageRequest): void {
@@ -725,6 +740,7 @@ export function BrowserScreen(): JSX.Element {
         preferences={data.preferences}
         onPreferencesChange={(update) => dispatch({ type: "preferences", update })}
         onClearData={wipe}
+        onImport={() => setPanel("import")}
         downloadCount={downloads.downloads.length}
         onDownloads={() => setPanel("downloads")}
         historyCount={data.history.length}
@@ -753,6 +769,7 @@ export function BrowserScreen(): JSX.Element {
         onRemove={downloads.remove}
         onClear={downloads.clear}
       />
+      <ImportPanel visible={panel === "import"} onClose={() => closePanel("import")} onImport={importLinks} />
       <LinkMenu
         visible={link !== null}
         onClose={() => setLink(null)}

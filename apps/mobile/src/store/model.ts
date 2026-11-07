@@ -96,6 +96,8 @@ export function initialBrowserData(tab: BrowserTab, preferences = DEFAULT_PREFER
 
 export type BrowserAction =
   | { type: "new-tab"; tab: BrowserTab; background: boolean }
+  | { type: "import-tabs"; tabs: BrowserTab[] }
+  | { type: "import-archive"; tabs: BrowserTab[]; now: number }
   | { type: "activate-tab"; id: string; now: number }
   | { type: "update-tab"; id: string; update: TabUpdate }
   | { type: "visit"; url: string; title: string; favicon: string | null; now: number }
@@ -129,6 +131,19 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
   switch (action.type) {
     case "new-tab":
       return { ...data, tabs: [...data.tabs, action.tab], activeTabId: action.background ? data.activeTabId : action.tab.id };
+    case "import-tabs": {
+      // A link that is already open stays where it is; importing again shouldn't duplicate tabs.
+      const open = new Set(data.tabs.map((tab) => tab.url));
+      const tabs = action.tabs.filter((tab) => tab.url && !open.has(tab.url));
+
+      return tabs.length ? { ...data, tabs: [...data.tabs, ...tabs] } : data;
+    }
+
+    case "import-archive": {
+      const tabs = action.tabs.filter((tab) => tab.url && !tab.private);
+
+      return tabs.length ? { ...data, archive: archiveTabs(data.archive, tabs, action.now) } : data;
+    }
     case "activate-tab": {
       if (!data.tabs.some((tab) => tab.id === action.id)) return data;
 
