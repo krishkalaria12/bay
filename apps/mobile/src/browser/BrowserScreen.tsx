@@ -2,6 +2,7 @@ import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
 import { hostOf } from "@bay/core/src/input.ts";
 import { clearData, privateBrowsingSupported, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
+import * as Linking from "expo-linking";
 import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect } from "expo-router";
@@ -33,6 +34,7 @@ import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
 import { fetchFavicon } from "./favicons";
 import type { ImportedTab } from "./importTabs";
+import { incomingLink } from "./incomingLink";
 import { sameNavigation } from "./navigationEvents";
 import { MiniPlayer } from "./MiniPlayer";
 import { PageError } from "./PageError";
@@ -83,6 +85,8 @@ export function BrowserScreen(): JSX.Element {
   const [fullscreenByTab, setFullscreenByTab] = useState<Record<string, boolean>>({});
   // The tab open before this one, for Arc's drag up on Tabs; activating a tab makes the one it left the last.
   const lastTab = useRef<string | null>(null);
+  // A link another app handed Bay (B9): `null` between links, whatever they sent until the tabs can take it.
+  const incoming = useRef<string | null>(null);
   const barHidden = useSharedValue(0);
 
   useEffect(() => {
@@ -162,6 +166,25 @@ export function BrowserScreen(): JSX.Element {
 
     return () => subscription.remove();
   }, [lockEnabled]);
+
+  // Links from other apps (B9): the default browser hands Bay whole web addresses. A link arriving while Bay runs
+  // opens at once; one that launched Bay waits for the saved tabs, so a cold start never opens over nothing.
+  useEffect(() => {
+    function take(url: string | null): void {
+      incoming.current = url;
+      // Ready is read live: the subscription is set up once, before the tabs load.
+      if (useBrowserStore.getState().ready) openIncomingLink();
+    }
+
+    void Linking.getInitialURL().then(take);
+    const subscription = Linking.addEventListener("url", (event) => take(event.url));
+
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (ready) openIncomingLink();
+  }, [ready]);
 
   async function authenticate(): Promise<boolean> {
     const result = await LocalAuthentication.authenticateAsync({ promptMessage: "Unlock private tabs" });
@@ -287,6 +310,24 @@ export function BrowserScreen(): JSX.Element {
     openTab(target.url, false, privately);
 
     if (emptyTab) closeTab(emptyTab);
+  }
+
+  // Opens the link other apps handed Bay (B9): a blank tab takes it, otherwise it opens in a fresh one, keeping the
+  // session. State is read live, since a warm link can arrive years into the subscription.
+  function openIncomingLink(): void {
+    const url = incomingLink(incoming.current);
+    incoming.current = null;
+
+    if (!url) return;
+    setOverlay("none");
+    setPanel(null);
+    setLink(null);
+
+    const current = useBrowserStore.getState().data;
+    const blank = current.tabs.find((tab) => tab.id === current.activeTabId);
+
+    if (blank && !blank.url) navigate(blank.id, url);
+    else openTab(url);
   }
 
   function search(inNewTab: boolean, privately = false): void {

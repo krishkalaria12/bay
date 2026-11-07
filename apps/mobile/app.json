@@ -5,7 +5,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "bay",
+    // Bay's own links, plus the web schemes it answers as a browser: iOS reads them for the default-browser offer and
+    // the Android VIEW filter takes them with BROWSABLE, so links from other apps open here (B9).
+    "scheme": ["bay", "http", "https"],
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,

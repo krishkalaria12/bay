@@ -1,4 +1,9 @@
-const { withAndroidManifest, withGradleProperties, withInfoPlist } = require("expo/config-plugins");
+const { withAndroidManifest, withEntitlementsPlist, withGradleProperties, withInfoPlist } = require("expo/config-plugins");
+
+// Bay as the default browser (B9) needs Apple's managed `com.apple.developer.web-browser` entitlement, which Apple
+// grants on request; the request isn't in our hands. Builds turned out with BAY_DEFAULT_BROWSER=1 claim it so a
+// grant (or an App Store submission) can use it; without the flag, local dev builds keep signing as they do today.
+const defaultBrowser = process.env.BAY_DEFAULT_BROWSER === "1";
 
 const gradleProperties = {
   // The Rust ad blocker (libbay_adblock.so, scripts/adblock) is built for arm64 only, so other ABIs would crash on
@@ -20,6 +25,11 @@ module.exports = function withBayEngine(config) {
     const permitted = mod.modResults.BGTaskSchedulerPermittedIdentifiers ?? [];
 
     if (!permitted.includes(downloadTasks)) mod.modResults.BGTaskSchedulerPermittedIdentifiers = [...permitted, downloadTasks];
+
+    return mod;
+  });
+  config = withEntitlementsPlist(config, (mod) => {
+    if (defaultBrowser) mod.modResults["com.apple.developer.web-browser"] = true;
 
     return mod;
   });

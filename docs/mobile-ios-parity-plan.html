@@ -923,7 +923,7 @@
             </tr>
             <tr>
               <td class="id">B9</td>
-              <th scope="row">Default browser, links from other apps <span class="kind">Phase 6</span></th>
+              <th scope="row">Default browser, links from other apps <span class="kind">Phase 6</span> <span class="status landed">Landed</span></th>
               <td>
                 <code>expo-linking</code> is installed, but nothing in <code>src</code> uses it and there's no web intent filter. A link from another app can't
                 open in Bay.
@@ -1449,7 +1449,8 @@
         <ul class="tasks">
           <li>
             <span class="tag api">Shared + 2 native</span> Default browser and incoming links (B9). Request Apple's entitlement early, since approval isn't in
-            our hands.
+            our hands. <span class="status landed">Landed</span>: Bay answers <code>http</code>/<code>https</code> on both apps, opens what other apps hand it
+            in a tab, and claims the web-browser entitlement behind <code>BAY_DEFAULT_BROWSER=1</code> for the request to Apple.
           </li>
           <li><span class="tag api">Shared + 2 native</span> Password and passkey AutoFill (B20).</li>
           <li><span class="tag shared">Shared</span> Import Arc tabs (B2) and the small Arc touches (B4). <span class="status landed">Both landed</span></li>
