@@ -46,6 +46,7 @@ export interface SettingsPanelProps {
 }
 
 const archiveOptions = [
+  { days: 0.5, label: "After 12 hours" },
   { days: 1, label: "After 1 day" },
   { days: 7, label: "After 7 days" },
   { days: 30, label: "After 30 days" },

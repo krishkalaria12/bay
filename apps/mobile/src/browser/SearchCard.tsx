@@ -1,5 +1,6 @@
 import type { SearchEngine } from "@bay/core/src/engines.ts";
 import { displayUrl } from "@bay/core/src/suggest.ts";
+import * as Clipboard from "expo-clipboard";
 import { useThemeColor } from "heroui-native";
 import { useRef, useState, type ComponentRef, type JSX } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -84,6 +85,18 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
     if (url) onOpen({ kind: "url", url });
   }
 
+  // Read only when tapped: reading the clipboard as the card opens makes iOS ask for paste permission unprompted.
+  async function pasteAndGo(): Promise<void> {
+    try {
+      const text = (await Clipboard.getStringAsync()).trim();
+      const url = text ? resolveAddress(text, engine) : null;
+
+      if (url) onOpen({ kind: "url", url });
+    } catch {
+      // No clipboard access: the field still takes a typed or pasted address.
+    }
+  }
+
   const pins = data.pinnedSites.slice(0, 4);
 
   return (
@@ -161,6 +174,21 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
               You're browsing privately. Nothing you open here is saved.
             </Text>
           ) : null}
+
+          {query ? null : (
+            <Pressable
+              testID="paste-and-go"
+              accessibilityRole="button"
+              accessibilityLabel="Paste and Go"
+              onPress={() => {
+                void pasteAndGo();
+              }}
+              className="mt-2 h-10 flex-row items-center gap-2 rounded-2xl px-3 active:bg-black/5 dark:active:bg-white/10"
+            >
+              <Icon name="copy" color={secondary} size={18} />
+              <Text style={{ color: text, fontSize: 15 }}>Paste and Go</Text>
+            </Pressable>
+          )}
 
           {pins.length && !query ? (
             <View className="mt-2.5 flex-row gap-2.5">

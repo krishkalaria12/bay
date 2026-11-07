@@ -5,6 +5,7 @@ import Animated from "react-native-reanimated";
 
 import { barButtons, barInsecure, barNewTab, barSite, type BarButton, type BrowserBarProps } from "./BrowserBar.types";
 import { MaterialSymbol, type MaterialSymbolName } from "./MaterialSymbol";
+import { SwipeUp } from "./SwipeUp";
 import { TabCount } from "./TabCount";
 
 // Same layout as iOS, drawn the way Arc Search does on Android: flat translucent buttons with a hairline edge.
@@ -67,7 +68,9 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
 
   return (
     <View className="flex-row items-center justify-center gap-4">
-      <BarPressable button={left} icon={left.icon} privately={props.privately} />
+      <SwipeUp onSwipeUp={props.mode === "page" ? props.onTabsSwipeUp : undefined}>
+        <BarPressable button={left} icon={left.icon} privately={props.privately} />
+      </SwipeUp>
       <Animated.View style={props.capsuleStyle}>
         <BarPressable
           button={search}

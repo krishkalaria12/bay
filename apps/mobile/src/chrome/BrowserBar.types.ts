@@ -18,8 +18,12 @@ export type BrowserBarProps = (
       onTabs: () => void;
       /** Long-pressing Tabs offers new, private and close actions. */
       onTabsLongPress?: () => void;
+      /** Dragging up on Tabs returns to the tab that was open before this one. */
+      onTabsSwipeUp?: () => void;
       onSearch: () => void;
       onMore: () => void;
+      /** Long-pressing More shares the page. */
+      onMoreLongPress?: () => void;
       /** The page's site, shown in the search capsule. */
       site?: string;
       /** Open tabs, shown on the Tabs button. */
@@ -78,6 +82,6 @@ export function barButtons(props: BrowserBarProps): [BarButton & { icon: "archiv
           label: props.site ? `Search or enter address, ${props.insecure ? "not secure, " : ""}${props.site}` : "Search",
           onPress: props.onSearch,
         },
-        { id: "bar-more", label: "More", icon: "more", onPress: props.onMore },
+        { id: "bar-more", label: "More", icon: "more", onPress: props.onMore, onLongPress: props.onMoreLongPress },
       ];
 }

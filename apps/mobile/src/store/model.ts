@@ -278,7 +278,7 @@ export function reduceBrowserData(data: BrowserData, action: BrowserAction): Bro
     case "search-engine":
       return action.id && action.id !== data.preferences.searchEngineId ? { ...data, preferences: { ...data.preferences, searchEngineId: action.id } } : data;
     case "archive-days":
-      return [null, 1, 7, 30].includes(action.days) && action.days !== data.preferences.archiveAfterDays
+      return [null, 0.5, 1, 7, 30].includes(action.days) && action.days !== data.preferences.archiveAfterDays
         ? { ...data, preferences: { ...data.preferences, archiveAfterDays: action.days } }
         : data;
     case "block-content":
@@ -631,7 +631,7 @@ export function parsePreferences(savedPreferences: JsonObject): BrowserPreferenc
       v.is(v.string(), savedPreferences.searchEngineId) && savedPreferences.searchEngineId
         ? savedPreferences.searchEngineId
         : DEFAULT_PREFERENCES.searchEngineId,
-    archiveAfterDays: v.is(v.picklist([1, 7, 30]), savedPreferences.archiveAfterDays)
+    archiveAfterDays: v.is(v.picklist([0.5, 1, 7, 30]), savedPreferences.archiveAfterDays)
       ? savedPreferences.archiveAfterDays
       : savedPreferences.archiveAfterDays === null
         ? null

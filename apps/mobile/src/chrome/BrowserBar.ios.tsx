@@ -6,6 +6,7 @@ import Animated from "react-native-reanimated";
 
 import { barButtons, barInsecure, barNewTab, barSite, type BrowserBarProps } from "./BrowserBar.types";
 import { GlassIconButton } from "./GlassIconButton";
+import { SwipeUp } from "./SwipeUp";
 import { TabCount } from "./TabCount";
 import { useStableCallback } from "./useStableCallback";
 
@@ -22,16 +23,18 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
 
   return (
     <View className="flex-row items-center justify-center gap-4">
-      <GlassIconButton
-        id={left.id}
-        label={left.label}
-        systemImage={symbols[left.icon]}
-        prominentTint={prominentTint}
-        onPress={left.onPress}
-        onLongPress={left.onLongPress}
-      >
-        {left.badge ? <TabCount count={left.badge} /> : null}
-      </GlassIconButton>
+      <SwipeUp onSwipeUp={props.mode === "page" ? props.onTabsSwipeUp : undefined}>
+        <GlassIconButton
+          id={left.id}
+          label={left.label}
+          systemImage={symbols[left.icon]}
+          prominentTint={prominentTint}
+          onPress={left.onPress}
+          onLongPress={left.onLongPress}
+        >
+          {left.badge ? <TabCount count={left.badge} /> : null}
+        </GlassIconButton>
+      </SwipeUp>
       <Animated.View testID={search.id} collapsable={false} style={props.capsuleStyle}>
         <Host matchContents>
           <Button
@@ -59,7 +62,14 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
           </Button>
         </Host>
       </Animated.View>
-      <GlassIconButton id={right.id} label={right.label} systemImage={symbols[right.icon]} prominentTint={prominentTint} onPress={right.onPress} />
+      <GlassIconButton
+        id={right.id}
+        label={right.label}
+        systemImage={symbols[right.icon]}
+        prominentTint={prominentTint}
+        onPress={right.onPress}
+        onLongPress={right.onLongPress}
+      />
     </View>
   );
 }

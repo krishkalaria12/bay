@@ -65,6 +65,25 @@ test("stale tabs are archived, except the current one and pinned sites", () => {
   assert.equal(data.archive.length, 1);
 });
 
+test("the archive can start after 12 hours", () => {
+  let data = initialBrowserData(page("current", "https://current.com/", 0));
+  const tab = page("old", "https://old.com/", 0);
+
+  data = { ...data, tabs: [...data.tabs, tab], preferences: { ...data.preferences, archiveAfterDays: 0.5 } };
+  data = reduceBrowserData(data, { type: "archive-stale", now: 13 * 60 * 60 * 1000 });
+  assert.deepEqual(
+    data.tabs.map((entry) => entry.id),
+    ["current"],
+  );
+  assert.deepEqual(
+    data.archive.map((entry) => entry.id),
+    ["old"],
+  );
+
+  const saved = { version: 1, ...data, preferences: { ...data.preferences, archiveAfterDays: 0.5 } };
+  assert.equal(parseBrowserData(JSON.parse(JSON.stringify(saved)), data).preferences.archiveAfterDays, 0.5);
+});
+
 test("visits count up and move to the top of history", () => {
   let data = initialBrowserData(createTab("a", 0));
   data = reduceBrowserData(data, { type: "visit", url: "https://a.com/", title: "A", favicon: null, now: 1 });

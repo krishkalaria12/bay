@@ -81,6 +81,8 @@ export function BrowserScreen(): JSX.Element {
   const [pageColors, setPageColors] = useState<Record<string, [number, number, number] | null>>({});
   // Tabs whose video is fullscreen (A2, Android): chrome stays hidden until it reports leaving fullscreen.
   const [fullscreenByTab, setFullscreenByTab] = useState<Record<string, boolean>>({});
+  // The tab open before this one, for Arc's drag up on Tabs; activating a tab makes the one it left the last.
+  const lastTab = useRef<string | null>(null);
   const barHidden = useSharedValue(0);
 
   useEffect(() => {
@@ -251,8 +253,18 @@ export function BrowserScreen(): JSX.Element {
   }
 
   function activate(id: string): void {
+    if (id !== data.activeTabId && data.tabs.some((tab) => tab.id === id)) lastTab.current = data.activeTabId;
     dispatch({ type: "activate-tab", id, now: Date.now() });
     setOverlay("none");
+  }
+
+  // Drag up on Tabs toggles back to the tab that was open before this one.
+  function lastOpenTab(): void {
+    const id = lastTab.current;
+
+    if (!id || !data.tabs.some((tab) => tab.id === id)) return;
+    tick();
+    activate(id);
   }
 
   function open(target: OpenTarget, privately: boolean): void {
@@ -617,15 +629,21 @@ export function BrowserScreen(): JSX.Element {
                   site={locked && active.private ? undefined : host}
                   insecure={active.url.startsWith("http:")}
                   privately={Boolean(active.private)}
-                  onTabs={showTabs}
+                  onTabs={() => showTabs()}
                   onTabsLongPress={() => {
                     tick();
                     setPanel("tabs");
                   }}
+                  onTabsSwipeUp={lastOpenTab}
                   tabCount={data.tabs.length}
                   onSearch={() => search(false)}
                   onMore={() => {
                     if (!(locked && active.private)) setPanel("page");
+                  }}
+                  onMoreLongPress={() => {
+                    if (locked && active.private) return;
+                    tick();
+                    void share(active.url);
                   }}
                 />
               )}
