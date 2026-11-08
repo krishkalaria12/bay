@@ -106,7 +106,8 @@ function drawKnockout(nodes: readonly SymbolNode[], solid: number, maskId: strin
 export function svgSymbol(name: string, maskId: string): ReactNode {
   const filled = name.endsWith(".fill");
   const base = filled ? name.slice(0, -".fill".length) : name;
-  const key = aliases[base] ?? base;
+  // SF Symbols' skip arrows carry their seconds (gobackward.15): the same arrows here, without the number.
+  const key = aliases[base] ?? base.replace(/^gobackward(\.\d+)?$/, "arrow.counterclockwise").replace(/^goforward(\.\d+)?$/, "arrow.clockwise");
   const nodes = symbolNodes[key] ?? symbolNodes["exclamationmark.circle"]!;
   // A dot: always solid.
   if (key === "circle") return draw(nodes, "c", () => SOLID_PAINT);
