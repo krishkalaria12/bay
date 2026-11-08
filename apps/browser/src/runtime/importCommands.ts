@@ -205,7 +205,8 @@ export const IMPORT_COMMAND_METHODS = ["importBookmarks", "importHistory", "impo
 // Native transport accepts at most 1 MiB. This remains below it with UTF-8 encoding and the request envelope.
 export const IMPORT_PAYLOAD_CHARS = 240_000;
 const MAX_ITEMS = 10_000;
-const title = (v: unknown) => commandText(v, 16_384, true);
+export const IMPORT_TITLE_CHARS = 16_384;
+const title = (v: unknown) => commandText(v, IMPORT_TITLE_CHARS, true);
 function list<T>(value: unknown, read: (item: unknown) => T): T[] {
   if (!Array.isArray(value) || value.length > MAX_ITEMS) return invalidCommand("too many import items");
   return Array.from(value, read);

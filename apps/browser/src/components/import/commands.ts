@@ -8,6 +8,7 @@ import { createWindow } from "../../runtime/windowActions";
 import { newTab } from "../../runtime/tabActions";
 import {
   IMPORT_PAYLOAD_CHARS,
+  IMPORT_TITLE_CHARS,
   pageKey,
   parseImportCommand,
   planArcSpace,
@@ -39,17 +40,25 @@ function fits(command: ImportCommand): boolean {
   }
 }
 
+// Room in a command for everything around its items.
+const COMMAND_ROOM = 1024;
+const sendable = (item: unknown) => JSON.stringify(item).length + 1 + COMMAND_ROOM <= IMPORT_PAYLOAD_CHARS;
+const wholeTime = (time: number | undefined) => {
+  const whole = Math.round(time ?? NaN);
+  return Number.isSafeInteger(whole) && whole >= 0 ? whole : undefined;
+};
+
 // Bound both the JSON and item count, including strings containing escaped characters.
 function* batches<T>(items: readonly T[]): Generator<T[]> {
   let batch: T[] = [];
-  let size = 1024;
+  let size = COMMAND_ROOM;
   for (const item of items) {
     const chars = JSON.stringify(item).length + 1;
-    if (chars + 1024 > IMPORT_PAYLOAD_CHARS) throw new Error("An imported item is too large");
+    if (!sendable(item)) throw new Error("An imported item is too large");
     if (batch.length && (batch.length >= 1000 || size + chars > IMPORT_PAYLOAD_CHARS)) {
       yield batch;
       batch = [];
-      size = 1024;
+      size = COMMAND_ROOM;
     }
     batch.push(item);
     size += chars;
@@ -73,7 +82,7 @@ async function openTabs(spaceId: string, tabs: TabDraft[]): Promise<string[]> {
 }
 
 export async function importTabs(spaceId: string, tabs: TabDraft[], group: string | null): Promise<number> {
-  const fresh = tabs.filter(usable);
+  const fresh = tabs.filter((tab) => usable(tab) && sendable(draftTab(tab)));
   if (!fresh.length) return 0;
   const ids = await openTabs(spaceId, fresh);
   const unpinned = ids.filter((_, i) => !fresh[i]!.pinned);
@@ -89,19 +98,53 @@ export async function importTabs(spaceId: string, tabs: TabDraft[], group: strin
 
 export async function importHistory(spaceId: string, entries: ImportHistoryEntry[]): Promise<number> {
   let count = 0;
-  const data = entries.map(({ url, title, visits, lastVisit }) => ({ url, title, visits, lastVisit }));
+  const data = entries.flatMap(({ url, title, visits, lastVisit }) => {
+    const entry = { url, title: title.slice(0, IMPORT_TITLE_CHARS), visits: wholeTime(visits) ?? 1, lastVisit: wholeTime(lastVisit) ?? 0 };
+    return sendable(entry) ? [entry] : [];
+  });
   for (const batch of batches(data)) count += (await dispatchBrowserCommand({ method: "importHistory", spaceId, entries: batch })).count;
   return count;
 }
 
-export async function importBookmarks(spaceId: string, root: BookmarkNode | undefined, browserName: string): Promise<number> {
-  if (!root?.children?.length) return 0;
+// A bookmark as the import command takes it. A browser's fractional date or an over-long title can't cost the bookmark,
+// and a link too long to send (a huge data: URL) is left out rather than costing all the others.
+function cleanBookmark(node: BookmarkNode, onSkipped: () => void): BookmarkNode | null {
+  const { dateAdded: _date, ...rest } = node;
+  const date = wholeTime(node.dateAdded);
+  const clean: BookmarkNode = {
+    ...rest,
+    title: (node.title ?? "").slice(0, IMPORT_TITLE_CHARS),
+    ...(node.pageTitle !== undefined ? { pageTitle: node.pageTitle.slice(0, IMPORT_TITLE_CHARS) } : {}),
+    ...(date !== undefined ? { dateAdded: date } : {}),
+  };
+  if (node.type === "folder") return { ...clean, children: (node.children ?? []).flatMap((child) => cleanBookmark(child, onSkipped) ?? []) };
+  if (sendable(clean)) return clean;
+  onSkipped();
+  return null;
+}
+
+export async function importBookmarks(
+  spaceId: string,
+  imported: BookmarkNode | undefined,
+  browserName: string,
+  onSkipped?: (count: number) => void,
+): Promise<number> {
+  if (!imported?.children?.length) return 0;
+  let skipped = 0;
+  const skip = () => void skipped++;
+  const root = cleanBookmark(imported, skip);
+  const count = root?.children?.length ? await writeBookmarks(spaceId, root, browserName, skip) : 0;
+  if (skipped) onSkipped?.(skipped);
+  return count;
+}
+
+async function writeBookmarks(spaceId: string, root: BookmarkNode, browserName: string, skip: () => void): Promise<number> {
   const command: ImportCommand = { method: "importBookmarks", spaceId, root, browserName };
   if (fits(command)) return (await dispatchBrowserCommand(command)).count;
   // Large exports are written a folder at a time so native IPC never needs the entire tree.
   await addBookmarkTree(spaceId, []);
   const roots = browserRead.getState().bookmarks.roots[spaceId]!;
-  const { toolbar, other } = splitImportedRoots(root.children);
+  const { toolbar, other } = splitImportedRoots(root.children ?? []);
   let count = 0;
   const write = async (nodes: BookmarkNode[], parentId: string) => {
     const commandFor = (children: BookmarkNode[]): ImportCommand => ({
@@ -129,7 +172,7 @@ export async function importBookmarks(spaceId: string, root: BookmarkNode | unde
         const folder = result.bookmarkIds?.[0];
         if (!folder) throw new Error("The imported folder was not created");
         await write(node.children ?? [], folder);
-      } else throw new Error("An imported bookmark is too large");
+      } else skip();
     }
     await flush();
   };

@@ -96,3 +96,23 @@ test("native import destinations come from the active projection and reject priv
   assert.throws(() => destinationProfile("incognito:window"), /unavailable/);
   assert.throws(() => destinationProfile("removed"), /unavailable/);
 });
+
+test("a bookmark with a fractional date still imports, and one too long to send costs only itself", async (t) => {
+  const { store, spaceId } = setup(t);
+  const skipped = [];
+  const links = [
+    { type: "url", title: "Kept", url: "https://kept.example/", dateAdded: 1730000000123.456 },
+    { type: "url", title: "Huge", url: `data:text/html,${"x".repeat(300_000)}` },
+    { type: "url", title: "t".repeat(20_000), url: "https://long-title.example/" },
+  ];
+  const root = { type: "folder", title: "", children: [{ type: "folder", title: "Toolbar", role: "toolbar", children: links }] };
+  assert.equal(await importBookmarks(spaceId, root, "Chrome", (n) => skipped.push(n)), 2);
+  assert.deepEqual(skipped, [1]);
+  const nodes = Object.values(store.getState().bookmarks.nodes);
+  assert.equal(nodes.find((n) => n.url === "https://kept.example/").addedAt, 1730000000123);
+  assert.equal(nodes.find((n) => n.url === "https://long-title.example/").title.length, 16_384);
+  assert.equal(
+    nodes.some((n) => n.url?.startsWith("data:")),
+    false,
+  );
+});

@@ -203,10 +203,11 @@ export function useImportFlow() {
     setPreparing(isArc ? Math.max(1, spaces.length) : selected.length);
     setStep("progress");
     abort.current = new AbortController();
+    const { signal } = abort.current;
     const total = emptyCounts();
     const failed = new Map<ImportKind, string[]>();
     const add = (c: ImportCounts) => (Object.keys(total) as (keyof ImportCounts)[]).forEach((k) => (total[k] += c[k]));
-    let destinationIndex = 0;
+    const placed = { destinations: 0 };
     const usedDestinations = new Set<string>();
     const extensionFailures: ExtensionFailure[] = [];
     const left: string[] = [];
@@ -217,73 +218,86 @@ export function useImportFlow() {
 
     const options: ImportOptions = {
       spaceIds: isArc ? spaces : undefined,
-      signal: abort.current.signal,
+      signal,
       onProgress: (p) => {
         if (p.phase === "start") setStatus((st) => ({ ...st, [p.kind]: "active" }));
         if (p.phase === "end") setStatus((st) => (st[p.kind] === "failed" ? st : { ...st, [p.kind]: "done" }));
       },
     };
-    for (const profile of selected) {
-      let result: ImportResult;
-      try {
-        result = await api.importData(source.id, profile.id, order, options);
-      } catch (e) {
-        if (errorCode(e) === "cancelled") return;
-        for (const k of order) failed.set(k, [...(failed.get(k) ?? []), profile.name]);
-        continue;
-      }
-      for (const k of result.failed) failed.set(k, [...(failed.get(k) ?? []), profile.name]);
-      left.push(...importWarningNotes(result));
-      const refused = (k: ImportKind) => {
-        const names = failed.get(k) ?? [];
-        if (!names.includes(profile.name)) failed.set(k, [...names, profile.name]);
-      };
-
-      // Arc's spaces can share source data; each destination keeps an independent copy.
-      let dest: string;
-      let extensionDestinations: string[];
-      if (isArc && result.spaces.length) {
-        const destinations = [];
-        for (const space of result.spaces) {
-          const name = space.name || "Space";
-          const spaceDest = await destination(destinationIndex++, name, space.color, space.emoji, usedDestinations);
-          usedDestinations.add(spaceDest);
-          destinations.push({ spaceId: spaceDest, space });
-        }
-        dest = destinations[0]!.spaceId;
-        extensionDestinations = destinations.map((d) => d.spaceId);
-        const nativeKinds = order.filter((kind) => kind === "cookies" || kind === "autofill");
+    // False when it was cancelled.
+    const importProfiles = async () => {
+      for (const profile of selected) {
+        let result: ImportResult;
         try {
-          add(await applyArcProfile(destinations, result, source.name, () => api.importData(source.id, profile.id, nativeKinds, options), refused));
-        } catch (error) {
-          if (errorCode(error) === "cancelled") return;
-          throw error;
-        }
-      } else {
-        // When all of a profile's Arc spaces were deselected, it has no destination to receive extensions.
-        if (isArc && profile.spaces?.length && !profile.spaces.some((s) => spaces.includes(s.id))) {
-          if (result.vaultToken) api.discardImported(result.vaultToken);
+          result = await api.importData(source.id, profile.id, order, options);
+        } catch (e) {
+          if (errorCode(e) === "cancelled") return false;
+          for (const k of order) failed.set(k, [...(failed.get(k) ?? []), profile.name]);
           continue;
         }
-        dest = await destination(destinationIndex++, result.profile?.name ?? profile.name, result.profile?.color ?? profile.color, undefined, usedDestinations);
-        extensionDestinations = [dest];
-        usedDestinations.add(dest);
-        add(await applyResult(dest, result, source.name, refused));
-      }
-      if (wanted.has("extensions")) {
-        setStatus((st) => ({ ...st, extensions: "active" }));
-        try {
-          const written = await importExtensions(extensionDestinations, result, abort.current.signal);
+        for (const k of result.failed) failed.set(k, [...(failed.get(k) ?? []), profile.name]);
+        left.push(...importWarningNotes(result));
+        const refused = (k: ImportKind) => {
+          const names = failed.get(k) ?? [];
+          if (!names.includes(profile.name)) failed.set(k, [...names, profile.name]);
+        };
+
+        // Arc's spaces can share source data; each destination keeps an independent copy.
+        let dest: string;
+        let extensionDestinations: string[];
+        if (isArc && result.spaces.length) {
+          const destinations = [];
+          for (const space of result.spaces) {
+            const name = space.name || "Space";
+            const spaceDest = await destination(placed.destinations++, name, space.color, space.emoji, usedDestinations);
+            usedDestinations.add(spaceDest);
+            destinations.push({ spaceId: spaceDest, space });
+          }
+          dest = destinations[0]!.spaceId;
+          extensionDestinations = destinations.map((d) => d.spaceId);
+          const nativeKinds = order.filter((kind) => kind === "cookies" || kind === "autofill");
+          add(await applyArcProfile(destinations, result, source.name, () => api.importData(source.id, profile.id, nativeKinds, options), refused));
+        } else {
+          // When all of a profile's Arc spaces were deselected, it has no destination to receive extensions.
+          if (isArc && profile.spaces?.length && !profile.spaces.some((s) => spaces.includes(s.id))) {
+            if (result.vaultToken) api.discardImported(result.vaultToken);
+            continue;
+          }
+          dest = await destination(
+            placed.destinations++,
+            result.profile?.name ?? profile.name,
+            result.profile?.color ?? profile.color,
+            undefined,
+            usedDestinations,
+          );
+          extensionDestinations = [dest];
+          usedDestinations.add(dest);
+          add(await applyResult(dest, result, source.name, refused, (note) => left.push(note)));
+        }
+        if (wanted.has("extensions")) {
+          setStatus((st) => ({ ...st, extensions: "active" }));
+          const written = await importExtensions(extensionDestinations, result, signal);
           total.extensions += written.imported;
           total.extensionSettings += written.storageImported;
           left.push(...written.notes);
           extensionFailures.push(...written.failed);
           if (written.failed.length) refused("extensions");
-        } catch (error) {
-          if (errorCode(error) === "cancelled") return;
-          throw error;
         }
       }
+      return true;
+    };
+    // Whatever stops it, the import ends and says so: an exception here left "Moving in…" on screen for good.
+    try {
+      if (!(await importProfiles())) return;
+    } catch (error) {
+      if (errorCode(error) === "cancelled") return;
+      console.error("The import failed", error);
+      for (const kind of order)
+        if (!failed.has(kind))
+          failed.set(
+            kind,
+            selected.map((p) => p.name),
+          );
     }
     setExtensions(extensionFailures);
     left.push(...extensionFailures.map((f) => `${f.extension.name} in ${browserRead.getState().spaces[f.spaceId]?.name ?? "Space"}: ${f.message}.`));

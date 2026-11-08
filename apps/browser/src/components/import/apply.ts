@@ -93,13 +93,21 @@ export async function importExtensions(spaceIds: string[], result: ImportResult,
   return { imported, storageImported, failed, notes };
 }
 
+// Enough at once that a large vault isn't one round trip after another, without flooding the password store.
+const PASSWORD_WRITES = 16;
+
 export async function importPasswords(spaceId: string, credentials: Credential[]): Promise<number> {
+  const profile = destinationProfile(spaceId);
   let saved = 0;
-  for (const c of credentials) {
-    const origin = /^([a-z][a-z0-9+.-]*:\/\/[^/?#]+)/i.exec(c.realm?.startsWith("http") ? c.realm : c.url)?.[1];
-    if (!origin || !c.password) continue;
-    if (await savePassword(destinationProfile(spaceId), origin, c.username, c.password).catch(() => false)) saved++;
-  }
+  let next = 0;
+  const writer = async () => {
+    while (next < credentials.length) {
+      const c = credentials[next++]!;
+      const origin = /^([a-z][a-z0-9+.-]*:\/\/[^/?#]+)/i.exec(c.realm?.startsWith("http") ? c.realm : c.url)?.[1];
+      if (origin && c.password && (await savePassword(profile, origin, c.username, c.password).catch(() => false))) saved++;
+    }
+  };
+  await Promise.all(Array.from({ length: PASSWORD_WRITES }, writer));
   return saved;
 }
 
@@ -129,9 +137,17 @@ export async function importNative(
   }
 }
 
-export async function applyResult(spaceId: string, result: ImportResult, browserName: string, onFailed?: (kind: ImportKind) => void): Promise<ImportCounts> {
+export async function applyResult(
+  spaceId: string,
+  result: ImportResult,
+  browserName: string,
+  onFailed?: (kind: ImportKind) => void,
+  onNote?: (note: string) => void,
+): Promise<ImportCounts> {
   const counts = emptyCounts();
-  counts.bookmarks += await importBookmarks(spaceId, result.bookmarks, browserName);
+  counts.bookmarks += await importBookmarks(spaceId, result.bookmarks, browserName, (skipped) =>
+    onNote?.(`${plural(skipped, "bookmark")} ${skipped === 1 ? "was" : "were"} too long to bring over.`),
+  );
   if (result.history.length) counts.history += await importHistory(spaceId, result.history);
   // Sign-ins first, so the imported tabs load signed in.
   Object.assign(counts, await importNative(spaceId, result.vaultToken, ["cookies", "autofill"], onFailed));
