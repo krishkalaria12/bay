@@ -6,6 +6,7 @@
 
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/bind.h"
 #include "base/strings/string_number_conversions.h"
@@ -41,7 +42,7 @@ class Registry final : public content::NavigationThrottleRegistry {
   bool EraseThrottleForTesting(const std::string&) override { return false; }
   std::vector<std::unique_ptr<content::NavigationThrottle>> throttles_;
  private:
-  content::NavigationHandle* const handle_;
+  const raw_ptr<content::NavigationHandle> handle_;
 };
 class Popup final : public blocked_content::PopupNavigationDelegate {
  public:
@@ -59,7 +60,7 @@ class Popup final : public blocked_content::PopupNavigationDelegate {
   void OnPopupBlocked(content::WebContents*, int) override {}
  private:
   const GURL url_;
-  bool* const opened_;
+  const raw_ptr<bool> opened_;
 };
 class PageInteractionEventsTest : public ChromeRenderViewHostTestHarness {
  protected:

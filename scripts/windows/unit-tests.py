@@ -75,7 +75,9 @@ def main(argv=None):
             break
         print(f"::group::{test}", flush=True)
         try:
-            code = subprocess.run([str(out / f"{test}.exe")], cwd=out, timeout=left).returncode
+            # Chromium's test suite refuses to start at a background priority, which these would inherit on CI.
+            code = subprocess.run([str(out / f"{test}.exe")], cwd=out, timeout=left,
+                                  creationflags=subprocess.NORMAL_PRIORITY_CLASS).returncode
         except subprocess.TimeoutExpired:
             code = "timed out"
         print("::endgroup::", flush=True)

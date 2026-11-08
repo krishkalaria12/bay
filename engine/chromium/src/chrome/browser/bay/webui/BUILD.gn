@@ -94,6 +94,7 @@ source_set("impl") {
     "page_services.h",
     "clear_specks.cc",
     "clear_specks.h",
+    "clear_specks_rows.cc",
     "page_menu.cc",
     "page_menu.h",
     "permission_prompts.cc",
@@ -208,6 +209,8 @@ source_set("impl") {
       "local_files.h",
       "native_file_drag.cc",
       "native_file_drag.h",
+      "window_key_rules.cc",
+      "window_key_rules.h",
       "window_key_watch.cc",
       "window_key_watch.h",
       "shell_ui.cc",
@@ -300,6 +303,7 @@ test("window_placement_unittests") {
     ":window_placement",
     "//base/test:run_all_unittests",
     "//testing/gtest",
+    "//ui/gfx:test_support",
   ]
 }
 
@@ -769,9 +773,13 @@ if (is_win || is_linux) {
 
 if (is_win || is_linux) {
   test("window_key_watch_unittests") {
-    sources = [ "window_key_watch_unittest.cc" ]
+    sources = [
+      "window_key_rules.cc",
+      "window_key_rules.h",
+      "window_key_watch_unittest.cc",
+    ]
     deps = [
-      ":webui",
+      "//base",
       "//base/test:run_all_unittests",
       "//testing/gtest",
       "//ui/events:events_base",
@@ -780,9 +788,13 @@ if (is_win || is_linux) {
 }
 
 test("clear_specks_unittests") {
-  sources = [ "clear_specks_unittest.cc" ]
+  sources = [
+    "clear_specks.h",
+    "clear_specks_rows.cc",
+    "clear_specks_unittest.cc",
+  ]
   deps = [
-    ":webui",
+    "//base",
     "//base/test:run_all_unittests",
     "//skia",
     "//testing/gtest",
@@ -824,15 +836,20 @@ if (is_win || is_linux) {
     deps = [
       ":notifications",
       "//base",
-      "//base/test:run_all_unittests",
       "//base/test:test_support",
       "//testing/gtest",
     ]
     if (is_linux) {
       deps += [
+        "//base/test:run_all_unittests",
         "//chrome/common",
         "//components/prefs:test_support",
       ]
+    }
+    if (is_win) {
+      # Windows' linker resolves everything :notifications pulls in, so it needs
+      # the browser, which this brings along with its own main().
+      deps += [ "//chrome/test:test_support_unit" ]
     }
   }
 }

@@ -106,6 +106,8 @@ chromium win,linux chromium-bay-page-activation.patch
 # Chrome's own WebUI tests, which Bay's unit tests build through Chrome's test support, kept compiling after
 # ungoogled-chromium's UI removals: the tests of removed UI go, and the search engine helper gets its new field.
 chromium win,linux chromium-webui-tests-ungoogled.patch
+# Chrome's test support, for what CEF and ungoogled-chromium change under it: neither builds it.
+chromium win,linux chromium-test-support-upstream-api.patch
 
 layer all engine/chromium
 layer all engine/nncore

@@ -223,6 +223,7 @@ if (is_win || is_linux) {
       "//ui/aura",
       "//ui/compositor",
       "//ui/gfx",
+      "//ui/gfx:test_support",
     ]
     if (is_linux) {
       deps += [ "//ui/ozone" ]
