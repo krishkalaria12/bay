@@ -1,5 +1,5 @@
 // Copyright 2026 Bay. Apache-2.0.
-#include "chrome/browser/bay/webui/window_key_watch.h"
+#include "chrome/browser/bay/webui/window_key_rules.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_constants.h"
