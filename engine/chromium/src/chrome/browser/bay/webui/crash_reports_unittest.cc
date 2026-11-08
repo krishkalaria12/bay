@@ -71,7 +71,7 @@ TEST(CrashReportsTest, AMissingDatabaseHasNoReports) {
   base::ScopedTempDir temp;
   ASSERT_TRUE(temp.CreateUniqueTempDir());
   EXPECT_TRUE(
-      CrashReportsSince(temp.GetPath().Append("missing"), 0).empty());
+      CrashReportsSince(temp.GetPath().AppendASCII("missing"), 0).empty());
 }
 TEST(CrashReportsTest, FramePointersLeadUpTheStack) {
   // Three frames, each saved frame pointer and return address side by side.
