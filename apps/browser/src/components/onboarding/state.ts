@@ -19,6 +19,8 @@ type OnboardingState = {
   leaving: boolean;
   session: number;
   tourAfter: boolean;
+  // The window whose import carries on behind the later steps, and after the card has gone if it's still running.
+  importInBackground: string | null;
   // What each step set up, as lines for the outro's postcard. A skipped step has none.
   picked: Partial<Record<OnboardingStep, string[]>>;
 };
@@ -29,6 +31,7 @@ export const useOnboarding = create<OnboardingState>(() => ({
   leaving: false,
   session: 0,
   tourAfter: false,
+  importInBackground: null,
   picked: {},
 }));
 
@@ -53,6 +56,12 @@ function advance(step: OnboardingStep, picked: string[] | undefined) {
 
 // Continue: the step has applied its choices; `picked` describes them.
 export const nextStep = (picked?: string[]) => advance(useOnboarding.getState().step, picked);
+
+// Moving in can take a while: the rest of the steps needn't wait for it.
+export function continueImportInBackground() {
+  useOnboarding.setState((s) => ({ importInBackground: s.windowId }));
+  nextStep();
+}
 
 // Skip: the step applies nothing, and the postcard forgets anything it set before.
 export const skipStep = () => advance(useOnboarding.getState().step, undefined);
