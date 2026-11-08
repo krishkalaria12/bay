@@ -24,7 +24,7 @@ export function SidebarOverlays({ windowWidth }: { windowWidth: number }) {
       <IconPicker windowId={windowId} sidebarWidth={sidebarWidth} windowWidth={windowWidth} windowHeight={height} />
       <NewMenu windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
       <SearchTabs windowId={windowId} windowWidth={windowWidth} />
-      <TabSwitcher windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
+      <TabSwitcher windowId={windowId} />
       <MediaSessionsOverlay windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
     </View>
   );

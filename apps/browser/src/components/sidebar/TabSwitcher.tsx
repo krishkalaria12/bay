@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface } from "@bay/desktop";
-import { Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { displayUrl } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -11,35 +11,30 @@ import { TabIcon } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";
 import { SWITCHER_ROW, SWITCHER_WIDTH } from "./constants";
 
-export function TabSwitcher({ windowId, windowWidth, windowHeight }: { windowId: string; windowWidth: number; windowHeight: number }) {
+export function TabSwitcher({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const switcher = useSidebarUi((u) => (u.switcher?.windowId === windowId && u.switcher.visible ? u.switcher : null));
   if (!switcher) return null;
-  const height = switcher.ids.length * SWITCHER_ROW + 16 + 26;
   return (
-    <Surface
-      fill={hex(theme.panel)}
-      cornerRadius={16}
-      borderColor={hex(theme.panelBorder)}
-      borderWidth={0.5}
-      shadowColor="#000000"
-      shadowOpacity={theme.panelShadowOpacity}
-      shadowRadius={28}
-      shadowOffset={[0, 12]}
-      style={{
-        position: "absolute",
-        left: (windowWidth - SWITCHER_WIDTH) / 2,
-        top: Math.max(40, (windowHeight - height) / 2 - 40),
-        width: SWITCHER_WIDTH,
-        padding: 8,
-      }}
-    >
-      <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary, paddingHorizontal: 8, paddingBottom: 6, paddingTop: 2 }}>Recent Tabs</Text>
-      {switcher.ids.map((id, i) => (
-        <SwitcherRow key={id} tabId={id} focused={i === switcher.index} index={i} focusFill={tokens.switcherFocus} outline={tokens.switcherOutline} />
-      ))}
-    </Surface>
+    <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
+      <Surface
+        fill={hex(theme.panel)}
+        cornerRadius={16}
+        borderColor={hex(theme.panelBorder)}
+        borderWidth={0.5}
+        shadowColor="#000000"
+        shadowOpacity={theme.panelShadowOpacity}
+        shadowRadius={28}
+        shadowOffset={[0, 12]}
+        style={{ width: SWITCHER_WIDTH, padding: 8 }}
+      >
+        <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary, paddingHorizontal: 8, paddingBottom: 6, paddingTop: 2 }}>Recent Tabs</Text>
+        {switcher.ids.map((id, i) => (
+          <SwitcherRow key={id} tabId={id} focused={i === switcher.index} index={i} focusFill={tokens.switcherFocus} outline={tokens.switcherOutline} />
+        ))}
+      </Surface>
+    </View>
   );
 }
 

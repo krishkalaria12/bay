@@ -47,26 +47,30 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
 
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 20 }}>
-        <Symbol name="plus" size={34} weight="light" color={theme.textTertiary} style={{ width: 48, height: 48 }} />
-        <View ref={tourAnchorRef(windowId, "commandBar", true)} {...hoverProps}>
-          <Pressable
-            onPress={() => open()}
-            accessibilityRole="button"
-            accessibilityLabel="Open search"
-            style={({ pressed }) => ({
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 9,
-              borderRadius: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : undefined,
-            })}
-          >
-            <Symbol name="magnifyingglass" size={14} color={theme.textSecondary} style={{ width: 18, height: 18 }} />
-            <Text style={{ color: theme.textSecondary, fontSize: 14 }}>Open search</Text>
-            <Text style={{ color: theme.textTertiary, fontSize: 12, marginLeft: 10 }}>{shortcutLabel("⌘L")}</Text>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View {...hoverProps}>
+          <Pressable onPress={() => open()} accessibilityRole="button" accessibilityLabel="Open search" style={{ alignItems: "center", gap: 20 }}>
+            {({ pressed }) => (
+              <>
+                <Symbol name="plus" size={34} weight="light" color={hovered ? theme.textSecondary : theme.textTertiary} style={{ width: 48, height: 48 }} />
+                <View
+                  ref={tourAnchorRef(windowId, "commandBar", true)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 9,
+                    borderRadius: 12,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : undefined,
+                  }}
+                >
+                  <Symbol name="magnifyingglass" size={14} color={theme.textSecondary} style={{ width: 18, height: 18 }} />
+                  <Text style={{ color: theme.textSecondary, fontSize: 14 }}>Open search</Text>
+                  <Text style={{ color: theme.textTertiary, fontSize: 12, marginLeft: 10 }}>{shortcutLabel("⌘L")}</Text>
+                </View>
+              </>
+            )}
           </Pressable>
         </View>
       </View>

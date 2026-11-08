@@ -138,7 +138,8 @@ export function PaletteContent({
     <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={{ height: Math.min(PALETTE_HEIGHT, maxHeight) }}>
       <View
         ref={tourAnchorRef(windowId, "commandBar")}
-        style={{ height: PALETTE_FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 18, gap: 12 }}
+        // Its icon and text on the rows' columns below.
+        style={{ height: PALETTE_FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, gap: 8 }}
       >
         {leadingIcon ?? <Symbol name="magnifyingglass" size={16} color={theme.textSecondary} style={{ width: 20, height: 20 }} />}
         {field}
