@@ -242,6 +242,7 @@ export function SelectTile({
   width = 80,
   height = 70,
   role = "checkbox",
+  fullColor,
   children,
 }: {
   title: string;
@@ -250,6 +251,8 @@ export function SelectTile({
   width?: number;
   height?: number;
   role?: "checkbox" | "radio";
+  // Logos keep their colours when the tile isn't chosen.
+  fullColor?: boolean;
   children: (state: { hovered: boolean }) => ReactNode;
 }) {
   const colors = useOnboardingColors();
@@ -278,7 +281,7 @@ export function SelectTile({
               transform: [{ scale: pressed ? 0.96 : 1 }],
             }}
           >
-            <View style={{ opacity: selected || hovered ? 1 : 0.7 }}>{children({ hovered })}</View>
+            <View style={{ opacity: selected || hovered || fullColor ? 1 : 0.7 }}>{children({ hovered })}</View>
             <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: "500", color: selected ? colors.title : colors.subtitle }}>
               {title}
             </Text>

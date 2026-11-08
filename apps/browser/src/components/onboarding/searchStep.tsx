@@ -7,7 +7,7 @@ import { reportBrowserCommand } from "../../runtime/commands";
 import { setSearchEngine, updateSettings } from "../../runtime/settingsActions";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { searchEngines, type Settings } from "../../store/settings";
-import { Favicon } from "../ui/primitives";
+import { Favicon, FaviconFallback } from "../ui/primitives";
 import { nextStep } from "./state";
 import { QUARTER_TILE, StepLayout } from "./steps";
 import { CheckRow, Reveal, SectionLabel, SelectTile, StepActions, StepTitle, useOnboardingColors } from "./ui";
@@ -44,8 +44,17 @@ export function SearchStep() {
       <Reveal delay={140} style={{ gap: 16 }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel="Search engine">
           {engines.map((e) => (
-            <SelectTile key={e.id} title={e.name} role="radio" width={QUARTER_TILE} height={60} selected={e.id === engineId} onPress={() => setEngineId(e.id)}>
-              {() => <Favicon url={engineUrl(e)} size={18} />}
+            <SelectTile
+              key={e.id}
+              title={e.name}
+              role="radio"
+              width={QUARTER_TILE}
+              height={60}
+              fullColor
+              selected={e.id === engineId}
+              onPress={() => setEngineId(e.id)}
+            >
+              {() => <FaviconFallback url={engineUrl(e)} size={22} />}
             </SelectTile>
           ))}
         </View>
@@ -73,7 +82,7 @@ function CommandBarPreview({ engine, typed }: { engine: SearchEngine | undefined
       key="search"
       icon={
         engine ? (
-          <Favicon url={engineUrl(engine)} size={14} />
+          <FaviconFallback url={engineUrl(engine)} size={14} />
         ) : (
           <Symbol name="magnifyingglass" size={11} color={colors.subtitle} style={{ width: 14, height: 14 }} />
         )
