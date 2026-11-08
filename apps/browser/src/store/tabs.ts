@@ -498,7 +498,11 @@ export const createTabsSlice =
       if (next !== live) set((s) => ({ live: withChangedEntry(s.live, id, next) }));
     },
 
-    navigated(id, page, live) {
+    navigated(id, page, reported) {
+      // A page has no colour of its own while it reloads: it keeps the last one until the load ends, or the window
+      // would flash its space's colour for a moment.
+      const held = reported.isLoading && reported.themeColor === null ? get().live[id]?.themeColor : undefined;
+      const live = held ? { ...reported, themeColor: held } : reported;
       const kept = get().tabs[id]?.newTabHistory;
       // Behind a New Tab page shown by Back, the kept page only refreshes its title; going anywhere else drops it.
       if (kept && page.url === kept.url) get().updateTab(id, { newTabHistory: { ...kept, title: page.title } }, live);

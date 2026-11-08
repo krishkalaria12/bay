@@ -221,6 +221,7 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   inspectElements: { key: "C", mod: true, shift: true },
   viewSource: { key: "U", mod: true },
   savePage: { key: "S", mod: true },
+  capture: { key: "S", mod: true, shift: true },
   zoomIn: { key: "=", mod: true },
   zoomOut: { key: "-", mod: true },
   zoomReset: { key: "0", mod: true },

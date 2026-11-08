@@ -65,7 +65,10 @@ export const moveToTrash = (path: string) => System.moveToTrash(path);
 export const renameFile = (path: string, name: string): Promise<string | null> => System.renameFile?.(path, name) ?? Promise.resolve(null);
 export const fileIcon = (path: string, size = 32) => System.fileIcon(path, size);
 export const runningAppIcon = (pid: number, size = 32) => System.appIcon(pid, size);
-export const hapticTick = () => System.hapticTick();
+// Only a Mac trackpad has one to play; the other hosts don't implement it.
+export const hapticTick = () => {
+  if (isMac) System.hapticTick();
+};
 export const menuShortcuts = () => System.menuShortcuts();
 /** The next key press as a shortcut, or null when cancelled. As on macOS a click cancels; the web host only sees keys,
  *  so its document watches for clicks, and for focus leaving it for a page or another window. */
