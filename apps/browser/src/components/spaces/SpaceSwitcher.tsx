@@ -10,7 +10,7 @@ import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "./pager";
 import { useHover } from "../ui/primitives";
 import { openSettings } from "../settings/windows";
-import { useSidebarWidth } from "../sidebar/tokens";
+import { useTabsSidebarWidth } from "../sidebar/tokens";
 import { newPinnedFolderWith, openIconPicker } from "../sidebar/actions";
 import { openNewMenu } from "../sidebar/NewMenu";
 import { NEW_MENU_ID, NEW_MENU_MS } from "../sidebar/constants";
@@ -40,7 +40,7 @@ import { updateSpace } from "../../runtime/spaceActions";
 
 export function SpaceSwitcher({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.spaceOrder));
-  const width = useSidebarWidth(windowId);
+  const width = useTabsSidebarWidth(windowId);
   const { pages } = usePagerPages(windowId);
   const fits = ids.length * SPACE_CELL + (ids.length - 1) * SPACE_GAP <= width - 2 * (layout.sidebarInset + SPACE_SIDE);
   const { reorder, dragging } = useSpaceReorder(SPACE_CELL + SPACE_GAP);

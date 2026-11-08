@@ -20,26 +20,24 @@ import { IconButton, useHover } from "../ui/primitives";
 import { PROFILE_INDICATOR_X } from "../spaces/constants";
 import { SearchField, useFormColors } from "../settings/controls";
 import { ADDRESS_LIGHTS_Y } from "../sidebar/constants";
-import { useSidebarTokens, useSidebarWidth } from "../sidebar/tokens";
+import { useSidebarTokens } from "../sidebar/tokens";
 import { newEasel, openLibraryPage } from "./actions";
 import { importMediaFiles, LibrarySectionBody } from "./LibraryPage";
 import { SECTIONS, type Section } from "./sections";
-import { closeLibrarySidebar, LIBRARY_RAIL as RAIL, showLibrarySidebar, useLibrarySidebar } from "./sidebarState";
+import { closeLibrarySidebar, LIBRARY_RAIL as RAIL, showLibrarySidebar } from "./sidebarState";
 import { startLibrary, useLibrary } from "./state";
 
 // Arc's Library in the sidebar: a rail of its sections down the left, and the chosen one's list beside it, with the
 // page still showing. Back goes to the tabs; the other button opens it as a page instead.
 
-export function LibrarySidebar({ windowId }: { windowId: string }) {
+export function LibrarySidebar({ windowId, section, width }: { windowId: string; section: Section; width: number }) {
   const colors = useFormColors();
-  const width = useSidebarWidth(windowId);
   const right = useSidebarOnRight();
   // The window buttons sit at the sidebar's top left: over the rail on the left, over the list on the right (where
   // they show only with the address bar in the sidebar). The field starts after them.
   const addressInSidebar = useAddressBarInSidebar();
   const lightsHere = !right || addressInSidebar;
   const fieldInset = !lightsHere ? 0 : right ? PROFILE_INDICATOR_X - layout.sidebarInset : PROFILE_INDICATOR_X - RAIL;
-  const section = useLibrarySidebar((l) => l[windowId]) ?? "media";
   const [query, setQuery] = useState("");
   const [listWidth, setListWidth] = useState(width - RAIL);
   const error = useLibrary((s) => s.error);

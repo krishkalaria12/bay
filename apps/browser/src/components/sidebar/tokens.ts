@@ -115,16 +115,21 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
-export function useSidebarWidth(windowId: string): number {
+/** The sidebar's width for its tabs, whatever the Library is doing. */
+export function useTabsSidebarWidth(windowId: string): number {
   const saved = useBrowser((s) => s.settings.sidebarWidth ?? layout.sidebarWidth);
   const dragging = useSidebarUi((u) => u.dragWidth[windowId]);
+  return dragging ?? saved;
+}
+
+export function useSidebarWidth(windowId: string): number {
+  const tabs = useTabsSidebarWidth(windowId);
   // The Library in the sidebar needs room for its rail and its list (and its Spaces, side by side).
   const section = useLibrarySidebar((l) => l[windowId]);
   const library = useBrowser((s) =>
     section ? libraryWidth(section, publicSpaceIds(s).length, s.windows[windowId]?.frame?.[2] ?? Dimensions.get("window").width) : 0,
   );
-  const width = dragging ?? saved;
-  return Math.max(width, library);
+  return Math.max(tabs, library);
 }
 
 export function useSidebarMetrics() {

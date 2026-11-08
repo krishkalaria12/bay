@@ -46,7 +46,7 @@ import { SidebarKeyboardScope, useSidebarKeyboard } from "./keyboardFocus";
 import { measureRow } from "./state";
 import { SplitRowItem, TabRowItem } from "./TabRow";
 import { ClosingTabRow, OpeningRow, useRowMotion } from "./RowMotion";
-import { useSidebarMetrics, useSidebarTokens, useSidebarWidth } from "./tokens";
+import { useSidebarMetrics, useSidebarTokens, useTabsSidebarWidth } from "./tokens";
 import {
   CLEAN_UP_UPSELL_MIN,
   DOCKED_BOTTOM,
@@ -75,7 +75,7 @@ export function Sidebar() {
   const newTabPitch = metrics.rowHeight + NEW_TAB_GAP;
   const newTabDock = DOCKED_BOTTOM + newTabPitch;
   const windowId = useWindowId();
-  const width = useSidebarWidth(windowId);
+  const width = useTabsSidebarWidth(windowId);
   const current = useWindowSpaceId();
   const { pages, paging } = usePagerPages(windowId);
   // The list's height matters only through `docked`: the latest is kept in a ref, and the state takes it only when the

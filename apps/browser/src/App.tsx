@@ -35,10 +35,11 @@ import { WindowProfile } from "./components/window/WindowProfile";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { LibrarySidebar } from "./components/library/LibrarySidebar";
 import { closeLibrarySidebar, useLibrarySidebar } from "./components/library/sidebarState";
+import { useLibrarySlide } from "./components/library/useLibrarySlide";
 import { LittleBayWindow } from "./components/littleBay/LittleBayWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
 import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
-import { useSidebarWidth } from "./components/sidebar/tokens";
+import { useSidebarWidth, useTabsSidebarWidth } from "./components/sidebar/tokens";
 import { hex, ThemeScope, useTheme, useWindowTint } from "./lib/theme";
 import { layout } from "./lib/constants";
 import { useEffectEvent } from "./lib/useEffectEvent";
@@ -121,6 +122,8 @@ function BrowserWindow() {
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);
   const library = useLibrarySidebar((l) => !!l[windowId]);
+  const tabsWidth = useTabsSidebarWidth(windowId);
+  const librarySlide = useLibrarySlide(windowId, sidebarWidth, right);
   // Hiding the sidebar (or moving tabs to the top) puts the Library away with it.
   useEffect(() => {
     if (!showSidebar) closeLibrarySidebar(windowId);
@@ -134,7 +137,7 @@ function BrowserWindow() {
   const slotStyle = useAnimatedStyle(() => {
     "worklet";
     // In page full screen the slot sits outside the window at the sidebar's full width.
-    return { width: fullscreen ? sidebarWidth : interpolate(dock.progress.get(), [0, 1], [layout.cardInset, sidebarWidth]) };
+    return { width: fullscreen ? sidebarWidth : interpolate(dock.progress.get(), [0, 1], [layout.cardInset, librarySlide.slotWidth.get()]) };
   });
   const dockedStyle = useAnimatedStyle(() => {
     "worklet";
@@ -153,14 +156,28 @@ function BrowserWindow() {
           style={[fullscreen ? { position: "absolute", top: 0, bottom: 0, ...(right ? { left: "100%" } : { right: "100%" }) } : { height: "100%" }, slotStyle]}
         >
           {dock.mounted ? (
-            <Animated.View style={[{ width: sidebarWidth, height: "100%" }, dockedStyle]}>
+            <Animated.View style={[{ height: "100%" }, librarySlide.slotStyle, dockedStyle]}>
               {/* The Library in the sidebar's place; the tabs stay mounted underneath, keeping their scroll and rows. */}
-              <View style={{ flex: 1, display: library ? "none" : "flex" }}>
+              <Animated.View
+                pointerEvents={library ? "none" : "auto"}
+                style={[
+                  { width: tabsWidth, height: "100%", display: librarySlide.covered ? "none" : "flex", ...(right ? { alignSelf: "flex-end" } : null) },
+                  librarySlide.tabsStyle,
+                ]}
+              >
                 <SpaceSwipe>
                   <Sidebar />
                 </SpaceSwipe>
-              </View>
-              {library ? <LibrarySidebar windowId={windowId} /> : null}
+              </Animated.View>
+              {librarySlide.shown ? (
+                <View pointerEvents={library ? "box-none" : "none"} style={[StyleSheet.absoluteFill, { overflow: "hidden" }]}>
+                  <Animated.View
+                    style={[{ height: "100%", width: librarySlide.shown.width, ...(right ? { alignSelf: "flex-end" } : null) }, librarySlide.libraryStyle]}
+                  >
+                    <LibrarySidebar windowId={windowId} section={librarySlide.shown.section} width={librarySlide.shown.width} />
+                  </Animated.View>
+                </View>
+              ) : null}
             </Animated.View>
           ) : null}
         </Animated.View>
