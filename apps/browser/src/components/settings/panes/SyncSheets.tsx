@@ -2,7 +2,8 @@ import { TextInput, View, isMac } from "@bay/platform";
 import { showMenu, Symbol } from "@bay/desktop";
 import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import { useTheme } from "../../../lib/theme";
 import { enterRecoveryPhrase, folderInfo, stopSync } from "../../../sync/engine";
 import { Button, Checkbox, Sheet, useFormColors } from "../controls";
@@ -91,7 +92,7 @@ function RecoveryKitSheet() {
           accessibilityLabel="Recovery kit preview"
           style={{ width: 168, height: 217, borderRadius: 4, overflow: "hidden", borderWidth: 1, borderColor: colors.groupBorder, backgroundColor: "#FFFFFF" }}
         >
-          {preview ? <Image source={{ uri: preview }} style={{ width: 168, height: 217 }} /> : null}
+          {preview ? <Image cachePolicy="memory" source={{ uri: preview }} style={{ width: 168, height: 217 }} /> : null}
         </View>
       </View>
       <Buttons left={<Button title="Other Options" onPress={() => void more()} />}>
@@ -228,7 +229,7 @@ function ConnectDeviceSheet() {
       </Body>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginTop: 16 }}>
         <View style={{ width: 132, height: 132, borderRadius: 8, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }}>
-          {qr ? <Image source={{ uri: qr }} style={{ width: 120, height: 120 }} /> : null}
+          {qr ? <Image cachePolicy="memory" source={{ uri: qr }} style={{ width: 120, height: 120 }} /> : null}
         </View>
         <Text style={{ flex: 1, fontSize: 12, lineHeight: 16, color: theme.textSecondary }}>
           {isMac

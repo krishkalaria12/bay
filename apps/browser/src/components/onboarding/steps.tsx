@@ -6,7 +6,8 @@ import { toggleTabLayout } from "../../runtime/splitActions";
 import { Pressable, View, shortcutForCommand, capabilities, isMac, shortcutLabel } from "@bay/platform";
 import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import { interpolateColor } from "@bay/platform/motion";
 import { SPACE_COLORS, spaceThemeKey, themeFor, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -437,7 +438,7 @@ function SystemChip({ on, icon, label }: { on: boolean; icon: string; label: str
 function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: boolean; login: boolean }) {
   return (
     <View style={{ alignItems: "center", gap: 28 }}>
-      <Image source={APP_ICON} style={{ width: 132, height: 132 }} />
+      <Image cachePolicy="memory" source={APP_ICON} style={{ width: 132, height: 132 }} />
       <View style={{ gap: 8, alignItems: "center" }}>
         <SystemChip on={isDefault} icon="globe" label="Default browser" />
         {capabilities.dock && <SystemChip on={dock} icon="dock.rectangle" label="In your Dock" />}
@@ -534,7 +535,7 @@ function Postcard({ lines }: { lines: string[] }) {
       <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }} />
       <View style={{ width: 96, paddingLeft: 14, justifyContent: "space-between", alignItems: "flex-end" }}>
         <View style={{ padding: 4, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.rowBorder, borderRadius: 3 }}>
-          <Image source={APP_ICON} style={{ width: 46, height: 46 }} />
+          <Image cachePolicy="memory" source={APP_ICON} style={{ width: 46, height: 46 }} />
         </View>
         <View style={{ alignSelf: "stretch", gap: 12 }}>
           {[0, 1, 2].map((i) => (

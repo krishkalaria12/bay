@@ -1,7 +1,8 @@
 import { capabilities, Pressable, View } from "@bay/platform";
 import { libraryImageUri, MarkupCanvas, MouseArea, Surface, Symbol, type MarkupCanvasHandle, type MarkupState, type MarkupTool } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { bouncySpring } from "../../lib/springPresets";
 import { hex, useTheme } from "../../lib/theme";
@@ -111,7 +112,7 @@ function CaptureResult({ tabId, session, pane }: { tabId: string; session: Ready
         />
         {/* Dragged out, the picture goes as its PNG (to Finder, Mail, a message). */}
         <MouseArea path={session.image.path} style={[StyleSheet.absoluteFill, { borderRadius: 6, overflow: "hidden" }]}>
-          <Image source={{ uri: libraryImageUri(session.image.path) }} resizeMode="stretch" style={StyleSheet.absoluteFill} />
+          <Image cachePolicy="memory" source={{ uri: libraryImageUri(session.image.path) }} contentFit="fill" style={StyleSheet.absoluteFill} />
         </MouseArea>
       </Animated.View>
       <Animated.View

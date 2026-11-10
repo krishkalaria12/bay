@@ -26,7 +26,8 @@ import {
 } from "@bay/chromium";
 import { confirm } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Image, Text } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { useBrowserRead, browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
 import { useSpaces } from "../../../store/hooks";
@@ -321,7 +322,7 @@ function AppLinks() {
           allowed.map((a) => (
             <Row
               key={`${a.origin}|${a.scheme}`}
-              icon={a.icon ? <Image source={{ uri: a.icon }} style={{ width: 20, height: 20 }} /> : <Favicon url={a.origin} />}
+              icon={a.icon ? <Image cachePolicy="memory" source={{ uri: a.icon }} style={{ width: 20, height: 20 }} /> : <Favicon url={a.origin} />}
               title={a.origin.replace(/^https?:\/\//, "")}
               description={`Opens ${a.scheme}: links in ${a.app ?? "an app that's no longer installed"}`}
             >

@@ -1,7 +1,8 @@
 import { Pressable, ScrollView, View } from "@bay/platform";
 import { ContextMenuArea, libraryImageUri, MouseArea, openFile, showMenu, Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, Text } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { useFileExists } from "../useFileExists";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
@@ -269,6 +270,13 @@ function RecentImage({ path }: { path: string }) {
   const exists = useFileExists(path);
   if (broken || exists !== true) return <Symbol name="photo" size={20} color={theme.textTertiary} style={{ width: 30, height: 30 }} />;
   return (
-    <Image source={{ uri: libraryImageUri(path) }} onError={() => setBroken(true)} resizeMode="cover" style={{ width: 30, height: 30, borderRadius: 4 }} />
+    <Image
+      cachePolicy="memory"
+      source={{ uri: libraryImageUri(path) }}
+      recyclingKey={path}
+      onError={() => setBroken(true)}
+      contentFit="cover"
+      style={{ width: 30, height: 30, borderRadius: 4 }}
+    />
   );
 }

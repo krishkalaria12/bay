@@ -3,7 +3,8 @@ import { Pressable, View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { Surface, Symbol, VisualEffect } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { AccessibilityInfo, Image, StyleSheet, Text } from "react-native";
+import { AccessibilityInfo, StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -333,7 +334,7 @@ function Stamp() {
           backgroundColor: "#FFFFFF",
         }}
       >
-        <Image source={APP_ICON} style={{ width: 54, height: 54 }} />
+        <Image cachePolicy="memory" source={APP_ICON} style={{ width: 54, height: 54 }} />
       </View>
       <View
         style={{

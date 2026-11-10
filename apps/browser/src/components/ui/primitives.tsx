@@ -2,7 +2,8 @@ import { Pressable, View } from "@bay/platform";
 import { displayHost } from "@bay/core";
 import { Symbol, type SymbolProps } from "@bay/desktop";
 import { memo, useState } from "react";
-import { Image, Text, type ViewStyle } from "react-native";
+import { Text, type ViewStyle } from "react-native";
+import { Image } from "expo-image";
 import { markHoverProps } from "../../lib/hoverShift";
 import { faviconFailed, useAppearanceDark, useFavicon, useFaviconTheme } from "../../lib/favicons";
 import { bundledSiteIcon } from "../../lib/siteIcons";
@@ -86,13 +87,15 @@ export const Favicon = memo(function Favicon({
   if (!resolved || broken === resolved.uri) return <FaviconFallback url={url} size={size} />;
   return (
     <Image
-      key={white ? `${resolved.uri} tinted` : resolved.uri}
+      cachePolicy="memory"
+      recyclingKey={resolved.uri}
       source={{ uri: resolved.uri }}
+      tintColor={white ? theme.textPrimary : undefined}
       onError={() => {
         setBroken(resolved.uri);
         if (resolved.spaceId) faviconFailed(resolved.spaceId, resolved.uri);
       }}
-      style={{ width: size, height: size, borderRadius: size > 18 ? 4 : 3, tintColor: white ? theme.textPrimary : undefined }}
+      style={{ width: size, height: size, borderRadius: size > 18 ? 4 : 3 }}
     />
   );
 });
@@ -101,7 +104,7 @@ export const Favicon = memo(function Favicon({
 export function FaviconFallback({ url, size = 16 }: { url: string; size?: number }) {
   const theme = useTheme();
   const bundled = bundledSiteIcon(url, theme.dark);
-  if (bundled !== undefined) return <Image source={bundled} style={{ width: size, height: size, borderRadius: size > 18 ? 4 : 3 }} />;
+  if (bundled !== undefined) return <Image cachePolicy="memory" source={bundled} style={{ width: size, height: size, borderRadius: size > 18 ? 4 : 3 }} />;
   const initial = hostInitial(url);
   if (!initial) return <Symbol name="globe" size={size - 3} color={theme.textSecondary} style={{ width: size, height: size }} />;
   const tile = Math.round((size * 14) / 16);
@@ -138,9 +141,11 @@ export function NewTabIcon({ size = 16 }: { size?: number }) {
   const theme = useTheme();
   return (
     <Image
+      cachePolicy="memory"
       key={theme.dark ? "dark" : "light"}
       source={NEW_TAB_MARK}
-      style={{ width: size, height: size, tintColor: theme.dark ? "#FFFFFF" : "#000000", opacity: theme.dark ? 0.4 : 0.42 }}
+      tintColor={theme.dark ? "#FFFFFF" : "#000000"}
+      style={{ width: size, height: size, opacity: theme.dark ? 0.4 : 0.42 }}
     />
   );
 }
