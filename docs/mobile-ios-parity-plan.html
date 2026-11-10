@@ -608,6 +608,20 @@
                 not appear.
               </td>
             </tr>
+            <tr>
+              <th scope="row">The e2e tests <span class="kind">Next round</span></th>
+              <td>
+                The tests were written before the stacked switcher and the Settings pages, so most of them failed on the app as it was: they looked for rows
+                that had moved, for a sheet's contents in a row of their own, and for the notifications prompt iOS asks for when the first download starts. The
+                shared flow now scrolls to the row it needs before tapping it.
+              </td>
+              <td><code>3d581367</code>, <code>99b6a584</code>, <code>243011af</code></td>
+              <td>
+                <span class="status landed">Landed</span> Eight of the nine pass on the iPhone now. On Android one passes and eight still fail: the download
+                toast, the reader, the find on page and the search suggestions depend on what the pages themselves say, and the switcher's own scroll does not
+                reach the second card.
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
