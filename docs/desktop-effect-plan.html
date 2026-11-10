@@ -1,0 +1,2863 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Bay desktop · Effect implementation plan</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --foreground: light-dark(#28242b, #ede7ef);
+        --muted-foreground: light-dark(#665e6c, #bcb1c3);
+        --border: light-dark(#d8d0dc, #4b414f);
+        --card: light-dark(#f3eef4, #2b252f);
+        --secondary: light-dark(#ece5ee, #342c39);
+        --primary: light-dark(#69435f, #e1b4d5);
+        --success: light-dark(#245c48, #9fd4bb);
+        --warning: light-dark(#75521c, #e4c68f);
+        --code-background: light-dark(#eee8f0, #302837);
+        --radius: 9px;
+        --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        line-height: 1.6;
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0 0 36px;
+        width: 100%;
+      }
+      h1 {
+        font-size: clamp(27px, 5vw, 40px);
+        line-height: 1.16;
+        letter-spacing: -0.035em;
+        font-weight: 650;
+        margin: 12px 0 16px;
+      }
+      h2 {
+        font-size: 24px;
+        letter-spacing: -0.025em;
+        line-height: 1.28;
+        margin: 42px 0 17px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 18px;
+        letter-spacing: -0.01em;
+        margin: 24px 0 9px;
+      }
+      h4 {
+        font-size: 15px;
+        margin: 20px 0 5px;
+      }
+      p {
+        margin: 9px 0 15px;
+      }
+      p,
+      li {
+        max-width: 90ch;
+      }
+      .lead {
+        font-size: 18px;
+        max-width: 73ch;
+      }
+      .meta,
+      .muted {
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+      .meta code {
+        font-size: 12px;
+      }
+      a {
+        color: var(--primary);
+        text-underline-offset: 3px;
+      }
+      a:hover {
+        text-decoration-thickness: 2px;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      a:focus-visible,
+      summary:focus-visible,
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 3px solid var(--primary);
+        outline-offset: 3px;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 20px;
+        margin: 22px 0;
+        font-size: 14px;
+      }
+      code {
+        font: 0.86em var(--font-mono);
+        overflow-wrap: anywhere;
+      }
+      pre {
+        font: 12px/1.65 var(--font-mono);
+        overflow: auto;
+        padding: 16px;
+        background: var(--code-background);
+        border-radius: var(--radius);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      ul,
+      ol {
+        padding-left: 23px;
+        margin: 9px 0 18px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .callout {
+        background: var(--card);
+        padding: 16px;
+        border-radius: var(--radius);
+        margin: 22px 0;
+      }
+      .callout p:last-child {
+        margin-bottom: 0;
+      }
+      .note {
+        border-left: 3px solid var(--primary);
+        padding: 0 0 0 16px;
+        margin: 21px 0;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        max-width: 100%;
+        margin: 16px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      thead th {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        font-weight: 600;
+        background: var(--card);
+      }
+      tbody th {
+        font-weight: 600;
+      }
+      td p {
+        margin: 5px 0 10px;
+      }
+      th:first-child,
+      td:first-child {
+        padding-left: 0;
+      }
+      thead th:first-child {
+        padding-left: 10px;
+      }
+      th:last-child,
+      td:last-child {
+        padding-right: 0;
+      }
+      .decisions th:first-child {
+        width: 25%;
+      }
+      .architecture {
+        display: grid;
+        gap: 0;
+        list-style: none;
+        padding: 0;
+        border-left: 2px solid var(--border);
+        margin: 20px 0 20px 8px;
+      }
+      .architecture li {
+        position: relative;
+        padding: 10px 0 15px 23px;
+        margin: 0;
+      }
+      .architecture li:before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border: 2px solid var(--primary);
+        background: var(--card);
+        border-radius: 50%;
+        position: absolute;
+        left: -5.5px;
+        top: 19px;
+      }
+      .architecture strong {
+        display: block;
+      }
+      .architecture p {
+        margin: 3px 0 0;
+        font-size: 14px;
+      }
+      .source {
+        display: block;
+        font-size: 12px;
+        line-height: 1.6;
+        margin: 6px 0;
+        overflow-wrap: anywhere;
+      }
+      .label {
+        font-size: 12px;
+        font-weight: 650;
+        color: var(--muted-foreground);
+        margin-top: 15px !important;
+      }
+      .tag {
+        font-size: 11px;
+        display: table;
+        color: var(--primary);
+        font-weight: 500;
+        margin: 7px 0 3px;
+      }
+      .row-index {
+        font: 11px var(--font-mono);
+        color: var(--muted-foreground);
+        display: block;
+        margin-bottom: 4px;
+      }
+      th small {
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--muted-foreground);
+        display: block;
+      }
+      .inventory th:first-child {
+        width: 36%;
+      }
+      .inventory td {
+        padding-top: 15px;
+      }
+      .inventory details {
+        font-size: 13px;
+      }
+      .inventory summary {
+        font-size: 12px;
+        color: var(--primary);
+        cursor: pointer;
+        padding: 2px 0 6px;
+      }
+      .inventory details[open] summary {
+        margin-bottom: 10px;
+      }
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: end;
+        background: var(--card);
+        padding: 16px;
+        border-radius: var(--radius);
+      }
+      .filters label {
+        display: grid;
+        gap: 5px;
+        font-size: 12px;
+        flex: 1 1 190px;
+      }
+      .filters input,
+      .filters select {
+        font-size: 13px;
+        min-width: 0;
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 9px 10px;
+        background: var(--code-background);
+      }
+      button {
+        font-size: 12px;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: var(--secondary);
+        border-radius: 5px;
+        padding: 9px 12px;
+      }
+      .filter-status {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        margin: 8px 0;
+      }
+      section {
+        scroll-margin-top: 16px;
+      }
+      .work {
+        margin: 24px 0 30px;
+      }
+      .work h3 {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+      }
+      .work h3 span {
+        font: 12px var(--font-mono);
+        color: var(--primary);
+        flex-shrink: 0;
+      }
+      .dependency {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .package-detail > summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--primary);
+        padding: 4px 0 8px;
+      }
+      .package-detail[open] {
+        margin-top: 12px;
+      }
+      details.deep {
+        border-top: 1px solid var(--border);
+        padding: 15px 0;
+      }
+      details.deep > summary {
+        font-weight: 600;
+        cursor: pointer;
+      }
+      footer {
+        border-top: 1px solid var(--border);
+        padding-top: 18px;
+        margin-top: 36px;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .no-match {
+        padding: 16px;
+        border: 1px solid var(--border);
+      }
+      .checklist li {
+        padding-left: 5px;
+      }
+      noscript p {
+        background: var(--card);
+        padding: 12px;
+        border-radius: var(--radius);
+      }
+      @media (max-width: 540px) {
+        h2 {
+          font-size: 22px;
+        }
+        .lead {
+          font-size: 16px;
+        }
+        nav {
+          gap: 7px 14px;
+        }
+        .inventory th:first-child {
+          width: 41%;
+        }
+        th,
+        td {
+          padding: 10px 8px;
+          font-size: 12px;
+        }
+        .decisions thead {
+          display: none;
+        }
+        .decisions tr {
+          display: block;
+          padding: 10px 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .decisions th:first-child,
+        .decisions td {
+          display: block;
+          width: auto;
+          border: 0;
+          padding: 3px 0;
+        }
+        .filters label {
+          flex-basis: 100%;
+        }
+        .source {
+          font-size: 11px;
+        }
+        .work h3 {
+          font-size: 17px;
+        }
+        .callout {
+          padding: 16px;
+        }
+        .verification {
+          min-width: 600px;
+        }
+        .decisions td {
+          font-size: 13px;
+        }
+      }
+      @media print {
+        html,
+        body {
+          color: #222;
+          color-scheme: light;
+        }
+        button,
+        .filters,
+        .filter-status,
+        nav {
+          display: none !important;
+        }
+        main {
+          max-width: none;
+        }
+        .source,
+        a {
+          color: #333;
+        }
+        details > * {
+          display: revert !important;
+        }
+        details summary {
+          display: none !important;
+        }
+        #no-match {
+          display: none !important;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+        tr,
+        .callout {
+          break-inside: avoid;
+        }
+        .table-wrap {
+          overflow: visible;
+        }
+        table {
+          font-size: 10pt;
+        }
+        .inventory th {
+          width: 30%;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="meta">Desktop engineering plan · 10 November 2026 · source <code>131f6a56418c0208d869397530632f133946552b</code></p>
+        <h1>Effect across Bay desktop</h1>
+        <p class="lead">
+          Move desktop asynchronous orchestration to Effect in one complete implementation. Keep the synchronous browser interaction paths and shared native
+          contracts intact.
+        </p>
+        <p>
+          This is the implementation plan requested after the repository audit. The work packages below are dependency steps within one migration. Completion
+          means every workflow marked <em>Migrate</em> or <em>Scope / adapt</em> is handled, its previous orchestration is removed, and the complete validation
+          gate passes.
+        </p>
+        <p class="meta">
+          Plan only. No application code or dependency has been changed. Architecture choices below are recommended decisions, adopted for this plan.
+          Compatibility and performance remain proof obligations.
+        </p>
+      </header>
+      <nav aria-label="Plan sections">
+        <a href="#commitment">Commitment</a><a href="#decisions">Decisions</a><a href="#architecture">Architecture</a><a href="#inventory">Repo inventory</a
+        ><a href="#implementation">Implementation</a><a href="#policies">Failure policies</a><a href="#verification">Verification</a
+        ><a href="#done">Completion</a><a href="#evidence">Sources</a>
+      </nav>
+
+      <section id="commitment">
+        <h2>1. What “properly implemented” means</h2>
+        <div class="callout">
+          <p>
+            <strong>One coherent desktop service architecture.</strong> Effect owns long-running jobs, I/O coordination, scoped resources, cancellation, bounded
+            retries and background failure handling. It does not become a second UI store or a new native engine.
+          </p>
+          <p>
+            All in-scope work lands before the migration is considered complete. Internal reviewable commits are useful; a small wrapper released while most
+            orchestration remains ad hoc does not satisfy this plan.
+          </p>
+        </div>
+        <ul>
+          <li>
+            Cover startup/persistence, encrypted sync, imports, live folders/accounts/calendar, search/previews/translation,
+            capture/Library/sharing/downloads/files, automation/extensions/system workflows and diagnostics.
+          </li>
+          <li>
+            Give every background task, timer and native subscription in those workflows an owner, a stop condition and a failure policy. Preserve deliberately
+            synchronous and UI-local work.
+          </li>
+          <li>
+            Keep mobile, the website, videos and the standalone Bun CLI outside this migration. Their shared package interfaces remain usable without importing
+            Effect.
+          </li>
+          <li>Preserve saved data, sync protocol, permissions, authentication, privacy behavior, undo, native event order and browser responsiveness.</li>
+        </ul>
+        <p class="muted">
+          Audit method: inventory scan of 489 non-test TypeScript/TSX/MJS modules across <code>apps/browser/src</code> and six relevant package source trees,
+          followed by focused tracing of asynchronous workflows, package/native contracts and regression suites. Vendor and fixture directories were excluded
+          from that census. The census is coverage context, not a claim of a line-by-line review or a runtime test pass.
+        </p>
+      </section>
+
+      <section id="decisions">
+        <h2>2. Decisions resolved</h2>
+        <p>
+          No product or architecture decision is left waiting for an answer. These are the recommended choices to implement. A failing technical gate requires a
+          fix, not an automatic change of scope.
+        </p>
+        <div class="table-wrap">
+          <table class="decisions">
+            <thead>
+              <tr>
+                <th>Decision</th>
+                <th>Recommended answer adopted</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Version and placement</th>
+                <td>
+                  Pin <code>effect@4.1.3</code> exactly in <code>apps/browser/package.json</code> and the root pnpm lockfile. npm’s current
+                  <code>latest</code> was verified as 4.1.3. Use its v4 APIs and documentation consistently; no beta or v3 examples.
+                  <a href="https://www.npmjs.com/package/effect/v/4.1.3">Package version</a>.
+                </td>
+              </tr>
+              <tr>
+                <th>Runtime ownership</th>
+                <td>
+                  One module-owned desktop <code>ManagedRuntime</code> per JS application instance. App services are shared by all windows. Child scopes belong
+                  to windows, profiles, accounts, documents or explicit jobs. Never create a runtime per hook/render/window. Do not mirror the authoritative
+                  Zustand store into Effect Ref state.
+                </td>
+              </tr>
+              <tr>
+                <th>Code location</th>
+                <td>
+                  Use <code>apps/browser/src/effect/</code> for runtime, ports and execution helpers. Keep domain workflows beside their existing feature code.
+                  No new workspace package or generic application framework.
+                </td>
+              </tr>
+              <tr>
+                <th>React and Zustand</th>
+                <td>
+                  Retain current rendering, stores, selectors and synchronous actions. Hooks consume ordinary data and call command adapters. Effects, fibers
+                  and service instances remain outside product state.
+                </td>
+              </tr>
+              <tr>
+                <th>Shared packages</th>
+                <td>
+                  Keep <code>@bay/core</code>, <code>@bay/chromium</code>, <code>@bay/desktop</code>, <code>@bay/sync</code>, <code>@bay/import</code> and
+                  shaders Effect-free. Desktop adapters call their existing APIs. Fix a native contract only when required by an acceptance test.
+                </td>
+              </tr>
+              <tr>
+                <th>Schema and validation</th>
+                <td>
+                  Retain Valibot and current persisted/native data schemas. Typed Effect failures do not require replacing every validator with Effect Schema.
+                </td>
+              </tr>
+              <tr>
+                <th>Platform packages</th>
+                <td>
+                  Use core Effect plus thin ports over existing native modules and RN <code>fetch</code>. Do not import Node/Bun/browser-DOM platform adapters
+                  into Hermes or add a second filesystem/HTTP implementation.
+                </td>
+              </tr>
+              <tr>
+                <th>Scheduling</th>
+                <td>
+                  Retain the aligned single-timer scheduler in <code>lib/throttledTimers.ts</code> behind a scoped service. Use Effect schedules for bounded
+                  retries and scoped job timing where appropriate; do not replace every periodic job with its own loop.
+                </td>
+              </tr>
+              <tr>
+                <th>Native cancellation</th>
+                <td>
+                  Forward AbortSignal/native job cancellation when supported. Otherwise invalidate stale continuations and retain resource exclusivity until the
+                  underlying native operation settles. A cancelled wait does not prove a native mutation stopped.
+                </td>
+              </tr>
+              <tr>
+                <th>Explicit sync completion</th>
+                <td>
+                  Make <code>syncNow()</code> await the cycle that satisfies its request, including a coalesced rerun when a cycle is already active. Update the
+                  settings caller and tests together. <code>scheduleSync()</code> stays a non-blocking trigger. Stopping rejects pending syncNow requests with a
+                  typed SyncStopped failure; the UI boundary handles it as expected cancellation. No waiter is silently dropped.
+                </td>
+              </tr>
+              <tr>
+                <th>Tests</th>
+                <td>
+                  Keep <code>node:test</code>, the existing app loader/stubs, pure suites and Swift/native tests. Add fake service layers and Effect TestClock
+                  tests. Do not add Vitest or <code>@effect/vitest</code> merely to adopt Effect.
+                </td>
+              </tr>
+              <tr>
+                <th>Delivery and rollback</th>
+                <td>
+                  One complete migration with dependency-ordered commits, no permanent feature flag or duplicate old/new orchestration. Preserve formats and
+                  public functions so an application-code revert can reopen existing data. This planning task does not commit, push or ship.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>3. Runtime and service boundaries</h2>
+        <ol class="architecture" aria-label="Execution and ownership order">
+          <li>
+            <strong>Native contract guard and synchronous bootstrap</strong>
+            <p>
+              Keep <code>nativeApi.tsx</code> compatibility checking and the import-first bridge batching hook. Install early error reporting, establish React
+              batching, load/hydrate saved state synchronously, and preserve page-handoff-before-window-close behavior.
+            </p>
+          </li>
+          <li>
+            <strong>One app runtime and a small set of infrastructure ports</strong>
+            <p>
+              Build native, persistence, HTTP, scheduler and diagnostic services from already available capabilities. Establish readiness before mounting
+              dependent roots or accepting background commands, without letting asynchronous layer acquisition interleave with the synchronous bootstrap prefix.
+              Layer acquisition registers owned resources. Transient connectivity or denied permissions must not poison a memoized app layer; perform
+              recoverable reads/connects as operations.
+            </p>
+          </li>
+          <li>
+            <strong>Domain services with scoped work</strong>
+            <p>
+              Sync/import, activity/calendar, page work, Library/downloads and automation/system workflows use typed programs. Scope jobs by stable resource
+              identity. Services may depend on ports and plain domain functions, without importing React components or acquiring stores through circular module
+              initialization.
+            </p>
+          </li>
+          <li>
+            <strong>Explicit command and event boundaries</strong>
+            <p>
+              Native callbacks and UI handlers run programs through a small command adapter. Domain programs compose other programs directly. Preserve typed
+              outcomes and interruption with Exit-aware handling; only legacy callers that expect Promise rejection receive it.
+            </p>
+          </li>
+          <li>
+            <strong>Ordinary state updates and synchronous browser actions</strong>
+            <p>
+              Commit results to Zustand/React at deliberate points after rechecking identity/generation. Immediate tab activation, focus, native command IDs and
+              batched page reports stay synchronous. Resource ownership does not require queueing every event.
+            </p>
+          </li>
+        </ol>
+        <details class="deep">
+          <summary>Proposed file ownership and dependency rules</summary>
+          <pre>
+apps/browser/src/
+  effect/
+    runtime.ts          app layer, one runtime, lifecycle and test disposal
+    commands.ts         UI/native execution boundaries and Exit handling
+    errors.ts           shared error metadata; domain errors live with their domain
+    ports/
+      native.ts         typed subsets of existing native APIs
+      documents.ts      sync document access + tracked async writes
+      http.ts           RN fetch, AbortSignal, status and decoding
+      scheduler.ts      scoped everySlowly registration; injected clock
+      diagnostics.ts    existing consent-aware logging/telemetry bridge
+    testing.ts          fake ports, clock helpers and resource accounting
+  lib/
+    persistenceService.ts, browserLifecycleService.ts
+    historyService.ts, bookmarkService.ts, notificationService.ts
+    localFileService.ts, downloadWorkService.ts, tidyWorkService.ts
+  sync/
+    service.ts          cycle, persistence, scheduler and UI port composition
+    engine.ts           existing public functions delegate to the service
+  components/import/
+    workflow.ts         discovery/auth/jobs/application; React hook stays UI-only
+  activity/
+    service.ts, calendarService.ts, connectionService.ts
+  components/commandBar/searchService.ts
+  components/site/previewService.ts, pageWorkService.ts
+  components/capture/service.ts
+  components/library/service.ts, sharingService.ts
+  components/cli/automationService.ts
+  components/extensions/service.ts
+  telemetry/service.ts</pre>
+          <p>
+            The names above are proposed ownership, not a requirement to create a file for every exported method. Keep existing names where clearer. Ports cover
+            workflows actually needed; do not mechanically wrap all native functions. Pure domain code cannot import the runtime. Raw shared packages cannot
+            import desktop service implementations.
+          </p>
+          <p>
+            Store ports provide narrow <code>read / subscribe / apply</code> operations using plain snapshots. Production composition wires the existing Zustand
+            stores; unit tests supply fake ports. No runtime import inside a store initializer and no service constructor that starts hidden network work.
+          </p>
+        </details>
+        <details class="deep">
+          <summary>Lifetime, concurrency and shutdown contract</summary>
+          <ul>
+            <li>
+              App-owned scopes hold durable listeners, the scheduler and long-lived workers. Each worker handles a failed job and remains available for
+              subsequent jobs; failure must not silently kill a refresh service or unrelated siblings. Closing one window cannot stop sync or another window’s
+              work.
+            </li>
+            <li>
+              Window/document scopes interrupt previews, captures, translation and UI discovery on close or document replacement. Use document/navigation
+              generations for document-bound work and a tab lifetime for work that survives view replacement. Moving a retained page transfers ownership without
+              interrupting it; component unmount alone cannot dispose transferred tab work.
+            </li>
+            <li>
+              Profile/account jobs key caches, locks and generations by identity. Disconnect/delete increments a generation before removing state, preventing an
+              old result from restoring it.
+            </li>
+            <li>
+              Keep one active sync cycle, one reconciler per automation domain, one publication operation per Easel, preserving immediate busy rejection, and
+              one relevant mutation per resource. Native history already serializes writes per profile; reuse that guarantee.
+            </li>
+            <li>
+              Use coalescing triggers for “refresh/reconcile again”, bounded queues for real commands and bounded parallelism for independent reads. Native
+              callback producers must not block waiting for a full queue. Critical events stay lossless or trigger explicit snapshot recovery; replaceable
+              progress can coalesce.
+            </li>
+            <li>
+              Scope finalizers remove listeners, timers, watchers, temporary page state and tracked work exactly once. They are idempotent and cannot launch
+              unbounded networking.
+            </li>
+            <li>
+              On <code>willQuit</code>, synchronously flush and freeze the correct session, then call <code>replyToTerminate</code>. Keep the runtime alive
+              through <code>quitCancelled</code>. Runtime disposal is for confirmed teardown/test restart, not the cancelable quit request. Do not promise
+              asynchronous finalizers will run after process termination.
+            </li>
+            <li>
+              Successful quit relies on already durable local state; network sync, telemetry and file uploads are never prerequisites to terminating. Async
+              local writes have explicit durability tracking and do not weaken the existing synchronous final-save contract.
+            </li>
+          </ul>
+        </details>
+      </section>
+
+      <section id="inventory">
+        <h2>4. File-level adoption inventory</h2>
+        <p>
+          Every row has a disposition, work package, source anchors and required proof. “Keep plain” and “outside desktop scope” are deliberate final decisions.
+          “Scope / adapt” is still required work, limited to ownership and asynchronous policy around the existing implementation.
+        </p>
+        <div class="filters" role="search" aria-label="Filter repository inventory">
+          <label>Find a workflow or file<input id="search" type="search" placeholder="e.g. imports, calendar, quit" autocomplete="off" /></label>
+          <label
+            >Disposition<select id="kind">
+              <option value="all">All dispositions</option>
+              <option value="migrate">Migrate workflow</option>
+              <option value="boundary">Scope / adapt boundary</option>
+              <option value="plain">Keep plain</option>
+              <option value="outside">Outside desktop scope</option>
+            </select></label
+          >
+          <button id="expand" type="button" aria-pressed="false">Expand visible evidence</button><button id="reset" type="button">Reset</button>
+        </div>
+        <p id="filter-status" class="filter-status" aria-live="polite"></p>
+        <noscript><p>All inventory rows are visible. Expand each row to read its evidence; search requires JavaScript.</p></noscript>
+        <div class="table-wrap">
+          <table class="inventory" id="inventory-table">
+            <thead>
+              <tr>
+                <th>Workflow and disposition</th>
+                <th>Evidence and implementation contract</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">01</span>Startup and app lifetime<span class="tag">Migrate workflow</span><small>Work package 1–2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Module-level start calls install global listeners and services in a deliberate order.</p>
+                    <a class="source" data-source="apps/browser/src/main.tsx" data-line="1" href="../apps/browser/src/main.tsx"
+                      ><code>apps/browser/src/main.tsx:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      One module-owned desktop runtime. Preserve the synchronous bootstrap prefix; register cleanup for each long-lived service and supervise
+                      background failures.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Two windows share one runtime. Bootstrap order is unchanged. Restarting a test scope leaves no listeners or fibers behind.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">02</span>Session and document persistence<span class="tag">Migrate workflow</span><small>Work package 2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Synchronous hydration, dirty-document tracking, coalesced saves, quit freeze/resume, and a separate activity save timer.</p>
+                    <a class="source" data-source="apps/browser/src/lib/persist.ts" data-line="316" href="../apps/browser/src/lib/persist.ts"
+                      ><code>apps/browser/src/lib/persist.ts:316</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/activity/activityStore.ts"
+                      data-line="113"
+                      href="../apps/browser/src/activity/activityStore.ts"
+                      ><code>apps/browser/src/activity/activityStore.ts:113</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Persistence coordinator owns subscriptions and debouncing. Retain synchronous document writes and final flush; register activity, Library
+                      and Boost persistence without changing file formats.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Dirty writes coalesce. A failed write stays dirty. Private state is absent from disk. Quit cancellation resumes saves.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">03</span>Quit handshake and close guards<span class="tag">Scope / adapt boundary</span><small>Work package 2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      willQuit flushes and replies to native termination. beforeunload can cancel quitting; native waits for JS and has a five-second late-save
+                      prompt.
+                    </p>
+                    <a class="source" data-source="apps/browser/src/lib/shellBridge.ts" data-line="67" href="../apps/browser/src/lib/shellBridge.ts"
+                      ><code>apps/browser/src/lib/shellBridge.ts:67</code></a
+                    ><a class="source" data-source="packages/desktop/ios/Windows.swift" data-line="601" href="../packages/desktop/ios/Windows.swift"
+                      ><code>packages/desktop/ios/Windows.swift:601</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/windowClose.ts" data-line="1" href="../apps/browser/src/lib/windowClose.ts"
+                      ><code>apps/browser/src/lib/windowClose.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Keep the synchronous flush/freeze/reply path. Scopes own registration, not asynchronous reordering. Do not dispose the app runtime on
+                      willQuit or wait for networking before replying.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Stay resumes the same runtime and persistence. Successful quit preserves the pre-close session. No extra quit prompt or network delay.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">04</span>Native shell events and menus<span class="tag">Scope / adapt boundary</span><small>Work package 2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Command, window, download and scripting listeners coordinate native chrome with synchronous store actions.</p>
+                    <a class="source" data-source="apps/browser/src/lib/shellBridge.ts" data-line="48" href="../apps/browser/src/lib/shellBridge.ts"
+                      ><code>apps/browser/src/lib/shellBridge.ts:48</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/lib/appMenuIntegration.ts"
+                      data-line="34"
+                      href="../apps/browser/src/lib/appMenuIntegration.ts"
+                      ><code>apps/browser/src/lib/appMenuIntegration.ts:34</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/menuUpdates.ts" data-line="1" href="../apps/browser/src/lib/menuUpdates.ts"
+                      ><code>apps/browser/src/lib/menuUpdates.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>Scoped registration and supervised asynchronous branches. Keep immediate focus, appearance, window and menu updates synchronous.</p>
+                    <p class="label">Required proof</p>
+                    <p>One handler per event; teardown removes all registrations; command latency and menu debounce behavior are unchanged.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row"><span class="row-index">05</span>Native event batching<span class="tag">Keep plain</span><small>Work package 2</small></th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Held page reports are applied before the next native callback in one React batch.</p>
+                    <a class="source" data-source="apps/browser/src/lib/bridgeEvents.ts" data-line="1" href="../apps/browser/src/lib/bridgeEvents.ts"
+                      ><code>apps/browser/src/lib/bridgeEvents.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Keep the batching mechanism, held-event set, import-first installation and callback ordering plain. No stream or fiber per page report.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Existing bridgeEvents tests pass; event order and React commit counts remain unchanged.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">06</span>Engine tab-strip reconciliation<span class="tag">Scope / adapt boundary</span><small>Work package 2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      An initial snapshot precedes buffered transactions. Revisions, immediate command IDs and one outstanding command per strip prevent
+                      feedback loops.
+                    </p>
+                    <a class="source" data-source="apps/browser/src/lib/engineTabs.ts" data-line="57" href="../apps/browser/src/lib/engineTabs.ts"
+                      ><code>apps/browser/src/lib/engineTabs.ts:57</code></a
+                    ><a class="source" data-source="packages/chromium/src/tabStripBridge.ts" data-line="82" href="../packages/chromium/src/tabStripBridge.ts"
+                      ><code>packages/chromium/src/tabStripBridge.ts:82</code></a
+                    ><a class="source" data-source="apps/browser/src/store/tabStripSync.ts" data-line="1" href="../apps/browser/src/store/tabStripSync.ts"
+                      ><code>apps/browser/src/store/tabStripSync.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Effect owns snapshot acquisition, failure reporting and listener lifetime. Retain synchronous receive/project/send logic and its microtask
+                      batching; recovery re-reads state before any resend.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Early/stale/duplicate transactions, native-origin changes and lost acknowledgements cannot duplicate commands or reorder tabs.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">07</span>Window and page ownership transfer<span class="tag">Scope / adapt boundary</span
+                  ><small>Work package 2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Pages are handed off before the old window closes; discard sweeps inspect visible, dirty and kept pages.</p>
+                    <a class="source" data-source="apps/browser/src/lib/tabNavigation.ts" data-line="30" href="../apps/browser/src/lib/tabNavigation.ts"
+                      ><code>apps/browser/src/lib/tabNavigation.ts:30</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/tabLifecycle.ts" data-line="364" href="../apps/browser/src/lib/tabLifecycle.ts"
+                      ><code>apps/browser/src/lib/tabLifecycle.ts:364</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Scope asynchronous lifecycle work by page identity. Preserve synchronous handoff and retained-page ownership. Serialize discard sweeps and
+                      release timers on replacement.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Move-tab and slow-mount acceptance stays green. No visible, dirty, kept or newly replaced page is discarded.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">08</span>History readiness, migration and writes<span class="tag">Migrate workflow</span><small>Work package 2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Readiness gates, legacy migration, native events and existing per-profile Promise write serialization.</p>
+                    <a class="source" data-source="apps/browser/src/lib/history.ts" data-line="259" href="../apps/browser/src/lib/history.ts"
+                      ><code>apps/browser/src/lib/history.ts:259</code></a
+                    ><a class="source" data-source="packages/chromium/src/history.ts" data-line="18" href="../packages/chromium/src/history.ts"
+                      ><code>packages/chromium/src/history.ts:18</code></a
+                    ><a class="source" data-source="apps/browser/src/store/history.ts" data-line="41" href="../apps/browser/src/store/history.ts"
+                      ><code>apps/browser/src/store/history.ts:41</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      History service owns loading, readiness and migration. Reuse the lower-level per-profile queue instead of stacking a second competing
+                      queue. Store actions stay immediate.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      No lost additions/deletes before readiness; migration commits before legacy deletion; high-volume batches do not create one fiber per
+                      item.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">09</span>Bookmark readiness and migration<span class="tag">Migrate workflow</span><small>Work package 2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Chrome-backed bookmarks use local shadow state and queued updates while loading/migrating.</p>
+                    <a class="source" data-source="apps/browser/src/lib/bookmarks.ts" data-line="591" href="../apps/browser/src/lib/bookmarks.ts"
+                      ><code>apps/browser/src/lib/bookmarks.ts:591</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>Scope migration and listeners; model readiness explicitly, with bounded retry of safe reads and acknowledged migration steps.</p>
+                    <p class="label">Required proof</p>
+                    <p>Shadow data cannot overwrite Chrome before readiness; interrupted migration retains recoverable source data.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">10</span>Profile and private-session cleanup<span class="tag">Migrate workflow</span><small>Work package 2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Delayed profile deletion and private-window download/session cleanup call native APIs.</p>
+                    <a class="source" data-source="apps/browser/src/lib/profileCleanup.ts" data-line="15" href="../apps/browser/src/lib/profileCleanup.ts"
+                      ><code>apps/browser/src/lib/profileCleanup.ts:15</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/persist.ts" data-line="416" href="../apps/browser/src/lib/persist.ts"
+                      ><code>apps/browser/src/lib/persist.ts:416</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      A scoped cleanup worker owns retries, in-flight state and settlement. Failed profile deletion remains durably queued for the next launch,
+                      preserving session.json recovery. Retain private download cancellation, WebKit private session cleanup and native partial-deletion
+                      results.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Closing the final private window clears only its data; slow deletion cannot release a profile lease while native work is still running.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">11</span>Low-wakeup scheduling<span class="tag">Scope / adapt boundary</span><small>Work package 1–2</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>everySlowly aligns periodic work to a shared wall-clock grid and stops its timer when no jobs are needed.</p>
+                    <a class="source" data-source="apps/browser/src/lib/throttledTimers.ts" data-line="1" href="../apps/browser/src/lib/throttledTimers.ts"
+                      ><code>apps/browser/src/lib/throttledTimers.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Provide a scoped scheduler adapter around the existing implementation. Service jobs run Effects, but registration, alignment, needed/watch
+                      and the single-timer algorithm remain.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>No timer when all jobs are idle; coincident work uses the same wakeup; test-clock integration preserves sleep/wake behavior.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">12</span>Encrypted sync cycle and scheduling<span class="tag">Migrate workflow</span><small>Work package 3</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>running/again flags, debounce timers, sealed state, transport, multiple scopes and polling in stopSync coordinate a sync cycle.</p>
+                    <a class="source" data-source="apps/browser/src/sync/engine.ts" data-line="128" href="../apps/browser/src/sync/engine.ts"
+                      ><code>apps/browser/src/sync/engine.ts:128</code></a
+                    ><a class="source" data-source="apps/browser/src/sync/engine.ts" data-line="320" href="../apps/browser/src/sync/engine.ts"
+                      ><code>apps/browser/src/sync/engine.ts:320</code></a
+                    ><a class="source" data-source="apps/browser/src/sync/engine.ts" data-line="567" href="../apps/browser/src/sync/engine.ts"
+                      ><code>apps/browser/src/sync/engine.ts:567</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      One serialized SyncService with a coalescing trigger, explicit persistence/native ports, typed state and an awaitable stop. Preserve
+                      syncNow/scheduleSync public entry points.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Burst triggers cause one cycle plus at most one pending rerun. Sealed journal precedes publish. Stop blocks new triggers, awaits native
+                      settlement without polling, attempts retirement, then forgets credentials/clears local state in the existing order.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">13</span>Sync domain adapters and deterministic core<span class="tag">Scope / adapt boundary</span
+                  ><small>Work package 3</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Pure record mapping surrounds Promise-based history/password/transport operations. Native sync I/O has no cancellation API.</p>
+                    <a class="source" data-source="apps/browser/src/sync/adapters.ts" data-line="373" href="../apps/browser/src/sync/adapters.ts"
+                      ><code>apps/browser/src/sync/adapters.ts:373</code></a
+                    ><a class="source" data-source="packages/sync/src/scope.ts" data-line="443" href="../packages/sync/src/scope.ts"
+                      ><code>packages/sync/src/scope.ts:443</code></a
+                    ><a class="source" data-source="packages/sync/src/native.ts" data-line="26" href="../packages/sync/src/native.ts"
+                      ><code>packages/sync/src/native.ts:26</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Wrap desktop I/O at the edges; retain shared CRDT/order/HLC/canonicalization and scope cycle logic. Track non-cancellable native mutation
+                      settlement before releasing exclusivity.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Unapplied keys remain unapplied after adapter failure; journal replay, quarantine, compaction and publish/flush/pull/apply ordering
+                      survive unchanged.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">14</span>Import discovery and authorization<span class="tag">Migrate workflow</span><small>Work package 3</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Browser/profile discovery, Full Disk Access, keychain unlock and native error decoding are mixed with UI transitions.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/import/useImportFlow.ts"
+                      data-line="59"
+                      href="../apps/browser/src/components/import/useImportFlow.ts"
+                      ><code>apps/browser/src/components/import/useImportFlow.ts:59</code></a
+                    ><a class="source" data-source="packages/import/src/index.ts" data-line="258" href="../packages/import/src/index.ts"
+                      ><code>packages/import/src/index.ts:258</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Desktop ImportService separates discovery/authorization/job execution from React state. Keep user-triggered permission and unlock prompts;
+                      decode existing ImportError codes.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Denied access and user cancellation do not retry prompts; rediscovery refreshes profiles without losing the chosen destination.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">15</span>Native import jobs and progress<span class="tag">Migrate workflow</span><small>Work package 3</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Job IDs correlate progress and history chunks; AbortSignal invokes cancelImport; listeners and unlocked keys need cleanup.</p>
+                    <a class="source" data-source="packages/import/src/index.ts" data-line="271" href="../packages/import/src/index.ts"
+                      ><code>packages/import/src/index.ts:271</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/import/useImportFlow.ts"
+                      data-line="552"
+                      href="../apps/browser/src/components/import/useImportFlow.ts"
+                      ><code>apps/browser/src/components/import/useImportFlow.ts:552</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Desktop scoped adapter uses the existing package API, native cancellation and idempotent finalizers. Preserve chunk ordering, progress
+                      correlation and forgetUnlockedKeys on exit.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Cancellation reaches the native job exactly once; no later profile begins; listeners and unlocked keys are released after success, failure
+                      and interruption.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">16</span>Import application and one-use vault tokens<span class="tag">Migrate workflow</span
+                  ><small>Work package 3</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Native credentials/sign-ins precede tabs; Arc refreshes consumed tokens per destination; extension failures are aggregated.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/import/apply.ts"
+                      data-line="141"
+                      href="../apps/browser/src/components/import/apply.ts"
+                      ><code>apps/browser/src/components/import/apply.ts:141</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/import/apply.ts"
+                      data-line="342"
+                      href="../apps/browser/src/components/import/apply.ts"
+                      ><code>apps/browser/src/components/import/apply.ts:342</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/import/useImportFlow.ts"
+                      data-line="222"
+                      href="../apps/browser/src/components/import/useImportFlow.ts"
+                      ><code>apps/browser/src/components/import/useImportFlow.ts:222</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Extract ordered application into the import workflow. Pure destination mapping stays plain. Never retry consuming writes or parallelize
+                      Arc destinations blindly.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Passwords/sign-ins precede tab opening; every Arc destination gets its own token; unused tokens are discarded, including invalid/private
+                      destinations.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">17</span>Dia import and onboarding<span class="tag">Migrate workflow</span><small>Work package 3</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Dia launch grace, bounded polling, AppState listeners and onboarding invoke the import flow.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/import/useImportFlow.ts"
+                      data-line="312"
+                      href="../apps/browser/src/components/import/useImportFlow.ts"
+                      ><code>apps/browser/src/components/import/useImportFlow.ts:312</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/onboarding/importStep.tsx"
+                      data-line="1"
+                      href="../apps/browser/src/components/onboarding/importStep.tsx"
+                      ><code>apps/browser/src/components/onboarding/importStep.tsx:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Use one import workflow for the import window and onboarding. Preserve the launch grace window and existing maximum poll count; the UI
+                      remains a consumer.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>No polling after closing the flow; onboarding and the utility window report identical partial failures and counts.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">18</span>Live-folder refresh and provider requests<span class="tag">Migrate workflow</span
+                  ><small>Work package 4</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Per-folder in-flight deduplication, provider fan-out, HTTP errors, detail-page retries and stale data retention.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/activity/activityEngine.ts"
+                      data-line="21"
+                      href="../apps/browser/src/activity/activityEngine.ts"
+                      ><code>apps/browser/src/activity/activityEngine.ts:21</code></a
+                    ><a class="source" data-source="apps/browser/src/activity/net.ts" data-line="25" href="../apps/browser/src/activity/net.ts"
+                      ><code>apps/browser/src/activity/net.ts:25</code></a
+                    ><a class="source" data-source="apps/browser/src/activity/sources.ts" data-line="73" href="../apps/browser/src/activity/sources.ts"
+                      ><code>apps/browser/src/activity/sources.ts:73</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      ActivityService owns keyed refresh jobs; HttpPort carries AbortSignal and status metadata. Use bounded provider concurrency and per-source
+                      outcomes, retaining successful siblings and previous data.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Deleting a folder prevents late writes. GitHub detail pages are all-or-none. One failed provider cannot erase successful or cached items.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">19</span>Account connections and OAuth<span class="tag">Migrate workflow</span><small>Work package 4</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Browser-tab redirect observation, GitHub device polling, account validation and Keychain operations own temporary resources.</p>
+                    <a class="source" data-source="apps/browser/src/activity/googleAuth.ts" data-line="23" href="../apps/browser/src/activity/googleAuth.ts"
+                      ><code>apps/browser/src/activity/googleAuth.ts:23</code></a
+                    ><a class="source" data-source="apps/browser/src/activity/sources.ts" data-line="43" href="../apps/browser/src/activity/sources.ts"
+                      ><code>apps/browser/src/activity/sources.ts:43</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/settings/panes/LiveFolders.tsx"
+                      data-line="121"
+                      href="../apps/browser/src/components/settings/panes/LiveFolders.tsx"
+                      ><code>apps/browser/src/components/settings/panes/LiveFolders.tsx:121</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Connection scopes own tabs, subscriptions, polling and request cancellation. Serialize token refresh per account and suppress stale
+                      results after disconnect.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Closing/replacing the auth flow ends its listeners. Wrong-state redirects fail. Disconnected accounts cannot be restored by late
+                      callbacks; tokens never enter logs.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">20</span>Calendar refresh and meeting notifications<span class="tag">Migrate workflow</span
+                  ><small>Work package 4</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>EventKit reads, access checks, refresh deduplication, calendar-change events, timed alerts and meeting groups.</p>
+                    <a class="source" data-source="apps/browser/src/activity/calendar.ts" data-line="74" href="../apps/browser/src/activity/calendar.ts"
+                      ><code>apps/browser/src/activity/calendar.ts:74</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/activity/meetingAlerts.ts"
+                      data-line="83"
+                      href="../apps/browser/src/activity/meetingAlerts.ts"
+                      ><code>apps/browser/src/activity/meetingAlerts.ts:83</code></a
+                    ><a class="source" data-source="apps/browser/src/activity/index.ts" data-line="9" href="../apps/browser/src/activity/index.ts"
+                      ><code>apps/browser/src/activity/index.ts:9</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      CalendarService scopes reads and refreshes; scheduler owns alert jobs. Keep event mapping, meeting grouping rules and useNow display ticks
+                      plain. Request access only on explicit connect.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      No background access prompt, duplicate meeting notification or cross-window timer duplication; selected calendars and dismissed
+                      occurrences remain respected.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">21</span>Search suggestions, currencies and bangs<span class="tag">Migrate workflow</span
+                  ><small>Work package 5</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Warm-up/debounce timers, remote suggestions, currency lookups and cached bang loading feed plain suggestion building.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/commandBar/useSuggestions.ts"
+                      data-line="168"
+                      href="../apps/browser/src/components/commandBar/useSuggestions.ts"
+                      ><code>apps/browser/src/components/commandBar/useSuggestions.ts:168</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/commandBar/bangs.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/commandBar/bangs.ts"
+                      ><code>apps/browser/src/components/commandBar/bangs.ts:1</code></a
+                    ><a class="source" data-source="packages/core/src/suggestFetcher.ts" data-line="12" href="../packages/core/src/suggestFetcher.ts"
+                      ><code>packages/core/src/suggestFetcher.ts:12</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Desktop SearchService owns request generations and in-flight lifetime. Reuse the existing shared fetcher as the single debounce/cache
+                      owner and adapt its cancellation to the desktop scope. Do not create a second debounce/cache owner.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Old queries never replace new results; closing the palette cancels work; private/disabled search policies and shared mobile fetcher
+                      behavior are unchanged.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">22</span>Link, Gmail and GitHub previews<span class="tag">Migrate workflow</span><small>Work package 5</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      Anonymous link fetching has an eight-second abort; authenticated site previews execute inside the selected page and race an answer
+                      timeout.
+                    </p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/site/linkPreview.ts"
+                      data-line="32"
+                      href="../apps/browser/src/components/site/linkPreview.ts"
+                      ><code>apps/browser/src/components/site/linkPreview.ts:32</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/previews/SitePreview.tsx"
+                      data-line="64"
+                      href="../apps/browser/src/components/previews/SitePreview.tsx"
+                      ><code>apps/browser/src/components/previews/SitePreview.tsx:64</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      PreviewService owns timeout, request identity and cancellation. Preserve link credential policy and page/profile-bound authenticated
+                      fetches. Keep HTML/site parsing plain.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Hover target change cannot apply an old answer; anonymous previews send no cookies; authenticated previews never cross profile or private
+                      boundaries.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">23</span>Page translation and engine switching<span class="tag">Migrate workflow</span><small>Work package 5</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      Translation prepares native models, processes batches, follows changing documents and reverts; engine switching checks for unsaved work.
+                    </p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/site/translateState.ts"
+                      data-line="143"
+                      href="../apps/browser/src/components/site/translateState.ts"
+                      ><code>apps/browser/src/components/site/translateState.ts:143</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/site/translateState.ts"
+                      data-line="203"
+                      href="../apps/browser/src/components/site/translateState.ts"
+                      ><code>apps/browser/src/components/site/translateState.ts:203</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/pageEngines.ts" data-line="33" href="../apps/browser/src/lib/pageEngines.ts"
+                      ><code>apps/browser/src/lib/pageEngines.ts:33</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      PageWorkService owns per-document translation jobs and engine-switch checks. Preserve tokens and validate page identity after every await.
+                      Keep injected translator code and engine-switch decisions plain.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Navigation/revert stops follow loops; results cannot patch a replacement document; unsaved-work confirmation still precedes engine
+                      switching.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">24</span>Favicon, theme and thumbnail enrichment<span class="tag">Scope / adapt boundary</span
+                  ><small>Work package 5</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      Batched favicon lookup/flush, native color analysis, thumbnails and artwork caches mix asynchronous enrichment with cheap synchronous
+                      reads.
+                    </p>
+                    <a class="source" data-source="apps/browser/src/lib/favicons.ts" data-line="79" href="../apps/browser/src/lib/favicons.ts"
+                      ><code>apps/browser/src/lib/favicons.ts:79</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/tabThumbnails.ts" data-line="19" href="../apps/browser/src/lib/tabThumbnails.ts"
+                      ><code>apps/browser/src/lib/tabThumbnails.ts:19</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/siteIcons.ts" data-line="1" href="../apps/browser/src/lib/siteIcons.ts"
+                      ><code>apps/browser/src/lib/siteIcons.ts:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/media/artwork.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/media/artwork.ts"
+                      ><code>apps/browser/src/components/media/artwork.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Scope asynchronous lookups, flush timers and cache invalidation inside an enrichment owner. Retain batching, pure color calculations,
+                      immediate cache reads and native rendering.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>No one-fiber-per-icon overhead; profile changes invalidate the correct cache; stale image work cannot patch a removed page.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">25</span>Capture and developer screenshots<span class="tag">Migrate workflow</span><small>Work package 6</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Script installation, page capture and copy/save/Library/Easel/portrait actions form multi-step jobs.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/capture/state.ts"
+                      data-line="65"
+                      href="../apps/browser/src/components/capture/state.ts"
+                      ><code>apps/browser/src/components/capture/state.ts:65</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/capture/state.ts"
+                      data-line="149"
+                      href="../apps/browser/src/components/capture/state.ts"
+                      ><code>apps/browser/src/components/capture/state.ts:149</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/developer/screenshot.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/developer/screenshot.ts"
+                      ><code>apps/browser/src/components/developer/screenshot.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      CaptureService owns per-capture stages and document tokens; finalizers remove temporary page state. Reuse it for developer screenshots
+                      without moving injected scripts into Effect.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Cancellation/navigation cleans overlays and temporary resources; failed save never reports success; outputs and capture dimensions match
+                      existing behavior.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">26</span>Library and Easel storage, exports and live clips<span class="tag">Migrate workflow</span
+                  ><small>Work package 6</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Local image retention, batched import, native canvas export, file saves and live clip refresh own external resources.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/library/state.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/library/state.ts"
+                      ><code>apps/browser/src/components/library/state.ts:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/library/export.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/library/export.ts"
+                      ><code>apps/browser/src/components/library/export.ts:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/library/liveClip.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/library/liveClip.ts"
+                      ><code>apps/browser/src/components/library/liveClip.ts:1</code></a
+                    ><a class="source" data-source="packages/desktop/src/easel.tsx" data-line="111" href="../packages/desktop/src/easel.tsx"
+                      ><code>packages/desktop/src/easel.tsx:111</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      LibraryService coordinates durable writes and bounded batch work; native canvas refs remain owned by the component. Scope live clips to
+                      the source page and owning Easel.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      PNG/HTML exports remain valid, closing tabs retains Easels in Library, and interrupted imports do not leave dangling media references.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">27</span>Easel publication and stop-sharing<span class="tag">Migrate workflow</span><small>Work package 6</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>A save queue and per-Easel exclusivity protect Keychain identity, revision persistence and HTTP upload/delete.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/library/sharing.ts"
+                      data-line="22"
+                      href="../apps/browser/src/components/library/sharing.ts"
+                      ><code>apps/browser/src/components/library/sharing.ts:22</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/library/sharing.ts"
+                      data-line="54"
+                      href="../apps/browser/src/components/library/sharing.ts"
+                      ><code>apps/browser/src/components/library/sharing.ts:54</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/library/sharing.ts"
+                      data-line="134"
+                      href="../apps/browser/src/components/library/sharing.ts"
+                      ><code>apps/browser/src/components/library/sharing.ts:134</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      SharingService owns per-Easel leases and the serialized record writer. Preserve key and revision persistence before upload, existing
+                      feature gate and all HTTP status meanings.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      After timeout/crash the Mac can still stop sharing. Concurrent publish/stop requests cannot race revisions. Preserve the existing busy
+                      rejection for a second concurrent request. No automatic retry that creates a new identity or consumes a revision twice.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">28</span>Downloads and tidy renaming<span class="tag">Migrate workflow</span><small>Work package 6</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Download events update the store immediately; metadata refinement, file renames, undo and cleanup are asynchronous.</p>
+                    <a class="source" data-source="apps/browser/src/lib/tidyDownloads.ts" data-line="130" href="../apps/browser/src/lib/tidyDownloads.ts"
+                      ><code>apps/browser/src/lib/tidyDownloads.ts:130</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/tidyDownloads.ts" data-line="191" href="../apps/browser/src/lib/tidyDownloads.ts"
+                      ><code>apps/browser/src/lib/tidyDownloads.ts:191</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/pages/DownloadsPage.tsx"
+                      data-line="1"
+                      href="../apps/browser/src/components/pages/DownloadsPage.tsx"
+                      ><code>apps/browser/src/components/pages/DownloadsPage.tsx:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      DownloadWorkService owns per-download rename jobs and settlement. Preserve immediate progress updates and pure name suggestions. Model
+                      user renames and undo as explicit commands.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      No duplicate rename after repeated completion events; user filenames are respected; failed rename leaves a correct path; private history
+                      stays isolated.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">29</span>Tidy tabs and local model work<span class="tag">Migrate workflow</span><small>Work package 6</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Optional native model suggestions, timed animation and store changes form a cancellable user operation.</p>
+                    <a class="source" data-source="apps/browser/src/lib/tidyTabs.ts" data-line="68" href="../apps/browser/src/lib/tidyTabs.ts"
+                      ><code>apps/browser/src/lib/tidyTabs.ts:68</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/tidyTabs.ts" data-line="92" href="../apps/browser/src/lib/tidyTabs.ts"
+                      ><code>apps/browser/src/lib/tidyTabs.ts:92</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>TidyWorkService scopes model work by window/session, validates state before applying and keeps the pure plan calculation unchanged.</p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Closing a window or changing its tabs invalidates an old plan; undo works; no native-model availability prompt is retried automatically.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">30</span>Local file open/reconnect/drop<span class="tag">Migrate workflow</span><small>Work package 6</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Inspect/list/open/reconnect calls can fail for missing files or inaccessible user-approved locations.</p>
+                    <a class="source" data-source="apps/browser/src/lib/localFiles.ts" data-line="6" href="../apps/browser/src/lib/localFiles.ts"
+                      ><code>apps/browser/src/lib/localFiles.ts:6</code></a
+                    ><a class="source" data-source="packages/desktop/src/localFiles.tsx" data-line="23" href="../packages/desktop/src/localFiles.tsx"
+                      ><code>packages/desktop/src/localFiles.tsx:23</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/window/windowDrop.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/window/windowDrop.ts"
+                      ><code>apps/browser/src/components/window/windowDrop.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      LocalFileService maps typed access outcomes, scopes directory reads and preserves security-scoped native ownership. Keep LocalFilesArea
+                      and drag/drop views plain.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Reconnect is user-driven; deleted/inaccessible paths yield the existing UI outcome; Finder drop/upload and synced-pin access rules
+                      survive.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">31</span>Userscript watcher and reconciliation<span class="tag">Migrate workflow</span><small>Work package 7</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Watcher events trigger serialized install/reload/uninstall across profiles with generation checks.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/cli/userScripts.ts"
+                      data-line="40"
+                      href="../apps/browser/src/components/cli/userScripts.ts"
+                      ><code>apps/browser/src/components/cli/userScripts.ts:40</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/cli/userScripts.ts"
+                      data-line="86"
+                      href="../apps/browser/src/components/cli/userScripts.ts"
+                      ><code>apps/browser/src/components/cli/userScripts.ts:86</code></a
+                    ><a class="source" data-source="packages/desktop/src/userScripts.ts" data-line="10" href="../packages/desktop/src/userScripts.ts"
+                      ><code>packages/desktop/src/userScripts.ts:10</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      AutomationService owns watch(true)/watch(false), a coalescing reconciliation job and profile-bound generations. Keep parsing and matching
+                      pure.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Watcher is disabled on scope close; a stale scan cannot reinstall removed scripts; duplicate changes do not run concurrent reconcilers.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">32</span>Desktop CLI server and native scripting commands<span class="tag">Migrate workflow</span
+                  ><small>Work package 7</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Server enable/disable, active-tab reporting and command replies use generations and native subscriptions.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/cli/driverControl.ts"
+                      data-line="124"
+                      href="../apps/browser/src/components/cli/driverControl.ts"
+                      ><code>apps/browser/src/components/cli/driverControl.ts:124</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/lib/appMenuIntegration.ts"
+                      data-line="187"
+                      href="../apps/browser/src/lib/appMenuIntegration.ts"
+                      ><code>apps/browser/src/lib/appMenuIntegration.ts:187</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      AutomationService supervises reconciliation and request/reply lifetimes. Already-sent native mutations settle before applying the next
+                      desired generation; do not use blanket latest-wins interruption. Preserve native generation/lease checks and exactly one reply per
+                      accepted command. The external Bun CLI remains separate.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Stale enable results cannot resurrect a disabled server; shutdown does not leave pending command replies or change the current-tab
+                      selection contract.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">33</span>Extensions and search-engine discovery<span class="tag">Scope / adapt boundary</span
+                  ><small>Work package 7</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Native extension snapshots/events, installs, permission decisions, side panels and search-provider registration.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/extensions/bridge.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/extensions/bridge.ts"
+                      ><code>apps/browser/src/components/extensions/bridge.ts:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/extensions/actions.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/extensions/actions.ts"
+                      ><code>apps/browser/src/components/extensions/actions.ts:1</code></a
+                    ><a class="source" data-source="packages/chromium/src/extensions.ts" data-line="121" href="../packages/chromium/src/extensions.ts"
+                      ><code>packages/chromium/src/extensions.ts:121</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      A desktop extension workflow adapter owns acquisition/install failures and subscriptions. Keep synchronous event projection, permission UI
+                      decisions and panel geometry plain.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>No duplicate extension listeners, profile mixing or changed permission prompts; search engines reconcile once per native change.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">34</span>Notifications and updater events<span class="tag">Migrate workflow</span><small>Work package 7</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Notification authorization, icon download/timeouts, post/remove/replies and pending-update subscription cross the native boundary.</p>
+                    <a class="source" data-source="apps/browser/src/lib/webNotifications.ts" data-line="26" href="../apps/browser/src/lib/webNotifications.ts"
+                      ><code>apps/browser/src/lib/webNotifications.ts:26</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/updates.ts" data-line="1" href="../apps/browser/src/lib/updates.ts"
+                      ><code>apps/browser/src/lib/updates.ts:1</code></a
+                    ><a class="source" data-source="packages/desktop/src/appMenu.ts" data-line="117" href="../packages/desktop/src/appMenu.ts"
+                      ><code>packages/desktop/src/appMenu.ts:117</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      NotificationService scopes multi-step delivery; app scope owns updater listener. Preserve Sparkle as update authority and explicit
+                      permission decisions.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Private tabs do not post site notifications; closed/replaced pages get no late delivery; notification responses reach the correct page;
+                      updater behavior is unchanged.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">35</span>Media dialogs and task-manager polling<span class="tag">Scope / adapt boundary</span
+                  ><small>Work package 7</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Display-source discovery, cast dialog subscriptions and task list reads live while utility UI is open.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/media/SharePicker.tsx"
+                      data-line="64"
+                      href="../apps/browser/src/components/media/SharePicker.tsx"
+                      ><code>apps/browser/src/components/media/SharePicker.tsx:64</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/media/cast.ts"
+                      data-line="30"
+                      href="../apps/browser/src/components/media/cast.ts"
+                      ><code>apps/browser/src/components/media/cast.ts:30</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/taskManager/TaskManagerWindow.tsx"
+                      data-line="75"
+                      href="../apps/browser/src/components/taskManager/TaskManagerWindow.tsx"
+                      ><code>apps/browser/src/components/taskManager/TaskManagerWindow.tsx:75</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Window scopes own async discovery, polling and listeners. Keep playback controls, native PiP, marquee animation and ordinary view state
+                      plain.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Closing dialogs stops work; source selection cannot reply after cancellation; utility windows do not multiply global listeners.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">36</span>Settings workflows, credentials and privacy actions<span class="tag">Scope / adapt boundary</span
+                  ><small>Work package 7</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Protected reads/exports, clear-data actions, shortcut recording and system preferences mix one-shot and multi-step native work.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/settings/panes/Passwords.tsx"
+                      data-line="1"
+                      href="../apps/browser/src/components/settings/panes/Passwords.tsx"
+                      ><code>apps/browser/src/components/settings/panes/Passwords.tsx:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/settings/panes/Autofill.tsx"
+                      data-line="1"
+                      href="../apps/browser/src/components/settings/panes/Autofill.tsx"
+                      ><code>apps/browser/src/components/settings/panes/Autofill.tsx:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/pages/ClearDataDialog.tsx"
+                      data-line="1"
+                      href="../apps/browser/src/components/pages/ClearDataDialog.tsx"
+                      ><code>apps/browser/src/components/pages/ClearDataDialog.tsx:1</code></a
+                    ><a class="source" data-source="packages/desktop/src/system.tsx" data-line="19" href="../packages/desktop/src/system.tsx"
+                      ><code>packages/desktop/src/system.tsx:19</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Typed desktop commands own multi-step authorization/read/export and cleanup. Keep simple synchronous settings updates and one-shot native
+                      UI calls plain where no policy is needed.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Touch ID remains required; denied/cancelled operations are not retried; shortcut capture always stops; partial clear-data outcomes remain
+                      visible.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">37</span>Boosts and page customization<span class="tag">Scope / adapt boundary</span><small>Work package 5</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Plain customization state and native/injected execution, with async element-count refresh and persistence.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/boosts/editor.ts"
+                      data-line="180"
+                      href="../apps/browser/src/components/boosts/editor.ts"
+                      ><code>apps/browser/src/components/boosts/editor.ts:180</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/boosts/state.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/boosts/state.ts"
+                      ><code>apps/browser/src/components/boosts/state.ts:1</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/boosts.ts" data-line="1" href="../apps/browser/src/lib/boosts.ts"
+                      ><code>apps/browser/src/lib/boosts.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Scope only async editor queries and route persistence through its existing ownership. Preserve plain validation, CSS generation and page
+                      script execution boundaries.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Old queries cannot patch a closed editor; private/JavaScript opt-in rules and existing Boost sync data remain unchanged.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="boundary">
+                <th scope="row">
+                  <span class="row-index">38</span>Little Bay, external links and Handoff<span class="tag">Scope / adapt boundary</span
+                  ><small>Work package 2, 7</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Small-window expiry/access and native URL/Handoff listeners combine lifecycle work with pure routing rules.</p>
+                    <a
+                      class="source"
+                      data-source="apps/browser/src/components/littleBay/putAway.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/littleBay/putAway.ts"
+                      ><code>apps/browser/src/components/littleBay/putAway.ts:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/littleBay/access.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/littleBay/access.ts"
+                      ><code>apps/browser/src/components/littleBay/access.ts:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/lib/appMenuIntegration.ts"
+                      data-line="126"
+                      href="../apps/browser/src/lib/appMenuIntegration.ts"
+                      ><code>apps/browser/src/lib/appMenuIntegration.ts:126</code></a
+                    ><a class="source" data-source="apps/browser/src/lib/externalLinkRules.ts" data-line="1" href="../apps/browser/src/lib/externalLinkRules.ts"
+                      ><code>apps/browser/src/lib/externalLinkRules.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Scope expiry jobs and native registrations, retaining shared scheduler alignment. Keep routing decisions, profile selection and immediate
+                      open actions plain.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Expired windows archive once; access and private routing rules remain intact; external URLs still open in the intended profile/window.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="migrate">
+                <th scope="row">
+                  <span class="row-index">39</span>Telemetry delivery and diagnostics<span class="tag">Migrate workflow</span><small>Work package 7</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Bounded disk queues, serialized HTTP drains, abort-on-opt-out, retry backoff, sampling and early crash/rejection hooks.</p>
+                    <a class="source" data-source="apps/browser/src/telemetry/client.ts" data-line="232" href="../apps/browser/src/telemetry/client.ts"
+                      ><code>apps/browser/src/telemetry/client.ts:232</code></a
+                    ><a class="source" data-source="apps/browser/src/telemetry/client.ts" data-line="320" href="../apps/browser/src/telemetry/client.ts"
+                      ><code>apps/browser/src/telemetry/client.ts:320</code></a
+                    ><a class="source" data-source="apps/browser/src/telemetry/usage.ts" data-line="142" href="../apps/browser/src/telemetry/usage.ts"
+                      ><code>apps/browser/src/telemetry/usage.ts:142</code></a
+                    ><a class="source" data-source="apps/browser/src/telemetry/errors.ts" data-line="64" href="../apps/browser/src/telemetry/errors.ts"
+                      ><code>apps/browser/src/telemetry/errors.ts:64</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      DiagnosticsService owns scheduled delivery and request fibers. Keep early error hook installation and pure sanitization/OTLP encoding
+                      plain; Effect diagnostics use the existing consent gate.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>
+                      Opt-out synchronously changes generation, aborts uploads, clears identity/queue and invalidates late results, without waiting behind a
+                      worker or scope teardown. Queue limits/batch splitting and privacy rules persist. No recursive logging or network export while sharing is
+                      off.
+                    </p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row">
+                  <span class="row-index">40</span>React, Zustand and synchronous domain logic<span class="tag">Keep plain</span><small>Work package all</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Rendering, selectors, actions, undo, normalization, geometry and tab/window decisions are already plain synchronous logic.</p>
+                    <a class="source" data-source="apps/browser/src/store/browserStore.ts" data-line="1" href="../apps/browser/src/store/browserStore.ts"
+                      ><code>apps/browser/src/store/browserStore.ts:1</code></a
+                    ><a class="source" data-source="apps/browser/src/store/model.ts" data-line="1" href="../apps/browser/src/store/model.ts"
+                      ><code>apps/browser/src/store/model.ts:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/window/layout.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/window/layout.ts"
+                      ><code>apps/browser/src/components/window/layout.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Keep this code plain. React hooks call stable desktop commands and consume ordinary results/events. Never store Effect values, fibers,
+                      scopes or runtime objects in product state.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Existing state/undo/layout suites remain valid; no new async hop for ordinary tab selection, focus, drag or keyboard actions.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row">
+                  <span class="row-index">41</span>Shared pure TypeScript and formats<span class="tag">Keep plain</span><small>Work package all</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>
+                      URL parsing, suggestion construction, tidy algorithms, sync canonicalization/order/clocks and validation are shared deterministic code.
+                    </p>
+                    <a class="source" data-source="packages/core/src/index.ts" data-line="1" href="../packages/core/src/index.ts"
+                      ><code>packages/core/src/index.ts:1</code></a
+                    ><a class="source" data-source="packages/sync/src/canon.ts" data-line="1" href="../packages/sync/src/canon.ts"
+                      ><code>packages/sync/src/canon.ts:1</code></a
+                    ><a class="source" data-source="packages/sync/src/order.ts" data-line="1" href="../packages/sync/src/order.ts"
+                      ><code>packages/sync/src/order.ts:1</code></a
+                    ><a class="source" data-source="packages/sync/src/hlc.ts" data-line="1" href="../packages/sync/src/hlc.ts"
+                      ><code>packages/sync/src/hlc.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Retain plain functions and Valibot. The migration does not change schemas, persisted formats, sync protocols or the shared public API.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>All pure suites pass unchanged, and old data/sync peers remain readable without a data migration.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="plain">
+                <th scope="row">
+                  <span class="row-index">42</span>Native views, declarations and page scripts<span class="tag">Keep plain</span><small>Work package all</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Expo declarations, view refs/props, shaders and injected page code run at different boundaries from desktop orchestration.</p>
+                    <a class="source" data-source="packages/chromium/src/native.ts" data-line="44" href="../packages/chromium/src/native.ts"
+                      ><code>packages/chromium/src/native.ts:44</code></a
+                    ><a class="source" data-source="packages/desktop/src/index.tsx" data-line="1" href="../packages/desktop/src/index.tsx"
+                      ><code>packages/desktop/src/index.tsx:1</code></a
+                    ><a class="source" data-source="packages/shaders/src/index.tsx" data-line="1" href="../packages/shaders/src/index.tsx"
+                      ><code>packages/shaders/src/index.tsx:1</code></a
+                    ><a
+                      class="source"
+                      data-source="apps/browser/src/components/site/pageTranslator.ts"
+                      data-line="1"
+                      href="../apps/browser/src/components/site/pageTranslator.ts"
+                      ><code>apps/browser/src/components/site/pageTranslator.ts:1</code></a
+                    >
+                    <p class="label">Implementation</p>
+                    <p>
+                      Keep these APIs and implementations plain; add Effect adapters inside apps/browser. Do not bundle Effect into injected page scripts or
+                      rewrite Swift/Objective-C++/Rust/C++.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Native APIs remain compatible; engine resources, codecs, locales, GPU fallbacks, page behavior and shader performance remain intact.</p>
+                  </details>
+                </td>
+              </tr>
+              <tr data-kind="outside">
+                <th scope="row">
+                  <span class="row-index">43</span>Mobile, website, videos, Bun CLI and release tooling<span class="tag">Outside desktop scope</span
+                  ><small>Work package excluded</small>
+                </th>
+                <td>
+                  <details>
+                    <summary>Evidence, change and acceptance</summary>
+                    <p class="label">Current code</p>
+                    <p>Separate runtimes/workspaces and native/build tooling are adjacent to the desktop app.</p>
+                    <a class="source" data-source="pnpm-workspace.yaml" data-line="1" href="../pnpm-workspace.yaml"><code>pnpm-workspace.yaml:1</code></a
+                    ><a class="source" data-source="apps/mobile/package.json" data-line="1" href="../apps/mobile/package.json"
+                      ><code>apps/mobile/package.json:1</code></a
+                    ><a class="source" data-source="apps/cli/package.json" data-line="1" href="../apps/cli/package.json"><code>apps/cli/package.json:1</code></a
+                    ><a class="source" data-source="scripts/release.sh" data-line="1" href="../scripts/release.sh"><code>scripts/release.sh:1</code></a>
+                    <p class="label">Implementation</p>
+                    <p>
+                      No Effect dependency or migration in these areas. Desktop website-sharing calls remain in scope, while the website server is unchanged.
+                      Existing release commands continue to ship the desktop build.
+                    </p>
+                    <p class="label">Required proof</p>
+                    <p>Only apps/browser directly gains effect; the shared package manifests and all standalone lockfiles remain untouched.</p>
+                  </details>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p id="no-match" class="no-match" hidden>No matching workflow. Clear the search or choose another disposition.</p>
+        <p class="muted">
+          Source links are relative to this file’s <code>docs/</code> location. The label includes the audited line number; a normal browser may open or
+          download the source rather than jump to the line.
+        </p>
+      </section>
+
+      <section id="implementation">
+        <h2>5. Complete implementation sequence</h2>
+        <p>
+          The sequence follows dependencies and failure risk. These are work packages in one implementation, not optional later phases. A package finishes with
+          its tests and removal of the replaced orchestration.
+        </p>
+
+        <article class="work">
+          <h3><span>01</span> Establish compatibility, baseline and runtime</h3>
+          <p class="dependency">Owner: runtime infrastructure · prerequisite for every following package</p>
+          <details class="package-detail">
+            <summary>Implementation tasks and exit checks</summary>
+            <ol>
+              <li>
+                Capture the source revision, existing test results and Release benchmark baseline before changing orchestration. Record bundle/native API
+                versions and use a disposable <code>BAY_DATA_DIR</code>.
+              </li>
+              <li>
+                Add the exact Effect dependency with pnpm. Create a minimal production-bundled runtime compatibility test that executes a typed failure, an
+                interrupted fetch, a finalizer, a service layer and a clock-driven job in Hermes. This is a technical gate inside the full implementation, not a
+                shipped pilot.
+              </li>
+              <li>
+                Implement infrastructure ports, owned execution helpers, service composition, explicit resource accounting and injected test layers. Map native
+                throw/rejection/<code>{error}</code>/unavailable cases without collapsing different domain outcomes. Inject fake adapters in service tests; the
+                existing native-module stubs are not real implementations.
+              </li>
+              <li>
+                Integrate scoped access to the existing aligned scheduler. Prove one timer and no idle timer. Use v4 package types to validate every API choice;
+                avoid copies from v3 tutorials.
+              </li>
+              <li>
+                Check that all browser runtime imports stay free of Node/Bun/DOM-only dependencies, including transitive imports. Leave standalone mobile
+                dependencies and lockfile unchanged.
+              </li>
+            </ol>
+            <p>
+              <strong>Exit:</strong> Type checks, Metro production bundle, Hermes bytecode compilation and a real macOS runtime smoke test pass. Startup/bundle
+              baselines are saved; runtime test teardown reports zero owned resources.
+            </p>
+          </details>
+        </article>
+
+        <article class="work">
+          <h3><span>02</span> Own startup, persistence and browser lifecycle</h3>
+          <p class="dependency">Owner: browser foundation · depends on 01</p>
+          <details class="package-detail">
+            <summary>Implementation tasks and exit checks</summary>
+            <ol>
+              <li>
+                Split synchronous bootstrap from scoped listener acquisition without changing existing startup order. Hydration stays before window projection.
+                Page ownership setup stays before native window reconciliation.
+              </li>
+              <li>
+                Move persistence subscriptions/debouncing, activity/Library/Boost document registration and migration/readiness work into owned services.
+                Preserve dirty-document optimizations and keep failed writes recoverable.
+              </li>
+              <li>
+                Scope native shell/menu listeners, profile cleanup, private-session teardown, history/bookmarks readiness and lifecycle sweeps. Preserve raw
+                synchronous commands and batch application.
+              </li>
+              <li>
+                Retain the native termination handshake. Add quit-cancel/resume tests before replacing any handler. Do not put the final session flush behind a
+                queue or an asynchronously initialized layer.
+              </li>
+              <li>
+                Handle early engine snapshot failure and teardown explicitly, keeping revision reconciliation synchronous. Unknown native commit outcomes
+                recover by reading state, not replaying a command blindly.
+              </li>
+            </ol>
+            <p>
+              <strong>Exit:</strong> Existing persistence, bridge, history/bookmark, privacy, window move and tab-strip regressions pass. Two windows produce
+              one global service set; late window mount and cancelled quit preserve the correct session.
+            </p>
+          </details>
+        </article>
+
+        <article class="work">
+          <h3><span>03</span> Migrate encrypted sync and the full import workflow</h3>
+          <p class="dependency">Owner: data workflows · depends on 01–02</p>
+          <details class="package-detail">
+            <summary>Implementation tasks and exit checks</summary>
+            <ol>
+              <li>
+                Implement SyncService with one cycle owner, coalesced rerun, existing debounce/period rules and awaitable stop. Extract sealed persistence and
+                native transport ports. Preserve public sync commands and domain-specific status, while making syncNow wait for the cycle fulfilling its
+                request. Update its settings caller and tests explicitly.
+              </li>
+              <li>
+                Maintain the journal-before-publish rule, journal restoration, sequence uniqueness, quarantine, unapplied-key handling and exact scope
+                cycle/compaction order. Keep the shared sync core plain.
+              </li>
+              <li>
+                Extract discovery, access/unlock, native jobs, progress and ordered application from <code>useImportFlow</code>. Wire both import window and
+                onboarding to the same workflow with UI-only React state.
+              </li>
+              <li>
+                Preserve Arc per-destination vault token refresh, credential/sign-in-before-tab order, invalid/private destination disposal and partial failure
+                aggregation. Match native cancelImport and forgetUnlockedKeys to scope exit.
+              </li>
+              <li>
+                Replace stop polling, ad hoc workflow timers/flags and redundant cleanup only after equivalent service tests pass. No old workflow runs
+                alongside the new one.
+              </li>
+            </ol>
+            <p>
+              <strong>Exit:</strong> Sync failure injection and replay tests pass; stop does not overlap commits. Import cancellation, per-profile partial
+              failure, Dia grace/poll limits, vault handling and all existing fixtures pass.
+            </p>
+          </details>
+        </article>
+
+        <article class="work">
+          <h3><span>04</span> Migrate activity, account connections and calendar</h3>
+          <p class="dependency">Owner: connected desktop features · depends on 01–02; shares data ports with 03</p>
+          <details class="package-detail">
+            <summary>Implementation tasks and exit checks</summary>
+            <ol>
+              <li>
+                Move folder refresh, provider reads/detail batching and account connection work into ActivityService/ConnectionService. Use per-folder
+                deduplication, bounded fan-out and independently handled source failures.
+              </li>
+              <li>
+                Preserve GitHub all-or-none detail fetching and the current safe retry count; keep document/meeting mapping pure. HTTP errors retain status,
+                provider and retry timing metadata while log output remains sanitized.
+              </li>
+              <li>
+                Own OAuth temporary tabs, GitHub device polls, Keychain operations and token refresh. Cancel by account/window scope and reject stale updates
+                after disconnect. Retain current authorization flows rather than redesigning OAuth in this migration.
+              </li>
+              <li>
+                Move calendar refresh, native calendar-change registration and meeting alert schedules into owned services. Preserve explicit user access
+                prompts and existing alert/group/dismissal semantics.
+              </li>
+            </ol>
+            <p>
+              <strong>Exit:</strong> Mock providers demonstrate success, offline, signed-out, SSO, rate-limit and partial failure; deleted folders/accounts
+              accept no late result. EventKit denial, reconnect and duplicate alert tests pass.
+            </p>
+          </details>
+        </article>
+
+        <article class="work">
+          <h3><span>05</span> Migrate search, previews and per-document work</h3>
+          <p class="dependency">Owner: page services · depends on 01–02</p>
+          <details class="package-detail">
+            <summary>Implementation tasks and exit checks</summary>
+            <ol>
+              <li>
+                Introduce one owner for search debounce/cache/in-flight work, preserving current pure suggestion assembly. Do not stack an Effect debounce on
+                the existing shared fetcher’s debounce.
+              </li>
+              <li>
+                Scope link/site previews and enrichment to resource identity. Preserve cookie-free link fetches and authenticated page-context fetches with
+                profile separation.
+              </li>
+              <li>
+                Migrate translation preparation/batches/follow/revert and page-engine unsaved-work checks to per-document jobs. Retain token checks after every
+                asynchronous boundary and native model behavior.
+              </li>
+              <li>
+                Scope asynchronous favicon/theme/thumbnail/artwork work and Boost count queries. Keep batched cache reads, native drawing, injected scripts and
+                UI animation timers plain.
+              </li>
+            </ol>
+            <p>
+              <strong>Exit:</strong> Old queries/hover targets/documents never overwrite current state. Closing palettes/editors ends work. Search policies,
+              translation revert, page switching and authenticated preview isolation pass.
+            </p>
+          </details>
+        </article>
+
+        <article class="work">
+          <h3><span>06</span> Migrate capture, Library, sharing, downloads and files</h3>
+          <p class="dependency">Owner: local content workflows · depends on 01–02 and relevant document work from 05</p>
+          <details class="package-detail">
+            <summary>Implementation tasks and exit checks</summary>
+            <ol>
+              <li>
+                Extract capture stages and cleanup; use the same service for developer screenshots. Maintain copy/save/Library/Easel/portrait results and clean
+                temporary page state on interruption.
+              </li>
+              <li>
+                Own Library media retention, batch import/export and live clips while native views/refs remain component-owned. Move sharing’s save
+                queue/per-Easel exclusivity into explicit service ownership.
+              </li>
+              <li>
+                Preserve save-before-upload, Keychain identity, revision monotonicity and stop-sharing recovery. Preserve the feature gate and existing HTTP
+                status behavior.
+              </li>
+              <li>
+                Migrate download metadata refinement/rename/undo, tidy-tabs model work and local-file inspection/open/reconnect. Keep immediate download
+                progress and pure naming/planning logic intact.
+              </li>
+              <li>
+                Track native mutation settlement before unlocking the same file/Easel/download. Test interruption at each persistence boundary rather than
+                assuming cancellation is a rollback.
+              </li>
+            </ol>
+            <p>
+              <strong>Exit:</strong> Export artifacts render correctly; interrupted capture/share/import remains recoverable. Rename/undo, repeated completion
+              events, local permissions, private downloads and live clips pass their regressions.
+            </p>
+          </details>
+        </article>
+
+        <article class="work">
+          <h3><span>07</span> Migrate automation, system workflows and diagnostics</h3>
+          <p class="dependency">Owner: desktop integration · depends on 01–02; consent-aware diagnostics support the other packages</p>
+          <details class="package-detail">
+            <summary>Implementation tasks and exit checks</summary>
+            <ol>
+              <li>
+                Migrate userscript watch/reconciliation and desktop CLI-control lifecycle. Preserve native generations/leases and one accepted-command reply.
+                Keep the external CLI’s Bun runtime untouched.
+              </li>
+              <li>
+                Scope extension snapshots/install commands/listeners, display-media/cast discovery, task-manager polling, Little Bay expiry/access and Handoff
+                registrations. Immediate native event projection remains plain.
+              </li>
+              <li>
+                Extract multi-step notification/permission delivery, protected credential export, shortcut capture and clear-data jobs. Keep simple one-shot
+                native UI commands plain, with explicit error handling at the existing edge.
+              </li>
+              <li>
+                Migrate telemetry drain scheduling, abort-on-opt-out, bounded disk queues and usage sampling. Preserve current consent, sanitization, batch
+                splitting/backoff and early crash/rejection hooks. Do not install a new always-on exporter.
+              </li>
+              <li>
+                Remove obsolete timers, Promise-chain workers, duplicated started/running/again flags and redundant generation ownership from migrated
+                workflows. Retain identity guards that still protect non-cancellable native work.
+              </li>
+            </ol>
+            <p>
+              <strong>Exit:</strong> Watchers stop, disabled automation stays disabled, protected data keeps its authorization checks, and telemetry opt-out
+              prevents uploads and stale queue commits. No unobserved background fiber failure remains.
+            </p>
+          </details>
+        </article>
+
+        <article class="work">
+          <h3><span>08</span> Audit completion, regression proof and release readiness</h3>
+          <p class="dependency">Owner: integration and review · depends on every preceding package</p>
+          <details class="package-detail">
+            <summary>Implementation tasks and exit checks</summary>
+            <ol>
+              <li>
+                Re-scan all audited directories for async jobs, subscriptions, <code>new Promise</code>, <code>Promise.race</code>, timers, <code>fetch</code>,
+                abort controllers and mutable lifecycle flags. Every result is migrated, explicitly UI-local/synchronous, a raw shared boundary, or an
+                intentional exclusion with a reason.
+              </li>
+              <li>
+                Check that each resource has one owner; there is no duplicate cache/debounce/queue, nested runtime execution inside domain programs, or parallel
+                old/new implementation. Use diagnostics to assert cleanup after churn.
+              </li>
+              <li>
+                Run all verification gates below, fix regressions and perform a code review focused on lifetime, native settlement, data durability,
+                permissions, privacy and hot-path timing.
+              </li>
+              <li>
+                Build a Release candidate on a scratch profile and check old saved data, multi-window operation and the Sparkle candidate/update path before
+                shipping. Preserve all existing packaging/signing/resource rules.
+              </li>
+            </ol>
+            <p>
+              <strong>Exit:</strong> The completion contract is satisfied and evidence is attached to the implementation review. Once the feature is explicitly
+              landed, follow the repository’s nightly procedure in <code>docs/releasing.md</code>; this document itself authorizes no commit or release.
+            </p>
+          </details>
+        </article>
+      </section>
+
+      <section id="policies">
+        <h2>6. Failure, retry and cancellation policies</h2>
+        <p>
+          Use domain errors that preserve existing codes. Shared metadata can name operation, resource identity and sanitized native cause. Expected refusal,
+          failure, interruption and programmer defects must remain distinguishable. Preserve intentional optional-enrichment fallbacks and partial success
+          rather than turning every tolerated failure into a visible alert. “Cancelled” is not an error toast or a telemetry incident.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Operation</th>
+                <th>Policy to implement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Recoverable read/network failure</th>
+                <td>
+                  Preserve current documented retry behavior when present. For new safe-read recovery use at most two retries with jittered 500 ms / 1 s delays
+                  inside the operation’s timeout; abort interrupts fetch. No retry storm on wake or reconnect.
+                </td>
+              </tr>
+              <tr>
+                <th>Rate limit, auth, permission</th>
+                <td>
+                  Rate limits honor provider timing and schedule a later refresh. 401, SSO, denied permission and user cancellation do not auto-retry or repeat
+                  prompts. Manual reconnect is explicit. Token refresh is serialized and retried only where its existing protocol allows it.
+                </td>
+              </tr>
+              <tr>
+                <th>Sync</th>
+                <td>
+                  Keep the current normal-cycle/debounce behavior and stalled state. Retry only safe substeps at documented checkpoints. Never restart a full
+                  cycle blindly after a potentially committed write; preserve journal identity and native settlement.
+                </td>
+              </tr>
+              <tr>
+                <th>Imports and protected writes</th>
+                <td>
+                  No automatic retry of consumed vault tokens, credential/cookie imports, password writes, destructive clear-data, export authorization or user
+                  prompts. Dia retains its existing grace window/poll cap. Per-extension failures remain independently reportable.
+                </td>
+              </tr>
+              <tr>
+                <th>Publication/rename/delete</th>
+                <td>
+                  Persist required recovery state before mutation, preserve native/HTTP idempotency rules, and determine ambiguous outcomes by reading state.
+                  Interruption is not a rollback. Keep a lease until non-cancellable native work settles.
+                </td>
+              </tr>
+              <tr>
+                <th>Partial fan-out failure</th>
+                <td>
+                  Use independent outcomes where the product already preserves successful siblings, such as providers/extensions. Do not use fail-fast fan-out
+                  for these. Keep GitHub detail batches all-or-none to avoid false “item disappeared” changes.
+                </td>
+              </tr>
+              <tr>
+                <th>Timeouts</th>
+                <td>
+                  Preserve existing domain limits, including eight-second anonymous previews and sixty-second sharing requests. Introduce timeouts only where
+                  the underlying operation and recovery are known. Human permission/auth prompts are not governed by a generic network timeout.
+                </td>
+              </tr>
+              <tr>
+                <th>Finalizer failure</th>
+                <td>
+                  Best-effort cleanup logs locally through sanitized diagnostics. Durability failures remain explicit and dirty state is retained. Finalizers
+                  cannot wait indefinitely on networking or silently release an in-flight native mutation’s serialization guard.
+                </td>
+              </tr>
+              <tr>
+                <th>Background defects</th>
+                <td>
+                  Supervise and report once through the existing error boundary/consent-aware reporting path. Do not convert every defect to a normal success or
+                  restart a failing worker forever. Expected cancellation is silent. Redact credentials, recovery phrases, vault tokens, account identifiers,
+                  page content and sensitive URLs before serializing any error, span or log.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Use the version-matched <a href="https://effect.website/docs/v4/error-management/retrying">retry guidance</a>,
+          <a href="https://effect.website/docs/v4/resource-management/scope">scopes</a> and
+          <a href="https://effect.website/docs/v4/runtime">runtime guidance</a>. A runtime can run finalizers for registered resources when its scope closes;
+          neither Effect nor JavaScript guarantees cleanup after an OS kill.
+        </p>
+      </section>
+
+      <section id="verification">
+        <h2>7. Verification that proves the migration</h2>
+        <p>
+          All checks here are required implementation work, not results already achieved. Existing suites remain the baseline; new tests target concurrency and
+          failure behavior that simple wrappers would miss.
+        </p>
+        <div class="table-wrap">
+          <table class="verification">
+            <thead>
+              <tr>
+                <th>Gate</th>
+                <th>Evidence required</th>
+                <th>Existing entry points</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Static correctness</th>
+                <td>
+                  All workspace types, lint, anti-slop, format, React Compiler and shader checks pass. Effect imports are restricted to desktop
+                  orchestration/adapters/tests. Shared and standalone manifests remain unchanged.
+                </td>
+                <td>
+                  <code>pnpm typecheck</code><br /><code>pnpm lint</code><br /><code>pnpm slop</code><br /><code>pnpm fmt:check</code><br /><code
+                    >pnpm compiler:check</code
+                  ><br /><code>pnpm shaders:check</code>
+                </td>
+              </tr>
+              <tr>
+                <th>Deterministic service tests</th>
+                <td>
+                  Fake clock/ports test success, typed failure, defect, interruption, duplicate triggers, late results, cleanup and failed layer acquisition. No
+                  real sleeps/network or native app required for these tests.
+                </td>
+                <td>
+                  Keep <code>apps/browser/src/test-loader.mjs</code> and <code>*.test.mjs</code>; add service-level tests compatible with the existing Node
+                  runner.
+                </td>
+              </tr>
+              <tr>
+                <th>Data integrity</th>
+                <td>
+                  Journal-before-publish, sync replay/quarantine/unapplied keys, migration acknowledgement, quit freeze/resume, imported vault ordering and
+                  sharing recovery tested with failure injection between each commit step.
+                </td>
+                <td>
+                  <code>sync/engine.test.mjs</code>, <code>sync/adapters.test.mjs</code>, <code>packages/sync/src/scope.test.ts</code>, import
+                  apply/Arc/extension suites, <code>sharing.test.mjs</code>
+                </td>
+              </tr>
+              <tr>
+                <th>Existing regression suite</th>
+                <td>
+                  Existing store/domain suites still pass. Run relevant native and Swift package tests on macOS, including import/sync and engine/native API
+                  contracts.
+                </td>
+                <td><code>pnpm test</code>; inspect package scripts for platform requirements. Linux CI currently runs a subset and does not build the app.</td>
+              </tr>
+              <tr>
+                <th>Real Metro and Hermes</th>
+                <td>
+                  Production bundle compiles to Hermes bytecode, opens the native macOS app, and runs representative typed
+                  failure/cancellation/finalizer/service paths. Development reload adds no duplicate resources.
+                </td>
+                <td><code>node apps/browser/scripts/perf/js-bench.mjs bundle /tmp/bay-effect-candidate</code>, existing macOS Debug/Release build scripts</td>
+              </tr>
+              <tr>
+                <th>Desktop acceptance</th>
+                <td>
+                  Exercise two windows, move/close/slow mount, private teardown, quit and Stay, import cancellation, offline/reconnect sync, live
+                  folders/calendar, search/previews, translation, capture/export/share-stop, files/download rename, scripts/extensions, permissions and
+                  telemetry opt-out.
+                </td>
+                <td>
+                  Existing <code>apps/browser/scripts/*-test.mjs</code> harnesses, scratch profiles, native acceptance in
+                  <code>packages/chromium/scripts/acceptance.mjs</code>. Inspect each scenario’s setup/coverage before selecting it.
+                </td>
+              </tr>
+              <tr>
+                <th>Leak and failure churn</th>
+                <td>
+                  Repeatedly open/close windows, dialogs and pages; connect/disconnect; start/cancel imports. Owned listeners/jobs/timers/locks return to
+                  expected idle counts. Pending native mutations remain tracked until settlement.
+                </td>
+                <td>New resource accounting tests plus native acceptance and <code>native-bench.mjs --only churn</code> on copied builds</td>
+              </tr>
+              <tr>
+                <th>Performance</th>
+                <td>
+                  Interleaved baseline/candidate Release measurements with matching native API, bench/probe revisions, seed data and machine conditions. Save
+                  raw results, not only aggregate numbers.
+                </td>
+                <td><code>apps/browser/scripts/perf/js-bench.mjs</code>, <code>native-bench.mjs</code>, <code>render-bench.mjs</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <details class="deep">
+          <summary>Required failure scenarios by domain</summary>
+          <ul>
+            <li>
+              <strong>Runtime:</strong> duplicate start, partial acquisition failure, two roots, component unmount, test dispose/restart, background defect and
+              development reload.
+            </li>
+            <li>
+              <strong>Persistence/browser:</strong> failed write, malformed saved document, hydration ordering, legacy migration interrupted after native
+              commit, initial engine snapshot failure, duplicate/out-of-order transactions, beforeunload Stay, private close and delayed page handoff.
+            </li>
+            <li>
+              <strong>Sync:</strong> many simultaneous triggers, stop during seal/write/apply, transport disconnect/reconnect, damaged remote file, failed
+              adapter apply, profile retirement and lock held until native settlement.
+            </li>
+            <li>
+              <strong>Import:</strong> abort before/after native job creation, late progress/chunks, key unlock cancellation, Full Disk Access refusal, Dia
+              grace expiry, multi-profile partial failure, token reuse prevention, invalid/private destination and cancellation during native commit.
+            </li>
+            <li>
+              <strong>Connected services:</strong> HTTP 401/403 SSO/429/5xx, partial provider results, missing detail page, deleted folder/account mid-request,
+              replaced OAuth flow, event access revoked and repeated native calendar change.
+            </li>
+            <li>
+              <strong>Page work:</strong> rapid typing, hover replacement, navigation/document replacement, closed page/window, unsupported translation pair,
+              native translate failure, revert during follow and anonymous/authenticated preview isolation.
+            </li>
+            <li>
+              <strong>Local content:</strong> failed image/file save, capture cancellation at every stage, save-before-upload failure, upload timeout after
+              ambiguous success, stop-share failure, duplicate download completion, missing file and undo after rename.
+            </li>
+            <li>
+              <strong>Integration:</strong> stale native CLI generation, repeated watcher events, disabled script during scan, extension permission refusal,
+              cancelled source chooser, closed task manager, denied Touch ID and telemetry opt-out mid-upload.
+            </li>
+          </ul>
+        </details>
+        <details class="deep">
+          <summary>Recommended performance budgets adopted for implementation</summary>
+          <p>
+            These are selected acceptance budgets, not measured Effect overhead or existing project guarantees. Capture baseline before work, then use ten
+            interleaved baseline/candidate runs plus repeated scenario samples. Investigate stable regressions and fix them rather than relaxing budgets
+            automatically.
+          </p>
+          <ul>
+            <li>First-window/startup median increase: at most the greater of 5% or 20 ms.</li>
+            <li>Typing, tab switch and open/close p95 increase: at most the greater of 5% or 2 ms; no extra React commit per held page report.</li>
+            <li>
+              Idle CPU increase: at most 0.1 percentage point under the same workload. Idle wakeups increase: at most one per second, with zero timer when no
+              scheduled work is needed.
+            </li>
+            <li>Steady app physical footprint increase: at most 5 MiB under the same loaded session, with no upward growth across repeated churn.</li>
+            <li>
+              Hermes bytecode increase: at most 512 KiB. Record the raw/minified bundle and bytecode deltas; do not claim tree-shaking alone guarantees the
+              result.
+            </li>
+          </ul>
+          <p>
+            Keep benchmark/probe revisions identical between compared bundles. If instrumentation must change, rebuild the baseline with the same
+            instrumentation. The existing Metro config intentionally disables inline requires after measurement; do not change that setting to conceal
+            initialization cost.
+          </p>
+        </details>
+        <p class="note">
+          The current Linux CI checks types/format/lint, selected JavaScript suites and React Compiler, but does not build the macOS app. Add a focused
+          service/dependency-boundary gate there and retain macOS/Hermes/native acceptance evidence for this migration. Run <code>pnpm slop</code> locally
+          before any eventual commit as required by this repository.
+        </p>
+      </section>
+
+      <section id="done">
+        <h2>8. Definition of complete</h2>
+        <ol class="checklist">
+          <li>
+            Every “Migrate workflow” and “Scope / adapt boundary” inventory row has its final implementation and required evidence. No row is left as a later
+            adoption task.
+          </li>
+          <li>
+            Each resource and worker has one scope owner, with interruption and error semantics covered by tests. Non-cancellable native work cannot outlive its
+            serialization protection unnoticed.
+          </li>
+          <li>The old orchestration for migrated workflows is removed. Pure UI/domain/shared/native code intentionally stays plain.</li>
+          <li>All static, deterministic, existing regression, macOS/Hermes, data-integrity, acceptance, leak and performance gates pass.</li>
+          <li>
+            Existing saved data, sync peers, permissions, incognito boundaries, protected credentials, sharing recovery and telemetry consent remain compatible.
+          </li>
+          <li>
+            Only the desktop app gains Effect. No unrequested schema migration, new UI store, platform rewrite or standalone-workspace adoption is bundled into
+            the change.
+          </li>
+          <li>
+            A reviewable implementation includes the inventory disposition, test outputs and before/after performance artifacts. Release readiness preserves
+            engine resources and normal signing/Sparkle checks.
+          </li>
+        </ol>
+        <p>
+          <strong>Remaining uncertainty is empirical.</strong> Metro/Hermes execution, final bytecode/initialization cost and native failure behavior must be
+          verified during implementation. This audit found compatible architectural boundaries; it did not run Effect in Bay or measure an implementation.
+        </p>
+      </section>
+
+      <section id="evidence">
+        <h2>9. Audit anchors and references</h2>
+        <p>
+          Repository facts come from the source anchors in the inventory, package manifests, TypeScript/Metro configuration and existing test/build workflows.
+          Proposed service names, work packages and budgets are implementation decisions, not claims about code already present.
+        </p>
+        <ul>
+          <li>
+            <a href="../apps/browser/package.json"><code>apps/browser/package.json</code></a
+            >, <a href="../tsconfig.base.json"><code>tsconfig.base.json</code></a> and <a href="../apps/browser/metro.config.js"><code>metro.config.js</code></a
+            >: React Native macOS/Hermes, TypeScript 5.9 with strict checking, Valibot/Zustand and current bundling choices.
+          </li>
+          <li>
+            <a href="../pnpm-workspace.yaml"><code>pnpm-workspace.yaml</code></a
+            >: desktop workspace membership and standalone mobile/web/videos/CLI exclusions.
+          </li>
+          <li>
+            <a href="../apps/browser/src/main.tsx"><code>main.tsx</code></a
+            >, <a href="../apps/browser/src/lib/bridgeEvents.ts"><code>bridgeEvents.ts</code></a> and
+            <a href="../packages/desktop/ios/Windows.swift"><code>Windows.swift</code></a
+            >: startup, batching and native quit contracts.
+          </li>
+          <li>
+            <a href="../.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a
+            >, <a href="../apps/browser/src/test-loader.mjs"><code>test-loader.mjs</code></a
+            >, <a href="../apps/browser/scripts/perf/js-bench.mjs"><code>js-bench.mjs</code></a> and
+            <a href="../apps/browser/scripts/perf/native-bench.mjs"><code>native-bench.mjs</code></a
+            >: current validation and measurement paths.
+          </li>
+          <li>
+            Effect <a href="https://www.npmjs.com/package/effect/v/4.1.3">4.1.3</a>, verified via <code>pnpm view effect version dist-tags --json</code> on the
+            audit date. The <a href="https://github.com/Effect-TS/effect#readme">official repository</a> documents v4 and package/tooling requirements.
+          </li>
+          <li>
+            Version-matched Effect guidance for <a href="https://effect.website/docs/v4/runtime">runtime and managed layers</a>,
+            <a href="https://effect.website/docs/v4/resource-management/scope">scope ownership</a>,
+            <a href="https://effect.website/docs/v4/error-management/retrying">bounded retries</a> and
+            <a href="https://effect.website/docs/v4/scheduling/using-schedules">scheduling</a>.
+          </li>
+        </ul>
+      </section>
+      <footer>
+        Prepared for Bay desktop. Source inventory and architecture audit, with recommended decisions resolved. Open the file directly to use search and
+        evidence disclosures; print expands the complete inventory.
+      </footer>
+    </main>
+    <script>
+      (() => {
+        const search = document.getElementById("search"),
+          kind = document.getElementById("kind"),
+          rows = [...document.querySelectorAll("#inventory-table tbody tr")],
+          status = document.getElementById("filter-status"),
+          expand = document.getElementById("expand"),
+          reset = document.getElementById("reset"),
+          empty = document.getElementById("no-match");
+        const text = rows.map((row) => row.textContent.toLowerCase());
+        function update() {
+          const q = search.value.trim().toLowerCase();
+          let visible = 0;
+          rows.forEach((row, i) => {
+            row.hidden = !(kind.value === "all" || row.dataset.kind === kind.value) || !text[i].includes(q);
+            if (!row.hidden) visible++;
+          });
+          status.textContent = visible + " of " + rows.length + " workflow families shown";
+          empty.hidden = visible !== 0;
+          syncExpand();
+        }
+        function syncExpand() {
+          const visible = rows.filter((row) => !row.hidden),
+            all = visible.length > 0 && visible.every((row) => row.querySelector("details").open);
+          expand.textContent = all ? "Collapse visible evidence" : "Expand visible evidence";
+          expand.setAttribute("aria-pressed", String(all));
+          expand.disabled = visible.length === 0;
+        }
+        search.addEventListener("input", update);
+        kind.addEventListener("change", update);
+        rows.forEach((row) => row.querySelector("details").addEventListener("toggle", syncExpand));
+        expand.addEventListener("click", () => {
+          const visible = rows.filter((row) => !row.hidden),
+            open = !visible.every((row) => row.querySelector("details").open);
+          visible.forEach((row) => (row.querySelector("details").open = open));
+          syncExpand();
+        });
+        reset.addEventListener("click", () => {
+          search.value = "";
+          kind.value = "all";
+          rows.forEach((row) => (row.querySelector("details").open = false));
+          update();
+          search.focus();
+        });
+        const disclosures = [...document.querySelectorAll("details")];
+        let printState = null;
+        window.addEventListener("beforeprint", () => {
+          printState = { hidden: rows.map((row) => row.hidden), open: disclosures.map((detail) => detail.open) };
+          rows.forEach((row) => {
+            row.hidden = false;
+          });
+          disclosures.forEach((detail) => (detail.open = true));
+        });
+        window.addEventListener("afterprint", () => {
+          if (printState) {
+            rows.forEach((row, i) => {
+              row.hidden = printState.hidden[i];
+            });
+            disclosures.forEach((detail, i) => (detail.open = printState.open[i]));
+            printState = null;
+            syncExpand();
+          }
+        });
+        update();
+      })();
+    </script>
+  </body>
+</html>
