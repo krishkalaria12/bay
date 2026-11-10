@@ -18,6 +18,7 @@ const store = () => useBrowser.getState();
 const declinedSites = new Set<string>();
 const movingTabs = new Set<string>();
 const siteMoves = new Map<string, number>();
+
 // A redirect chain across sites with different engines can't bounce a tab between them.
 const SITE_MOVE_SPACING_MS = 10_000;
 const hostLabel = (site: string) => new URL(site).hostname.replace(/^www\./, "");
@@ -49,6 +50,7 @@ export function persistEngine(tabId: string, engine: PageEngine) {
 async function mayLeavePage(t: Tab, title: string, message: string, confirmTitle: string): Promise<boolean> {
   if (!wantsPage(t) || !(await hasUnsavedWork(t.id))) return true;
   const { confirmed } = await confirm({ title, message, confirmTitle, cancelTitle: "Stay on Page", windowId: t.windowId });
+
   return confirmed;
 }
 
@@ -58,18 +60,23 @@ const pageUrl = (t: Tab | undefined) => t?.url || t?.navigation?.url || "";
 export async function goBackAcrossEngines(tabId: string): Promise<boolean> {
   const back = pageOf(tabId).engineBack;
   const t = store().tabs[tabId];
+
   if (!back || !t) return false;
   const from = pageUrl(t);
+
   const leaving = await mayLeavePage(
     t,
     "Go back to the previous page?",
     `It opens in ${ENGINE_NAMES[back.engine]}, so changes you made on this page may not be saved.`,
     "Go Back",
   );
+
   const now = store().tabs[tabId];
+
   if (!leaving || !now || pageUrl(now) !== from || pageOf(tabId).engineBack !== back) return false;
   patchPage(tabId, { engineBack: null });
   store().updateTab(tabId, { engine: back.engine, adoptId: undefined, navigation: navigationTo(back.url, true) });
+
   return true;
 }
 
@@ -114,6 +121,7 @@ export async function playInWebKit(tabId: string) {
   try {
     if (!(await openPageIn(tabId, "webkit"))) {
       declinedSites.add(site);
+
       return;
     }
   } finally {
@@ -124,8 +132,8 @@ export async function playInWebKit(tabId: string) {
 
   if (moved)
     showToast(moved.windowId, "Opened in Safari's engine for protected media", `${hostLabel(site)} plays here. You may need to sign in once.`, {
-    icon: "play.rectangle",
-  });
+      icon: "play.rectangle",
+    });
 }
 
 /** A link followed in the tab to a site that needs another engine (a streaming site): the page moves there once it
@@ -161,6 +169,7 @@ let unwatch: (() => void) | null = null;
 function watchClosedTabs() {
   unwatch ??= useBrowser.subscribe((s, prev) => {
     if (s.tabs === prev.tabs) return;
+
     for (const id of visitedTabs) {
       if (s.tabs[id]) continue;
       visitedTabs.delete(id);
@@ -172,6 +181,7 @@ function watchClosedTabs() {
 /** A WebKit page's visit goes into the profile's (Chromium's) history; a private window's never does. */
 export function noteWebKitPage(tabId: string, page: WebKitPage) {
   const t = store().tabs[tabId];
+
   if (!t) return;
   watchClosedTabs();
   visitedTabs.add(tabId);

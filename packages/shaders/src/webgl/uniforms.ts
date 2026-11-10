@@ -18,6 +18,7 @@ export function backdropUniforms(
   const b = color(colors[colors.length - 1] ?? colors[0]) ?? a;
   const r = ((Number.isFinite(angle) ? angle : 180) * Math.PI) / 180;
   const grain = grainInputs(grainOpacity, grainScale, { opacity: GRAIN_OPACITY, scale: GRAIN_SCALE });
+
   return {
     labA: oklab(a),
     labB: oklab(b),
@@ -28,6 +29,7 @@ export function backdropUniforms(
   };
 }
 
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 export const POWER_UP_PALETTES: Record<string, string[]> = {
   pink: ["#FF6AFF", "#FE8097", "#FF9966", "#FCE0FF", "#FA62B1"],
   purple: ["#7293FF", "#7D5DFF", "#E263FF", "#FF81EE", "#A585FF"],
@@ -42,11 +44,13 @@ export const POWER_UP_PALETTES: Record<string, string[]> = {
 /** Dia: the band runs 3.75 s and the halo 2 s of view time, whatever the speed; each then holds its last frame. */
 export const POWER_UP_FINISH = 3.75;
 export const HALO_FINISH = 2;
+
 /** The halo's view is the halo frame grown by this on every side. */
 export const HALO_INSET = 50;
 
 export function powerUpUniforms({ palette: p = "pink", speed = 1.25, origin = 0.5 }: PowerUpProps, time: number): UniformValues {
   const colors = palette(p, POWER_UP_PALETTES, "pink");
+
   return {
     direction: 0,
     numberOfColors: colors.length,
@@ -67,6 +71,7 @@ export function haloUniforms(
   dark: boolean,
 ): UniformValues {
   const [first, second = first] = palette(p, POWER_UP_PALETTES, "pink");
+
   return {
     resolution: size,
     direction: 0,
@@ -82,6 +87,7 @@ export function haloUniforms(
   };
 }
 
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 export const AREA_LIGHT_PALETTES: Record<string, string[]> = {
   blue: ["#4691C3", "#4BA5B9", "#418CBE", "#48B6DA", "#55A2E4"],
   red: ["#C1575C", "#C35F4B", "#B95058", "#DB463C", "#E16070"],
@@ -97,6 +103,7 @@ export const AREA_LIGHT_DURATION = 60;
 
 const smooth = (x: number) => {
   const t = Math.min(Math.max(x, 0), 1);
+
   return t * t * (3 - 2 * t);
 };
 
@@ -120,25 +127,31 @@ export function areaLightUniforms(
     introDelay = 0.05,
     introDuration = 0.4,
   } = props;
+
   const colors = palette(props.palette ?? "pink", AREA_LIGHT_PALETTES, "pink");
   const A = AREA_LIGHT_DURATION;
   const T = time;
   const k = key ? 1 : 0.5;
   const e = Math.max(T - introDelay, 0);
+
   let progress = 1,
     introFade = 1;
+
   if (introDuration > 0) {
     const t = Math.min(Math.max(e / introDuration, 0), 1);
     const u = 1 - (1 + 3 * t) * Math.exp(-3 * t);
     progress = u * u * (3 - 2 * u) - 0.25 * (1 - t) * Math.sin(Math.PI * t);
     introFade = smooth(Math.min(e / (0.25 * introDuration), 1));
   }
+
   const lift = 3 + (k * liftProp - 3) * progress;
   let effectiveTime = T;
+
   if (T > 0.75 * A) {
     const x = Math.min((T - 0.75 * A) / (0.25 * A), 1);
     effectiveTime = 0.75 * A + 0.25 * A * (x - x * x * x + 0.5 * x * x * x * x);
   }
+
   // Dia: 6 s cycle, 2.19 s peak.
   const phase = (T % 6) / 6;
   const sigma = phase < 0.365 ? 0.15 : 0.3;
@@ -148,7 +161,10 @@ export function areaLightUniforms(
   const a = (progress * k * tilt[0] * Math.PI) / 180;
   const b = (progress * k * tilt[1] * Math.PI) / 180;
   const frame = validRect(source);
+
   return {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
+    // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- The name is the shader's own uniform, not a shape this code describes.
     shapeFrame: frame ? [frame.x, frame.y, frame.width, frame.height] : [0, 0, 0, 0],
     rotationTrig: [Math.cos(a), Math.sin(a), Math.cos(b), Math.sin(b)],
     viewSize: [width, height],
@@ -168,6 +184,7 @@ export function edgeLightUniforms(props: EdgeLightProps, time: number, width: nu
   const { rectFrame, cornerRadius = 20, lightStart, lightEnd, lightColor, logoFrame, animationDuration = 1, animationDelay = 0 } = props;
   const rect = validRect(rectFrame);
   const logo = validRect(logoFrame);
+
   return {
     resolution: [width, height],
     time,

@@ -10,7 +10,9 @@ export type Disposition = "current" | "newTab" | "newWindow";
 
 export function dispositionFor(mods: { metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean }): Disposition {
   if (modKey(mods) || mods.altKey) return "newTab";
+
   if (mods.shiftKey) return "newWindow";
+
   return "current";
 }
 
@@ -32,10 +34,13 @@ export function switchFromBar(targetTabId: string, url: string, barTabId: string
 export async function restoreFromBar(entryId: string, barTabId: string): Promise<boolean> {
   const s = browserRead.getState();
   const bar = s.tabs[barTabId];
+
   if (!bar || !cleanedTabsFor(s, bar.windowId).some((entry) => entry.id === entryId)) return false;
   const restored = await restoreCleaned(bar.windowId, entryId);
+
   if (!restored) return false;
   await dismissCommandPanel(bar.windowId);
   await switchToTab(restored);
+
   return true;
 }

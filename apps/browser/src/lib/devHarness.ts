@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import * as shell from "@bay/desktop";
 import { readDocument, writeDocument } from "@bay/desktop";
 import { requireOptionalNativeModule } from "@bay/platform/native";
@@ -24,23 +25,31 @@ type DevEvalError = JsonInput | Error;
 
 // The desktop host's documents: one coordinator holds the store, and each window its own views.
 type WebHost = { role: "coordinator" | "window"; windowId?: string };
+
 function webHost(): WebHost | null {
   if (Platform.OS !== "web") return null;
   const { runtimeRole, windowId } = getNativeHostInfo().constants.BayShell ?? {};
-  return { role: runtimeRole === "window" ? "window" : "coordinator", ...(typeof windowId === "string" ? { windowId } : {}) };
+
+  return { role: runtimeRole === "window" ? "window" : "coordinator", ...(v.is(v.string(), windowId) ? { windowId } : undefined) };
 }
+
 // What scripts call on macOS: the same modules, over the bridge.
 function installWebModules() {
+  // SAFETY: the checks above established this shape.
   const global = globalThis as { expo?: { modules?: object } };
   const expo = (global.expo ??= {});
   const existing = expo.modules ?? {};
   expo.modules = new Proxy(existing, {
-    get: (target, name, receiver) => (typeof name === "string" ? requireOptionalNativeModule(name) : null) ?? Reflect.get(target, name, receiver),
+    get: (target, name, _receiver) =>
+      (v.is(v.string(), name) ? requireOptionalNativeModule(name) : null) ??
+      // SAFETY: the property is the key the target was asked for.
+      target[name as keyof typeof target],
   });
 }
 
 export function startDevHarness() {
   const host = webHost();
+
   if (host) installWebModules();
   const consoleLog = host ? `dev-console-${host.windowId ?? host.role}.log` : "dev-console.log";
   probeStore("pages", usePages);
@@ -207,6 +216,7 @@ export function startDevHarness() {
 
   // SAFETY: nn is the dev harness's own surface, read only by dev scripts.
   (globalThis as { nn?: typeof nn }).nn = nn;
+
   // The launcher evaluates over DevTools: a host's document snapshot doesn't see files it didn't write.
   if (host) return;
   const scriptId = (source: string | null) => source?.match(/^\/\/ *(\S+)/)?.[1];

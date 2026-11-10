@@ -14,16 +14,21 @@ const unavailableView = "data:text/javascript," + encodeURIComponent("export con
 const nativeStub = new URL("../../test-native-stub.mjs", import.meta.url).href;
 const nncore = "data:text/javascript," + encodeURIComponent(`export * from ${JSON.stringify(nativeStub)}; export const listExtensions = async () => [];`);
 const shell = "data:text/javascript," + encodeURIComponent(`export * from ${JSON.stringify(nativeStub)}; export const showMenu = async () => null;`);
+
 registerHooks({
   resolve(specifier, context, next) {
     if (context.parentURL?.endsWith("/lib/actions.ts")) {
       if (["../components/spaces/pager", "../components/spaces/CreateSpace"].includes(specifier)) return { url: unavailableView, shortCircuit: true };
+
       if (specifier === "@bay/chromium") return { url: nncore, shortCircuit: true };
     }
+
     if (specifier === "@bay/desktop" && context.parentURL?.endsWith("/split/splitActions.ts")) return { url: shell, shortCircuit: true };
+
     return next(specifier, context);
   },
 });
+
 const { newGroupWithSelection, newPinnedFolderWith } = await import("./actions.ts");
 const { sidebarUi } = await import("./state.ts");
 const { withFolderMoveUndo } = await import("../../lib/folderUndo.ts");
@@ -36,18 +41,21 @@ const tick = () => new Promise(setImmediate);
 async function remote(t, store) {
   const authority = createBrowserAuthority({ epoch: "sidebar-epoch", store });
   const pending = [];
+
   const client = createBrowserClient({
     clientId: "sidebar-window",
     transport: {
       getSnapshot: async () => authority.getSnapshot(),
       async dispatch(request) {
         const reply = await authority.dispatch(request);
+
         return new Promise((resolve) => pending.push({ command: request.command, release: () => resolve(reply) }));
       },
       subscribeCommits: (listener) => authority.subscribe(listener),
       subscribeClose: () => () => {},
     },
   });
+
   await client.ready;
   const restoreCommands = installBrowserCommands(createClientBrowserCommands(client));
   const restoreRead = browserRead.install(createClientBrowserReadSource(client));
@@ -57,11 +65,13 @@ async function remote(t, store) {
     client.close();
     authority.close();
   });
+
   const release = async () => {
     await tick();
     pending.shift().release();
     await tick();
   };
+
   return { pending, release };
 }
 
@@ -71,6 +81,7 @@ function setup() {
   const windowId = s().createWindow({ url: "https://a.example/" });
   const a = activeTabId(s(), windowId);
   const b = s().newTab(windowId, { url: "https://b.example/", background: true });
+
   return { store, s, windowId, a, b };
 }
 

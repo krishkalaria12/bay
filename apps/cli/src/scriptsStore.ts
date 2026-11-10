@@ -1,3 +1,4 @@
+import { isJsonObject } from "@bay/core";
 import { dlopen, FFIType } from "bun:ffi";
 import * as v from "valibot";
 import {
@@ -82,6 +83,7 @@ function openPosix() {
     flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
   });
 }
+
 let posix: ReturnType<typeof openPosix> | undefined;
 const posixLibrary = () => (posix ??= openPosix());
 
@@ -93,16 +95,20 @@ function openExchange() {
         returns: FFIType.i32,
       },
     });
+
     return (first: Buffer, second: Buffer) => library.symbols.renameatx_np(AT_FDCWD, first, AT_FDCWD, second, RENAME_SWAP);
   }
+
   const library = dlopen("libc.so.6", {
     renameat2: {
       args: [FFIType.i32, FFIType.cstring, FFIType.i32, FFIType.cstring, FFIType.u32],
       returns: FFIType.i32,
     },
   });
+
   return (first: Buffer, second: Buffer) => library.symbols.renameat2(-100, first, -100, second, 2); // AT_FDCWD, RENAME_EXCHANGE
 }
+
 let exchange: ReturnType<typeof openExchange> | undefined;
 
 function openWindows() {
@@ -124,6 +130,7 @@ function openWindows() {
     GetLastError: { args: [], returns: FFIType.u32 },
   });
 }
+
 let windows: ReturnType<typeof openWindows> | undefined;
 
 export class StoreError extends Error {
@@ -146,6 +153,7 @@ export function swap(first: string, second: string): void {
     const journal = `${temporary}.json`;
     writeFileSync(journal, JSON.stringify({ first: basename(first), second: basename(second) }), { flag: "wx", mode: 0o600 });
     renameSync(second, temporary);
+
     try {
       renameSync(first, second);
     } catch (error) {
@@ -155,8 +163,10 @@ export function swap(first: string, second: string): void {
       } catch (restoreError) {
         throw new SwapRecoveryError(`can't restore ${second}; its previous contents remain in ${temporary}: ${String(restoreError)}`);
       }
+
       throw error;
     }
+
     try {
       renameSync(temporary, first);
     } catch (error) {
@@ -169,12 +179,17 @@ export function swap(first: string, second: string): void {
       } catch (restoreError) {
         throw new SwapRecoveryError(`can't restore exchanged folders; preserve ${first}, ${second} and ${temporary}: ${String(restoreError)}`);
       }
+
       throw error;
     }
+
     removeTree(journal);
+
     return;
   }
+
   const ret = (exchange ??= openExchange())(Buffer.from(`${first}\0`), Buffer.from(`${second}\0`));
+
   if (ret !== 0) throw new StoreError(`can't swap ${first} and ${second}`);
 }
 
@@ -183,35 +198,48 @@ export function swap(first: string, second: string): void {
 // Only names from a bounded plain journal in this folder can be recovered.
 function recoverSwaps(directory: string): void {
   if (!existsSync(directory)) return;
+
   for (const name of readdirSync(directory)) {
     if (!/^\.swap-[a-f0-9]{12}\.json$/.test(name)) continue;
     const journal = join(directory, name);
     const stat = lstatSync(journal);
+
     if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 4096) {
       throw new StoreError(`can't recover ${journal}: not a plain journal`);
     }
+
     const record: unknown = JSON.parse(readFileSync(journal, "utf8"));
+
     const safeName = (value: unknown): value is string =>
-      typeof value === "string" && value.length > 0 && value !== "." && value !== ".." && !/[\\/\0:]/.test(value);
-    if (!record || typeof record !== "object" || !("first" in record) || !("second" in record) || !safeName(record.first) || !safeName(record.second)) {
+      v.is(v.string(), value) && value.length > 0 && value !== "." && value !== ".." && !/[\\/\0:]/.test(value);
+
+    if (!record || !isJsonObject(record) || !("first" in record) || !("second" in record) || !safeName(record.first) || !safeName(record.second)) {
       throw new StoreError(`can't recover ${journal}: invalid folder names`);
     }
+
     const temporaryName = name.slice(0, -5);
+
     if (record.first === record.second || record.first === temporaryName || record.second === temporaryName) {
       throw new StoreError(`can't recover ${journal}: overlapping folder names`);
     }
+
     const first = join(directory, record.first);
     const second = join(directory, record.second);
     const temporary = join(directory, temporaryName);
+
     const present = (path: string): boolean => {
       if (!existsSync(path)) return false;
       const info = lstatSync(path);
+
       if (!info.isDirectory() || info.isSymbolicLink()) throw new StoreError(`can't recover ${journal}: ${path} isn't a plain folder`);
+
       return true;
     };
+
     const hasFirst = present(first);
     const hasSecond = present(second);
     const hasTemporary = present(temporary);
+
     if (hasTemporary && hasFirst && !hasSecond) renameSync(temporary, second);
     else if (hasTemporary && !hasFirst && hasSecond) renameSync(temporary, first);
     else if (hasTemporary || !hasSecond) throw new StoreError(`can't recover ${journal}; its folders were preserved`);
@@ -222,21 +250,27 @@ function recoverSwaps(directory: string): void {
 function lockFile(path: string): () => void {
   const deadline = Date.now() + LOCK_TIMEOUT * 1000;
   const timeout = () => new StoreError(`another bay scripts command or Bay has held ${path} for ${LOCK_TIMEOUT}s`);
+
   if (process.platform === "win32") {
     const { symbols } = (windows ??= openWindows());
     // Share reads and writes, but not deletion: every reader locks the same
     // file object. Never follow a reparse point, including a junction.
     const handle = symbols.CreateFileW(Buffer.from(`${path}\0`, "utf16le"), 0xc0000000, 3, null, 4, 0x00200000, 0n);
+
     if (handle === 0xffffffffffffffffn) throw new StoreError(`can't open ${path} (Windows error ${symbols.GetLastError()})`);
     const info = new Uint32Array(13);
     const overlapped = new BigUint64Array(4); // 64-bit OVERLAPPED, offset zero.
+
     try {
       if (!symbols.GetFileInformationByHandle(handle, info) || (info[0]! & 0x410) !== 0 || info[10] !== 1) {
         throw new StoreError(`${path} must be a plain file without links`);
       }
+
       while (!symbols.LockFileEx(handle, 3, 0, 1, 0, overlapped)) {
         const error = symbols.GetLastError();
+
         if (error !== 33) throw new StoreError(`can't lock ${path} (Windows error ${error})`);
+
         if (Date.now() >= deadline) throw timeout();
         Bun.sleepSync(50);
       }
@@ -244,16 +278,21 @@ function lockFile(path: string): () => void {
       symbols.CloseHandle(handle);
       throw error;
     }
+
     return () => {
       symbols.UnlockFileEx(handle, 0, 1, 0, overlapped);
       symbols.CloseHandle(handle);
     };
   }
+
   const { symbols } = posixLibrary();
   const fd = openSync(path, constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+
   try {
     const info = fstatSync(fd);
+
     if (!info.isFile() || info.nlink !== 1) throw new StoreError(`${path} must be a plain file without links`);
+
     while (symbols.flock(fd, 2 | 4) !== 0) {
       // LOCK_EX | LOCK_NB
       if (Date.now() >= deadline) throw timeout();
@@ -263,6 +302,7 @@ function lockFile(path: string): () => void {
     closeSync(fd);
     throw error;
   }
+
   return () => {
     try {
       symbols.flock(fd, 8); // LOCK_UN
@@ -275,12 +315,15 @@ function lockFile(path: string): () => void {
 export function readFileSafe(path: string): Buffer | null {
   try {
     const stat = lstatSync(path);
+
     if (stat.isSymbolicLink()) {
       throw new StoreError(`${path} is a symbolic link`);
     }
+
     if (!stat.isFile()) {
       throw new StoreError(`${path} isn't a regular file`);
     }
+
     if (stat.size > MAX_FILE) {
       throw new StoreError(`${path} is too big`);
     }
@@ -296,6 +339,7 @@ export function readFileSafe(path: string): Buffer | null {
 export function writeAtomic(path: string, data: Buffer | string): void {
   const dir = dirname(path);
   const temp = join(dir, `.${basename(path)}-${randomHex()}`);
+
   try {
     writeFileSync(temp, data, { mode: 0o644 });
     renameSync(temp, path);
@@ -303,6 +347,7 @@ export function writeAtomic(path: string, data: Buffer | string): void {
     try {
       unlinkSync(temp);
     } catch {}
+
     throw error;
   }
 }
@@ -310,6 +355,7 @@ export function writeAtomic(path: string, data: Buffer | string): void {
 export function removeTree(path: string): void {
   try {
     const stat = lstatSync(path);
+
     if (stat.isDirectory()) {
       rmSync(path, { recursive: true, force: true });
     } else {
@@ -333,23 +379,28 @@ export class Store {
       if (!create) return false;
       throw new StoreError(`${this.dataRoot} doesn't exist`);
     }
+
     if (!create && !existsSync(this.path)) {
       return false;
     }
+
     for (const directory of [this.path, this.scriptsDir]) {
       if (existsSync(directory)) {
         const info = lstatSync(directory);
+
         if (info.isSymbolicLink() || !info.isDirectory()) throw new StoreError(`${directory} must be a plain folder`);
       } else if (create) {
         mkdirSync(directory, { mode: directory === this.path ? 0o700 : 0o755 });
       }
     }
+
     return true;
   }
 
   lock(): void {
     if (this.releaseLock) throw new StoreError("this scripts store is already locked");
     this.releaseLock = lockFile(join(this.path, ".lock"));
+
     try {
       recoverSwaps(this.path);
       recoverSwaps(this.scriptsDir);
@@ -395,6 +446,7 @@ export class Store {
       if (name.startsWith(".")) continue;
       const full = join(this.scriptsDir, name);
       const stat = lstatSync(full);
+
       if (stat.isSymbolicLink()) {
         throw new StoreError(`${full} is a symbolic link; remove it`);
       }
@@ -436,17 +488,22 @@ export class Store {
 
   generation(): number {
     const data = readFileSafe(join(this.path, GENERATION));
+
     if (!data) return 0;
     const text = data.toString("utf8").trim();
+
     return /^\d+$/.test(text) ? parseInt(text, 10) : 0;
   }
 
   extensionGeneration(): number {
     const extDir = join(this.path, EXTENSION);
+
     if (!existsSync(extDir)) return 0;
     const data = readFileSafe(join(extDir, GENERATION));
+
     if (!data) return 0;
     const text = data.toString("utf8").trim();
+
     return /^\d+$/.test(text) ? parseInt(text, 10) : 0;
   }
 
@@ -501,6 +558,7 @@ export class Store {
       removeTree(stagePath);
       throw error;
     }
+
     return [stageName, record];
   }
 
@@ -537,11 +595,13 @@ export class Store {
 
       validateManifest(manifest, jsFiles);
       const manifestText = JSON.stringify(manifest, null, 2) + "\n";
+
       if (Buffer.byteLength(manifestText) > MAX_MANIFEST) {
         throw new StoreError(
           `the generated manifest would be ${Buffer.byteLength(manifestText)} bytes, over the ${MAX_MANIFEST} limit; uninstall some scripts`,
         );
       }
+
       writeFileSync(join(stagePath, "manifest.json"), manifestText, "utf8");
       writeFileSync(join(stagePath, GENERATION), `${generation}\n`, "utf8");
     } catch (error) {
@@ -555,29 +615,39 @@ export class Store {
   publishExtension(staged: string | null): string | null {
     const extPath = join(this.path, EXTENSION);
     const present = existsSync(extPath);
+
     if (present) {
       const stat = lstatSync(extPath);
+
       if (!stat.isDirectory()) {
         throw new StoreError(`${extPath} isn't a folder the bay command made; move it away first`);
       }
     }
+
     if (staged === null) {
       if (!present) return null;
       const oldName = `.extension-old-${randomHex()}`;
       renameSync(extPath, join(this.path, oldName));
+
       return oldName;
     }
+
     const stagedPath = join(this.path, staged);
+
     if (present) {
       swap(stagedPath, extPath);
+
       return staged;
     }
+
     renameSync(stagedPath, extPath);
+
     return null;
   }
 
   restoreExtension(staged: string | null, old: string | null): void {
     const extPath = join(this.path, EXTENSION);
+
     if (old !== null && staged !== null && old === staged) {
       swap(join(this.path, staged), extPath);
     } else if (old !== null) {
@@ -625,6 +695,7 @@ export class Store {
 
     try {
       stagedExtension = plan.length ? this.buildExtension(plan, generation) : null;
+
       if (!plan.length && this.extensionPresent()) {
         writeAtomic(join(this.path, GENERATION), `${generation}\n`);
       }
@@ -637,6 +708,7 @@ export class Store {
       }
     } catch (error) {
       if (error instanceof SwapRecoveryError) throw error;
+
       if (published) {
         try {
           this.restoreExtension(stagedExtension, oldExtension);
@@ -644,7 +716,9 @@ export class Store {
           throw new StoreError(`couldn't restore the previous extension; staged folders were preserved: ${String(restoreError)}`);
         }
       }
+
       if (stagedRecord) removeTree(join(this.scriptsDir, stagedRecord));
+
       if (stagedExtension) removeTree(join(this.path, stagedExtension));
       throw error;
     }
@@ -656,25 +730,33 @@ export class Store {
     }
 
     writeAtomic(join(this.path, GENERATION), `${generation}\n`);
+
     return [record ?? {}, generation];
   }
 
   commitRecord(staged: string | null, recordId: string, removing: boolean): void {
     const targetPath = join(this.scriptsDir, recordId);
+
     if (removing) {
       const trash = join(this.scriptsDir, `.old-${recordId}-${randomHex()}`);
+
       if (existsSync(targetPath)) {
         renameSync(targetPath, trash);
         removeTree(trash);
       }
+
       return;
     }
+
     const stagedPath = join(this.scriptsDir, staged!);
+
     if (existsSync(targetPath)) {
       const stat = lstatSync(targetPath);
+
       if (!stat.isDirectory()) {
         throw new StoreError(`${targetPath} isn't a folder the bay command made`);
       }
+
       swap(stagedPath, targetPath);
       removeTree(stagedPath);
     } else {
@@ -714,6 +796,7 @@ export class Store {
       if (!existsSync(jsDir)) return false;
       const files = readdirSync(jsDir).sort();
       const expectedFiles = records.map((m) => `${m.id}.js`).sort();
+
       if (JSON.stringify(files) !== JSON.stringify(expectedFiles)) return false;
 
       for (const meta of records) {
@@ -726,6 +809,7 @@ export class Store {
     } catch {
       return false;
     }
+
     return true;
   }
 
@@ -786,9 +870,11 @@ export class Store {
       if (!alive()) {
         return ["quit", null];
       }
+
       if (Date.now() >= deadline) {
         return ["timeout", null];
       }
+
       Bun.sleepSync(STATUS_POLL);
     }
   }
@@ -857,6 +943,7 @@ export function validateManifest(manifest: GeneratedManifest, jsFiles: Set<strin
       }
     }
   }
+
   if (files.size > MAX_FILES) {
     fail(`${files.size} script files, over Bay's limit of ${MAX_FILES}; uninstall some scripts`);
   }
@@ -913,14 +1000,18 @@ export function validateManifest(manifest: GeneratedManifest, jsFiles: Set<strin
 
 export function repairIfPresent(dataRoot: string): string | null {
   const store = new Store(dataRoot);
+
   try {
     if (!store.open(false) || (!existsSync(store.scriptsDir) && !store.extensionPresent() && !store.generation())) {
       return null;
     }
+
     store.lock();
+
     if (!existsSync(store.scriptsDir)) {
       mkdirSync(store.scriptsDir, { recursive: true, mode: 0o755 });
     }
+
     return store.repair();
   } finally {
     store.close();

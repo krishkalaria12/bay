@@ -114,6 +114,7 @@ export const live = () => useLive.getState();
 export const setLive = (patch: Partial<LiveState> | ((s: LiveState) => Partial<LiveState>)) => useLive.setState(patch);
 
 type LivePersistence = { stop(): void; flush(final: boolean): Promise<void>; resume(): void };
+
 let persistence: LivePersistence | undefined;
 
 export function flushLivePersistence({ final = false } = {}): Promise<void> {
@@ -132,18 +133,23 @@ export function startLivePersistence(): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let frozen = false;
   let finalFlush: Promise<void> | null = null;
+
   const json = () => {
     const state = live();
+
     return JSON.stringify(Object.fromEntries(PERSISTED.map((key) => [key, state[key]])));
   };
+
   const write = () => {
     timer = undefined;
+
     try {
       writeDocument(LIVE_DOC, json());
     } catch (error) {
       console.warn("Couldn't save live folders", error);
     }
   };
+
   const save = (): Promise<void> => {
     try {
       return Promise.resolve(saveDocument(LIVE_DOC, json()));
@@ -151,28 +157,34 @@ export function startLivePersistence(): () => void {
       return Promise.reject(error);
     }
   };
+
   const unsubscribe = useLive.subscribe((s, prev) => {
     if (frozen || PERSISTED.every((key) => s[key] === prev[key])) return;
     clearTimeout(timer);
     timer = setTimeout(write, 800);
   });
+
   const stop = () => {
     if (persistence?.stop !== stop) return;
     clearTimeout(timer);
     unsubscribe();
     persistence = undefined;
   };
+
   persistence = {
     stop,
     flush(final) {
       clearTimeout(timer);
       timer = undefined;
+
       if (frozen) return finalFlush ?? Promise.resolve();
+
       if (!final) return save();
       // Capture and acknowledge every final document, including a pending
       // background write. Closing-window mutations must not replace it.
       frozen = true;
       finalFlush = save();
+
       return finalFlush;
     },
     resume() {
@@ -184,6 +196,7 @@ export function startLivePersistence(): () => void {
       write();
     },
   };
+
   return stop;
 }
 
@@ -197,6 +210,7 @@ export const FOLDER_DEFAULTS: Record<LiveFolderKind, { name: string; sources: Li
 
 export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: LiveSourceId[]): string {
   const id = newId();
+
   const folder: LiveFolder = {
     id,
     spaceId,
@@ -208,30 +222,38 @@ export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: Li
     filters: { authored: true, reviewRequests: true },
     createdAt: Date.now(),
   };
+
   setLive((s) => ({
     folders: { ...s.folders, [id]: folder },
     folderOrder: [...s.folderOrder, id],
     status: { ...s.status, [id]: { state: "initializing", lastFetch: null, error: null } },
   }));
+
   return id;
 }
 
 let browserOwner: BrowserStore = useBrowser;
+
 export function bindLiveStoreBrowser(browser: BrowserStore): () => void {
   const previous = browserOwner;
   browserOwner = browser;
+
   return () => {
     if (browserOwner === browser) browserOwner = previous;
   };
 }
 
 type LiveFolderUndo = { id: string; before: Partial<LiveFolder>; after: Partial<LiveFolder> };
+
 // Restores only the fields a later edit has not changed again.
 registerSidebarUndo("liveFolder", (value) => {
+  // SAFETY: the checks above established this shape.
   const { id, before, after } = value as LiveFolderUndo;
   const current = useLive.getState().folders[id];
+
   if (!current) return;
   const restore: Partial<LiveFolder> = {};
+
   for (const key of ["name", "icon"] as const) if (key in before && (current[key] ?? null) === after[key]) Object.assign(restore, { [key]: before[key] });
   setLive({ folders: { ...useLive.getState().folders, [id]: { ...current, ...restore } } });
 });
@@ -242,6 +264,7 @@ export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | 
   setLive((s) => (s.folders[id] ? { folders: { ...s.folders, [id]: { ...s.folders[id]!, ...patch } } } : {}));
   const fields = (["name", "icon"] as const).filter((key) => before && patch[key] !== undefined && before[key] !== patch[key]);
   const windowId = originWindowId ?? sidebarUndoWindow() ?? browserOwner.getState().ui.focusedWindowId;
+
   if (before && windowId && fields.length) {
     const pick = (folder: Partial<LiveFolder>) => Object.fromEntries(fields.map((key) => [key, folder[key] ?? null]));
     const data: LiveFolderUndo = { id, before: pick(before), after: pick(patch) };
@@ -251,6 +274,7 @@ export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | 
 
 const without = <T>(record: Record<string, T>, key: string) => {
   const { [key]: _, ...rest } = record;
+
   return rest;
 };
 
@@ -274,8 +298,10 @@ export function moveFolder(id: string, delta: -1 | 1) {
     const order = [...s.folderOrder];
     const i = order.indexOf(id);
     const j = i + delta;
+
     if (i < 0 || j < 0 || j >= order.length) return {};
     [order[i], order[j]] = [order[j]!, order[i]!];
+
     return { folderOrder: order };
   });
 }
@@ -292,13 +318,17 @@ export function applyFetch(folderId: string, next: LiveItem[], gone: Record<stri
     const animating = new Set(s.completing[folderId] ?? []);
     const leaving = prev.filter((it) => !ids.has(it.id) && gone[it.id] && !animating.has(it.id));
     const merged = [...next];
+
     for (const it of prev)
       if (!ids.has(it.id) && (animating.has(it.id) || leaving.includes(it))) merged.splice(Math.min(prev.indexOf(it), merged.length), 0, it);
+
     const completed = [
       ...leaving.map((item) => ({ item, state: gone[item.id]!, at: now })),
       ...(s.completed[folderId] ?? []).filter((c) => !ids.has(c.item.id) && !leaving.some((l) => l.id === c.item.id)),
     ].slice(0, MAX_COMPLETED_ITEMS);
+
     const stillThere = new Set(merged.map((it) => it.id));
+
     return {
       items: { ...s.items, [folderId]: merged },
       known: { ...s.known, [folderId]: [...known, ...fresh].slice(-MAX_KNOWN_ITEMS) },
@@ -321,6 +351,7 @@ export function finishCompleting(folderId: string, ids: string[]) {
 export function setStatus(folderId: string, status: Partial<FolderStatus>) {
   setLive((s) => {
     const current = s.status[folderId] ?? { state: "idle" as const, lastFetch: null, error: null };
+
     return { status: { ...s.status, [folderId]: { ...current, ...status } } };
   });
 }
@@ -330,6 +361,7 @@ export function markRead(folderId: string, itemIds?: string[]) {
   setLive((s) => {
     const unread = s.unread[folderId] ?? [];
     const next = itemIds ? unread.filter((id) => !itemIds.includes(id)) : [];
+
     return next.length === unread.length ? {} : { unread: { ...s.unread, [folderId]: next } };
   });
 }
@@ -337,8 +369,10 @@ export function markRead(folderId: string, itemIds?: string[]) {
 export function setAccount(source: LiveSourceId, account: LiveAccount | null) {
   setLive((s) => {
     const accounts = { ...s.accounts };
+
     if (account) accounts[source] = account;
     else delete accounts[source];
+
     return { accounts };
   });
 }
@@ -346,6 +380,7 @@ export function setAccount(source: LiveSourceId, account: LiveAccount | null) {
 export const updateConfig = (patch: Partial<LiveConfig>) => {
   if (!sendService("liveConfig", [patch])) setLive((s) => ({ config: { ...s.config, ...patch } }));
 };
+
 export const updateCalendarSettings = (patch: Partial<CalendarSettings>) => {
   if (!sendService("calendarSettings", [patch])) setLive((s) => ({ calendar: { ...s.calendar, ...patch } }));
 };
@@ -357,6 +392,7 @@ export function dismissAlert(occurrence: string) {
 export function setMeetingGroup(group: MeetingGroup | null, groupId?: string) {
   setLive((s) => {
     if (group) return { meetingGroups: { ...s.meetingGroups, [group.groupId]: group } };
+
     return groupId && s.meetingGroups[groupId] ? { meetingGroups: without(s.meetingGroups, groupId) } : {};
   });
 }
@@ -367,6 +403,7 @@ export function markUnread(folderId: string, itemId: string) {
   if (sendService("liveUnread", [folderId, itemId])) return;
   setLive((s) => ({ unread: { ...s.unread, [folderId]: [...new Set([...(s.unread[folderId] ?? []), itemId])] } }));
 }
+
 export function setLiveView(field: "expandedStacks" | "showAll", key: string, value: boolean) {
   if (sendService("liveView", [field, key, value])) return;
   setLive((s) => ({ [field]: { ...s[field], [key]: value } }));

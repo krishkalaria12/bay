@@ -65,6 +65,7 @@ let suspended = false;
 let quitCheckpoint: Promise<void> | null = null;
 let quitCheckpointPending = false;
 let acknowledgedRevision = -1;
+
 // Serialize acknowledged checkpoints and cancellation repairs, even if the
 // previous attempt failed or was cancelled while its disk writes were pending.
 let checkpointWrites: Promise<void> = Promise.resolve();
@@ -72,9 +73,11 @@ let checkpointWrites: Promise<void> = Promise.resolve();
 function save(patch: Partial<Saved>) {
   saved = { ...saved, ...patch };
   documentRevision++;
+
   try {
     writeDocument(TELEMETRY_STATE_DOC, JSON.stringify(saved));
   } catch {}
+
   useTelemetry.setState({ sharing: saved.sharing, decided: saved.decidedAt !== null, askDone: saved.askDoneAt !== null });
 }
 
@@ -128,16 +131,20 @@ let queue: Queue = { version: 1, events: [], logs: [] };
 let generation = 0;
 
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
+
 function persistQueue(now = false) {
   documentRevision++;
   clearTimeout(persistTimer);
   persistTimer = undefined;
+
   if (suspended && !now) return;
+
   const write = () => {
     try {
       writeDocument(TELEMETRY_QUEUE_DOC, JSON.stringify(queue));
     } catch {}
   };
+
   if (now) write();
   else persistTimer = setTimeout(write, 2000);
 }
@@ -172,6 +179,7 @@ export function capture(event: string, props: Record<string, JsonValue> = {}, op
       timestamp: new Date().toISOString(),
       properties: { ...context(), ...cleanProperties(props), ...options.raw },
     });
+
     if (queue.events.length > MAX_EVENTS) queue.events.splice(0, queue.events.length - MAX_EVENTS);
     persistQueue(options.persist);
     scheduleFlush(options.urgent ? URGENT_FLUSH_DELAY_MS : FLUSH_DELAY_MS);
@@ -180,8 +188,10 @@ export function capture(event: string, props: Record<string, JsonValue> = {}, op
 
 export function queueLog(level: "warn" | "error", message: string, attributes: Record<string, string | number | boolean>) {
   if (!saved.sharing) return;
+
   try {
     queue.logs.push(logRecord(level, message, attributes));
+
     if (queue.logs.length > MAX_LOGS) queue.logs.splice(0, queue.logs.length - MAX_LOGS);
     persistQueue();
     scheduleFlush(FLUSH_DELAY_MS);
@@ -199,6 +209,7 @@ let retryAt = 0;
 function scheduleFlush(delay: number) {
   if (!saved.sharing || suspended) return;
   const due = Math.max(Date.now() + delay, retryAt);
+
   if (flushTimer && flushDueAt <= due) return;
   clearTimeout(flushTimer);
   flushDueAt = due;
@@ -221,13 +232,16 @@ export const requestLog = (): readonly RequestLogEntry[] => requests;
 
 function logRequest(entry: RequestLogEntry, body: string) {
   requests.push(entry);
+
   if (requests.length > 200) requests.shift();
+
   if (__DEV__) {
     try {
       const line = JSON.stringify({ ...entry, body: JSON.parse(body) });
       writeDocument(TELEMETRY_REQUEST_LOG_DOC, (readDocument(TELEMETRY_REQUEST_LOG_DOC) ?? "").slice(-400_000) + `${line}\n`);
     } catch {}
   }
+
   if (__DEV__) console.log(`[telemetry] ${entry.dryRun ? "dry run" : "POST"} ${entry.url} ${entry.kind}×${entry.count} → ${entry.status}`);
 }
 
@@ -236,12 +250,16 @@ const inflight = new Set<AbortController>();
 
 async function post(kind: RequestLogEntry["kind"], url: string, body: string, count: number, gen: number) {
   const entry: RequestLogEntry = { at: new Date().toISOString(), kind, url, count, bytes: body.length, status: null };
+
   if (!canSend()) {
     logRequest({ ...entry, dryRun: true }, body);
+
     return 200;
   }
+
   const abort = new AbortController();
   inflight.add(abort);
+
   try {
     const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: abort.signal });
     entry.status = response.status;
@@ -250,7 +268,9 @@ async function post(kind: RequestLogEntry["kind"], url: string, body: string, co
   } finally {
     inflight.delete(abort);
   }
+
   if (gen === generation) logRequest(entry, body);
+
   return entry.status;
 }
 
@@ -290,29 +310,38 @@ async function drain<T>(
   gen: number,
 ): Promise<DrainResult> {
   let size = BATCH_SIZE;
+
   for (let batch = take().slice(0, size); batch.length; batch = take().slice(0, size)) {
     if (gen !== generation || suspended) return "stale";
     const body = encode(batch);
+
     if (body.length > MAX_BODY_BYTES && batch.length > 1) {
       size = Math.ceil(batch.length / 2);
       continue;
     }
+
     const status = await post(kind, LOGS_URL, body, batch.length, gen);
+
     if (gen !== generation) return "stale";
     const result = outcome(status, batch.length);
+
     if (result === "retry") return "failed";
+
     if (result === "split") size = Math.ceil(batch.length / 2);
     else remove(batch);
   }
+
   return "done";
 }
 
 export async function flush() {
   flushTimer = undefined;
+
   if (!saved.sharing || flushing || suspended) return;
   flushing = true;
   const gen = generation;
   let result: DrainResult;
+
   try {
     result = await drain(
       "events",
@@ -321,6 +350,7 @@ export async function flush() {
       (batch) => (queue.events = queue.events.filter((e) => !batch.includes(e))),
       gen,
     );
+
     if (result === "done")
       result = await drain(
         "logs",
@@ -332,8 +362,10 @@ export async function flush() {
   } finally {
     if (gen === generation) flushing = false;
   }
+
   if (result === "stale" || gen !== generation) return;
   persistQueue(true);
+
   if (result === "failed") {
     failures++;
     retryAt = Date.now() + Math.min(MAX_BACKOFF_MS, 30_000 * 2 ** (failures - 1));
@@ -351,18 +383,22 @@ export type SharingSource = "settings" | "onboarding" | "ask";
 export function setSharing(on: boolean, source: SharingSource) {
   if (sendService("telemetrySetSharing", [on, source])) return;
   const now = Date.now();
+
   if (on === saved.sharing) return save({ decidedAt: now, askDoneAt: saved.askDoneAt ?? now });
   generation++;
   flushing = false;
   failures = 0;
   retryAt = 0;
+
   if (!on) {
     for (const abort of inflight) abort.abort();
     inflight.clear();
     save({ sharing: false, installId: null, sessionOpen: false, decidedAt: now, askDoneAt: saved.askDoneAt ?? now });
     clearQueue();
+
     return;
   }
+
   save({
     sharing: true,
     installId: uuidv4(),
@@ -397,18 +433,24 @@ export function startClient(): { previous: PreviousSession; updatedFrom: string 
   void engineInfo()
     .then((e) => (engineVersion = `NNCore / Chromium ${e.chromiumVersion}`))
     .catch(() => {});
+
   if (!saved.sharing) {
     const stale = readJson<Queue>(TELEMETRY_QUEUE_DOC);
+
     if (stale?.events?.length || stale?.logs?.length) clearQueue();
+
     return null;
   }
+
   const stored = readJson<Queue>(TELEMETRY_QUEUE_DOC);
+
   if (stored?.version === 1) queue = { version: 1, events: [...(stored.events ?? []), ...queue.events], logs: [...(stored.logs ?? []), ...queue.logs] };
   const previous: PreviousSession = saved.lastVersion === null ? "none" : saved.sessionOpen ? "unclean" : "clean";
   const version = appInfo().appVersion;
   const updatedFrom = saved.lastVersion && saved.lastVersion !== version ? saved.lastVersion : null;
   save({ sessionOpen: true, lastVersion: version });
   scheduleFlush(10_000);
+
   return { previous, updatedFrom };
 }
 
@@ -420,6 +462,7 @@ export function stopClient() {
   clearTimeout(flushTimer);
   clearTimeout(persistTimer);
   flushTimer = persistTimer = undefined;
+
   for (const abort of inflight) abort.abort();
 }
 
@@ -427,6 +470,7 @@ function checkpointDocuments(attempt: number): Promise<void> {
   const writing = checkpointWrites.then(async () => {
     while (attempt === quitGeneration) {
       const revision = documentRevision;
+
       // Wait for both writes even on failure, so a later attempt cannot race
       // the successful half of an older checkpoint.
       const results = await Promise.allSettled(
@@ -434,40 +478,53 @@ function checkpointDocuments(attempt: number): Promise<void> {
           await saveDocument(name, JSON.stringify(name === TELEMETRY_STATE_DOC ? saved : queue));
         }),
       );
+
       const failed = results.find((result) => result.status === "rejected");
+
       if (failed?.status === "rejected") throw failed.reason;
+
       if (attempt === quitGeneration && revision === documentRevision) {
         acknowledgedRevision = revision;
+
         return;
       }
     }
   });
+
   checkpointWrites = writing.catch(() => {});
+
   return writing;
 }
 
 export function endSession(): Promise<void> {
   if (quitCheckpoint && (quitCheckpointPending || acknowledgedRevision === documentRevision)) return quitCheckpoint;
+
   if (!suspended) {
     suspended = true;
     generation++;
     quitGeneration++;
     flushing = false;
+
     for (const abort of inflight) abort.abort();
     inflight.clear();
     clearTimeout(flushTimer);
     flushTimer = undefined;
     clearTimeout(persistTimer);
     persistTimer = undefined;
+
     if (saved.sharing) save({ sessionOpen: false });
   }
+
   const checkpoint = checkpointDocuments(quitGeneration);
   quitCheckpoint = checkpoint;
   quitCheckpointPending = true;
+
   const settled = () => {
     if (quitCheckpoint === checkpoint) quitCheckpointPending = false;
   };
+
   void checkpoint.then(settled, settled);
+
   return quitCheckpoint;
 }
 
@@ -477,9 +534,11 @@ export function resumeClientAfterQuit(): Promise<void> {
   quitCheckpoint = null;
   quitCheckpointPending = false;
   const attempt = ++quitGeneration;
+
   if (saved.sharing) save({ sessionOpen: true });
   persistQueue(true);
   scheduleFlush(FLUSH_DELAY_MS);
+
   // Re-save the current choice and queue after any old checkpoint settles.
   // Never restore a snapshot: opting out meanwhile must keep its empty queue.
   return checkpointDocuments(attempt);
@@ -495,17 +554,20 @@ export const devState = () => ({ saved, queued: { events: queue.events.length, l
 function hex(n: number) {
   return Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
 }
+
 function variant() {
   return (8 + Math.floor(Math.random() * 4)).toString(16);
 }
 
 export function uuidv4() {
   const h = hex(29);
+
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(12, 15)}-${variant()}${h.slice(15, 18)}-${h.slice(18, 29)}${hex(1)}`;
 }
 
 export function uuidv7() {
   const ms = Date.now().toString(16).padStart(12, "0");
   const h = hex(18);
+
   return `${ms.slice(0, 8)}-${ms.slice(8, 12)}-7${h.slice(0, 3)}-${variant()}${h.slice(3, 6)}-${h.slice(6, 18)}`;
 }

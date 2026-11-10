@@ -18,6 +18,7 @@ export async function clipboardPasteAction(): Promise<PasteAction | null> {
 
 export function pasteMenuItem(action: PasteAction | null): MenuItem[] {
   if (!action) return [];
+
   return [
     {
       id: "pasteAndGo",
@@ -35,6 +36,8 @@ export async function showUrlBarMenu(tab: Pick<Tab, "id" | "url">) {
   const action = await clipboardPasteAction();
   const paste = pasteMenuItem(action);
   const choice = await showMenu([...paste, ...(paste.length ? [{ separator: true as const }] : []), { id: "copy", title: "Copy URL", symbol: "link" }]);
+
   if (choice === "pasteAndGo" && action) reportBrowserCommand(tabCommands.navigate(tab.id, pasteTarget(action)));
+
   if (choice === "copy") copyText(cleanUrl(tab.url));
 }

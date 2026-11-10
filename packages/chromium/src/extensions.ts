@@ -151,12 +151,16 @@ export const isExtensionId = (s: string) => /^[a-p]{32}$/.test(s);
 
 export function webStoreExtensionId(urlOrId: string): string | null {
   const s = urlOrId.trim();
+
   if (isExtensionId(s)) return s;
+
   try {
     const url = new URL(s);
     const store = url.hostname === "chromewebstore.google.com" || (url.hostname === "chrome.google.com" && url.pathname.startsWith("/webstore/"));
+
     if (!store) return null;
     const id = url.pathname.split("/").find(isExtensionId);
+
     return id ?? null;
   } catch {
     return null;
@@ -206,6 +210,7 @@ export async function configureExtension(
 
 export async function extensionActionStates(browserId: number, ids: string[]): Promise<Record<string, ActionState>> {
   if (!ids.length || !browserId) return {};
+
   return ChromeUI.actionStates(browserId, ids);
 }
 
@@ -221,6 +226,7 @@ export function permissionWarnings(pkg: Pick<ExtensionPackage, "permissions" | "
   const perms = new Set(pkg.permissions);
   const hosts = pkg.hostPermissions.filter((h) => !/^(chrome|chrome-extension|about|data):/.test(h));
   const allHosts = hosts.some((h) => h === "<all_urls>" || /^(\*|https?|wss?):\/\/\*\//.test(h)) || perms.has("debugger");
+
   if (allHosts || perms.has("proxy") || perms.has("pageCapture") || perms.has("debugger")) {
     warnings.push("Read and change all your data on all websites");
   } else if (hosts.length) {
@@ -231,22 +237,32 @@ export function permissionWarnings(pkg: Pick<ExtensionPackage, "permissions" | "
     else if (names.length === 3) warnings.push(`Read and change your data on ${names[0]}, ${names[1]}, and ${names[2]}`);
     else if (names.length > 3) warnings.push(`Read and change your data on a number of websites`);
   }
+
   const clipboard = perms.has("clipboardRead") && perms.has("clipboardWrite");
+
   if (clipboard) warnings.push("Read and modify data you copy and paste");
+
   for (const [permission, message] of PERMISSION_WARNINGS) {
     if (clipboard && permission.startsWith("clipboard")) continue;
+
     if (perms.has(permission)) warnings.push(message);
   }
+
   if (perms.has("declarativeNetRequest") && !allHosts && !perms.has("declarativeNetRequestWithHostAccess")) warnings.push("Block content on any page");
   const browsing = perms.has("history") ? "Read and change your browsing history on all your signed-in devices" : null;
+
   if (!browsing && (perms.has("tabs") || perms.has("webNavigation")) && !allHosts) warnings.push("Read your browsing history");
+
   if (browsing) warnings.push(browsing);
+
   return [...new Set(warnings)];
 }
 
 function hostLabel(pattern: string): string | null {
   const m = /^[^:]+:\/\/(\*\.)?([^/]+)/.exec(pattern);
+
   if (!m) return null;
+
   return m[1] ? `all ${m[2]} sites` : m[2]!;
 }
 

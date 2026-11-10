@@ -36,6 +36,7 @@ const MENU_KEYS = [
   { key: "Enter", metaKey: true },
   { key: "/", metaKey: true },
 ];
+
 // ⇧⌫ is claimed only while the search field is empty, so it still deletes text.
 const EMPTY_MENU_KEYS = [...MENU_KEYS, { key: "Backspace", shiftKey: true }];
 
@@ -52,6 +53,7 @@ export function hintOf({ key, metaKey, shiftKey, altKey, ctrlKey }: KeyEvent): s
 async function runAction(action: PaletteMenuAction): Promise<string | null> {
   try {
     await action.run();
+
     return null;
   } catch (failure) {
     return (failure instanceof Error ? failure.message : "Couldn't complete this action. Try again.").slice(0, 160);
@@ -97,22 +99,27 @@ export function PaletteActionMenu({
   const selectedIndex = Math.min(selected, filtered.length - 1);
   const selectedId = filtered[selectedIndex]?.id;
   const hover = usePointerHover(query);
+
   const growStyle = useAnimatedStyle(() => {
     "worklet";
     const p = progress.get();
+
     return { opacity: p, transform: [{ scale: interpolate(p, [0, 1], [0.94, 1]) }, { translateY: interpolate(p, [0, 1], [top === undefined ? 4 : -4, 0]) }] };
   });
 
   const keepSelectedVisible = () => {
     const row = selectedId ? rows.current.get(selectedId) : undefined;
     const visible = viewport.current;
+
     if (!row || !visible.height) return;
     const y = row.y < visible.y ? row.y : row.y + row.height > visible.y + visible.height ? row.y + row.height - visible.height : visible.y;
+
     if (y !== visible.y) {
       visible.y = y;
       scroller.current?.scrollTo({ y, animated: false });
     }
   };
+
   useEffect(keepSelectedVisible, [selectedId, query]);
 
   const run = async (action: PaletteMenuAction | undefined) => {
@@ -121,6 +128,7 @@ export function PaletteActionMenu({
     setBusy(true);
     const failure = await runAction(action);
     setBusy(false);
+
     if (failure === null) return onClose();
     setError(failure);
     input.current?.focus();
@@ -164,6 +172,7 @@ export function PaletteActionMenu({
               key={action.id}
               onLayout={(event) => {
                 rows.current.set(action.id, event.nativeEvent.layout);
+
                 if (action.id === selectedId) keepSelectedVisible();
               }}
               onMouseEnter={(e) => hover(e, () => setSelected(index))}
@@ -233,16 +242,22 @@ export function PaletteActionMenu({
             onKeyDown={(event) => {
               const { key, shiftKey } = event.nativeEvent;
               const metaKey = modKey(event.nativeEvent);
+
               if (key === "Escape" || (metaKey && (key.toLowerCase() === "k" || key === "/"))) {
                 onClose();
+
                 return;
               }
+
               // ⌘ shortcuts always reach their action; ⇧⌫ only once the search field is empty.
               if (metaKey || (shiftKey && key === "Backspace" && !query)) {
                 const action = actions.find((item) => item.hint && shortcutLabel(item.hint) === hintOf(event.nativeEvent));
+
                 if (action) void run(action);
+
                 return;
               }
+
               if (key === "Enter") void run(filtered[selectedIndex]);
               else if (filtered.length && (key === "ArrowUp" || key === "ArrowDown" || key === "Tab")) {
                 const direction = key === "ArrowUp" || (key === "Tab" && shiftKey) ? -1 : 1;

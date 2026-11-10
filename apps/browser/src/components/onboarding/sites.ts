@@ -2,6 +2,7 @@ import * as tabCommands from "../../runtime/tabActions";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId, viewTabIds } from "../../store/model";
 import type { DeepReadonly } from "../../runtime/projection";
+
 type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 
 export type PinnableSite = { id: string; title: string; url: string };
@@ -69,5 +70,6 @@ export async function pinSites(windowId: string, ids: string[]) {
       await tabCommands.newTab(w.id, { url: site.url, pinned: true, background: true });
     }
   }
+
   if (selectedTab) await tabCommands.activate(selectedTab);
 }

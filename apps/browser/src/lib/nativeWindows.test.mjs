@@ -7,14 +7,18 @@ import { createNativeWindowReconciler } from "./nativeWindows.ts";
 const settle = async () => {
   for (let i = 0; i < 12; i++) await Promise.resolve();
 };
+
 const deferred = () => {
   let resolve, reject;
+
   const promise = new Promise((yes, no) => {
     resolve = yes;
     reject = no;
   });
+
   return { promise, resolve, reject };
 };
+
 function harness({ syncOpen = false, throwOpen = false, holdClose = false } = {}) {
   const store = createBrowserStore();
   const pending = new Map();
@@ -22,28 +26,38 @@ function harness({ syncOpen = false, throwOpen = false, holdClose = false } = {}
   const calls = [];
   const native = new Set();
   const errors = [];
+
   const reconciler = createNativeWindowReconciler({
     open(id, options) {
       calls.push(["open", id, options]);
+
       if (throwOpen) throw new Error("cannot create");
+
       if (syncOpen) {
         native.add(id);
+
         return;
       }
+
       const held = deferred();
       pending.set(id, held);
+
       return held.promise.then(() => {
         native.add(id);
       });
     },
     close(id) {
       calls.push(["close", id]);
+
       if (!holdClose) {
         native.delete(id);
+
         return;
       }
+
       const held = deferred();
       pendingClose.set(id, held);
+
       return held.promise.then(() => {
         native.delete(id);
       });
@@ -64,21 +78,26 @@ function harness({ syncOpen = false, throwOpen = false, holdClose = false } = {}
       errors.push([operation, id, error]);
     },
   });
+
   const sync = () => {
     const s = store.getState();
     const focused = s.ui.focusedWindowId;
     const order = s.windowOrder.filter((id) => id !== focused);
+
     if (focused && s.windows[focused]) order.push(focused);
     reconciler.sync(
       order.map((id) => {
         const w = s.windows[id];
         const title = s.tabs[w.activeTabIds[w.spaceId]]?.title ?? "";
+
         return { id, title, options: { incognito: w.incognito, title, focus: id === focused } };
       }),
       focused,
     );
   };
+
   const stop = store.subscribe(sync);
+
   return { store, pending, pendingClose, calls, native, errors, reconciler, sync, stop };
 }
 

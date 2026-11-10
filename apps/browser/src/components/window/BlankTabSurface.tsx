@@ -19,8 +19,10 @@ const launchTabs = new Set<string>();
 
 export function quietLaunchTabs() {
   const s = browserRead.getState();
+
   for (const windowId of s.windowOrder) {
     const id = activeTabId(s, windowId);
+
     if (id) launchTabs.add(id);
   }
 }
@@ -31,8 +33,9 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
   const windowId = useWindowId();
   const [size, setSize] = useState({ width: 0, height: 0 });
   const { hovered, hoverProps } = useHover();
+
   const open = (sourceTabId?: string) => {
-    void dispatchBrowserCommand({ method: "openCommandPanel", windowId, initialText: "", ...(sourceTabId ? { sourceTabId } : {}) }).catch((error) => {
+    void dispatchBrowserCommand({ method: "openCommandPanel", windowId, initialText: "", ...(sourceTabId ? { sourceTabId } : undefined) }).catch((error) => {
       console.error("Couldn't open search", error);
       showToast(windowId, "Couldn't open search", "Please try again.");
     });
@@ -41,6 +44,7 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
   useEffect(() => {
     if (!focused || launchTabs.has(tabId)) return;
     const state = browserRead.getState();
+
     if (activeTabId(state, windowId) !== tabId || state.tabs[tabId]?.url || state.windowUi[windowId]?.panel.open || themeEditorOpen(windowId)) return;
     open(tabId);
   }, [tabId, windowId, focused]);

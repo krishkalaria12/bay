@@ -5,6 +5,7 @@ import type { FolderPatch, GroupPatch, NewFolderOptions } from "./organizeComman
 
 export const createGroup = (tabIds: string[], options?: { name?: string; icon?: string | null; color?: GroupColor | null }) =>
   dispatchBrowserCommand({ method: "createGroup", tabIds, options });
+
 export const groupTabs = (tabIds: string[], options?: { pinned?: boolean; name?: string }) => dispatchBrowserCommand({ method: "groupTabs", tabIds, options });
 export const updateGroup = (groupId: string, patch: GroupPatch) => dispatchBrowserCommand({ method: "updateGroup", groupId, patch });
 export const addTabsToGroup = (groupId: string, tabIds: string[]) => dispatchBrowserCommand({ method: "addTabsToGroup", groupId, tabIds });
@@ -19,8 +20,10 @@ export const newTabInGroup = (groupId: string, url?: string) => dispatchBrowserC
 
 export const newPinnedFolder = (windowId: string, options?: NewFolderOptions) => dispatchBrowserCommand({ method: "newPinnedFolder", windowId, options });
 export const updatePinnedFolder = (folderId: string, patch: FolderPatch) => dispatchBrowserCommand({ method: "updatePinnedFolder", folderId, patch });
+
 export const movePinnedFolder = (folderId: string, beforeId: string | null, parentId?: string | null) =>
   dispatchBrowserCommand({ method: "movePinnedFolder", folderId, beforeId, parentId });
+
 export const deletePinnedFolder = (folderId: string) => dispatchBrowserCommand({ method: "deletePinnedFolder", folderId });
 export const undoSidebarEdit = (windowId: string) => dispatchBrowserCommand({ method: "undoSidebarEdit", windowId });
 export const undoPinnedFolderMove = () => dispatchBrowserCommand({ method: "undoPinnedFolderMove" });
@@ -33,7 +36,9 @@ export const setMuted = (tabIds: string[], muted: boolean) => dispatchBrowserCom
 export const setSiteMuted = (tabId: string, muted: boolean) => dispatchBrowserCommand({ method: "setSiteMuted", tabId, muted });
 export const returnToPinnedUrl = (tabId: string) => dispatchBrowserCommand({ method: "returnToPinnedUrl", tabId });
 export const setPinnedUrl = (tabId: string, url?: string) => dispatchBrowserCommand({ method: "setPinnedUrl", tabId, url });
+
 export const cleanUpTabs = (windowId: string, options?: { inactiveForMs?: number; spaceId?: string }) =>
   dispatchBrowserCommand({ method: "cleanUpTabs", windowId, options });
+
 export const tidyTabs = (windowId: string) => dispatchBrowserCommand({ method: "tidyTabs", windowId });
 export const restoreCleaned = (windowId: string, entryId?: string) => dispatchBrowserCommand({ method: "restoreCleaned", windowId, entryId });

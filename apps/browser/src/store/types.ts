@@ -1,7 +1,9 @@
 import type { PageEngine } from "@bay/chromium";
 
 export type Frame = [number, number, number, number];
+
 export type WindowSize = [number, number];
+
 export type WindowPlacement = { size?: WindowSize; maximized?: boolean };
 
 // Only bookmark-style metadata belongs in JS. Security-scoped grants live in the native shell on this Mac.

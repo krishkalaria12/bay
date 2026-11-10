@@ -24,6 +24,7 @@ export function registerWindowApplication({ onFirstMount }: WindowApplicationOpt
 
 // Development: `globalThis.nnDevMountDelayMs` holds a window's content back that long after its root starts, as a
 // window opened under load mounts late (acceptance move-tab-slow-mount).
+// SAFETY: the checks above established this shape.
 const devMountDelay = () => (__DEV__ ? ((globalThis as { nnDevMountDelayMs?: number }).nnDevMountDelayMs ?? 0) : 0);
 
 function RootContents({ windowId, onFirstMount }: { windowId: string; onFirstMount?: () => void }) {
@@ -32,13 +33,16 @@ function RootContents({ windowId, onFirstMount }: { windowId: string; onFirstMou
   useEffect(() => {
     if (!held) return;
     const timer = setTimeout(() => setHeld(false), delay);
+
     return () => clearTimeout(timer);
   }, []);
   useEffect(() => {
     perfMark("firstWindow");
     onFirstMount?.();
   }, []);
+
   if (held) return null;
+
   return __DEV__ ? (
     <DevErrorBoundary>
       <WindowRoot windowId={windowId} />

@@ -155,17 +155,24 @@ function UpdatesSection() {
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
+
     return () => sub.remove();
   }, []);
+
   if (!state?.available) return null;
   const ready = state.configured;
   const channelBusy = state.sessionInProgress || state.pending?.ready === true;
+
   const set = (patch: { automaticChecks?: boolean; automaticDownloads?: boolean; channel?: UpdateChannel }) => {
     setState({ ...state, ...patch });
+
     if (patch.automaticChecks !== undefined) void setAutomaticUpdateChecks(patch.automaticChecks).finally(refresh);
+
     if (patch.automaticDownloads !== undefined) void setAutomaticUpdateDownloads(patch.automaticDownloads).finally(refresh);
+
     if (patch.channel !== undefined) void setUpdateChannel(patch.channel).finally(refresh);
   };
+
   const lastCheck = state.lastCheck
     ? `Last checked ${new Date(state.lastCheck).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
     : "Not checked yet.";
@@ -241,20 +248,25 @@ function DefaultBrowserBanner() {
   // Why setting the default failed, when trying again can't help (Linux without bay.desktop installed).
   const [problem, setProblem] = useState<string | null>(null);
   const refresh = () => void isDefaultBrowser().then(setIsDefault);
+
   const makeDefault = () =>
     void setAsDefaultBrowser().then(
       (value) => {
         setProblem(null);
         setIsDefault(value);
       },
-      (failure: unknown) => setProblem(failure instanceof Error ? failure.message : "The default browser wasn't changed. Try again."),
+      (failure: Error) => setProblem(failure instanceof Error ? failure.message : "The default browser wasn't changed. Try again."),
     );
+
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
+
     return () => sub.remove();
   }, []);
+
   if (isDefault === null) return <View style={{ height: 20 }} />;
+
   return (
     <View
       style={{

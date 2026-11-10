@@ -3,6 +3,7 @@ import { join } from "node:path";
 /** Runs icacls on `path`; its exit code. */
 export function icacls(path: string, ...args: string[]): number {
   const tool = join(process.env.SystemRoot || "C:\\Windows", "System32", "icacls.exe");
+
   return Bun.spawnSync([tool, path, ...args]).exitCode;
 }
 
@@ -28,8 +29,10 @@ export const CONTROL_FILE_TIMEOUT = 60_000;
 export function makeControlFilePrivate(path: string): void {
   if (process.platform !== "win32") return;
   const powershell = join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+
   const result = Bun.spawnSync([powershell, "-NoProfile", "-NonInteractive", "-Command", `$ErrorActionPreference = 'Stop'; ${PRIVATE_ACL}`], {
     env: { ...process.env, BAY_TEST_ACL_PATH: path },
   });
+
   if (result.exitCode !== 0) throw new Error(`couldn't make the control file private: ${result.stderr.toString()}`);
 }

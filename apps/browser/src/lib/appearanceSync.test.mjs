@@ -4,6 +4,7 @@ import { appearanceState, appEventListeners, emitAppEvent } from "../test-native
 import { startAppearanceSync } from "./appearanceSync.ts";
 
 let resolveQuery;
+
 beforeEach(() => {
   appEventListeners.clear();
   appearanceState.query = () => new Promise((resolve) => (resolveQuery = resolve));

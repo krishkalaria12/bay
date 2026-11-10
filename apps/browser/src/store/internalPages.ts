@@ -17,11 +17,14 @@ export const internalUrl = (page: InternalPageId, query?: string) => `${INTERNAL
 export function internalPageOf(url: string | null | undefined): InternalPageId | null {
   if (!url?.toLowerCase().startsWith(INTERNAL_SCHEME)) return null;
   const page = url.slice(INTERNAL_SCHEME.length).split(/[/?#]/)[0]!.toLowerCase();
+
+  // SAFETY: the checks above established this shape.
   return page in INTERNAL_PAGES ? (page as InternalPageId) : null;
 }
 
 export function internalQuery(url: string): string {
   const q = /[?&]q=([^&#]*)/.exec(url)?.[1];
+
   try {
     return q ? decodeURIComponent(q) : "";
   } catch {

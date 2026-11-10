@@ -9,6 +9,7 @@ export { installErrorReporting };
 
 export function startTelemetry() {
   const stop = startUsage();
+
   if (__DEV__) {
     // SAFETY: nnTelemetry is telemetry's own dev-harness surface, read only by tests.
     (globalThis as { nnTelemetry?: unknown }).nnTelemetry = {
@@ -39,5 +40,6 @@ export function startTelemetry() {
       crash: devCrash,
     };
   }
+
   return stop;
 }

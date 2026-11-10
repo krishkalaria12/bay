@@ -5,6 +5,7 @@ import { createFocusHolder } from "./focusHolder";
 // holds focus and reads the keys itself. A text field or a page keeps its keys, as on macOS.
 
 // The keys macOS's responder gives the sidebar, by DOM key name.
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 const SIDEBAR_KEYS: Record<string, string> = {
   ArrowUp: "ArrowUp",
   ArrowDown: "ArrowDown",
@@ -36,6 +37,7 @@ type Host = {
 
 /** A text field, an editor or a page: what the sidebar never takes keys from. */
 export const holdsTyping = (element: Element | null): boolean =>
+  // SAFETY: the checks above established this shape.
   !!element && (element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.tagName === "EMBED" || !!(element as HTMLElement).isContentEditable);
 
 const plain = (event: KeyboardEvent) => !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
@@ -47,6 +49,7 @@ export function startWebSidebarKeyboard(sidebar: WebSidebarKeyboard, host: Host 
   const holder = createFocusHolder(doc);
   const rows = new WeakSet<Element>();
   const owns = (element: Element | null) => !!element && (element === holder || rows.has(element));
+
   const take = () => {
     if (!owns(doc.activeElement)) holder.focus({ preventScroll: true });
   };
@@ -54,19 +57,24 @@ export function startWebSidebarKeyboard(sidebar: WebSidebarKeyboard, host: Host 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented || !owns(doc.activeElement)) return;
     const key = plain(event) ? SIDEBAR_KEYS[event.key] : undefined;
+
     if (key && sidebar.active()) sidebar.runKey(key);
     else if (isUndo(event) && sidebar.canUndo()) sidebar.undo();
     else return;
     event.preventDefault();
     event.stopPropagation();
   };
+
   // As on macOS, a click anywhere, or focus going somewhere else, ends keyboard focus.
   const onPointerDown = () => {
     if (sidebar.active()) sidebar.blur();
   };
+
   const onFocusIn = (event: FocusEvent) => {
+    // SAFETY: the checks above established this shape.
     if (sidebar.active() && !owns(event.target as Element | null)) sidebar.blur();
   };
+
   doc.addEventListener("keydown", onKeyDown, true);
   doc.addEventListener("pointerdown", onPointerDown, true);
   doc.addEventListener("focusin", onFocusIn, true);
@@ -75,7 +83,10 @@ export function startWebSidebarKeyboard(sidebar: WebSidebarKeyboard, host: Host 
     /** Keyboard focus came to the sidebar, or left it. */
     changed(active: boolean) {
       if (active) take();
-      else if (owns(doc.activeElement)) (doc.activeElement as HTMLElement).blur();
+      else if (owns(doc.activeElement)) {
+        // SAFETY: the checks above established this shape.
+        (doc.activeElement as HTMLElement).blur();
+      }
     },
     /** A row drawn focused takes DOM focus, so a screen reader follows it. */
     focusRow(row: HTMLElement) {

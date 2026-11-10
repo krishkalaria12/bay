@@ -4,6 +4,7 @@ import { installNativeTransport } from "./nativeBridge.ts";
 
 test("web Linux trusts only an explicit boolean host capability", async () => {
   let sequence = 0;
+
   for (const platform of ["linux", "windows"]) {
     for (const flag of [undefined, false, true, "true", 1, null]) {
       const connection = installNativeTransport({
@@ -19,6 +20,7 @@ test("web Linux trusts only an explicit boolean host capability", async () => {
         },
         subscribe: () => ({ remove() {} }),
       });
+
       try {
         const { capabilities } = await import(`./os.web.ts?case=${sequence++}`);
         assert.equal(capabilities.globalWindowCoordinates, platform === "windows" || flag === true);

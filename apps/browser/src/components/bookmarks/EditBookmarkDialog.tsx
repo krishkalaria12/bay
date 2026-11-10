@@ -17,7 +17,9 @@ import { addBookmark, addBookmarkFolder, moveBookmark, updateBookmark } from "..
 export function EditBookmarkDialog() {
   const windowId = useWindowId();
   const open = useBookmarkEditor((e) => (e.open?.windowId === windowId ? e.open : null));
+
   if (!open) return null;
+
   return <Sheet key={`${open.bookmarkId}:${open.folder}`} state={open} />;
 }
 
@@ -28,9 +30,11 @@ function Sheet({ state }: { state: EditorState }) {
   const [node] = useState(() => useBrowser.getState().bookmarks.nodes[state.bookmarkId ?? ""]);
   const [title, setTitle] = useState(node?.title ?? "");
   const [url, setUrl] = useState(node?.kind === "url" ? node.url : "");
+
   const [parentId, setParentId] = useState<string | null>(
     () => node?.parentId ?? state.parentId ?? useBrowser.getState().bookmarks.roots[state.spaceId]?.bar ?? null,
   );
+
   const searchPrefix = useBrowser((s) => searchUrlPrefix(s.settings));
   const close = () => useBookmarkEditor.getState().set(null);
   const resolvedUrl = url.trim() ? resolveInput(url, searchPrefix) : "";
@@ -38,8 +42,10 @@ function Sheet({ state }: { state: EditorState }) {
 
   const save = () => {
     if (!valid) return;
+
     if (node) {
       reportBrowserCommand(updateBookmark(node.id, state.folder ? { title: title.trim() } : { title: title.trim(), url: resolvedUrl }));
+
       if (parentId && parentId !== node.parentId) reportBrowserCommand(moveBookmark(node.id, parentId));
     } else if (state.folder) {
       reportBrowserCommand(addBookmarkFolder({ spaceId: state.spaceId, title: title.trim(), parentId: parentId ?? undefined, index: state.index }));
@@ -47,6 +53,7 @@ function Sheet({ state }: { state: EditorState }) {
       const options = { spaceId: state.spaceId, url: resolvedUrl, title: title.trim() || resolvedUrl, parentId: parentId ?? undefined, index: state.index };
       reportBrowserCommand(addBookmark(options));
     }
+
     close();
   };
 
@@ -104,5 +111,6 @@ function Sheet({ state }: { state: EditorState }) {
 
 function Label({ text }: { text: string }) {
   const theme = useTheme();
+
   return <Text style={{ fontSize: 11.5, marginTop: 12, marginBottom: 5, color: theme.textSecondary }}>{text}</Text>;
 }

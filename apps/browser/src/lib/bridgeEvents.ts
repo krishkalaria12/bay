@@ -58,6 +58,7 @@ export const HELD_EVENTS: ReadonlySet<string> = new Set([
   "topMediaAccess",
   "topLoadError",
 ]);
+
 /** The queue: `hold` keeps a report for later, `flush` applies everything held, in order, as one batch. */
 export function createHold({ batch, schedule, report }: Options) {
   let held: (() => void)[] = [];
@@ -85,6 +86,7 @@ export function createHold({ batch, schedule, report }: Options) {
     if (flushing) drain(errors);
     else {
       flushing = true;
+
       try {
         batch(() => drain(errors));
       } finally {
@@ -93,14 +95,17 @@ export function createHold({ batch, schedule, report }: Options) {
         flushing = false;
       }
     }
+
     // Each from a task of its own: a reporter that throws can't drop a report, another error, or the call that set
     // off the flush.
     for (const error of errors) schedule(() => report(error));
   };
+
   const hold = (run: () => void) => {
     if (!held.length) schedule(flush);
     held.push(run);
   };
+
   return { hold, flush, batch };
 }
 
@@ -119,6 +124,7 @@ export function holdPageReports(bridge: Bridge, { hold, flush }: Hold) {
     flush();
     call(module, method, args);
   };
+
   bridge.__invokeCallback = (id, args) => {
     flush();
     invoke(id, args);
@@ -176,6 +182,7 @@ const emitter = g.expo?.EventEmitter?.prototype;
 
 if (!g.__nnApplyHeldReports && bridge && emitter && v.is(v.function_(), bridge.__callFunction) && v.is(v.function_(), bridge.__invokeCallback)) {
   // Required here, not imported: tests load this module without React Native.
+  // SAFETY: the checks above established this shape.
   const batch = (update: () => void) => (require("@bay/platform") as typeof import("@bay/platform")).batchedUpdates(update);
   // A 0 ms timer runs at once on the JS thread (RCTTiming), so its call queues behind the ones already waiting.
   const held = createHold({ batch, schedule: (callback) => setTimeout(callback, 0), report: (error) => g.ErrorUtils?.reportFatalError(error) });

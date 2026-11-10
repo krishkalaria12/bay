@@ -1,6 +1,7 @@
 import { displayUrl, hostOf, parseUrl, type Suggestion } from "@bay/core";
 import type { Tab } from "../../store/types";
 import type { DeepReadonly } from "../../runtime/projection";
+
 type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 
 // `host` marks a frequent site: a whole site, not one page.

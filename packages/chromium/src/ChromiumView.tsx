@@ -41,7 +41,9 @@ export type NowPlaying = {
   /** Seconds behind a live stream's end, at `timestamp`. */
   liveBehind: number;
 };
+
 export type MediaCommand = "play" | "pause" | "toggle" | "next" | "previous" | "seekBy" | "seekTo" | "seekToLive" | "stop";
+
 export type MediaAccess = { camera: boolean; microphone: boolean; screen: boolean };
 
 export type OpenDisposition = "foreground" | "background" | "window" | "popup" | "incognito" | "current" | "split";
@@ -63,6 +65,7 @@ export type OpenWindowRequest = {
 export type BlockedPopup = { id: string; url: string; origin: string };
 
 export type FindResult = { count: number; active: number; final: boolean };
+
 // "escape": an Esc the page left alone, outside a text field (Little Bay closes on it).
 // `modifiers`: the keys held when the menu item was picked ("search").
 export type PageCommand = {
@@ -70,6 +73,7 @@ export type PageCommand = {
   text: string;
   modifiers?: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean };
 };
+
 export type LoadError = {
   url: string;
   code: number;
@@ -77,10 +81,13 @@ export type LoadError = {
   /** Bay's content blocker stopped this page (WebKit tabs never say so). */
   blockedPage?: boolean;
 };
+
 export type NavigationEntry = { url: string; title: string; current: boolean };
+
 export type CrashInfo = { status: number; reason: "abnormal" | "killed" | "crashed" | "oom" | "launchFailed" | "integrity" | "unknown"; code: number };
 
 export type CertificatePrincipal = { commonName: string; displayName: string; organizations: string[]; country: string };
+
 export type Certificate = {
   subject: CertificatePrincipal;
   issuer: CertificatePrincipal;
@@ -90,6 +97,7 @@ export type Certificate = {
   sha256?: string;
   chainLength: number;
 };
+
 export type SecurityInfo = {
   level: "secure" | "mixed" | "insecure" | "certificateError" | "local" | "none";
   url: string;
@@ -117,7 +125,9 @@ export type WebNotification = {
 };
 
 export type PictureInPictureState = { kind: "video" | "document"; active: boolean };
+
 export type ActivateRequest = { reason: "pictureInPicture" | "page" };
+
 export type DisplayMediaSource = {
   id: string;
   kind: "screen" | "window";
@@ -127,9 +137,11 @@ export type DisplayMediaSource = {
   width: number;
   height: number;
 };
+
 export type DisplayMediaRequest = { id: string; origin: string; audio: boolean; sources: DisplayMediaSource[]; cancelled?: boolean };
 
 export type ZoomState = { zoom: number; host: string; isDefault: boolean; pinchScale: number };
+
 export type ContentBlockedState = { count: number; url: string };
 
 export type PasswordPrompt = {
@@ -140,7 +152,9 @@ export type PasswordPrompt = {
   federation: string;
   usernames: string[];
 };
+
 export type PasswordPromptAnswer = "save" | "update" | "never" | "nope" | "dismiss";
+
 /** Chrome's offer to save or update an address or card after the page sent a form, in Chrome's words. `lines` is
  *  what gets saved (an address's lines, a card's "Visa ••1111 • 12/31"); an update lists its `changes` instead, under
  *  `newLabel` / `oldLabel` (empty when it only adds values). */
@@ -158,8 +172,10 @@ export type AutofillPrompt = {
   newLabel?: string;
   oldLabel?: string;
 };
+
 /** "accept" saves (or updates), "decline" is Chrome's "No thanks", "dismiss" closes it undecided. */
 export type AutofillPromptAnswer = "accept" | "decline" | "dismiss";
+
 export type ExtensionActionResult = "none" | "popup" | "sidePanel";
 
 export type WebViewProps = ViewProps & {
@@ -290,6 +306,7 @@ export type WebViewHandle = {
 export type DiscardOutcome = "discarded" | "already" | "refused" | "unsupported";
 
 type Evt<T> = (e: NativeSyntheticEvent<T>) => void;
+
 type NativeEvents = {
   onNavigationChange: NavigationState;
   onProgress: { progress: number };
@@ -328,6 +345,7 @@ type NativeEvents = {
 };
 
 type Handlers = keyof NativeEvents;
+
 export type NativeProps = Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> };
 
 const unwrap = {
@@ -393,11 +411,14 @@ const isViewMissing = (error: unknown): error is ViewError =>
 async function callView<T>(native: RefObject<NativeHandle | null>, fallback: T, fn: (view: NativeHandle) => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     const view = native.current;
+
     if (!view) return fallback;
+
     try {
       return await fn(view);
     } catch (error) {
       if (!isViewMissing(error)) throw error;
+
       if (attempt >= VIEW_RETRIES || native.current !== view) return fallback;
       await new Promise((resolve) => setTimeout(resolve, 16 * (attempt + 1)));
     }
@@ -408,6 +429,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
   const native = useRef<NativeHandle>(null);
   useImperativeHandle(ref, () => {
     const call = <T,>(fallback: T, fn: (view: NativeHandle) => Promise<T>) => callView(native, fallback, fn);
+
     return {
       loadUrl: (url, options) => call(undefined, (n) => n.loadUrl(toEngineUrl(url), options?.userInitiated ?? false)),
       goBack: () => call(undefined, (n) => n.goBack()),
@@ -490,5 +512,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
   }
 
   const Native = props.engine === "webkit" && hasWebKit() ? webKitView() : NativeWebView;
+
+  // SAFETY: the checks above established this shape.
   return <Native ref={native} {...(nativeProps as NativeProps)} />;
 });

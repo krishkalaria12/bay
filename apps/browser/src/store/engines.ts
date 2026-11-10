@@ -25,16 +25,22 @@ const MAX_CACHED_SITES = 1024;
 function parsedSite(url: string | undefined | null): Site | null {
   if (!url) return null;
   const cached = sites.get(url);
+
   if (cached !== undefined) return cached;
   let site: Site | null = null;
+
   try {
     const u = new URL(url);
+
     if (u.protocol === "http:" || u.protocol === "https:") site = { key: `${u.protocol}//${u.host}`.toLowerCase(), host: u.hostname.toLowerCase() };
   } catch {}
+
   // Don't retain unusually large query strings after their tabs close.
   if (url.length > 4096) return site;
+
   if (sites.size >= MAX_CACHED_SITES) sites.delete(sites.keys().next().value!);
   sites.set(url, site);
+
   return site;
 }
 
@@ -69,8 +75,10 @@ const PROTECTED_VIDEO_SITES: readonly string[] = [
 
 export function protectedVideoSite(url: string | undefined | null): boolean {
   const site = parsedSite(url);
+
   if (!site?.key.startsWith("https://")) return false;
   const host = site.host;
+
   return PROTECTED_VIDEO_SITES.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
@@ -81,13 +89,19 @@ export const engineForUrl = (url: string | undefined | null): PageEngine => chos
 
 const fromAdoption = (s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine | undefined => {
   const id = t.adoptId;
+
   if (!id) return undefined;
+
   if (id.startsWith("webkit:")) return "webkit";
+
   if (id.startsWith("nncore:") || id.startsWith("tab:")) return "chromium";
+
   if (id.startsWith("clone:")) {
     const source = s.tabs[id.slice("clone:".length)];
+
     return source && depth < 8 ? engineOf(s, source, depth + 1) : undefined;
   }
+
   return undefined;
 };
 
@@ -116,7 +130,9 @@ export function tabEngine(s: EngineState, tabId: string): PageEngine {
 export function typedNavigationEngine(s: EngineState, tab: DeepReadonly<Tab>, url: string): PageEngine {
   if (chromiumOnly(url)) return "chromium";
   const chosen = chosenEngine(url);
+
   if (chosen) return chosen;
+
   return tab.url || tab.navigation ? tabEngine(s, tab.id) : "chromium";
 }
 
@@ -147,29 +163,38 @@ export const VISIT_SETTLE_MS = 1500;
 export function visitRecorder(write: (profile: string, visit: RecordedVisit) => void, timers: VisitTimers, now: () => number) {
   const open = new Map<string, Visit>();
   const done = new Map<string, string>();
+
   const finish = (tabId: string, visit: Visit) => {
     if (visit.timer !== undefined) timers.clear(visit.timer);
     visit.timer = undefined;
+
     if (open.get(tabId) === visit) open.delete(tabId);
     done.set(tabId, visit.url);
+
     if (visit.profile !== null) write(visit.profile, { url: visit.url, title: visit.title, at: visit.at });
   };
+
   return {
     note(tabId: string, profile: string | null, page: WebKitPage) {
       const { url, title, isLoading, committedUrl } = page;
+
       if (!/^https?:/i.test(url) || url !== committedUrl) return;
       let visit = open.get(tabId);
+
       if (visit && visit.url !== url) {
         finish(tabId, visit);
         visit = undefined;
       }
+
       if (!visit) {
         if (done.get(tabId) === url) return;
         done.delete(tabId);
         visit = { url, title, at: now(), staleTitle: title, profile };
         open.set(tabId, visit);
       } else if (title) visit.title = title;
+
       if (title && title !== visit.staleTitle) return finish(tabId, visit);
+
       if (isLoading || visit.timer !== undefined) return;
       const settling = visit;
       settling.timer = timers.set(() => {
@@ -178,6 +203,7 @@ export function visitRecorder(write: (profile: string, visit: RecordedVisit) => 
     },
     close(tabId: string) {
       const visit = open.get(tabId);
+
       if (visit) finish(tabId, visit);
       open.delete(tabId);
       done.delete(tabId);

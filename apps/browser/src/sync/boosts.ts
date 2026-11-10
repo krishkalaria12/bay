@@ -17,18 +17,23 @@ export const boostsAdapter: Adapter = {
   extract: () => {
     ensureBoostsLoaded();
     const s = useBoosts.getState();
+
     // Unreadable here: publish nothing rather than deletions.
     if (!s.loaded || s.error) return null;
+
     return { values: new Map(Object.values(s.boosts).map(({ id, ...record }) => [`${PREFIX}${id}`, record satisfies BoostRecord])) };
   },
   apply: (visible, changed) => {
     ensureBoostsLoaded();
+
     if (useBoosts.getState().error) return false;
     const upserts: Boost[] = [];
     const removed: string[] = [];
+
     for (const key of changed) {
       if (!key.startsWith(PREFIX)) continue;
       const id = key.slice(PREFIX.length);
+
       if (!visible.has(key)) {
         removed.push(id);
         continue;

@@ -71,68 +71,92 @@ const visible = (calendars: SystemCalendar[]) => {
 };
 
 type CalendarScope = { active: boolean };
+
 let service: { scope: CalendarScope; stop: () => void } | undefined;
 let inflight: { promise: Promise<void>; scope?: CalendarScope } | undefined;
 
 export function refreshCalendar(): Promise<void> {
   if (hasServiceClient()) return requestService("calendarRefresh");
+
   if (inflight) return inflight.promise;
   const scope = service?.scope;
   const active = () => !scope || scope.active;
+
   const run = async () => {
     useCalendar.setState({ loading: true });
+
     try {
       if (fixtureMode) {
         const { calendars, events } = loadFixture();
         const ids = new Set(visible(calendars));
         useCalendar.setState({ access: "fixture", calendars, events: events.filter((e) => ids.has(e.calendarId)), error: null, lastFetch: Date.now() });
+
         return;
       }
+
       const access = calendarAuthorization();
+
       if (access !== "fullAccess") {
         useCalendar.setState({ access, calendars: [], events: [], error: null });
+
         return;
       }
+
       const calendars = await systemCalendars();
+
       if (!active()) return;
       const ids = visible(calendars);
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       const events = ids.length ? await systemCalendarEvents(start.getTime(), Date.now() + CALENDAR_HORIZON_MS, ids) : [];
+
       if (!active()) return;
       useCalendar.setState({ access, calendars, events: events.sort((a, b) => a.start - b.start), error: null, lastFetch: Date.now() });
     } catch (error) {
-      if (active()) useCalendar.setState({ error: String((error as Error)?.message ?? error) });
+      if (active()) {
+        // SAFETY: the checks above established this shape.
+        useCalendar.setState({ error: String((error as Error)?.message ?? error) });
+      }
     } finally {
       if (active()) useCalendar.setState({ loading: false });
     }
   };
+
   const task = {
     scope,
     promise: run().finally(() => {
       if (inflight === task) inflight = undefined;
     }),
   };
+
   inflight = task;
+
   return task.promise;
 }
 
 // Request EventKit access only from an explicit click.
 export async function connectCalendar(active: () => boolean = () => true): Promise<boolean> {
   if (hasServiceClient()) return active() ? requestService("calendarConnect") : false;
+
   if (!active()) return false;
+
   if (fixtureMode) {
     await refreshCalendar();
+
     return true;
   }
+
   const granted = await requestCalendarAccess();
+
   if (!active()) return granted;
   await refreshCalendar();
+
   return granted;
 }
 
 export const calendarConnected = () => {
   const access = useCalendar.getState().access;
+
   return access === "fullAccess" || access === "fixture";
 };
 
@@ -140,10 +164,13 @@ export function startCalendar(): () => void {
   if (service) return service.stop;
   const scope: CalendarScope = { active: true };
   const disposers: (() => void)[] = [];
+
   const stop = () => {
     if (!scope.active) return;
     scope.active = false;
+
     if (service?.scope === scope) service = undefined;
+
     for (const dispose of disposers) {
       try {
         dispose();
@@ -151,17 +178,22 @@ export function startCalendar(): () => void {
         console.warn("Couldn't stop calendar watcher", error);
       }
     }
+
     if (inflight?.scope === scope) {
       inflight = undefined;
       useCalendar.setState({ loading: false });
     }
   };
+
   service = { scope, stop };
+
   try {
     void refreshCalendar();
+
     const changed = onCalendarChanged(() => {
       if (scope.active) void refreshCalendar();
     });
+
     disposers.push(() => changed.remove());
     // Only while connected: connecting refreshes on its own.
     disposers.push(
@@ -181,6 +213,7 @@ export function startCalendar(): () => void {
     stop();
     throw error;
   }
+
   return stop;
 }
 
@@ -195,7 +228,9 @@ export function useNow(intervalMs = 15_000, enabled = true): number {
     if (!enabled) return;
     setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), intervalMs);
+
     return () => clearInterval(t);
   }, [intervalMs, enabled]);
+
   return now;
 }

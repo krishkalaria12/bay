@@ -20,9 +20,11 @@ const TAB = "tab:";
 function shareableTabs(tabId: string) {
   const s = useBrowser.getState();
   const tab = s.tabs[tabId];
+
   if (!tab) return [];
   const profile = engineProfile(tab.spaceId);
   const live = new Set(Object.values(usePages.getState().browsers));
+
   return Object.values(s.tabs)
     .filter((t) => live.has(t.id) && engineProfile(t.spaceId) === profile && /^https?:|^file:/.test(t.url))
     .sort((a, b) => (a.id === tabId ? 1 : b.id === tabId ? -1 : b.lastActiveAt - a.lastActiveAt));
@@ -32,15 +34,19 @@ type Pending = DisplayMediaRequest & { pageUrl: string };
 
 export function requestDisplayMedia(tabId: string, request: DisplayMediaRequest) {
   const pending = useMedia.getState().displayRequests[tabId];
+
   if (request.cancelled) {
     if (pending?.id === request.id)
       useMedia.setState((m) => {
         const displayRequests = { ...m.displayRequests };
         delete displayRequests[tabId];
+
         return { displayRequests };
       });
+
     return;
   }
+
   if (pending) void webviews.get(tabId)?.resolveDisplayMedia(pending.id, null);
   const pageUrl = useBrowser.getState().tabs[tabId]?.url ?? "";
   // SAFETY: Pending } })) assertion matches the runtime value validated at this call site.
@@ -57,11 +63,13 @@ if (__DEV__)
 
 export function answerDisplayMedia(tabId: string, sourceId: string | null) {
   const request = useMedia.getState().displayRequests[tabId];
+
   if (!request) return;
   void webviews.get(tabId)?.resolveDisplayMedia(request.id, sourceId);
   useMedia.setState((m) => {
     const displayRequests = { ...m.displayRequests };
     delete displayRequests[tabId];
+
     return { displayRequests };
   });
 }
@@ -69,10 +77,13 @@ export function answerDisplayMedia(tabId: string, sourceId: string | null) {
 // Shares another tab: its capture id, read just before (a renderer change replaces it).
 async function shareTab(tabId: string, sharedTabId: string) {
   const request = useMedia.getState().displayRequests[tabId];
+
   if (!request) return;
   const source = await webviews.get(sharedTabId)?.mediaCaptureSourceId();
+
   // A newer request replaced this one meanwhile (and answered it): this choice was for the old one.
   if (useMedia.getState().displayRequests[tabId] !== request) return;
+
   if (source) noteTabShare(tabId, sharedTabId, request.origin);
   answerDisplayMedia(tabId, source ?? null);
 }
@@ -125,6 +136,7 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
 
   useEffect(() => {
     const missing = [...new Set(sources.map((s) => s.pid).filter((pid): pid is number => pid !== undefined && !(pid in icons)))];
+
     if (!missing.length) return;
     void Promise.all(missing.map(async (pid) => [pid, await runningAppIcon(pid, 20)] as const)).then((entries) =>
       setIcons((current) => ({ ...current, ...Object.fromEntries(entries) })),
@@ -137,11 +149,15 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
   const windows = sources.filter((s) => s.kind === "window");
   const isTab = (id: string | null) => !!id && id.startsWith(TAB) && tabs.some((t) => TAB + t.id === id);
   const valid = !!selected && (isTab(selected) || sources.some((s) => s.id === selected));
+
   const share = (id: string | null = selected) => {
     if (!id) return;
+
     if (isTab(id)) return void shareTab(tabId, id.slice(TAB.length));
+
     if (sources.some((s) => s.id === id)) answerDisplayMedia(tabId, id);
   };
+
   const cancel = () => answerDisplayMedia(tabId, null);
   const width = Math.min(SHARE_PICKER_WIDTH, paneWidth - 24);
 
@@ -250,6 +266,7 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
 
 function SectionTitle({ title }: { title: string }) {
   const theme = useTheme();
+
   return <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textSecondary, paddingHorizontal: 8, marginTop: 6, marginBottom: 6 }}>{title}</Text>;
 }
 
@@ -272,6 +289,7 @@ function ScreenTile({
   const { hovered, hoverProps } = useHover();
   const aspect = source.width && source.height ? source.height / source.width : 10 / 16;
   const previewWidth = width - 16;
+
   return (
     <View {...hoverProps} onDoubleClick={onShare}>
       <Pressable onPress={onSelect}>
@@ -329,6 +347,7 @@ function TabRow({
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} onDoubleClick={onShare}>
       <Pressable onPress={onSelect}>
@@ -377,6 +396,7 @@ function WindowRow({
   const { hovered, hoverProps } = useHover();
   const title = source.name || source.app || "Window";
   const app = source.app && source.app !== title ? source.app : null;
+
   return (
     <View {...hoverProps} onDoubleClick={onShare}>
       <Pressable onPress={onSelect}>

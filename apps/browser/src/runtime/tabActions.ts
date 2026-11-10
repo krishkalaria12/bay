@@ -3,8 +3,10 @@ import type { TabDetailsPatch, UserNewTabOptions } from "./tabCommands";
 
 export const newTab = (windowId: string, options?: UserNewTabOptions) => dispatchBrowserCommand({ method: "newTab", windowId, options });
 export const activate = (tabId: string, windowId?: string | null) => dispatchBrowserCommand({ method: "activate", tabId, windowId });
+
 export const navigate = (tabId: string, url: string, options?: { userInitiated?: boolean }) =>
   dispatchBrowserCommand({ method: "navigate", tabId, url, options });
+
 export const closeTab = (tabId: string) => dispatchBrowserCommand({ method: "closeTab", tabId });
 export const closeTabs = (tabIds: string[]) => dispatchBrowserCommand({ method: "closeTabs", tabIds });
 export const removeTab = (tabId: string) => dispatchBrowserCommand({ method: "removeTab", tabId });

@@ -138,6 +138,7 @@ test("theme previews stay local and clearing one window keeps another preview", 
   const b = S().createWindow({ url: "https://example.org" });
   const original = S();
   const before = themeKey(original, a, null);
+
   try {
     setPreviewLook(a, { color: "plum", theme: { colors: ["#123456"], intensity: 0.5, grain: 0.3 } });
     setPreviewLook(b, { color: "plum", theme: { colors: ["#654321"], intensity: 0.5, grain: 0.3 } });

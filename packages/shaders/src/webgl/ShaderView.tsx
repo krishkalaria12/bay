@@ -1,5 +1,7 @@
 // What the web components share: the rollout switch, live media queries, and the canvas an animated effect owns.
 
+import type { JsonInput } from "../json.ts";
+import * as v from "valibot";
 import { capabilities } from "@bay/platform";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { subscribe } from "./clock";
@@ -13,16 +15,17 @@ export const webShaders = process.env.EXPO_PUBLIC_BAY_WEB_SHADERS === "1" && cap
 export function useMedia(query: string): boolean {
   return useSyncExternalStore(
     (onChange) => {
-      const list = typeof matchMedia === "function" ? matchMedia(query) : null;
+      const list = v.is(v.function_(), globalThis.matchMedia) ? globalThis.matchMedia(query) : null;
       list?.addEventListener("change", onChange);
+
       return () => list?.removeEventListener("change", onChange);
     },
-    () => (typeof matchMedia === "function" ? matchMedia(query).matches : false),
+    () => (v.is(v.function_(), globalThis.matchMedia) ? globalThis.matchMedia(query).matches : false),
   );
 }
 
 /** High contrast or forced colours: grain goes, decorative light goes. */
-export function useContrast(): { more: boolean; forced: boolean } {
+export function useContrast() {
   return { more: useMedia("(prefers-contrast: more)"), forced: useMedia("(forced-colors: active)") };
 }
 
@@ -32,6 +35,7 @@ export function useFocused(): boolean {
     (onChange) => {
       addEventListener("focus", onChange);
       addEventListener("blur", onChange);
+
       return () => {
         removeEventListener("focus", onChange);
         removeEventListener("blur", onChange);
@@ -52,7 +56,7 @@ export type Draw = (surface: Surface, size: { width: number; height: number; css
  * canvas is on screen. Nothing is drawn, and no effect time passes, until `sources` have linked. Change `kick` to
  * draw again (new inputs, a replay). `failed` means: show the fallback.
  */
-export function useAnimatedCanvas(enabled: boolean, sources: readonly Source[], draw: Draw, kick: unknown) {
+export function useAnimatedCanvas(enabled: boolean, sources: readonly Source[], draw: Draw, kick: JsonInput) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
   const drawRef = useRef(draw);
@@ -63,20 +67,26 @@ export function useAnimatedCanvas(enabled: boolean, sources: readonly Source[], 
 
   useEffect(() => {
     const canvas = ref.current;
+
     if (!enabled || !canvas) return;
+
     if (slots.size >= 2) {
       setFailed(true);
+
       return;
     }
+
     slots.add(canvas);
     let stop: (() => void) | null = null;
     let onScreen = true;
     let size: Parameters<Draw>[1] | null = null;
     let first = true;
+
     const halt = () => {
       stop?.();
       stop = null;
     };
+
     const surface = createSurface(
       canvas,
       () => {
@@ -89,74 +99,99 @@ export function useAnimatedCanvas(enabled: boolean, sources: readonly Source[], 
         run();
       },
     );
+
     if (!surface) {
       slots.delete(canvas);
       setFailed(true);
+
       return;
     }
+
     setFailed(false);
+
     const frame = (dt: number) => {
       if (!size || surface.lost) return halt();
       const ready = surface.ready(...sources);
+
       if (ready === false) return;
+
       if (ready === null) {
         halt();
+
         return setFailed(true);
       }
+
       surface.gl.viewport(0, 0, size.width, size.height);
       const more = drawRef.current(surface, size, first ? 0 : dt);
       first = false;
+
       if (!more || !onScreen) halt();
     };
+
     const run = () => {
       if (!stop && size && onScreen && !surface.lost) stop = subscribe(frame);
     };
+
     start.current = () => {
       first = true;
       run();
     };
+
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       const next = targetSize(rect.width, rect.height, devicePixelRatio, glLimit(surface.gl));
+
       if (!next) {
         size = null;
+
         return halt();
       }
+
       if (canvas.width !== next.width || canvas.height !== next.height) {
         canvas.width = next.width;
         canvas.height = next.height;
       }
+
       size = { ...next, cssWidth: rect.width, cssHeight: rect.height };
       first = true;
       run();
     };
+
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
+
     const intersection = new IntersectionObserver(([entry]) => {
       onScreen = !!entry?.isIntersecting;
+
       if (onScreen) run();
       else halt();
     });
+
     intersection.observe(canvas);
     // Moving to a monitor with another scale changes the ratio without a resize.
     let dpr: MediaQueryList | null = null;
+
     const watchDpr = () => {
       dpr?.removeEventListener("change", onDpr);
       dpr = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
       dpr.addEventListener("change", onDpr);
     };
+
     const onDpr = () => {
       watchDpr();
       resize();
     };
+
     watchDpr();
     resize();
+
     return () => {
       halt();
       resizeObserver.disconnect();
       intersection.disconnect();
       dpr?.removeEventListener("change", onDpr);
       start.current = () => {};
+
       surface.release();
       slots.delete(canvas);
     };

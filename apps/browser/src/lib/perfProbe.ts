@@ -107,6 +107,7 @@ export const perfProbeEnabled = probeOptions !== null;
 //   2  6232fa43: module events timed as module:<event> tasks, counted in taskMs; commitTasks
 export const PERF_PROBE_REVISION = 2;
 const rendersProbe = !!probeOptions?.includes("renders");
+
 // "listeners" also times each store listener by the functions that subscribed it.
 const listenersProbe = !!probeOptions?.includes("listeners");
 
@@ -201,6 +202,7 @@ const startedAt = now();
 const startup: [task: string, at: number, ms: number][] = [];
 const roots = new Set<{ current: Fiber }>();
 let firstCommit = 0;
+
 // The native→JS task running now (bridge call, timer callback or native module event), for commitTasks.
 let task: string | null = null;
 
@@ -234,11 +236,13 @@ const HOST_COMPONENT = 5;
 // wasn't visited this commit (React's DevTools skips the same way).
 function walk(fiber: Fiber) {
   if (fiber.alternate && fiber.child === fiber.alternate.child) return;
+
   for (let c = fiber.child; c; c = c.sibling) {
     if (COMPONENT_TAGS.has(c.tag)) {
       if (!c.alternate) bump(stats.mounts, nameOf(c.type));
       else if (c.flags & PERFORMED_WORK) {
         bump(stats.renders, nameOf(c.type));
+
         if (rendersProbe) classify(c, c.alternate);
       }
     } else if (c.tag === HOST_COMPONENT && c.alternate && c.flags & UPDATE) stats.hostUpdates++;
@@ -267,6 +271,7 @@ function classify(fiber: Fiber, before: Fiber) {
   const prev = before.memoizedProps ?? {};
   let propsChanged = false;
   let realProps = false;
+
   if (props !== prev) {
     for (const key of new Set([...Object.keys(props), ...Object.keys(prev)])) {
       const a = props[key];
@@ -283,7 +288,9 @@ function classify(fiber: Fiber, before: Fiber) {
       }
     }
   }
+
   let stateChanged = false;
+
   if (fiber.tag === 1) {
     if (!shallowEqual(fiber.memoizedState, before.memoizedState)) {
       stateChanged = true;
@@ -304,17 +311,21 @@ function classify(fiber: Fiber, before: Fiber) {
       causes.push(shallowEqual(h.memoizedState, o.memoizedState) ? "state~" : "state");
     }
   }
+
   let contextChanged = false;
   let ci = fiber.dependencies?.firstContext ?? null;
   let co = before.dependencies?.firstContext ?? null;
+
   for (; ci; ci = ci.next, co = co?.next ?? null) {
     if (co && Object.is(ci.memoizedValue, co.memoizedValue)) continue;
     contextChanged = true;
     causes.push(`context:${ci.context.displayName ?? "?"}`);
   }
+
   const ms = fiber.selfBaseDuration ?? 0;
   bump(stats.renderMs, name, ms);
   const counter = (stats.causes[name] ??= {});
+
   if (!propsChanged && !stateChanged && !contextChanged) {
     bump(stats.wasted, name);
     bump(stats.wastedMs, name, ms);
@@ -326,6 +337,7 @@ function classify(fiber: Fiber, before: Fiber) {
       bump(stats.unstable, name);
       bump(stats.unstableMs, name, ms);
     }
+
     for (const cause of new Set(causes)) bump(counter, cause);
   }
 }
@@ -348,13 +360,16 @@ function installReactHook() {
       roots.add(root);
       stats.commits++;
       bump(stats.commitTasks, task ?? "other");
+
       if (stats.commitTimes.length < 5000) {
         stats.commitTimes.push(t);
         stats.commitTaskLog.push(task ?? "other");
       }
+
       try {
         walk(root.current);
       } catch {}
+
       stats.commitMs += root.current.actualDuration ?? 0;
       stats.walkMs += now() - t;
     },
@@ -373,24 +388,24 @@ const callers = (stack: string | undefined, depth = 4) =>
 function wrapTimers() {
   // Times a callback and reports it as `name:label`; preserves the native timer contract (id out).
   const withTiming = (name: string, callback: Function) => {
-      let label = `${name}:${callback.name || "anonymous"}`;
+    let label = `${name}:${callback.name || "anonymous"}`;
 
-      // With nnPerf.traceTimers on, anonymous callbacks are named by the functions that scheduled them.
-      if (traceTimers && !callback.name) label += ` <${callers(new Error().stack)}>`;
+    // With nnPerf.traceTimers on, anonymous callbacks are named by the functions that scheduled them.
+    if (traceTimers && !callback.name) label += ` <${callers(new Error().stack)}>`;
 
     return function (this: ProbeValue, ...args: ProbeValue[]) {
-          const t = now();
-          const outer = task;
+      const t = now();
+      const outer = task;
 
-          task = label;
+      task = label;
 
-          try {
+      try {
         return callback.apply(this, args);
-          } finally {
-            task = outer;
-            bump(stats.timers, label);
-            bump(stats.timerMs, label, now() - t);
-          }
+      } finally {
+        task = outer;
+        bump(stats.timers, label);
+        bump(stats.timerMs, label, now() - t);
+      }
     };
   };
 
@@ -485,6 +500,7 @@ function wrapSelectors() {
         bump(stats.selectorMs, label, now() - t);
       }
     };
+
     return original(subscribe, timed, getServerSnapshot);
   };
 }
@@ -505,7 +521,9 @@ function wrapBridge() {
       const t = now();
       const key = label(args);
       task = key;
+
       if (key !== "JSTimers.callTimers" && stats.taskLog.length < 5000) stats.taskLog.push([key, t]);
+
       try {
         return original.apply(queue, args);
       } finally {
@@ -513,14 +531,18 @@ function wrapBridge() {
         const end = now();
         bump(stats.tasks, key);
         bump(stats.taskMs, key, end - t);
+
         // Until the first window is up: when each task ran (ms from the bundle's start) and for how long.
         if (!marks.firstWindow && startup.length < 1000) startup.push([key, Math.round(t - startedAt), Math.round((end - t) * 10) / 10]);
       }
     };
   };
+
   wrap("callFunctionReturnFlushedQueue", ([module, method, args]) => {
     if (module === "RCTEventEmitter" && Array.isArray(args)) return `event:${String(args[1])}`;
+
     if (module === "RCTDeviceEventEmitter" && Array.isArray(args)) return `device:${String(args[0])}`;
+
     return `${String(module)}.${String(method)}`;
   });
   wrap("invokeCallbackAndReturnFlushedQueue", () => "callback");
@@ -554,7 +576,9 @@ function wrapModuleEvents() {
         if (task !== null) return listener.apply(this, args);
         const t = now();
         task = key;
+
         if (stats.taskLog.length < 5000) stats.taskLog.push([key, t]);
+
         try {
           return listener.apply(this, args);
         } finally {
@@ -602,14 +626,17 @@ export function probeStore<S>(name: string, store: { subscribe(listener: (s: S, 
   const subscribe = store.subscribe;
   store.subscribe = (listener) => {
     const site = listenersProbe ? `${name} ${callers(new Error().stack, 3)}` : "";
+
     return subscribe((s, prev) => {
       const t = now();
+
       try {
         listener(s, prev);
       } finally {
         const ms = now() - t;
         bump(stats.listenerCalls, name);
         bump(stats.listenerMs, name, ms);
+
         if (site) {
           bump(stats.listenerSiteCalls, site);
           bump(stats.listenerSiteMs, site, ms);
@@ -631,19 +658,23 @@ export function perfMark(name: string) {
 
 function findFibers(name: string, limit = 50): Fiber[] {
   const out: Fiber[] = [];
+
   const visit = (f: Fiber | null) => {
     for (let c = f; c && out.length < limit; c = c.sibling) {
       if (COMPONENT_TAGS.has(c.tag) && nameOf(c.type) === name) out.push(c);
       visit(c.child);
     }
   };
+
   for (const root of roots) visit(root.current);
+
   return out;
 }
 
 // Hermes' sampling profiler (macos/Bay-macOS/HermesProfiler.mm): js-bench --cpuprofile 1 starts it before a scenario
 // and writes a Chrome trace of the JS thread after it. Null where the app has no profiler (an older build).
 type HermesProfiler = { start(hz: number): boolean; stop(name: string): string | null };
+
 const cpuProfile = {
   start(hz = 1000): boolean {
     return !!profiler()?.start(hz);

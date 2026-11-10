@@ -7,6 +7,7 @@ import { browserRead, createBrowserReader, createLocalBrowserReadSource, createC
 import { createBrowserAuthority } from "./authority.ts";
 import { createBrowserClient } from "./client.ts";
 import { createLocalBrowserCommands, createClientBrowserCommands, installBrowserCommands, dispatchBrowserCommand } from "./commands.ts";
+
 // The bar's unused restore helper imports the window action module, whose space
 // picker and animated pager need native views. Keep its store actions real and
 // fail if these visual-only paths are unexpectedly exercised by command tests.
@@ -15,30 +16,39 @@ const unavailableView =
   encodeURIComponent(
     'export const pageToSpace = () => { throw new Error("native pager is unavailable in command tests"); }; export const requestCreateSpace = () => { throw new Error("space picker is unavailable in command tests"); };',
   );
+
 const nativeStub = new URL("../test-native-stub.mjs", import.meta.url).href;
+
 registerHooks({
   resolve(specifier, context, next) {
     if (context.parentURL?.endsWith("/lib/actions.ts")) {
       if (["../components/spaces/pager", "../components/spaces/CreateSpace"].includes(specifier)) return { url: unavailableView, shortCircuit: true };
+
       if (specifier === "@bay/chromium")
         return {
           url: "data:text/javascript," + encodeURIComponent(`export * from ${JSON.stringify(nativeStub)}; export const listExtensions = async () => [];`),
           shortCircuit: true,
         };
     }
+
     return next(specifier, context);
   },
 });
+
 const { openFromBar, openInBackground, switchFromBar } = await import("../components/commandBar/open.ts");
+
 import { openNewTabPanel } from "../lib/newTab.ts";
 
 const tick = () => new Promise(setImmediate);
+
 const deferred = () => {
   let resolve, reject;
+
   const promise = new Promise((yes, no) => {
     resolve = yes;
     reject = no;
   });
+
   return { promise, resolve, reject };
 };
 
@@ -85,11 +95,14 @@ test("a remote product helper waits for its acknowledged mirror and updates both
   const tab = viewTabIds(store.getState(), id)[0];
   const authority = createBrowserAuthority({ epoch: "product-epoch", store });
   const pending = [];
+
   const connect = (clientId) => {
     const commits = new Set();
+
     const stop = authority.subscribe((commit) => {
       for (const listener of commits) listener(commit);
     });
+
     const client = createBrowserClient({
       clientId,
       transport: {
@@ -98,10 +111,12 @@ test("a remote product helper waits for its acknowledged mirror and updates both
           const reply = await authority.dispatch(request);
           const held = deferred();
           pending.push({ reply, held });
+
           return held.promise;
         },
         subscribeCommits(listener) {
           commits.add(listener);
+
           return () => commits.delete(listener);
         },
         subscribeClose() {
@@ -109,15 +124,20 @@ test("a remote product helper waits for its acknowledged mirror and updates both
         },
       },
     });
+
     t.after(() => {
       client.close();
       stop();
     });
+
     return client;
   };
+
   t.after(() => authority.close());
+
   const first = connect("first-window"),
     second = connect("second-window");
+
   await Promise.all([first.ready, second.ready]);
   const firstRead = createBrowserReader(createClientBrowserReadSource(first));
   const secondRead = createBrowserReader(createClientBrowserReadSource(second));
@@ -130,15 +150,18 @@ test("a remote product helper waits for its acknowledged mirror and updates both
   const restore = installBrowserCommands(createClientBrowserCommands(first));
   const restoreRead = browserRead.install(createClientBrowserReadSource(first));
   let restoreSecond = () => {};
+
   t.after(() => {
     restoreSecond();
     restore();
     restoreRead();
   });
   let done = false;
+
   const open = openFromBar("https://shared.example/", tab, "newTab").then(() => {
     done = true;
   });
+
   await tick();
   assert.equal(done, false, "publication alone is not command acknowledgement");
   assert.equal(firstRead.getState().windowOrder.length, 1);
@@ -185,17 +208,21 @@ test("disposing older read and command installations cannot restore a disposed r
   removeNewer();
 
   let calls = 0;
+
   const removeFirst = installBrowserCommands({
     dispatch: async () => {
       throw new Error("disposed runtime");
     },
   });
+
   const removeSecond = installBrowserCommands({
     dispatch: async () => {
       calls++;
+
       return null;
     },
   });
+
   removeFirst();
   await dispatchBrowserCommand({ method: "requestNewTab", windowId: "missing" });
   assert.equal(calls, 1);

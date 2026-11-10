@@ -35,6 +35,7 @@ function watchTabbing(document: Document) {
 /** `enableFocusRing`: a view draws its own focus when it's false. */
 export function setWebFocusRing(node: HTMLElement, enabled = true) {
   const document = node.ownerDocument;
+
   if (!document.getElementById(styleId)) {
     const style = document.createElement("style");
     style.id = styleId;
@@ -42,6 +43,7 @@ export function setWebFocusRing(node: HTMLElement, enabled = true) {
     document.head.appendChild(style);
     watchTabbing(document);
   }
+
   if (enabled) node.removeAttribute(noRing);
   else node.setAttribute(noRing, "");
 }

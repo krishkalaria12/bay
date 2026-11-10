@@ -4,6 +4,8 @@ import { HASH12, HEADER, MAX_COLORS } from "./common";
 // ios/AreaLightView.swift areaLightSource. Colours are sRGB + alpha; the output is premultiplied.
 export const areaLight: Source = {
   uniforms: {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
+    // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- The name is the shader's own uniform, not a shape this code describes.
     shapeFrame: "v4",
     rotationTrig: "v4",
     viewSize: "v2",

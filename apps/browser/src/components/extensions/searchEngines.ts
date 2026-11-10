@@ -9,25 +9,31 @@ export function startExtensionSearchEngines(store: BrowserStore = useBrowser) {
   const delayed = new Set<ReturnType<typeof setTimeout>>();
   const timers: Record<string, ReturnType<typeof setTimeout>> = {};
   const read = new Set<string>();
+
   const unsubscribe = useExtensions.subscribe((e, prev) => {
     if (e.lists === prev.lists) return;
+
     for (const [profile, list] of Object.entries(e.lists)) {
       if (list === prev.lists[profile]) continue;
       clearTimeout(timers[profile]);
       timers[profile] = setTimeout(() => void refreshExtensionSearchEngines(profile, store, () => !stopped), 400);
+
       if (!read.has(profile)) delayed.add(setTimeout(() => void refreshExtensionSearchEngines(profile, store, () => !stopped), 3000));
       read.add(profile);
     }
   });
+
   return () => {
     stopped = true;
     unsubscribe();
+
     for (const timer of [...Object.values(timers), ...delayed]) clearTimeout(timer);
   };
 }
 
 export async function refreshExtensionSearchEngines(profile: string, store: BrowserStore = useBrowser, active = () => true) {
   let list: JsonValue | null | undefined;
+
   try {
     list = JSON.parse(JSON.stringify(await searchEngineList(profile)));
   } catch (error) {
@@ -35,10 +41,12 @@ export async function refreshExtensionSearchEngines(profile: string, store: Brow
 
     return;
   }
+
   if (list == null || !active()) return;
   const engines = extensionEnginesFromChrome(profile, list);
   const s = store.getState();
   const current = s.settings.extensionSearchEngines ?? [];
   const next = [...current.filter((e) => e.profile !== profile), ...engines];
+
   if (JSON.stringify(next) !== JSON.stringify(current)) s.updateSettings({ extensionSearchEngines: next });
 }

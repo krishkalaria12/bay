@@ -46,8 +46,10 @@ export function chromeChanged(
   const firstFromChrome = (t: Keyed) => !stayed(t) && !seen.has(t.key) && madeByChrome(s, t.key);
   // An extension moving a tab to another window: it arrives in a strip of another app window.
   const home = homeWindow(s, after, siblings, stayed);
+
   const movedIn = (t: Keyed) =>
     !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfileFor(s.tabs[t.key]!.spaceId, s.spaces) === after.profile;
+
   const taken = new Set(now.filter((t) => firstFromChrome(t) || movedIn(t)).map((t) => t.key));
 
   for (const t of now) if (movedIn(t)) s = intoWindow(s, t.key, home!);

@@ -5,11 +5,14 @@ import { boundedScale, drawItem } from "../../../../../packages/desktop/src/ease
 /** Records what's drawn; a character is 10 wide. */
 function recorder() {
   const calls = [];
+
   const record =
     (name) =>
     (...args) =>
       void calls.push([name, ...args]);
+
   const context = { measureText: (text) => ({ width: text.length * 10 }) };
+
   for (const name of [
     "save",
     "restore",
@@ -26,8 +29,10 @@ function recorder() {
     "drawImage",
   ])
     context[name] = record(name);
+
   return { context, calls, named: (name) => calls.filter((c) => c[0] === name) };
 }
+
 const base = { id: "i", x: 10, y: 20, width: 100, height: 50 };
 const none = () => null;
 

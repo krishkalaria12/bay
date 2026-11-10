@@ -32,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+
   if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
   else delete globalThis.navigator;
   heldSaves.error = null;
@@ -237,8 +238,10 @@ test("web sharing uses the fixed native transport without a cross-origin rendere
   const native = [];
   easelSharingAnswers.request = async (...args) => {
     native.push(args);
+
     return { status: args[2] === "DELETE" ? 204 : 200 };
   };
+
   await publishEasel("board", snapshot);
   assert.equal(requests.length, 0);
   assert.equal(native.length, 1);
@@ -270,11 +273,13 @@ function webLocks() {
           names.push(name);
           const next = queue.then(run);
           queue = next.catch(() => {});
+
           return next;
         },
       },
     },
   });
+
   return names;
 }
 

@@ -5,11 +5,13 @@ import { useTheme } from "../../lib/theme";
 export function Keycaps({ hint, color }: { hint: string; color?: string }) {
   const theme = useTheme();
   const label = shortcutLabel(hint);
+
   const keys = isMac
     ? Array.from(hint.replace(/\s/g, ""))
     : label.endsWith("++")
       ? [...label.slice(0, -1).split("+").filter(Boolean), "+"]
       : label.split("+").filter(Boolean);
+
   return (
     <View pointerEvents="none" style={{ flexDirection: "row", gap: 3 }}>
       {keys.map((key, i) => (

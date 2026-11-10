@@ -15,17 +15,21 @@ type QuitPreparation = {
 export async function prepareApplicationQuit(owners: QuitPreparation): Promise<boolean> {
   if (!owners.isCurrent()) return false;
   await owners.prepareSync();
+
   if (!owners.isCurrent()) return false;
   await Promise.all([owners.flushSession(), owners.flushLive()]);
+
   if (!owners.isCurrent()) return false;
   await owners.flushTelemetry();
+
   return owners.isCurrent();
 }
 
 /** Saving before quitting failed. Refusing to quit until it works would leave Bay impossible to close, so say why and
  *  let the person choose. True to quit. */
-export async function quitAnyway(error: unknown, ask: (options: ConfirmOptions) => Promise<ConfirmResult>): Promise<boolean> {
+export async function quitAnyway(error: Error, ask: (options: ConfirmOptions) => Promise<ConfirmResult>): Promise<boolean> {
   const reason = error instanceof Error ? error.message : String(error);
+
   try {
     const { confirmed } = await ask({
       title: "Bay couldn't save before quitting",
@@ -34,6 +38,7 @@ export async function quitAnyway(error: unknown, ask: (options: ConfirmOptions) 
       cancelTitle: "Keep Bay Open",
       destructive: true,
     });
+
     return confirmed;
   } catch {
     return false;

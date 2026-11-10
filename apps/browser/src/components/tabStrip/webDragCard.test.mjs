@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { hideDragCard, showDragCard } = await import("./webDragCard.ts");
 
 const node = () => ({
@@ -12,6 +13,7 @@ const node = () => ({
     this.removed = true;
   },
 });
+
 const page = () => ({ createElement: node, body: node() });
 
 test("the card follows the pointer, shows the tab, and reuses one element", () => {

@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { capabilities, isMac, shortcutForCommand } from "@bay/platform";
 import type { CommandAction } from "@bay/core";
 import type { BrowserCommand } from "@bay/desktop";
@@ -17,8 +18,10 @@ import { boostsAvailable, boostsForHost, useBoosts } from "../boosts/state";
 
 const siteHasBoosts = (url: string | undefined) => {
   const host = boostHost(url);
+
   return !!host && boostsForHost(useBoosts.getState(), host).length > 0;
 };
+
 const siteBoostsOn = (url: string) => useBoosts.getState().on && boostsForHost(useBoosts.getState(), boostHost(url)).some((b) => b.enabled);
 
 type Context = { s: BrowserState; windowId: string; tab: Tab | undefined };
@@ -197,6 +200,7 @@ const DEFS: ActionDef[] = [
 // desktop hosts keep the same handlers discoverable in the command panel.
 const nativePage = ({ tab }: Context) => !!tab?.url && !isInternalTab(tab);
 const splitPage = ({ s, tab }: Context) => !!tab && !!splitOf(s, tab.id);
+
 const WINDOW_MENU_DEFS: ActionDef[] = [
   {
     command: "openFile",
@@ -262,11 +266,16 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
   const c: Context = { s, windowId, tab };
   const out: CommandAction[] = [];
   const defs = capabilities.menuBar ? DEFS : [...DEFS, ...WINDOW_MENU_DEFS];
+
   for (const d of defs) {
     if (!capabilities.menuBar && w?.kind === "small" && LITTLE_BAY_DISABLED_COMMANDS.includes(d.command)) continue;
+
     if (d.available && !d.available(c)) continue;
+
     if ((d.command === "newEasel" || d.command === "openLibrary") && !libraryAvailable()) continue;
+
     if ((d.needs === "boost" || d.needs === "boosted") && !boostsAvailable()) continue;
+
     if (d.needs === "page" && !tab?.url) continue;
 
     if (d.needs === "tab" && !tab) continue;
@@ -283,11 +292,12 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
 
     const action: CommandAction = {
       id: actionId(d),
-      title: typeof d.title === "string" ? d.title : d.title(c),
+      title: v.is(v.string(), d.title) ? d.title : d.title(c),
       icon: d.icon,
-      ...(d.hint ? { hint: shortcutForCommand(d.command, d.hint) } : {}),
-      ...(d.keywords ? { keywords: d.keywords } : {}),
+      ...(d.hint ? { hint: shortcutForCommand(d.command, d.hint) } : undefined),
+      ...(d.keywords ? { keywords: d.keywords } : undefined),
     };
+
     out.push(action);
   }
 
@@ -304,6 +314,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
       });
     });
   }
+
   return out;
 }
 

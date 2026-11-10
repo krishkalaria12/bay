@@ -18,12 +18,16 @@ test("the JS bundle and the native build declare the same API version", () => {
 
 test("the native runtime accepts every slice of the coordinator's current state schema", () => {
   const native = read("../../../engine/chromium/src/chrome/browser/bay/webui/runtime_state.cc");
+
   const fields = (name) => {
     const body = native.match(new RegExp(`${name}\\[\\]\\s*=\\s*\\{([^}]+)\\}`))?.[1];
     assert.ok(body, `${name} declaration found`);
+
     return [...body.matchAll(/"([^"]+)"/g)].map((match) => match[1]).sort();
   };
+
   const state = createBrowserProjector()(createBrowserStore().getState());
+
   for (const [name, isList] of [
     ["kRecords", false],
     ["kLists", true],
@@ -31,6 +35,7 @@ test("the native runtime accepts every slice of the coordinator's current state 
     const expected = Object.keys(state)
       .filter((key) => Array.isArray(state[key]) === isList)
       .sort();
+
     assert.deepEqual(fields(name), expected, `${name} must match the published coordinator projection`);
   }
 });

@@ -28,17 +28,20 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
   installErrorReporting();
   prepareCoordinatorStore(store, transport.bootstrap.recoveryState, restoreBrowserSession);
   let native: ReturnType<typeof startNativeSync> | undefined;
+
   const coordinator = await createBrowserCoordinator({
     store,
     transport,
     effects: { focusWindow },
     executeAsync: async (command, isActive) => {
       if (command.method !== "serviceAction") throw new Error("Unsupported asynchronous command");
+
       return executeServiceCommand(store, command, isActive);
     },
     startServices() {
       const stops: (() => void)[] = [];
       let persistence: ReturnType<typeof startCoordinatorServices>;
+
       try {
         persistence = startCoordinatorServices({
           store,
@@ -47,9 +50,11 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
         stops.push(() => persistence.dispose());
         native = startNativeSync({ store, persistence, shared: true });
         stops.push(() => native?.dispose(), startSync(store), startExtensionSearchEngines(store));
+
         const refresh = () => {
           for (const id of new Set(store.getState().windowOrder.map((id) => engineProfile(store.getState().windows[id]!.spaceId)))) void refreshExtensions(id);
         };
+
         refresh();
         const extensions = onExtensionsChanged(({ profile }) => void refreshExtensions(profile));
         stops.push(() => extensions.remove());
@@ -64,30 +69,36 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
         for (const stop of stops.reverse()) stop();
         throw error;
       }
+
       return {
         flush: persistence.flush,
         resume: persistence.resume,
         dispose() {
           stopServiceCommands();
+
           for (const stop of stops.reverse()) stop();
         },
       };
     },
+    // SAFETY: the checks above established this shape.
     onAcceptedCommit: (commit) => native?.reconcile(commit.state as BrowserState),
     onError,
   });
+
   try {
     // Before the windows open: a first run's window then starts on onboarding rather than showing the browser first.
     startApplicationLifecycle({
       returning,
       start(step, picked) {
         const windowId = resolveWindowId(store.getState());
+
         if (windowId) requestOnboarding(windowId, step, picked);
       },
     });
     await coordinator.announceReady();
     startCliControl({ activeTab: false });
     startUserScripts();
+
     return coordinator;
   } catch (error) {
     coordinator.dispose();

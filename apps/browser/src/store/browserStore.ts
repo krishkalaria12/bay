@@ -85,9 +85,11 @@ function withoutWindowId<T extends { windowId?: string }>(saved: T): Omit<T, "wi
 
 // Batch external updates; React Native otherwise commits once per subscriber.
 let batch = (update: () => void) => update();
+
 export function setStoreBatching(batchedUpdates: (update: () => void) => void) {
   batch = batchedUpdates;
 }
+
 /** For the app's other stores: their subscribers re-render in one commit. */
 export const batchStoreUpdates = (update: () => void) => batch(update);
 
@@ -169,29 +171,40 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
               pinnedUrl: rest.pinnedUrl ?? (pinnedPage(rest) ? rest.url || null : null),
             };
           }
+
           // Each list: the saved one's order, then (an older session) each window's.
           const lookup = { spaces, windows: rawWindows };
           const lists: Record<string, string[]> = {};
+
           const add = (id: string) => {
             const t = tabs[id];
+
             if (!t) return;
             const list = (lists[tabListKey(lookup, t)] ??= []);
+
             if (!list.includes(id)) list.push(id);
           };
+
           for (const ids of Object.values(data.tabLists ?? {})) ids.forEach(add);
+
           for (const w of Object.values(rawWindows)) (w.tabIds ?? []).forEach(add);
           Object.keys(tabs).forEach(add);
           const tabLists = Object.fromEntries(Object.entries(lists).map(([key, ids]) => [key, placeFolders(pinnedFirst(ids, tabs), tabs, data.pinnedFolders)]));
 
           const windows: Record<string, BrowserWindow> = {};
+
           for (const { tabIds: _, ...w } of Object.values(rawWindows)) {
             if (kept(w) && !tabLists[windowListKey(lookup, w)]) continue;
             const spaceId = w.incognito || w.kind === "small" || spaces[w.spaceId] ? w.spaceId : settings.defaultSpaceId;
+
             const listed = (p: string, id: string) =>
               !!tabs[id] && (w.kind === "small" ? tabs[id]!.windowId === w.id : tabListKey(lookup, tabs[id]!) === spaceListKey({ spaces }, p));
+
             windows[w.id] = { ...w, spaceId, activeTabIds: Object.fromEntries(Object.entries(w.activeTabIds).filter(([p, id]) => listed(p, id))) };
           }
+
           for (const t of Object.values(tabs)) if (t.windowId && !windows[t.windowId]) tabs[t.id] = { ...t, windowId: "" };
+
           const windowOrder = [
             ...(data.windowOrder ?? []).filter((id) => windows[id]),
             ...Object.keys(windows).filter((id) => !data.windowOrder?.includes(id)),
@@ -204,37 +217,48 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
             Object.values((data.groups ?? {}) as Record<string, SavedGroup>)
               .map((saved) => {
                 const g = withoutWindowId(saved);
+
                 return { ...g, tabIds: g.tabIds.filter((id) => tabs[id]?.spaceId === g.spaceId) };
               })
               .filter((g) => g.tabIds.length)
               .map((g) => [g.id, g]),
           );
+
           const splits = sanitizeSplits(data.splits ?? {}, tabs);
           let bookmarks = data.bookmarks ?? EMPTY_BOOKMARKS;
           const history: BrowserState["history"] = {};
           const replacedRoots = new Set<string>();
+
           // Shared native data stays with its canonical owner. Other spaces retain their tabs but start clean.
           for (const [owner, ids] of owners) {
             const source = [owner, ...ids].find((id) => data.history?.[id]);
+
             if (source) history[owner] = data.history![source]!;
             const roots = [owner, ...ids].map((id) => bookmarks.roots[id]).find(Boolean);
+
             if (roots) {
               const expected = rootIdsFor(engineIdOf(spaces[owner]!));
               const nodes = { ...bookmarks.nodes };
+
               for (const kind of ["bar", "other"] as const) {
                 const from = roots[kind];
                 const to = expected[kind];
                 const node = nodes[from];
+
                 if (from === to || node?.kind !== "folder") continue;
                 nodes[to] = { ...node, id: to };
                 replacedRoots.add(from);
+
                 for (const child of node.children) if (nodes[child]) nodes[child] = { ...nodes[child]!, parentId: to };
               }
+
               bookmarks = { nodes, roots: { ...bookmarks.roots, [owner]: expected } };
             }
           }
+
           for (const id of spaceOrder) {
             const engine = engineIdOf(spaces[id]!);
+
             if (detached.has(id)) {
               const roots = rootIdsFor(engine);
               const nodes = { ...bookmarks.nodes };
@@ -242,18 +266,23 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
               delete nodes[roots.other];
               bookmarks = { ...bookmarks, nodes };
             }
+
             bookmarks = engineRoots(bookmarks, id, engine)[0];
           }
+
           // Replaced permanent folders are aliases, not another bookmark tree.
           if (replacedRoots.size) {
             const liveRoots = new Set(spaceOrder.flatMap((id) => Object.values(bookmarks.roots[id]!)));
             const nodes = { ...bookmarks.nodes };
+
             for (const id of replacedRoots) if (!liveRoots.has(id)) delete nodes[id];
             bookmarks = { ...bookmarks, nodes };
           }
+
           const focused = data.focusedWindowId && windows[data.focusedWindowId] ? data.focusedWindowId : (windowOrder.at(-1) ?? null);
 
           const engines = new Set(Object.values(spaces).map(engineIdOf));
+
           let next: BrowserState = {
             ...s,
             spaces,
@@ -303,14 +332,17 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
             find: {},
             ui: { ...s.ui, focusedWindowId: focused, focusOrder: focused ? [focused, ...windowOrder.filter((id) => id !== focused).reverse()] : [] },
           };
+
           next = prunePinnedFolders(next);
           // Each window shows the tab it showed, else its space's most recent one, else a new tab. A launch that starts on
           // a new tab shows a blank one, its space's tabs waiting in the sidebar.
           const blank = data.launch && settings.launchTab === "newTab";
+
           for (const w of Object.values(windows)) {
             const shown = blank ? blankTabToShow(next, w.id, w.spaceId) : tabToShow(next, w.id, w.spaceId);
             next = shown ? apply(next, activated(next, shown, w.id)) : withNewTab(next, w.id)[0];
           }
+
           set(next);
         },
       },
@@ -324,16 +356,20 @@ export function createBrowserStore(options: { publishEngineProfiles?: boolean; o
   store.subscribe((s, prev) => {
     if (s.spaces !== prev.spaces && Object.values(s.localFiles).some((pin) => !s.spaces[pin.spaceId]))
       store.setState({ localFiles: normalizeLocalFiles(s.localFiles, s.spaces) });
+
     if (s.windows !== prev.windows && Object.keys(s.sidebarUndo).some((id) => !s.windows[id]))
       store.setState({ sidebarUndo: Object.fromEntries(Object.entries(s.sidebarUndo).filter(([id]) => s.windows[id])) });
     const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
+
     if (patch) store.setState(patch);
   });
+
   return store;
 }
 
 // Native integrations on macOS still use model.engineProfile without an explicit registry.
 export const useBrowser = createBrowserStore({ publishEngineProfiles: true, openAppUrl: registeredAppUrlOpener });
+
 export type BrowserStore = ReturnType<typeof createBrowserStore>;
 
 export type { CreateWindowOptions } from "./windows";

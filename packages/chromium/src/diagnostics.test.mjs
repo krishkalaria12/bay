@@ -6,28 +6,34 @@ const calls = [];
 let saved = "/downloads/Bay Trace test.json";
 let recording = false;
 let rejectWindow = false;
+
 globalThis.nnTestNativeModules = {
   BayCEF: {
     chromeWindows: async () => [{ window: 12, appWindow: "work", profile: "", visible: true }],
     devWindowNumber: async (tab) => (tab === 42 ? 12 : 0),
     devWindow: async (id, action) => {
       calls.push([id, action]);
+
       if (rejectWindow) throw Object.assign(new Error("unsupported action"), { code: "unsupported_action" });
+
       return '{"visible":true}';
     },
     beginTracing: async () => {
       const started = !recording;
       recording = true;
+
       return started;
     },
     isTracing: async () => recording,
     endTracing: async (keep) => {
       recording = false;
       calls.push(["end", keep]);
+
       return keep ? saved : null;
     },
   },
 };
+
 const { chromeWindows, devWindowNumber, devWindowAction, beginTracing, endTracing, isTracing } = await import("./nativeModule.ts");
 
 test("developer window diagnostics preserve native ids, JSON strings and errors", async () => {

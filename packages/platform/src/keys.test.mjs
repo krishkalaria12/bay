@@ -23,17 +23,20 @@ test("desktop shortcut labels preserve Mac glyphs and spell Windows modifiers", 
   assert.equal(relabelShortcuts("Copy Link (⇧⌘C)", "windows"), "Copy Link (Ctrl+Shift+C)");
   assert.equal(relabelShortcuts("⌘-click to select", "windows"), "Ctrl+-click to select");
 });
+
 test("Windows shortcut matches Control, Alt navigation and explicit Control strokes", () => {
   assert.equal(strokeMatches(WINDOWS_SHORTCUTS.newTab, { key: "t", ctrlKey: true }), true);
   assert.equal(strokeMatches(WINDOWS_SHORTCUTS.newTab, { key: "t", metaKey: true }), false);
   assert.equal(strokeMatches(WINDOWS_SHORTCUTS.back, { key: "ArrowLeft", altKey: true }), true);
   assert.equal(strokeMatches({ key: "Tab", ctrl: true }, { key: "Tab", ctrlKey: true }), true);
 });
+
 test("Windows opens the same space menu command as macOS", () => {
   assert.equal(windowsShortcutLabel("openSpaceMenu"), "Ctrl+Shift+P");
   assert.equal(strokeMatches(WINDOWS_SHORTCUTS.openSpaceMenu, { key: "p", ctrlKey: true, shiftKey: true }), true);
   assert.equal(WINDOWS_SHORTCUTS.openProfileMenu, undefined);
 });
+
 test("Linux keeps every Windows shortcut and adds Ctrl+Q and F11", () => {
   for (const [command, stroke] of Object.entries(WINDOWS_SHORTCUTS)) assert.deepEqual(LINUX_SHORTCUTS[command], stroke, command);
   assert.equal(windowsShortcutLabel("quit", "linux"), "Ctrl+Q");
@@ -42,8 +45,10 @@ test("Linux keeps every Windows shortcut and adds Ctrl+Q and F11", () => {
   assert.equal(strokeMatches(LINUX_SHORTCUTS.quit, { key: "q", ctrlKey: true }), true);
   assert.equal(strokeMatches(LINUX_SHORTCUTS.toggleFullScreen, { key: "F11" }), true);
 });
+
 test("no web desktop shortcut uses Super, which the compositor owns", () => {
   const modifiers = new Set(["key", "mod", "shift", "alt", "ctrl"]);
+
   for (const [command, stroke] of Object.entries(LINUX_SHORTCUTS)) {
     for (const field of Object.keys(stroke)) assert.ok(modifiers.has(field), `${command} uses ${field}`);
     assert.equal(
@@ -53,8 +58,10 @@ test("no web desktop shortcut uses Super, which the compositor owns", () => {
     );
   }
 });
+
 test("Windows never advertises Apple-only features, even if a bridge shares module names", () => {
   const windows = capabilitiesFor("windows", () => true);
+
   for (const key of [
     "liquidGlass",
     "vibrancy",
@@ -74,11 +81,13 @@ test("Windows never advertises Apple-only features, even if a bridge shares modu
   assert.equal(mac.shaders, false);
   assert.equal(mac.keychain, false);
 });
+
 test("Linux desktop uses the web host without Apple services", () => {
   const linux = capabilitiesFor("linux", () => true);
   assert.equal(linux.windowBackdrop, true);
   assert.equal(linux.introScreen, true);
   assert.equal(linux.hover, true);
+
   for (const key of [
     "liquidGlass",
     "vibrancy",
@@ -104,6 +113,7 @@ test("Windows draws caption buttons without native modules, Linux none, while ma
     assert.equal(desktop.trafficLights, false, os);
     assert.equal(desktop.menuBar, false, os);
   }
+
   const mac = capabilitiesFor("macos", () => true);
   assert.equal(mac.captionButtons, false);
   assert.equal(mac.trafficLights, true);
@@ -132,6 +142,7 @@ test("every Windows and Linux shortcut key has the virtual-key code Chromium's k
   assert.equal(virtualKeyCode("Left"), 0x25);
   assert.equal(virtualKeyCode("="), 0xbb);
   assert.equal(virtualKeyCode("Pause"), null);
+
   for (const [command, stroke] of Object.entries(LINUX_SHORTCUTS)) assert.notEqual(virtualKeyCode(stroke.key), null, command);
 });
 
@@ -153,6 +164,7 @@ test("menu keys and stroke names read each other", () => {
     assert.equal(menuKeyName(key), name);
     assert.equal(menuKeyOf(name), key);
   }
+
   assert.equal(menuKeyOf("T"), "t");
   assert.equal(menuKeyName("\u0008"), "Backspace");
   assert.equal(menuKeyName("\uf727"), "\uf727", "a key strokes have no name for stays itself");
@@ -190,6 +202,7 @@ test("every key the recorder can give has a virtual key and a label", () => {
     assert.notEqual(virtualKeyCode(menuKeyName(key)), null, JSON.stringify(key));
     assert.ok(formatShortcut({ key: menuKeyName(key), mod: true }, "linux").startsWith("Ctrl+"));
   }
+
   assert.equal(formatShortcut(menuShortcutStroke(menuKeyName("\uf700"), ["shift", "command"]), "linux"), "Ctrl+Shift+Up");
   assert.equal(formatShortcut(menuShortcutStroke(menuKeyName("\uf709")), "linux"), "F6");
 });

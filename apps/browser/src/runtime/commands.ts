@@ -11,6 +11,7 @@ export function createLocalBrowserCommands(store: BrowserStore, effects: Locatio
   return {
     dispatch<C extends BrowserCommand>(command: C) {
       try {
+        // SAFETY: the checks above established this shape.
         return Promise.resolve(executeBrowserCommand(store, parseBrowserCommand(command), effects) as BrowserCommandValue<C>);
       } catch (error) {
         return Promise.reject(error);
@@ -18,6 +19,7 @@ export function createLocalBrowserCommands(store: BrowserStore, effects: Locatio
     },
   };
 }
+
 export function createClientBrowserCommands(client: Pick<ReturnType<typeof createBrowserClient>, "dispatch">): BrowserCommands {
   return { dispatch: (command) => client.dispatch(command) };
 }
@@ -31,8 +33,10 @@ const local = createLocalBrowserCommands(useBrowser, {
     }
   },
 });
+
 const bindings = [{ commands: local }];
 let current = local;
+
 /** Explicit runtime setup only. A remote command resolves after its client has
  * installed the acknowledged commit; no reducer API is added to the mirror.
  */
@@ -40,14 +44,18 @@ export function installBrowserCommands(next: BrowserCommands) {
   const binding = { commands: next };
   bindings.push(binding);
   current = next;
+
   return () => {
     const index = bindings.indexOf(binding);
+
     if (index < 0) return;
     const active = index === bindings.length - 1;
     bindings.splice(index, 1);
+
     if (active) current = bindings[bindings.length - 1]!.commands;
   };
 }
+
 export const dispatchBrowserCommand = <C extends BrowserCommand>(command: C): Promise<BrowserCommandValue<C>> => current.dispatch(command);
 
 /** Event handlers must observe failures, including remote rejection. Never retry

@@ -14,10 +14,12 @@ const [appArg, ...options] = process.argv.slice(2);
 const realOnly = options.includes("--real-only");
 const port = options.find((option) => option !== "--real-only");
 const appPath = appArg && resolve(appArg);
+
 if (!appPath) {
   console.error("usage: node shortcuts-test.mjs <Debug Bay.app> [cdpPort] [--real-only]");
   process.exit(2);
 }
+
 const scratch = mkdtempSync(join(tmpdir(), "nn-shortcuts-"));
 const data = join(scratch, "data");
 const rep = reporter(join(scratch, "shortcuts-test.log"), { name: "shortcuts-test" });
@@ -27,27 +29,33 @@ const server = createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html" });
   res.end(`<!doctype html><title>${name}</title><body style="font:20px system-ui"><h1>${name}</h1><input id=f value="hello field">`);
 });
+
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
+
 const pages = `http://127.0.0.1:${server.address().port}`;
 
 const tab = (id, pinned) => ({ id, url: `${pages}/?${id}`, title: id, pinned, pinnedUrl: pinned ? `${pages}/?${id}` : null });
 const ids = ["pin1", "pin2", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9"];
 
 let app = null;
+
 const finish = async (code) => {
   await app?.quit();
   server.close();
   rmSync(data, { recursive: true, force: true });
   process.exit(code);
 };
+
 process.on("uncaughtException", (error) => {
   console.error(error);
   finish(1);
 });
+
 process.on("unhandledRejection", (error) => {
   console.error(error);
   finish(1);
 });
+
 app = await launch(appPath, {
   data,
   port,
@@ -63,9 +71,12 @@ app = await launch(appPath, {
   switches: "--disable-backgrounding-occluded-windows",
   ready: "return !!nn.shell.devKeyEquivalent",
 });
+
 rep.log(`instance: pid ${app.pid}, DevTools port ${app.port}, data ${data}`);
+
 // The pages come from a local server: no Developer Mode offer over them (it would take the keyboard).
 await app.eval(`nn.developer.setDeveloperMode(${JSON.stringify(pages)}, false); return 1;`);
+
 await sleep(3000);
 
 const nn = (body, timeout = 60000) =>
@@ -73,10 +84,12 @@ const nn = (body, timeout = 60000) =>
     error.message += `\n${body}`;
     throw error;
   });
+
 // The expression's value in the first page whose URL holds urlPart (undefined without one, or on an exception).
 async function cdp(urlPart, expression) {
   if (!(await app.pageTarget(urlPart))) return undefined;
   const page = await app.page(urlPart);
+
   try {
     return await page.eval(expression, { timeout: 3000 });
   } catch {
@@ -90,8 +103,10 @@ const state = () =>
   nn(`const s = nn.store.getState(), w = s.windows.w1;
   return { profile: w.spaceId, active: w.activeTabIds[w.spaceId], tabs: (s.tabLists[w.kind === "small" ? w.id : w.spaceId] ?? []).length,
     panel: !!s.windowUi.w1?.panel.open, panelMode: s.windowUi.w1?.panel.mode };`);
+
 const activeUrl = async () =>
   await nn(`const s = nn.store.getState(), w = s.windows.w1; return w ? s.tabs[w.activeTabIds[w.spaceId]]?.url ?? "" : "no window w1";`);
+
 const press = (key, options) => nn(`return nn.shell.devKeyEquivalent("w1", ${JSON.stringify({ ...key, ...options })});`);
 
 const F = (code) => String.fromCharCode(code);
@@ -132,10 +147,12 @@ const KEY_CODES = {
   [F(0xf728)]: 117,
   ...Object.fromEntries([122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111].map((code, i) => [F(0xf704 + i), code])),
 };
+
 // Linux and Windows have their own bindings and no menu bar: the table is what the app says its shortcuts are.
 const desktopShortcuts = async () =>
   (await nn(`return nn.keyBindings.shortcutCatalog().filter((row) => row.remappable && row.defaultKey);`)).map((row) => {
     const [command, arg] = row.id.split(":");
+
     return [row.title, { key: row.defaultKey, keyCode: KEY_CODES[row.defaultKey], modifiers: row.defaultModifiers }, { command, arg }, row.title];
   });
 
@@ -244,10 +261,13 @@ const macShortcuts = [
   ["⌃2", K("2", 19, "control"), { command: "switchSpace", arg: "p-work" }, "⌃2"],
   ...translatedShortcuts,
 ];
+
 const shortcuts = desktopHost ? await desktopShortcuts() : macShortcuts;
 
 rep.log("Layout regression events are synthetic translated characters; actual AZERTY/German/Dvorak input sources are not exercised.");
+
 rep.log("German Command+Option bracket combinations are not covered: the existing bracket menu shortcuts require Command without Option.");
+
 rep.log("Arrow/Home/End error-sound acceptance is unverified: devKeyEquivalent does not send unhandled events through keyDown or measure beeps.");
 
 const same = (f, expect) =>
@@ -256,15 +276,22 @@ const same = (f, expect) =>
     : expect.title instanceof RegExp
       ? expect.title.test(f.title)
       : f.title === expect.title;
+
 function verdict(r, expect) {
   if (r.error) return "FAIL";
+
   const fired = r.fired ?? [],
     matched = r.matched ?? [];
+
   if (expect === null) return fired.length ? "FAIL" : "ok";
+
   if (fired.some((f) => same(f, expect))) return "ok";
+
   if (!fired.length && matched.some((m) => same(m, expect) && !m.enabled)) return "off";
+
   return "FAIL";
 }
+
 const describe = (r) =>
   r.error ??
   `${r.handledBy}${r.fired?.length ? ` → ${r.fired.map((f) => (f.command ? `${f.command}${f.arg ? `:${f.arg}` : ""}` : f.title)).join(", ")}` : ""}` +
@@ -272,11 +299,13 @@ const describe = (r) =>
 
 async function showPage(name) {
   await nn(`nn.store.getState().activate("${name}");`);
+
   for (let i = 0; i < 40; i++) {
     if ((await cdp(`?${name}`, "document.readyState")) === "complete") return;
     await sleep(250);
   }
 }
+
 const macFocuses = {
   sidebar: { press: { focus: "window" } },
   page: { press: { focus: "page", asKey: true, wait: 800 }, before: () => cdp("?t3", "document.activeElement.blur(), true") },
@@ -301,6 +330,7 @@ const macFocuses = {
 
 // A dry press there asks the window's own table, which no focus changes; the page's and fields' keys need real input.
 const focuses = desktopHost ? { sidebar: macFocuses.sidebar } : macFocuses;
+
 // Each focus is one check: the shortcuts that failed in it.
 let since = Date.now();
 
@@ -322,28 +352,38 @@ function recordFocus(focusName) {
   });
   since = Date.now();
 }
+
 const results = new Map(shortcuts.map(([name]) => [name, {}]));
 let failures = 0;
+
 await showPage("t3");
+
 if (realOnly) rep.log("--real-only skips the dry shortcut matrices; only actual action checks run.");
+
 for (const [focusName, focus] of Object.entries(realOnly ? {} : focuses)) {
   await focus.setup?.();
+
   for (const [name, key, expect, , only] of shortcuts) {
     if (focusName !== "sidebar" && (only === "window-only" || only === "clipboard")) continue;
+
     // The command bar copies its selected row (or its page) itself (Omnibox.tsx), for real even in a dry run.
     if (focusName === "commandBar" && only === "palette-own") continue;
+
     // Text fields consume ⌘↩, ⌘←/→, and ⇧⌘⌫.
     // DevTools' own ⇧⌘D (its dock side) wins while it has the focus, as in Chrome.
     const inField =
       (only === "not-field" && (focusName === "field" || focusName === "commandBar")) ||
       (only === "page-field" && focusName === "field") ||
       (only === "devtools-own" && focusName === "devTools");
+
     await focus.before?.();
     const r = await press(key, { ...focus.press, dry: true });
     const result = verdict(r, inField ? null : expect);
+
     if (result === "FAIL") failures++;
     results.get(name)[focusName] = { result, detail: describe(r), responder: r.firstResponder };
   }
+
   await focus.teardown?.();
   recordFocus(focusName);
 }
@@ -357,11 +397,14 @@ if (desktopHost) {
 // One line per check, timed from the one before.
 const check = (name, ok, detail) => {
   rep.record(name, { ms: Date.now() - since, error: ok ? null : detail || "failed", evidence: ok && detail ? detail : undefined });
+
   if (!ok) failures++;
   since = Date.now();
 };
+
 await nn(`globalThis.selections = []; nn.store.subscribe((s, p) => { const w = s.windows.w1, a = w?.activeTabIds[w.spaceId];
   if (a !== p.windows.w1?.activeTabIds[p.windows.w1.spaceId]) globalThis.selections.push(a); }); return 1;`);
+
 const real = async (label, key, focus, expectUrl) => {
   await nn(`globalThis.selections.length = 0; return 1;`);
   const r = await press(key, focus);
@@ -371,34 +414,60 @@ const real = async (label, key, focus, expectUrl) => {
   const selected = ok ? [] : await nn(`return globalThis.selections;`);
   check(`${label}: selects ${expectUrl}`, ok, ok ? url : `${url}; ${describe(r)}, first responder ${r.firstResponder}, selected ${selected.join(" → ")}`);
 };
+
 const sidebar = { focus: "window" };
 const page = { focus: "page", asKey: true, wait: 800, settle: 500 };
+
 await real("⌘1 in the sidebar", cmd("1", 18), sidebar, "pin1");
+
 await real("⌘2 in the sidebar", cmd("2", 19), sidebar, "pin2");
+
 await real("⌘9 in the sidebar", cmd("9", 25), sidebar, "t9");
+
 await real("⌘5 in the sidebar", cmd("5", 23), sidebar, "t3");
+
 await showPage("t3");
+
 await sleep(2000);
+
 await real("⌘1 in a page", cmd("1", 18), page, "pin1");
+
 await showPage("t3");
+
 await cdp("?t3", "document.getElementById('f').focus(), true");
+
 await real("⌘9 in a page's text field", cmd("9", 25), page, "t9");
+
 await showPage("t3");
+
 await cdp("?t3", "document.getElementById('f').focus(), true");
+
 await real("⌘4 in a page's text field", cmd("4", 21), page, "t2");
+
 await nn(`nn.runCommand({ command: "focusCommandBar", arg: null, windowId: "w1" });`);
+
 await sleep(600);
+
 await real("⌘2 in the command bar", cmd("2", 19), { asKey: true }, "pin2");
+
 check("…and the command bar closes", !(await state()).panel, "");
+
 await real("⇧⌘] (Next Tab)", cmd("}", 30, "shift"), sidebar, "t1");
+
 await real("⇧⌘[ (Previous Tab)", cmd("{", 33, "shift"), sidebar, "pin2");
+
 await real("⌥⌘↓ (Next Tab)", cmd(F(0xf701), 125, "option", "function"), sidebar, "t1");
+
 await real("⌃⇟ (Next Tab)", K(F(0xf72d), 121, "control", "function"), sidebar, "t2");
+
 await showPage("t3");
+
 await sleep(2000);
+
 {
   const next = await nn(`const s = nn.store.getState(), w = s.windows.w1, ids = s.tabLists[w.spaceId] ?? [];
     return ids[ids.indexOf("t3") + 1];`);
+
   const before = await activeUrl();
   const r = await press(cmd("}", 30, "shift"), page);
   await sleep(300);
@@ -407,61 +476,98 @@ await sleep(2000);
 }
 
 let s = await state();
+
 await press(cmd("t", 40), sidebar);
+
 await sleep(400);
+
 let after = await state();
+
 check(
   "synthetic Dvorak ⌘T opens the new tab palette",
   after.panel && after.panelMode === "newTab" && after.tabs === s.tabs && after.active === s.active,
   `${s.tabs} → ${after.tabs} tabs; active ${after.active}; panel ${after.panelMode}`,
 );
+
 await nn(
   `const driver = nn.omnibox.get("w1:palette"); if (!driver) throw new Error("palette driver missing"); driver.type(${JSON.stringify(`${pages}/?closed`)});`,
 );
+
 await sleep(100);
+
 await nn(`nn.omnibox.get("w1:palette").submit();`);
+
 await sleep(1500);
+
 after = await state();
+
 check(
   "submitting the palette opens a tab and selects it",
   after.tabs === s.tabs + 1 && after.active !== s.active && !after.panel && (await activeUrl()).endsWith("?closed"),
   `${s.tabs} → ${after.tabs} tabs; active ${after.active}; palette ${after.panel ? "open" : "closed"}`,
 );
+
 await press(cmd("w", 43), sidebar);
+
 await sleep(400);
+
 check("synthetic Dvorak ⌘W closes it", (await state()).tabs === s.tabs, `${(await state()).tabs} tabs`);
+
 await sleep(1000);
+
 await press(cmd("T", 17, "shift"), sidebar);
+
 await sleep(400);
+
 check("⇧⌘T reopens it", (await state()).tabs === s.tabs + 1, `${(await state()).tabs} tabs`);
+
 await press(K("2", 19, "control"), sidebar);
+
 await sleep(600);
+
 check("⌃2 switches the window to the second profile", (await state()).profile === "p-work", (await state()).profile);
+
 await press(K("1", 18, "control"), sidebar);
+
 await sleep(600);
+
 check("⌃1 switches back", (await state()).profile === "default", (await state()).profile);
+
 await showPage("t3");
+
 await press(cmd("l", 37), sidebar);
+
 await sleep(400);
+
 check("⌘L opens the command bar", (await state()).panel, "");
+
 await nn(`nn.store.getState().closePanel("w1");`);
+
 await showPage("t3");
+
 await sleep(2000);
+
 await cdp("?t3", "(f => (f.value = 'hello field', f.focus(), f.setSelectionRange(0, 0), true))(document.getElementById('f'))");
+
 await press(cmd("a", 0), page);
+
 const selection = await cdp("?t3", "(f => [f.selectionStart, f.selectionEnd, f.value.length].join())(document.getElementById('f'))");
+
 check("⌘A selects all of a page's text field", selection === "0,11,11", selection);
 
 const fieldPage = await app.page("?t3");
+
 try {
   await fieldPage.send("Input.insertText", { text: "edited field" });
 } finally {
   fieldPage.close();
 }
+
 const edited = await cdp("?t3", "document.getElementById('f').value");
 const tabsBeforeUndo = (await state()).tabs;
 const undo = await press(cmd("z", 13), page);
 const undone = await cdp("?t3", "document.getElementById('f').value");
+
 check(
   "synthetic AZERTY ⌘Z undoes a page edit without closing a tab",
   edited === "edited field" && undone === "hello field" && (await state()).tabs === tabsBeforeUndo,
@@ -469,24 +575,33 @@ check(
 );
 
 await cdp("?t3", "document.activeElement.blur(); history.pushState({}, '', '?t3-history'); true");
+
 const back = await press(cmd("[", 23), page);
 const backUrl = await activeUrl();
+
 check("synthetic German ⌘[ navigates back", backUrl.endsWith("?t3"), `${backUrl}; ${describe(back)}`);
+
 const forward = await press(cmd("]", 22), page);
 const forwardUrl = await activeUrl();
+
 check("synthetic German ⌘] navigates forward", forwardUrl.endsWith("?t3-history"), `${forwardUrl}; ${describe(forward)}`);
 
 await press(cmd("q", 12), { focus: "window", wait: 0 });
+
 let quit = false;
+
 for (let i = 0; i < 150 && !quit; i++) {
   await sleep(100);
   quit = app.exited;
 }
+
 check("⌘Q quits", quit, quit ? "" : "still running after 15 s");
 
 // The whole table, for the log (after the checks, so it isn't printed under a failure).
 const cols = Object.keys(focuses);
+
 rep.log(`\n${"shortcut".padEnd(8)} ${"Dia".padEnd(26)} ${cols.map((c) => c.padEnd(10)).join(" ")}`);
+
 for (const [name, , , dia] of shortcuts) {
   const row = results.get(name);
   rep.log(`${name.padEnd(8)} ${dia.padEnd(26)} ${cols.map((c) => (row[c]?.result ?? "—").padEnd(10)).join(" ")}`);

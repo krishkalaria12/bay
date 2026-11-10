@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as v from "valibot";
 import { test } from "node:test";
 import {
   bindNativeModule,
@@ -20,11 +21,13 @@ const hostInfo = (overrides) => ({
   constants: { BayApp: { apiVersion: 8 } },
   ...overrides,
 });
+
 const transport = (overrides) => ({ getHostInfo: () => hostInfo(), invoke: async () => '{"value":null}', subscribe: () => ({ remove() {} }), ...overrides });
 
 test("optional modules stay absent, desktop identity and contract versions are validated", () => {
   assert.equal(bindNativeModule(transport(), "BayCalendar"), null);
   assert.throws(() => bindNativeModule(transport({ getHostInfo: () => hostInfo({ contractVersion: 1 }) }), "BayCalendar"), { code: "contract_mismatch" });
+
   for (const invalid of [
     hostInfo({ platform: "android" }),
     hostInfo({ modules: ["BayApp", "BayApp"] }),
@@ -33,17 +36,21 @@ test("optional modules stay absent, desktop identity and contract versions are v
   ])
     assert.throws(() => validateNativeHostInfo(invalid));
 });
+
 test("every wire method is asynchronous, including former synchronous facades", async () => {
   const calls = [];
+
   const shell = bindNativeModule(
     transport({
       invoke: async (...args) => {
         calls.push(args);
+
         return '{"value":"contents"}';
       },
     }),
     "BayShell",
   );
+
   assert.ok(shell.readDocument("settings.json") instanceof Promise);
   assert.equal(await shell.readDocument("settings.json"), "contents");
   assert.deepEqual(calls[0], ["BayShell", "readDocument", '["settings.json"]']);
@@ -51,51 +58,64 @@ test("every wire method is asynchronous, including former synchronous facades", 
   assert.equal(shell.unknownMethod, undefined);
   assert.equal(shell.windowIds, shell.windowIds);
   await assert.rejects(shell.openWindow(), { code: "invalid_arguments" });
+
   for (const module of Object.values(nativeContracts.modules)) for (const method of Object.values(module.methods)) assert.equal(method.async, true);
   assert.equal(nativeContracts.version, 2);
 });
+
 test("native constants refresh from host snapshots and optional methods require advertisement", () => {
   let info = hostInfo();
   const native = transport({ getHostInfo: () => info });
+
   const app = bindNativeModule(native, "BayApp"),
     shell = bindNativeModule(native, "BayShell");
+
   assert.equal(app.apiVersion, 8);
   info = hostInfo({ constants: { BayApp: { apiVersion: 9 } }, optionalMethods: ["BayShell.windowFrame"] });
   assert.equal(app.apiVersion, 9);
-  assert.equal(typeof shell.windowFrame, "function");
+  assert.ok(v.is(v.function_(), shell.windowFrame));
   info = hostInfo();
   assert.equal(shell.windowFrame, undefined);
 });
+
 test("Linux window button layout uses current snapshots and the advertised optional query", async (t) => {
   let layout = { left: ["close"], right: ["minimize", "maximize"] };
+
   let info = hostInfo({
     platform: "linux",
     optionalMethods: ["BayShell.windowButtonLayout"],
     snapshots: { BayShell: { windowButtonLayout: layout } },
   });
+
   let event;
   let removed = false;
   const calls = [];
+
   const native = transport({
     getHostInfo: () => info,
     invoke: async (...args) => {
       calls.push(args);
+
       return JSON.stringify({ value: layout });
     },
     subscribe: (module, name, listener) => {
       assert.equal(module, "BayShell");
       assert.equal(name, "onAppEvent");
       event = listener;
+
       return { remove: () => (removed = true) };
     },
   });
+
   const connection = installNativeTransport(native);
   t.after(() => connection.remove());
   const shell = bindNativeModule(native, "BayShell");
+
   const read = () =>
     nativeSnapshot("BayShell", "windowButtonLayout", [], () => {
       throw new Error("Snapshot read must not invoke native code");
     });
+
   assert.deepEqual(read(), layout);
   assert.deepEqual(calls, []);
   const received = [];
@@ -113,20 +133,24 @@ test("Linux window button layout uses current snapshots and the advertised optio
   subscription.remove();
   assert.equal(removed, true);
 });
+
 test("native selection and capture settings require host support", async () => {
   for (const platform of ["linux", "windows", "macos"]) {
     const calls = [];
     let info = hostInfo({ platform, modules: ["BayCEF"] });
+
     const cef = bindNativeModule(
       transport({
         getHostInfo: () => info,
         invoke: async (...args) => {
           calls.push(args);
+
           return '{"value":null}';
         },
       }),
       "BayCEF",
     );
+
     assert.equal(cef.setDisplayMediaPicker, undefined);
     assert.equal(cef.setSearchEngineName, undefined);
     info = { ...info, optionalMethods: ["BayCEF.setDisplayMediaPicker", "BayCEF.setSearchEngineName"] };
@@ -138,14 +162,17 @@ test("native selection and capture settings require host support", async () => {
     ]);
   }
 });
+
 test("envelopes distinguish native errors from engine domain Result values", async () => {
   assert.deepEqual(decodeNativeResult('{"value":{"error":"not found"}}'), { error: "not found" });
   assert.throws(() => decodeNativeResult('{"error":{"code":"denied","message":"Access denied"}}'), { code: "denied", message: "Access denied" });
+
   for (const value of ["{broken", "null", "[]", "{}", '{"value":null,"error":{}}', '{"error":"bad"}'])
     assert.throws(() => decodeNativeResult(value), { code: "invalid_result" });
   const failed = bindNativeModule(transport({ invoke: async () => '{"error":{"code":"cancelled","message":"Cancelled"}}' }), "BayShell");
   await assert.rejects(failed.windowIds(), { code: "cancelled" });
 });
+
 test("native subscriptions validate events and preserve module namespace and removal", () => {
   const calls = [],
     listener = () => {},
@@ -154,23 +181,28 @@ test("native subscriptions validate events and preserve module namespace and rem
         calls.push("removed");
       },
     };
+
   const shell = bindNativeModule(
     transport({
       subscribe: (module, event, callback) => {
         calls.push([module, event, callback]);
+
         return subscription;
       },
     }),
     "BayShell",
   );
+
   assert.equal(shell.addListener("onCommand", listener), subscription);
   subscription.remove();
   assert.deepEqual(calls, [["BayShell", "onCommand", listener], "removed"]);
   assert.throws(() => shell.addListener("onInvalid", listener), { code: "unknown_event" });
 });
+
 test("snapshot facades perform no IPC, missing required state fails, disposal is idempotent", async () => {
   let invoked = 0,
     disposed = 0;
+
   const installed = installNativeTransport(
     transport({
       getHostInfo: () =>
@@ -183,15 +215,18 @@ test("snapshot facades perform no IPC, missing required state fails, disposal is
         }),
       invoke: async () => {
         invoked++;
+
         return '{"value":true}';
       },
       dispose: () => disposed++,
     }),
   );
+
   try {
     const forbiddenFallback = () => {
       throw new Error("Synchronous native fallback called");
     };
+
     assert.equal(getNativeHostInfo().platform, "windows");
     assert.equal(readNativeSnapshot("BaySystem", "downloadsFolder"), "C:/Downloads");
     assert.deepEqual(nativeSnapshot("BayApp", "systemInfo", [], forbiddenFallback), { appName: "Bay" });
@@ -207,6 +242,7 @@ test("snapshot facades perform no IPC, missing required state fails, disposal is
     installed.remove();
     installed.remove();
   }
+
   assert.equal(disposed, 1);
   assert.throws(() => getNativeHostInfo(), { code: "not_initialized" });
 });
@@ -214,18 +250,23 @@ test("snapshot facades perform no IPC, missing required state fails, disposal is
 test("document snapshots read optimistic writes and native writes preserve per-document order", async () => {
   const calls = [],
     resolvers = [];
+
   const native = transport({
     getHostInfo: () => hostInfo({ snapshots: { BayShell: { documents: { "state.json": "old" } } } }),
     invoke: (...args) => {
       calls.push(args);
+
       return new Promise((resolve) => resolvers.push(resolve));
     },
   });
+
   const installed = installNativeTransport(native);
+
   const read = () =>
     nativeSnapshot("BayShell", "readDocument", ["state.json"], () => {
       throw new Error("native fallback");
     });
+
   try {
     nativeDocumentWrite("state.json", "first", () => {});
     nativeDocumentWrite("state.json", "second", () => {});
@@ -253,23 +294,29 @@ test("document snapshots read optimistic writes and native writes preserve per-d
 test("acknowledged saves follow queued writes, report failure and allow retry", async () => {
   const calls = [],
     replies = [];
+
   const installed = installNativeTransport(
     transport({
       getHostInfo: () => hostInfo({ snapshots: { BayShell: { documents: { "state.json": "old" } } } }),
       invoke: (...args) => {
         calls.push(args);
+
         return new Promise((resolve) => replies.push(resolve));
       },
     }),
   );
+
   const turn = () => new Promise((resolve) => setImmediate(resolve));
   const read = () => nativeSnapshot("BayShell", "readDocument", ["state.json"], () => null);
+
   try {
     nativeDocumentWrite("state.json", "first", () => {});
     let acknowledged = false;
+
     const saving = nativeDocumentSave("state.json", "final", async () => {}).then(() => {
       acknowledged = true;
     });
+
     const rejected = assert.rejects(saving, { code: "disk_full" });
     await turn();
     assert.equal(calls.length, 1);
@@ -293,18 +340,22 @@ test("acknowledged saves follow queued writes, report failure and allow retry", 
 
 test("Linux sync names use host snapshots and device IDs stay fresh without IPC", () => {
   let invoked = 0;
+
   const subscription = installNativeTransport(
     transport({
       getHostInfo: () => hostInfo({ platform: "linux", snapshots: { BaySync: { deviceName: "Linux laptop" } } }),
       invoke: async () => {
         invoked++;
+
         return '{"value":null}';
       },
     }),
   );
+
   const fallback = () => {
     throw new Error("Synchronous native fallback called");
   };
+
   try {
     assert.equal(nativeSnapshot("BaySync", "deviceName", [], fallback), "Linux laptop");
     const first = nativeRandomUUID(fallback);

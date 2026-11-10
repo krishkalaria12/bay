@@ -161,6 +161,7 @@ test("file sync mutates only its configured coordinator store", async () => {
   const owner = createBrowserStore();
   const legacy = useBrowser.getState();
   const release = configureSyncStore(owner);
+
   try {
     localFilesAdapter("default").apply(
       new Map([["file:owner", { p: "/Documents/owner.pdf", n: "Owner", k: "file", a: 100, pos: "V" }]]),

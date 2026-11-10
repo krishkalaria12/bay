@@ -52,17 +52,22 @@ type SyncNative = {
 };
 
 const Native = requireOptionalNativeModule<SyncNative>("BaySync");
+
 // Device IDs are local utilities and the name is host state. Neither requires
 // synchronous IPC in the WebUI renderer.
 const newDeviceId = () => nativeRandomUUID(() => Native!.newDeviceId());
 const deviceName = () => nativeSnapshot("BaySync", "deviceName", [], () => Native!.deviceName());
+
 export const SyncNative: SyncNative | null =
   Native &&
   new Proxy(Native, {
     get(target, property) {
       if (property === "newDeviceId") return newDeviceId;
+
       if (property === "deviceName") return deviceName;
-      return Reflect.get(target, property);
+
+      // SAFETY: the property is the key the target was asked for.
+      return target[property as keyof typeof target];
     },
   });
 

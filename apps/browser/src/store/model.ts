@@ -15,22 +15,26 @@ export const incognitoSpaceId = (windowId: string) => `incognito:${windowId}`;
 export const isIncognitoSpace = (spaceId: string) => spaceId.startsWith("incognito:");
 
 let spaceProfiles: Record<string, string> = {};
+
 export const setSpaceProfiles = (map: Record<string, string>) => {
   spaceProfiles = map;
 };
 
 export const engineProfile = (spaceId: string) => {
   const id = spaceProfiles[spaceId] ?? spaceId;
+
   return id === DEFAULT_SPACE_ID ? "" : id;
 };
 
 /** A space's engine profile from the given spaces, for stores other than the app's own (runtime/authority.ts). */
 export const engineProfileFor = (spaceId: string, spaces: Readonly<Record<string, Pick<Space, "profileId">>>) => {
   const id = spaces[spaceId]?.profileId || spaceId;
+
   return id === DEFAULT_SPACE_ID ? "" : id;
 };
 
 type ReadonlyModelState = QuietBrowserState;
+
 type ReadonlyListOfTabState = Pick<ReadonlyModelState, "spaces" | "windows" | "tabs" | "tabLists">;
 
 export const INCOGNITO_SPACE: Space = { id: "incognito", name: "Incognito", color: "neutral", icon: null, createdAt: 0 };
@@ -46,6 +50,7 @@ export const IDLE_LIVE: TabLive = {
 
 export function makeTab(windowId: string, spaceId: string, url = "", snapshot?: Partial<TabSnapshot>): Tab {
   const now = Date.now();
+
   return {
     id: newId("tab"),
     windowId,
@@ -94,18 +99,26 @@ export const pinnedPage = (t: Pick<Tab, "pinned" | "pinnedRow">) => t.pinned || 
 export function pinnedFirst(ids: string[], tabs: Record<string, Tab>): string[] {
   const rank = (id: string) => {
     if (tabs[id]?.pinned) return 0;
+
     if (tabs[id]?.pinnedRow) return 1;
+
     return 2;
   };
+
   const out = [0, 1, 2].flatMap((r) => ids.filter((id) => rank(id) === r));
+
   return out.every((id, i) => id === ids[i]) ? ids : out;
 }
 
 export function inPinnedContainer(s: Pick<BrowserState, "tabs" | "groups"> | Pick<ReadonlyModelState, "tabs" | "groups">, id: string): boolean {
   const tab = s.tabs[id];
+
   if (!tab) return false;
+
   if (pinnedPage(tab)) return true;
+
   for (const g of Object.values(s.groups)) if (g.pinned && g.tabIds.includes(id)) return true;
+
   return false;
 }
 
@@ -131,6 +144,7 @@ export const tabListKey = (s: Pick<ReadonlyModelState, "spaces" | "windows">, t:
   s.windows[t.windowId]?.kind === "small" ? t.windowId : spaceListKey(s, t.spaceId);
 
 const NO_TABS: string[] = [];
+
 export function listIds(s: Pick<BrowserState, "tabLists">, key: string): string[];
 export function listIds(s: Pick<ReadonlyModelState, "tabLists">, key: string): readonly string[];
 export function listIds(s: Pick<BrowserState, "tabLists"> | Pick<ReadonlyModelState, "tabLists">, key: string): readonly string[] {
@@ -142,8 +156,10 @@ export function listOfTab(s: Pick<BrowserState, "spaces" | "windows" | "tabs" | 
 export function listOfTab(s: ReadonlyListOfTabState, id: string): DeepReadonly<TabList> | undefined;
 export function listOfTab(s: ReadonlyListOfTabState, id: string): DeepReadonly<TabList> | undefined {
   const t = s.tabs[id];
+
   if (!t) return undefined;
   const key = tabListKey(s, t);
+
   return { key, tabIds: listIds(s, key) };
 }
 
@@ -152,6 +168,7 @@ export type TabList = { key: string; tabIds: string[] };
 /** The state with the list's ids; an empty list goes. */
 export function withList<S extends Pick<BrowserState, "tabLists">>(s: S, list: TabList): S {
   if (s.tabLists[list.key] === list.tabIds) return s;
+
   return { ...s, tabLists: list.tabIds.length ? { ...s.tabLists, [list.key]: list.tabIds } : without(s.tabLists, [list.key]) };
 }
 
@@ -162,6 +179,7 @@ export function viewTabIds(s: ReadonlyModelState, windowId: string, spaceId?: st
   if (!w) return [];
   const space = w.kind === "small" ? w.spaceId : (spaceId ?? w.spaceId);
   const key = w.kind === "small" ? w.id : spaceListKey(s, space);
+
   return listIds(s, key).filter((id) => s.tabs[id]?.spaceId === space);
 }
 
@@ -179,7 +197,9 @@ export function tabToShow(s: ReadonlyModelState, windowId: string, spaceId: stri
   const w = s.windows[windowId];
   const view = viewTabIds(s, windowId, spaceId).filter((id) => !shownElsewhere(s, id, windowId));
   const remembered = w?.activeTabIds[spaceId];
+
   if (remembered && view.includes(remembered)) return remembered;
+
   return view.reduce<string | undefined>((best, id) => (!best || s.tabs[id]!.lastActiveAt > s.tabs[best]!.lastActiveAt ? id : best), undefined);
 }
 
@@ -192,7 +212,9 @@ export function blankTabToShow(s: ReadonlyModelState, windowId: string, spaceId:
 /** The tabs whose page is in the window, in their lists' order. */
 export function windowTabIds(s: Pick<ReadonlyModelState, "tabs" | "tabLists">, windowId: string): string[] {
   const out: string[] = [];
+
   for (const ids of Object.values(s.tabLists)) for (const id of ids) if (s.tabs[id]?.windowId === windowId) out.push(id);
+
   return out;
 }
 
@@ -242,6 +264,7 @@ export function activeTabId(s: ActiveTabState, windowId: string, spaceId?: strin
   const space = spaceId ?? w.spaceId;
   const id = w.activeTabIds[space];
   const t = id ? s.tabs[id] : undefined;
+
   return t && (w.kind === "small" ? t.windowId === windowId : s.windows[t.windowId]?.kind !== "small" && t.spaceId === space) ? id : undefined;
 }
 
@@ -267,6 +290,7 @@ export function resolveWindowId(s: ReadonlyModelState, id?: string | null): stri
   if (id && s.windows[id]) return id;
   // Without a window named, never pick a Little Bay: it holds one page (store/littleBay.ts).
   const main = (w: string) => !!s.windows[w] && s.windows[w]!.kind !== "small";
+
   return s.ui.focusOrder.find(main) ?? s.windowOrder.find(main);
 }
 
@@ -274,6 +298,7 @@ export function merge<T extends object>(obj: T, patch: Partial<T>): T {
   for (const key in patch) {
     if (!Object.is(obj[key], patch[key])) return { ...obj, ...patch };
   }
+
   return obj;
 }
 
@@ -287,12 +312,17 @@ export function without<T>(map: Record<string, T>, ids: Iterable<string>) {
 
 export function tabLabel(t: Pick<Tab, "url" | "title" | "customTitle">): string {
   if (t.customTitle) return t.customTitle;
+
   if (!t.url) return "New Tab";
   const app = appUrlOrigin(t.url);
+
   if (app) return app;
+
   try {
     const u = new URL(t.url);
+
     if (u.protocol === "file:") return t.title || decodeURIComponent(u.pathname.split("/").pop() ?? "");
+
     return displayHost(u.hostname).replace(/^www\./, "") || t.title || t.url;
   } catch {
     return t.title || t.url;
@@ -301,6 +331,7 @@ export function tabLabel(t: Pick<Tab, "url" | "title" | "customTitle">): string 
 
 export function findLast<T>(list: readonly T[], test: (item: T) => boolean): T | undefined {
   for (let i = list.length - 1; i >= 0; i--) if (test(list[i]!)) return list[i];
+
   return undefined;
 }
 
@@ -315,5 +346,6 @@ export function windowTitle(s: ReadonlyModelState, windowId: string): string {
   const tab = activeTab(s, windowId);
   const others = viewTabIds(s, windowId).length - 1;
   const label = tab ? tabLabel(tab) : "New Tab";
+
   return `${spaceFor(s, w.spaceId).name} — ${label}${others > 0 ? ` & ${plural(others, "Tab")}` : ""}`;
 }

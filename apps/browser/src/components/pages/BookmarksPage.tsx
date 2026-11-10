@@ -1,3 +1,4 @@
+import { checked } from "../../lib/checked";
 import { ScrollView } from "@bay/platform";
 import { Pressable, View, modKey } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
@@ -6,12 +7,15 @@ import { useEffect, useRef, useState } from "react";
 import { PanResponder, StyleSheet, Text } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
+
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { bookmarkAncestors, folderChildren, folderLinks } from "../../store/bookmarks";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { plural } from "../../store/model";
 import type { DeepReadonly } from "../../runtime/projection";
+
 type BookmarkNode = DeepReadonly<import("../../store/types").BookmarkNode>;
+
 import { openFolder, openUrl } from "../bookmarks/actions";
 import { editBookmark } from "../bookmarks/edit";
 import { FolderTree } from "../bookmarks/FolderTree";
@@ -26,7 +30,11 @@ import { reportBrowserCommand } from "../../runtime/commands";
 import { moveBookmark, removeBookmarks, restoreBookmarks } from "../../runtime/bookmarkActions";
 import { browserRead } from "../../store/read";
 
+/** The press modifiers a row reads: the platform's own event fields. */
+type ClickMods = { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+
 type Target = { kind: "folder"; id: string } | { kind: "row"; id: string; index: number; folder: boolean };
+
 type Drop = { into: string } | { parentId: string; index: number };
 
 export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: string }) {
@@ -49,6 +57,7 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
   useResetOn(`${folderId}|${query}`, () => setSelected([]));
 
   const folderTitle = useBrowser((s) => (folderId ? (s.bookmarks.nodes[folderId]?.title ?? "") : ""));
+
   const listKey = useBrowser((s) => {
     if (query.trim() && roots) {
       const all = [...folderLinksAndFolders(s.bookmarks, roots.bar), ...folderLinksAndFolders(s.bookmarks, roots.other)];
@@ -68,9 +77,12 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
     if (e.shiftKey && anchor.current && ids.includes(anchor.current)) {
       const [a, b] = [ids.indexOf(anchor.current), ids.indexOf(id)].sort((x, y) => x - y);
       setSelected(ids.slice(a!, b! + 1));
+
       return;
     }
+
     anchor.current = id;
+
     if (modKey(e)) setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
     else setSelected([id]);
   };
@@ -82,47 +94,64 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
       removeBookmarks(spaceId, list).then((undoId) => {
         // The coordinator keeps what Undo puts back; the toast counts the items it took.
         const entry = undoId ? browserRead.getState().bookmarkUndo.find((u) => u.id === undoId) : undefined;
+
         if (undoId && entry) setUndo({ undoId, count: entry.removed.places.length });
       }),
     );
   };
+
   useEffect(() => {
     if (!undo) return;
     const timer = setTimeout(() => setUndo(null), 8000);
+
     return () => clearTimeout(timer);
   }, [undo]);
 
   // MARK: Drag and drop
 
   const dragging = useRef<string[]>([]);
+
   const onDragStart = (id: string) => {
     dragging.current = selected.includes(id) ? ids.filter((x) => selected.includes(x)) : [id];
     targets.measure();
   };
+
   const dropFor = (x: number, y: number): Drop | null => {
     const hit = targets.hit(x, y);
+
     if (!hit || !folderId) return null;
     const t = hit.data;
+
     if (t.kind === "folder") return dragging.current.includes(t.id) ? null : { into: t.id };
+
     if (t.folder && hit.fraction > 0.25 && hit.fraction < 0.75 && !dragging.current.includes(t.id)) return { into: t.id };
+
     if (searching) return null;
+
     return { parentId: folderId, index: hit.fraction < 0.5 ? t.index : t.index + 1 };
   };
+
   const onDragMove = (x: number, y: number) => {
     const next = dropFor(x, y);
     setDrop((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   };
+
   const onDragEnd = (x: number, y: number) => {
     const target = dropFor(x, y);
     setDrop(null);
+
     if (!target) return;
     const moving = dragging.current;
+
     if ("into" in target) return moving.forEach((id) => reportBrowserCommand(moveBookmark(id, target.into)));
+
     // The rows moving from above the drop take their room with them.
     const above = moving.filter((id) => {
       const from = ids.indexOf(id);
+
       return from >= 0 && from < target.index;
     }).length;
+
     moving.forEach((id, i) => reportBrowserCommand(moveBookmark(id, target.parentId, target.index - above + i)));
   };
 
@@ -133,9 +162,13 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
       { separator: true },
       { id: "import", title: "Import Bookmarks…" },
     ]);
+
     const parentId = folderId ?? undefined;
+
     if (choice === "bookmark") editBookmark(null, windowId, { spaceId, parentId });
+
     if (choice === "folder") editBookmark(null, windowId, { spaceId, parentId, folder: true });
+
     if (choice === "import") openImport();
   };
 
@@ -203,7 +236,9 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
               keyDownEvents={[{ key: "Backspace" }, { key: "Delete" }, { key: "a", metaKey: true }]}
               onKeyDown={(e) => {
                 const key = e.nativeEvent.key;
+
                 if (key === "Backspace" || key === "Delete") remove(selected);
+
                 if (key.toLowerCase() === "a" && modKey(e.nativeEvent)) setSelected(ids);
               }}
               contentContainerStyle={{ padding: 6 }}
@@ -291,6 +326,7 @@ function BookmarkRow({
   const theme = useTheme();
   const colors = useFormColors();
   const node = useBrowser((s) => s.bookmarks.nodes[id]);
+
   const path = useBrowser((s) =>
     showPath
       ? bookmarkAncestors(s.bookmarks, id)
@@ -299,6 +335,7 @@ function BookmarkRow({
           .join(" › ")
       : "",
   );
+
   const { hovered, hoverProps } = useHover();
   const dy = useSharedValue(0);
   const dyStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dy.get() }] }));
@@ -306,6 +343,7 @@ function BookmarkRow({
   const dragStart = useEffectEvent(onDragStart);
   const dragMove = useEffectEvent(onDragMove);
   const dragEnd = useEffectEvent(onDragEnd);
+
   // One responder for the row's life: a new one mid-gesture would drop the gesture.
   const [responder] = useState(() =>
     PanResponder.create({
@@ -330,11 +368,14 @@ function BookmarkRow({
       },
     }),
   );
+
   if (!node) return null;
 
   const open = (mode: Parameters<typeof openUrl>[2]) => node.kind === "url" && openUrl(node.url, windowId, mode);
+
   const menu = async () => {
     if (!selected) onSelect({});
+
     const items: MenuItem[] =
       node.kind === "url"
         ? [
@@ -352,18 +393,29 @@ function BookmarkRow({
             { separator: true },
             { id: "edit", title: "Rename…" },
           ];
+
     if (showPath) items.push({ id: "show", title: "Show in Folder" });
     items.push({ separator: true }, { id: "delete", title: "Delete" });
     const choice = await showMenu(items);
+
     if (choice === "tab") open("foreground");
+
     if (choice === "window") open("window");
+
     if (choice === "incognito") open("incognito");
+
     if (choice === "split") open("split");
+
     if (choice === "copy" && node.kind === "url") copyText(cleanUrl(node.url));
+
     if (choice === "edit") editBookmark(node.id, windowId, { spaceId });
+
     if (choice === "openAll") void openFolder(node.id, windowId);
+
     if (choice === "openAllWindow") void openFolder(node.id, windowId, "window");
+
     if (choice === "show" && node.parentId) onOpenFolder(node.parentId);
+
     if (choice === "delete") onDelete();
   };
 
@@ -377,7 +429,7 @@ function BookmarkRow({
     >
       <ContextMenuArea onContextMenu={() => void menu()}>
         <MouseArea onMiddleClick={() => open("background")}>
-          <Pressable onPress={(e) => onSelect(e.nativeEvent as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean })}>
+          <Pressable onPress={(e) => onSelect(checked<ClickMods>(e.nativeEvent))}>
             <View
               onDoubleClick={() => (node.kind === "folder" ? onOpenFolder() : void open("current"))}
               style={{
@@ -420,6 +472,7 @@ function BookmarkRow({
 
 function UndoToast({ message, onUndo }: { message: string; onUndo: () => void }) {
   const theme = useTheme();
+
   return (
     <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 24, alignItems: "center" }}>
       <View

@@ -197,6 +197,7 @@ function contrast(png, [x0, y0, x1, y1]) {
 }
 
 const check = (name, fn) => rep.check(name, fn);
+
 // These read the dragged tab's picture through devDragPreviewState, which only AppKit's panel answers.
 const previewCheck = (name, fn) => (desktopHost ? rep.record(name, { skip: "needs BayShell.devDragPreviewState, macOS only" }) : check(name, fn));
 
@@ -375,6 +376,7 @@ try {
       });`);
 
     assert.equal(result.drags, 2, "a press at the strip's top and one near its bottom each drag the window");
+
     // What a double-click does is the desktop's setting, and on Windows the system's own handling of real input.
     if (desktopHost) return;
     // System Settings › Desktop & Dock › "Double-click a window's title bar to": Fill and Zoom change the frame.

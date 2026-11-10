@@ -83,6 +83,7 @@ test("tab row flags follow the installed window reader instead of the local sing
   const row = tabRowStore(windowId, tabId);
   const seen = [];
   const stop = row.subscribe((value) => seen.push(value));
+
   try {
     assert.equal(row.getState(), ACTIVE);
     assert.equal(S().tabs[tabId], undefined);
@@ -90,6 +91,7 @@ test("tab row flags follow the installed window reader instead of the local sing
     assert.deepEqual(seen, [ACTIVE | LOADING]);
     state().setSelection(windowId, [tabId]);
     assert.equal(seen.at(-1), ACTIVE | LOADING | SELECTED);
+
     for (let i = 1; i <= 10; i++) state().updateLive(tabId, { progress: i / 10 });
     assert.equal(seen.length, 2);
   } finally {

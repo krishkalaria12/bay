@@ -21,10 +21,12 @@ export const ENCRYPTED: ImportKind[] = ["passwords", "cookies", "autofill"];
 // reports locked v11 rows in the result, preserving every selected category.
 export function kindsWithoutUnlock(kinds: Set<ImportKind>, basicStore: boolean): Set<ImportKind> {
   const wanted = new Set(kinds);
+
   if (!basicStore) {
     wanted.delete("passwords");
     wanted.delete("cookies");
   }
+
   return wanted;
 }
 

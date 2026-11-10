@@ -13,6 +13,7 @@ import { openNewTabPanel } from "../../lib/newTab";
 import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
 import { shareCollection } from "../../lib/sharedLinkEncoding";
 import { showToast } from "../ui/toasts";
+
 export { showToast, hideToast, hideKeyedToast, useToasts, type ToastOptions } from "../ui/toasts";
 
 const store = () => browserRead.getState();
@@ -24,7 +25,9 @@ async function openPane(windowId: string, options: UserPaneOptions): Promise<{ t
   const anchorTabId = options.anchorTabId ?? activeTabId(store(), windowId);
   const tabId = await commands.openSplitPane(windowId, options);
   const full = !tabId && !!splitOf(store(), anchorTabId);
+
   if (full) maxedOut(windowId);
+
   return { tabId, full };
 }
 
@@ -36,6 +39,7 @@ export async function openSplitPane(windowId: string, options: UserPaneOptions =
 // to the coordinator.
 function openAdoptedPane(windowId: string, options: OpenPaneOptions) {
   const result = legacyBrowser.getState().openSplitPane(windowId, options);
+
   if (!result.ok && result.reason === "max") maxedOut(windowId);
 }
 
@@ -52,8 +56,10 @@ export function splitWithCurrentTab(windowId: string) {
 
 export function openInSplit(tabId: string, side: SplitSide = "right") {
   const tab = store().tabs[tabId];
+
   if (!tab) return;
   const active = activeTabId(store(), tab.windowId);
+
   if (!active || active === tabId) return;
   reportBrowserCommand(openSplitPane(tab.windowId, { tabId, anchorTabId: active, side }));
 }
@@ -62,34 +68,43 @@ export function openLinkInSplit(sourceTabId: string, url: string, adoptId?: stri
   if (adoptId && pageFactsInCoordinator()) return;
   const s = store();
   const source = s.tabs[sourceTabId];
+
   if (!source) return;
   const split = splitOf(s, sourceTabId);
   const next = split?.tabIds[split.tabIds.indexOf(sourceTabId) + 1];
+
   if (split && (next || split.tabIds.length >= MAX_SPLIT_PANES)) {
     const target = next ?? split.tabIds.at(-1)!;
+
     if (target !== sourceTabId) {
       if (!adoptId) return reportBrowserCommand(navigate(target, url));
       const before = activeTabId(s, source.windowId);
       const owner = legacyBrowser.getState();
       const id = owner.newTab(source.windowId, { url, adoptId, spaceId: source.spaceId, openerId: sourceTabId, background: true });
       legacyBrowser.getState().replaceSplitPane(target, id);
+
       if (before && before !== target) legacyBrowser.getState().activate(before);
+
       return;
     }
   }
+
   const options = { anchorTabId: sourceTabId, url, side: "right", background: true } as const;
+
   if (adoptId) openAdoptedPane(source.windowId, { ...options, adoptId });
   else reportBrowserCommand(openSplitPane(source.windowId, options));
 }
 
 export function openPageInSplit(windowId: string, url: string, adoptId?: string) {
   if (adoptId && pageFactsInCoordinator()) return;
+
   if (adoptId) openAdoptedPane(windowId, { url, adoptId });
   else reportBrowserCommand(openSplitPane(windowId, { url }));
 }
 
 export function dropTabIntoSplit(tabId: string, targetTabId: string, side: SplitSide) {
   const target = store().tabs[targetTabId];
+
   if (!target || tabId === targetTabId) return;
   reportBrowserCommand(openSplitPane(target.windowId, { tabId, anchorTabId: targetTabId, side }));
 }
@@ -104,11 +119,13 @@ export async function showSplitMenu(tabId: string) {
   const s = store();
   const split = splitOf(s, tabId);
   const tab = s.tabs[tabId];
+
   if (!split || !tab) return;
   const horizontal = split.orientation === "horizontal";
   const index = split.tabIds.indexOf(tabId);
   const full = split.tabIds.length >= MAX_SPLIT_PANES;
   const stacked = slotsOf(split).some((slot) => slot.length === 2 && slot.includes(tabId));
+
   const items: MenuItem[] = [
     {
       id: "add",
@@ -147,7 +164,9 @@ export async function showSplitMenu(tabId: string) {
     { separator: true },
     { id: "close", title: "Close Pane", symbol: "xmark" },
   ];
+
   const choice = await showMenu(items);
+
   switch (choice) {
     case "share":
       return void shareCollection(tab.windowId, { kind: "split", id: split.id });

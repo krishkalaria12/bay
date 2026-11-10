@@ -15,7 +15,9 @@ export function TabSwitcher({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const switcher = useSidebarUi((u) => (u.switcher?.windowId === windowId && u.switcher.visible ? u.switcher : null));
+
   if (!switcher) return null;
+
   return (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
       <Surface
@@ -41,7 +43,9 @@ export function TabSwitcher({ windowId }: { windowId: string }) {
 function SwitcherRow({ tabId, focused, index, focusFill, outline }: { tabId: string; focused: boolean; index: number; focusFill: string; outline: string }) {
   const theme = useTheme();
   const tab = useBrowser((s) => s.tabs[tabId]);
+
   if (!tab) return null;
+
   // Switch on mouse-down; the following mouse-up would close the switcher.
   return (
     <Pressable onPressIn={() => commitSwitcher(index)}>

@@ -9,29 +9,39 @@ const splitIndexes = new WeakMap<object, Map<string, unknown[]>>();
 
 // The first group (in the map's order) holding each tab, as Object.values(groups).find would give.
 export function groupIndex<G extends DeepReadonly<TabGroup>>(groups: Readonly<Record<string, G>>): Map<string, G> {
+  // SAFETY: the checks above established this shape.
   let index = groupIndexes.get(groups) as Map<string, G> | undefined;
+
   if (!index) {
     index = new Map();
+
     for (const g of Object.values(groups)) for (const id of g.tabIds) if (!index.has(id)) index.set(id, g);
     groupIndexes.set(groups, index);
   }
+
   return index;
 }
 
 // Every split holding each tab, in the map's order.
 export function splitIndex<V extends DeepReadonly<SplitView>>(splits: Readonly<Record<string, V>>): Map<string, V[]> {
+  // SAFETY: the checks above established this shape.
   let index = splitIndexes.get(splits) as Map<string, V[]> | undefined;
+
   if (!index) {
     index = new Map();
+
     for (const v of Object.values(splits)) {
       for (const id of v.tabIds) {
         const list = index.get(id);
+
         if (!list) index.set(id, [v]);
         else if (!list.includes(v)) list.push(v);
       }
     }
+
     splitIndexes.set(splits, index);
   }
+
   return index;
 }
 

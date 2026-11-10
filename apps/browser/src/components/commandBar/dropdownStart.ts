@@ -1,7 +1,9 @@
 import type { Suggestion } from "@bay/core";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { DeepReadonly } from "../../runtime/projection";
+
 type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
+
 import { NO_HISTORY } from "../../store/constants";
 import { DROPDOWN_RECENT_PAGES } from "./constants";
 

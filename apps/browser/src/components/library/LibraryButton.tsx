@@ -26,6 +26,7 @@ export function LibraryButton({ windowId }: { windowId: string }) {
     return (
       <IconButton icon="arrow.down.circle" size={15} box={28} radius={7} tooltip="Downloads" onPress={() => reportBrowserCommand(toggleDownloads(windowId))} />
     );
+
   return <AvailableLibraryButton windowId={windowId} />;
 }
 
@@ -41,10 +42,12 @@ function AvailableLibraryButton({ windowId }: { windowId: string }) {
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const width = useSidebarWidth(windowId) - 20;
+
   const cancelTimer = () => {
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = null;
   };
+
   useEffect(
     () => () => {
       if (timer.current !== null) clearTimeout(timer.current);
@@ -57,25 +60,32 @@ function AvailableLibraryButton({ windowId }: { windowId: string }) {
 
   const keepOpen = () => {
     cancelTimer();
+
     if (!privateWindow) setOpen(true);
   };
+
   const enter = () => {
     cancelTimer();
+
     if (!privateWindow) timer.current = setTimeout(() => setOpen(true), 250);
   };
+
   const leave = () => {
     cancelTimer();
     timer.current = setTimeout(() => setOpen(false), 280);
   };
+
   const openPage = (section?: string) => {
     cancelTimer();
     setOpen(false);
     openLibrary(windowId, section);
   };
+
   async function preferences() {
     cancelTimer();
     setOpen(false);
     const inPage = useBrowser.getState().settings.libraryIn === "page";
+
     const choice = await showMenu([
       { id: "media", title: "Show Recent Media", checked: recentTypes.media },
       { id: "downloads", title: "Show Recent Downloads", checked: recentTypes.downloads },
@@ -91,9 +101,13 @@ function AvailableLibraryButton({ windowId }: { windowId: string }) {
         ],
       },
     ]);
+
     if (choice === "media" || choice === "downloads") setRecentTypes((types) => ({ ...types, [choice]: !types[choice] }));
+
     if (choice === "library") openPage();
+
     if (choice === "libraryPage") openLibraryPage(windowId);
+
     if (choice === "in:sidebar" || choice === "in:page") reportBrowserCommand(updateSettings({ libraryIn: choice === "in:page" ? "page" : "sidebar" }));
   }
 
@@ -173,17 +187,20 @@ function RecentLibrary({
   const media = useLibrary((s) => s.media);
   const error = useLibrary((s) => s.error);
   const downloads = useBrowser(useShallow((s) => downloadsIn(s, windowId)));
+
   const recentMedia = types.media
     ? Object.values(media)
         .filter((m) => !m.source?.profileId || !isIncognitoSpace(m.source.profileId))
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, 5)
     : [];
+
   const recentDownloads = types.downloads ? downloads.filter((d) => d.state === "finished").slice(0, 5) : [];
   useEffect(() => startLibrary(), []);
 
   async function open(path: string) {
     onOpenFile();
+
     try {
       if (!(await openFile(path))) showToast(windowId, "Couldn't Open File", "The file may have been moved or deleted.");
     } catch (error) {
@@ -231,6 +248,7 @@ function RecentLibrary({
 
 function RecentHeading({ title, onPress }: { title: string; onPress: () => void }) {
   const theme = useTheme();
+
   return (
     <Pressable onPress={onPress} style={{ paddingHorizontal: 13, paddingTop: 10, paddingBottom: 5 }}>
       <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary }}>{title}</Text>
@@ -242,6 +260,7 @@ function RecentFile({ name, path, icon, onPress }: { name: string; path: string;
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const exists = useFileExists(path) === true;
+
   return (
     <MouseArea path={exists ? path : null}>
       <View {...hoverProps} style={{ marginHorizontal: 5, borderRadius: 7, backgroundColor: hovered ? theme.rowHover : undefined }}>
@@ -267,7 +286,9 @@ function RecentImage({ path }: { path: string }) {
   const theme = useTheme();
   const [broken, setBroken] = useState(false);
   const exists = useFileExists(path);
+
   if (broken || exists !== true) return <Symbol name="photo" size={20} color={theme.textTertiary} style={{ width: 30, height: 30 }} />;
+
   return (
     <Image source={{ uri: libraryImageUri(path) }} onError={() => setBroken(true)} resizeMode="cover" style={{ width: 30, height: 30, borderRadius: 4 }} />
   );

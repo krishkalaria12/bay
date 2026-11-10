@@ -1,6 +1,7 @@
 // The Windows and Linux entry: the Metal views' contracts drawn with WebGL2, each over a CSS base that stays when
 // WebGL2 is off (BAY_WEB_SHADERS), unavailable, failed or lost.
 
+import * as v from "valibot";
 import { capabilities, View } from "@bay/platform";
 import { useEffect, useRef, useState } from "react";
 import { GRAIN_OPACITY, GRAIN_SCALE } from "./constants";
@@ -27,7 +28,9 @@ import {
   powerUpUniforms,
   validRect,
 } from "./webgl/uniforms";
+
 export { DIA_SPECTRUM } from "./constants";
+
 export type { Rect, AreaLightPalette, AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps } from "./types";
 
 const DARK = "(prefers-color-scheme: dark)";
@@ -51,11 +54,13 @@ export function WindowBackdrop({
   const dark = useMedia(DARK);
   const grain = grainInputs(contrast.more || contrast.forced ? 0 : grainOpacity, grainScale, { opacity: GRAIN_OPACITY, scale: GRAIN_SCALE });
   const [drawn, setDrawn] = useState(false);
+
   // A glass window over the system backdrop (Mica) keeps the tint and grain, as macOS keeps them over vibrancy.
   if (vibrancy && capabilities.windowBackdrop) {
     const tint = tintColor ? color(tintColor) : null;
     // WindowTreatmentView: the tint over its lightened self, at the tint's alpha scaled for the appearance.
     const alpha = Math.max(0, Math.min(1, tintAlpha)) * (dark ? 0.5 : 0.75);
+
     return (
       <View pointerEvents="none" style={[{ overflow: "hidden" }, style]}>
         {tint && alpha > 0 ? (
@@ -69,8 +74,10 @@ export function WindowBackdrop({
       </View>
     );
   }
+
   const from = colors[0],
     to = colors[colors.length - 1] ?? from;
+
   return (
     <View pointerEvents="none" style={[{ backgroundColor: from, overflow: "hidden" }, style]}>
       {drawn ? null : (
@@ -98,29 +105,37 @@ function BackdropCanvas({
   const [ok, setOk] = useState(false);
   useEffect(() => {
     const canvas = ref.current;
+
     if (!canvas) return;
+
     const handle = registerStatic(canvas, (drawn) => {
       setOk(drawn);
       onDrawn(drawn);
     });
+
     setSlot(handle);
+
     const measure = () => {
       const r = canvas.getBoundingClientRect();
       setSize((s) =>
         s.width === r.width && s.height === r.height && s.dpr === devicePixelRatio ? s : { width: r.width, height: r.height, dpr: devicePixelRatio },
       );
     };
+
     const observer = new ResizeObserver(measure);
     observer.observe(canvas);
     let dpr = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
+
     const onDpr = () => {
       dpr.removeEventListener("change", onDpr);
       dpr = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
       dpr.addEventListener("change", onDpr);
       measure();
     };
+
     dpr.addEventListener("change", onDpr);
     measure();
+
     return () => {
       observer.disconnect();
       dpr.removeEventListener("change", onDpr);
@@ -138,6 +153,7 @@ function BackdropCanvas({
       values: (w, h) => backdropUniforms({ colors: [from, to], angle, grainOpacity, grainScale }, w, h),
     });
   }, [slot, size, from, to, angle, grainOpacity, grainScale]);
+
   return <canvas ref={ref} aria-hidden="true" style={{ ...fill, visibility: ok ? "visible" : "hidden" }} />;
 }
 
@@ -148,6 +164,7 @@ export function PowerUp({ style, ...props }: PowerUpProps) {
   const time = useRef({ band: 0, halo: 0 });
   const live = webShaders && !reduced && !forced;
   const haloFrame = validRect(props.halo);
+
   const { ref, failed } = useAnimatedCanvas(
     live,
     POWER_UP_SOURCES,
@@ -155,22 +172,26 @@ export function PowerUp({ style, ...props }: PowerUpProps) {
       const t = time.current;
       t.band = Math.min(t.band + dt, POWER_UP_FINISH);
       t.halo = Math.min(t.halo + dt, HALO_FINISH);
+
       const region = haloFrame && {
         x: haloFrame.x - HALO_INSET,
         y: haloFrame.y - HALO_INSET,
         width: haloFrame.width + 2 * HALO_INSET,
         height: haloFrame.height + 2 * HALO_INSET,
       };
+
       const ok = drawPowerUp(
         surface,
         size,
         powerUpUniforms(props, t.band),
         region ? { ...region, values: haloUniforms(props, t.halo, [region.width, region.height], dark) } : null,
       );
+
       return ok && (t.band < POWER_UP_FINISH || (!!region && t.halo < HALO_FINISH));
     },
     JSON.stringify([props.palette, props.speed, props.origin, props.cornerRadius, haloFrame, dark]),
   );
+
   // Decorative: with reduced motion, forced colours or no GPU there is nothing to show.
   return (
     <View pointerEvents="none" style={style}>
@@ -196,20 +217,25 @@ export function AreaLight({ style, ...props }: AreaLightProps) {
   useEffect(() => {
     clock.current.running = focused && !reduced;
   }, [focused, reduced]);
+
   const { ref, failed } = useAnimatedCanvas(
     live,
     AREA_LIGHT_SOURCES,
     (surface, size, dt) => {
       const c = clock.current;
+
       if (c.running) c.time = Math.min(c.time + dt, AREA_LIGHT_DURATION);
       const values = areaLightUniforms(props, noiseSeed, c.time, focused, dark, size.cssWidth, size.cssHeight);
       surface.gl.disable(surface.gl.BLEND);
+
       return surface.draw(areaLight, values) && c.running && c.time < AREA_LIGHT_DURATION;
     },
     JSON.stringify([props, focused, reduced, dark]),
   );
+
   if (forced || !source) return <View pointerEvents="none" style={style} />;
-  const first = typeof props.palette === "object" ? props.palette[0] : AREA_LIGHT_PALETTES[props.palette ?? "pink"]?.[0];
+  const first = v.is(v.object({}), props.palette) ? props.palette[0] : AREA_LIGHT_PALETTES[props.palette ?? "pink"]?.[0];
+
   return (
     <View pointerEvents="none" style={[{ opacity: 0.75 }, style]}>
       {live ? <canvas ref={ref} aria-hidden="true" style={{ ...fill, visibility: failed ? "hidden" : "visible" }} /> : null}
@@ -229,17 +255,21 @@ export function EdgeLight({ style, ...props }: EdgeLightProps) {
   }, [reduced, end]);
   const rect = validRect(props.rectFrame);
   const live = webShaders && !forced && !!rect;
+
   const { ref, failed } = useAnimatedCanvas(
     live,
     EDGE_LIGHT_SOURCES,
     (surface, size, dt) => {
       if (time.current <= end + 0.1) time.current += dt;
       surface.gl.disable(surface.gl.BLEND);
+
       return surface.draw(edgeLight, edgeLightUniforms(props, time.current, size.cssWidth, size.cssHeight)) && time.current <= end + 0.1;
     },
     JSON.stringify([props, reduced]),
   );
+
   if (forced || !rect) return <View pointerEvents="none" style={style} />;
+
   return (
     <View pointerEvents="none" style={style}>
       {live ? <canvas ref={ref} aria-hidden="true" style={{ ...fill, visibility: failed ? "hidden" : "visible" }} /> : null}

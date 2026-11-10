@@ -1,3 +1,4 @@
+import { checked } from "../../lib/checked";
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as tabCommands from "../../runtime/tabActions";
 import { Pressable, TextInput, View } from "@bay/platform";
@@ -30,7 +31,9 @@ import { DEVELOPER_YELLOW } from "../developer/constants";
 import { ACTIVE, SELECTED, PLAYING, LOADING, tabRowStore } from "./rowState";
 
 export const clickMods = (e: GestureResponderEvent) => {
-  const n = e.nativeEvent as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+  // SAFETY: the checks above established this shape.
+  const n = checked<{ metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean }>(e.nativeEvent);
+
   return { metaKey: !!n.metaKey, ctrlKey: !!n.ctrlKey, shiftKey: !!n.shiftKey, altKey: !!n.altKey };
 };
 
@@ -47,6 +50,7 @@ export const TabRowItem = memo(function TabRowItem({
 }) {
   const windowId = useWindowId();
   const { ref, style, handle } = useDragItem(`t:${tabId}`, { kind: "row", tabIds: [tabId], section, parentGroup }, selectionOf(windowId));
+
   return (
     <Animated.View ref={ref} style={style} {...handle}>
       <TabRow tabId={tabId} />
@@ -58,7 +62,9 @@ export const TabRowItem = memo(function TabRowItem({
 // it, as Arc's does.
 function closeButton(tab: Pick<Tab, "id" | "pinnedRow" | "unloaded">) {
   if (!tab.pinnedRow) return { icon: "xmark", tooltip: "Close Tab (⌘W)", onPress: () => void closeTab(tab.id) };
+
   if (tab.unloaded) return { icon: "xmark", tooltip: "Remove Pinned Tab", onPress: () => reportBrowserCommand(tabCommands.removeTab(tab.id)) };
+
   return { icon: "minus", tooltip: "Unload Tab (⌘W)", onPress: () => void closeTab(tab.id) };
 }
 
@@ -78,6 +84,7 @@ export function TabRow({ tabId }: { tabId: string }) {
   const developer = useSettings((settings) => active && isDeveloperUrl({ settings }, tab?.url ?? ""));
   const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "tab" && u.renaming.id === tabId);
   const { hovered, hoverProps } = useRowHover(windowId, renaming ? null : { kind: "tab", id: tabId });
+
   if (!tab) return null;
   const title = tabTitle(tab);
   // The active row's fill is its ActiveHighlight's, under it.
@@ -86,18 +93,21 @@ export function TabRow({ tabId }: { tabId: string }) {
   // What hovering and pressing don't change is made here, outside the press render function (which makes everything
   // in it anew): hovering a row renders its fill and its slot again, not its icon, badges, label and highlight.
   const highlight = <ActiveHighlight active={active} tabIds={[tabId]} borderWidth={0.5} />;
+
   const icon = (
     <View>
       <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} spaceId={tab.spaceId} />
       <TabBadges tabId={tab.id} />
     </View>
   );
+
   const mute =
     playingAudio || tab.muted ? (
       <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: 6 }} tooltip={tab.muted ? "Unmute Site" : "Mute Site"}>
         <Symbol name={tab.muted ? "speaker.slash" : "speaker.wave.2"} size={12} color={theme.textTab} style={{ width: 18, height: 16 }} />
       </Pressable>
     ) : null;
+
   const label = renaming ? (
     <RenameField
       initial={tab.customTitle ?? tab.title}
@@ -108,8 +118,10 @@ export function TabRow({ tabId }: { tabId: string }) {
   ) : (
     <FadeLabel text={title} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 18, marginLeft: 5 }} />
   );
+
   const closeControl = <IconButton {...closeButton(tab)} size={10} weight="semibold" box={22} radius={6} />;
   const spinner = loading ? <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} /> : null;
+
   const outline = developer ? (
     <View
       pointerEvents="none"
@@ -194,15 +206,19 @@ export function RenameField({
   const [text, setText] = useState(initial);
   const done = useRef(false);
   const input = useRef<TextInput>(null);
+
   const finish = (value: string | null) => {
     if (done.current) return;
     done.current = true;
     onDone(value);
   };
+
   useEffect(() => {
     const t = setTimeout(() => input.current?.focus(), 0);
+
     return () => clearTimeout(t);
   }, []);
+
   return (
     <TextInput
       ref={input}
@@ -233,16 +249,20 @@ export const SplitRowItem = memo(function SplitRowItem({
 }) {
   const metrics = useSidebarMetrics();
   const windowId = useWindowId();
+
   const tabIds = useQuietBrowser((s) => (s.splits[splitId] ? splitRowTabs(s, s.splits[splitId]).join(",") : ""))
     .split(",")
     .filter(Boolean);
+
   const { ref, style, handle } = useDragItem(`s:${splitId}`, { kind: "split", tabIds, section, parentGroup });
   const theme = useTheme();
   const spaceId = usePageSpaceId();
   const active = useQuietBrowser((s) => tabIds.includes(s.windows[windowId]?.activeTabIds[spaceId] ?? ""));
   const { hovered, hoverProps } = useRowHover(windowId, null);
   const title = useQuietBrowser((s) => tabIds.map((id) => (s.tabs[id] ? tabTitle(s.tabs[id]!) : "")).join(", "));
+
   if (tabIds.length < 2) return null;
+
   return (
     <Animated.View ref={ref} style={style} {...handle}>
       <SidebarKeyboardRowView rowId={`s:${splitId}`} legacyId={`s:${splitId}`} label={`Split view, ${title}`} {...hoverProps}>
@@ -271,7 +291,9 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
   const active = useIsActiveTab(tabId);
   const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "tab" && u.renaming.id === tabId);
   const { hovered, hoverProps } = useRowHover(windowId, { kind: "tab", id: tabId });
+
   if (!tab) return null;
+
   return (
     <View {...hoverProps} style={{ flex: 1, minWidth: 0 }}>
       <ContextMenuArea onContextMenu={() => void openTabMenu(windowId, tab)}>

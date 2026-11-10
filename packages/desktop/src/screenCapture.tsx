@@ -18,9 +18,11 @@ const Capture = () =>
   }>("BayCapture");
 
 export type QuoteCard = { text: string; title: string; url: string; colors: string[]; dark: boolean };
+
 /** A locally rendered quote card and its text-fragment link in one clipboard item. */
 export const copyQuoteCard = async (card: QuoteCard) =>
   quoteCards ? quoteCards.copy(card) : Capture().copyQuote(card.text, card.title, card.url, card.colors, card.dark);
+
 /** Share the card image together with the link to its source passage. */
 export const shareQuoteCard = async ({ text, title, url, colors, dark }: QuoteCard, windowId: string) =>
   Capture().shareQuote(text, title, url, colors, dark, windowId);
@@ -31,13 +33,16 @@ export const portraitCaptureImage = async (path: string, colors: string[], dark:
 
 /** The picture on the clipboard. */
 export const copyCaptureImage = async (path: string) => (imageFiles ? imageFiles.copy(path) : Capture().copyImage(path));
+
 /** A copy in Downloads named `name` (numbered when taken): its path. */
 export const saveCaptureImage = async (path: string, name: string) => (imageFiles ? imageFiles.save(path, name) : Capture().saveImage(path, name));
+
 /** The share menu for the picture, under `anchor` (x, y, width, height in the window's content from its top-left). */
 export const shareCaptureImage = async (path: string, name: string, windowId: string | null, anchor?: [number, number, number, number]) =>
   Capture().shareImage(path, name, windowId, anchor ?? null);
 
 export type MarkupTool = "pen" | "highlighter" | "arrow" | "rect" | "oval" | "text";
+
 export type MarkupState = { canUndo: boolean; canRedo: boolean; marks: number };
 
 export type MarkupCanvasHandle = {

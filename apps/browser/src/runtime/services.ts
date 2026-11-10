@@ -21,13 +21,16 @@ export function startCoordinatorServices({
   afterLiveRestore?: () => () => void;
 }): PersistenceOwner {
   const existing = owners.get(store);
+
   if (existing) return existing;
   const stops: (() => void)[] = [];
   let disposed = false;
+
   const dispose = () => {
     if (disposed) return;
     disposed = true;
     owners.delete(store);
+
     for (const stop of stops.reverse()) {
       try {
         stop();
@@ -36,22 +39,28 @@ export function startCoordinatorServices({
       }
     }
   };
+
   try {
     // Live state must be loaded before the browser and meeting watchers run.
     stops.push(startLivePersistence());
+
     if (afterLiveRestore) stops.push(afterLiveRestore());
     const persistence = createBrowserPersistence({ store, restoreSession });
     stops.push(() => persistence.dispose());
     stops.push(startLive(store));
+
     const events = onAppEvent((event) => {
       if (event.type === "resignActive" || event.type === "screenLocked") store.getState().closeAbandonedNewTabs();
     });
+
     stops.push(() => events.remove());
     const timer = setInterval(() => store.getState().cleanUpInactiveTabs(), AUTO_CLEAN_EVERY_MS);
     stops.push(() => clearInterval(timer));
+
     const owner: PersistenceOwner = {
       flush(options) {
         if (disposed) return Promise.reject(new Error("Background services are disposed"));
+
         return Promise.all([persistence.flush(options), flushLivePersistence(options)]).then(() => {});
       },
       resume() {
@@ -61,7 +70,9 @@ export function startCoordinatorServices({
       },
       dispose,
     };
+
     owners.set(store, owner);
+
     return owner;
   } catch (error) {
     dispose();

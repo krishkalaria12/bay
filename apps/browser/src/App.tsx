@@ -91,22 +91,27 @@ function BrowserWindow() {
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left.
   const right = useSidebarOnRight();
   const addressInSidebar = useAddressBarInSidebar();
+
   // The top corners the page reaches: it has no toolbar there to hold caption buttons.
   const pageCorner = {
     left: !topTabs && addressInSidebar && (right || !showSidebar),
     right: !topTabs && addressInSidebar && (!right || !showSidebar),
   };
+
   // Where the page would run up under caption buttons, they live in a bar of their own over it, as in Zen: hidden in
   // the card's top gap until the pointer reaches the window's top, then open, pushing the page down rather than
   // covering it. Open, it lines up with the sidebar's toolbar row; it always moves the window.
   const buttons = useWindowButtonLayout();
+
   const captionBar =
     capabilities.captionButtons && !fullscreen && ((pageCorner.left && buttons.left.length > 0) || (pageCorner.right && buttons.right.length > 0));
+
   const captionRevealed = useCaptionRevealed(windowId, captionBar);
   const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
   const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   const captionBarHeight = captionRevealed ? captionHeight : layout.cardTop;
   let pageTop: number = layout.cardTop;
+
   if (showStrip) pageTop = TOP_STRIP_HEIGHT;
   else if (captionBar) pageTop = captionBarHeight;
   const pageInset = useSharedValue(pageTop);

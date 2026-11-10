@@ -120,6 +120,7 @@ export function useTidySuggestion(d: Download | undefined): TidyName | null {
   }, [d?.id, d?.filename, d?.state]);
 
   if (!d) return null;
+
   if (!entry || entry.filename !== d.filename) return null;
 
   return entry.value;
@@ -224,6 +225,7 @@ export async function tidyFinishedDownload(d: Download, s: BrowserProjection = b
 export function startTidyDownloads(store?: BrowserStore): () => void {
   // Only downloads that finish while Bay watches: the engine replays its finished history at every launch.
   const live = new Set<string>();
+
   const subscription = onDownload((d) => {
     if (d.state === "downloading") live.add(d.id);
     else if (live.delete(d.id) && d.state === "finished") void tidyFinishedDownload(d, (store ?? browserRead).getState(), store);

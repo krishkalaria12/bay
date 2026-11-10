@@ -7,6 +7,7 @@ let generation = 0;
 export function configureSyncStore(store: BrowserStore): () => void {
   owner = store;
   const current = ++generation;
+
   return () => {
     if (generation === current) {
       owner = undefined;
@@ -14,11 +15,15 @@ export function configureSyncStore(store: BrowserStore): () => void {
     }
   };
 }
+
 export function syncStore(): BrowserStore {
   if (!owner) throw new Error("Sync engine has no active owner");
+
   return owner;
 }
+
 export const syncGeneration = () => generation;
+
 export function assertSyncGeneration(current: number): void {
   if (!owner || generation !== current) throw new Error("Sync owner stopped");
 }

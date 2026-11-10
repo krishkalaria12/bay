@@ -16,9 +16,10 @@ export function createNativeWindowReconciler<Options>({
   focus(id: string): void | Promise<void>;
   openFailed(id: string): void;
   closed(id: string, options: Options): void;
-  report(operation: string, id: string, error: unknown): void;
+  report(operation: string, id: string, error: Error): void;
 }) {
   type Wanted = { id: string; title: string; options: Options };
+
   type Entry = {
     status: "opening" | "open" | "closing";
     options: Options;
@@ -28,13 +29,17 @@ export function createNativeWindowReconciler<Options>({
     nativeClosed: boolean;
     released: boolean;
   };
+
   let disposed = false;
   const pending = new Set<Promise<unknown>>();
+
   const track = (promise: Promise<unknown>) => {
     pending.add(promise);
     void promise.finally(() => pending.delete(promise)).catch(() => {});
+
     return promise;
   };
+
   const entries = new Map<string, Entry>();
   const failed = new Set<string>();
   let wanted = new Map<string, Wanted>();
@@ -43,12 +48,14 @@ export function createNativeWindowReconciler<Options>({
   const release = (id: string, entry: Entry) => {
     if (entry.released) return;
     entry.released = true;
+
     try {
       closed(id, entry.options);
     } catch (error) {
-      report("release", id, error);
+      report("release", id, error instanceof Error ? error : new Error(String(error)));
     }
   };
+
   // Dispatch immediately, preserving macOS call order and void-returning hosts.
   const invoke = (run: () => void | Promise<void>) => {
     try {
@@ -57,6 +64,7 @@ export function createNativeWindowReconciler<Options>({
       return track(Promise.reject(error));
     }
   };
+
   const finishClose = (id: string, entry: Entry) => {
     if (entries.get(id) !== entry) return;
     entries.delete(id);
@@ -66,6 +74,7 @@ export function createNativeWindowReconciler<Options>({
     // restored while the old close was awaiting its acknowledgement.
     void Promise.resolve().then(reconcile);
   };
+
   const beginClose = (id: string, entry: Entry) => {
     if (entry.status === "closing") return;
     entry.status = "closing";
@@ -78,8 +87,10 @@ export function createNativeWindowReconciler<Options>({
       },
     );
   };
+
   const updateTitle = (id: string, entry: Entry) => {
     const next = wanted.get(id);
+
     if (!next || next.title === entry.title) return;
     entry.title = next.title;
     void invoke(() => setTitle(id, next.title)).catch((error) => report("title", id, error));
@@ -87,14 +98,18 @@ export function createNativeWindowReconciler<Options>({
 
   function reconcile() {
     if (disposed) return;
+
     for (const window of wanted.values()) {
       const { id } = window;
+
       if (!wanted.has(id) || failed.has(id)) continue;
       const existing = entries.get(id);
+
       if (existing) {
         if (existing.status === "open") updateTitle(id, existing);
         continue;
       }
+
       const entry: Entry = {
         status: "opening",
         options: window.options,
@@ -104,6 +119,7 @@ export function createNativeWindowReconciler<Options>({
         nativeClosed: false,
         released: false,
       };
+
       entries.set(id, entry);
       void invoke(() => open(id, window.options)).then(
         () => {
@@ -113,6 +129,7 @@ export function createNativeWindowReconciler<Options>({
           if (entry.nativeClosed || entry.cancelled || !wanted.has(id)) return beginClose(id, entry);
           entry.status = "open";
           updateTitle(id, entry);
+
           if (entry.wantedFocus && focusedId && focusedId !== id && entries.get(focusedId)?.status === "open") {
             const current = focusedId;
             void invoke(() => focus(current)).catch((error) => report("focus", current, error));
@@ -121,20 +138,24 @@ export function createNativeWindowReconciler<Options>({
         (error) => {
           report("open", id, error);
           failed.add(id);
+
           // Remove the invisible canonical window before another update can try
           // again. Close also cleans up a possibly partial native creation.
           try {
             openFailed(id);
           } catch (failure) {
-            report("reconcile", id, failure);
+            report("reconcile", id, failure instanceof Error ? failure : new Error(String(failure)));
           }
+
           beginClose(id, entry);
         },
       );
     }
+
     for (const [id, entry] of entries) {
       if (wanted.has(id)) continue;
       entry.cancelled = true;
+
       if (entry.status === "open") beginClose(id, entry);
     }
   }
@@ -150,13 +171,16 @@ export function createNativeWindowReconciler<Options>({
       if (disposed) return;
       wanted = new Map(windows.map((window) => [window.id, window]));
       focusedId = focused;
+
       for (const id of failed) if (!wanted.has(id)) failed.delete(id);
       reconcile();
     },
     nativeClosed(id: string) {
       const entry = entries.get(id);
+
       if (!entry) return;
       entry.nativeClosed = true;
+
       // A pending create retains its profile until its reply and cleanup close.
       if (entry.status !== "opening") finishClose(id, entry);
     },

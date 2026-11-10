@@ -132,13 +132,16 @@ const light: typeof dark = {
 
 export function hex(color: string): string {
   const m = color.match(/rgba?\(([^)]+)\)/);
+
   if (!m) return color;
   const [r, g, b, a = "1"] = m[1]!.split(",").map((v) => v.trim());
+
   const h = (n: number) =>
     Math.round(Math.min(255, Math.max(0, n)))
       .toString(16)
       .padStart(2, "0")
       .toUpperCase();
+
   return `#${h(+r!)}${h(+g!)}${h(+b!)}${h(+a * 255)}`;
 }
 
@@ -194,12 +197,14 @@ const INCOGNITO: ProfileTheme = { lightPalette: null, edgeLight: "#FFFFFF33" };
 export function profileNameColor(color: SpaceColor, dark: boolean): string {
   const spec = SPACE_COLORS[color] ?? SPACE_COLORS.plum;
   const base = spec.action ?? spec.swatch;
+
   return dark ? mix(base, "#FFFFFF", 0.6) : mix(base, "#000000", 0.4);
 }
 
 function mix(a: string, b: string, t: number): string {
   const ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
   const out = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t));
+
   return `#${out
     .map((v) => v.toString(16).padStart(2, "0"))
     .join("")
@@ -209,21 +214,26 @@ function mix(a: string, b: string, t: number): string {
 function profileTheme(color: SpaceColor, isDark: boolean): ProfileTheme {
   const spec = SPACE_COLORS[color] ?? SPACE_COLORS.plum;
   const explicit = isDark ? spec.dark : spec.light;
+
   if (explicit) return explicit;
+
   return isDark
     ? { lightPalette: spec.palette, edgeLight: `${mix(spec.swatch, "#FFFFFF", 0.5)}80` }
     : { lightPalette: spec.palette, edgeLight: `${spec.swatch}66` };
 }
 
 const cache = new Map<string, Theme>();
+
 // Custom themes are keyed by their values, so dragging in the theme editor makes a key a frame, and solid windows by
 // their pages' colours: keep the latest few.
 const MAX_TRANSIENT = 48;
 const CUSTOM = "custom|";
 
 const GLASS = ":glass";
+
 // A solid window's page colour, after its space's key: "plum:dark@#202124".
 const SITE = "@";
+
 // High contrast, last of all: "plum:dark@#202124!contrast".
 const CONTRAST = "!contrast";
 const CONTRAST_INTENSITY = 0.5;
@@ -234,7 +244,9 @@ export function spaceThemeKey(profile: DeepReadonly<Pick<Space, "color" | "theme
   const space = profile ?? DEFAULT_SPACE;
   const mode = `${dark ? "dark" : "light"}${glass ? GLASS : ""}`;
   const t = space.theme;
+
   if (!t?.colors.length) return `${space.color}:${mode}`;
+
   return `${CUSTOM}${t.colors.join(",")}|${t.intensity.toFixed(2)}|${t.grain.toFixed(2)}:${mode}`;
 }
 
@@ -257,6 +269,7 @@ function customTheme(key: string): Theme {
   const backdrop = { ...backdropTint(first, false), tintAlpha: 0.08 + 0.52 * Number(intensity) };
   const top = opaqueTint(backdrop, isDark, solid);
   const windowTint: [string, string] = colors.length > 1 ? [top[0], opaqueTint({ ...backdrop, tintColor: last }, isDark, solid)[0]] : top;
+
   return {
     ...look,
     lightPalette: colors,
@@ -278,6 +291,7 @@ function presetTheme(key: string): Theme {
   // Dia: neutral band 0.502 at 0.65.
   const powerUpColor = !spec ? null : spec.palette ? (spec.powerUp ?? spec.swatch) : "#808080A6";
   const backdrop = backdropTint(spec ? (spec.tint ?? tintForHue(spec.swatch, !spec.palette)) : INCOGNITO_TINT, !spec?.palette);
+
   return {
     ...look,
     backdrop,
@@ -292,6 +306,7 @@ function presetTheme(key: string): Theme {
 function contrasted(theme: Theme): Theme {
   const ink = theme.dark ? "#FFFFFF" : "#000000";
   const edge = theme.dark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)";
+
   return {
     ...theme,
     grain: 0,
@@ -316,17 +331,22 @@ function contrasted(theme: Theme): Theme {
 
 export function themeFor(key: string): Theme {
   let theme = cache.get(key);
+
   if (theme) return theme;
   const site = key.indexOf(SITE);
+
   if (key.endsWith(CONTRAST)) theme = contrasted(themeFor(key.slice(0, -CONTRAST.length)));
   // A solid window filled with its page's colour, its space's theme in the look that reads on it.
   else if (site >= 0) theme = { ...themeFor(key.slice(0, site)), windowTint: [key.slice(site + 1), key.slice(site + 1)] };
   else theme = key.startsWith(CUSTOM) ? customTheme(key) : presetTheme(key);
   cache.set(key, theme);
+
   if (transient(key)) {
     const keys = [...cache.keys()].filter(transient);
+
     for (const old of keys.slice(0, Math.max(0, keys.length - MAX_TRANSIENT))) cache.delete(old);
   }
+
   return theme;
 }
 
@@ -334,6 +354,7 @@ export function themeFor(key: string): Theme {
 function siteColor(s: BrowserState, windowId: string, spaceId: string): string | null {
   const id = activeTabId(s, windowId, spaceId);
   const color = id && s.tabs[id]?.url ? s.live[id]?.themeColor : null;
+
   return color && /^#[0-9a-f]{6}/i.test(color) ? color.slice(0, 7).toUpperCase() : null;
 }
 
@@ -342,6 +363,7 @@ function siteColor(s: BrowserState, windowId: string, spaceId: string): string |
  * space's own theme (the theme editor's) always shows, as Arc's and Zen's do: only a preset colour gives way to the page.
  */
 type PreviewLook = Pick<Space, "color" | "theme" | "followSite">;
+
 const usePreviewLooks = create<Record<string, PreviewLook>>(() => ({}));
 const keys = new Map<string, { inputs: unknown[]; key: string }>();
 
@@ -359,12 +381,15 @@ export function themeKey(
   const inputs = [w, s.settings, s.spaces[spaceId], looks[id], contrast, s.ui.appDark, active && s.tabs[active]?.url, active && s.live[active]?.themeColor];
   const memo = `${id}|${spaceId}`;
   const cached = keys.get(memo);
+
   if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.key;
   const own = lookKey(s, windowId, page, looks, contrast);
   const key = contrast ? `${own}${CONTRAST}` : own;
   keys.delete(memo);
   keys.set(memo, { inputs, key });
+
   if (keys.size > 32) keys.delete(keys.keys().next().value!);
+
   return key;
 }
 
@@ -373,6 +398,7 @@ function lookKey(s: BrowserState, windowId: string | null, page: string | null, 
   const w = s.windows[id];
   const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
   const glass = s.settings.windowMaterial === "glass" && !contrast;
+
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
   // A look being chosen for this window (the new space panel's) shows on its space meanwhile.
   const preview = w && spaceId === w.spaceId ? looks[id] : undefined;
@@ -385,6 +411,7 @@ function lookKey(s: BrowserState, windowId: string | null, page: string | null, 
   // A strong theme of its own tints the window towards mid grey, where no text colour reads: at most half, in contrast.
   const theme = contrast && space.theme ? { ...space.theme, intensity: Math.min(space.theme.intensity, CONTRAST_INTENSITY) } : space.theme;
   const key = spaceThemeKey({ ...space, theme }, s.ui.appDark, glass);
+
   return site ? `${key}${SITE}${site}` : key;
 }
 
@@ -394,8 +421,10 @@ const ThemeContext = createContext<Theme | null>(null);
 export function setPreviewLook(windowId: string, look: Pick<Space, "color" | "theme" | "followSite"> | null) {
   usePreviewLooks.setState((current) => {
     const looks = { ...current };
+
     if (look) looks[windowId] = look;
     else delete looks[windowId];
+
     return looks;
   }, true);
 }
@@ -409,6 +438,7 @@ export function ThemeScope({ children }: { children: ReactNode }) {
   const looks = usePreviewLooks();
   const contrast = useHighContrast();
   const key = useBrowser((s) => spaceKeyOf(themeKey(s, windowId, page, looks, contrast)));
+
   return createElement(ThemeContext.Provider, { value: themeFor(key) }, children);
 }
 
@@ -419,6 +449,7 @@ export function ThemeScope({ children }: { children: ReactNode }) {
  */
 export function spaceKeyOf(key: string): string {
   const site = key.indexOf(SITE);
+
   return site >= 0 ? key.slice(0, site) : key;
 }
 
@@ -434,12 +465,16 @@ export function useWindowTint(): Theme["windowTint"] {
   const page = useContext(PageSpaceContext);
   const looks = usePreviewLooks();
   const contrast = useHighContrast();
+
   return useBrowser((s) => themeFor(themeKey(s, windowId, page, looks, contrast)).windowTint);
 }
 
 export function useTheme(): Theme {
   const scoped = useContext(ThemeContext);
+
   if (scoped) return scoped;
+
   if (__DEV__) console.warn("useTheme outside a ThemeScope");
+
   return unscopedTheme();
 }

@@ -10,8 +10,10 @@ const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._
 const random = (n: number) => Array.from({ length: n }, () => CHARS[Math.floor(Math.random() * CHARS.length)]).join("");
 
 let owner: BrowserStore | undefined;
+
 export function bindGoogleBrowser(browser: BrowserStore): () => void {
   owner = browser;
+
   return () => {
     if (owner === browser) {
       pending?.cancel();
@@ -19,6 +21,7 @@ export function bindGoogleBrowser(browser: BrowserStore): () => void {
     }
   };
 }
+
 const read = () => owner?.getState() ?? browserRead.getState();
 let pending: { cancel(): void } | null = null;
 
@@ -27,8 +30,8 @@ function query(url: string): Map<string, string> {
 
   // SAFETY: each &-separated pair splits into a key and value; decoding maps the two parts in order into a tuple.
   const pairs = search
-      .split("&")
-      .filter(Boolean)
+    .split("&")
+    .filter(Boolean)
     .map((pair) => pair.split("=").map((v) => decodeURIComponent(v.replace(/\+/g, " "))) as [string, string]);
 
   return new Map(pairs);
@@ -39,6 +42,7 @@ export function connectGoogleDrive(windowId: string, clientId: string, clientSec
   pending?.cancel();
   const verifier = random(64);
   const state = random(24);
+
   const url = `${endpoints.googleAuth}?${form({
     client_id: clientId.trim(),
     redirect_uri: GOOGLE_REDIRECT,
@@ -50,36 +54,47 @@ export function connectGoogleDrive(windowId: string, clientId: string, clientSec
     access_type: "offline",
     prompt: "consent",
   })}`;
+
   return new Promise<void>((resolve, reject) => {
     let stop = () => {};
     let settled = false;
     const request = { cancel: () => finish(new Error("Cancelled")) };
-    const finish = (error?: unknown) => {
+
+    const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
       stop();
+
       if (pending === request) pending = null;
+
       if (error) reject(error);
       else resolve();
     };
+
     pending = request;
     void Promise.resolve(owner ? owner.getState().newTab(windowId, { url }) : newTab(windowId, { url }))
       .then((tabId) => {
         if (settled) return;
+
         const check = () => {
           const tab = read().tabs[tabId];
+
           if (!tab) return finish(new Error("Sign-in was cancelled"));
+
           if (!tab.url.startsWith(GOOGLE_REDIRECT)) return;
           const params = query(tab.url);
+
           if (params.get("state") !== state) return finish(new Error("Sign-in didn't match this request"));
           const code = params.get("code");
           stop();
           void Promise.resolve(owner ? owner.getState().closeTab(tabId) : closeTab(tabId)).catch((error) =>
             console.error("Couldn't close the sign-in tab", error),
           );
+
           if (!code) return finish(new Error(params.get("error") ?? "Google didn't grant access"));
           connectGoogle(clientId.trim(), clientSecret.trim(), code, verifier, GOOGLE_REDIRECT).then(() => finish(), finish);
         };
+
         stop = (owner ?? browserRead).subscribe(check);
         check();
       })

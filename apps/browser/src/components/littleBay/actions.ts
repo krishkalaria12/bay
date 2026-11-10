@@ -23,10 +23,13 @@ export async function openExternalUrls(urls: string[], sourceApp?: string) {
     if (handleSharedCollectionUrl(url)) continue;
     const s = store();
     const matched = matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
+
     const target =
       matched?.kind === "space" && !s.spaces[matched.spaceId] ? defaultLinkDestination(s.settings) : (matched ?? defaultLinkDestination(s.settings));
+
     const spaceId =
       target.kind === "space" && s.spaces[target.spaceId] ? target.spaceId : target.kind === "mostRecentSpace" ? mostRecentSpace(s) : s.settings.defaultSpaceId;
+
     if (target.kind === "littleBay" && opensInLittleBay(url)) await openLittleBay(url, spaceId);
     else if (target.kind === "newWindow") focus(await openWindow({ url, spaceId }));
     else await openLinksInMainWindow([url], spaceId);
@@ -37,15 +40,18 @@ export async function openExternalUrls(urls: string[], sourceApp?: string) {
 // comes forward; a new window when there's none. The blank window a launch opens takes the first link itself.
 async function openLinksInMainWindow(urls: string[], spaceId: string) {
   let target = mainWindowFor(store(), spaceId);
+
   for (const url of urls) {
     const s = store();
     const w = target ? s.windows[target] : undefined;
     const view = target ? viewTabIds(s, target) : [];
     const blank = w && view.length === 1 ? s.tabs[view[0]!] : undefined;
+
     if (!w) target = await openWindow({ url, spaceId });
     else if (blank && !blank.url && !blank.navigation && blank.spaceId === spaceId && !s.windowUi[w.id]?.panel.open) await navigate(blank.id, url);
     else await newTab(w.id, { url, spaceId });
   }
+
   if (target) focus(target);
 }
 
@@ -63,6 +69,7 @@ export async function closeLittleBay(windowId: string) {
 export function closeLittleBayOnEscape(tabId: string) {
   const s = store();
   const tab = s.tabs[tabId];
+
   if (!tab || !isSmall(s, tab.windowId) || s.find[tabId]?.open || s.windowUi[tab.windowId]?.panel.open) return;
   reportBrowserCommand(closeLittleBay(tab.windowId));
 }

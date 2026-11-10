@@ -6,6 +6,7 @@ const script = readFileSync(new URL("../ios/page_script.js", import.meta.url), "
 const modifiers = script.match(/const isMac =[^;]+;\s*const primaryModifier =[^;]+;\s*const secondaryModifier =[^;]+;/)?.[0];
 const start = script.indexOf("  // MARK: Capture");
 const end = script.indexOf("  // MARK: Link previews", start);
+
 assert.ok(modifiers && start > 0 && end > start);
 
 function fixture(platform) {
@@ -17,10 +18,12 @@ function fixture(platform) {
     (...args) => sent.push(args),
     true,
   );
+
   return {
     sent,
     mouse(fields = {}) {
       let swallowed = 0;
+
       const event = {
         isTrusted: true,
         button: 0,
@@ -38,7 +41,9 @@ function fixture(platform) {
           swallowed++;
         },
       };
+
       listeners.get("mousedown")(event);
+
       return swallowed;
     },
   };
@@ -60,8 +65,10 @@ test("page Capture uses the desktop primary modifier", () => {
 
 test("page Capture leaves synthetic and unrelated mouse gestures alone", () => {
   const f = fixture("Linux x86_64");
+
   for (const extra of [{ isTrusted: false }, { button: 1 }, { shiftKey: false }, { altKey: true }, { metaKey: true }]) {
     assert.equal(f.mouse({ ctrlKey: true, ...extra }), 0);
   }
+
   assert.deepEqual(f.sent, []);
 });

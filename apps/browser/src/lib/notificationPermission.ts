@@ -10,10 +10,14 @@ export async function ensureNotificationPermission(windowId?: string): Promise<b
   // native service when a host supports notifications without that query.
   if (!hasNotificationPermissionQuery()) return capabilities.notifications;
   const status = await notificationPermission();
+
   if (status === "granted" || status === "provisional") return true;
+
   if (status === "notDetermined") return requestNotificationPermission();
+
   if (asked) return false;
   asked = true;
+
   const { confirmed } = await confirm({
     title: "Bay Needs Notifications Permission",
     message: `You need to open ${platformWords.systemSettings} to give Bay permission to show you Notifications.`,
@@ -21,6 +25,8 @@ export async function ensureNotificationPermission(windowId?: string): Promise<b
     cancelTitle: "Not Now",
     windowId,
   });
+
   if (confirmed) void openNotificationSettings();
+
   return false;
 }

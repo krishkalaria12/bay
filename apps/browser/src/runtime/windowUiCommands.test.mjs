@@ -9,13 +9,16 @@ import { withSidebarUndoWindow } from "../store/sidebarUndo.ts";
 
 const run = (store, command) => executeWindowUiCommand(store, parseWindowUiCommand(command));
 const download = (id, profile) => ({ id, url: `https://${id}.example/`, filename: id, path: "", state: "complete", received: 1, total: 1, profile });
+
 function setup() {
   const store = createBrowserStore();
   const s = () => store.getState();
   const windowId = s().createWindow({ url: "a.com" });
   const privateWindow = s().createWindow({ incognito: true, url: "p.com" });
   const privateSpace = s().windows[privateWindow].spaceId;
+
   for (const d of [download("public", "default"), download("secret", privateSpace)]) s().upsertDownload(d);
+
   return { store, s, windowId, privateWindow, tab: activeTabId(s(), windowId) };
 }
 
@@ -27,13 +30,16 @@ test("window UI parser closes every command and the find patch", () => {
     { method: "clearDownloads", windowId: "w" },
     { method: "updateDownloadFile", id: "d", patch: { filename: "b.pdf", path: "/tmp/b.pdf" } },
   ];
+
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(WINDOW_UI_COMMAND_METHODS));
+
   for (const command of commands) {
     const parsed = parseWindowUiCommand(command);
     assert.deepEqual(parsed, command);
     assert.notEqual(parsed, command);
     assert.throws(() => parseWindowUiCommand({ ...command, native: true }), { code: "invalid_request" });
   }
+
   for (const command of [
     { method: "upsertDownload", download: {} },
     { method: "setFind", tabId: "t", patch: { sessionId: "x" } },
@@ -44,6 +50,7 @@ test("window UI parser closes every command and the find patch", () => {
 
   const details = { method: "updateTabDetails", tabId: "t", patch: { customTitle: null, customIcon: "★", kept: true } };
   assert.deepEqual(parseTabCommand(details), details);
+
   for (const field of ["url", "title", "zoom", "pinnedUrl"])
     assert.throws(() => parseTabCommand({ ...details, patch: { [field]: "x" } }), { code: "invalid_request" }, field);
   // The panel wrapper omits text it wasn't given.
@@ -72,6 +79,7 @@ test("window UI commands toggle panels, find and a window's own downloads", () =
     assert.throws(() => run(store, command), { code: "invalid_request" }, JSON.stringify(command));
     assert.equal(s(), before);
   }
+
   run(store, { method: "removeDownload", windowId, downloadId: "public" });
   assert.deepEqual(
     s().downloads.map((d) => d.id),
@@ -94,6 +102,7 @@ test("download renames stay in the file's folder and in the origin window's list
   s().upsertDownload({ ...download("busy", "default"), state: "downloading", path: "/Users/me/Downloads/busy.pdf" });
 
   assert.equal(renamesInPlace("/a/b.pdf", { filename: "c.pdf", path: "/a/c.pdf" }), true);
+
   for (const to of [
     { filename: "c.pdf", path: "/elsewhere/c.pdf" },
     { filename: "c.pdf", path: "/a/d.pdf" },
@@ -112,6 +121,7 @@ test("download renames stay in the file's folder and in the origin window's list
     assert.throws(() => run(store, command), { code: "invalid_request" }, JSON.stringify(command));
     assert.equal(s(), before);
   }
+
   const rename = { method: "updateDownloadFile", id: "done", patch: { filename: "Report.pdf", path: "/Users/me/Downloads/Report.pdf" } };
   assert.throws(() => withSidebarUndoWindow(privateWindow, () => run(store, rename)), { code: "invalid_request" });
   withSidebarUndoWindow(windowId, () => run(store, rename));

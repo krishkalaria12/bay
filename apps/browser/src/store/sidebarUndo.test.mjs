@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as v from "valibot";
 import { test } from "node:test";
 
 const { useBrowser } = await import("./browserStore.ts");
@@ -290,6 +291,7 @@ test("live-folder undo stays with the authority and its snapshot contains only J
   const legacy = useBrowser.getState();
   const previous = useLive.getState();
   const release = bindLiveBrowser(owner);
+
   try {
     setLive({
       folders: {
@@ -316,6 +318,7 @@ test("live-folder undo still works after the authority recovers from JSON", asyn
   const windowId = owner.getState().createWindow();
   const previous = useLive.getState();
   const release = bindLiveBrowser(owner);
+
   try {
     setLive({
       folders: {
@@ -343,13 +346,14 @@ for (const kind of ["automatic", "action"]) {
     const tabId = viewTabIds(browser.getState(), windowId)[0];
     const seen = new Set();
     let previousSummary;
+
     for (let index = 0; index < 55; index++) {
       if (kind === "automatic") browser.getState().updateTab(tabId, { customTitle: `Edit ${index}` });
       else browser.getState().pushSidebarUndo(windowId, { kind: "test", data: { index } });
       const stack = JSON.parse(JSON.stringify(browser.getState().sidebarUndo[windowId]));
       assert.equal(stack.length, Math.min(index + 1, 50));
       const id = stack.at(-1).id;
-      assert.equal(typeof id, "string");
+      assert.ok(v.is(v.string(), id));
       assert.ok(id.startsWith("undo-"));
       assert.ok(!seen.has(id));
       seen.add(id);

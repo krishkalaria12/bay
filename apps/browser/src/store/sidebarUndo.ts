@@ -1,3 +1,5 @@
+import { checked } from "../lib/checked";
+import type { JsonValue } from "../lib/json";
 import type { StateCreator } from "zustand";
 import * as v from "valibot";
 import type { BrowserState } from "./browserStore";
@@ -49,11 +51,14 @@ export type SidebarUndoSlice = {
 
 const RECORDS: RecordKey[] = ["tabs", "tabLists", "groups", "pinnedFolders", "spaces", "splits", "localFiles"];
 const MAX_EDITS = 50;
+
 // Edits outside BrowserState (Live folders) register how to reverse their JSON actions.
-const handlers = new Map<string, (data: unknown) => void>();
-export function registerSidebarUndo(kind: string, handler: (data: unknown) => void) {
+const handlers = new Map<string, (data: JsonValue) => void>();
+
+export function registerSidebarUndo(kind: string, handler: (data: JsonValue) => void) {
   handlers.set(kind, handler);
 }
+
 let suspended = 0;
 let originWindow: string | undefined;
 export const sidebarUndoWindow = () => originWindow;
@@ -176,6 +181,7 @@ export const createSidebarUndoSlice: StateCreator<BrowserState, [], [], SidebarU
     const s = get();
 
     if (suspended || !s.windows[windowId]) return;
+
     const edit: SidebarEdit = {
       id: newId("undo"),
       changes: [],
@@ -183,8 +189,10 @@ export const createSidebarUndoSlice: StateCreator<BrowserState, [], [], SidebarU
       cleanedIds: [],
       groupIds: [],
       undo: true,
+      // SAFETY: the checks above established this shape.
       action: JSON.parse(JSON.stringify(action)) as SidebarUndoAction,
     };
+
     set({ sidebarUndo: { ...s.sidebarUndo, [windowId]: [...(s.sidebarUndo[windowId] ?? []), edit].slice(-MAX_EDITS) } });
   },
   undoSidebarEdit(windowId) {
@@ -197,7 +205,8 @@ export const createSidebarUndoSlice: StateCreator<BrowserState, [], [], SidebarU
 
     if (edit.undo) {
       const handler = edit.action && handlers.get(edit.action.kind);
-      if (handler) withoutSidebarUndo(() => handler(edit.action!.data));
+
+      if (handler) withoutSidebarUndo(() => handler(checked<JsonValue>(edit.action!.data)));
       set({ sidebarUndo: patch.sidebarUndo! });
 
       return true;

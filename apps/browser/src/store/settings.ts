@@ -10,6 +10,7 @@ import {
   type ExtensionSearchEngine,
   type SearchEngine,
 } from "@bay/core";
+import * as v from "valibot";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browserStore";
 import { layout } from "../lib/constants";
@@ -192,17 +193,24 @@ type LegacySettings = Partial<Settings> & {
 export function restoreSettings(saved: LegacySettings | null = {}): Settings {
   const { defaultProfileId, warnBeforeMovingTabsToProfile, openLinksInHarbor, harborSize, openLinksInSmallYahu, smallYahuSize, ...current } = saved ?? {};
   const settings = { ...DEFAULT_SETTINGS, ...current };
+
   if (current.defaultSpaceId === undefined && defaultProfileId) settings.defaultSpaceId = defaultProfileId;
-  if (current.warnBeforeMovingTabsToSpace === undefined && typeof warnBeforeMovingTabsToProfile === "boolean") {
+
+  if (current.warnBeforeMovingTabsToSpace === undefined && v.is(v.boolean(), warnBeforeMovingTabsToProfile)) {
     settings.warnBeforeMovingTabsToSpace = warnBeforeMovingTabsToProfile;
   }
+
   const externalLinks = openLinksInHarbor ?? openLinksInSmallYahu;
-  if (current.openLinksInLittleBay === undefined && typeof externalLinks === "boolean") settings.openLinksInLittleBay = externalLinks;
+
+  if (current.openLinksInLittleBay === undefined && v.is(v.boolean(), externalLinks)) settings.openLinksInLittleBay = externalLinks;
   const size = harborSize ?? smallYahuSize;
+
   if (current.littleBaySize === undefined && Array.isArray(size) && size.length === 2 && size.every((n) => Number.isFinite(n) && n > 0)) {
     settings.littleBaySize = [...size];
   }
+
   const shortcuts = { ...settings.shortcuts };
+
   for (const [legacy, name] of [
     ["newSmallYahu", "newLittleBay"],
     ["newHarbor", "newLittleBay"],
@@ -217,7 +225,9 @@ export function restoreSettings(saved: LegacySettings | null = {}): Settings {
     if (shortcuts[legacy] && !shortcuts[name]) shortcuts[name] = shortcuts[legacy]!;
     delete shortcuts[legacy];
   }
+
   settings.shortcuts = shortcuts;
+
   return settings;
 }
 

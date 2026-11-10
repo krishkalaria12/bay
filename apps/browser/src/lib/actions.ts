@@ -38,21 +38,27 @@ export async function closeTab(tabId: string) {
   const s = browserRead.getState();
   const tab = s.tabs[tabId];
   const w = tab && s.windows[tab.windowId];
+
   if (!tab || !w) return;
   const origin = sidebarUndoWindow() ?? s.ui.focusedWindowId ?? tab.windowId;
   const last = closesWindow(s, tabId);
+
   if (last && s.settings.warnBeforeClosingLastTab && !w.incognito) {
     const { confirmed, suppressed } = await confirm({ ...closeWindowDialog(w.id), suppression: "Don’t ask me again", windowId: w.id });
+
     if (suppressed) await updateSettings({ warnBeforeClosingLastTab: false });
+
     if (!confirmed) return;
     // The page's last reports land before the tab closes (Reopen Closed Tab restores what it showed).
     applyHeldReports();
   }
+
   await withSidebarUndoWindow(origin, () => dispatchBrowserCommand({ method: "closeTab", tabId }));
 }
 
 export function toggleMute(tabId: string) {
   const tab = browserRead.getState().tabs[tabId];
+
   if (!tab) return;
   reportBrowserCommand(setSiteMuted(tabId, !tab.muted));
   void webviews.get(tabId)?.setMuted(!tab.muted);
@@ -65,7 +71,9 @@ export function createSpace(windowId?: string, preset?: CreateSpacePreset): Prom
 export async function deleteSpace(spaceId: string, windowId?: string) {
   const s = browserRead.getState();
   const profile = s.spaces[spaceId];
+
   if (!profile || s.spaceOrder.length <= 1) return;
+
   const { confirmed } = await confirm({
     title: `Delete “${profile.name}”?`,
     message: `Its tabs will be closed, and its cookies, passwords, extensions, bookmarks and history will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
@@ -73,6 +81,7 @@ export async function deleteSpace(spaceId: string, windowId?: string) {
     destructive: true,
     windowId,
   });
+
   if (!confirmed) return;
   // The store queues its engine data for deletion (lib/profileCleanup.ts).
   await spaceActions.deleteSpace(spaceId);
@@ -85,7 +94,9 @@ async function keptExtensionsNote(): Promise<string> {
     (list) => list.filter((e) => e.mayModify).map((e) => e.name),
     () => null,
   );
+
   if (names && !names.length) return "";
+
   return names
     ? ` Its extensions (${names.join(", ")}) stay installed on ${platformWords.thisComputer}, turned off.`
     : ` Its extensions stay installed on ${platformWords.thisComputer}, turned off.`;
@@ -93,9 +104,12 @@ async function keptExtensionsNote(): Promise<string> {
 
 export async function moveTabToSpace(tabId: string, target: string) {
   const tab = browserRead.getState().tabs[tabId];
+
   if (!tab || isIncognitoSpace(tab.spaceId)) return;
   const spaceId = target === "new" ? await createSpace(tab.windowId) : target;
+
   if (!spaceId || spaceId === tab.spaceId) return;
+
   if (browserRead.getState().settings.warnBeforeMovingTabsToSpace) {
     const { confirmed, suppressed } = await confirm({
       title: "Move Tab to Space?",
@@ -104,14 +118,18 @@ export async function moveTabToSpace(tabId: string, target: string) {
       suppression: "Don't warn me again",
       windowId: tab.windowId,
     });
+
     if (suppressed) await updateSettings({ warnBeforeMovingTabsToSpace: false });
+
     if (!confirmed) return;
   }
+
   await windowActions.moveTabToSpace(tabId, spaceId);
 }
 
 export async function moveTabToWindow(tabId: string, target: string) {
   const windowId = await windowActions.moveTabsToWindow([tabId], target === "new" ? null : target);
+
   if (windowId) focus(windowId);
 }
 
@@ -128,19 +146,23 @@ export function cycleSpace(windowId: string, delta: 1 | -1) {
 
 function cycleFromStore(windowId: string, delta: 1 | -1) {
   const target = cycleTarget(windowId, delta);
+
   if (target) switchSpace(windowId, target, true);
 }
 
 function cycleTarget(windowId: string, delta: 1 | -1) {
   const s = store();
   const w = s.windows[windowId];
+
   if (!w || w.incognito || s.spaceOrder.length < 2) return null;
   const i = s.spaceOrder.indexOf(w.spaceId);
+
   return s.spaceOrder[(i + delta + s.spaceOrder.length) % s.spaceOrder.length]!;
 }
 
 export async function openUrls(urls: string[], windowId?: string | null) {
   let target = resolveWindowId(browserRead.getState(), windowId);
+
   for (const url of urls) {
     if (!target || browserRead.getState().windows[target]?.incognito) target = await openWindow({ url });
     else await dispatchBrowserCommand({ method: "newTab", windowId: target, options: { url } });

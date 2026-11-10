@@ -33,6 +33,7 @@ export function LittleBaySettings() {
   const [menus, setMenus] = useState<MenuShortcut[]>([]);
   useEffect(() => {
     void menuShortcuts().then(setMenus);
+
     return () => void cancelShortcutRecording();
   }, []);
 
@@ -40,10 +41,12 @@ export function LittleBaySettings() {
     const run = ++latestRecording.current;
     setRecording(true);
     const combo = await recordShortcut();
+
     // A later recording replaced this one, and its field stays lit.
     if (run === latestRecording.current) setRecording(false);
     // A global shortcut needs ⌘, ⌥ or ⌃: a bare key or ⇧ and a key would take typing from every app.
     const modifiers = (combo?.modifiers ?? []).filter((m): m is LittleBayShortcut["modifiers"][number] => m !== "function");
+
     if (!combo || !modifiers.some((m) => m !== "shift")) return;
     update({ littleBayShortcut: { key: combo.key, keyCode: combo.keyCode, modifiers } });
   };
@@ -53,11 +56,14 @@ export function LittleBaySettings() {
     ? menus.find((item) => {
         const own = overrides[item.id];
         const combo = own ? { key: own[0] ?? "", modifiers: own.slice(1) } : { key: item.defaultKey, modifiers: item.defaultModifiers };
+
         return item.title !== "New Little Bay Window" && comboId(combo) === comboId(shortcut);
       })
     : undefined;
+
   // A time chosen elsewhere (not one of the choices) stays listed, as itself.
   const hoursValue = hours === null ? "never" : String(hours);
+
   const putAwayChoices = PUT_AWAY_CHOICES.some((c) => c.value === hoursValue)
     ? PUT_AWAY_CHOICES
     : [...PUT_AWAY_CHOICES, { value: hoursValue, title: `After ${hours} hours` }];
@@ -104,8 +110,12 @@ export function LittleBaySettings() {
 function shortcutDescription(shortcut: LittleBayShortcut | null, status: HotKeyStatus, clash: MenuShortcut | undefined): string {
   if (!shortcut) return "A shortcut that opens Little Bay ready to type, even when Bay is in the background.";
   const keys = formatShortcut(shortcut);
+
   if (status === "taken") return `${keys} is taken by another app or by ${isMac ? "macOS" : "your desktop"}. Choose another.`;
+
   if (status === "unavailable") return "Your desktop doesn't let apps use a shortcut from anywhere. Use the tray icon, or the shortcut inside Bay.";
+
   if (clash) return `Also Bay's ${clash.title}: in Bay, ${keys} opens Little Bay instead.`;
+
   return `${keys} opens Little Bay ready to type, from any app.`;
 }

@@ -1,7 +1,9 @@
 const styleId = "bay-view-tooltips";
 const ownerAttribute = "data-bay-tooltip";
+
 const controls =
   'button, a[href], input:not([type="hidden"]), textarea, select, [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"], [tabindex]:not([tabindex="-1"])';
+
 const bindings = new WeakMap<HTMLElement, TooltipBinding>();
 const managers = new WeakMap<Document, TooltipManager>();
 let nextId = 1;
@@ -19,15 +21,20 @@ type TooltipBinding = {
 function control(node: HTMLElement): HTMLElement {
   if (node.matches(controls)) return node;
   const children = node.querySelectorAll<HTMLElement>(controls);
+
   return children.length === 1 ? children[0]! : node;
 }
+
 function describe(node: HTMLElement, id: string, add: boolean) {
   const ids = new Set((node.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean));
+
   if (add) ids.add(id);
   else ids.delete(id);
+
   if (ids.size) node.setAttribute("aria-describedby", [...ids].join(" "));
   else node.removeAttribute("aria-describedby");
 }
+
 function installStyle(document: Document) {
   if (document.getElementById(styleId)) return;
   const style = document.createElement("style");
@@ -77,6 +84,7 @@ class TooltipManager {
     });
     this.element.addEventListener("mouseleave", () => {
       this.overTooltip = false;
+
       if (this.active && !this.active.hovered && !this.active.focused) this.hide();
     });
   }
@@ -84,6 +92,7 @@ class TooltipManager {
     clearTimeout(this.timer);
     clearTimeout(this.hideTimer);
     this.pending = binding;
+
     if (immediate) this.show(binding);
     else this.timer = setTimeout(() => this.show(binding), 500);
   }
@@ -92,6 +101,7 @@ class TooltipManager {
       clearTimeout(this.timer);
       this.pending = null;
     }
+
     if (this.active !== binding || binding.focused || binding.hovered) return;
     // Keep the label readable when the pointer crosses from its control to it.
     this.hideTimer = setTimeout(() => {
@@ -106,10 +116,12 @@ class TooltipManager {
       clearTimeout(this.timer);
       this.pending = null;
     }
+
     if (this.active === binding) this.hide();
   }
   private show(binding: TooltipBinding) {
     this.pending = null;
+
     if (!binding.label || !binding.node.isConnected) return;
     this.hide();
     this.active = binding;
@@ -126,9 +138,11 @@ class TooltipManager {
     this.element.style.top = `${top}px`;
     describe(this.target, this.element.id, true);
     const dismiss = () => this.hide();
+
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") this.hide();
     };
+
     const document = this.document;
     const window = document.defaultView;
     document.addEventListener("keydown", key, true);
@@ -150,6 +164,7 @@ class TooltipManager {
     this.pending = null;
     this.removeListeners?.();
     this.removeListeners = undefined;
+
     if (this.target) describe(this.target, this.element.id, false);
     this.target = null;
     this.active = null;
@@ -162,30 +177,41 @@ class TooltipManager {
 export function setWebTooltip(node: HTMLElement, label?: string) {
   if (!label) {
     removeWebTooltip(node);
+
     return;
   }
+
   const existing = bindings.get(node);
+
   if (existing) {
     const previous = existing.label;
     existing.label = label;
+
     if (existing.labelled?.getAttribute("aria-label") === previous) existing.labelled.setAttribute("aria-label", label);
     existing.refresh();
+
     return;
   }
+
   let manager = managers.get(node.ownerDocument);
+
   if (!manager) {
     manager = new TooltipManager(node.ownerDocument);
     managers.set(node.ownerDocument, manager);
   }
+
   node.setAttribute(ownerAttribute, "");
   // A wrapper tooltip can also name its sole icon button. Never replace the
   // name chosen by a control or label an already-labelled text control.
   const candidate = control(node);
+
   const labelled =
     candidate.matches(controls) && !candidate.getAttribute("aria-label") && !candidate.getAttribute("aria-labelledby") && !candidate.textContent?.trim()
       ? candidate
       : null;
+
   labelled?.setAttribute("aria-label", label);
+
   const binding: TooltipBinding = {
     node,
     label,
@@ -196,6 +222,7 @@ export function setWebTooltip(node: HTMLElement, label?: string) {
     dispose: () => {
       manager.remove(binding);
       node.removeAttribute(ownerAttribute);
+
       if (binding.labelled?.getAttribute("aria-label") === binding.label) binding.labelled.removeAttribute("aria-label");
       node.removeEventListener("mouseenter", enter);
       node.removeEventListener("mouseleave", leave);
@@ -203,31 +230,40 @@ export function setWebTooltip(node: HTMLElement, label?: string) {
       node.removeEventListener("focusout", blur);
     },
   };
+
   const enter = () => {
     binding.hovered = true;
     manager.request(binding, false);
   };
+
   const leave = () => {
     binding.hovered = false;
     manager.leave(binding);
   };
+
   const focus = (event: FocusEvent) => {
+    // SAFETY: the checks above established this shape.
     const target = event.target as HTMLElement;
+
     if (target.closest(`[${ownerAttribute}]`) !== node) return;
     binding.focused = target;
     manager.request(binding, true);
   };
+
   const blur = (event: FocusEvent) => {
+    // SAFETY: the checks above established this shape.
     if (event.relatedTarget && node.contains(event.relatedTarget as Node)) return;
     binding.focused = null;
     manager.leave(binding);
   };
+
   node.addEventListener("mouseenter", enter);
   node.addEventListener("mouseleave", leave);
   node.addEventListener("focusin", focus);
   node.addEventListener("focusout", blur);
   bindings.set(node, binding);
 }
+
 export function removeWebTooltip(node: HTMLElement) {
   bindings.get(node)?.dispose();
   bindings.delete(node);

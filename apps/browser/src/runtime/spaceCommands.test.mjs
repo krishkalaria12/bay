@@ -19,15 +19,19 @@ test("space parser closes every command and its options and patch", () => {
     { method: "setDefaultSpace", spaceId: "s" },
     { method: "reorderSpaces", spaceIds: ["a", "b"] },
   ];
+
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(SPACE_COMMAND_METHODS));
+
   for (const command of commands) {
     const parsed = parseSpaceCommand(command);
     assert.deepEqual(parsed, command);
     assert.notEqual(parsed, command);
     assert.throws(() => parseSpaceCommand({ ...command, native: true }), { code: "invalid_request" });
+
     for (const key of ["options", "patch"])
       if (command[key]) assert.throws(() => parseSpaceCommand({ ...command, [key]: { ...command[key], profileId: "x" } }), { code: "invalid_request" });
   }
+
   for (const command of [
     { method: "profileDataDeleted", engineId: "e" },
     { method: "createSpace", options: {} },
@@ -77,6 +81,7 @@ test("space commands reject private, missing and last spaces without mutating", 
   const privateWindow = s().createWindow({ incognito: true });
   const privateSpace = s().windows[privateWindow].spaceId;
   const only = s().spaceOrder[0];
+
   for (const command of [
     { method: "createSpace", options: { name: "n", shareWith: privateSpace } },
     { method: "createSpace", options: { name: "n", shareWith: "missing" } },

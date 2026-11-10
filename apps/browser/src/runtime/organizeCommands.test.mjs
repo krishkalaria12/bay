@@ -8,6 +8,7 @@ import { executeOrganizeCommand, ORGANIZE_COMMAND_METHODS, parseOrganizeCommand 
 import { browserCommandResultKind } from "./userCommands.ts";
 
 const run = (store, command) => executeOrganizeCommand(store, parseOrganizeCommand(command));
+
 const shared = encodeSharedCollection({
   version: 1,
   kind: "folder",
@@ -17,6 +18,7 @@ const shared = encodeSharedCollection({
     { kind: "folder", title: "Nested", children: [{ kind: "link", title: "Two", url: "https://two.example/" }] },
   ],
 });
+
 function setup() {
   const store = createBrowserStore();
   const windowId = store.getState().createWindow({ url: "a.com" });
@@ -26,6 +28,7 @@ function setup() {
   const c = s().newTab(windowId, { url: "c.com", background: true });
   const privateWindow = s().createWindow({ incognito: true, url: "private.com" });
   const privateTab = activeTabId(s(), privateWindow);
+
   return { store, s, windowId, a, b, c, privateWindow, privateTab };
 }
 
@@ -58,15 +61,19 @@ test("organize parser closes every command and nested option object", () => {
     { method: "tidyTabs", windowId: "w" },
     { method: "restoreCleaned", windowId: "w", entryId: "e" },
   ];
+
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(ORGANIZE_COMMAND_METHODS));
+
   for (const command of commands) {
     const parsed = parseOrganizeCommand(command);
     assert.deepEqual(parsed, command);
     assert.notEqual(parsed, command);
     assert.throws(() => parseOrganizeCommand({ ...command, native: true }), { code: "invalid_request" });
+
     for (const key of ["options", "patch", "placement"])
       if (command[key]) assert.throws(() => parseOrganizeCommand({ ...command, [key]: { ...command[key], forged: 1 } }), { code: "invalid_request" });
   }
+
   for (const command of [
     { method: "cleanUpInactiveTabs" },
     { method: "closeAbandonedNewTabs" },
@@ -133,9 +140,11 @@ test("organize commands run group, folder, placement and cleanup reducers", () =
   assert.ok(entry);
   const restored = run(store, { method: "restoreCleaned", windowId, entryId: entry.id });
   assert.equal(s().tabs[restored].url, entry.tab.url);
-  // Tidy Tabs runs its reducer; the grouping itself is store/tidyTabs.test.mjs's.
-  assert.equal(run(store, { method: "tidyTabs", windowId }), null);
+  // Tidy Tabs runs its reducer and answers with the groups it made; the grouping itself is store/tidyTabs.test.mjs's.
+  assert.equal(run(store, { method: "tidyTabs", windowId }), 1);
+  assert.equal(browserCommandResultKind("tidyTabs"), "count");
   assert.equal(browserCommandResultKind("restoreCleaned"), "optionalId");
+
   for (const method of ["createGroup", "groupTabs", "duplicateGroup", "newTabInGroup", "newPinnedFolder"]) assert.equal(browserCommandResultKind(method), "id");
 });
 
@@ -151,6 +160,7 @@ test("organize commands reject references across private and space boundaries wi
   s().cleanUpTabs(privateWindow, { inactiveForMs: 0 });
   const privateEntry = s().privateCleanedTabs[privateWindow]?.at(-1);
   assert.ok(privateEntry);
+
   for (const command of [
     { method: "createGroup", tabIds: [a, privateTab] },
     { method: "groupTabs", tabIds: ["missing"] },
@@ -177,6 +187,7 @@ test("organize commands reject references across private and space boundaries wi
     assert.throws(() => run(store, command), { code: "invalid_request" }, JSON.stringify(command));
     assert.equal(s(), before, JSON.stringify(command));
   }
+
   assert.ok(run(store, { method: "restoreCleaned", windowId: privateWindow, entryId: privateEntry.id }));
 });
 
@@ -195,6 +206,7 @@ test("group ids are never empty acknowledgements", async () => {
 test("shared collections arrive as a validated token and become an unloaded folder in a public window", () => {
   const { store, s, windowId, privateWindow } = setup();
   assert.equal(browserCommandResultKind("addSharedCollection"), "id");
+
   for (const token of ["", "not a token!", "A".repeat(16_001)])
     assert.throws(() => parseOrganizeCommand({ method: "addSharedCollection", windowId, token }), { code: "invalid_request" }, token.slice(0, 20));
   assert.throws(() => parseOrganizeCommand({ method: "addSharedCollection", windowId, token: shared, collection: {} }), { code: "invalid_request" });

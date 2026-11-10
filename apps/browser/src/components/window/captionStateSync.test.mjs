@@ -4,11 +4,13 @@ import { captionState, emitWindowEvent, windowEventListeners } from "../../test-
 import { startCaptionStateSync } from "./captionStateSync.ts";
 
 let resolveQuery;
+
 beforeEach(() => {
   windowEventListeners.clear();
   captionState.query = (id) => {
     assert.equal(id, "caption");
     assert.equal(windowEventListeners.size, 1, "subscribe before querying");
+
     return new Promise((resolve) => (resolveQuery = resolve));
   };
 });

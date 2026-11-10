@@ -17,11 +17,15 @@ export const clearableTabs = (s: BrowserProjection, windowId: string, spaceId?: 
 
 export async function clearTabs(windowId: string) {
   const ids = clearableTabs(browserRead.getState(), windowId);
+
   if (!ids.length) return;
+
   if (!reduceMotion()) {
     const rects = (await Promise.all(ids.slice(0, CLEAR_MAX_ROWS).map((id) => measureRow(windowId, id)))).filter((r): r is Anchor => !!r);
+
     // The rows are drawn while they're snapshot, before they go.
     if (rects.length) await (isMac ? disintegrate(windowId, rects) : webDisintegrate(rects)).catch(() => {});
   }
+
   await cleanUpTabs(windowId, { inactiveForMs: 0 });
 }

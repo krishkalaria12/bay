@@ -3,7 +3,9 @@ import { requireNativeViewManager } from "@bay/platform/native";
 import * as v from "valibot";
 import { GRAIN_OPACITY, GRAIN_SCALE } from "./constants";
 import type { AreaLightProps, EdgeLightProps, PowerUpProps, Rect, WindowBackdropProps } from "./types";
+
 export { DIA_SPECTRUM } from "./constants";
+
 export type { Rect, AreaLightPalette, AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps } from "./types";
 
 type NativeAreaLightProps = Omit<AreaLightProps, "source" | "palette"> & { areaRect: number[]; palette?: string[] };

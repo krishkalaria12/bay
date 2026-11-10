@@ -216,6 +216,7 @@ test("scoped and engine views follow the installed runtime source and restore th
   let durable = 0;
   let live = 0;
   const stops = [quietStore.subscribe(() => durable++), tabLiveStore(id).subscribe(() => live++)];
+
   try {
     assert.equal(tabStore(id).getState().url, "https://remote.example");
     assert.strictEqual(useEngineView.getState().tabs, browserRead.getState().tabs);
@@ -232,6 +233,7 @@ test("scoped and engine views follow the installed runtime source and restore th
     stops.forEach((stop) => stop());
     restore();
   }
+
   assert.equal(tabStore(id).getState(), undefined);
   assert.strictEqual(useEngineView.getState().tabs, browserRead.getState().tabs);
 });

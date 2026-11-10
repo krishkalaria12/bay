@@ -14,9 +14,11 @@ import * as native from "../test-native-stub.mjs";
 const settle = async () => {
   for (let i = 0; i < 12; i++) await Promise.resolve();
 };
+
 const storeFor = (engine) => {
   const store = createBrowserStore();
   store.setState({ spaces: { local: { id: "local", name: "Local", color: "blue", icon: null, createdAt: 0, profileId: engine } }, spaceOrder: ["local"] });
+
   return store;
 };
 
@@ -25,11 +27,14 @@ test("history instances use their own shared-profile mappings and stop native ev
   native.historyDbs.clear();
   native.chromeVisit("engine-a", "https://a.example/", "A");
   native.chromeVisit("engine-b", "https://b.example/", "B");
+
   const original = useBrowser.getState(),
     a = storeFor("engine-a"),
     b = storeFor("engine-b");
+
   const first = createHistoryService(a),
     second = createHistoryService(b);
+
   try {
     first.start();
     second.start();
@@ -52,10 +57,12 @@ test("history instances use their own shared-profile mappings and stop native ev
 
 test("disposed history and bookmark reads cannot replace store state", async () => {
   native.docs.clear();
+
   for (const factory of [createHistoryService, createBookmarksService]) {
     const store = storeFor("late-engine"),
       service = factory(store),
       initial = store.getState();
+
     const loading = service.reload();
     await Promise.resolve();
     service.dispose();
@@ -67,16 +74,20 @@ test("disposed history and bookmark reads cannot replace store state", async () 
 test("bookmark instances read and write only their own store and engine", async () => {
   native.docs.clear();
   native.bookmarkDbs.clear();
+
   for (const [engine, id] of [
     ["marks-a", "a"],
     ["marks-b", "b"],
   ])
     native.chromeBookmarkEdit(engine, [{ op: "add", id: bookmarkUuidFor(id), k: "u", t: id, u: `https://${id}.example/`, a: 1, parent: "bar", index: 0 }]);
+
   const original = useBrowser.getState(),
     a = storeFor("marks-a"),
     b = storeFor("marks-b");
+
   const first = createBookmarksService(a),
     second = createBookmarksService(b);
+
   try {
     first.start();
     second.start();
@@ -97,16 +108,22 @@ test("bookmark instances read and write only their own store and engine", async 
 
 test("favicon caches and download queues belong to their browser instance", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
+
   const a = storeFor("icons-a"),
     b = storeFor("icons-b");
+
   const makeTab = (store) => {
     const w = store.getState().createWindow({ spaceId: "local", url: "https://page.example/" });
+
     return activeTabId(store.getState(), w);
   };
+
   const ta = makeTab(a),
     tb = makeTab(b);
+
   const first = createFaviconService(a, { downloadFavicon: async () => ({ uri: "data:a" }) });
   const second = createFaviconService(b, { downloadFavicon: async () => ({ uri: "data:b" }) });
+
   try {
     first.noteFavicon(ta, "https://icon.example/a");
     second.noteFavicon(tb, "https://icon.example/b");
@@ -124,16 +141,20 @@ test("favicon caches and download queues belong to their browser instance", asyn
 
 test("late favicon download after disposal cannot refill its cache", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
+
   const store = createBrowserStore(),
     w = store.getState().createWindow({ url: "https://late.example/" }),
     tab = activeTabId(store.getState(), w);
+
   let resolve;
+
   const service = createFaviconService(store, {
     downloadFavicon: () =>
       new Promise((r) => {
         resolve = r;
       }),
   });
+
   service.noteFavicon(tab, "https://icon.example/");
   service.dispose();
   resolve({ uri: "data:late" });
@@ -145,12 +166,16 @@ test("late favicon download after disposal cannot refill its cache", async (t) =
 test("profile cleanup disposal cancels delays without affecting another instance", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   native.deletedProfileData.length = 0;
+
   const a = createBrowserStore(),
     b = createBrowserStore();
+
   a.setState({ orphanedProfileData: ["discarded"] });
   b.setState({ orphanedProfileData: ["removed"] });
+
   const first = createProfileDataCleanup(a),
     second = createProfileDataCleanup(b);
+
   try {
     first.start();
     second.start();
@@ -174,6 +199,7 @@ test("history starts under the authority with JSON-safe complete and bounded vie
   native.chromeVisit("authority-history", "https://single.example/", "Single", 1000);
   const authority = createBrowserAuthority({ epoch: "history-epoch", store });
   const history = createHistoryService(store);
+
   try {
     history.start();
     await history.reload();
@@ -183,6 +209,7 @@ test("history starts under the authority with JSON-safe complete and bounded vie
 
     const db = native.chromeHistory("authority-history");
     db.clear();
+
     for (let i = 0; i < MAX_HISTORY; i++) db.set(`https://entry.example/${i}`, { title: String(i), visits: [1000 + i] });
     await history.reload();
     assert.equal(authority.getSnapshot().state.historyFloor.local, 1000);
@@ -225,12 +252,14 @@ test("a closed private tab's late favicon cannot repopulate its profile", async 
   const window = store.getState().createWindow({ incognito: true, url: "https://secret.example/" });
   const tab = activeTabId(store.getState(), window);
   let resolve;
+
   const service = createFaviconService(store, {
     downloadFavicon: () =>
       new Promise((r) => {
         resolve = r;
       }),
   });
+
   try {
     service.start();
     service.noteFavicon(tab, "https://icon.example/");
@@ -252,15 +281,19 @@ test("disposal before start does not strand a restarted service behind old work"
   native.chromeBookmarkEdit("restarted", [
     { op: "add", id: bookmarkUuidFor("restart"), k: "u", t: "Restart", u: "https://restart.example/", a: 1, parent: "bar", index: 0 },
   ]);
+
   for (const factory of [createHistoryService, createBookmarksService]) {
     const store = storeFor("restarted"),
       service = factory(store);
+
     const old = service.reload();
     service.dispose();
+
     try {
       service.start();
       await old;
       await service.reload();
+
       if (factory === createHistoryService) assert.equal(store.getState().history.local[0].title, "Restart");
       else assert.equal(store.getState().bookmarks.nodes[bookmarkUuidFor("restart")].title, "Restart");
     } finally {
@@ -276,6 +309,7 @@ test("a private favicon cached before disposal cannot survive a stopped-window c
   const { spaceId } = store.getState().windows[window];
   const tab = activeTabId(store.getState(), window);
   const service = createFaviconService(store, { downloadFavicon: async () => ({ uri: "data:private-cache" }) });
+
   try {
     service.start();
     service.noteFavicon(tab, "https://icon.example/private");

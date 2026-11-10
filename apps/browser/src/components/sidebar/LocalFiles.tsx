@@ -33,16 +33,21 @@ const fileRowId = (id: string, relativePath = "") => `file|${encodeURIComponent(
 function fileKeyboardRegistry(windowId: string, spaceId: string, enabled: boolean) {
   const rows = new Map<string, { row: SidebarKeyboardRow; position: number[] }>();
   let unregister: (() => void) | undefined;
+
   const publish = () => {
     const ordered = [...rows.values()].sort((a, b) => {
       for (let i = 0; i < Math.min(a.position.length, b.position.length); i++) {
         const delta = a.position[i]! - b.position[i]!;
+
         if (delta) return delta;
       }
+
       return a.position.length - b.position.length;
     });
+
     unregister = registerSidebarKeyboardRows(windowId, spaceId, "finderFiles", enabled ? ordered.map(({ row }) => row) : []);
   };
+
   return {
     set(row: SidebarKeyboardRow, position: number[]) {
       rows.set(row.id, { row, position });
@@ -57,6 +62,7 @@ function fileKeyboardRegistry(windowId: string, spaceId: string, enabled: boolea
     },
   };
 }
+
 const FileKeyboardContext = createContext<ReturnType<typeof fileKeyboardRegistry> | null>(null);
 
 /** Insert inside the pinned section, before tail:pinned. FinderDropZone wraps that section in dnd.tsx. */
@@ -73,9 +79,12 @@ export function LocalFiles({ windowId, spaceId: requestedSpace }: { windowId: st
     const sub = onWindowEvent((event) => {
       if (event.type === "focus" && event.id === windowId) refresh((value) => value + 1);
     });
+
     return () => sub.remove();
   }, [windowId]);
+
   if (privateWindow) return null;
+
   return (
     <FileKeyboardContext.Provider value={registry}>
       {pins.map((pin, index) => (
@@ -101,6 +110,7 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
         if (alive) setAccess({ status: "inaccessible" });
       },
     );
+
     return () => {
       alive = false;
     };
@@ -108,6 +118,7 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
   const available = access?.status === "available";
   // A reconnect may point at another local URL. Always use the native kind when available.
   const folder = available ? access.kind === "folder" : pin.kind === "folder";
+
   const reconnect = async () => {
     try {
       if (await reconnectLocalFile(pin.id)) setRetry((v) => v + 1);
@@ -115,9 +126,11 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
       setError("Couldn't grant access. Try again.");
     }
   };
+
   const open = async (relativePath = "") => {
     try {
       const result = await openLocalFile(windowId, pin.id, relativePath);
+
       if (result.status !== "available") setError(localFileStatusText(result));
       else {
         blurSidebar(windowId);
@@ -127,12 +140,16 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
       setError("Couldn't open this file. Try again.");
     }
   };
+
   const rename = async () => {
     const current = useBrowser.getState().localFiles[pin.id];
+
     if (!current) return;
     const name = await prompt({ title: "Rename Pin", value: current.name, confirmTitle: "Rename", windowId });
+
     if (name?.trim()) await dispatchBrowserCommand({ method: "renameLocalFile", id: pin.id, name });
   };
+
   const peek = (relativePath = "") => {
     void peekLocalFile(windowId, pin.id, relativePath).then(
       (result) => {
@@ -145,7 +162,9 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
       () => setError("Couldn't preview this file. Try again."),
     );
   };
+
   const rowId = fileRowId(pin.id);
+
   const menu = async () => {
     const choice = await showMenu([
       { id: "open", title: folder ? platformWords.openFolderTitle : "Open", enabled: available },
@@ -157,8 +176,11 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
       { id: "down", title: "Move Down" },
       { id: "remove", title: "Remove from Sidebar" },
     ]);
+
     const s = useBrowser.getState();
+
     if (!s.localFiles[pin.id]) return;
+
     if (choice === "remove") await dispatchBrowserCommand({ method: "removeLocalFile", id: pin.id });
     else if (choice === "open") void open();
     else if (choice === "reconnect") void reconnect();
@@ -167,11 +189,14 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
     else if (choice === "up" || choice === "down") {
       const pins = localFilePins(s, pin.spaceId);
       const index = pins.findIndex((p) => p.id === pin.id);
+
       if (choice === "up" && index > 0) await dispatchBrowserCommand({ method: "moveLocalFile", id: pin.id, beforeId: pins[index - 1]!.id });
+
       if (choice === "down" && index < pins.length - 1)
         await dispatchBrowserCommand({ method: "moveLocalFile", id: pin.id, beforeId: pins[index + 2]?.id ?? null });
     }
   };
+
   return (
     <View>
       <FileRow
@@ -201,6 +226,7 @@ function LocalFileBlock({ pin, windowId, revision, position }: { pin: LocalFileP
         depth={0}
         onPress={() => {
           if (!access) return;
+
           if (!available) void reconnect();
           else if (folder) reportBrowserCommand(dispatchBrowserCommand({ method: "setLocalFileExpanded", id: pin.id, expanded: !pin.expanded }));
           else void open();
@@ -258,14 +284,19 @@ function FolderContents({ pin, windowId, relativePath, depth, position, open, pe
         if (alive) setListing({ access: { status: "inaccessible" }, entries: [] });
       },
     );
+
     return () => {
       alive = false;
     };
   }, [pin.path, relativePath, retry]);
+
   if (!listing) return <FileNote text="Loading…" />;
+
   if (listing.access.status !== "available")
     return <FileNote text={localFileStatusText(listing.access)} action="Retry" onPress={() => setRetry((v) => v + 1)} />;
+
   if (!listing.entries.length) return <FileNote text="Empty folder" />;
+
   return (
     <>
       {listing.entries.map((entry, index) => (
@@ -279,6 +310,7 @@ function FileChild({ pin, windowId, entry, depth, position, open, peek }: Omit<F
   const [expanded, setExpanded] = useState(false);
   const folder = entry.kind === "folder";
   const parent = entry.relativePath.includes("/") ? entry.relativePath.slice(0, entry.relativePath.lastIndexOf("/")) : "";
+
   return (
     <>
       <FileRow
@@ -347,6 +379,7 @@ function FileRow({
   useLayoutEffect(() => () => registry?.remove(keyboardRow.id), [registry, keyboardRow.id]);
   const theme = useTheme();
   const metrics = useSidebarMetrics();
+
   return (
     <SidebarKeyboardRowView
       rowId={keyboardRow.id}
@@ -386,6 +419,7 @@ function FileRow({
 
 function FileNote({ text, action, onPress }: { text: string; action?: string; onPress?: () => void }) {
   const theme = useTheme();
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: 34, paddingRight: 8, paddingVertical: 4, gap: 5 }}>
       <Text style={{ color: theme.textSecondary, fontSize: 11, flex: 1 }}>{text}</Text>

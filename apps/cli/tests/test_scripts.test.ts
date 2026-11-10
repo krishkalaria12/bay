@@ -255,6 +255,7 @@ describe("Store", () => {
       writeFileSync(join(first, "value"), "new");
       writeFileSync(join(second, "value"), "old");
       const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+
       try {
         // Exercise the three-move Windows path on POSIX too. Filesystem and
         // FFI behavior still needs the same suite on a real Windows machine.
@@ -284,6 +285,7 @@ describe("Store", () => {
       writeFileSync(join(second, "value"), "old");
       writeFileSync(journal, JSON.stringify({ first: ".extension-new", second: "extension" }));
       renameSync(second, temporary);
+
       if (published) renameSync(first, second);
       store.lock();
       store.close();
@@ -308,6 +310,7 @@ describe("Store", () => {
     const started = join(root, "started");
     const acquired = join(root, "acquired");
     const source = new URL("../src/scriptsStore.ts", import.meta.url).href;
+
     const child = Bun.spawn(
       [
         process.execPath,
@@ -325,8 +328,10 @@ describe("Store", () => {
       ],
       { stdout: "ignore", stderr: "pipe" },
     );
+
     try {
       const deadline = Date.now() + 3000;
+
       while (!existsSync(started) && Date.now() < deadline) await Bun.sleep(20);
       expect(existsSync(started)).toBe(true);
       await Bun.sleep(100);
@@ -404,11 +409,13 @@ describe("Store", () => {
         throw new Error("record write failed");
       }
     }
+
     const script = join(root, "update.user.ts");
     writeFileSync(script, `// ==UserScript==\n// @name update\n// @match https://example.com/*\n// ==/UserScript==\nconsole.log('old');\n`);
     const store = new Store(root);
     store.open(true);
     store.lock();
+
     try {
       store.apply({ add: await build(script) });
       const original = readFileSync(join(store.path, "extension", "js", "update.js"), "utf8");

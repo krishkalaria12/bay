@@ -69,19 +69,24 @@ export function startNativeSync({
 }) {
   const stops: (() => void)[] = [];
   let disposed = false;
+
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
   if (shared) {
     stops.push(startChromeTabs({ store, shared: true })!);
+
     // On the Chrome-hosted desktop the coordinator is the one document that lives as long as Bay does, so the shortcut
     // and tray icon are its.
     if (!isMac) {
       startLittleBayAccess();
       startLittleBayPutAway();
+
       const opens = onCommand((e) => {
         if (e.command === "newLittleBay") reportBrowserCommand(openLittleBay());
+
         if (e.command === "newWindow") reportBrowserCommand(createWindow());
       });
+
       stops.push(() => opens.remove());
     }
   }
@@ -92,11 +97,13 @@ export function startNativeSync({
     stops.push(startSidebarMoveUndoSync());
     stops.push(startWindowCloseGuard());
     startExtensionsBridge();
+
     if (store === useBrowser) {
       startLittleBayAccess();
       startLittleBayPutAway();
     }
   }
+
   const urls = onOpenURLs(openExternalUrls);
   const downloads = onDownload((d) => store.getState().upsertDownload(d));
   stops.push(
@@ -111,8 +118,11 @@ export function startNativeSync({
 
   const appEvents = onAppEvent((e) => {
     const s = store.getState();
+
     if (e.type === "reopen") createWindow();
+
     if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
+
     if (e.type === "willQuit") {
       quitting = true;
       const attempt = ++quitAttempt;
@@ -131,13 +141,16 @@ export function startNativeSync({
           },
           async (error) => {
             console.error("Couldn't save app data before quitting", error);
+
             if (!isCurrent()) return;
             const quit = await quitAnyway(error, confirm);
+
             if (isCurrent()) return replyToTerminate(quit);
           },
         )
         .catch((error) => console.error("Couldn't reply to app shutdown", error));
     }
+
     if (e.type === "quitCancelled") {
       quitting = false;
       quitAttempt++;
@@ -152,8 +165,11 @@ export function startNativeSync({
 
   const windowEvents = onWindowEvent((e) => {
     const s = store.getState();
+
     if (e.type === "focus") s.setFocusedWindow(e.id);
+
     if (e.type === "frame") s.setWindowFrame(e.id, e.frame);
+
     if (e.type === "close") {
       if (quitting) return;
       windows.nativeClosed(e.id);
@@ -194,6 +210,7 @@ export function startNativeSync({
     // Dispatch the focused window last so it comes to front.
     const focused = s.ui.focusedWindowId;
     const order = s.windowOrder.filter((id) => id !== focused);
+
     if (focused && s.windows[focused]) order.push(focused);
     windows.sync(
       order.map((id) => {
@@ -203,6 +220,7 @@ export function startNativeSync({
         // each other profile its spaces show (WindowRegistry::BrowserFor), so a space switch never replaces the window.
         const profile = isMac || w.incognito ? engineProfile(w.spaceId) : "";
         const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.littleBaySize } : {};
+
         return { id, title, options: { ...nativeWindowPlacement(w), incognito: w.incognito, title, focus: id === focused, profile, ...small } };
       }),
       focused,
@@ -212,8 +230,10 @@ export function startNativeSync({
   let lastMenu = "";
   let lastBookmarkMenus: unknown[] = [];
   let menuTimer: ReturnType<typeof setTimeout> | undefined;
+
   const syncMenu = () => {
     menuTimer = undefined;
+
     if (!capabilities.menuBar) return;
     const state = menuState(store.getState());
     // The bookmark menus are cached per bookmarks tree (bookmarkMenus), so they compare by identity;
@@ -222,6 +242,7 @@ export function startNativeSync({
     const bookmarkMenus = [bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks];
     const json = JSON.stringify(rest);
     const bookmarksChanged = !bookmarkMenus.every((menu, i) => menu === lastBookmarkMenus[i]);
+
     if (json === lastMenu && !bookmarksChanged) return;
     lastMenu = json;
     lastBookmarkMenus = bookmarkMenus;
@@ -238,6 +259,7 @@ export function startNativeSync({
       if (!shared) syncWindows(s, prev);
     }),
   );
+
   if (capabilities.menuBar) stops.push(subscribeMenuInputs(() => void (menuTimer ??= setTimeout(syncMenu, 120))));
   stops.push(
     store.subscribe((s, prev) => {
@@ -262,20 +284,24 @@ export function startNativeSync({
       watch: (changed) => useCalendar.subscribe(changed),
     }),
   );
+
   if (!shared)
     void windowIds().then((ids) => {
       if (disposed) return;
       const s = store.getState();
+
       for (const id of ids) {
         if (!s.windows[id]) {
           if (!isUtilityWindowId(id)) void closeWindow(id);
           continue;
         }
+
         // One that already existed kept the title it had (openWindow leaves it be): send the current one.
         const title = windowTitle(s, id);
         void setWindowTitle(id, title);
       }
     });
+
   return {
     async reconcile(state: BrowserState) {
       if (disposed) return;
@@ -286,6 +312,7 @@ export function startNativeSync({
       disposed = true;
       clearTimeout(menuTimer);
       windows.dispose();
+
       for (const stop of stops.reverse()) stop();
     },
   };
@@ -327,7 +354,9 @@ const PAGE_COMMANDS = [
   "stop",
   "caretBrowsing",
 ];
+
 const INTERNAL_PAGE_COMMANDS = ["copyUrl", "copyUrlAsMarkdown", "bookmarkPage", "addBookmarkToFolder"];
+
 const WINDOW_COMMANDS = [
   ...PAGE_COMMANDS,
   "focusCommandBar",
@@ -368,14 +397,18 @@ function menuBookmarks(b: Bookmarks, folderId: string, depth = 0): MenuBookmark[
 }
 
 type BookmarkMenus = Pick<MenuState, "bookmarkFolders" | "recentBookmarks" | "bookmarksBar" | "otherBookmarks">;
+
 const bookmarkMenuCache = new WeakMap<Bookmarks, Map<string, BookmarkMenus>>();
 
 function bookmarkMenus(b: Bookmarks, spaceId: string): BookmarkMenus {
   let perProfile = bookmarkMenuCache.get(b);
+
   if (!perProfile) bookmarkMenuCache.set(b, (perProfile = new Map()));
   const cached = perProfile.get(spaceId);
+
   if (cached) return cached;
   const roots = b.roots[spaceId];
+
   const menus: BookmarkMenus = roots
     ? {
         bookmarkFolders: [
@@ -392,7 +425,9 @@ function bookmarkMenus(b: Bookmarks, spaceId: string): BookmarkMenus {
         otherBookmarks: menuBookmarks(b, roots.other),
       }
     : { bookmarkFolders: [], recentBookmarks: [], bookmarksBar: [], otherBookmarks: [] };
+
   perProfile.set(spaceId, menus);
+
   return menus;
 }
 
@@ -405,28 +440,43 @@ export function menuState(s: BrowserState): MenuState {
   const regularWindows = s.windowOrder.filter((id) => !s.windows[id]!.incognito && s.windows[id]!.kind !== "small");
 
   const disabled: string[] = [];
+
   if (!tab || !splitOf(s, tab.id)) disabled.push("focusNextPane", "focusPreviousPane", "removeFromSplit");
+
   if (w && (w.tabLayout ?? s.settings.tabLayout) === "top") disabled.push("toggleAddressBar");
+
   if (!w) disabled.push(...WINDOW_COMMANDS, "toggleTabLayout", "openSplitPane");
   else {
     if (!tab?.url) disabled.push(...PAGE_COMMANDS);
     else if (isInternalTab(tab)) disabled.push(...PAGE_COMMANDS.filter((c) => !INTERNAL_PAGE_COMMANDS.includes(c)));
+
     if (!tab || !canGoBack(tab.id, live ?? IDLE_LIVE)) disabled.push("back");
+
     if (!tab || !canGoForward(tab.id, live ?? IDLE_LIVE)) disabled.push("forward");
+
     if (!live?.isLoading) disabled.push("stop");
+
     if (w.incognito) disabled.push("moveTabToSpace", "moveTabToWindow", "switchSpace", "nextSpace", "previousSpace");
     else if (tab) disabled.push(`moveTabToSpace:${tab.spaceId}`);
+
     if (regularWindows.length < 2) disabled.push("mergeAllWindows");
   }
+
   if (!s.closedTabs.length && !s.closedWindows.length && !s.closedGroups.length) disabled.push("reopenClosedTab");
+
   if (!s.closedWindows.length) disabled.push("reopenClosedWindow");
 
   const checked = [`setAppearance:${s.settings.appearance}`];
+
   if (s.settings.showFullUrl) checked.push("toggleFullUrl");
+
   if (s.settings.addressBar === "sidebar") checked.push("toggleAddressBar");
+
   if (s.settings.sidebarPosition === "right") checked.push("toggleSidebarPosition");
   checked.push(`setBookmarksBar:${s.settings.bookmarksBar}`);
+
   if ((w?.tabLayout ?? s.settings.tabLayout) === "sidebar") checked.push("toggleTabLayout");
+
   if (w && !w.sidebarOpen) checked.push("toggleSidebar");
 
   const titles: Record<string, string> = {};
@@ -443,12 +493,14 @@ export function menuState(s: BrowserState): MenuState {
 
   if (!s.settings.openLinksInLittleBay) titles.toggleOpenLinksInLittleBay = "Open Links from Other Apps in Little Bay";
   const meeting = meetingToJoin();
+
   if (meeting) titles.joinMeeting = `Join “${meeting.title || "Untitled event"}”`;
   else disabled.push("joinMeeting");
 
   const sidebar = sidebarMenuState(s, windowId);
   disabled.push(...sidebar.disabled);
   Object.assign(titles, sidebar.titles);
+
   if (w?.kind === "small") {
     disabled.push(...LITTLE_BAY_DISABLED_COMMANDS);
     // ⌘O is Open File in a main window and Open in Bay in Little Bay, as in Little Arc.
@@ -482,9 +534,11 @@ export function menuState(s: BrowserState): MenuState {
 
 function isInTree(b: Bookmarks, id: string, roots: string[]): boolean {
   let node = b.nodes[id];
+
   for (let i = 0; node && i < 64; i++) {
     if (roots.includes(node.id)) return true;
     node = node.parentId ? b.nodes[node.parentId] : undefined;
   }
+
   return false;
 }

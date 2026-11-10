@@ -15,6 +15,7 @@ test("remote windows cannot start boosts persistence, style timers or unsupporte
     timers++;
     throw new Error("a remote feature started a timer");
   };
+
   try {
     assert.equal(boostsAvailable(), false);
     ensureBoostsLoaded();

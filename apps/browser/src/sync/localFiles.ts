@@ -19,7 +19,9 @@ export function localFilesAdapter(spaceId: string): Adapter {
     prefix: "file:",
     extract: (base) => {
       const s = syncStore().getState();
+
       if (!s.spaces[spaceId] || isIncognitoSpace(spaceId)) return null;
+
       const pins = Object.values(normalizeLocalFiles(s.localFiles, s.spaces))
         .filter((pin) => pin.spaceId === spaceId)
         .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
@@ -32,6 +34,7 @@ export function localFilesAdapter(spaceId: string): Adapter {
           return validPosition(pos) ? pos : undefined;
         }),
       );
+
       return {
         values: new Map(
           pins.map((pin, index) => [`file:${pin.id}`, { p: pin.path, n: pin.name, k: pin.kind, a: pin.createdAt, pos: positions[index]! } satisfies FileValue]),
@@ -40,6 +43,7 @@ export function localFilesAdapter(spaceId: string): Adapter {
     },
     apply: (visible, changed) => {
       const s = syncStore().getState();
+
       if (!s.spaces[spaceId] || isIncognitoSpace(spaceId)) return false;
       const localFiles = { ...s.localFiles };
       const incoming: { pin: LocalFilePin; pos: string }[] = [];
@@ -61,15 +65,20 @@ export function localFilesAdapter(spaceId: string): Adapter {
           },
           s.spaces,
         )[id];
+
         if (pin) incoming.push({ pin, pos: record.pos });
       }
+
       incoming.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.pin.id.localeCompare(b.pin.id)));
+
       // A malformed record does not erase a valid pin. Only a sync tombstone removes one.
       for (const key of changed) {
         if (!key.startsWith("file:") || visible.has(key)) continue;
         const id = key.slice(5);
+
         if (localFiles[id]?.spaceId === spaceId) delete localFiles[id];
       }
+
       incoming.forEach(({ pin }, order) => {
         localFiles[pin.id] = { ...pin, order };
       });

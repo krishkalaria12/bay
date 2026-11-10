@@ -71,6 +71,8 @@ export function splitOf<S extends Pick<BrowserState, "splits"> | Pick<BrowserPro
   tabId: string | undefined,
 ): S["splits"][string] | undefined {
   if (!tabId) return undefined;
+
+  // SAFETY: the checks above established this shape.
   return splitIndex(s.splits).get(tabId)?.[0] as S["splits"][string] | undefined;
 }
 

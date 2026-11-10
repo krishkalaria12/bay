@@ -22,6 +22,7 @@ const handedOff = new Map<string, string>();
 /** The tab's page outlives its current view (a view going, or the tab leaving its window). */
 export function handOff(tabId: string, profile: string) {
   handedOff.set(tabId, profile);
+
   if (!pageFactsInCoordinator()) prepareTabTransfer(tabId);
 }
 
@@ -42,6 +43,7 @@ export function startTabPages() {
 
       if (kept !== undefined && !(wantsPage(tab) && profile === kept)) {
         handedOff.delete(id);
+
         if (!pageFactsInCoordinator()) releaseTabTransfer(id);
       }
     }

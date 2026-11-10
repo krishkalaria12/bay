@@ -40,16 +40,19 @@ const stepAfter = (step: OnboardingStep, delta: number) => STEPS[STEPS.indexOf(s
 // The step is saved as it shows, so a relaunch picks up where you were.
 export function goToStep(step: OnboardingStep) {
   useOnboarding.setState({ step });
+
   if (step !== "intro") save({ step });
 }
 
 function advance(step: OnboardingStep, picked: string[] | undefined) {
   const all = { ...useOnboarding.getState().picked };
+
   if (picked?.length) all[step] = picked;
   else delete all[step];
   useOnboarding.setState({ picked: all });
   save({ picked: all });
   const after = stepAfter(step, 1);
+
   if (after) goToStep(after);
   else finishOnboarding();
 }
@@ -68,6 +71,7 @@ export const skipStep = () => advance(useOnboarding.getState().step, undefined);
 
 export function previousStep() {
   const before = stepAfter(useOnboarding.getState().step, -1);
+
   if (before && before !== "intro") goToStep(before);
 }
 
@@ -119,11 +123,13 @@ export const saveIntroMusicMuted = (muted: boolean) => save({ introMusicMuted: m
 
 export function startOnboarding(windowId?: string | null, step: OnboardingStep = "intro", picked: OnboardingState["picked"] = {}) {
   const id = resolveWindowId(useBrowser.getState(), windowId);
+
   if (!id) return;
   endToolTour();
   // A build without the intro starts at the first setup step.
   const first = step === "intro" && !capabilities.introScreen ? FIRST_STEP : step;
   useOnboarding.setState((s) => ({ windowId: id, step: first, picked, leaving: false, tourAfter: false, session: s.session + 1 }));
+
   if (first !== "intro") save({ step: first });
 }
 
@@ -131,13 +137,16 @@ export function finishOnboarding(options: { tour?: boolean } = {}) {
   markCompleted();
   stopIntroMusic(0.6);
   const { windowId } = useOnboarding.getState();
+
   if (windowId) useOnboarding.setState({ leaving: true, tourAfter: !!options.tour });
 }
 
 export function dismissOnboarding(session: number) {
   const { session: current, windowId, tourAfter } = useOnboarding.getState();
+
   if (current !== session) return;
   useOnboarding.setState({ windowId: null, step: capabilities.introScreen ? "intro" : FIRST_STEP, leaving: false, tourAfter: false, picked: {} });
+
   if (tourAfter && windowId) startToolTour(windowId);
 }
 
@@ -149,9 +158,13 @@ export function maybeStartOnboarding({
   start = (step, picked) => startOnboarding(null, step, picked),
 }: { returning?: boolean; start?: (step: OnboardingStep, picked: OnboardingState["picked"]) => void } = {}) {
   const saved = readSaved();
+
   if (saved?.completedAt) return;
+
   if (saved?.startedAt) return start(resumableStep(saved), saved.picked ?? {});
+
   if (returning) return markCompleted();
+
   if (__DEV__ && launchEnvironment("BAY_ONBOARDING") !== "1") return;
   save({ startedAt: Date.now() });
   start("intro", {});
@@ -160,6 +173,7 @@ export function maybeStartOnboarding({
 /** The coordinator's request, in the window it named. A reloaded window goes on from its saved step. */
 export function startRequestedOnboarding(windowId: string, step: OnboardingStep, picked: OnboardingState["picked"]) {
   const saved = readSaved();
+
   if (saved?.completedAt || useOnboarding.getState().windowId === windowId) return;
   startOnboarding(windowId, saved?.step ? resumableStep(saved) : step, saved?.picked ?? picked);
 }

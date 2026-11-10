@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 globalThis.__DEV__ = false;
+
 const { createBrowserStore, useBrowser } = await import("../store/browserStore.ts");
 const { startServiceStateOwner, installServiceState } = await import("./serviceState.ts");
 const { executeServiceCommand } = await import("./serviceExecutor.ts");
 const { parseServiceCommand } = await import("./serviceCommands.ts");
 const { live, setLive, setLiveView } = await import("../activity/activityStore.ts");
 const command = (action, args = []) => parseServiceCommand({ method: "serviceAction", action, args });
+
 test("coordinator snapshots detach remote mirrors and stop publishing", () => {
   const browser = createBrowserStore();
   browser.getState().hydrate({});
@@ -29,12 +32,14 @@ test("coordinator snapshots detach remote mirrors and stop publishing", () => {
   setLiveView("showAll", "detached", true);
   assert.equal(snapshot.live.showAll.detached, undefined);
 });
+
 test("service browser mutations use the explicit authority and reject private requests", async () => {
   const browser = createBrowserStore();
   browser.getState().hydrate({});
   const windowId = browser.getState().createWindow();
   const stop = startServiceStateOwner(browser, { restore: false });
   const singleton = useBrowser.getState();
+
   try {
     setLive({ accounts: {}, folders: {}, folderOrder: [], items: {}, status: {}, unread: {}, known: {}, completing: {}, completed: {} });
     const folderId = await executeServiceCommand(browser, command("liveCreate", [windowId, "documents"]));

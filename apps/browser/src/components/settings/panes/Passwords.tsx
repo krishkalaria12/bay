@@ -36,6 +36,7 @@ import { platformWords } from "../../../lib/platformWords";
 // 1Password connects to a browser it has been told to trust, and only to one installed in Applications.
 function passwordManagerAppsNote() {
   const apps = `1Password, Bitwarden, KeePassXC and Proton Pass extensions connect to their ${platformWords.desktopApps}.`;
+
   return systemInfo().inApplicationsFolder === false
     ? `${apps} For 1Password, move Bay to your Applications folder and reopen it (1Password only connects to browsers there), then in the 1Password app open Settings › Browser › Add Browser and choose it.`
     : `${apps} For 1Password, add Bay once: in the 1Password app, open Settings › Browser › Add Browser and choose Bay.`;
@@ -67,6 +68,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
       .then(setNever)
       .catch(() => {});
   };
+
   useEffect(() => {
     if (unlocked) load();
   }, [unlocked, spaceId]);
@@ -89,9 +91,12 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
 
   const importCsv = async () => {
     const mod = importModule();
+
     if (!mod) return setImportStatus("Importing isn't available in this build.");
     const path = await mod.chooseImportFile("passwordsCSV");
+
     if (!path) return;
+
     try {
       const saved = await saveImported(profile, await mod.importPasswordsCSV(path));
       setImportStatus(`Imported ${plural(saved, "password")}.`);
@@ -105,6 +110,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
   const exportCsv = async () => {
     const { status, path } = await exportPasswords(profile);
     const folder = path ? path.split(/[\\/]/).slice(-2, -1)[0] : "";
+
     if (status === "succeeded") setExportStatus(`Saved to “${folder}”. Delete the file once you're done with it.`);
     else if (status === "writeFailed") setExportStatus("Couldn't write the file. Try another folder.");
     else if (status === "inProgress") setExportStatus("An export is already running.");
@@ -202,12 +208,15 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
 // The imported passwords saved: those with a site and a password.
 async function saveImported(profile: string, creds: { url: string; username: string; password: string }[]): Promise<number> {
   let saved = 0;
+
   for (const c of creds) if (c.url && c.password && (await savePassword(profile, originOf(c.url), c.username, c.password))) saved++;
+
   return saved;
 }
 
 function originOf(url: string) {
   const m = /^([a-z][a-z0-9+.-]*:\/\/[^/?#]+)/i.exec(url);
+
   return m ? m[1]! : url;
 }
 
@@ -227,6 +236,7 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
     onChanged();
     closeSettingsSheet();
   };
+
   const remove = async () => {
     const { confirmed } = await confirm({
       title: `Delete the password for ${hostLabel(saved.origin)}?`,
@@ -234,6 +244,7 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
       confirmTitle: "Delete",
       destructive: true,
     });
+
     if (!confirmed) return;
     await deletePassword(profile, saved.origin, saved.username);
     onChanged();

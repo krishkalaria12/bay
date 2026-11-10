@@ -6,6 +6,7 @@ import { quoteCards } from "../../../../../packages/desktop/src/quoteCard.web.ts
 const original = globalThis.OffscreenCanvas;
 const drawings = [];
 const measureText = (text) => ({ width: Array.from(text).length * 10 });
+
 class Canvas {
   constructor(width, height) {
     this.width = width;
@@ -29,19 +30,24 @@ class Canvas {
   }
   async convertToBlob(options) {
     assert.equal(options.type, "image/png");
+
     return new Blob([new Uint8Array([137, 80, 78, 71])]);
   }
 }
+
 globalThis.OffscreenCanvas = Canvas;
+
 after(() => {
   globalThis.OffscreenCanvas = original;
 });
+
 const card = { text: "Selected passage", title: "Source title", url: "https://example.test/page#:~:text=Selected", colors: ["#31587a"], dark: false };
 
 test("quote cards reject empty, oversized and non-web sources", () => {
   for (const fields of [{ text: "  " }, { text: "x".repeat(4001) }, { url: "file:///tmp/secret" }, { url: "javascript:alert(1)" }, { url: "https://" }]) {
     assert.equal(renderQuoteCard({ ...card, ...fields }), null);
   }
+
   assert.equal(renderQuoteCard({ ...card, text: "x\n".repeat(1500) }), null, "many short lines cannot allocate an enormous image");
 });
 
@@ -75,6 +81,7 @@ test("copying a web quote sends PNG bytes and its exact text-fragment URL togeth
   const previous = globalThis.nnTestNativeModules;
   const calls = [];
   globalThis.nnTestNativeModules = { BayShell: { copyImage: async (...args) => (calls.push(args), true) } };
+
   try {
     assert.equal(await quoteCards.copy(card), true);
     assert.deepEqual(calls, [["iVBORw==", card.url]]);

@@ -9,6 +9,7 @@ export type CaptureSource = {
   viewportHeight?: number;
   profileId?: string;
 };
+
 export type EaselItem = {
   id: string;
   kind: "image" | "text" | "link" | "pen" | "rect" | "ellipse" | "arrow";
@@ -26,6 +27,7 @@ export type EaselItem = {
   source?: CaptureSource;
   live?: boolean;
 };
+
 export type EaselDocument = {
   id: string;
   title: string;
@@ -36,6 +38,7 @@ export type EaselDocument = {
   spaceId: string;
   nativeEditId?: string;
 };
+
 export type LibraryMedia = {
   id: string;
   name: string;

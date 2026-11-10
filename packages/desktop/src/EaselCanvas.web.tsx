@@ -76,6 +76,7 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
 
   function imageFor(path: string) {
     const known = images.current.get(path);
+
     if (known !== undefined) return known;
     const image = new Image();
     images.current.set(path, null);
@@ -83,38 +84,47 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
       images.current.set(path, image);
       paint();
     };
+
     image.src = libraryImageUri(path);
+
     return null;
   }
 
   function draw() {
     const element = canvas.current;
     const context = element?.getContext("2d");
+
     if (!element || !context) return;
     const { width, height } = element.getBoundingClientRect();
     const scale = window.devicePixelRatio || 1;
+
     if (element.width !== Math.round(width * scale) || element.height !== Math.round(height * scale)) {
       element.width = Math.round(width * scale);
       element.height = Math.round(height * scale);
     }
+
     context.setTransform(scale, 0, 0, scale, 0, 0);
     context.fillStyle = easel.document.background || (latest.current.dark ? "#1A1A1A" : "#FFFFFF");
     context.fillRect(0, 0, width, height);
     context.save();
     context.scale(easel.zoom, easel.zoom);
     context.translate(-easel.viewport.x, -easel.viewport.y);
+
     for (const item of easel.items) drawItem(context, item, imageFor);
+
     if (easel.draft) drawItem(context, easel.draft, imageFor);
     context.restore();
     context.strokeStyle = ACCENT;
     context.lineWidth = 1;
     const selected = easel.selectedBounds;
+
     if (selected) {
       const origin = easel.screen(selected);
       const w = selected.width * easel.zoom;
       const h = selected.height * easel.zoom;
       context.strokeRect(origin.x, origin.y, w, h);
       context.fillStyle = "#FFFFFF";
+
       for (const [x, y] of [
         [origin.x, origin.y],
         [origin.x + w, origin.y],
@@ -125,18 +135,21 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
         context.strokeRect(x - 4, y - 4, 8, 8);
       }
     }
+
     if (easel.marquee) {
       const { x, y, width: w, height: h } = easel.marquee;
       context.fillStyle = "rgba(10, 132, 255, 0.08)";
       context.fillRect(x, y, w, h);
       context.strokeRect(x, y, w, h);
     }
+
     element.style.cursor = easel.cursor;
   }
 
   function openEditor(item: EaselItem, key: "text" | "url") {
     closeEditor();
     const host = box.current;
+
     if (!host) return;
     const rect = itemRect(item);
     const at = easel.screen(rect);
@@ -152,6 +165,7 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
     input.value = String(item[key] ?? "");
     input.addEventListener("keydown", (event) => {
       event.stopPropagation();
+
       if (event.key === "Escape") {
         event.preventDefault();
         easel.cancelEditor();
@@ -177,22 +191,27 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
 
   const pointAt = (event: { clientX: number; clientY: number }): Point => {
     const rect = box.current!.getBoundingClientRect();
+
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   };
 
   async function paste(data: DataTransfer | null, at?: Point) {
     if (!data) return false;
     const items = data.getData(CLIPBOARD_TYPE);
+
     if (items && easel.pasteItems(items, at)) return true;
     const files = [...data.files].filter((file) => file.type.startsWith("image/"));
+
     if (files.length) {
       const retained = await Promise.all(files.map((file) => imageFiles.retainBlob(file)));
       easel.insertImages(
         retained.filter((image): image is RetainedImage => !!image),
         at,
       );
+
       return true;
     }
+
     return easel.pasteText(data.getData("text/uri-list").split("\n")[0] || data.getData("text/plain"), at);
   }
 
@@ -201,12 +220,16 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
     try {
       for (const item of await navigator.clipboard.read()) {
         const type = item.types.find((t) => t.startsWith("image/"));
+
         if (type) {
           const image = await imageFiles.retainBlob(await item.getType(type));
+
           if (image) easel.insertImages([image], at);
+
           return;
         }
       }
+
       easel.pasteText(await navigator.clipboard.readText(), at);
     } catch (error) {
       console.error("Couldn't read the clipboard", error);
@@ -215,19 +238,23 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
 
   function copy(data: DataTransfer | null) {
     const copied = easel.copySelection();
+
     if (!copied || !data) return false;
     data.setData(CLIPBOARD_TYPE, copied.items);
+
     if (copied.plain) data.setData("text/plain", copied.plain);
+
     return true;
   }
 
   async function copyFromMenu() {
     const copied = easel.copySelection();
+
     if (!copied) return;
     await navigator.clipboard.write([
       new ClipboardItem({
         [CLIPBOARD_TYPE]: new Blob([copied.items], { type: "application/x-bay-easel" }),
-        ...(copied.plain ? { "text/plain": new Blob([copied.plain], { type: "text/plain" }) } : {}),
+        ...(copied.plain ? { "text/plain": new Blob([copied.plain], { type: "text/plain" }) } : undefined),
       }),
     ]);
   }
@@ -235,6 +262,7 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
   async function contextMenu(point: Point) {
     easel.menuAt(point);
     const choice = await showMenu(easel.menu);
+
     if (choice === "copy") await copyFromMenu();
     else if (choice === "cut") {
       await copyFromMenu();
@@ -246,8 +274,10 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
   useEffect(() => {
     const host = box.current;
     const element = canvas.current;
+
     if (!host || !element) return;
     let pressed = false;
+
     const down = (event: PointerEvent) => {
       if (event.button === 2) return;
       event.preventDefault();
@@ -256,61 +286,77 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
       element.setPointerCapture(event.pointerId);
       easel.pointerDown(pointAt(event), { ...modifiers(event), button: event.button, clickCount: event.detail });
     };
+
     const move = (event: PointerEvent) => {
       if (pressed) easel.pointerMove(pointAt(event), modifiers(event));
     };
+
     const up = () => {
       if (!pressed) return;
       pressed = false;
       easel.pointerUp();
     };
+
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
+
       if (event.ctrlKey || event.altKey) easel.zoomBy(Math.exp(-event.deltaY * 0.01), pointAt(event));
       else {
         const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
         easel.scroll({ x: event.deltaX * unit, y: event.deltaY * unit });
       }
     };
+
     const key = (event: KeyboardEvent) => {
       if (field.current) return;
+
       if (easel.keyDown({ key: event.key, ...modifiers(event) })) {
         event.preventDefault();
         event.stopPropagation();
       }
     };
+
     const keyUp = (event: KeyboardEvent) => easel.keyUp(event.key);
     const blur = () => easel.blur();
+
     const onCopy = (event: ClipboardEvent) => {
       if (!field.current && copy(event.clipboardData)) event.preventDefault();
     };
+
     const onCut = (event: ClipboardEvent) => {
       if (field.current || !copy(event.clipboardData)) return;
       event.preventDefault();
       easel.deleteSelection();
     };
+
     const onPaste = (event: ClipboardEvent) => {
       if (field.current) return;
       event.preventDefault();
       void paste(event.clipboardData);
     };
+
     const over = (event: DragEvent) => {
       event.preventDefault();
+
       if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
     };
+
     const drop = (event: DragEvent) => {
       event.preventDefault();
       void paste(event.dataTransfer, easel.world(pointAt(event)));
     };
+
     const menu = (event: MouseEvent) => {
       event.preventDefault();
       host.focus();
       void contextMenu(pointAt(event));
     };
+
     const resized = new ResizeObserver(() => {
       easel.commitText();
       easel.emit();
     });
+
     resized.observe(host);
     element.addEventListener("pointerdown", down);
     element.addEventListener("pointermove", move);
@@ -326,6 +372,7 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
     host.addEventListener("dragover", over);
     host.addEventListener("drop", drop);
     host.addEventListener("contextmenu", menu);
+
     return () => {
       resized.disconnect();
       cancelAnimationFrame(frame.current);
@@ -370,10 +417,12 @@ function EaselCanvasView({ document, tool, color, lineWidth, dark, onEaselChange
       fit: async () => easel.fit(),
       export: async () => {
         easel.commitText();
+
         return imageFiles.exportPNG(easel.document);
       },
       prepareShare: async (title) => {
         easel.commitText();
+
         return imageFiles.prepareShare(easel.document, title);
       },
       addText: async (text) => easel.addText(text),

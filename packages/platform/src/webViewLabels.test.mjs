@@ -34,8 +34,10 @@ class Node {
     this.ownerDocument.body.mounted = null;
   }
 }
+
 const documentWith = () => {
   const styles = new Map();
+
   const document = {
     head: { appendChild: (style) => styles.set(style.id, style) },
     documentElement: {
@@ -58,7 +60,9 @@ const documentWith = () => {
     removeEventListener() {},
     styles,
   };
+
   document.body = new Node(document);
+
   return document;
 };
 

@@ -6,32 +6,43 @@ import { installNativeTransport } from "../../../../packages/platform/src/native
 // Exercise the real web binding and generated contract, rather than the app's
 // native stub, so optional capability advertisement participates in startup.
 const native = new URL("../../../../packages/platform/src/native.web.ts", import.meta.url).href;
+
 registerHooks({
   resolve(specifier, context, next) {
     return specifier === "@bay/platform/native" ? { url: native, shortCircuit: true } : next(specifier, context);
   },
 });
+
 const info = { contractVersion: 2, platform: "windows", modules: ["BayCEF"], views: [], constants: {}, optionalMethods: [] };
+
 const calls = [],
   listeners = new Map();
+
 let denied = false;
+
 const connection = installNativeTransport({
   getHostInfo: () => info,
   async invoke(module, method, args) {
     calls.push({ module, method, args });
+
     if (denied) return JSON.stringify({ error: { code: "forbidden", message: "Only the coordinator may subscribe" } });
+
     if (method === "startPageEvents")
       for (const [listener, event] of listeners) listener(event === "onPageEvent" ? { tabId: "native-tab" } : { offerId: "native-offer" });
+
     return JSON.stringify({ value: null });
   },
   subscribe(module, event, listener) {
     assert.equal(module, "BayCEF");
     assert.ok(event === "onPageEvent" || event === "onPageOpen");
     listeners.set(listener, event);
+
     return { remove: () => listeners.delete(listener) };
   },
 });
+
 after(() => connection.remove());
+
 const { onPageEvent, onPageOpen, finishPageOpen, startPageEvents, stopPageEvents } = await import("../../../../packages/chromium/src/pageEvents.ts");
 
 test("coordinator page startup requires advertised native support and subscribes before replay", async () => {

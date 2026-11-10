@@ -1,3 +1,4 @@
+import { checked } from "../lib/checked";
 import { Pressable, TextInput, View } from "@bay/platform";
 import { setDialogPresenter, Surface, type ConfirmOptions, type ConfirmResult, type PromptOptions } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
@@ -22,9 +23,12 @@ let nextId = 1;
 // The window named, else the focused one: null when no window in this document shows dialogs (the system's then).
 function targetWindow(windowId: string | undefined): string | null {
   const { hosts } = useDialogs.getState();
+
   if (windowId) return hosts[windowId] ? windowId : null;
   const focused = browserRead.getState().ui.focusedWindowId;
+
   if (focused && hosts[focused]) return focused;
+
   return Object.keys(hosts).find((id) => hosts[id]) ?? null;
 }
 
@@ -34,12 +38,16 @@ const dequeue = (id: number) => useDialogs.setState((s) => ({ requests: s.reques
 setDialogPresenter({
   confirm(options) {
     const windowId = targetWindow(options.windowId);
+
     if (!windowId) return null;
+
     return new Promise((resolve) => enqueue({ id: nextId++, windowId, kind: "confirm", options, resolve }));
   },
   prompt(options) {
     const windowId = targetWindow(options.windowId);
+
     if (!windowId) return null;
+
     return new Promise((resolve) => enqueue({ id: nextId++, windowId, kind: "prompt", options, resolve }));
   },
 });
@@ -50,24 +58,30 @@ export function AppDialogHost({ windowId }: { windowId: string }) {
   const request = useDialogs((s) => s.requests.find((r) => r.windowId === windowId) ?? null);
   useEffect(() => {
     useDialogs.setState((s) => ({ hosts: { ...s.hosts, [windowId]: (s.hosts[windowId] ?? 0) + 1 } }));
+
     return () => {
       const remaining = (useDialogs.getState().hosts[windowId] ?? 1) - 1;
+
       if (remaining > 0) return void useDialogs.setState((s) => ({ hosts: { ...s.hosts, [windowId]: remaining } }));
       // A window that goes answers what it was asking: no.
       const orphans = useDialogs.getState().requests.filter((r) => r.windowId === windowId);
       useDialogs.setState((s) => {
         const hosts = { ...s.hosts };
         delete hosts[windowId];
+
         return { hosts, requests: s.requests.filter((r) => r.windowId !== windowId) };
       });
       orphans.forEach(cancelled);
     };
   }, [windowId]);
+
   if (!request) return null;
+
   const finish = (answer: (request: Request) => void) => {
     dequeue(request.id);
     answer(request);
   };
+
   return <AppDialog key={request.id} request={request} finish={finish} />;
 }
 
@@ -80,7 +94,9 @@ function AppDialog({ request, finish }: { request: Request; finish: (answer: (re
   const keys = useRef<View>(null);
   const input = useRef<TextInput>(null);
   useEffect(() => {
-    const t = setTimeout(() => (prompt ? input.current?.focus() : (keys.current as unknown as { focus?: () => void } | null)?.focus?.()), 50);
+    // SAFETY: the checks above established this shape.
+    const t = setTimeout(() => (prompt ? input.current?.focus() : checked<{ focus?: () => void } | null>(keys.current)?.focus?.()), 50);
+
     return () => clearTimeout(t);
   }, []);
   const cancel = () => finish(cancelled);
@@ -171,8 +187,11 @@ const DESTRUCTIVE = "#D9271C";
 
 function buttonFill(primary: "default" | "destructive" | undefined, dark: boolean, hovered: boolean, accent: string) {
   if (primary === "destructive") return DESTRUCTIVE;
+
   if (primary) return accent;
+
   if (dark) return hovered ? "#3A3A3C" : "#2C2C2E";
+
   return hovered ? "rgba(0,0,0,0.1)" : "rgba(0,0,0,0.06)";
 }
 
@@ -182,6 +201,7 @@ function DialogButton({ title, keyCap, primary, onPress }: { title: string; keyC
   const { hovered, hoverProps } = useHover();
   const fill = buttonFill(primary, dark, hovered, theme.accent);
   const ink = primary ? "#FFFFFF" : theme.textPrimary;
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>

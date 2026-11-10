@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { LittleBayShortcut } from "../../store/settings";
 import type { BrowserProjection } from "../../runtime/projection";
+
 type ReadShortcut = BrowserProjection["settings"]["littleBayShortcut"];
 
 // Little Bay from any app (packages/shell LittleBayAccess.swift), as Little Arc's: a shortcut and a menu bar button,

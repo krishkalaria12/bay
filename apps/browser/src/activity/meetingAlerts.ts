@@ -19,14 +19,18 @@ const notified = new Set<string>();
 
 export function alertEvent(now = Date.now()): CalendarEvent | null {
   const lead = ALERT_LEADS.find((l) => l.value === live().calendar.alertLead)?.minutes;
+
   if (lead === null || lead === undefined) return null;
+
   return dueAlerts(useCalendar.getState().events, now, lead, new Set(live().dismissedAlerts))[0] ?? null;
 }
 
 function check() {
   const event = alertEvent();
   const current = useMeetingAlert.getState().event;
+
   if (event?.occurrence !== current?.occurrence) useMeetingAlert.setState({ event });
+
   if (!event || appActive || live().calendar.alertCondition !== "always" || notified.has(event.occurrence)) return;
   notified.add(event.occurrence);
   const link = joinLink(event);
@@ -42,6 +46,7 @@ function check() {
 export function joinEvent(event: CalendarEvent, openAll = false, windowId = frontWindow()) {
   if (windowId && sendService("alertJoin", [windowId, event.occurrence, openAll])) return;
   const link = joinLink(event);
+
   if (!link || !windowId) return;
   reportBrowserCommand(joinMeeting(windowId, event, link.url, openAll));
   dismiss(event);
@@ -53,10 +58,13 @@ export const meetingToJoin = (now = Date.now()) => joinableMeeting(useCalendar.g
 /** ⌃⌘J: joins the meeting that's on now (or about to start) as the alert's Join does; false when none is. */
 export function joinMeetingNow(): boolean {
   const event = meetingToJoin();
+
   if (!event) return false;
   const windowId = frontWindow();
+
   if (windowId) joinEvent(event, false, windowId);
   else reportBrowserCommand(openWindow().then((id) => joinEvent(event, false, id)));
+
   return true;
 }
 
@@ -64,6 +72,7 @@ export function dismiss(event: CalendarEvent) {
   if (sendService("alertDismiss", [event.occurrence])) return;
   dismissAlert(event.occurrence);
   void removeNotifications([`meeting:${event.occurrence}`]);
+
   if (useMeetingAlert.getState().event?.occurrence === event.occurrence) useMeetingAlert.setState({ event: null });
   check();
 }
@@ -73,6 +82,7 @@ const frontWindow = () => {
   const id = s.ui.focusedWindowId;
   // A main window: a call doesn't open in a private window or Little Bay.
   const main = (w: string) => !s.windows[w]!.incognito && s.windows[w]!.kind !== "small";
+
   return id && s.windows[id] && main(id) ? id : s.windowOrder.find(main);
 };
 
@@ -80,13 +90,16 @@ const running = new WeakMap<BrowserStore, () => void>();
 
 export function startMeetingAlerts(browser: BrowserStore = useBrowser): () => void {
   const existing = running.get(browser);
+
   if (existing) return existing;
   let stopped = false;
   const cleanups: (() => void)[] = [];
+
   const stop = () => {
     if (stopped) return;
     stopped = true;
     running.delete(browser);
+
     for (const cleanup of cleanups.reverse()) {
       try {
         cleanup();
@@ -95,15 +108,20 @@ export function startMeetingAlerts(browser: BrowserStore = useBrowser): () => vo
       }
     }
   };
+
   running.set(browser, stop);
+
   try {
     const appEvents = onAppEvent((e) => {
       if (e.type === "resignActive") appActive = false;
     });
+
     cleanups.push(() => appEvents.remove());
+
     const windowEvents = onWindowEvent((e) => {
       if (e.type === "focus") appActive = true;
     });
+
     cleanups.push(() => windowEvents.remove());
     cleanups.push(useCalendar.subscribe((s, prev) => s.events !== prev.events && check()));
     cleanups.push(
@@ -114,6 +132,7 @@ export function startMeetingAlerts(browser: BrowserStore = useBrowser): () => vo
         watch: (changed) => {
           const calendar = useCalendar.subscribe(changed);
           const alert = useMeetingAlert.subscribe(changed);
+
           return () => {
             try {
               calendar();
@@ -129,5 +148,6 @@ export function startMeetingAlerts(browser: BrowserStore = useBrowser): () => vo
     stop();
     throw error;
   }
+
   return stop;
 }

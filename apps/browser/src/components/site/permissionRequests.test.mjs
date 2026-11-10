@@ -10,6 +10,7 @@ const request = (id, browserId) => ({ id, browserId, origin: "https://a.test/", 
 const browsers = (entries) => usePages.setState((s) => ({ browsers: { ...s.browsers, ...entries } }));
 
 startPermissionRequests();
+
 assert.ok(onPermission && onPermissionDismissed);
 
 test("a window showing the tab asks; a window that never showed it holds the request until it does", () => {

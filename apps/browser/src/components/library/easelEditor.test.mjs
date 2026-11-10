@@ -4,12 +4,15 @@ import { contentBounds, EaselEditor, safeUrl } from "../../../../../packages/des
 
 const none = { shift: false, option: false, command: false };
 const click = { ...none, button: 0, clickCount: 1 };
+
 const doc = (items = [], extra = {}) =>
   JSON.stringify({ id: "easel", title: "T", background: "#FFFFFF", items, createdAt: 1, updatedAt: 1, spaceId: "s", ...extra });
+
 const rect = (id, x, y, width = 100, height = 100) => ({ id, kind: "rect", x, y, width, height });
 
 function editor(items = []) {
   const events = { emitted: [], opened: [], links: [], text: null };
+
   const easel = new EaselEditor({
     size: () => ({ width: 800, height: 600 }),
     changed() {},
@@ -22,9 +25,12 @@ function editor(items = []) {
     editorText: () => events.text,
     closeEditor: () => (events.text = null),
   });
+
   easel.load(doc(items));
+
   return { easel, events, last: () => events.emitted.at(-1) };
 }
+
 const drag = (easel, from, to, modifiers = none) => {
   easel.pointerDown(from, { ...modifiers, button: 0, clickCount: 1 });
   easel.pointerMove(to, modifiers);
@@ -134,6 +140,7 @@ test("dragging a corner scales a shape from the opposite corner, and its stroke 
       ],
     },
   ]);
+
   easel.selectAll();
   drag(easel, { x: 100, y: 100 }, { x: 200, y: 50 });
   const [item] = easel.items;
@@ -265,6 +272,7 @@ test("fit shows every item, and the viewport reports with the state", () => {
 
 test("safeUrl only allows http(s) with a host, and bounds include strokes", () => {
   assert.equal(safeUrl("https://a.example"), "https://a.example/");
+
   for (const bad of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,x", "nope"]) assert.equal(safeUrl(bad), null);
   assert.deepEqual(contentBounds([{ ...rect("a", 10, 10, 20, 20), lineWidth: 4 }]), { x: 2, y: 2, width: 36, height: 36 });
   assert.equal(contentBounds([]), null);

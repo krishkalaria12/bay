@@ -18,8 +18,10 @@ import { internalPageOf, internalQuery, tabDestination } from "./pageUrls";
 export function InternalPage({ tabId }: { tabId: string }) {
   const url = useBrowser((s) => {
     const t = s.tabs[tabId];
+
     return t ? tabDestination(t) : "";
   });
+
   const page = internalPageOf(url);
   const easelId = easelIdOf(url);
   const easelTitle = useLibrary((s) => (easelId ? s.easels[easelId]?.title : undefined));
@@ -32,8 +34,10 @@ export function InternalPage({ tabId }: { tabId: string }) {
   }, [page, url, easelTitle, tabId]);
 
   if (!page) return null;
+
   if ((page === "library" || page === "easel") && !libraryAvailable())
     return <EmptyState title="Library and Easels are unavailable" subtitle="These features are not supported in this window yet." />;
+
   return (
     <View style={StyleSheet.absoluteFill}>
       {page === "library" && <LibraryPage tabId={tabId} initialSection={internalQuery(url)} />}

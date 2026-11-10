@@ -129,13 +129,18 @@ function AwakeSites() {
   const theme = useTheme();
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+
   const add = async () => {
     const site = normalizeAwakeSite(input);
+
     if (!site) {
       setError("Enter a website such as example.com.");
+
       return;
     }
+
     const s = browserRead.getState();
+
     try {
       if (!s.settings.awakeSites.includes(site)) await updateSettings({ awakeSites: [...s.settings.awakeSites, site] });
       setInput("");
@@ -144,10 +149,12 @@ function AwakeSites() {
       setError(failure instanceof Error ? failure.message : "Couldn't keep the website awake.");
     }
   };
+
   const remove = (site: string) => {
     const s = browserRead.getState();
     reportBrowserCommand(updateSettings({ awakeSites: s.settings.awakeSites.filter((item) => item !== site) }));
   };
+
   return (
     <View>
       <SectionHeader
@@ -186,6 +193,7 @@ function LayoutChoice({ layout, title, selected }: { layout: "sidebar" | "top"; 
   const choose = () => reportBrowserCommand(setTabLayout(layout));
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
+
   return (
     <Pressable onPress={choose} style={{ flex: 1, alignItems: "center", gap: 8 }}>
       <View
@@ -227,6 +235,7 @@ function LayoutChoice({ layout, title, selected }: { layout: "sidebar" | "top"; 
 // The calendar's own setting (Settings › Calendar), listed with the other previews.
 function CalendarPreviewToggle() {
   const on = useLive((s) => s.calendar.showPreview);
+
   return (
     <Row title="Calendar" description="Today's events, with Join.">
       <Toggle value={on} onChange={(v) => updateCalendarSettings({ showPreview: v })} />

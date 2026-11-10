@@ -103,6 +103,7 @@ test("pins keep a Windows device's paths in their own form", () => {
   assert.equal(localFilePath("C:\\"), "C:\\");
   assert.equal(localFilePath("\\\\server\\share\\Work"), "\\\\server\\share\\Work");
   assert.equal(localFilePath("/tmp/back\\slash"), "/tmp/back\\slash");
+
   for (const path of ["C:notes", "notes\\secret", "C:\\Users\\..\\secret", "C:/Users/./secret", "\\\\server\\..\\x", "1:\\notes"])
     assert.equal(localFilePath(path), null, path);
   const id = setup();

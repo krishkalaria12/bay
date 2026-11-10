@@ -45,11 +45,14 @@ test("each engine's download reaches the app once", () => {
 
 // The web host lists what a listener missed before it subscribed (BayCEF.listDownloads).
 const cef = globalThis.nnTestNativeModules.BayCEF;
+
 const listing = () => {
   let resolve, reject;
   cef.listDownloads = () => new Promise((yes, no) => ((resolve = yes), (reject = no)));
+
   return { resolve: (list) => resolve(list), reject: (error) => reject(error) };
 };
+
 const settle = () => new Promise((done) => setTimeout(done, 0));
 
 test("a host's download list reaches a new listener, unless an event already reported that download", async (t) => {

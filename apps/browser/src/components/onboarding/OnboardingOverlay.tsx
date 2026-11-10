@@ -22,6 +22,7 @@ export function OnboardingOverlay() {
   const active = useOnboarding((s) => s.windowId === windowId);
   const session = useOnboarding((s) => s.session);
   const importing = useOnboarding((s) => s.importInBackground === windowId);
+
   return (
     <>
       {active || importing ? <ImportFlowHost windowId={windowId}>{active ? <Overlay key={session} session={session} /> : null}</ImportFlowHost> : null}
@@ -60,6 +61,7 @@ function Overlay({ session }: { session: number }) {
     );
   }, [leaving]);
   const presenceStyle = useAnimatedStyle(() => ({ opacity: presence.get() }));
+
   const cardStyle = useAnimatedStyle(() => ({
     opacity: interpolate(card.get(), [0, 1, 2], [0, 1, 0]),
     transform: [{ translateY: interpolate(card.get(), [0, 1, 2], [24, 0, 0]) }, { scale: interpolate(card.get(), [0, 1, 2], [0.97, 1, 1.03]) }],

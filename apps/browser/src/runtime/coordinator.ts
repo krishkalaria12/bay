@@ -1,4 +1,7 @@
+import * as v from "valibot";
 import type { CoordinatorRuntimeTransport, RuntimeResolution } from "@bay/platform/runtimeTransport";
+import { checked } from "../lib/checked";
+import { isJsonObject, type JsonInput, type JsonValue } from "../lib/json";
 import type { BrowserState, BrowserStore } from "../store/browserStore";
 import { createBrowserAuthority, type BrowserCommand, type BrowserCommit, type CommandRequest } from "./authority";
 import { decodeBrowserCommit } from "./client";
@@ -17,16 +20,22 @@ export type BrowserCoordinatorTransport = CoordinatorRuntimeTransport<BrowserPro
  * live/navigation/adoption state. Session hydrate deliberately is not involved.
  */
 function recover(store: BrowserStore, epoch: string, state: BrowserProjection) {
-  const accepted = decodeBrowserCommit({ epoch, revision: 0, state });
+  const accepted = decodeBrowserCommit(JSON.parse(JSON.stringify({ epoch, revision: 0, state })));
+  // SAFETY: the checks above established this shape.
   const detached = JSON.parse(JSON.stringify(accepted.state)) as Partial<BrowserState>;
   store.setState(detached);
 }
-function commandError(error: unknown): { code: string; message: string } {
-  const code =
-    error && typeof error === "object" && "code" in error && typeof error.code === "string" && /^[a-z_]{1,128}$/.test(error.code)
-      ? error.code
-      : "command_failed";
+
+/** The code and message a failed command answers with. */
+type CommandError = { code: string; message: string };
+
+function commandError(error: Error): CommandError {
+  const details = checked<JsonInput>(error);
+  const named = isJsonObject(details) ? details.code : undefined;
+  const code = v.is(v.string(), named) && /^[a-z_]{1,128}$/.test(named) ? named : "command_failed";
+
   const message = error instanceof Error && error.message ? error.message.slice(0, 16384) : "Browser command failed";
+
   return { code, message };
 }
 
@@ -46,7 +55,7 @@ export async function createBrowserCoordinator({
   store: BrowserStore;
   transport: BrowserCoordinatorTransport;
   effects?: LocationCommandEffects;
-  executeAsync?: (command: BrowserCommand, isActive: () => boolean) => Promise<unknown>;
+  executeAsync?: (command: BrowserCommand, isActive: () => boolean) => Promise<JsonValue>;
   startServices?: (options: { store: BrowserStore }) => PersistenceOwner;
   /** Shared native window reconciliation runs after browser acceptance, so
    * offered private profiles are reserved before creating their windows.
@@ -57,23 +66,26 @@ export async function createBrowserCoordinator({
 }) {
   const identity = transport.bootstrap;
   let authority: ReturnType<typeof createBrowserAuthority>;
+
   try {
     if (
       identity.version !== 1 ||
       identity.role !== "coordinator" ||
-      typeof identity.epoch !== "string" ||
+      !v.is(v.string(), identity.epoch) ||
       !identity.epoch ||
-      typeof identity.clientId !== "string" ||
+      !v.is(v.string(), identity.clientId) ||
       !identity.clientId ||
       "windowId" in identity
     )
       throw new Error("A browser-assigned coordinator connection is required");
+
     if (identity.recoveryState !== undefined) recover(store, identity.epoch, identity.recoveryState);
     authority = createBrowserAuthority({ epoch: identity.epoch, store, effects, executeAsync });
   } catch (error) {
     transport.dispose();
     throw error;
   }
+
   const epoch = identity.epoch;
   let failure: Error | null = null;
   let disposed = false;
@@ -90,25 +102,31 @@ export async function createBrowserCoordinator({
 
   function active() {
     if (failure) throw failure;
+
     if (disposed) throw new Error("Browser coordinator is closed");
   }
-  function stop(error?: unknown) {
+
+  function stop(error?: Error) {
     if (disposed) return;
     disposed = true;
     failure = error === undefined ? null : error instanceof Error ? error : new Error(String(error));
     pageFacts.dispose();
     pageOpens.clear();
+
     for (const remove of [unsubscribePages, unsubscribeAuthority, unsubscribeCommands, unsubscribeClose, () => services?.dispose()]) {
       try {
         remove();
       } catch {}
     }
+
     authority.close();
+
     try {
       transport.dispose();
     } catch (cause) {
       console.error("[runtime] coordinator transport cleanup failed", cause);
     }
+
     if (failure) {
       try {
         onError(failure);
@@ -117,9 +135,11 @@ export async function createBrowserCoordinator({
       }
     }
   }
+
   function publish(commit: BrowserCommit): Promise<void> {
     const task = publications.then(async () => {
       active();
+
       if (commit.epoch !== epoch || commit.revision !== publishedRevision + 1) throw new Error("Coordinator publication sequence is invalid");
       await transport.publish(commit);
       active();
@@ -127,52 +147,65 @@ export async function createBrowserCoordinator({
       await onAcceptedCommit?.(commit);
       active();
     });
+
     publications = task;
     void task.catch(stop);
+
     return task;
   }
+
   async function resolve(token: string, reply: RuntimeResolution<unknown>) {
     active();
     await transport.resolve(token, reply);
     active();
   }
+
   async function handleCommand(token: string, request: CommandRequest, initial: Promise<void>) {
     try {
       await initial;
       active();
       let response: RuntimeResolution<unknown>;
+
       try {
         const reply = await authority.dispatch(request);
         await publications;
         active();
+
         if (publishedRevision < reply.commit.revision) throw new Error("Command revision was not published");
         response = { epoch, revision: reply.commit.revision, value: reply.value };
       } catch (error) {
         active();
         await publications;
         active();
-        response = { epoch, error: commandError(error) };
+        response = { epoch, error: commandError(error instanceof Error ? error : new Error(String(error))) };
       }
+
       await resolve(token, response);
     } catch (error) {
-      if (!disposed) stop(error);
+      if (!disposed) stop(error instanceof Error ? error : new Error(String(error)));
     }
   }
 
-  function handlePageOpen(input: unknown, initial: Promise<void>) {
+  function handlePageOpen(input: JsonInput, initial: Promise<void>) {
     let event: ReturnType<typeof parsePageOpen>;
+
     try {
       event = parsePageOpen(input);
     } catch (error) {
-      stop(error);
+      stop(error instanceof Error ? error : new Error(String(error)));
+
       return;
     }
+
     const fingerprint = JSON.stringify(event);
     const existing = pageOpens.get(event.offerId);
+
     if (existing) {
       if (existing.fingerprint !== fingerprint) stop(new Error("Native page offer changed identity"));
+
       return;
     }
+
     const request = { fingerprint, complete: false, promise: Promise.resolve() };
     pageOpens.set(event.offerId, request);
     request.promise = (async () => {
@@ -181,21 +214,24 @@ export async function createBrowserCoordinator({
       const reply = await authority.dispatchNative((owner) => applyPageOpen(owner, event));
       await publications;
       active();
+
       if (publishedRevision < reply.commit.revision) throw new Error("Native page handoff was not published");
       const target = reply.value ? reply.commit.state.tabs[reply.value] : undefined;
       const adopted = target?.adoptId === event.offerId || target?.wakeAdoptId === event.offerId;
       await finishPageOpen(event.offerId, adopted ? reply.value : null);
       active();
       request.complete = true;
+
       // Native bounds pending offers. Retain recent completed identities too,
       // so duplicate deliveries never repeat a reducer after its tab moved.
       for (const [id, saved] of pageOpens) {
         if (pageOpens.size <= 1024) break;
+
         if (saved.complete) pageOpens.delete(id);
       }
     })();
     void request.promise.catch((error) => {
-      if (!disposed) stop(error);
+      if (!disposed) stop(error instanceof Error ? error : new Error(String(error)));
     });
   }
 
@@ -207,40 +243,50 @@ export async function createBrowserCoordinator({
       void publish(commit);
     });
     const releaseClose = transport.subscribeClose((error) => stop(error));
+
     if (disposed) releaseClose();
     else unsubscribeClose = releaseClose;
     active();
+
     const releaseCommands = transport.subscribeCommands((token, request) => {
       void handleCommand(token, request, initial);
     });
+
     if (disposed) releaseCommands();
     else unsubscribeCommands = releaseCommands;
     active();
     const owner = startServices({ store });
+
     if (disposed) owner.dispose();
     else services = owner;
     active();
+
     const pages = onPageEvent((event) => {
-      if (!disposed) pageFacts.apply(event);
+      if (!disposed) pageFacts.apply(checked<JsonInput>(event));
     });
+
     const openings = onPageOpen((event) => {
-      if (!disposed) handlePageOpen(event, initial);
+      if (!disposed) handlePageOpen(checked<JsonInput>(event), initial);
     });
+
     unsubscribePages = () => {
       pages.remove();
       openings.remove();
       void stopPageEvents().catch((error) => console.error("[runtime] page event cleanup failed", error));
     };
+
     await initial;
     active();
     // Native authorizes page identity against its accepted projection. The
     // first commit must reach the browser before requesting cached page facts.
     await startPageEvents();
     active();
+
     return {
       getSnapshot: authority.getSnapshot,
       flushPersistence(options?: { final?: boolean }) {
         active();
+
         return services!.flush(options);
       },
       resumePersistence() {
@@ -263,6 +309,7 @@ export async function createBrowserCoordinator({
           active();
         })();
         void ready.catch(stop);
+
         return ready;
       },
       dispose() {
@@ -270,7 +317,7 @@ export async function createBrowserCoordinator({
       },
     };
   } catch (error) {
-    stop(error);
+    stop(error instanceof Error ? error : new Error(String(error)));
     throw error;
   }
 }

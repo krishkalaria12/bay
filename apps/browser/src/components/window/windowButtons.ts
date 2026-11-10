@@ -4,6 +4,7 @@ import { layout } from "../../lib/constants";
 
 /** Native macOS traffic lights keep their existing spacing. */
 export const LIGHTS_WIDTH = capabilities.trafficLights ? layout.trafficLightsWidth : 0;
+
 /** Windows' own caption button width. */
 export const CAPTION_BUTTON_WIDTH = 46;
 
@@ -14,6 +15,7 @@ const native = windowButtonLayout();
 const current: WindowButtonLayout = Object.freeze({ left: Object.freeze([...native.left]), right: Object.freeze([...native.right]) });
 
 export const getWindowButtonLayout = () => current;
+
 /** A stable layout: it never changes while the app runs. */
 export const useWindowButtonLayout = () => current;
 
@@ -26,8 +28,10 @@ export function windowButtonRoom(buttons: WindowButtonLayout) {
 export function captionMaximizeRect(buttons: WindowButtonLayout, width: number, height: number): [number, number, number, number] | null {
   for (const side of ["left", "right"] as const) {
     const index = buttons[side].indexOf("maximize");
+
     if (index !== -1)
       return [(side === "left" ? 0 : width - buttons.right.length * CAPTION_BUTTON_WIDTH) + index * CAPTION_BUTTON_WIDTH, 0, CAPTION_BUTTON_WIDTH, height];
   }
+
   return null;
 }

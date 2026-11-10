@@ -23,6 +23,7 @@ export class OutOfTime extends BrowsingDataError {
 }
 
 type SpaceRow = { id: string; name?: string; profileId?: string };
+
 export type PinnedTab = {
   title: string;
   url: string;
@@ -44,8 +45,11 @@ type TabRow = {
   folderId?: unknown;
   spaceId?: unknown;
 };
+
 type GroupRow = { id?: unknown; name?: unknown; spaceId?: unknown; pinned?: unknown; tabIds?: unknown };
+
 type FolderRow = { id?: unknown; name?: unknown };
+
 type SessionDoc = {
   version?: unknown;
   spaces?: Record<string, SpaceRow>;
@@ -59,7 +63,9 @@ type SessionDoc = {
 };
 
 export type HistoryOptions = { days?: number; limit?: number | null; space?: string; domains?: boolean };
+
 export type HistoryRow = { url: string; title: string; visits: number; total_visits: number; last_visit: string; space: string };
+
 export type HistoryDomain = { domain: string; visits: number; pages: number; last_visit: string; top_title: string; space: string };
 
 export function pinned(root: string | null): PinnedTab[] {
@@ -125,6 +131,7 @@ export function pinned(root: string | null): PinnedTab[] {
       });
     }
   }
+
   return rows.sort((a, b) => a.order - b.order).map((entry) => entry.row);
 }
 
@@ -143,14 +150,17 @@ export function history(root: string | null, options: HistoryOptions = {}): Arra
   const chosen = pickSpaces(spots, options.space);
   const cutoff = Math.round((Date.now() - days * 86_400_000 + CHROME_EPOCH_OFFSET * 1000) * 1000);
   const rows: HistoryRow[] = [];
+
   for (const spot of chosen) {
     outOfTime(deadline, "history()");
     const folder = join(chromiumRoot(data), spot.directory);
     const work = mkdtempSync(join(tmpdir(), "bay-history-"));
     let db: Database | undefined;
+
     try {
       const path = snapshot(join(folder, "History"), work, deadline);
       db = new Database(path, { readonly: true });
+
       const found = db
         .query<{ url: string; title: string | null; visits: number; last: number; total: number }, [number, number, number, number]>(
           `SELECT u.url AS url, u.title AS title, COUNT(v.id) AS visits, MAX(v.visit_time) AS last, u.visit_count AS total
@@ -162,6 +172,7 @@ export function history(root: string | null, options: HistoryOptions = {}): Arra
          LIMIT ?`,
         )
         .all(cutoff, SUBFRAME_TRANSITIONS[0]!, SUBFRAME_TRANSITIONS[1]!, MAX_ROWS);
+
       for (const row of found) {
         rows.push({ url: row.url, title: row.title ?? "", visits: row.visits, total_visits: row.total, last_visit: String(row.last), space: spot.name });
       }
@@ -173,10 +184,13 @@ export function history(root: string | null, options: HistoryOptions = {}): Arra
       rmSync(work, { recursive: true, force: true });
     }
   }
+
   rows.sort((a, b) => Number(b.last_visit) - Number(a.last_visit));
   let result: Array<HistoryRow | HistoryDomain>;
+
   if (options.domains) {
     const rolled = new Map<string, HistoryDomain>();
+
     for (const row of rows) {
       const host = hostOf(row.url).replace(/^www\./, "");
       const key = `${row.space}\u0000${host}`;
@@ -185,36 +199,45 @@ export function history(root: string | null, options: HistoryOptions = {}): Arra
       entry.pages += 1;
       rolled.set(key, entry);
     }
+
     result = [...rolled.values()].sort((a, b) => b.visits - a.visits || Number(b.last_visit) - Number(a.last_visit));
   } else {
     result = rows;
   }
+
   if (limit !== null) result = result.slice(0, limit);
+
   return result.map((entry) => ({ ...entry, last_visit: iso(Number(entry.last_visit)) }));
 }
 
 function checkedRoot(root: string | null, name: string): string {
   if (!root) throw new BrowsingDataError(NO_DATA_DIR.replace("{name}", name));
+
   try {
     requireControl(root);
   } catch (error) {
     if (error instanceof EndpointError) throw new BrowsingDataError(error.message);
     throw error;
   }
+
   return root;
 }
 
 function readSession(root: string): SessionDoc {
   const path = join(documentsRoot(root), "session.json");
   let stats: ReturnType<typeof lstatSync>;
+
   try {
     stats = lstatSync(path);
   } catch {
     return {};
   }
+
   if (!stats.isFile()) throw new BrowsingDataError(`${path} isn't a regular file`);
+
   if (stats.size > MAX_SESSION_BYTES) throw new BrowsingDataError(`${path} is too big`);
   let session: unknown;
+
   try {
     session = JSON.parse(readFileSync(path, "utf8"));
   } catch {
@@ -246,6 +269,7 @@ function spaceProfiles(session: SessionDoc): SpaceProfile[] {
     const profileId = isString(space.profileId) && space.profileId ? space.profileId : id;
     const engine = profileId === DEFAULT_SPACE_ID ? "" : profileId;
     const directory = engine ? (process.platform === "darwin" ? `Profile ${engine}` : engine) : "Default";
+
     if (seen.has(directory)) continue;
     seen.add(directory);
     const owner = byId.get(profileId);
@@ -259,37 +283,47 @@ function spaceProfiles(session: SessionDoc): SpaceProfile[] {
 function pickSpaces(spots: SpaceProfile[], wanted: string | undefined): SpaceProfile[] {
   if (!wanted) return spots;
   const chosen = spots.filter((spot) => spot.name === wanted || spot.id === wanted || spot.directory === wanted);
+
   if (!chosen.length) {
     const known = spots.map((spot) => spot.name).join(", ") || "none";
     throw new BrowsingDataError(`no space named ${JSON.stringify(wanted)} has history (known: ${known})`);
   }
+
   return chosen;
 }
 
 function snapshot(history: string, work: string, deadline: number): string {
   const target = join(work, "History");
+
   try {
     const info = lstatSync(history);
+
     if (!info.isFile()) throw new Error("isn't a regular file");
     outOfTime(deadline, "history()");
     copyFileSync(history, target);
+
     for (const suffix of ["-wal", "-journal"]) {
       const side = `${history}${suffix}`;
+
       if (existsSync(side) && !lstatSync(side).isSymbolicLink() && statSync(side).isFile()) copyFileSync(side, `${target}${suffix}`);
     }
+
     check(target);
+
     return target;
   } catch (error) {
     if (error instanceof BrowsingDataError) throw error;
     // Bay may hold the database; a read-only handle on it still answers most of the time.
     outOfTime(deadline, "history()");
     check(history);
+
     return history;
   }
 }
 
 function check(path: string): void {
   const db = new Database(path, { readonly: true });
+
   try {
     db.query("SELECT count(*) FROM urls").get();
     db.query("SELECT count(*) FROM visits").get();
@@ -304,6 +338,7 @@ function outOfTime(deadline: number, what: string): void {
 
 function iso(chromeMicroseconds: number): string {
   const date = new Date(chromeMicroseconds / 1000 - CHROME_EPOCH_OFFSET * 1000);
+
   return localIso(date);
 }
 
@@ -311,6 +346,7 @@ function localIso(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   const offset = -date.getTimezoneOffset();
   const sign = offset >= 0 ? "+" : "-";
+
   return (
     `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
     `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
@@ -342,9 +378,12 @@ export function profileFolders(root: string): string[] {
     return readdirSync(chromiumRoot(root)).filter((name) => {
       if (name !== "Default" && !name.startsWith("Profile ")) return false;
       const suffix = name.startsWith("Profile ") ? name.slice(8) : "";
+
       if (PRIVATE_PREFIXES.some((prefix) => suffix.toLowerCase().startsWith(prefix.toLowerCase()))) return false;
+
       if (suffix.includes("@") || suffix.includes(":")) return false;
       const folder = join(chromiumRoot(root), name, "History");
+
       try {
         return lstatSync(folder).isFile();
       } catch {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { specksFor, speckAt } = await import("./webDisintegrate.ts");
 
 const row = { x: 10, y: 20, width: 100, height: 30 };

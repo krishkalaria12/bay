@@ -7,11 +7,13 @@ import { applyPageOpen, parsePageOpen } from "./pageOpen.ts";
 
 let sequence = 0;
 const offer = () => `bay-tab:00000000-0000-4000-8000-${(++sequence).toString(16).padStart(12, "0")}`;
+
 function setup(options = {}) {
   const store = createBrowserStore();
   const windowId = store.getState().createWindow({ url: "https://source.example/", ...options });
   const tabId = activeTabId(store.getState(), windowId);
   const profile = engineProfileFor(store.getState().tabs[tabId].spaceId, store.getState().spaces);
+
   const event = (patch = {}) => ({
     offerId: offer(),
     sourceTabId: tabId,
@@ -23,14 +25,17 @@ function setup(options = {}) {
     disposition: "foreground",
     ...patch,
   });
+
   return { store, windowId, tabId, event };
 }
+
 const adopted = (store, id, event) => {
   const tab = store.getState().tabs[id];
   assert.ok(tab);
   assert.equal(tab.adoptId, event.offerId);
   assert.equal(tab.navigation, null, "adoption must retain Chrome's POST body and opener");
   assert.equal(tab.url, event.url);
+
   return tab;
 };
 
@@ -39,6 +44,7 @@ test("native page open validates exact fields, bounded text, opaque offers and b
   const good = event();
   assert.deepEqual(parsePageOpen(good), good);
   assert.equal(parsePageOpen({ ...good, url: "chrome://version/" }).url, "bay://version/");
+
   for (const bad of [
     null,
     [],
@@ -84,11 +90,13 @@ test("replayed offers return their existing target even after the source closes"
 
 test("missing or closed sources and incompatible public profiles never mutate the store", () => {
   const { store, tabId, event } = setup();
+
   for (const input of [event({ sourceTabId: "missing" }), event({ sourceProfile: "other" }), event({ profile: "other" }), event({ incognito: true })]) {
     const before = store.getState();
     assert.equal(applyPageOpen(store, input), null);
     assert.equal(store.getState(), before);
   }
+
   store.getState().closeTab(tabId);
   const before = store.getState();
   assert.equal(applyPageOpen(store, event()), null);
@@ -113,6 +121,7 @@ test("extension pages map their native profile to a public space and reject miss
   const id = applyPageOpen(store, input);
   assert.equal(adopted(store, id, input).spaceId, spaceId);
   assert.equal(store.getState().tabs[id].windowId, windowId);
+
   for (const patch of [{ sourceWindowId: "missing" }, { sourceProfile: "missing", profile: "missing" }]) {
     const before = store.getState();
     assert.equal(applyPageOpen(store, event({ sourceTabId: undefined, ...patch })), null);
@@ -127,6 +136,7 @@ test("pages from a window Chrome opened join the named window, its active one in
   const behindId = applyPageOpen(store, behind);
   assert.equal(activeTabId(store.getState(), windowId), tabId);
   const frontId = applyPageOpen(store, front);
+
   for (const [id, input] of [
     [behindId, behind],
     [frontId, front],
@@ -138,6 +148,7 @@ test("pages from a window Chrome opened join the named window, its active one in
 test("Little Bay links and splits transfer their offered pages behind a main window", () => {
   const { store, windowId, tabId, event } = setup({ small: true });
   const main = store.getState().createWindow();
+
   for (const disposition of ["foreground", "background", "split"]) {
     const input = event({ disposition });
     const id = applyPageOpen(store, input);
@@ -182,6 +193,7 @@ test("split links make a new pane with the native offer and keep the source acti
 test("a full split replaces its following pane without adding a fourth pane", () => {
   const { store, windowId, tabId, event } = setup();
   const ids = [tabId];
+
   for (let i = 0; i < 2; i++) ids.push(store.getState().newTab(windowId, { url: `https://pane${i}.example/` }));
   store.getState().createSplit(ids);
   const input = event({ sourceTabId: ids[1], disposition: "split" });
@@ -241,6 +253,7 @@ test("public offers requested in private windows reload fresh and do not cross p
 
 test("private source new windows always have separate sessions and fresh navigation", () => {
   const { store, windowId, event } = setup({ incognito: true });
+
   for (const disposition of ["window", "incognito"]) {
     const input = event({ disposition });
     const id = applyPageOpen(store, input);

@@ -7,12 +7,16 @@ import { executeWindowCommand, parseWindowCommand, WINDOW_COMMAND_METHODS } from
 const sparseArray = (length) => {
   const array = [];
   array.length = length;
+
   return array;
 };
+
 const run = (store, command) => executeWindowCommand(store, parseWindowCommand(command));
+
 const setup = (options) => {
   const store = createBrowserStore();
   const windowId = store.getState().createWindow(options);
+
   return { store, windowId, tabId: activeTabId(store.getState(), windowId) };
 };
 
@@ -42,16 +46,20 @@ test("window parser accepts bounded user options and rejects native facts", () =
     { method: "reopenClosedWindow" },
     { method: "restoreClosed", entryId: "entry", windowId: "w" },
   ];
+
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(WINDOW_COMMAND_METHODS));
+
   for (const command of commands) {
     const parsed = parseWindowCommand(command);
     assert.deepEqual(parsed, command);
     assert.notEqual(parsed, command);
     assert.throws(() => parseWindowCommand({ ...command, native: true }), { code: "invalid_request" });
   }
+
   assert.notEqual(parseWindowCommand(commands[0]).options.tabIds, commands[0].options.tabIds);
   assert.notEqual(parseWindowCommand(commands[0]).options.frame, commands[0].options.frame);
   assert.notEqual(parseWindowCommand(commands[0]).options.size, commands[0].options.size);
+
   for (const command of [
     null,
     [],
@@ -113,11 +121,14 @@ test("window commands create, move, switch and merge through the existing reduce
 
 test("window restore commands retain closed tabs and windows", () => {
   const { store, windowId } = setup({ url: "first.com" });
+
   const closeTab = () => {
     const id = store.getState().newTab(windowId, { url: "closed.com" });
     store.getState().closeTab(id);
+
     return store.getState().closedTabs.at(-1).id;
   };
+
   closeTab();
   const count = Object.keys(store.getState().tabs).length;
   run(store, { method: "reopenClosedTab", windowId });
@@ -147,6 +158,7 @@ test("window commands reject invalid and private references before any changes",
   const closed = store.getState().newTab(windowId, { url: "closed.com" });
   store.getState().closeTab(closed);
   const entryId = store.getState().closedTabs.at(-1).id;
+
   for (const command of [
     { method: "createWindow", options: { spaceId: "missing" } },
     { method: "createWindow", options: { incognito: true, tabIds: [tabId] } },
@@ -171,6 +183,7 @@ test("window commands reject invalid and private references before any changes",
     assert.throws(() => run(store, command), { code: "invalid_request" }, JSON.stringify(command));
     assert.equal(store.getState(), before);
   }
+
   run(store, { method: "moveTabsToWindow", tabIds: [privateTab], windowId: privateWindow });
   assert.equal(store.getState().tabs[privateTab].windowId, privateWindow);
 });
@@ -181,6 +194,7 @@ test("window command invokes the selected reducer once and normalizes optional r
   store.setState({
     moveTabsToWindow: (...args) => {
       calls.push(args);
+
       return undefined;
     },
   });
@@ -227,11 +241,14 @@ test("Little Bay moves into or creates its main window before its source can dis
       );
       assert.equal(store.getState().windowOrder.length, 1);
       const target = store.getState().windowOrder[0];
+
       if (main) assert.equal(target, main);
       assert.deepEqual(focused, [target]);
+
       if (url) assert.equal(store.getState().tabs[tabId].windowId, target);
     }
   }
+
   const { store, windowId } = setup();
   const before = store.getState();
   assert.throws(() => run(store, { method: "openInMainWindow", windowId }), { code: "invalid_request" });
@@ -242,9 +259,11 @@ test("window size/maximized command fields are strict and native placement sette
   for (const size of [[], [1], [1, 2, 3], [0, 1], [-1, 1], [1, Infinity], [1, NaN], [1, "2"], sparseArray(2), null, { width: 1, height: 2 }]) {
     assert.throws(() => parseWindowCommand({ method: "createWindow", options: { size } }), { code: "invalid_request" });
   }
+
   for (const options of [{ maximized: 1 }, { minimized: true }, { fullscreen: true }, { size: [1, 2], position: [1, 2] }]) {
     assert.throws(() => parseWindowCommand({ method: "createWindow", options }), { code: "invalid_request" });
   }
+
   assert.throws(() => parseWindowCommand({ method: "setWindowPlacement", windowId: "w", placement: { size: [1, 2], maximized: true } }), {
     code: "invalid_request",
   });

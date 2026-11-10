@@ -39,6 +39,7 @@ export function ensureBoostsLoaded() {
   load();
   useBoosts.subscribe((s, prev) => {
     if (!s.loaded || s.error) return;
+
     if (s.boosts !== prev.boosts || s.scripts !== prev.scripts || s.on !== prev.on || s.scriptsAcknowledged !== prev.scriptsAcknowledged) save(s);
   });
 }
@@ -63,6 +64,7 @@ export function startBoosts() {
     if (hasServiceClient()) return;
     const browser = useBrowser.getState();
     const tab = browser.tabs[tabId];
+
     if (!tab) return;
     const boosts = useBoosts.getState();
     const style = tabBoostStyle(spacePalette(browser, tab.spaceId), Object.values(boosts.boosts), boosts.on);
@@ -106,6 +108,7 @@ function load() {
 
 function save(s: BoostsState) {
   if (hasServiceClient()) return;
+
   try {
     writeDocument(FILE, JSON.stringify({ version: 1, on: s.on, boosts: s.boosts, scripts: s.scripts, scriptsAcknowledged: s.scriptsAcknowledged }));
   } catch (error) {
@@ -121,6 +124,7 @@ let lastEngine = "";
 // Typing in the CSS field changes a Boost many times a second: the engine takes the latest a moment later.
 function scheduleEngine() {
   if (hasServiceClient()) return;
+
   if (engineTimer) return;
   engineTimer = setTimeout(() => {
     engineTimer = null;
@@ -131,9 +135,11 @@ function scheduleEngine() {
 function pushEngine() {
   if (hasServiceClient()) return;
   const s = useBoosts.getState();
+
   if (!s.loaded) return;
   const list = engineBoosts(Object.values(s.boosts), s.scripts, s.on);
   const json = JSON.stringify(list);
+
   if (json === lastEngine) return;
   lastEngine = json;
   void setEngineBoosts(list);
@@ -146,6 +152,7 @@ let tabsTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleTabs() {
   if (hasServiceClient()) return;
+
   if (tabsTimer) return;
   tabsTimer = setTimeout(() => {
     tabsTimer = null;
@@ -158,6 +165,7 @@ export function spacePalette(s: BrowserProjection, spaceId: string): BoostPalett
   const space = s.spaces[spaceId] ?? DEFAULT_SPACE;
   const theme = themeFor(spaceThemeKey(space, s.ui.appDark));
   const colors = space.theme?.colors.length ? space.theme.colors : [(SPACE_COLORS[space.color] ?? SPACE_COLORS.plum).swatch.slice(0, 7)];
+
   return {
     background: hex(theme.windowTint[0]),
     backgroundExtra: hex(theme.windowTint[1]),
@@ -175,17 +183,21 @@ function pushTabs() {
   const boosts = useBoosts.getState();
   const s = useBrowser.getState();
   const styles = new Map<string, { style: EngineBoostStyle; json: string }>();
+
   for (const [tabId, tab] of Object.entries(s.tabs)) {
     let entry = styles.get(tab.spaceId);
+
     if (!entry) {
       const style = tabBoostStyle(spacePalette(s, tab.spaceId), Object.values(boosts.boosts), boosts.on);
       entry = { style, json: JSON.stringify(style) };
       styles.set(tab.spaceId, entry);
     }
+
     if (sentStyles.get(tabId) === entry.json) continue;
     sentStyles.set(tabId, entry.json);
     void webviews.get(tabId)?.setBoostStyle(entry.style);
   }
+
   for (const tabId of sentStyles.keys()) if (!s.tabs[tabId]) sentStyles.delete(tabId);
 }
 
@@ -201,10 +213,12 @@ export function createBoost(host: string, name?: string): Boost | null {
   if (!boostsAvailable()) return null;
   startBoosts();
   const s = useBoosts.getState();
+
   if (s.error || !host) return null;
   const count = boostsForHost(s, host).length;
   const boost = newBoost(newId("boost"), host, Date.now(), name ?? (count ? `My Boost ${count + 1}` : "My Boost"));
   useBoosts.setState({ boosts: { ...s.boosts, [boost.id]: boost } });
+
   return boost;
 }
 
@@ -212,6 +226,7 @@ export function createBoost(host: string, name?: string): Boost | null {
 export function addBoost(boost: Boost, script = "") {
   if (!boostsAvailable()) return;
   const s = useBoosts.getState();
+
   if (s.error) return;
   useBoosts.setState({
     boosts: { ...s.boosts, [boost.id]: boost },
@@ -222,14 +237,17 @@ export function addBoost(boost: Boost, script = "") {
 export function updateBoost(id: string, patch: Partial<Omit<Boost, "id" | "host" | "createdAt">> | ((b: Boost) => Partial<Boost>)) {
   const s = useBoosts.getState();
   const before = s.boosts[id];
+
   if (!boostsAvailable() || !before || s.error) return;
   const next = normalizeBoost({ ...before, ...(patch instanceof Function ? patch(before) : patch), id, host: before.host, updatedAt: Date.now() });
+
   if (next) useBoosts.setState({ boosts: { ...s.boosts, [id]: next } });
 }
 
 export function deleteBoost(id: string) {
   if (!boostsAvailable()) return;
   const s = useBoosts.getState();
+
   if (!s.boosts[id] || s.error) return;
   const boosts = { ...s.boosts };
   const scripts = { ...s.scripts };
@@ -241,9 +259,11 @@ export function deleteBoost(id: string) {
 export function setBoostScript(id: string, patch: Partial<BoostScript>) {
   if (!boostsAvailable()) return;
   const s = useBoosts.getState();
+
   if (!s.boosts[id] || s.error) return;
   const before = s.scripts[id] ?? { code: "", enabled: false, privateWindows: false };
   const next = normalizeScript({ ...before, ...patch });
+
   if (next) useBoosts.setState({ scripts: { ...s.scripts, [id]: next } });
 }
 
@@ -263,17 +283,21 @@ export function removeSelector(id: string, list: "zaps" | "focus", selector: str
 export function applySyncedBoosts(upserts: Boost[], removed: string[]) {
   if (!boostsAvailable()) return;
   const s = useBoosts.getState();
+
   if (s.error) return;
   const boosts = { ...s.boosts };
   const scripts = { ...s.scripts };
+
   for (const b of upserts) {
     // Consent belongs to the site where this Mac enabled the script. A synced host edit cannot transfer it.
     if (boosts[b.id]?.host !== b.host && scripts[b.id]) scripts[b.id] = { ...scripts[b.id]!, enabled: false, privateWindows: false };
     boosts[b.id] = b;
   }
+
   for (const id of removed) {
     delete boosts[id];
     delete scripts[id];
   }
+
   useBoosts.setState({ boosts, scripts });
 }

@@ -29,6 +29,7 @@ const owners = new WeakMap<BrowserStore, () => void>();
 export function startChromeTabs({ store = useBrowser, shared = false }: { store?: BrowserStore; shared?: boolean } = {}): (() => void) | undefined {
   if (!shared && pageFactsInCoordinator()) return;
   const existing = owners.get(store);
+
   if (existing) return shared ? existing : undefined;
   let disposed = false;
   const mirror = new Map<number, StripState>();
@@ -37,9 +38,11 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
   let early: TabStripTransaction[] = [];
   // Tabs the app has seen in a strip (a tab Chrome made is Chrome's to place only the first time).
   const seen = new Set<string>();
+
   // The command each strip is waiting for (an arrange or group with the tabs it lists; the store group a new Chrome
   // group is made for).
   type Kind = "arrange" | "activate" | "group";
+
   const inflight = new Map<number, { kind: Kind; cmd: number; keys?: string[]; makes?: string; successor?: boolean }>();
   // Chrome's group ids → the store's.
   const groups: GroupBindings = new Map();
@@ -49,6 +52,7 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
   const changedAt = new Map<number, number>();
 
   if (__DEV__) {
+    // SAFETY: the checks above established this shape.
     (globalThis as { nnChromeTabs?: unknown }).nnChromeTabs = {
       chromeWindows,
       engineInfo,
@@ -60,12 +64,15 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
 
   const events = onTabStripTransaction((tx) => {
     if (disposed) return;
+
     if (lastRev < 0) early.push(tx);
     else receive(tx);
   });
+
   const unsubscribe = store.subscribe((s, prev) => {
     if (s.windows !== prev.windows || s.tabLists !== prev.tabLists || s.groups !== prev.groups || placed(s, prev)) scheduleProject();
   });
+
   const dispose = () => {
     if (disposed) return;
     disposed = true;
@@ -80,17 +87,22 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
     seen.clear();
     changedAt.clear();
   };
+
   owners.set(store, dispose);
   void tabStrips().then(
     (snapshot) => {
       if (disposed) return;
+
       for (const strip of snapshot.strips) {
         mirror.set(strip.strip, strip);
+
         for (const t of strip.tabs) if (t.key) seen.add(t.key);
       }
+
       lastRev = snapshot.rev;
       const queued = early;
       early = [];
+
       for (const tx of queued) receive(tx);
       scheduleProject();
     },
@@ -107,6 +119,7 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
     return changedIds(s.tabs, prev.tabs).some((id) => {
       const a = s.tabs[id];
       const b = prev.tabs[id];
+
       return !a || !b || a.windowId !== b.windowId || a.spaceId !== b.spaceId || a.pinned !== b.pinned;
     });
   }
@@ -116,20 +129,27 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
   function receive(tx: TabStripTransaction) {
     if (tx.rev <= lastRev) return;
     lastRev = tx.rev;
+
     for (const [strip, f] of inflight) {
       if (f.cmd !== tx.cmd) continue;
       inflight.delete(strip);
       // The Chrome group made for a store group: whatever group its tabs are in now.
       const made = f.makes && tx.strips.find((x) => x.strip === strip)?.tabs.find((t) => t.key === f.keys?.[0])?.group;
+
       if (made && f.makes) groups.set(made, f.makes);
     }
+
     const start = store.getState();
     let s = start;
+
     for (const strip of tx.strips) {
       const before = mirror.get(strip.strip);
+
       if (strip.closed) mirror.delete(strip.strip);
       else mirror.set(strip.strip, strip);
+
       if (tx.cmd === null || tx.cmd < 0) changedAt.set(strip.strip, tx.rev);
+
       if (tx.cmd === null) {
         // A command of the app's own on its way to this strip comes after Chrome's change, and wins.
         const waiting = inflight.get(strip.strip);
@@ -147,9 +167,12 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
           },
         });
       }
+
       for (const t of strip.tabs) if (t.key) seen.add(t.key);
     }
+
     if (seen.size > 2 * Object.keys(s.tabs).length + 64) for (const key of seen) if (!s.tabs[key]) seen.delete(key);
+
     if (s !== start) store.setState(s);
     scheduleProject();
   }
@@ -163,6 +186,7 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
     projectQueued = true;
     queueMicrotask(() => {
       projectQueued = false;
+
       if (!disposed) project(store.getState());
     });
   }
@@ -171,10 +195,12 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
     for (const strip of mirror.values()) {
       if (inflight.has(strip.strip)) continue;
       const plan = stripPlan(s, strip);
+
       if (!plan) continue;
       const actual = stripActual(strip, plan);
       // The shown tab first: Chrome's commands and extensions act on its active tab.
       const order = `${plan.keys.join(",")}|${plan.pinned}`;
+
       if (plan.active && plan.active !== actual.active) {
         // Chrome's active tab is gone from the store (it closed): the store's pick is a successor.
         const successor = !!actual.active && !s.tabs[actual.active];
@@ -183,6 +209,7 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
         send(strip.strip, "arrange", order, { op: "arrange", strip: strip.strip, keys: plan.keys, pinned: plan.pinned });
       } else {
         const step = groupStep(s, strip, groups);
+
         if (step) {
           const { makes, ...rest } = step;
           send(strip.strip, "group", JSON.stringify(step), { op: "group", strip: strip.strip, ...rest }, makes);
@@ -194,9 +221,10 @@ export function startChromeTabs({ store = useBrowser, shared = false }: { store?
   function send(strip: number, kind: Kind, sig: string, command: TabStripCommand, makes?: string, successor?: boolean) {
     const since = changedAt.get(strip) ?? 0;
     const last = tried.get(`${strip}:${kind}`);
+
     if (last?.sig === sig && last.since === since) return;
     tried.set(`${strip}:${kind}`, { sig, since });
-    inflight.set(strip, { kind, cmd: sendTabStripCommand(command), ...(command.op !== "activate" ? { keys: command.keys } : {}), makes, successor });
+    inflight.set(strip, { kind, cmd: sendTabStripCommand(command), ...(command.op !== "activate" ? { keys: command.keys } : undefined), makes, successor });
   }
 
   return shared ? dispose : undefined;

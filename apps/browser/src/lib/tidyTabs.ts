@@ -122,11 +122,13 @@ export async function runTidyTabs(windowId: string): Promise<void> {
   if (!s.windows[windowId]) return;
   const modelGrouped = !!plan && (plan.newGroups.length > 0 || plan.joins.length > 0);
   const stillOpen = ids.filter((id) => s.tabs[id]);
+
   const count = await dispatchBrowserCommand({
     method: "tidyTabs",
     windowId,
     ...(modelGrouped ? { plan: plan! } : { plan: siteTidyPlan(s, stillOpen) }),
   });
+
   const after = browserRead.getState();
   markTidied(after, windowId, spaceId);
 

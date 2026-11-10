@@ -12,6 +12,7 @@ export function EaselShareButton({ doc, canvas, windowId }: { doc: EaselDocument
   const publication = useEaselShares((s) => s.records[doc.id]);
   const busy = useEaselShares((s) => !!s.busy[doc.id]);
   useEffect(startEaselShares, []);
+
   return (
     <Button
       title={busy ? "Sharing…" : publication ? "Shared Easel…" : "Share Easel…"}
@@ -25,19 +26,26 @@ async function openEaselSharing(doc: EaselDocument, canvas: RefObject<EaselCanva
   const publish = async () => {
     const url = await publishEasel(doc.id, async () => {
       if (!canvas.current) throw new Error("The Easel is still loading. Try again.");
+
       return canvas.current.prepareShare(doc.title);
     });
+
     copyText(url);
     showToast(windowId, "Easel Link Copied", "Anyone with the link can view this snapshot in a browser.", { icon: "link" });
   };
+
   try {
     startEaselShares();
     const state = useEaselShares.getState();
+
     if (state.error) {
       showToast(windowId, "Couldn't Share Easel", state.error, { icon: "link" });
+
       return;
     }
+
     const current = state.records[doc.id];
+
     if (!current) {
       const { confirmed } = await confirm({
         title: "Share this Easel on the web?",
@@ -46,9 +54,12 @@ async function openEaselSharing(doc: EaselDocument, canvas: RefObject<EaselCanva
         confirmTitle: "Publish and Copy Link",
         windowId,
       });
+
       if (confirmed) await publish();
+
       return;
     }
+
     const choice = await showMenu([
       { id: "copy", title: "Copy Easel Link", enabled: current.publishedAt !== null },
       { id: "open", title: "Open Shared Page", enabled: current.publishedAt !== null },
@@ -57,14 +68,20 @@ async function openEaselSharing(doc: EaselDocument, canvas: RefObject<EaselCanva
       { id: "update", title: current.publishedAt === null ? "Retry Publishing and Copy Link" : "Update Shared Page and Copy Link" },
       { id: "stop", title: "Stop Sharing…" },
     ]);
+
     const url = easelShareURL(current.id);
+
     if (choice === "copy") {
       copyText(url);
       showToast(windowId, "Easel Link Copied", undefined, { icon: "link" });
     }
+
     if (choice === "open") reportBrowserCommand(newTab(windowId, { url }));
+
     if (choice === "share") await sharePage(url, doc.title, windowId);
+
     if (choice === "update") await publish();
+
     if (choice === "stop") {
       const { confirmed } = await confirm({
         title: "Stop sharing this Easel?",
@@ -73,6 +90,7 @@ async function openEaselSharing(doc: EaselDocument, canvas: RefObject<EaselCanva
         destructive: true,
         windowId,
       });
+
       if (!confirmed) return;
       await stopSharingEasel(doc.id);
       showToast(windowId, "Easel Sharing Stopped", "The shared link no longer opens this Easel.", { icon: "link" });

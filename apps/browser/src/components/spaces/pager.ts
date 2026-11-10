@@ -17,6 +17,7 @@ function restPages(current: string | null, order: readonly string[]): PagerPage[
   const i = order.indexOf(current);
   const before = i > 0 ? order[i - 1] : undefined;
   const after = i >= 0 ? order[i + 1] : undefined;
+
   return [...(before ? [{ id: before, slot: -1 }] : []), { id: current, slot: 0 }, ...(after ? [{ id: after, slot: 1 }] : [])];
 }
 
@@ -40,20 +41,25 @@ class SpacePager {
     this.state.setState({ pages: this.warmPages() });
     this.unsubscribe = useBrowser.subscribe((s, prev) => {
       const w = s.windows[windowId];
+
       if (!w) return this.dispose();
       // Native selection survives root swaps; React's selection reaches it through props.
       const was = prev.windows[windowId];
+
       if (w.spaceId !== was?.spaceId || w.incognito !== was?.incognito || s.spaceOrder !== prev.spaceOrder) {
         this.state.setState({ pages: this.warmPages() });
+
         // Without an active native pager, React's selection moves the pages.
         if (!this.active && this.index() >= 0) this.pos.set(withTiming(this.index(), { duration: 250, easing: Easing.out(Easing.cubic) }));
       }
+
       if (capabilities.swipe && !this.switching && !w.incognito && w.spaceId !== was?.spaceId) this.selectExternal(w.spaceId, s.spaceOrder);
     });
   }
 
   attach() {
     this.surfaces++;
+
     return () => void this.surfaces--;
   }
 
@@ -70,17 +76,21 @@ class SpacePager {
   private selectExternal(spaceId: string, order: readonly string[]) {
     const generation = ++this.externalGeneration;
     this.external = generation;
+
     const done = (ok: boolean) => {
       if (this.external !== generation) return;
       this.external = 0;
+
       // The latest state, not the requested profile: a gesture after the command wins.
       if (ok) this.commitNative(cef.pagerState(this.windowId));
     };
+
     cef.selectPager(this.windowId, spaceId, order.join("\n")).then(done, () => done(false));
   }
 
   private commitNative(snapshot: Pick<PagerStateEvent, "sequence" | "selected" | "profileId"> | null, event?: PagerStateEvent) {
     if (!snapshot || snapshot.sequence <= this.state.getState().ack) return;
+
     if (__DEV__) this.lastEvent = { native: event ?? null, snapshot };
     const s = useBrowser.getState();
     const w = s.windows[this.windowId];
@@ -92,12 +102,14 @@ class SpacePager {
         this.switching++;
         reportBrowserCommand(windowCommands.switchSpace(this.windowId, id).finally(() => this.switching--));
       }
+
       this.state.setState({ ack: snapshot.sequence });
     });
   }
 
   private index() {
     const current = this.current();
+
     return current ? useBrowser.getState().spaceOrder.indexOf(current) : -1;
   }
 
@@ -117,10 +129,13 @@ class SpacePager {
   wheel(e: SwipeEvent) {
     const now = Date.now();
     const w = this.wheelState;
+
     if (now - w.trigger <= WHEEL_COOLDOWN_MS) return;
+
     if (now - w.last > WHEEL_BURST_MS) w.sum = 0;
     w.last = now;
     w.sum += e.direction === "back" ? -e.distance : e.distance;
+
     if (Math.abs(w.sum) <= WHEEL_THRESHOLD) return;
     const delta = w.sum < 0 ? -1 : 1;
     w.sum = 0;
@@ -134,6 +149,7 @@ class SpacePager {
     void cef.stepPager(this.windowId, delta, false, useBrowser.getState().spaceOrder.join("\n")).then((ok) => {
       if (ok) return;
       const next = useBrowser.getState().spaceOrder[this.index() + delta];
+
       if (this.index() >= 0 && next) reportBrowserCommand(windowCommands.switchSpace(this.windowId, next));
     });
   }
@@ -141,7 +157,9 @@ class SpacePager {
   switchTo(spaceId: string) {
     const s = useBrowser.getState();
     const index = s.spaceOrder.indexOf(spaceId);
+
     if (!s.spaces[spaceId] || !this.current() || index < 0) return;
+
     if (!this.active) return reportBrowserCommand(windowCommands.switchSpace(this.windowId, spaceId));
     void cef.switchPager(this.windowId, index, s.spaceOrder.join("\n")).then((ok) => {
       if (!ok) reportBrowserCommand(windowCommands.switchSpace(this.windowId, spaceId));
@@ -150,6 +168,7 @@ class SpacePager {
 
   private current() {
     const w = useBrowser.getState().windows[this.windowId];
+
     return w && !w.incognito ? w.spaceId : null;
   }
 
@@ -175,7 +194,9 @@ const pagers = new Map<string, SpacePager>();
 
 export function pagerFor(windowId: string): SpacePager {
   let pager = pagers.get(windowId);
+
   if (!pager) pagers.set(windowId, (pager = new SpacePager(windowId)));
+
   return pager;
 }
 
@@ -201,6 +222,7 @@ export function usePagerPages(windowId: string): PagerPages {
   // Every profile stays mounted at its absolute index, so a drag needs no JS to start.
   const all = !incognito && !!current && order.includes(current);
   const pages = all ? order.map((id, slot) => ({ id, slot })) : restPages(current, order).map((p) => (p.id === current ? p : { ...p, resting: true }));
+
   return { pages, paging: all, pager };
 }
 
@@ -209,25 +231,30 @@ export function usePagerNativeConfig(windowId: string, width?: number): NativePa
   const pager = pagerFor(windowId);
   // Through useStore, not pager.state(…): the React Compiler only knows a call named use… for a hook, and would skip it.
   const ack = useStore(pager.state, (s) => s.ack);
+
   const [selected, count, order] = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
       const i = w && !w.incognito ? s.spaceOrder.indexOf(w.spaceId) : -1;
+
       return [i, s.spaceOrder.length, s.spaceOrder.join("\n")] as const;
     }),
   );
+
   return capabilities.swipe && selected >= 0 ? { key: windowId, selected, count, width: width || undefined, ack, order } : undefined;
 }
 
 // A page's place in the pager: off to the side at rest, outside the surface's clip.
 export function usePageStyle(windowId: string, slot: number, width: number) {
   const { pos } = pagerFor(windowId);
+
   return useAnimatedStyle(() => ({ transform: [{ translateX: (pos.get() - slot) * -width }] }), [slot, width]);
 }
 
 /** Opacity along the pager: `selected` with `slot` shown, easing to `rest` a page either side. */
 export function usePagerOpacity(windowId: string, slot: number | undefined, rest: number, selected: number) {
   const { pos } = pagerFor(windowId);
+
   return useAnimatedStyle(
     () => ({ opacity: slot === undefined ? rest : interpolate(pos.get(), [slot - 1, slot, slot + 1], [rest, selected, rest], Extrapolation.CLAMP) }),
     [slot, rest, selected],

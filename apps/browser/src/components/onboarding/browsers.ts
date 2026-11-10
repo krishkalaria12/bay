@@ -28,6 +28,7 @@ const CANDIDATES: { id: string; name: string; apps: string[] }[] = [
 export function detectBrowsers(): InstalledBrowser[] {
   return CANDIDATES.flatMap(({ id, name, apps }) => {
     const app = apps.map((a) => (a.startsWith("/") ? a : `/Applications/${a}`)).find(fileExists);
+
     return app ? [{ id, name, app }] : [];
   });
 }

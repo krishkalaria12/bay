@@ -13,6 +13,7 @@ const button: React.CSSProperties = {
   color: "inherit",
   cursor: "pointer",
 };
+
 const input: React.CSSProperties = { ...button, background: "#0004", cursor: "text", minWidth: 0 };
 
 /** Phase 2 diagnostic, selected only by --bay-hosting-spike or local ?spike. */
@@ -38,15 +39,19 @@ function HostingSpike() {
     if (!motion || !overlay) {
       cancelAnimation(progress);
       progress.set(0);
+
       return;
     }
+
     progress.set(withRepeat(withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.quad) }), -1, true));
     let frame = 0;
     let previous = 0;
     const samples: number[] = [];
+
     const measureFrame = (timestamp: number) => {
       if (previous) samples.push(timestamp - previous);
       previous = timestamp;
+
       if (samples.length < 240) frame = requestAnimationFrame(measureFrame);
       else {
         samples.sort((a, b) => a - b);
@@ -55,41 +60,53 @@ function HostingSpike() {
         );
       }
     };
+
     setFrames("Sampling 240 animation frame intervals...");
     frame = requestAnimationFrame(measureFrame);
+
     return () => {
       cancelAnimation(progress);
       cancelAnimationFrame(frame);
     };
   }, [motion, overlay, progress]);
-  const pageAction = (action: () => Promise<unknown> | undefined) => {
+
+  const pageAction = (action: () => Promise<void> | undefined) => {
     setActionError("");
     void Promise.resolve()
       .then(action)
       .catch((error) => setActionError(error instanceof Error ? error.message : String(error)));
   };
+
   useEffect(() => {
     const subscription = subscribeNativeEvent("BayShell", "onCommand", (payload) => {
+      // SAFETY: the checks above established this shape.
       const command = (payload as { command: string }).command;
       setCommands((current) => [command, ...current].slice(0, 8));
+
       if (command === "focusCommandBar" || command === "focusAddress") {
         address.current?.focus();
         address.current?.select();
       }
     });
+
     return () => subscription.remove();
   }, []);
+
   const measure = async () => {
     if (measuring) return;
     setMeasuring(true);
+
     try {
       setTiming(await measureBridgeCalls(preview));
     } catch (error) {
       setTiming(error instanceof Error ? error.message : String(error));
     }
+
     setMeasuring(false);
   };
+
   const windowId = String(info.constants.BayShell?.windowId ?? "hosting-spike");
+
   return (
     <WindowContext.Provider value={windowId}>
       <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#161a22", color: "#eef1f7", font: "14px system-ui,sans-serif" }}>
@@ -146,6 +163,7 @@ function HostingSpike() {
                   onSubmit={(event) => {
                     event.preventDefault();
                     const candidate = (drafts[index] ?? "").trim();
+
                     if (!/^https?:\/\//i.test(candidate)) return;
                     setURLs((current) => current.map((value, pane) => (pane === index ? candidate : value)));
                   }}
@@ -218,12 +236,16 @@ function HostingSpike() {
 
 async function measureBridgeCalls(preview: boolean): Promise<string> {
   const samples: number[] = [];
+
   for (let count = 0; count < 105; ++count) {
     const start = performance.now();
     await invokeNative("BayCEF", "engineInfo");
+
     if (count >= 5) samples.push(performance.now() - start);
   }
+
   samples.sort((a, b) => a - b);
+
   return `${preview ? "Fixture, not Mojo. " : ""}p50 ${samples[49]!.toFixed(2)} ms, p95 ${samples[94]!.toFixed(2)} ms`;
 }
 

@@ -1,3 +1,4 @@
+import { checked } from "../../lib/checked";
 import * as tabCommands from "../../runtime/tabActions";
 import { ScrollView } from "@bay/platform";
 import { Pressable, View, shortcutForCommand } from "@bay/platform";
@@ -99,7 +100,9 @@ import { toggleDownloads } from "../../runtime/windowUiActions";
 const FloatingStrip = createContext(false);
 
 type Member = { kind: "tab"; id: string; group: string | null } | { kind: "split"; id: string; tabIds: string[]; group: string | null };
+
 type GroupEntry = { kind: "group"; id: string; collapsed: boolean; members: Member[] };
+
 type Entry = { kind: "dock"; ids: string[] } | GroupEntry | Member;
 
 // `width`: the window's (the peek's, floating), from its parent, so a strip mounting again lays its tabs out right on its
@@ -138,6 +141,7 @@ export function TopTabStrip({
   useEffect(() => {
     if (floating || hidden) return;
     void setTrafficLightsCenter(windowId, STRIP_LIGHTS_CENTER);
+
     return () => void setTrafficLightsCenter(windowId, null);
   }, [floating, hidden, windowId]);
 
@@ -185,6 +189,7 @@ function StripDropHighlight({ left, right }: { left: number; right: number }) {
     glow.set(withTiming(over ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) }));
   }, [over]);
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.get() }));
+
   return (
     <Animated.View
       pointerEvents="none"
@@ -222,19 +227,24 @@ function useIncomingTab(windowId: string, current: boolean, top: DragGeometry) {
   const index = incomingIndex(top, point, start, groups);
   const beforeId = index === null ? undefined : (top.slots[index]?.tabIds[0] ?? null);
   useEffect(() => setInsert(windowId, beforeId), [beforeId, windowId]);
+
   // The drop asks again at the pointer where it ended.
   const resolve = useEffectEvent((p: [number, number]) => {
     const i = incomingIndex(top, p, start, useBrowser.getState().groups);
+
     return i === null ? undefined : (top.slots[i]?.tabIds[0] ?? null);
   });
+
   useEffect(() => {
     if (!current) return;
     setInsertResolver(windowId, resolve);
+
     return () => {
       setInsertResolver(windowId, null);
       setInsert(windowId, undefined);
     };
   }, [windowId, current, resolve]);
+
   return { active, at: index, origin };
 }
 
@@ -245,7 +255,9 @@ function incomingIndex(top: DragGeometry, point: [number, number] | null, start:
   const x = point[0] - start;
   let index = top.slots.filter((slot, i) => top.lefts[i]! + slot.width / 2 < x).length;
   const pinnedGroup = (id: string | undefined) => !!id && Object.values(groups).some((g) => g.pinned && g.tabIds.includes(id));
+
   while (index < top.slots.length && pinnedGroup(top.slots[index]!.tabIds[0])) index++;
+
   return index;
 }
 
@@ -257,6 +269,7 @@ function IncomingGap({ open, width, origin }: { open: boolean; width: number; or
     room.set(withTiming(open ? 1 : 0, { duration: 120, easing: Easing.out(Easing.cubic) }));
   }, [open]);
   const roomStyle = useAnimatedStyle(() => ({ width: room.get() * width, marginRight: interpolate(room.get(), [0, 1], [-STRIP_GAP, 0]) }), [width]);
+
   return <Animated.View ref={origin} pointerEvents="none" style={[{ height: TOP_STRIP_HEIGHT }, roomStyle]} />;
 }
 
@@ -274,11 +287,14 @@ function StripPage({ spaceId, slot, pageWidth, current, resting }: { spaceId: st
   const groupIds = parsed.flatMap((e) => (e.kind === "group" ? [e.id] : []));
   const chipWidths = useMeasuredWidths(groupIds.map(chipKey));
   const chipOf = (groupId: string) => chipWidths[groupIds.indexOf(groupId)];
+
   // What's out in the strip: collapsed groups show only their active member.
   const visible = parsed.flatMap((e): Member[] =>
     e.kind === "group" ? (e.collapsed ? e.members.filter((m) => holds(m, activeId)) : e.members) : e.kind === "dock" ? [] : [e],
   );
+
   const pinnedCount = parsed.reduce((n, e) => n + (e.kind === "dock" ? e.ids.length : 0), 0);
+
   const chip = stripTabWidth({
     pageWidth,
     dockWidth: pinnedCount ? pinnedCount * (STRIP_PINNED_CELL + STRIP_PINNED_SPACING) - STRIP_PINNED_SPACING + STRIP_DOCK_GAP : 0,
@@ -291,18 +307,22 @@ function StripPage({ spaceId, slot, pageWidth, current, resting }: { spaceId: st
     min: STRIP_MIN_CHIP,
     max: STRIP_MAX_CHIP,
   });
+
   // A tab dragged along the strip trades places with whole tabs, splits and groups.
   const top = dragGeometry(
     parsed.flatMap((e): DragSlot[] => {
       if (e.kind === "dock") return [];
+
       if (e.kind !== "group") return [{ tabIds: tabsOf(e), width: chip * units(e) }];
       const widths = e.members.map((m) => chip * units(m));
       const shown = e.members.findIndex((m) => holds(m, activeId));
       const width = groupLayout(chipOf(e.id) ?? 0, widths, STRIP_GAP, !e.collapsed, shown).width;
+
       return [{ tabIds: e.members.flatMap(tabsOf), width, marginLeft: STRIP_GROUP_MARGIN_LEFT, marginRight: STRIP_GROUP_MARGIN_RIGHT }];
     }),
     STRIP_GAP,
   );
+
   const firstSlots = firstSlotIndexes(top.slots);
   const slotOf = (id: string) => firstSlots.get(id) ?? -1;
   const dockIds = parsed.flatMap((e) => (e.kind === "dock" ? e.ids : []));
@@ -311,10 +331,13 @@ function StripPage({ spaceId, slot, pageWidth, current, resting }: { spaceId: st
   // Each entry's slot: its place among the entries that take one (the dock takes none).
   const slotIndexes: number[] = [];
   let slots = 0;
+
   for (const e of parsed) {
     slotIndexes.push(slots);
+
     if (e.kind !== "dock") slots += 1;
   }
+
   const gap = (i: number) =>
     incoming.active ? <IncomingGap key={`gap${i}`} open={incoming.at === i} width={chip} origin={i === 0 ? incoming.origin : undefined} /> : null;
 
@@ -338,6 +361,7 @@ function StripPage({ spaceId, slot, pageWidth, current, resting }: { spaceId: st
               {parsed.flatMap((e, i) => {
                 if (e.kind === "dock") return <PinnedDock key="dock" tabIds={e.ids} />;
                 const before = gap(slotIndexes[i]!);
+
                 if (e.kind === "group")
                   return [
                     before,
@@ -352,6 +376,7 @@ function StripPage({ spaceId, slot, pageWidth, current, resting }: { spaceId: st
                       onChipWidth={(width) => setMeasuredWidth(chipKey(e.id), width)}
                     />,
                   ];
+
                 if (e.kind === "split")
                   return [
                     before,
@@ -364,6 +389,7 @@ function StripPage({ spaceId, slot, pageWidth, current, resting }: { spaceId: st
                       group={null}
                     />,
                   ];
+
                 return [before, <DraggableChip key={e.id} tabId={e.id} width={chip} geometry={top} from={slotOf(e.id)} group={null} />];
               })}
               {gap(top.slots.length)}
@@ -379,31 +405,39 @@ function StripPage({ spaceId, slot, pageWidth, current, resting }: { spaceId: st
 function parseEntries(keys: string[]): Entry[] {
   const out: Entry[] = [];
   const groups = new Map<string, GroupEntry>();
+
   for (const key of keys) {
     const [kind, id, a, b] = key.split(":");
+
     if (kind === "pinned") {
       const last = out[out.length - 1];
+
       if (last?.kind === "dock") last.ids.push(id!);
       else out.push({ kind: "dock", ids: [id!] });
       continue;
     }
+
     if (kind === "group") {
       const group: GroupEntry = { kind, id: id!, collapsed: a === "1", members: [] };
       groups.set(group.id, group);
       out.push(group);
       continue;
     }
+
     const member: Member = kind === "split" ? { kind, id: id!, tabIds: a!.split(","), group: b || null } : { kind: "tab", id: id!, group: a || null };
     const group = member.group ? groups.get(member.group) : undefined;
+
     if (group) group.members.push(member);
     else out.push(member);
   }
+
   return out;
 }
 
 const chipKey = (groupId: string) => `strip-group-chip|${groupId}`;
 const holds = (m: Member, tabId: string) => (m.kind === "split" ? m.tabIds.includes(tabId) : m.id === tabId);
 const tabsOf = (m: Member) => (m.kind === "split" ? m.tabIds : [m.id]);
+
 // A split shows at most two panes' width.
 const units = (m: Member) => (m.kind === "split" ? Math.min(m.tabIds.length, 2) : 1);
 
@@ -429,6 +463,7 @@ type StripDrag = {
 
 // Where the pinned dock sits, from the left of the strip's first tab (or group): pinned tabs and tabs cross it.
 type Dock = { ids: string[]; left: number };
+
 const dockWidth = (cells: number) => cells * (STRIP_PINNED_CELL + STRIP_PINNED_SPACING) - STRIP_PINNED_SPACING;
 const DockContext = createContext<{ dock: Dock | null; top: DragGeometry } | null>(null);
 
@@ -459,10 +494,12 @@ function useStripDrag(item: StripDrag) {
   const room = item.width + item.gap;
   // Lifted off the strip it fades, and its row closes the gap it leaves.
   const fadeStyle = useAnimatedStyle(() => ({ opacity: 1 - lift.get() }));
+
   const moveStyle = useAnimatedStyle(
     () => ({ opacity: 1 - lift.get(), marginRight: -room * lift.get(), transform: [{ translateX: dx.get() + shift.get() }] }),
     [room],
   );
+
   // Flat, for callers to destructure: the compiler treats `x.ref` (and the rest of `x`) as a ref read.
   return { ref: machine.ref, panHandlers: machine.panHandlers, style: [moveStyle, { zIndex: dragging ? 10 : 0 }], fadeStyle, dragging };
 }
@@ -478,23 +515,33 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
     // Its margin: the strip closes the gap the tab leaves.
     lift.set(withTiming(lifted ? 1 : 0, { duration: STRIP_LIFT_MS, easing: Easing.out(Easing.cubic) }));
   };
+
   // The place its row makes for it (`to`), as its leading edge passes a neighbour's centre; none once it's lifted
   // off the strip, whose gap closes instead.
   const makeRoomAt = (to: number) => {
     const { geometry, from } = current();
+
     if (from < 0 || to === drag.to) return;
     drag.to = to;
     makeRoom(geometry, from, to < 0 ? from : to);
   };
+
   let owns = false;
   // Drawn over the row while dragged and settling (a group's member over the group's other members).
   let raised: number | null = null;
+
   const raise = (on: boolean) => {
-    if (Platform.OS === "web") return raiseElement(view as unknown as HTMLElement | null, current().groupId ? 1 : 0, on);
+    // SAFETY: the checks above established this shape.
+    if (Platform.OS === "web") {
+      // SAFETY: the checks above established this shape.
+      return raiseElement(checked<HTMLElement | null>(view), current().groupId ? 1 : 0, on);
+    }
+
     const tag = on ? nodeTag(view) : raised;
     raiseView(tag, current().groupId ? 1 : 0, on);
     raised = on ? tag : null;
   };
+
   const reset = () => {
     owns = false;
     makeRoomAt(-1);
@@ -503,27 +550,34 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
     setDragging(false);
     raise(false);
   };
+
   // Let go: it settles into its new place (`to`; none: back home) with the row already laid out around it, and
   // only then does the store move it: until that one update, nothing reorders the views, so it stays drawn on top.
   let settle: { land: () => void } | null = null;
+
   const settleInto = (to: number | null, commit: () => boolean) => {
     const { geometry, from } = current();
+
     if (to === null) makeRoomAt(-1);
+
     const landing = {
       land: () => {
         if (settle !== landing) return;
         settle = null;
+
         // The row stands where it is about to be laid out, then one store update (React renders it at once here,
         // outside an event, so the row's items are this geometry's only until then), the item at rest: one batch.
         if (to !== null) {
           settleRoom(geometry);
           commit();
         }
+
         dx.set(0);
         setDragging(false);
         raise(false);
       },
     };
+
     settle = landing;
     const land = () => landing.land();
     dx.set(
@@ -532,22 +586,29 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
       }),
     );
   };
+
   // Closed mid-drag (⌘W): RN drops the responder without telling it, so the drag would stay open and block the next;
   // the row it was passing stands where it is laid out.
   const unmount = () => {
     settle?.land();
+
     if (!owns) return;
     settleRoom(current().geometry);
+
     if (!current().local) cancelTabDrag();
   };
+
   const { panHandlers } = PanResponder.create({
     onMoveShouldSetPanResponder: (_, g) => {
       // RN grants a parent that asks for a drag before the child holding it can refuse: a split doesn't ask
       // while its pane is dragging.
       if (useTabDrag.getState().tabIds.length) return false;
       const axis = current().axis;
+
       if (axis === "y") return Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx);
+
       if (axis === "x") return Math.abs(g.dx) > 4;
+
       return Math.abs(g.dx) > 4 || Math.abs(g.dy) > 6;
     },
     onPanResponderGrant: (e) => {
@@ -561,7 +622,9 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
       drag = mine;
       owns = true;
       setDragging(true);
+
       if (current().from >= 0) raise(true);
+
       if (current().local) return;
       const seq = beginTabDrag(ids.length === 1 ? current().tabId : null, ids);
       view?.measureInWindow((x, y, width, height) => {
@@ -578,48 +641,61 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
       const lifted = !local && !!tabId && drag.ids.length === 1 && g.moveY > drag.stripBottom + STRIP_LIFT_SLOP;
       setLifted(lifted);
       const [min, max] = range ?? (from < 0 ? [0, 0] : dragRange(geometry, from));
+
       if (!lifted) {
         drag.dx = Math.max(min, Math.min(max, g.dx));
         dx.set(drag.dx);
       }
+
       makeRoomAt(lifted || from < 0 ? -1 : dropIndex(geometry, from, g.dx));
+
       if (!local) updateTabDrag(g.moveX, g.moveY, lifted);
     },
     onPanResponderRelease: (_, g) => {
       const lifted = drag.lifted;
       const { local, drop, from, range, geometry } = current();
       owns = false;
+
       // Over the page or out of the window: tabDrag.ts (a split, another window or a new one).
       if ((!local && (endTabDrag() || lifted)) || from < 0) return reset();
       const travelled = range ? Math.max(range[0], Math.min(range[1], g.dx)) : g.dx;
       const ids = drag.ids;
+
       // Into or out of the pinned dock (its own drop), or a selection whose other tabs move too: its place isn't
       // along this row, so the store moves it now and it's simply there.
       if (!local) {
         const store = useBrowser.getState();
         const moved = drop?.(travelled, ids) || (ids.length > 1 && reorder(ids, current(), g.dx));
+
         if (moved && useBrowser.getState() !== store) settleRoom(geometry);
+
         if (moved) return reset();
       }
+
       // PanResponder resets its gesture state after this handler: the drop's travel, kept for the landing.
       const at = g.dx;
       const to = dropIndex(geometry, from, at);
       settleInto(to === from ? null : to, () => {
         const store = useBrowser.getState();
+
         if (local) drop?.(travelled, ids);
         else reorder(ids, current(), at);
+
         return useBrowser.getState() !== store;
       });
     },
     onPanResponderTerminate: () => {
       const local = current().local;
       reset();
+
       if (!local) cancelTabDrag();
     },
   });
+
   const ref = (v: View | null) => {
     view = v;
   };
+
   return { ref, panHandlers, unmount };
 }
 
@@ -628,30 +704,39 @@ function reorder(ids: string[], { geometry, from, pinned, groupId }: StripDrag, 
   const s = useBrowser.getState();
   const tab = s.tabs[ids[0] ?? ""];
   const w = tab && listOfTab(s, tab.id);
+
   if (!tab || !w) return false;
   const to = dropIndex(geometry, from, dx);
+
   if (ids.length === 1) {
     // One tab: its place among the section's tabs (which keeps it in or out of its group as it was).
     const section = w.tabIds.filter((id) => s.tabs[id]?.spaceId === tab.spaceId && !!s.tabs[id]?.pinned === pinned);
     const index = moveIndex(section, tab.id, geometry.slots, from, to);
+
     if (index === null) return false;
     reportBrowserCommand(tabCommands.moveTab(tab.id, index));
+
     return true;
   }
+
   if (to === from) return false;
   // Before the first tab of the slot it lands on that isn't moving along (a multi-selection's other tabs), else
   // before whatever follows the strip's last slot.
   const others = geometry.slots.filter((_, i) => i !== from);
+
   let beforeId =
     others
       .slice(to)
       .flatMap((slot) => slot.tabIds)
       .find((id) => !ids.includes(id)) ?? null;
+
   if (!beforeId) {
     const last = w.tabIds.indexOf(others.at(-1)?.tabIds.at(-1) ?? "");
     beforeId = last < 0 ? null : (w.tabIds.slice(last + 1).find((id) => !ids.includes(id)) ?? null);
   }
+
   reportBrowserCommand(placeTabs(ids, { pinned, beforeId, groupId }));
+
   return true;
 }
 
@@ -660,7 +745,9 @@ function withSelection(tabId: string): string[] {
   const s = useBrowser.getState();
   const tab = s.tabs[tabId];
   const selection = tab ? (s.selection[tab.windowId] ?? []) : [];
+
   if (selection.length < 2 || !selection.includes(tabId)) return [tabId];
+
   return (listOfTab(s, tabId)?.tabIds ?? []).filter((id) => selection.includes(id) && !!s.tabs[id]?.pinned === tab!.pinned);
 }
 
@@ -684,6 +771,7 @@ function DraggableChip({
   // A tab outside groups may go on into the pinned dock, and is pinned there.
   const dock = !group && from >= 0 ? (strip?.dock ?? null) : null;
   const range: [number, number] | undefined = dock ? [dock.left - geometry.lefts[from]!, dragRange(geometry, from)[1]] : undefined;
+
   const {
     ref: dragRef,
     panHandlers: dragHandlers,
@@ -703,14 +791,19 @@ function DraggableChip({
       if (!dock) return false;
       // Its leading edge decides, as along the strip (a tab is wider than the dock): past the last pinned tab's middle.
       const left = geometry.lefts[from]! + dx;
+
       if (left > dock.left + (dock.ids.length - 1) * (STRIP_PINNED_CELL + STRIP_PINNED_SPACING) + STRIP_PINNED_CELL / 2) return false;
+
       const index = dock.ids.filter(
         (_, i) => dock.left + i * (STRIP_PINNED_CELL + STRIP_PINNED_SPACING) + STRIP_PINNED_CELL / 2 < left + STRIP_PINNED_CELL / 2,
       ).length;
+
       reportBrowserCommand(placeTabs(ids, { pinned: true, beforeId: dock.ids[index] ?? null }));
+
       return true;
     },
   });
+
   return (
     <Animated.View ref={dragRef} {...dragHandlers} mouseDownCanMoveWindow={false} style={[dragStyle, { zIndex: dragging ? 10 : active ? 1 : 0 }]}>
       <TabChip tabId={tabId} width={width} tuck={tuck} dragged={dragging} />
@@ -725,6 +818,7 @@ function useWebsiteBand(tabId: string) {
   const url = useTab(tabId)?.url;
   const themeColor = useTabLive(tabId, (l) => l.themeColor);
   const palette = toolbarPalette(theme, extend && url ? themeColor : null);
+
   return { palette, band: useEasedColor(palette.background) };
 }
 
@@ -738,9 +832,11 @@ function TabChip({ tabId, width, tuck, dragged }: { tabId: string; width: number
   const playing = useTabLive(tabId, (l) => l.playingAudio);
   const { palette, band } = useWebsiteBand(tabId);
   const { hovered, hoverProps } = useHover();
+
   if (!tab) return null;
   const title = tab.customTitle || tab.title || tab.url || "New Tab";
   const onBand = active && !floating && !!palette.background;
+
   const close = (
     <IconButton
       icon={tuck ? "minus" : "xmark"}
@@ -753,6 +849,7 @@ function TabChip({ tabId, width, tuck, dragged }: { tabId: string; width: number
       tooltip={tuck ? "Hide in Group" : "Close Tab"}
     />
   );
+
   // Not hit: an image view under a press in an inactive window moves the window (AppKit's first mouse).
   const icon = (
     <View pointerEvents="none">
@@ -760,9 +857,11 @@ function TabChip({ tabId, width, tuck, dragged }: { tabId: string; width: number
       <TabBadges tabId={tab.id} pip={false} />
     </View>
   );
+
   // Squeezed, as Chrome's: only the favicon, centred; the selected tab trades it for its ✕ on hover, and the others
   // keep no ✕ at all, so a click meant for a tab never closes it.
   const compact = width < STRIP_COMPACT_CHIP;
+
   return (
     <View {...hoverProps} tooltip={tab.url ? `${title}\n${tab.url}` : title} style={{ width, height: TOP_STRIP_HEIGHT }}>
       {active && <SelectedTab width={width} band={band} opaque={dragged} />}
@@ -806,6 +905,7 @@ function TabChip({ tabId, width, tuck, dragged }: { tabId: string; width: number
 // A tab's content row, 5…37, with Dia's hover and pressed fills for a tab that isn't selected. `compact`: one centred icon.
 function ItemRow({ hovered, pressed, compact = false, children }: { hovered: boolean; pressed: boolean; compact?: boolean; children: React.ReactNode }) {
   const theme = useTheme();
+
   return (
     <View
       style={{
@@ -837,6 +937,7 @@ function SelectedTab({ width, band, opaque = false }: { width: number; band: Fil
   const theme = useTheme();
   const windowTint = useWindowTint();
   const floating = useContext(FloatingStrip);
+
   if (floating) {
     const card = {
       position: "absolute" as const,
@@ -846,6 +947,7 @@ function SelectedTab({ width, band, opaque = false }: { width: number; band: Fil
       height: STRIP_ITEM_HEIGHT,
       borderRadius: STRIP_TAB_RADIUS,
     };
+
     return (
       <>
         {opaque && <View pointerEvents="none" style={{ ...card, backgroundColor: windowTint[0] }} />}
@@ -861,8 +963,10 @@ function SelectedTab({ width, band, opaque = false }: { width: number; band: Fil
       </>
     );
   }
+
   const body = width - 1;
   const fills: Fill[] = [...(opaque ? [windowTint[0]] : []), theme.card, ...(band ? [band] : [])];
+
   return (
     <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width, height: TOP_STRIP_HEIGHT }}>
       {fills.map((fill, i) => (
@@ -885,6 +989,7 @@ function SelectedTab({ width, band, opaque = false }: { width: number; band: Fil
 // The tab's body over the strip, in one of its fills.
 function TabBody({ width, fill }: { width: number; fill: Fill }) {
   const color = useEasedColorStyle(fill, "backgroundColor");
+
   return (
     <Animated.View
       style={[
@@ -907,6 +1012,7 @@ function TabBody({ width, fill }: { width: number; fill: Fill }) {
 function Flare({ x, side, color: fill }: { x: number; side: "left" | "right"; color: Fill }) {
   const outer = STRIP_FLARE * 2;
   const color = useEasedColorStyle(fill, "borderColor");
+
   return (
     <View style={{ position: "absolute", left: x, top: TOP_STRIP_HEIGHT - STRIP_FLARE, width: STRIP_FLARE, height: STRIP_FLARE, overflow: "hidden" }}>
       <Animated.View
@@ -930,11 +1036,13 @@ function Flare({ x, side, color: fill }: { x: number; side: "left" | "right"; co
 // Dia keeps pinned tabs in one shared container (the TabDockItemResting fill and stroke), not a tile each.
 function PinnedDock({ tabIds }: { tabIds: string[] }) {
   const theme = useTheme();
+
   // Pinned tabs trade places among themselves, or go out among the tabs (unpinned).
   const geometry = dragGeometry(
     tabIds.map((id) => ({ tabIds: [id], width: STRIP_PINNED_CELL })),
     STRIP_PINNED_SPACING,
   );
+
   return (
     <View
       style={{
@@ -975,6 +1083,7 @@ function PinnedCell({ tabId, geometry, from }: { tabId: string; geometry: DragGe
   // With no tabs yet, room for one after the dock.
   const end = top && top.slots.length ? top.lefts.at(-1)! + top.slots.at(-1)!.width : STRIP_MAX_CHIP;
   const range: [number, number] | undefined = dock ? [-geometry.lefts[from]!, end - dock.left - geometry.lefts[from]! - STRIP_PINNED_CELL] : undefined;
+
   const {
     ref: dragRef,
     panHandlers: dragHandlers,
@@ -992,13 +1101,17 @@ function PinnedCell({ tabId, geometry, from }: { tabId: string; geometry: DragGe
     drop: (dx, ids) => {
       if (!dock || !top) return false;
       const left = dock.left + geometry.lefts[from]! + dx;
+
       if (left + STRIP_PINNED_CELL / 2 < -STRIP_DOCK_GAP / 2) return false;
       const k = top.slots.filter((slot, i) => top.lefts[i]! + slot.width / 2 < left + STRIP_PINNED_CELL).length;
       reportBrowserCommand(placeTabs(ids, { pinned: false, beforeId: top.slots[k]?.tabIds[0] ?? null }));
+
       return true;
     },
   });
+
   if (!tab) return null;
+
   return (
     <Animated.View ref={dragRef} {...dragHandlers} mouseDownCanMoveWindow={false} style={dragStyle}>
       <View {...hoverProps} tooltip={`${tab.customTitle || tab.title || tab.url}${tab.url ? `\n${tab.url}` : ""}`}>
@@ -1063,11 +1176,13 @@ function StripGroup({
   const shown = entry.members.findIndex((m) => holds(m, activeId));
   const chipSize = chipWidth ?? 0;
   const { offsets, width } = groupLayout(chipSize, widths, STRIP_GAP, expanded, shown);
+
   // Inside an open group, a member trades places with the other members only.
   const members = dragGeometry(
     entry.members.map((m, i) => ({ tabIds: tabsOf(m), width: widths[i]! })),
     STRIP_GAP,
   );
+
   const tuckable = useBrowser((s) => !expanded && shown >= 0 && !!tuckTarget(s, windowId, spaceId, entry.id));
   const open = useSharedValue(expanded ? 1 : 0);
   const size = useSharedValue(width);
@@ -1082,11 +1197,15 @@ function StripGroup({
       springs.current += 1;
       const id = springs.current;
       let running = values.length;
+
       const done = () => {
         running -= 1;
+
         if (running === 0 && id === springs.current) setMoving(false);
       };
+
       setMoving(true);
+
       for (const [value, to] of values)
         value.set(
           withSpring(to, GROUP_SPRING, () => {
@@ -1094,6 +1213,7 @@ function StripGroup({
           }),
         );
     };
+
     if (settled.current !== state) {
       // Expanding, collapsing and a member coming out or going back spring.
       settled.current = state;
@@ -1109,6 +1229,7 @@ function StripGroup({
   const fadeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, open.get())) }));
   const sizeStyle = useAnimatedStyle(() => ({ width: size.get() }));
   const tailStyle = useAnimatedStyle(() => ({ left: size.get() - (STRIP_TAIL_EXPANDED - 2.25), opacity: Math.min(1, Math.max(0, open.get())) }));
+
   // Dragged by its chip, the group moves along the strip as one.
   const {
     ref: dragRef,
@@ -1127,21 +1248,27 @@ function StripGroup({
     local: true,
     drop: (dx) => {
       const to = dropIndex(geometry, from, dx);
+
       if (to === from) return true;
       const others = geometry.slots.filter((_, i) => i !== from);
       const pinned = !!browserRead.getState().groups[entry.id]?.pinned;
       reportBrowserCommand(moveGroup(entry.id, { pinned, beforeId: others[to]?.tabIds[0] ?? null }));
+
       return true;
     },
   });
+
   if (!group) return null;
   const tint = group.color ? GROUP_COLORS[group.color].hex : null;
   const divider = theme.dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)";
+
   const tuck = () => {
     const s = useBrowser.getState();
     const target = tuckTarget(s, windowId, spaceId, entry.id);
+
     if (target) reportBrowserCommand(tabCommands.activate(target, windowId));
   };
+
   return (
     <Animated.View
       ref={dragRef}
@@ -1265,12 +1392,15 @@ function GroupMember({
   useEffect(() => {
     shownValue.set(withTiming(shown ? 1 : 0, { duration: STRIP_TUCK_FADE_MS, easing: Easing.out(Easing.quad) }));
   }, [shown]);
+
   const placeStyle = useAnimatedStyle(() => {
     const o = open.get();
     // Out with the group's opening (fully in by halfway), or as the shown member.
     const opacity = Math.min(1, Math.max(0, shownValue.get() + Math.min(1, Math.max(0, o * 2))));
+
     return { left: interpolate(o, [0, 1], [start, start + offset]), opacity };
   }, [start, offset]);
+
   return (
     <Animated.View
       pointerEvents={interactive ? "box-none" : "none"}
@@ -1309,12 +1439,14 @@ function SplitChip({ tabIds, width, geometry, from, group }: { tabIds: string[];
   const floating = useContext(FloatingStrip);
   const ink = active && !floating && palette.background ? palette : null;
   const { hovered, hoverProps } = useHover();
+
   const {
     ref: dragRef,
     panHandlers: dragHandlers,
     style: dragStyle,
     dragging,
   } = useStripDrag({ tabId: null, ids: () => tabIds, pinned: false, groupId: group, geometry, from, width, gap: STRIP_GAP, axis: "x" });
+
   return (
     <Animated.View ref={dragRef} {...dragHandlers} mouseDownCanMoveWindow={false} style={[dragStyle, { zIndex: dragging ? 10 : active ? 1 : 0 }]}>
       <View {...hoverProps} style={{ width, height: TOP_STRIP_HEIGHT }}>
@@ -1337,12 +1469,15 @@ function SplitPart({ tabId, first, ink }: { tabId: string; first: boolean; ink: 
   const windowId = useWindowId();
   const tab = useTab(tabId);
   const focused = useIsActiveTab(tabId);
+
   const {
     ref: dragRef,
     panHandlers: dragHandlers,
     fadeStyle: dragFade,
   } = useStripDrag({ tabId, ids: () => [tabId], pinned: false, groupId: null, geometry: NO_SLOTS, from: -1, width: 0, gap: 0, axis: "y" });
+
   if (!tab) return null;
+
   return (
     <Animated.View ref={dragRef} {...dragHandlers} style={[{ flex: 1, flexDirection: "row", alignItems: "center" }, dragFade]}>
       <ContextMenuArea onContextMenu={() => void openTabMenu(windowId, tab)} style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
@@ -1370,6 +1505,7 @@ function SplitPart({ tabId, first, ink }: { tabId: string; first: boolean; ink: 
 function NewTabButton({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View
       {...hoverProps}
@@ -1410,11 +1546,14 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
   const theme = useTheme();
   const windowTint = useWindowTint();
   const { slide, live, show, hide } = usePeek(enabled);
+
   const slideStyle = useAnimatedStyle(() => {
     "worklet";
     const p = slide.get();
+
     return { opacity: p, transform: [{ translateY: interpolate(p, [0, 1], [-STRIP_PEEK_HEIGHT - 8, 0]) }] };
   });
+
   return (
     <>
       {/* Leaving the strip hides the peek unless the pointer goes on into it, as at the sidebar's edge (App.tsx). */}

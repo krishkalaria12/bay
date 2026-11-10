@@ -63,6 +63,7 @@ export const settingsAdapter: Adapter = {
   adoptRemoteOnJoin: true,
   extract: () => {
     const settings = store().settings;
+
     return { values: new Map(SYNCED_SETTINGS.map((name) => [`set:${name}`, { v: settings[name] ?? null }])) };
   },
   apply: (visible, changed) => {
@@ -161,6 +162,7 @@ type BookmarkValue = { k: "u" | "f"; p: string; t: string; u?: string; a: number
 export function bookmarksAdapter(spaceId: string): Adapter {
   // Before the tree is read from Chrome it's empty, which would read as every bookmark deleted.
   const ready = () => !!store().bookmarksReady[spaceId];
+
   return {
     prefix: "bm:",
     extract: (base) => {
@@ -174,13 +176,18 @@ export function bookmarksAdapter(spaceId: string): Adapter {
       // An old key names this node only if it maps to it (a copy of a bookmark carries its original's key along).
       const keyOf = (id: string) => {
         if (id === roots.bar) return "bar";
+
         if (id === roots.other) return "other";
         const key = b.nodes[id]?.syncKey;
+
         return key && bookmarkUuidFor(key) === id ? key : id;
       };
+
       const seen = new Set<string>();
+
       const walk = (folderId: string) => {
         const folder = b.nodes[folderId];
+
         if (folder?.kind !== "folder" || seen.has(folderId)) return;
         seen.add(folderId);
         const parent = keyOf(folderId);
@@ -206,8 +213,10 @@ export function bookmarksAdapter(spaceId: string): Adapter {
           if (node.kind === "folder") walk(id);
         });
       };
+
       walk(roots.bar);
       walk(roots.other);
+
       return { values };
     },
     apply: (visible) => {
@@ -220,26 +229,33 @@ export function bookmarksAdapter(spaceId: string): Adapter {
       const keys = new Map([...visible.keys()].map((k) => [bookmarkUuidFor(k.slice(3)), k.slice(3)]));
       const rootOf = (key: string) => (key === "bar" ? roots.bar : key === "other" ? roots.other : null);
       const parentOf = new Map<string, string>();
+
       for (const [id, v] of values) {
         const root = rootOf(v.p);
         const parent = root ? null : bookmarkUuidFor(v.p);
         parentOf.set(id, root ?? (parent && values.get(parent)?.k === "f" ? parent : roots.other));
       }
+
       for (const id of [...values.keys()].sort()) {
         const seen = new Set<string>([id]);
+
         for (let at = parentOf.get(id)!; parentOf.has(at); at = parentOf.get(at)!) {
           if (seen.has(at)) {
             parentOf.set(id, roots.other);
             break;
           }
+
           seen.add(at);
         }
       }
+
       const children = new Map<string, string[]>([
         [roots.bar, []],
         [roots.other, []],
       ]);
+
       for (const id of values.keys()) children.set(parentOf.get(id)!, [...(children.get(parentOf.get(id)!) ?? []), id]);
+
       const byPosition = (a: string, z: string) => {
         const pa = values.get(a)!.pos;
         const pz = values.get(z)!.pos;
@@ -280,17 +296,22 @@ export function bookmarksAdapter(spaceId: string): Adapter {
               }
             : { kind: "folder", id, parentId: parentOf.get(id)!, title: v.t, children: [], addedAt: v.a, ...syncKey };
       }
+
       for (const [parent, ids] of children) {
         const folder = nodes[parent];
+
         if (folder?.kind === "folder") nodes[parent] = { ...folder, children: ids.sort(byPosition) };
       }
+
       syncStore().setState({ bookmarks: { ...b, nodes } });
     },
   };
 }
 
 type HistoryValue = { t: string; n: number; vt: number[] };
+
 const lastVisitOf = (v: HistoryValue) => Math.max(0, ...v.vt);
+
 // What Chrome keeps in history (an app page, bay://, it doesn't): other records are left alone.
 const keptInHistory = (url: string) => /^(https?|file):/i.test(url);
 
@@ -304,6 +325,7 @@ export const historyExpired = (key: string, value: JsonValue | null, now: number
 // visits instead of trading versions.
 export function historyAdapter(spaceId: string): Adapter {
   const ready = () => !!store().historyReady[spaceId];
+
   return {
     prefix: "h:",
     extract: (base) => {
@@ -315,9 +337,11 @@ export function historyAdapter(spaceId: string): Adapter {
       const view = store().history[spaceId] ?? [];
       // The view holds Chrome's newest MAX_HISTORY URLs: one visited at or before this may only be missing from it.
       const floor = store().historyFloor[spaceId] ?? -Infinity;
+
       for (const e of view) {
         if (!keptInHistory(e.url)) continue;
         const key = `h:${e.url}`;
+
         if (e.lastVisit < since) {
           older.add(key);
           continue;
@@ -329,6 +353,7 @@ export function historyAdapter(spaceId: string): Adapter {
         const edited = !known || local.vt.some((t) => !known.vt.some((k) => Math.abs(k - t) <= SAME_VISIT_MS));
         values.set(key, edited ? local : known);
       }
+
       const ignore = (key: string) => {
         if (older.has(key) || !keptInHistory(key.slice(2))) return true;
         // Chrome expired it (as every Mac does), or the view no longer reaches it: not a deletion.
@@ -348,6 +373,7 @@ export function historyAdapter(spaceId: string): Adapter {
     },
     apply: async (visible, changed) => {
       const generation = syncGeneration();
+
       if (!ready()) return false;
       const since = Date.now() - HISTORY_WINDOW_MS;
       const byUrl = new Map((store().history[spaceId] ?? []).map((e) => [e.url, e]));
@@ -366,8 +392,10 @@ export function historyAdapter(spaceId: string): Adapter {
         if (v) {
           const have = old?.visitTimes ?? [];
           const fresh = v.vt.filter((t) => t >= since && !have.some((h) => Math.abs(h - t) <= SAME_VISIT_MS));
+
           if (fresh.length) add.push({ url, title: v.t, visitTimes: fresh });
           const times = [...have, ...fresh].sort((a, z) => a - z).slice(-MAX_VISIT_TIMES);
+
           if (!times.length) continue;
           updates.set(url, {
             url,
@@ -382,6 +410,7 @@ export function historyAdapter(spaceId: string): Adapter {
           updates.set(url, null);
         }
       }
+
       if (!updates.size) return;
       const engine = engineProfile(spaceId);
       await Promise.all([addHistoryVisits(engine, add, SAME_VISIT_MS), deleteHistoryUrls(engine, remove)]);
@@ -389,8 +418,10 @@ export function historyAdapter(spaceId: string): Adapter {
       // The view as it is now (Chrome's reports may have landed meanwhile), with the records merged in.
       syncStore().setState((s) => {
         const current = new Map((s.history[spaceId] ?? []).map((e) => [e.url, e]));
+
         for (const [url, update] of updates) {
           const now = current.get(url);
+
           if (!update) current.delete(url);
           else if (!now) current.set(url, update);
           else {
@@ -398,7 +429,9 @@ export function historyAdapter(spaceId: string): Adapter {
             current.set(url, { ...update, visits: Math.max(now.visits, update.visits), lastVisit: times[times.length - 1]!, visitTimes: times });
           }
         }
+
         const list = [...current.values()].sort((a, z) => z.lastVisit - a.lastVisit).slice(0, MAX_HISTORY);
+
         return { history: { ...s.history, [spaceId]: list } };
       });
     },
@@ -409,17 +442,20 @@ export type DeviceTabs = { n: string; tabs: { u: string; t: string }[] };
 
 export function deviceTabsAdapter(spaceId: string, deviceId: string, name: () => string, retired = false): Adapter {
   const key = `tabs:${deviceId}`;
+
   return {
     prefix: "tabs:",
     extract: () => {
       if (retired) return { values: new Map(), ignore: (k) => k !== key };
       const s = store();
+
       const open = Object.values(s.tabs)
         // Pinned tabs sync as pinned tabs; unloaded tiles and peeks aren't open.
         .filter((t) => t.spaceId === spaceId && !t.pinned && !t.unloaded && !t.peekOf && /^(https?|file):/.test(t.url) && !s.windows[t.windowId]?.incognito)
         .sort((a, z) => z.lastActiveAt - a.lastActiveAt)
         .slice(0, MAX_DEVICE_TABS)
         .map((t) => ({ u: t.url, t: t.customTitle || t.title }));
+
       return { values: new Map([[key, { n: name(), tabs: open } satisfies DeviceTabs]]), ignore: (k) => k !== key };
     },
     apply: () => true,
@@ -427,6 +463,7 @@ export function deviceTabsAdapter(spaceId: string, deviceId: string, name: () =>
 }
 
 type PinValue = { g: string | null; u: string; t: string | null; i: string | null; ti: string; pos: string; r?: true; o?: string };
+
 // Optional folder metadata keeps these records readable as flat pinned groups on older devices.
 type PinGroupValue = { n: string; i: string | null; c: TabGroup["color"]; pos: string; f?: true; p?: string | null; b?: string | null; a?: number };
 
@@ -435,33 +472,42 @@ export function pinnedAdapter(spaceId: string): Adapter {
     prefix: "pin:",
     extract: (base) => {
       const s = store();
+
       type Pin = Pick<Tab, "id" | "url" | "title" | "customTitle" | "customIcon" | "pinnedRow"> & { pinnedUrl?: string | null };
+
       const tiles: Pin[] = [];
       const groups: (Pick<TabGroup, "id" | "name" | "icon" | "color"> | PinnedFolder)[] = [];
       const members = new Map<string, Pin[]>();
       const pinnedGroupOf = new Map<string, TabGroup>();
+
       for (const g of Object.values(s.groups)) if (g.pinned && g.spaceId === spaceId) g.tabIds.forEach((id) => pinnedGroupOf.set(id, g));
+
       // The space's tiles and pinned groups, in its list's order.
       for (const id of listIds(s, spaceListKey(s, spaceId))) {
         const t = s.tabs[id];
+
         if (!t || t.spaceId !== spaceId) continue;
         const g = pinnedGroupOf.get(id);
         const folder = t.pinnedRow && t.folderId ? s.pinnedFolders[t.folderId] : undefined;
+
         if (t.pinned || (t.pinnedRow && !folder)) tiles.push(t);
         else if (folder) {
           if (!members.has(folder.id)) {
             members.set(folder.id, []);
             groups.push(folder);
           }
+
           members.get(folder.id)!.push(t);
         } else if (g) {
           if (!members.has(g.id)) {
             members.set(g.id, []);
             groups.push(g);
           }
+
           members.get(g.id)!.push(t);
         }
       }
+
       for (const folder of Object.values(s.pinnedFolders)) {
         if (folder.spaceId !== spaceId || members.has(folder.id)) continue;
         groups.push(folder);
@@ -490,7 +536,7 @@ export function pinnedAdapter(spaceId: string): Adapter {
             i: t.customIcon,
             ti: t.title,
             pos: positions[i]!,
-      };
+          };
 
           if (t.pinnedRow) {
             value.r = true;
@@ -524,6 +570,7 @@ export function pinnedAdapter(spaceId: string): Adapter {
     },
     apply: (visible, changed) => {
       let s = store();
+
       if (!s.spaces[spaceId]) return false;
       const key = spaceListKey(s, spaceId);
       const pins = new Map<string, PinValue>();
@@ -545,13 +592,17 @@ export function pinnedAdapter(spaceId: string): Adapter {
         <T extends { pos: string }>(m: Map<string, T>) =>
         (a: string, z: string) =>
           m.get(a)!.pos < m.get(z)!.pos ? -1 : m.get(a)!.pos > m.get(z)!.pos ? 1 : a < z ? -1 : 1;
+
       const groupOrder = [...groupValues.keys()].sort(byPos(groupValues));
+
       const tileOrder = [...pins.keys()]
         .filter((id) => {
           const g = pins.get(id)!.g;
+
           return !g || !groupValues.has(g);
         })
         .sort(byPos(pins));
+
       const memberOrder = new Map(groupOrder.map((g) => [g, [...pins.keys()].filter((id) => pins.get(id)!.g === g).sort(byPos(pins))]));
 
       // A pin removed elsewhere goes; one whose page is open here stays, as a page.
@@ -572,13 +623,16 @@ export function pinnedAdapter(spaceId: string): Adapter {
         false,
       );
       const tabs = { ...s.tabs };
+
       for (const id of goneTabs)
         if (tabs[id]) {
           const { pinnedRow: _, folderId: _f, ...rest } = tabs[id]!;
           tabs[id] = { ...rest, pinned: false, pinnedUrl: null };
         }
+
       let groups = { ...s.groups };
       let pinnedFolders = { ...s.pinnedFolders };
+
       for (const k of changed)
         if (k.startsWith("pin:g:") && !visible.has(k)) {
           delete groups[k.slice(6)];
@@ -600,17 +654,20 @@ export function pinnedAdapter(spaceId: string): Adapter {
           delete groups[id];
           continue;
         }
+
         delete pinnedFolders[id];
         const old = groups[id];
         groups[id] = old
           ? { ...old, name: v.n, icon: v.i, color: v.c, pinned: true }
           : { id, spaceId, name: v.n, icon: v.i, color: v.c, collapsed: false, pinned: true, tabIds: [], createdAt: Date.now() };
       }
+
       pinnedFolders = normalizePinnedFolders(pinnedFolders);
       // Sync order includes empty folders too, so it also defines their sibling order.
       const folderOrder = [...Object.keys(pinnedFolders).filter((id) => !groupValues.has(id)), ...groupOrder.filter((id) => pinnedFolders[id])];
       pinnedFolders = Object.fromEntries(folderOrder.map((id) => [id, pinnedFolders[id]!]));
       const added: string[] = [];
+
       for (const [id, v] of pins) {
         const group = v.g && groups[v.g] ? groups[v.g]! : null;
         const folder = v.g && pinnedFolders[v.g] ? pinnedFolders[v.g]! : null;
@@ -654,17 +711,21 @@ export function pinnedAdapter(spaceId: string): Adapter {
         const wanted = g.pinned && memberOrder.has(g.id) ? memberOrder.get(g.id)!.filter((id) => tabs[id]) : g.tabIds.filter((id) => !inGroup.has(id));
         groups[g.id] = { ...g, tabIds: wanted };
       }
+
       for (const g of Object.values(groups)) if (g.spaceId === spaceId && !g.tabIds.length) delete groups[g.id];
 
       // The list in the synced order: its pins where its pins were, the rest as they are.
       const flatSequence = [...tileOrder, ...groupOrder.flatMap((g) => memberOrder.get(g) ?? [])];
+
       const rowSequence = flatSequence
         .filter((id) => tabs[id]?.pinnedRow)
         .sort((a, z) => {
           const aPos = pins.get(a)?.o ?? "";
           const zPos = pins.get(z)?.o ?? "";
+
           return aPos < zPos ? -1 : aPos > zPos ? 1 : 0;
         });
+
       const sequence = [
         ...flatSequence.filter((id) => tabs[id]?.pinned),
         ...rowSequence,
@@ -704,24 +765,32 @@ export function passwordsAdapter(
   let created = new Map<string, number>();
   const profile = () => engineProfile(spaceId);
   const keyOf = (origin: string, username: string) => `pw:${origin}\n${username}`;
+
   const read = async () => {
     const generation = syncGeneration();
     const logins = await readLogins(profile());
     assertSyncGeneration(generation);
+
     if (!logins) return null;
     const out = new Map<string, PasswordValue & { c: number }>();
+
     for (const l of logins) {
       const origin = originOf(l);
+
       if (origin) out.set(keyOf(origin, l.username), { o: origin, u: l.username, p: l.password, c: l.created });
     }
+
     return out;
   };
+
   return {
     prefix: "pw:",
     extract: async () => {
       const now = Date.now();
+
       if (now < quietUntil || (now - lastRead < PASSWORD_READ_INTERVAL_MS && !forced())) return null;
       const logins = await read();
+
       if (!logins) return null;
       lastRead = now;
       created = new Map([...logins].map(([k, v]) => [k, v.c]));
@@ -743,6 +812,7 @@ export function passwordsAdapter(
 
       for (const key of changed) {
         assertSyncGeneration(generation);
+        // SAFETY: the checks above established this shape.
         const v = visible.get(key) as PasswordValue | undefined;
         const have = local.get(key);
         // SAFETY: pw records are written by passwordsAdapter extract as PasswordValue values.
@@ -782,5 +852,6 @@ export function passwordsAdapter(
 
 function originOf(login: SavedLogin): string | null {
   const realm = login.origin.replace(/\/$/, "");
+
   return /^https?:\/\/[^/\s]+$/.test(realm) ? realm : null;
 }

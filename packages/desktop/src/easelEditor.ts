@@ -1,15 +1,24 @@
+import type { JsonInput } from "./json.ts";
+import * as v from "valibot";
 import type { EaselDocument, EaselItem, EaselState, EaselTool } from "./easel";
 
 // The Easel canvas's editing, without a view: the port of EaselCanvasView (ios/Easel.swift) the desktop hosts use.
 // EaselCanvas.web.tsx feeds it pointer and key events and draws what it holds.
 
 export type Point = { x: number; y: number };
+
 export type Rect = Point & { width: number; height: number };
+
 export type EaselModifiers = { shift: boolean; option: boolean; command: boolean };
+
 export type EaselPress = EaselModifiers & { button: number; clickCount: number };
+
 export type EaselKey = EaselModifiers & { key: string };
+
 export type RetainedImage = { path: string; width: number; height: number };
+
 type EditKey = "text" | "url";
+
 type Mode = "" | "pan" | "move" | "resize" | "marquee" | "draw";
 
 export type EaselEditorHost = {
@@ -27,7 +36,7 @@ export type EaselEditorHost = {
 
 const LIMIT = 10_000_000;
 const clamp = (value: number) => Math.min(LIMIT, Math.max(-LIMIT, value));
-const finite = (value: unknown, fallback = 0) => (typeof value === "number" && Number.isFinite(value) ? clamp(value) : fallback);
+const finite = (value: JsonInput, fallback = 0) => (v.is(v.number(), value) && Number.isFinite(value) ? clamp(value) : fallback);
 
 export const itemRect = (item: EaselItem): Rect => ({
   x: finite(item.x),
@@ -44,11 +53,14 @@ const union = (a: Rect | null, b: Rect): Rect => {
   if (!a) return b;
   const x = Math.min(a.x, b.x);
   const y = Math.min(a.y, b.y);
+
   return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
 };
+
 const inset = (r: Rect, by: number): Rect => ({ x: r.x + by, y: r.y + by, width: r.width - 2 * by, height: r.height - 2 * by });
 const contains = (r: Rect, p: Point) => p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height;
 const intersects = (a: Rect, b: Rect) => a.x <= b.x + b.width && b.x <= a.x + a.width && a.y <= b.y + b.height && b.y <= a.y + a.height;
+
 const corners = (r: Rect): Point[] => [
   { x: r.x, y: r.y },
   { x: r.x + r.width, y: r.y },
@@ -59,14 +71,17 @@ const corners = (r: Rect): Point[] => [
 /** What every item covers, strokes and arrowheads included. */
 export function contentBounds(items: readonly EaselItem[]): Rect | null {
   let bounds: Rect | null = null;
+
   for (const item of items) {
     const width = Math.max(0.5, finite(item.lineWidth, 2));
     const padding = item.kind === "arrow" ? Math.max(12, width * 4) : Math.max(2, width * 2);
     bounds = union(bounds, inset(itemRect(item), -padding));
   }
+
   if (!bounds) return null;
   const x = Math.floor(bounds.x);
   const y = Math.floor(bounds.y);
+
   return { x, y, width: Math.ceil(bounds.x + bounds.width) - x, height: Math.ceil(bounds.y + bounds.height) - y };
 }
 
@@ -74,12 +89,14 @@ export function contentBounds(items: readonly EaselItem[]): Rect | null {
 export function safeUrl(text: string): string | null {
   try {
     const url = new URL(text);
+
     return (url.protocol === "https:" || url.protocol === "http:") && url.hostname ? url.href : null;
   } catch {
     return null;
   }
 }
 
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 const TOOL_KEYS: Record<string, EaselTool> = { v: "select", h: "hand", p: "pen", t: "text", r: "rect", o: "ellipse", a: "arrow" };
 const HISTORY_LIMIT = 100;
 const EDIT_ID_LIMIT = 128;
@@ -133,30 +150,39 @@ export class EaselEditor {
   }
   get cursor() {
     if (this.tool === "hand" || this.spaceHeld) return this.mode === "pan" ? "grabbing" : "grab";
+
     return this.tool === "text" ? "text" : this.tool === "select" ? "default" : "crosshair";
   }
 
   /** A document from the app: an echo of this canvas's own edit leaves its selection, gesture and undo alone. */
   load(json: string) {
     let next: EaselDocument;
+
     try {
+      // SAFETY: the checks above established this shape.
       next = JSON.parse(json) as EaselDocument;
     } catch {
       return;
     }
-    if (typeof next?.id !== "string" || !Array.isArray(next.items)) return;
+
+    if (!v.is(v.string(), next?.id) || !Array.isArray(next.items)) return;
+
     if (JSON.stringify(next) === JSON.stringify(this.document)) return;
     const same = next.id === this.document.id;
+
     if (same) {
       if (JSON.stringify(next.items) === JSON.stringify(this.items)) {
         // Persistence may replace updatedAt or rename the document when echoing an edit.
         this.document = next;
         this.emitted = JSON.stringify(next);
         this.host.changed();
+
         return;
       }
+
       if (next.nativeEditId && this.emittedEditIds.includes(next.nativeEditId)) return;
     }
+
     this.cancelEditor();
     this.document = next;
     this.history = [];
@@ -166,10 +192,12 @@ export class EaselEditor {
     this.marquee = null;
     this.mode = "";
     this.selection = new Set();
+
     if (!same) {
       this.viewport = { x: 0, y: 0 };
       this.zoom = 1;
     }
+
     this.emit();
   }
 
@@ -189,16 +217,20 @@ export class EaselEditor {
   }
   private get center() {
     const { width, height } = this.host.size();
+
     return this.world({ x: width / 2, y: height / 2 });
   }
   get selectedBounds(): Rect | null {
     let bounds: Rect | null = null;
+
     for (const item of this.items) if (this.selection.has(item.id)) bounds = union(bounds, itemRect(item));
+
     return bounds;
   }
 
   emit() {
     this.host.changed();
+
     if (!this.document.id) return;
     this.emitted = JSON.stringify(this.document);
     this.report();
@@ -207,6 +239,7 @@ export class EaselEditor {
   // Selection and the viewport change far more often than the document, which the app saves.
   private report() {
     this.host.changed();
+
     if (!this.document.id) return;
     const viewport = { x: this.viewport.x, y: this.viewport.y, zoom: this.zoom };
     this.host.emit({
@@ -224,12 +257,14 @@ export class EaselEditor {
     const id = crypto.randomUUID();
     this.document = { ...this.document, nativeEditId: id };
     this.emittedEditIds.push(id);
+
     if (this.emittedEditIds.length > EDIT_ID_LIMIT) this.emittedEditIds.shift();
   }
 
   private record(previous: EaselDocument) {
     if (JSON.stringify(previous) === JSON.stringify(this.document)) return this.emit();
     this.history.push(previous);
+
     if (this.history.length > HISTORY_LIMIT) this.history.shift();
     this.future = [];
     this.document = { ...this.document, updatedAt: Date.now() };
@@ -240,6 +275,7 @@ export class EaselEditor {
   undo() {
     this.commitText();
     const previous = this.history.pop();
+
     if (!previous) return;
     this.future.push(this.document);
     this.document = previous;
@@ -251,6 +287,7 @@ export class EaselEditor {
   redo() {
     this.commitText();
     const next = this.future.pop();
+
     if (!next) return;
     this.history.push(this.document);
     this.document = next;
@@ -266,6 +303,7 @@ export class EaselEditor {
 
   deleteSelection() {
     this.commitText();
+
     if (!this.selection.size) return;
     const previous = this.document;
     this.items = this.items.filter((i) => !this.selection.has(i.id));
@@ -283,6 +321,7 @@ export class EaselEditor {
 
   reorder(front: boolean) {
     this.commitText();
+
     if (!this.selection.size) return;
     const previous = this.document;
     const chosen = this.items.filter((i) => this.selection.has(i.id));
@@ -304,11 +343,14 @@ export class EaselEditor {
   fit() {
     this.commitText();
     const box = contentBounds(this.items);
+
     if (!box) {
       this.viewport = { x: 0, y: 0 };
       this.zoom = 1;
+
       return this.report();
     }
+
     const { width, height } = this.host.size();
     this.zoom = Math.min(4, Math.max(0.05, Math.min(Math.max(1, width - 64) / box.width, Math.max(1, height - 64) / box.height)));
     this.viewport = { x: box.x + box.width / 2 - width / (2 * this.zoom), y: box.y + box.height / 2 - height / (2 * this.zoom) };
@@ -333,12 +375,14 @@ export class EaselEditor {
     this.items = [...this.items, item];
     this.selection = new Set([item.id]);
     this.record(previous);
+
     if (!text) this.beginEditing(item);
   }
 
   addLink(url: string, title: string, at?: Point) {
     this.commitText();
     const address = safeUrl(url);
+
     if (!address) return;
     const previous = this.document;
     const item = { ...this.makeItem("link", at ?? this.center, 320, 80), text: title || url, url: address, fontSize: 16 };
@@ -349,14 +393,18 @@ export class EaselEditor {
 
   insertImages(retained: readonly RetainedImage[], at?: Point) {
     this.commitText();
+
     if (!retained.length) return;
     const point = at ?? this.center;
     const previous = this.document;
+
     const added = retained.map((media, index) => {
       const scale = Math.min(1, 640 / Math.max(media.width, media.height));
       const place = { x: point.x + index * 24, y: point.y + index * 24 };
+
       return { ...this.makeItem("image", place, media.width * scale, media.height * scale), path: media.path };
     });
+
     this.items = [...this.items, ...added];
     this.selection = new Set(added.map((i) => i.id));
     this.record(previous);
@@ -379,25 +427,33 @@ export class EaselEditor {
   copySelection(): { items: string; plain: string } | null {
     this.commitText();
     const chosen = this.items.filter((i) => this.selection.has(i.id));
+
     if (!chosen.length) return null;
+
     return { items: JSON.stringify(chosen), plain: chosen.flatMap((i) => i.url ?? i.text ?? []).join("\n") };
   }
 
   /** The pasted text, as a link when it is one. */
   pasteText(text: string, at?: Point) {
     const trimmed = text.trim();
+
     if (!trimmed) return false;
+
     if (safeUrl(trimmed)) this.addLink(trimmed, trimmed, at);
     else this.addText(text, at);
+
     return true;
   }
 
   pasteItems(json: string, at?: Point) {
     try {
       const copied: unknown = JSON.parse(json);
+
       if (!Array.isArray(copied) || !copied.length) return false;
       this.commitText();
+      // SAFETY: the checks above established this shape.
       this.insertCopies(copied as EaselItem[], at ?? this.center);
+
       return true;
     } catch {
       return false;
@@ -413,62 +469,84 @@ export class EaselEditor {
     this.downViewport = this.viewport;
     this.beforeDrag = this.document;
     this.dragSelection = new Set(this.selection);
+
     if (this.tool === "hand" || this.spaceHeld || press.button === 1) {
       this.mode = "pan";
+
       return;
     }
+
     if (this.tool === "text") {
       this.addText("", this.downWorld);
       this.mode = "";
+
       return;
     }
+
     if (this.tool !== "select") {
       this.mode = "draw";
       this.draft = this.makeItem(this.tool, this.downWorld, 1, 1);
       this.strokePoints = [this.downWorld];
+
       return;
     }
+
     const box = this.selectedBounds;
+
     if (box) {
       const corner = corners(box).findIndex((c) => {
         const s = this.screen(c);
+
         return Math.hypot(s.x - p.x, s.y - p.y) < 9;
       });
+
       if (corner !== -1) {
         this.resizingCorner = corner;
         this.resizeBounds = box;
         this.mode = "resize";
+
         return;
       }
     }
+
     const hit = this.itemAt(this.downWorld, 4 / this.zoom);
+
     if (!hit) {
       if (!press.shift) this.selection = new Set();
       this.dragSelection = new Set(this.selection);
       this.mode = "marquee";
+
       return this.report();
     }
+
     if (press.command && hit.url && safeUrl(hit.url)) {
       this.host.openLink(hit.url);
       this.mode = "";
+
       return;
     }
+
     if (press.clickCount === 2 && (hit.kind === "text" || hit.kind === "link")) {
       this.selection = new Set([hit.id]);
       this.beginEditing(hit, press.option && hit.kind === "link" ? "url" : "text");
       this.mode = "";
+
       return this.report();
     }
+
     if (press.shift) {
       if (this.selection.has(hit.id)) {
         this.selection.delete(hit.id);
         this.mode = "";
+
         return this.report();
       }
+
       this.selection.add(hit.id);
     } else if (!this.selection.has(hit.id)) {
       this.selection = new Set([hit.id]);
     }
+
     if (press.option) {
       // Option-drag duplicates in one history entry when released.
       const copies = this.items.filter((i) => this.selection.has(i.id)).map((i) => ({ ...i, id: crypto.randomUUID() }));
@@ -476,6 +554,7 @@ export class EaselEditor {
       this.selection = new Set(copies.map((i) => i.id));
       this.markEdit();
     }
+
     // Movement starts from the post-duplicate items, but undo returns to before duplication.
     this.dragItems = this.items;
     this.mode = "move";
@@ -490,6 +569,7 @@ export class EaselEditor {
     const at = this.world(p);
     const dx = at.x - this.downWorld.x;
     const dy = at.y - this.downWorld.y;
+
     switch (this.mode) {
       case "pan":
         this.viewport = { x: this.downViewport.x - (p.x - this.downScreen.x) / this.zoom, y: this.downViewport.y - (p.y - this.downScreen.y) / this.zoom };
@@ -511,35 +591,43 @@ export class EaselEditor {
         this.selection = new Set([...this.dragSelection, ...this.items.filter((i) => intersects(box, itemRect(i))).map((i) => i.id)]);
         break;
       }
+
       case "draw":
         this.drawTo(at, dx, dy, modifiers.shift);
         break;
       default:
         return;
     }
+
     this.report();
   }
 
   private resizeTo(at: Point, keepRatio: boolean) {
     const previous = this.beforeDrag?.items;
+
     if (!previous) return;
     const bounds = this.resizeBounds;
     const opposite = corners(bounds)[(this.resizingCorner + 2) % 4]!;
+
     const target: Rect = {
       x: Math.min(opposite.x, at.x),
       y: Math.min(opposite.y, at.y),
       width: Math.max(4, Math.abs(opposite.x - at.x)),
       height: Math.max(4, Math.abs(opposite.y - at.y)),
     };
+
     if (keepRatio) {
       target.height = target.width / Math.max(0.001, bounds.width / Math.max(1, bounds.height));
+
       if (this.resizingCorner < 2) target.y = opposite.y - target.height;
     }
+
     const sx = target.width / Math.max(1, bounds.width);
     const sy = target.height / Math.max(1, bounds.height);
     this.items = previous.map((value) => {
       if (!this.selection.has(value.id)) return value;
       const old = itemRect(value);
+
       const item: EaselItem = {
         ...value,
         x: target.x + (old.x - bounds.x) * sx,
@@ -547,25 +635,32 @@ export class EaselEditor {
         width: old.width * sx,
         height: old.height * sy,
       };
+
       if (value.points) item.points = itemPoints(value).map((p) => [p.x * sx, p.y * sy]);
+
       if (value.fontSize !== undefined) item.fontSize = Math.max(1, finite(value.fontSize, 24) * Math.min(sx, sy));
+
       return item;
     });
   }
 
   private drawTo(at: Point, dx: number, dy: number, keepSquare: boolean) {
     const draft = this.draft;
+
     if (!draft) return;
     const start = this.downWorld;
     let end = at;
+
     if (keepSquare && (this.tool === "rect" || this.tool === "ellipse")) {
       const size = Math.max(Math.abs(dx), Math.abs(dy));
       end = { x: start.x + (dx < 0 ? -size : size), y: start.y + (dy < 0 ? -size : size) };
     }
+
     if (this.tool === "pen") this.strokePoints.push(at);
     const points = this.tool === "pen" ? this.strokePoints : [start, end];
     const minX = Math.min(...points.map((p) => p.x));
     const minY = Math.min(...points.map((p) => p.y));
+
     const next: EaselItem = {
       ...draft,
       x: minX,
@@ -573,6 +668,7 @@ export class EaselEditor {
       width: Math.max(1, Math.max(...points.map((p) => p.x)) - minX),
       height: Math.max(1, Math.max(...points.map((p) => p.y)) - minY),
     };
+
     if (this.tool === "pen" || this.tool === "arrow") next.points = points.map((p) => [p.x - minX, p.y - minY]);
     this.draft = next;
   }
@@ -581,20 +677,24 @@ export class EaselEditor {
     const previous = this.beforeDrag;
     const mode = this.mode;
     this.beforeDrag = null;
+
     if (mode === "draw" && this.draft) {
       const item = this.tool === "pen" && !this.draft.points ? { ...this.draft, points: [[0, 0]] } : this.draft;
       const r = itemRect(item);
+
       // Drawn, not selected: the tool stays ready for the next mark (V selects).
       if (this.tool === "pen" || Math.max(r.width, r.height) * this.zoom > 3) {
         this.items = [...this.items, item];
         this.selection = new Set();
       }
     }
+
     this.draft = null;
     this.marquee = null;
     this.mode = "";
     this.dragItems = [];
     this.strokePoints = [];
+
     if ((mode === "draw" || mode === "move" || mode === "resize") && previous) this.record(previous);
     else this.report();
   }
@@ -615,12 +715,15 @@ export class EaselEditor {
 
   commitText() {
     const editing = this.editing;
+
     if (!editing) return;
     const text = this.host.editorText();
     this.cancelEditor();
     const item = this.items.find((i) => i.id === editing.id);
+
     if (text === null || !item || item[editing.key] === text) return;
     const value = editing.key === "url" ? safeUrl(text) : text;
+
     if (value === null) return;
     const previous = this.document;
     this.items = this.items.map((i) => (i.id === editing.id ? { ...i, [editing.key]: value } : i));
@@ -633,14 +736,18 @@ export class EaselEditor {
   keyDown({ key, shift, option, command }: EaselKey): boolean {
     const lower = key.toLowerCase();
     const tool = TOOL_KEYS[lower];
+
     if (tool && !command && !option) {
       if (tool !== this.tool) {
         this.setTool(tool);
         this.report();
       }
+
       return true;
     }
+
     if (command) {
+      // oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
       const commands: Record<string, () => void> = {
         z: () => (shift ? this.redo() : this.undo()),
         a: () => this.selectAll(),
@@ -652,43 +759,61 @@ export class EaselEditor {
         "]": () => this.reorder(true),
         "[": () => this.reorder(false),
       };
+
       const run = commands[lower];
       run?.();
+
       return !!run;
     }
+
     if (key === " ") {
       this.spaceHeld = true;
       this.host.changed();
+
       return true;
     }
+
     if (key === "Backspace" || key === "Delete") {
       this.deleteSelection();
+
       return true;
     }
+
     if (key === "Escape") {
       this.cancelGesture();
+
       return true;
     }
+
     if (key === "Enter") {
       const item = this.items.find((i) => this.selection.has(i.id) && (i.kind === "text" || i.kind === "link"));
+
       if (!item) return false;
       this.beginEditing(item);
+
       return true;
     }
+
     const step = shift ? 10 : 1;
+
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
     const arrows: Record<string, Point> = {
       ArrowLeft: { x: -step, y: 0 },
       ArrowRight: { x: step, y: 0 },
       ArrowUp: { x: 0, y: -step },
       ArrowDown: { x: 0, y: step },
     };
+
     const arrow = arrows[key];
+
     if (arrow && this.selection.size) {
       const previous = this.document;
       this.items = this.items.map((i) => (this.selection.has(i.id) ? { ...i, x: finite(i.x) + arrow.x, y: finite(i.y) + arrow.y } : i));
       this.record(previous);
+
       return true;
     }
+
     return false;
   }
 
@@ -706,8 +831,10 @@ export class EaselEditor {
     if (this.beforeDrag) {
       const changed = JSON.stringify(this.items) !== JSON.stringify(this.beforeDrag.items);
       this.document = this.beforeDrag;
+
       if (changed) this.markEdit();
     }
+
     this.beforeDrag = null;
     this.mode = "";
     this.draft = null;
@@ -722,6 +849,7 @@ export class EaselEditor {
   menuAt(p: Point) {
     this.commitText();
     const item = this.itemAt(this.world(p), 0);
+
     if (item && !this.selection.has(item.id)) {
       this.selection = new Set([item.id]);
       this.report();
@@ -730,11 +858,13 @@ export class EaselEditor {
 
   private selectedLinkUrl() {
     const item = this.items.find((i) => this.selection.has(i.id) && safeUrl(i.url ?? i.source?.url ?? ""));
+
     return item ? (item.url ?? item.source?.url ?? null) : null;
   }
 
   get menu() {
     const selected = this.selection.size > 0;
+
     return [
       { id: "undo", title: "Undo", enabled: this.canUndo },
       { id: "redo", title: "Redo", enabled: this.canRedo },
@@ -752,16 +882,24 @@ export class EaselEditor {
   /** A menu item that needs no clipboard. */
   runMenu(id: string) {
     if (id === "undo") this.undo();
+
     if (id === "redo") this.redo();
+
     if (id === "duplicate") this.duplicateSelection();
+
     if (id === "selectAll") this.selectAll();
+
     if (id === "delete") this.deleteSelection();
+
     if (id === "editLink") {
       const item = this.items.find((i) => this.selection.has(i.id) && i.kind === "link");
+
       if (item) this.beginEditing(item, "url");
     }
+
     if (id === "openLink") {
       const url = this.selectedLinkUrl();
+
       if (url) this.host.openLink(url);
     }
   }

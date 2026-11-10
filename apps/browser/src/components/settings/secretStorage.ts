@@ -8,6 +8,7 @@ const CARD_STORE: Record<PlatformOS, string> = {
   windows: "Windows Credential Manager",
   linux: "your desktop keyring",
 };
+
 // Where saved passwords live and what holds their key.
 const PASSWORD_STORAGE: Record<PlatformOS, string> = {
   macos: "Saved on this Mac, separately for each space, and encrypted with a key in your Keychain.",
@@ -26,10 +27,12 @@ export function secretStorageWarning(kind: SecretStorageKind | null): { title: s
       description:
         "Bay couldn't reach GNOME Keyring, KWallet or another Secret Service, or was started with --password-store=basic. Saved passwords, cookies and card numbers use a fixed key that any app on this computer can read. Start a keyring and reopen Bay; what you save after that uses the keyring.",
     };
+
   if (kind === "unavailable")
     return {
       title: "Passwords can't be encrypted right now",
       description: "Bay has no key for saved passwords, cookies and card numbers. Unlock your keyring and reopen Bay.",
     };
+
   return null;
 }

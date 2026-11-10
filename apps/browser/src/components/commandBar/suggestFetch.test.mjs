@@ -7,13 +7,16 @@ const tick = () => new Promise(setImmediate);
 
 test("Google suggestions use the bounded native route rather than a page CORS request", async () => {
   const urls = [];
+
   const fetch = createSuggestionFetch(
     async () => assert.fail("web suggestions must not retry through browser CORS"),
     async (url) => {
       urls.push(url);
+
       return { body: '["bay",["bay browser","bay area"]]' };
     },
   );
+
   const fetcher = createSuggestFetcher({ fetch, delay: 0 });
   const suggestions = await new Promise((done) => fetcher.request(BUILT_IN_ENGINES[0], "bay", done));
   assert.deepEqual(suggestions, ["bay browser", "bay area"]);
@@ -24,10 +27,12 @@ test("Google suggestions use the bounded native route rather than a page CORS re
 
 test("cancelled native requests reject immediately and late replies cannot revive them", async () => {
   let finish;
+
   const fetch = createSuggestionFetch(
     async () => assert.fail("unexpected browser fetch"),
     () => new Promise((done) => (finish = done)),
   );
+
   const controller = new AbortController();
   const pending = fetch("https://suggestqueries.google.com/complete/search?q=bay", { signal: controller.signal });
   const rejected = assert.rejects(pending, /cancelled/);
@@ -45,6 +50,7 @@ test("native errors stay failures and do not fall back to browser fetch", async 
       throw new Error("unapproved endpoint");
     },
   );
+
   await assert.rejects(fetch("https://unapproved.example/", { signal: new AbortController().signal }), /unapproved endpoint/);
 });
 
@@ -61,10 +67,12 @@ test("native macOS fetch keeps its existing abort signal and response semantics"
 test("an already cancelled request never enters the native bridge", async () => {
   const controller = new AbortController();
   controller.abort();
+
   const fetch = createSuggestionFetch(
     async () => assert.fail("unexpected browser fetch"),
     async () => assert.fail("cancelled request must not start"),
   );
+
   await assert.rejects(fetch("https://provider.example/", { signal: controller.signal }), /cancelled/);
 });
 
@@ -73,6 +81,7 @@ test("a malformed native body rejects rather than leaving the fetch pending", as
     async () => assert.fail("unexpected browser fetch"),
     async () => null,
   );
+
   await assert.rejects(fetch("https://provider.example/", { signal: new AbortController().signal }), /Invalid native suggestion response/);
 });
 
@@ -99,6 +108,7 @@ test("extension suggestions retain their native owner profile across space chang
       isDefault: false,
     },
   ];
+
   const selected = allEngines([], records).find((engine) => engine.extension);
   assert.equal(suggestionProfile(selected, records), "extension-owner");
   assert.equal(suggestionProfile(BUILT_IN_ENGINES[0], records), "");

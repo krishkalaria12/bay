@@ -44,7 +44,9 @@ const scopeState = (scope: SearchScope | null, from: string) => (scope ? JSON.st
 // The text an arrowed-to row puts in the field, to open as is or keep editing.
 function fillText(s: Suggestion | undefined, dropdown: boolean): string | null {
   if (s?.kind === "search") return s.query;
+
   if (s?.kind === "page") return dropdown ? s.url : s.url.replace(/^https?:\/\//, "");
+
   return null;
 }
 
@@ -71,6 +73,7 @@ const BASE_KEYS = [
   { key: "Enter", ctrlKey: true, shiftKey: true },
   { key: "/", metaKey: true },
 ];
+
 const SCOPE_KEYS = [...BASE_KEYS, { key: "Backspace" }];
 const FORGET_KEYS = [...BASE_KEYS, { key: "Backspace", shiftKey: true }];
 
@@ -125,6 +128,7 @@ export function Omnibox({
     createBangSubmitter(async () => {
       const bundled = await loadBangs();
       const custom = customBangTable(searchEngines(useBrowser.getState().settings).filter((e) => e.custom));
+
       return joinBangTables([custom, bundled]);
     }),
   );
@@ -156,6 +160,7 @@ export function Omnibox({
   const idle = !scope && (!edited || !typed.trim());
   const pageContext = palette && !newTab && !!currentUrl && initialText === currentUrl && typed === initial && !edited && !scope;
   let sections = idleSections;
+
   if (!idle) sections = [{ id: "results", items: suggested }];
   else if (pageContext) sections = currentPageActions({ url: currentUrl, title: currentTitle, customTitle: null });
   const items = palette ? sections.flatMap((s) => s.items) : dropdown && !edited && !scope ? start : suggested;
@@ -221,10 +226,12 @@ export function Omnibox({
   // Another space while open (⌃1…9, ⌥⌘←/→): what was typed stays and its results are the new space's; an untouched
   // field (the old page's address) clears for the new space's start.
   const [shownSpace, setShownSpace] = useState(spaceId);
+
   if (shownSpace !== spaceId) {
     setShownSpace(spaceId);
     setArrowed(null);
     setSelected(0);
+
     if (!edited) {
       setTyped("");
       setPendingSelection({ start: 0, end: 0 });
@@ -235,65 +242,84 @@ export function Omnibox({
     bangEnter.cancel();
     onCancel?.();
   };
+
   const closeMenu = () => {
     setMenu(null);
     requestAnimationFrame(() => input.current?.focus());
   };
 
-  const openingFailed = (error: unknown) => {
+  const openingFailed = (error: Error) => {
     console.error("Couldn't open the address", error);
     showToast(windowId, "Couldn't open the address", "Please try again.");
   };
+
   const background = (url: string) => {
     void openInBackground(url, tabId).catch(openingFailed);
   };
+
   const go = (url: string, disposition: Disposition = "current", background = false) => {
     bangEnter.cancel();
+
     if (!url) return;
+
     if (background) return void openInBackground(url, tabId).catch(openingFailed);
+
     const result =
       palette && newTab && disposition !== "newWindow"
         ? dispatchBrowserCommand({ method: "submitNewTab", windowId, url })
         : openFromBar(url, tabId, disposition);
+
     void result.catch(openingFailed);
   };
 
   const choose = (s: Suggestion | undefined, disposition: Disposition = "current", byEnter = false, background = false) => {
     bangEnter.cancel();
+
     // Opt-in telemetry records the suggestion kind only, never its text.
     if (s || !scope) trackSuggestionChosen(s);
     const typedSearch = !s || (byEnter && selectedIndex === 0 && (s.kind === "page" || (s.kind === "search" && !s.bang && !s.suggested)));
+
     if (bangsEnabled && !scope && typedSearch) {
       const text = edited ? value : initialText || value;
+
       if (mayBeBang(text)) {
         const fallback = s && "url" in s ? s.url : resolveInput(text, engine.url);
         const sessionId = useBrowser.getState().windowUi[windowId]?.panel.sessionId;
         bangEnter.submit(text, (url) => {
           const state = useBrowser.getState();
           const panel = state.windowUi[windowId]?.panel;
+
           if (!panel?.open || panel.sessionId !== sessionId || state.settings.searchShortcutMode !== "duckduckgo") return;
           go(url ?? fallback, disposition, background);
         });
+
         return;
       }
     }
+
     if (!s) {
       if (scope) return;
       const text = edited ? value : initialText || value;
+
       return go(resolveInput(text, engine.url), disposition, background);
     }
+
     switch (s.kind) {
       case "page":
         if (s.tabId) {
           if (background || (palette && newTab && disposition !== "current")) return go(s.url, disposition, background);
           void switchFromBar(s.tabId, s.url, tabId, disposition).catch(openingFailed);
+
           return;
         }
+
         if (s.cleanedId && disposition === "current" && !background) {
           const url = s.url;
           void restoreFromBar(s.cleanedId, tabId).then((restored) => restored || go(url), openingFailed);
+
           return;
         }
+
         return go(s.url, disposition, background);
       case "search":
       case "create":
@@ -306,15 +332,18 @@ export function Omnibox({
         setTyped(s.value);
         setSuppressCompletion(true);
         setPendingSelection({ start: 0, end: s.value.length });
+
         return;
       case "action":
         dismiss();
+
         return runBarAction(s.id, windowId);
     }
   };
 
   const forceSearch = () => {
     const text = typed.trim();
+
     if (!text) return;
     go(scope ? scopedSearchUrl(scope, text, engine) : searchUrl(engine, text));
   };
@@ -349,6 +378,7 @@ export function Omnibox({
     const topFills = !shownCompletion && top?.kind === "page" && top.url !== resolveInput(typed, engine.url);
     const text = !idle && (next > 0 || topFills) ? fillText(items[next], dropdown) : null;
     setArrowed(text === null ? null : { typed, index: next, text });
+
     if (text !== null) setPendingSelection({ start: text.length, end: text.length });
     else if (preview !== null) setPendingSelection({ start: typed.length, end: typedValue.length });
   };
@@ -356,11 +386,13 @@ export function Omnibox({
   const forget = (s: PaletteSuggestion) => {
     const { history } = useBrowser.getState();
     const urls = s.host ? (history[spaceId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
+
     if (urls.length) reportBrowserCommand(removeHistory(spaceId, urls));
   };
 
   const openRowMenu = (target = current) => {
     if (!target) return;
+
     const title =
       target.kind === "page"
         ? target.title || displayUrl(target.url)
@@ -369,6 +401,7 @@ export function Omnibox({
           : target.kind === "calc" || target.kind === "emoji"
             ? target.value
             : target.title;
+
     const actions = rowMenuActions(target, newTab, searchTemplates, {
       choose,
       openInBackground: background,
@@ -376,8 +409,10 @@ export function Omnibox({
       closeTab,
       forget,
     });
+
     setMenu({ side: "right", title, actions });
   };
+
   const openAppMenu = () => void appPaletteActions(windowId, dismiss).then((actions) => setMenu({ side: "left", title: "Bay", actions }));
 
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
@@ -421,19 +456,28 @@ export function Omnibox({
         setTyped(value);
         setSuppressCompletion(true);
         setPendingSelection({ start: value.length, end: value.length });
+
         return;
       }
+
       return move(1);
     }
+
     if (key === "Backspace" && scope && !typed) return leaveScope(true);
+
     if (key === "Enter") {
       if (metaKey && shiftKey) return forceSearch();
+
       if (ctrlKey && !(bangsEnabled && mayBeBang(typed)) && !/[\s./:]/.test(typed.trim()) && typed.trim())
         return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
+
       // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
       if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return choose(current, "newTab", true, true);
+
       if (shiftKey && !metaKey && !altKey && topResult) return go(topResult);
+
       if (metaKey || altKey || shiftKey) return choose(current, dispositionFor(e.nativeEvent), true);
+
       return choose(current, "current", true);
     }
   };
@@ -453,6 +497,7 @@ export function Omnibox({
   const keyAt = useRef(0);
   useLayoutEffect(() => {
     if (__DEV__) traceOmnibox({ bar: `${windowId}:${variant}`, typed, heard: heardAt.current, committed: Date.now() });
+
     if (keyAt.current) {
       sampleOmniboxLatency(Date.now() - keyAt.current);
       keyAt.current = 0;
@@ -514,7 +559,9 @@ export function Omnibox({
     const { start, end } = selection.current;
     input.current?.setSelection(start, end);
   };
+
   const focused = useRef(false);
+
   const focusOnce = () => {
     if (focused.current) return;
     focused.current = true;
@@ -522,6 +569,7 @@ export function Omnibox({
     // Changes nothing, but gives the field its own empty history before the first edit.
     recordEdit(typed, typed);
   };
+
   // macOS's buttons never take the keyboard, nor does a page attaching under the palette; the web host's do. So, as
   // there, the open palette's field keeps the keyboard (across a space switch, say) unless another field takes it.
   const keepFocus = () => {
@@ -529,6 +577,7 @@ export function Omnibox({
     requestAnimationFrame(() => {
       const active = document.activeElement;
       const field = active instanceof HTMLElement && (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+
       if (field || !document.hasFocus() || !browserRead.getState().windowUi[windowId]?.panel.open) return;
       focusField();
     });
@@ -568,6 +617,7 @@ export function Omnibox({
   // A private window keeps no history to remove from.
   const removeRow = useEffectEvent((url: string) => !isIncognitoSpace(spaceId) && reportBrowserCommand(removeHistory(spaceId, [url])));
   const rowActions: RowActions = { choose: chooseRow, hover: setSelected, remove: removeRow };
+
   const suggestionList = (
     <SuggestionList
       items={items}

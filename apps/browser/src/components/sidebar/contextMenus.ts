@@ -80,13 +80,16 @@ import { openNewTabPanel } from "../../lib/newTab";
 
 const store = () => browserRead.getState();
 const sep = { separator: true } as const;
+
 type Mods = NonNullable<Extract<MenuItem, { id: string }>["modifiers"]>;
+
 const hint = (key: string, ...modifiers: Mods) => ({ key, modifiers });
 
 function bookmarkFolderItems(windowId: string, prefix: string): MenuItem[] {
   const s = store();
   const roots = s.bookmarks.roots[bookmarkSpaceId(s, s.windows[windowId])];
   const folders = roots ? [...folderChildren(s.bookmarks, roots.bar), ...folderChildren(s.bookmarks, roots.other)].filter((n) => n.kind === "folder") : [];
+
   return [
     { id: `${prefix}bar`, title: "Bookmarks Bar", symbol: "menubar.rectangle" },
     ...(roots ? [{ id: `${prefix}${roots.other}`, title: "Other Bookmarks", symbol: "folder" }] : []),
@@ -99,6 +102,7 @@ function bookmarkFolderItems(windowId: string, prefix: string): MenuItem[] {
 function moveToWindowItems(windowId: string): MenuItem[] {
   const s = store();
   const others = s.windowOrder.filter((id) => id !== windowId && !s.windows[id]!.incognito && s.windows[id]!.kind !== "small");
+
   return [
     ...others.map((id) => ({ id: `window:${id}`, title: windowTitle(s, id) })),
     ...(others.length ? [sep] : []),
@@ -110,6 +114,7 @@ function moveToGroupItems(windowId: string, exclude: string | undefined): MenuIt
   const s = store();
   const w = s.windows[windowId];
   const groups = Object.values(s.groups).filter((g) => g.spaceId === w?.spaceId && g.id !== exclude);
+
   return groups.map((g) => ({ id: `group:${g.id}`, title: groupLabel(s, g), symbol: g.pinned ? "pin" : "square.on.square" }));
 }
 
@@ -117,12 +122,14 @@ function moveToGroupItems(windowId: string, exclude: string | undefined): MenuIt
 export function moveToFolderItems(windowId: string, exclude: string | undefined, movingFolder = false): MenuItem[] {
   const s = store();
   const spaceId = s.windows[windowId]?.spaceId;
+
   const branch = (parentId: string | null, depth: number): MenuItem[] =>
     childFolderIds(s, parentId, spaceId).flatMap((id): MenuItem[] => {
       if (depth > MAX_FOLDER_DEPTH || (movingFolder && !canMoveFolder(s, exclude!, id))) return [];
       const f = s.pinnedFolders[id]!;
       const children = branch(id, depth + 1);
       const item: MenuItem = { id: `pfolder:${id}`, title: f.name || "New Folder", symbol: "folder", enabled: id !== exclude };
+
       return children.length
         ? [
             {
@@ -134,15 +141,19 @@ export function moveToFolderItems(windowId: string, exclude: string | undefined,
           ]
         : [item];
     });
+
   const folders = branch(null, 1);
+
   return [...folders, ...(folders.length ? [sep] : []), ...(!movingFolder ? [{ id: "pfolder:new", title: "New Folder", symbol: "folder.badge.plus" }] : [])];
 }
 
 function runFolderChoice(windowId: string, ids: string[], choice: string): boolean {
   if (!choice.startsWith("pfolder:")) return false;
   const folderId = choice.slice(8);
+
   if (folderId === "new") reportBrowserCommand(newPinnedFolderWith(windowId, ids));
   else withFolderMoveUndo(windowId, () => placeTabs(ids, { pinned: false, row: true, folderId }));
+
   return true;
 }
 
@@ -151,6 +162,7 @@ export function tabsAround(windowId: string, tab: Tab) {
   const s = store();
   const list = viewTabIds(s, windowId).filter((id) => !pinnedPage(s.tabs[id]!));
   const index = list.indexOf(tab.id);
+
   return {
     above: pinnedPage(tab) ? [] : list.slice(0, index),
     below: pinnedPage(tab) ? [] : list.slice(index + 1),
@@ -162,7 +174,9 @@ export function tabsAround(windowId: string, tab: Tab) {
 export async function openTabMenu(windowId: string, tab: Tab) {
   const s = store();
   const selected = selectedTabIds(s, windowId);
+
   if (selected.length > 1 && selected.includes(tab.id)) return openMultiMenu(windowId, selected);
+
   if (s.selection[windowId]?.length) reportBrowserCommand(setSelection(windowId, []));
 
   const { above, below, others } = tabsAround(windowId, tab);
@@ -173,11 +187,13 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const away = awayFromPin(tab);
   const active = activeTabId(s, windowId);
   const current = tab.id === active;
+
   const moveToSpace: MenuItem[] = [
     ...s.spaceOrder.map((id) => ({ id: `profile:${id}`, title: s.spaces[id]!.name, checked: id === tab.spaceId, enabled: id !== tab.spaceId })),
     sep,
     { id: "profile:new", title: "New Space…" },
   ];
+
   const groups = moveToGroupItems(windowId, group?.id);
   const folder = tab.pinnedRow && tab.folderId ? s.pinnedFolders[tab.folderId] : undefined;
   const windows = moveToWindowItems(windowId).filter((item) => "id" in item && item.id !== "window:new");
@@ -253,9 +269,12 @@ export async function openTabMenu(windowId: string, tab: Tab) {
       enabled: below.length > 0,
     },
   ]);
+
   if (!choice) return;
   const t = { kind: "tab" as const, id: tab.id };
+
   if (runCalendarMenu(choice)) return;
+
   if (choice === "backToPin") reportBrowserCommand(returnToPinnedUrl(tab.id));
   else if (choice === "replacePin") reportBrowserCommand(setPinnedUrl(tab.id));
   else if (choice === "editPin") void editPinnedPage(windowId, tab.id);
@@ -313,6 +332,7 @@ async function openMultiMenu(windowId: string, ids: string[]) {
   const allRows = tabs.every((t) => t.pinnedRow);
   const incognito = tabs.some((t) => isIncognitoSpace(t.spaceId));
   const groups = moveToGroupItems(windowId, undefined);
+
   const choice = await showMenu([
     { id: "pinRow", title: allRows ? `Unpin ${n} Tabs` : `Pin ${n} Tabs`, symbol: allRows ? "pin.slash" : "pin" },
     { id: "essential", title: allPinned ? `Remove ${n} Tabs from Essentials` : `Add ${n} Tabs to Essentials`, symbol: "square.grid.2x2" },
@@ -339,7 +359,9 @@ async function openMultiMenu(windowId: string, ids: string[]) {
     sep,
     { id: "close", title: `Close ${n} Tabs`, symbol: "xmark", ...hint("w", "command") },
   ]);
+
   if (!choice) return;
+
   if (choice === "pinRow") reportBrowserCommand(pinRows(ids, !allRows));
   else if (choice === "essential") reportBrowserCommand(pinTabs(ids, !allPinned));
   else if (runFolderChoice(windowId, ids, choice)) return;
@@ -356,18 +378,22 @@ async function openMultiMenu(windowId: string, ids: string[]) {
     const moving = moveTabsToWindow(ids, choice === "window:new" ? null : choice.slice(7)).then((target) =>
       target ? switchToTab(store().windows[target]?.activeTabIds[tabs[0]!.spaceId] ?? ids[0]!) : null,
     );
+
     reportBrowserCommand(moving);
   } else if (choice === "close") reportBrowserCommand(closeTabs(ids));
+
   if (choice !== "copy" && choice !== "copyMd" && choice !== "share") reportBrowserCommand(setSelection(windowId, []));
 }
 
 export async function openGroupMenu(windowId: string, groupId: string) {
   const s = store();
   const g = s.groups[groupId];
+
   if (!g) return;
   const colors: GroupColor[] = ["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"];
   const siteColor = g.tabIds.map((id) => s.live[id]?.themeColor).find(Boolean);
   const matched = siteColor ? nearestGroupColor(siteColor) : null;
+
   const choice = await showMenu([
     { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
     { id: "icon", title: g.icon ? "Change Icon…" : "Add Icon…", symbol: "face.smiling" },
@@ -402,8 +428,10 @@ export async function openGroupMenu(windowId: string, groupId: string) {
 
   if (choice === "rename") void startRename(windowId, target);
   else if (choice === "icon") void openIconPicker(windowId, target);
-  else if (choice.startsWith("color:")) reportBrowserCommand(updateGroup(groupId, { color: (choice.slice(6) || null) as GroupColor | null }));
-  else if (choice === "newTab") {
+  else if (choice.startsWith("color:")) {
+    // SAFETY: the checks above established this shape.
+    reportBrowserCommand(updateGroup(groupId, { color: (choice.slice(6) || null) as GroupColor | null }));
+  } else if (choice === "newTab") {
     reportBrowserCommand(openNewTabPanel(windowId, groupId));
   } else if (choice === "pin") reportBrowserCommand(moveGroup(groupId, { pinned: !g.pinned }));
   else if (choice === "duplicate") reportBrowserCommand(duplicateGroup(groupId));
@@ -423,6 +451,7 @@ function firstAfterFolder(folderId: string): string | null {
   const ids = f ? listIds(s, spaceListKey(s, f.spaceId)) : [];
   const members = new Set(folderTabIds(s, folderId));
   const last = ids.reduce((at, id, i) => (members.has(id) ? i : at), -1);
+
   return last < 0 ? null : (ids.slice(last + 1).find((id) => s.tabs[id]?.pinnedRow) ?? null);
 }
 
@@ -430,8 +459,10 @@ function firstAfterFolder(folderId: string): string | null {
 export async function openFolderMenu(windowId: string, folderId: string) {
   const s = store();
   const f = s.pinnedFolders[folderId];
+
   if (!f) return;
   const members = folderTabIds(s, folderId);
+
   const choice = await showMenu([
     { id: "collapse", title: f.collapsed ? "Open Folder" : "Close Folder", symbol: f.collapsed ? "folder" : "folder.fill" },
     { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
@@ -450,8 +481,10 @@ export async function openFolderMenu(windowId: string, folderId: string) {
     // Its tabs stay pinned, loose, where they were.
     { id: "delete", title: "Remove Folder", symbol: "trash" },
   ]);
+
   if (!choice) return;
   const target = { kind: "folder" as const, id: folderId };
+
   if (choice === "rename") void startRename(windowId, target);
   else if (choice === "icon") void openIconPicker(windowId, target);
   else if (choice === "resetIcon") reportBrowserCommand(updatePinnedFolder(folderId, { icon: null }));
@@ -469,6 +502,7 @@ export async function openFolderMenu(windowId: string, folderId: string) {
 export async function openSidebarMenu(windowId: string) {
   const s = store();
   const muted = allMuted(windowId);
+
   const choice = await showMenu([
     { id: "newTab", title: "New Tab", symbol: "plus", ...hint("t", "command") },
     { id: "search", title: "Search Tabs…", symbol: "magnifyingglass", ...hint("a", "shift", "command") },
@@ -482,7 +516,9 @@ export async function openSidebarMenu(windowId: string) {
     newLiveFolderMenuItem(),
     ...(s.windows[windowId]?.incognito ? [] : [sep, { id: "theme", title: "Edit Theme…", symbol: "paintpalette" }]),
   ]);
+
   if (choice && runNewLiveFolder(windowId, choice)) return;
+
   if (choice === "theme") openThemeEditor(windowId, s.windows[windowId]!.spaceId);
   else if (choice === "newTab") reportBrowserCommand(openNewTabPanel(windowId));
   else if (choice === "newFolder") reportBrowserCommand(newPinnedFolderWith(windowId));
@@ -495,15 +531,18 @@ export async function openSidebarMenu(windowId: string) {
 
 export function closeAllTabs(windowId: string) {
   const s = store();
+
   return closeTabs(viewTabIds(s, windowId).filter((id) => !inPinnedContainer(s, id)));
 }
 
 export async function openOverflowMenu(windowId: string) {
   const s = store();
   const w = s.windows[windowId];
+
   if (!w) return;
   const muted = allMuted(windowId);
   const open = viewTabIds(s, windowId).map((id) => s.tabs[id]!);
+
   const closed = [
     ...s.closedTabs
       .filter((c) => c.tab.spaceId === w.spaceId)
@@ -518,13 +557,17 @@ export async function openOverflowMenu(windowId: string) {
     .sort((a, b) => b.at - a.at)
     .slice(0, 15)
     .map((item) => ({ id: item.id, title: item.title, symbol: item.symbol }));
+
   const allCleaned = cleanedTabsFor(s, windowId);
   const cleaned = [...allCleaned].reverse().slice(0, 20);
+
   const deleted = keptDeletedGroups(s.deletedGroups)
     .reverse()
     .map((c) => ({ id: `restore:${c.id}`, title: `${c.group.name} (${plural(c.tabs.length, "Tab")})`, symbol: "trash" }));
+
   const daily = s.settings.cleanUpInactiveTabsAfterHours !== null;
   const synced = syncedDevicesMenuItem(w.spaceId);
+
   const choice = await showMenu([
     { id: "search", title: "Search Tabs…", symbol: "magnifyingglass", ...hint("a", "shift", "command") },
     sep,
@@ -565,7 +608,9 @@ export async function openOverflowMenu(windowId: string) {
     { id: "mute", title: muted ? "Unmute All Tabs" : "Mute All Tabs", symbol: muted ? "speaker.wave.2" : "speaker.slash" },
     { id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...hint("k", "shift", "command") },
   ]);
+
   if (!choice) return;
+
   if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice.startsWith("tab:")) reportBrowserCommand(switchToTab(choice.slice(4)));
   else if (openSyncedTab(choice, windowId, w.spaceId)) return;

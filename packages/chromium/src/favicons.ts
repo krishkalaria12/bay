@@ -2,6 +2,7 @@ import { engineCall } from "./engineInfo";
 import { Cef } from "./native";
 
 export type FaviconImage = { uri: string; width: number; height: number };
+
 /** What the Chrome-hosted desktop answers for an SVG icon: its engine has nothing to decode one with. */
 export type FaviconSvg = { svg: string };
 
@@ -19,6 +20,7 @@ export async function rasterizedSvg(base64: string): Promise<FaviconImage | null
     canvas.width = Math.max(1, Math.round((image.naturalWidth || SVG_ICON_SIDE) * scale));
     canvas.height = Math.max(1, Math.round((image.naturalHeight || SVG_ICON_SIDE) * scale));
     canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+
     return { uri: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
   } catch {
     return null;

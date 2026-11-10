@@ -29,7 +29,9 @@ import { importModule } from "./module";
 const importable = (list: BrowserSource[]) => list.filter((browser) => browser.family !== "automation" || capabilities.appleScript);
 
 export type Step = "loading" | "choose" | "profiles" | "safari" | "access" | "unlock" | "dia" | "progress" | "done";
+
 export type Status = "pending" | "active" | "done" | "failed";
+
 export type ImportFlow = ReturnType<typeof useImportFlow>;
 
 /** The import window's state and what it does: which browser and data, each step's progress, and the result. */
@@ -64,11 +66,14 @@ export function useImportFlow() {
 
   const recheckAccess = async () => {
     if (!api) return;
+
     if (step === "safari") return setFullDiskAccess(await api.safariHasFullDiskAccess());
     const list = await api.listBrowsers().catch(() => null);
+
     if (!list) return;
     setBrowsers(importable(list));
     const updated = list.find((b) => b.id === source?.id);
+
     if (updated && !updated.needsFullDiskAccess) {
       choose(updated);
       setStep("choose");
@@ -81,12 +86,15 @@ export function useImportFlow() {
     const defaults = b.profiles.filter((p) => p.isDefault);
     setSourceProfiles((defaults.length ? defaults : b.profiles.slice(0, 1)).map((p) => p.id));
     setSpaces(b.profiles.flatMap((p) => p.spaces ?? []).map((s) => s.id));
+
     const available: ImportKind[] = b.requiresExport
       ? ["bookmarks", "history", "passwords"]
       : b.family === "automation"
         ? ["tabs", "pinnedTabs"]
         : [...new Set(b.profiles.flatMap((p) => p.available))];
+
     setKinds(new Set(available));
+
     if (b.family === "safari" && api)
       void api.safariHasFullDiskAccess().then(
         (value) => {
@@ -105,8 +113,10 @@ export function useImportFlow() {
   const toggleKind = (kind: ImportKind, on: boolean) =>
     setKinds((prev) => {
       const next = new Set(prev);
+
       if (on) next.add(kind);
       else next.delete(kind);
+
       return next;
     });
 
@@ -118,26 +128,37 @@ export function useImportFlow() {
   const next = async () => {
     if (!source || checkingUnlock.current) return;
     const selected = choice.current;
+
     return checkUnlock(
       checkingUnlock,
       async () => {
         setError(null);
+
         if (step === "choose" && isDiaTabs) {
           setDiaStatus("checking");
           setStep("dia");
+
           return void refreshDia();
         }
+
         if (step === "profiles" && isDiaTabs && dia) return void runDia(dia, sourceProfiles, kinds);
+
         if (step === "choose") {
           if (source.needsFullDiskAccess) return setStep("access");
+
           if (source.requiresExport) return setStep("safari");
+
           if (source.profiles.length > 1 || (isArc && allSpaces.length > 1)) return setStep("profiles");
         }
+
         if ((step === "choose" || step === "profiles") && ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain && api) {
           const unlocked = await api.isBrowserUnlocked(source.id);
+
           if (choice.current !== selected) return;
+
           if (!unlocked) return setStep("unlock");
         }
+
         void run(kinds);
       },
       () => {
@@ -149,6 +170,7 @@ export function useImportFlow() {
   const unlock = async () => {
     if (!api || !source) return;
     setUnlocking(true);
+
     try {
       await api.unlockBrowser(source.id);
       setUnlocking(false);
@@ -176,6 +198,7 @@ export function useImportFlow() {
     if (index === 0) return target;
     const s = browserRead.getState();
     const clash = s.spaceOrder.find((id) => !used?.has(id) && s.spaces[id]!.name.trim().toLowerCase() === name.trim().toLowerCase());
+
     if (clash) {
       const { confirmed } = await confirm({
         title: "Import as new Space?",
@@ -189,6 +212,7 @@ export function useImportFlow() {
     }
 
     // Without an emoji of its own (Chrome's profiles, an Arc space with a symbol) the space gets a free one (createSpace).
+    // SAFETY: the checks above established this shape.
     return createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji });
   };
 
@@ -198,7 +222,9 @@ export function useImportFlow() {
     if (!api || !source) return;
     const selected = source.profiles.filter((p) => sourceProfiles.includes(p.id) || (isArc && p.spaces?.some((s) => spaces.includes(s.id))));
     const requested: ImportKind[] = [...wanted];
+
     if (isArc && requested.includes("tabs")) requested.push("spaces", "pinnedTabs");
+
     if (isArc && requested.includes("extensions") && !requested.includes("spaces")) requested.push("spaces");
     const order = KINDS.map((k) => k.kind).filter((k) => requested.includes(k));
     setStatus(Object.fromEntries(order.map((k) => [k, "pending"])));
@@ -214,6 +240,7 @@ export function useImportFlow() {
     const usedDestinations = new Set<string>();
     const extensionFailures: ExtensionFailure[] = [];
     const left: string[] = [];
+
     // Firefox keeps no keychain key: without a primary password its logins open as they are.
     if (source.family === "firefox" && requested.includes("passwords") && !(await api.isBrowserUnlocked(source.id))) {
       await api.unlockBrowser(source.id).catch(() => {});
@@ -224,38 +251,48 @@ export function useImportFlow() {
       signal,
       onProgress: (p) => {
         if (p.phase === "start") setStatus((st) => ({ ...st, [p.kind]: "active" }));
+
         if (p.phase === "end") setStatus((st) => (st[p.kind] === "failed" ? st : { ...st, [p.kind]: "done" }));
       },
     };
+
     // False when it was cancelled.
     const importProfiles = async () => {
       for (const profile of selected) {
         let result: ImportResult;
+
         try {
           result = await api.importData(source.id, profile.id, order, options);
         } catch (e) {
           if (errorCode(e) === "cancelled") return false;
+
           for (const k of order) failed.set(k, [...(failed.get(k) ?? []), profile.name]);
           continue;
         }
+
         for (const k of result.failed) failed.set(k, [...(failed.get(k) ?? []), profile.name]);
         left.push(...importWarningNotes(result));
+
         const refused = (k: ImportKind) => {
           const names = failed.get(k) ?? [];
+
           if (!names.includes(profile.name)) failed.set(k, [...names, profile.name]);
         };
 
         // Arc's spaces can share source data; each destination keeps an independent copy.
         let dest: string;
         let extensionDestinations: string[];
+
         if (isArc && result.spaces.length) {
           const destinations = [];
+
           for (const space of result.spaces) {
             const name = space.name || "Space";
             const spaceDest = await destination(placed.destinations++, name, space.color, space.emoji, usedDestinations);
             usedDestinations.add(spaceDest);
             destinations.push({ spaceId: spaceDest, space });
           }
+
           dest = destinations[0]!.spaceId;
           extensionDestinations = destinations.map((d) => d.spaceId);
           const nativeKinds = order.filter((kind) => kind === "cookies" || kind === "autofill");
@@ -266,6 +303,7 @@ export function useImportFlow() {
             if (result.vaultToken) api.discardImported(result.vaultToken);
             continue;
           }
+
           dest = await destination(
             placed.destinations++,
             result.profile?.name ?? profile.name,
@@ -277,6 +315,7 @@ export function useImportFlow() {
           usedDestinations.add(dest);
           add(await applyResult(dest, result, source.name, refused, (note) => left.push(note)));
         }
+
         if (wanted.has("extensions")) {
           setStatus((st) => ({ ...st, extensions: "active" }));
           const written = await importExtensions(extensionDestinations, result, signal);
@@ -284,17 +323,21 @@ export function useImportFlow() {
           total.extensionSettings += written.storageImported;
           left.push(...written.notes);
           extensionFailures.push(...written.failed);
+
           if (written.failed.length) refused("extensions");
         }
       }
+
       return true;
     };
+
     // Whatever stops it, the import ends and says so: an exception here left "Moving in…" on screen for good.
     try {
       if (!(await importProfiles())) return;
     } catch (error) {
       if (errorCode(error) === "cancelled") return;
       console.error("The import failed", error);
+
       for (const kind of order)
         if (!failed.has(kind))
           failed.set(
@@ -302,6 +345,7 @@ export function useImportFlow() {
             selected.map((p) => p.name),
           );
     }
+
     setExtensions(extensionFailures);
     left.push(...extensionFailures.map((f) => `${f.extension.name} in ${browserRead.getState().spaces[f.spaceId]?.name ?? "Space"}: ${f.message}.`));
     setNotes(left);
@@ -317,6 +361,7 @@ export function useImportFlow() {
     if (!api) return;
     const status = await api.diaAutomationStatus().catch((): DiaAutomationStatus => "denied");
     setDiaStatus(status);
+
     if (status === "granted") await readDia();
   };
 
@@ -326,6 +371,7 @@ export function useImportFlow() {
     const status = await api.requestDiaAutomation().catch((): DiaAutomationStatus => "denied");
     setAsking(false);
     setDiaStatus(status);
+
     if (status === "granted") await readDia();
   };
 
@@ -341,6 +387,7 @@ export function useImportFlow() {
     setError(null);
     setDiaStatus("reading");
     let result: DiaTabsResult;
+
     try {
       result = await readDiaTabs(api, diaLaunched.current);
     } catch (e) {
@@ -361,9 +408,11 @@ export function useImportFlow() {
 
   const takeDiaResult = (result: DiaTabsResult) => {
     setDia(result);
+
     if (!result.profiles.length) {
       return setError(result.windowCount ? "Dia has no open or pinned web pages to import." : "Dia has no open windows. Open one, then try again.");
     }
+
     const profiles: BrowserProfile[] = result.profiles.map((p, i) => ({
       id: p.id,
       name: p.name,
@@ -371,9 +420,11 @@ export function useImportFlow() {
       isDefault: i === 0,
       available: ["tabs", "pinnedTabs"],
     }));
+
     setSource((s) => (s ? { ...s, profiles } : s));
     const first = [profiles[0]!.id];
     setSourceProfiles(first);
+
     if (profiles.length > 1) setStep("profiles");
     else void runDia(result, first, kinds);
   };
@@ -385,10 +436,12 @@ export function useImportFlow() {
     setPreparing(selected.length);
     setStep("progress");
     const total = emptyCounts();
+
     for (const [i, p] of selected.entries()) {
       const dest = await destination(i, p.name);
       total.tabs += await importDiaProfile(dest, p, { pinned: wanted.has("pinnedTabs"), open: wanted.has("tabs") });
     }
+
     setStatus(Object.fromEntries(order.map((k) => [k, "done"])));
     setFailures([]);
     setCounts(total);
@@ -403,13 +456,16 @@ export function useImportFlow() {
     setStep("progress");
     const failed: ImportKind[] = [];
     let counts: ImportCounts;
+
     try {
       counts = await applySafari(target, await api.importSafariExport(path), false, (k) => failed.push(k));
     } catch (e) {
       setStep("safari");
       setError(errorCode(e) === "unsupported" ? "Please select a folder or zip file." : "The selected file is invalid. Please try again.");
+
       return;
     }
+
     setStatus({ bookmarks: "done", history: "done", passwords: "done", autofill: failed.includes("autofill") ? "failed" : "done" });
     setCounts(counts);
     setFailures(failed.map((kind) => ({ kind, profiles: [] })));
@@ -426,10 +482,12 @@ export function useImportFlow() {
     const signal = abort.current.signal;
     const failed: ImportKind[] = [];
     let counts: ImportCounts;
+
     try {
       counts = await applySafari(target, await api.importSafariDirect({ signal }), safariCookies, (k) => failed.push(k));
     } catch (e) {
       const code = errorCode(e);
+
       if (code === "cancelled") return;
       setStep("safari");
       setError(
@@ -438,8 +496,10 @@ export function useImportFlow() {
           : "Couldn't read Safari's data. Try the export file below.",
       );
       setFullDiskAccess(await api.safariHasFullDiskAccess());
+
       return;
     }
+
     setStatus({
       bookmarks: "done",
       history: "done",
@@ -456,7 +516,9 @@ export function useImportFlow() {
   const importNow = () => {
     if (!api || !source) return;
     setError(null);
+
     if (source.family === "safari") return void importSafariDirect();
+
     if (ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain && !api.isBrowserUnlocked(source.id)) return void unlock();
     void run(kinds);
   };
@@ -466,7 +528,9 @@ export function useImportFlow() {
   const importHtml = async () => {
     if (!api) return;
     const path = await api.chooseImportFile("bookmarksHTML");
+
     if (!path) return;
+
     try {
       const root = await api.importBookmarksHTML(path);
       const n = await importBookmarks(target, root, "HTML File");
@@ -482,16 +546,20 @@ export function useImportFlow() {
 
   const openExtensions = async () => {
     const bySpace = new Map<string, Set<string>>();
+
     for (const { spaceId, extension } of extensions) {
       if (!extension.webStoreUrl) continue;
+
       if (!bySpace.has(spaceId)) bySpace.set(spaceId, new Set());
       bySpace.get(spaceId)!.add(extension.webStoreUrl);
     }
+
     for (const [spaceId, urls] of bySpace) await openInWebStore(spaceId, [...urls]);
     setExtensions([]);
   };
 
   const close = () => void closeWindow(IMPORT_WINDOW_ID);
+
   const cancel = () => {
     abort.current?.abort();
     close();
@@ -500,18 +568,22 @@ export function useImportFlow() {
   // Below the actions they call: the compiler needs each declared before a closure uses it.
   useEffect(() => {
     if (!api || !((step === "safari" && !fullDiskAccess) || step === "access")) return;
+
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active") void recheckAccess();
     });
+
     return () => sub.remove();
   }, [step, fullDiskAccess, api, source?.id]);
 
   useEffect(() => {
     if (!api || step !== "dia") return;
     const timer = diaStatus === "notRunning" ? setInterval(() => void refreshDia(), DIA_POLL_MS) : null;
+
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active" && (diaStatus === "denied" || diaStatus === "notRunning")) void refreshDia();
     });
+
     return () => {
       if (timer) clearInterval(timer);
       sub.remove();
@@ -521,6 +593,7 @@ export function useImportFlow() {
   // Opened again for another browser while it shows the list: switch to that one.
   useEffect(() => {
     const b = requested ? browsers.find((x) => x.id === requested) : undefined;
+
     if (b && step === "choose" && b.id !== source?.id) choose(b);
   }, [requested]);
 
@@ -531,14 +604,17 @@ export function useImportFlow() {
       .then((list) => {
         const shown = importable(list);
         setBrowsers(shown);
+
         const first =
           shown.find((b) => b.id === useImportRequest.getState().browserId) ??
           shown.find((b) => !b.needsFullDiskAccess && !b.requiresExport && b.family !== "automation") ??
           shown[0];
+
         if (first) choose(first);
         setStep("choose");
       })
       .catch(() => setStep("choose"));
+
     return () => {
       abort.current?.abort();
       api.forgetUnlockedKeys();
@@ -552,7 +628,9 @@ export function useImportFlow() {
     g.nnImport = {
       select: (id: string) => {
         const b = browsers.find((x) => x.id === id);
+
         if (b) choose(b);
+
         return !!b;
       },
       next,
@@ -571,6 +649,7 @@ export function useImportFlow() {
       takeDiaResult,
       setSourceProfiles,
     };
+
     return () => void delete g.nnImport;
   });
 
@@ -633,6 +712,7 @@ const errorCode = (cause: unknown) => (cause as { code?: string }).code;
 
 async function checkUnlock(checking: { current: boolean }, action: () => Promise<void>, onError: () => void): Promise<void> {
   checking.current = true;
+
   try {
     await action();
   } catch {
@@ -649,15 +729,18 @@ type ImportOptions = Parameters<ImportApi["importData"]>[3];
 // Dia just launched from here may not have a window yet: its read is retried a few times before an empty one counts.
 async function readDiaTabs(api: ImportApi, launchedAt: number): Promise<DiaTabsResult> {
   let result = await api.readDiaTabs();
+
   for (let i = 0; !result.windowCount && Date.now() - launchedAt < DIA_LAUNCH_MS && i < 8; i++) {
     await new Promise((r) => setTimeout(r, DIA_POLL_MS));
     result = await api.readDiaTabs();
   }
+
   return result;
 }
 
 function defaultTarget(): string {
   const s = browserRead.getState();
   const w = s.windows[s.ui.focusedWindowId ?? ""];
+
   return w && !w.incognito ? w.spaceId : s.settings.defaultSpaceId;
 }

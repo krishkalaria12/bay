@@ -22,6 +22,9 @@
     "contracts:check": "node scripts/native-contracts.mjs --check",
     "contracts:generate": "node scripts/native-contracts.mjs"
   },
+  "dependencies": {
+    "valibot": "^1.5.0"
+  },
   "devDependencies": {
     "@types/node": "^24.13.6"
   },

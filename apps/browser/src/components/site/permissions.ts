@@ -19,11 +19,14 @@ export function startPermissionPrompts() {
 // none is answered without being shown.
 export function answerPermission(tabId: string, requestId: string, result: PermissionResult) {
   const request = pageOf(tabId).permission;
+
   if (!request || request.id !== requestId) return;
   void resolvePermission(request.id, result, result !== "dismiss");
+
   if (result === "accept" && request.permissions.includes("notifications")) {
     void ensureNotificationPermission(useBrowser.getState().tabs[tabId]?.windowId);
   }
+
   showNextPermission(tabId);
 }
 
@@ -31,6 +34,7 @@ export function dismissPermissions(tabId: string) {
   for (const r of queuedPermissions(tabId)) void resolvePermission(r.id, "dismiss");
   clearQueuedPermissions(tabId);
   const current = pageOf(tabId).permission;
+
   if (current) {
     void resolvePermission(current.id, "dismiss");
     patchPage(tabId, { permission: null });
@@ -80,11 +84,15 @@ export function describePermission(request: PermissionRequest): PermissionDescri
   try {
     site = new URL(request.origin).hostname.replace(/^www\./, "") || request.origin;
   } catch {}
+
   const kinds = request.permissions.map((k) => KINDS[k] ?? { icon: "questionmark.circle", noun: k });
   const icons = [...new Set(kinds.map((k) => k.icon))];
   const single = kinds.length === 1 ? kinds[0]!.question : undefined;
+
   if (single) return { icons, question: single(site) };
   const nouns = kinds.map((k) => k.noun).filter((n): n is string => !!n);
+
   if (nouns.length === kinds.length) return { icons, question: `Allow ${site} to access your ${list(nouns)}?` };
+
   return { icons, question: `Allow ${site} to use ${list(request.permissions.map((k) => KINDS[k]?.noun ?? k))}?` };
 }

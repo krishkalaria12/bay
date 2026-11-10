@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -6,10 +7,13 @@ import ts from "typescript";
 // Exercise the actual native-to-public event mapping without loading a React
 // Native renderer or replacing the component with a parallel implementation.
 const source = ts.createSourceFile("ChromiumView.tsx", readFileSync(new URL("./ChromiumView.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
+
 const declaration = source.statements.find(
   (node) => ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => item.name.getText(source) === "unwrap"),
 );
+
 assert.ok(declaration);
+
 const code = ts.transpileModule(declaration.getText(source), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const unwrap = new Function("toAppUrl", `${code}\nreturn unwrap;`)((url) => url.replace(/^bay:\/\//, "app://"));
 
@@ -30,22 +34,29 @@ const nativeSource = ts.createSourceFile(
   ts.ScriptTarget.Latest,
   true,
 );
+
 let mountEffect;
+
 function findMountEffect(node) {
   if (!mountEffect && ts.isCallExpression(node) && node.expression.getText(nativeSource) === "useEffect") mountEffect = node.arguments[0];
   ts.forEachChild(node, findMountEffect);
 }
+
 findMountEffect(nativeSource);
+
 assert.ok(mountEffect);
+
 const effectCode = ts.transpileModule(`const mountEffect = ${mountEffect.getText(nativeSource)};`, {
   compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText;
+
 async function mountHarness() {
   let receive;
   let finishMount;
   const surfaces = [];
   const events = [];
   const pending = { current: Promise.resolve() };
+
   const scope = {
     activeTag: { current: 0 },
     latestSerialized: { current: "{}" },
@@ -55,6 +66,7 @@ async function mountHarness() {
     setError: (error) => assert.equal(error, null),
     subscribeNativeEvent: (_module, _event, handler) => {
       receive = handler;
+
       return { remove() {} };
     },
     invokeNative: (_module, method) =>
@@ -66,10 +78,12 @@ async function mountHarness() {
     pending,
     windowId: "window-1",
   };
-  const effect = new Function(...Object.keys(scope), `let nextTag = 1; ${effectCode}\nreturn mountEffect;`)(...Object.values(scope));
+
+  const effect = new Function("v", ...Object.keys(scope), `let nextTag = 1; ${effectCode}\nreturn mountEffect;`)(v, ...Object.values(scope));
   effect();
   await Promise.resolve();
   await Promise.resolve();
+
   return {
     surfaces,
     events,

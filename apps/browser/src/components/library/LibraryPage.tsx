@@ -46,6 +46,7 @@ import { setBoostsOn, startBoosts, updateBoost, useBoosts } from "../boosts/stat
 
 export function LibraryPage({ tabId, initialSection }: { tabId: string; initialSection?: string }) {
   const window = useBrowser((s) => s.windows[s.tabs[tabId]?.windowId ?? ""]);
+
   if (!window || window.incognito || isIncognitoSpace(window.spaceId)) {
     return (
       <View style={{ flex: 1, padding: 24 }}>
@@ -57,11 +58,13 @@ export function LibraryPage({ tabId, initialSection }: { tabId: string; initialS
       </View>
     );
   }
+
   return <PublicLibrary key={window.id} tabId={tabId} windowId={window.id} initialSection={initialSection} />;
 }
 
 function LibraryTitle() {
   const theme = useTheme();
+
   return <Text style={{ fontSize: 22, fontWeight: "600", color: theme.textPrimary }}>Library</Text>;
 }
 
@@ -86,11 +89,13 @@ function PublicLibrary({ tabId, windowId, initialSection }: { tabId: string; win
     setImporting(true);
     setActionError(null);
     let failed = 0;
+
     try {
       failed = await importMediaFiles(windowId);
     } catch (error) {
       setActionError(`Couldn't import images: ${String(error)}`);
     }
+
     if (failed)
       setActionError(
         `${failed === 1 ? "One file couldn't" : `${failed} files couldn't`} be imported. Choose image files that are available on ${platformWords.thisComputer}.`,
@@ -163,28 +168,38 @@ export function LibrarySectionBody({
 }) {
   const loaded = useLibrary((s) => s.loaded);
   const pad = compact ? 10 : 24;
+
   if (section === "spaces")
     return compact ? <LibrarySpaces windowId={windowId} query={query} /> : <SpacesSection windowId={windowId} query={query} pad={pad} />;
+
   if (section === "boosts") return <BoostsSection windowId={windowId} query={query} pad={pad} />;
+
   if (section === "archive") return <ArchiveSection windowId={windowId} query={query} pad={pad} />;
+
   if (!loaded) return <EmptyState title="Loading Library…" />;
+
   if (section === "media") return <MediaSection windowId={windowId} query={query} width={width} compact={compact} />;
+
   return <EaselsSection windowId={windowId} query={query} width={width} compact={compact} />;
 }
 
 export async function importMediaFiles(windowId: string) {
   const files = await pickFiles();
   let failed = 0;
+
   for (const file of files) {
     if (!libraryWindow(windowId)) break;
+
     try {
       const path = file.startsWith("file://") ? decodeURIComponent(new URL(file).pathname) : file;
       const media = await saveLibraryMedia({ path, width: 1, height: 1 }, fileNameOf(path) || "Image");
+
       if (!media) failed++;
     } catch {
       failed++;
     }
   }
+
   return failed;
 }
 
@@ -192,6 +207,7 @@ function SectionButton({ title, icon, selected, onPress }: { title: string; icon
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable
@@ -240,17 +256,21 @@ function gridSize(width: number, compact: boolean) {
   const g = compact ? GRID.compact : GRID.page;
   const columns = Math.max(1, Math.floor((width - 2 * g.edge + g.gap) / (g.min + g.gap)));
   const cardWidth = Math.max(1, (width - 2 * g.edge - (columns - 1) * g.gap) / columns);
+
   // Compact cards are as tall as three quarters of their width; the page's are all one height.
   return { columns, cardWidth, cardHeight: g.cardHeight || Math.round(cardWidth * 0.75), content: g.content, cell: g.cell };
 }
 
 function MediaSection({ windowId, query, width, compact }: { windowId: string; query: string; width: number; compact: boolean }) {
   const media = useLibrary((s) => s.media);
+
   const shown = Object.values(media)
     .filter((m) => !m.source?.profileId || !isIncognitoSpace(m.source.profileId))
     .filter((m) => matchesQuery(query, m.name, m.source?.title ?? "", m.source?.url ?? ""))
     .sort((a, b) => b.createdAt - a.createdAt);
+
   const { columns, cardWidth, cardHeight, content, cell } = gridSize(width, compact);
+
   if (!shown.length)
     return (
       <EmptyState
@@ -258,6 +278,7 @@ function MediaSection({ windowId, query, width, compact }: { windowId: string; q
         subtitle={query ? "Try a different name or source." : "Import images or save a capture to Library."}
       />
     );
+
   return (
     <LegendList
       key={columns}
@@ -281,6 +302,7 @@ function MediaCard({ media, windowId, width, height }: { media: LibraryMedia; wi
   const [broken, setBroken] = useState(false);
   const exists = useFileExists(media.path);
   const available = !broken && exists === true;
+
   return (
     <View style={{ width, gap: 8 }}>
       <MouseArea path={available ? media.path : null}>
@@ -334,6 +356,7 @@ function MediaCard({ media, windowId, width, height }: { media: LibraryMedia; wi
 
 async function openMediaFile(media: LibraryMedia, windowId: string) {
   if (!libraryWindow(windowId)) return;
+
   try {
     if (!(await openFile(media.path))) throw new Error("The file may have been moved or deleted.");
   } catch (error) {
@@ -343,8 +366,10 @@ async function openMediaFile(media: LibraryMedia, windowId: string) {
 
 async function mediaMenu(media: LibraryMedia, windowId: string) {
   if (!libraryWindow(windowId)) return;
+
   try {
     const exists = await fileExists(media.path);
+
     const choice = await showMenu([
       { id: "copy", title: "Copy Image", enabled: exists },
       { id: "save", title: "Save to Downloads", enabled: exists },
@@ -354,18 +379,26 @@ async function mediaMenu(media: LibraryMedia, windowId: string) {
       { separator: true },
       { id: "remove", title: "Remove from Library", enabled: !useLibrary.getState().error },
     ]);
+
     if (!choice || !libraryWindow(windowId)) return;
+
     if (choice === "copy" && !(await copyCaptureImage(media.path))) throw new Error("The image is unavailable.");
+
     if (choice === "save") {
       if (!(await saveCaptureImage(media.path, media.name))) throw new Error("The image couldn't be saved to Downloads.");
       showToast(windowId, "Saved to Downloads", media.name);
     }
+
     if (choice === "share") await shareCaptureImage(media.path, media.name, windowId);
+
     if (choice === "source" && media.source) openUrl(media.source.url, windowId, "foreground");
+
     if (choice === "easel" && !(await chooseEasel(media, windowId))) {
       const error = useLibrary.getState().error;
+
       if (error) throw new Error(error);
     }
+
     if (choice === "remove") removeLibraryMedia(media.id);
   } catch (error) {
     showToast(windowId, "Couldn't Complete Media Action", String(error));
@@ -374,10 +407,13 @@ async function mediaMenu(media: LibraryMedia, windowId: string) {
 
 function EaselsSection({ windowId, query, width, compact }: { windowId: string; query: string; width: number; compact: boolean }) {
   const easels = useLibrary((s) => s.easels);
+
   const shown = Object.values(easels)
     .filter((e) => !isIncognitoSpace(e.spaceId) && matchesQuery(query, e.title))
     .sort((a, b) => b.updatedAt - a.updatedAt);
+
   const { columns, cardWidth, cardHeight, content, cell } = gridSize(width, compact);
+
   if (!shown.length)
     return (
       <EmptyState
@@ -385,6 +421,7 @@ function EaselsSection({ windowId, query, width, compact }: { windowId: string; 
         subtitle={query ? "Try a different Easel title." : "Create an Easel to arrange images, links, and notes."}
       />
     );
+
   return (
     <LegendList
       key={columns}
@@ -408,10 +445,12 @@ function EaselCard({ easel, windowId, width, height }: { easel: EaselDocument; w
   const visible = easel.items.filter((item) => item.kind === "image" || item.kind === "text" || item.kind === "link");
   const left = Math.min(0, ...easel.items.map((i) => i.x));
   const top = Math.min(0, ...easel.items.map((i) => i.y));
+
   const scale = Math.min(
     (width - 24) / Math.max(320, ...easel.items.map((i) => i.x + i.width - left)),
     (height - 24) / Math.max(200, ...easel.items.map((i) => i.y + i.height - top)),
   );
+
   return (
     <View style={{ width, gap: 8 }}>
       <ContextMenuArea onContextMenu={() => void easelMenu(easel.id, windowId)}>
@@ -471,16 +510,20 @@ function EaselCard({ easel, windowId, width, height }: { easel: EaselDocument; w
 function EaselImage({ path }: { path: string }) {
   const [broken, setBroken] = useState(false);
   const exists = useFileExists(path);
+
   if (broken || exists !== true) return <Text style={{ fontSize: 9, color: "#777777" }}>Image unavailable</Text>;
+
   return <Image source={{ uri: libraryImageUri(path) }} resizeMode="contain" onError={() => setBroken(true)} style={{ width: "100%", height: "100%" }} />;
 }
 
 function SpacesSection({ windowId, query, pad }: { windowId: string; query: string; pad: number }) {
   const theme = useTheme();
   const colors = useFormColors();
+
   const { spaces, spaceOrder, tabs, tabLists, windows } = useBrowser(
     useShallow((s) => ({ spaces: s.spaces, spaceOrder: s.spaceOrder, tabs: s.tabs, tabLists: s.tabLists, windows: s.windows })),
   );
+
   const shown = spaceOrder
     .map((id) => spaces[id])
     .filter((space) => space && !isIncognitoSpace(space.id) && !isIncognitoSpace(space.profileId ?? ""))
@@ -492,7 +535,9 @@ function SpacesSection({ windowId, query, pad }: { windowId: string; query: stri
     }))
     .map((entry) => ({ ...entry, shownTabs: entry.tabs.filter((tab) => matchesQuery(query, tabTitle(tab), tab.url, entry.space.name)) }))
     .filter((entry) => matchesQuery(query, entry.space.name) || entry.shownTabs.length);
+
   if (!shown.length) return <EmptyState title="No matching spaces or tabs" subtitle="Try a space name, tab title, or website." />;
+
   return (
     <ScrollView contentContainerStyle={{ padding: pad, gap: pad < 24 ? 12 : 20, paddingBottom: 40 }}>
       {shown.map(({ space, tabs, shownTabs }) => (
@@ -546,8 +591,10 @@ function BoostsSection({ windowId, query, pad }: { windowId: string; query: stri
   const { boosts, scripts, on } = useBoosts(useShallow((s) => ({ boosts: s.boosts, scripts: s.scripts, on: s.on })));
   useEffect(() => startBoosts(), []);
   const sites = new Map<string, Boost[]>();
+
   for (const b of Object.values(boosts).sort((a, b) => a.host.localeCompare(b.host) || a.createdAt - b.createdAt))
     if (matchesQuery(query, b.name, b.host)) sites.set(b.host, [...(sites.get(b.host) ?? []), b]);
+
   const header = (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingBottom: 4 }}>
       <View style={{ flex: 1 }}>
@@ -559,6 +606,7 @@ function BoostsSection({ windowId, query, pad }: { windowId: string; query: stri
       <Toggle value={on} onChange={setBoostsOn} />
     </View>
   );
+
   if (!sites.size)
     return (
       <View style={{ flex: 1 }}>
@@ -569,6 +617,7 @@ function BoostsSection({ windowId, query, pad }: { windowId: string; query: stri
         />
       </View>
     );
+
   return (
     <ScrollView contentContainerStyle={{ padding: pad, gap: pad < 24 ? 10 : 16, paddingBottom: 40 }}>
       {header}
@@ -618,6 +667,7 @@ function boostSummary(b: Boost, script: boolean): string {
     b.css.trim() ? "CSS" : null,
     script ? "JavaScript" : null,
   ].filter(Boolean);
+
   return parts.length ? parts.join(" · ") : "No changes yet";
 }
 
@@ -633,6 +683,7 @@ async function libraryBoostMenu(windowId: string, b: Boost) {
     { separator: true },
     { id: "delete", title: "Delete Boost…", symbol: "trash" },
   ]);
+
   if (choice === "edit") editBoostOnSite(windowId, b);
   else if (choice === "export") void exportBoostFile(b.id);
   else if (choice === "delete") void removeBoost(null, b.id);
@@ -643,6 +694,7 @@ type ArchiveEntry = { id: string; title: string; detail: string; at: number; ico
 function ArchiveSection({ windowId, query, pad }: { windowId: string; query: string; pad: number }) {
   // Arc's archive filter for links closed in Little Arc: Little Bay's pages, closed or put away.
   const [onlyLittleBay, setOnlyLittleBay] = useState(false);
+
   const { cleanedTabs, closedTabs, closedGroups, closedWindows, spaces, windows } = useBrowser(
     useShallow((s) => ({
       cleanedTabs: s.cleanedTabs,
@@ -661,12 +713,12 @@ function ArchiveSection({ windowId, query, pad }: { windowId: string; query: str
     ...[...cleanedTabs.map((entry) => ({ entry, cleaned: true })), ...closedTabs.map((entry) => ({ entry, cleaned: false }))].flatMap(({ entry, cleaned }) => {
       if (!(publicTab(entry.tab) && !windows[entry.windowId]?.incognito)) return [];
 
-        // A page from a Little Bay window, closed or put away.
-        const small = !cleaned && "small" in entry && !!entry.small;
-        let how = "Closed";
+      // A page from a Little Bay window, closed or put away.
+      const small = !cleaned && "small" in entry && !!entry.small;
+      let how = "Closed";
 
-        if (cleaned) how = "Cleaned up";
-        else if (small) how = "Little Bay";
+      if (cleaned) how = "Cleaned up";
+      else if (small) how = "Little Bay";
 
       return [
         {
@@ -680,17 +732,17 @@ function ArchiveSection({ windowId, query, pad }: { windowId: string; query: str
           tab: entry.tab,
         },
       ];
-      }),
+    }),
     ...closedGroups.flatMap((entry) =>
       entry.tabs.length && entry.tabs.every(publicTab) && !windows[entry.windowId]?.incognito
         ? [
             {
-        id: entry.id,
-        title: entry.group.name || "Tab Group",
-        detail: `${spaceName(entry.tabs[0]!.spaceId)} · ${entry.tabs.length} tabs · ${entry.tabs.map((t) => t.customTitle || t.title || hostLabel(t.url)).join(", ")}`,
-        at: entry.closedAt,
-        icon: "rectangle.stack",
-        cleaned: false,
+              id: entry.id,
+              title: entry.group.name || "Tab Group",
+              detail: `${spaceName(entry.tabs[0]!.spaceId)} · ${entry.tabs.length} tabs · ${entry.tabs.map((t) => t.customTitle || t.title || hostLabel(t.url)).join(", ")}`,
+              at: entry.closedAt,
+              icon: "rectangle.stack",
+              cleaned: false,
             },
           ]
         : [],
@@ -699,12 +751,12 @@ function ArchiveSection({ windowId, query, pad }: { windowId: string; query: str
       !isIncognitoSpace(entry.window.spaceId) && entry.tabs.every(publicTab)
         ? [
             {
-        id: entry.id,
-        title: "Closed Window",
-        detail: `${spaceName(entry.window.spaceId)} · ${entry.tabs.length} tabs · ${entry.tabs.map((t) => t.customTitle || t.title || hostLabel(t.url)).join(", ")}`,
-        at: entry.closedAt,
-        icon: "macwindow",
-        cleaned: false,
+              id: entry.id,
+              title: "Closed Window",
+              detail: `${spaceName(entry.window.spaceId)} · ${entry.tabs.length} tabs · ${entry.tabs.map((t) => t.customTitle || t.title || hostLabel(t.url)).join(", ")}`,
+              at: entry.closedAt,
+              icon: "macwindow",
+              cleaned: false,
             },
           ]
         : [],
@@ -722,13 +774,17 @@ function ArchiveSection({ windowId, query, pad }: { windowId: string; query: str
         <SectionButton title="Little Bay" icon="macwindow" selected={onlyLittleBay} onPress={() => setOnlyLittleBay(true)} />
       </View>
     ) : null;
+
   const restore = (entry: ArchiveEntry) => {
     reportBrowserCommand(entry.cleaned ? restoreCleaned(windowId, entry.id) : restoreClosed(entry.id, windowId));
   };
+
   if (!shown.length) {
     let empty = { title: "No archived tabs", subtitle: "Closed tabs and tabs cleaned up from your spaces appear here." };
+
     if (query) empty = { title: "No matching archived tabs", subtitle: "Try a tab title, website, or space name." };
     else if (onlyLittleBay) empty = { title: "No Little Bay pages", subtitle: "Pages from Little Bay windows you close, or that are put away, appear here." };
+
     return (
       <>
         {filters(false)}
@@ -736,6 +792,7 @@ function ArchiveSection({ windowId, query, pad }: { windowId: string; query: str
       </>
     );
   }
+
   return (
     <LegendList
       style={{ flex: 1 }}
@@ -758,6 +815,7 @@ function ArchiveSection({ windowId, query, pad }: { windowId: string; query: str
 
 function ArchiveIcon({ name }: { name: string }) {
   const theme = useTheme();
+
   return <Symbol name={name} size={15} color={theme.textSecondary} style={{ width: 18, height: 18 }} />;
 }
 
@@ -776,6 +834,7 @@ function LibraryRow({
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View
       {...hoverProps}

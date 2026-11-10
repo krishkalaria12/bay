@@ -12,12 +12,19 @@ import {
 } from "@bay/platform/native";
 
 export * from "./system";
+
 export * from "./appMenu";
+
 export * from "./liveActivity";
+
 export * from "./screenCapture";
+
 export * from "./easel";
+
 export * from "./localFiles";
+
 export * from "./cli";
+
 export * from "./userScripts";
 
 export type BrowserCommand =
@@ -174,9 +181,12 @@ export type WindowState = {
   /** Restored/normal window size, including while maximized or fullscreen. No screen position. */
   size?: [number, number];
 };
+
 /** Desktop decoration order, from left to right within each physical window edge. */
 export type WindowButton = "minimize" | "maximize" | "close";
+
 export type WindowButtonLayout = { left: readonly WindowButton[]; right: readonly WindowButton[] };
+
 /** The caption the UI draws (Windows): its maximize button, in the window from the top-left, for Snap Layouts; and
  *  its theme, which the system backdrop follows. */
 /** `reveal`: from the window's top, the band the frame watches for the pointer, for a caption bar that hides until
@@ -239,6 +249,7 @@ export type OpenWindowOptions = {
 };
 
 export type MenuEntry = { id: string; title: string; current?: boolean };
+
 export type MenuBookmark = { id: string; title: string; url?: string; children?: MenuBookmark[] };
 
 export type MenuState = {
@@ -332,10 +343,12 @@ const Shell = requireNativeModule<{
 }>("BayShell");
 
 export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
+
 /** The caption buttons the app draws (capabilities.captionButtons), in Windows' order. Linux hosts still publish the
  *  desktop's button layout (snapshots.BayShell.windowButtonLayout), but Bay's Linux windows show no buttons. */
 export const windowButtonLayout = (): WindowButtonLayout => ({ left: [], right: capabilities.captionButtons ? ["minimize", "maximize", "close"] : [] });
 export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
+
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
 export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));
 export const removeDocument = (name: string) => nativeDocumentWrite(name, null, () => Shell.removeDocument(name));
@@ -369,13 +382,17 @@ const withShortcutLabels = (items: MenuItem[]): MenuItem[] =>
   items.map((item) => {
     if ("separator" in item) return item;
     const labeled = { ...item };
+
     if (item.children) labeled.children = withShortcutLabels(item.children);
+
     if (item.key) labeled.shortcut = formatShortcut(menuShortcutStroke(item.key, item.modifiers), platformOS);
+
     return labeled;
   });
 
 export function showMenu(items: MenuItem[], anchor?: [number, number]): Promise<string | null> {
   if (isMac) return Shell.showMenu(items);
+
   return anchor ? Shell.showMenu(withShortcutLabels(items), anchor) : Shell.showMenu(withShortcutLabels(items));
 }
 
@@ -385,20 +402,25 @@ export type WindowProfileProps = ViewProps & {
   profile: string;
   neighbours: string[];
 };
+
 export const WindowProfile = requireNativeViewManager<WindowProfileProps>("BayWindowProfile");
 
 export const closeWindow = (id: string) => Shell.closeWindow(id);
 export const focusWindow = (id: string) => Shell.focusWindow(id);
 export const setWindowTitle = (id: string, title: string) => Shell.setWindowTitle(id, title);
+
 export const setTrafficLightsCenter = (id: string, center: [number, number] | null) =>
   capabilities.trafficLights ? Shell.setTrafficLightsCenter(id, center) : Promise.resolve();
+
 /**
  * The window buttons: "shown"; "hover", only while the pointer is over the window's top (Zen's, with the page under
  * them); "hidden" (Arc's with the sidebar closed, shown with its peek).
  */
 export type TrafficLightsMode = "shown" | "hover" | "hidden";
+
 export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode, color?: string) =>
   capabilities.trafficLights ? Shell.setTrafficLightsMode(id, mode, color ?? null) : Promise.resolve();
+
 type Rect4 = [number, number, number, number];
 
 export type DragPreviewStyle = "hidden" | "pill" | "card";
@@ -417,11 +439,13 @@ export const dragPreview = {
   /** A tab with no picture: its icon (a data: or file: URL) and title where its page would be. */
   placeholder: (title: string, favicon: string | null) => void Shell.dragPreviewPlaceholder?.(title, favicon),
 };
+
 /** Draws the view with React tag `tag` (and `levels` of its ancestors) over its siblings, or back in React's order:
  * React Native macOS's zIndex doesn't reorder them. A no-op on builds without it. */
 export const raiseView = (tag: number | null, levels: number, raised: boolean) => {
   if (tag != null) void Shell.raiseView?.(tag, levels, raised);
 };
+
 /** The window's frame now, on screen (AppKit's coordinates); null without global screen coordinates. */
 export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFrame?.(id) ?? Promise.resolve(null);
 export const windowIds = () => Shell.windowIds();
@@ -429,6 +453,7 @@ export const windowIds = () => Shell.windowIds();
 /** A key the window's host runs as an app command (onCommand) rather than Chrome's: `keyCode` is the key's virtual-key
  *  code, as Chromium's key events carry it. An empty command runs nothing, which keeps the key from Chrome. */
 export type KeyShortcut = { command: BrowserCommand | ""; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean };
+
 /** Hands the host the window's key shortcuts (hosts whose menus don't carry them: the Chrome-hosted desktop). */
 export const setKeyShortcuts = (shortcuts: KeyShortcut[]) => Shell.setKeyShortcuts?.(shortcuts) ?? Promise.resolve();
 
@@ -442,34 +467,43 @@ export const setAppearance = (mode: "auto" | "light" | "dark") => Shell.setAppea
 export const isDarkAppearance = () => Shell.isDarkAppearance();
 
 type MenuBookmarkKey = "bookmarkFolders" | "recentBookmarks" | "bookmarksBar" | "otherBookmarks";
+
 /**
  * Sends the menu state with the bookmark lists only when `bookmarksChanged`, so the native menus rebuild (and the
  * bridge carries) thousands of bookmarks only when they change.
  */
 export function setMenuStateParts(state: MenuState, bookmarksChanged: boolean) {
   const { bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks, ...rest } = state;
+
   if (bookmarksChanged) void Shell.setMenuBookmarks({ bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks });
+
   return Shell.setMenuState(rest);
 }
+
 export const replyToTerminate = (ok: boolean) => Shell.replyToTerminate(ok);
 
 export type ConfirmResult = { confirmed: boolean; suppressed: boolean };
+
 /** The app's own dialog for a confirm or a prompt, or null to leave it to the system's. */
 export type DialogPresenter = {
   confirm(options: ConfirmOptions): Promise<ConfirmResult> | null;
   prompt(options: PromptOptions): Promise<string | null> | null;
 };
+
 let dialogPresenter: DialogPresenter | null = null;
+
 /** The app's in-window dialogs take the system's place where it can show them. */
 export const setDialogPresenter = (presenter: DialogPresenter | null) => {
   dialogPresenter = presenter;
 };
+
 export const confirm = (options: ConfirmOptions): Promise<ConfirmResult> => dialogPresenter?.confirm(options) ?? Shell.confirm(options);
 export const prompt = (options: PromptOptions): Promise<string | null> => dialogPresenter?.prompt(options) ?? Shell.prompt(options);
 
 export const onCommand = (listener: (e: CommandEvent) => void) => Shell.addListener("onCommand", listener);
 export const onWindowEvent = (listener: (e: WindowEvent) => void) => Shell.addListener("onWindowEvent", listener);
 export const onAppEvent = (listener: (e: AppEvent) => void) => Shell.addListener("onAppEvent", listener);
+
 export const onOpenURLs = (listener: (urls: string[], sourceApp?: string) => void) =>
   Shell.addListener("onOpenURLs", ({ urls, sourceApp }) => listener(urls, sourceApp));
 
@@ -597,6 +631,7 @@ const InlineCompletionModule = requireOptionalNativeModule<{
 export type InlineWrite = 0 | 1 | 2;
 
 export const completeInline = (tag: number, typed: string, completion: string) =>
+  // SAFETY: the checks above established this shape.
   InlineCompletionModule?.complete(tag, typed, completion) ?? Promise.resolve(0 as InlineWrite);
 
 export const showTextInputMenu = (tag: number, items: MenuItem[]) => InlineCompletionModule?.showMenu(tag, items) ?? Promise.resolve(null);
@@ -620,6 +655,7 @@ type TranslationModule = {
   translate(source: string, target: string, texts: string[]): Promise<string[]>;
   translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;
 };
+
 const TranslationNative = requireOptionalNativeModule<TranslationModule>("BayTranslate");
 
 // Null before macOS 26, which has no translation API for apps.
@@ -629,6 +665,7 @@ type TidyNamesModule = {
   readonly available: boolean;
   suggest(filename: string, pageTitle: string, pageUrl: string): Promise<string | null>;
 };
+
 const TidyNamesNative = requireOptionalNativeModule<TidyNamesModule>("BayTidyNames");
 
 // Apple Intelligence is a Mac's alone: without the native module (Windows, Linux) or without the model (a Mac before

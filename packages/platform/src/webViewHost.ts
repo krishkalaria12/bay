@@ -1,6 +1,8 @@
+import type { JsonValue } from "./json.ts";
 import { requireNativeModule } from "./native";
 
 export type EmbeddedTab = { surfaceId: string; browserId: number; chromeTabId: number };
+
 export type EmbeddedTabProps = {
   url?: string;
   profile?: string;
@@ -8,15 +10,15 @@ export type EmbeddedTabProps = {
   transferKey?: string;
   active?: boolean;
   visible?: boolean;
-  [key: string]: unknown;
-};
-export type EmbeddedViewEvent = { tag: number; event: string; payload: unknown };
+} & { [key: string]: JsonValue | undefined };
+
+export type EmbeddedViewEvent = { tag: number; event: string; payload: JsonValue };
 
 /** Chrome owns the WebContents independently of its DOM embed's lifetime. */
 export type WebViewHost = {
   mount(tag: number, windowId: string, props: EmbeddedTabProps): Promise<EmbeddedTab>;
   update(tag: number, props: EmbeddedTabProps): Promise<void>;
-  call(tag: number, method: string, args: unknown[]): Promise<unknown>;
+  call(tag: number, method: string, args: JsonValue[]): Promise<JsonValue>;
   unmount(tag: number): Promise<void>;
 };
 

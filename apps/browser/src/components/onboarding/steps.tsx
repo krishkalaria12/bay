@@ -22,6 +22,7 @@ import { PreviewTrafficLights } from "../window/PreviewTrafficLights";
 
 export function StepLayout({ children, actions, preview }: { children: ReactNode; actions: ReactNode; preview: ReactNode }) {
   const colors = useOnboardingColors();
+
   return (
     <View style={{ flex: 1, flexDirection: "row" }}>
       <View style={{ width: 460, paddingHorizontal: 40, paddingTop: 34, paddingBottom: 32, justifyContent: "space-between" }}>
@@ -82,6 +83,7 @@ function lookOf(windowId: string): Look {
   const s = useBrowser.getState();
   const spaceId = s.windows[windowId]?.spaceId;
   const space = spaceId ? s.spaces[spaceId] : undefined;
+
   return {
     spaceId,
     color: space?.color,
@@ -95,8 +97,11 @@ function lookOf(windowId: string): Look {
 function restoreLook(windowId: string, look: Look) {
   const b = useBrowser.getState();
   const theme = look.theme ? { ...look.theme, colors: [...look.theme.colors] } : null;
+
   if (look.spaceId && look.color) reportBrowserCommand(updateSpace(look.spaceId, { color: look.color, theme }));
+
   if (lookOf(windowId).tabLayout !== look.tabLayout) reportBrowserCommand(toggleTabLayout(windowId));
+
   if (b.settings.appearance !== look.appearance) reportBrowserCommand(updateSettings({ appearance: look.appearance }));
 }
 
@@ -150,6 +155,7 @@ export function PersonalizeStep() {
 function Segment({ title, selected, onPress }: { title: string; selected: boolean; onPress: () => void }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} style={{ flex: 1 }}>
       <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={title}>
@@ -179,14 +185,18 @@ function WindowPreview({ windowId }: { windowId: string }) {
   const dark = useTheme().dark;
   // The space's whole look, as its window shows it: a gradient theme (a new install's Twilight) or a preset colour.
   const key = useBrowser((s) => spaceThemeKey(s.spaces[s.windows[windowId]?.spaceId ?? ""], dark));
+
   const accent = useBrowser((s) => {
     const space = s.spaces[s.windows[windowId]?.spaceId ?? ""];
+
     return space?.theme?.colors[0] ?? SPACE_COLORS[space?.color ?? "plum"]?.swatch ?? SPACE_COLORS.plum.swatch;
   });
+
   const layout = useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
   const theme = themeFor(key);
   const [top, bottom] = theme.windowTint;
   const line = { height: 6, borderRadius: 3, backgroundColor: colors.progressTrack };
+
   return (
     <View
       style={{
@@ -285,6 +295,7 @@ function PinnedPreview({ selected }: { selected: string[] }) {
   const colors = useOnboardingColors();
   const sites = PINNABLE_SITES.filter((s) => selected.includes(s.id));
   const slots = Math.max(6, Math.ceil(sites.length / 3) * 3);
+
   return (
     <View
       style={{
@@ -301,6 +312,7 @@ function PinnedPreview({ selected }: { selected: string[] }) {
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
         {Array.from({ length: slots }, (_, i) => {
           const site = sites[i];
+
           return (
             <View
               key={site?.id ?? `empty-${i}`}
@@ -338,7 +350,9 @@ type SystemState = { isDefault: boolean; inDock: boolean; loginEnabled: boolean 
 
 async function applySystemChoices(system: SystemState, choice: { setDefault: boolean; trial: boolean; login: boolean; dock: boolean }) {
   if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser().catch(() => false)) && choice.trial) recordDefaultBrowserTrial();
+
   if (choice.login !== system.loginEnabled) await setLaunchAtLogin(choice.login).catch(() => {});
+
   if (capabilities.dock && choice.dock && !system.inDock) await addToDock();
 }
 
@@ -354,6 +368,7 @@ export function DefaultBrowserStep() {
     void Promise.all([isDefaultBrowser(), capabilities.dock ? isInDock() : Promise.resolve(false), launchAtLoginStatus()]).then(
       ([isDefault, inDock, login]) => {
         setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
+
         if (login === "enabled") setLogin(true);
       },
     );
@@ -362,11 +377,13 @@ export function DefaultBrowserStep() {
   const apply = async () => {
     if (!system) return;
     setBusy(true);
+
     const picked = [
       ...(setDefault && !system.isDefault ? [trial ? "A week as your default browser" : "Bay is your default browser"] : []),
       ...(capabilities.dock && dock && !system.inDock ? ["In your Dock"] : []),
       ...(login ? ["Opens at login"] : []),
     ];
+
     await applySystemChoices(system, { setDefault, trial, login, dock }).finally(() => {
       setBusy(false);
       nextStep(picked);
@@ -374,6 +391,7 @@ export function DefaultBrowserStep() {
   };
 
   const defaultOn = system?.isDefault || setDefault;
+
   return (
     <StepLayout
       actions={<StepActions continueTitle={busy ? "Setting Up…" : "Continue"} onContinue={() => void apply()} disabled={!system} busy={busy} />}
@@ -411,6 +429,7 @@ export function DefaultBrowserStep() {
 
 function SystemChip({ on, icon, label }: { on: boolean; icon: string; label: string }) {
   const colors = useOnboardingColors();
+
   return (
     <View
       style={{
@@ -456,6 +475,7 @@ export function OutroStep() {
   const colors = useOnboardingColors();
   const picked = useOnboarding((s) => s.picked);
   const lines = STEPS.flatMap((step) => picked[step] ?? []);
+
   return (
     <StepLayout
       actions={
@@ -499,6 +519,7 @@ export function OutroStep() {
 
 function Postcard({ lines }: { lines: string[] }) {
   const colors = useOnboardingColors();
+
   return (
     <View
       style={{

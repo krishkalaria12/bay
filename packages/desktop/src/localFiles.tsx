@@ -3,6 +3,7 @@ import type { ViewProps } from "@bay/platform";
 import type { LocalFileDescriptor } from "./localFilesNative";
 
 export { localFiles } from "./localFilesNative";
+
 export type { LocalFileAccess, LocalFileDescriptor, LocalFileEntry, LocalFileListing, LocalFileStatus } from "./localFilesNative";
 
 export type LocalFilesAreaProps = ViewProps & {

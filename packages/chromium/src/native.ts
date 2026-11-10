@@ -1,3 +1,4 @@
+import type { JsonValue } from "./json.ts";
 import { requireNativeModule, type EventSubscription } from "@bay/platform/native";
 import * as v from "valibot";
 import type { ContentBlockerState, ContentBlockerStats } from "./contentBlocker";
@@ -26,6 +27,7 @@ export type Result<T> = T | { error: string };
 // (its !important rules beat the page's); css: an author sheet after the page's; script: run in the Boost's isolated
 // world once the DOM is in (private windows only with scriptInPrivate); invert: Chrome's forced dark mode on the site.
 export type EngineBoost = { host: string; userCss: string; css: string; script: string; scriptInPrivate: boolean; invert: boolean };
+
 // Per-tab palette and the winning tint for each boosted host. The renderer selects by its actual document URL.
 export type EngineBoostStyle = { palette: string; sites: Record<string, string> };
 
@@ -47,8 +49,8 @@ export const Cef = requireNativeModule<{
   addListener(name: "onContentBlocker", listener: (s: ContentBlockerStats) => void): EventSubscription;
   addListener(name: "onSystemState", listener: (s: SystemState) => void): EventSubscription;
   addListener(name: "onEngineEvent", listener: (e: { topic: string; payload: string }) => void): EventSubscription;
-  addListener(name: "onPageEvent", listener: (event: unknown) => void): EventSubscription;
-  addListener(name: "onPageOpen", listener: (event: unknown) => void): EventSubscription;
+  addListener(name: "onPageEvent", listener: (event: JsonValue) => void): EventSubscription;
+  addListener(name: "onPageOpen", listener: (event: JsonValue) => void): EventSubscription;
   startPageEvents?(): Promise<void>;
   stopPageEvents?(): Promise<void>;
   finishPageOpen?(offerId: string, tabId: string | null): Promise<void>;

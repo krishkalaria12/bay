@@ -15,13 +15,16 @@ function setup(t) {
   const global = useBrowser.getState();
   const snapshot = browserRead.getState();
   let reads = 0;
+
   const restoreRead = installBrowserReadSource({
     getState() {
       reads++;
+
       return snapshot;
     },
     subscribe: () => () => {},
   });
+
   reads = 0;
   const stop = startMeetingGroups(browser);
   t.after(() => {
@@ -29,6 +32,7 @@ function setup(t) {
     restoreRead();
     useLive.setState(saved, true);
   });
+
   return { browser, windowId, stop, global, reads: () => reads };
 }
 
@@ -100,15 +104,18 @@ test("meeting group startup detaches its subscription when timer creation fails"
   let removals = 0;
   t.mock.method(browser, "subscribe", (...args) => {
     const unsubscribe = subscribe(...args);
+
     return () => {
       removals++;
       unsubscribe();
     };
   });
   const failure = new Error("timer unavailable");
+
   const timer = t.mock.method(globalThis, "setTimeout", () => {
     throw failure;
   });
+
   assert.throws(
     () => startMeetingGroups(browser),
     (error) => error === failure,
