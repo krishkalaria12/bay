@@ -107,6 +107,7 @@ export type FakeHttp = {
 export const fakeHttp = (): FakeHttp => {
   const requests: HttpRequest[] = [];
   const answers = new Map<string, HttpResponse | Error>();
+  const noHeaders = { get: () => null };
 
   const send = (request: HttpRequest) =>
     Effect.suspend(() => {
@@ -121,7 +122,7 @@ export const fakeHttp = (): FakeHttp => {
         return Effect.fail(new HttpError({ operation: { name: "http.send", resource: request.url }, status: 0, cause: answer }));
       }
 
-      return Effect.succeed(answer);
+      return Effect.succeed({ ...answer, headers: answer.headers ?? noHeaders });
     });
 
   return {

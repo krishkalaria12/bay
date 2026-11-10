@@ -11,6 +11,8 @@ export type HttpRequest = {
   readonly method?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
+  /** Whether the request carries the caller's credentials. The app's own requests send none. */
+  readonly credentials?: "omit" | "include" | "same-origin";
   /** The caller's own signal. It is cancelled along with the effect that made the request. */
   readonly signal?: AbortSignal;
 };
@@ -19,6 +21,8 @@ export type HttpResponse = {
   readonly status: number;
   readonly ok: boolean;
   readonly body: string;
+  /** The response's headers, as the server sent them. */
+  readonly headers: { get: (name: string) => string | null };
 };
 
 /** The request did not come back as a success: it failed, or it came back with a status that isn't one. */
@@ -83,10 +87,11 @@ export class Http extends Context.Service<
               method: request.method ?? "GET",
               headers: request.headers,
               body: request.body,
+              credentials: request.credentials ?? "omit",
               signal: link(request.signal, signal),
             }).then(async (response) => {
               const body = await response.text();
-              const result: HttpResponse = { status: response.status, ok: response.ok, body };
+              const result: HttpResponse = { status: response.status, ok: response.ok, body, headers: response.headers };
 
               if (!response.ok) {
                 throw new HttpError({

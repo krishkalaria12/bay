@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { ActivityService, LiveSources } from "../activity/activityService";
 import { CalendarEngine, CalendarService } from "../activity/calendarService";
+import { PreviewService } from "../components/site/previewService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { AutomationEngine, AutomationService, CliEngine } from "../components/cli/automationService";
@@ -34,6 +35,7 @@ export type AppServices =
   | LocalFileService
   | NotificationService
   | Persistence
+  | PreviewService
   | ProfileCleanup
   | Scheduler
   | Sync;
@@ -63,6 +65,8 @@ const calendar = CalendarService.layer.pipe(Layer.provide(Layer.mergeAll(Calenda
 
 const automation = AutomationService.layer.pipe(Layer.provide(Layer.mergeAll(AutomationEngine.layer, CliEngine.layer)));
 
+const preview = PreviewService.layer.pipe(Layer.provide(Http.layer));
+
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
   diagnostics,
@@ -80,6 +84,7 @@ export const appLayer = Layer.mergeAll(
   localFiles,
   calendar,
   automation,
+  preview,
 ).pipe(Layer.provide(diagnostics));
 
 /**
