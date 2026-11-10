@@ -5,7 +5,8 @@ import { test } from "node:test";
 const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const { migrateHistoryFile, reloadHistory, startHistory } = await import("../lib/history.ts");
-const { flushPersistence, loadSession, startPersistence } = await import("../lib/persist.ts");
+const { loadSession } = await import("../lib/persist.ts");
+const { flushPersistence, startPersistence } = await import("../lib/persistenceService.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();

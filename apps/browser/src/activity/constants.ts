@@ -15,6 +15,9 @@ export const MAX_KNOWN_ITEMS = 600;
 export const MAX_COMPLETED_ITEMS = 20;
 export const LIVE_PAGE_SIZE = 8;
 
+// The live folders' document is written a moment after a change, so a burst of them is one write.
+export const LIVE_SAVE_DELAY_MS = 800;
+
 // MARK: Calendar and meetings (calendar.ts, meetings.ts, meetingGroups.ts)
 
 export const CALENDAR_HORIZON_MS = 36 * 3_600_000;

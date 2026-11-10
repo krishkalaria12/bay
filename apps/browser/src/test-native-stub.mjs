@@ -1,6 +1,19 @@
 export const docs = new Map();
 export const readDocument = (name) => docs.get(name) ?? null;
-export const writeDocument = (name, contents) => docs.set(name, contents);
+
+// A test can make a document fail to write, and can see what was written.
+export const writeErrors = new Map();
+export const writes = [];
+
+export const writeDocument = (name, contents) => {
+  writes.push(name);
+
+  const error = writeErrors.get(name);
+
+  if (error) throw error;
+
+  docs.set(name, contents);
+};
 
 // Native file access is opt-in for each test. A synced path by itself has no grant.
 export const localFileAnswers = {

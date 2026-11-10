@@ -36,7 +36,7 @@ import { everySlowly } from "./throttledTimers";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./appCommands";
 import { startSidebarMoveUndoSync } from "./folderUndo";
-import { flushPersistence, resumePersistence } from "./persist";
+import { flushPersistence, resumePersistence } from "./persistenceService";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
