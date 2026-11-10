@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bay Mobile Next Round</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column, sections separated by space, tables scroll in their own box. Palette continues Bay's plum from docs/mobile-plan.html. */
+:root {
+  --bg: #faf7fa;
+  --fg: #28242b;
+  --muted: #6a6170;
+  --line: #e2d9e3;
+  --card: #f2ebf2;
+  --accent: #70485f;
+  --ok: #2f7a4f;
+  --warn: #9a6a12;
+  --gap: #a3394a;
+  --shared: #3f5f8f;
+  --ios: #5b4a9a;
+  --android: #3c7a5a;
+  --display: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1c181e; --fg: #ede7ef; --muted: #b3a9b9; --line: #3b3340; --card: #27212a;
+    --accent: #e3accb; --ok: #7fd1a0; --warn: #e8bf6a; --gap: #f08a99;
+    --shared: #9db8e6; --ios: #b9a8f0; --android: #8fd4ae; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1c181e; --fg: #ede7ef; --muted: #b3a9b9; --line: #3b3340; --card: #27212a;
+  --accent: #e3accb; --ok: #7fd1a0; --warn: #e8bf6a; --gap: #f08a99;
+  --shared: #9db8e6; --ios: #b9a8f0; --android: #8fd4ae; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--body); }
+main {
+  max-width: 920px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 56px;
+  display: grid; gap: 44px;
+}
+section { display: grid; gap: 14px; min-width: 0; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.02em; }
+h1 { font-size: clamp(30px, 5.4vw, 46px); line-height: 1.08; font-weight: 650; }
+h2 { font-size: 24px; font-weight: 650; }
+h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font: 500 12px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lead { font-size: 18px; color: var(--fg); max-width: 62ch; }
+.meta { color: var(--muted); font-size: 13px; }
+code { font: 0.86em var(--mono); overflow-wrap: anywhere; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+header { display: grid; gap: 14px; }
+nav { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; }
+
+.clock { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.clock div { background: var(--card); border-radius: 10px; padding: 12px 14px; display: grid; gap: 2px; }
+.clock b { font: 600 22px var(--display); font-variant-numeric: tabular-nums; }
+.clock span { font-size: 13px; color: var(--muted); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--muted); align-items: center; }
+
+.tag, .st { display: inline-block; font: 500 11px/1.7 var(--mono); padding: 0 7px; border-radius: 999px; white-space: nowrap; border: 1px solid currentColor; }
+.tag.shared { color: var(--shared); }
+.tag.ios { color: var(--ios); }
+.tag.android { color: var(--android); }
+.tag.both { color: var(--accent); }
+.st.done { color: var(--ok); }
+.st.part { color: var(--warn); }
+.st.miss { color: var(--gap); }
+
+.wrap { overflow-x: auto; border-top: 1px solid var(--line); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+th { text-align: left; font: 500 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 10px 10px 8px; }
+td { padding: 11px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+th:first-child, td:first-child { padding-left: 0; }
+td.id { font: 500 12px var(--mono); color: var(--accent); white-space: nowrap; }
+td small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+td.c { text-align: center; }
+
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.rules div { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; }
+.rules b { font: 600 15px var(--display); }
+.rules span { font-size: 13px; color: var(--muted); }
+
+.prs { display: grid; gap: 10px; }
+.pr { display: grid; grid-template-columns: 26px 1fr; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
+.pr .n { font: 600 18px var(--display); color: var(--accent); font-variant-numeric: tabular-nums; }
+.pr div { display: grid; gap: 4px; min-width: 0; }
+.pr code.branch { color: var(--accent); font-size: 13px; }
+.pr p { color: var(--muted); font-size: 14px; }
+.pr.first { background: var(--card); border-top: 0; border-radius: 10px; padding: 14px; grid-template-columns: 26px 1fr; }
+
+.skip { border-left: 2px solid var(--line); padding-left: 14px; color: var(--muted); font-size: 14px; display: grid; gap: 6px; }
+footer { border-top: 1px solid var(--line); padding-top: 14px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<main>
+  <header>
+    <div class="eyebrow">Plan · 10 November 2026 · branch feat/mobile-ios-parity at 73a77199</div>
+    <h1>Bay mobile: what to build next</h1>
+    <p class="lead">Motion is the biggest gap you can feel today. The biggest gap that breaks sites is pages that ask a question: alerts, permissions, file pickers and links to other apps. This plan compares Bay with Arc Search and Lens, lists what is still missing, and splits the work into small PRs.</p>
+    <p class="meta">Builds on <code>docs/mobile-plan.html</code> (the roadmap) and <code>docs/mobile-ios-parity-plan.html</code> (the 5 November gap audit). Item ids (I, A, B) are the ones used there. Statuses come from reading the code, not from running the apps.</p>
+    <nav>
+      <a href="#motion">Animations</a><a href="#compare">Arc, Lens, Bay</a><a href="#both">Missing on both</a><a href="#single">One platform only</a><a href="#prs">PRs</a><a href="#skip">Not building</a>
+    </nav>
+    <div class="clock">
+      <div><b>13 days</b><span>until 23 Nov: Arc turns off AI, sign-in and sync</span></div>
+      <div><b>42 days</b><span>until 22 Dec: Arc Search leaves Google Play</span></div>
+      <div><b>9 commits</b><span>shipped since the 5 Nov audit: downloads, Google sign-in, pull to refresh</span></div>
+    </div>
+  </header>
+
+  <section id="motion">
+    <div class="eyebrow">01 · Animations</div>
+    <h2>Motion: A1 to A8</h2>
+    <p>Bay animates the bar hiding on scroll, the bar swipe between tabs, the stacked switcher, toasts and download rows. All of it uses Reanimated. Sheets open with the library's default spring, there are no shared transitions between screens, and haptics exist only on the iOS pull to refresh. Arc and Lens feel fast because each tap gets a response within one frame.</p>
+    <div class="rules">
+      <div><b>Transform and opacity</b><span>Never animate width, height or layout props on the page path.</span></div>
+      <div><b>UI thread</b><span>Reanimated worklets only, nothing driven from JS state.</span></div>
+      <div><b>150 to 250 ms</b><span>Springs for drags, timing curves for taps.</span></div>
+      <div><b>Reduced motion</b><span><code>useReducedMotion()</code> turns every one into a crossfade.</span></div>
+    </div>
+    <div class="wrap"><table>
+      <thead><tr><th>#</th><th>Animation</th><th>Where</th><th>Reference</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="id">A1</td><td>Tab card zooms into the page when opened, page shrinks back into its card when closed<small>Measure the card's frame and scale the snapshot, then swap in the live view.</small></td><td><code>TabSwitcher.tsx</code></td><td>Arc, Safari</td><td><span class="st miss">Missing</span></td></tr>
+        <tr><td class="id">A2</td><td>Search capsule grows into the search card instead of a hard cut<small>One shared element, keyboard rises with it.</small></td><td><code>SearchCard.tsx</code>, <code>BrowserBar.*</code></td><td>Lens</td><td><span class="st miss">Missing</span></td></tr>
+        <tr><td class="id">A3</td><td>Haptics on pin, unpin, tab close, long press and the switcher snap<small>Add <code>expo-haptics</code>. Android uses light ticks only.</small></td><td>shared hook</td><td>Arc, Lens</td><td><span class="st part">Pull to refresh only</span></td></tr>
+        <tr><td class="id">A4</td><td>Press feedback on tiles and rows: scale to 0.96 and dim<small>One <code>Pressable</code> wrapper, reused by the page menu, Settings and the start page.</small></td><td><code>PageMenu.tsx</code>, <code>SettingsPanel.tsx</code></td><td>Arc</td><td><span class="st miss">Missing</span></td></tr>
+        <tr><td class="id">A5</td><td>Pins and recents fade in, and close the gap when one is removed<small><code>LinearTransition</code> on the grid items.</small></td><td><code>StartPage.tsx</code></td><td>Lens</td><td><span class="st miss">Missing</span></td></tr>
+        <tr><td class="id">A6</td><td>Load progress as a thin line along the capsule edge, fading out on finish</td><td><code>BrowserBar.*</code></td><td>Arc, Lens</td><td><span class="st miss">Missing</span></td></tr>
+        <tr><td class="id">A7</td><td>Swipe a history or archive row left to remove it, with the list closing up</td><td><code>HistoryPanel.tsx</code>, <code>ArchivePanel.tsx</code></td><td>Arc</td><td><span class="st miss">Missing</span></td></tr>
+        <tr><td class="id">A8</td><td>Sheet springs tuned to one shared config, and the iOS glass sheet background (I6)</td><td><code>PanelSheet.tsx</code></td><td>Lens</td><td><span class="st part">Default spring</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="compare">
+    <div class="eyebrow">02 · Comparison</div>
+    <h2>Arc Search, Lens and Bay</h2>
+    <p>Arc Search is the model for the Android look and is going away, so its users need somewhere to go. Lens is the design reference for both apps. Rows that both rivals have and Bay lacks come first.</p>
+    <div class="legend">
+      <span><span class="st done">Have</span> working on both apps</span>
+      <span><span class="st part">Partly</span> one app, or a weaker version</span>
+      <span><span class="st miss">Missing</span> not started</span>
+    </div>
+    <div class="wrap"><table>
+      <thead><tr><th>Feature</th><th class="c">Arc Search</th><th class="c">Lens</th><th>Bay</th><th>Item</th></tr></thead>
+      <tbody>
+        <tr><td>Open links from other apps, default browser</td><td class="c">✓</td><td class="c">✓</td><td><span class="st miss">Missing</span></td><td class="id">B9</td></tr>
+        <tr><td>Widgets and app icon quick actions</td><td class="c">✓</td><td class="c">✓</td><td><span class="st miss">Missing</span></td><td class="id">B15</td></tr>
+        <tr><td>Voice search</td><td class="c">✓</td><td class="c">✓</td><td><span class="st miss">Missing</span></td><td class="id">B16</td></tr>
+        <tr><td>Landscape and fullscreen video</td><td class="c">✓</td><td class="c">✓</td><td><span class="st miss">Missing</span></td><td class="id">B10, A2</td></tr>
+        <tr><td>Tabs keep history after relaunch</td><td class="c">✓</td><td class="c">✓</td><td><span class="st miss">Missing</span></td><td class="id">B6</td></tr>
+        <tr><td>Link preview (Peek)</td><td class="c">✓</td><td class="c">✓</td><td><span class="st miss">Missing</span></td><td class="id">B11</td></tr>
+        <tr><td>Per-site zoom, Reader and desktop mode</td><td class="c">·</td><td class="c">✓</td><td><span class="st part">Blocking only</span></td><td class="id">B12</td></tr>
+        <tr><td>Picture in Picture, skip in media controls</td><td class="c">·</td><td class="c">✓</td><td><span class="st part">Play, pause, stop</span></td><td class="id">B17</td></tr>
+        <tr><td>Swipe anywhere to go back and forward</td><td class="c">·</td><td class="c">✓</td><td><span class="st part">iOS edge only</span></td><td class="id">A4</td></tr>
+        <tr><td>Languages beyond English</td><td class="c">✓</td><td class="c">14</td><td><span class="st miss">Missing</span></td><td class="id">B18</td></tr>
+        <tr><td>Import tabs from Arc</td><td class="c">export</td><td class="c">·</td><td><span class="st miss">Missing</span></td><td class="id">B2</td></tr>
+        <tr><td>Stacked tab switcher, swipe up to close</td><td class="c">✓</td><td class="c">✓</td><td><span class="st done">Have</span></td><td class="id">·</td></tr>
+        <tr><td>Auto archive, searchable</td><td class="c">12 h</td><td class="c">✓</td><td><span class="st part">1 day minimum</span></td><td class="id">B4</td></tr>
+        <tr><td>Ad and tracker blocking, Reader, private lock</td><td class="c">✓</td><td class="c">✓</td><td><span class="st done">Have</span></td><td class="id">·</td></tr>
+        <tr><td>Google sign-in, background downloads</td><td class="c">✓</td><td class="c">✓</td><td><span class="st done">Have, since 5 Nov</span></td><td class="id">B1, I2</td></tr>
+        <tr><td>Hide elements, inspect, copy as Markdown</td><td class="c">·</td><td class="c">·</td><td><span class="st done">Bay only</span></td><td class="id">·</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="both">
+    <div class="eyebrow">03 · Missing on both apps</div>
+    <h2>Fix sites first, then add features</h2>
+    <p>One engine event, <code>onPageRequest</code>, plus one shared sheet covers four of these: dialogs, HTTP sign-in, permissions and links to other apps. That keeps the no-Material rule on Android. None of the native hooks exist yet.</p>
+    <div class="wrap"><table>
+      <thead><tr><th>#</th><th>Missing</th><th>Kind</th><th>Size</th></tr></thead>
+      <tbody>
+        <tr><td class="id">I3 B3 B5 B7</td><td>Page requests sheet: <code>alert</code>, <code>confirm</code>, <code>prompt</code>, HTTP auth, <code>tel:</code> and <code>mailto:</code>, camera, microphone, location<small>Today confirms silently answer no on iOS, and permissions are refused on Android.</small></td><td><span class="tag both">Shared + 2 native</span></td><td>M</td></tr>
+        <tr><td class="id">B6</td><td>Tabs keep back history, scroll and forms after relaunch; reload pages the system killed<small><code>interactionState</code> on iOS, <code>saveState</code> on Android, never for private tabs.</small></td><td><span class="tag both">Shared + 2 native</span></td><td>M</td></tr>
+        <tr><td class="id">B19</td><td>New windows open real tabs that keep their opener, so popup sign-ins work</td><td><span class="tag both">Shared + 2 native</span></td><td>L</td></tr>
+        <tr><td class="id">B10</td><td>Landscape, which fullscreen video needs. <code>app.json</code> locks portrait.</td><td><span class="tag shared">Shared</span></td><td>M</td></tr>
+        <tr><td class="id">B9 B14</td><td>Default browser, incoming links and Share to Bay</td><td><span class="tag both">Shared + 2 native</span></td><td>M</td></tr>
+        <tr><td class="id">B2 B4</td><td>Import Arc tabs from pasted or shared text; 12-hour archive; Paste and Go</td><td><span class="tag shared">Shared</span></td><td>S</td></tr>
+        <tr><td class="id">B11</td><td>Peek: long press a link to preview it in a second engine view</td><td><span class="tag shared">Shared</span></td><td>M</td></tr>
+        <tr><td class="id">B12</td><td>Per-site zoom, Reader and desktop mode</td><td><span class="tag shared">Shared</span></td><td>M</td></tr>
+        <tr><td class="id">B13</td><td>Image long press: save, copy, share</td><td><span class="tag both">Shared + 2 native</span></td><td>M</td></tr>
+        <tr><td class="id">B15 B16</td><td>Quick actions, a search widget, voice search</td><td><span class="tag both">Shared + 2 native</span></td><td>M</td></tr>
+        <tr><td class="id">B20</td><td>Password and passkey AutoFill</td><td><span class="tag both">Shared + 2 native</span></td><td>L</td></tr>
+        <tr><td class="id">B8</td><td>Release setup: <code>eas.json</code>, crash reports, <code>supportsTablet: false</code></td><td><span class="tag shared">Shared</span></td><td>M</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="single">
+    <div class="eyebrow">04 · One platform only</div>
+    <h2>What each app still lacks</h2>
+    <div class="wrap"><table>
+      <thead><tr><th>#</th><th>Gap</th><th>Platform</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="id">I4</td><td>Link menu misses links in iframes and shadow DOM. Move to WebKit's <code>contextMenuConfigurationForElement</code>.</td><td><span class="tag ios">iOS</span></td><td><span class="st miss">Missing</span></td></tr>
+        <tr><td class="id">I6</td><td>Glass sheet backgrounds; sheets are solid today</td><td><span class="tag ios">iOS</span></td><td><span class="st part">Bar and downloads only</span></td></tr>
+        <tr><td class="id">I1</td><td>Lock screen media controls, if WebKit's own aren't enough</td><td><span class="tag ios">iOS</span></td><td><span class="st part">Test first</span></td></tr>
+        <tr><td class="id">I2</td><td>Downloads that keep going in the background</td><td><span class="tag ios">iOS</span></td><td><span class="st done">Done</span></td></tr>
+        <tr><td class="id">A1</td><td>File upload: no <code>onShowFileChooser</code>, so file pickers never open</td><td><span class="tag android">Android</span></td><td><span class="st miss">Missing</span></td></tr>
+        <tr><td class="id">A2</td><td>Fullscreen video: no <code>onShowCustomView</code></td><td><span class="tag android">Android</span></td><td><span class="st miss">Missing</span></td></tr>
+        <tr><td class="id">A3</td><td><code>blob:</code> and <code>data:</code> downloads</td><td><span class="tag android">Android</span></td><td><span class="st part">Check after b12b1685</span></td></tr>
+        <tr><td class="id">A4</td><td>Edge swipe forward, and back without the system gesture</td><td><span class="tag android">Android</span></td><td><span class="st miss">Missing</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="prs">
+    <div class="eyebrow">05 · Pull requests</div>
+    <h2>Seven PRs, in order</h2>
+    <p>Each PR goes to the fork, is tested on the iPhone and the Android phone, and is done when its e2e flows pass on both.</p>
+    <div class="prs">
+      <div class="pr first"><span class="n">0</span><div><code class="branch">feat/mobile-next-plan</code><h3>This plan</h3><p>Adds <code>docs/mobile-next-plan.html</code>. No code.</p></div></div>
+      <div class="pr"><span class="n">1</span><div><code class="branch">feat/mobile-motion</code><h3>Animations A1 to A8</h3><p>Shared press and haptics hooks first, then each animation as its own commit. Profile the switcher zoom with the native profiler on both phones.</p></div></div>
+      <div class="pr"><span class="n">2</span><div><code class="branch">feat/mobile-page-requests</code><h3>Page requests sheet</h3><p>I3, B3, B5 and B7 behind one <code>@bay/engine</code> event.</p></div></div>
+      <div class="pr"><span class="n">3</span><div><code class="branch">feat/mobile-site-compat</code><h3>Uploads, fullscreen, landscape</h3><p>A1, A2, A3, B10 and I4.</p></div></div>
+      <div class="pr"><span class="n">4</span><div><code class="branch">feat/mobile-tab-state</code><h3>Tabs that survive</h3><p>B6, then B19 new windows. B19 is the riskiest item; fall back to plain new tabs if it blocks.</p></div></div>
+      <div class="pr"><span class="n">5</span><div><code class="branch">feat/mobile-arc-switch</code><h3>Arc switchers</h3><p>B2 import, B4 touches, B9 default browser, B8 release setup. Aim for a test build before 22 December.</p></div></div>
+      <div class="pr"><span class="n">6</span><div><code class="branch">feat/mobile-lens-features</code><h3>Lens features</h3><p>B11 Peek, B12 per-site settings, B13 images, A4 swipes, B15 to B18.</p></div></div>
+    </div>
+  </section>
+
+  <section id="skip">
+    <div class="eyebrow">06 · Not building</div>
+    <h2>Left out on purpose</h2>
+    <div class="skip">
+      <p>Browse for Me, Pinch to Summarize and Call Arc: Arc is turning them off, Lens has none, and they need a paid server.</p>
+      <p>Blur or imitation glass on Android: Android stays flat, as decided on 2 November.</p>
+      <p>Spaces, sync and tablet layouts: after the first release, as in the roadmap.</p>
+    </div>
+  </section>
+
+  <footer class="meta">Sources: <a href="https://arc.net/">arc.net</a> farewell post for Arc dates, <a href="https://lens.maximos.work/">Lens</a> for its feature list, and the code in <code>apps/mobile</code>. Arc and Lens rows marked ✓ come from the 5 November audit's sources and were not re-checked today.</footer>
+</main>
+</body>
+</html>
