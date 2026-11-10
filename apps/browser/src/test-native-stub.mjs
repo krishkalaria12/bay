@@ -470,3 +470,28 @@ export const readUserScripts = async () => ({ state: "empty" });
 export const readUserScriptsStatus = async () => null;
 export const writeUserScriptsStatus = async () => {};
 export const onUserScriptsChange = () => ({ remove() {} });
+
+// The engine's extensions: what is installed, and what a test wants to see.
+export const installedExtensions = [];
+
+export const listExtensions = async () => installedExtensions;
+
+export const installExtension = async (options, profile) => {
+  const id = `ext-${installedExtensions.length + 1}`;
+
+  installedExtensions.push({ id, profile, path: options.path, enabled: true, blockedByPolicy: false, state: "ENABLED", errors: [] });
+
+  return id;
+};
+
+export const reloadExtension = async (id, profile) => {
+  const ext = installedExtensions.find((e) => e.id === id && e.profile === profile);
+
+  if (ext) ext.enabled = true;
+};
+
+export const uninstallExtension = async (id, profile) => {
+  const at = installedExtensions.findIndex((e) => e.id === id && e.profile === profile);
+
+  if (at >= 0) installedExtensions.splice(at, 1);
+};

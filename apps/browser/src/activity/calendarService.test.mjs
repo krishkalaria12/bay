@@ -43,6 +43,7 @@ const fakeEngine = () => {
 
 const withService = async (use) => {
   const engine = fakeEngine();
+
   const runtime = ManagedRuntime.make(
     CalendarService.layer.pipe(Layer.provide(Layer.mergeAll(engine.layer, Scheduler.layer.pipe(Layer.provide(Diagnostics.layer))))),
   );

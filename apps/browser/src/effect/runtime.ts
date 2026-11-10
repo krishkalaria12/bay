@@ -7,6 +7,7 @@ import { ActivityService, LiveSources } from "../activity/activityService";
 import { CalendarEngine, CalendarService } from "../activity/calendarService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
+import { AutomationEngine, AutomationService } from "../components/cli/automationService";
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
 import { Persistence } from "../lib/persistenceService";
@@ -22,6 +23,7 @@ import { Scheduler } from "./ports/scheduler";
 /** The services every desktop workflow can rely on. */
 export type AppServices =
   | ActivityService
+  | AutomationService
   | Bookmarks
   | CalendarService
   | Diagnostics
@@ -59,6 +61,8 @@ const localFiles = LocalFileService.layer.pipe(Layer.provide(LocalFileEngine.lay
 
 const calendar = CalendarService.layer.pipe(Layer.provide(Layer.mergeAll(CalendarEngine.layer, Scheduler.layer)));
 
+const automation = AutomationService.layer.pipe(Layer.provide(AutomationEngine.layer));
+
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
   diagnostics,
@@ -75,6 +79,7 @@ export const appLayer = Layer.mergeAll(
   notifications,
   localFiles,
   calendar,
+  automation,
 ).pipe(Layer.provide(diagnostics));
 
 /**
