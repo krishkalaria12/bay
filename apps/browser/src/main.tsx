@@ -30,6 +30,9 @@ setStoreBatching(unstable_batchedUpdates);
 
 startPersistence();
 
+// The runtime takes over the work that outlives the bootstrap: the saving, and later the rest.
+void startAppServices();
+
 // Before the native sync: a moved tab's page is handed off before the window it left closes (lib/tabNavigation.ts).
 startTabPages();
 
@@ -51,9 +54,6 @@ startTranslate();
 startSync();
 
 startTelemetry();
-
-// The runtime takes over the work that outlives the bootstrap: the saving, and later the rest.
-void startAppServices();
 
 if (__DEV__ || perfProbeEnabled) require("./lib/devHarness").startDevHarness();
 

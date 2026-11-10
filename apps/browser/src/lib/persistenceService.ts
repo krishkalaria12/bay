@@ -16,7 +16,6 @@ import { useBrowser, type BrowserState } from "../store/browserStore";
 import { SAVE_DELAY_MS } from "./constants";
 import { startBookmarks } from "./bookmarks";
 import { startFavicons } from "./favicons";
-import { startHistory } from "./history";
 import { DOCS, forgetClosedIncognito, loadSession, sessionNeedsRewrite, type Doc } from "./persist";
 import { startProfileDataCleanup } from "./profileCleanup";
 
@@ -126,7 +125,7 @@ const createCoordinator = (): PersistenceCoordinator => {
     hydrate();
     check(useBrowser.getState());
 
-    const stops = [startFavicons(), startHistory(), startBookmarks(), startProfileDataCleanup(), startLiveFolders()];
+    const stops = [startFavicons(), startBookmarks(), startProfileDataCleanup(), startLiveFolders()];
 
     const stopSession = useBrowser.subscribe((s, prev) => {
       check(s);

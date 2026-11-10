@@ -162,9 +162,15 @@ const emitHistory = (change) => {
 
 export const onHistoryChanged = (listener) => (historyListeners.add(listener), { remove: () => historyListeners.delete(listener) });
 
-// Each profile the app asked to watch, in order (Chrome's events reach the app only once it watches).
+/** A change Chrome reports, as the engine does. */
+export const chromeHistoryChange = (change) => emitHistory(change);
+
+// Each profile the app asked to watch, in order (Chrome's events reach the app only once it watches), and how many
+// visits had been moved into Chrome when it asked (the move goes first).
 export const historyWatches = [];
-export const watchHistory = async (profile) => (historyWatches.push(profile), { ok: true });
+export const historyWatchedAfter = [];
+export const historyMoved = [];
+export const watchHistory = async (profile) => (historyWatches.push(profile), historyWatchedAfter.push(historyMoved.length), { ok: true });
 
 const addVisit = (profile, url, title, at) => {
   const db = chromeHistory(profile);
@@ -187,6 +193,8 @@ export const queryHistory = async (profile, maxUrls = 5000, maxVisits = 50) =>
 
 export const addHistoryVisits = async (profile, pages, toleranceMs = 1000) => {
   let added = 0;
+
+  historyMoved.push(pages.length);
 
   for (const page of pages) {
     // One to one: each visit Chrome has accounts for one asked for.
