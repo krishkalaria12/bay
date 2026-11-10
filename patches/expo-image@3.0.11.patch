@@ -1,0 +1,576 @@
+diff --git a/ios/AnimatedImage.swift b/ios/AnimatedImage.swift
+index 34f8fafbce5faa777eeee03177e7123a80510550..4597c8c7deafb5766cde2f0ee10b6c1800925c02 100644
+--- a/ios/AnimatedImage.swift
++++ b/ios/AnimatedImage.swift
+@@ -10,6 +10,7 @@ final class AnimatedImage: SDAnimatedImage {
+ 
+   // MARK: - UIImage
+ 
++  #if !os(macOS)
+   override var images: [UIImage]? {
+     preloadAllFrames()
+     return frames?.map({ $0.image })
+@@ -20,6 +21,8 @@ final class AnimatedImage: SDAnimatedImage {
+     return frames?.reduce(0, { $0 + $1.duration }) ?? 0.0
+   }
+ 
++  #endif
++
+   // MARK: - SDAnimatedImage
+ 
+   override func preloadAllFrames() {
+diff --git a/ios/Blurhash.swift b/ios/Blurhash.swift
+index a564ad2ee1107880c755d4723f04d545454ea3d0..2addb2925aa54259dd143ef6374391d4b87b4f72 100644
+--- a/ios/Blurhash.swift
++++ b/ios/Blurhash.swift
+@@ -4,7 +4,11 @@
+ // - https://github.com/woltapp/blurhash/blob/master/Swift/BlurHashEncode.swift
+ // See https://blurha.sh for more details about the blurhash.
+ 
++#if os(macOS)
++import AppKit
++#else
+ import UIKit
++#endif
+ 
+ // swiftlint:disable force_unwrapping
+ 
+@@ -115,7 +119,11 @@ internal func blurhash(fromImage image: UIImage, numberOfComponents components:
+   context.translateBy(x: 0, y: -size.height)
+ 
+   UIGraphicsPushContext(context)
++  #if os(macOS)
++  image.draw(in: CGRect(origin: .zero, size: size))
++  #else
+   image.draw(at: .zero)
++  #endif
+   UIGraphicsPopContext()
+ 
+   guard let cgImage = context.makeImage(),
+diff --git a/ios/ContentFit.swift b/ios/ContentFit.swift
+index 4f2b4a92333d7170d3f1cb3c24ca9cfa6bc02083..0eee4e47c365681628d1a7d857f9f500372d04a3 100644
+--- a/ios/ContentFit.swift
++++ b/ios/ContentFit.swift
+@@ -40,6 +40,7 @@ enum ContentFit: String, Enumerable {
+    `ContentFit` cases can be directly translated to the native `UIView.ContentMode`
+    except `scaleDown` that needs to be handled differently at the later step of rendering.
+    */
++  #if !os(macOS)
+   func toContentMode() -> UIView.ContentMode {
+     switch self {
+     case .contain:
+@@ -52,4 +53,5 @@ enum ContentFit: String, Enumerable {
+       return .center
+     }
+   }
++  #endif
+ }
+diff --git a/ios/ContentPosition.swift b/ios/ContentPosition.swift
+index 73c34ca66c29b82a0be732ac063b4aae69bac56b..df7f3c6ef92478754564251fb04bd171c8af6d8f 100644
+--- a/ios/ContentPosition.swift
++++ b/ios/ContentPosition.swift
+@@ -66,6 +66,18 @@ struct ContentPosition: Record {
+     return 0
+   }
+ 
++  #if os(macOS)
++  func frame(contentSize: CGSize, containerSize: CGSize) -> CGRect {
++    let offset = offset(contentSize: contentSize, containerSize: containerSize)
++    return CGRect(
++      x: (containerSize.width - contentSize.width) / 2 + offset.x,
++      y: (containerSize.height - contentSize.height) / 2 + offset.y,
++      width: contentSize.width,
++      height: contentSize.height
++    )
++  }
++  #endif
++
+   /**
+    A `CGPoint` with horizontal and vertical content offsets.
+    */
+diff --git a/ios/ExpoImage.podspec b/ios/ExpoImage.podspec
+index 818e05051f3ac539aefa00d7c50bf9871c35530f..239f132ac88fdaf47c0a18e8d60375b2caf57ce6 100644
+--- a/ios/ExpoImage.podspec
++++ b/ios/ExpoImage.podspec
+@@ -12,7 +12,8 @@ Pod::Spec.new do |s|
+   s.homepage       = package['homepage']
+   s.platforms      = {
+     :ios => '15.1',
+-    :tvos => '15.1'
++    :tvos => '15.1',
++    :osx => '14.0'
+   }
+   s.swift_version  = '5.9'
+   s.source         = { git: 'https://github.com/expo/expo.git' }
+diff --git a/ios/Image.swift b/ios/Image.swift
+index 5c92efa2ec1ca32fc4c49b0e30f3f809259508f3..d80d28135041bb719490f94e95e9fad8555a39c8 100644
+--- a/ios/Image.swift
++++ b/ios/Image.swift
+@@ -1,6 +1,7 @@
+ // Copyright 2024-present 650 Industries. All rights reserved.
+ 
+ import ExpoModulesCore
++import SDWebImage
+ 
+ internal final class Image: SharedRef<UIImage> {
+   override var nativeRefType: String {
+@@ -8,7 +9,11 @@ internal final class Image: SharedRef<UIImage> {
+   }
+ 
+   var isAnimated: Bool {
++    #if os(macOS)
++    return ref.sd_isAnimated
++    #else
+     return !(ref.images?.isEmpty ?? true)
++    #endif
+   }
+ 
+   override func getAdditionalMemoryPressure() -> Int {
+diff --git a/ios/ImageModule.swift b/ios/ImageModule.swift
+index b44f4316f459f6ea138840dee98869683a0facd5..5db4d948955bed789eab62e595a2f5e2d2fb9621 100644
+--- a/ios/ImageModule.swift
++++ b/ios/ImageModule.swift
+@@ -82,17 +82,25 @@ public final class ImageModule: Module {
+       }
+ 
+       Prop("enableLiveTextInteraction") { (view, enableLiveTextInteraction: Bool?) in
+-        #if !os(tvOS)
++        #if !os(tvOS) && !os(macOS)
+         view.enableLiveTextInteraction = enableLiveTextInteraction ?? false
+         #endif
+       }
+ 
+       Prop("accessible") { (view, accessible: Bool?) in
++        #if os(macOS)
++        view.sdImageView.setAccessibilityElement(accessible ?? false)
++        #else
+         view.sdImageView.isAccessibilityElement = accessible ?? false
++        #endif
+       }
+ 
+       Prop("accessibilityLabel") { (view, label: String?) in
++        #if os(macOS)
++        view.sdImageView.setAccessibilityLabel(label)
++        #else
+         view.sdImageView.accessibilityLabel = label
++        #endif
+       }
+ 
+       Prop("recyclingKey") { (view, key: String?) in
+@@ -116,11 +124,19 @@ public final class ImageModule: Module {
+       }
+ 
+       AsyncFunction("startAnimating") { (view: ImageView) in
++        #if os(macOS)
++        view.sdImageView.animates = true
++        #else
+         view.sdImageView.startAnimating()
++        #endif
+       }
+ 
+       AsyncFunction("stopAnimating") { (view: ImageView) in
++        #if os(macOS)
++        view.sdImageView.animates = false
++        #else
+         view.sdImageView.stopAnimating()
++        #endif
+       }
+ 
+       AsyncFunction("lockResourceAsync") { (view: ImageView) in
+@@ -223,7 +239,7 @@ public final class ImageModule: Module {
+     Class(Image.self) {
+       Property("width", \.ref.size.width)
+       Property("height", \.ref.size.height)
+-      Property("scale", \.ref.scale)
++      Property("scale") { image in image.ref.scale }
+       Property("isAnimated", \.isAnimated)
+       Property("mediaType") { image in
+         return imageFormatToMediaType(image.ref.sd_imageFormat)
+diff --git a/ios/ImagePlatform.swift b/ios/ImagePlatform.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..e44070af3d42ded9ae0a8837816ad4663b60f08a
+--- /dev/null
++++ b/ios/ImagePlatform.swift
+@@ -0,0 +1,35 @@
++// Copyright 2022-present 650 Industries. All rights reserved.
++
++#if os(macOS)
++import AppKit
++
++typealias UIImage = NSImage
++typealias UIColor = NSColor
++
++extension NSImage {
++  var cgImage: CGImage? {
++    cgImage(forProposedRect: nil, context: nil, hints: nil)
++  }
++
++  var scale: CGFloat {
++    guard size.width > 0, let representation = representations.first(where: { $0.pixelsWide > 0 }) else {
++      return 1
++    }
++    return CGFloat(representation.pixelsWide) / size.width
++  }
++
++  convenience init(cgImage: CGImage) {
++    self.init(cgImage: cgImage, size: CGSize(width: cgImage.width, height: cgImage.height))
++  }
++}
++
++// The hash encoders draw through the platform graphics context to respect image orientation.
++func UIGraphicsPushContext(_ context: CGContext) {
++  NSGraphicsContext.saveGraphicsState()
++  NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
++}
++
++func UIGraphicsPopContext() {
++  NSGraphicsContext.restoreGraphicsState()
++}
++#endif
+diff --git a/ios/ImageTransition.swift b/ios/ImageTransition.swift
+index 41c6745e20fac49ab2cbb291f51761dbf25df6ef..8594a5f471583722a8715d8e30ea1d2946a00bbc 100644
+--- a/ios/ImageTransition.swift
++++ b/ios/ImageTransition.swift
+@@ -8,6 +8,7 @@ enum ImageTransitionTiming: String, Enumerable {
+   case easeOut = "ease-out"
+   case linear = "linear"
+ 
++  #if !os(macOS)
+   func toAnimationOption() -> UIView.AnimationOptions {
+     switch self {
+     case .easeInOut:
+@@ -20,6 +21,7 @@ enum ImageTransitionTiming: String, Enumerable {
+       return .curveLinear
+     }
+   }
++  #endif
+ }
+ 
+ enum ImageTransitionEffect: String, Enumerable {
+@@ -31,6 +33,7 @@ enum ImageTransitionEffect: String, Enumerable {
+   case curlUp = "curl-up"
+   case curlDown = "curl-down"
+ 
++  #if !os(macOS)
+   func toAnimationOption() -> UIView.AnimationOptions {
+     switch self {
+     case .crossDissolve:
+@@ -49,6 +52,7 @@ enum ImageTransitionEffect: String, Enumerable {
+       return .transitionCurlDown
+     }
+   }
++  #endif
+ }
+ 
+ struct ImageTransition: Record {
+@@ -61,7 +65,9 @@ struct ImageTransition: Record {
+   @Field
+   var effect: ImageTransitionEffect = .crossDissolve
+ 
++  #if !os(macOS)
+   func toAnimationOptions() -> UIView.AnimationOptions {
+     return [timing.toAnimationOption(), effect.toAnimationOption()]
+   }
++  #endif
+ }
+diff --git a/ios/ImageUtils.swift b/ios/ImageUtils.swift
+index be40a77ec73eb1c4e676392faea8ae10aeb8e803..8a0a60b384641da41d535a9a240e9aa40969d37d 100644
+--- a/ios/ImageUtils.swift
++++ b/ios/ImageUtils.swift
+@@ -106,12 +106,32 @@ func shouldDownscale(image: UIImage, toSize size: CGSize, scale: Double) -> Bool
+  Resizes a static image to fit in the given size and scale.
+  */
+ func resize(image: UIImage, toSize size: CGSize, scale: Double) -> UIImage {
++  #if os(macOS)
++  guard size.width > 0, size.height > 0,
++    let representation = NSBitmapImageRep(
++      bitmapDataPlanes: nil, pixelsWide: Int(ceil(size.width * scale)), pixelsHigh: Int(ceil(size.height * scale)),
++      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
++      colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
++    ), let context = NSGraphicsContext(bitmapImageRep: representation) else {
++    return image
++  }
++  representation.size = size
++  NSGraphicsContext.saveGraphicsState()
++  NSGraphicsContext.current = context
++  context.cgContext.scaleBy(x: scale, y: scale)
++  image.draw(in: CGRect(origin: .zero, size: size))
++  NSGraphicsContext.restoreGraphicsState()
++  let resized = NSImage(size: size)
++  resized.addRepresentation(representation)
++  return resized
++  #else
+   let format = UIGraphicsImageRendererFormat()
+   format.scale = scale
+ 
+   return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+     image.draw(in: CGRect(origin: .zero, size: size))
+   }
++  #endif
+ }
+ 
+ /**
+diff --git a/ios/ImageView.swift b/ios/ImageView.swift
+index c33ec335e6afad5f0d58110950c80b313caf694e..5c91de303d20dab137a3d3b553b012d01bfab077 100644
+--- a/ios/ImageView.swift
++++ b/ios/ImageView.swift
+@@ -2,7 +2,7 @@
+ 
+ import SDWebImage
+ import ExpoModulesCore
+-#if !os(tvOS)
++#if !os(tvOS) && !os(macOS)
+ import VisionKit
+ #endif
+ 
+@@ -17,6 +17,18 @@ public final class ImageView: ExpoView {
+ 
+   let sdImageView = SDAnimatedImageView(frame: .zero)
+ 
++  private var imageLayer: CALayer {
++    #if os(macOS)
++    return sdImageView.layer!
++    #else
++    return sdImageView.layer
++    #endif
++  }
++
++  #if os(macOS)
++  public override var isFlipped: Bool { true }
++  #endif
++
+   // Custom image manager doesn't use shared loaders managers by default,
+   // so make sure it is provided here.
+   let imageManager = SDWebImageManager(
+@@ -106,13 +118,20 @@ public final class ImageView: ExpoView {
+     super.init(appContext: appContext)
+ 
+     clipsToBounds = true
++    #if os(macOS)
++    sdImageView.imageScaling = .scaleAxesIndependently
++    wantsLayer = true
++    layer?.masksToBounds = true
++    sdImageView.wantsLayer = true
++    #else
+     sdImageView.contentMode = contentFit.toContentMode()
+     sdImageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+-    sdImageView.layer.masksToBounds = false
++    #endif
++    imageLayer.masksToBounds = false
+ 
+     // Apply trilinear filtering to smooth out mis-sized images.
+-    sdImageView.layer.magnificationFilter = .trilinear
+-    sdImageView.layer.minificationFilter = .trilinear
++    imageLayer.magnificationFilter = .trilinear
++    imageLayer.minificationFilter = .trilinear
+ 
+     addSubview(sdImageView)
+   }
+@@ -122,6 +141,7 @@ public final class ImageView: ExpoView {
+     cancelPendingOperation()
+   }
+ 
++  #if !os(macOS)
+   public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+     super.traitCollectionDidChange(previousTraitCollection)
+     if self.traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+@@ -131,6 +151,8 @@ public final class ImageView: ExpoView {
+     }
+   }
+ 
++  #endif
++
+   // MARK: - Implementation
+ 
+   func reload(force: Bool = false) {
+@@ -145,7 +167,11 @@ public final class ImageView: ExpoView {
+       return
+     }
+     if sdImageView.image == nil {
++      #if os(macOS)
++      sdImageView.imageScaling = .scaleAxesIndependently
++      #else
+       sdImageView.contentMode = contentFit.toContentMode()
++      #endif
+     }
+     var context = createSDWebImageContext(forSource: source, cachePolicy: cachePolicy, useAppleWebpCodec: useAppleWebpCodec)
+ 
+@@ -243,7 +269,7 @@ public final class ImageView: ExpoView {
+         ]
+       ])
+ 
+-      let scale = window?.screen.scale ?? UIScreen.main.scale
++      let scale = screenScale
+       imageIdealSize = idealSize(
+         contentPixelSize: image.size * image.scale,
+         containerSize: frame.size,
+@@ -270,7 +296,12 @@ public final class ImageView: ExpoView {
+       return nil
+     }()
+ 
+-    if let path, !path.isEmpty, let local = UIImage(named: path) {
++    #if os(macOS)
++    let local = path.flatMap { $0.isEmpty ? nil : NSImage(named: NSImage.Name($0)) }
++    #else
++    let local = path.flatMap { $0.isEmpty ? nil : UIImage(named: $0) }
++    #endif
++    if let local {
+       renderSourceImage(local)
+       return true
+     }
+@@ -377,7 +408,7 @@ public final class ImageView: ExpoView {
+         sdImageView.animationTransformer = SDImageResizingTransformer(size: size, scaleMode: .fill)
+         return image
+       }
+-      return resize(image: image, toSize: idealSize, scale: scale)
++      return ExpoImage.resize(image: image, toSize: idealSize, scale: scale)
+     }
+     return image
+   }
+@@ -388,8 +419,12 @@ public final class ImageView: ExpoView {
+    Moves the layer on which the image is rendered to respect the `contentPosition` prop.
+    */
+   private func applyContentPosition(contentSize: CGSize, containerSize: CGSize) {
++    #if os(macOS)
++    // AppKit has no aspect-fill mode. Render into the fitted rectangle and clip at the Expo view.
++    sdImageView.frame = contentPosition.frame(contentSize: contentSize, containerSize: containerSize)
++    #else
+     let offset = contentPosition.offset(contentSize: contentSize, containerSize: containerSize)
+-    if sdImageView.layer.mask != nil {
++    if imageLayer.mask != nil {
+       // In New Architecture mode, React Native adds a mask layer to image subviews.
+       // When moving the layer frame, we must move the mask layer with a compensation value.
+       // This prevents the layer from being cropped.
+@@ -397,12 +432,13 @@ public final class ImageView: ExpoView {
+       // and https://github.com/facebook/react-native/blob/c72d4c5ee97/packages/react-native/React/Fabric/Mounting/ComponentViews/View/RCTViewComponentView.mm#L1066-L1076
+       CATransaction.begin()
+       CATransaction.setDisableActions(true)
+-      sdImageView.layer.frame.origin = offset
+-      sdImageView.layer.mask?.frame.origin = CGPoint(x: -offset.x, y: -offset.y)
++      imageLayer.frame.origin = offset
++      imageLayer.mask?.frame.origin = CGPoint(x: -offset.x, y: -offset.y)
+       CATransaction.commit()
+     } else {
+-      sdImageView.layer.frame.origin = offset
++      imageLayer.frame.origin = offset
+     }
++    #endif
+   }
+ 
+   internal func renderSourceImage(_ image: UIImage?) {
+@@ -410,6 +446,19 @@ public final class ImageView: ExpoView {
+     sourceImage = image
+ 
+     if let transition = transition, transition.duration > 0 {
++      #if os(macOS)
++      let animation = CATransition()
++      animation.type = .fade
++      animation.duration = transition.duration / 1000
++      switch transition.timing {
++      case .easeInOut: animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
++      case .easeIn: animation.timingFunction = CAMediaTimingFunction(name: .easeIn)
++      case .easeOut: animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
++      case .linear: animation.timingFunction = CAMediaTimingFunction(name: .linear)
++      }
++      imageLayer.add(animation, forKey: "imageTransition")
++      setImage(image, contentFit: contentFit, isPlaceholder: false)
++      #else
+       let options = transition.toAnimationOptions()
+       let seconds = transition.duration / 1000
+ 
+@@ -418,13 +467,18 @@ public final class ImageView: ExpoView {
+           self.setImage(image, contentFit: self.contentFit, isPlaceholder: false)
+         }
+       }
++      #endif
+     } else {
+       setImage(image, contentFit: contentFit, isPlaceholder: false)
+     }
+   }
+ 
+   private func setImage(_ image: UIImage?, contentFit: ContentFit, isPlaceholder: Bool) {
++    #if os(macOS)
++    sdImageView.imageScaling = .scaleAxesIndependently
++    #else
+     sdImageView.contentMode = contentFit.toContentMode()
++    #endif
+ 
+     if isPlaceholder {
+       sdImageView.autoPlayAnimatedImage = true
+@@ -432,6 +486,22 @@ public final class ImageView: ExpoView {
+       sdImageView.autoPlayAnimatedImage = autoplay
+     }
+ 
++    #if os(macOS)
++    if imageTintColor != nil && !isPlaceholder {
++      // Never mutate a cached image's template flag. Preserve animated images when no tint is requested.
++      let template = image?.copy() as? NSImage
++      template?.isTemplate = true
++      sdImageView.image = template
++    } else {
++      sdImageView.image = image
++    }
++    sdImageView.contentTintColor = isPlaceholder ? nil : imageTintColor
++    if let image {
++      imageIdealSize = idealSize(contentPixelSize: image.size * image.scale, containerSize: bounds.size,
++                                scale: screenScale, contentFit: contentFit).rounded(.up)
++      applyContentPosition(contentSize: imageIdealSize, containerSize: bounds.size)
++    }
++    #else
+     if let imageTintColor, !isPlaceholder {
+       sdImageView.tintColor = imageTintColor
+       sdImageView.image = image?.withRenderingMode(.alwaysTemplate)
+@@ -440,11 +510,13 @@ public final class ImageView: ExpoView {
+       sdImageView.image = image
+     }
+ 
++    #endif
++
+     if !isPlaceholder {
+       onDisplay()
+     }
+ 
+-#if !os(tvOS)
++#if !os(tvOS) && !os(macOS)
+     if enableLiveTextInteraction {
+       analyzeImage()
+     }
+@@ -463,7 +535,11 @@ public final class ImageView: ExpoView {
+    or the main scale if the view is not mounted yet.
+    */
+   var screenScale: Double {
++    #if os(macOS)
++    return Double(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1)
++    #else
+     return window?.screen.scale as? Double ?? UIScreen.main.scale
++    #endif
+   }
+ 
+   /**
+@@ -488,7 +564,7 @@ public final class ImageView: ExpoView {
+   }
+ 
+   // MARK: - Live Text Interaction
+-#if !os(tvOS)
++#if !os(tvOS) && !os(macOS)
+   @available(iOS 16.0, macCatalyst 17.0, *)
+   static let imageAnalyzer = ImageAnalyzer.isSupported ? ImageAnalyzer() : nil
+ 
+diff --git a/ios/Thumbhash.swift b/ios/Thumbhash.swift
+index c2da2b7d06401ca01281efb4c6375e7c4c0f18cb..46989db6f9eef8117661e8608010c6805f39c2b5 100644
+--- a/ios/Thumbhash.swift
++++ b/ios/Thumbhash.swift
+@@ -456,8 +456,12 @@ func thumbHashToApproximateAspectRatio(hash: Data) -> Float32 {
+   return Float32(lx) / Float32(ly)
+ }
+ 
+-#if os(iOS) || os(tvOS)
++#if os(iOS) || os(tvOS) || os(macOS)
++#if os(macOS)
++import AppKit
++#else
+ import UIKit
++#endif
+ 
+ func thumbHash(fromImage: UIImage) -> Data {
+   let size = fromImage.size

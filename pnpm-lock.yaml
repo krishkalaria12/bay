@@ -6,6 +6,7 @@ settings:
 
 patchedDependencies:
   expo-constants@18.0.14: 73c86d7955adfae63acc9821a5f33ece2ffa7eda70099faa582ad6b0d4467535
+  expo-image@3.0.11: 0d67b9bd64be62e46b39d055b040fb36952c496150d4d5e3415af32a561e0a6e
   expo-modules-core@3.0.30: 9fb4cf2fe9a085d9b9e7ce6daf8ab264d120a461b3cb479be703ff8a9208d1cb
   react-native-macos@0.81.9: 1c4072973c2ee40912cac832bdac13166663475cfc59a8ab55cee3d3420d505a
   react-native-web@0.21.4: 6dbe0ca59e22fffb4b3b80ff1d32285f8fd25dc73c99af2051af5d2cecc8c1be
@@ -59,6 +60,9 @@ importers:
       expo:
         specifier: ~54.0.37
         version: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(react-native@0.81.6(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@5.9.3))(@react-native/metro-config@0.81.6(@babel/core@7.29.7))(@types/react@19.1.17)(react@19.1.4))(react@19.1.4)(typescript@5.9.3)
+      expo-image:
+        specifier: ~3.0.11
+        version: 3.0.11(patch_hash=0d67b9bd64be62e46b39d055b040fb36952c496150d4d5e3415af32a561e0a6e)(expo@54.0.37)(react-native-web@0.21.4(patch_hash=6dbe0ca59e22fffb4b3b80ff1d32285f8fd25dc73c99af2051af5d2cecc8c1be)(react-dom@19.1.4(react@19.1.4))(react@19.1.4))(react-native@0.81.6(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@5.9.3))(@react-native/metro-config@0.81.6(@babel/core@7.29.7))(@types/react@19.1.17)(react@19.1.4))(react@19.1.4)
       expo-modules-core:
         specifier: ~3.0.29
         version: 3.0.30(patch_hash=9fb4cf2fe9a085d9b9e7ce6daf8ab264d120a461b3cb479be703ff8a9208d1cb)(react-native@0.81.6(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@5.9.3))(@react-native/metro-config@0.81.6(@babel/core@7.29.7))(@types/react@19.1.17)(react@19.1.4))(react@19.1.4)
@@ -1981,6 +1985,17 @@ packages:
       expo: '*'
       react: '*'
       react-native: '*'
+
+  expo-image@3.0.11:
+    resolution: {integrity: sha512-4TudfUCLgYgENv+f48omnU8tjS2S0Pd9EaON5/s1ZUBRwZ7K8acEr4NfvLPSaeXvxW24iLAiyQ7sV7BXQH3RoA==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: '*'
+      react-native-web: '*'
+    peerDependenciesMeta:
+      react-native-web:
+        optional: true
 
   expo-keep-awake@15.0.8:
     resolution: {integrity: sha512-YK9M1VrnoH1vLJiQzChZgzDvVimVoriibiDIFLbQMpjYBnvyfUeHJcin/Gx1a+XgupNXy92EQJLgI/9ZuXajYQ==}
@@ -5915,6 +5930,14 @@ snapshots:
       fontfaceobserver: 2.3.0
       react: 19.1.4
       react-native: 0.81.6(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@5.9.3))(@react-native/metro-config@0.81.6(@babel/core@7.29.7))(@types/react@19.1.17)(react@19.1.4)
+
+  expo-image@3.0.11(patch_hash=0d67b9bd64be62e46b39d055b040fb36952c496150d4d5e3415af32a561e0a6e)(expo@54.0.37)(react-native-web@0.21.4(patch_hash=6dbe0ca59e22fffb4b3b80ff1d32285f8fd25dc73c99af2051af5d2cecc8c1be)(react-dom@19.1.4(react@19.1.4))(react@19.1.4))(react-native@0.81.6(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@5.9.3))(@react-native/metro-config@0.81.6(@babel/core@7.29.7))(@types/react@19.1.17)(react@19.1.4))(react@19.1.4):
+    dependencies:
+      expo: 54.0.37(@babel/core@7.29.7)(@expo/metro-runtime@6.1.2)(react-native@0.81.6(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@5.9.3))(@react-native/metro-config@0.81.6(@babel/core@7.29.7))(@types/react@19.1.17)(react@19.1.4))(react@19.1.4)(typescript@5.9.3)
+      react: 19.1.4
+      react-native: 0.81.6(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@5.9.3))(@react-native/metro-config@0.81.6(@babel/core@7.29.7))(@types/react@19.1.17)(react@19.1.4)
+    optionalDependencies:
+      react-native-web: 0.21.4(patch_hash=6dbe0ca59e22fffb4b3b80ff1d32285f8fd25dc73c99af2051af5d2cecc8c1be)(react-dom@19.1.4(react@19.1.4))(react@19.1.4)
 
   expo-keep-awake@15.0.8(expo@54.0.37)(react@19.1.4):
     dependencies:
