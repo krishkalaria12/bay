@@ -12,7 +12,8 @@
     "scheme": ["bay", "http", "https"],
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true,
+      // Bay has no tablet layout yet (D7): a build that says it runs on iPad invites App Store questions for nothing.
+      "supportsTablet": false,
       "bundleIdentifier": "in.krishkalaria.bay.mobile",
       "infoPlist": {
         "UIFileSharingEnabled": true,

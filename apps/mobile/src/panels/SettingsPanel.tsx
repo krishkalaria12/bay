@@ -44,6 +44,10 @@ export interface SettingsPanelProps {
   onDownloads: () => void;
   historyCount: number;
   onHistory: () => void;
+  /** How many times Bay broke since it was opened; shown on the row that reports it (B8). */
+  crashCount: number;
+  /** Sends the errors Bay kept, so they can be looked at. */
+  onReportProblem: () => void;
 }
 
 const archiveOptions = [
@@ -454,6 +458,16 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               />
             )}
             {confirming ? <ActionRow testID="clear-data-cancel" label="Keep browsing data" disabled={busy} onPress={() => setConfirming(false)} /> : null}
+          </Group>
+          <Group label="Help">
+            <ActionRow
+              testID="settings-report-problem"
+              icon="error"
+              label="Report a problem"
+              detail={props.crashCount ? `${props.crashCount} ${props.crashCount === 1 ? "error" : "errors"} kept` : "Sends what went wrong"}
+              disabled={busy}
+              onPress={props.onReportProblem}
+            />
           </Group>
           {busy ? (
             <Typography testID="clear-data-busy" className="mt-3 px-1 text-sm text-muted">

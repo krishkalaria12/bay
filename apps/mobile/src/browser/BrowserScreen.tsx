@@ -26,6 +26,7 @@ import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { tick } from "@/chrome/haptics";
+import { crashReportText, crashReports } from "@/crashReports";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
@@ -451,6 +452,11 @@ export function BrowserScreen(): JSX.Element {
   function copy(url: string): void {
     // Android 13+ confirms copies itself with the system clipboard preview.
     void Clipboard.setStringAsync(cleanUrl(url)).then(() => Platform.OS === "ios" && toast.show("Link copied"));
+  }
+
+  // What went wrong since Bay was opened (B8): sent on, so it can be looked at.
+  async function reportProblem(): Promise<void> {
+    await Share.share({ message: crashReportText() });
   }
 
   // Closing a tab archives it, so it can come straight back.
@@ -1008,6 +1014,8 @@ export function BrowserScreen(): JSX.Element {
         onDownloads={() => setPanel("downloads")}
         historyCount={data.history.length}
         onHistory={() => setPanel("history")}
+        crashCount={crashReports().length}
+        onReportProblem={() => void reportProblem()}
       />
       <HistoryPanel
         visible={panel === "history"}
