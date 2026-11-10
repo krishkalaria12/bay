@@ -3,6 +3,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { Persistence } from "../lib/persistenceService";
 import { captureException } from "../telemetry/errors";
@@ -12,7 +13,7 @@ import { Http } from "./ports/http";
 import { Scheduler } from "./ports/scheduler";
 
 /** The services every desktop workflow can rely on. */
-export type AppServices = Diagnostics | Documents | History | Http | Persistence | Scheduler;
+export type AppServices = Bookmarks | Diagnostics | Documents | History | Http | Persistence | Scheduler;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -21,8 +22,12 @@ const diagnostics = Diagnostics.layer;
 
 const history = History.layer.pipe(Layer.provide(HistoryEngine.layer));
 
+const bookmarks = Bookmarks.layer.pipe(Layer.provide(BookmarkEngine.layer));
+
 /** The app's services, ready to be built. */
-export const appLayer = Layer.mergeAll(diagnostics, Documents.layer, Http.layer, Scheduler.layer, Persistence.layer, history).pipe(Layer.provide(diagnostics));
+export const appLayer = Layer.mergeAll(diagnostics, Documents.layer, Http.layer, Scheduler.layer, Persistence.layer, history, bookmarks).pipe(
+  Layer.provide(diagnostics),
+);
 
 /**
  * The app's runtime. It is built on first use and kept for the life of the JavaScript instance, so every window
@@ -60,6 +65,10 @@ export const startAppServices = (): Promise<void> =>
         const history = yield* History;
 
         yield* history.start;
+
+        const bookmarks = yield* Bookmarks;
+
+        yield* bookmarks.start;
       }),
     )
     .catch((cause: unknown) => {

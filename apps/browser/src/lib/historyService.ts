@@ -102,20 +102,18 @@ function viewOf(engine: string): HistoryEntry[] {
   return [];
 }
 
-// Sync may use a view only once history.json is in Chrome: before, its visits would read as deleted.
-let legacyMoved = false;
-
 /**
  * Shows `list` for the engine profile. `floor`: visits at or before it may be missing from the view (it holds
  * Chrome's newest MAX_HISTORY URLs); a read sets it, and it only rises while the view fills from events.
+ *
+ * `ready`: sync may use a view only once history.json is in Chrome; before, its visits would read as deleted.
  */
-function setView(engine: string, list: HistoryEntry[], floor?: number) {
+function setView(engine: string, list: HistoryEntry[], floor: number | undefined, ready: boolean) {
   useBrowser.setState((s) => {
     const ids = profilesUsing(s, engine);
     const was = ids.map((id) => s.historyFloor[id] ?? -Infinity).reduce((a, b) => Math.max(a, b), -Infinity);
     const full = list.length >= MAX_HISTORY ? list[list.length - 1]!.lastVisit : -Infinity;
     const next = Math.max(floor ?? was, full);
-    const ready = legacyMoved;
 
     if (ids.every((id) => s.history[id] === list && (s.historyFloor[id] ?? -Infinity) === next && (!ready || s.historyReady[id]))) return {};
 
@@ -192,32 +190,6 @@ type Read = {
   done: Deferred.Deferred<void> | undefined;
 };
 
-// The reads that are running, by profile. A profile that isn't here has no read in flight.
-const reads = new Map<string, Read>();
-
-// The profiles whose history has been read from Chrome.
-const loaded = new Set<string>();
-
-// Profiles whose old file is being moved in: their views are read again once it's done, not per added visit.
-const migrating = new Set<string>();
-
-// With an old history.json to move in, the views are first read (and Chrome's changes watched) once it's in:
-// watching during the move sent the JS one event per moved visit (~88,000 for a long-used profile, ~200 ms of
-// the startup JS), all of them ignored, and the views are read again after it anyway.
-let moving = false;
-
-const readOf = (profile: string): Read => {
-  const existing = reads.get(profile);
-
-  if (existing) return existing;
-
-  const created: Read = { queued: [], again: false, done: undefined };
-
-  reads.set(profile, created);
-
-  return created;
-};
-
 // MARK: The service
 
 export class History extends Context.Service<
@@ -241,6 +213,35 @@ export class History extends Context.Service<
       const engine = yield* HistoryEngine;
       const diagnostics = yield* Diagnostics;
       const scope = yield* Scope.Scope;
+
+      // The reads that are running, by profile. A profile that isn't here has no read in flight.
+      const reads = new Map<string, Read>();
+
+      // The profiles whose history has been read from Chrome.
+      const loaded = new Set<string>();
+
+      // Profiles whose old file is being moved in: their views are read again once it's done, not per added visit.
+      const migrating = new Set<string>();
+
+      // With an old history.json to move in, the views are first read (and Chrome's changes watched) once it's in:
+      // watching during the move sent the JS one event per moved visit (~88,000 for a long-used profile, ~200 ms of
+      // the startup JS), all of them ignored, and the views are read again after it anyway.
+      let moving = false;
+
+      // Sync may use a view only once history.json is in Chrome: before, its visits would read as deleted.
+      let legacyMoved = false;
+
+      const readOf = (profile: string): Read => {
+        const existing = reads.get(profile);
+
+        if (existing) return existing;
+
+        const created: Read = { queued: [], again: false, done: undefined };
+
+        reads.set(profile, created);
+
+        return created;
+      };
 
       // The profiles the app asks to read. Chrome's report of an emptied history asks for one.
       const requests = yield* Queue.unbounded<string>();
@@ -281,7 +282,7 @@ export class History extends Context.Service<
 
             if (state.queued.some((c) => c.kind === "deleted" && c.all)) state.again = true;
 
-            setView(profile, list, floor);
+            setView(profile, list, floor, legacyMoved);
             loaded.add(profile);
           } while (state.again);
         });
@@ -421,7 +422,7 @@ export class History extends Context.Service<
           return;
         }
 
-        setView(profile, applyHistoryChange(viewOf(profile), change));
+        setView(profile, applyHistoryChange(viewOf(profile), change), undefined, legacyMoved);
       };
 
       const onSpaces = (s: BrowserState, prev: BrowserState) => {
@@ -435,7 +436,7 @@ export class History extends Context.Service<
           if (prev.spaces[id] || isIncognitoSpace(id) || s.history[id]) continue;
           const list = viewOf(engineProfile(id));
 
-          if (list.length) setView(engineProfile(id), list);
+          if (list.length) setView(engineProfile(id), list, undefined, legacyMoved);
         }
       };
 
@@ -446,6 +447,7 @@ export class History extends Context.Service<
       // Chrome yet.
       const forget = () => {
         loaded.clear();
+        reads.clear();
         legacyMoved = false;
         moving = false;
       };
@@ -485,7 +487,7 @@ export class History extends Context.Service<
           } else if (result === "moved") {
             yield* reload();
           } else if (legacyMoved) {
-            for (const profile of loaded) setView(profile, viewOf(profile));
+            for (const profile of loaded) setView(profile, viewOf(profile), undefined, legacyMoved);
           }
         });
       });

@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 const { useBrowser } = await import("./browserStore.ts");
 const { bookmarkUuidFor } = await import("./bookmarks.ts");
-const { migrateBookmarksFile, reloadBookmarks, startBookmarks } = await import("../lib/bookmarks.ts");
+const { migrateBookmarksFile, reloadBookmarks, startBookmarks, stopBookmarks } = await import("../lib/bookmarks.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
@@ -88,7 +88,7 @@ test("the store's tree and Chrome's stay alike: the app's edits go as ops, an ex
   S().hydrate({});
   stub.docs.clear();
   stub.bookmarkDbs.clear();
-  const stop = startBookmarks();
+  await startBookmarks();
   await settle();
   await reloadBookmarks();
   assert.ok(S().bookmarksReady.default);
@@ -128,7 +128,7 @@ test("the store's tree and Chrome's stay alike: the app's edits go as ops, an ex
   same();
   assert.equal(S().bookmarks.nodes["0f0f0f0f-0000-4000-8000-000000000001"]?.title, "Ext");
   assert.equal(stub.bookmarkOpsSent.length, sent, "the app sends nothing back for it");
-  stop();
+  await stopBookmarks();
 });
 
 test("an edit made at launch, before Chrome's tree is read, reaches Chrome and stays", async () => {
@@ -139,18 +139,18 @@ test("an edit made at launch, before Chrome's tree is read, reaches Chrome and s
     { op: "add", id: "0f0f0f0f-0000-4000-8000-0000000000a1", k: "u", t: "In Chrome", u: "https://chrome.example/", a: 1, parent: "bar" },
   ]);
   S().addBookmark({ spaceId: "default", url: "https://early.example/", title: "Early" });
-  const stop = startBookmarks();
+  await startBookmarks();
   await reloadBookmarks();
   assert.deepEqual(chromeTree().bar, { "Bookmarks Bar": ["Early=https://early.example/", "In Chrome=https://chrome.example/"] });
   assert.deepEqual(storeTree(), chromeTree());
-  stop();
+  await stopBookmarks();
 });
 
 test("ops Chrome can't apply (an extension moved things meanwhile) stop there: nothing the store kept is removed", async () => {
   S().hydrate({ bookmarks: { nodes: {}, roots: {} } });
   stub.docs.clear();
   stub.bookmarkDbs.clear();
-  const stop = startBookmarks();
+  await startBookmarks();
   await reloadBookmarks();
   const b = S().addBookmarkFolder({ spaceId: "default", title: "B" });
   const f = S().addBookmarkFolder({ spaceId: "default", title: "F" });
@@ -166,7 +166,7 @@ test("ops Chrome can't apply (an extension moved things meanwhile) stop there: n
   await reloadBookmarks();
   assert.ok(db.has(a) && db.has(b), "A and B are still in Chrome");
   assert.deepEqual(storeTree(), chromeTree(), "the store shows Chrome's tree");
-  stop();
+  await stopBookmarks();
 });
 
 test("at launch the bar shows the last tree read from Chrome until Chrome's loads, and nothing of it is written back", async () => {
@@ -189,11 +189,12 @@ test("at launch the bar shows the last tree read from Chrome until Chrome's load
       },
     }),
   );
-  const stop = startBookmarks();
+  const started = startBookmarks();
   assert.deepEqual(storeTree().bar, { "Bookmarks Bar": ["Deleted since=https://gone.example/"] }, "the cache shows at once");
   assert.ok(!S().bookmarksReady.default, "sync waits for Chrome's tree");
+  await started;
   await reloadBookmarks();
   assert.deepEqual(storeTree(), chromeTree(), "then Chrome's tree");
   assert.ok(!stub.chromeBookmarks("").has(gone), "the cache's stale bookmark isn't written back");
-  stop();
+  await stopBookmarks();
 });
