@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { startLiveFolders } from "../activity/activityStore";
 import { startBoosts } from "../components/boosts/state";
-import { startLibrary } from "../components/library/state";
+import { readLibrary } from "../components/library/libraryService";
 import { useBrowser, type BrowserState } from "../store/browserStore";
 import { SAVE_DELAY_MS } from "./constants";
 import { startFavicons } from "./favicons";
@@ -103,7 +103,7 @@ const createCoordinator = (): PersistenceCoordinator => {
     const session = loadSession();
 
     useBrowser.getState().hydrate(session ?? {});
-    startLibrary();
+    readLibrary();
     startBoosts();
 
     // What the store holds now is the baseline: a change after this is a change to save.

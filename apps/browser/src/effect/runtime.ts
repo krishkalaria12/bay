@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { ActivityService, LiveSources } from "../activity/activityService";
 import { CalendarEngine, CalendarService } from "../activity/calendarService";
+import { LibraryEngine, LibraryService } from "../components/library/libraryService";
 import { SharingEngine, SharingService } from "../components/library/sharingService";
 import { PreviewService } from "../components/site/previewService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
@@ -33,6 +34,7 @@ export type AppServices =
   | History
   | Http
   | ImportWorkflow
+  | LibraryService
   | LocalFileService
   | NotificationService
   | Persistence
@@ -71,6 +73,8 @@ const preview = PreviewService.layer.pipe(Layer.provide(Http.layer));
 
 const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEngine.layer, Http.layer)));
 
+const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
+
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
   diagnostics,
@@ -90,6 +94,7 @@ export const appLayer = Layer.mergeAll(
   automation,
   preview,
   sharing,
+  library,
 ).pipe(Layer.provide(diagnostics));
 
 /**
@@ -136,6 +141,10 @@ export const startAppServices = (): Promise<void> =>
         const cleanup = yield* ProfileCleanup;
 
         yield* cleanup.start;
+
+        const library = yield* LibraryService;
+
+        yield* library.start;
       }),
     )
     .catch((cause: unknown) => {
