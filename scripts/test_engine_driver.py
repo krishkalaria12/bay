@@ -475,19 +475,25 @@ class BuildTests(unittest.TestCase):
             engine.main()
 
     def test_timed_build_uses_fail_fast_ninja_and_writes_no_stamp_when_paused(self):
-        with tempfile.TemporaryDirectory() as directory, \
-             mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
-             mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
-             mock.patch.object(engine, "build_adblock"), \
-             mock.patch.object(engine, "compile_changes_first", return_value=True) as first, \
-             mock.patch.object(engine, "run_until", return_value=False) as run_until:
-            root = Path(directory)
-            self.assertIs(engine.build(root, engine.environment(root), [], 4, ci_minutes=5), False)
-            self.assertEqual(first.call_args.args[1:4], (engine.LOCK["outputDirectory"], ["chrome"], 4))
-            self.assertEqual(first.call_args.args[5], 5)
-            self.assertEqual(run_until.call_args.args[0], ["autoninja", "-C", engine.LOCK["outputDirectory"], "-j", "4", "chrome"])
-            self.assertLessEqual(run_until.call_args.args[3], 5)
-            self.assertFalse((root / "bay-engine-build.json").exists())
+        # Adding the budget to this tick and subtracting it again rounds above five minutes.
+        for elapsed, remaining in ((0, 5), (30, 4.5), (300, None)):
+            with self.subTest(elapsed=elapsed), tempfile.TemporaryDirectory() as directory, \
+                 mock.patch.object(engine.time, "monotonic", side_effect=[212.18, 212.18 + elapsed]), \
+                 mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "series"), \
+                 mock.patch.object(engine, "generate_gn"), mock.patch.object(engine, "require_tools"), \
+                 mock.patch.object(engine, "build_adblock"), \
+                 mock.patch.object(engine, "compile_changes_first", return_value=True) as first, \
+                 mock.patch.object(engine, "run_until", return_value=False) as run_until:
+                root = Path(directory)
+                self.assertIs(engine.build(root, engine.environment(root), [], 4, ci_minutes=5), False)
+                self.assertEqual(first.call_args.args[1:4], (engine.LOCK["outputDirectory"], ["chrome"], 4))
+                self.assertEqual(first.call_args.args[5], 5)
+                if remaining is None:
+                    run_until.assert_not_called()
+                else:
+                    self.assertEqual(run_until.call_args.args[0], ["autoninja", "-C", engine.LOCK["outputDirectory"], "-j", "4", "chrome"])
+                    self.assertEqual(run_until.call_args.args[3], remaining)
+                self.assertFalse((root / "bay-engine-build.json").exists())
 
     def test_timed_build_stops_before_the_full_build_when_changes_fail_or_use_the_time(self):
         for outcome in (subprocess.CalledProcessError(1, ["ninja"]), False):
