@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { ActivityService, LiveSources } from "../activity/activityService";
+import { CalendarEngine, CalendarService } from "../activity/calendarService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
@@ -22,6 +23,7 @@ import { Scheduler } from "./ports/scheduler";
 export type AppServices =
   | ActivityService
   | Bookmarks
+  | CalendarService
   | Diagnostics
   | Documents
   | History
@@ -55,6 +57,8 @@ const notifications = NotificationService.layer.pipe(Layer.provide(NotificationE
 
 const localFiles = LocalFileService.layer.pipe(Layer.provide(LocalFileEngine.layer));
 
+const calendar = CalendarService.layer.pipe(Layer.provide(Layer.mergeAll(CalendarEngine.layer, Scheduler.layer)));
+
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
   diagnostics,
@@ -70,6 +74,7 @@ export const appLayer = Layer.mergeAll(
   activity,
   notifications,
   localFiles,
+  calendar,
 ).pipe(Layer.provide(diagnostics));
 
 /**
