@@ -72,6 +72,10 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
       writeUserScriptsStatus: async (json) => {
         statuses.push(JSON.parse(json));
       },
+      installedCliVersion: () => null,
+      writeDocument: () => {},
+      installCli: async () => ({ ok: false, appVersion: "", error: "not installed", lines: [] }),
+      onCliInstallLine: () => ({ remove() {} }),
     },
     "../../store/browserStore": {
       useBrowser: {
@@ -97,8 +101,8 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
     false,
   );
 
-  const { AutomationEngine, AutomationService } = module.exports;
-  const runtime = ManagedRuntime.make(AutomationService.layer.pipe(Layer.provide(AutomationEngine.layer)));
+  const { AutomationEngine, AutomationService, CliEngine } = module.exports;
+  const runtime = ManagedRuntime.make(AutomationService.layer.pipe(Layer.provide(Layer.mergeAll(AutomationEngine.layer, CliEngine.layer))));
 
   const run = (program) => runtime.runPromise(program);
 

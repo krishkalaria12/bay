@@ -7,7 +7,7 @@ import { ActivityService, LiveSources } from "../activity/activityService";
 import { CalendarEngine, CalendarService } from "../activity/calendarService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
-import { AutomationEngine, AutomationService } from "../components/cli/automationService";
+import { AutomationEngine, AutomationService, CliEngine } from "../components/cli/automationService";
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
 import { Persistence } from "../lib/persistenceService";
@@ -61,7 +61,7 @@ const localFiles = LocalFileService.layer.pipe(Layer.provide(LocalFileEngine.lay
 
 const calendar = CalendarService.layer.pipe(Layer.provide(Layer.mergeAll(CalendarEngine.layer, Scheduler.layer)));
 
-const automation = AutomationService.layer.pipe(Layer.provide(AutomationEngine.layer));
+const automation = AutomationService.layer.pipe(Layer.provide(Layer.mergeAll(AutomationEngine.layer, CliEngine.layer)));
 
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(

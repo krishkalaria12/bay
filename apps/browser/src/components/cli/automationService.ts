@@ -4,16 +4,43 @@
 // The reconciliation is a job: it runs once at a time, a change that arrives while it runs asks for another pass,
 // and a folder that changed under it starts over. The generations keep a stale answer from being taken for a
 // current one.
-import { installExtension, listExtensions, reloadExtension, uninstallExtension, type InstalledExtension } from "@bay/chromium";
-import { onUserScriptsChange, readUserScripts, watchUserScripts, writeUserScriptsStatus, type UserScriptsFolder } from "@bay/desktop";
+import {
+  cliControlStatus,
+  installExtension,
+  listExtensions,
+  onCliControlChanged,
+  reloadExtension,
+  setCliActiveTab,
+  setCliControl,
+  uninstallExtension,
+  type CliControlStatus,
+  type InstalledExtension,
+} from "@bay/chromium";
+import {
+  installCli,
+  installedCliVersion,
+  onCliInstallLine,
+  onUserScriptsChange,
+  readUserScripts,
+  watchUserScripts,
+  writeDocument,
+  writeUserScriptsStatus,
+  type CliInstallResult,
+  type UserScriptsFolder,
+} from "@bay/desktop";
+import { create } from "zustand";
 import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import { useBrowser, type BrowserState } from "../../store/browserStore";
-import { engineProfile, isIncognitoSpace } from "../../store/model";
+import { activeTabId, engineProfile, isIncognitoSpace } from "../../store/model";
+import { tabEngine } from "../../store/engines";
+import { shownPeek } from "../../store/peeks";
+import { pageOf, usePages } from "../window/pageState";
 
 /** The scripts could not be applied. */
 export class AutomationFailure extends TaggedError("AutomationFailure")<{
@@ -60,6 +87,15 @@ const withError = (unloaded: ScriptsOutcome, refused: string): ScriptsOutcome =>
 
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 
+// Where the app keeps what it knows of the command line tool.
+const INSTALL_DOC = "bay-cli.json";
+
+/** What the terminal control says when the native side could not be asked. */
+const refused = (cause: unknown): CliControlStatus => ({ state: "off", reason: message(cause) });
+
+/** What the installer says when it could not run. */
+const failedInstall = (cause: unknown): CliInstallResult => ({ ok: false, appVersion: "", error: message(cause), lines: [] });
+
 // A folder that cannot be read: nothing is applied, and the run waits for the next one.
 const failedFolder = (): UserScriptsFolder => ({ state: "empty", token: "" });
 
@@ -76,6 +112,10 @@ export class AutomationEngine extends Context.Service<
     readonly installExtension: (options: { path: string }, profile: string) => Effect.Effect<string, AutomationFailure>;
     readonly reloadExtension: (id: string, profile: string) => Effect.Effect<void, AutomationFailure>;
     readonly uninstallExtension: (id: string, profile: string) => Effect.Effect<void, AutomationFailure>;
+    /** Installs the command line tool. */
+    readonly install: () => Effect.Effect<CliInstallResult, AutomationFailure>;
+    /** The installer's own progress. */
+    readonly onInstallLine: (listener: (line: string) => void) => () => void;
   }
 >()("bay/AutomationEngine") {
   static readonly layer = Layer.succeed(AutomationEngine)({
@@ -119,8 +159,92 @@ export class AutomationEngine extends Context.Service<
         try: () => uninstallExtension(id, profile),
         catch: (cause) => new AutomationFailure({ operation: "scripts.uninstall", cause }),
       }),
+    install: () =>
+      Effect.tryPromise({
+        try: () => installCli(),
+        catch: (cause) => new AutomationFailure({ operation: "cli.install", cause }),
+      }),
+    onInstallLine: (listener) => {
+      const subscription = onCliInstallLine(listener);
+
+      return () => subscription.remove();
+    },
   });
 }
+
+/** The native side of the terminal control, as the service reaches it. */
+export class CliEngine extends Context.Service<
+  CliEngine,
+  {
+    readonly status: () => Effect.Effect<CliControlStatus, AutomationFailure>;
+    readonly setControl: (on: boolean) => Effect.Effect<CliControlStatus, AutomationFailure>;
+    readonly setActiveTab: (tab: number | null) => Effect.Effect<void, AutomationFailure>;
+    /** The native side's own change to the server. */
+    readonly onChanged: (listener: (server: CliControlStatus) => void) => () => void;
+  }
+>()("bay/CliEngine") {
+  static readonly layer = Layer.succeed(CliEngine)({
+    status: () =>
+      Effect.tryPromise({
+        try: () => cliControlStatus(),
+        catch: (cause) => new AutomationFailure({ operation: "cli.status", cause }),
+      }),
+    setControl: (on) =>
+      Effect.tryPromise({
+        try: () => setCliControl(on),
+        catch: (cause) => new AutomationFailure({ operation: "cli.setControl", cause }),
+      }),
+    setActiveTab: (tab) =>
+      Effect.tryPromise({
+        try: () => setCliActiveTab(tab),
+        catch: (cause) => new AutomationFailure({ operation: "cli.setActiveTab", cause }),
+      }),
+    onChanged: (listener) => {
+      const subscription = onCliControlChanged(listener);
+
+      return () => subscription.remove();
+    },
+  });
+}
+
+/** The current pane, including a Peek over it, once its Chromium page exists. */
+export function shownCliTab(s: BrowserState): number | null {
+  const windowId = s.ui.focusedWindowId;
+
+  if (!windowId || !s.windows[windowId]) return null;
+
+  const id = shownPeek(s, windowId)?.tabId ?? activeTabId(s, windowId);
+  const tab = id ? s.tabs[id] : undefined;
+
+  if (
+    !id ||
+    !tab ||
+    !/^(https?|about|data|blob):/i.test(tab.url) ||
+    !(tab.navigation || tab.adoptId) ||
+    tabEngine(s, id) !== "chromium" ||
+    pageOf(id).newTabShown
+  )
+    return null;
+
+  return usePages.getState().chromeTabs[id] ?? null;
+}
+
+/** What the app shows of the terminal control and its installer. */
+export const useCli = create<{
+  server: CliControlStatus | null;
+  installing: boolean;
+  step: string | null;
+  installedVersion: string | null;
+  binPath: string | null;
+  error: string | null;
+}>(() => ({
+  server: null,
+  installing: false,
+  step: null,
+  installedVersion: installedCliVersion(),
+  binPath: null,
+  error: null,
+}));
 
 export class AutomationService extends Context.Service<
   AutomationService,
@@ -129,6 +253,10 @@ export class AutomationService extends Context.Service<
     readonly start: Effect.Effect<void>;
     /** Asks for the scripts to be applied. */
     readonly schedule: Effect.Effect<void>;
+    /** Starts the terminal control: the server is asked for, and the active tab is kept. */
+    readonly startCli: Effect.Effect<void>;
+    /** Installs the command line tool, and says how it went. */
+    readonly install: () => Effect.Effect<CliInstallResult>;
   }
 >()("bay/AutomationService") {
   static readonly layer = Layer.effect(
@@ -137,8 +265,9 @@ export class AutomationService extends Context.Service<
       const engine = yield* AutomationEngine;
       const scope = yield* Scope.Scope;
 
-      // The work the app asks for: one reconciliation at a time.
-      const requests = yield* Queue.unbounded<void>();
+      // The work the app asks for: one job at a time. The terminal control's request carries the state it was
+      // asked for: a later one must not answer for an earlier one.
+      const requests = yield* Queue.unbounded<{ readonly kind: "scripts" } | { readonly kind: "cli"; readonly on: boolean }>();
 
       // What each profile was told last, and for which generation of the folder.
       const applied = new Map<string, { generation: number; wanted: Wanted; outcome: ScriptsOutcome }>();
@@ -267,7 +396,157 @@ export class AutomationService extends Context.Service<
         });
 
       // The work runs here, in the app's scope: it stops when the app does.
-      yield* Effect.forkIn(Effect.forever(Effect.flatMap(Queue.take(requests), () => schedule())), scope);
+      yield* Effect.forkIn(
+        Effect.forever(Effect.flatMap(Queue.take(requests), (request) => (request.kind === "scripts" ? schedule() : syncCli(request.on)))),
+        scope,
+      );
+
+      // The terminal control: the server is asked for, and the active tab is kept in step with the window.
+      const cli = yield* CliEngine;
+
+      let request = 0;
+      let inFlight = 0;
+      let generation = 0;
+      let cliApplied: boolean | null = null;
+      let sentActive: number | null | undefined;
+
+      const pushActive = (): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          const server = useCli.getState().server;
+
+          if (server?.state !== "on" && server?.state !== "starting") {
+            sentActive = undefined;
+
+            return;
+          }
+
+          const active = shownCliTab(useBrowser.getState());
+
+          if (active === sentActive) return;
+
+          sentActive = active;
+
+          const sent = yield* Effect.exit(cli.setActiveTab(active));
+
+          // The native side did not take it: the next push tries again.
+          if (Exit.isFailure(sent)) sentActive = undefined;
+        });
+
+      const applyCli = (server: CliControlStatus, reconcile: boolean): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          if ((server.generation ?? generation) < generation) return;
+
+          if ((server.generation ?? generation) > generation) sentActive = undefined;
+
+          generation = Math.max(generation, server.generation ?? 0);
+          useCli.setState({ server });
+
+          if (reconcile && server.state === "off" && server.reason && useBrowser.getState().settings.cliControl === true) {
+            useBrowser.getState().updateSettings({ cliControl: false });
+          }
+
+          yield* pushActive();
+        });
+
+      // The server is asked for when the setting changes: the answer that settles last is the one that counts.
+      // The native side is asked without waiting for it, so a change that follows is not held up.
+      const syncCli = (on: boolean): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          if (on === cliApplied) return;
+
+          const first = cliApplied === null;
+
+          cliApplied = on;
+
+          const mine = ++request;
+
+          inFlight++;
+
+          const asked = (first && !on ? cli.status() : cli.setControl(on)).pipe(
+            Effect.catch((error) => Effect.succeed(refused(error.cause))),
+            Effect.flatMap((server) =>
+              Effect.gen(function* () {
+                inFlight--;
+
+                if (mine === request) yield* applyCli(server, true);
+              }),
+            ),
+          );
+
+          yield* Effect.forkIn(asked, scope);
+        });
+
+      // The installer runs once at a time: a second ask waits for the first.
+      let installation: Effect.Effect<CliInstallResult> | undefined;
+
+      const install = (): Effect.Effect<CliInstallResult> =>
+        Effect.gen(function* () {
+          const running = installation;
+
+          if (running) return yield* running;
+
+          yield* Effect.sync(() => useCli.setState({ installing: true, step: null, error: null }));
+
+          const lines = engine.onInstallLine((line) => {
+            const step = /^step (\S+)/.exec(line)?.[1];
+
+            if (step) useCli.setState({ step });
+          });
+
+          const job = engine.install().pipe(
+            Effect.catch((error) => Effect.succeed(failedInstall(error.cause))),
+            Effect.tap((result) =>
+              Effect.sync(() => {
+                const error = result.ok ? null : (result.error ?? "The installer stopped.");
+                const binPath = result.binPath ?? useCli.getState().binPath;
+
+                useCli.setState({ installing: false, step: null, installedVersion: installedCliVersion(), binPath, error });
+
+                try {
+                  writeDocument(INSTALL_DOC, JSON.stringify({ version: 1, binPath, error }));
+                } catch (failure) {
+                  console.warn("[cli] couldn't save the install status", failure);
+                }
+              }),
+            ),
+            Effect.ensuring(
+              Effect.sync(() => {
+                lines();
+                installation = undefined;
+              }),
+            ),
+          );
+
+          installation = job;
+
+          return yield* job;
+        });
+
+      const startCli = Effect.gen(function* () {
+        const stopListening = cli.onChanged((server) => {
+          void Effect.runFork(applyCli(server, inFlight === 0));
+        });
+
+        const stopStore = useBrowser.subscribe((s) => {
+          Queue.offerUnsafe(requests, { kind: "cli", on: s.settings.cliControl === true });
+          void Effect.runFork(pushActive());
+        });
+
+        const stopPages = usePages.subscribe(() => {
+          void Effect.runFork(pushActive());
+        });
+
+        Queue.offerUnsafe(requests, { kind: "cli", on: useBrowser.getState().settings.cliControl === true });
+
+        yield* Scope.addFinalizer(
+          scope,
+          Effect.sync(() => {
+            stopListening();
+            stopStore();
+            stopPages();
+          }),
+        );
+      });
 
       const start = Effect.gen(function* () {
         let watching = false;
@@ -285,10 +564,10 @@ export class AutomationService extends Context.Service<
 
             yield* engine.watchScripts(on).pipe(Effect.catch(() => Effect.void));
 
-            if (on) Queue.offerUnsafe(requests, undefined);
+            if (on) Queue.offerUnsafe(requests, { kind: "scripts" });
           });
 
-        const stopListening = engine.onScriptsChange(() => Queue.offerUnsafe(requests, undefined));
+        const stopListening = engine.onScriptsChange(() => Queue.offerUnsafe(requests, { kind: "scripts" }));
 
         yield* sync(useBrowser.getState());
 
@@ -309,7 +588,9 @@ export class AutomationService extends Context.Service<
 
       return AutomationService.of({
         start,
-        schedule: Effect.sync(() => Queue.offerUnsafe(requests, undefined)),
+        startCli,
+        install,
+        schedule: Effect.sync(() => Queue.offerUnsafe(requests, { kind: "scripts" })),
       });
     }),
   );
