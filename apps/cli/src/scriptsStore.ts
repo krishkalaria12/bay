@@ -1,4 +1,3 @@
-import { isJsonObject } from "@bay/core";
 import { dlopen, FFIType } from "bun:ffi";
 import * as v from "valibot";
 import {
@@ -213,18 +212,24 @@ function recoverSwaps(directory: string): void {
     const safeName = (value: unknown): value is string =>
       v.is(v.string(), value) && value.length > 0 && value !== "." && value !== ".." && !/[\\/\0:]/.test(value);
 
-    if (!record || !isJsonObject(record) || !("first" in record) || !("second" in record) || !safeName(record.first) || !safeName(record.second)) {
+    if (!v.is(v.object({}), record)) throw new StoreError(`can't recover ${journal}: invalid folder names`);
+
+    // SAFETY: the check above established that the record is an object with named fields.
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- The record's fields are read by name, and each is checked where it is used.
+    const fields = record as Record<string, unknown>;
+
+    if (!("first" in fields) || !("second" in fields) || !safeName(fields.first) || !safeName(fields.second)) {
       throw new StoreError(`can't recover ${journal}: invalid folder names`);
     }
 
     const temporaryName = name.slice(0, -5);
 
-    if (record.first === record.second || record.first === temporaryName || record.second === temporaryName) {
+    if (fields.first === fields.second || fields.first === temporaryName || fields.second === temporaryName) {
       throw new StoreError(`can't recover ${journal}: overlapping folder names`);
     }
 
-    const first = join(directory, record.first);
-    const second = join(directory, record.second);
+    const first = join(directory, fields.first);
+    const second = join(directory, fields.second);
     const temporary = join(directory, temporaryName);
 
     const present = (path: string): boolean => {
