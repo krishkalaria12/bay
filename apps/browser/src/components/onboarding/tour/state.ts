@@ -74,11 +74,13 @@ export const useTour = create<TourState>(() => ({ windowId: null, stops: [], ind
 
 export async function startToolTour(windowId?: string | null) {
   const id = resolveWindowId(useBrowser.getState(), windowId);
+
   if (!id) return;
   const session = useTour.getState().session + 1;
   useTour.setState({ windowId: null, stops: [], index: 0, session });
   closeReleaseNotes();
   const found = await Promise.all(TOUR_STOPS.map((stop) => (stop.anchor ? locateAnchor(id, stop.anchor) : Promise.resolve(true))));
+
   if (useTour.getState().session !== session) return;
   useTour.setState({ windowId: id, stops: TOUR_STOPS.filter((_, i) => !!found[i]) });
 }
@@ -90,18 +92,23 @@ export function endToolTour() {
 export function stepToolTour(delta: number) {
   const { index, stops } = useTour.getState();
   const next = index + delta;
+
   if (next >= stops.length) return endToolTour();
   useTour.setState({ index: Math.max(0, next) });
 }
 
 export function videoTourUrl(): string | null {
   const url = systemInfo().videoTourURL;
+
   return url && /^https?:\/\//i.test(url) ? url : null;
 }
 
 export function openVideoTour(windowId?: string | null) {
   const url = videoTourUrl();
+
   if (url) openUrls([url], windowId);
 }
 
-if (__DEV__) (globalThis as { nnTour?: unknown }).nnTour = { store: useTour, start: startToolTour, step: stepToolTour, end: endToolTour };
+if (__DEV__)
+  // SAFETY: nnTour is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  (globalThis as { nnTour?: unknown }).nnTour = { store: useTour, start: startToolTour, step: stepToolTour, end: endToolTour };

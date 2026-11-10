@@ -9,6 +9,7 @@ export const liquidGlass = isLiquidGlass();
  */
 export function useLiquidGlass(): boolean {
   const theme = useTheme();
+
   return liquidGlass && theme.glass;
 }
 
@@ -20,6 +21,7 @@ export function glassTint(theme: Theme, fill: string, raised = false, dark = the
   const lightening = r + g + b > 3 * 127;
   const alpha = a * (!lightening ? 1 : dark ? (raised ? 0.9 : 0.6) : raised ? 0.8 : 0.55);
   const mix = (c: number, p: number) => c + (p - c) * PROFILE_SHARE;
+
   return toHex([mix(r, pr), mix(g, pg), mix(b, pb), alpha * 255]);
 }
 
@@ -39,6 +41,7 @@ export function GlassFill({
   dark?: boolean;
 }) {
   const theme = useTheme();
+
   return (
     <GlassEffect
       pointerEvents="none"
@@ -52,12 +55,16 @@ export function GlassFill({
 
 function rgba(color: string): [number, number, number, number] {
   const m = color.match(/rgba?\(([^)]+)\)/);
+
   if (m) {
     const [r = 0, g = 0, b = 0, a = 1] = m[1]!.split(",").map((v) => Number(v.trim()));
+
     return [r, g, b, a];
   }
+
   const h = color.replace("#", "");
   const ch = (i: number) => parseInt(h.slice(2 * i, 2 * i + 2), 16);
+
   return [ch(0), ch(1), ch(2), h.length >= 8 ? ch(3) / 255 : 1];
 }
 

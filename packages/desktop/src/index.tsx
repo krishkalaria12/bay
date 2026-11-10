@@ -86,7 +86,6 @@ export type BrowserCommand =
   | "addBookmarkToFolder"
   | "openBookmark"
   | "toggleMute"
-  | "togglePageEngine"
   | "downloads"
   | "mergeAllWindows"
   | "switchSpace"
@@ -306,7 +305,7 @@ const Shell = requireNativeModule<{
   setTrafficLightsMode(id: string, mode: TrafficLightsMode, color: string | null): Promise<void>;
   dragPreviewBegin?(windowId: string, chip: Rect4, grab: [number, number]): Promise<void>;
   dragPreviewPage?(base64: string, frame: Rect4): Promise<void>;
-  dragPreviewUpdate?(shape: DragPreviewShape, point: [number, number]): Promise<void>;
+  dragPreviewUpdate?(style: DragPreviewStyle, point: [number, number]): Promise<void>;
   dragPreviewCancel?(): Promise<void>;
   raiseView?(tag: number, levels: number, raised: boolean): Promise<void>;
   dragPreviewPlaceholder?(title: string, favicon: string | null): Promise<void>;
@@ -401,7 +400,9 @@ export type TrafficLightsMode = "shown" | "hover" | "hidden";
 export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode, color?: string) =>
   capabilities.trafficLights ? Shell.setTrafficLightsMode(id, mode, color ?? null) : Promise.resolve();
 type Rect4 = [number, number, number, number];
-export type DragPreviewShape = "hidden" | "pill" | "card";
+
+export type DragPreviewStyle = "hidden" | "pill" | "card";
+
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›
 // DragPreview). Rects and points are in the source window from its top-left; `end`'s frame (the new window's, as
 // asked for) is on screen, in AppKit's coordinates. Optional: builds from before it have no picture, nothing else
@@ -409,7 +410,7 @@ export type DragPreviewShape = "hidden" | "pill" | "card";
 export const dragPreview = {
   begin: (windowId: string, chip: Rect4, grab: [number, number]) => void Shell.dragPreviewBegin?.(windowId, chip, grab),
   page: (base64: string, frame: Rect4) => void Shell.dragPreviewPage?.(base64, frame),
-  update: (shape: DragPreviewShape, point: [number, number]) => void Shell.dragPreviewUpdate?.(shape, point),
+  update: (style: DragPreviewStyle, point: [number, number]) => void Shell.dragPreviewUpdate?.(style, point),
   /** `windowId`: the new window the tab went to; the picture grows into it. */
   end: (windowId: string | null = null, frame: Rect4 | null = null) => void Shell.dragPreviewEnd?.(windowId, frame),
   cancel: () => void Shell.dragPreviewCancel?.(),
@@ -588,12 +589,25 @@ export const DockSelection = requireNativeViewManager<DockSelectionProps>("BayDo
 
 const InlineCompletionModule = requireOptionalNativeModule<{
   complete(tag: number, typed: string, completion: string): Promise<InlineWrite>;
+  showMenu(tag: number, items: MenuItem[]): Promise<string | null>;
+  recordEdit(tag: number, before: string, after: string, start: number, end: number, state: string): Promise<void>;
+  addListener(name: "onTextInputRestore", listener: (e: { tag: number; state: string }) => void): EventSubscription;
 }>("BayInlineCompletion");
 
 export type InlineWrite = 0 | 1 | 2;
 
 export const completeInline = (tag: number, typed: string, completion: string) =>
   InlineCompletionModule?.complete(tag, typed, completion) ?? Promise.resolve(0 as InlineWrite);
+
+export const showTextInputMenu = (tag: number, items: MenuItem[]) => InlineCompletionModule?.showMenu(tag, items) ?? Promise.resolve(null);
+
+export const recordTextInputEdit = (tag: number, before: string, after: string, start: number, end: number, state: string) =>
+  InlineCompletionModule?.recordEdit(tag, before, after, start, end, state) ?? Promise.resolve();
+
+export const onTextInputRestore = (tag: number, listener: (state: string) => void): EventSubscription =>
+  InlineCompletionModule?.addListener("onTextInputRestore", (e) => {
+    if (e.tag === tag) listener(e.state);
+  }) ?? { remove: () => {} };
 
 type TranslationModule = {
   readonly available: boolean;
@@ -613,11 +627,28 @@ export const translation: Omit<TranslationModule, "available"> | null = Translat
 
 type TidyNamesModule = {
   readonly available: boolean;
-  suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;
+  suggest(filename: string, pageTitle: string, pageUrl: string): Promise<string | null>;
 };
 const TidyNamesNative = requireOptionalNativeModule<TidyNamesModule>("BayTidyNames");
 
-// Null unless launched with BAY_TIDY_DOWNLOADS_AI=true on a Mac with Apple Intelligence; Tidy Downloads then leans on
-// the local cleaner alone.
+// Apple Intelligence is a Mac's alone: without the native module (Windows, Linux) or without the model (a Mac before
+// macOS 26, or with Apple Intelligence off) Tidy Downloads leans on the local cleaner alone.
 export const tidyNames: Omit<TidyNamesModule, "available"> | null =
   TidyNamesNative && nativeSnapshot("BayTidyNames", "available", [], () => TidyNamesNative.available) ? TidyNamesNative : null;
+
+/** Where Apple Intelligence stands on this Mac. */
+export type TidyModelStatus = "available" | "off" | "preparing" | "ineligible" | "needsNewerMacOS" | "unavailable";
+
+type TidyTabsModule = {
+  modelStatus(): TidyModelStatus;
+  /** Named groups of tab ids from the prompt, or null when the model couldn't answer. */
+  group(prompt: string): Promise<{ name: string; tabs: number[] }[] | null>;
+};
+
+// Optional: a platform or a build without it groups tabs by site.
+export const tidyTabsModel = requireOptionalNativeModule<TidyTabsModule>("BayTidyTabs");
+
+export type TidySquiggleProps = ViewProps & { running: boolean; color: string };
+
+/** The divider's wave while the model works. Null without the model, which is the only thing that takes long enough to need it. */
+export const TidySquiggle = tidyTabsModel ? requireNativeViewManager<TidySquiggleProps>("BayTidyTabs") : null;

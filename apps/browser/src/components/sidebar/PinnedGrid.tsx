@@ -33,8 +33,10 @@ export function PinnedGrid({ tabs, innerWidth }: { tabs: string[]; innerWidth: n
   const width = Math.floor(((innerWidth - PINNED_TILE_GAP * (columns - 1)) / columns) * 2) / 2;
   const { ref: tailRef } = useDragItem("tail:tiles", { kind: "tail", tabIds: [], section: "tiles" });
   const topGap = listTopGap(useSidebarFieldShown());
+
   // With no pinned tabs a drag's pin target is an overlay that takes no room (PinDropZone): nothing here.
   if (!tabs.length) return null;
+
   return (
     <View
       ref={(v) => {
@@ -60,6 +62,7 @@ export function PinDropZone({ top, height, cover }: { top: number; height: numbe
   const theme = useTheme();
   const controller = useDragController();
   const active = useDropPins();
+
   return (
     <View
       ref={(v) => {
@@ -98,11 +101,13 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   const selected = useQuietBrowser((s) => (s.selection[windowId] ?? []).includes(tabId));
   const playing = useTabLive(tabId, (l) => l.playingAudio);
   const { hovered, hoverProps } = useRowHover(windowId, { kind: "tab", id: tabId });
+
   const { ref, style, handle } = useDragItem(
     `t:${tabId}`,
     { kind: "tile", tabIds: [tabId], section: "tiles" },
     () => useBrowser.getState().selection[windowId] ?? [],
   );
+
   const away = !!tab && awayFromPin(tab);
   const tileTheme = useTileTheme(tab?.url ?? "", tab?.favicon, tab?.customIcon, tab?.spaceId ?? "");
   const badge = useSharedValue(away ? 1 : 0);
@@ -111,6 +116,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   }, [away]);
   const badgeStyle = useAnimatedStyle(() => ({ opacity: badge.get(), transform: [{ scale: interpolate(badge.get(), [0, 1], [0.4, 1]) }] }));
   const glass = useLiquidGlass();
+
   if (!tab) return null;
   const radius = 10;
 
@@ -251,9 +257,11 @@ function GlassTile({
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const tab = useTab(tabId);
+
   if (!tab) return null;
   const radius = 10;
   const fill = active ? theme.pinnedSelectedFill : pressed ? theme.tabPressed : hovered || selected ? theme.tabHover : theme.pinnedResting;
+
   return (
     <View style={{ width, height: metrics.pinnedHeight, alignItems: "center", justifyContent: "center" }}>
       <GlassFill radius={radius} fill={fill} raised={active && !pressed} />

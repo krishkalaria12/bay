@@ -103,8 +103,10 @@ function NewButton({ windowId }: { windowId: string }) {
   const turn = useSharedValue(0);
   useEffect(() => turn.set(withTiming(open ? 1 : 0, { duration: NEW_MENU_MS, easing: Easing.out(Easing.cubic) })), [open]);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 45}deg` }] }));
+
   return (
-    <Animated.View ref={(v) => registerRow(windowId, NEW_MENU_ID, v as unknown as View | null)} style={style}>
+    // SAFETY: View | null)} style assertion matches the runtime value validated at this call site.
+    <Animated.View ref={(v) => registerRow(windowId, NEW_MENU_ID, v as View | null)} style={style}>
       {/* Just the +: no hover or press fill behind it, it turns to × instead. */}
       <Pressable onPress={() => void openNewMenu(windowId)} accessibilityRole="button" accessibilityLabel="New" tooltip={open ? undefined : "New"}>
         {({ pressed }) => (

@@ -3,7 +3,7 @@ import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { isBookmarked } from "./bookmarks";
 import { useBrowserRead as useBrowser } from "./read";
-import type { BrowserShape } from "./browserStore";
+import type { QuietBrowserState } from "./browserStore";
 import { activeTabId, bookmarkSpaceId, IDLE_LIVE, spaceFor } from "./model";
 import type { Settings } from "./settings";
 import type { DeepReadonly } from "../runtime/projection";
@@ -103,7 +103,7 @@ export function useWindowUi() {
 }
 
 /** Select durable state without running on page progress. */
-export const useQuietBrowser = <T>(select: (s: BrowserShape) => T): T => useStore(quietStore, select);
+export const useQuietBrowser = <T>(select: (s: QuietBrowserState) => T): T => useStore(quietStore, select);
 
 export const useSettings = <T>(select: (settings: DeepReadonly<Settings>) => T): T => useStore(settingsStore, select);
 

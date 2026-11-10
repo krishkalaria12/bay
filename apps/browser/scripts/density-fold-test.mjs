@@ -8,9 +8,12 @@ import { launch, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const args = process.argv.slice(2);
 const appPath = args.find((a) => !a.startsWith("--"));
+
 if (!appPath) throw new Error("Provide the Debug Bay.app path");
+
 const data = mkdtempSync(join(tmpdir(), "bay-density-fold-"));
 let app;
+
 try {
   app = await launch(resolve(appPath), {
     data,
@@ -62,5 +65,6 @@ try {
   console.log(`PASS: density switches, title click folds, today remains active, fold and density survive relaunch. Evidence: ${data}`);
 } finally {
   await app?.quit();
+
   if (!args.includes("--keep-data")) rmSync(data, { recursive: true, force: true });
 }

@@ -45,6 +45,7 @@ export function useToolbarMode(tabId: string, windowId: string, enabled: boolean
   const appNeedsBar = useQuietBrowser((s) => enabled && scrolledDown && needsBar(s, tabId, windowId));
   const popover = usePages((s) => enabled && scrolledDown && !!s.popover[tabId]);
   const historyMenu = useHistoryMenu((m) => enabled && scrolledDown && m.menu?.tabId === tabId);
+
   return toolbarMode({ enabled, hasPage, scrolledDown, peek, needsBar: appNeedsBar || popover || historyMenu });
 }
 
@@ -87,8 +88,11 @@ export function useToolbarMotion({
   // rendering, so the layout changes in the commit that starts the motion.
   const [tallState, setTall] = useState({ on: collapsed, doc });
   let tall = tallState;
+
   if (tall.doc !== doc || (!enabled && tall.on)) tall = { on: false, doc };
+
   if (enabled && collapsed && !tall.on) tall = { on: true, doc };
+
   if (tall !== tallState) setTall(tall);
 
   // Where the page shows (0: under the full bar, 1: under the strip) and where its layout puts it (same scale).
@@ -107,13 +111,17 @@ export function useToolbarMotion({
   useLayoutEffect(() => {
     const before = was.current;
     was.current = { collapsed, hidden };
+
     if (before.collapsed === collapsed && before.hidden === hidden) return;
+
     const glide = (value: number, show: boolean) =>
       withTiming(value, { duration: show ? TOOLBAR_SHOW_MS : TOOLBAR_HIDE_MS, easing: show ? SHOW_EASING : HIDE_EASING });
+
     if (before.collapsed !== collapsed) {
       const to = collapsed ? 1 : 0;
       const barTo = hidden ? 1 : 0;
       laid.set(to);
+
       if (reduceMotion()) {
         // The page and the band move at once, the controls fade.
         page.set(to);
@@ -173,6 +181,7 @@ export function AutoHideToolbar({
 
   const peekTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(peekTimer.current), []);
+
   const peekLater = (on: boolean, ms: number) => {
     clearTimeout(peekTimer.current);
     peekTimer.current = setTimeout(() => setToolbarPeek(tabId, on), ms);
@@ -180,6 +189,7 @@ export function AutoHideToolbar({
 
   const { bar, fade } = motion;
   const H = layout.toolbarHeight;
+
   // The band: the bar's height down to the strip's, its top edge fixed (scaled about its middle, then lifted).
   const bandStyle = useAnimatedStyle(() => ({
     transform: [
@@ -187,7 +197,9 @@ export function AutoHideToolbar({
       { scaleY: interpolate(bar.get(), [0, 1], [1, AUTO_HIDE_STRIP_HEIGHT / H]) },
     ],
   }));
+
   const dividerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -TOOLBAR_BAR_ROOM]) }] }));
+
   const controlsStyle = useAnimatedStyle(() => ({
     opacity: interpolate(fade.get(), [0, 0.2, 0.4, 0.6, 1], [1, 0.45, 0.15, 0, 0]),
     // Toward the top centre: scaled about its middle, then lifted so its top edge stays put, and a little more.
@@ -196,6 +208,7 @@ export function AutoHideToolbar({
       { scale: interpolate(bar.get(), [0, 1], [1, TOOLBAR_PEEK_SHRINK]) },
     ],
   }));
+
   const labelStyle = useAnimatedStyle(() => ({ opacity: interpolate(fade.get(), [0, 0.5, 1], [0, 0, 1]) }));
   const host = url.startsWith("file:") ? "File" : breadcrumb(url).host;
 

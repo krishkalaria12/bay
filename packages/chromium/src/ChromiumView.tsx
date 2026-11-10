@@ -3,8 +3,10 @@ import { toAppUrl, toEngineUrl } from "@bay/core";
 import NativeWebView, { webKitView } from "./NativeWebView";
 import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
 import { NativeSyntheticEvent } from "react-native";
+import * as v from "valibot";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
+import type { JsonValue } from "./json";
 import type { EngineBoostStyle } from "./native";
 import { hasWebKit, type PageEngine } from "./webkit";
 
@@ -209,7 +211,7 @@ export type WebViewProps = ViewProps & {
   onWindowClose?: () => void;
   onCommand?: (command: PageCommand) => void;
   onPageFocus?: () => void;
-  onPageMessage?: (kind: string, data: unknown) => void;
+  onPageMessage?: (kind: string, data: JsonValue) => void;
   onReady?: (browserId: number, chromeTabId: number) => void;
   onDiscarded?: (url: string) => void;
   onPasswordPrompt?: (prompt: PasswordPrompt) => void;
@@ -317,17 +319,18 @@ type NativeEvents = {
   onWindowClose: object;
   onCommand: PageCommand;
   onPageFocus: object;
-  onPageMessage: { kind: string; data: unknown };
+  onPageMessage: { kind: string; data: JsonValue };
   onReady: { browserId: number; tabId?: number };
   onDiscarded: { url: string };
   onPasswordPrompt: PasswordPrompt;
   onAutofillPrompt: AutofillPrompt | { id: number; closed: true };
   onExternalApp: ExternalAppRequest;
 };
+
 type Handlers = keyof NativeEvents;
 export type NativeProps = Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> };
 
-const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<WebViewProps[K]>> } = {
+const unwrap = {
   onNavigationChange: (e) => [{ ...e, url: toAppUrl(e.url) }],
   onProgress: (e) => [e.progress],
   onFavicon: (e) => [e.url, e.urls],
@@ -362,7 +365,9 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onPasswordPrompt: (e) => [e],
   onAutofillPrompt: (e) => ("closed" in e ? [null, e.id] : [e, e.id]),
   onExternalApp: (e) => [e],
-};
+} satisfies { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<WebViewProps[K]>> };
+
+const isHandlerKey = (key: string): key is Handlers => Object.hasOwn(unwrap, key);
 
 export type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard" | "setBoostStyle"> & {
   setBoostStyle?(descriptor: string): Promise<void>;
@@ -374,10 +379,14 @@ export type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloa
 };
 
 const VIEW_RETRIES = 3;
+
+type ViewError = { code?: string; message?: string };
+
+const ViewErrorSchema = v.object({ code: v.optional(v.string()), message: v.optional(v.string()) });
+
 // Expo's view functions reject with this cause when the view tag has no registered view.
-const isViewMissing = (error: unknown) =>
-  (error as { code?: unknown } | null)?.code === "ERR_ARGUMENT_CAST" &&
-  /Unable to find the '\w+' view with tag/.test(String((error as { message?: unknown }).message));
+const isViewMissing = (error: unknown): error is ViewError =>
+  v.is(ViewErrorSchema, error) && error.code === "ERR_ARGUMENT_CAST" && /Unable to find the '\w+' view with tag/.test(error.message ?? "");
 
 // Expo can't find the view just after mount (legacy architecture registers it later) or once the tab is gone; retry the
 // first briefly and settle the second with the fallback instead of rejecting.
@@ -420,8 +429,11 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       executeJavaScript: (code) => call(undefined, (n) => n.executeJavaScript(code)),
       evaluate: async <T,>(code: string) => {
         const json = await call(null, (n) => n.evaluate(code));
+
         if (json == null) return null;
+
         try {
+          // SAFETY: the native evaluate returns JSON for the caller's T and JSON.parse produces that value unchanged.
           return JSON.parse(json) as T;
         } catch {
           return null;
@@ -451,16 +463,30 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
     };
   });
 
-  const nativeProps: Record<string, unknown> = {};
+  const nativeProps: Partial<NativeProps> = {};
+
   for (const [key, value] of Object.entries(props)) {
     if (key === "engine") continue;
+
     if (key === "url") {
-      nativeProps.url = typeof value === "string" ? toEngineUrl(value) : value;
+      Object.assign(nativeProps, { url: v.is(v.string(), value) ? toEngineUrl(value) : undefined });
       continue;
     }
-    const map = unwrap[key as Handlers] as ((e: unknown) => unknown[]) | undefined;
-    nativeProps[key] =
-      map && typeof value === "function" ? (e: NativeSyntheticEvent<unknown>) => (value as (...args: unknown[]) => void)(...map(e.nativeEvent)) : value;
+
+    const handlerKey = isHandlerKey(key) ? key : undefined;
+
+    if (handlerKey && v.is(v.function_(), value)) {
+      // SAFETY: handlerKey names an unwrap entry whose map returns the JS handler's arguments for the native event.
+      const map = unwrap[handlerKey] as (e: NativeEvents[Handlers]) => unknown[];
+
+      // SAFETY: value is the JS handler for handlerKey, checked as a function, and map returns its arguments.
+      Object.assign(nativeProps, {
+        [handlerKey]: (e: NativeSyntheticEvent<NativeEvents[Handlers]>) => (value as (...args: unknown[]) => void)(...map(e.nativeEvent)),
+      } as Partial<NativeProps>);
+    } else {
+      // SAFETY: key is a non-handler prop and value is that prop's value taken from props.
+      Object.assign(nativeProps, { [key]: value as NativeProps[keyof NativeProps] } as Partial<NativeProps>);
+    }
   }
 
   const Native = props.engine === "webkit" && hasWebKit() ? webKitView() : NativeWebView;

@@ -1,6 +1,7 @@
 import * as settingsCommands from "../../runtime/settingsActions";
 import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
+import * as v from "valibot";
 import { useShallow } from "zustand/react/shallow";
 import {
   getContentBlocker,
@@ -11,7 +12,6 @@ import {
   setSiteSetting,
   setWebKitSiteSetting,
   WEBKIT_SITE_SETTINGS,
-  type PageEngine,
   type SecurityInfo,
   type SiteSettingType,
   type SiteSettingValue,
@@ -27,9 +27,9 @@ import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
-import { bookmarkSpaceId, engineProfile, isIncognitoSpace, tabLabel } from "../../store/model";
-import { canSwitchEngine, defaultEngine, ENGINE_NAMES, engineForUrl, otherEngine, recommendedEngineFor, ruleFor, tabEngine } from "../../store/engines";
-import { openPageIn, setWebsiteEngine, togglePageEngine } from "../../lib/pageEngines";
+import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
+import { protectedVideoSite, tabEngine } from "../../store/engines";
+import { openSettings } from "../settings/windows";
 import { Favicon, useHover } from "../ui/primitives";
 import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../toolbar/buttons";
 import { toggleDeveloperMode } from "../developer/devMode";
@@ -125,9 +125,6 @@ export function SiteControls({
   const webkitPage = pageEngine === "webkit";
   const permissions = webkitPage ? PERMISSIONS.filter((p) => WEBKIT_SITE_SETTINGS.includes(p.type)) : PERMISSIONS;
   const readSettings = webkitPage ? getWebKitSiteSettings : getSiteSettings;
-  const engineRule = useBrowser((s) => ruleFor(s, url));
-  const recommended = useBrowser((s) => recommendedEngineFor(s, url));
-  const usesDefault = useBrowser((s) => recommendedEngineFor(s, url) === defaultEngine(s));
 
   useEffect(() => {
     if (!origin) return;
@@ -158,8 +155,13 @@ export function SiteControls({
   const pickPermission = async (type: SiteSettingType, choices: SiteSettingValue[]) => {
     const current = settings?.[type]?.value;
     const choice = await showMenu(choices.map((v) => ({ id: v, title: choiceTitle(type, v), checked: v === current })));
-    if (choice) void setPermission(type, choice as SiteSettingValue);
+
+    if (choice) {
+      // SAFETY: choice is the id of a menu item built from choices (SiteSettingValue[]).
+      void setPermission(type, choice as SiteSettingValue);
+    }
   };
+
   const toggleBlocker = async (on: boolean) => {
     // A change that fails changed nothing: the toggle shows what the blocker has, and the window says so.
     const failed = await setContentBlockerAllowed(host, !on).then(
@@ -182,34 +184,14 @@ export function SiteControls({
       destructive: true,
       windowId: tab.windowId,
     });
+
     if (!confirmed) return;
     const result = await webviews.get(tabId)?.clearSiteData();
-    const n = result && typeof result.cookies === "number" ? result.cookies : 0;
+    const n = result && v.is(v.number(), result.cookies) ? result.cookies : 0;
     setCleared(n ? `Cleared ${n} cookie${n === 1 ? "" : "s"} and site data` : "Cleared site data");
     void webviews.get(tabId)?.reload();
   };
-  // Which engine the site opens in: a website rule, else the recommended one (WebKit for streaming sites). A private
-  // window's choice moves this page only.
-  const privatePage = isIncognitoSpace(tab.spaceId);
-  const recommendedTitle = `${usesDefault ? "Default" : "Recommended"} (${ENGINE_NAMES[recommended]})`;
-  const opensIn = privatePage ? ENGINE_NAMES[pageEngine] : engineRule ? ENGINE_NAMES[engineRule] : recommendedTitle;
-  const pickEngine = async () => {
-    const checked = (engine: PageEngine) => (privatePage ? pageEngine === engine : engineRule === engine);
-    const choice = await showMenu([
-      ...(privatePage ? [] : [{ id: "default", title: recommendedTitle, checked: !engineRule }, { separator: true as const }]),
-      { id: "chromium", title: ENGINE_NAMES.chromium, checked: checked("chromium") },
-      { id: "webkit", title: ENGINE_NAMES.webkit, checked: checked("webkit") },
-    ]);
-    if (!choice) return;
-    close();
-    if (choice === "default") {
-      setWebsiteEngine(url, null);
-      void openPageIn(tabId, engineForUrl(useBrowser.getState(), url));
-    } else {
-      const engine: PageEngine = choice === "webkit" ? "webkit" : "chromium";
-      void openPageIn(tabId, engine, { rule: engine });
-    }
-  };
+
   const copyClean = () => {
     copyText(cleanUrl(url));
     setCopied(true);
@@ -218,13 +200,9 @@ export function SiteControls({
 
   const more = async () => {
     const items: MenuItem[] = [];
+
     if (origin) items.push({ id: "clear", title: `Clear Cookies and Data for ${displayHost(host)}…`, symbol: "trash" });
-    if (origin && canSwitchEngine(url))
-      items.push({
-        id: "engine",
-        title: `Open Page in ${ENGINE_NAMES[otherEngine(pageEngine)]}`,
-        symbol: otherEngine(pageEngine) === "webkit" ? "safari" : "globe",
-      });
+
     if (origin && translation && (translate.source || translate.status !== "idle")) {
       items.push({
         id: "translate",
@@ -244,11 +222,9 @@ export function SiteControls({
       { id: "settings", title: "All Site Settings…", checked: detailsOpen },
     );
     const choice = await showMenu(items);
+
     if (choice === "clear") void clearData();
-    else if (choice === "engine") {
-      close();
-      void togglePageEngine(tabId);
-    } else if (choice === "translate") {
+    else if (choice === "translate") {
       close();
       toggleTranslation(tabId);
     } else if (choice === "captureFullPage") {
@@ -323,8 +299,26 @@ export function SiteControls({
               <ActionTile icon="plus.magnifyingglass" title="Zoom and Site Settings" onPress={() => setDetailsOpen((open) => !open)} />
             </View>
 
+            {webkitPage ? (
+              <ProtectedMedia
+                url={url}
+                host={host}
+                onLearnMore={() => {
+                  close();
+                  openSettings("engines");
+                }}
+              />
+            ) : (
+              <>
             <View
-              style={{ paddingHorizontal: 14, paddingTop: 17, paddingBottom: 9, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingTop: 17,
+                    paddingBottom: 9,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
             >
               <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Extensions</Text>
               <Pressable
@@ -350,6 +344,8 @@ export function SiteControls({
                 }}
               />
             </View>
+              </>
+            )}
 
             {origin ? (
               <>
@@ -374,13 +370,6 @@ export function SiteControls({
                   }
                   accessory={blocker?.enabled && !webkitPage ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
                 />
-                {canSwitchEngine(url) ? (
-                  <PopoverRow
-                    icon={webkitPage ? "safari" : "globe"}
-                    title="Opens in"
-                    accessory={<ValueButton title={opensIn} onPress={() => void pickEngine()} />}
-                  />
-                ) : null}
                 <PopoverRow
                   icon="chevron.left.forwardslash.chevron.right"
                   title="Developer Mode"
@@ -503,6 +492,31 @@ export function SiteControls({
         </View>
       </View>
     </Popover>
+  );
+}
+
+// Why a WebKit page has no extensions or DevTools. Bay chose the engine (store/engines.ts), so this explains; it offers
+// no switch.
+function ProtectedMedia({ url, host, onLearnMore }: { url: string; host: string; onLearnMore: () => void }) {
+  const theme = useTheme();
+
+  const why = protectedVideoSite(url)
+    ? `${displayHost(host).replace(/^www\./, "")} plays with Safari's engine, which has the DRM it needs.`
+    : "This page runs in Safari's engine, which has the DRM protected media needs.";
+
+  return (
+    <>
+      <Text style={{ paddingHorizontal: 14, paddingTop: 17, paddingBottom: 5, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>
+        Protected Media
+      </Text>
+      <Text style={{ paddingHorizontal: 14, paddingBottom: 5, fontSize: 13, lineHeight: 18, color: theme.textPrimary }}>{why} Here, that means:</Text>
+      <PopoverRow icon="person.crop.circle" title="You sign in here once" />
+      <PopoverRow icon="puzzlepiece.extension" title="Extensions don't run here" />
+      <PopoverRow icon="hammer" title="DevTools don't open here" />
+      <Pressable onPress={onLearnMore} accessibilityRole="link" style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingTop: 5 }}>
+        <Text style={{ fontSize: 12, color: theme.textSecondary }}>Learn more</Text>
+      </Pressable>
+    </>
   );
 }
 
@@ -669,9 +683,12 @@ function CertificateDetails({ security }: { security: SecurityInfo }) {
     ["Issued by", cert.issuer.commonName || cert.issuer.displayName],
     ["Valid from", date(cert.validFrom)],
     ["Expires", date(cert.validUntil)],
-    ...(security.protocol ? [["Protocol", security.protocol] as [string, string]] : []),
-    ...(cert.sha256 ? [["SHA-256", cert.sha256.replace(/(.{2})(?!$)/g, "$1 ").slice(0, 47) + "…"] as [string, string]] : []),
   ];
+
+  if (security.protocol) rows.push(["Protocol", security.protocol]);
+
+  if (cert.sha256) rows.push(["SHA-256", cert.sha256.replace(/(.{2})(?!$)/g, "$1 ").slice(0, 47) + "…"]);
+
   return (
     <View
       style={{

@@ -1,3 +1,4 @@
+import { lookup } from "@bay/core";
 import { fileExists } from "@bay/desktop";
 import type { ImageSourcePropType } from "react-native";
 
@@ -32,7 +33,7 @@ export function detectBrowsers(): InstalledBrowser[] {
 }
 
 // Shown until the app's own icon comes back from the system.
-const BUNDLED: Record<string, ImageSourcePropType> = {
+const BUNDLED = {
   arc: require("../../../assets/browsers/arc.png"),
   dia: require("../../../assets/browsers/dia.png"),
   chrome: require("../../../assets/browsers/chrome.png"),
@@ -49,4 +50,4 @@ const BUNDLED: Record<string, ImageSourcePropType> = {
   island: require("../../../assets/browsers/island.png"),
 };
 
-export const bundledBrowserIcon = (id: string): ImageSourcePropType | null => BUNDLED[id] ?? null;
+export const bundledBrowserIcon = (id: string): ImageSourcePropType | null => lookup(BUNDLED, id) ?? null;

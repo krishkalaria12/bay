@@ -1,5 +1,6 @@
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as settingsCommands from "../../runtime/settingsActions";
+import * as v from "valibot";
 import { translation } from "@bay/desktop";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
@@ -133,9 +134,11 @@ async function drain(tabId: string, token: string, onProgress?: (done: number, t
     const passages = batch.passages
       .slice(0, TRANSLATE_BATCH * 4)
       .filter((p): p is Passage => Array.isArray(p) && Array.isArray(p[1]))
-      .map(([id, pieces]): Passage => [id, pieces.filter((x) => Array.isArray(x) && typeof x[1] === "string").slice(0, 40)]);
+      .map(([id, pieces]): Passage => [id, pieces.filter((x) => Array.isArray(x) && v.is(v.string(), x[1])).slice(0, 40)]);
+
     if (passages.length) {
       const results = await translatePassages(source, target, passages);
+
       if (stateOf(tabId).token !== token) return false;
       await web.evaluate(translatorCall("apply", results));
     }

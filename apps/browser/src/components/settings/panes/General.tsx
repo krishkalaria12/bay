@@ -9,7 +9,6 @@ import {
   setLaunchAtLogin,
   setUpdateChannel,
   Symbol,
-  tidyNames,
   updaterState,
   type UpdateChannel,
   type UpdaterState,
@@ -23,6 +22,7 @@ import { useTheme } from "../../../lib/theme";
 import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
+import { TidyModelNote } from "../TidyModelNote";
 import { openImport } from "../windows";
 import { APP_NAME } from "../../../lib/constants";
 
@@ -169,16 +169,24 @@ function UpdatesSection() {
   const lastCheck = state.lastCheck
     ? `Last checked ${new Date(state.lastCheck).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
     : "Not checked yet.";
-  const localCleaner = isMac ? "Bay cleans the name on this Mac. Nothing leaves it." : "Bay cleans the name on your computer. Nothing leaves it.";
+
   return (
     <>
-      <SectionHeader title="Downloads" description={tidyNames ? "Apple's on-device model writes the suggested name. Nothing leaves this Mac." : localCleaner} />
+      <SectionHeader
+        title="Downloads"
+        description={
+          <TidyModelNote
+            available="Apple's on-device model writes the new names. Nothing leaves this Mac."
+            fallback="Bay cleans the names on this Mac. Nothing leaves it."
+          />
+        }
+      />
       <Group>
         <SettingToggle
           setting="tidyDownloads"
           settingId={SETTINGS.tidyDownloads.id}
           title={SETTINGS.tidyDownloads.title}
-          description="Offer a readable name for files the web hands over with machine names, like IMG_20261024_8812.pdf. You choose whether to rename each file; files you named yourself are left alone."
+          description="Rename files the web hands over with machine names, like IMG_20261024_8812.pdf, as they finish downloading, so you can find them later. You can undo each rename; files you named yourself are left alone."
         />
       </Group>
 

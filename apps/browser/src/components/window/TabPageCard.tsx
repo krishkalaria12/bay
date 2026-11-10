@@ -1,4 +1,6 @@
 import * as tabCommands from "../../runtime/tabActions";
+import * as v from "valibot";
+import { JsonValueSchema } from "../../lib/json";
 import { View } from "@bay/platform";
 import { WebView, type OpenWindowRequest, type PageEngine } from "@bay/chromium";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -15,7 +17,7 @@ import { layout } from "../../lib/constants";
 import { startChromeTabs } from "../../lib/engineTabs";
 import { handOff, wantsPage } from "../../lib/tabNavigation";
 import { noteDiscarded, noteGone, noteReady } from "../../lib/tabLifecycle";
-import { clearEngineOffer, followSiteChoice, noteWebKitPage, offerWebKit, persistEngine } from "../../lib/pageEngines";
+import { followSiteChoice, noteWebKitPage, persistEngine, playInWebKit } from "../../lib/pageEngines";
 import { webviewRef, webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useBrowser as legacyBrowser } from "../../store/browserStore";
@@ -57,7 +59,6 @@ import { InternalPage } from "../pages/index";
 import {
   AutofillPrompt,
   BlockedPopupsPrompt,
-  EngineOfferPrompt,
   ExternalAppPrompt,
   PasswordPrompt,
   PermissionPrompt,
@@ -71,7 +72,7 @@ import { ZoomPopover } from "../site/ZoomControls";
 import { SelectionPopover } from "../site/SelectionPopover";
 import { LinkPreview } from "../site/LinkPreviewCard";
 import { setLinkPreview } from "../site/linkPreview";
-import { copyLinkToSelection, searchSelection, setPageSelection, startSelectionTools, type PageSelection } from "../site/selection";
+import { copyLinkToSelection, searchSelection, setPageSelection, startSelectionTools } from "../site/selection";
 import { startMedia, useAutoPictureInPicture } from "../media/pip";
 import { SharePicker, requestDisplayMedia } from "../media/SharePicker";
 import { ShareBar } from "../media/ShareBar";
@@ -117,10 +118,17 @@ function cardPanes(split: SplitView | undefined, activeId: string | undefined, f
 }
 
 // Where the warm tabs' pages paint, off screen: each the card's size, or its place in its split.
-function warmPaneRects(warm: string[], splits: SplitView[], width: number, height: number): Record<string, Rect> {
-  const out: Record<string, Rect> = {};
+export interface PaneRects {
+  [paneId: string]: Rect;
+}
+
+function warmPaneRects(warm: string[], splits: SplitView[], width: number, height: number): PaneRects {
+  const out: PaneRects = {};
+
   for (const id of warm) out[id] = { x: 0, y: 0, width, height };
+
   for (const v of splits) Object.assign(out, splitGeometry(v, width, height).panes);
+
   return out;
 }
 
@@ -211,10 +219,15 @@ export function ContentCard() {
   const shown = useQuietBrowser(
     useShallow((s) => {
       const memo = shownMemo.current;
+
       if (memo.mounted === mounted && memo.panes === framed && memo.tabs === s.tabs) return memo.keys;
+
       const keys = [...new Set([...mounted, ...Object.keys(framed)])]
-        .map((id) => s.tabs[id])
-        .filter((t) => !!t)
+        .flatMap((id) => {
+          const tab = s.tabs[id];
+
+          return tab ? [tab] : [];
+        })
         // Keep mount order stable; reordering native subviews while tabs move can shuffle them.
         .sort((a, b) => a!.createdAt - b!.createdAt)
         // A tab whose space changed profile is another view: its page is the other engine profile's.
@@ -457,7 +470,6 @@ const TabPane = memo(function TabPane({
                 <PasswordPrompt tabId={tabId} right={barEnd} top={4} />
                 <AutofillPrompt tabId={tabId} right={barEnd} top={4} />
                 {!newTabShown && <ExternalAppPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
-                {!newTabShown && <EngineOfferPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
                 {popover === "siteControls" && (!addressInSidebar || !sidebarOpen || devBar) && <SiteControls tabId={tabId} {...popoverSide} top={2} />}
                 {popover === "popups" && <BlockedPopupsPrompt tabId={tabId} {...popoverSide} top={2} />}
                 {popover === "zoom" && <ZoomPopover tabId={tabId} {...popoverSide} top={2} />}
@@ -580,7 +592,6 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
           setPopover(tabId, null);
           setPageSelection(tabId, null);
           setLinkPreview(tabId, null);
-          clearEngineOffer(tabId);
           const blocked = pageOf(tabId).blockedPage;
           patchPage(tabId, {
             popups: [],
@@ -693,14 +704,26 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         }
       }}
       onPageMessage={(kind, data) => {
-        if (kind === "selection") setPageSelection(tabId, data as PageSelection | null);
-        else if (kind === "scroll") noteScroll(tabId, data);
-        else if (kind === "devMode") onDeveloperMessage(tabId, data);
+        const rect = v.object({ x: v.number(), y: v.number(), width: v.number(), height: v.number() });
+        const linkPreview = v.safeParse(v.nullable(v.object({ url: v.string(), rect })), data);
+
+        if (kind === "selection") {
+          const parsed = v.safeParse(v.nullable(v.object({ text: v.string(), rect })), data);
+
+          setPageSelection(tabId, parsed.success ? parsed.output : null);
+        } else if (kind === "scroll") {
+          const parsed = v.safeParse(v.nullable(v.object({ state: v.optional(v.string()) })), data);
+
+          noteScroll(tabId, parsed.success ? parsed.output : null);
+        } else if (kind === "devMode") onDeveloperMessage(tabId, data);
         else if (kind === "capture") onCaptureMessage(tabId, data);
-        else if (kind === "boost") onBoostMessage(tabId, data);
-        else if (kind === "linkPreview") setLinkPreview(tabId, data as { url: string; rect: { x: number; y: number; width: number; height: number } } | null);
+        else if (kind === "boost") {
+          const boostMessage = v.safeParse(JsonValueSchema, data);
+
+          if (boostMessage.success) onBoostMessage(tabId, boostMessage.output);
+        } else if (kind === "linkPreview") setLinkPreview(tabId, linkPreview.success ? linkPreview.output : null);
         else if (kind === "captureGesture") onCaptureGesture(tabId, data);
-        else if (kind === "drm") offerWebKit(tabId, data);
+        else if (kind === "drm") void playInWebKit(tabId);
       }}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url) => {

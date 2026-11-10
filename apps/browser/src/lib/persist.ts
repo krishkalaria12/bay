@@ -17,7 +17,7 @@ import { PERSIST_VERSION, SAVE_DELAY_MS } from "./constants";
 type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
 
 const serialized =
-  (serialize: (s: BrowserState) => unknown) =>
+  <T>(serialize: (s: BrowserState) => T) =>
   (s: BrowserState): string =>
     JSON.stringify(serialize(s));
 
@@ -40,10 +40,14 @@ function persistedTabJson(t: Tab, detached: boolean): string {
 
 /** An object's JSON from its fields' JSON, in order; a field whose JSON is undefined is left out, as JSON.stringify does. */
 function objectJson(fields: [string, string | undefined][]): string {
-  return `{${fields
-    .filter((f): f is [string, string] => f[1] !== undefined)
-    .map(([key, json]) => `${JSON.stringify(key)}:${json}`)
-    .join(",")}}`;
+  const parts: string[] = [];
+
+  for (const [key, json] of fields) {
+    if (json === undefined) continue;
+    parts.push(`${JSON.stringify(key)}:${json}`);
+  }
+
+  return `{${parts.join(",")}}`;
 }
 
 /** session.json's document. */
@@ -56,7 +60,10 @@ export function sessionJson(s: BrowserState): string {
   const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small" && !t.peekOf;
   const tabs = Object.values(s.tabs).filter(own);
   const saved = new Set(tabs.map((t) => t.id));
-  const json = (value: unknown) => JSON.stringify(value) as string | undefined;
+
+  // SAFETY: JSON.stringify returns undefined only for undefined, functions and symbols, which the fields never hold.
+  const json = <T>(value: T) => JSON.stringify(value) as string | undefined;
+
   return objectJson([
     ["version", json(PERSIST_VERSION)],
     ["spaces", json(s.spaces)],
@@ -128,6 +135,8 @@ const DOCS: Doc[] = [
 function read<T>(name: string): T | null {
   try {
     const json = readDocument(name);
+
+    // SAFETY: JSON.parse yields the persisted document shape written by write for this name; callers check version.
     return json ? (JSON.parse(json) as T) : null;
   } catch (error) {
     console.warn(`Couldn't read ${name}`, error);
@@ -302,7 +311,7 @@ export function loadSession(): HydrateData | null {
     tabLists: session.tabLists ?? {},
     groups: byId(session.groups),
     pinnedFolders: byId(session.pinnedFolders),
-    localFiles: normalizeLocalFiles({ ...session.localFiles }, spaces),
+    localFiles: normalizeLocalFiles(Object.fromEntries((session.localFiles ?? []).map((pin, index) => [String(index), pin])), spaces),
     splits: byId(session.splits),
     closedTabs: session.closedTabs,
     closedWindows: session.closedWindows?.map(restorableClosedEntry),
@@ -323,10 +332,10 @@ export function loadSession(): HydrateData | null {
     for (const t of loose) bySpace.set(t.spaceId, [...(bySpace.get(t.spaceId) ?? []), t]);
     data.closedWindows = [
       ...(data.closedWindows ?? []),
-      ...[...bySpace]
-        .map(([spaceId, tabs]) => {
+      ...[...bySpace].flatMap(([spaceId, tabs]) => {
           const w = shownAt(spaceId);
-          return {
+
+        const closedWindow = {
             kind: "window" as const,
             id: newId("cw"),
             window: restorableClosedWindow({ ...w, spaceId, sidebarOpen: w?.sidebarOpen ?? true, frame: w?.frame ?? null }),
@@ -334,8 +343,9 @@ export function loadSession(): HydrateData | null {
             groups: [],
             closedAt: now,
           };
-        })
-        .filter((c) => c.tabs.some((t) => t.url)),
+
+        return closedWindow.tabs.some((t) => t.url) ? [closedWindow] : [];
+      }),
     ].slice(-10);
     const gone = new Set(loose.map((t) => t.id));
     data.windows = {};

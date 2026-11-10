@@ -21,11 +21,14 @@ export type ExternalAppAllowance = { origin: string; scheme: string; app: string
 
 export const resolveExternalApp = (id: string, open: boolean, remember = false) =>
   isWebKitExternalApp(id) ? (WebKit?.resolveExternalApp(id, open, remember) ?? Promise.resolve()) : Cef.resolveExternalApp(id, open, remember);
+
 // Both engines' allowances: WebKit pages keep their own (in memory, for the app's run).
 export const getExternalAppAllowances = async (profile: string): Promise<ExternalAppAllowance[]> => {
   const [chromium, webkit] = await Promise.all([Cef.getExternalAppAllowances(profile), WebKit?.externalAppAllowances(profile).catch(() => []) ?? []]);
   const seen = new Set((chromium ?? []).map((a: ExternalAppAllowance) => `${a.origin}|${a.scheme}`));
+
   return [...(chromium ?? []), ...webkit.filter((a) => !seen.has(`${a.origin}|${a.scheme}`))];
 };
+
 export const removeExternalAppAllowance = (profile: string, origin: string, scheme: string) =>
   Promise.all([Cef.removeExternalAppAllowance(profile, origin, scheme), WebKit?.removeExternalAppAllowance(profile, origin, scheme)]).then(() => {});

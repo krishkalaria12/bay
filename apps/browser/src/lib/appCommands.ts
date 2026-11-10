@@ -51,7 +51,6 @@ import { mergeAllWindows, reopenClosed, reopenClosedWindow, restoreClosed, toggl
 import { browserRead } from "../store/read";
 import { addBookmark, addBookmarkFolder } from "../runtime/bookmarkActions";
 import { dismissCommandPanel, openCommandPanel, setFind, toggleDownloads } from "../runtime/windowUiActions";
-import { togglePageEngine } from "./pageEngines";
 import { showAppMenu } from "./appMenu";
 import { menuState } from "./shellBridge";
 
@@ -299,10 +298,9 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
       const node = arg ? s.bookmarks.nodes[arg] : undefined;
       return node?.kind === "url" && tab ? reportBrowserCommand(navigate(tab.id, node.url)) : undefined;
     }
+
     case "toggleMute":
       return page ? toggleMute(page.id) : undefined;
-    case "togglePageEngine":
-      return page ? void togglePageEngine(page.id) : undefined;
     case "newEasel":
       return newEasel(windowId);
     case "openLibrary":
@@ -387,7 +385,6 @@ const LITTLE_BAY_PAGE_COMMANDS = new Set<string>([
   "addBookmarkToFolder",
   "openBookmark",
   "toggleMute",
-  "togglePageEngine",
   "cast",
   "openExtension",
   "addExtension",

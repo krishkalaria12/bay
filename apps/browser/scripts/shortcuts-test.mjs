@@ -303,15 +303,19 @@ const macFocuses = {
 const focuses = desktopHost ? { sidebar: macFocuses.sidebar } : macFocuses;
 // Each focus is one check: the shortcuts that failed in it.
 let since = Date.now();
+
 function recordFocus(focusName) {
   const lines = [];
+
   for (const [name] of shortcuts) {
     const r = results.get(name)[focusName];
+
     if (r && r.result !== "ok") lines.push(`${r.result.padEnd(4)}  ${name} with the focus in ${focusName}: ${r.detail} (first responder ${r.responder})`);
   }
+
   // The failures first: they're what a failing check prints under its line.
   for (const l of [...lines.filter((l) => l.startsWith("FAIL")), ...lines.filter((l) => !l.startsWith("FAIL"))]) rep.log(l);
-  const failed = shortcuts.filter(([name]) => results.get(name)[focusName]?.result === "FAIL").map(([name]) => name);
+  const failed = shortcuts.flatMap(([name]) => (results.get(name)[focusName]?.result === "FAIL" ? [name] : []));
   rep.record(`every shortcut with the focus in ${focusName}`, {
     ms: Date.now() - since,
     error: failed.length ? `${failed.length} failed: ${failed.join(" ")}` : null,

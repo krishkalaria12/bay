@@ -40,12 +40,18 @@ export const QUICK_CREATE: readonly QuickCreate[] = [
 
 export function matchQuickCreate(query: string, limit = 3): QuickCreate[] {
   const m = /^(?:new|create)(\s+(.*))?$/i.exec(query.trimStart());
+
   if (!m || !m[1]) return [];
   const rest = (m[2] ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+
   if (!rest) return QUICK_CREATE.slice(0, limit);
   const rank = (c: QuickCreate) => (c.aliases.includes(rest) ? 0 : c.aliases.some((a) => a.startsWith(rest)) ? 1 : Infinity);
-  return QUICK_CREATE.map((c, order) => ({ c, r: rank(c), order }))
-    .filter((x) => x.r !== Infinity)
+
+  return QUICK_CREATE.flatMap((c, order) => {
+    const r = rank(c);
+
+    return r === Infinity ? [] : [{ c, r, order }];
+  })
     .sort((a, b) => a.r - b.r || a.order - b.order)
     .slice(0, limit)
     .map((x) => x.c);

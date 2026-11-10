@@ -11,6 +11,7 @@ import { useTheme } from "../../lib/theme";
 export function useHover() {
   const [hovered, setHovered] = useState(false);
   const [hoverProps] = useState(() => markHoverProps({ onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) }));
+
   return { hovered, hoverProps };
 }
 
@@ -39,6 +40,7 @@ export function IconButton({
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View tooltip={tooltip} style={style} {...hoverProps}>
       <Pressable onPress={onPress} disabled={disabled}>
@@ -79,17 +81,21 @@ export const Favicon = memo(function Favicon({
   useAppearanceDark();
   const cached = useFavicon(url, direct ? null : favicon, spaceId);
   const resolved = direct && favicon ? { uri: favicon, spaceId: "" } : cached;
-  const shape = useFaviconTheme(theme.dark || direct ? "" : url, favicon, spaceId);
-  const white = shape?.kind === "template" && !!shape.stroke;
+  const faviconTheme = useFaviconTheme(theme.dark || direct ? "" : url, favicon, spaceId);
+  const white = faviconTheme?.kind === "template" && !!faviconTheme.stroke;
   const [broken, setBroken] = useState<string | null>(null);
+
   if (!url && !resolved) return <NewTabIcon size={size} />;
+
   if (!resolved || broken === resolved.uri) return <FaviconFallback url={url} size={size} />;
+
   return (
     <Image
       key={white ? `${resolved.uri} tinted` : resolved.uri}
       source={{ uri: resolved.uri }}
       onError={() => {
         setBroken(resolved.uri);
+
         if (resolved.spaceId) faviconFailed(resolved.spaceId, resolved.uri);
       }}
       style={{ width: size, height: size, borderRadius: size > 18 ? 4 : 3, tintColor: white ? theme.textPrimary : undefined }}
@@ -101,10 +107,13 @@ export const Favicon = memo(function Favicon({
 export function FaviconFallback({ url, size = 16 }: { url: string; size?: number }) {
   const theme = useTheme();
   const bundled = bundledSiteIcon(url, theme.dark);
+
   if (bundled !== undefined) return <Image source={bundled} style={{ width: size, height: size, borderRadius: size > 18 ? 4 : 3 }} />;
   const initial = hostInitial(url);
+
   if (!initial) return <Symbol name="globe" size={size - 3} color={theme.textSecondary} style={{ width: size, height: size }} />;
   const tile = Math.round((size * 14) / 16);
+
   return (
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
       <View
@@ -126,8 +135,10 @@ export function FaviconFallback({ url, size = 16 }: { url: string; size?: number
 
 function hostInitial(url: string): string {
   const host = /^(?:https?|ftp):\/\/(?:[^@/?#]*@)?([^/?#:]+)/i.exec(url)?.[1];
+
   if (!host || /^[\d.]+$|^\[/.test(host)) return "";
   const shown = displayHost(host.toLowerCase()).replace(/^www\./, "");
+
   return Array.from(shown)[0]?.toLocaleUpperCase() ?? "";
 }
 
@@ -136,6 +147,7 @@ const NEW_TAB_MARK = require("../../../assets/new-tab-bay.png");
 
 export function NewTabIcon({ size = 16 }: { size?: number }) {
   const theme = useTheme();
+
   return (
     <Image
       key={theme.dark ? "dark" : "light"}

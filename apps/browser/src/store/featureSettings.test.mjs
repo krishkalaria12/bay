@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const { DEFAULT_AWAKE_SITES } = await import("../lib/keptAwakeSites.ts");
 const { sidebarMetrics } = await import("../lib/sidebarDensity.ts");
@@ -15,6 +16,7 @@ const S = () => useBrowser.getState();
 test("search shortcuts default to Arc for older sessions and normalize invalid saved modes", () => {
   S().hydrate({ settings: { searchEngine: "bing" } });
   assert.equal(S().settings.searchShortcutMode, "arc");
+
   for (const searchShortcutMode of ["invalid", "", null, false, 1, {}, []]) {
     S().hydrate({ settings: { searchShortcutMode, searchEngine: "bing" } });
     assert.equal(S().settings.searchShortcutMode, "arc");
@@ -51,10 +53,12 @@ test("both shortcut modes and custom overrides survive persistence and sync with
 
 test("invalid synced shortcut modes preserve the current choice", () => {
   S().hydrate({ settings: { searchShortcutMode: "duckduckgo" } });
+
   for (const v of ["invalid", "", null, false, 1, {}, [], undefined]) {
     settingsAdapter.apply(new Map([["set:searchShortcutMode", { v }]]), new Set(["set:searchShortcutMode"]));
     assert.equal(S().settings.searchShortcutMode, "duckduckgo");
   }
+
   settingsAdapter.apply(new Map([["set:searchShortcutMode", { v: "arc" }]]), new Set(["set:searchShortcutMode"]));
   assert.equal(S().settings.searchShortcutMode, "arc");
 });
@@ -84,6 +88,7 @@ function tabs() {
   const today = Object.keys(S().tabs)[0];
   const pinned = S().newTab(w, { url: "https://pin.example", background: true });
   const folder = S().newPinnedFolder(w, { tabIds: [pinned], name: "Work" });
+
   return { w, today, pinned, folder };
 }
 
@@ -137,6 +142,7 @@ test("density resizes sidebar controls and folder/reveal geometry together", () 
   assert.deepEqual(rowSpan(S(), w, "default", today, true), { section: "list", top: 42, height: 36 });
   S().updateSettings({ density: "compact" });
   const compact = sidebarMetrics(S().settings.density);
+
   for (const metric of ["rowHeight", "iconSize", "pinnedHeight", "addressHeight", "toolbarAddressHeight"]) assert.ok(compact[metric] < comfortable[metric]);
   assert.equal(entryHeight(S(), w, "default", `f:${folder}`), 62);
   assert.equal(entriesHeight(S(), w, "default", [`t:${today}`, `f:${folder}`]), 94);
@@ -165,10 +171,12 @@ test("density, awake sites and folded spaces round-trip sync; older profile reco
   S().updateSpace("default", { folded: true });
   profile.apply(expanded, new Set(expanded.keys()));
   assert.equal(S().spaces.default.folded, false);
+
   const invalid = new Map([
     ["set:density", { v: "bad" }],
     ["set:awakeSites", { v: null }],
   ]);
+
   settingsAdapter.apply(invalid, new Set(invalid.keys()));
   assert.equal(S().settings.density, "compact");
   assert.deepEqual(S().settings.awakeSites, []);

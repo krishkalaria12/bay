@@ -1,5 +1,7 @@
+import * as v from "valibot";
 import type { Adapter } from "@bay/sync";
 import { normalizeBoost, type Boost } from "../lib/boosts";
+import { isJsonObject } from "../lib/json";
 import { applySyncedBoosts, ensureBoostsLoaded, useBoosts } from "../components/boosts/state";
 
 // Boosts across Macs: one record a Boost, its look and CSS (and whether it's on). Its JavaScript never leaves this
@@ -31,14 +33,21 @@ export const boostsAdapter: Adapter = {
         removed.push(id);
         continue;
       }
+
       // A malformed record changes nothing: only a tombstone removes a Boost.
-      const boost = normalizeBoost({ ...(visible.get(key) as object), id });
+      const record = visible.get(key);
+
+      if (!isJsonObject(record)) continue;
+      const boost = normalizeBoost({ ...record, id });
+
       if (boost) upserts.push(boost);
     }
+
     if (upserts.length || removed.length) applySyncedBoosts(upserts, removed);
   },
   editedAt: (value) => {
-    const at = (value as { updatedAt?: unknown } | null)?.updatedAt;
-    return typeof at === "number" && Number.isFinite(at) ? at : undefined;
+    const at = isJsonObject(value) ? value.updatedAt : undefined;
+
+    return v.is(v.number(), at) && Number.isFinite(at) ? at : undefined;
   },
 };

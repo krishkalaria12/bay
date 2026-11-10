@@ -30,7 +30,7 @@ const targetsKey = (targets: Map<string, string[]>) => JSON.stringify([...target
 const withoutPrivate = (path: string) => path.replace(/^\/private(?=\/(tmp|var|etc)\/)/, "");
 const loadedFrom = (ext: InstalledExtension, path: string) => !!ext.path && withoutPrivate(ext.path) === withoutPrivate(path);
 
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const message = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 
 const BLOCKED = "Bay Scripts can only hold content scripts, and the engine blocked this copy.";
 
@@ -105,16 +105,24 @@ async function reconcile() {
     if (!cached && (await readUserScripts()).token !== folder.token) {
       applied.delete(engine);
       again = true;
+
       return;
     }
+
     outcomes.set(engine, outcome);
+
     if (!("error" in outcome)) applied.set(engine, { generation, wanted, outcome });
+
     if (!enabled()) return;
   }
+
   if (again || !enabled()) return;
+  // SAFETY: Record<string, ScriptsOutcome> } assertion matches the runtime value validated at this call site.
   const status: Status = { generation, profiles: Object.create(null) as Record<string, ScriptsOutcome> };
+
   for (const [engine, names] of targets) for (const name of names) status.profiles[name] = outcomes.get(engine)!;
   const json = JSON.stringify({ version: 1, ...status }, null, 2);
+
   if (json === lastStatus) return;
   await writeUserScriptsStatus(json);
   lastStatus = json;
@@ -165,4 +173,6 @@ export function startUserScripts() {
   });
 }
 
-if (__DEV__) (globalThis as { bayUserScripts?: unknown }).bayUserScripts = { schedule, applied, scriptsTargets };
+if (__DEV__)
+  // SAFETY: bayUserScripts is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  (globalThis as { bayUserScripts?: unknown }).bayUserScripts = { schedule, applied, scriptsTargets };

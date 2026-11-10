@@ -80,10 +80,14 @@ test("Arc imports retain every usable overflow tab in the fifth folder level", a
   S().hydrate({});
   const w = S().createWindow({ url: "https://home.com" });
   const spaceId = S().windows[w].spaceId;
-  let pinned = [];
+  let folder = null;
+
   for (let depth = 80; depth >= 1; depth--) {
-    pinned = [{ type: "folder", title: `Level ${depth}`, children: [link(`level-${depth}`), ...pinned] }];
+    const children = folder ? [link(`level-${depth}`), folder] : [link(`level-${depth}`)];
+    folder = { type: "folder", title: `Level ${depth}`, children };
   }
+  const pinned = folder ? [folder] : [];
+
   const n = await importArcSpace(spaceId, { id: "deep", name: "Deep", profileId: "Default", pinned, tabs: [] });
   assert.equal(n, 80);
   const folders = Object.values(S().pinnedFolders);

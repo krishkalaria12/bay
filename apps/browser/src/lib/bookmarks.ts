@@ -42,12 +42,14 @@ export function flatFromStore(b: Bookmarks, engine: string): Flat {
       kind: node.kind,
       parent,
       title: node.title,
-      ...(node.kind === "url" ? { url: node.url } : {}),
+      ...(node.kind === "url" ? { url: node.url } : undefined),
       addedAt: node.addedAt,
-      ...(node.syncKey ? { key: node.syncKey } : {}),
+      ...(node.syncKey ? { key: node.syncKey } : undefined),
     });
+
     if (node.kind !== "folder") return;
     const kids: string[] = [];
+
     for (const c of node.children) {
       if (!b.nodes[c] || flat.nodes.has(c)) continue;
       walk(c, id);
@@ -68,10 +70,11 @@ function flatFromEngine(tree: { bar: EngineBookmark; other: EngineBookmark }, en
       kind: node.k === "u" ? "url" : "folder",
       parent,
       title: node.t,
-      ...(node.k === "u" ? { url: node.u ?? "" } : {}),
+      ...(node.k === "u" ? { url: node.u ?? "" } : undefined),
       addedAt: node.a,
-      ...(node.key ? { key: node.key } : {}),
+      ...(node.key ? { key: node.key } : undefined),
     });
+
     if (node.k === "f") {
       flat.children.set(
         id,
@@ -117,9 +120,9 @@ export function bookmarkOps(from: Flat, to: Flat, engine: string): BookmarkOp[] 
           id,
           k: node.kind === "url" ? "u" : "f",
           t: node.title,
-          ...(node.url !== undefined ? { u: node.url } : {}),
+          ...(node.url !== undefined ? { u: node.url } : undefined),
           a: node.addedAt,
-          ...(node.key ? { key: node.key } : {}),
+          ...(node.key ? { key: node.key } : undefined),
           parent: opParent(engine, folder),
           index,
         });
@@ -134,10 +137,12 @@ export function bookmarkOps(from: Flat, to: Flat, engine: string): BookmarkOp[] 
           parentOf.set(id, folder);
           ops.push({ op: "move", id, parent: opParent(engine, folder), index });
         }
+
         if (was && (was.title !== node.title || (node.url !== undefined && was.url !== node.url))) {
-          ops.push({ op: "update", id, t: node.title, ...(node.url !== undefined ? { u: node.url } : {}) });
+          ops.push({ op: "update", id, t: node.title, ...(node.url !== undefined ? { u: node.url } : undefined) });
         }
       }
+
       if (node.kind === "folder") queue.push(id);
     });
   }
@@ -190,8 +195,8 @@ export function applyOps(tree: Flat, ops: BookmarkOp[], engine: string): Flat {
       if (!node || node.parent === null) break;
       flat.nodes.set(op.id, {
         ...node,
-        ...(op.t !== undefined ? { title: op.t } : {}),
-        ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}),
+        ...(op.t !== undefined ? { title: op.t } : undefined),
+        ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : undefined),
       });
       continue;
     }
@@ -202,20 +207,23 @@ export function applyOps(tree: Flat, ops: BookmarkOp[], engine: string): Flat {
       if (!node || node.parent === null || inside(op.id, parent)) break;
       detach(op.id);
       attach(op.id, parent, op.index);
+
       if (op.op === "add")
-        flat.nodes.set(op.id, { ...flat.nodes.get(op.id)!, title: op.t, ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}) });
+        flat.nodes.set(op.id, { ...flat.nodes.get(op.id)!, title: op.t, ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : undefined) });
       continue;
     }
+
     // Chrome drops an add whose URL it can't keep, and goes on.
     if (op.k === "u" && !keepsUrl(op.u ?? "")) continue;
     flat.nodes.set(op.id, {
       kind: op.k === "u" ? "url" : "folder",
       parent,
       title: op.t,
-      ...(op.k === "u" ? { url: op.u ?? "" } : {}),
+      ...(op.k === "u" ? { url: op.u ?? "" } : undefined),
       addedAt: op.a,
-      ...(op.key ? { key: op.key } : {}),
+      ...(op.key ? { key: op.key } : undefined),
     });
+
     if (op.k === "f") flat.children.set(op.id, []);
     attach(op.id, parent, op.index);
   }

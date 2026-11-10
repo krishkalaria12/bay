@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Builds Bay's Rust content blocker (packages/adblock) for both mobile engines:
+#   iOS      modules/bay-engine/ios/BayAdblock.xcframework (static, device + simulator)
+#   Android  modules/bay-engine/android/src/main/jniLibs/<abi>/libbay_adblock.so
+# plus the scriptlet and redirect resources (packages/adblock/resources/resources.json) in each app bundle.
+# Both are generated and git-ignored. scripts/native runs this when the Rust sources are newer than the outputs.
+# Needs rustup with the aarch64-apple-ios, aarch64-apple-ios-sim and aarch64-linux-android targets, and the NDK.
+#
+#   scripts/adblock              both platforms
+#   scripts/adblock ios          one platform
+#   scripts/adblock android
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source scripts/lib/devices.sh
+parse_platforms "$@"
+
+crate=../../packages/adblock
+# rustup's cargo has the mobile targets; a Homebrew cargo earlier on PATH would not.
+export PATH=$HOME/.cargo/bin:$PATH
+build() { cargo rustc --release --lib --manifest-path "$crate/Cargo.toml" --target "$1" --crate-type "$2" -q; }
+
+for platform in "${platforms[@]}"; do
+  if [[ $platform == ios ]]; then
+    for target in aarch64-apple-ios aarch64-apple-ios-sim; do build "$target" staticlib; done
+    headers=$crate/target/include
+    rm -rf "$headers" modules/bay-engine/ios/BayAdblock.xcframework
+    mkdir -p "$headers"
+    cp "$crate/include/bay_adblock.h" "$crate/include/module.modulemap" "$headers/"
+    xcodebuild -create-xcframework \
+      -library "$crate/target/aarch64-apple-ios/release/libbay_adblock.a" -headers "$headers" \
+      -library "$crate/target/aarch64-apple-ios-sim/release/libbay_adblock.a" -headers "$headers" \
+      -output modules/bay-engine/ios/BayAdblock.xcframework >/dev/null
+    mkdir -p modules/bay-engine/ios/BayAdblockResources
+    cp "$crate/resources/resources.json" modules/bay-engine/ios/BayAdblockResources/bay-adblock-resources.json
+    echo "adblock: ios built"
+  else
+    ndk=$(ls -d "$ANDROID_HOME"/ndk/*/ | grep -v incomplete | sort -V | tail -1)
+    export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${ndk}toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang
+    build aarch64-linux-android cdylib
+    mkdir -p modules/bay-engine/android/src/main/jniLibs/arm64-v8a
+    cp "$crate/target/aarch64-linux-android/release/libbay_adblock.so" modules/bay-engine/android/src/main/jniLibs/arm64-v8a/
+    mkdir -p modules/bay-engine/android/src/main/assets
+    cp "$crate/resources/resources.json" modules/bay-engine/android/src/main/assets/bay-adblock-resources.json
+    echo "adblock: android built"
+  fi
+done

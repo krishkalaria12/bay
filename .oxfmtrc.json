@@ -1,5 +1,12 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "printWidth": 160,
-  "ignorePatterns": ["**/fixtures/**", "engine/**", "**/*.md", "packages/platform/src/nativeContracts.ts", "packages/desktop/src/lucideSymbols.web.ts"]
+  "ignorePatterns": [
+    "**/fixtures/**",
+    "engine/**",
+    "**/*.md",
+    "tools/oxlint/anti-slop/**",
+    "packages/platform/src/nativeContracts.ts",
+    "packages/desktop/src/lucideSymbols.web.ts"
+  ]
 }

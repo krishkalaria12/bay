@@ -11,20 +11,29 @@ import { closeCastPicker, useCast } from "./cast";
 import { CAST_PICKER_WIDTH } from "./constants";
 import { useResetOn } from "../../lib/useResetOn";
 
-const SINK_ICON: Record<number, string> = { 0: "tv", 1: "hifispeaker.2", 2: "hifispeaker", 6: "display", 7: "tv" };
+const SINK_ICON = new Map<number, string>([
+  [0, "tv"],
+  [1, "hifispeaker.2"],
+  [2, "hifispeaker"],
+  [6, "display"],
+  [7, "tv"],
+]);
 
 export function CastPicker({ tabId, paneWidth }: { tabId: string; paneWidth: number }) {
   const theme = useTheme();
   const dialog = useCast((c) => c.dialogs[tabId]);
   const [screen, setScreen] = useState(false);
   useResetOn(dialog?.id, () => setScreen(false));
+
   if (!dialog) return null;
   const close = () => closeCastPicker(tabId);
   const available = dialog.sinks.filter((s) => s.state !== "unavailable");
   const canScreen = dialog.sinks.some((s) => s.modes & CastMode.screen);
   const width = Math.min(CAST_PICKER_WIDTH, paneWidth - 24);
+
   const cast = (sink: CastSink) => {
     const mode = screen && sink.modes & CastMode.screen ? CastMode.screen : preferredCastMode(sink.modes & ~CastMode.screen) || preferredCastMode(sink.modes);
+
     if (mode) void startCasting(dialog.id, sink.id, mode);
   };
 
@@ -73,6 +82,7 @@ function SinkRow({ sink, onCast, onStop }: { sink: CastSink; onCast(): void; onS
   const { hovered, hoverProps } = useHover();
   const active = sink.state === "connected" && !!sink.routeId;
   const busy = sink.state === "connecting" || sink.state === "disconnecting";
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={active || busy ? undefined : onCast}>
@@ -98,7 +108,7 @@ function SinkRow({ sink, onCast, onStop }: { sink: CastSink; onCast(): void; onS
               backgroundColor: active ? theme.accent : theme.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
             }}
           >
-            <Symbol name={SINK_ICON[sink.icon] ?? "tv"} size={13} color={active ? "#FFFFFF" : theme.icon} style={{ width: 20, height: 20 }} />
+            <Symbol name={SINK_ICON.get(sink.icon) ?? "tv"} size={13} color={active ? "#FFFFFF" : theme.icon} style={{ width: 20, height: 20 }} />
           </View>
           <View style={{ flex: 1 }}>
             <Text numberOfLines={1} style={{ fontSize: 13, color: theme.textPrimary }}>
@@ -121,13 +131,16 @@ function SinkRow({ sink, onCast, onStop }: { sink: CastSink; onCast(): void; onS
 function SourceButton({ screen, onChange }: { screen: boolean; onChange: (screen: boolean) => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   const pick = async () => {
     const choice = await showMenu([
       { id: "tab", title: "Cast Tab", checked: !screen },
       { id: "screen", title: "Cast Screen", checked: screen },
     ]);
+
     if (choice) onChange(choice === "screen");
   };
+
   return (
     <View {...hoverProps} tooltip="Source">
       <Pressable onPress={() => void pick()}>
@@ -153,6 +166,7 @@ function SourceButton({ screen, onChange }: { screen: boolean; onChange: (screen
 function Message({ text, link, onLink }: { text: string; link: string; onLink: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View style={{ paddingHorizontal: 14, paddingTop: 12, gap: 5 }}>
       <Text style={{ fontSize: 12.5, color: theme.textSecondary }}>{text}</Text>

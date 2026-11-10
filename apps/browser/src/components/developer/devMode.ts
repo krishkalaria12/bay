@@ -1,5 +1,7 @@
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as settingsCommands from "../../runtime/settingsActions";
+import * as v from "valibot";
+import { isJsonObject, type JsonInput } from "../../lib/json";
 import { copyText } from "@bay/desktop";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
@@ -81,20 +83,27 @@ export function setInspecting(tabId: string, on: boolean) {
 export const toggleInspecting = (tabId: string) => setInspecting(tabId, !useDeveloperUi.getState().inspecting[tabId]);
 
 /** What the inspector in a page sends (inspectorScript's send): untrusted, as everything from a page. */
-export function onDeveloperMessage(tabId: string, data: unknown) {
-  const message = data && typeof data === "object" ? (data as { type?: unknown; text?: unknown }) : null;
+export function onDeveloperMessage(tabId: string, data: JsonInput) {
+  const message = isJsonObject(data) ? data : null;
   const tab = useBrowser.getState().tabs[tabId];
+
   // The JSON viewer's key: its path ($.items[0].id) on the clipboard.
-  if (message?.type === "copyJsonPath" && tab && typeof message.text === "string" && isDeveloperUrl(useBrowser.getState(), tab.url)) {
+  if (message?.type === "copyJsonPath" && tab && v.is(v.string(), message.text) && isDeveloperUrl(useBrowser.getState(), tab.url)) {
     copyText(message.text.slice(0, 2_000));
+
     return showToast(tab.windowId, "Copied Path", message.text.slice(0, 120), { icon: "curlybraces" });
   }
+
   if (!message || !tab || !useDeveloperUi.getState().inspecting[tabId]) return;
+
   if (message.type === "exit") return setInspecting(tabId, false);
-  if (message.type === "copy" && typeof message.text === "string") {
+
+  if (message.type === "copy" && v.is(v.string(), message.text)) {
     copyText(message.text.slice(0, 200_000));
+
     return showToast(tab.windowId, "Copied for Agent", "The element, its styles and where it is.", { icon: "doc.on.doc" });
   }
+
   if (message.type === "elements") {
     setInspecting(tabId, false);
     void webviews.get(tabId)?.showDevTools("inspect");

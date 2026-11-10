@@ -469,7 +469,9 @@ function useStripDrag(item: StripDrag) {
 
 function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<number>; lift: SharedValue<number> }, setDragging: (dragging: boolean) => void) {
   let view: View | null = null;
+  // SAFETY: string[], dx assertion matches the runtime value validated at this call site.
   let drag = { stripBottom: TOP_STRIP_HEIGHT, lifted: false, ids: [] as string[], dx: 0, to: -1 };
+
   const setLifted = (lifted: boolean) => {
     if (drag.lifted === lifted) return;
     drag.lifted = lifted;

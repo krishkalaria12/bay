@@ -63,10 +63,15 @@ export function closeWebNotification(engineId: string) {
 
 export function handleWebNotificationResponse({ id, action, tabId, data }: NotificationResponse): boolean {
   if (!id.startsWith("web:")) return false;
+
+  // SAFETY: data comes from this module's own postNotification data field, which sets engineId as a string.
   const engineId = (data as { engineId?: string } | null)?.engineId;
+
   if (engineId && shown.get(id) === engineId) shown.delete(id);
   const tab = tabId ? useBrowser.getState().tabs[tabId] : undefined;
+
   if (!tab) return true;
+
   if (action === "click") {
     switchToTab(tab.id);
     focus(tab.windowId);

@@ -15,6 +15,7 @@ import {
   updaterState,
   type CommandEvent,
   type ScriptCommand,
+  type ScriptResult,
   type ScriptState,
 } from "@bay/desktop";
 import { maybeStartOnboarding, openVideoTour, startOnboarding, startToolTour } from "../components/onboarding/index";
@@ -29,6 +30,9 @@ import { openReleaseNotesAfterUpdate, openReleaseNotesPage } from "./releaseNote
 import { webviews } from "./webviews";
 import { handleWebNotificationResponse } from "./webNotifications";
 import { platformWords } from "./platformWords";
+import type { JsonInput } from "./json";
+
+type ScriptError = JsonInput | Error;
 
 export function startAppIntegration({ sharedWindow = false } = {}) {
   onCommand(runAppCommand);
@@ -195,7 +199,7 @@ function startScripting() {
   void push();
 
   onScriptCommand((request) => {
-    let result: Record<string, unknown> | null = null;
+    let result: ScriptResult | null = null;
     Promise.resolve()
       .then(async () => {
         result = (await runScriptCommand(request)) ?? {};
@@ -203,23 +207,30 @@ function startScripting() {
       .then(
         // Push state before replying so the script sees the change.
         () => push().then(() => replyToScript(request.id, result)),
-        (error: unknown) => push().then(() => replyToScript(request.id, null, error instanceof Error ? error.message : String(error))),
+        (error: ScriptError) => push().then(() => replyToScript(request.id, null, error instanceof Error ? error.message : String(error))),
       );
   });
 }
 
-async function runScriptCommand(request: ScriptCommand): Promise<Record<string, unknown> | void> {
+async function runScriptCommand(request: ScriptCommand): Promise<ScriptResult | void> {
   const s = useBrowser.getState();
+
   const tabOf = (tabId: string) => {
     const tab = s.tabs[tabId];
+
     if (!tab) throw new Error("That tab no longer exists.");
+
     return tab;
   };
+
   const loaded = (tabId: string) => {
     const web = webviews.get(tabId);
+
     if (!web) throw new Error("The tab hasn't loaded yet; focus it first.");
+
     return web;
   };
+
   switch (request.command) {
     case "newWindow": {
       const windowId = await openWindow({ url: request.url, incognito: request.incognito, spaceId: request.profileId });

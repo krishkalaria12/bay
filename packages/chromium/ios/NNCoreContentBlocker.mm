@@ -12,9 +12,9 @@
 // The filter lists are uBO's default catalogue (filter_lists.json): each one on or off, downloaded into
 // <app support>/Content Blocker/lists and updated when its `! Expires:` says so. The default lists are bundled
 // (Resources/FilterLists, packages/chromium/scripts/filter-lists.sh), so a new install blocks from its first page. The
-// compiled engine is cached (engine.dat) and loads in milliseconds at launch; it's rebuilt when a list or the
-// selection changes. Settings (on/off, the lists, the hosts it's paused on) live in settings.json and apply to every
-// profile, private ones included.
+// compiled engine is cached (engine.dat), loads in milliseconds at launch and reads its rules from the mapped file, so
+// they aren't dirty memory; it's rebuilt when a list or the selection changes. Settings (on/off, the lists, the hosts
+// it's paused on) live in settings.json and apply to every profile, private ones included.
 
 #import "NNCoreServices.h"
 #import "NNCoreInternal.h"
@@ -239,7 +239,7 @@ BOOL gEngineRunsScriptlets = NO;
 
 NSString *const kVersion = @"adblock-rust 0.13.5";
 // Bump with a change to how lists compile (the crate, its features): the cached engine is rebuilt.
-NSString *const kEngineFormat = @"bay-adblock 5";
+NSString *const kEngineFormat = @"bay-adblock 6";
 
 NSArray<NSDictionary *> *Catalogue() {
   static NSArray<NSDictionary *> *lists;
@@ -551,6 +551,16 @@ BayBlocker *Compile(NSArray<NSString *> *ids) {
   return bay_blocker_new_with_permissions(pointers.data(), hosts.get(), permissions.data(), pointers.size());
 }
 
+void ReleaseEngineData(void *data) { CFRelease(data); }
+
+// The engine cached at `path`, reading its rules from the mapped file. Writes replace the file (atomically), so the
+// blocker's mapping stays whole until it's freed.
+BayBlocker *LoadEngine(NSString *path) {
+  NSData *data = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
+  if (!data) return nullptr;
+  return bay_blocker_deserialize((const uint8_t *)data.bytes, data.length, (void *)CFBridgingRetain(data), ReleaseEngineData);
+}
+
 Built Build(NSArray<NSString *> *ids, BOOL useCache) {
   Built built;
   const CFTimeInterval start = CACurrentMediaTime();
@@ -563,19 +573,23 @@ Built Build(NSArray<NSString *> *ids, BOOL useCache) {
   NSString *metaPath = [Directory() stringByAppendingPathComponent:@"engine.lists.json"];
   BayBlocker *blocker = nullptr;
   if (useCache && [[NSString stringWithContentsOfFile:keyPath encoding:NSUTF8StringEncoding error:nil] isEqualToString:key]) {
-    NSData *data = [NSData dataWithContentsOfFile:enginePath options:NSDataReadingMappedIfSafe error:nil];
-    NSArray *cachedIds = ReadJSON(metaPath);
-    if (data && [cachedIds isEqual:present]) blocker = bay_blocker_deserialize((const uint8_t *)data.bytes, data.length);
+    if ([ReadJSON(metaPath) isEqual:present]) blocker = LoadEngine(enginePath);
   }
   if (!blocker) {
     blocker = Compile(present);
     size_t length = 0;
     uint8_t *bytes = bay_blocker_serialize(blocker, &length);
-    if ([[NSData dataWithBytesNoCopy:bytes length:length freeWhenDone:NO] writeToFile:enginePath atomically:YES]) {
+    const BOOL written = [[NSData dataWithBytesNoCopy:bytes length:length freeWhenDone:NO] writeToFile:enginePath atomically:YES];
+    bay_bytes_free(bytes, length);
+    if (written) {
       WriteJSON(metaPath, present);
       [key writeToFile:keyPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+      // From the file, as at the next launch: this one's rules are on the heap, the file's cost no dirty memory.
+      if (BayBlocker *cached = LoadEngine(enginePath)) {
+        bay_blocker_free(blocker);
+        blocker = cached;
+      }
     }
-    bay_bytes_free(bytes, length);
   }
   // Resource storage is separate from adblock-rust's serialized filter engine. Load the pinned resources for both
   // new and cached engines, so scriptlets and redirect stand-ins work on every launch.

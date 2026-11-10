@@ -15,11 +15,13 @@ const config = mergeConfig(getDefaultConfig(projectRoot), {
       } else if (platform === "web" && moduleName === "react-native") {
         moduleName = "react-native-web";
       }
+
       // The render benchmark (scripts/perf/js-bench.mjs bundle --profiling) bundles React's profiling renderer:
       // production code that also times each component's render.
       if (process.env.NN_REACT_PROFILING === "1" && moduleName.endsWith("/ReactNativeRenderer-prod")) {
         moduleName = moduleName.replace(/-prod$/, "-profiling");
       }
+
       return context.resolveRequest(context, moduleName, platform);
     },
   },

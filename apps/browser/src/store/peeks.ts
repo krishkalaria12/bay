@@ -2,7 +2,7 @@ import type { PagePoint } from "@bay/chromium";
 import type { StateCreator } from "zustand";
 import type { DeepReadonly } from "../runtime/projection";
 import { matchingLinkRule } from "../lib/externalLinkRules";
-import type { BrowserState, BrowserShape } from "./browserStore";
+import type { BrowserState, QuietBrowserState } from "./browserStore";
 import { IDLE_LIVE, activeTabId, findLast, listIds, makeTab, pinnedFirst, pinnedPage, spaceListKey, withList } from "./model";
 import { insertionIndex } from "./openerOrder";
 import { groupWithOpener } from "./tabTidying";
@@ -75,28 +75,33 @@ export function siteOf(host: string): string {
 const hostOf = (url: string) => url.match(/^https?:\/\/([^/?#:]*)/i)?.[1] ?? "";
 
 /** Whether `fromId` peeks its links: a pinned tab or a favourite in a main window, with the setting on. */
-export function peeksLinks(s: BrowserShape, fromId: string): boolean {
+export function peeksLinks(s: QuietBrowserState, fromId: string): boolean {
   const from = s.tabs[fromId];
+
   if (!s.settings.peekLinksFromPinnedTabs || !from || isPeek(from) || !pinnedPage(from)) return false;
   const w = s.windows[from.windowId];
+
   return !!w && !w.incognito && w.kind !== "small";
 }
 
 /** Whether a link `fromId` opens goes to a peek: one to another site, from a tab that peeks its links (Arc's rule). */
-export function opensInPeek(s: BrowserShape, fromId: string, url: string): boolean {
+export function opensInPeek(s: QuietBrowserState, fromId: string, url: string): boolean {
   const host = hostOf(url);
+
   return !!host && peeksLinks(s, fromId) && siteOf(host) !== siteOf(hostOf(s.tabs[fromId]!.url));
 }
 
 /** The window's peek while it's on screen: its opener is the shown tab, or a pane of the shown split. */
-export function shownPeek(s: BrowserShape, windowId: string): DeepReadonly<Peek> | undefined {
+export function shownPeek(s: QuietBrowserState, windowId: string): DeepReadonly<Peek> | undefined {
   const peek = s.peeks[windowId];
+
   if (!peek || !s.tabs[peek.tabId]) return undefined;
   const shown = activeTabId(s, windowId);
+
   return shown === peek.fromId || splitOf(s, shown)?.tabIds.includes(peek.fromId) ? peek : undefined;
 }
 
-const lastClosedTab = (s: BrowserShape, windowId: string) => findLast(s.closedTabs, (c) => c.windowId === windowId)?.id ?? null;
+const lastClosedTab = (s: QuietBrowserState, windowId: string) => findLast(s.closedTabs, (c) => c.windowId === windowId)?.id ?? null;
 
 const withoutPeek = (s: BrowserState, windowId: string): BrowserState => {
   const { [windowId]: _, ...peeks } = s.peeks;

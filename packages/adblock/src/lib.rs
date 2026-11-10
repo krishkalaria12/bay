@@ -19,8 +19,9 @@ mod removeparam;
 mod tracking;
 
 pub use blocker::{
-    content_blocking_rules, Blocker, FilterList, ListCounts, PageResources, RequestMatch,
+    content_blocking_rules, load_cached, Blocker, Check, FilterList, ListCounts, PageResources,
+    RequestMatch, TRUSTED_SCRIPTLETS,
 };
 pub use modifiers::ResponseMatch;
-pub use preprocess::preprocess;
+pub use preprocess::{preprocess, preprocess_for, Platform};
 pub use tracking::TrackingParams;

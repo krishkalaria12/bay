@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromiumRoot, documentsRoot, EndpointError, requireControl } from "./endpoint.ts";
-import { isRecord } from "./util.ts";
+import { isRecord, isString } from "./util.ts";
 
 const CHROME_EPOCH_OFFSET = 11_644_473_600;
 const SUBFRAME_TRANSITIONS = [3, 4];
@@ -68,46 +68,57 @@ export function pinned(root: string | null): PinnedTab[] {
   const spaces = session.spaces ?? session.profiles ?? {};
   const order = session.spaceOrder ?? session.profileOrder ?? [];
   const names = new Map<string, string>();
+
   for (const [id, space] of Object.entries(spaces)) {
     if (isPrivateSpace(id)) continue;
-    names.set(id, typeof space.name === "string" && space.name ? space.name : id);
+    names.set(id, isString(space.name) && space.name ? space.name : id);
   }
+
   const spaceOrder = [...new Set([...order.filter((id) => names.has(id)), ...names.keys()])];
   const tabs = new Map<string, TabRow>();
-  for (const tab of session.tabs ?? []) if (typeof tab.id === "string") tabs.set(tab.id, tab);
+
+  for (const tab of session.tabs ?? []) if (isString(tab.id)) tabs.set(tab.id, tab);
   const folders = new Map<string, string>();
+
   for (const folder of session.pinnedFolders ?? []) {
-    if (typeof folder.id === "string" && typeof folder.name === "string") folders.set(folder.id, folder.name);
+    if (isString(folder.id) && isString(folder.name)) folders.set(folder.id, folder.name);
   }
+
   const groups = (session.groups ?? []).filter((group) => group.pinned === true);
   const lists = session.tabLists ?? {};
   const rows: Array<{ order: number; row: PinnedTab }> = [];
   const seen = new Set<string>();
   let rank = 0;
+
   for (const spaceId of spaceOrder) {
     const ids = [...(lists[spaceId] ?? [])];
+
     for (const group of groups) {
       if (group.spaceId !== spaceId || !Array.isArray(group.tabIds)) continue;
-      for (const id of group.tabIds) if (typeof id === "string" && !ids.includes(id)) ids.push(id);
+
+      for (const id of group.tabIds) if (isString(id) && !ids.includes(id)) ids.push(id);
     }
+
     for (const id of ids) {
       const tab = tabs.get(id);
+
       if (!tab || seen.has(id)) continue;
       const group = groups.find((item) => item.spaceId === spaceId && Array.isArray(item.tabIds) && item.tabIds.includes(id));
       const favorite = tab.pinned === true;
       const pinnedRow = tab.pinnedRow === true;
+
       if (!favorite && !pinnedRow && !group) continue;
       seen.add(id);
-      const folderId = typeof tab.folderId === "string" ? tab.folderId : null;
+      const folderId = isString(tab.folderId) ? tab.folderId : null;
       const title = firstString(tab.customTitle, tab.title, tab.url, tab.pinnedUrl);
       rows.push({
         order: rank++,
         row: {
           title,
           url: firstString(tab.url, tab.pinnedUrl),
-          pinnedUrl: typeof tab.pinnedUrl === "string" ? tab.pinnedUrl : null,
+          pinnedUrl: isString(tab.pinnedUrl) ? tab.pinnedUrl : null,
           kind: favorite ? "favorite" : "pinned",
-          folder: favorite ? null : group && typeof group.name === "string" ? group.name : folderId ? (folders.get(folderId) ?? null) : null,
+          folder: favorite ? null : group && isString(group.name) ? group.name : folderId ? (folders.get(folderId) ?? null) : null,
           space: names.get(spaceId) ?? spaceId,
           parked: false,
         },
@@ -123,7 +134,9 @@ export function history(root: string | null, options: HistoryOptions = {}): Arra
   const data = checkedRoot(root, "history");
   const days = options.days ?? 1;
   const limit = options.limit === undefined ? 200 : options.limit;
-  if (!(typeof days === "number") || !Number.isFinite(days) || days <= 0) throw new BrowsingDataError("days must be a positive number");
+
+  if (!Number.isFinite(days) || days <= 0) throw new BrowsingDataError("days must be a positive number");
+
   if (limit !== null && (!Number.isInteger(limit) || limit <= 0)) throw new BrowsingDataError("limit must be a positive integer or null");
   const session = readSession(data);
   const spots = spaceProfiles(session);
@@ -207,6 +220,8 @@ function readSession(root: string): SessionDoc {
   } catch {
     throw new BrowsingDataError(`${path} isn't valid JSON (Bay may be writing it; try again)`);
   }
+
+  // SAFETY: isRecord confirmed session is a plain object and the version === 2 check above is the v2 SessionDoc contract; SessionDoc is only read after these guards.
   return isRecord(session) && session.version === 2 ? (session as SessionDoc) : {};
 }
 
@@ -225,17 +240,19 @@ function spaceProfiles(session: SessionDoc): SpaceProfile[] {
   const ordered = [...order.filter((id) => byId.has(id)), ...publicSpaces.map(([id]) => id).filter((id) => !order.includes(id))];
   const spots: SpaceProfile[] = [];
   const seen = new Set<string>();
+
   for (const id of ordered) {
     const space = byId.get(id)!;
-    const profileId = typeof space.profileId === "string" && space.profileId ? space.profileId : id;
+    const profileId = isString(space.profileId) && space.profileId ? space.profileId : id;
     const engine = profileId === DEFAULT_SPACE_ID ? "" : profileId;
     const directory = engine ? (process.platform === "darwin" ? `Profile ${engine}` : engine) : "Default";
     if (seen.has(directory)) continue;
     seen.add(directory);
     const owner = byId.get(profileId);
-    const name = owner && typeof owner.name === "string" && owner.name ? owner.name : typeof space.name === "string" && space.name ? space.name : id;
+    const name = owner && isString(owner.name) && owner.name ? owner.name : isString(space.name) && space.name ? space.name : id;
     spots.push({ id, name, directory });
   }
+
   return spots;
 }
 
@@ -310,11 +327,12 @@ function hostOf(url: string): string {
 }
 
 function firstString(...values: unknown[]): string {
-  for (const value of values) if (typeof value === "string" && value) return value;
+  for (const value of values) if (isString(value) && value) return value;
+
   return "";
 }
 
-function messageOf(error: unknown): string {
+function messageOf<T>(error: T): string {
   return error instanceof Error ? error.message : String(error);
 }
 

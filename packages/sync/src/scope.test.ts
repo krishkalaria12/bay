@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Clock } from "./hlc.ts";
+import type { JsonValue } from "./canon.ts";
 import {
   compact,
   emptyScope,
@@ -15,13 +16,16 @@ import {
 } from "./scope.ts";
 
 type Entry = { payload: string; hiddenFrom: Set<string>; partialFor: Set<string>; at: number };
+
 class Folder {
   scopes = new Map<string, Map<string, Entry>>();
   counter = 0;
   now = 0;
   scope(name: string) {
     let s = this.scopes.get(name);
+
     if (!s) this.scopes.set(name, (s = new Map()));
+
     return s;
   }
   transport(device: string): Transport {
@@ -29,17 +33,22 @@ class Folder {
       write: async (scope, payload) => {
         const id = `f${++this.counter}`;
         this.scope(scope).set(id, { payload, hiddenFrom: new Set(), partialFor: new Set(), at: this.now });
+
         return id;
       },
       read: async (scope, known): Promise<Listing> => {
         const listing: Listing = { files: [], pending: [], damaged: [], present: [] };
+
         for (const [id, e] of this.scope(scope)) {
           listing.present.push(id);
+
           if (known.includes(id)) continue;
+
           if (e.hiddenFrom.has(device)) listing.pending.push(id);
           else if (e.partialFor.has(device)) listing.damaged.push({ id, age: 0 });
           else listing.files.push({ id, payload: e.payload });
         }
+
         return listing;
       },
       remove: async (scope, ids) => {
@@ -53,8 +62,8 @@ class Folder {
 }
 
 class Device {
-  store = new Map<string, unknown>();
-  settings = new Map<string, unknown>();
+  store = new Map<string, JsonValue>();
+  settings = new Map<string, JsonValue>();
   state: ScopeState = emptyScope();
   clock: Clock;
   offset = 0;
@@ -79,7 +88,9 @@ class Device {
         extract: () => ({ values: new Map(this.store) }),
         apply: (visible, changed) => {
           for (const k of changed) {
-            if (visible.has(k)) this.store.set(k, visible.get(k));
+            const value = visible.get(k);
+
+            if (value !== undefined) this.store.set(k, value);
             else this.store.delete(k);
           }
         },
@@ -89,29 +100,39 @@ class Device {
         adoptRemoteOnJoin: true,
         extract: () => ({ values: new Map(this.settings) }),
         apply: (visible, changed) => {
-          for (const k of changed) if (visible.has(k)) this.settings.set(k, visible.get(k));
+          for (const k of changed) {
+            const value = visible.get(k);
+
+            if (value !== undefined) this.settings.set(k, value);
+          }
         },
       },
     ];
   }
   async sync() {
     const base = this.folder.transport(this.id);
+
     const transport: Transport = {
       ...base,
       write: async (scope, payload) => {
         const fail = this.failWrite;
         delete this.failWrite;
+
         if (fail === "before") throw new Error("offline");
         const id = await base.write(scope, payload);
+
         if (fail === "after") throw new Error("timed out");
+
         return id;
       },
       read: async (scope, known) => {
         const listing = await base.read(scope, known);
         this.onRead?.();
+
         return listing;
       },
     };
+
     return syncScope({
       scope: "s",
       state: this.state,
@@ -124,7 +145,7 @@ class Device {
     });
   }
   relaunch() {
-    this.state = JSON.parse(JSON.stringify(this.state)) as ScopeState;
+    this.state = JSON.parse(JSON.stringify(this.state));
     this.clock = new Clock(this.id, this.clock.last, () => this.time());
   }
   // What's on disk: the state as last saved, and the batches persisted since.
@@ -132,22 +153,24 @@ class Device {
   savedClock: string | null = null;
   journal = new Map<number, LogFile>();
   persist(batches: LogFile[]) {
-    for (const f of batches) this.journal.set(f.seq, JSON.parse(JSON.stringify(f)) as LogFile);
+    for (const f of batches) this.journal.set(f.seq, JSON.parse(JSON.stringify(f)));
   }
   save() {
     this.saved = JSON.stringify(this.state);
     this.savedClock = this.clock.last;
+
     for (const seq of this.journal.keys()) if (seq <= this.state.seq) this.journal.delete(seq);
   }
   // Quit without saving: back to what's on disk; the store keeps its edits.
   crash() {
-    this.state = JSON.parse(this.saved) as ScopeState;
+    this.state = JSON.parse(this.saved);
     this.clock = new Clock(this.id, this.savedClock, () => this.time());
     restoreJournal(this.state, [...this.journal.values()], this.clock);
   }
 }
 
 const snapshot = (d: Device) => Object.fromEntries([...d.store].sort(([a], [b]) => a.localeCompare(b)));
+
 async function syncAll(devices: Device[], rounds = 2) {
   for (let i = 0; i < rounds; i++) for (const d of devices) await d.sync();
 }
@@ -219,6 +242,7 @@ test("clock skew: an edit made after seeing another device's wins even with a sl
   folder.now += 1000;
   a.store.set("x:k", "A, after C");
   await syncAll([a, b, c]);
+
   for (const d of [a, b, c]) assert.equal(d.store.get("x:k"), "A, after C");
 });
 
@@ -264,6 +288,7 @@ test("a local edit made while files are read isn't overwritten", async () => {
     b.store.set("x:k", "B, typed during the read");
     b.onRead = undefined;
   };
+
   await b.sync();
   assert.equal(b.store.get("x:k"), "B, typed during the read");
   await syncAll([a, b]);
@@ -274,33 +299,44 @@ test("three devices, random edits, sync orders and crashes, converge", async () 
   let seed = 7;
   const random = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
   let compactions = 0;
+
   for (let run = 0; run < 40; run++) {
     const folder = new Folder();
     const opts = { compactAfterFiles: 6, compactInterval: 0 };
     const devices = ["devA", "devB", "devC"].map((id) => new Device(id, folder, opts));
+
     for (let step = 0; step < 40; step++) {
       folder.now += Math.floor(random() * 50);
       const d = devices[Math.floor(random() * 3)]!;
       const key = `x:${Math.floor(random() * 6)}`;
       const r = random();
+
       if (r < 0.5) d.store.set(key, `${d.id}-${step}`);
       else if (r < 0.7) d.store.delete(key);
       else if (r < 0.75) d.relaunch();
       else if (r < 0.8) d.crash();
       else await d.sync();
+
       if (random() < 0.4) d.save();
+
       if (random() < 0.3) await devices[Math.floor(random() * 3)]!.sync();
+
       for (const e of folder.scope("s").values()) {
         if (random() < 0.15) e.hiddenFrom.add(devices[Math.floor(random() * 3)]!.id);
+
         if (random() < 0.1) e.partialFor.add(devices[Math.floor(random() * 3)]!.id);
+
         if (random() < 0.3) e.hiddenFrom.clear();
+
         if (random() < 0.3) e.partialFor.clear();
       }
     }
+
     for (const e of folder.scope("s").values()) {
       e.hiddenFrom.clear();
       e.partialFor.clear();
     }
+
     await syncAll(devices, 3);
     compactions += [...folder.scope("s").values()].filter((e) => e.payload.includes('"snapshot"')).length;
     const [a, b, c] = devices;
@@ -308,6 +344,7 @@ test("three devices, random edits, sync orders and crashes, converge", async () 
     assert.deepEqual(snapshot(b!), snapshot(c!), `run ${run}`);
     assert.deepEqual(a!.state.records, b!.state.records, `run ${run}`);
   }
+
   assert.ok(compactions > 0);
 });
 
@@ -330,7 +367,9 @@ test("an old snapshot put back after its tombstones were collected doesn't bring
   folder.now += 30 * day;
   a.store.set("x:later", 3);
   await syncAll([a, b]);
+
   for (const d of [a, b]) await compact(d.state, folder.transport(d.id), "s", d.id, folder.now, { ...opts, pruneGrace: 0 }, true);
+
   for (const d of [a, b]) assert.equal(d.state.records["x:secret"], undefined, `${d.id} collected the tombstone`);
   assert.equal(folder.scope("s").has(oldId), false);
 
@@ -351,6 +390,7 @@ test("a failed write is retried as the same batch, even when the file did land",
   const folder = new Folder();
   const a = new Device("devA", folder);
   const b = new Device("devB", folder);
+
   for (const fail of ["after", "before"] as const) {
     a.store.set(`x:${fail}`, 1);
     a.failWrite = fail;
@@ -359,6 +399,7 @@ test("a failed write is retried as the same batch, even when the file did land",
     await syncAll([a, b]);
     assert.deepEqual(snapshot(b), snapshot(a), fail);
   }
+
   assert.equal(b.store.get("x:after-next"), 2);
   const files = [...folder.scope("s").values()].map((e) => e.payload);
   assert.equal(files.length, new Set(files).size + 1, "only the batch whose write threw after landing is there twice");

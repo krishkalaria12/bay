@@ -1,6 +1,7 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
+import * as v from "valibot";
 import { addSecret } from "./redact.ts";
 import { checkControlFile } from "./controlFileSecurity.ts";
 import { expandHome, isRecord } from "./util.ts";
@@ -78,10 +79,13 @@ async function fromPort(port: number): Promise<Endpoint> {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     answer = await response.json();
   } catch (error) {
-    throw new EndpointError(`no DevTools server answers on 127.0.0.1:${port} (${reason(error)})`);
+    throw new EndpointError(`no DevTools server answers on 127.0.0.1:${port} (${reason(error instanceof Error ? error : String(error))})`);
   }
+
   const ws = isRecord(answer) ? answer.webSocketDebuggerUrl : null;
-  if (typeof ws !== "string") throw new EndpointError(`127.0.0.1:${port}/json/version has no webSocketDebuggerUrl`);
+
+  if (!v.is(v.string(), ws)) throw new EndpointError(`127.0.0.1:${port}/json/version has no webSocketDebuggerUrl`);
+
   return fromWs(ws, `--port ${port}`);
 }
 
@@ -90,21 +94,27 @@ export function fromControlFile(path: string): Endpoint {
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch (error) {
+    // SAFETY: openSync throws node:fs ErrnoExceptions, which carry the `code` this branches on.
     const code = (error as NodeJS.ErrnoException).code;
+
     if (code === "ENOENT") throw new EndpointError(NOT_REACHABLE);
+
     if (code === "ELOOP") throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} is a symbolic link)`);
-    throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} ${messageOf(error)})`);
+    throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} ${messageOf(error instanceof Error ? error : String(error))})`);
   }
+
   let raw: string;
+
   try {
     const info = fstatSync(fd);
+
     if (!info.isFile()) throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} isn't a regular file)`);
     checkControlFile(path, fd);
     if (info.size > MAX_CONTROL_FILE) throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} is too big)`);
     raw = readFileSync(fd, { encoding: "utf8" });
   } catch (error) {
     if (error instanceof EndpointError) throw error;
-    throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} ${messageOf(error)})`);
+    throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} ${messageOf(error instanceof Error ? error : String(error))})`);
   } finally {
     closeSync(fd);
   }
@@ -119,18 +129,24 @@ export function fromControlFile(path: string): Endpoint {
   const browser = control.browser;
   const token = control.token;
   const pid = control.pid;
-  if (typeof port !== "number" || !Number.isInteger(port) || port <= 0 || port >= 65536) {
+
+  if (!v.is(v.number(), port) || !Number.isInteger(port) || port <= 0 || port >= 65536) {
     throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} has no valid port)`);
   }
-  if (typeof browser !== "string" || !BROWSER_PATH.test(browser)) {
+
+  if (!v.is(v.string(), browser) || !BROWSER_PATH.test(browser)) {
     throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} has no valid browser path)`);
   }
-  if (typeof token !== "string" || !TOKEN.test(token)) {
+
+  if (!v.is(v.string(), token) || !TOKEN.test(token)) {
     throw new EndpointError(`${NOT_REACHABLE} (${basename(path)} has no valid token)`);
   }
+
   addSecret(token);
-  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 1 || !alive(pid)) throw new EndpointError(NOT_REACHABLE);
+
+  if (!v.is(v.number(), pid) || !Number.isInteger(pid) || pid <= 1 || !alive(pid)) throw new EndpointError(NOT_REACHABLE);
   const query = `token=${encodeURIComponent(token)}`;
+
   return {
     ws: `ws://127.0.0.1:${port}${browser}?${query}`,
     source: path,
@@ -142,18 +158,20 @@ export function fromControlFile(path: string): Endpoint {
 export function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch (error) {
+    // SAFETY: process.kill throws node:fs ErrnoExceptions; EPERM means the pid exists but belongs to another user.
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
-function reason(error: unknown): string {
+function reason(error: Error | string): string {
   if (error instanceof Error) return error.message || error.name;
-  return String(error) || "unreachable";
+
+  return error || "unreachable";
 }
 
-function messageOf(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
+function messageOf(error: Error | string): string {
+  return error instanceof Error ? error.message : error;
 }

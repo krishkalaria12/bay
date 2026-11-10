@@ -11,6 +11,7 @@ import { platformWords } from "../../lib/platformWords";
 export async function appPaletteActions(windowId: string, onDismiss: () => void): Promise<PaletteMenuAction[]> {
   const app = systemInfo();
   const isDefault = await isDefaultBrowser().catch(() => false);
+
   const action = (entry: PaletteMenuAction): PaletteMenuAction => ({
     ...entry,
     run: async () => {
@@ -18,6 +19,7 @@ export async function appPaletteActions(windowId: string, onDismiss: () => void)
       onDismiss();
     },
   });
+
   const items: PaletteMenuAction[] = [
     { id: "feedback", title: "Send Feedback", icon: "text.bubble", run: () => sendFeedback(windowId) },
     ...(releaseNotesUrl() ? [{ id: "changelog", title: "Changelog", icon: "doc.text", run: () => openReleaseNotesPage(windowId) }] : []),
@@ -52,5 +54,6 @@ export async function appPaletteActions(windowId: string, onDismiss: () => void)
     },
     { id: "settings", title: "Settings", icon: "gearshape", hint: shortcutForCommand("openSettings", "⌘,"), run: () => openSettings() },
   ];
+
   return items.map(action);
 }

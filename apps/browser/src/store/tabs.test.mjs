@@ -1,6 +1,7 @@
 // Where tabs open, which tab shows when one closes, and the structures that must stay whole (groups, splits).
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const organize = await import("./tabTidying.ts");
@@ -9,6 +10,7 @@ const media = await import("../components/media/state.ts");
 
 const S = () => useBrowser.getState();
 const tabLists = await import("./model.ts");
+
 // A window's list: its space's tabs, in sidebar order (store/model.ts).
 const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const view = (w) => model.viewTabIds(S(), w).map((id) => S().tabs[id].url);
@@ -21,11 +23,14 @@ const reset = (settings = {}) => {
   S().hydrate({});
   S().updateSettings({ cmdClickCreatesTabGroup: false, newTabPosition: "bottom", ...settings });
 };
+
 const open = (w, url, opener, background = true) => S().newTab(w, { url: `${url}.com`, openerId: opener, background });
+
 const setup = (...urls) => {
   const w = S().createWindow({ url: `${urls[0]}.com` });
   const ids = [tabsOf(w)[0], ...urls.slice(1).map((u) => S().newTab(w, { url: `${u}.com` }))];
   S().activate(ids[0]);
+
   return [w, ...ids];
 };
 
@@ -101,15 +106,18 @@ test("closing a group that holds the shown tab shows the tab just above the grou
 test("closing a pinned tab selects the regular tab the window showed last, not the neighbour", () => {
   reset();
   let clock = Date.now();
+
   const select = (id) => {
     const now = Date.now;
     Date.now = () => (clock += 1000);
+
     try {
       S().activate(id);
     } finally {
       Date.now = now;
     }
   };
+
   const [w, p, q, , b] = setup("p", "q", "a", "b", "c");
   S().togglePin(p);
   S().togglePin(q);
@@ -202,6 +210,7 @@ test("abandoned New Tab cleanup never closes a window or the tab it shows", () =
 
 test("an extension that took the default search engine controls it until it goes", () => {
   reset();
+
   const ddg = {
     profile: "",
     extensionId: "dcielhccnenaljfdmekhnepaeenphgjp",
@@ -211,6 +220,7 @@ test("an extension that took the default search engine controls it until it goes
     url: "https://duckduckgo.com/?q=%s&t=nnfixture",
     isDefault: true,
   };
+
   const wiki = {
     ...ddg,
     extensionId: "lfkochledepkdapbginilfnephdpkfjc",
@@ -220,6 +230,7 @@ test("an extension that took the default search engine controls it until it goes
     url: "https://en.wikipedia.org/w/index.php?search=%s",
     isDefault: false,
   };
+
   S().updateSettings({ searchEngine: "bing", extensionSearchEngines: [ddg, wiki] });
   assert.equal(controllingSearchExtension(S().settings)?.extensionId, ddg.extensionId);
   assert.equal(defaultSearchEngine(S().settings).id, `extension:${ddg.extensionId}`);
@@ -238,6 +249,7 @@ test("an extension that took the default search engine controls it until it goes
 // 0.2.12: the mini player's × paused the video and jumped to its tab. Dismissing it lasts until the tab plays again.
 test("closing the mini player lasts until its tab plays again", async () => {
   const M = () => media.useMedia.getState();
+
   const report = (overrides = {}) => ({
     title: "Song",
     artist: "Band",
@@ -252,6 +264,7 @@ test("closing the mini player lasts until its tab plays again", async () => {
     actions: ["play", "pause"],
     ...overrides,
   });
+
   reset();
   const w = S().createWindow({ url: "a.com" });
   const [a] = model.viewTabIds(S(), w);

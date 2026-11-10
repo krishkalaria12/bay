@@ -25,9 +25,9 @@ public class AreaLightModule: Module {
     }.runOnQueue(.main)
 
     View(AreaLightView.self) {
-      Prop("shapeFrame") { (view: AreaLightView, frame: [Double]) in
+      Prop("areaRect") { (view: AreaLightView, frame: [Double]) in
         guard frame.count == 4 else { return }
-        view.params.shapeFrame = SIMD4(frame.map(Float.init))
+        view.params.areaRect = SIMD4(frame.map(Float.init))
       }
       Prop("cornerRadius") { (view: AreaLightView, v: Double) in view.params.cornerRadius = Float(v) }
       Prop("palette") { (view: AreaLightView, value: [String]) in view.setPalette(value) }

@@ -1,4 +1,5 @@
 import { requireNativeModule, type EventSubscription } from "@bay/platform/native";
+import * as v from "valibot";
 import type { ContentBlockerState, ContentBlockerStats } from "./contentBlocker";
 import type { DisplayMediaSource } from "./ChromiumView";
 import type { ExternalAppAllowance } from "./externalApps";
@@ -29,10 +30,13 @@ export type EngineBoost = { host: string; userCss: string; css: string; script: 
 export type EngineBoostStyle = { palette: string; sites: Record<string, string> };
 
 export function valueOr<T extends object, F>(result: Result<T>, fallback: F): T | F {
-  if (result && typeof result === "object" && "error" in result) {
+  if (v.is(v.object({ error: v.string() }), result)) {
     console.warn(`[cef] ${result.error}`);
+
     return fallback;
   }
+
+  // SAFETY: `Result<T>` is either `T` or the error object just ruled out, so what is left is `T`.
   return result as T;
 }
 

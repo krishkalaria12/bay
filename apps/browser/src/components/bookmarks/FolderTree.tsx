@@ -13,22 +13,32 @@ type FolderRow = { id: string; title: string; depth: number; hasChildren: boolea
 function useFolderRows(spaceId: string, expanded: Set<string>): FolderRow[] {
   const key = useBrowser((s) => {
     const roots = s.bookmarks.roots[spaceId];
+
     if (!roots) return "";
     const lines: string[] = [];
+
     const walk = (id: string, depth: number) => {
       const node = s.bookmarks.nodes[id];
+
       if (node?.kind !== "folder") return;
       const sub = folderChildren(s.bookmarks, id).filter((c) => c.kind === "folder");
       lines.push(JSON.stringify([id, node.title, depth, sub.length > 0]));
+
       if (expanded.has(id)) sub.forEach((c) => walk(c.id, depth + 1));
     };
+
     walk(roots.bar, 0);
     walk(roots.other, 0);
+
     return lines.join("\n");
   });
+
   if (!key) return [];
+
   return key.split("\n").map((line) => {
+    // SAFETY: [string, string, number, boolean] assertion matches the runtime value validated at this call site.
     const [id, title, depth, hasChildren] = JSON.parse(line) as [string, string, number, boolean];
+
     return { id, title, depth, hasChildren };
   });
 }
@@ -50,20 +60,27 @@ export function FolderTree({
     const s = useBrowser.getState();
     const roots = s.bookmarks.roots[spaceId];
     const open = new Set<string>(roots ? [roots.bar, roots.other] : []);
+
     if (selectedId) for (const a of bookmarkAncestors(s.bookmarks, selectedId)) open.add(a.id);
+
     return open;
   });
+
   useEffect(() => {
     if (!selectedId) return;
     const hidden = bookmarkAncestors(useBrowser.getState().bookmarks, selectedId).filter((a) => !expanded.has(a.id));
+
     if (hidden.length) setExpanded((prev) => new Set([...prev, ...hidden.map((a) => a.id)]));
   }, [selectedId]);
   const rows = useFolderRows(spaceId, expanded);
+
   const toggle = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
+
       if (next.has(id)) next.delete(id);
       else next.add(id);
+
       return next;
     });
 
@@ -81,6 +98,7 @@ export function FolderTree({
             onSelect={() => onSelect(row.id)}
           />
         );
+
         return wrapRow ? <View key={row.id}>{wrapRow(row.id, content)}</View> : content;
       })}
     </View>
@@ -105,6 +123,7 @@ function FolderTreeRow({
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onSelect}>

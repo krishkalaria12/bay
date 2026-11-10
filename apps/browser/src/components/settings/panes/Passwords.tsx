@@ -97,6 +97,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
       setImportStatus(`Imported ${plural(saved, "password")}.`);
       load();
     } catch (e) {
+      // SAFETY: Error).message} assertion matches the runtime value validated at this call site.
       setImportStatus(`Couldn't import that file: ${(e as Error).message}`);
     }
   };

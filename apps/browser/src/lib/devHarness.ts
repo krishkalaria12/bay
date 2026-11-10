@@ -16,6 +16,11 @@ import * as favicons from "./favicons";
 import { probeStore } from "./perfProbe";
 import { useLifecycle } from "./tabLifecycle";
 import { webviews } from "./webviews";
+import type { JsonInput, JsonValue } from "./json";
+
+type DevEvalBody = { result: JsonValue | null } | { error: string };
+
+type DevEvalError = JsonInput | Error;
 
 // The desktop host's documents: one coordinator holds the store, and each window its own views.
 type WebHost = { role: "coordinator" | "window"; windowId?: string };
@@ -42,10 +47,12 @@ export function startDevHarness() {
   probeStore("sidebarUi", useSidebarUi);
   probeStore("favicons", favicons.useFavicons);
   probeStore("lifecycle", useLifecycle);
+
   for (const level of ["error", "warn"] as const) {
     const original = console[level].bind(console);
     console[level] = (...args: unknown[]) => {
       original(...args);
+
       try {
         const line = `${new Date().toISOString()} ${level} ${args.map((a) => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join(" ")}\n`;
         writeDocument(consoleLog, (readDocument(consoleLog) ?? "").slice(-200_000) + line);
@@ -130,11 +137,7 @@ export function startDevHarness() {
       return require("../components/sidebar/contextMenus");
     },
     // Nested-folder acceptance tests inspect the same tree and geometry the sidebar renders.
-    get folders(): {
-      model: typeof import("../store/folders");
-      entries: typeof import("../components/sidebar/sidebarEntries");
-      geometry: typeof import("../components/sidebar/rowGeometry");
-    } {
+    get folders() {
       return {
         model: require("../store/folders"),
         entries: require("../components/sidebar/sidebarEntries"),
@@ -166,20 +169,11 @@ export function startDevHarness() {
       return require("../components/developer/devMode");
     },
     // Boosts: the store, the editor and the model (scripts/boosts-test.mjs).
-    get boosts(): {
-      state: typeof import("../components/boosts/state");
-      editor: typeof import("../components/boosts/editor");
-      model: typeof import("./boosts");
-    } {
+    get boosts() {
       return { state: require("../components/boosts/state"), editor: require("../components/boosts/editor"), model: require("./boosts") };
     },
     // Capture's sessions and actions (scripts/capture-test.mjs).
-    get library(): {
-      state: typeof import("../components/library/state");
-      actions: typeof import("../components/library/actions");
-      canvases: typeof import("../components/library/EaselPage").easelCanvases;
-      canvasStates: typeof import("../components/library/EaselPage").easelCanvasStates;
-    } {
+    get library() {
       return {
         state: require("../components/library/state"),
         actions: require("../components/library/actions"),
@@ -191,14 +185,7 @@ export function startDevHarness() {
       return require("../components/capture/state");
     },
     // Arc's small habits (scripts/interaction-habits-test.mjs): unread counts, Little Bay from any app and put away, ⌃⌘J.
-    get arcGaps(): {
-      unread: typeof import("./unreadBadges");
-      littleBayAccess: typeof import("../components/littleBay/access");
-      putAway: typeof import("../components/littleBay/putAway");
-      alerts: typeof import("../activity/meetingAlerts");
-      calendar: typeof import("../activity/calendar").useCalendar;
-      menuState: typeof import("./shellBridge").menuState;
-    } {
+    get arcGaps() {
       return {
         unread: require("./unreadBadges"),
         littleBayAccess: require("../components/littleBay/access"),
@@ -213,10 +200,12 @@ export function startDevHarness() {
       return require("./hoverShift");
     },
     // Live folders without a service: a test makes a folder and hands it items.
-    get live(): { store: typeof import("../activity/activityStore"); engine: typeof import("../activity/activityEngine") } {
+    get live() {
       return { store: require("../activity/activityStore"), engine: require("../activity/activityEngine") };
     },
   };
+
+  // SAFETY: nn is the dev harness's own surface, read only by dev scripts.
   (globalThis as { nn?: typeof nn }).nn = nn;
   // The launcher evaluates over DevTools: a host's document snapshot doesn't see files it didn't write.
   if (host) return;
@@ -226,14 +215,17 @@ export function startDevHarness() {
     function pollDevEval() {
       const source = readDocument("dev-eval.js");
       const id = scriptId(source);
+
       if (!source || !id || id === lastId) return;
       lastId = id;
-      const done = (body: object) => writeDocument("dev-eval-result.json", JSON.stringify({ id, ...body }));
+      const done = (body: DevEvalBody) => writeDocument("dev-eval-result.json", JSON.stringify({ id, ...body }));
+
       try {
-        const fn = new Function("nn", source) as (n: typeof nn) => unknown;
+        // SAFETY: new Function builds the dev script, whose return is its JSON result for the harness file.
+        const fn = new Function("nn", source) as (n: typeof nn) => JsonInput;
         Promise.resolve(fn(nn)).then(
           (result) => done({ result: result ?? null }),
-          (error: unknown) => done({ error: String(error) }),
+          (error: DevEvalError) => done({ error: String(error) }),
         );
       } catch (error) {
         done({ error: String(error) });

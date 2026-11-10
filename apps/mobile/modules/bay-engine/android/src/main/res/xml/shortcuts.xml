@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- App icon quick actions (B15): each opens Bay with a `bay://` command BrowserScreen answers (B9). -->
+    <shortcut
+        android:shortcutId="new_tab"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcuts_new_tab_short"
+        android:shortcutLongLabel="@string/shortcuts_new_tab_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="bay://new-tab" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="private_tab"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcuts_private_tab_short"
+        android:shortcutLongLabel="@string/shortcuts_private_tab_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="bay://private-tab" />
+    </shortcut>
+</shortcuts>

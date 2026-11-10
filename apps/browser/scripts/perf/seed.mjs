@@ -33,6 +33,7 @@ const HOSTS = [
   "www.reddit.com",
   "arstechnica.com",
 ];
+
 const WORDS = [
   "performance",
   "react",
@@ -69,18 +70,22 @@ const WORDS = [
   "color",
   "download",
 ];
+
 const words = (n) => Array.from({ length: n }, () => pick(WORDS)).join(" ");
 const title = (n) => words(n).replace(/^\w/, (c) => c.toUpperCase());
 
 export function buildSeed(origin, appVersion = "") {
   const now = Date.now();
+
   const spaces = {
     default: { id: "default", name: "Personal", color: "plum", icon: null, createdAt: 0 },
     work: { id: "work", name: "Work", color: "blue", icon: null, createdAt: 1 },
   };
+
   const windowId = "w-bench";
   const tabs = [];
   const groups = [];
+
   const tab = (spaceId, i, extra = {}) => {
     const t = {
       id: `t-${spaceId}-${i}`,
@@ -100,15 +105,21 @@ export function buildSeed(origin, appVersion = "") {
       lastActiveAt: now - (400 - i) * 60_000,
       ...extra,
     };
+
     tabs.push(t);
+
     return t;
   };
+
   const layoutProfile = (spaceId, count, pinned, groupSizes) => {
     const ids = [];
     let i = 0;
+
     for (; i < pinned; i++) ids.push(tab(spaceId, i, { pinned: true, pinnedUrl: `${origin}/p/${spaceId}-${i}` }).id);
+
     for (const [g, size] of groupSizes.entries()) {
       const members = [];
+
       for (let k = 0; k < size; k++, i++) members.push(tab(spaceId, i).id);
       groups.push({
         id: `g-${spaceId}-${g}`,
@@ -124,12 +135,16 @@ export function buildSeed(origin, appVersion = "") {
       });
       ids.push(...members);
     }
+
     for (; i < count; i++) ids.push(tab(spaceId, i).id);
+
     return ids;
   };
+
   const personal = layoutProfile("default", 158, 8, [5, 5]);
   const work = layoutProfile("work", 42, 4, [4]);
   const active = { default: personal[20], work: work[10] };
+
   for (const [p, id] of Object.entries(active)) tabs.find((t) => t.id === id).lastActiveAt = now - 1000 * (p === "default" ? 1 : 2);
 
   const session = {
@@ -161,13 +176,17 @@ export function buildSeed(origin, appVersion = "") {
 
   const entries = [];
   const seen = new Set();
+
   while (entries.length < 5000) {
     const host = pick(HOSTS);
+
     const path =
       host === "github.com"
         ? `/${pick(["facebook", "microsoft", "expo", "nodejs"])}/${pick(["react", "react-native", "hermes", "node"])}/${pick(["pull", "issues"])}/${Math.floor(rand() * 40000)}`
         : `/${words(2).replace(/ /g, "/")}/${Math.floor(rand() * 10000)}`;
+
     const url = `https://${host}${path}`;
+
     if (seen.has(url)) continue;
     seen.add(url);
     const visits = 1 + Math.floor(rand() ** 3 * 40);
@@ -175,24 +194,30 @@ export function buildSeed(origin, appVersion = "") {
     const times = Array.from({ length: Math.min(visits, 50) }, (_, k) => last - k * 3_600_000).reverse();
     entries.push({ url, title: title(4 + Math.floor(rand() * 6)), favicon: `https://${host}/favicon.ico`, visits, lastVisit: last, visitTimes: times });
   }
+
   entries.sort((a, b) => b.lastVisit - a.lastVisit);
   const history = { version: 2, history: { default: entries, work: entries.slice(0, 800) } };
 
   const nodes = {};
   const roots = {};
   let n = 0;
+
   const folder = (parentId, name) => {
     const id = `bm-${n++}`;
     nodes[id] = { kind: "folder", id, parentId, title: name, children: [], addedAt: now };
+
     if (parentId) nodes[parentId].children.push(id);
+
     return id;
   };
+
   for (const spaceId of ["default", "work"]) {
     const bar = folder(null, "Bookmarks Bar");
     const other = folder(null, "Other Bookmarks");
     roots[spaceId] = { bar, other };
     const count = spaceId === "default" ? 900 : 100;
     const folders = [bar, other, ...Array.from({ length: 20 }, (_, k) => folder(k % 2 ? bar : other, title(2)))];
+
     for (let k = 0; k < count; k++) {
       const parentId = k < 12 ? bar : pick(folders);
       const id = `bm-${n++}`;
@@ -201,6 +226,7 @@ export function buildSeed(origin, appVersion = "") {
       nodes[parentId].children.push(id);
     }
   }
+
   const bookmarks = { version: 2, bookmarks: { nodes, roots } };
 
   return {
@@ -216,13 +242,15 @@ export function buildSeed(origin, appVersion = "") {
 
 export function writeSeed(dir, origin, appVersion) {
   mkdirSync(dir, { recursive: true });
+
   for (const [name, value] of Object.entries(buildSeed(origin, appVersion))) {
-    writeFileSync(join(dir, name), typeof value === "string" ? value : JSON.stringify(value));
+    writeFileSync(join(dir, name), Object.prototype.toString.call(value) === "[object String]" ? value : JSON.stringify(value));
   }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [dir, origin = "http://127.0.0.1:47817", version = ""] = process.argv.slice(2);
+
   if (!dir) throw new Error("usage: node seed.mjs <data dir> [server origin] [app version]");
   writeSeed(dir, origin, version);
 }

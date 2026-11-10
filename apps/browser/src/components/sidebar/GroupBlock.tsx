@@ -14,8 +14,8 @@ import { IconButton } from "../ui/primitives";
 import { commitRename, endRename, startRename } from "./actions";
 import { useDragItem, useDropInto } from "./dnd";
 import { Fold, useFold } from "./Fold";
+import { GROUP_INDENT } from "./constants";
 import { keptEntry } from "./rowGeometry";
-import { GROUP_BORDER, GROUP_PAD } from "./constants";
 import { useGroupEntries } from "./sidebarEntries";
 import { dismissHover, useRowHover } from "./hover";
 import { openGroupMenu } from "./contextMenus";
@@ -30,15 +30,16 @@ import { closeGroup, updateGroup } from "../../runtime/organizeActions";
 export const GroupBlock = memo(function GroupBlock({ groupId, section }: { groupId: string; section: "list" | "pinnedGroups" }) {
   const metrics = useSidebarMetrics();
   const windowId = useWindowId();
-  const tokens = useSidebarTokens();
   const collapsed = useQuietBrowser((s) => !!s.groups[groupId]?.collapsed);
-  const color = useQuietBrowser((s) => s.groups[groupId]?.color ?? null);
   const tabIds = useQuietBrowser((s) => s.groups[groupId]?.tabIds.join(",") ?? "");
   const entries = useGroupEntries(groupId);
+
   const selectedInside = useQuietBrowser((s) => {
     const selection = s.selection[windowId];
+
     return !!selection?.length && !!s.groups[groupId]?.tabIds.some((id) => selection.includes(id));
   });
+
   const spaceId = usePageSpaceId();
   // The window's active tab, when it's a member: it stays out while the group is collapsed, as in Arc and Dia.
   const activeEntry = useQuietBrowser((s) => keptEntry(s, windowId, spaceId, entries));
@@ -53,19 +54,16 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
 
   const fold = useFold(collapsed);
 
-  const spec = color ? GROUP_COLORS[color] : null;
-  const fill = spec ? withAlpha(spec.hex, 0.16) : tokens.groupFill;
-  const stroke = spec ? withAlpha(spec.hex, 0.3) : tokens.groupStroke;
-
+  // No box around a group: its tabs sit a little in from its header instead.
   return (
     <Animated.View ref={ref} style={style}>
-      <View style={{ borderRadius: 12, backgroundColor: fill, borderWidth: GROUP_BORDER, borderColor: stroke, paddingHorizontal: GROUP_PAD }}>
         <View ref={headerRef} {...handle}>
           <GroupHeader groupId={groupId} windowId={windowId} collapsed={collapsed} open={fold.open} />
         </View>
         {/* A collapsed group's members aren't mounted (a big group would otherwise cost as much as if it were open); they
             mount for the animation. Selected members stay mounted: a multi-tab drag gathers its rows from the mounted
             ones (sidebar/dnd.tsx). The active tab stays out while the group is collapsed, as in Arc and Dia. */}
+      <View style={{ paddingLeft: GROUP_INDENT }}>
         <Fold
           fold={fold}
           collapsed={collapsed}
@@ -73,7 +71,6 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
           keep={activeEntry}
           gap={layout.rowGap}
           rowHeight={metrics.rowHeight}
-          padBottom={GROUP_PAD}
           mountClosed={selectedInside}
           footer={<Animated.View ref={tailRef} style={tailStyle} />}
         />
@@ -109,8 +106,11 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
   const { hovered, hoverProps } = useRowHover(windowId, collapsed && !renaming ? { kind: "group", id: groupId } : null);
   const countdown = useMeetingCountdown(groupId);
   const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${(open.get() - 1) * 90}deg` }] }));
+
   if (!group) return null;
   const target = { kind: "group" as const, id: groupId };
+  // With no fill to carry it, a group's color shows on its name.
+  const nameColor = group.color ? GROUP_COLORS[group.color].hex : tokens.groupTitle;
 
   return (
     <SidebarKeyboardRowView
@@ -134,9 +134,9 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
         >
           {({ pressed }) => (
             <Surface
-              fill={hex(dropInto || pressed ? theme.tabPressed : hovered ? tokens.groupHeaderHover : "rgba(0,0,0,0)")}
+              fill={hex(dropInto || pressed ? theme.tabPressed : hovered ? theme.tabHover : "rgba(0,0,0,0)")}
               cornerRadius={10}
-              style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - GROUP_PAD }}
+              style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}
             >
               {group.icon || firstTab ? (
                 <TabIcon url={firstTab?.url ?? ""} favicon={firstTab?.favicon} icon={group.icon ?? firstTab?.customIcon} spaceId={firstTab?.spaceId} />
@@ -164,12 +164,12 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
                       text={label}
                       fontSize={13}
                       weight="medium"
-                      color={tokens.groupTitle}
+                      color={nameColor}
                       style={{ position: "absolute", left: 0, right: 0, top: 0, height: 18 }}
                     />
                   </View>
                   <Animated.View style={[{ width: 10, height: 10, marginLeft: 0, alignItems: "center", justifyContent: "center" }, chevron]}>
-                    <Symbol name="chevron.down" size={9} weight="semibold" color={withAlpha(tokens.groupTitle, 0.5)} style={{ width: 10, height: 10 }} />
+                    <Symbol name="chevron.down" size={9} weight="semibold" color={withAlpha(nameColor, 0.5)} style={{ width: 10, height: 10 }} />
                   </Animated.View>
                 </Animated.View>
               )}

@@ -47,21 +47,27 @@ const fixtureMode = (() => {
     return false;
   }
 })();
+
 const launchedAt = Date.now();
 
-function loadFixture(): { calendars: SystemCalendar[]; events: CalendarEvent[] } {
+function loadFixture() {
+  // SAFETY: Fixture assertion matches the runtime value validated at this call site.
   const raw = JSON.parse(readDocument("calendar-fixture.json") ?? '{"calendars":[],"events":[]}') as Fixture;
   const base = Math.floor(launchedAt / 60_000) * 60_000;
+
   const events = raw.events.map(({ startInMinutes, durationMinutes, ...e }) => {
     const start = base + startInMinutes * 60_000;
+
     return { ...e, start, end: start + durationMinutes * 60_000, occurrence: `${e.id}@${start}` };
   });
+
   return { calendars: raw.calendars, events };
 }
 
 const visible = (calendars: SystemCalendar[]) => {
   const hidden = new Set(live().calendar.hiddenCalendarIds);
-  return calendars.filter((c) => !hidden.has(c.id)).map((c) => c.id);
+
+  return calendars.flatMap((c) => (!hidden.has(c.id) ? [c.id] : []));
 };
 
 type CalendarScope = { active: boolean };

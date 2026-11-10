@@ -9,6 +9,7 @@ import type { ToolbarPalette } from "./colors";
 
 export type ClickModifiers = { metaKey: boolean; ctrlKey?: boolean; altKey: boolean; shiftKey: boolean };
 export function modifiersOf(e: GestureResponderEvent | undefined): ClickModifiers {
+  // SAFETY: Partial<ClickModifiers> assertion matches the runtime value validated at this call site.
   const n = (e?.nativeEvent ?? {}) as Partial<ClickModifiers>;
   return { metaKey: !!n.metaKey, ctrlKey: !!n.ctrlKey, altKey: !!n.altKey, shiftKey: !!n.shiftKey };
 }

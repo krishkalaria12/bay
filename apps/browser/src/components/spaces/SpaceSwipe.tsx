@@ -117,10 +117,19 @@ function TintPage({ themeKey, from, slot }: { themeKey: string; from: number | n
 }
 
 const devAreas = new Map<string, React.RefObject<SwipeAreaHandle | null>>();
+
 // DEV: every onSwipe JS received, to compare with the native emits.
 const received: object[] = [];
+
+type SwipeDevHandle = {
+  received?: () => object[];
+  sidebar?: (windowId: string) => SwipeAreaHandle | null;
+  strip?: (windowId: string) => SwipeAreaHandle | null;
+};
+
 if (__DEV__) {
-  const g = globalThis as { nnSwipe?: Record<string, unknown> };
+  // SAFETY: nnSwipe is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  const g = globalThis as { nnSwipe?: SwipeDevHandle };
   g.nnSwipe = {
     ...g.nnSwipe,
     received: () => received.splice(0),

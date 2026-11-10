@@ -26,7 +26,13 @@ export function SearchStep() {
   const all = useBrowser((s) => searchEngines(s.settings));
   const [engineId, setEngineId] = useState(() => useBrowser.getState().settings.searchEngine);
   const [typed, setTyped] = useState(() => useBrowser.getState().settings.commandBarPreference);
-  const offered = ENGINES.map((id) => all.find((e) => e.id === id)).filter((e): e is SearchEngine => !!e);
+
+  const offered = ENGINES.flatMap((id) => {
+    const found = all.find((e) => e.id === id);
+
+    return found ? [found] : [];
+  });
+
   const current = all.find((e) => e.id === engineId);
   const engines = current && !offered.includes(current) ? [...offered.slice(0, ENGINES.length - 1), current] : offered;
 
@@ -77,6 +83,7 @@ export function SearchStep() {
 function CommandBarPreview({ engine, typed }: { engine: SearchEngine | undefined; typed: Settings["commandBarPreference"] }) {
   const colors = useOnboardingColors();
   const site = <Result key="site" icon={<Favicon url="https://github.com" size={14} />} title="github.com" detail="Open" highlighted={typed === "website"} />;
+
   const search = (
     <Result
       key="search"
@@ -92,6 +99,7 @@ function CommandBarPreview({ engine, typed }: { engine: SearchEngine | undefined
       highlighted={typed === "search"}
     />
   );
+
   return (
     <View
       style={{
@@ -117,6 +125,7 @@ function CommandBarPreview({ engine, typed }: { engine: SearchEngine | undefined
 
 function Result({ icon, title, detail, highlighted }: { icon: ReactNode; title: string; detail: string; highlighted: boolean }) {
   const colors = useOnboardingColors();
+
   return (
     <View
       style={{

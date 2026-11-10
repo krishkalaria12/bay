@@ -1,4 +1,5 @@
 import { formatShortcut as formatStroke, isMac, menuKeyName, menuShortcutStroke, platformOS, Pressable, View, shortcutLabel } from "@bay/platform";
+import { lookup } from "@bay/core";
 import { cancelShortcutRecording, recordShortcut, Symbol, type MenuShortcut } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Text } from "react-native";
@@ -15,8 +16,9 @@ type Combo = { key: string; modifiers: string[] };
 type Filter = "all" | "customized" | "conflicts";
 
 const MOD_ORDER = ["control", "option", "shift", "command", "function"];
-const MOD_GLYPH: Record<string, string> = { control: "⌃", option: "⌥", shift: "⇧", command: "⌘", function: "🌐" };
-const KEY_NAMES: Record<string, string> = {
+const MOD_GLYPH = { control: "⌃", option: "⌥", shift: "⇧", command: "⌘", function: "🌐" } satisfies Record<string, string>;
+
+const KEY_NAMES = {
   "\t": "⇥",
   "\r": "↩",
   "\u0003": "⌤",
@@ -33,16 +35,14 @@ const KEY_NAMES: Record<string, string> = {
   "": "↘",
   "": "⇞",
   "": "⇟",
-};
+} satisfies Record<string, string>;
 
 export function formatShortcut({ key, modifiers }: Combo): string {
   if (!key) return "";
   if (!isMac) return formatStroke(menuShortcutStroke(menuKeyName(key), modifiers as Parameters<typeof menuShortcutStroke>[1]), platformOS);
-  const mods = MOD_ORDER.filter((m) => modifiers.includes(m))
-    .map((m) => MOD_GLYPH[m])
-    .join("");
+  const mods = MOD_ORDER.flatMap((m) => (modifiers.includes(m) ? [lookup(MOD_GLYPH, m) ?? ""] : [])).join("");
   const code = key.charCodeAt(0);
-  const name = KEY_NAMES[key] ?? (code >= 0xf704 && code <= 0xf717 ? `F${code - 0xf703}` : key.toUpperCase());
+  const name = lookup(KEY_NAMES, key) ?? (code >= 0xf704 && code <= 0xf717 ? `F${code - 0xf703}` : key.toUpperCase());
   return shortcutLabel(mods + name);
 }
 

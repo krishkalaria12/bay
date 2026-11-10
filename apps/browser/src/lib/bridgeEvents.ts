@@ -6,25 +6,42 @@
 // Whatever reaches JS next first applies the held ones, then runs: another event, a timer, a callback, a native
 // module's event (a tab strip transaction, a download). So nothing is reordered, and nothing a user action waits on
 // is held: only page reports wait, and only for the calls already queued behind them.
+import * as v from "valibot";
+
+/** Any JS value reaching the bridge: primitives, arrays, records, functions, symbols and nothing. */
+export type BridgeValue =
+  | string
+  | number
+  | boolean
+  | bigint
+  | null
+  | undefined
+  | symbol
+  | BridgeValue[]
+  | { [key: string]: BridgeValue }
+  | ((...args: never[]) => BridgeValue);
 
 /** React Native's MessageQueue (`__fbBatchedBridge`): every native→JS call and callback runs through these. */
 export type Bridge = {
   __callFunction(module: string, method: string, args: unknown[]): void;
   __invokeCallback(id: number, args: unknown[]): void;
 };
+
 /** Expo's EventEmitter prototype: native modules' events reach their listeners through JSI, not the bridge. */
 export type Emitter = {
-  addListener(this: unknown, name: string, listener: (...args: unknown[]) => unknown): unknown;
-  removeListener(this: unknown, name: string, listener: unknown): unknown;
+  addListener(this: BridgeValue, name: string, listener: BridgeValue): BridgeValue;
+  removeListener(this: BridgeValue, name: string, listener: BridgeValue): BridgeValue;
 };
+
 type Options = {
   /** Runs updates as one React commit (React Native's unstable_batchedUpdates). */
   batch: (update: () => void) => void;
   /** Calls back once the calls queued now have run (also how errors are reported, from a task of their own). */
   schedule: (callback: () => void) => void;
   /** An error a held report threw (the bridge's own guard reports it the same way). */
-  report: (error: unknown) => void;
+  report: (error: BridgeValue) => void;
 };
+
 export type Hold = ReturnType<typeof createHold>;
 
 // The WebView's live page state (packages/nncore WebView.tsx). Opening windows, focus, activation, page commands,
@@ -49,19 +66,22 @@ export function createHold({ batch, schedule, report }: Options) {
   let next = 0;
   let flushing = false;
 
-  const drain = (errors: unknown[]) => {
+  const drain = (errors: BridgeValue[]) => {
     while (next < held.length) {
       // One report's error doesn't drop the ones after it.
       try {
         held[next++]!();
       } catch (error) {
-        errors.push(error);
+        // SAFETY: thrown values are JS values covered by the BridgeValue union.
+        errors.push(error as BridgeValue);
       }
     }
   };
+
   const flush = () => {
     if (next >= held.length) return;
-    const errors: unknown[] = [];
+    const errors: BridgeValue[] = [];
+
     if (flushing) drain(errors);
     else {
       flushing = true;
@@ -89,10 +109,13 @@ export function holdPageReports(bridge: Bridge, { hold, flush }: Hold) {
   const call = bridge.__callFunction.bind(bridge);
   const invoke = bridge.__invokeCallback.bind(bridge);
   bridge.__callFunction = (module, method, args) => {
+    // SAFETY: receiveEvent calls carry the event name as their second argument.
     if (module === "RCTEventEmitter" && method === "receiveEvent" && HELD_EVENTS.has(args[1] as string)) {
       hold(() => call(module, method, args));
+
       return;
     }
+
     flush();
     call(module, method, args);
   };
@@ -107,40 +130,51 @@ export function afterHeldReports(emitter: Emitter, { flush, batch }: Hold) {
   const add = emitter.addListener;
   const remove = emitter.removeListener;
   // Per listener and event, so removeListener finds what addListener added.
-  const wrapped = new WeakMap<object, Map<string, (...args: unknown[]) => unknown>>();
+  const wrapped = new WeakMap<object, Map<string, (...args: BridgeValue[]) => BridgeValue>>();
   emitter.addListener = function (name, listener) {
-    if (typeof listener !== "function") return add.call(this, name, listener);
+    if (!v.is(v.function_(), listener)) return add.call(this, name, listener);
     let byName = wrapped.get(listener);
+
     if (!byName) wrapped.set(listener, (byName = new Map()));
     let wrapper = byName.get(name);
+
     if (!wrapper) {
-      wrapper = function (this: unknown, ...args: unknown[]) {
-        let result: unknown;
+      wrapper = function (this: BridgeValue, ...args: BridgeValue[]) {
+        let result: BridgeValue;
         batch(() => {
           flush();
-          result = listener.apply(this, args);
+
+          // SAFETY: the wrapped listener returns a JS value covered by the BridgeValue union.
+          result = listener.apply(this, args) as BridgeValue;
         });
+
         return result;
       };
+
       byName.set(name, wrapper);
     }
+
     return add.call(this, name, wrapper);
   };
+
   emitter.removeListener = function (name, listener) {
-    return remove.call(this, name, (typeof listener === "function" && wrapped.get(listener)?.get(name)) || listener);
+    return remove.call(this, name, (v.is(v.function_(), listener) && wrapped.get(listener)?.get(name)) || listener);
   };
 }
 
 // Installed once per JS context (a Fast Refresh evaluates this module again): the flush lives on the global.
-const g = globalThis as unknown as {
+// SAFETY: globalThis holds the bridge, Expo emitter and ErrorUtils hooks when present.
+const g = globalThis as {
   __nnApplyHeldReports?: () => void;
   __fbBatchedBridge?: Bridge;
   expo?: { EventEmitter?: { prototype: Emitter } };
-  ErrorUtils?: { reportFatalError(error: unknown): void };
+  ErrorUtils?: { reportFatalError(error: BridgeValue): void };
 };
+
 const bridge = g.__fbBatchedBridge;
 const emitter = g.expo?.EventEmitter?.prototype;
-if (!g.__nnApplyHeldReports && bridge && emitter && typeof bridge.__callFunction === "function" && typeof bridge.__invokeCallback === "function") {
+
+if (!g.__nnApplyHeldReports && bridge && emitter && v.is(v.function_(), bridge.__callFunction) && v.is(v.function_(), bridge.__invokeCallback)) {
   // Required here, not imported: tests load this module without React Native.
   const batch = (update: () => void) => (require("@bay/platform") as typeof import("@bay/platform")).batchedUpdates(update);
   // A 0 ms timer runs at once on the JS thread (RCTTiming), so its call queues behind the ones already waiting.

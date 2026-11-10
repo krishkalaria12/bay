@@ -17,6 +17,7 @@ class FakeChrome {
   nextBrowser = 1;
   listen(listener) {
     this.listener = listener;
+
     return { remove() {} };
   }
   snapshot() {
@@ -26,18 +27,20 @@ class FakeChrome {
     this.sent++;
     const id = ++this.lastCommand;
     this.commands.push({ id, command });
+
     return id;
   }
   state(id) {
     const s = this.strips.get(id);
+
     return {
       strip: id,
       window: id,
-      ...(s.appWindow ? { appWindow: s.appWindow } : {}),
+      ...(s.appWindow ? { appWindow: s.appWindow } : undefined),
       activePickedOnClose: !!s.pickedOnClose,
       profile: "",
       tabs: s.tabs.map((t, index) => ({ key: t.key, browser: t.browser, index, active: t.browser === s.active, pinned: t.pinned, group: t.group ?? null })),
-      groups: [...s.groups].filter(([id]) => s.tabs.some((t) => t.group === id)).map(([id, g]) => ({ id, ...g })),
+      groups: [...s.groups].flatMap(([id, g]) => (s.tabs.some((t) => t.group === id) ? [{ id, ...g }] : [])),
     };
   }
   emit(id, cmd, ...more) {
@@ -45,13 +48,16 @@ class FakeChrome {
   }
   strip(id) {
     if (!this.strips.has(id)) this.strips.set(id, { tabs: [], active: 0, groups: new Map() });
+
     return this.strips.get(id);
   }
   find(key) {
     for (const [id, s] of this.strips) {
       const i = s.tabs.findIndex((t) => t.key === key);
+
       if (i >= 0) return { id, s, i, tab: s.tabs[i] };
     }
+
     return null;
   }
   // The app's view made a browser for the tab (cmd -1): appended, in the background.
@@ -59,18 +65,21 @@ class FakeChrome {
     const s = this.strip(stripId);
     const browser = this.nextBrowser++;
     s.tabs.push({ key, browser, pinned: false });
+
     if (!s.active) s.active = browser;
     this.emit(stripId, -1);
   }
   // Chrome closes a tab; when it was the active one it shows the next (TabStripModel::DetermineNewSelectedIndex).
   remove(key) {
     const f = this.find(key);
+
     if (!f) return;
     this.drop(f);
     this.emit(f.id, null);
   }
   drop(f) {
     f.s.tabs.splice(f.i, 1);
+
     if (f.s.active === f.tab.browser) {
       f.s.active = (f.s.tabs[f.i] ?? f.s.tabs[f.i - 1])?.browser ?? 0;
       f.s.pickedOnClose = true;
@@ -116,11 +125,13 @@ class FakeChrome {
     f.s.groups.set(id, { title, color, collapsed: false });
     this.regroup(f.s, keys, id);
     this.emit(f.id, null);
+
     return id;
   }
   regroup(s, keys, id) {
     const moving = s.tabs.filter((t) => keys.includes(t.key) && !t.pinned);
     const at = s.tabs.indexOf(moving[0]);
+
     for (const t of moving) t.group = id;
     s.tabs = s.tabs.filter((t) => !moving.includes(t));
     s.tabs.splice(Math.min(at, s.tabs.length), 0, ...moving);
@@ -156,10 +167,12 @@ class FakeChrome {
   // Runs the next command the app sent, as the engine does: Chrome's pending changes already went out.
   runOne() {
     const next = this.commands.shift();
+
     if (!next) return false;
     const { id, command } = next;
     const s = this.strips.get(command.strip);
     const has = (key) => s?.tabs.some((t) => t.key === key);
+
     if (command.op === "activate" && has(command.key)) {
       s.active = s.tabs.find((t) => t.key === command.key).browser;
       s.pickedOnClose = false;
@@ -167,9 +180,12 @@ class FakeChrome {
     } else if (command.op === "group" && command.keys.some(has)) {
       const keys = command.keys.filter(has);
       let token = command.group;
+
       if (token === "new") s.groups.set((token = `g${++this.lastGroup}`), { title: command.title ?? "", color: command.color ?? "grey", collapsed: false });
+
       if (token) {
         if (command.title !== undefined) Object.assign(s.groups.get(token), { title: command.title, color: command.color });
+
         if (command.collapsed !== undefined) s.groups.get(token).collapsed = command.collapsed;
         this.regroup(s, keys, token);
       } else for (const t of s.tabs) if (keys.includes(t.key)) t.group = null;
@@ -182,25 +198,32 @@ class FakeChrome {
     } else {
       this.outbox.push({ rev: ++this.rev, cmd: id, strips: [], rejected: true });
     }
+
     return true;
   }
   deliver() {
     const out = this.outbox;
     this.outbox = [];
+
     for (const tx of out) this.listener(tx);
+
     return out.length;
   }
 }
 
 const chrome = new FakeChrome();
+
 globalThis.nnTestTabStrip = chrome;
+
 const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const { startChromeTabs } = await import("../lib/engineTabs.ts");
+
 startChromeTabs();
 
 const S = () => useBrowser.getState();
 const tabLists = await import("./model.ts");
+
 // A window's list: its space's tabs, in sidebar order (store/model.ts).
 const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const tick = () => new Promise((r) => setImmediate(r));
@@ -212,39 +235,52 @@ const chromeOrder = (strip) => chrome.strips.get(strip).tabs.map((t) => urlOf(t.
 const chromeShown = (strip) => urlOf(chrome.strips.get(strip).tabs.find((t) => t.browser === chrome.strips.get(strip).active).key);
 
 let nextStrip = 1;
+
 // One window whose tabs live in a strip of their own. Its views make browsers as the store loads tabs.
 function windowWith(...urls) {
   S().hydrate({});
   S().updateSettings({ cmdClickCreatesTabGroup: false, newTabPosition: "bottom" });
+
   return anotherWindow(...urls);
 }
+
 function anotherWindow(...urls) {
   const w = S().createWindow({ url: urls[0] ? `${urls[0]}.com` : undefined });
+
   for (const u of urls.slice(1)) S().newTab(w, { url: `${u}.com`, background: true });
   const strip = nextStrip++;
   chrome.strip(strip).appWindow = w;
+
   return { w, strip };
 }
+
 // What ContentCard does: a browser for every loaded tab whose page is in the window, none for closed ones.
 function mountViews({ w, strip }) {
   for (const id of model.windowTabIds(S(), w)) {
     const t = S().tabs[id];
+
     if ((t.navigation || t.adoptId) && !chrome.find(id)) chrome.create(strip, id);
   }
+
   for (const s of chrome.strips.values()) for (const t of Array.from(s.tabs)) if (!S().tabs[t.key]) chrome.remove(t.key);
 }
+
 // Lets every message cross until nothing moves; returns how many transactions crossed.
 async function settle(win) {
   let crossed = 0;
+
   for (let i = 0; i < 200; i++) {
     await tick();
+
     if (win) mountViews(win);
     const delivered = chrome.deliver();
     crossed += delivered;
     await tick();
     const ran = chrome.runOne();
+
     if (!delivered && !ran && !chrome.outbox.length && !chrome.commands.length) return crossed;
   }
+
   throw new Error("never settled: commands and transactions kept coming");
 }
 
@@ -254,11 +290,14 @@ test("the app's own switches never come back as switches, however late Chrome re
   const win = windowWith("a");
   await settle(win);
   let switches = 0;
+
   const stop = useBrowser.subscribe((s, prev) => {
     const a = s.windows[win.w]?.activeTabIds[s.windows[win.w].spaceId];
     const b = prev.windows[win.w]?.activeTabIds[prev.windows[win.w].spaceId];
+
     if (a !== b) switches++;
   });
+
   // Twenty tabs opened faster than Chrome runs the app's commands: each activation lands after the store has
   // moved on, and its transaction arrives after that.
   for (let i = 0; i < 20; i++) {
@@ -266,8 +305,10 @@ test("the app's own switches never come back as switches, however late Chrome re
     mountViews(win);
     chrome.deliver();
     await tick();
+
     if (i % 4 === 3) chrome.runOne();
   }
+
   const crossed = await settle(win);
   stop();
   assert.equal(switches, 20, "one switch per tab opened, none back");

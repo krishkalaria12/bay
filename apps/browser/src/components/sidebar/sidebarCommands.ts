@@ -1,11 +1,12 @@
 import type { BrowserCommand, MenuEntry } from "@bay/desktop";
 import { reportBrowserCommand } from "../../runtime/commands";
-import { cleanUpTabs, returnToPinnedUrl, tidyTabs } from "../../runtime/organizeActions";
+import { cleanUpTabs, returnToPinnedUrl } from "../../runtime/organizeActions";
 import { closeTabs, updateTabDetails } from "../../runtime/tabActions";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { browserRead } from "../../store/read";
 import { activeTabId, pinnedPage, plural } from "../../store/model";
 import { awayFromPin, groupOf, selectedTabIds } from "../../store/tabTidying";
+import { runTidyTabs } from "../../lib/tidyTabs";
 import { newGroupWithSelection, openIconPicker, startRename } from "./actions";
 import { closeAllTabs, tabsAround } from "./contextMenus";
 import { setSidebarUi } from "./state";
@@ -38,7 +39,7 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
       reportBrowserCommand(cleanUpTabs(windowId));
       return true;
     case "tidyTabs":
-      reportBrowserCommand(tidyTabs(windowId));
+      void runTidyTabs(windowId);
       return true;
     case "closeAllTabs":
       reportBrowserCommand(closeAllTabs(windowId));

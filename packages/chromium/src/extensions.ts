@@ -1,4 +1,5 @@
 import { requireNativeModule, type EventSubscription } from "@bay/platform/native";
+import * as v from "valibot";
 import { ChromeUI } from "./chromeDialogs";
 
 export type SiteAccess = "ON_ALL_SITES" | "ON_SPECIFIC_SITES" | "ON_CLICK";
@@ -96,6 +97,27 @@ export type ExtensionInstallPrompt = {
 
 type Result<T> = T | { error: string };
 
+/** How an extension is configured: the switches chrome://extensions has, in the engine's own names. */
+export type ExtensionOptions = {
+  pinned?: boolean;
+  incognito?: boolean;
+  fileAccess?: boolean;
+  siteAccess?: "allSites" | "specificSites" | "onClick";
+};
+
+/** One engine search engine: the shape nn_search_engines_list replies with (nn_search_engines.h). */
+export type EngineSearchEngine = {
+  name: string;
+  keyword: string;
+  url: string;
+  suggestionsUrl: string;
+  default: boolean;
+  isOmniboxExtension: boolean;
+  extension?: { id: string; name: string };
+};
+
+export type EngineSearchEngineList = { engines: EngineSearchEngine[] };
+
 type NativeExtensions = {
   addListener(name: "onChanged", listener: (e: ExtensionsChange) => void): EventSubscription;
   addListener(name: "onTabs", listener: (e: TabsRequest) => void): EventSubscription;
@@ -107,19 +129,21 @@ type NativeExtensions = {
   setEnabled(id: string, profile: string, enabled: boolean): Promise<Result<{ ok: true }>>;
   uninstall(id: string, profile: string): Promise<Result<{ ok: true }>>;
   reload(id: string, profile: string): Promise<Result<{ ok: true }>>;
-  configure(id: string, profile: string, options: Record<string, unknown>): Promise<Result<{ ok: true }>>;
-  searchEngineList(profile: string): Promise<Result<{ list: unknown }>>;
+  configure(id: string, profile: string, options: ExtensionOptions): Promise<Result<{ ok: true }>>;
+  searchEngineList(profile: string): Promise<Result<{ list: EngineSearchEngineList }>>;
   chooseFolder(): Promise<string | null>;
 };
 
 const Native = requireNativeModule<NativeExtensions>("BayExtensions");
 
-if (__DEV__) (globalThis as { nnExtensions?: unknown }).nnExtensions = Native;
+if (__DEV__) Object.assign(globalThis, { nnExtensions: Native });
 
 export class ExtensionError extends Error {}
 
 function unwrap<T>(result: Result<T>): T {
-  if (result && typeof result === "object" && "error" in result) throw new ExtensionError(result.error);
+  if (v.is(v.object({ error: v.string() }), result)) throw new ExtensionError(result.error);
+
+  // SAFETY: `Result<T>` is either `T` or the error object just ruled out, so what is left is `T`.
   return result as T;
 }
 
@@ -139,7 +163,7 @@ export function webStoreExtensionId(urlOrId: string): string | null {
   }
 }
 
-export async function searchEngineList(profile: string): Promise<unknown> {
+export async function searchEngineList(profile: string): Promise<EngineSearchEngineList> {
   return unwrap(await Native.searchEngineList(profile)).list;
 }
 
@@ -200,7 +224,8 @@ export function permissionWarnings(pkg: Pick<ExtensionPackage, "permissions" | "
   if (allHosts || perms.has("proxy") || perms.has("pageCapture") || perms.has("debugger")) {
     warnings.push("Read and change all your data on all websites");
   } else if (hosts.length) {
-    const names = [...new Set(hosts.map(hostLabel).filter(Boolean))] as string[];
+    const names = [...new Set(hosts.map(hostLabel).filter((label): label is string => Boolean(label)))];
+
     if (names.length === 1) warnings.push(`Read and change your data on ${names[0]}`);
     else if (names.length === 2) warnings.push(`Read and change your data on ${names[0]} and ${names[1]}`);
     else if (names.length === 3) warnings.push(`Read and change your data on ${names[0]}, ${names[1]}, and ${names[2]}`);

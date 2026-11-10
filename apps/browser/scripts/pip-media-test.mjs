@@ -11,10 +11,14 @@ import { launch, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const args = process.argv.slice(2);
 const appPath = args.find((a) => !a.startsWith("--"));
+
 if (!appPath) throw new Error("Provide the Debug Bay.app path");
+
 const data = mkdtempSync(join(tmpdir(), "bay-pip-media-"));
+
 const server = createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/html" });
+
   if (req.url !== "/live") return res.end("<title>Other</title>Other");
   res.end(`<title>Live fixture</title><video id="v" playsinline style="width: 320px; height: 180px"></video><script>
     const v = document.getElementById("v");
@@ -51,19 +55,25 @@ const server = createServer((req, res) => {
     };
   </script>`);
 });
+
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
 const origin = `http://127.0.0.1:${server.address().port}`;
 let app;
 let page;
+
 const until = async (label, fn, timeout = 10000) => {
   const end = Date.now() + timeout;
   let last;
+
   while (Date.now() < end) {
     if ((last = await fn())) return last;
     await sleep(100);
   }
+
   throw new Error(`Timed out waiting for ${label}: ${JSON.stringify(last)}`);
 };
+
 try {
   app = await launch(resolve(appPath), {
     data,
@@ -143,5 +153,6 @@ try {
   page?.close();
   await app?.quit();
   await new Promise((resolve) => server.close(resolve));
+
   if (!args.includes("--keep-data")) rmSync(data, { recursive: true, force: true });
 }

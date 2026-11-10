@@ -1,6 +1,7 @@
 import { withoutSidebarUndo } from "../store/sidebarUndo";
 import { addHistoryVisits, deleteHistoryUrls, deletePassword, savePassword } from "@bay/chromium";
-import { assignPositions, SyncNative, type Adapter, type Extraction, type SavedLogin } from "@bay/sync";
+import * as v from "valibot";
+import { assignPositions, SyncNative, type Adapter, type Extraction, type JsonValue, type SavedLogin } from "@bay/sync";
 import { bookmarkUuidFor, ensureRoots, isBookmarkUuid } from "../store/bookmarks";
 import { DEFAULT_SPACE_ID, MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
 import { assertSyncGeneration, syncGeneration, syncStore } from "./store";
@@ -9,7 +10,7 @@ import { orderSections, syncGroupOrder } from "../store/groups";
 import { engineProfileFor, IDLE_LIVE, listIds, makeTab, pinnedFirst, spaceListKey, withList } from "../store/model";
 import { removeTabs } from "../store/tabs";
 import type { Settings } from "../store/settings";
-import type { BookmarkNode, HistoryEntry, PinnedFolder, Space, Tab, TabGroup } from "../store/types";
+import type { HistoryEntry, PinnedFolder, Space, Tab, TabGroup, TabSnapshot } from "../store/types";
 import { HISTORY_WINDOW_MS, MAX_DEVICE_TABS, PASSWORD_READ_INTERVAL_MS, SAME_VISIT_MS } from "./constants";
 
 const store = () => syncStore().getState();
@@ -38,6 +39,7 @@ export const SYNCED_SETTINGS = [
   "optShiftClickOpensInGroup",
   "autoGroupMeetingTabs",
   "tidyTabTitles",
+  "tidyTabs",
   "cleanUpInactiveTabsAfterHours",
   "awakeSites",
   "tidyDownloads",
@@ -64,51 +66,73 @@ export const settingsAdapter: Adapter = {
     return { values: new Map(SYNCED_SETTINGS.map((name) => [`set:${name}`, { v: settings[name] ?? null }])) };
   },
   apply: (visible, changed) => {
-    const patch: Record<string, unknown> = {};
+    const patch: Record<string, JsonValue> = {};
+
     for (const key of changed) {
       const name = key.slice(4);
-      const record = visible.get(key) as { v: unknown } | undefined;
+      // SAFETY: visible values under `set:` are `{ v }` records written by settingsAdapter extract.
+      const record = visible.get(key) as { v: JsonValue } | undefined;
+
+      // SAFETY: SYNCED_SETTINGS holds exactly the Settings keys `name` is checked against.
       if (!record || !("v" in record) || !(SYNCED_SETTINGS as readonly string[]).includes(name)) continue;
+
       if (name === "awakeSites" && !Array.isArray(record.v)) continue;
+
       if (name === "density" && record.v !== "comfortable" && record.v !== "compact") continue;
+
       if (name === "searchShortcutMode" && record.v !== "arc" && record.v !== "duckduckgo") continue;
-      if (name === "calculatorEnabled" && typeof record.v !== "boolean") continue;
-      if (name === "tidyDownloads" && typeof record.v !== "boolean") continue;
+
+      if (name === "calculatorEnabled" && !v.is(v.boolean(), record.v)) continue;
+
+      if ((name === "tidyDownloads" || name === "tidyTabs") && !v.is(v.boolean(), record.v)) continue;
       patch[name] = record.v;
     }
-    if (Object.keys(patch).length) store().updateSettings(patch as Partial<Settings>);
+
+    if (Object.keys(patch).length) {
+      // SAFETY: patch holds only SYNCED_SETTINGS keys, each carrying that Settings value as JsonValue.
+      store().updateSettings(patch as Partial<Settings>);
+    }
   },
 };
 
 export type ProfileRecord = { n: string; c: Space["color"]; i: string | null; d?: true; f?: boolean };
 
+type ProfilePatch = { name: string; color: Space["color"]; icon: string | null; folded?: boolean };
+
 export function profilesAdapter(links: () => Record<string, { syncId: string }>): Adapter {
   const linked = () => Object.entries(links()).filter(([id]) => store().spaces[id]);
+
   return {
     prefix: "prof:",
     adoptRemoteOnJoin: true,
     extract: () => {
-      const values = new Map<string, unknown>();
+      const values = new Map<string, JsonValue>();
+
       for (const [id, { syncId }] of linked()) {
         const p = store().spaces[id]!;
-        values.set(`prof:${syncId}`, {
-          n: p.name,
-          c: p.color,
-          i: p.icon,
-          f: !!p.folded,
-          ...(id === DEFAULT_SPACE_ID ? { d: true } : {}),
-        } satisfies ProfileRecord);
+
+        const record: ProfileRecord = { n: p.name, c: p.color, i: p.icon, f: !!p.folded };
+
+        if (id === DEFAULT_SPACE_ID) record.d = true;
+        values.set(`prof:${syncId}`, record);
       }
+
       const mine = new Set(values.keys());
+
       return { values, ignore: (key) => !mine.has(key) };
     },
     apply: (visible, changed) => {
       for (const [id, { syncId }] of linked()) {
+        // SAFETY: prof records are written by profilesAdapter extract as ProfileRecord values.
         const record = visible.get(`prof:${syncId}`) as ProfileRecord | undefined;
+
         if (!record || !changed.has(`prof:${syncId}`)) continue;
-        withoutSidebarUndo(() =>
-          store().updateSpace(id, { name: record.n, color: record.c, icon: record.i, ...(typeof record.f === "boolean" ? { folded: record.f } : {}) }),
-        );
+
+        const patch: ProfilePatch = { name: record.n, color: record.c, icon: record.i };
+
+        if (v.is(v.boolean(), record.f)) patch.folded = record.f;
+
+        withoutSidebarUndo(() => store().updateSpace(id, patch));
       }
     },
   };
@@ -143,8 +167,10 @@ export function bookmarksAdapter(spaceId: string): Adapter {
       if (!ready()) return null;
       const b = store().bookmarks;
       const roots = b.roots[spaceId];
-      const values = new Map<string, unknown>();
+      const values = new Map<string, JsonValue>();
+
       if (!roots) return { values };
+
       // An old key names this node only if it maps to it (a copy of a bookmark carries its original's key along).
       const keyOf = (id: string) => {
         if (id === roots.bar) return "bar";
@@ -159,22 +185,24 @@ export function bookmarksAdapter(spaceId: string): Adapter {
         seen.add(folderId);
         const parent = keyOf(folderId);
         const children = folder.children.filter((id) => b.nodes[id]);
+
         const positions = assignPositions(
           children.map((id) => {
+            // SAFETY: bm records are written by bookmarksAdapter extract as BookmarkValue values.
             const known = base(`bm:${keyOf(id)}`) as BookmarkValue | undefined;
+
             return known?.p === parent ? known.pos : undefined;
           }),
         );
+
         children.forEach((id, i) => {
           const node = b.nodes[id]!;
-          values.set(`bm:${keyOf(id)}`, {
-            k: node.kind === "url" ? "u" : "f",
-            p: parent,
-            t: node.title,
-            ...(node.kind === "url" ? { u: node.url } : {}),
-            a: node.addedAt,
-            pos: positions[i]!,
-          } satisfies BookmarkValue);
+
+          const value: BookmarkValue = { k: node.kind === "url" ? "u" : "f", p: parent, t: node.title, a: node.addedAt, pos: positions[i]! };
+
+          if (node.kind === "url") value.u = node.url;
+          values.set(`bm:${keyOf(id)}`, value);
+
           if (node.kind === "folder") walk(id);
         });
       };
@@ -187,6 +215,7 @@ export function bookmarksAdapter(spaceId: string): Adapter {
       const s = store();
       const [b, roots] = ensureRoots(s.bookmarks, spaceId);
       // By node id; a key that isn't a UUID names the node bookmarkUuidFor gives it.
+      // SAFETY: bm values in visible are written by bookmarksAdapter extract as BookmarkValue values.
       const values = new Map([...visible].map(([k, v]) => [bookmarkUuidFor(k.slice(3)), v as BookmarkValue]));
       const keys = new Map([...visible.keys()].map((k) => [bookmarkUuidFor(k.slice(3)), k.slice(3)]));
       const rootOf = (key: string) => (key === "bar" ? roots.bar : key === "other" ? roots.other : null);
@@ -216,16 +245,23 @@ export function bookmarksAdapter(spaceId: string): Adapter {
         const pz = values.get(z)!.pos;
         const ka = keys.get(a)!;
         const kz = keys.get(z)!;
+
         return pa < pz ? -1 : pa > pz ? 1 : ka < kz ? -1 : 1;
       };
-      const nodes: Record<string, BookmarkNode> = { ...b.nodes };
+
+      const nodes = { ...b.nodes };
+
       const drop = (id: string) => {
         const node = nodes[id];
+
         if (node?.kind === "folder") node.children.forEach(drop);
+
         if (id !== roots.bar && id !== roots.other) delete nodes[id];
       };
+
       drop(roots.bar);
       drop(roots.other);
+
       for (const [id, v] of values) {
         const old = b.nodes[id];
         const key = keys.get(id)!;
@@ -258,8 +294,9 @@ const lastVisitOf = (v: HistoryValue) => Math.max(0, ...v.vt);
 // What Chrome keeps in history (an app page, bay://, it doesn't): other records are left alone.
 const keptInHistory = (url: string) => /^(https?|file):/i.test(url);
 
-export const historyExpired = (key: string, value: unknown, now: number) =>
-  key.startsWith("h:") && lastVisitOf(value as HistoryValue) < now - HISTORY_WINDOW_MS;
+// SAFETY: the v.is check above verifies value holds vt as a number array, which HistoryValue requires for lastVisitOf.
+export const historyExpired = (key: string, value: JsonValue | null, now: number) =>
+  key.startsWith("h:") && !!value && v.is(v.object({ vt: v.array(v.number()) }), value) && lastVisitOf(value as HistoryValue) < now - HISTORY_WINDOW_MS;
 
 // History is Chrome's (lib/history.ts keeps the store's view of it). Applying a record adds its visits to
 // Chrome, so Chrome's copy then differs from the record (its own visit count and title). A local edit is a visit
@@ -273,7 +310,7 @@ export function historyAdapter(spaceId: string): Adapter {
       // Before the view is read from Chrome it's empty, which would read as every URL deleted.
       if (!ready()) return null;
       const since = Date.now() - HISTORY_WINDOW_MS;
-      const values = new Map<string, unknown>();
+      const values = new Map<string, JsonValue>();
       const older = new Set<string>();
       const view = store().history[spaceId] ?? [];
       // The view holds Chrome's newest MAX_HISTORY URLs: one visited at or before this may only be missing from it.
@@ -285,7 +322,9 @@ export function historyAdapter(spaceId: string): Adapter {
           older.add(key);
           continue;
         }
+
         const local: HistoryValue = { t: e.title, n: e.visits, vt: e.visitTimes?.length ? e.visitTimes : [e.lastVisit] };
+        // SAFETY: h records are written by historyAdapter extract as HistoryValue values.
         const known = base(key) as HistoryValue | undefined;
         const edited = !known || local.vt.some((t) => !known.vt.some((k) => Math.abs(k - t) <= SAME_VISIT_MS));
         values.set(key, edited ? local : known);
@@ -293,12 +332,20 @@ export function historyAdapter(spaceId: string): Adapter {
       const ignore = (key: string) => {
         if (older.has(key) || !keptInHistory(key.slice(2))) return true;
         // Chrome expired it (as every Mac does), or the view no longer reaches it: not a deletion.
+        // SAFETY: h records are written by historyAdapter extract as HistoryValue values.
         const known = base(key) as HistoryValue | undefined;
+
         return !!known && (lastVisitOf(known) < since || lastVisitOf(known) <= floor);
       };
+
       return { values, ignore };
     },
-    editedAt: (v) => lastVisitOf(v as HistoryValue),
+    editedAt: (v) => {
+      // SAFETY: h records are written by historyAdapter extract as HistoryValue values.
+      const h = v as HistoryValue;
+
+      return lastVisitOf(h);
+    },
     apply: async (visible, changed) => {
       const generation = syncGeneration();
       if (!ready()) return false;
@@ -307,11 +354,15 @@ export function historyAdapter(spaceId: string): Adapter {
       const add: { url: string; title: string; visitTimes: number[] }[] = [];
       const remove: string[] = [];
       const updates = new Map<string, HistoryEntry | null>();
+
       for (const key of changed) {
         const url = key.slice(2);
+
         if (!keptInHistory(url)) continue;
+        // SAFETY: h records are written by historyAdapter extract as HistoryValue values.
         const v = visible.get(key) as HistoryValue | undefined;
         const old = byUrl.get(url);
+
         if (v) {
           const have = old?.visitTimes ?? [];
           const fresh = v.vt.filter((t) => t >= since && !have.some((h) => Math.abs(h - t) <= SAME_VISIT_MS));
@@ -416,41 +467,59 @@ export function pinnedAdapter(spaceId: string): Adapter {
         groups.push(folder);
         members.set(folder.id, []);
       }
+
       const rowIds = listIds(s, spaceListKey(s, spaceId)).filter((id) => s.tabs[id]?.spaceId === spaceId && s.tabs[id]?.pinnedRow);
+      // SAFETY: pin:t records are written by pinnedAdapter extract as PinValue values.
       const rowOrder = assignPositions(rowIds.map((id) => (base(`pin:t:${id}`) as PinValue | undefined)?.o));
       const rowPositions = new Map(rowIds.map((id, index) => [id, rowOrder[index]!]));
-      const values = new Map<string, unknown>();
+      const values = new Map<string, JsonValue>();
+
       const place = (tabs: Pin[], group: string | null) => {
+        // SAFETY: pin:t records are written by pinnedAdapter extract as PinValue values.
         const positions = assignPositions(
           tabs.map((t) =>
             ((base(`pin:t:${t.id}`) as PinValue | undefined)?.g ?? null) === group ? (base(`pin:t:${t.id}`) as PinValue | undefined)?.pos : undefined,
           ),
         );
-        tabs.forEach((t, i) =>
-          values.set(`pin:t:${t.id}`, {
+
+        tabs.forEach((t, i) => {
+          const value: PinValue = {
             g: group,
             u: (group && !t.pinnedRow ? t.url : t.pinnedUrl || t.url) || "",
             t: t.customTitle,
             i: t.customIcon,
             ti: t.title,
             pos: positions[i]!,
-            ...(t.pinnedRow ? { r: true, o: rowPositions.get(t.id)! } : {}),
-          } satisfies PinValue),
-        );
       };
+
+          if (t.pinnedRow) {
+            value.r = true;
+            value.o = rowPositions.get(t.id)!;
+          }
+
+          values.set(`pin:t:${t.id}`, value);
+        });
+      };
+
       place(tiles, null);
+      // SAFETY: pin:g records are written by pinnedAdapter extract as PinGroupValue values.
       const groupPositions = assignPositions(groups.map((g) => (base(`pin:g:${g.id}`) as PinGroupValue | undefined)?.pos));
       groups.forEach((g, i) => {
         const folder = s.pinnedFolders[g.id];
-        values.set(`pin:g:${g.id}`, {
-          n: g.name,
-          i: g.icon,
-          c: "color" in g ? g.color : null,
-          pos: groupPositions[i]!,
-          ...(folder ? { f: true, p: folder.parentId ?? null, b: folder.beforeId ?? null, a: folder.createdAt } : {}),
-        } satisfies PinGroupValue);
+
+        const value: PinGroupValue = { n: g.name, i: g.icon, c: "color" in g ? g.color : null, pos: groupPositions[i]! };
+
+        if (folder) {
+          value.f = true;
+          value.p = folder.parentId ?? null;
+          value.b = folder.beforeId ?? null;
+          value.a = folder.createdAt;
+        }
+
+        values.set(`pin:g:${g.id}`, value);
         place(members.get(g.id)!, g.id);
       });
+
       return { values } satisfies Extraction;
     },
     apply: (visible, changed) => {
@@ -459,10 +528,19 @@ export function pinnedAdapter(spaceId: string): Adapter {
       const key = spaceListKey(s, spaceId);
       const pins = new Map<string, PinValue>();
       const groupValues = new Map<string, PinGroupValue>();
+
       for (const [k, v] of visible) {
-        if (k.startsWith("pin:t:")) pins.set(k.slice(6), v as PinValue);
-        else if (k.startsWith("pin:g:")) groupValues.set(k.slice(6), v as PinGroupValue);
+        if (k.startsWith("pin:t:")) {
+          // SAFETY: pin:t values in visible are written by pinnedAdapter extract as PinValue values.
+          const pv = v as PinValue;
+          pins.set(k.slice(6), pv);
+        } else if (k.startsWith("pin:g:")) {
+          // SAFETY: pin:g values in visible are written by pinnedAdapter extract as PinGroupValue values.
+          const gv = v as PinGroupValue;
+          groupValues.set(k.slice(6), gv);
+        }
       }
+
       const byPos =
         <T extends { pos: string }>(m: Map<string, T>) =>
         (a: string, z: string) =>
@@ -477,10 +555,16 @@ export function pinnedAdapter(spaceId: string): Adapter {
       const memberOrder = new Map(groupOrder.map((g) => [g, [...pins.keys()].filter((id) => pins.get(id)!.g === g).sort(byPos(pins))]));
 
       // A pin removed elsewhere goes; one whose page is open here stays, as a page.
-      const goneTabs = [...changed]
-        .filter((k) => k.startsWith("pin:t:") && !visible.has(k))
-        .map((k) => k.slice(6))
-        .filter((id) => s.tabs[id]);
+      const goneTabs: string[] = [];
+
+      for (const k of changed) {
+        if (!k.startsWith("pin:t:") || visible.has(k)) continue;
+        const id = k.slice(6);
+
+        if (!s.tabs[id]) continue;
+        goneTabs.push(id);
+      }
+
       const open = (id: string) => !!s.tabs[id]!.navigation || !!s.tabs[id]!.adoptId;
       s = removeTabs(
         s,
@@ -503,18 +587,16 @@ export function pinnedAdapter(spaceId: string): Adapter {
 
       for (const id of groupOrder) {
         const v = groupValues.get(id)!;
+
         if (v.f) {
           const old = pinnedFolders[id];
-          pinnedFolders[id] = {
-            id,
-            spaceId,
-            name: v.n,
-            icon: v.i,
-            collapsed: old?.collapsed ?? false,
-            createdAt: v.a ?? old?.createdAt ?? 0,
-            ...(v.p ? { parentId: v.p } : {}),
-            ...(v.b ? { beforeId: v.b } : {}),
-          };
+
+          const folder: PinnedFolder = { id, spaceId, name: v.n, icon: v.i, collapsed: old?.collapsed ?? false, createdAt: v.a ?? old?.createdAt ?? 0 };
+
+          if (v.p) folder.parentId = v.p;
+
+          if (v.b) folder.beforeId = v.b;
+          pinnedFolders[id] = folder;
           delete groups[id];
           continue;
         }
@@ -534,32 +616,39 @@ export function pinnedAdapter(spaceId: string): Adapter {
         const folder = v.g && pinnedFolders[v.g] ? pinnedFolders[v.g]! : null;
         const row = !!folder || (!!v.r && !group);
         const old = tabs[id];
+
         if (old) {
           const { pinnedRow: _, folderId: _f, ...rest } = old;
-          tabs[id] = {
-            ...rest,
-            pinned: !group && !row,
-            ...(row ? { pinnedRow: true } : {}),
-            ...(folder ? { folderId: folder.id } : {}),
-            pinnedUrl: group ? null : v.u,
-            customTitle: v.t,
-            customIcon: v.i,
-            ...(old.unloaded ? { url: v.u, title: v.ti } : {}),
-          };
+
+          const updated: Tab = { ...rest, pinned: !group && !row, pinnedUrl: group ? null : v.u, customTitle: v.t, customIcon: v.i };
+
+          if (row) updated.pinnedRow = true;
+
+          if (folder) updated.folderId = folder.id;
+
+          if (old.unloaded) {
+            updated.url = v.u;
+            updated.title = v.ti;
+          }
+
+          tabs[id] = updated;
           continue;
         }
+
         // Not shown in a window yet: its page loads in the first that shows it.
-        tabs[id] = {
-          ...makeTab("", spaceId, v.u, { title: v.ti, pinned: !group && !row, ...(row ? { pinnedRow: true } : {}), customTitle: v.t, customIcon: v.i }),
-          id,
-          ...(folder ? { folderId: folder.id } : {}),
-          pinnedUrl: group ? null : v.u,
-          navigation: null,
-          unloaded: true,
-        };
+        const snapshot: Partial<TabSnapshot> = { title: v.ti, pinned: !group && !row, customTitle: v.t, customIcon: v.i };
+
+        if (row) snapshot.pinnedRow = true;
+
+        const created: Tab = { ...makeTab("", spaceId, v.u, snapshot), id, pinnedUrl: group ? null : v.u, navigation: null, unloaded: true };
+
+        if (folder) created.folderId = folder.id;
+        tabs[id] = created;
         added.push(id);
       }
+
       const inGroup = new Set([...memberOrder.values()].flat().filter((id) => tabs[id]));
+
       for (const g of Object.values(groups)) {
         if (g.spaceId !== spaceId) continue;
         const wanted = g.pinned && memberOrder.has(g.id) ? memberOrder.get(g.id)!.filter((id) => tabs[id]) : g.tabIds.filter((id) => !inGroup.has(id));
@@ -581,9 +670,15 @@ export function pinnedAdapter(spaceId: string): Adapter {
         ...rowSequence,
         ...flatSequence.filter((id) => !tabs[id]?.pinned && !tabs[id]?.pinnedRow),
       ];
+
       const rank = new Map(sequence.map((id, i) => [id, i]));
       const ids = [...listIds(s, key).filter((id) => tabs[id]), ...added];
-      const slots = ids.map((id, i) => (rank.has(id) ? i : -1)).filter((i) => i >= 0);
+      const slots: number[] = [];
+
+      ids.forEach((id, i) => {
+        if (rank.has(id)) slots.push(i);
+      });
+
       const sorted = slots.map((i) => ids[i]!).sort((a, z) => rank.get(a)! - rank.get(z)!);
       slots.forEach((slot, i) => (ids[slot] = sorted[i]!));
       const list = { key, tabIds: orderSections(pinnedFirst(ids, tabs), tabs, groups, pinnedFolders) };
@@ -630,23 +725,35 @@ export function passwordsAdapter(
       if (!logins) return null;
       lastRead = now;
       created = new Map([...logins].map(([k, v]) => [k, v.c]));
+
       return { values: new Map([...logins].map(([k, { o, u, p }]) => [k, { o, u, p } satisfies PasswordValue])) };
     },
-    editedAt: (v) => created.get(keyOf((v as PasswordValue).o, (v as PasswordValue).u)) || undefined,
+    editedAt: (v) => {
+      // SAFETY: pw records are written by passwordsAdapter extract as PasswordValue values.
+      const pv = v as PasswordValue;
+
+      return created.get(keyOf(pv.o, pv.u)) || undefined;
+    },
     apply: async (visible, changed, base) => {
       const generation = syncGeneration();
       const local = await read();
+
       if (!local) return false;
       let ok = true;
+
       for (const key of changed) {
         assertSyncGeneration(generation);
         const v = visible.get(key) as PasswordValue | undefined;
         const have = local.get(key);
+        // SAFETY: pw records are written by passwordsAdapter extract as PasswordValue values.
         const known = base(key) as PasswordValue | undefined;
+
         if (have && known?.p !== have.p) continue;
         const [origin, username] = [key.slice(3, key.indexOf("\n")), key.slice(key.indexOf("\n") + 1)];
+
         if (v) {
           if (have?.p === v.p) continue;
+
           if (have) ok = (await deletePassword(profile(), origin, username)) && ok;
           assertSyncGeneration(generation);
           ok = (await savePassword(profile(), v.o, v.u, v.p)) && ok;
@@ -654,14 +761,20 @@ export function passwordsAdapter(
           ok = (await deletePassword(profile(), origin, username)) && ok;
         }
       }
+
       // Wait for Chrome to write password changes before reading them.
       let settled = false;
+
       for (let i = 0; i < 20 && !settled; i++) {
         const now = await read();
+        // SAFETY: pw values in visible are written by passwordsAdapter extract as PasswordValue values.
         settled = !!now && [...changed].every((k) => (visible.get(k) as PasswordValue | undefined)?.p === now.get(k)?.p);
+
         if (!settled) await new Promise((r) => setTimeout(r, 250));
       }
+
       if (!settled) quietUntil = Date.now() + 30_000;
+
       return ok;
     },
   };

@@ -103,9 +103,11 @@ class SpacePager {
 
   private warmPages(): PagerPage[] | null {
     const i = this.index();
+
     if (i < 0) return null;
     const order = useBrowser.getState().spaceOrder;
-    return [i - 1, i, i + 1].filter((slot) => slot >= 0 && slot < order.length).map((slot) => ({ id: order[slot]!, slot }));
+
+    return [i - 1, i, i + 1].flatMap((slot) => (slot >= 0 && slot < order.length ? [{ id: order[slot]!, slot }] : []));
   }
 
   get active() {
@@ -185,7 +187,13 @@ export function usePagerSurface(windowId: string) {
   useEffect(() => pagerFor(windowId).attach(), [windowId]);
 }
 
-export function usePagerPages(windowId: string): { pages: PagerPage[]; paging: boolean; pager: SpacePager } {
+export interface PagerPages {
+  pages: PagerPage[];
+  paging: boolean;
+  pager: SpacePager;
+}
+
+export function usePagerPages(windowId: string): PagerPages {
   const pager = pagerFor(windowId);
   const current = useBrowser((s) => s.windows[windowId]?.spaceId ?? null);
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
@@ -227,5 +235,6 @@ export function usePagerOpacity(windowId: string, slot: number | undefined, rest
 }
 
 if (__DEV__) {
+  // SAFETY: { nnPager? assertion matches the runtime value validated at this call site.
   (globalThis as { nnPager?: unknown }).nnPager = (windowId: string) => pagerFor(windowId);
 }

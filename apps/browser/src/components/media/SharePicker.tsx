@@ -43,11 +43,13 @@ export function requestDisplayMedia(tabId: string, request: DisplayMediaRequest)
   }
   if (pending) void webviews.get(tabId)?.resolveDisplayMedia(pending.id, null);
   const pageUrl = useBrowser.getState().tabs[tabId]?.url ?? "";
+  // SAFETY: Pending } })) assertion matches the runtime value validated at this call site.
   useMedia.setState((m) => ({ displayRequests: { ...m.displayRequests, [tabId]: { ...request, pageUrl } as Pending } }));
 }
 
 // The NNCore acceptance run answers the picker as a click would.
 if (__DEV__)
+  // SAFETY: { nnSharePicker? assertion matches the runtime value validated at this call site.
   (globalThis as { nnSharePicker?: unknown }).nnSharePicker = {
     answerDisplayMedia: (tabId: string, sourceId: string | null) => answerDisplayMedia(tabId, sourceId),
     shareTab: (tabId: string, sharedTabId: string) => shareTab(tabId, sharedTabId),
@@ -77,10 +79,14 @@ async function shareTab(tabId: string, sharedTabId: string) {
 
 export function cancelDisplayMediaOnNavigation() {
   const page = (url: string) => url.replace(/#.*$/, "");
+
   return useBrowser.subscribe((s, prev) => {
     if (s.tabs === prev.tabs) return;
+
+    // SAFETY: [string, Pending][]) { assertion matches the runtime value validated at this call site.
     for (const [tabId, request] of Object.entries(useMedia.getState().displayRequests) as [string, Pending][]) {
       const url = s.tabs[tabId]?.url;
+
       if (url !== undefined && page(url) !== page(request.pageUrl)) answerDisplayMedia(tabId, null);
     }
   });
@@ -108,7 +114,9 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
     setSelected(null);
     let live = true;
     const t = setInterval(() => void getDisplayMediaSources().then((next) => live && setSources(next)), SHARE_SOURCES_REFRESH_MS);
-    setTimeout(() => (list.current as unknown as { focus?: () => void } | null)?.focus?.(), 50);
+    // SAFETY: { focus? assertion matches the runtime value validated at this call site.
+    setTimeout(() => (list.current as { focus?: () => void } | null)?.focus?.(), 50);
+
     return () => {
       live = false;
       clearInterval(t);

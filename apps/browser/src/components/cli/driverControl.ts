@@ -1,3 +1,5 @@
+import * as v from "valibot";
+import { isJsonObject, type JsonValue } from "../../lib/json";
 import { cliControlStatus, onCliControlChanged, setCliActiveTab, setCliControl, type CliControlStatus } from "@bay/chromium";
 import { installedCliVersion, installCli, onCliInstallLine, readDocument, writeDocument, type CliInstallResult } from "@bay/desktop";
 import { create } from "zustand";
@@ -13,12 +15,14 @@ import { usePages } from "../window/pageState";
 const INSTALL_DOC = "bay-cli.json";
 
 type SavedInstall = { binPath?: string; error?: string };
+
 function savedInstall(): SavedInstall {
   try {
-    const saved: unknown = JSON.parse(readDocument(INSTALL_DOC) ?? "{}");
-    if (!saved || typeof saved !== "object") return {};
-    const record = saved as Record<string, unknown>;
-    return { binPath: typeof record.binPath === "string" ? record.binPath : undefined, error: typeof record.error === "string" ? record.error : undefined };
+    const saved: JsonValue = JSON.parse(readDocument(INSTALL_DOC) ?? "{}");
+
+    if (!isJsonObject(saved)) return {};
+
+    return { binPath: v.is(v.string(), saved.binPath) ? saved.binPath : undefined, error: v.is(v.string(), saved.error) ? saved.error : undefined };
   } catch {
     return {};
   }
@@ -45,12 +49,15 @@ let installation: Promise<CliInstallResult> | null = null;
 export function installCliInBackground(): Promise<CliInstallResult> {
   if (installation) return installation;
   useCli.setState({ installing: true, step: null, error: null });
+
   const lines = onCliInstallLine((line) => {
     const step = /^step (\S+)/.exec(line)?.[1];
+
     if (step) useCli.setState({ step });
   });
+
   installation = installCli()
-    .catch((error: unknown): CliInstallResult => ({ ok: false, appVersion: "", error: message(error), lines: [] }))
+    .catch((cause: unknown): CliInstallResult => ({ ok: false, appVersion: "", error: message(cause), lines: [] }))
     .then((result) => {
       lines.remove();
       installation = null;
@@ -144,12 +151,16 @@ export function startCliControl({ activeTab = true } = {}) {
     applied = on;
     const mine = ++request;
     inFlight++;
+
     const settle = (server: CliControlStatus) => {
       inFlight--;
+
       if (mine === request) apply(server, true);
     };
-    void (first && !on ? cliControlStatus() : setCliControl(on)).then(settle, (error: unknown) => settle({ state: "off", reason: message(error) }));
+
+    void (first && !on ? cliControlStatus() : setCliControl(on)).then(settle, (cause: unknown) => settle({ state: "off", reason: message(cause) }));
   };
+
   useBrowser.subscribe(() => {
     sync();
     pushActive();

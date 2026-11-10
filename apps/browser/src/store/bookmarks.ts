@@ -154,6 +154,8 @@ function insertChild(b: Bookmarks, node: BookmarkNode, parentId: string, index?:
   if (parent?.kind !== "folder") return b;
   const children = parent.children.filter((c) => c !== node.id);
   children.splice(Math.min(index ?? children.length, children.length), 0, node.id);
+
+  // SAFETY: node is a BookmarkNode and parentId is its new string parent, so the spread is a BookmarkNode.
   return { ...b, nodes: { ...b.nodes, [node.id]: { ...node, parentId } as BookmarkNode, [parentId]: { ...parent, children } } };
 }
 
@@ -197,8 +199,10 @@ export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksS
   updateBookmark(id, patch) {
     set((s) => {
       const node = s.bookmarks.nodes[id];
+
       if (!node) return {};
-      const next = node.kind === "url" ? { ...node, ...patch } : { ...node, ...(patch.title !== undefined ? { title: patch.title } : {}) };
+      const next = node.kind === "url" ? { ...node, ...patch } : { ...node, ...(patch.title !== undefined ? { title: patch.title } : undefined) };
+
       return { bookmarks: { ...s.bookmarks, nodes: { ...s.bookmarks.nodes, [id]: next } } };
     });
   },
@@ -234,12 +238,16 @@ export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksS
         nodes[id] = { kind: "url", id, parentId: parent, title: d.title, url: d.url, favicon: null, addedAt };
       } else {
         nodes[id] = { kind: "folder", id, parentId: parent, title: d.title, children: [], addedAt };
+        // SAFETY: nodes[id] was just assigned the folder variant above, so it is a BookmarkFolder.
         (nodes[id] as BookmarkFolder).children = (d.children ?? []).map((c) => build(c, id));
       }
+
       return id;
     };
+
     const target = parentId && b.nodes[parentId]?.kind === "folder" ? parentId : roots.bar;
     const ids = drafts.map((d) => build(d, target));
+    // SAFETY: target is a checked folder id or roots.bar, which engineRoots always creates as a folder.
     const parent = nodes[target] as BookmarkFolder;
     const children = [...parent.children];
     children.splice(Math.min(index ?? children.length, children.length), 0, ...ids);

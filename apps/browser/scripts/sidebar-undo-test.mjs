@@ -8,22 +8,29 @@ import { join, resolve } from "node:path";
 import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const [appArg] = process.argv.slice(2);
+
 if (!appArg) throw new Error("usage: phase2-undo-test.mjs <Debug Bay.app>");
+
 const scratch = mkdtempSync(join(tmpdir(), "bay-phase2-undo-"));
 const report = reporter(join(scratch, "undo.log"), { name: "phase2-undo" });
+
 const server = createServer((_req, res) => {
   res.writeHead(200, { "content-type": "text/html" });
   res.end('<!doctype html><title>Undo fixture</title><input value="Original draft"><p>Plain page</p>');
 });
+
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
+
 const base = `http://127.0.0.1:${server.address().port}`;
 let app;
 const run = (body) => app.eval(body);
 const undo = () => run('return nn.shell.devKeyEquivalent("w1", {key:"z", keyCode:6, modifiers:["command"], asKey:true})');
+
 const until = async (description, body) => {
   for (const end = Date.now() + 10000; Date.now() < end; await sleep(100)) if (await run(body)) return;
   throw new Error(`timed out: ${description}`);
 };
+
 try {
   app = await launch(resolve(appArg), {
     data: join(scratch, "data"),
@@ -48,19 +55,23 @@ try {
     await run(
       'const s=nn.store.getState(); s.pinRows(["b"],true); s.updateTab("b",{customTitle:"Renamed"}); s.updateTab("b",{customIcon:"📚"}); s.updateSpace("default",{theme:{colors:["#123456"],intensity:0.5,grain:0}}); return true',
     );
+
     for (let i = 0; i < 4; i++) {
       await undo();
       await sleep(180);
     }
+
     const result = await run(
       "const s=nn.store.getState(); return {pin:!!s.tabs.b.pinnedRow,name:s.tabs.b.customTitle,icon:s.tabs.b.customIcon,color:s.spaces.default.theme?.colors[0]}",
     );
+
     assert.deepEqual({ pin: result.pin, name: result.name, icon: result.icon }, { pin: false, name: null, icon: null });
     assert.notEqual(result.color, "#123456");
   });
   await report.check("web input Undo edits the draft and leaves sidebar history untouched", async () => {
     await run('nn.store.getState().updateTab("b",{customTitle:"Sidebar edit"}); return nn.webviews.get("a").focus()');
     const page = await app.page("/a");
+
     try {
       assert.equal(
         await page.eval(
@@ -79,11 +90,13 @@ try {
   });
   await report.check("native close from a plain page can be undone", async () => {
     const page = await app.page("/a");
+
     try {
       await page.eval("document.activeElement.blur(); true");
     } finally {
       page.close();
     }
+
     await run('nn.store.getState().activate("b","w1"); return true');
     await until("b mounted", 'return !!nn.webviews.get("b")');
     await run('return nn.webviews.get("b").focus()');
@@ -98,5 +111,7 @@ try {
   server.close();
   writeFileSync(join(scratch, "results.json"), JSON.stringify({ failures: report.failed, scratch }, null, 2));
 }
+
 process.exitCode = report.summary() ? 0 : 1;
+
 console.log(`Evidence: ${scratch}`);

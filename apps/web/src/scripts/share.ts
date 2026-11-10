@@ -16,12 +16,14 @@ function renderItems(items: SharedItem[]): HTMLUListElement {
 
   for (const item of items) {
     const row = document.createElement("li");
+
     if (item.kind === "folder") {
       row.className = "share-folder";
       const label = document.createElement("p");
       label.className = "share-folder-title";
       label.textContent = item.title || "Untitled folder";
       row.append(label);
+
       if (item.children.length > 0) {
         row.append(renderItems(item.children));
       } else {
@@ -47,6 +49,7 @@ function renderItems(items: SharedItem[]): HTMLUListElement {
       link.append(name, address);
       row.append(link);
     }
+
     list.append(row);
   }
 
@@ -66,8 +69,10 @@ function showCollection(): void {
   summary.textContent = "Preview the links here, or save a copy in Bay.";
 
   const token = window.location.hash.slice(1);
+
   if (!token) {
     state.textContent = "No collection in this link. Open the complete shared link from the sender, including everything after #.";
+
     return;
   }
 
@@ -86,8 +91,10 @@ function showCollection(): void {
       contents.append(tree);
       contents.hidden = false;
     }
+
     if (count === 0) {
       state.textContent = "This collection has no links to add. Ask the sender to share a collection with links.";
+
       return;
     }
 
@@ -105,9 +112,12 @@ importButton.addEventListener("click", () => {
 
 copyButton.addEventListener("click", async () => {
   const url = sharedUrl;
+
   if (!url) return;
+
   try {
     await navigator.clipboard.writeText(url);
+
     if (sharedUrl === url) copyStatus.textContent = "Shared link copied.";
   } catch {
     if (sharedUrl === url) copyStatus.textContent = "Could not copy. Copy the full link from your address bar.";
@@ -115,4 +125,5 @@ copyButton.addEventListener("click", async () => {
 });
 
 window.addEventListener("hashchange", showCollection);
+
 showCollection();

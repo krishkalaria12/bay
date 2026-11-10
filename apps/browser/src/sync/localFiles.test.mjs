@@ -8,6 +8,7 @@ import { configureSyncStore } from "./store.ts";
 configureSyncStore(useBrowser);
 
 const S = () => useBrowser.getState();
+
 const pin = (id, order = 0, extra = {}) => ({
   id,
   spaceId: "default",
@@ -36,6 +37,7 @@ test("file sync repairs malformed base positions without passing them into fract
   S().hydrate({});
   useBrowser.setState({ localFiles: { a: pin("a", 0), b: pin("b", 1) } });
   const adapter = localFilesAdapter("default");
+
   for (const pos of [123, null, false, {}, [], "", "!", "V0", "0"]) {
     const { values } = adapter.extract(() => ({ pos }));
     const repaired = [...values.values()].map((record) => record.pos);
@@ -52,6 +54,7 @@ test("incoming file records reject malformed and noncanonical fractional positio
   S().hydrate({});
   useBrowser.setState({ localFiles: { a: pin("a") } });
   const adapter = localFilesAdapter("default");
+
   for (const pos of [123, null, false, {}, [], "", "!", "V0", "0"]) {
     adapter.apply(new Map([["file:a", { p: "/Users/owner/replaced.pdf", n: "Replaced", k: "file", a: 100, pos }]]), new Set(["file:a"]));
     assert.deepEqual(S().localFiles.a, pin("a"), String(pos));
@@ -68,10 +71,12 @@ test("incoming files retain local expansion, ignore malformed paths and remove o
       kept: pin("kept", 0, { spaceId: other }),
     },
   });
+
   const incoming = new Map([
     ["file:a", { p: "/Users/owner/new", n: "New name", k: "folder", a: 100, pos: "V", bookmark: "secret" }],
     ["file:bad", { p: "../relative", n: "Bad", k: "file", a: 100, pos: "W" }],
   ]);
+
   localFilesAdapter("default").apply(incoming, new Set(["file:a", "file:b", "file:kept", "file:bad"]));
   assert.equal(S().localFiles.a.name, "New name");
   assert.equal(S().localFiles.a.expanded, true);
@@ -84,42 +89,51 @@ test("incoming files retain local expansion, ignore malformed paths and remove o
 test("two Macs converge on file paths, order, rename and deletion without transferring grants", async () => {
   const files = new Map();
   let counter = 0;
+
   const transport = {
     write: async (_scope, payload) => {
       const id = `f${++counter}`;
       files.set(id, payload);
+
       return id;
     },
     read: async (_scope, known) => ({
-      files: [...files].filter(([id]) => !known.includes(id)).map(([id, payload]) => ({ id, payload })),
+      files: [...files].flatMap(([id, payload]) => (known.includes(id) ? [] : [{ id, payload }])),
       pending: [],
       damaged: [],
       present: [...files.keys()],
     }),
     remove: async (_scope, ids) => ids.forEach((id) => files.delete(id)),
   };
+
   const device = (id) => {
     S().hydrate({});
+
     return { id, browser: S(), state: emptyScope(), clock: new Clock(id) };
   };
+
   const a = device("a");
   const b = device("b");
+
   const edit = (device, fn) => {
     useBrowser.setState(device.browser, true);
     fn();
     device.browser = S();
   };
+
   const sync = async (device) => {
     useBrowser.setState(device.browser, true);
     await syncScope({ scope: "p", state: device.state, transport, adapters: [localFilesAdapter("default")], clock: device.clock, device: device.id });
     device.browser = S();
   };
+
   const converge = async () => {
     for (let i = 0; i < 2; i++) {
       await sync(a);
       await sync(b);
     }
   };
+
   edit(a, () => useBrowser.setState({ localFiles: { pdf: pin("pdf", 1), folder: pin("folder", 0, { kind: "folder", expanded: true }) } }));
   await converge();
   assert.equal(b.browser.localFiles.pdf.path, a.browser.localFiles.pdf.path);

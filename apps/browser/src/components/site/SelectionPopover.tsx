@@ -17,9 +17,11 @@ export function SelectionPopover({ tabId, zoom }: { tabId: string; zoom: number 
   useEffect(() => {
     if (!selection) return setShown(null);
     const timer = setTimeout(() => setShown(selection), SELECTION_SHOW_DELAY_MS);
+
     return () => clearTimeout(timer);
   }, [selection]);
   useEffect(() => () => setPageSelection(tabId, null), [tabId]);
+
   if (!selection && !shown) return null;
 
   return (
@@ -41,17 +43,22 @@ function Bar({ tabId, selection, zoom, area }: { tabId: string; selection: PageS
   const bottom = (r.y + r.height) * zoom;
   const above = top - SELECTION_POPOVER_GAP - SELECTION_POPOVER_HEIGHT >= 4;
   const measured = width > 0;
+
   const appearStyle = useAnimatedStyle(() => {
     const a = appear.get();
+
     return {
       opacity: measured ? a : 0,
       transform: [{ scale: interpolate(a, [0, 1], [0.94, 1]) }, { translateY: interpolate(a, [0, 1], [above ? 3 : -3, 0]) }],
     };
   }, [measured, above]);
+
   if (bottom < 0 || top > area.height) return null;
+
   const y = above
     ? top - SELECTION_POPOVER_GAP - SELECTION_POPOVER_HEIGHT
     : Math.min(bottom + SELECTION_POPOVER_GAP, area.height - SELECTION_POPOVER_HEIGHT - 4);
+
   const center = (r.x + r.width / 2) * zoom;
   const x = Math.max(8, Math.min(center - width / 2, area.width - width - 8));
 
@@ -85,7 +92,9 @@ function ShareQuoteButton({ tabId }: { tabId: string }) {
   const available = useBrowser((s) => /^https?:/.test(s.tabs[tabId]?.url ?? ""));
   const { hovered, hoverProps } = useHover();
   const [busy, setBusy] = useState(false);
+
   if (!available) return null;
+
   return (
     <View {...hoverProps} tooltip="Copy the selected text as a card and link">
       <Pressable
@@ -126,12 +135,14 @@ function SearchButton({ tabId, text }: { tabId: string; text: string }) {
   const engine = useBrowser((s) => defaultSearchEngine(s.settings).name);
   const { hovered, hoverProps } = useHover();
   const quoted = text.length > 40 ? `${text.slice(0, 40).trimEnd()}…` : text;
+
   return (
     <View {...hoverProps} tooltip={`Search ${engine} for “${quoted.replace(/\s+/g, " ")}”`}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Search ${engine}`}
-        onPress={(e) => searchSelection(tabId, text, e.nativeEvent as unknown as ClickModifiers)}
+        // SAFETY: ClickModifiers)} assertion matches the runtime value validated at this call site.
+        onPress={(e) => searchSelection(tabId, text, e.nativeEvent as ClickModifiers)}
       >
         {({ pressed }) => (
           <View

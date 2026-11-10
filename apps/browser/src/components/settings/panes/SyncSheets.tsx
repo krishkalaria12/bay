@@ -13,11 +13,13 @@ import { platformWords } from "../../../lib/platformWords";
 
 function Title({ children }: { children: string }) {
   const theme = useTheme();
+
   return <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>{children}</Text>;
 }
 
 function Body({ children, style }: { children: ReactNode; style?: object }) {
   const theme = useTheme();
+
   return <Text style={[{ fontSize: 12.5, lineHeight: 17, marginTop: 6, color: theme.textSecondary }, style]}>{children}</Text>;
 }
 
@@ -45,10 +47,13 @@ function RecoveryKitSheet() {
   useEffect(() => void folderInfo().then((info) => setSessionOnly(info?.keyStorage === "session")), []);
   const [saved, setSaved] = useState<string | null>(null);
   useEffect(() => void SyncNative?.recoveryKitPreview(168).then(setPreview), []);
+
   const save = async (format: "pdf" | "text") => {
     const path = await SyncNative?.saveRecoveryKit(format);
+
     if (path) setSaved(path);
   };
+
   const more = async () => {
     const choice = await showMenu([
       { id: "copy", title: "Copy", symbol: "doc.on.doc" },
@@ -56,10 +61,12 @@ function RecoveryKitSheet() {
       { separator: true },
       { id: "text", title: "Save as Text…", symbol: "doc.plaintext" },
     ]);
+
     if (choice === "copy") await SyncNative?.copyRecoveryKit();
     else if (choice === "share") await SyncNative?.shareRecoveryKit();
     else if (choice === "text") await save("text");
   };
+
   return (
     <Sheet width={460} onClose={closeSettingsSheet}>
       <View style={{ flexDirection: "row", gap: 18 }}>
@@ -110,6 +117,7 @@ export function showPhraseEntry(folder: FolderInfo | null, onChooseFolder?: () =
 
 const phraseError = (r: Awaited<ReturnType<typeof enterRecoveryPhrase>>): string | null => {
   if ("ok" in r) return null;
+
   switch (r.error) {
     case "wordCount":
       return "Recovery phrase must be exactly 24 words.";
@@ -138,10 +146,12 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const count = text
     .toLowerCase()
     .split(/[^a-z]+/)
     .filter(Boolean).length;
+
   const submit = async () => {
     if (!folder || busy) return;
     setBusy(true);
@@ -149,9 +159,11 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
     const result = await enterRecoveryPhrase(folder.path, text);
     setBusy(false);
     const message = phraseError(result);
+
     if (message) setError(message);
     else closeSettingsSheet();
   };
+
   return (
     <Sheet width={440} onClose={closeSettingsSheet}>
       <Title>Connect with Recovery Phrase</Title>
@@ -219,6 +231,7 @@ function ConnectDeviceSheet() {
   const [qr, setQr] = useState<string | null>(null);
   const [words, setWords] = useState<string[] | null>(null);
   useEffect(() => void SyncNative?.qrCode().then(setQr), []);
+
   return (
     <Sheet width={480} onClose={closeSettingsSheet}>
       <Title>Connect Another Device</Title>
@@ -285,11 +298,13 @@ function StopSheet() {
 function DeleteDataSheet() {
   const [understood, setUnderstood] = useState(false);
   const [busy, setBusy] = useState(false);
+
   const finish = async (deleteData: boolean) => {
     setBusy(true);
     await stopSync({ deleteData });
     closeSettingsSheet();
   };
+
   return (
     <Sheet width={420} onClose={() => void finish(false)}>
       <Title>Delete Sync Data?</Title>
@@ -313,7 +328,9 @@ function DeleteDataSheet() {
 export function folderLabel(folder: Pick<FolderInfo, "path" | "inICloud">): string {
   if (folder.inICloud) {
     const rest = folder.path.split("com~apple~CloudDocs")[1]?.split("/").filter(Boolean) ?? [];
+
     return ["iCloud Drive", ...rest].join(" › ");
   }
+
   return folder.path.replace(/^\/Users\/[^/]+/, "~");
 }

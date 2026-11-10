@@ -80,6 +80,8 @@ const PERSISTED = [
 function load(): Partial<LiveState> {
   try {
     const json = readDocument(LIVE_DOC);
+
+    // SAFETY: the live document is only ever written by this store, so it holds a serialized `LiveState`.
     return json ? (JSON.parse(json) as Partial<LiveState>) : {};
   } catch {
     return {};
@@ -283,7 +285,7 @@ export function applyFetch(folderId: string, next: LiveItem[], gone: Record<stri
     if (!s.folders[folderId]) return {};
     const known = new Set(s.known[folderId] ?? []);
     const first = known.size === 0 && !s.status[folderId]?.lastFetch;
-    const fresh = next.filter((it) => !known.has(it.id)).map((it) => it.id);
+    const fresh = next.flatMap((it) => (known.has(it.id) ? [] : [it.id]));
     const unreadFresh = fresh.filter((id) => !quiet.has(id));
     const ids = new Set(next.map((it) => it.id));
     const prev = s.items[folderId] ?? [];

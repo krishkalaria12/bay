@@ -1,5 +1,5 @@
 import { appUrlOrigin, displayHost } from "@bay/core";
-import type { BrowserState, BrowserShape } from "./browserStore";
+import type { BrowserState, QuietBrowserState } from "./browserStore";
 import type { DeepReadonly } from "../runtime/projection";
 import { DEFAULT_SPACE_ID } from "./constants";
 import type { BrowserWindow, Space, Tab, TabLive, TabSnapshot } from "./types";
@@ -9,7 +9,7 @@ let counter = 0;
 export const newId = (prefix: string) => `${prefix}-${launch}-${(++counter).toString(36)}`;
 
 let navSeq = 0;
-export const navigationTo = (url: string, userInitiated = false) => ({ url, seq: ++navSeq, ...(userInitiated ? { userInitiated } : {}) });
+export const navigationTo = (url: string, userInitiated = false) => ({ url, seq: ++navSeq, ...(userInitiated ? { userInitiated } : undefined) });
 
 export const incognitoSpaceId = (windowId: string) => `incognito:${windowId}`;
 export const isIncognitoSpace = (spaceId: string) => spaceId.startsWith("incognito:");
@@ -30,7 +30,8 @@ export const engineProfileFor = (spaceId: string, spaces: Readonly<Record<string
   return id === DEFAULT_SPACE_ID ? "" : id;
 };
 
-type ReadonlyModelState = BrowserShape;
+type ReadonlyModelState = QuietBrowserState;
+type ReadonlyListOfTabState = Pick<ReadonlyModelState, "spaces" | "windows" | "tabs" | "tabLists">;
 
 export const INCOGNITO_SPACE: Space = { id: "incognito", name: "Incognito", color: "neutral", icon: null, createdAt: 0 };
 
@@ -82,8 +83,8 @@ export const snapshotTab = (t: Tab): TabSnapshot => ({
   customIcon: t.customIcon,
   pinnedUrl: t.pinnedUrl,
   spaceId: t.spaceId,
-  ...(t.pinnedRow ? { pinnedRow: true } : {}),
-  ...(t.engine ? { engine: t.engine } : {}),
+  ...(t.pinnedRow ? { pinnedRow: true } : undefined),
+  ...(t.engine ? { engine: t.engine } : undefined),
 });
 
 /** A pinned page: an Essential (a pinned tile) or a pinned row. It keeps the page it was pinned at (`pinnedUrl`). */
@@ -138,8 +139,8 @@ export function listIds(s: Pick<BrowserState, "tabLists"> | Pick<ReadonlyModelSt
 
 /** The list the tab is in, by key and ids. */
 export function listOfTab(s: Pick<BrowserState, "spaces" | "windows" | "tabs" | "tabLists">, id: string): TabList | undefined;
-export function listOfTab(s: Pick<ReadonlyModelState, "spaces" | "windows" | "tabs" | "tabLists">, id: string): DeepReadonly<TabList> | undefined;
-export function listOfTab(s: Pick<ReadonlyModelState, "spaces" | "windows" | "tabs" | "tabLists">, id: string): DeepReadonly<TabList> | undefined {
+export function listOfTab(s: ReadonlyListOfTabState, id: string): DeepReadonly<TabList> | undefined;
+export function listOfTab(s: ReadonlyListOfTabState, id: string): DeepReadonly<TabList> | undefined {
   const t = s.tabs[id];
   if (!t) return undefined;
   const key = tabListKey(s, t);
@@ -157,6 +158,7 @@ export function withList<S extends Pick<BrowserState, "tabLists">>(s: S, list: T
 /** The tabs the window lists for a space (its shown one by default), in the list's order. */
 export function viewTabIds(s: ReadonlyModelState, windowId: string, spaceId?: string): string[] {
   const w = s.windows[windowId];
+
   if (!w) return [];
   const space = w.kind === "small" ? w.spaceId : (spaceId ?? w.spaceId);
   const key = w.kind === "small" ? w.id : spaceListKey(s, space);
@@ -202,15 +204,19 @@ export function sharesProfile(s: Pick<BrowserState, "spaces">, a: string, b: str
 /** A space's pinned tiles, in their list's order. */
 export function favoriteTabIds(s: ReadonlyModelState, windowId: string, spaceId?: string): string[] {
   const w = s.windows[windowId];
+
   if (!w || w.kind === "small") return [];
   const space = spaceId ?? w.spaceId;
+
   return listIds(s, spaceListKey(s, space)).filter((id) => s.tabs[id]?.spaceId === space && s.tabs[id]?.pinned);
 }
 
 export function closesWindow(s: ReadonlyModelState, id: string): boolean {
   const tab = s.tabs[id];
   const w = tab && s.windows[tab.windowId];
+
   if (!tab || !w || tab.spaceId !== w.spaceId || inPinnedContainer(s, id)) return false;
+
   return viewTabIds(s, w.id).every((t) => t === id || s.tabs[t]!.unloaded);
 }
 
@@ -231,6 +237,7 @@ type ActiveTabState = {
 /** The tab the window shows for a space (its shown one by default). */
 export function activeTabId(s: ActiveTabState, windowId: string, spaceId?: string): string | undefined {
   const w = s.windows[windowId];
+
   if (!w) return undefined;
   const space = spaceId ?? w.spaceId;
   const id = w.activeTabIds[space];
@@ -242,6 +249,7 @@ export function activeTab(s: BrowserState, windowId: string): Tab | undefined;
 export function activeTab(s: ReadonlyModelState, windowId: string): DeepReadonly<Tab> | undefined;
 export function activeTab(s: BrowserState | ReadonlyModelState, windowId: string): Tab | DeepReadonly<Tab> | undefined {
   const id = activeTabId(s, windowId);
+
   return id ? s.tabs[id] : undefined;
 }
 
@@ -269,9 +277,11 @@ export function merge<T extends object>(obj: T, patch: Partial<T>): T {
   return obj;
 }
 
-export function without<T>(map: Record<string, T>, ids: Iterable<string>): Record<string, T> {
+export function without<T>(map: Record<string, T>, ids: Iterable<string>) {
   const next = { ...map };
+
   for (const id of ids) delete next[id];
+
   return next;
 }
 
@@ -300,6 +310,7 @@ export function plural(n: number, word: string) {
 
 export function windowTitle(s: ReadonlyModelState, windowId: string): string {
   const w = s.windows[windowId];
+
   if (!w) return "";
   const tab = activeTab(s, windowId);
   const others = viewTabIds(s, windowId).length - 1;

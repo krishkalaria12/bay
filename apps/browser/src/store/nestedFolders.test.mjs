@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const { folderTabIds, folderDepth, folderRootId, canMoveFolder, childFolderIds } = await import("./folders.ts");
 const { listIds } = await import("./model.ts");
 const S = () => useBrowser.getState();
+
 function setup() {
   S().hydrate({});
   S().updateSettings({ newTabPosition: "bottom" });
@@ -11,12 +13,14 @@ function setup() {
   const a = S().windows[w].activeTabIds[S().windows[w].spaceId];
   const b = S().newTab(w, { url: "https://second.example" });
   const c = S().newTab(w, { url: "https://third.example" });
+
   return { w, a, b, c, space: S().windows[w].spaceId };
 }
 
 test("nested folders cap the entire subtree at five levels and reject cycles and cross-space moves", () => {
   const { w } = setup();
   const chain = [S().newPinnedFolder(w, { name: "Root" })];
+
   for (let i = 1; i < 5; i++) chain.push(S().newPinnedFolder(w, { name: `Level ${i + 1}`, parentId: chain.at(-1) }));
   assert.equal(folderDepth(S(), chain.at(-1)), 5);
   assert.equal(folderRootId(S(), chain.at(-1)), chain[0]);
@@ -106,6 +110,7 @@ test("hydrate preserves flat and nested sessions and repairs malformed parents w
   S().hydrate({ ...data, pinnedFolders: flat });
   assert.equal(S().pinnedFolders[child].parentId, undefined);
   S().hydrate({ ...data, pinnedFolders: { ...data.pinnedFolders, [root]: { ...data.pinnedFolders[root], parentId: child } } });
+
   for (const id of [root, child]) assert.ok(folderDepth(S(), id) <= 5);
   assert.ok(S().tabs[a] && S().tabs[b]);
   S().hydrate({ ...data, pinnedFolders: { ...data.pinnedFolders, [child]: { ...data.pinnedFolders[child], parentId: "missing" } } });

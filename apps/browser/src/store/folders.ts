@@ -255,9 +255,10 @@ export const createFoldersSlice: StateCreator<BrowserState, [], [], FoldersSlice
       icon: null,
       collapsed: false,
       createdAt: Date.now(),
-      ...(parentId ? { parentId } : {}),
-      ...(emptyAnchor ? { beforeId: emptyAnchor } : {}),
+      ...(parentId ? { parentId } : undefined),
+      ...(emptyAnchor ? { beforeId: emptyAnchor } : undefined),
     };
+
     let next: BrowserState = { ...s, pinnedFolders: { ...s.pinnedFolders, [folder.id]: folder } };
     const members = withSplitPanes(s, tabIds).filter((id) => next.tabs[id]?.spaceId === spaceId);
     const list = listIds(s, spaceListKey(s, spaceId));
@@ -291,7 +292,7 @@ export const createFoldersSlice: StateCreator<BrowserState, [], [], FoldersSlice
       const anchorFolder = beforeId ? s.pinnedFolders[beforeId] : undefined;
       const anchorTab = beforeId ? s.tabs[beforeId] : undefined;
       const validAnchor = beforeId && (anchorFolder?.spaceId === f.spaceId || (anchorTab?.spaceId === f.spaceId && anchorTab.pinnedRow));
-      const moved = { ...root, ...(targetParent ? { parentId: targetParent } : {}), ...(!members.length && validAnchor ? { beforeId } : {}) };
+      const moved = { ...root, ...(targetParent ? { parentId: targetParent } : undefined), ...(!members.length && validAnchor ? { beforeId } : undefined) };
       // Object order also retains empty sibling order through persistence.
       const others = Object.values(s.pinnedFolders).filter((folder) => folder.id !== id);
       let beforeFolder = beforeId && s.pinnedFolders[beforeId] ? beforeId : beforeId ? s.tabs[beforeId]?.folderId : undefined;
@@ -341,19 +342,31 @@ export const createFoldersSlice: StateCreator<BrowserState, [], [], FoldersSlice
     if (move.id) {
       const { parentId: _, beforeId: _before, ...f } = folders[move.id]!;
       const parentId = move.parentId && folders[move.parentId]?.spaceId === f.spaceId ? move.parentId : undefined;
-      folders[f.id] = { ...f, ...(parentId ? { parentId } : {}), ...(move.beforeId ? { beforeId: move.beforeId } : {}) };
+      folders[f.id] = { ...f, ...(parentId ? { parentId } : undefined), ...(move.beforeId ? { beforeId: move.beforeId } : undefined) };
+
       if (!canMoveFolder({ pinnedFolders: folders }, f.id, parentId ?? null)) return false;
     }
+
     const tabs = { ...s.tabs };
+
     for (const [id, pin] of Object.entries(move.tabs ?? {})) {
       const tab = tabs[id];
+
       if (!tab || tab.spaceId !== move.spaceId) continue;
       const { pinnedRow: _, folderId: _f, ...rest } = tab;
       const folderId = pin.folderId && folders[pin.folderId]?.spaceId === tab.spaceId ? pin.folderId : undefined;
-      tabs[id] = { ...rest, pinned: pin.pinned, pinnedUrl: pin.pinnedUrl, ...(pin.pinnedRow ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}) };
+      tabs[id] = {
+        ...rest,
+        pinned: pin.pinned,
+        pinnedUrl: pin.pinnedUrl,
+        ...(pin.pinnedRow ? { pinnedRow: true } : undefined),
+        ...(folderId ? { folderId } : undefined),
+      };
     }
+
     const movedTabs = new Set(Object.keys(move.tabs ?? {}));
     let groups = leaveGroups(s.groups, new Set([...movedTabs].filter((id) => tabs[id] && pinnedPage(tabs[id]!))));
+
     for (const entry of move.groups ?? []) {
       const restored = entry.removed.filter((id) => {
         const t = tabs[id];
@@ -385,13 +398,16 @@ export const createFoldersSlice: StateCreator<BrowserState, [], [], FoldersSlice
       for (const t of Object.values(s.tabs)) {
         if (t.folderId !== id) continue;
         const { folderId: _, ...rest } = t;
-        tabs[t.id] = { ...rest, ...(f.parentId ? { folderId: f.parentId } : {}) };
+        tabs[t.id] = { ...rest, ...(f.parentId ? { folderId: f.parentId } : undefined) };
       }
+
       const pinnedFolders = without(s.pinnedFolders, [id]);
+
       for (const child of childFolderIds(s, id)) {
         const { parentId: _, ...rest } = pinnedFolders[child]!;
-        pinnedFolders[child] = { ...rest, ...(f.parentId ? { parentId: f.parentId } : {}) };
+        pinnedFolders[child] = { ...rest, ...(f.parentId ? { parentId: f.parentId } : undefined) };
       }
+
       return { tabs, pinnedFolders };
     });
   },

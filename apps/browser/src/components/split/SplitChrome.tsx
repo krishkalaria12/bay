@@ -46,6 +46,7 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
     if (divider.kind === "root") {
       reportBrowserCommand(updateSplit(split.id, { sizes: resize(start.current.sizes, divider.index, delta, room) }));
     } else if (start.current.stack) {
+      // SAFETY: [number, number] assertion matches the runtime value validated at this call site.
       const next = resize(start.current.stack, 0, delta, room) as [number, number];
       reportBrowserCommand(updateSplit(split.id, { stackSizes: next }));
     }

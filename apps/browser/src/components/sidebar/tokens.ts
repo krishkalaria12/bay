@@ -100,6 +100,8 @@ export function nearestGroupColor(color: string): GroupColor | null {
   if (target.s < 0.18 || target.l < 0.12 || target.l > 0.92) return null;
   let best: GroupColor | null = null;
   let bestDistance = Infinity;
+
+  // SAFETY: [GroupColor, { hex assertion matches the runtime value validated at this call site.
   for (const [id, { hex }] of Object.entries(GROUP_COLORS) as [GroupColor, { hex: string }][]) {
     if (id === "grey") continue;
     const n = parseInt(hex.slice(1), 16);

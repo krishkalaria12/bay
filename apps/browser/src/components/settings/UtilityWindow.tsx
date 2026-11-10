@@ -22,5 +22,6 @@ export function UtilityWindow({ id }: { id: string }) {
 
 function UtilityContent({ id }: { id: string }) {
   if (id === TASK_MANAGER_WINDOW_ID) return <TaskManagerWindow />;
+
   return id === SETTINGS_WINDOW_ID ? <SettingsWindow /> : <ImportWindow />;
 }

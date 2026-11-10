@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sidebarMoveUndoCalls } from "../test-native-stub.mjs";
+
 const { useBrowser } = await import("../store/browserStore.ts");
 const { armSidebarMoveUndo, startSidebarMoveUndoSync } = await import("./folderUndo.ts");
 const S = () => useBrowser.getState();
@@ -13,6 +14,7 @@ test("sidebar Undo tracks each window and explicitly arms focus only after a use
   useBrowser.setState({ sidebarUndo: {} });
   sidebarMoveUndoCalls.length = 0;
   const stop = startSidebarMoveUndoSync();
+
   try {
     armSidebarMoveUndo(w);
     assert.deepEqual(sidebarMoveUndoCalls, [{ windowId: w, available: false, focus: false }]);

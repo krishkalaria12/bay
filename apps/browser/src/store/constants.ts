@@ -22,6 +22,7 @@ export const MAX_CLOSED_GROUPS = 20;
 export const CLEAN_UP_AFTER_MS = 12 * 60 * 60 * 1000;
 export const MAX_CLEANED = 100;
 export const DELETED_GROUP_MS = 7 * 86_400_000;
+
 // The tabs ⌃Tab switches between: Arc's five most recent.
 export const RECENT_TABS = 5;
 

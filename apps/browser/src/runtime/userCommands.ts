@@ -62,11 +62,14 @@ export type BrowserCommandValue<C extends BrowserCommand> = C extends ImportComm
         ? string
         : C extends { method: (typeof OPTIONAL_ID_METHODS)[number] }
           ? string | null
-          : null;
+          : C extends { method: "tidyTabs" }
+            ? number
+            : null;
 
-export function browserCommandResultKind(method: BrowserCommand["method"]): "id" | "optionalId" | "ids" | "json" | "none" {
+export function browserCommandResultKind(method: BrowserCommand["method"]): "id" | "optionalId" | "ids" | "json" | "count" | "none" {
   if (method === "pinLocalFiles") return "ids";
   if (method === "serviceAction" || (IMPORT_COMMAND_METHODS as readonly string[]).includes(method)) return "json";
+  if (method === "tidyTabs") return "count";
   if ((ID_METHODS as readonly string[]).includes(method)) return "id";
   if ((OPTIONAL_ID_METHODS as readonly string[]).includes(method)) return "optionalId";
   return "none";
@@ -95,7 +98,7 @@ export function executeBrowserCommand(
   store: BrowserStore,
   command: BrowserCommand,
   effects?: LocationCommandEffects,
-): string | string[] | null | ImportCommandResult {
+): string | string[] | number | null | ImportCommandResult {
   if ((LOCAL_FILE_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeLocalFileCommand(store, command as LocalFileCommand);
   if ((IMPORT_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeImportCommand(store, command as ImportCommand);
   if (command.method === "serviceAction") throw new Error("Service actions require the application owner");
@@ -116,6 +119,7 @@ export function validateBrowserCommandResult(command: BrowserCommand, value: unk
   if (kind === "ids") return Array.isArray(value) && value.length <= 10_000 && value.every((id) => typeof id === "string" && !!id.trim() && id.length <= 1024);
   if (kind === "id") return typeof value === "string" && !!value;
   if (kind === "optionalId") return value === null || (typeof value === "string" && !!value);
+  if (kind === "count") return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
   if (command.method === "serviceAction") {
     try {
       parseServiceResult(value, command.action);

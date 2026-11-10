@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { engineCall, onEngineEvent } from "./engineInfo";
 
 // Chrome's history (HistoryService), the one store of it. Chrome records visits itself; the app reads it as one
@@ -16,6 +17,7 @@ type Row = { u: string; t: string; n: number };
 
 export async function queryHistory(profile: string, maxUrls = 5000, maxVisits = 50): Promise<EngineHistoryEntry[]> {
   const { entries } = await engineCall<{ entries: (Row & { v: number[] })[] }>("nn_history_query", profile, { maxUrls, maxVisits });
+
   return entries.map((e) => ({ url: e.u, title: e.t, visits: e.n, visitTimes: e.v }));
 }
 
@@ -29,11 +31,14 @@ const adding = new Map<string, Promise<unknown>>();
  */
 export function addHistoryVisits(profile: string, pages: { url: string; title: string; visitTimes: number[] }[], toleranceMs = 1000) {
   if (!pages.length) return Promise.resolve(0);
+
   const run = (adding.get(profile) ?? Promise.resolve())
     .catch(() => {})
     .then(() => engineCall<{ added: number }>("nn_history_add", profile, { pages: pages.map((p) => ({ u: p.url, t: p.title, v: p.visitTimes })), toleranceMs }))
     .then((r) => r.added);
+
   adding.set(profile, run);
+
   return run;
 }
 
@@ -49,18 +54,41 @@ export const deleteHistoryUrls = (profile: string, urls: string[]) =>
 /** Starts `onHistoryChanged` events for the profile. */
 export const watchHistory = (profile: string) => engineCall("nn_history_watch", profile);
 
-type RawChange = Record<string, unknown>;
+const RowSchema = v.object({ u: v.string(), t: v.string(), n: v.number() });
+
+const HistoryChangeSchema = v.variant("kind", [
+  v.object({ kind: v.literal("visit"), u: v.string(), t: v.string(), n: v.number(), at: v.number() }),
+  v.object({ kind: v.literal("modified"), rows: v.array(RowSchema) }),
+  v.object({ kind: v.literal("deleted"), all: v.optional(v.boolean(), false), urls: v.optional(v.array(v.string()), []) }),
+]);
+
+type RawChange = v.InferOutput<typeof HistoryChangeSchema>;
+
+// The engine sends each change with the profile whose store it touched, alone or batched (see below).
+const HistoryEventSchema = v.variant("kind", [
+  v.object({ kind: v.literal("batch"), profile: v.string(), changes: v.optional(v.array(HistoryChangeSchema), []) }),
+  v.object({ kind: v.literal("visit"), profile: v.string(), u: v.string(), t: v.string(), n: v.number(), at: v.number() }),
+  v.object({ kind: v.literal("modified"), profile: v.string(), rows: v.array(RowSchema) }),
+  v.object({ kind: v.literal("deleted"), profile: v.string(), all: v.optional(v.boolean(), false), urls: v.optional(v.array(v.string()), []) }),
+]);
+
+function toChange(change: RawChange, profile: string): HistoryChange {
+  if (change.kind === "visit") return { kind: "visit", profile, url: change.u, title: change.t, visits: change.n, at: change.at };
+
+  if (change.kind === "modified") return { kind: "modified", profile, rows: change.rows.map((r) => ({ url: r.u, title: r.t, visits: r.n })) };
+
+  return { kind: "deleted", profile, all: change.all, urls: change.urls };
+}
 
 // The engine sends the changes of each ~20 ms together ({kind: "batch", changes}), in order: an add of many visits
 // (history.json's move, sync) made one event per visit, ~88,000 at one launch.
 export const onHistoryChanged = (listener: (change: HistoryChange) => void) =>
-  onEngineEvent((_topic, p) => {
-    const profile = p.profile;
-    const one = (c: RawChange) => {
-      if (c.kind === "visit") listener({ kind: "visit", profile, url: c.u as string, title: c.t as string, visits: c.n as number, at: c.at as number });
-      else if (c.kind === "modified") listener({ kind: "modified", profile, rows: (c.rows as Row[]).map((r) => ({ url: r.u, title: r.t, visits: r.n })) });
-      else if (c.kind === "deleted") listener({ kind: "deleted", profile, all: !!c.all, urls: (c.urls as string[]) ?? [] });
-    };
-    if (p.kind === "batch") for (const c of (p.changes as RawChange[]) ?? []) one(c);
-    else one(p);
+  onEngineEvent((_topic, payload) => {
+    const parsed = v.safeParse(HistoryEventSchema, payload);
+
+    if (!parsed.success) return;
+    const event = parsed.output;
+
+    if (event.kind === "batch") for (const change of event.changes) listener(toChange(change, event.profile));
+    else listener(toChange(event, event.profile));
   }, "history.changed");

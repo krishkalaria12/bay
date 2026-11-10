@@ -71,8 +71,12 @@ const KINDS: Record<PermissionKind, Describe> = {
 
 const list = (words: string[]) => (words.length < 2 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`);
 
-export function describePermission(request: PermissionRequest): { icons: string[]; question: string } {
+/** A permission prompt's icons and its question. */
+export type PermissionDescription = { icons: string[]; question: string };
+
+export function describePermission(request: PermissionRequest): PermissionDescription {
   let site = request.origin;
+
   try {
     site = new URL(request.origin).hostname.replace(/^www\./, "") || request.origin;
   } catch {}

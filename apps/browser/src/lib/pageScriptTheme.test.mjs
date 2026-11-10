@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as v from "valibot";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
@@ -6,7 +7,9 @@ import { runInNewContext } from "node:vm";
 const script = readFileSync(new URL("../../../../packages/chromium/ios/page_script.js", import.meta.url), "utf8");
 const start = script.indexOf("  // MARK: Theme color");
 const end = script.indexOf("  // MARK: Pinch zoom", start);
+
 assert.ok(start > 0 && end > start, "extract the complete production theme block, including its event wiring");
+
 const source = script.slice(start, end);
 
 function page(contents = [], initialOverride = null) {
@@ -20,25 +23,31 @@ function page(contents = [], initialOverride = null) {
   const stats = { probes: 0, probeAppends: 0, probeRemovals: 0, hitTests: 0 };
   const appearance = { color: "rgb(10, 20, 30)", override: initialOverride };
   const listeners = new Map();
+
   const listen = (target, type, fn) => {
     const key = `${target}:${type}`;
+
     if (!listeners.has(key)) listeners.set(key, new Set());
     listeners.get(key).add(fn);
   };
+
   const fire = (target, type, event = {}) => {
     for (const fn of listeners.get(`${target}:${type}`) || []) fn({ type, ...event });
   };
+
   const mutate = (target, type, attributeName) => {
     for (const observer of observers) {
       if (
         observer.targets.some(([node, options]) => {
           const within = target === node || (options.subtree && target.parentElement === node);
+
           return within && options[type] && (type !== "attributes" || !options.attributeFilter || options.attributeFilter.includes(attributeName));
         })
       )
         observer.callback([{ target, type, attributeName }]);
     }
   };
+
   class Element {
     constructor(parentElement = null, attributes = {}) {
       this.parentElement = parentElement;
@@ -73,6 +82,7 @@ function page(contents = [], initialOverride = null) {
       mutate(parent, "childList");
     }
   }
+
   const root = new Element();
   const head = new Element(root);
   const body = new Element(root);
@@ -80,9 +90,11 @@ function page(contents = [], initialOverride = null) {
   const header = new Element(body);
   header.position = "sticky";
   header.backgroundColor = "rgb(20, 30, 40)";
+
   const metas = contents.map(
-    (content) => new Element(head, typeof content === "string" ? { name: "theme-color", content } : { name: "theme-color", ...content }),
+    (content) => new Element(head, v.is(v.string(), content) ? { name: "theme-color", content } : { name: "theme-color", ...content }),
   );
+
   const matchMedia = (media) => {
     if (!queries.has(media)) {
       const handlers = new Set();
@@ -92,18 +104,25 @@ function page(contents = [], initialOverride = null) {
         removeEventListener: (_type, fn) => handlers.delete(fn),
         change(matches) {
           this.matches = matches;
+
           for (const fn of handlers) fn();
         },
         handlers,
       });
     }
+
     return queries.get(media);
   };
+
   const resolveColor = (value, important) => {
     if (appearance.override && !important) return appearance.override;
+
     if (/^(?:var\(|currentcolor$|canvas$|light-dark\(|rgb\(from)/i.test(value)) return appearance.color;
+
     if (value === "red") return "rgb(255, 0, 0)";
+
     if (value === "transparent") return "rgba(0, 0, 0, 0)";
+
     if (value.startsWith("#")) {
       const hex =
         value.length === 4
@@ -113,10 +132,13 @@ function page(contents = [], initialOverride = null) {
               .map((c) => c + c)
               .join("")
           : value.slice(1);
+
       return `rgb(${[0, 2, 4].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
     }
+
     return value;
   };
+
   const document = {
     documentElement: root,
     head,
@@ -126,15 +148,19 @@ function page(contents = [], initialOverride = null) {
     elementFromPoint: () => {
       stats.hitTests++;
       samples.push(now);
+
       return header;
     },
     addEventListener: (type, fn) => listen("document", type, fn),
   };
+
   const setTimeout = (fn, ms) => {
     const id = ++nextTimer;
     timers.set(id, { at: now + ms, fn });
+
     return id;
   };
+
   const window = { scrollY: 0 };
   runInNewContext(
     source,
@@ -146,8 +172,10 @@ function page(contents = [], initialOverride = null) {
       getComputedStyle: (el) => {
         if (el.style.color) {
           stats.probes++;
+
           return { color: resolveColor(el.style.color, el.style.getPropertyPriority("color") === "important") };
         }
+
         return { backgroundColor: el.backgroundColor, position: el.position, colorScheme: "light dark" };
       },
       MutationObserver: class {
@@ -171,22 +199,29 @@ function page(contents = [], initialOverride = null) {
     },
     { filename: "page_script.theme.js" },
   );
+
   const advance = (ms) => {
     const until = now + ms;
+
     for (;;) {
       const due = [...timers].filter(([, timer]) => timer.at <= until).sort((a, b) => a[1].at - b[1].at)[0];
+
       if (!due) break;
       now = due[1].at;
       timers.delete(due[0]);
       due[1].fn();
     }
+
     now = until;
   };
+
   const warm = () => {
     advance(3100);
+
     for (const key of Object.keys(stats)) stats[key] = 0;
     samples.length = sent.length = 0;
   };
+
   return {
     stats,
     sent,
@@ -214,10 +249,12 @@ for (const value of ["#123456", "#abc", "red", "rgb(12, 34, 56)", "rgba(12, 34, 
     const p = page([value]);
     assert.equal(p.stats.probes, 1);
     p.warm();
+
     for (let i = 0; i < 60; i++) {
       p.scroll();
       p.advance(16);
     }
+
     p.advance(116);
     assert.equal(p.stats.probes, 0);
     assert.equal(p.stats.probeAppends, 0);
@@ -230,13 +267,16 @@ for (const value of ["#123456", "#abc", "red", "rgb(12, 34, 56)", "rgba(12, 34, 
 test("scroll hit-testing is bounded and a final sample captures the settled dynamic header", () => {
   const p = page();
   p.warm();
+
   for (let i = 1; i <= 60; i++) {
     p.header.backgroundColor = `rgb(${i}, 0, 0)`;
     p.scroll();
     p.advance(16);
   }
+
   p.advance(116);
   assert.ok(p.stats.hitTests > 1 && p.stats.hitTests <= 11, `sampled ${p.stats.hitTests} times for 60 scroll frames`);
+
   for (let i = 1; i < p.samples.length; i++) assert.ok(p.samples[i] - p.samples[i - 1] >= 100);
   assert.equal(p.sent.at(-1).color, "#3C0000");
   assert.equal(p.sent.at(-1).source, "header");

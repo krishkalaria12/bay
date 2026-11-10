@@ -46,7 +46,6 @@ const choices: Partial<Record<keyof Settings, readonly string[]>> = {
   windowMaterial: ["solid", "glass"],
   addressBar: ["toolbar", "sidebar"],
   libraryIn: ["sidebar", "page"],
-  pageEngine: ["chromium", "webkit"],
 };
 
 /** Renderer preferences cannot replace engines reported by native extensions or
@@ -78,11 +77,6 @@ function patchFrom(value: unknown): Partial<Settings> {
       const normalized = normalizeExternalLinkRules(item);
       if (normalized.length !== item.length) invalid();
       patch[key] = normalized.map((rule) => ({ ...rule, destination: { ...rule.destination } }));
-    } else if (key === "websiteEngines") {
-      // Site ("https://host[:port]") to the engine its pages open in (store/engines.ts).
-      patch[key] = Object.fromEntries(
-        Object.entries(record(item)).map(([site, engine]) => [text(site, false), engine === "chromium" || engine === "webkit" ? engine : invalid()]),
-      );
     } else if (key === "shortcuts" || key === "neverTranslateSites") {
       patch[key] = Object.fromEntries(Object.entries(record(item)).map(([name, values]) => [text(name, false), strings(values)]));
     } else if (Array.isArray(fallback)) patch[key] = strings(item);

@@ -17,6 +17,7 @@ export function SidebarOverlays({ windowWidth }: { windowWidth: number }) {
   const sidebarWidth = useSidebarWidth(windowId);
   const [height, setHeight] = useState(0);
   useEffect(startSidebarEffects, []);
+
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
       <HoverCard windowId={windowId} windowWidth={windowWidth} />

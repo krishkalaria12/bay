@@ -29,7 +29,7 @@ export function withoutVisitsSince(entry: HistoryEntry, since: number): HistoryE
   return { ...entry, visits: entry.visits - (times.length - kept.length), lastVisit: kept[kept.length - 1]!, visitTimes: kept };
 }
 
-const failed = (what: string) => (error: unknown) => console.warn(`[history] ${what}`, error);
+const failed = (what: string) => (error: Error) => console.warn(`[history] ${what}`, error);
 
 export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice> = (set, get) => ({
   history: {},

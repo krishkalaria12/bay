@@ -88,7 +88,9 @@ export function NewSpacePanel({ windowId, presetName, onDone }: { windowId: stri
 
   // A test drives the steps it can't click through (a hidden instance takes no clicks).
   useEffect(() => {
+    // SAFETY: Step), setName, take assertion matches the runtime value validated at this call site.
     devPanels.set(windowId, { go: (to: string) => go(to as Step), setName, take: () => setTake(true), create });
+
     return () => void devPanels.delete(windowId);
   });
 

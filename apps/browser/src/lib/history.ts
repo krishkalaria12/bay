@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { addHistoryVisits, onHistoryChanged, queryHistory, watchHistory, type EngineHistoryEntry, type HistoryChange } from "@bay/chromium";
 import { readDocument, removeDocument } from "@bay/desktop";
 import { useBrowser, type BrowserState, type BrowserStore } from "../store/browserStore";
@@ -211,11 +212,11 @@ export function createHistoryService(browser: BrowserStore) {
     try {
       for (const [engine, list] of perEngine) {
         const pages = list
-          .filter((e) => e && typeof e.url === "string")
+          .filter((e) => e && v.is(v.string(), e.url))
           .map((e) => ({
             url: e.url,
             title: e.title ?? "",
-            visitTimes: (e.visitTimes?.length ? e.visitTimes : [e.lastVisit]).filter((t) => typeof t === "number" && t > now - CHROME_HISTORY_KEEPS_MS),
+            visitTimes: (e.visitTimes?.length ? e.visitTimes : [e.lastVisit]).filter((t) => v.is(v.number(), t) && t > now - CHROME_HISTORY_KEEPS_MS),
           }))
           .filter((p) => p.visitTimes.length);
         for (let i = 0; i < pages.length; i += HISTORY_CHUNK) {

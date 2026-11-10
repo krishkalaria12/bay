@@ -1,7 +1,7 @@
 import { decodeSharedCollection } from "@bay/core";
 import type { BrowserState, BrowserStore } from "../store/browserStore";
 import { isIncognitoSpace } from "../store/model";
-import type { GroupPlacement, TabPlacement } from "../store/tabTidying";
+import type { GroupPlacement, TabPlacement, TabTidyPlan } from "../store/tabTidying";
 import type { GroupColor, PinnedFolder, TabGroup } from "../store/types";
 import {
   commandBoolean,
@@ -49,7 +49,7 @@ export type OrganizeCommand =
   | { method: "returnToPinnedUrl"; tabId: string }
   | { method: "setPinnedUrl"; tabId: string; url?: string }
   | { method: "cleanUpTabs"; windowId: string; options?: { inactiveForMs?: number; spaceId?: string } }
-  | { method: "tidyTabs"; windowId: string }
+  | { method: "tidyTabs"; windowId: string; plan?: TabTidyPlan }
   | { method: "restoreCleaned"; windowId: string; entryId?: string };
 
 export const ORGANIZE_COMMAND_METHODS = [
@@ -84,6 +84,23 @@ export const ORGANIZE_COMMAND_METHODS = [
   "tidyTabs",
   "restoreCleaned",
 ] as const;
+
+/** The groups Tidy makes and the ones it adds to: tab ids, and the group each joins. */
+const tidyPlan = (value: unknown): TabTidyPlan => {
+  const plan = commandObject(value, ["newGroups", "joins"]);
+  const newGroups = (Array.isArray(plan.newGroups) ? plan.newGroups : []).map((group) => {
+    const entry = commandObject(group, ["name", "tabIds"]);
+
+    return { ...(entry.name === undefined ? {} : { name: commandText(entry.name) }), tabIds: commandIds(entry.tabIds) };
+  });
+  const joins = (Array.isArray(plan.joins) ? plan.joins : []).map((join) => {
+    const entry = commandObject(join, ["groupId", "tabIds"]);
+
+    return { groupId: commandText(entry.groupId), tabIds: commandIds(entry.tabIds) };
+  });
+
+  return { newGroups, joins };
+};
 
 const GROUP_COLORS: readonly string[] = ["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"];
 const color = (value: unknown): GroupColor | null =>
@@ -241,8 +258,8 @@ export function parseOrganizeCommand(value: unknown): OrganizeCommand {
         }),
       };
     case "tidyTabs":
-      fields("windowId");
-      return { method: c.method, windowId: windowId() };
+      fields("windowId", "plan");
+      return { method: c.method, windowId: windowId(), ...(c.plan !== undefined ? { plan: tidyPlan(c.plan) } : {}) };
     case "restoreCleaned":
       fields("windowId", "entryId");
       return { method: c.method, windowId: windowId(), ...(c.entryId !== undefined ? { entryId: commandText(c.entryId) } : {}) };
@@ -276,7 +293,7 @@ function requireCleanedEntry(s: BrowserState, windowId: string, entryId: string 
   if (entryId && !entries.some((entry) => entry.id === entryId)) return invalidCommand("cleaned up tab no longer exists");
 }
 
-export function executeOrganizeCommand(store: BrowserStore, command: OrganizeCommand): string | null {
+export function executeOrganizeCommand(store: BrowserStore, command: OrganizeCommand): string | number | null {
   const s = store.getState();
   // Reducers return "" when nothing was created; an ID result is never empty.
   const created = (id: string) => id || invalidCommand("command had no effect");
@@ -400,8 +417,7 @@ export function executeOrganizeCommand(store: BrowserStore, command: OrganizeCom
     }
     case "tidyTabs":
       requireCommandWindow(s, command.windowId);
-      s.tidyTabs(command.windowId);
-      break;
+      return s.tidyTabs(command.windowId, command.plan);
     case "restoreCleaned":
       requireCleanedEntry(s, command.windowId, command.entryId);
       return s.restoreCleaned(command.entryId, command.windowId) ?? null;

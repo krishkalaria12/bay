@@ -214,29 +214,49 @@ export const getDisplayMediaSources = () => Cef.displayMediaSources();
 // Downloads and permission prompts from both engines, in one list; a WebKit one's id says so (webkit.ts). On the
 // legacy architecture a module's event reaches the listeners of every module declaring that name, so each engine's
 // subscription takes only its own: otherwise every prompt arrives twice, and comes back after it's answered.
-const bothEngines = <T extends { id: string }>(
-  name: "onDownload" | "onPermission" | "onPermissionDismissed",
-  isWebKit: (id: string) => boolean,
-  listener: (value: T) => void,
-) => {
-  const chromium = Cef.addListener(
-    name as "onDownload",
-    ((value: T) => {
-      if (!isWebKit(value.id)) listener(value);
-    }) as unknown as (d: Download) => void,
-  );
-  const webkit = webKitListener<T>(name, (value) => {
-    if (isWebKit(value.id)) listener(value);
+function subscribeDownload(listener: (d: Download) => void) {
+  const chromium = Cef.addListener("onDownload", (value) => {
+    if (!isWebKitDownload(value.id)) listener(value);
   });
+
+  const webkit = webKitListener<Download>("onDownload", (value) => {
+    if (isWebKitDownload(value.id)) listener(value);
+  });
+
   return { remove: () => (chromium.remove(), webkit.remove()) };
-};
+}
+
+function subscribePermission(listener: (p: PermissionRequest) => void) {
+  const chromium = Cef.addListener("onPermission", (value) => {
+    if (!isWebKitPermission(value.id)) listener(value);
+  });
+
+  const webkit = webKitListener<PermissionRequest>("onPermission", (value) => {
+    if (isWebKitPermission(value.id)) listener(value);
+  });
+
+  return { remove: () => (chromium.remove(), webkit.remove()) };
+}
+
+function subscribePermissionDismissed(listener: (p: { id: string }) => void) {
+  const chromium = Cef.addListener("onPermissionDismissed", (value) => {
+    if (!isWebKitPermission(value.id)) listener(value);
+  });
+
+  const webkit = webKitListener<{ id: string }>("onPermissionDismissed", (value) => {
+    if (isWebKitPermission(value.id)) listener(value);
+  });
+
+  return { remove: () => (chromium.remove(), webkit.remove()) };
+}
+
 const webKitDownload = (action: "cancel" | "pause" | "resume", id: string) => WebKit?.downloadCommand(action, id) ?? Promise.resolve();
 
 export function onDownload(listener: (d: Download) => void) {
   // A host that has the list gives it after subscribing, so nothing reported before is lost. An event can overtake
   // the list's reply: the event is newer, so the list's copy of that download is dropped.
   let reported: Set<string> | null = new Set<string>();
-  const subscription = bothEngines<Download>("onDownload", isWebKitDownload, (d) => {
+  const subscription = subscribeDownload((d) => {
     reported?.add(d.id);
     listener(d);
   });
@@ -261,8 +281,9 @@ export const cancelDownload = (id: string) => (isWebKitDownload(id) ? webKitDown
 export const pauseDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("pause", id) : Cef.pauseDownload(id));
 export const resumeDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("resume", id) : Cef.resumeDownload(id));
 
-export const onPermission = (listener: (p: PermissionRequest) => void) => bothEngines("onPermission", isWebKitPermission, listener);
-export const onPermissionDismissed = (listener: (p: { id: string }) => void) => bothEngines("onPermissionDismissed", isWebKitPermission, listener);
+export const onPermission = subscribePermission;
+export const onPermissionDismissed = subscribePermissionDismissed;
+
 export const resolvePermission = (id: string, result: PermissionResult, remember = false) =>
   isWebKitPermission(id) ? (WebKit?.resolvePermission(id, result, remember) ?? Promise.resolve()) : Cef.resolvePermission(id, result, remember);
 

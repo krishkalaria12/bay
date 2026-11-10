@@ -10,6 +10,7 @@ registerHooks({
     if (specifier === "@bay/platform") return { url: new URL("./test-platform-stub.mjs", import.meta.url).href, shortCircuit: true };
     if (specifier === "@bay/platform/native") return { url: stub, shortCircuit: true };
     if (native.has(specifier)) return { url: stub, shortCircuit: true };
+
     try {
       return next(specifier, context);
     } catch (error) {
@@ -20,6 +21,7 @@ registerHooks({
           } catch {}
         }
       }
+
       throw error;
     }
   },

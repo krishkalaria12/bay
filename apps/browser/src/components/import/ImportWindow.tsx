@@ -17,6 +17,7 @@ const STEPS: Record<Step, (props: { flow: ImportFlow }) => React.ReactNode> = {
 export function ImportWindow() {
   const flow = useImportFlow();
   const CurrentStep = STEPS[flow.step];
+
   return (
     <ImportBackdrop>
       <CurrentStep flow={flow} />

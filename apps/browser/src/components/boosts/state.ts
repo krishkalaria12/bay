@@ -3,6 +3,7 @@ import { readDocument, writeDocument } from "@bay/desktop";
 import { create } from "zustand";
 import { hasServiceClient } from "../../runtime/serviceClient";
 import { engineBoosts, newBoost, normalizeBoost, normalizeScript, tabBoostStyle, type Boost, type BoostPalette, type BoostScript } from "../../lib/boosts";
+import { isJsonObject, type JsonValue } from "../../lib/json";
 import { hex, SPACE_COLORS, spaceThemeKey, themeFor } from "../../lib/theme";
 import { onWebviewAttached, webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -75,17 +76,27 @@ export function startBoosts() {
 function load() {
   try {
     const json = readDocument(FILE);
-    const data = json ? (JSON.parse(json) as Record<string, unknown>) : {};
+    const data: JsonValue = json ? JSON.parse(json) : {};
+
+    if (!isJsonObject(data)) throw new Error("Boosts file isn't a JSON object");
+    const savedBoosts = isJsonObject(data.boosts) ? data.boosts : {};
     const boosts: Record<string, Boost> = {};
-    for (const raw of Object.values((data.boosts as Record<string, unknown>) ?? {})) {
+
+    for (const raw of Object.values(savedBoosts)) {
       const b = normalizeBoost(raw);
+
       if (b) boosts[b.id] = b;
     }
+
     const scripts: Record<string, BoostScript> = {};
-    for (const [id, raw] of Object.entries((data.scripts as Record<string, unknown>) ?? {})) {
+    const savedScripts = isJsonObject(data.scripts) ? data.scripts : {};
+
+    for (const [id, raw] of Object.entries(savedScripts)) {
       const script = normalizeScript(raw);
+
       if (script && boosts[id]) scripts[id] = script;
     }
+
     useBoosts.setState({ loaded: true, error: null, on: data.on !== false, boosts, scripts, scriptsAcknowledged: data.scriptsAcknowledged === true });
   } catch (error) {
     // An unreadable file is kept as it is, not overwritten: nothing is saved until it's fixed.
@@ -204,7 +215,7 @@ export function addBoost(boost: Boost, script = "") {
   if (s.error) return;
   useBoosts.setState({
     boosts: { ...s.boosts, [boost.id]: boost },
-    ...(script ? { scripts: { ...s.scripts, [boost.id]: { code: script, enabled: false, privateWindows: false } } } : {}),
+    ...(script ? { scripts: { ...s.scripts, [boost.id]: { code: script, enabled: false, privateWindows: false } } } : undefined),
   });
 }
 
@@ -212,7 +223,7 @@ export function updateBoost(id: string, patch: Partial<Omit<Boost, "id" | "host"
   const s = useBoosts.getState();
   const before = s.boosts[id];
   if (!boostsAvailable() || !before || s.error) return;
-  const next = normalizeBoost({ ...before, ...(typeof patch === "function" ? patch(before) : patch), id, host: before.host, updatedAt: Date.now() });
+  const next = normalizeBoost({ ...before, ...(patch instanceof Function ? patch(before) : patch), id, host: before.host, updatedAt: Date.now() });
   if (next) useBoosts.setState({ boosts: { ...s.boosts, [id]: next } });
 }
 

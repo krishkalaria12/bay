@@ -61,7 +61,9 @@ const SCHEMES: { mode: Settings["appearance"]; icon: string; tooltip: string }[]
 ];
 
 type Swatch = { name: string; color?: SpaceColor; colors: string[] };
+
 const SWATCHES: Swatch[] = [
+  // SAFETY: SpaceColor[]).map((c) assertion matches the runtime value validated at this call site.
   ...(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => ({ name: SPACE_COLORS[c].name, color: c, colors: [SPACE_COLORS[c].swatch] })),
   ...THEME_PRESETS,
 ];
@@ -73,6 +75,7 @@ const useEditor = create<{ request: Request | null }>(() => ({ request: null }))
 /** Edits a space's theme in a window, which shows that space meanwhile. */
 export function openThemeEditor(windowId: string, spaceId: string) {
   const s = useBrowser.getState();
+
   if (!s.spaces[spaceId] || !s.windows[windowId]) return;
   reportBrowserCommand(
     windowCommands.switchSpace(windowId, spaceId).then(() => {
@@ -87,6 +90,7 @@ const close = () => useEditor.setState({ request: null });
 export function closeThemeEditorOnEscape(windowId: string): boolean {
   if (!themeEditorOpen(windowId)) return false;
   close();
+
   return true;
 }
 
@@ -96,6 +100,7 @@ export const themeEditorOpen = (windowId: string) => useEditor.getState().reques
 export function ThemeEditorHost() {
   const windowId = useWindowId();
   const request = useEditor((e) => (e.request?.windowId === windowId ? e.request : null));
+
   return request ? <ThemeEditor key={request.spaceId} request={request} /> : null;
 }
 
@@ -108,10 +113,14 @@ function ThemeEditor({ request }: { request: Request }) {
   const side = useSidebarOnRight() ? "right" : "left";
   const keys = useRef<View>(null);
   useEffect(() => {
-    const t = setTimeout(() => (keys.current as unknown as { focus?: () => void } | null)?.focus?.(), 50);
+    // SAFETY: { focus? assertion matches the runtime value validated at this call site.
+    const t = setTimeout(() => (keys.current as { focus?: () => void } | null)?.focus?.(), 50);
+
     return () => clearTimeout(t);
   }, []);
+
   if (!space) return null;
+
   return (
     <>
       <Pressable accessibilityLabel="Close Theme Editor" style={StyleSheet.absoluteFill} onPress={close} />
@@ -158,42 +167,55 @@ export function ThemeControls({ look, width = THEME_FIELD_WIDTH, onChange }: { l
   const frame = useRef<number | null>(null);
 
   const current = draft && look.theme ? draft : editableTheme(look.theme, SPACE_COLORS[look.color].swatch);
+
   // Many changes a second while dragging: `onChange` takes the latest once a frame.
   const set = (patch: Partial<SpaceTheme>) => {
     const next = { ...(pending.current ?? current), ...patch };
     pending.current = next;
     setDraft(next);
+
     if (frame.current !== null) return;
     frame.current = requestAnimationFrame(() => {
       frame.current = null;
+
       if (pending.current) onChange({ ...look, theme: pending.current });
     });
   };
+
   const colors = () => (pending.current ?? current).colors;
+
   // The first colour leads: the others take their places from it in the harmony (one for as many colours).
   const arrange = (first: string, type: Harmony) => {
     setHarmony(type);
     set({ colors: harmonize(first, type) });
   };
+
   const moveFirst = (first: string) => arrange(first, harmony);
+
   const addColor = () => {
     if (colors().length < MAX_THEME_COLORS) arrange(colors()[0]!, defaultHarmony(colors().length + 1));
   };
+
   const removeColor = () => {
     if (colors().length > 1) arrange(colors()[0]!, harmonyAfterRemoving(harmony, colors().length - 1));
   };
+
   const cycleHarmony = () => {
     if (colors().length > 1) arrange(colors()[0]!, nextHarmony(harmony, colors().length));
   };
+
   const applySwatch = (swatch: Swatch) => {
     pending.current = null;
     setDraft(null);
     setHarmony(defaultHarmony(swatch.colors.length));
+
     if (swatch.color) onChange({ ...look, color: swatch.color, theme: null });
     else onChange({ ...look, theme: { ...current, colors: swatch.colors } });
   };
+
   const chosen = (swatch: Swatch) =>
     swatch.color ? !look.theme && look.color === swatch.color : !!look.theme && look.theme.colors.join() === swatch.colors.join();
+
   const follows = look.followSite ?? !look.theme?.colors.length;
 
   return (
@@ -242,6 +264,7 @@ export function ThemeControls({ look, width = THEME_FIELD_WIDTH, onChange }: { l
 // yab's "Take the site's color": a page with a colour of its own tints the window.
 function SiteColorRow({ on, onChange }: { on: boolean; onChange(on: boolean): void }) {
   const theme = useTheme();
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14 }}>
       <View style={{ flex: 1 }}>
@@ -259,11 +282,14 @@ function wheel(width: number) {
   const radius = (THEME_WHEEL_RADIUS * width) / THEME_FIELD_WIDTH;
   const cx = width / 2;
   const cy = height / 2;
+
   const dotAt = (color: string) => {
     const { angle, distance } = wheelPosition(color);
     const r = distance * radius;
+
     return { x: cx + Math.cos(angle * 2 * Math.PI) * r, y: cy + Math.sin(angle * 2 * Math.PI) * r };
   };
+
   return { height, radius, cx, cy, dotAt };
 }
 
@@ -274,11 +300,13 @@ export function ColorField({ colors, width, onMoveFirst }: { colors: string[]; w
   const { height, radius, cx, cy, dotAt } = wheel(width);
   const field = useRef<View>(null);
   const origin = useRef({ x: 0, y: 0 });
+
   const follow = useEffectEvent((e: GestureResponderEvent) => {
     const dx = e.nativeEvent.pageX - origin.current.x - cx;
     const dy = e.nativeEvent.pageY - origin.current.y - cy;
     onMoveFirst(wheelColor(Math.atan2(dy, dx) / (2 * Math.PI), Math.hypot(dx, dy) / radius));
   });
+
   const [pan] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -288,6 +316,7 @@ export function ColorField({ colors, width, onMoveFirst }: { colors: string[]; w
       onPanResponderTerminationRequest: () => false,
     }),
   );
+
   return (
     <View
       ref={field}
@@ -312,6 +341,7 @@ export function ColorField({ colors, width, onMoveFirst }: { colors: string[]; w
           const { x, y } = dotAt(c);
           const size = i === 0 ? THEME_PRIMARY_DOT : THEME_DOT;
           const ring = i === 0 ? 5 : 3;
+
           // A faint outer ring sets the dot off a light field: no style shadow (RN macOS's view shadow takes the app
           // down; the app's shadows are Surface's).
           return (
@@ -346,6 +376,7 @@ function WaveSlider({ value, colors, onChange }: { value: number; colors: string
   const ends = 10;
   const run = Math.max(1, width - 2 * ends);
   const change = useEffectEvent((e: GestureResponderEvent) => onChange(Math.min(1, Math.max(0, (e.nativeEvent.pageX - origin.current - ends) / run))));
+
   const [pan] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -355,11 +386,13 @@ function WaveSlider({ value, colors, onChange }: { value: number; colors: string
       onPanResponderTerminationRequest: () => false,
     }),
   );
+
   const thumbX = ends + value * run;
   const points = width ? wavePoints(ends, width - ends, THEME_WAVE_HEIGHT, value, THEME_WAVE_AMPLITUDE, THEME_WAVE_PERIOD) : [];
   const thumb = { width: 8 + 8 * value, height: 28 + 10 * value };
   const faint = theme.dark ? "#FFFFFF2E" : "#00000026";
   const nudge = (k: number) => Math.min(1, Math.max(0, Math.round((value + k) * 10) / 10));
+
   return (
     <View
       ref={track}
@@ -394,6 +427,7 @@ function WaveSlider({ value, colors, onChange }: { value: number; colors: string
         const lit = s.x <= thumbX;
         // Coloured from the theme's first colour through its last, as Zen's wave takes the gradient.
         const color = lit ? colors[Math.min(colors.length - 1, Math.floor((s.x / Math.max(1, thumbX)) * colors.length))]! : faint;
+
         return (
           <View
             key={i}
@@ -432,12 +466,15 @@ function GrainDial({ value, onChange }: { value: number; onChange(v: number): vo
   const theme = useTheme();
   const dial = useRef<View>(null);
   const centre = useRef({ x: 0, y: 0 });
+
   const change = useEffectEvent((e: GestureResponderEvent) => {
     const next = dialValue(e.nativeEvent.pageX - centre.current.x, e.nativeEvent.pageY - centre.current.y, THEME_DIAL_STEPS);
+
     if (next === value) return;
     hapticTick();
     onChange(next);
   });
+
   const [pan] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -447,6 +484,7 @@ function GrainDial({ value, onChange }: { value: number; onChange(v: number): vo
       onPanResponderTerminationRequest: () => false,
     }),
   );
+
   const r = THEME_DIAL / 2;
   const steps = Math.round(value * THEME_DIAL_STEPS) % THEME_DIAL_STEPS;
   // On the ring of dots, in place of the step's own.
@@ -454,6 +492,7 @@ function GrainDial({ value, onChange }: { value: number; onChange(v: number): vo
   const inner = THEME_DIAL * 0.6;
   const mark = theme.dark ? "#FFFFFF" : "#000000";
   const stepBy = (k: number) => ((steps + k + THEME_DIAL_STEPS) % THEME_DIAL_STEPS) / THEME_DIAL_STEPS;
+
   return (
     <View
       ref={dial}
@@ -470,7 +509,9 @@ function GrainDial({ value, onChange }: { value: number; onChange(v: number): vo
     >
       {Array.from({ length: THEME_DIAL_STEPS }, (_, i) => {
         const p = dialPoint(i / THEME_DIAL_STEPS, r - 4);
+
         if (i === steps) return null;
+
         return (
           <View
             key={i}
@@ -519,6 +560,7 @@ function GrainDial({ value, onChange }: { value: number; onChange(v: number): vo
 
 function SwatchButton({ swatch, on, onPress }: { swatch: Swatch; on: boolean; onPress(): void }) {
   const theme = useTheme();
+
   return (
     <Pressable onPress={onPress} tooltip={swatch.name}>
       <View
@@ -559,6 +601,7 @@ function IconButton({
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const fill = on ? (theme.dark ? "#FFFFFF1F" : "#0000001A") : hovered && !disabled ? theme.rowHover : undefined;
+
   return (
     <View {...hoverProps} tooltip={tooltip}>
       <Pressable disabled={disabled} accessibilityLabel={tooltip} accessibilityState={{ selected: on, disabled }} onPress={onPress}>

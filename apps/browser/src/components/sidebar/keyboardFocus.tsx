@@ -142,13 +142,17 @@ export function useSidebarKeyboard(windowId: string, scroll: RefObject<ScrollVie
         },
         peek(row) {
           if (row.kind === "folder" || row.kind === "group") {
+            const kind = row.kind;
+
             void measureRow(windowId, row.id.slice(2)).then((anchor) => {
               if (anchor && useSidebarUi.getState().keyboard[windowId]?.rowId === row.id && useSidebarUi.getState().keyboard[windowId]?.active) {
-                setSidebarUi({ hover: { windowId, kind: row.kind as "folder" | "group", id: row.id.slice(2), anchor } });
+                setSidebarUi({ hover: { windowId, kind, id: row.id.slice(2), anchor } });
               }
             });
+
             return;
           }
+
           const s = useBrowser.getState();
           const from = activeTabId(s, windowId);
           const id = tabId(row);

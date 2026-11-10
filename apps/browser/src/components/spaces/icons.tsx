@@ -112,7 +112,9 @@ export const profileSymbol = (icon: string | null) => (icon?.startsWith(SYMBOL_P
 /** The icon's name for a label: its symbol's title, the emoji itself, or "Initial". */
 export function spaceIconTitle(icon: string | null): string {
   const symbol = profileSymbol(icon);
+
   if (symbol) return SPACE_SYMBOLS.find((s) => s.name === symbol)?.title ?? "Symbol";
+
   return icon ?? "Initial";
 }
 
@@ -121,6 +123,7 @@ export { SPACE_EMOJI, unusedSpaceIcon } from "../../store/spaces";
 export function SpaceBadge({ profile, size = 26 }: { profile: Pick<Space, "name" | "color" | "icon"> & Partial<Pick<Space, "theme">>; size?: number }) {
   const swatch = profile.theme?.colors[0] ?? SPACE_COLORS[profile.color]?.swatch ?? SPACE_COLORS.plum.swatch;
   const symbol = profileSymbol(profile.icon);
+
   return (
     <View
       style={{

@@ -256,13 +256,16 @@ export async function showExtensionMenu(windowId: string, ext: InstalledExtensio
   if (choice === "manage") openManageExtensions();
 }
 
-function message(error: unknown): string {
-  if (error instanceof ExtensionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
+function message(cause: unknown): string {
+  if (cause instanceof ExtensionError) return cause.message;
+
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 export function extensionMenu(s: BrowserState, windowId: string | undefined) {
   return windowExtensions(s, windowId).map((x) => ({ id: x.id, title: x.name, icon: x.actionIcon || x.icon, enabled: true }));
 }
 
-if (__DEV__) (globalThis as { nnExtensionsUi?: unknown }).nnExtensionsUi = { useExtensions, confirmInstall, cancelInstall, activateExtension };
+if (__DEV__)
+  // SAFETY: nnExtensionsUi is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  (globalThis as { nnExtensionsUi?: unknown }).nnExtensionsUi = { useExtensions, confirmInstall, cancelInstall, activateExtension };

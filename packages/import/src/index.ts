@@ -71,6 +71,7 @@ export type ImportedTab = {
 };
 
 export type TabGroupColor = "grey" | "blue" | "red" | "yellow" | "green" | "pink" | "purple" | "cyan" | "orange";
+
 export type ImportedTabGroup = { id: string; title: string; color: TabGroupColor | (string & {}); collapsed: boolean };
 
 export type Credential = {
@@ -223,11 +224,13 @@ export class ImportError extends Error {
 
 type ImportEvent = ({ jobId: string; type: "progress" } & ImportProgress) | { jobId: string; type: "history"; entries: string };
 
+type NativeImportOptions = { historyLimit?: number; historySince?: number; spaceIds?: string[]; chunkSize?: number; streamHistory: boolean };
+
 const Native = requireNativeModule<{
   addListener(name: "onImportEvent", listener: (e: ImportEvent) => void): EventSubscription;
   listBrowsers(): Promise<string>;
   listInstalledBrowsers(): Promise<string>;
-  importData(jobId: string, browserId: string, profileId: string, kinds: ImportKind[], options: object): Promise<string>;
+  importData(jobId: string, browserId: string, profileId: string, kinds: ImportKind[], options: NativeImportOptions): Promise<string>;
   cancelImport(jobId: string): void;
   unlockBrowser(browserId: string, primaryPassword: string | null): Promise<null>;
   isBrowserUnlocked(browserId: string): boolean;
@@ -255,8 +258,11 @@ let jobSeq = 0;
 async function call<T>(promise: Promise<string | null>): Promise<T> {
   try {
     const json = await promise;
+
+    // SAFETY: each call site names the exact domain type its native payload serializes, so parsing that payload is exactly T.
     return (json == null ? undefined : JSON.parse(json)) as T;
   } catch (e) {
+    // SAFETY: the native bridge rejects with an Error instance or a {code, message} record; both expose optional code/message properties, checked below.
     const err = e as { code?: string; message?: string };
     throw new ImportError(err.code ?? "unreadable", err.message ?? String(e));
   }
@@ -264,14 +270,21 @@ async function call<T>(promise: Promise<string | null>): Promise<T> {
 
 async function job<T>(options: ImportOptions, start: (jobId: string) => Promise<string>): Promise<T> {
   const jobId = `import-${++jobSeq}`;
+
   if (options.signal?.aborted) throw new ImportError("cancelled", "Import cancelled");
+
   const sub = Native.addListener("onImportEvent", (e) => {
     if (e.jobId !== jobId) return;
-    if (e.type === "history") options.onHistoryChunk?.(JSON.parse(e.entries) as ImportedHistoryEntry[]);
-    else options.onProgress?.({ kind: e.kind, phase: e.phase, processed: e.processed, total: e.total });
+
+    if (e.type === "history") {
+      const entries: ImportedHistoryEntry[] = JSON.parse(e.entries);
+      options.onHistoryChunk?.(entries);
+    } else options.onProgress?.({ kind: e.kind, phase: e.phase, processed: e.processed, total: e.total });
   });
+
   const abort = () => Native.cancelImport(jobId);
   options.signal?.addEventListener("abort", abort);
+
   try {
     return await call<T>(start(jobId));
   } finally {
@@ -293,6 +306,7 @@ export function importData(browserId: string, profileId: string, kinds: ImportKi
     chunkSize: options.chunkSize,
     streamHistory: options.onHistoryChunk != null,
   };
+
   return job<ImportResult>(options, (jobId) => Native.importData(jobId, browserId, profileId, kinds, native));
 }
 

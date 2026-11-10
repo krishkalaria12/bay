@@ -23,11 +23,10 @@ import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
 import { useBrowser, type BrowserStore, type BrowserState } from "../store/browserStore";
 import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId, tabLabel, windowTitle } from "../store/model";
-import { canSwitchEngine, tabEngine } from "../store/engines";
 import { pinnableSplit, pinRowTitle, splitOf } from "../store/splits";
 import { canGoBack, canGoForward } from "../components/window/historyMenu";
 import type { Bookmarks, BookmarkNode } from "../store/types";
-import { startTidyDownloadOffers } from "./tidyDownloads";
+import { startTidyDownloads } from "./tidyDownloads";
 import { isUtilityWindowId } from "../components/settings/windows";
 import { isInternalTab } from "../components/pages/pageUrls";
 import { sidebarMenuState } from "../components/sidebar/sidebarCommands";
@@ -104,7 +103,7 @@ export function startNativeSync({
     () => urls.remove(),
     () => downloads.remove(),
   );
-  stops.push(startTidyDownloadOffers(store));
+  stops.push(startTidyDownloads(store));
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
   void setAppearance(store.getState().settings.appearance);
@@ -310,7 +309,6 @@ const PAGE_COMMANDS = [
   "bookmarkPage",
   "addBookmarkToFolder",
   "toggleMute",
-  "togglePageEngine",
   "findAndReplace",
   "jumpToSelection",
   "viewSource",
@@ -383,7 +381,7 @@ function bookmarkMenus(b: Bookmarks, spaceId: string): BookmarkMenus {
         bookmarkFolders: [
           { id: roots.bar, title: "Bookmarks Bar" },
           { id: roots.other, title: "Other Bookmarks" },
-          ...[...folderChildren(b, roots.bar), ...folderChildren(b, roots.other)].filter((n) => n.kind === "folder").map((n) => ({ id: n.id, title: n.title })),
+          ...[...folderChildren(b, roots.bar), ...folderChildren(b, roots.other)].flatMap((n) => (n.kind === "folder" ? [{ id: n.id, title: n.title }] : [])),
         ],
         recentBookmarks: Object.values(b.nodes)
           .filter((n): n is Extract<BookmarkNode, { kind: "url" }> => n.kind === "url" && isInTree(b, n.id, [roots.bar, roots.other]))
@@ -432,11 +430,13 @@ export function menuState(s: BrowserState): MenuState {
   if (w && !w.sidebarOpen) checked.push("toggleSidebar");
 
   const titles: Record<string, string> = {};
+
   if (tab?.pinned) titles.togglePin = "Remove from Essentials";
+
   if (tab?.pinnedRow || (tab && pinnableSplit(s, tab.id))) titles.togglePinRow = pinRowTitle(s, tab.id);
+
   if (tab?.muted) titles.toggleMute = "Unmute Site";
-  if (tab && tabEngine(s, tab.id) === "webkit") titles.togglePageEngine = "Open Page in Chromium";
-  if (!canSwitchEngine(tab?.url)) disabled.push("togglePageEngine");
+
   if (tab?.url && isBookmarked(s.bookmarks, bookmarkProfile, tab.url)) {
     titles.bookmarkPage = "Edit Bookmark…";
   }

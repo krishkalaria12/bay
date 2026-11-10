@@ -81,7 +81,13 @@ const inside = (f: Frame, x: number, y: number, slop = 0) => x >= f.x - slop && 
 const measure = (view: View | null): Promise<Frame | null> =>
   view ? new Promise((resolve) => view.measureInWindow((x, y, w, h) => resolve(w || h ? { x, y, w, h } : null))) : Promise.resolve(null);
 
+function asView(v: ScrollView | View | null): View {
+  // SAFETY: this.scroll is a mounted ScrollView host view; at runtime it exposes View.measureInWindow.
+  return v as View;
+}
+
 type Marks = { sources: Set<string>; dropInto: string | null; landing: string | null; pins: boolean };
+
 const NO_MARKS: Marks = { sources: new Set(), dropInto: null, landing: null, pins: false };
 const noMarks = create<Marks>()(() => NO_MARKS);
 
@@ -204,7 +210,7 @@ class DragController {
   }
 
   private async measureAll() {
-    const [rootFrame, viewport] = await Promise.all([measure(this.root), measure(this.scroll as unknown as View)]);
+    const [rootFrame, viewport] = await Promise.all([measure(this.root), measure(asView(this.scroll))]);
     this.rootFrame = rootFrame ?? this.rootFrame;
     this.viewport = viewport;
     this.startScrollY = this.scrollY;
@@ -545,7 +551,10 @@ export function DragProvider({ children }: { children: (ghost: Ghost | null, con
     if (controller.active) controller.end(false);
   }, [controller, density, folded]);
   useEffect(() => {
-    if (__DEV__) (globalThis as { sidebarDrag?: DragController }).sidebarDrag = controller;
+    if (__DEV__)
+      // SAFETY: sidebarDrag is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+      (globalThis as { sidebarDrag?: DragController }).sidebarDrag = controller;
+
     // The sidebar going away mid-drag (its window closing, the layout switching) ends the drag and its picture.
     return () => void (controller.active && controller.end(false));
   }, [controller]);

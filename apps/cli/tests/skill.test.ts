@@ -21,10 +21,12 @@ it.each([...blocks("ts"), ...commands])("compiles the recipe %s", (recipe) => {
 
 it("installs the skill with its API reference", () => {
   const project = mkdtempSync(join(tmpdir(), "bay-skill-test-"));
+
   try {
     const result = Bun.spawnSync([process.execPath, join(import.meta.dir, "../bin/bay.ts"), "skills", "install", "--project", "--target", "claude-code"], {
       cwd: project,
     });
+
     expect(result.exitCode).toBe(0);
     const folder = join(project, ".claude", "skills", "bay");
     expect(readFileSync(join(folder, "SKILL.md"), "utf8")).toBe(skill);

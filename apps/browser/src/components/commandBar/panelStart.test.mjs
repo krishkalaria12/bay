@@ -11,6 +11,7 @@ const tab = (id, lastActiveAt, overrides = {}) => ({
   favicon: null,
   ...overrides,
 });
+
 const visit = (url, visits, lastVisit, overrides = {}) => ({ url, visits, lastVisit, title: "Page title", favicon: null, ...overrides });
 const section = (result, id) => result.find((entry) => entry.id === id)?.items;
 
@@ -45,6 +46,7 @@ test("idle sections show recent other tabs before frequent sites", () => {
     tab("fourth", 20),
     tab("second", 40),
   ];
+
   const result = paletteStart(tabs, [visit("https://docs.example/document/123", 5, 5)], "current");
   assert.deepEqual(
     result.map((entry) => entry.id),
@@ -66,6 +68,7 @@ test("frequent sites aggregate page visits by host and use recency to break coun
     visit("https://gamma.example/", 4, 40),
     visit("https://delta.example/", 1, 50),
   ];
+
   const frequent = section(paletteStart([], history, "current"), "frequent");
   assert.deepEqual(
     frequent.map((item) => item.title),
@@ -85,6 +88,7 @@ test("frequent links use the latest page origin with its scheme and port", () =>
     visit("http://localhost:3000/project?secret=value#section", 4, 20, { favicon: "new" }),
     visit("https://secure.example:9443/path?q=1#heading", 3, 15, { favicon: "secure" }),
   ];
+
   const frequent = section(paletteStart([], history, "current"), "frequent");
   assert.deepEqual(
     frequent.map(({ title, url, favicon }) => ({ title, url, favicon })),
@@ -120,6 +124,7 @@ test("nonweb, internal and malformed history cannot enter frequent sites", () =>
     "https://",
     "https://:invalid",
   ].map((url) => visit(url, 1000, 1000));
+
   history.push(visit("https://valid.example/article", 1, 1));
   const frequent = section(paletteStart([], history, "current"), "frequent");
   assert.deepEqual(
@@ -141,18 +146,24 @@ test("building idle sections leaves caller tab and history arrays unchanged", ()
 
 test("frequent sites scan each history snapshot once while recent tabs stay live", () => {
   let scans = 0;
+
   const history = new Proxy([visit("https://site.example/page", 2, 10)], {
-    get(target, key, receiver) {
+    get(target, key) {
       if (key === Symbol.iterator) scans++;
-      return Reflect.get(target, key, receiver);
+
+      // Fixture is a plain array of plain objects with no getters; indexing forwards the same values.
+      return target[key];
     },
   });
+
   const first = paletteStart([tab("a", 1)], history, "current");
+
   for (let i = 0; i < 30; i++) {
     const next = paletteStart([tab("b", i)], history, "current");
     assert.strictEqual(section(next, "frequent"), section(first, "frequent"));
     assert.equal(section(next, "recent")[0].tabId, "b");
   }
+
   assert.equal(scans, 1);
   const updated = [...history, visit("http://new.example:3000/project", 20, 30, { favicon: "new-icon" })];
   const frequent = section(paletteStart([], updated, "current"), "frequent");
@@ -164,23 +175,28 @@ test("frequent sites scan each history snapshot once while recent tabs stay live
 
 test("new history snapshots reuse unchanged rows' hosts, including rejected URLs", () => {
   let reads = 0;
+
   const counted = (url) =>
     Object.freeze({
       ...visit(url, 1, 1),
       get url() {
         reads++;
+
         return url;
       },
     });
+
   const unchanged = [counted("https://quiet.example/page"), counted("file:///private/page"), counted("https://:invalid")];
   const winners = [visit("https://first.example/", 20, 20), visit("https://second.example/", 15, 15), visit("https://third.example/", 10, 10)];
   paletteStart([], [...winners, ...unchanged], "current");
   const initialReads = reads;
   assert.ok(initialReads > 0);
+
   for (let i = 0; i < 5; i++) {
     const updated = [{ ...winners[0], visits: 21 + i, lastVisit: 21 + i }, ...winners.slice(1), ...unchanged];
     assert.equal(section(paletteStart([], updated, "current"), "frequent")[0].title, "first.example");
   }
+
   assert.equal(reads, initialReads, "replacing a snapshot does not parse its unchanged rows again");
 });
 
@@ -231,15 +247,18 @@ test("reused hosts preserve credential, IPv6, scheme and port parsing", () => {
     visit("https://www.example.com:9443/recent", 1, 20),
     visit(" https://leading.example/", 100, 100),
   ];
+
   const expected = [
     { title: "example.com", url: "https://www.example.com:9443/" },
     { title: "[::1]", url: "http://[::1]:8080/" },
   ];
+
   for (const snapshot of [rows, [...rows], rows.slice(0, -1)]) {
     assert.deepEqual(
       section(paletteStart([], snapshot, "current"), "frequent").map(({ title, url }) => ({ title, url })),
       expected,
     );
   }
+
   assert.equal(section(paletteStart([], rows.slice(0, 2), "current"), "frequent")[0].url, "https://www.example.com:0443/");
 });

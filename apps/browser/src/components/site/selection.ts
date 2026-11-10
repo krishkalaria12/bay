@@ -24,11 +24,15 @@ const store = () => useBrowser.getState();
 
 export function startSelectionTools() {
   let name = "";
+
   const sync = () => {
     const next = defaultSearchEngine(store().settings).name;
+
     if (next !== name) void setSearchEngineName((name = next));
   };
+
   sync();
+
   return useBrowser.subscribe((s, prev) => s.settings !== prev.settings && sync());
 }
 
@@ -38,6 +42,7 @@ export type ClickModifiers = { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: 
 export function searchSelection(tabId: string, text: string, modifiers: ClickModifiers = {}) {
   const tab = store().tabs[tabId];
   const query = text.replace(/\s+/g, " ").trim();
+
   if (!tab || !query) return;
   setPageSelection(tabId, null);
   const url = searchUrl(defaultSearchEngine(store().settings), query);
@@ -74,37 +79,48 @@ type SelectionSnapshot = { url: string; context: SelectionContext };
 async function readSelection(tabId: string): Promise<SelectionSnapshot | null> {
   const url = store().tabs[tabId]?.url;
   const web = webviews.get(tabId);
+
   if (!url || !/^https?:/.test(url) || !web) return null;
   const context = await web.evaluate<SelectionContext>(SELECTION_CONTEXT);
+
   if (store().tabs[tabId]?.url !== url || webviews.get(tabId) !== web) return null;
+
   return context && !("error" in context) ? { url, context } : null;
 }
 
 function selectionLink({ url, context }: SelectionSnapshot): string | null {
   const fragment = chooseTextFragment(context);
+
   return fragment ? withTextFragment(cleanUrl(url), fragment) : null;
 }
 
 export async function linkToSelection(tabId: string): Promise<string | null> {
   const selection = await readSelection(tabId);
+
   return selection ? selectionLink(selection) : null;
 }
 
 export async function shareSelectionQuote(tabId: string) {
   const tab = store().tabs[tabId];
+
   if (!tab || !/^https?:/.test(tab.url)) return;
   const failed = (message: string) => showToast(tab.windowId, "Couldn't Share Quote", message, { icon: "quote.bubble", key: "share-quote" });
+
   try {
     // Read the quote and its fragment from the same selection, not the popover's shortened preview.
     const selection = await readSelection(tabId);
+
     if (!selection) return failed("Select text on the page and try again.");
     const text = selection.context.selected.trim();
+
     if (Array.from(text).length > 4000) return failed("Select up to 4,000 characters to fit on a card.");
     const link = selectionLink(selection);
+
     if (!link) return failed("Select text on the page and try again.");
     const s = store();
     const space = s.spaces[tab.spaceId];
     const theme = themeFor(s.windows[tab.windowId]?.incognito ? "incognito:dark" : spaceThemeKey(space, s.ui.appDark));
+
     const card: QuoteCard = {
       text,
       title: tab.title || tab.url,
@@ -112,6 +128,7 @@ export async function shareSelectionQuote(tabId: string) {
       colors: Array.isArray(theme.lightPalette) ? theme.lightPalette : theme.windowTint,
       dark: theme.dark,
     };
+
     if (!(await copyQuoteCard(card))) return failed("The card couldn't be copied. Try a shorter selection.");
     setPageSelection(tabId, null);
     showToast(tab.windowId, "Copied Quote", "Paste the card or its link into another app.", {
@@ -136,6 +153,7 @@ export async function shareSelectionQuote(tabId: string) {
 export async function copyLinkToSelection(tabId: string) {
   const link = await linkToSelection(tabId);
   const windowId = store().tabs[tabId]?.windowId;
+
   if (!link || !windowId) return;
   copyText(link);
   showToast(windowId, "Copied Quote Link", "Links directly to the selected text.", { icon: "quote.bubble.fill" });
@@ -145,12 +163,14 @@ const HAS_SELECTION = `post("result", JSON.stringify(!!String(getSelection() || 
 
 export async function copyPageUrl(tabId: string) {
   const tab = store().tabs[tabId];
+
   if (!tab?.url) return;
   const clean = cleanUrl(tab.url);
   copyText(clean);
   const title = clean !== tab.url ? "Copied a clean link without trackers" : "Copied Current URL";
   const web = webviews.get(tabId);
   const selected = /^https?:/.test(tab.url) && web ? await web.evaluate<boolean>(HAS_SELECTION) : false;
+
   if (selected !== true) return showToast(tab.windowId, title, undefined, { icon: "link" });
   showToast(tab.windowId, title, "Share a link directly to this text instead?", {
     icon: "link",
@@ -293,10 +313,12 @@ export async function replaceInField(tabId: string, query: string, replacement: 
   const web = webviews.get(tabId);
   const args = [query, replacement, all].map((v) => JSON.stringify(v)).join(", ");
   const result = web ? await web.evaluate<ReplaceResult | { error: string }>(`(${REPLACE})(${args})`) : null;
+
   return result && "field" in result ? result : { field: false, count: 0 };
 }
 
 if (__DEV__) {
+  // SAFETY: { nnSelection? assertion matches the runtime value validated at this call site.
   (globalThis as { nnSelection?: unknown }).nnSelection = {
     usePageSelection,
     searchSelection,

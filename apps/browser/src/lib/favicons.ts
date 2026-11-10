@@ -41,7 +41,7 @@ export const pageKey = (url: string) => url.replace(/#.*$/, "");
 class FaviconBatch {
   private sizes = new WeakMap<object, number>();
 
-  size(map: object): number {
+  size<Value>(map: Record<string, Value>): number {
     return this.sizes.get(map) ?? Object.keys(map).length;
   }
 

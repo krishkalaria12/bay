@@ -25,7 +25,7 @@ export type Site = {
 const doc = (kicker: string, title: string): Body => ({ kind: "doc", kicker, title });
 const list = (kicker: string, title: string, rows: string[]): Body => ({ kind: "list", kicker, title, rows });
 
-export const SITES: Record<string, Site> = {
+export const SITES = {
   mail: {
     title: "Inbox",
     host: "mail.example",
@@ -164,10 +164,10 @@ export const SITES: Record<string, Site> = {
     body: { kind: "news", title: "The best browsers of the year" },
     link: "garden",
   },
-};
+} satisfies Record<string, Site>;
 
 /** Each mark's drawing: white strokes on the site's tint (play is filled). */
-export const ICONS: Record<string, string> = {
+export const ICONS = {
   mail: "M4 6.5h16v11H4zM4.5 7l7.5 6 7.5-6",
   calendar: "M5 6h14v13H5zM5 10h14M9 4v4M15 4v4",
   music: "M9 17V6l10-2v11M9 17a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0zM19 15a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z",
@@ -190,7 +190,12 @@ export const ICONS: Record<string, string> = {
   check: "M5 7.5l2 2 3.5-3.5M5 15.5l2 2 3.5-3.5M13.5 8.5h5.5M13.5 16.5h5.5",
   globe: "M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17",
   search: "M11 17.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zM16 16l4 4",
-};
+} satisfies Record<string, string>;
+
+const iconEntries = new Map(Object.entries(ICONS));
+
+/** The mark drawn for a glyph, or undefined when the glyph is a character shown as it is (◎, say). */
+export const iconFor = (glyph: string): string | undefined => iconEntries.get(glyph);
 
 /** Sites the command bar offers before you type. */
 export const FREQUENT = ["news", "docs", "prs"];

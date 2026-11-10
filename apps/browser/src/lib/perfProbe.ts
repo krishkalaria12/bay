@@ -6,53 +6,94 @@
 // With it on: React commits, component renders and mounts, host view updates, store updates and the time
 // their subscribers take, native→JS calls (events, timers) with their time, timer callbacks and document
 // writes, all readable through `globalThis.nnPerf` from the dev harness.
+import * as v from "valibot";
+
+// Any value the app can hand the probe: React fiber fields, store states, native module payloads.
+type ProbeValue =
+  | string
+  | number
+  | boolean
+  | bigint
+  | null
+  | undefined
+  | symbol
+  | ProbeValue[]
+  | { [key: string]: ProbeValue }
+  | ((...args: never[]) => ProbeValue);
+
+type EventListener = (...args: ProbeValue[]) => ProbeValue;
+
+const isListenerFn = (value: ProbeValue): value is EventListener => v.is(v.function_(), value);
+
+type FiberComponentType =
+  | string
+  | ((...args: never[]) => ProbeValue)
+  | { displayName?: string; render?: FiberComponentType; type?: FiberComponentType }
+  | null
+  | undefined;
 
 type Fiber = {
   tag: number;
   flags: number;
-  type: unknown;
+  type: FiberComponentType;
   child: Fiber | null;
   sibling: Fiber | null;
   alternate: Fiber | null;
-  memoizedProps: Record<string, unknown> | null;
-  memoizedState: unknown;
+  memoizedProps: Record<string, ProbeValue> | null;
+  memoizedState: ProbeValue;
   dependencies: { firstContext: ContextItem | null } | null;
-  stateNode: unknown;
+  stateNode: ProbeValue;
   // Set by React's profiling build only (the bench bundles it with --profiling).
   selfBaseDuration?: number;
   actualDuration?: number;
 };
 
-type ContextItem = { context: { displayName?: string }; memoizedValue: unknown; next: ContextItem | null };
-type Hook = { memoizedState: unknown; queue: unknown; next: Hook | null };
+type ContextItem = { context: { displayName?: string }; memoizedValue: ProbeValue; next: ContextItem | null };
 
-type Store = {
-  subscribe: (listener: (s: unknown, prev: unknown) => void) => () => void;
-  getState: () => unknown;
-};
+type Hook = { memoizedState: ProbeValue; queue: ProbeValue; next: Hook | null };
 
 type Counter = Record<string, number>;
 
 // This runs before anything has imported expo-modules-core, and the legacy bridge installs `expo` ahead of the bundle
 // only when its runtime exists by then: install it as expo-modules-core's ensureNativeModulesAreInstalled does, or the
 // probe stays off in some launches.
-if (!(globalThis as { expo?: unknown }).expo) {
+type ExpoModules = {
+  BayApp?: { systemInfo?: () => ProbeValue };
+  BayShell?: {
+    readDocument?: (name: string) => ProbeValue;
+    writeDocument?: (name: string, contents: string) => ProbeValue;
+  };
+};
+
+// SAFETY: expo-modules-core registers `expo` on the global ahead of the bundle only when its runtime exists;
+// absent on other launches, and the guard handles that.
+if (!(globalThis as { expo?: { modules?: ExpoModules } }).expo) {
   try {
+    // SAFETY: require("react-native") returns the same module namespace as the static import; require is untyped.
     const { TurboModuleRegistry } = require("react-native") as typeof import("react-native");
+    // SAFETY: ExpoModulesCore, when present, is Expo's native modules module and exposes installModules().
     (TurboModuleRegistry.get("ExpoModulesCore") as { installModules?: () => void } | null)?.installModules?.();
   } catch {}
 }
-const modules = (globalThis as { expo?: { modules?: Record<string, Record<string, (...a: unknown[]) => unknown>> } }).expo?.modules;
+
+// SAFETY: expo-modules-core registers BayApp and BayShell on the global only in builds that ship them;
+// both are optional and every use below is guarded.
+const modules = (globalThis as { expo?: { modules?: ExpoModules } }).expo?.modules;
 const shell = modules?.BayShell;
 
 // The file's contents name optional (slower) probes: "selectors" times every store selector by call site;
 // "renders" says why each component rendered (props, state, context, or nothing: a wasted render).
 const probeOptions = (() => {
   try {
-    const info = modules?.BayApp?.systemInfo?.() as { isolatedInstance?: boolean } | undefined;
-    if (!info?.isolatedInstance || typeof shell?.readDocument !== "function") return null;
-    const file = shell.readDocument("perf-probe");
-    return typeof file === "string" ? file : null;
+    const parsed = v.safeParse(v.object({ isolatedInstance: v.optional(v.boolean()) }), modules?.BayApp?.systemInfo?.());
+
+    if (!parsed.success || !parsed.output.isolatedInstance) return null;
+    const readDocument = shell?.readDocument;
+
+    if (!readDocument) return null;
+    const file = readDocument("perf-probe");
+
+    return v.is(v.string(), file) ? file : null;
   } catch {
     return null;
   }
@@ -72,48 +113,84 @@ const listenersProbe = !!probeOptions?.includes("listeners");
 const now = () => performance.now();
 const bump = (c: Counter, key: string, by = 1) => void (c[key] = (c[key] ?? 0) + by);
 
-function fresh() {
+type ProbeStats = {
+  since: number;
+  commits: number;
+  commitTimes: number[];
+  commitTaskLog: string[];
+  renders: Counter;
+  mounts: Counter;
+  hostUpdates: number;
+  walkMs: number;
+  storeUpdates: Counter;
+  storeKeys: Counter;
+  listenerCalls: Counter;
+  listenerMs: Counter;
+  listenerSiteCalls: Counter;
+  listenerSiteMs: Counter;
+  tasks: Counter;
+  taskMs: Counter;
+  taskLog: [string, number][];
+  commitTasks: Counter;
+  timers: Counter;
+  timerMs: Counter;
+  selectorCalls: Counter;
+  selectorMs: Counter;
+  writes: Counter;
+  writeBytes: Counter;
+  writeMs: Counter;
+  wasted: Counter;
+  wastedMs: Counter;
+  unstable: Counter;
+  unstableMs: Counter;
+  renderMs: Counter;
+  causes: Record<string, Counter>;
+  origins: Counter;
+  commitMs: number;
+};
+
+function fresh(): ProbeStats {
   return {
     since: now(),
     commits: 0,
-    commitTimes: [] as number[],
+    commitTimes: [],
     // The task of each commit in commitTimes.
-    commitTaskLog: [] as string[],
-    renders: {} as Counter,
-    mounts: {} as Counter,
+    commitTaskLog: [],
+    renders: {},
+    mounts: {},
     hostUpdates: 0,
     walkMs: 0,
-    storeUpdates: {} as Counter,
-    storeKeys: {} as Counter,
-    listenerCalls: {} as Counter,
-    listenerMs: {} as Counter,
+    storeUpdates: {},
+    storeKeys: {},
+    listenerCalls: {},
+    listenerMs: {},
     // With the "listeners" probe: the same, by the store and the function that subscribed.
-    listenerSiteCalls: {} as Counter,
-    listenerSiteMs: {} as Counter,
-    tasks: {} as Counter,
-    taskMs: {} as Counter,
+    listenerSiteCalls: {},
+    listenerSiteMs: {},
+    tasks: {},
+    taskMs: {},
     // When each native→JS task other than a timer started: [label, time].
-    taskLog: [] as [string, number][],
+    taskLog: [],
     // Commits by the task they happened in (a native→JS call, a timer, a native module's event).
-    commitTasks: {} as Counter,
-    timers: {} as Counter,
-    timerMs: {} as Counter,
-    selectorCalls: {} as Counter,
-    selectorMs: {} as Counter,
-    writes: {} as Counter,
-    writeBytes: {} as Counter,
-    writeMs: {} as Counter,
+    commitTasks: {},
+    timers: {},
+    timerMs: {},
+    selectorCalls: {},
+    selectorMs: {},
+    writes: {},
+    writeBytes: {},
+    writeMs: {},
     // With the "renders" probe: per component, renders that changed nothing (wasted), their time, each
     // render's self time, and what changed (props:<key> real change, fn:<key> new function, obj:<key> new
     // but shallow-equal object, state, state~ new but shallow-equal state, context:<name>).
-    wasted: {} as Counter,
-    wastedMs: {} as Counter,
-    unstable: {} as Counter,
-    unstableMs: {} as Counter,
-    renderMs: {} as Counter,
-    causes: {} as Record<string, Counter>,
+    wasted: {},
+    wastedMs: {},
+    unstable: {},
+    unstableMs: {},
+    renderMs: {},
+    causes: {},
     // Components whose own state or context changed with their props unchanged: where an update starts.
-    origins: {} as Counter,
+    origins: {},
     commitMs: 0,
   };
 }
@@ -127,15 +204,25 @@ let firstCommit = 0;
 // The native→JS task running now (bridge call, timer callback or native module event), for commitTasks.
 let task: string | null = null;
 
-function nameOf(type: unknown): string {
-  if (typeof type === "function") return (type as { displayName?: string }).displayName || type.name || "Anonymous";
-  if (type && typeof type === "object") {
-    const t = type as { displayName?: string; render?: unknown; type?: unknown };
-    if (t.displayName) return t.displayName;
-    if (t.render) return nameOf(t.render);
-    if (t.type) return nameOf(t.type);
-  }
-  return String(type);
+type FiberTypeObject = { displayName?: string; render?: FiberComponentType; type?: FiberComponentType };
+
+const isFiberTypeObject = (value: FiberComponentType): value is FiberTypeObject =>
+  value !== null && value !== undefined && !v.is(v.string(), value) && !v.is(v.function_(), value);
+
+function nameOf(type: FiberComponentType): string {
+  if (v.is(v.string(), type)) return type;
+
+  if (v.is(v.function_(), type)) return type.name || "Anonymous";
+
+  if (!isFiberTypeObject(type)) return String(type ?? "Anonymous");
+
+  if (type.displayName) return type.displayName;
+
+  if (type.render) return nameOf(type.render);
+
+  if (type.type) return nameOf(type.type);
+
+  return "Anonymous";
 }
 
 const COMPONENT_TAGS = new Set([0, 1, 11, 15]);
@@ -159,13 +246,16 @@ function walk(fiber: Fiber) {
   }
 }
 
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+const isObject = (value: ProbeValue): value is Record<string, ProbeValue> => v.is(v.object({}), value);
 
-function shallowEqual(a: unknown, b: unknown) {
+function shallowEqual(a: ProbeValue, b: ProbeValue) {
   if (Object.is(a, b)) return true;
+
   if (!isObject(a) || !isObject(b)) return false;
   const ka = Object.keys(a);
+
   if (ka.length !== Object.keys(b).length) return false;
+
   return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && Object.is(a[k], b[k]));
 }
 
@@ -181,9 +271,11 @@ function classify(fiber: Fiber, before: Fiber) {
     for (const key of new Set([...Object.keys(props), ...Object.keys(prev)])) {
       const a = props[key];
       const b = prev[key];
+
       if (Object.is(a, b)) continue;
       propsChanged = true;
-      if (typeof a === "function" && typeof b === "function") causes.push(`fn:${key}`);
+
+      if (v.is(v.function_(), a) && v.is(v.function_(), b)) causes.push(`fn:${key}`);
       else if (key !== "children" && isObject(a) && isObject(b) && shallowEqual(a, b)) causes.push(`obj:${key}`);
       else {
         realProps = true;
@@ -200,8 +292,12 @@ function classify(fiber: Fiber, before: Fiber) {
   } else {
     // Only hooks with an update queue hold state (useState, useReducer, useSyncExternalStore: zustand
     // selectors); memo, ref and effect hooks follow from props and state.
+    // SAFETY: function components with state hooks keep the hooks linked list in memoizedState (React fiber
+    // layout, stable across the React versions this runs against); null when the component has no hooks.
     let h = fiber.memoizedState as Hook | null;
+    // SAFETY: same linked-list layout for the alternate fiber (the previous commit's tree).
     let o = before.memoizedState as Hook | null;
+
     for (; h && o; h = h.next, o = o.next) {
       if (h.queue == null || Object.is(h.memoizedState, o.memoizedState)) continue;
       stateChanged = true;
@@ -236,6 +332,7 @@ function classify(fiber: Fiber, before: Fiber) {
 
 function installReactHook() {
   let ids = 0;
+  // SAFETY: the hook slot is React DevTools' documented global; installing it here is the probe's purpose.
   (globalThis as { __REACT_DEVTOOLS_GLOBAL_HOOK__?: unknown }).__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
     supportsFiber: true,
     isDisabled: false,
@@ -274,45 +371,113 @@ const callers = (stack: string | undefined, depth = 4) =>
     .join(" < ");
 
 function wrapTimers() {
-  const g = globalThis as unknown as Record<string, (...a: unknown[]) => unknown>;
-  for (const name of ["setTimeout", "setInterval", "requestAnimationFrame", "setImmediate"]) {
-    const original = g[name];
-    if (typeof original !== "function") continue;
-    g[name] = function (this: unknown, callback: unknown, ...rest: unknown[]) {
-      if (typeof callback !== "function") return original.call(this, callback, ...rest);
+  // Times a callback and reports it as `name:label`; preserves the native timer contract (id out).
+  const withTiming = (name: string, callback: Function) => {
       let label = `${name}:${callback.name || "anonymous"}`;
+
       // With nnPerf.traceTimers on, anonymous callbacks are named by the functions that scheduled them.
       if (traceTimers && !callback.name) label += ` <${callers(new Error().stack)}>`;
-      return original.call(
-        this,
-        function (this: unknown, ...args: unknown[]) {
+
+    return function (this: ProbeValue, ...args: ProbeValue[]) {
           const t = now();
           const outer = task;
+
           task = label;
+
           try {
-            return (callback as (...a: unknown[]) => unknown).apply(this, args);
+        return callback.apply(this, args);
           } finally {
             task = outer;
             bump(stats.timers, label);
             bump(stats.timerMs, label, now() - t);
           }
-        },
-        ...rest,
-      );
     };
+  };
+
+  const timeout = globalThis.setTimeout;
+
+  if (timeout) {
+    const wrapped = function (this: ProbeValue, handler?: TimerHandler, timeoutMs?: number, ...args: never[]): number {
+      if (handler === undefined || v.is(v.string(), handler)) {
+        // SAFETY: a non-function (or missing) handler goes straight to the native timer, exactly as without the probe.
+        return timeout.apply(this, [handler, timeoutMs, ...args] as never);
+      }
+
+      return timeout.call(this, withTiming("setTimeout", handler), timeoutMs, ...args);
+    };
+
+    Object.assign(globalThis, { setTimeout: wrapped });
+  }
+
+  const interval = globalThis.setInterval;
+
+  if (interval) {
+    const wrapped = function (this: ProbeValue, handler?: TimerHandler, timeoutMs?: number, ...args: never[]): number {
+      if (handler === undefined || v.is(v.string(), handler)) {
+        // SAFETY: a non-function (or missing) handler goes straight to the native timer, exactly as without the probe.
+        return interval.apply(this, [handler, timeoutMs, ...args] as never);
+      }
+
+      return interval.call(this, withTiming("setInterval", handler), timeoutMs, ...args);
+    };
+
+    Object.assign(globalThis, { setInterval: wrapped });
+  }
+
+  const raf = globalThis.requestAnimationFrame;
+
+  if (raf) {
+    const wrapped = function (this: ProbeValue, callback: FrameRequestCallback): number {
+      const timed: FrameRequestCallback = (time) => {
+        task = "requestAnimationFrame:callback";
+
+        try {
+          callback(time);
+        } finally {
+          task = null;
+          bump(stats.timers, "requestAnimationFrame");
+        }
+      };
+
+      return raf.call(this, timed);
+    };
+
+    Object.assign(globalThis, { requestAnimationFrame: wrapped });
+  }
+
+  // SAFETY: setImmediate is RN/Hermes' own timer, absent from this project's DOM lib; skipped where missing.
+  const immediate = Object.getOwnPropertyDescriptor(globalThis, "setImmediate")?.value as
+    | ((this: ProbeValue, handler?: Function, ...args: never[]) => number)
+    | undefined;
+
+  if (immediate) {
+    const wrapped = function (this: ProbeValue, handler?: Function, ...args: never[]): number {
+      if (handler === undefined || v.is(v.string(), handler)) {
+        // SAFETY: a non-function (or missing) handler goes straight to the native timer, exactly as without the probe.
+        return immediate.apply(this, [handler, ...args] as never);
+      }
+
+      return immediate.call(this, withTiming("setImmediate", handler), ...args);
+    };
+
+    Object.assign(globalThis, { setImmediate: wrapped });
   }
 }
 
 // Times each useSyncExternalStore snapshot (a zustand selector), keyed by the hooks and component that
 // called it. Stack capture on every render makes this slow; use it to find costly selectors, not to time.
 function wrapSelectors() {
-  const react = require("react") as { useSyncExternalStore: (...a: unknown[]) => unknown };
+  // SAFETY: require("react") returns the same module namespace as the static import; require is untyped.
+  const react = require("react") as { useSyncExternalStore: (...a: ProbeValue[]) => ProbeValue };
   const original = react.useSyncExternalStore;
-  react.useSyncExternalStore = (subscribe: unknown, getSnapshot: unknown, getServerSnapshot: unknown) => {
+  react.useSyncExternalStore = (subscribe: ProbeValue, getSnapshot: ProbeValue, getServerSnapshot: ProbeValue) => {
     const label = callers(new Error().stack, 4);
-    const get = getSnapshot as () => unknown;
+    // SAFETY: useSyncExternalStore receives a snapshot function; React calls it on every render.
+    const get = getSnapshot as () => ProbeValue;
+
     const timed = () => {
       const t = now();
+
       try {
         return get();
       } finally {
@@ -326,12 +491,17 @@ function wrapSelectors() {
 
 // Every native→JS call (events, timers, callbacks) goes through the bridge queue; time each one.
 function wrapBridge() {
-  const queue = (globalThis as { __fbBatchedBridge?: Record<string, (...a: unknown[]) => unknown> }).__fbBatchedBridge;
+  // SAFETY: the RN bridge queue exists only in bridge-built launches; guarded below.
+  const queue = (globalThis as { __fbBatchedBridge?: Record<string, (...a: ProbeValue[]) => ProbeValue> }).__fbBatchedBridge;
+
   if (!queue) return;
-  const wrap = (method: string, label: (args: unknown[]) => string) => {
+
+  const wrap = (method: string, label: (args: ProbeValue[]) => string) => {
     const original = queue[method];
-    if (typeof original !== "function") return;
-    queue[method] = (...args: unknown[]) => {
+
+    if (original === undefined) return;
+
+    queue[method] = (...args: ProbeValue[]): ProbeValue => {
       const t = now();
       const key = label(args);
       task = key;
@@ -359,20 +529,28 @@ function wrapBridge() {
 // Native modules' events (Expo's, through JSI) don't go through the bridge queue: time each listener call as a
 // `module:<event>` task. A listener an event of the JS side's own runs inside its task and isn't counted again.
 function wrapModuleEvents() {
-  const proto = (globalThis as unknown as { expo?: { EventEmitter?: { prototype: Record<string, unknown> } } }).expo?.EventEmitter?.prototype;
-  const add = proto?.addListener as ((this: unknown, name: string, listener: (...a: unknown[]) => void) => unknown) | undefined;
-  const remove = proto?.removeListener as ((this: unknown, name: string, listener: unknown) => unknown) | undefined;
-  if (!proto || typeof add !== "function" || typeof remove !== "function") return;
+  // SAFETY: expo-modules-core installs expo on the global in builds that ship it; EventEmitter's prototype
+  // carries the add/remove listener pair this wraps. Absent elsewhere; guarded below.
+  const expo = Object.getOwnPropertyDescriptor(globalThis, "expo")?.value as { EventEmitter?: { prototype?: Record<string, ProbeValue> } } | undefined;
+  const proto = expo?.EventEmitter?.prototype;
+
+  // SAFETY: addListener is Expo EventEmitter's method; its first argument is the event name.
+  const add = proto?.addListener as ((this: ProbeValue, name: string, listener: EventListener) => ProbeValue) | undefined;
+  // SAFETY: removeListener is Expo EventEmitter's method; its first argument is the event name.
+  const remove = proto?.removeListener as ((this: ProbeValue, name: string, listener: ProbeValue) => ProbeValue) | undefined;
+
+  if (!proto || !isListenerFn(add) || !isListenerFn(remove)) return;
   // Per listener and event, so removeListener finds what addListener added.
-  const wrapped = new WeakMap<object, Map<string, (...a: unknown[]) => void>>();
-  proto.addListener = function (this: unknown, name: string, listener: (...a: unknown[]) => void) {
-    if (typeof listener !== "function") return add.call(this, name, listener);
+  const wrapped = new WeakMap<object, Map<string, EventListener>>();
+  proto.addListener = function (this: ProbeValue, name: string, listener: ProbeValue): ProbeValue {
+    if (!isListenerFn(listener)) return add.call(this, name, listener);
     const key = `module:${name}`;
-    const byName = wrapped.get(listener) ?? new Map<string, (...a: unknown[]) => void>();
+    const byName = wrapped.get(listener) ?? new Map<string, EventListener>();
     wrapped.set(listener, byName);
+
     const timed =
       byName.get(name) ??
-      function (this: unknown, ...args: unknown[]) {
+      function (this: ProbeValue, ...args: ProbeValue[]): ProbeValue {
         if (task !== null) return listener.apply(this, args);
         const t = now();
         task = key;
@@ -385,26 +563,33 @@ function wrapModuleEvents() {
           bump(stats.taskMs, key, now() - t);
         }
       };
+
     byName.set(name, timed);
+
     return add.call(this, name, timed);
   };
-  proto.removeListener = function (this: unknown, name: string, listener: unknown) {
-    return remove.call(this, name, (typeof listener === "function" && wrapped.get(listener)?.get(name)) || listener);
+
+  proto.removeListener = function (this: ProbeValue, name: string, listener: ProbeValue): ProbeValue {
+    return remove.call(this, name, (isListenerFn(listener) && wrapped.get(listener)?.get(name)) || listener);
   };
 }
 
 function wrapWrites() {
-  const original = shell?.writeDocument;
-  if (typeof original !== "function") return;
+  const target = shell;
+  const original = target?.writeDocument;
+
+  if (!target || !original) return;
+
   try {
-    shell!.writeDocument = (name: unknown, contents: unknown) => {
+    target.writeDocument = (name: string, contents: string) => {
       const t = now();
+
       try {
         return original(name, contents);
       } finally {
         const key = String(name);
         bump(stats.writes, key);
-        bump(stats.writeBytes, key, typeof contents === "string" ? contents.length : 0);
+        bump(stats.writeBytes, key, contents.length);
         bump(stats.writeMs, key, now() - t);
       }
     };
@@ -412,7 +597,7 @@ function wrapWrites() {
 }
 
 // Counts a store's updates (by top-level key) and times every subscriber it notifies.
-export function probeStore(name: string, store: Store) {
+export function probeStore<S>(name: string, store: { subscribe(listener: (s: S, prev: S) => void): () => void }) {
   if (!perfProbeEnabled) return;
   const subscribe = store.subscribe;
   store.subscribe = (listener) => {
@@ -432,11 +617,11 @@ export function probeStore(name: string, store: Store) {
       }
     });
   };
+
   subscribe((s, prev) => {
     bump(stats.storeUpdates, name);
-    const a = s as Record<string, unknown>;
-    const b = prev as Record<string, unknown>;
-    for (const key in a) if (a[key] !== b[key]) bump(stats.storeKeys, `${name}.${key}`);
+
+    for (const key in s) if (s[key] !== prev[key]) bump(stats.storeKeys, `${name}.${key}`);
   });
 }
 
@@ -468,7 +653,11 @@ const cpuProfile = {
     return profiler()?.stop(name) ?? null;
   },
 };
-const profiler = () => (require("react-native") as typeof import("react-native")).NativeModules.NNHermesProfiler as HermesProfiler | undefined;
+
+// SAFETY: require("react-native") returns the same module namespace as the static import; NNHermesProfiler
+// exists only in builds with the sampling profiler, hence optional and guarded at the call sites.
+const profiler = (): HermesProfiler | undefined =>
+  (require("react-native") as { NativeModules?: { NNHermesProfiler?: HermesProfiler } }).NativeModules?.NNHermesProfiler;
 
 if (perfProbeEnabled) {
   marks.bundleStart = Date.now();
@@ -477,7 +666,9 @@ if (perfProbeEnabled) {
   wrapBridge();
   wrapModuleEvents();
   wrapWrites();
+
   if (probeOptions?.includes("selectors")) wrapSelectors();
+  // SAFETY: nnPerf is the probe's own dev-harness surface, read only by the benchmark tooling.
   (globalThis as { nnPerf?: unknown }).nnPerf = {
     revision: PERF_PROBE_REVISION,
     marks,

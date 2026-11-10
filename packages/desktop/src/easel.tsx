@@ -5,6 +5,8 @@ import { imageFiles } from "./imageFiles";
 import type { Ref } from "react";
 import type { ViewProps } from "@bay/platform";
 
+export type EaselFieldValue = string | number | boolean | null | undefined | EaselFieldValue[] | { [key: string]: EaselFieldValue };
+
 export type EaselSource = {
   url: string;
   title: string;
@@ -12,7 +14,7 @@ export type EaselSource = {
   viewportWidth?: number;
   viewportHeight?: number;
   profileId?: string;
-  [key: string]: unknown;
+  [key: string]: EaselFieldValue;
 };
 
 export type EaselItem = {
@@ -32,7 +34,7 @@ export type EaselItem = {
   points?: number[][];
   source?: EaselSource;
   live?: boolean;
-  [key: string]: unknown;
+  [key: string]: EaselFieldValue;
 };
 
 export type EaselDocument = {
@@ -44,7 +46,7 @@ export type EaselDocument = {
   updatedAt: number;
   spaceId: string;
   nativeEditId?: string;
-  [key: string]: unknown;
+  [key: string]: EaselFieldValue;
 };
 
 export type EaselTool = "select" | "hand" | "pen" | "text" | "rect" | "ellipse" | "arrow";

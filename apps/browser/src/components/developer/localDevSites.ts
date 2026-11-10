@@ -1,5 +1,5 @@
-import type { BrowserProjection as BrowserState } from "../../runtime/projection";
-import type { BrowserShape } from "../../store/browserStore";
+import type { BrowserProjection } from "../../runtime/projection";
+import type { QuietBrowserState } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { useQuietBrowser } from "../../store/hooks";
 
@@ -27,19 +27,20 @@ export function isLocalDevSite(url: string): boolean {
   return port && /^(10\.\d+|192\.168|172\.(1[6-9]|2\d|3[01]))\.\d+\.\d+$/.test(host);
 }
 
-export function isDeveloperUrl(s: Pick<BrowserState, "settings">, url: string): boolean {
+export function isDeveloperUrl(s: Pick<BrowserProjection, "settings">, url: string): boolean {
   const site = siteKey(url);
   return !!site && (s.settings.developerSites ?? []).includes(site);
 }
 
-export function isDeveloperTab(s: BrowserShape, tabId: string | undefined): boolean {
+export function isDeveloperTab(s: QuietBrowserState, tabId: string | undefined): boolean {
   const url = tabId ? s.tabs[tabId]?.url : undefined;
+
   return !!url && isDeveloperUrl(s, url);
 }
 
 export const useIsDeveloperTab = (tabId: string | undefined) => useQuietBrowser((s) => isDeveloperTab(s, tabId));
 
 /** The window's shown tab is in Developer Mode: its address is over its page, not in the sidebar. */
-export function developerTabShown(s: BrowserShape, windowId: string): boolean {
+export function developerTabShown(s: QuietBrowserState, windowId: string): boolean {
   return isDeveloperTab(s, activeTabId(s, windowId));
 }

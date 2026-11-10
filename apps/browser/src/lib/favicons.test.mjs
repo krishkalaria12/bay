@@ -5,6 +5,7 @@ import { test } from "node:test";
 // Execute hook effects without a renderer. The stores and queued production pipeline stay real.
 const native = new URL("../test-native-stub.mjs", import.meta.url).href;
 const vanilla = import.meta.resolve("zustand/vanilla");
+
 const stubs = {
   react: "export const useEffect = (effect) => globalThis.faviconTest.cleanups.push(effect());",
   zustand: `import { createStore } from ${JSON.stringify(vanilla)};
@@ -16,9 +17,11 @@ const stubs = {
   "@bay/desktop": `export * from ${JSON.stringify(native)};
     export const iconTheme = (...args) => globalThis.faviconTest.theme(...args);`,
 };
+
 registerHooks({
   resolve(specifier, context, next) {
     if (!context.parentURL?.endsWith("/lib/favicons.ts") || !(specifier in stubs)) return next(specifier, context);
+
     return { url: `data:text/javascript,${encodeURIComponent(stubs[specifier])}`, shortCircuit: true };
   },
 });
@@ -27,18 +30,24 @@ const { useBrowser } = await import("../store/browserStore.ts");
 const { setSpaceProfiles } = await import("../store/model.ts");
 const { webviews } = await import("./webviews.ts");
 const { FAVICON_FLUSH_MS, FAVICON_LOOKUP_DELAY_MS, MAX_FAVICONS, APPEARANCE_SWAP_MS } = await import("./constants.ts");
+
 const { useFavicons, noteFavicon, faviconFailed, pruneProfileFavicons, resolveFavicon, startFavicons, useFavicon, useFaviconTheme } =
   await import("./favicons.ts");
+
 const state = () => useFavicons.getState();
 const empty = () => ({ pages: {}, srcs: {}, appearances: {} });
+
 const drain = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve();
 };
+
 function deferred() {
   let resolve;
+
   const promise = new Promise((r) => {
     resolve = r;
   });
+
   return { promise, resolve };
 }
 
@@ -57,6 +66,7 @@ function setup(t, profiles = {}, themes = {}) {
   const stop = startFavicons();
   t.after(async () => {
     stop();
+
     for (const cleanup of globalThis.faviconTest.cleanups) cleanup?.();
     await drain();
     t.mock.timers.tick(FAVICON_FLUSH_MS);
@@ -68,10 +78,13 @@ function tab(id, url = `https://site/${id}`, spaceId = "work", download = async 
   useBrowser.setState({ tabs: { ...useBrowser.getState().tabs, [id]: { id, url, spaceId } } });
   webviews.set(id, { downloadFavicon: download });
 }
+
 const flush = (t) => t.mock.timers.tick(FAVICON_FLUSH_MS);
 const history = (urls, all = false, profile = "work") => globalThis.faviconTest.history({ kind: "deleted", profile, urls, all });
+
 function freezeIcons(icons) {
   for (const map of Object.values(icons)) Object.freeze(map);
+
   return Object.freeze(icons);
 }
 
@@ -79,10 +92,13 @@ test("download bursts share inflight answers and publish once, then identical re
   setup(t);
   const answer = deferred();
   let calls = 0;
+
   const download = () => {
     calls++;
+
     return answer.promise;
   };
+
   tab("a", "https://site/a#one", "work", download);
   tab("b", "https://site/b", "work", download);
   const before = state();
@@ -110,11 +126,14 @@ test("a burst bounds map enumeration and never mutates published snapshots", asy
   const original = freezeIcons({ pages: { old: "data:old" }, srcs: { old: "data:old" }, appearances: {} });
   setup(t, Object.freeze({ work: original }));
   const tabs = {};
+
   for (let i = 0; i < 1000; i++) {
     tabs[i] = { id: String(i), spaceId: "work", url: `https://burst/${i}` };
     webviews.set(String(i), { downloadFavicon: async () => ({ uri: `data:${i}` }) });
   }
+
   useBrowser.setState({ tabs });
+
   for (let i = 0; i < 1000; i++) noteFavicon(String(i), `src:${i}`);
   await drain();
   const keys = Object.keys;
@@ -122,13 +141,16 @@ test("a burst bounds map enumeration and never mutates published snapshots", asy
   Object.keys = (map) => {
     const out = keys(map);
     scanned += out.length;
+
     return out;
   };
+
   try {
     flush(t);
   } finally {
     Object.keys = keys;
   }
+
   assert.ok(scanned < 10_000, `enumerated ${scanned} entries for a 1000-icon burst`);
   assert.equal(keys(state().profiles.work.pages).length, 1001);
   assert.equal(keys(state().profiles.work.srcs).length, 1001);
@@ -196,14 +218,17 @@ test("a report after a queued delete restores the page, and a late download afte
 test("page and source caps reset at the same write, including replacement at capacity", async (t) => {
   const pages = {},
     srcs = {};
+
   for (let i = 0; i < MAX_FAVICONS - 1; i++) {
     pages[`old:${i}`] = `data:${i}`;
     srcs[`old:${i}`] = `data:${i}`;
   }
+
   setup(t, { work: freezeIcons({ pages, srcs, appearances: {} }) });
   tab("a");
   tab("b");
   tab("c");
+
   for (const id of ["a", "b", "c"]) noteFavicon(id, id);
   await drain();
   flush(t);
@@ -262,8 +287,10 @@ test("theme answers coalesce with icons, preserve both branches and retain cap r
   globalThis.faviconTest.theme = ({ uri }) => {
     const answer = deferred();
     answers.set(uri, answer);
+
     return answer.promise;
   };
+
   for (const id of ["a", "b", "c"]) useFaviconTheme(`https://site/${id}`, null, "work");
   tab("next");
   const before = state();
@@ -304,15 +331,18 @@ test("reentrant subscribers can immediately clear or queue without mutating oute
   tab("a");
   tab("b");
   const snapshots = [];
+
   const stop = useFavicons.subscribe((f) => {
     snapshots.push(f);
     freezeIcons(f.profiles.work);
     Object.freeze(f.profiles);
+
     if (snapshots.length === 1) {
       noteFavicon("b", "b");
       pruneProfileFavicons("work");
     }
   });
+
   noteFavicon("a", "a");
   flush(t);
   assert.equal(snapshots.length, 2);
@@ -337,12 +367,16 @@ test("reentrant subscribers can immediately clear or queue without mutating oute
 
 test("native lookup answers flush after pending reports and capped resets notify missing-page watchers", async (t) => {
   setup(t);
+
   const lookup = deferred(),
     calls = [];
+
   globalThis.faviconTest.lookup = (key, pages) => {
     calls.push([key, pages]);
+
     return lookup.promise;
   };
+
   useFavicon("https://missing/", null, "work");
   t.mock.timers.tick(FAVICON_LOOKUP_DELAY_MS);
   assert.deepEqual(calls, [["work", ["https://missing/"]]]);
@@ -356,6 +390,7 @@ test("native lookup answers flush after pending reports and capped resets notify
   useFavicons.setState({ profiles: { work: { ...state().profiles.work, pages: { ...state().profiles.work.pages, "https://none/": null } } } });
   useFavicon("https://none/", null, "work");
   const full = { ...state().profiles.work.pages };
+
   for (let i = Object.keys(full).length; i < MAX_FAVICONS; i++) full[`old:${i}`] = "old";
   useFavicons.setState({ profiles: { work: { ...state().profiles.work, pages: full } } });
   tab("reset");
@@ -397,6 +432,7 @@ test("capacity counts ignore replacement keys and a known source keeps its full 
   flush(t);
   assert.equal(state().profiles.work.srcs, srcs);
   assert.equal(state().profiles.work.pages["https://site/a"], "data:0");
+
   // Replacing a page repeatedly must not count each report as an additional key.
   for (let i = 1; i < MAX_FAVICONS; i++) noteFavicon("a", `src:${i}`);
   flush(t);

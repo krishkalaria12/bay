@@ -80,7 +80,10 @@ function kindOf(d: Download): Exclude<Filter, "all"> | null {
   if (mime.startsWith("audio/")) return "audio";
   const name = d.filename || d.path;
   const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+
+  // SAFETY: (keyof typeof EXTENSIONS)[]) if (EXTENSIONS[kind].includes(e assertion matches the runtime value validated at this call site.
   for (const kind of Object.keys(EXTENSIONS) as (keyof typeof EXTENSIONS)[]) if (EXTENSIONS[kind].includes(ext)) return kind;
+
   return null;
 }
 

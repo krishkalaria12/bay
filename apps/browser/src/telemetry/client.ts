@@ -18,6 +18,7 @@ import {
   TELEMETRY_STATE_DOC,
   URGENT_FLUSH_DELAY_MS,
 } from "./config";
+import type { JsonValue } from "../lib/json";
 import { eventRecord, logRecord, logsRequest, outcome, type OtlpLogRecord, type QueuedEvent } from "./otlp";
 import { cleanProperties } from "./sanitize";
 import { platformWords } from "../lib/platformWords";
@@ -49,6 +50,8 @@ const DEFAULT: Saved = {
 function readJson<T>(name: string): T | null {
   try {
     const json = readDocument(name);
+
+    // SAFETY: JSON.parse yields the persisted telemetry document shape written by writeDocument for this name.
     return json ? (JSON.parse(json) as T) : null;
   } catch {
     return null;
@@ -94,8 +97,13 @@ export const environment = (): "dev" | "test" | "production" => (__DEV__ ? "dev"
 const devSendAllowed = () => launchEnvironment(DEV_SEND_ENV) === "1";
 const canSend = () => !__DEV__ || devSendAllowed();
 
-function context(): Record<string, unknown> {
+export interface TelemetryContext {
+  [attribute: string]: string | number | boolean | null;
+}
+
+function context(): TelemetryContext {
   const info = appInfo();
+
   return {
     $lib: "bay-telemetry",
     $lib_version: "1",
@@ -144,16 +152,18 @@ function clearQueue() {
 let droppedWhileOff = 0;
 
 export type CaptureOptions = {
-  raw?: Record<string, unknown>;
+  raw?: Record<string, JsonValue>;
   urgent?: boolean;
   persist?: boolean;
 };
 
-export function capture(event: string, props: Record<string, unknown> = {}, options: CaptureOptions = {}) {
+export function capture(event: string, props: Record<string, JsonValue> = {}, options: CaptureOptions = {}) {
   if (!saved.sharing || !saved.installId) {
     droppedWhileOff++;
+
     return;
   }
+
   try {
     queue.events.push({
       uuid: uuidv7(),
@@ -244,8 +254,9 @@ async function post(kind: RequestLogEntry["kind"], url: string, body: string, co
   return entry.status;
 }
 
-function resource(): Record<string, unknown> {
+function resource(): TelemetryContext {
   const info = appInfo();
+
   return {
     "service.name": "bay-app",
     "service.version": info.appVersion,

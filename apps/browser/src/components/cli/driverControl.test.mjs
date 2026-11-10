@@ -8,6 +8,7 @@ import { shownCliTab, startCliActiveTab, startCliControl, useCli } from "./drive
 import * as stub from "../../test-native-stub.mjs";
 
 const S = () => useBrowser.getState();
+
 beforeEach(() => {
   S().hydrate({});
   usePages.setState({ pages: {}, browsers: {}, chromeTabs: {} });
@@ -18,6 +19,7 @@ function page() {
   S().setFocusedWindow(window);
   const id = activeTabId(S(), window);
   setBrowserId(id, 4, 81);
+
   return { window, id };
 }
 

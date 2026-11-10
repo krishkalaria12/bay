@@ -16,7 +16,7 @@ import { useSidebarWidth } from "../sidebar/tokens";
 import { showToast } from "../split/splitActions";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { removeDownload } from "../../runtime/windowUiActions";
-import { tidyRename, resolveTidySuggestion } from "../../lib/tidyDownloads";
+import { keepDownloadName, tidyRename, resolveTidySuggestion } from "../../lib/tidyDownloads";
 import { platformWords } from "../../lib/platformWords";
 
 // MARK: Formatting
@@ -52,10 +52,14 @@ export function downloadStatus(d: Download, exists = true) {
 
 const openWhenDone = new Set<string>();
 
+// SAFETY: { __nnDownloadsWatch? assertion matches the runtime value validated at this call site.
 const g = globalThis as { __nnDownloadsWatch?: () => void };
+
 g.__nnDownloadsWatch?.();
+
 g.__nnDownloadsWatch = useBrowser.subscribe((s, prev) => {
   if (s.downloads === prev.downloads || !openWhenDone.size) return;
+
   for (const d of s.downloads) {
     if (d.state !== "downloading" && openWhenDone.delete(d.id) && d.state === "finished") void openFile(d.path);
   }
@@ -65,7 +69,11 @@ export const isOpenWhenDone = (id: string) => openWhenDone.has(id);
 
 export function toggleOpenWhenDone(id: string) {
   if (openWhenDone.has(id)) openWhenDone.delete(id);
-  else openWhenDone.add(id);
+  else {
+    openWhenDone.add(id);
+    // It's opened the moment it finishes: renaming it then would pull the file from under the app opening it.
+    keepDownloadName(id);
+  }
 }
 
 export async function downloadMenu(d: Download, windowId: string) {

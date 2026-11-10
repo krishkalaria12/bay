@@ -21,13 +21,18 @@ export type GroupLayout = { offsets: number[]; width: number };
 export function groupLayout(chip: number, widths: number[], gap: number, expanded: boolean, shown: number): GroupLayout {
   const offsets: number[] = [];
   let x = 0;
+
   for (const w of widths) {
     offsets.push(x);
     x += w + gap;
   }
+
   const members = widths.length ? x - gap : 0;
+
   if (expanded && widths.length) return { offsets, width: chip + STRIP_MEMBERS_INSET + members + STRIP_TAIL_EXPANDED };
+
   if (shown >= 0 && widths[shown] !== undefined) return { offsets, width: chip + STRIP_MEMBERS_INSET + widths[shown]! + STRIP_TAIL_COLLAPSED };
+
   return { offsets, width: chip };
 }
 
@@ -35,11 +40,15 @@ export function groupLayout(chip: number, widths: number[], gap: number, expande
 export function tuckTarget(s: BrowserState, windowId: string, spaceId: string, groupId: string): string | undefined {
   const members = new Set(s.groups[groupId]?.tabIds ?? []);
   let best: string | undefined;
+
   for (const id of viewTabIds(s, windowId, spaceId)) {
     const t = s.tabs[id];
+
     if (!t || members.has(id)) continue;
+
     if (!best || t.lastActiveAt > s.tabs[best]!.lastActiveAt) best = id;
   }
+
   return best;
 }
 
@@ -55,11 +64,14 @@ export function stripTabWidth(o: {
   max: number;
 }): number {
   let room = o.pageWidth - o.dockWidth - o.plus - o.gap;
+
   for (const g of o.groups) {
     const parts = g.expanded ? STRIP_MEMBERS_INSET + STRIP_TAIL_EXPANDED : g.shown ? STRIP_MEMBERS_INSET + STRIP_TAIL_COLLAPSED : 0;
     room -= STRIP_GROUP_MARGIN_LEFT + STRIP_GROUP_MARGIN_RIGHT + g.chip + parts + o.gap;
   }
+
   const width = o.tabUnits ? room / o.tabUnits - o.gap : o.max;
+
   // Half points keep every tab edge on the 2x pixel grid, so the attached tab shows no seam against the card.
   return Math.round(Math.max(o.min, Math.min(o.max, width)) * 2) / 2;
 }
@@ -70,22 +82,26 @@ export function stripTabWidth(o: {
  * open group, its members. Each has its tabs (in window order), its width and its outer margins.
  */
 export type DragSlot = { tabIds: string[]; width: number; marginLeft?: number; marginRight?: number };
+
 export type DragGeometry = { slots: DragSlot[]; lefts: number[] };
 
 export function dragGeometry(slots: DragSlot[], gap: number): DragGeometry {
   const lefts: number[] = [];
   let x = 0;
+
   for (const slot of slots) {
     x += slot.marginLeft ?? 0;
     lefts.push(x);
     x += slot.width + (slot.marginRight ?? 0) + gap;
   }
+
   return { slots, lefts };
 }
 
 /** How far the dragged slot may travel: from the first slot's left edge to the last slot's right edge. */
 export function dragRange({ slots, lefts }: DragGeometry, from: number): [number, number] {
   const last = slots.length - 1;
+
   return [lefts[0]! - lefts[from]!, lefts[last]! + slots[last]!.width - (lefts[from]! + slots[from]!.width)];
 }
 
@@ -99,8 +115,10 @@ export function dropIndex({ slots, lefts }: DragGeometry, from: number, dx: numb
   let index = 0;
   slots.forEach((slot, i) => {
     const centre = lefts[i]! + slot.width / 2;
+
     if (i < from ? centre < left : i > from && centre < right) index++;
   });
+
   return index;
 }
 
@@ -114,7 +132,9 @@ export function moveIndex(section: string[], tabId: string, slots: DragSlot[], f
   const others = slots.filter((_, i) => i !== from);
   const anchor = to < others.length ? others[to]!.tabIds[0] : others[others.length - 1]?.tabIds.at(-1);
   const at = anchor ? moved.indexOf(anchor) : -1;
+
   if (at < 0) return null;
+
   return to < others.length ? at : at + 1;
 }
 
@@ -135,32 +155,43 @@ export function stripEntries(s: BrowserState, windowId: string, spaceId: string)
   const key = `${windowId}|${spaceId}`;
   const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits];
   const cached = stripMemo.get(key);
+
   if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result;
   const groups = groupIndex(s.groups);
   const splits = splitIndex(s.splits);
   const seen = new Set<string>();
   const out: string[] = [];
+
   for (const id of viewTabIds(s, windowId, spaceId)) {
     const t = s.tabs[id]!;
+
     if (t.pinned) {
       out.push(`pinned:${id}`);
       continue;
     }
+
     const group = groups.get(id);
+
     if (group && !seen.has(group.id)) {
       seen.add(group.id);
       out.push(`group:${group.id}:${group.collapsed ? 1 : 0}`);
     }
+
     const split = splits.get(id)?.[0];
+
     if (split) {
       if (!seen.has(split.id)) out.push(`split:${split.id}:${split.tabIds.join(",")}:${group?.id ?? ""}`);
       seen.add(split.id);
       continue;
     }
+
     out.push(`tab:${id}:${group?.id ?? ""}`);
   }
+
   const result = stableList(cached?.result, out);
   stripMemo.set(key, { inputs, result });
+
   if (stripMemo.size > 8) for (const k of stripMemo.keys()) if (!s.windows[k.split("|")[0]!]) stripMemo.delete(k);
+
   return result;
 }

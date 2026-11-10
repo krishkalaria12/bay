@@ -19,6 +19,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   const theme = useTheme();
+
   return (
     <View style={{ height: 64, flexDirection: "row", alignItems: "center", paddingHorizontal: 24, gap: 16 }}>
       <Text style={{ width: 200, fontSize: 22, fontWeight: "600", color: theme.textPrimary }}>{title}</Text>
@@ -32,6 +33,7 @@ export function PageHeader({
 
 export function EmptyState({ icon, title, subtitle }: { icon?: ReactNode; title: string; subtitle?: string }) {
   const theme = useTheme();
+
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 80, gap: 8 }}>
       {icon}
@@ -46,6 +48,7 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 
 export const dayStart = (ms: number) => {
   const d = new Date(ms);
+
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 };
 
@@ -53,30 +56,39 @@ export function dayLabel(start: number, now = Date.now()): string {
   const d = new Date(start);
   const full = `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
   const today = dayStart(now);
+
   if (start === today) return `Today – ${full}`;
+
   if (start === dayStart(today - 1)) return `Yesterday – ${full}`;
+
   return full;
 }
 
 export function timeLabel(ms: number): string {
   const d = new Date(ms);
   const h = d.getHours();
+
   return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
 export function hostLabel(url: string): string {
   const app = appUrlOrigin(url);
+
   if (app) return app;
   const m = /^[a-z][a-z0-9+.-]*:\/\/([^/?#:]+)/i.exec(url);
+
   return m ? displayHost(m[1]!.toLowerCase()).replace(/^www\./, "") : url;
 }
 
 export function matchesQuery(query: string, ...fields: string[]): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+
   if (!words.length) return true;
+
   const hay = fields
     .map((f) => (/xn--/i.test(f) ? `${f} ${urlForDisplay(f)}` : f))
     .join(" ")
     .toLowerCase();
+
   return words.every((w) => hay.includes(w));
 }

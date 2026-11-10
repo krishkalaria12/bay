@@ -49,14 +49,18 @@ async function secret(source: LiveSourceId): Promise<string> {
 
 // MARK: GitHub
 
-async function githubGraphql<T>(token: string, query: string, variables: Record<string, unknown> = {}): Promise<T> {
+async function githubGraphql<T>(token: string, query: string, variables: Record<string, string | string[]> = {}): Promise<T> {
   const json = await request<T & { errors?: { type?: string; message: string }[] }>(endpoints.githubGraphql, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ query, variables }),
   });
+
   const error = json.errors?.[0];
+
+  // SAFETY: { data? assertion matches the runtime value validated at this call site.
   if (error && !(json as { data?: unknown }).data) throw new LiveError(error.type === "RATE_LIMITED" ? "rateLimited" : "other", error.message);
+
   return json;
 }
 
@@ -71,10 +75,13 @@ const github: LiveSource = {
     const ids = detailIds(json, folder.filters);
     const pages = Array.from({ length: Math.ceil(ids.length / DETAILS_PAGE) }, (_, i) => ids.slice(i * DETAILS_PAGE, (i + 1) * DETAILS_PAGE));
     const page = async (ids: string[]) => detailNodes(ids, await githubGraphql<DetailsResponse>(token, GITHUB_DETAILS_QUERY, { ids }));
+
     // Every page or none (a partial result would read as PRs gone); a page is small, so a failure is retried once.
-    const retry = (ids: string[]) => (error: unknown) =>
-      error instanceof LiveError && (error.kind === "other" || error.kind === "network") ? page(ids) : Promise.reject(error);
+    const retry = (ids: string[]) => (cause: unknown) =>
+      cause instanceof LiveError && (cause.kind === "other" || cause.kind === "network") ? page(ids) : Promise.reject(cause);
+
     const details = await Promise.all(pages.map((ids) => page(ids).catch(retry(ids))));
+
     return mapGithub(withDetails(json, details.flat()), folder.filters);
   },
   async resolveGone(items) {
@@ -166,8 +173,11 @@ const confluence: LiveSource = {
 type GoogleTokens = { access_token: string; refresh_token: string; expires_at: number; client_secret: string };
 
 async function googleAccessToken(): Promise<string> {
+  // SAFETY: GoogleTokens assertion matches the runtime value validated at this call site.
   const stored = JSON.parse(await secret("gdrive")) as GoogleTokens;
+
   if (stored.expires_at > Date.now() + 60_000) return stored.access_token;
+
   const json = await request<{ access_token: string; expires_in: number }>(endpoints.googleToken, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

@@ -1,4 +1,5 @@
 import { Pressable, TextInput, View } from "@bay/platform";
+import * as v from "valibot";
 import { showMenu, Surface, Symbol, type MenuItem } from "@bay/desktop";
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
@@ -141,9 +142,15 @@ export function PopUp<T extends string>({
       ...(o.separatorBefore ? [{ separator: true as const }] : []),
       { id: o.value, title: o.title, checked: o.value === value },
     ]);
+
     const choice = await showMenu(items);
-    if (choice !== null && choice !== value) onChange(choice as T);
+
+    if (choice !== null && choice !== value) {
+      // SAFETY: showMenu returns one of the ids built from options above; T is the value type of those options.
+      onChange(choice as T);
+    }
   };
+
   return (
     <View {...hoverProps} style={{ opacity: disabled ? 0.45 : 1 }}>
       <Pressable disabled={disabled} onPress={open}>
@@ -379,7 +386,17 @@ function useSearchHighlight(settingId?: SettingId) {
   return { ref, marked };
 }
 
-export function SectionHeader({ settingId, title, description, action }: { settingId?: SettingId; title: string; description?: string; action?: ReactNode }) {
+export function SectionHeader({
+  settingId,
+  title,
+  description,
+  action,
+}: {
+  settingId?: SettingId;
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+}) {
   const theme = useTheme();
   const colors = useFormColors();
   const { ref, marked } = useSearchHighlight(settingId);
@@ -451,9 +468,9 @@ export function Row({
     >
       {icon}
       <View style={{ flex: 1 }}>
-        {typeof title === "string" ? <Text style={{ fontSize: 13, color: theme.textPrimary }}>{title}</Text> : title}
+        {v.is(v.string(), title) ? <Text style={{ fontSize: 13, color: theme.textPrimary }}>{title}</Text> : title}
         {description ? (
-          typeof description === "string" ? (
+          v.is(v.string(), description) ? (
             <Text style={{ fontSize: 11.5, marginTop: 2, color: theme.textSecondary, lineHeight: 15 }}>{description}</Text>
           ) : (
             description

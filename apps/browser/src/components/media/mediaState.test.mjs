@@ -1,12 +1,14 @@
 // The sidebar player: which tab it shows, and where its play and pause state comes from.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { webviews } = await import("../../lib/webviews.ts");
 const media = await import("./state.ts");
 
 const S = () => useBrowser.getState();
 const M = () => media.useMedia.getState();
+
 const report = (overrides = {}) => ({
   title: "Song",
   artist: "Band",
@@ -23,6 +25,7 @@ const report = (overrides = {}) => ({
   liveBehind: 0,
   ...overrides,
 });
+
 const tick = () => new Promise((resolve) => setTimeout(resolve, 3));
 
 // Two background tabs playing; the player shows the one that started last. As useSidebarPlayerTab does, the player
@@ -33,12 +36,14 @@ async function twoPlaying() {
   const b = S().newTab(w, { url: "b.com", background: true });
   const c = S().newTab(w, { url: "c.com", background: true });
   const sent = [];
+
   for (const id of [b, c]) webviews.set(id, { mediaCommand: async (action) => void sent.push([id, action]) });
   media.setNowPlaying(b, report());
   await tick();
   media.setNowPlaying(c, report());
   let shown = media.playerTabFor(M(), [b, c]);
   const player = () => (shown = media.playerTabFor(M(), [b, c], shown));
+
   return { b, c, sent, player };
 }
 
@@ -54,6 +59,7 @@ test("pausing the tab the sidebar player shows keeps the player on it", async ()
 
   media.setNowPlaying(c, null);
   assert.equal(player(), b, "its session ended: the next one");
+
   for (const id of [b, c]) webviews.delete(id);
 });
 
@@ -71,6 +77,7 @@ test("a late playing report doesn't move the sidebar player", async () => {
   media.setNowPlaying(c, report({ position: 11 }));
   assert.equal(player(), c);
   assert.equal(M().sessions[b].playbackState, "playing");
+
   for (const id of [b, c]) webviews.delete(id);
 });
 
@@ -79,6 +86,7 @@ test("closing the sidebar player hands it to the next tab", async () => {
   assert.equal(player(), c);
   media.useMedia.setState({ dismissed: { [c]: true } });
   assert.equal(player(), b);
+
   for (const id of [b, c]) webviews.delete(id);
 });
 
@@ -156,10 +164,12 @@ test("Pause All pauses each playing tab once and leaves paused sessions and othe
   const other = S().windows[otherWindow].activeTabIds[S().windows[otherWindow].spaceId];
   const ids = [first, second, third, paused, other];
   const sent = [];
+
   for (const id of ids) {
     webviews.set(id, { mediaCommand: async (command) => void sent.push([id, command]) });
     media.setNowPlaying(id, report({ playbackState: id === paused ? "paused" : "playing" }));
   }
+
   media.useMedia.setState({ dismissed: { [second]: true } });
   media.pauseAllMedia(w);
   assert.deepEqual(sent, [
@@ -172,6 +182,7 @@ test("Pause All pauses each playing tab once and leaves paused sessions and othe
   media.mediaCommand(second, "toggle");
   assert.deepEqual(sent.at(-1), [second, "toggle"]);
   assert.equal(sent.length, 4);
+
   for (const id of ids) webviews.delete(id);
 });
 
@@ -181,6 +192,7 @@ test("muting a media-list row only mutes that tab, even with another session on 
   const first = S().windows[w].activeTabIds[S().windows[w].spaceId];
   const second = S().newTab(w, { url: "https://same.com/two", background: true });
   const sent = [];
+
   for (const id of [first, second]) webviews.set(id, { setMuted: async (muted) => void sent.push([id, muted]) });
   media.toggleMediaTabMute(second);
   assert.equal(S().tabs[second].muted, true);
@@ -192,6 +204,7 @@ test("muting a media-list row only mutes that tab, even with another session on 
     [second, true],
     [second, false],
   ]);
+
   for (const id of [first, second]) webviews.delete(id);
 });
 

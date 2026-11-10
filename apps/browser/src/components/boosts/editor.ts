@@ -1,6 +1,8 @@
 import { confirm, openTextFile, prompt, saveTextFile } from "@bay/desktop";
 import { create } from "zustand";
+import * as v from "valibot";
 import { boostChanges, boostHost, cleanSelector, exportBoost, importBoost, newBoost, shuffledBoost, type Boost } from "../../lib/boosts";
+import { isJsonObject, JsonValueSchema, type JsonInput } from "../../lib/json";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { newId } from "../../store/model";
@@ -130,11 +132,19 @@ export function stopPicking(tabId: string) {
 }
 
 /** What the picker in a page sends (pickerScript's send): untrusted, as everything from a page. */
-export function onBoostMessage(tabId: string, data: unknown) {
-  const message = data && typeof data === "object" ? (data as { type?: unknown; mode?: unknown; selector?: unknown; pickerId?: unknown }) : null;
+export function onBoostMessage(tabId: string, input: JsonInput) {
+  const parsed = v.safeParse(JsonValueSchema, input);
+
+  if (!parsed.success) return;
+  const message = parsed.output;
+
+  if (!isJsonObject(message)) return;
   const session = sessionOf(tabId);
-  if (!message || !session || !session.picking || message.mode !== session.picking || message.pickerId !== session.pickerId) return;
+
+  if (!session || !session.picking || message.mode !== session.picking || message.pickerId !== session.pickerId) return;
+
   if (message.type === "done") return stopPicking(tabId);
+
   if (message.type !== "select") return;
   // The page could send anything: only a selector that can't end its rule early.
   const selector = cleanSelector(message.selector);

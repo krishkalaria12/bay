@@ -15,6 +15,7 @@ export const C = {
   blue: "#a8d5fb",
   pen: "#1f5fe0",
 };
+
 export const SANS = '"SF Pro Display", system-ui, -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif';
 export const MONO = '"SF Mono", ui-monospace, Menlo, monospace';
 export const HAND = '"Caveat", "Bradley Hand", cursive';
@@ -40,19 +41,23 @@ export const toFrames = (beats: number, fps: number) => Math.round((beats * fps)
 export function useBeat() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+
   return (frame * BEAT) / fps;
 }
+
 export const ARRIVE = Easing.bezier(0.2, 0.8, 0.2, 1);
 
 /** 0 → 1 as a scene's frame passes `from`, over `len` frames, with the site's arrive curve. */
 export function useIn(from: number, len = 18) {
   const frame = useBeat();
+
   return interpolate(frame, [from, from + len], [0, 1], { ...clamp, easing: ARRIVE });
 }
 
 /** A spring that starts at `from`. */
 export function useSpring(from: number, config: Parameters<typeof spring>[0]["config"] = { damping: 14, mass: 0.8 }) {
   const frame = useBeat();
+
   return spring({ frame: frame - from, fps: BEAT, config });
 }
 
@@ -61,6 +66,7 @@ export function useSceneFade(inLen = 10, outLen = 10) {
   const frame = useBeat();
   const { durationInFrames, fps } = useVideoConfig();
   const len = (durationInFrames * BEAT) / fps;
+
   return interpolate(frame, [0, inLen, len - outLen, len], [0, 1, 1, 0], clamp);
 }
 
@@ -161,6 +167,7 @@ export function Sticky({ children, color = C.yellow, tilt = -3, style }: { child
 /** The caption under a scene: bold, tight, the site's headline type, rising in after `delay`. */
 export function Caption({ children, delay = 8 }: { children: ReactNode; delay?: number }) {
   const t = useIn(delay, 20);
+
   return (
     <div
       style={{

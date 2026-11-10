@@ -22,12 +22,15 @@ export function TelemetryAsk({ windowId }: { windowId: string }) {
   const releaseNotes = usePendingReleaseNotes() !== null;
   const [existing] = useState(() => onboardingCompletedAt() !== null);
   const [leaving, setLeaving] = useState<null | (() => void)>(null);
+
   if (!leaving && !(due && existing && !incognito && !onboarding && !checkIn && !releaseNotes)) return null;
+
   const retire = (action: () => void) =>
     setLeaving(() => () => {
       action();
       setLeaving(null);
     });
+
   return (
     <View style={{ position: "absolute", left: 0, top: 0, width: TELEMETRY_ASK_FRAME.width, padding: 8 }} pointerEvents="box-none">
       <Card
@@ -63,6 +66,7 @@ function Card({ leaving, onShare, onNotNow, onClose }: { leaving: null | (() => 
   const primary = theme.dark ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.8)";
   const secondary = theme.dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.53)";
   const cardStyle = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ scale: scale.get() }] }));
+
   return (
     <Animated.View {...hoverProps} style={cardStyle} pointerEvents={leaving ? "none" : "auto"}>
       <Surface
@@ -119,6 +123,7 @@ function AskButton({ title, onPress }: { title: string; onPress: () => void }) {
   const { hovered, hoverProps } = useHover();
   const [pressed, setPressed] = useState(false);
   const fill = theme.dark ? (pressed ? "#FFFFFF2E" : hovered ? "#FFFFFF24" : "#FFFFFF17") : pressed ? "#0000001F" : hovered ? "#00000017" : "#0000000D";
+
   return (
     <View {...hoverProps} style={{ flex: 1 }}>
       <Pressable
@@ -140,6 +145,7 @@ function CloseButton({ onPress }: { onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const fill = theme.dark ? (hovered ? "#FFFFFF4D" : "#FFFFFF14") : hovered ? "#0000004D" : "#00000033";
+
   return (
     <View {...hoverProps} tooltip="Dismiss">
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Dismiss">

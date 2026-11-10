@@ -82,10 +82,14 @@ export type GithubResponse = {
 export function checkState(c: RawCheck): CheckState {
   if (c.__typename === "StatusContext") {
     if (c.state === "SUCCESS") return "success";
+
     if (c.state === "FAILURE" || c.state === "ERROR") return "failure";
+
     return "pending";
   }
+
   if (c.status !== "COMPLETED") return c.status === "IN_PROGRESS" ? "pending" : "queued";
+
   switch (c.conclusion) {
     case "SUCCESS":
       return "success";
@@ -100,11 +104,13 @@ export function checkState(c: RawCheck): CheckState {
 
 function mapPR(raw: RawPR, section: PullRequestSection): LiveItem {
   const rollup = raw.commits.nodes[0]?.commit.statusCheckRollup;
+
   const checks: PullRequestCheck[] = (rollup?.contexts.nodes ?? []).map((c) => ({
     name: c.__typename === "CheckRun" ? c.name : c.context,
     state: checkState(c),
     url: c.__typename === "CheckRun" ? c.detailsUrl : c.targetUrl,
   }));
+
   const pr: PullRequestInfo = {
     number: raw.number,
     repo: raw.repository.nameWithOwner,
@@ -129,6 +135,7 @@ function mapPR(raw: RawPR, section: PullRequestSection): LiveItem {
     deletions: raw.deletions,
     changedFiles: raw.changedFiles,
   };
+
   return {
     id: `github:${raw.id}`,
     source: "github",
@@ -142,17 +149,22 @@ function mapPR(raw: RawPR, section: PullRequestSection): LiveItem {
   };
 }
 
-const isPR = (n: object): n is RawPR => "number" in n;
+type SearchNode = RawPR | { id: string } | Record<string, never>;
+
+const isPR = (n: SearchNode): n is RawPR => "number" in n;
 
 // The ids whose details the folder shows (GITHUB_DETAILS_QUERY), each once.
 export function detailIds(json: GithubResponse, filters: { authored: boolean; reviewRequests: boolean }): string[] {
   const data = json.data;
+
   if (!data) return [];
   const sections = [filters.authored && data.authored, filters.reviewRequests && data.review].filter((x) => !!x);
+
   return [...new Set(sections.flatMap((section) => section.nodes.map((n) => ("id" in n ? n.id : "")).filter(Boolean)))];
 }
 
 type GraphqlError = { type?: string; message: string; path?: (string | number)[] };
+
 export type DetailsResponse = { data?: { nodes?: (RawPR | null)[] } | null; errors?: GraphqlError[] };
 
 // One details page's PRs. A PR missing from a successful fetch counts as merged or reviewed (resolveGone), so a page
@@ -163,13 +175,17 @@ export type DetailsResponse = { data?: { nodes?: (RawPR | null)[] } | null; erro
 export function detailNodes(ids: string[], res: DetailsResponse): RawPR[] {
   const errors = res.errors ?? [];
   const limited = errors.find((e) => e.type === "RATE_LIMITED");
+
   if (limited) throw new LiveError("rateLimited", limited.message);
   const nodes = res.data?.nodes;
   const fail = (error?: GraphqlError) => new LiveError("other", (error ?? errors[0])?.message ?? "Missing pull request details");
+
   if (!nodes || nodes.length !== ids.length) throw fail();
+
   return nodes.filter((node, i): node is RawPR => {
     if (node) return true;
     const error = errors.find((e) => e.path?.[0] === "nodes" && e.path[1] === i);
+
     if (error?.type === "NOT_FOUND" || error?.type === "FORBIDDEN") return false;
     throw fail(error);
   });
@@ -179,18 +195,24 @@ export function detailNodes(ids: string[], res: DetailsResponse): RawPR[] {
 // between the two queries) drops out.
 export function withDetails(json: GithubResponse, details: (RawPR | null)[]): GithubResponse {
   const data = json.data;
+
   if (!data) return json;
-  const byId = new Map(details.filter((d): d is RawPR => !!d && isPR(d) && d.state === "OPEN").map((d) => [d.id, d]));
+
+  const byId = new Map(details.flatMap((d): [string, RawPR][] => (d && isPR(d) && d.state === "OPEN" ? [[d.id, d]] : [])));
+
   const fill = (nodes: (RawPR | { id: string } | Record<string, never>)[]) => nodes.flatMap((n) => ("id" in n && byId.has(n.id) ? [byId.get(n.id)!] : []));
+
   return { ...json, data: { ...data, authored: { nodes: fill(data.authored.nodes) }, review: { nodes: fill(data.review.nodes) } } };
 }
 
 export function mapGithub(json: GithubResponse, filters: { authored: boolean; reviewRequests: boolean }): LiveItem[] {
   const data = json.data;
+
   if (!data) return [];
   const direct = new Set(data.direct.nodes.map((n) => ("id" in n ? n.id : "")));
   const out: LiveItem[] = [];
   const seen = new Set<string>();
+
   if (filters.authored) {
     for (const n of data.authored.nodes) {
       if (!isPR(n) || seen.has(n.id)) continue;
@@ -198,6 +220,7 @@ export function mapGithub(json: GithubResponse, filters: { authored: boolean; re
       out.push(mapPR(n, "authored"));
     }
   }
+
   if (filters.reviewRequests) {
     for (const n of data.review.nodes) {
       if (!isPR(n) || seen.has(n.id)) continue;
@@ -205,39 +228,53 @@ export function mapGithub(json: GithubResponse, filters: { authored: boolean; re
       out.push(mapPR(n, direct.has(n.id) ? "review" : "team"));
     }
   }
+
   return withStacks(out);
 }
 
 export function withStacks(items: LiveItem[]): LiveItem[] {
   const byHead = new Map<string, LiveItem>();
+
   for (const it of items) if (it.pr) byHead.set(`${it.pr.repo}:${it.pr.headRef}`, it);
   const parent = (it: LiveItem) => (it.pr ? byHead.get(`${it.pr.repo}:${it.pr.baseRef}`) : undefined);
+
   const bottomOf = (it: LiveItem) => {
     let cur = it;
     const visited = new Set<string>();
+
     for (let p = parent(cur); p && !visited.has(p.id); p = parent(cur)) {
       visited.add(cur.id);
       cur = p;
     }
+
     return cur;
   };
+
   const stacks = new Map<string, LiveItem[]>();
+
   for (const it of items) {
     if (!it.pr) continue;
     const bottom = bottomOf(it);
     stacks.set(bottom.id, [...(stacks.get(bottom.id) ?? []), it]);
   }
+
   const info = new Map<string, PullRequestInfo["stack"]>();
+
   for (const [bottomId, members] of stacks) {
     if (members.length < 2) continue;
+
     const depth = (it: LiveItem) => {
       let d = 1;
+
       for (let p = parent(it); p && d <= members.length; p = parent(p)) d++;
+
       return d;
     };
+
     const ordered = [...members].sort((a, b) => depth(a) - depth(b) || a.pr!.number - b.pr!.number);
     ordered.forEach((it, i) => info.set(it.id, { id: `stack:${bottomId}`, position: i + 1, size: ordered.length }));
   }
+
   return items.map((it) => (info.has(it.id) && it.pr ? { ...it, pr: { ...it.pr, stack: info.get(it.id) } } : it));
 }
 
@@ -254,19 +291,29 @@ export function summarizeChecks(checks: PullRequestCheck[]): CheckSummary | null
   const queued = checks.filter((c) => c.state === "queued").length;
   const success = checks.length - failure - pending;
   const counts = { success, failure, pending };
+
   if (failure) return { text: failure === 1 ? "1 check is failing" : `${failure} checks are failing`, tone: "failure", counts };
+
   if (queued && queued === pending && !checks.some((c) => c.state === "success")) return { text: "Checks are queued", tone: "pending", counts };
+
   if (pending) return { text: "Some checks haven't completed yet", tone: "pending", counts };
+
   return { text: "All checks have passed", tone: "success", counts };
 }
 
 export function prBadge(pr: PullRequestInfo): "conflict" | "failing" | "changesRequested" | "pending" | "approved" | "passed" | null {
   if (pr.mergeable === "conflicting") return "conflict";
   const summary = summarizeChecks(pr.checks);
+
   if (summary?.tone === "failure") return "failing";
+
   if (pr.review === "changesRequested") return "changesRequested";
+
   if (summary?.tone === "pending") return "pending";
+
   if (pr.review === "approved") return "approved";
+
   if (summary?.tone === "success") return "passed";
+
   return null;
 }

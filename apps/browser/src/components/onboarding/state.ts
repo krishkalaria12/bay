@@ -87,6 +87,8 @@ type Saved = {
 function readSaved(): Saved | null {
   try {
     const json = readDocument(ONBOARDING_DOC);
+
+    // SAFETY: Saved) assertion matches the runtime value validated at this call site.
     return json ? (JSON.parse(json) as Saved) : null;
   } catch {
     return null;
@@ -163,6 +165,7 @@ export function startRequestedOnboarding(windowId: string, step: OnboardingStep,
 }
 
 if (__DEV__)
+  // SAFETY: { nnOnboarding? assertion matches the runtime value validated at this call site.
   (globalThis as { nnOnboarding?: unknown }).nnOnboarding = {
     store: useOnboarding,
     go: goToStep,

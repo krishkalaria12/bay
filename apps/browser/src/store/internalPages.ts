@@ -10,13 +10,13 @@ export const INTERNAL_PAGES: Record<InternalPageId, { title: string }> = {
   downloads: { title: "Downloads" },
 };
 
-const SCHEME = "bay://";
+export const INTERNAL_SCHEME = "bay://";
 
-export const internalUrl = (page: InternalPageId, query?: string) => `${SCHEME}${page}${query ? `?q=${encodeURIComponent(query)}` : ""}`;
+export const internalUrl = (page: InternalPageId, query?: string) => `${INTERNAL_SCHEME}${page}${query ? `?q=${encodeURIComponent(query)}` : ""}`;
 
 export function internalPageOf(url: string | null | undefined): InternalPageId | null {
-  if (!url?.toLowerCase().startsWith(SCHEME)) return null;
-  const page = url.slice(SCHEME.length).split(/[/?#]/)[0]!.toLowerCase();
+  if (!url?.toLowerCase().startsWith(INTERNAL_SCHEME)) return null;
+  const page = url.slice(INTERNAL_SCHEME.length).split(/[/?#]/)[0]!.toLowerCase();
   return page in INTERNAL_PAGES ? (page as InternalPageId) : null;
 }
 

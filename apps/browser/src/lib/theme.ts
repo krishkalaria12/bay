@@ -43,6 +43,7 @@ const dark = {
   tabSelected: "rgba(18,18,18,0.5)",
   tabSelectedText: "#FFFFFF",
   // Dia: 0.5pt border; 15/12.5 shadow.
+  // SAFETY: the literal has exactly two entries, matching the light theme's pair.
   tabSelectedBorder: ["rgba(255,255,255,0.15)", "rgba(255,255,255,0.15)"] as [string, string],
   // No glow: a white one haloed the row on the dark sidebar. Its fill and border set it apart.
   tabSelectedShadow: "rgba(0,0,0,0)",
@@ -241,7 +242,10 @@ export function spaceThemeKey(profile: DeepReadonly<Pick<Space, "color" | "theme
 export const customGrain = (dial: number) => dial * 0.12;
 
 function customTheme(key: string): Theme {
+  // SAFETY: `spaceThemeKey` builds custom keys as "custom|<colors>|<intensity>|<grain>:<mode>:<material?>", so splitting
+  // yields the fields destructured below.
   const [body, mode, material] = key.split(":") as [string, string, string | undefined];
+  // SAFETY: the body `spaceThemeKey` builds always has the four "|"-separated fields destructured here.
   const [, list, intensity, grain] = body.split("|") as [string, string, string, string];
   const colors = list.split(",");
   const isDark = mode === "dark";
@@ -266,6 +270,7 @@ function customTheme(key: string): Theme {
 }
 
 function presetTheme(key: string): Theme {
+  // SAFETY: a preset key is "<space color>:<mode>:<material?>" from `spaceThemeKey`; non-preset keys never reach here.
   const [color, mode, material] = key.split(":") as [SpaceColor | "incognito", string, string | undefined];
   const solid = material !== "glass";
   const look = color === "incognito" ? { ...dark, ...INCOGNITO } : { ...(mode === "dark" ? dark : light), ...profileTheme(color, mode === "dark") };

@@ -9,9 +9,11 @@ import { profileSymbol } from "./icons";
 export function SpaceGlyph({ spaceId, size }: { spaceId: string; size: number }) {
   const theme = useTheme();
   const profile = useBrowser((s) => s.spaces[spaceId]);
+
   if (!profile) return null;
   const ink = theme.dark ? "#FFFFFF" : "#000000";
   const symbol = profileSymbol(profile.icon);
+
   if (symbol) {
     return (
       <Symbol
@@ -24,6 +26,7 @@ export function SpaceGlyph({ spaceId, size }: { spaceId: string; size: number })
       />
     );
   }
+
   return (
     <Text style={{ fontSize: profile.icon ? size : Math.round(size * 0.8), fontWeight: "700", color: ink }}>
       {profile.icon ?? (profile.name.trim()[0] ?? "?").toUpperCase()}

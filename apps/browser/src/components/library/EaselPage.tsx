@@ -1,4 +1,5 @@
 import { capabilities, isMac, Pressable, TextInput, View } from "@bay/platform";
+import * as v from "valibot";
 import { WebView, type WebViewHandle } from "@bay/chromium";
 import {
   EaselCanvas,
@@ -83,26 +84,37 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
   const change = (next: EaselState) => {
     easelCanvasStates.set(tabId, next);
     setState(next);
+
     if (next.tool && next.tool !== tool) setTool(next.tool);
+
     if (next.document && next.document !== state.document) applyEaselDocument(doc.id, next.document);
   };
+
   const fail = (message: string) => showToast(windowId, "Couldn't Export Easel", message, { icon: "scribble.variable" });
   const finishExport = () => setBusy(false);
-  const failedExport = (error: unknown) => {
+
+  const failedExport = (cause: unknown) => {
     setBusy(false);
-    fail(String(error));
+    fail(String(cause));
   };
+
   const exportPNG = (share = false) => {
     setBusy(true);
+
     return writeEaselPNG(canvas.current, doc, windowId, share).then(finishExport, failedExport);
   };
+
   const exportHTML = () => {
     setBusy(true);
+
     return writeEaselHTML(doc, windowId).then(finishExport, failedExport);
   };
+
   const addLink = async () => {
     const url = await prompt({ title: "Add Link", message: "Paste the address of a webpage.", placeholder: "https://", confirmTitle: "Add", windowId });
+
     if (!url) return;
+
     if (!webLink(url)) return showToast(windowId, "Enter a Web Address", "Links must start with https:// or http://.");
     await canvas.current?.addLink(url, url);
   };
@@ -382,10 +394,12 @@ function LiveClip({
   const crop = liveClipTransform(source.clip!, { width, height }, scrollY);
   const viewportWidth = Math.max(source.viewportWidth ?? cw!, cx! + cw!);
   const viewportHeight = Math.max(source.viewportHeight ?? ch!, ch!);
+
   const position = () =>
     void web.current?.evaluate<number>(`window.scrollTo(0, ${Math.max(0, cy!)}); window.scrollY`).then((y) => {
-      if (typeof y === "number") setScrollY(y);
+      if (v.is(v.number(), y)) setScrollY(y);
     });
+
   return (
     <View style={{ position: "absolute", left, top, width, height, overflow: "hidden", borderRadius: 3 }}>
       <View

@@ -64,9 +64,10 @@ async function run(folderId: string, scope?: RefreshScope) {
   const results = await Promise.allSettled(folder.sources.map((id) => SOURCES[id].fetch(folder)));
 
   const next: LiveItem[] = [];
-  const failed: { source: LiveSourceId; error: unknown }[] = [];
+  const failed: { source: LiveSourceId; error: Error }[] = [];
   results.forEach((r, i) => {
     const source = folder.sources[i]!;
+
     if (r.status === "fulfilled") next.push(...r.value);
     else {
       failed.push({ source, error: r.reason });
@@ -86,14 +87,18 @@ async function run(folderId: string, scope?: RefreshScope) {
   }
 
   const firstFailure = failed[0];
+
   if (firstFailure && failed.length === folder.sources.length && !prev.length && !before.status[folderId]?.lastFetch) {
     setStatus(folderId, { state: "error", error: describe(firstFailure.source, firstFailure.error) });
+
     return;
   }
+
   const lastSources = fetchedSources.get(folderId);
-  const quiet = new Set(lastSources ? next.filter((it) => !lastSources.has(it.source)).map((it) => it.id) : []);
+  const quiet = new Set(lastSources ? next.flatMap((it) => (lastSources.has(it.source) ? [] : [it.id])) : []);
   fetchedSources.set(folderId, new Set(folder.sources.filter((id) => !failed.some((f) => f.source === id))));
   applyFetch(folderId, order(next), gone, Date.now(), quiet);
+
   if (firstFailure) setStatus(folderId, { state: "error", error: describe(firstFailure.source, firstFailure.error) });
   const leaving = Object.keys(gone);
   if (leaving.length)
@@ -106,9 +111,10 @@ async function run(folderId: string, scope?: RefreshScope) {
     );
 }
 
-function describe(source: LiveSourceId, error: unknown) {
+function describe(source: LiveSourceId, error: Error) {
   if (error instanceof LiveError) return { kind: error.kind, message: error.message, source };
-  return { kind: "other" as const, message: String((error as Error)?.message ?? error), source };
+
+  return { kind: "other" as const, message: String(error?.message ?? error), source };
 }
 
 export function statusText(folderId: string, now = Date.now()): string {

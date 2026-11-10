@@ -3,7 +3,7 @@ import { Pressable, View } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, prompt, showMenu, Symbol, type MenuItem } from "@bay/desktop";
 import { useState } from "react";
-import { PanResponder, StyleSheet, Text, type LayoutRectangle } from "react-native";
+import { PanResponder, StyleSheet, Text, type GestureResponderEvent, type LayoutRectangle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { reportBrowserCommand } from "../../runtime/commands";
@@ -257,9 +257,13 @@ function BarButton({
   const { hovered, hoverProps } = useHover();
   const windowId = useWindowId();
   const spaceId = useBrowser((s) => bookmarkSpaceId(s, s.windows[windowId]));
+
+  // SAFETY: e.nativeEvent carries the press modifiers from the platform event; the component only reads metaKey/shiftKey/altKey.
+  const handlePress = (e: GestureResponderEvent) => onPress(e.nativeEvent as ClickMods);
+
   return (
     <View {...hoverProps} tooltip={tooltip}>
-      <Pressable onPress={(e) => onPress(e.nativeEvent as unknown as ClickMods)}>
+      <Pressable onPress={handlePress}>
         {({ pressed }) => (
           <View
             style={{
@@ -316,8 +320,10 @@ async function openFolderMenu(windowId: string, ids: readonly string[], _e?: Cli
           ? { id: `open:${n.id}`, title: n.title || n.url, symbol: "globe" }
           : { id: `folder:${n.id}`, title: n.title, symbol: "folder", children: depth < 8 ? build(n.children, n.id, depth + 1) : [] },
       );
+
     if (!items.length) items.push({ id: "empty", title: "Empty", enabled: false });
     const links = parent ? folderLinks(b, parent).length : 0;
+
     if (links > 0) {
       items.push(
         { separator: true },
@@ -406,7 +412,9 @@ async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode
   if (choice === "delete" && node) reportBrowserCommand(removeBookmark(node.id));
   const parentId = node?.parentId ?? bar;
   const index = node && parentId ? folderChildren(useBrowser.getState().bookmarks, parentId).findIndex((n) => n.id === node.id) + 1 : undefined;
+
   if (choice === "addPage") void editBookmark(null, windowId, { spaceId, parentId: parentId ?? undefined, index });
+
   if (choice === "addFolder") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
     if (title) reportBrowserCommand(addBookmarkFolder({ spaceId, title, parentId: parentId ?? undefined, index }));

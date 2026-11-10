@@ -35,7 +35,9 @@ export async function faviconsFor(profile: string, pages: string[], icons: strin
     profile,
     { pages, icons, size },
   );
+
   const uri = (png: string) => `data:image/png;base64,${png}`;
+
   return {
     pages: new Map(Object.entries(result.pages).map(([page, r]) => [page, { uri: uri(r.png), icon: r.icon }])),
     icons: new Map(Object.entries(result.icons).map(([icon, r]) => [icon, uri(r.png)])),
@@ -47,7 +49,9 @@ export async function fetchFavicon(url: string, profile: string, page?: string):
   const fetched = await Cef.fetchFavicon(url, profile);
   const image = fetched && "svg" in fetched ? await rasterizedSvg(fetched.svg) : fetched;
   const png = image?.uri.startsWith("data:image/png;base64,") ? image.uri.slice(22) : null;
+
   if (page && png) await engineCall("nn_favicons_set", profile, { page, icon: url, png }).catch(() => null);
+
   return image;
 }
 

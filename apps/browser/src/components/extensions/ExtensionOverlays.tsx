@@ -30,6 +30,7 @@ export function ExtensionOverlays() {
   const popup = useExtensions((e) => (e.popup?.windowId === windowId ? e.popup : null));
   const install = useExtensions((e) => (e.install?.windowId === windowId ? e.install : null));
   const pin = useExtensions((e) => e.pinDialog?.windowId === windowId);
+
   return (
     <>
       {popup && <ActionPopup key={`${popup.extensionId}|${popup.url}`} {...popup} />}
@@ -44,6 +45,7 @@ export function InstallDialogHost({ windowId, onClosed }: { windowId: string; on
   useEffect(() => {
     if (!install) onClosed();
   }, [!install]);
+
   return install ? <InstallDialog request={install} /> : null;
 }
 
@@ -93,6 +95,7 @@ function ActionPopup({
 
   useEffect(() => {
     alive.current = true;
+
     return () => {
       alive.current = false;
     };
@@ -108,12 +111,15 @@ function ActionPopup({
   const watchSize = () => {
     void web.current?.evaluate<{ w: number; h: number }>(MEASURE).then((m) => {
       if (!alive.current || !m) return;
+
       const next = {
         width: Math.min(POPUP_MAX_SIZE.width, Math.max(POPUP_MIN_SIZE.width, m.w)),
         height: Math.min(POPUP_MAX_SIZE.height, Math.max(POPUP_MIN_SIZE.height, m.h)),
       };
+
       setSize((prev) => {
         if (!prev) appear.set(withTiming(1, { duration: 150, easing: Easing.out(Easing.cubic) }));
+
         return prev && prev.width === next.width && prev.height === next.height ? prev : next;
       });
       watchSize();
@@ -154,6 +160,7 @@ function ActionPopup({
               onWindowClose={closeExtensionPopup}
               onOpenWindow={(request) => {
                 openFromPage(request, { windowId, spaceId: pageSpaceId(windowId, pageProfile) });
+
                 if (request.disposition !== "background") closeExtensionPopup();
               }}
             />
@@ -177,6 +184,7 @@ function InstallDialog({ request }: { request: InstallRequest }) {
   const busy = request.status === "installing";
 
   let body;
+
   if (request.status === "error") {
     body = (
       <>
@@ -239,6 +247,7 @@ function PinDialog({ windowId }: { windowId: string }) {
   const profile = useBrowser((s) => extensionProfile(s, windowId));
   const list = useWindowExtensions(windowId);
   const close = () => useExtensions.setState({ pinDialog: null });
+
   return (
     <Dialog onDismiss={close}>
       <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Pin Extensions</Text>
@@ -263,6 +272,7 @@ function PinDialog({ windowId }: { windowId: string }) {
 
 function PinRow({ ext, onChange }: { ext: InstalledExtension; onChange: (pinned: boolean) => void }) {
   const theme = useTheme();
+
   return (
     <Pressable onPress={() => onChange(!ext.pinned)} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 }}>
       <Checkbox value={ext.pinned} onChange={onChange} />
@@ -282,6 +292,7 @@ function Dialog({ onDismiss, children }: { onDismiss?: () => void; children: Rea
   }, []);
   const dim = useAnimatedStyle(() => ({ opacity: appear.get() }));
   const card = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ scale: interpolate(appear.get(), [0, 1], [0.96, 1]) }] }));
+
   return (
     <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.15)" }, dim]}>

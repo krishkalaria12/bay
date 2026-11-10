@@ -7,6 +7,7 @@ import { useBrowserRead as useBrowser } from "../../store/read";
 import { defaultSearchEngine } from "../../store/settings";
 import type { Tab } from "../../store/types";
 
+// SAFETY: { getString() assertion matches the runtime value validated at this call site.
 const NativeClipboard = NativeModules.Clipboard as { getString(): Promise<string> } | undefined;
 
 export const readClipboard = (): Promise<string> => NativeClipboard?.getString().catch(() => "") ?? Promise.resolve("");

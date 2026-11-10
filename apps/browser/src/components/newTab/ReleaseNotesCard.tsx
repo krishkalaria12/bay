@@ -24,11 +24,13 @@ function useArtworkColors(): [string, string] {
   const windowId = useWindowId();
   const color = useBrowser((s) => s.spaces[s.windows[windowId]?.spaceId ?? ""]?.color ?? "plum");
   const swatch = SPACE_COLORS[color]?.swatch ?? SPACE_COLORS.plum.swatch;
+
   return [mix(swatch, "#FFFFFF", 0.45), mix(swatch, "#10121A", 0.5)];
 }
 
 function mix(a: string, b: string, t: number) {
   const ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
+
   return `#${[0, 1, 2]
     .map((i) =>
       Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t)
@@ -60,11 +62,13 @@ export function ReleaseNotesPostcard({
     let cancelled = false;
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (cancelled) return;
+
       if (reduce) return (drop.set(0), opacity.set(1));
       const stiffness = ((2 * Math.PI) / 0.65) ** 2;
       drop.set(withSpring(0, { stiffness, damping: 2 * Math.sqrt(stiffness), mass: 1 }));
       opacity.set(withTiming(1, { duration: 300, easing: Easing.out(Easing.quad) }));
     });
+
     return () => {
       cancelled = true;
     };
@@ -84,12 +88,15 @@ export function ReleaseNotesPostcard({
       }),
     );
   };
+
   const dropStyle = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: drop.get() * -280 }] }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${POSTCARD.tilt}deg` }, { scale: scale.get() }] }));
   const tooltipStyle = useAnimatedStyle(() => ({ opacity: tooltip.get() }));
+
   if (size.height < 420 || size.width < 560) return null;
 
   const card = cardFrame(size);
+
   return (
     <Animated.View
       pointerEvents={leaving ? "none" : "box-none"}
@@ -137,6 +144,7 @@ export function ReleaseNotesPostcard({
 
 function Tooltip({ text, onOpen, onClose }: { text: string; onOpen: () => void; onClose: () => void }) {
   const theme = useTheme();
+
   return (
     <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={text}>
       <View
@@ -163,6 +171,7 @@ function Tooltip({ text, onOpen, onClose }: { text: string; onOpen: () => void; 
 
 function CloseButton({ onPress, label, size, radius }: { onPress: () => void; label: string; size: number; radius: number }) {
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip={label}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
@@ -189,6 +198,7 @@ function Artwork({ notes, radius, titleSize, hidden }: { notes: ReleaseNotes; ra
   const colors = useArtworkColors();
   const k = titleSize / 44;
   const pad = 22 * k;
+
   return (
     <View style={{ flex: 1, borderRadius: radius, overflow: "hidden", backgroundColor: mix(colors[0], colors[1], 0.5) }}>
       <WindowBackdrop colors={colors} angle={150} grainOpacity={0.1} style={StyleSheet.absoluteFill} />
@@ -206,8 +216,10 @@ export function ReleaseNotesPage({ notes, size, onClose }: { notes: ReleaseNotes
   const [closing, setClosing] = useState(false);
   useEffect(() => {
     t.set(withSpring(1, POSTCARD_PAGE_SPRING));
+
     return onClose;
   }, []);
+
   const close = () => {
     setClosing(true);
     t.set(
@@ -223,9 +235,11 @@ export function ReleaseNotesPage({ notes, size, onClose }: { notes: ReleaseNotes
   const card = cardFrame(size);
   const from = { x: card.x + card.width / 2 - size.width / 2, y: card.y + card.height / 2 - size.height / 2 };
   const backdrop = useAnimatedStyle(() => ({ opacity: interpolate(t.get(), [0, 1], [0, 1], Extrapolation.CLAMP) }));
+
   // From the postcard's place, size and tilt to the page's.
   const page = useAnimatedStyle(() => {
     const p = t.get();
+
     return {
       opacity: interpolate(p, [0, 0.3, 1], [0, 1, 1], Extrapolation.CLAMP),
       transform: [
@@ -294,6 +308,7 @@ function PageCloseButton({ onPress }: { onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const label = "Close release notes";
+
   return (
     <View {...hoverProps} tooltip={label}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>

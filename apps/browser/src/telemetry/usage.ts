@@ -25,7 +25,7 @@ function emitCounts() {
   countsSince = Date.now();
 }
 
-const size = (o: object) => Object.keys(o).length;
+const size = <T>(o: Record<string, T>) => Object.keys(o).length;
 
 function watchStore() {
   return useBrowser.subscribe((s, prev) => {

@@ -675,14 +675,16 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
   }
 }
 
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const errorText = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 
 function linkProfiles(app: ScopeState) {
   const s = syncStore().getState();
   const remote = [...visible(app, "prof:")].map(([k, v]) => [k.slice(5), v as ProfileRecord] as const);
   const taken = new Set(Object.values(doc.profiles).map((l) => l.syncId));
+
   for (const id of s.spaceOrder) {
     const profile = s.spaces[id];
+
     if (!profile || isIncognitoSpace(id) || doc.profiles[id]) continue;
     const match = doc.joining ? remote.find(([syncId, r]) => !taken.has(syncId) && (id === DEFAULT_SPACE_ID ? r.d : r.n === profile.name))?.[0] : undefined;
     const syncId = match ?? SyncNative!.newDeviceId();
@@ -714,27 +716,39 @@ function summarize(): Pick<SyncUi, "devices" | "remoteTabs" | "remoteProfiles"> 
   for (const scope of Object.values(doc.scopes)) {
     for (const [device, at] of Object.entries(scope.seen)) lastSeen.set(device, Math.max(at, lastSeen.get(device) ?? 0));
   }
+
+  // SAFETY: visible values under `dev:` are DeviceRecord records written by deviceAdapter extract.
   const names = new Map([...visible(app, "dev:")].map(([k, v]) => [k.slice(4), (v as DeviceRecord).n]));
   const devices: SyncedDevice[] = [...names].map(([id, name]) => ({ id, name, lastSeen: lastSeen.get(id) ?? null, current: id === doc.deviceId }));
   devices.sort((a, b) => Number(b.current) - Number(a.current) || (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
   const remoteTabs: Record<string, RemoteTabs[]> = {};
+
   for (const [spaceId, link] of Object.entries(doc.profiles)) {
     const scope = doc.scopes[`p:${link.syncId}`];
+
     if (!scope || !link.enabled) continue;
-    remoteTabs[spaceId] = [...visible(scope, "tabs:")]
-      .map(([k, v]) => ({ deviceId: k.slice(5), value: v as DeviceTabs }))
       // A device that stopped syncing took its record away; one without a name record is on its way out.
-      .filter(({ deviceId, value }) => deviceId !== doc.deviceId && names.has(deviceId) && value.tabs.length > 0)
-      .map(({ deviceId, value }) => ({
-        deviceId,
-        name: names.get(deviceId) || value.n || "Unknown Device",
-        tabs: value.tabs.map((t) => ({ url: t.u, title: t.t })),
-      }));
+    remoteTabs[spaceId] = [...visible(scope, "tabs:")].flatMap(([k, v]) => {
+      // SAFETY: visible values under `tabs:` are DeviceTabs records written by deviceTabsAdapter extract.
+      const value = v as DeviceTabs;
+      const deviceId = k.slice(5);
+
+      return deviceId === doc.deviceId || !names.has(deviceId) || !value.tabs.length
+        ? []
+        : [{ deviceId, name: names.get(deviceId) || value.n || "Unknown Device", tabs: value.tabs.map((t) => ({ url: t.u, title: t.t })) }];
+    });
   }
+
   const linked = new Set(Object.values(doc.profiles).map((l) => l.syncId));
-  const remoteProfiles = [...visible(app, "prof:")]
-    .filter(([k]) => !linked.has(k.slice(5)))
-    .map(([k, v]) => ({ syncId: k.slice(5), name: (v as ProfileRecord).n, color: (v as ProfileRecord).c, icon: (v as ProfileRecord).i }));
+
+  const remoteProfiles = [...visible(app, "prof:")].flatMap(([k, v]) => {
+    // SAFETY: visible values under `prof:` are ProfileRecord records written by profilesAdapter extract.
+    const record = v as ProfileRecord;
+    const syncId = k.slice(5);
+
+    return linked.has(syncId) ? [] : [{ syncId, name: record.n, color: record.c, icon: record.i }];
+  });
+
   return { devices, remoteTabs, remoteProfiles };
 }
 
@@ -894,10 +908,12 @@ export function addRemoteProfile(syncId: string): string | null | Promise<string
   if (hasServiceClient()) return requestService<string | null>("addRemoteProfile", [syncId]);
   if (quitPaused) return null;
   const record = doc.scopes[APP_SCOPE]?.records[`prof:${syncId}`]?.v as ProfileRecord | undefined;
+
   if (!record) return null;
   const id = syncStore().getState().createSpace({ name: record.n, color: record.c, icon: record.i });
   if (typeof record.f === "boolean") syncStore().getState().updateSpace(id, { folded: record.f });
   doc.profiles[id] = { syncId, enabled: true };
+
   if (doc.types.settings) resolveLinkRuleSpaces(doc.profiles);
   doc.scopes[`p:${syncId}`] = { ...emptyScope(), awaitRemote: true };
   save();
@@ -990,7 +1006,9 @@ export function startSync(store: BrowserStore): () => void {
   unsubscribeBoosts = useBoosts.subscribe((s, prev) => {
     if (doc.enabled && !running && !quitPaused && s.boosts !== prev.boosts) scheduleSync();
   });
+
   if (__DEV__) {
+    // SAFETY: globalThis is the dev debug surface that holds the nnSync sync hook only.
     (globalThis as { nnSync?: object }).nnSync = {
       useSync,
       syncNow,

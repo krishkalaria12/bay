@@ -25,6 +25,17 @@ export function LinkRules() {
   const rules = settings.externalLinkRules;
   const defaultDestination = defaultLinkDestination(settings);
   const selectedDefault = defaultDestination.kind === "space" ? `space:${defaultDestination.spaceId}` : defaultDestination.kind;
+
+  // SAFETY: PopUp options are built from these three values plus "space:<id>"; anything not starting with "space:" is one of them.
+  const onDefaultChange = (value: string) =>
+    reportBrowserCommand(
+      updateSettings({
+        externalLinkDefault: value.startsWith("space:")
+          ? { kind: "space", spaceId: value.slice(6) }
+          : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
+      }),
+    );
+
   const move = (id: string, direction: number) => {
     const state = browserRead.getState();
     const next = [...state.settings.externalLinkRules];
@@ -56,15 +67,7 @@ export function LinkRules() {
               { value: "littleBay", title: "Little Bay" },
               ...(defaultDestination.kind === "newWindow" ? [{ value: "newWindow", title: "New window" }] : []),
             ]}
-            onChange={(value) =>
-              reportBrowserCommand(
-                updateSettings({
-                  externalLinkDefault: value.startsWith("space:")
-                    ? { kind: "space", spaceId: value.slice(6) }
-                    : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
-                }),
-              )
-            }
+            onChange={onDefaultChange}
             minWidth={180}
           />
         </Row>
@@ -126,10 +129,11 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
     const saved: ExternalLinkRule = {
       id: rule?.id ?? newId("link-rule"),
       pattern: cleanPattern,
-      ...(matchType ? { matchType } : {}),
-      ...(cleanSource ? { sourceApp: cleanSource } : {}),
+      ...(matchType ? { matchType } : undefined),
+      ...(cleanSource ? { sourceApp: cleanSource } : undefined),
       destination,
     };
+
     const rules = state.settings.externalLinkRules;
     const externalLinkRules = rule ? rules.map((existing) => (existing.id === rule.id ? saved : existing)) : [...rules, saved];
     try {
@@ -201,6 +205,7 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
           ]}
           onChange={(value) =>
             setDestination(
+              // SAFETY: target type assertion matches the runtime value validated at this call site.
               value.startsWith("space:") ? { kind: "space", spaceId: value.slice(6) } : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
             )
           }

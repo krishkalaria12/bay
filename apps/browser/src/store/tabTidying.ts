@@ -64,8 +64,11 @@ export type OrganizeSlice = {
   newTabInGroup(groupId: string, url?: string): string;
   moveGroupToBookmarksBar(groupId: string): void;
 
-  /** Groups the tabs used today by site into tab groups; the number of groups made. Pinned tabs and groups stay. */
-  tidyTabs(windowId: string): number;
+  /**
+   * Sorts the loose tabs into tab groups as `plan` says, or by site without one (lib/tidyTabs.ts asks the model
+   * first); the number of groups made or added to. Pinned tabs and tabs already in a group stay.
+   */
+  tidyTabs(windowId: string, plan?: TabTidyPlan): number;
   /** Cleans up the tabs of the space the window shows, or of `spaceId`. */
   cleanUpTabs(windowId: string, options?: { inactiveForMs?: number; spaceId?: string }): number;
   /** The automatic clean up (Arc's archive): every window's spaces, each after its own time. */
@@ -530,7 +533,8 @@ export function forgetClosedPrivateWindows(s: BrowserState): Partial<BrowserStat
   return { privateCleanedTabs: without(s.privateCleanedTabs, cleaned), privateSiteMutes: without(s.privateSiteMutes, mutes) };
 }
 
-function hostOfTab(tab: Tab): string {
+/** A tab's host without its "www.": the site a group of tabs shares. */
+export function hostOfTab(tab: Pick<Tab, "url">): string {
   try {
     return new URL(tab.url).hostname.replace(/^www\./, "");
   } catch {
@@ -538,45 +542,110 @@ function hostOfTab(tab: Tab): string {
   }
 }
 
-function tidyingTabs(s: BrowserState, windowId: string): [BrowserState, number] {
-  const w = s.windows[windowId];
-  if (!w) return [s, 0];
-  const today = new Date().setHours(0, 0, 0, 0);
-  const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
-  const candidates = viewTabIds(s, windowId, w.spaceId).filter((id) => {
-    const t = s.tabs[id];
-    return !!t?.url && !pinnedPage(t) && !grouped.has(id) && Math.max(t.lastActiveAt, t.createdAt) >= today;
-  });
+/** The groups Tidy may make and the groups it may add to. */
+export type TabTidyPlan = {
+  newGroups: { name?: string; tabIds: string[] }[];
+  joins: { groupId: string; tabIds: string[] }[];
+};
 
+// A check for tabs Tidy may move: open, and not pinned, grouped or split.
+function looseTabCheck(s: BrowserProjection): (id: string) => boolean {
+  const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
+  const inSplit = splitIndex(s.splits);
+
+  return (id) => !!s.tabs[id] && !pinnedPage(s.tabs[id]!) && !grouped.has(id) && !inSplit.has(id);
+}
+
+/** The tabs Tidy may sort in the window's space, in sidebar order: loose web pages. */
+export function tidyCandidates(s: BrowserProjection, windowId: string, spaceId?: string): string[] {
+  const isLoose = looseTabCheck(s);
+
+  return viewTabIds(s, windowId, spaceId).filter((id) => isLoose(id) && /^(?:https?|file):/i.test(s.tabs[id]!.url));
+}
+
+export type TidyTabCounts = { tabCount: number; loose: string[] };
+
+// The divider's selector runs on every store update; this is worked out again only when the lists and groups change.
+const tidyCounts = new Map<string, { inputs: unknown[]; result: TidyTabCounts }>();
+
+/** What the divider's Tidy goes by: the list's tabs, grouped ones included, and the loose ones among them. */
+export function tidyTabCounts(s: BrowserProjection, windowId: string, spaceId?: string): TidyTabCounts {
+  const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits];
+  const key = `${windowId}|${spaceId ?? ""}`;
+  const cached = tidyCounts.get(key);
+
+  if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result;
+  const tabCount = viewTabIds(s, windowId, spaceId).filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!)).length;
+  const result = { tabCount, loose: tidyCandidates(s, windowId, spaceId) };
+  tidyCounts.delete(key);
+  tidyCounts.set(key, { inputs, result });
+
+  if (tidyCounts.size > 16) tidyCounts.delete(tidyCounts.keys().next().value!);
+
+  return result;
+}
+
+/** The grouping that needs no model: a group per site with two or more tabs, the rest together under "Other". */
+export function siteTidyPlan(s: BrowserProjection, ids: string[]): TabTidyPlan {
   const clusters = new Map<string, string[]>();
   const leftovers: string[] = [];
-  for (const id of candidates) {
+
+  for (const id of ids) {
     const host = hostOfTab(s.tabs[id]!);
+
     if (!host) {
       leftovers.push(id);
       continue;
     }
+
     const list = clusters.get(host) ?? [];
     list.push(id);
     clusters.set(host, list);
   }
 
+  const newGroups: TabTidyPlan["newGroups"] = [];
+
+  for (const tabIds of clusters.values()) {
+    if (tabIds.length < 2) leftovers.push(...tabIds);
+    else newGroups.push({ tabIds });
+  }
+
+  if (leftovers.length >= 2) newGroups.push({ name: "Other", tabIds: leftovers });
+
+  return { newGroups, joins: [] };
+}
+
+// The plan may be seconds old: the model was thinking while the person kept browsing. Only tabs still loose move.
+function tidyingTabs(s: BrowserState, plan: TabTidyPlan): [BrowserState, number] {
+  const isLoose = looseTabCheck(s);
   let next = s;
   let made = 0;
-  for (const ids of clusters.values()) {
-    if (ids.length < 2) {
-      leftovers.push(...ids);
-      continue;
+
+  for (const join of plan.joins) {
+    let joined = false;
+
+    for (const id of join.tabIds.filter(isLoose)) {
+      const group = next.groups[join.groupId];
+      const list = listOfTab(next, id);
+
+      if (!group || !list || group.spaceId !== next.tabs[id]!.spaceId) continue;
+      next = joinGroup(next, list, group, id);
+      joined = true;
     }
-    const [state, id] = withGroup(next, ids, { pinned: false });
+
+    if (joined) made++;
+  }
+
+  for (const { name, tabIds } of plan.newGroups) {
+    const ids = tabIds.filter(isLoose);
+
+    if (ids.length < 2) continue;
+    const [state, id] = withGroup(next, ids, { pinned: false, ...(name ? { name } : {}) });
     next = state;
+
     if (id) made++;
   }
-  if (leftovers.length >= 2) {
-    const [state, id] = withGroup(next, leftovers, { pinned: false, name: "Other" });
-    next = state;
-    if (id) made++;
-  }
+
   return [next, made];
 }
 
@@ -764,9 +833,12 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     set(closingGroup(get(), groupId));
   },
 
-  tidyTabs(windowId) {
-    const [next, made] = tidyingTabs(get(), windowId);
+  tidyTabs(windowId, plan) {
+    const s = get();
+    const [next, made] = tidyingTabs(s, plan ?? siteTidyPlan(s, tidyCandidates(s, windowId)));
+
     if (made) set(next);
+
     return made;
   },
 

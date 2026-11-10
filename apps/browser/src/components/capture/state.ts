@@ -1,3 +1,5 @@
+import * as v from "valibot";
+import { isJsonObject, type JsonInput } from "../../lib/json";
 import type { CapturedImage } from "@bay/chromium";
 import { copyCaptureImage, portraitCaptureImage, revealFile, saveCaptureImage, shareCaptureImage } from "@bay/desktop";
 import { PixelRatio } from "react-native";
@@ -94,28 +96,39 @@ export function retakeCapture(tabId: string) {
   void startCapture(tabId);
 }
 
-const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const finite = (value: unknown): value is number => v.is(v.number(), value) && Number.isFinite(value);
 
 /** What the selection in a page sends (captureScript's send): untrusted, as everything from a page. */
-export function onCaptureMessage(tabId: string, data: unknown) {
-  const m = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+export function onCaptureMessage(tabId: string, data: JsonInput) {
+  const m = isJsonObject(data) ? data : null;
+
   if (!m || sessionOf(tabId)?.phase !== "selecting") return;
+
   if (m.type === "cancel") return setSession(tabId, null);
+
   if (m.type === "fullPage") {
     setSession(tabId, null);
+
     return void (m.portrait === true ? capturePortrait(tabId) : captureFullPage(tabId));
   }
+
   if (m.type !== "capture") return;
   const { x, y, width, height, left, top, viewportWidth, viewportHeight } = m;
+
   if (![x, y, width, height, left, top, viewportWidth, viewportHeight].every(finite)) return setSession(tabId, null);
+
+  // SAFETY: number) < 1 || (height as number) < 1 || (viewportWidth as n assertion matches the runtime value validated at this call site.
   if ((width as number) < 1 || (height as number) < 1 || (viewportWidth as number) < 1) return setSession(tabId, null);
+  // SAFETY: CaptureArea assertion matches the runtime value validated at this call site.
   const area = { x, y, left, top, width, height, viewportWidth, viewportHeight } as CaptureArea;
+  // SAFETY: number, y as number, width as number, height as number], bey assertion matches the runtime value validated at this call site.
   void shoot(tabId, { clip: [x as number, y as number, width as number, height as number], beyond: m.beyond === true }, area);
 }
 
 /** ⌘⇧ pressed on the page (page_script.js › Capture): Capture, with a drag from there. */
-export function onCaptureGesture(tabId: string, data: unknown) {
-  const m = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+export function onCaptureGesture(tabId: string, data: JsonInput) {
+  const m = isJsonObject(data) ? data : null;
+
   if (!m || !finite(m.x) || !finite(m.y) || sessionOf(tabId)?.phase === "shooting") return;
   void startCapture(tabId, { x: m.x, y: m.y });
 }
@@ -166,11 +179,14 @@ export async function captureToLibrary(tabId: string, toEasel = false) {
         profileId: engineProfile(tab.spaceId),
         ...(area
           ? { clip: [area.x ?? area.left, area.y ?? area.top, area.width, area.height], viewportWidth: area.viewportWidth, viewportHeight: area.viewportHeight }
-          : {}),
+          : undefined),
       }
     : undefined;
+
   const media = await saveLibraryMedia(session.image, session.name, source);
+
   if (!media) return showToast(tab.windowId, "Couldn't Save Capture", "Bay couldn't save the image to Library.", { icon: "camera.viewfinder" });
+
   if (toEasel) {
     if (await chooseEasel(media, tab.windowId)) closeCapture(tabId);
   } else {

@@ -1,6 +1,6 @@
 import { resolveInput } from "@bay/core";
 import type { StateCreator } from "zustand";
-import type { BrowserProjection } from "../runtime/projection";
+import type { BrowserProjection, ProjectionWindow } from "../runtime/projection";
 import type { BrowserState } from "./browserStore";
 import { withChangedEntry } from "./recordDiff";
 import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
@@ -106,9 +106,16 @@ function canShow(s: BrowserState, w: BrowserWindow | undefined, tab: Tab): w is 
  *  one with its page), else the focused one, else the one with its page, else any. */
 export function windowFor(s: BrowserState, tab: Tab, requested?: string | null): BrowserWindow | undefined {
   const asked = requested ? s.windows[requested] : undefined;
+
   if (canShow(s, asked, tab)) return asked;
   const key = tabListKey(s, tab);
-  const order = [...new Set([...s.ui.focusOrder, tab.windowId, ...s.windowOrder])].map((id) => s.windows[id]).filter((w) => canShow(s, w, tab));
+
+  const order = [...new Set([...s.ui.focusOrder, tab.windowId, ...s.windowOrder])].flatMap((id) => {
+    const w = s.windows[id];
+
+    return w && canShow(s, w, tab) ? [w] : [];
+  });
+
   return order.find((w) => windowListKey(s, w!) === key && w!.id === s.ui.focusedWindowId) ?? order.find((w) => windowListKey(s, w!) === key) ?? order[0];
 }
 
@@ -123,18 +130,26 @@ export function activated(s: BrowserState, id: string, windowId?: string | null)
   // A favourite shared with the space on screen (the same profile) opens in it, and is that space's from now on: the
   // window stays where it is. Its page is the same engine profile's, so nothing reloads.
   const spaceId = tab.pinned && !w.incognito && tab.spaceId !== w.spaceId && sharesProfile(s, tab.spaceId, w.spaceId) ? w.spaceId : tab.spaceId;
-  const nextTab: Tab = { ...rest, spaceId, windowId: w.id, lastActiveAt: Date.now(), ...(lazy ? wake(tab) : {}) };
+  const nextTab: Tab = { ...rest, spaceId, windowId: w.id, lastActiveAt: Date.now() };
+
+  if (lazy) Object.assign(nextTab, wake(tab));
+
   const window: BrowserWindow = {
     ...w,
     spaceId: w.incognito ? w.spaceId : spaceId,
     activeTabIds: { ...w.activeTabIds, [spaceId]: id },
   };
+
   const ui = s.windowUi[w.id];
-  return {
+
+  const result: Partial<BrowserState> = {
     tabs: { ...s.tabs, [id]: nextTab },
     windows: { ...s.windows, [w.id]: window },
-    ...(ui?.panel.open ? { windowUi: { ...s.windowUi, [w.id]: { ...ui, panel: { open: false, initialText: "" } } } } : {}),
   };
+
+  if (ui?.panel.open) result.windowUi = { ...s.windowUi, [w.id]: { ...ui, panel: { open: false, initialText: "" } } };
+
+  return result;
 }
 
 export const apply = (s: BrowserState, patch: Partial<BrowserState>): BrowserState => ({ ...s, ...patch });
@@ -150,9 +165,11 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
     if (record) {
       list.forEach((id, index) => {
         const t = s.tabs[id];
+
         if (!t || !gone.has(id) || (!t.url && !t.pinned)) return;
         const group = Object.values(s.groups).find((g) => g.tabIds.includes(id));
-        closed.push({
+
+        const entry: ClosedTab = {
           kind: "tab",
           id: newId("ct"),
           tab: snapshotTab(t),
@@ -161,11 +178,15 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
           index,
           group: group ? { id: group.id, name: group.name, icon: group.icon, color: group.color } : null,
           closedAt: now,
-          ...(s.windows[key]?.kind === "small" ? { small: true } : {}),
-        });
+        };
+
+        if (s.windows[key]?.kind === "small") entry.small = true;
+        closed.push(entry);
       });
     }
+
     const left = list.filter((id) => !gone.has(id));
+
     if (left.length) tabLists[key] = left;
     else delete tabLists[key];
   }
@@ -211,8 +232,9 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
 
 /** The window's shown tab for each space, with each of `gone` replaced by the tab it shows next: one its
  *  opener opened, else the next one (awake first), else the one before. */
-export function successors(s: BrowserProjection, w: BrowserProjection["windows"][string], gone: Set<string>): Record<string, string> {
+export function successors(s: BrowserProjection, w: ProjectionWindow, gone: Set<string>): Record<string, string> {
   const activeTabIds = { ...w.activeTabIds };
+
   for (const [spaceId, activeId] of Object.entries(w.activeTabIds)) {
     if (!gone.has(activeId)) continue;
     const before = viewTabIds(s, w.id, spaceId);
@@ -299,9 +321,17 @@ export function unloadPinnedTabs(s: BrowserState, ids: string[]): BrowserState {
 
 function backToPin(s: BrowserState, t: Tab): Partial<Tab> {
   const home = t.pinnedUrl;
+
   if (!home || !t.url || samePage(t.url, home)) return {};
   const entry = s.history[t.spaceId]?.find((h) => samePage(h.url, home));
-  return { ...onUrlChange(s, t, home), url: home, ...(entry ? { title: entry.title, favicon: entry.favicon ?? t.favicon } : {}) };
+  const patch: Partial<Tab> = { ...onUrlChange(s, t, home), url: home };
+
+  if (entry) {
+    patch.title = entry.title;
+    patch.favicon = entry.favicon ?? t.favicon;
+  }
+
+  return patch;
 }
 
 function lastRegularTab(s: BrowserState, w: BrowserWindow, id: string, closing: Set<string>): string | undefined {

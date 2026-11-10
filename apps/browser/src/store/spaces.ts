@@ -63,15 +63,22 @@ export const SPACE_LOOKS: { name: string; color: SpaceColor; theme: SpaceTheme }
  * A new space's look, so that no two spaces look alike: the first gradient no space wears, then a theme of a colour
  * no space has. Always a theme, so the space shows as itself over any page.
  */
-export function unusedSpaceLook(spaces: DeepReadonly<Record<string, Space>>): { color: SpaceColor; theme: SpaceTheme } {
+export interface SpaceLook {
+  color: SpaceColor;
+  theme: SpaceTheme;
+}
+
+export function unusedSpaceLook(spaces: DeepReadonly<Record<string, Space>>): SpaceLook {
   const worn = new Set(Object.values(spaces).map((p) => p.theme?.colors.join()));
   const look = LOOKS.find(([name]) => !worn.has(presetTheme(name).colors.join()));
+
   if (look) return { color: look[1], theme: presetTheme(look[0]) };
+
   return themeOfColor(unusedSpaceColor(spaces));
 }
 
 /** A space's look from one of the preset colours: its swatch, as a theme. */
-export function themeOfColor(color: SpaceColor): { color: SpaceColor; theme: SpaceTheme } {
+export function themeOfColor(color: SpaceColor): SpaceLook {
   return { color, theme: { colors: [SPACE_SWATCHES[color]], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN } };
 }
 
@@ -124,11 +131,13 @@ export function unusedSpaceIcon(profiles: Record<string, Pick<Space, "icon">>): 
 
 /** Every space shows an emoji: a saved one without (an older session, a space synced without one) gets a free one. */
 export function withSpaceEmoji(spaces: Record<string, Space>, order: string[]): Record<string, Space> {
-  let next = spaces;
+  const next = Object.assign({}, spaces);
+
   for (const id of order) {
     if (!next[id] || next[id]!.icon) continue;
-    next = { ...next, [id]: { ...next[id]!, icon: unusedSpaceIcon(next) } };
+    Object.assign(next, { [id]: { ...next[id]!, icon: unusedSpaceIcon(next) } });
   }
+
   return next;
 }
 
@@ -206,10 +215,10 @@ export const createSpacesSlice =
           id: newId("p"),
           name: name.trim() || `Space ${s.spaceOrder.length + 1}`,
           color: look.color,
-          ...(look.theme ? { theme: look.theme } : {}),
+          ...(look.theme ? { theme: look.theme } : undefined),
           icon: icon || unusedSpaceIcon(s.spaces),
           createdAt: Date.now(),
-          ...(source ? { profileId: profileIdOf(source), sharesSignIns: true } : {}),
+          ...(source ? { profileId: profileIdOf(source), sharesSignIns: true } : undefined),
         };
         const bookmarks = engineRoots(s.bookmarks, profile.id, engineIdOf(profile))[0];
         set({ spaces: { ...s.spaces, [profile.id]: profile }, spaceOrder: [...s.spaceOrder, profile.id], bookmarks });

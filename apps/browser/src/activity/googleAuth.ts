@@ -24,12 +24,14 @@ let pending: { cancel(): void } | null = null;
 
 function query(url: string): Map<string, string> {
   const search = url.split("#")[0]!.split("?")[1] ?? "";
-  return new Map(
-    search
+
+  // SAFETY: each &-separated pair splits into a key and value; decoding maps the two parts in order into a tuple.
+  const pairs = search
       .split("&")
       .filter(Boolean)
-      .map((pair) => pair.split("=").map((v) => decodeURIComponent(v.replace(/\+/g, " "))) as [string, string]),
-  );
+    .map((pair) => pair.split("=").map((v) => decodeURIComponent(v.replace(/\+/g, " "))) as [string, string]);
+
+  return new Map(pairs);
 }
 
 export function connectGoogleDrive(windowId: string, clientId: string, clientSecret: string): Promise<void> {

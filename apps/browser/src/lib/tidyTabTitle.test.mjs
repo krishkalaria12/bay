@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { tidyTabTitle } = await import("./tidyTabTitle.ts");
 
 test("shortens Inbox – Gmail to Gmail", () => {

@@ -7,57 +7,74 @@ import { join } from "node:path";
 import { launch, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 if (!process.argv[2]) throw new Error("Pass a Debug Bay.app path; start Metro for this checkout first");
+
 const data = mkdtempSync(join(tmpdir(), "bay-bangs-test-"));
 const results = [];
+
 const app = await launch(process.argv[2], {
   data,
   onboarded: true,
   session: session({ tabs: [{ id: "test", url: "about:blank", title: "Search test" }] }),
 });
+
 const run = (body) => app.eval(body);
 const driver = 'nn.omnibox.get("w1:palette")';
+
 const state = () =>
   run(
     "const s=nn.store.getState();return {tabs:Object.values(s.tabs).map(t=>({id:t.id,url:t.url})),active:s.windows.w1.activeTabIds.default,panel:s.windowUi.w1.panel.open,windows:s.windowOrder};",
   );
+
 async function until(label, read) {
   for (const end = Date.now() + 5000; Date.now() < end; await sleep(25)) {
     const value = await read();
+
     if (value) return value;
   }
+
   throw new Error(`Timed out: ${label}`);
 }
+
 async function open() {
   await run('nn.store.getState().closePanel("w1");return true;');
   await until("palette closed", () => run(`return !${driver};`));
   await run('nn.store.getState().openNewTabPanel("w1");return true;');
   await until("palette opened", () => run(`return !!${driver};`));
 }
+
 async function type(text) {
   await run(`${driver}.type(${JSON.stringify(text)});return true;`);
   await until("typed text committed", () => run(`return ${driver}?.state().typed === ${JSON.stringify(text)};`));
 }
+
 async function key(key, mods = {}) {
   await run(`${driver}.key(${JSON.stringify(key)},${JSON.stringify(mods)});return true;`);
 }
+
 // Exercise AppKit's field editor, which the JS driver's key() bypasses.
 async function nativeTab(shift = false) {
   assert.equal(await run(`return globalThis.expo.modules.BayApp.devPostKey("w1", "\\t", 48, ${JSON.stringify(shift ? ["shift"] : [])});`), true);
 }
+
 const bar = () => run(`return ${driver}.state();`);
+
 async function opened(url, before, background = false) {
   const s = await until(`opened ${url}`, async () => {
     const next = await state();
+
     return next.tabs.some((t) => !before.tabs.some((b) => b.id === t.id) && t.url === url) && next;
   });
+
   assert.equal(s.tabs.length, before.tabs.length + 1, "one submission opens exactly one tab");
   assert.equal(s.active === before.active, background, "foreground/background disposition");
 }
+
 async function check(name, fn) {
   await fn();
   results.push(name);
   console.log(`PASS ${name}`);
 }
+
 async function holdCatalog() {
   await run(`nn.bangs.resetBangsForTests();nn.shell.writeDocument("bangs.txt", "");
     globalThis.bangTestRelease=undefined;
@@ -66,6 +83,7 @@ async function holdCatalog() {
       globalThis.bangTestRelease=()=>globalThis.bangTestLoad().then(resolve);
     });return true;`);
 }
+
 const releaseCatalog = () => run("globalThis.bangTestRelease();globalThis.bangTestPlatform.loadBundledBangs=globalThis.bangTestLoad;return true;");
 
 try {
@@ -95,6 +113,7 @@ try {
     await nativeTab(true);
     await until("Shift-Tab moves up without entering scope", async () => {
       const s = await bar();
+
       return !s.scope && s.selected === (beforeTab.selected + beforeTab.items.length - 1) % beforeTab.items.length;
     });
     await nativeTab();
@@ -102,11 +121,13 @@ try {
     await run('return nn.shell.devTypeKeys("w1", "funny cats", 25);');
     await until("query typed into the native field", async () => (await bar()).typed === "funny cats");
     assert.equal((await bar()).scopeColor, "#D90000");
+
     for (const appearance of ["light", "dark"]) {
       await run(`nn.store.getState().updateSettings({appearance:${JSON.stringify(appearance)}});return true;`);
       await sleep(200);
       assert.equal(await run(`return nn.shell.devSnapshotWindow("w1",${JSON.stringify(join(data, `scope-youtube-${appearance}.png`))});`), true);
     }
+
     const before = await state();
     await key("Enter");
     await opened("https://www.youtube.com/results?search_query=funny%20cats", before);
@@ -148,6 +169,7 @@ try {
       assert.equal(await run(`return globalThis.bangTestRequests.some(u=>u.includes(encodeURIComponent(${JSON.stringify(query)})));`), false);
     });
   }
+
   for (const action of ["edit", "escape", "outside click", "mode"]) {
     await check(`pending bang submission is cancelled by ${action}`, async () => {
       await open();
@@ -155,6 +177,7 @@ try {
       await type("!gh cancelled");
       const before = await state();
       await key("Enter");
+
       if (action === "edit") await type("?replacement");
       else if (action === "escape") await key("Escape");
       else if (action === "outside click") await run('nn.store.getState().closePanel("w1");return true;');
@@ -198,6 +221,7 @@ try {
       await opened(expected, before);
     });
   }
+
   await check("Cmd-Enter on a calculator still opens behind the current tab", async () => {
     await open();
     await type("1+1");

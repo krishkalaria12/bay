@@ -119,16 +119,22 @@ function pageTo(t: Tab, windowId: string): Tab {
  */
 export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): BrowserState {
   const target = s.windows[targetId];
+
   if (!target) return s;
   const small = isSmallWindow(target);
+
   if (small && (ids.length !== 1 || listIds(s, targetId).length || s.tabs[ids[0]!]?.spaceId !== target.spaceId)) return s;
-  const moving = ids
-    .map((id) => s.tabs[id])
-    .filter(
-      (t): t is Tab =>
-        !!t && t.windowId !== targetId && isIncognitoSpace(t.spaceId) === target.incognito && (!target.incognito || t.spaceId === target.spaceId),
-    );
+
+  const moving: Tab[] = [];
+
+  for (const id of ids) {
+    const t = s.tabs[id];
+
+    if (t && t.windowId !== targetId && isIncognitoSpace(t.spaceId) === target.incognito && (!target.incognito || t.spaceId === target.spaceId)) moving.push(t);
+  }
+
   if (!moving.length) return s;
+
   if (small && (moving.length !== 1 || pinnedPage(moving[0]!) || moving[0]!.peekOf)) return s;
   const movingIds = new Set(moving.map((t) => t.id));
 
@@ -143,10 +149,12 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
       tabIds: pinnedFirst([...listIds(next, key), t.id], tabs),
     });
   }
-  next = withoutWindows(
-    next,
-    littles.map((t) => t.windowId).filter((w) => !next.tabLists[w]),
-  );
+
+  const emptyWindows: string[] = [];
+
+  for (const t of littles) if (!next.tabLists[t.windowId]) emptyWindows.push(t.windowId);
+
+  next = withoutWindows(next, emptyWindows);
 
   if (small) {
     const tab = moving[0]!;
@@ -227,9 +235,10 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
         const t = s.tabs[tid]!;
         const { adoptId: _, ...rest } = t;
         const loaded = !!t.url && (!!t.navigation || !!t.adoptId);
-        tabs[tid] = { ...rest, windowId: "", navigation: null, unloaded: true, ...(loaded ? { wakeAdoptId: restoreId(tid) } : {}) };
+        tabs[tid] = { ...rest, windowId: "", navigation: null, unloaded: true, ...(loaded ? { wakeAdoptId: restoreId(tid) } : undefined) };
         live[tid] = IDLE_LIVE;
       }
+
       const entry: ClosedWindow = {
         kind: "window",
         id: newId("cw"),

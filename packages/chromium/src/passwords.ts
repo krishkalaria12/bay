@@ -15,6 +15,7 @@ export const deletePassword = async (profile: string, origin: string, username: 
 export const setNeverSavePasswords = async (profile: string, origin: string, never: boolean) => {
   if (!never) valueOr(await Cef.allowSavingPasswords(profile, origin), null);
 };
+
 export const getNeverSavePasswordOrigins = async (profile: string) => valueOr(await Cef.getNeverSavePasswordOrigins(profile), { origins: [] }).origins;
 /**
  * The key protecting saved passwords, cookies and card numbers on Linux: the desktop keyring, the fixed key every
@@ -23,8 +24,11 @@ export const getNeverSavePasswordOrigins = async (profile: string) => valueOr(aw
 export type SecretStorageKind = "keyring" | "basic" | "unavailable";
 export const secretStorage = async (): Promise<SecretStorageKind | null> => (await Cef.secretStorage?.().catch(() => null)) ?? null;
 export type PasswordExportStatus = "succeeded" | "cancelled" | "writeFailed" | "reauthFailed" | "inProgress";
+
 /** Chrome's export: asks where to save, then for Touch ID or the login password, then writes a CSV. */
+// SAFETY: "writeFailed" is a valid PasswordExportStatus, so the fallback has exactly the native export shape.
 export const exportPasswords = async (profile: string): Promise<{ status: PasswordExportStatus; path?: string }> =>
   valueOr(await Cef.exportPasswords(profile), { status: "writeFailed" as PasswordExportStatus });
+
 export const getPasswordAutofill = (profile = "") => Cef.getPasswordAutofill(profile);
 export const setPasswordAutofill = (enabled: boolean, profile = "") => Cef.setPasswordAutofill(profile, enabled);

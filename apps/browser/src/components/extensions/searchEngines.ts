@@ -1,6 +1,7 @@
 import { searchEngineList } from "@bay/chromium";
 import { extensionEnginesFromChrome } from "@bay/core";
 import { useBrowser, type BrowserStore } from "../../store/browserStore";
+import type { JsonValue } from "../../lib/json";
 import { useExtensions } from "./state";
 
 export function startExtensionSearchEngines(store: BrowserStore = useBrowser) {
@@ -26,11 +27,12 @@ export function startExtensionSearchEngines(store: BrowserStore = useBrowser) {
 }
 
 export async function refreshExtensionSearchEngines(profile: string, store: BrowserStore = useBrowser, active = () => true) {
-  let list: unknown;
+  let list: JsonValue | null | undefined;
   try {
-    list = await searchEngineList(profile);
+    list = JSON.parse(JSON.stringify(await searchEngineList(profile)));
   } catch (error) {
     console.warn("[extensions] search engines failed", error);
+
     return;
   }
   if (list == null || !active()) return;

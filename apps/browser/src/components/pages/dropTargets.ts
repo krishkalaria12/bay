@@ -15,6 +15,7 @@ export class DropTargets<T> {
 
   measure() {
     this.rects.clear();
+
     for (const [key, { view, data }] of this.views) {
       view.measureInWindow((x, y, width, height) => {
         if (width > 0 && height > 0) this.rects.set(key, { rect: { x, y, width, height }, data });
@@ -28,6 +29,7 @@ export class DropTargets<T> {
         return { key, data, rect, fraction: (y - rect.y) / rect.height };
       }
     }
+
     return null;
   }
 }

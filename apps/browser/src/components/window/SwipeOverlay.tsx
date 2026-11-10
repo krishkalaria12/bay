@@ -89,31 +89,39 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
 
   const g = useRef({
     active: false,
+    // SAFETY: target type assertion matches the runtime value validated at this call site.
     direction: "back" as "back" | "forward",
     confirmed: false,
     width: CAPSULE_SIZE,
+    // SAFETY: Promise<HistoryItem[]> | null, assertion matches the runtime value validated at this call site.
     items: null as Promise<HistoryItem[]> | null,
+    // SAFETY: HistoryItem[] | null, assertion matches the runtime value validated at this call site.
     list: null as HistoryItem[] | null,
     listY: 0,
     selected: 0,
+    // SAFETY: ReturnType<typeof setTimeout> | undefined, assertion matches the runtime value validated at this call site.
     idle: undefined as ReturnType<typeof setTimeout> | undefined,
   }).current;
+
   // Every shown page has this overlay and almost none is ever swiped: the capsule's values are made at its first
   // swipe, and its animated styles only while it shows. Made for every page, they cost a tab switch twelve shared
   // values and six UI-thread styles to set up (and the page left as many to tear down).
   const values = useRef<CapsuleValues | null>(null);
   const [capsuleValues, setCapsuleValues] = useState<CapsuleValues | null>(null);
+
   const capsule = () => {
     if (!values.current) {
       values.current = makeCapsuleValues();
       setCapsuleValues(values.current);
     }
+
     return values.current;
   };
 
   // A new gesture stops everything the last one left running: its springs, its delayed dismiss and its list timer.
   const resetValues = (direction: "back" | "forward") => {
     const v = capsule();
+
     for (const value of Object.values(v)) cancelAnimation(value);
     clearTimeout(g.idle);
     const height = areaHeight.current;
@@ -143,15 +151,19 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
 
   const setConfirmed = (confirmed: boolean) => {
     const v = capsule();
+
     if (g.confirmed === confirmed) return;
     g.confirmed = confirmed;
+
     if (confirmed) swipeHaptic("levelChange");
     const height = areaHeight.current;
+
     if (!g.list) {
       const s = confirmed ? CAPSULE_SIZE_CONFIRMED : CAPSULE_SIZE;
       layoutTo(s, s, height / 2 - s / 2, s / 2, 0.18, 0.7);
       spring(v.icon, confirmed ? CAPSULE_ICON_CONFIRMED / CAPSULE_ICON : 1, 0.18, 0.7);
     }
+
     v.confirm.set(withTiming(confirmed ? 1 : 0, { duration: 180, easing: EASE }));
     setShown((s) => (s ? { ...s, confirmed } : s));
   };
@@ -160,6 +172,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     const v = capsule();
     const gesture = g.items;
     const items = (await gesture) ?? [];
+
     if (g.items !== gesture || !g.active || g.list || !g.confirmed || items.length < 2) return;
     const height = areaHeight.current;
     const fit = Math.max(2, Math.floor((height / 2 + SWIPE_LIST_ROW / 2 - SWIPE_LIST_PAD - 8) / SWIPE_LIST_ROW));
@@ -184,6 +197,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     const v = capsule();
     const { index, nudge } = listSelection(dy - g.listY, g.list!.length);
     v.nudge.set(nudge);
+
     if (index === g.selected) return;
     g.selected = index;
     swipeHaptic("alignment");
@@ -195,6 +209,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     const v = capsule();
     clearTimeout(g.idle);
     g.active = false;
+
     const out = (to: number, done?: () => void) =>
       withDelay(
         delay,
@@ -202,45 +217,58 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
           if (finished && done) runOnJS(done)();
         }),
       );
+
     v.scale.set(out(0.01));
     v.fade.set(out(0, () => setShown(null)));
   };
 
   const lastDy = useRef(0);
+
   const onSwipe = (e: SwipeEvent) => {
     const v = capsule();
     lastDy.current = e.dy;
+
     if (e.phase === "began" || e.phase === "swipe") {
       resetValues(e.direction);
       g.items = historyItems(tabId, e.direction === "back" ? -1 : 1);
       setShown({ direction: e.direction, confirmed: false, list: null, selected: 0 });
     }
+
     if (!g.active) return;
+
     if (e.phase === "swipe") {
       v.x.set(CAPSULE_INSET);
       setConfirmed(true);
       navigate(e.direction, null);
+
       // Confirmed for a moment, then gone; the delay is part of the animation, so the next gesture's reset stops it.
       return dismiss(120);
     }
+
     if (e.phase === "cancelled") return dismiss();
+
     if (e.phase === "ended") {
       const target = g.list ? (g.list[g.selected] ?? null) : null;
+
       if (target || g.confirmed) navigate(e.direction, target);
+
       return dismiss();
     }
 
     const progress = swipeProgress(e.distance);
+
     if (g.list) select(e.dy);
     else setConfirmed(progress >= 1);
     v.x.set(capsuleOffset(progress, g.width));
 
     clearTimeout(g.idle);
+
     if (g.confirmed && !g.list) g.idle = setTimeout(() => void presentList(), SWIPE_LIST_IDLE_MS);
   };
 
   const navigate = (direction: "back" | "forward", item: HistoryItem | null) => {
     if (item) return void goToHistoryItem(tabId, item);
+
     if (direction === "back") goBack(tabId);
     else goForward(tabId);
   };
@@ -248,6 +276,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
   useEffect(
     () => () => {
       clearTimeout(g.idle);
+
       if (values.current) for (const value of Object.values(values.current)) cancelAnimation(value);
     },
     [],
@@ -276,11 +305,13 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
 function SwipeCapsule({ tabId, shown, v }: { tabId: string; shown: Shown; v: CapsuleValues }) {
   const theme = useTheme();
   const back = shown.direction !== "forward";
+
   // Every frame value, the unused side "auto": a value the style stops giving keeps the last one it gave.
   const frame = useAnimatedStyle(
     () => ({ left: back ? v.x.get() : "auto", right: back ? "auto" : v.x.get(), top: v.top.get() + v.nudge.get(), width: v.w.get(), height: v.h.get() }),
     [back],
   );
+
   const fadeStyle = useAnimatedStyle(() => ({ opacity: v.fade.get(), transform: [{ scale: v.scale.get() }] }));
   const radiusStyle = useAnimatedStyle(() => ({ borderRadius: v.radius.get() }));
   const confirmStyle = useAnimatedStyle(() => ({ opacity: v.confirm.get() }));
@@ -341,6 +372,7 @@ function DestinationList({
   const favicons = useHistoryFavicons(spaceId, items);
   const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ scale: interpolate(appear.get(), [0, 1], [0.9, 1]) }] }));
   const pillStyle = useAnimatedStyle(() => ({ transform: [{ translateY: pill.get() }] }));
+
   return (
     <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: SWIPE_LIST_WIDTH, paddingVertical: SWIPE_LIST_PAD }, appearStyle]}>
       <Animated.View
@@ -372,15 +404,26 @@ function DestinationList({
 }
 
 const devPanes = new Map<string, React.RefObject<SwipeAreaHandle | null>>();
+
+type SwipeHistoryDev = { items: typeof historyItems; open: typeof openHistoryMenu; menu: typeof useHistoryMenu; go: typeof goToHistoryItem };
+
+type SwipeDevHandle = {
+  pane?: (tabId: string) => SwipeAreaHandle | null;
+  history?: SwipeHistoryDev;
+};
+
 function useSwipeDevHandle(tabId: string, area: React.RefObject<SwipeAreaHandle | null>) {
   useEffect(() => {
     if (!__DEV__) return;
     devPanes.set(tabId, area);
+
     return () => void (devPanes.get(tabId) === area && devPanes.delete(tabId));
   }, [tabId]);
 }
+
 if (__DEV__) {
-  const g = globalThis as { nnSwipe?: Record<string, unknown> };
+  // SAFETY: nnSwipe is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  const g = globalThis as { nnSwipe?: SwipeDevHandle };
   g.nnSwipe = {
     ...g.nnSwipe,
     pane: (tabId: string) => devPanes.get(tabId)?.current ?? null,

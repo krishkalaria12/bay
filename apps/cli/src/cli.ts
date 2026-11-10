@@ -8,6 +8,7 @@ import { VERSION } from "./version.ts";
 import { ArgumentError, numericOption, parseArguments } from "./args.ts";
 
 export const DESCRIPTION = "Control a running Bay from the terminal.";
+
 export const EXEC_DESCRIPTION = `Run TypeScript/JavaScript against the running Bay, with top-level await.
 
 In scope:
@@ -82,10 +83,13 @@ Commands:
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   if (argv.length === 1 && (argv[0] === "--version" || argv[0] === "-v")) {
     process.stdout.write(`bay ${VERSION}\n`);
+
     return 0;
   }
+
   if (!argv.length || argv[0] === "--help" || argv[0] === "-h") {
     printHelp();
+
     return 0;
   }
 
@@ -94,21 +98,26 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 
   try {
     if (command === "exec") return await runExec(rest);
+
     if (command === "skills") return runSkills(rest);
+
     if (command === "scripts") return await runScriptsCommand(rest);
   } catch (error) {
     if (!(error instanceof ArgumentError)) throw error;
     process.stderr.write(`bay ${command}: ${error.message}\n`);
+
     return 1;
   }
 
   process.stderr.write(`unknown command: ${command}\n`);
   printHelp();
+
   return 1;
 }
 
 export async function runExec(args: string[]): Promise<number> {
   installOutputRedaction();
+
   try {
     return await innerRunExec(args);
   } finally {
@@ -130,10 +139,13 @@ async function innerRunExec(args: string[]): Promise<number> {
     },
     1,
   );
+
   if (values.help) {
     printExecHelp();
+
     return 0;
   }
+
   const code = positionals[0] ?? null;
   const file = values.file;
   const dataDir = values["data-dir"];
@@ -148,8 +160,10 @@ async function innerRunExec(args: string[]): Promise<number> {
   if (file) {
     if (code !== null) {
       process.stderr.write("bay exec: give CODE or -f FILE, not both\n");
+
       return 1;
     }
+
     if (file === "-") {
       source = await Bun.stdin.text();
       filename = "<stdin>";
@@ -159,14 +173,17 @@ async function innerRunExec(args: string[]): Promise<number> {
         filename = file;
       } catch (error) {
         process.stderr.write(`bay exec: ${error instanceof Error ? error.message : String(error)}\n`);
+
         return 1;
       }
     }
   } else if (code === null || code === "-") {
     if (code === null && process.stdin.isTTY) {
       process.stderr.write("bay exec: give CODE, - (stdin) or -f FILE\n");
+
       return 1;
     }
+
     source = await Bun.stdin.text();
     filename = "<stdin>";
   } else {
@@ -177,47 +194,60 @@ async function innerRunExec(args: string[]): Promise<number> {
     runner.compileCode(source, filename);
   } catch (error) {
     runner.printErr(runner.formatSyntaxError(error instanceof Error ? error : new Error(String(error))));
+
     return 1;
   }
 
   let endpoint;
+
   try {
     endpoint = await resolveEndpoint({ ws, port, dataDir });
   } catch (error) {
     runner.printErr(`bay: ${error instanceof Error ? error.message : String(error)}`);
+
     return 2;
   }
 
   const root = endpoint.explicit ? explicitDataRoot(dataDir) : dataRoot(dataDir);
 
   let value: unknown;
+
   try {
     value = await runner.runCode(source, filename, endpoint, timeout || null, root ?? undefined);
   } catch (error) {
     if (error instanceof EndpointError) {
       runner.printErr(`bay: ${error.message}`);
+
       return 2;
     }
+
     if (error instanceof runner.UserCodeError) {
       runner.printErr(runner.formatUserError(error));
+
       return 1;
     }
+
     if (error instanceof runner.ExecTimeout) {
       runner.printErr(`bay exec: ${error.message}`);
+
       return 1;
     }
+
     if (error instanceof runner.ExecInterrupted) return 130;
     runner.printErr(`bay exec: ${error instanceof Error ? error.message : String(error)}`);
+
     return 1;
   }
 
   try {
     const text = runner.formatValue(value, asJson);
+
     if (text !== null) {
       process.stdout.write(`${text}\n`);
     }
   } catch (error) {
     runner.printErr(`bay exec: can't print the result as JSON (${error instanceof Error ? error.message : String(error)})`);
+
     return 1;
   }
 
@@ -227,21 +257,29 @@ async function innerRunExec(args: string[]): Promise<number> {
 export function runSkills(args: string[]): number {
   if (!args.length || args[0] === "--help" || args[0] === "-h") {
     printSkillsHelp();
+
     return 0;
   }
+
   if (args[0] !== "install") throw new ArgumentError(`unknown command: ${args[0]}`);
+
   const { values } = parseArguments(args.slice(1), {
     project: { type: "boolean" },
     target: { type: "string", multiple: true },
     help: { type: "boolean", short: "h" },
   });
+
   if (values.help) {
     printSkillsHelp();
+
     return 0;
   }
+
   const targets = values.target ?? ["general"];
+
   for (const target of targets) {
-    if (!Object.hasOwn(TARGETS, target)) throw new ArgumentError(`invalid target: ${target}. Choices: ${Object.keys(TARGETS).sort().join(", ")}`);
+    if (!TARGETS.has(target)) throw new ArgumentError(`invalid target: ${target}. Choices: ${[...TARGETS.keys()].sort().join(", ")}`);
   }
+
   return installSkills(targets, values.project ?? false);
 }

@@ -29,6 +29,10 @@ export type AppIcon = { id: string; name: string; preview: string | null };
 
 export type NotificationPermission = "granted" | "denied" | "notDetermined" | "provisional";
 
+export type NotificationData = Record<string, string | number | boolean>;
+
+export type ScriptResult = Record<string, string | number | boolean | undefined>;
+
 export type NotificationOptions = {
   id?: string;
   title: string;
@@ -40,7 +44,7 @@ export type NotificationOptions = {
   windowId?: string;
   origin?: string;
   dismissible?: boolean;
-  data?: Record<string, unknown>;
+  data?: NotificationData;
 };
 
 export type NotificationResponse = {
@@ -139,7 +143,7 @@ type AppModule = {
   removeNotifications(ids: string[]): Promise<void>;
   openNotificationSettings?(): Promise<void>;
   setScriptState(state: ScriptState): Promise<void>;
-  replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;
+  replyToScript(id: string, result: ScriptResult | null, error: string | null): Promise<void>;
   systemInfo(): SystemInfo;
   openExternalURL(url: string): Promise<boolean>;
   launchEnvironment(name: string): string | null;
@@ -201,7 +205,7 @@ export const openNotificationSettings = () => App.openNotificationSettings?.() ?
 export const onNotificationResponse = (listener: (e: NotificationResponse) => void) => App.addListener("onNotificationResponse", listener);
 
 export const setScriptState = (state: ScriptState) => App.setScriptState(state);
-export const replyToScript = (id: string, result: Record<string, unknown> | null, error: string | null = null) => App.replyToScript(id, result, error);
+export const replyToScript = (id: string, result: ScriptResult | null, error: string | null = null) => App.replyToScript(id, result, error);
 export const onScriptCommand = (listener: (e: ScriptCommand) => void) => App.addListener("onScriptCommand", listener);
 
 export const systemInfo = () => nativeSnapshot("BayApp", "systemInfo", [], () => App.systemInfo());

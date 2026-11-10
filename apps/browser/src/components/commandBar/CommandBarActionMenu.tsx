@@ -1,3 +1,4 @@
+import { lookup } from "@bay/core";
 import { ScrollView } from "@bay/platform";
 import { Pressable, TextInput, View, modKey, shortcutLabel } from "@bay/platform";
 import { Symbol } from "@bay/desktop";
@@ -17,7 +18,7 @@ export type PaletteMenuAction = {
   hint?: string;
   separator?: boolean;
   checked?: boolean;
-  run(): void | Promise<unknown>;
+  run(): void | Promise<void>;
 };
 
 const MENU_KEYS = [
@@ -39,11 +40,12 @@ const MENU_KEYS = [
 const EMPTY_MENU_KEYS = [...MENU_KEYS, { key: "Backspace", shiftKey: true }];
 
 type KeyEvent = { key: string; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; ctrlKey?: boolean };
-const KEY_GLYPHS: Record<string, string> = { Enter: "↩", Backspace: "⌫" };
+
+const KEY_GLYPHS = { Enter: "↩", Backspace: "⌫" } satisfies Record<string, string>;
 
 // A key event as the keycap hint actions show, e.g. "⇧⌘C".
 export function hintOf({ key, metaKey, shiftKey, altKey, ctrlKey }: KeyEvent): string {
-  return shortcutLabel(`${ctrlKey ? "⌃" : ""}${altKey ? "⌥" : ""}${shiftKey ? "⇧" : ""}${metaKey ? "⌘" : ""}${KEY_GLYPHS[key] ?? key.toUpperCase()}`);
+  return shortcutLabel(`${ctrlKey ? "⌃" : ""}${altKey ? "⌥" : ""}${shiftKey ? "⇧" : ""}${metaKey ? "⌘" : ""}${lookup(KEY_GLYPHS, key) ?? key.toUpperCase()}`);
 }
 
 // Runs the action: null once done, else what went wrong.

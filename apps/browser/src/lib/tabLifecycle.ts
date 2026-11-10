@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { listTasks, onSystemState, releaseProfile, systemState, type SystemState, type WebViewHandle } from "@bay/chromium";
 import { onAppEvent, onWindowEvent } from "@bay/desktop";
 import { create } from "zustand";
@@ -129,7 +130,8 @@ async function hasUnsavedInput(handle: WebViewHandle): Promise<boolean | null> {
     LIFECYCLE_EVAL_TIMEOUT_MS,
     null,
   );
-  return typeof result === "boolean" ? result : null;
+
+  return v.is(v.boolean(), result) ? result : null;
 }
 
 export async function sleepTab(id: string, automatic = false): Promise<boolean> {
@@ -173,7 +175,11 @@ function forget(tabId: string, all: boolean) {
   if (l.discarded[tabId]) useLifecycle.setState({ discarded: omit(l.discarded, tabId) });
 }
 
-function omit<T>(map: Record<string, T>, key: string): Record<string, T> {
+interface Omitted<T> {
+  [key: string]: T;
+}
+
+function omit<T>(map: Record<string, T>, key: string): Omitted<T> {
   if (!(key in map)) return map;
   const next = { ...map };
   delete next[key];
@@ -196,7 +202,18 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
     const pressure = currentSystem()?.memoryPressure ?? "normal";
     // A warning must be able to reclaim a small session too. Keeping ten recent pages alive could otherwise
     // leave no candidates until pressure became critical. Visible and busy pages have separate protections below.
-    const protectedRecent = pressure === "critical" ? 0 : pressure === "warning" ? Math.min(policy.protectedRecent, 2) : policy.protectedRecent;
+    // macOS sits at warning for hours with plenty free, so a warning shortens the timer rather than dropping it.
+    let protectedRecent = policy.protectedRecent;
+    let idleMs = policy.idleMs;
+
+    if (pressure === "critical") {
+      protectedRecent = 0;
+      idleMs = 0;
+    } else if (pressure === "warning") {
+      protectedRecent = Math.min(policy.protectedRecent, 2);
+      idleMs = policy.idleMs / 4;
+    }
+
     const recent = new Set(
       Object.values(s.tabs)
         .filter((t) => t.url)
@@ -204,16 +221,23 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
         .slice(0, protectedRecent)
         .map((t) => t.id),
     );
+
     const unused = unusedProfiles(s, now, policy.profileIdleMs);
+
     const candidates = [...webviews.keys()].filter((id) => {
       const tab = s.tabs[id];
+
       // A kept tab sleeps only when asked (the tab menu's Put Tab to Sleep).
       if (!tab || tab.kept || inPinnedContainer(s, id) || shown.has(id) || useLifecycle.getState().discarded[id]) return false;
+
       if (pressure !== "critical" && siteKeptAwake(tab.url, s.settings.awakeSites)) return false;
       const idle = now - (hiddenAt.get(id) ?? now);
-      if (!unused.has(tab.spaceId) && (recent.has(id) || (pressure === "normal" && idle < policy.idleMs))) return false;
+
+      if (!unused.has(tab.spaceId) && (recent.has(id) || idle < idleMs)) return false;
+
       return !keepAliveReason(s, id);
     });
+
     candidates.sort(
       (a, b) =>
         Number(siteKeptAwake(s.tabs[a]?.url, s.settings.awakeSites)) - Number(siteKeptAwake(s.tabs[b]?.url, s.settings.awakeSites)) ||
@@ -338,6 +362,7 @@ export function startTabLifecycle() {
   });
 
   if (__DEV__) {
+    // SAFETY: nnLifecycle is the lifecycle policy's own dev-harness surface, read only by tests.
     (globalThis as { nnLifecycle?: unknown }).nnLifecycle = {
       policy: POLICY,
       sweep,

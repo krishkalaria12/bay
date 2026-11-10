@@ -3,21 +3,25 @@ import { test } from "node:test";
 import { createRequire } from "node:module";
 
 globalThis.require = createRequire(import.meta.url);
+
 const writes = [];
 const installed = new Set();
 let rejected = new Set();
 let afterWrite = () => {};
 let storageImported = 0;
 let warnings = [];
+
 globalThis.nnTestNativeModules = {
   BayImport: {
     writeExtension: async (browserId, sourceProfile, id, profile) => {
       writes.push({ browserId, sourceProfile, id, profile });
+
       if (rejected.has(id)) throw new Error("Unsupported manifest");
       const key = `${profile}:${id}`;
       const isNew = !installed.has(key);
       installed.add(key);
       afterWrite();
+
       return JSON.stringify({ id, installed: isNew, storageImported: isNew ? storageImported : 0, warnings, updateMode: "store" });
     },
   },
@@ -28,17 +32,20 @@ const { engineProfile, setSpaceProfiles } = await import("../../store/model.ts")
 const { importExtensions } = await import("./apply.ts");
 const extension = (id) => ({ id, name: id, enabled: true, pinned: false });
 const source = (profileId, ids, browserId = "arc") => ({ browserId, profileId, extensions: ids.map(extension) });
+
 const reset = () => {
   writes.length = 0;
   installed.clear();
   rejected = new Set();
   afterWrite = () => {};
+
   storageImported = 0;
   warnings = [];
   useBrowser.getState().hydrate({});
   setSpaceProfiles({});
   const first = useBrowser.getState().settings.defaultSpaceId;
   const second = useBrowser.getState().createSpace({ name: "Work" });
+
   return [first, second];
 };
 

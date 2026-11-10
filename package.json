@@ -16,6 +16,7 @@
     "test": "turbo run test",
     "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",
+    "slop": "oxlint -c .oxlintrc.anti-slop.json",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "windows": "node scripts/windows/run-python.mjs build-app.py",
@@ -30,6 +31,7 @@
     "typecheck:web": "pnpm --filter @bay/browser typecheck:web"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.87.0",
     "oxfmt": "0.72.0",
     "oxlint": "1.87.0",
     "turbo": "^2.11.3",

@@ -44,6 +44,7 @@ test("failed durable copy never creates dangling media metadata", async () => {
   reset();
   const importer = libraryImages.retain;
   libraryImages.retain = async () => null;
+
   try {
     assert.equal(await saveLibraryMedia({ path: "/missing", width: 1, height: 1 }, "missing"), null);
     assert.deepEqual(useLibrary.getState().media, {});

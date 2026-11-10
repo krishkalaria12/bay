@@ -52,14 +52,15 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
   const listKey = useBrowser((s) => {
     if (query.trim() && roots) {
       const all = [...folderLinksAndFolders(s.bookmarks, roots.bar), ...folderLinksAndFolders(s.bookmarks, roots.other)];
-      return all
-        .filter((n) => matchesQuery(query, n.title, n.kind === "url" ? n.url : ""))
-        .map((n) => n.id)
-        .join(",");
+
+      return all.flatMap((n) => (matchesQuery(query, n.title, n.kind === "url" ? n.url : "") ? [n.id] : [])).join(",");
     }
+
     const folder = folderId ? s.bookmarks.nodes[folderId] : undefined;
+
     return folder?.kind === "folder" ? folder.children.join(",") : "";
   });
+
   const ids = listKey ? listKey.split(",") : [];
   const searching = !!query.trim();
 
@@ -368,6 +369,7 @@ function BookmarkRow({
 
   return (
     <Animated.View
+      // SAFETY: targetRef accepts a ref callback; casting through never satisfies Animated.View's ref without changing the target.
       ref={targetRef as never}
       {...responder.panHandlers}
       {...hoverProps}

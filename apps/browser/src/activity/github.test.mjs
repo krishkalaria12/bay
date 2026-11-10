@@ -10,13 +10,16 @@ const fixture = JSON.parse(await import("node:fs").then((fs) => fs.readFileSync(
 const all = [...fixture.data.authored.nodes, ...fixture.data.review.nodes];
 const pr = (id) => ({ ...all.find((n) => n.id === id), state: "OPEN" });
 const filters = { authored: true, reviewRequests: true };
+
 const kind = (fn) => {
   try {
     fn();
   } catch (error) {
     assert.ok(error instanceof LiveError);
+
     return error.kind;
   }
+
   return "ok";
 };
 
@@ -44,6 +47,7 @@ test("a field error keeps the PR, with that field empty", () => {
 
 test("a PR GitHub can't find or won't show drops out; the rest stay", () => {
   const ids = all.slice(0, 3).map((n) => n.id);
+
   for (const type of ["NOT_FOUND", "FORBIDDEN"]) {
     const nodes = ids.map(pr);
     nodes[1] = null;
@@ -89,6 +93,7 @@ test("details keep the search's order and sections, and drop PRs that closed in 
   assert.equal(new Set(ids).size, ids.length);
   const details = ids.map(pr).reverse();
   details[0] = { ...details[0], state: "MERGED" };
+
   const items = mapGithub(
     withDetails(
       {
@@ -102,6 +107,7 @@ test("details keep the search's order and sections, and drop PRs that closed in 
     ),
     filters,
   );
+
   const before = mapGithub(fixture, filters).filter((it) => it.id !== `github:${details[0].id}`);
   assert.deepEqual(
     items.map((it) => [it.id, it.section]),

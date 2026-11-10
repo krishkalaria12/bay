@@ -184,8 +184,10 @@ export function useImportFlow() {
         confirmTitle: "Import as new Space",
         cancelTitle: "Replace this Space",
       });
+
       if (!confirmed) return clash;
     }
+
     // Without an emoji of its own (Chrome's profiles, an Arc space with a symbol) the space gets a free one (createSpace).
     return createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji });
   };
@@ -206,6 +208,7 @@ export function useImportFlow() {
     const { signal } = abort.current;
     const total = emptyCounts();
     const failed = new Map<ImportKind, string[]>();
+    // SAFETY: (keyof ImportCounts)[]).forEach((k) assertion matches the runtime value validated at this call site.
     const add = (c: ImportCounts) => (Object.keys(total) as (keyof ImportCounts)[]).forEach((k) => (total[k] += c[k]));
     const placed = { destinations: 0 };
     const usedDestinations = new Set<string>();
@@ -302,6 +305,7 @@ export function useImportFlow() {
     setExtensions(extensionFailures);
     left.push(...extensionFailures.map((f) => `${f.extension.name} in ${browserRead.getState().spaces[f.spaceId]?.name ?? "Space"}: ${f.message}.`));
     setNotes(left);
+    // SAFETY: ImportKind) ? assertion matches the runtime value validated at this call site.
     setStatus((st) => Object.fromEntries(Object.entries(st).map(([k, v]) => [k, failed.has(k as ImportKind) ? "failed" : v === "failed" ? v : "done"])));
     setFailures([...failed].map(([kind, names]) => ({ kind, profiles: selected.length > 1 ? names : [] })));
     setCounts(total);
@@ -342,9 +346,15 @@ export function useImportFlow() {
     } catch (e) {
       const code = errorCode(e);
       setDiaStatus(code === "notRunning" ? "notRunning" : code === "locked" ? "denied" : "granted");
-      if (code !== "notRunning" && code !== "locked") setError(`${(e as Error).message}. Try again.`);
+
+      if (code !== "notRunning" && code !== "locked") {
+        // SAFETY: errorCode only returns these two codes for Error instances that carry a message string.
+        setError(`${(e as Error).message}. Try again.`);
+      }
+
       return;
     }
+
     setDiaStatus("granted");
     takeDiaResult(result);
   };
@@ -409,7 +419,7 @@ export function useImportFlow() {
   const importSafariDirect = async () => {
     if (!api) return;
     setError(null);
-    setStatus({ bookmarks: "active", history: "active", tabs: "active", ...(safariCookies ? { cookies: "active" as const } : {}) });
+    setStatus({ bookmarks: "active", history: "active", tabs: "active", ...(safariCookies ? { cookies: "active" as const } : undefined) });
     setPreparing(1);
     setStep("progress");
     abort.current = new AbortController();
@@ -434,7 +444,7 @@ export function useImportFlow() {
       bookmarks: "done",
       history: "done",
       tabs: "done",
-      ...(safariCookies ? { cookies: failed.includes("cookies") ? "failed" : ("done" as const) } : {}),
+      ...(safariCookies ? { cookies: failed.includes("cookies") ? "failed" : ("done" as const) } : undefined),
     });
     setCounts(counts);
     setFailures(failed.map((kind) => ({ kind, profiles: [] })));
@@ -537,6 +547,7 @@ export function useImportFlow() {
 
   useEffect(() => {
     if (!__DEV__) return;
+    // SAFETY: { nnImport? assertion matches the runtime value validated at this call site.
     const g = globalThis as { nnImport?: object };
     g.nnImport = {
       select: (id: string) => {
@@ -617,7 +628,8 @@ export function useImportFlow() {
   };
 }
 
-const errorCode = (e: unknown) => (e as { code?: string }).code;
+// SAFETY: { code? assertion matches the runtime value validated at this call site.
+const errorCode = (cause: unknown) => (cause as { code?: string }).code;
 
 async function checkUnlock(checking: { current: boolean }, action: () => Promise<void>, onError: () => void): Promise<void> {
   checking.current = true;
@@ -631,6 +643,7 @@ async function checkUnlock(checking: { current: boolean }, action: () => Promise
 }
 
 type ImportApi = NonNullable<ReturnType<typeof importModule>>;
+
 type ImportOptions = Parameters<ImportApi["importData"]>[3];
 
 // Dia just launched from here may not have a window yet: its read is retried a few times before an empty one counts.

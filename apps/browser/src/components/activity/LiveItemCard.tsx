@@ -28,6 +28,7 @@ export function HoverSurface({ anchor, width, children }: { anchor: Anchor; widt
   // It comes out of the sidebar, toward the page.
   const from = right ? 4 : -4;
   const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ translateX: interpolate(appear.get(), [0, 1], [from, 0]) }] }));
+
   return (
     <Animated.View style={[{ position: "absolute", left: besideRow(anchor, width, right), top: Math.max(8, anchor.y - 6), width }, appearStyle]}>
       <Surface
@@ -52,7 +53,9 @@ export function HoverSurface({ anchor, width, children }: { anchor: Anchor; widt
 export function LiveItemCard({ id, windowId, anchor }: { id: string; windowId: string; anchor: Anchor }) {
   const [, folderId = "", itemId = ""] = id.split("|");
   const item = useLive((s) => s.items[folderId]?.find((i) => i.id === itemId));
+
   if (!item) return null;
+
   return (
     <HoverSurface anchor={anchor} width={item.pr ? 300 : 280}>
       {item.pr ? <PullRequestPreview item={item} folderId={folderId} windowId={windowId} /> : <DocumentPreview item={item} />}
@@ -63,12 +66,14 @@ export function LiveItemCard({ id, windowId, anchor }: { id: string; windowId: s
 export function Avatar({ uri, name, size = 20 }: { uri: string | null; name: string; size?: number }) {
   const theme = useTheme();
   const [failed, setFailed] = useState(false);
+
   const initials = name
     .split(/[\s._-]+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((p) => p[0]!.toUpperCase())
     .join("");
+
   return (
     <View
       style={{
@@ -99,6 +104,7 @@ function PullRequestPreview({ item, folderId, windowId }: { item: LiveItem; fold
   const summary = summarizeChecks(pr.checks);
   const failing = pr.checks.filter((c) => c.state === "failure");
   const [showAll, setShowAll] = useState(false);
+
   return (
     <View style={{ gap: 9 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
@@ -188,9 +194,11 @@ function CIProgressBar({ checks, colors }: { checks: PullRequestCheck[]; colors:
     if (!pending) return;
     const leg = (to: number) => withTiming(to, { duration: 700, easing: Easing.inOut(Easing.quad) });
     pulse.set(withRepeat(withSequence(leg(0.45), leg(1)), -1, false));
+
     return () => cancelAnimation(pulse);
   }, [pending]);
   const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }));
+
   return (
     <View style={{ height: 6, borderRadius: 3, overflow: "hidden", flexDirection: "row", backgroundColor: colors.ciTrack, gap: 2 }}>
       {success ? <View style={{ flex: success, backgroundColor: colors.success }} /> : null}
@@ -203,6 +211,7 @@ function CIProgressBar({ checks, colors }: { checks: PullRequestCheck[]; colors:
 function FailingCheckRow({ check, colors, onPress }: { check: PullRequestCheck; colors: LiveColors; onPress(): void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
@@ -228,6 +237,7 @@ function FailingCheckRow({ check, colors, onPress }: { check: PullRequestCheck; 
 
 function StatusLine({ symbol, color, text }: { symbol: string; color: string; text: string }) {
   const theme = useTheme();
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
       <Symbol name={symbol} size={11} color={color} style={{ width: 14, height: 14 }} />
@@ -262,6 +272,7 @@ export function SmallButton({
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const fg = primary ? (theme.dark ? "#000000" : "#FFFFFF") : theme.textPrimary;
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
@@ -291,6 +302,7 @@ export function SmallButton({
 function LinkText({ text, onPress }: { text: string; onPress(): void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
@@ -303,6 +315,7 @@ function LinkText({ text, onPress }: { text: string; onPress(): void }) {
 function DocumentPreview({ item }: { item: LiveItem }) {
   const theme = useTheme();
   const doc = item.doc;
+
   return (
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>

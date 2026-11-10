@@ -29,6 +29,7 @@ import { createServer, request as httpRequest } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as v from "valibot";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Linux or Windows, for a script's checks that need AppKit. BAY_INSTANCE_HOST=desktop drives the path on macOS, against a stand-in binary. */
@@ -139,12 +140,16 @@ const profileColors = ["plum", "blue", "green", "orange", "red"];
  */
 export function session({ spaces = ["Personal"], windows = [{}], tabs = [], ...rest } = {}) {
   const ps = spaces.map((p, i) => {
-    const o = typeof p === "string" ? { name: p } : p;
+    const o = v.is(v.string(), p) ? { name: p } : p;
+
     return { id: o.id ?? (i ? o.name.toLowerCase() : "default"), name: o.name ?? o.id, color: o.color ?? profileColors[i % 5], icon: null, createdAt: i, ...o };
   });
+
   const ws = windows.map((w, i) => ({ id: w.id ?? `w${i + 1}`, spaceId: ps[0].id, ...w }));
+
   const ts = tabs.map((t) => {
     const windowId = t.windowId ?? ws[0].id;
+
     return {
       windowId,
       spaceId: ws.find((w) => w.id === windowId)?.spaceId ?? ps[0].id,
@@ -407,7 +412,8 @@ class Instance {
   }
   /** The first page target whose URL contains `urlPart` (or matches the predicate), or null. */
   async pageTarget(urlPart) {
-    const test = typeof urlPart === "function" ? urlPart : (t) => t.url.includes(urlPart);
+    const test = v.is(v.function_(), urlPart) ? urlPart : (t) => t.url.includes(urlPart);
+
     return (await this.targets()).find((t) => t.type === "page" && test(t)) ?? null;
   }
   /** A DevTools session on a page, waiting up to `timeout` for it to appear. */
@@ -512,7 +518,9 @@ export async function launch(app, opts = {}) {
   try {
     previous = JSON.parse(readFileSync(join(data, "instance.json"), "utf8"));
   } catch {}
+
   for (const f of ["dev-eval.js", "dev-eval-result.json", "instance.json"]) rmSync(join(data, f), { force: true });
+
   if (opts.session) writeFileSync(join(data, "session.json"), JSON.stringify(opts.session));
   // A packed bundle isn't __DEV__, so on Linux and Windows a new data folder would otherwise open on onboarding.
   if (opts.onboarded ?? desktopHost) writeFileSync(join(data, "onboarding.json"), JSON.stringify({ version: 1, completedAt: 1 }));
@@ -538,10 +546,11 @@ export async function launch(app, opts = {}) {
     BAY_BACKGROUND: "1",
     BAY_DATA_DIR: data,
     BAY_REMOTE_DEBUGGING_PORT: String(port),
-    ...(location ? { BAY_JS_LOCATION: location } : {}),
-    ...(switches ? { BAY_CHROMIUM_SWITCHES: switches } : {}),
+    ...(location ? { BAY_JS_LOCATION: location } : undefined),
+    ...(switches ? { BAY_CHROMIUM_SWITCHES: switches } : undefined),
     ...opts.env,
   };
+
   const log = resolve(opts.log ?? join(data, "app.out.log"));
   const launchedAt = Date.now();
   const startTimeout = opts.startTimeout ?? 60000;
@@ -579,6 +588,7 @@ async function startMac(app, binary, { env, log, port, args, urls, startTimeout 
   for (const end = Date.now() + startTimeout; !owned && Date.now() < end; await sleep(100)) {
     let info;
     const pid = ownedCandidate(listenerPids(port), before, (p) => (info = processInfo(p))?.command, binary);
+
     if (pid && info) owned = { pid, started: info.started };
   }
   if (!owned) throw new Error(`the app didn't listen on DevTools port ${port} within ${startTimeout / 1000} s (log: ${log})`);
@@ -632,9 +642,12 @@ export function reporter(logFile, { name = "run" } = {}) {
   const write = (line) => {
     appendFileSync(logFile, `${line}\n`);
     section.push(line);
+
     if (process.env.VERBOSE) console.log(line);
   };
-  const text = (a) => (typeof a === "string" ? a : a instanceof Error ? (a.stack ?? a.message) : JSON.stringify(a));
+
+  const text = (a) => (v.is(v.string(), a) ? a : a instanceof Error ? (a.stack ?? a.message) : JSON.stringify(a));
+
   const r = {
     results,
     logFile,

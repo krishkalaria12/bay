@@ -21,11 +21,18 @@
   --color-pen: #1f5fe0;
 
   --animate-rise: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-marquee: marquee 38s linear infinite;
 
   @keyframes rise {
     from {
       opacity: 0;
       transform: translateY(14px);
+    }
+  }
+
+  @keyframes marquee {
+    to {
+      transform: translate(-50%);
     }
   }
 }

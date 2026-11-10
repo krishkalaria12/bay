@@ -27,7 +27,8 @@ globalThis.nnTestNativeModules = {
     },
     read: async (_folder, scope, known) => {
       const here = [...folder].filter(([, f]) => f.scope === scope);
-      const files = here.filter(([id]) => !known.includes(id)).map(([id, f]) => ({ id, payload: f.payload }));
+      const files = here.flatMap(([id, f]) => (known.includes(id) ? [] : [{ id, payload: f.payload }]));
+
       return { files, pending: [], damaged: [], present: here.map(([id]) => id) };
     },
     remove: async (_folder, _scope, list) => list.forEach((id) => folder.delete(id)),
@@ -92,7 +93,13 @@ test("a batch is published only once the journal holding it is on disk", async (
   engine.startSync(useBrowser);
   assert.ok("ok" in (await engine.turnOnSync("/sync")));
   await engine.syncNow();
-  const published = () => [...folder.values()].map((f) => JSON.parse(f.payload)).filter((f) => f.ops?.some((op) => op.v?.t === "Held"));
+
+  const published = () =>
+    [...folder.values()].flatMap((f) => {
+      const parsed = JSON.parse(f.payload);
+
+      return parsed.ops?.some((op) => op.v?.t === "Held") ? [parsed] : [];
+    });
 
   shell.heldSaves.on = true;
   S().addBookmark({ spaceId: "default", url: "https://held.example/", title: "Held" });

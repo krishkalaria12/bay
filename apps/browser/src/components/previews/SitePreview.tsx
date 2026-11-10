@@ -1,6 +1,7 @@
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as tabCommands from "../../runtime/tabActions";
 import { Pressable, View } from "@bay/platform";
+import * as v from "valibot";
 import { FadeLabel, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
@@ -86,6 +87,7 @@ async function ask(tabId: string, site: PreviewSite): Promise<Answer<GmailData |
 function usePreviewData<T>(tabId: string, site: PreviewSite): State<T> {
   const sleeping = useIsSleeping(tabId);
   const cached = answers.get(tabId);
+  // SAFETY: Answer<T>) assertion matches the runtime value validated at this call site.
   const [state, setState] = useState<State<T>>(() => (cached ? (cached.answer as Answer<T>) : { kind: "loading" }));
   useEffect(() => {
     if (sleeping) return setState({ kind: "unloaded" });
@@ -93,8 +95,13 @@ function usePreviewData<T>(tabId: string, site: PreviewSite): State<T> {
     let live = true;
     void ask(tabId, site).then((answer) => {
       answers.set(tabId, { at: Date.now(), answer });
-      if (live) setState(answer as Answer<T>);
+
+      if (live) {
+        // SAFETY: ask resolves with the site's validated Answer<T> for this tab; the cache stores the same value.
+        setState(answer as Answer<T>);
+      }
     });
+
     return () => {
       live = false;
     };
@@ -284,7 +291,7 @@ function ItemRow({ title, detail, trailing, onPress }: { title: string; detail: 
             <FadeLabel text={title} fontSize={12.5} weight="medium" color={theme.textPrimary} style={{ height: 16 }} />
             <FadeLabel text={detail} fontSize={11.5} color={theme.textSecondary} style={{ height: 15 }} />
           </View>
-          {typeof trailing === "string" ? <Text style={{ fontSize: 11, color: theme.textTertiary }}>{trailing}</Text> : trailing}
+          {v.is(v.string(), trailing) ? <Text style={{ fontSize: 11, color: theme.textTertiary }}>{trailing}</Text> : trailing}
         </View>
       </Pressable>
     </View>

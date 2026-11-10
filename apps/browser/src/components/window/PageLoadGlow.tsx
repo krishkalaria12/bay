@@ -26,6 +26,7 @@ const FADE = { duration: 220, reduceMotion: ReduceMotion.System };
 
 export function PageLoadGlow({ tabId }: { tabId: string }) {
   const loading = useTabLive(tabId, (l) => l.isLoading);
+
   // Mounted with the shown page, so on every tab switch: its shared values, style and settling animations come with
   // the page's first load, not before (a page at rest had a spring and a fade started for nothing).
   return useLatched(loading) ? <Glow loading={loading} /> : null;
@@ -40,8 +41,10 @@ function Glow({ loading }: { loading: boolean }) {
     if (loading) {
       shown.set(withTiming(1, FADE));
       width.set(withRepeat(withSequence(withSpring(LOAD_GLOW_WIDE, SPRING), withSpring(LOAD_GLOW_NARROW, SPRING)), -1));
+
       return;
     }
+
     cancelAnimation(width);
     width.set(withSpring(LOAD_GLOW_NARROW, SPRING));
     shown.set(withTiming(0, FADE));
@@ -49,6 +52,7 @@ function Glow({ loading }: { loading: boolean }) {
 
   const pillStyle = useAnimatedStyle(() => {
     "worklet";
+
     return { width: width.get(), opacity: shown.get() };
   });
 

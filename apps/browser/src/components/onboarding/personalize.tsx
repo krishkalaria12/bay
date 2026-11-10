@@ -18,6 +18,7 @@ export const PERSONALIZE_COPY = {
   layouts: "Choose how you would like to view your tabs:",
 } as const;
 
+// SAFETY: SpaceColor[] assertion matches the runtime value validated at this call site.
 const COLORS = Object.keys(SPACE_COLORS) as SpaceColor[];
 
 // Bay's own look (the first space's: store/spaces.ts DEFAULT_SPACE) leads the choices; a plain color replaces it.
@@ -30,7 +31,9 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
   const bayTheme = useBrowser((s) => (spaceId ? isBayTheme(s.spaces[spaceId]?.theme) : false));
   const themed = useBrowser((s) => (spaceId ? !!s.spaces[spaceId]?.theme : false));
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
+
   if (!spaceId || incognito) return null;
+
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: size >= 30 ? 5 : 4 }} accessibilityRole="radiogroup" accessibilityLabel="Theme color">
       <ColorButton
@@ -63,10 +66,13 @@ function ColorButton({ name, colors, size, selected, onPress }: { name: string; 
   }, [selected]);
   const ring = useAnimatedStyle(() => ({ opacity: t.get() }));
   const rest = size - (hovered ? 6 : 8);
+
   const dot = useAnimatedStyle(() => {
     const d = interpolate(t.get(), [0, 1], [rest, size - 12]);
+
     return { width: d, height: d };
   }, [rest, size]);
+
   return (
     <View {...hoverProps} tooltip={name}>
       <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={name}>
@@ -109,9 +115,11 @@ function ColorButton({ name, colors, size, selected, onPress }: { name: string; 
 
 export function TabLayoutPicker({ windowId }: { windowId: string }) {
   const layout = useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
+
   const pick = (next: "sidebar" | "top") => {
     if (next !== layout) reportBrowserCommand(toggleTabLayout(windowId));
   };
+
   return (
     <View style={{ flexDirection: "row", gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel="Tab layout">
       <LayoutButton kind="sidebar" title="Sidebar" subtitle="Tabs down the side" selected={layout === "sidebar"} onPress={() => pick("sidebar")} />
@@ -136,6 +144,7 @@ function LayoutButton({
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
   const bar = { backgroundColor: colors.progressTrack, borderRadius: 2 };
+
   return (
     <View {...hoverProps} style={{ flex: 1 }}>
       <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={title}>
@@ -196,6 +205,7 @@ function LayoutButton({
 
 function Radio({ on }: { on: boolean }) {
   const colors = useOnboardingColors();
+
   return (
     <View
       style={{

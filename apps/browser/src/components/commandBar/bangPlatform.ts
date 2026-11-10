@@ -7,15 +7,19 @@ export const loadBundledBangs = (): Promise<typeof import("@bay/core/src/bangLis
 export async function fetchBangList(etag: string | null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
+
   try {
     const response = await fetch("https://services.helium.imput.net/bangs.json", {
-      headers: { Accept: "application/json", ...(etag ? { "If-None-Match": etag } : {}) },
+      headers: { Accept: "application/json", ...(etag ? { "If-None-Match": etag } : undefined) },
       credentials: "omit",
       signal: controller.signal,
     });
+
     if (Number(response.headers.get("content-length")) > MAX_BANG_LIST_CHARS) throw new Error("Bang list is too large");
     const body = response.status === 200 ? await response.text() : null;
+
     if (body && body.length > MAX_BANG_LIST_CHARS) throw new Error("Bang list is too large");
+
     return { status: response.status, body, contentType: response.headers.get("content-type"), etag: response.headers.get("etag") };
   } finally {
     clearTimeout(timer);

@@ -3,23 +3,22 @@ import type { DeepReadonly } from "../runtime/projection";
 import type { BrowserState } from "./browserStore";
 import type { Tab } from "./types";
 
-// Which engine a tab's page runs in. Chromium is Bay's engine; it has no Widevine, so streaming sites (Netflix,
-// Disney+, Prime Video…) open in WebKit, whose FairPlay plays them. A site can be given an engine (Settings › Engines,
-// Site Controls' "Opens in"); every other page opens in the default engine, and a page's links stay on its engine.
+// Which engine a tab's page runs in. Bay chooses it; there is no switch. Chromium is Bay's engine; it has no Widevine, so
+// streaming sites (Netflix, Disney+, Prime Video…) open in WebKit, whose FairPlay plays them, and any other page whose
+// protected video won't play moves there (lib/pageEngines.ts). A page's links stay on its engine, so a sign-in that
+// crosses sites comes back signed in; a typed address leaves for its own site's engine.
 // WebKit is macOS's: a build without the BayWebKit module (Windows, Linux) keeps every page in Chromium.
 
 export const ENGINE_NAMES: Record<PageEngine, string> = { chromium: "Chromium", webkit: "WebKit" };
 export const ENGINE_SYMBOLS: Record<PageEngine, string> = { chromium: "globe", webkit: "safari" };
-export const RECOMMENDED_ENGINE: PageEngine = "chromium";
-export const otherEngine = (engine: PageEngine): PageEngine => (engine === "webkit" ? "chromium" : "webkit");
 
 // Read-only, so the coordinator's store and a window's projection (runtime/projection.ts) both answer.
-type SettingsState = DeepReadonly<Pick<BrowserState, "settings">>;
-type EngineState = DeepReadonly<Pick<BrowserState, "tabs" | "settings">>;
+type EngineState = DeepReadonly<Pick<BrowserState, "tabs">>;
 
 type Site = { key: string; host: string };
+
 // Every tab icon asks on every store update. URL parsing in Hermes otherwise repeats for all rows even when only
-// another page's progress changed. Cache only address-derived facts, so settings and opener changes still apply.
+// another page's progress changed. Cache only address-derived facts, so opener changes still apply.
 const sites = new Map<string, Site | null>();
 const MAX_CACHED_SITES = 1024;
 
@@ -39,24 +38,19 @@ function parsedSite(url: string | undefined | null): Site | null {
   return site;
 }
 
-/** A website rule's key: scheme, host and port (no subdomains), for web pages only. */
+/** A site's key: scheme, host and port (no subdomains), for web pages only. */
 export function siteOf(url: string | undefined | null): string | null {
   return parsedSite(url)?.key ?? null;
 }
 
-export const canSwitchEngine = (url: string | undefined | null) => hasWebKit() && !!url && /^(https?|file):/i.test(url);
+/** A page WebKit can show: a web page or a file, on a build that has WebKit. */
+export const canUseWebKit = (url: string | undefined | null) => hasWebKit() && !!url && /^(https?|file):/i.test(url);
+
 /** Bay's and Chrome's own pages, extensions and DevTools exist only in Chromium. */
-export const chromiumOnly = (url: string | undefined | null) => !!url && /^(bay|chrome|chrome-extension|chrome-untrusted|devtools|view-source):/i.test(url);
-
-export const defaultEngine = (s: SettingsState): PageEngine => (hasWebKit() && s.settings.pageEngine === "webkit" ? "webkit" : "chromium");
-
-export function ruleFor(s: SettingsState, url: string | undefined | null): PageEngine | undefined {
-  const site = hasWebKit() ? siteOf(url) : null;
-  return site ? s.settings.websiteEngines?.[site] : undefined;
-}
+const chromiumOnly = (url: string | undefined | null) => !!url && /^(bay|chrome|chrome-extension|chrome-untrusted|devtools|view-source):/i.test(url);
 
 /** Sites whose video is DRM-protected (Widevine in Chrome, FairPlay in Safari), subdomains included. */
-export const PROTECTED_VIDEO_SITES: readonly string[] = [
+const PROTECTED_VIDEO_SITES: readonly string[] = [
   "netflix.com",
   "disneyplus.com",
   "max.com",
@@ -80,16 +74,10 @@ export function protectedVideoSite(url: string | undefined | null): boolean {
   return PROTECTED_VIDEO_SITES.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
-/** WebKit for a streaming site from its first visit, unless Settings › Engines turned that off. */
-export const builtInEngine = (s: SettingsState, url: string | undefined | null): PageEngine | undefined =>
-  hasWebKit() && s.settings.protectedVideoInWebKit !== false && protectedVideoSite(url) ? "webkit" : undefined;
+/** The engine a site needs, if it needs one: WebKit for a streaming site, from its first visit. */
+export const chosenEngine = (url: string | undefined | null): PageEngine | undefined => (hasWebKit() && protectedVideoSite(url) ? "webkit" : undefined);
 
-/** A website rule wins over the built-in choice. */
-export const chosenEngine = (s: SettingsState, url: string | undefined | null): PageEngine | undefined => ruleFor(s, url) ?? builtInEngine(s, url);
-
-export const recommendedEngineFor = (s: SettingsState, url: string | undefined | null): PageEngine => builtInEngine(s, url) ?? defaultEngine(s);
-
-export const engineForUrl = (s: SettingsState, url: string | undefined | null): PageEngine => chosenEngine(s, url) ?? defaultEngine(s);
+export const engineForUrl = (url: string | undefined | null): PageEngine => chosenEngine(url) ?? "chromium";
 
 const fromAdoption = (s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine | undefined => {
   const id = t.adoptId;
@@ -105,40 +93,52 @@ const fromAdoption = (s: EngineState, t: DeepReadonly<Tab>, depth: number): Page
 
 function engineOf(s: EngineState, t: DeepReadonly<Tab>, depth: number): PageEngine {
   if (!hasWebKit() || chromiumOnly(t.navigation?.url ?? t.url)) return "chromium";
+
   if (t.engine) return t.engine;
   const adopted = fromAdoption(s, t, depth);
+
   if (adopted) return adopted;
   const opener = t.openerId ? s.tabs[t.openerId] : undefined;
+
   if (opener?.engine && (opener.url || opener.navigation)) return opener.engine;
-  return engineForUrl(s, t.navigation?.url ?? t.url);
+
+  return engineForUrl(t.navigation?.url ?? t.url);
 }
 
 /** The tab's engine: the one it has, else its adopted page's, its opener's, then its address's. */
 export function tabEngine(s: EngineState, tabId: string): PageEngine {
   const t = s.tabs[tabId];
-  return t ? engineOf(s, t, 0) : defaultEngine(s);
+
+  return t ? engineOf(s, t, 0) : "chromium";
 }
 
-/** An address the user typed follows its site's choice, else keeps the page's engine. */
+/** An address the user typed follows its site's engine, else keeps the page's engine. */
 export function typedNavigationEngine(s: EngineState, tab: DeepReadonly<Tab>, url: string): PageEngine {
   if (chromiumOnly(url)) return "chromium";
-  const chosen = chosenEngine(s, url);
+  const chosen = chosenEngine(url);
   if (chosen) return chosen;
-  return tab.url || tab.navigation ? tabEngine(s, tab.id) : defaultEngine(s);
+  return tab.url || tab.navigation ? tabEngine(s, tab.id) : "chromium";
 }
 
-/** The engine a tab's icon is marked with: only a web page away from the default engine. */
+/** The engine a tab's icon is marked with: only a web page away from Chromium. */
 export function engineMark(s: EngineState, tabId: string): PageEngine | null {
   const t = s.tabs[tabId];
-  if (!t || !canSwitchEngine(t.url || t.navigation?.url)) return null;
+
+  if (!t || !canUseWebKit(t.url || t.navigation?.url)) return null;
   const engine = tabEngine(s, tabId);
-  return engine === defaultEngine(s) ? null : engine;
+
+  return engine === "chromium" ? null : engine;
 }
 
 export type WebKitPage = { url: string; title: string; isLoading: boolean; committedUrl: string };
+
 export type RecordedVisit = { url: string; title: string; at: number };
-type Visit = RecordedVisit & { staleTitle: string; profile: string | null; timer?: unknown };
-type VisitTimers = { set(run: () => void, ms: number): unknown; clear(handle: unknown): void };
+
+type TimerHandle = Parameters<typeof clearTimeout>[0];
+
+type Visit = RecordedVisit & { staleTitle: string; profile: string | null; timer?: TimerHandle };
+
+type VisitTimers = { set(run: () => void, ms: number): TimerHandle; clear(handle: TimerHandle): void };
 
 export const VISIT_SETTLE_MS = 1500;
 

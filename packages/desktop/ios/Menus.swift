@@ -279,6 +279,19 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
   }
 
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    if menuItem.action == #selector(undoText(_:)) || menuItem.action == #selector(redoText(_:)) {
+      let undo = menuItem.action == #selector(undoText(_:))
+      if let editor = focusedEditor {
+        let manager = TextInputHistory.undoManager(for: editor)
+        return undo ? manager?.canUndo == true : manager?.canRedo == true
+      }
+      let action = Selector(undo ? "undo:" : "redo:")
+      let item = NSMenuItem(title: menuItem.title, action: action, keyEquivalent: "")
+      guard let target = NSApp.target(forAction: action, to: nil, from: item) else { return false }
+      if let target = target as? NSMenuItemValidation { return target.validateMenuItem(item) }
+      if let target = target as? NSUserInterfaceValidations { return target.validateUserInterfaceItem(item) }
+      return true
+    }
     if menuItem.action == #selector(closeWindow(_:)) { return WindowManager.shared.closableWindow != nil }
     if menuItem.action == #selector(toggleKeepOnTop(_:)) {
       guard let window = WindowManager.shared.keyBrowserWindow else { return false }
@@ -300,6 +313,24 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
   @objc func arrangeWindowsInFront(_ sender: Any?) { NSApp.arrangeInFront(sender) }
   @objc func toggleKeepOnTop(_ sender: Any?) { WindowManager.shared.toggleKeepOnTop() }
   @objc func closeWindow(_ sender: Any?) { WindowManager.shared.closableWindow?.performClose(sender) }
+
+  private var focusedEditor: NSTextView? { NSApp.keyWindow?.firstResponder as? NSTextView }
+
+  @objc func undoText(_ sender: Any?) {
+    if let editor = focusedEditor {
+      TextInputHistory.undoManager(for: editor)?.undo()
+    } else {
+      NSApp.sendAction(Selector(("undo:")), to: nil, from: sender)
+    }
+  }
+
+  @objc func redoText(_ sender: Any?) {
+    if let editor = focusedEditor {
+      TextInputHistory.undoManager(for: editor)?.redo()
+    } else {
+      NSApp.sendAction(Selector(("redo:")), to: nil, from: sender)
+    }
+  }
 
   @objc func pasteAndMatchStyle(_ sender: Any?) {
     let web = Selector(("pasteAndMatchStyle:"))
@@ -421,9 +452,13 @@ enum MainMenu {
     let paste = NSMenuItem(title: "Paste and Match Style", action: #selector(MenuTarget.pasteAndMatchStyle(_:)), keyEquivalent: "v")
     paste.keyEquivalentModifierMask = [.command, .shift]
     paste.target = MenuTarget.shared
+    let undo = std("Undo", #selector(MenuTarget.undoText(_:)), "z")
+    undo.target = MenuTarget.shared
+    let redo = std("Redo", #selector(MenuTarget.redoText(_:)), "z", [.command, .shift])
+    redo.target = MenuTarget.shared
     _ = top("Edit", [
-      std("Undo", Selector(("undo:")), "z"),
-      std("Redo", Selector(("redo:")), "z", [.command, .shift]),
+      undo,
+      redo,
       .separator(),
       std("Cut", #selector(NSText.cut(_:)), "x"),
       std("Copy", #selector(NSText.copy(_:)), "c"),
@@ -516,7 +551,6 @@ enum MainMenu {
       cmd("Show Address Bar in Sidebar", "toggleAddressBar"),
       cmd("Show Sidebar on Right", "toggleSidebarPosition"),
       cmd("Cast…", "cast"),
-      cmd("Open Page in WebKit", "togglePageEngine"),
       .separator(),
       cmd("Zoom to Actual Size", "zoomReset", "0"),
       cmd("Zoom In", "zoomIn", "+"),

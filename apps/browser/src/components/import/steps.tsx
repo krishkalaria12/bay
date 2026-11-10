@@ -34,6 +34,7 @@ const kindTitle = (k: ImportKind) => KINDS.find((x) => x.kind === k)?.title ?? k
 
 function diaProfileSummary(dia: DiaTabsResult | null, id: string): string | undefined {
   const p = dia?.profiles.find((x) => x.id === id);
+
   return p ? `${plural(p.pinned.length, "pinned tab")} · ${plural(p.tabs.length, "open tab")}` : undefined;
 }
 
@@ -53,9 +54,11 @@ export function LoadingStep() {
 export function ChooseStep({ flow }: StepProps) {
   const theme = useTheme();
   const { source, isArc, isDiaTabs } = flow;
+
   const offered = isDiaTabs
     ? KINDS.filter((k) => k.kind === "tabs" || k.kind === "pinnedTabs")
     : KINDS.filter((k) => source?.profiles.some((p) => p.available.includes(k.kind)) && !["spaces", "pinnedTabs"].includes(k.kind));
+
   return (
     <StepLayout
       footer={
@@ -123,8 +126,10 @@ export function ChooseStep({ flow }: StepProps) {
 export function SpacesStep({ flow }: StepProps) {
   const theme = useTheme();
   const { source, isArc, isDiaTabs } = flow;
+
   if (!source) return <EmptyStep />;
   const toggle = (list: string[], id: string, on: boolean) => (on ? [...list, id] : list.filter((x) => x !== id));
+
   return (
     <StepLayout
       footer={
@@ -192,8 +197,10 @@ export function SpacesStep({ flow }: StepProps) {
 export function UnlockStep({ flow }: StepProps) {
   const theme = useTheme();
   const { source } = flow;
+
   if (!source) return <EmptyStep />;
   const many = flow.sourceProfiles.length > 1;
+
   return (
     <StepLayout
       footer={
@@ -234,6 +241,7 @@ export function UnlockStep({ flow }: StepProps) {
 export function SafariStep({ flow }: StepProps) {
   const theme = useTheme();
   const importExport = (path: string) => void flow.importSafari(path);
+
   return (
     <StepLayout
       footer={
@@ -292,7 +300,9 @@ export function SafariStep({ flow }: StepProps) {
 
 export function AccessStep({ flow }: StepProps) {
   const { source } = flow;
+
   if (!source) return <EmptyStep />;
+
   return (
     <StepLayout
       footer={
@@ -315,7 +325,9 @@ export function AccessStep({ flow }: StepProps) {
 
 export function DiaStep({ flow }: StepProps) {
   const { source, diaStatus } = flow;
+
   if (!source) return <EmptyStep />;
+
   return (
     <StepLayout
       footer={
@@ -339,6 +351,7 @@ export function DiaStep({ flow }: StepProps) {
 function DiaStatus({ flow }: StepProps) {
   const theme = useTheme();
   const recheck = () => void flow.refreshDia();
+
   switch (flow.diaStatus) {
     case "checking":
     case "reading":
@@ -402,6 +415,7 @@ function DiaStatus({ flow }: StepProps) {
 export function ProgressStep({ flow }: StepProps) {
   const theme = useTheme();
   const { status } = flow;
+
   return (
     <StepLayout
       footer={
@@ -431,9 +445,11 @@ export function DoneStep({ flow }: StepProps) {
   const { counts, failures, notes, extensions } = flow;
   const failed = failures.length > 0;
   const summary = importedSummary(counts);
+
   const leftBehind = notes.length ? (
     <Text style={{ fontSize: 12, lineHeight: 17, marginTop: 10, color: theme.textTertiary, textAlign: failed ? "left" : "center" }}>{notes.join(" ")}</Text>
   ) : null;
+
   const extensionList = extensions.length ? (
     <View style={{ alignSelf: "stretch", marginTop: 14, gap: 8 }}>
       <Text style={{ fontSize: 12, color: theme.textSecondary, textAlign: "center" }}>
@@ -447,6 +463,7 @@ export function DoneStep({ flow }: StepProps) {
       </View>
     </View>
   ) : null;
+
   return (
     <StepLayout
       footer={

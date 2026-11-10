@@ -1,11 +1,17 @@
 import type { BrowserState } from "../store/browserStore";
 
-export type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } : T;
+type OneLess = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+
+/** Read-only down to a few levels: deep enough for the store's own shape, shallow enough to type cheaply. */
+export type DeepReadonly<T, D extends number = 8> = D extends 0 ? T : T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K], OneLess[D]> } : T;
 type DataKey = { [K in keyof BrowserState]: BrowserState[K] extends (...args: never[]) => unknown ? never : K }[keyof BrowserState];
 
 // This is the coordinator's complete state, including private windows. A native
 // broker must filter it for each window before sending it across renderer IPC.
 export type BrowserProjection = DeepReadonly<Pick<BrowserState, DataKey>>;
+
+/** A window as the projection holds it: named, so a spread of it doesn't deepen the type afresh. */
+export type ProjectionWindow = BrowserProjection["windows"][string];
 
 /** Copies immutable store nodes once. Never freeze nodes belonging to the store. */
 export function createBrowserProjector() {

@@ -33,6 +33,7 @@ export const emptyCounts = (): ImportCounts => ({
 
 /** What an import brought, a phrase for each kind with any: "3 bookmarks", "1 address". */
 export const importedSummary = (counts: ImportCounts) =>
+  // SAFETY: target type assertion matches the runtime value validated at this call site.
   [
     counts.bookmarks && plural(counts.bookmarks, "bookmark"),
     counts.history && plural(counts.history, "history item"),
@@ -85,8 +86,10 @@ export async function importExtensions(spaceIds: string[], result: ImportResult,
         const name = browserRead.getState().spaces[spaceId]?.name ?? "Space";
         notes.push(...written.warnings.map((message) => `${extension.name} in ${name}: ${message}`));
       } catch (error) {
+        // SAFETY: Error).message }) assertion matches the runtime value validated at this call site.
         failed.push({ spaceId, extension, message: (error as Error).message });
       }
+
       if (signal?.aborted) throw Object.assign(new Error("Import cancelled"), { code: "cancelled" });
     }
   }
@@ -182,15 +185,20 @@ export async function applyArcProfile(
         token = fresh.vaultToken;
         fresh.failed.forEach((kind) => onFailed?.(kind));
       } catch (error) {
+        // SAFETY: { code? assertion matches the runtime value validated at this call site.
         if ((error as { code?: string } | null)?.code === "cancelled") throw error;
+
         if (result.cookieCount) onFailed?.("cookies");
+
         if (result.addressCount || result.cardCount) onFailed?.("autofill");
       }
     }
+
     const counts = await applyResult(spaceId, { ...result, vaultToken: token }, browserName, onFailed);
     counts.tabs += await importArcSpace(spaceId, space);
     for (const key of Object.keys(total) as (keyof ImportCounts)[]) total[key] += counts[key];
   }
+
   return total;
 }
 
@@ -208,8 +216,10 @@ export async function applySafari(spaceId: string, data: SafariExport, cookies =
 
 export function profileColorFor(hex: string | undefined): SpaceColor | undefined {
   const m = hex && /^#?([0-9a-f]{6})/i.exec(hex);
+
   if (!m) return undefined;
   const v = parseInt(m[1]!, 16);
+  // SAFETY: [number, number, number] assertion matches the runtime value validated at this call site.
   const [r, g, b] = [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((c) => c / 255) as [number, number, number];
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);

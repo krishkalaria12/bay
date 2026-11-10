@@ -78,7 +78,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     if (!window || window.kind === "small" || (groupId && (!group || group.spaceId !== window.spaceId))) return;
     set(
       patchWindowUi(s, windowId, {
-        panel: { open: true, initialText: "", mode: "newTab", sessionId: newId("panel"), ...(groupId ? { groupId } : {}) },
+        panel: { open: true, initialText: "", mode: "newTab", sessionId: newId("panel"), ...(groupId ? { groupId } : undefined) },
         downloadsOpen: false,
       }),
     );
@@ -133,7 +133,8 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
         if (d.id !== id) return d;
         const saved = d.renamedFrom ?? d.path;
         const { renamedFrom: _, ...rest } = d;
-        return { ...rest, filename: patch.filename, path: patch.path, ...(patch.path === saved ? {} : { renamedFrom: saved }) };
+
+        return { ...rest, filename: patch.filename, path: patch.path, ...(patch.path === saved ? undefined : { renamedFrom: saved }) };
       }),
     }));
   },

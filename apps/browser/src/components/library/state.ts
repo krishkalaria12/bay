@@ -101,7 +101,7 @@ export function applyEaselDocument(id: string, json: string) {
           width: item.width,
           height: item.height,
           createdAt: Date.now(),
-          ...(item.source ? { source: item.source } : {}),
+          ...(item.source ? { source: item.source } : undefined),
         };
         known.add(item.path);
         added = true;
@@ -134,12 +134,15 @@ export function deleteEasel(id: string) {
 
 export async function saveLibraryMedia(image: { path: string; width: number; height: number }, name: string, source?: CaptureSource) {
   startLibrary();
+
   if (useLibrary.getState().error) return null;
   const retained = await retainLibraryImage(image.path);
+
   if (!retained || useLibrary.getState().error) return null;
   const id = newId("media");
-  const media: LibraryMedia = { id, name, ...retained, createdAt: Date.now(), ...(source ? { source } : {}) };
+  const media: LibraryMedia = { id, name, ...retained, createdAt: Date.now(), ...(source ? { source } : undefined) };
   useLibrary.setState((s) => ({ media: { ...s.media, [id]: media } }));
+
   return media;
 }
 

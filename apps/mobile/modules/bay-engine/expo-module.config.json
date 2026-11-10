@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["BayEngineModule"], "appDelegateSubscribers": ["BayShortcuts"] },
+  "android": { "modules": ["expo.modules.bayengine.BayEngineModule"] }
+}

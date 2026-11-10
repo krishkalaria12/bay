@@ -1,5 +1,6 @@
 export const BANG_LIST_ETAG = '"6ad9e8e9-512a8"';
 export const BANG_LIST_GENERATED_AT = "2026-10-14T11:11:02.825Z";
+
 export const BANG_LIST = `5	Fiverr	fiverr.com/gigs/search?query={s}
 a az amz aus buy amus price amazon	Amazon.com	www.amazon.com/s?k={s}
 b bing	Bing	bing.com/search?q={s}
@@ -10078,6 +10079,7 @@ cottrillcompassblog	Cottrill Compass blog	cottrillcompass.com/blog/?s={s}
 cuchilleriaalbacete	Cuchilleria Albacete - Grupo Marpasi S.L.	cuchilleriaalbacete.com/articulos-buscar.php?busco={s}
 whitetailproperties	Whitetail Properties	www.whitetailproperties.com/hunting-land/filtered-search?search_mode=all&keywords={s}
 worldcubeassociation	World Cube Association	www.worldcubeassociation.org/search?q={s}`;
+
 export const BANG_LIST_UNICODE = `g п goog google	Google	www.google.com/search?q={s}
 õ õs	Eesti õigekeelsussõnaraamat	www.eki.ee/dict/qs/index.cgi?Q={s}
 γ ggr	Google GR	www.google.gr/search?q={s}&meta=&aq=f&aqi=g10&aql=&gs_rfai=

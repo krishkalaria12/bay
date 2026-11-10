@@ -23,22 +23,44 @@
   // can't reach them). The browser still checks every message.
   const { stringify: toJSON, parse: fromJSON } = JSON;
   const apply = Reflect.apply;
-  const { keys, setPrototypeOf } = Object;
+  const { getPrototypeOf, keys, setPrototypeOf } = Object;
   const { isArray } = Array;
   const { isFinite } = Number;
+  const FN = Function;
+  // Captured before page code runs: a primitive's prototype is its boxed companion, so these
+  // decide "is this a string/number/boolean" without typeof and without converting the value.
+  // A boxed value fails the identity, a null-prototype object is no primitive's prototype.
+  const StrProto = String.prototype;
+  const NumProto = Number.prototype;
+  const BoolProto = Boolean.prototype;
+  const isStr = (value) => value !== null && value !== undefined && !(value instanceof Object) && getPrototypeOf(value) === StrProto;
+  const isNum = (value) => value !== null && value !== undefined && !(value instanceof Object) && getPrototypeOf(value) === NumProto;
+  const isBool = (value) => value !== null && value !== undefined && !(value instanceof Object) && getPrototypeOf(value) === BoolProto;
   const startsWith = String.prototype.startsWith;
+
   const plain = (value, depth) => {
-    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-    if (typeof value === "number") return isFinite(value) ? value : null;
-    if (typeof value !== "object" || depth > 4) return null;
+    if (isStr(value) || isBool(value)) return value;
+
+    if (isNum(value)) return isFinite(value) ? value : null;
+
+    if (depth > 4 || value === null || value === undefined || value instanceof FN) return null;
+
+    // Only real objects reach the copy below. Anything else is a leftover primitive (NaN, a
+    // symbol, a bigint), whose prototype is its boxed companion.
+    if (!(value instanceof Object) && getPrototypeOf(value) !== null) return null;
+
     const out = setPrototypeOf(isArray(value) ? [] : {}, null);
     const names = keys(value);
+
     for (let i = 0; i < names.length; i++) {
       const v = value[names[i]];
-      if (v !== undefined && typeof v !== "function") out[names[i]] = plain(v, depth + 1);
+
+      if (v !== undefined && !(v instanceof FN)) out[names[i]] = plain(v, depth + 1);
     }
+
     return out;
   };
+
   const serialize = (data) => toJSON(plain(data, 0));
   const send = (kind, data) => post(kind, serialize(data));
   const onReady = (fn) => (document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", fn, { once: true }) : fn());
@@ -121,8 +143,10 @@
   // YouTube's player, which knows more than its video element: subtitles, and where a live stream's end is.
   const youTubePlayer = (v) => {
     const player = v.closest(".html5-video-player");
-    return player && typeof player.getOption === "function" && typeof player.setOption === "function" ? player : null;
+
+    return player && player.getOption instanceof FN && player.setOption instanceof FN ? player : null;
   };
+
   // YouTube pads a live video's duration an hour past the live edge, so its seekable end never moves: the edge is
   // its player's, in the player's own time.
   const youTubeLive = (m) => {
@@ -384,22 +408,30 @@
   let pipCues = null;
   let pipTimer = 0;
   let lastPip = "";
+
   const youTubeTracks = (player) => {
     const listed = player.getOption("captions", "tracklist");
+
     if (isArray(listed) && listed.length) return listed.map((t) => ({ label: t.displayName || t.languageName || t.languageCode, track: t }));
-    const response = typeof player.getPlayerResponse === "function" ? player.getPlayerResponse() : null;
+    const response = player.getPlayerResponse instanceof FN ? player.getPlayerResponse() : null;
     const tracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+
     if (!isArray(tracks)) return [];
+
     return tracks.map((t) => ({
       label: t.name?.simpleText || t.name?.runs?.map((r) => r.text).join("") || t.languageCode,
-      track: { languageCode: t.languageCode, ...(t.kind ? { kind: t.kind } : {}), ...(t.vssId ? { vss_id: t.vssId } : {}) },
+      track: { languageCode: t.languageCode, ...(t.kind ? { kind: t.kind } : undefined), ...(t.vssId ? { vss_id: t.vssId } : undefined) },
     }));
   };
+
   const sameYouTubeTrack = (a, b) =>
     !!b?.languageCode && (a.vss_id && b.vss_id ? a.vss_id === b.vss_id : a.languageCode === b.languageCode && (a.kind || "") === (b.kind || ""));
+
   const textTracks = (v) => [...v.textTracks].filter((t) => t.kind === "subtitles" || t.kind === "captions");
+
   const subtitlesOf = (v) => {
     const player = youTubePlayer(v);
+
     if (player) {
       try {
         const list = youTubeTracks(player);
@@ -407,26 +439,41 @@
         return { player, list, tracks: list.map((t) => t.label), selected: list.findIndex((t) => sameYouTubeTrack(t.track, current)) };
       } catch {}
     }
+
     const list = textTracks(v);
+
     return { list, tracks: list.map((t, i) => t.label || t.language || `Track ${i + 1}`), selected: list.findIndex((t) => t.mode === "showing") };
   };
+
   const cueText = (subtitles) => {
     if (subtitles.selected < 0) return "";
+
     if (subtitles.player) {
       const lines = subtitles.player.querySelectorAll(".ytp-caption-window-container .caption-visual-line");
+
       return [...lines]
-        .map((line) => line.textContent.trim())
-        .filter(Boolean)
+        .flatMap((line) => {
+          const text = line.textContent.trim();
+
+          return text ? [text] : [];
+        })
         .join("\n");
     }
+
     const cues = subtitles.list[subtitles.selected].activeCues;
+
     return [...(cues || [])]
-      .map((cue) => (typeof cue.getCueAsHTML === "function" ? cue.getCueAsHTML().textContent : cue.text || "").trim())
-      .filter(Boolean)
+      .flatMap((cue) => {
+        const text = (cue.getCueAsHTML instanceof FN ? cue.getCueAsHTML().textContent : cue.text || "").trim();
+
+        return text ? [text] : [];
+      })
       .join("\n");
   };
+
   const reportPip = later(() => {
     const v = document.pictureInPictureElement;
+
     if (!v || v !== pipVideo) return;
     const subtitles = subtitlesOf(v);
     const live = isLive(v);
@@ -475,16 +522,21 @@
     clearInterval(pipTimer);
     pipVideo = pipCues = null;
   }
+
   handlers.pip = ({ action, value }) => {
     const v = document.pictureInPictureElement;
+
     if (!v || v !== pipVideo) return;
-    if (action === "rate" && typeof value === "number" && value >= 0.25 && value <= 4) {
+
+    if (action === "rate" && isNum(value) && value >= 0.25 && value <= 4) {
       const player = youTubePlayer(v);
-      if (player && typeof player.setPlaybackRate === "function") player.setPlaybackRate(value);
+
+      if (player && player.setPlaybackRate instanceof FN) player.setPlaybackRate(value);
       else v.playbackRate = value;
-    } else if (action === "subtitles" && typeof value === "number") {
+    } else if (action === "subtitles" && isNum(value)) {
       const { player, list } = subtitlesOf(v);
       const chosen = list[value];
+
       if (!player) {
         for (const t of list) t.mode = t === chosen ? "showing" : "disabled";
       } else if (chosen) {
@@ -674,8 +726,10 @@
           value: (type) => {
             const event = new Event(type, { cancelable: type === "click" });
             const handler = this["on" + type];
-            if (typeof handler === "function") guard(handler).call(this, event);
+
+            if (handler instanceof FN) guard(handler).call(this, event);
             this.dispatchEvent(event);
+
             return event;
           },
         });
@@ -772,12 +826,13 @@
   };
 
   // Protected video: Chromium here has no Widevine, so a player that needs a DRM system it can't have stalls. Tell the
-  // app once (it offers to open the page in WebKit, apps/browser lib/pageEngines.ts) when a refused Widevine, PlayReady
+  // app once (it moves the page to WebKit, apps/browser lib/pageEngines.ts) when a refused Widevine, PlayReady
   // or FairPlay request is followed by playback that tried and didn't start, not on a capability check alone.
   try {
     const NavigatorType = window.Navigator;
     const requestAccess = NavigatorType && NavigatorType.prototype.requestMediaKeySystemAccess;
-    if (typeof requestAccess === "function") {
+
+    if (requestAccess instanceof FN) {
       const protectedSystem = /^com\.(widevine\.alpha|microsoft\.playready|apple\.fps)/;
       const { test } = RegExp.prototype;
       const then = Promise.prototype.then;
@@ -834,7 +889,8 @@
       const wrapped = {
         requestMediaKeySystemAccess(keySystem, _configurations) {
           const result = apply(requestAccess, this, arguments);
-          if (!drmSent && typeof keySystem === "string" && apply(test, protectedSystem, [keySystem])) {
+
+          if (!drmSent && isStr(keySystem) && apply(test, protectedSystem, [keySystem])) {
             const activated = !!(navigator.userActivation && navigator.userActivation.isActive);
             apply(then, result, [null, () => onRefused(keySystem, activated)]);
           }
@@ -937,38 +993,57 @@
     const pattern = (text, exact = false, quoted = true) => {
       const value = quoted ? unquote(text) : text.trim();
       const regex = /^\/(.*)\/([imu]*)$/.exec(value);
+
       if (regex) return new RegExp(regex[1], regex[2]);
       const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
       return new RegExp(exact ? `^${escaped}$` : escaped);
     };
+
     const select = (node, selector, first) => {
       if (first || node.nodeType === 9) return [...node.querySelectorAll(selector)];
+
       if (/^\s*[+~]/.test(selector)) {
         const parent = node.parentElement;
+
         if (!parent) return [];
         const index = [...parent.children].indexOf(node) + 1;
+
         return [...parent.querySelectorAll(`:scope > :nth-child(${index})${selector}`)];
       }
+
       if (/^\s*>/.test(selector)) return [...node.querySelectorAll(`:scope ${selector}`)];
+
       if (/^\s/.test(selector)) return [...node.querySelectorAll(selector.trim())];
+
       return node.matches(selector) ? [node] : [];
     };
+
     const operator = ({ type, arg }, index) => {
-      if (typeof arg !== "string") throw new Error("no procedural argument");
+      if (!isStr(arg)) throw new Error("no procedural argument");
+
       if (type === "css-selector") return (nodes) => nodes.flatMap((node) => select(node, arg, index === 0));
+
       if (type === "has-text") {
         const regex = pattern(arg);
+
         return (nodes) => nodes.filter((node) => regex.test(node.textContent));
       }
+
       if (type === "min-text-length") {
         const min = Number(arg);
+
         if (!Number.isInteger(min) || min < 0) throw new Error("invalid text length");
+
         return (nodes) => nodes.filter((node) => node.textContent.length >= min);
       }
+
       if (type === "matches-path") {
         const regex = pattern(arg.replace(/\P{ASCII}/gu, (c) => encodeURIComponent(c)));
+
         return (nodes) => (regex.test(location.pathname + location.search) ? nodes : []);
       }
+
       if (type === "matches-attr") {
         const attribute = unquote(arg);
         const equal = attribute.indexOf("=");
@@ -1016,20 +1091,28 @@
             return matches;
           });
       }
+
       throw new Error("unknown procedural operator");
     };
+
     const rules = [];
+
     for (const entry of encoded) {
       try {
-        const rule = typeof entry === "string" ? fromJSON(entry) : entry;
+        const rule = isStr(entry) ? fromJSON(entry) : entry;
+
         if (!isArray(rule?.selector) || !rule.selector.length) continue;
         const action = rule.action || { type: "style", arg: "display:none!important" };
+
         if (!["style", "remove", "remove-attr", "remove-class"].includes(action.type)) continue;
-        if (action.type !== "remove" && typeof action.arg !== "string") continue;
+
+        if (action.type !== "remove" && !isStr(action.arg)) continue;
         const probe = document.createElement("span");
         const styles = [];
+
         if (action.type === "style") {
           probe.style.cssText = action.arg;
+
           for (let n = 0; n < probe.style.length; n++) {
             const name = probe.style[n];
             styles.push([name, probe.style.getPropertyValue(name), probe.style.getPropertyPriority(name)]);

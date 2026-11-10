@@ -653,18 +653,23 @@ function ArchiveSection({ windowId, query, pad }: { windowId: string; query: str
       windows: s.windows,
     })),
   );
+
   const publicTab = (tab: TabSnapshot) => !isIncognitoSpace(tab.spaceId) && !isIncognitoSpace(spaces[tab.spaceId]?.profileId ?? "");
   const spaceName = (id: string) => spaces[id]?.name ?? "Deleted Space";
+
   const entries: ArchiveEntry[] = [
-    ...[...cleanedTabs.map((entry) => ({ entry, cleaned: true })), ...closedTabs.map((entry) => ({ entry, cleaned: false }))]
-      .filter(({ entry }) => publicTab(entry.tab) && !windows[entry.windowId]?.incognito)
-      .map(({ entry, cleaned }) => {
+    ...[...cleanedTabs.map((entry) => ({ entry, cleaned: true })), ...closedTabs.map((entry) => ({ entry, cleaned: false }))].flatMap(({ entry, cleaned }) => {
+      if (!(publicTab(entry.tab) && !windows[entry.windowId]?.incognito)) return [];
+
         // A page from a Little Bay window, closed or put away.
         const small = !cleaned && "small" in entry && !!entry.small;
         let how = "Closed";
+
         if (cleaned) how = "Cleaned up";
         else if (small) how = "Little Bay";
-        return {
+
+      return [
+        {
           id: entry.id,
           title: entry.tab.customTitle || entry.tab.title || hostLabel(entry.tab.url) || "New Tab",
           detail: `${spaceName(entry.tab.spaceId)} · ${how} · ${hostLabel(entry.tab.url)}`,
@@ -673,31 +678,42 @@ function ArchiveSection({ windowId, query, pad }: { windowId: string; query: str
           cleaned,
           small,
           tab: entry.tab,
-        };
+        },
+      ];
       }),
-    ...closedGroups
-      .filter((entry) => entry.tabs.length && entry.tabs.every(publicTab) && !windows[entry.windowId]?.incognito)
-      .map((entry) => ({
+    ...closedGroups.flatMap((entry) =>
+      entry.tabs.length && entry.tabs.every(publicTab) && !windows[entry.windowId]?.incognito
+        ? [
+            {
         id: entry.id,
         title: entry.group.name || "Tab Group",
         detail: `${spaceName(entry.tabs[0]!.spaceId)} · ${entry.tabs.length} tabs · ${entry.tabs.map((t) => t.customTitle || t.title || hostLabel(t.url)).join(", ")}`,
         at: entry.closedAt,
         icon: "rectangle.stack",
         cleaned: false,
-      })),
-    ...closedWindows
-      .filter((entry) => !isIncognitoSpace(entry.window.spaceId) && entry.tabs.every(publicTab))
-      .map((entry) => ({
+            },
+          ]
+        : [],
+    ),
+    ...closedWindows.flatMap((entry) =>
+      !isIncognitoSpace(entry.window.spaceId) && entry.tabs.every(publicTab)
+        ? [
+            {
         id: entry.id,
         title: "Closed Window",
         detail: `${spaceName(entry.window.spaceId)} · ${entry.tabs.length} tabs · ${entry.tabs.map((t) => t.customTitle || t.title || hostLabel(t.url)).join(", ")}`,
         at: entry.closedAt,
         icon: "macwindow",
         cleaned: false,
-      })),
+            },
+          ]
+        : [],
+    ),
   ];
+
   const shown = entries.filter((entry) => (!onlyLittleBay || entry.small) && matchesQuery(query, entry.title, entry.detail)).sort((a, b) => b.at - a.at);
   const hasLittleBay = entries.some((entry) => entry.small);
+
   // Over the list (in its padding), or alone over the empty state.
   const filters = (inList: boolean) =>
     hasLittleBay || onlyLittleBay ? (

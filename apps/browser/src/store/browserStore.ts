@@ -20,6 +20,7 @@ import type { BrowserWindow, PinnedFolder, Tab, TabGroup } from "./types";
 import { createUiSlice, type UiSlice } from "./windowUi";
 import { createWindowsSlice, type WindowsSlice } from "./windows";
 import { createSharedCollectionsSlice, type SharedCollectionsSlice } from "./sharedCollections";
+import * as v from "valibot";
 
 export type BrowserState = SidebarUndoSlice &
   SpacesSlice &
@@ -75,8 +76,10 @@ type SavedWindow = BrowserWindow & { tabIds?: string[] };
 
 // Groups and pinned folders were once saved with the window they were in; they belong to their space now.
 function withoutWindowId<T extends { windowId?: string }>(saved: T): Omit<T, "windowId"> {
+  // SAFETY: copy spreads T, whose windowId is optional per the constraint; the intersection keeps T's other fields deleteable.
   const copy = { ...saved } as { windowId?: string } & Omit<T, "windowId">;
   delete copy.windowId;
+
   return copy;
 }
 
@@ -91,13 +94,15 @@ export const batchStoreUpdates = (update: () => void) => batch(update);
 const batched =
   <T>(creator: StateCreator<T>): StateCreator<T> =>
   (set, get, api) => {
+    // SAFETY: batchedSet forwards set's full tuple; the inner cast restores the tuple arity Zustand's generic set expects.
     const batchedSet = ((...args: Parameters<typeof set>) => batch(() => (set as (...a: typeof args) => void)(...args))) as typeof set;
     api.setState = batchedSet;
+
     return creator(batchedSet, get, api);
   };
 
-/** Durable data visible to selectors that do not read page progress. */
-export type BrowserShape = Omit<BrowserProjection, "live">;
+/** The published state without `live`: what a selector on the quiet view reads (store/derivedStores.ts). */
+export type QuietBrowserState = Omit<BrowserProjection, "live">;
 
 // A store per runtime owner: the app's own (useBrowser), or an isolated one (runtime/authority.ts, tests) that doesn't
 // publish engine profiles or open app URLs on the app's behalf.
@@ -135,9 +140,12 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
           settings.density = settings.density === "compact" ? "compact" : "comfortable";
           settings.searchShortcutMode = settings.searchShortcutMode === "duckduckgo" ? "duckduckgo" : "arc";
           settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
-          settings.tidyDownloads = typeof settings.tidyDownloads === "boolean" ? settings.tidyDownloads : DEFAULT_SETTINGS.tidyDownloads;
+          settings.tidyDownloads = v.is(v.boolean(), settings.tidyDownloads) ? settings.tidyDownloads : DEFAULT_SETTINGS.tidyDownloads;
+          settings.tidyTabs = v.is(v.boolean(), settings.tidyTabs) ? settings.tidyTabs : DEFAULT_SETTINGS.tidyTabs;
+
           if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
           settings.externalLinkDefault = normalizeLinkDestination(settings.externalLinkDefault);
+
           if (settings.externalLinkDefault?.kind === "space" && !spaces[settings.externalLinkDefault.spaceId])
             settings.externalLinkDefault = { kind: "space", spaceId: settings.defaultSpaceId };
 
@@ -146,11 +154,14 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
           // A private window's tabs and a Little Bay's page only come back with their window.
           const kept = (w: SavedWindow | undefined) => !!w && (w.incognito || w.kind === "small");
           const tabs: Record<string, Tab> = {};
+
           for (const t of Object.values(data.tabs ?? {})) {
             const own = rawWindows[t.windowId];
+
             // A peek is thrown away with its window's session (store/peeks.ts).
             if (!spaceOk(t.spaceId) || (isIncognitoSpace(t.spaceId) && !own) || t.peekOf) continue;
-            const { adoptId: _, wakeAdoptId: _wake, ...rest } = t;
+            // Its engine comes from its address again, so a page a website rule once moved isn't stuck there.
+            const { adoptId: _, wakeAdoptId: _wake, engine: _engine, ...rest } = t;
             tabs[t.id] = {
               ...rest,
               windowId: own ? t.windowId : "",
@@ -185,7 +196,10 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
             ...(data.windowOrder ?? []).filter((id) => windows[id]),
             ...Object.keys(windows).filter((id) => !data.windowOrder?.includes(id)),
           ];
+
           type SavedGroup = TabGroup & { windowId?: string };
+
+          // SAFETY: data.groups may carry an older windowId field, stripped by withoutWindowId in the map below.
           const groups = Object.fromEntries(
             Object.values((data.groups ?? {}) as Record<string, SavedGroup>)
               .map((saved) => {

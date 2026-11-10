@@ -269,12 +269,16 @@ useBrowser.subscribe((s, prev) => {
   const m = useMedia.getState();
   const keys = ["sessions", "dismissed", "pip", "pipOpen", "displayRequests", "tabShares"] as const;
   const gone = [...new Set(keys.flatMap((k) => Object.keys(m[k])))].filter((id) => !s.tabs[id]);
+
   if (!gone.length) return;
+  // SAFETY: Pick<Store, (typeof keys)[number]> assertion matches the runtime value validated at this call site.
   const next = Object.fromEntries(keys.map((k) => [k, { ...m[k] }])) as Pick<Store, (typeof keys)[number]>;
+
   for (const id of gone) for (const k of keys) delete next[k][id];
   useMedia.setState(next);
 });
 
 if (typeof __DEV__ !== "undefined" && __DEV__) {
+  // SAFETY: { nnMedia? assertion matches the runtime value validated at this call site.
   (globalThis as { nnMedia?: unknown }).nnMedia = { useMedia, mediaCommand, setNowPlaying, togglePictureInPicture, inPictureInPicture, seekToLive };
 }

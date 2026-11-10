@@ -199,9 +199,14 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
   // The editor shows in a browser window (settings is its own), on this space, so the window is its preview.
   const customize = () => {
     const windowId = resolveWindowId(useBrowser.getState());
+
     if (windowId) openThemeEditor(windowId, spaceId);
   };
+
   const commitName = () => (name.trim() ? update({ name: name.trim() }) : setName(profile.name));
+
+  // SAFETY: SPACE_COLORS is keyed by SpaceColor; Object.keys yields exactly those keys at runtime.
+  const spaceColors = Object.keys(SPACE_COLORS) as SpaceColor[];
 
   return (
     <View>
@@ -238,7 +243,7 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
         ) : null}
         <Row title="Theme colour" description="Tints this space's windows and New Tab page.">
           <View style={{ flexDirection: "row", gap: 7 }}>
-            {(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => (
+            {spaceColors.map((c) => (
               <Pressable key={c} onPress={() => update({ color: c, theme: null })} tooltip={SPACE_COLORS[c].name}>
                 <View
                   style={{

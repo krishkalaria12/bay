@@ -1,5 +1,7 @@
+import * as v from "valibot";
 import type { Adapter } from "@bay/sync";
 import { normalizeExternalLinkRules, type ExternalLinkRule } from "../lib/externalLinkRules";
+import { isJsonObject, type JsonInput } from "../lib/json";
 import { syncStore } from "./store";
 
 type ProfileLinks = Record<string, { syncId: string }>;
@@ -63,6 +65,7 @@ export function linkRulesAdapter(links: () => ProfileLinks): Adapter {
     },
     apply: (visible, changed) => {
       if (!changed.has(KEY)) return;
+
       // Keep unpublished edits until their profile links let syncScope publish them before retrying apply.
       if (
         syncStore()
@@ -70,15 +73,23 @@ export function linkRulesAdapter(links: () => ProfileLinks): Adapter {
           .settings.externalLinkRules.some((rule) => rule.destination.kind === "space" && !profileIdFor(rule, links()))
       )
         return false;
-      const record = visible.get(KEY) as { rules?: unknown } | undefined;
+      // SAFETY: visible values under `linkRules:ordered` are `{ rules }` records written by linkRulesAdapter extract.
+      const record = visible.get(KEY) as { rules?: JsonInput } | undefined;
+
       if (!record) return;
+
       if (!Array.isArray(record.rules)) return;
-      const rules = record.rules.map((rule: unknown) => {
-        if (!rule || typeof rule !== "object") return null;
+
+      const rules = record.rules.map((rule: JsonInput) => {
+        if (!isJsonObject(rule)) return null;
+        // SAFETY: SyncedRule fields are checked by normalizeExternalLinkRules below; destination shape is checked here.
         const incoming = rule as SyncedRule;
         const destination = incoming.destination;
+
         if (destination?.kind !== "space") return incoming;
-        if (typeof destination.profileId !== "string" || !destination.profileId) return null;
+
+        if (!v.is(v.string(), destination.profileId) || !destination.profileId) return null;
+
         return {
           ...incoming,
           destination: { kind: "space", spaceId: localSpace(destination.profileId, links()), syncProfileId: destination.profileId },

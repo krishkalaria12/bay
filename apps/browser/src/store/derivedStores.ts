@@ -1,6 +1,6 @@
 import type { StoreApi } from "zustand/vanilla";
 import { useBrowserRead as useBrowser } from "./read";
-import type { BrowserShape } from "./browserStore";
+import type { QuietBrowserState } from "./browserStore";
 import { changedIds } from "./recordDiff";
 import { spaceHeaderHidden } from "./model";
 
@@ -74,10 +74,11 @@ export const spaceHeaderHiddenStore = selectStore(useBrowser, spaceHeaderHidden)
 export const windowsStore = selectStore(useBrowser, (s) => s.windows);
 
 // The store without `live`, which every page's progress replaces (the most frequent update there is). A selector that
-// reads nothing of it follows this and doesn't run then; `BrowserShape` has no `live`, so one that does won't compile.
-function withoutLive(): ReadStore<BrowserShape> {
-  const listeners = new Set<(state: BrowserShape, prev: BrowserShape) => void>();
+// reads nothing of it follows this and doesn't run then; `QuietBrowserState` has no `live`, so one that does won't compile.
+function withoutLive(): ReadStore<QuietBrowserState> {
+  const listeners = new Set<(state: QuietBrowserState, prev: QuietBrowserState) => void>();
   let stop: (() => void) | undefined;
+
   return {
     getState: useBrowser.getState,
     getInitialState: useBrowser.getInitialState,
@@ -87,6 +88,7 @@ function withoutLive(): ReadStore<BrowserShape> {
         for (const key in s) {
           if (key !== "live" && s[key as keyof typeof s] !== prev[key as keyof typeof s]) {
             for (const each of listeners) each(s, prev);
+
             return;
           }
         }

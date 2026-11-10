@@ -1,6 +1,7 @@
+import * as v from "valibot";
 import { capabilities } from "@bay/platform";
 import { Dimensions } from "react-native";
-import { dragPreview, hapticTick, windowFrame, type DragPreviewShape } from "@bay/desktop";
+import { dragPreview, hapticTick, windowFrame, type DragPreviewStyle } from "@bay/desktop";
 import { hideDragCard, showDragCard } from "./webDragCard";
 import { create } from "zustand";
 import { focus } from "../../lib/actions";
@@ -52,7 +53,9 @@ export const useTabDrag = create<TabDrag>()(() => ({
   insert: null,
 }));
 
-if (__DEV__) (globalThis as { nnTabDrag?: typeof useTabDrag }).nnTabDrag = useTabDrag;
+if (__DEV__)
+  // SAFETY: nnTabDrag is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  (globalThis as { nnTabDrag?: typeof useTabDrag }).nnTabDrag = useTabDrag;
 
 // Background tabs' last pictures, for their drag picture.
 startTabPictures();
@@ -67,15 +70,16 @@ let pointer: [number, number] = [-1, -1];
 // The picture the drag will show once it leaves its list, the shape last sent to it, and whether the native picture
 // was begun (it holds the window's snapshot, and may still be animating after its drag ended).
 type Picture = { chip: () => [number, number, number, number]; grab: [number, number] };
+
 let picture: Picture | null = null;
-let sentShape: DragPreviewShape = "hidden";
+let sentStyle: DragPreviewStyle = "hidden";
 let begun = false;
 
 export function beginTabDrag(tabId: string | null, tabIds: string[] = tabId ? [tabId] : []): number {
   if (begun) dragPreview.cancel();
   begun = false;
   picture = null;
-  sentShape = "hidden";
+  sentStyle = "hidden";
   pointer = [-1, -1];
   const windowId = useBrowser.getState().tabs[tabIds[0] ?? ""]?.windowId ?? null;
   useTabDrag.setState({ ...IDLE, tabId, tabIds, windowId, x: -1, y: -1 });
@@ -129,9 +133,11 @@ export function setInsert(windowId: string, beforeId: string | null | undefined)
 
 // The dragged tab's picture (a native panel, so it can leave the window): the pill over another window's tab
 // strip (which makes room for it), the card over a page or anywhere else outside, nothing in its own list.
-function previewShape(d: TabDrag): DragPreviewShape {
+function previewStyle(d: TabDrag): DragPreviewStyle {
   if (!d.tabIds.length) return "hidden";
+
   if (d.outside) return d.overWindow && d.insert?.windowId === d.overWindow ? "pill" : "card";
+
   return (d.lifted ?? d.onPage) ? "card" : "hidden";
 }
 
@@ -143,29 +149,32 @@ function endPreview(...args: Parameters<typeof dragPreview.end>) {
 
 function syncPreview() {
   const d = useTabDrag.getState();
+
   if (!d.windowId) return;
-  const shape = previewShape(d);
+  const style = previewStyle(d);
   if (!capabilities.globalWindowCoordinates) {
     // The card can't leave the window here, and over the tab list the tab itself shows where it's going.
     const tab = d.tabId ? useBrowser.getState().tabs[d.tabId] : undefined;
-    if (shape === "card" && !d.outside && tab) showDragCard(pointer, tab.customTitle || tab.title || tab.url || "New Tab", tab.favicon);
+    if (style === "card" && !d.outside && tab) showDragCard(pointer, tab.customTitle || tab.title || tab.url || "New Tab", tab.favicon);
     else hideDragCard();
     return;
   }
   // Within its list there's no picture: nothing to send while it stays hidden.
-  if (shape === "hidden" && sentShape === "hidden") return;
-  if (shape !== "hidden" && picture) takePicture(picture, d.windowId);
-  sentShape = shape;
-  dragPreview.update(shape, pointer);
+  if (style === "hidden" && sentStyle === "hidden") return;
+
+  if (style !== "hidden" && picture) takePicture(picture, d.windowId);
+  sentStyle = style;
+  dragPreview.update(style, pointer);
 }
 
 /** The dragged item in its window (from the top-left; `chip` says where it is when asked) and the pointer, for its
  * picture. `drag`: the number beginTabDrag gave; a measure that comes back after its drag ended is dropped. */
 export function setDragPicture(drag: number, chip: [number, number, number, number] | (() => [number, number, number, number]), grab: [number, number]) {
   const { windowId, tabIds } = useTabDrag.getState();
+
   if (drag !== dragSeq || !windowId || !tabIds.length) return;
-  const rect = typeof chip === "function" ? chip() : chip;
-  picture = { chip: typeof chip === "function" ? chip : () => chip, grab: [grab[0] - rect[0], grab[1] - rect[1]] };
+  const rect = v.is(v.function_(), chip) ? chip() : chip;
+  picture = { chip: v.is(v.function_(), chip) ? chip : () => chip, grab: [grab[0] - rect[0], grab[1] - rect[1]] };
   // The pointer may have left the list before the measure came back.
   syncPreview();
 }
@@ -254,15 +263,19 @@ export function endTabDrag(): boolean {
   dragSeq++;
   picture = null;
   const shown = begun;
-  sentShape = "hidden";
+  sentStyle = "hidden";
+
   if (target && tabId) {
     endPreview();
     dropTabIntoSplit(tabId, target.tabId, target.side);
+
     return true;
   }
+
   if (!(outside || onPage) || !windowId || !tabIds.length) {
     hideDragCard();
     if (shown) dragPreview.end();
+
     return false;
   }
   const asked: { frame: [number, number, number, number] | null } = { frame: null };
@@ -296,7 +309,8 @@ export function cancelTabDrag() {
   useTabDrag.setState({ ...IDLE, tabIds: [] });
   dragSeq++;
   picture = null;
+
   if (begun) dragPreview.cancel();
   begun = false;
-  sentShape = "hidden";
+  sentStyle = "hidden";
 }

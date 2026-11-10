@@ -14,6 +14,7 @@ import { useQuietBrowser } from "../../store/hooks";
 export function HistoryPopover({ tabId, windowId, anchors }: { tabId: string; windowId: string; anchors: { back: number; forward: number } }) {
   const menu = useHistoryMenu((s) => (s.menu?.tabId === tabId ? s.menu : null));
   useEffect(() => () => void (useHistoryMenu.getState().menu?.tabId === tabId && closeHistoryMenu()), [tabId]);
+
   // Every pane has this and almost none has a menu: the history is looked through only for an open one.
   return menu ? <OpenHistoryMenu tabId={tabId} windowId={windowId} anchors={anchors} menu={menu} /> : null;
 }
@@ -34,10 +35,13 @@ function OpenHistoryMenu({
 
   const open = (item: HistoryItem, e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => {
     const mode = openModeFor(e);
+
     if (mode === "current" || mode === "split" || !item.url) {
       closeHistoryMenu();
+
       return void goToHistoryItem(tabId, item);
     }
+
     if (mode !== "background") closeHistoryMenu();
     openUrl(item.url, windowId, mode);
   };
@@ -64,6 +68,7 @@ function OpenHistoryMenu({
 
 function RowFrame({ children, hovered, pressed }: { children: React.ReactNode; hovered: boolean; pressed: boolean }) {
   const theme = useTheme();
+
   return (
     <View
       style={{
@@ -93,6 +98,7 @@ function Row({
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip={item.url || undefined}>
       <MouseArea onMiddleClick={(e) => onOpen({ ...e, middle: true })}>
@@ -114,6 +120,7 @@ function Row({
 function ActionRow({ icon, title, onPress }: { icon: string; title: string; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>

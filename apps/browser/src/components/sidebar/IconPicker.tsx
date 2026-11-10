@@ -117,6 +117,7 @@ export function IconPicker({
   windowHeight: number;
 }) {
   const picker = useSidebarUi((u) => (u.iconPicker?.windowId === windowId ? u.iconPicker : null));
+
   return picker ? <PickerPanel key={picker.id} picker={picker} sidebarWidth={sidebarWidth} windowWidth={windowWidth} windowHeight={windowHeight} /> : null;
 }
 
@@ -127,6 +128,7 @@ function PickerPanel({ picker, sidebarWidth, windowWidth, windowHeight }: { pick
   const right = useSidebarOnRight();
   const tokens = useSidebarTokens();
   const liveIcon = useLive((s) => (picker.kind === "live" ? s.folders[picker.id.split("|")[1] ?? ""]?.icon : null));
+
   const current = useBrowser((s) => {
     switch (picker.kind) {
       case "tab":
@@ -141,12 +143,14 @@ function PickerPanel({ picker, sidebarWidth, windowWidth, windowHeight }: { pick
         return s.groups[picker.id]?.icon ?? null;
     }
   });
+
   const space = picker.kind === "space";
   // Fades in as it opens, and out before it goes.
   const shown = useSharedValue(0);
   useEffect(() => shown.set(withTiming(1, { duration: PICKER_FADE_MS, easing: Easing.out(Easing.cubic) })), []);
   const fade = useAnimatedStyle(() => ({ opacity: shown.get(), transform: [{ translateY: (1 - shown.get()) * 6 }] }));
   const closing = useRef(false);
+
   const close = () => {
     if (closing.current) return;
     closing.current = true;
@@ -156,16 +160,26 @@ function PickerPanel({ picker, sidebarWidth, windowWidth, windowHeight }: { pick
       }),
     );
   };
+
   const choose = (icon: string | null) => {
     setIcon(picker, icon);
     close();
   };
+
   // A space's panel is the sidebar's width, its emoji filling the row.
   const width = space ? sidebarWidth - layout.sidebarInset * 2 : ICON_PICKER_WIDTH;
   const spaceCell = Math.floor((width - SPACE_PICKER_PAD * 2) / SPACE_PICKER_COLUMNS);
   // Beside its row, but never past the window's foot.
   const top = Math.max(8, Math.min((picker.anchor?.y ?? 60) - 8, windowHeight - ICON_PICKER_HEIGHT - 8));
-  let place: { top?: number; bottom?: number; left: number };
+
+  interface PickerPlace {
+    top?: number;
+    bottom?: number;
+    left: number;
+  }
+
+  let place: PickerPlace;
+
   if (space) {
     // Across the sidebar, just above the spaces at its foot.
     const y = picker.anchor?.y ?? windowHeight - 44;
@@ -245,6 +259,7 @@ function PickerPanel({ picker, sidebarWidth, windowWidth, windowHeight }: { pick
 function SpaceEmoji({ current, cell, onChoose, onClose }: { current: string | null; cell: number; onChoose: (icon: string) => void; onClose: () => void }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
+
   return (
     <View style={{ gap: 10 }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingLeft: 4 }}>
@@ -295,6 +310,7 @@ function SpaceEmoji({ current, cell, onChoose, onClose }: { current: string | nu
 function EmojiCell({ emoji, size, selected, onPress }: { emoji: string; size: number; selected: boolean; onPress: () => void }) {
   const tokens = useSidebarTokens();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>

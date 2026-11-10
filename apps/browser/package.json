@@ -38,6 +38,7 @@
     "react-native-macos": "0.81.9",
     "react-native-reanimated": "3.19.5",
     "react-native-web": "^0.21.4",
+    "valibot": "^1.5.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

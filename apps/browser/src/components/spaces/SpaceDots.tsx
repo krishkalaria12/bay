@@ -13,6 +13,7 @@ export function SpaceDots({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.spaceOrder));
   const { pages } = usePagerPages(windowId);
   const { reorder, dragging } = useSpaceReorder(DOTS_CELL);
+
   return (
     <View style={{ height: PROFILE_DOTS_HEIGHT, alignItems: "center" }}>
       <View style={{ marginTop: (PROFILE_DOTS_HEIGHT - 3 - DOTS_BAND) / 2, height: DOTS_BAND, flexDirection: "row" }}>
@@ -34,6 +35,7 @@ function Dot({ id, windowId, page, reorder, lifted }: { id: string; windowId: st
   const panHandlers = useSpaceDrag(reorder, id, "x");
   const offset = reorder.offsetOf(id);
   const dragStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }] }), [offset]);
+
   return (
     <Animated.View {...panHandlers} style={[{ zIndex: lifted ? 1 : 0 }, dragStyle]}>
       <View {...hoverProps} tooltip={lifted ? undefined : name}>

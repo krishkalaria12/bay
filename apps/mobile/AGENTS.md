@@ -1,0 +1,73 @@
+# Bay mobile
+
+Bay for iPhone and Android, built and tested together. Expo SDK 58 + Expo Router and HeroUI Native (Uniwind/Tailwind). Pages render with WebKit on iOS and the system WebView on Android, behind one engine API (`@bay/engine`, see `docs/mobile-plan.html`). Native engine code lives in `modules/bay-engine`; rebuild both dev clients after changing it. Every feature ships on both platforms.
+
+This is a standalone project with its own `pnpm-workspace.yaml` and lockfile. The repo root's workspace excludes it because the desktop app pins react-native-macos 0.81 in a hoisted `node_modules`. Always run `pnpm` from `apps/mobile`.
+
+# Libraries
+If the work can be done through any of the expo libraries, then you can use it.
+
+## Design
+
+- **One design on both platforms: Lens** (see the reference below): the same screens, layout and behaviour on iPhone and Android.
+- **iOS draws it in Liquid Glass** with `@expo/ui/swift-ui`.
+- **Android draws the same design with our own React Native views, the way Arc Search does on Android**: flat surfaces with translucent fills and hairline edges, no Material components (no `@expo/ui/jetpack-compose`, no Material ripples or elevation) and no imitation glass.
+- Icons: SF Symbols by name on iOS; Material Symbols outline paths on Android (`src/chrome/MaterialSymbol.tsx`, from google/material-design-icons, Apache-2.0, drawn with react-native-svg).
+
+## Both platforms, always
+
+- Test iOS completely: every flow, every screen, every state.
+- **Every UI change is also tested on Android** before it's done: run it on the emulator, screenshot it next to iOS, and pass `pnpm e2e` on both. iOS passing is never enough on its own; the Android UI is our own code and breaks independently.
+- Platform-specific code goes in `Name.ios.tsx` and `Name.android.tsx`; shared code stays in `Name.tsx`. Metro picks the file for each platform, and `tsconfig.json` sets `moduleSuffixes` so `import … from "./Name"` type-checks. Give each pair one shared props type so they can't drift. Example: `src/chrome/StartToolbar.ios.tsx` / `StartToolbar.android.tsx`.
+- Never import `@expo/ui/swift-ui` outside a `.ios.tsx` file.
+
+## Run it
+
+```sh
+cd apps/mobile
+pnpm install
+pnpm start      # Metro for both dev clients (run in the background)
+pnpm native     # boot both devices, build and install both dev clients in parallel
+pnpm ios        # or one platform
+pnpm android
+pnpm e2e        # every Argent test in .argent/e2e, on iOS then Android (boots both devices)
+pnpm typecheck
+```
+
+- The scripts set `DEVELOPER_DIR` (this Mac's `xcode-select` points at the Command Line Tools), `ANDROID_HOME` and `JAVA_HOME` (JDK 17). Set them yourself for raw `expo`, `xcrun` or Gradle commands.
+- Devices (`scripts/lib/devices.sh`): `IOS_SIMULATOR` (default `iPhone 18 Pro`) and `ANDROID_AVD` (default `bay-pixel`, a Pixel 9 on Android 16). Create the AVD on a new machine with `avdmanager create avd -n bay-pixel -k "system-images;android-36;google_apis;arm64-v8a" -d pixel_9`.
+- Build logs: `.expo/logs/native-<platform>.log`.
+- Don't start Metro with `CI=1`: that turns off file watching, so edits never reach the apps.
+- The dev client opens `http://127.0.0.1:8081` on launch (the Android emulator reaches it through `adb reverse`, which `expo run:android` sets up). One exception: when Argent starts the Android app (`launch-app`, `restart-app`, an e2e `launch:`), the dev launcher shows its home screen instead. Wait for the screen to go idle, then `open-url` on `exp+bay://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081` (sent too early after a cold start, the link is dropped); it works on both platforms and `.argent/e2e/smoke.yaml` does it. If an app shows "Could not connect", Metro wasn't up: start it and open the link again.
+- `pnpm native` first builds Bay's Rust content blocker (`packages/adblock`, shared with desktop) with `scripts/adblock`: a static xcframework for iOS and `libbay_adblock.so` for Android, both git-ignored. It needs rustup's toolchain with the `aarch64-apple-ios`, `aarch64-apple-ios-sim` and `aarch64-linux-android` targets, and the Android NDK. Use rustup's cargo (`~/.cargo/bin`), not Homebrew's.
+- Scriptlets and `$redirect` stand-ins come from `packages/adblock/resources/resources.json` (uBlock Origin's and Brave's resources, rebuilt with `node packages/adblock/scripts/assemble-resources.mjs [ubo-tag]`), which `scripts/adblock` copies into both app bundles.
+- Argent's tool-server needs `DEVELOPER_DIR` too (this Mac's `xcode-select` points at the Command Line Tools, which have no `simctl`). If iOS launches fail with `unable to find utility "simctl"`, restart it detached: `argent server stop`, then `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer nohup argent server start >/tmp/argent-server.log 2>&1 &`.
+- Filter lists download into the app's documents, never through JavaScript (7 MB of list text on the JS thread dropped keystrokes); keep heavy data on the native side. Settings shows how many lists the blocker is using.
+- `ios/` and `android/` are generated by `expo prebuild` and git-ignored. Native changes go in config plugins or local Expo modules (`modules/`), never hand edits.
+- Bundle id and package: `in.krishkalaria.bay.mobile`. Scheme: `bay://`.
+
+## Drive it with Argent
+
+Argent (`@swmansion/argent`) is set up at the repo root: `.mcp.json` registers the `argent` MCP server and its skills sit in `.agents/skills` (symlinked into `.claude/skills`).
+
+1. `list-devices` → the booted iPhone (UDID) and the emulator (`emulator-5554`). Boot with `boot-device` (`udid` or `avdName: bay-pixel`) if needed.
+2. `launch-app` with `in.krishkalaria.bay.mobile` on each, then `open-url` with the dev-client link above.
+3. Take tap targets from `debugger-component-tree` (React) or `describe` (native SwiftUI), never from screenshot pixels.
+4. `screenshot` both after each change and compare them with the reference below.
+5. Record finished flows as e2e tests in `.argent/e2e/` with a launch map (`launch: { ios: …, android: … }`) so one file runs on both; `pnpm e2e` replays them on both.
+
+Writing e2e tests:
+
+- Start each test with `run: ../flows/fresh-start`: it launches the app, opens Metro on Android and clears browsing data in Settings, because tabs and history persist between runs.
+- On iOS the runner's tree has no web content: wait on app controls (`bar-more`, `page-progress` hidden, idle) and long-press links by point, with the point explained in a comment (see `link-menu.yaml`). Android's tree has the page's links, so select them by text there.
+- Tap rows whose order can change (search suggestions) by their text, not their index.
+- Prove a feature runs, not just that its UI appears: `privacy.yaml` waits for Settings to report "8 lists active" before testing blocking, which is how a bug that deleted every downloaded list was caught.
+- Keep sheets short enough that a flow never scrolls them. Sheets drag by their handle only (`PanelSheet` turns off content panning): a pan gesture over their content made iOS lose quick taps on rows and buttons.
+- Media needs an emulator with audio: with `-no-audio` (how Argent's `boot-device` starts one unless given `sound: true`) audio never starts playing. `scripts/lib/devices.sh` boots it with audio and mutes the media stream. While a page's media controls animate, reading Android's tree can time out; tap them by point.
+- SwiftUI buttons get their handler through `useStableCallback` (`src/chrome`): a handler that changes while a page loads can drop a tap.
+
+The CLI does the same outside MCP: `argent run <tool> --udid <id> ...` (`argent tools` lists them).
+
+## Design reference
+
+The UI follows Lens (lens.maximos.work) on both platforms; Lens itself is iOS-only. For how a design like this is drawn on Android without Material, look at Arc Search for Android (Play Store screenshots, 9to5Google's October 2024 review). Lens is App Store/TestFlight only, so it can't be installed on a simulator. `apps/mobile/.reference/` (git-ignored) holds its press kit screenshots, the demo video (`lens-demo.mp4`) and one frame per second of it (`video-frames/`). To compare against the real app, install Lens on a cabled iPhone and drive it with Argent's physical-device skills.

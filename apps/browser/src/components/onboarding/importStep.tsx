@@ -1,5 +1,6 @@
 import { listInstalledBrowsers, type BrowserSource } from "@bay/import";
 import { isMac, Pressable, View } from "@bay/platform";
+import { lookup } from "@bay/core";
 import { WindowBackdrop } from "@bay/shaders";
 import { fileIcon, hapticTick, Surface, Symbol } from "@bay/desktop";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
@@ -85,13 +86,19 @@ function phaseOf(flow: ImportFlow, handedOff: boolean, queued: boolean, leaving:
 type Chip = { id: string; title: string; color?: string; on: boolean; toggle: () => void };
 
 // Before the scan has a browser's profiles, and for one with a single profile: nothing to choose.
-const NO_CHIPS = { chips: [] as Chip[], hint: "Thanks for all the tabs." };
+const NO_CHIPS: ImportChips = { chips: [], hint: "Thanks for all the tabs." };
 const USUAL_CARGO = "your tabs, passwords and history";
 
+interface ImportChips {
+  chips: Chip[];
+  hint: string;
+}
+
 // Arc's spaces, or another browser's profiles, to leave behind or bring along. One of either needs no choosing.
-function chipsOf(flow: ImportFlow): { chips: Chip[]; hint: string } {
+function chipsOf(flow: ImportFlow): ImportChips {
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   const source = flow.source;
+
   if (flow.isArc && flow.allSpaces.length > 1) {
     return {
       hint: "Click a space to leave it behind.",
@@ -304,7 +311,10 @@ export function ImportStep() {
       lift.set(withTiming(0, { duration: 160 }));
       absorb.set(withTiming(0, { duration: 260 }));
     }
-    const t = setTimeout(() => (keys.current as unknown as { focus?: () => void } | null)?.focus?.(), 50);
+
+    // SAFETY: { focus? assertion matches the runtime value validated at this call site.
+    const t = setTimeout(() => (keys.current as { focus?: () => void } | null)?.focus?.(), 50);
+
     return () => clearTimeout(t);
   }, [phase]);
 
@@ -509,7 +519,7 @@ function FarewellHalf({
   lift: SharedValue<number>;
   children: ReactNode;
 }) {
-  const colors = HANDOFF_COLORS[leaving.id] ?? HANDOFF_FALLBACK_COLORS;
+  const colors = lookup(HANDOFF_COLORS, leaving.id) ?? HANDOFF_FALLBACK_COLORS;
   const { chips, hint } = parts;
   const farewell = useAnimatedStyle(() => ({ opacity: 1 - lift.get(), transform: [{ translateY: interpolate(lift.get(), [0, 1], [0, -6]) }] }));
   const goodbye = useAnimatedStyle(() => ({ opacity: lift.get(), transform: [{ translateY: interpolate(lift.get(), [0, 1], [6, 0]) }] }));
