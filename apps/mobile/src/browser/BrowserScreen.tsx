@@ -729,6 +729,7 @@ export function BrowserScreen(): JSX.Element {
                 onOpen={(url) => open({ kind: "url", url }, false)}
                 onUnpin={(site) => {
                   const index = data.pinnedSites.indexOf(site);
+                  tick();
                   dispatch({ type: "remove-pin", id: site.id });
                   toast.show("Unpinned", { label: "Undo", onPress: () => dispatch({ type: "add-pin", site, index }) });
                 }}

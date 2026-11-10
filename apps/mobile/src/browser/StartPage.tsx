@@ -1,8 +1,10 @@
 import { hostOf } from "@bay/core/src/input.ts";
 import { useThemeColor } from "heroui-native";
 import { useRef, type JSX } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
+import { gridShift, tileArriving, tileLeaving, useReducedMotion } from "@/chrome/motion";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { Surface } from "@/chrome/Surface";
 import type { HistoryEntry, PinnedSite } from "@/store/types";
 import { SiteIcon } from "./SiteIcon";
@@ -25,6 +27,11 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
   const muted = useThemeColor("muted");
   // Unpin when the finger lifts: removing the pressed tile mid-gesture made Android swallow the next tap (the toast's Undo).
   const unpinning = useRef<PinnedSite | null>(null);
+  // A tile that is taken away leaves a gap; the rest close it (A5).
+  const reduced = useReducedMotion();
+  const shift = gridShift(reduced);
+  const arriving = tileArriving();
+  const leaving = tileLeaving();
   // History is kept newest first; show the latest page of each site that isn't pinned.
   const seen = new Set(pins.map((site) => siteName(site.url)));
   const recent: HistoryEntry[] = [];
@@ -45,7 +52,7 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
       {pins.length ? (
         <View className="flex-row flex-wrap justify-center" style={{ rowGap: 16 }}>
           {pins.slice(0, PINS).map((site, index) => (
-            <Pressable
+            <PressFeedback
               key={site.id}
               testID={`start-pin-${index}`}
               accessibilityRole="button"
@@ -60,7 +67,10 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
                 unpinning.current = null;
                 onUnpin(site);
               }}
-              className="w-1/4 items-center gap-1.5 active:opacity-60"
+              className="w-1/4 items-center gap-1.5"
+              layout={shift}
+              entering={arriving}
+              exiting={leaving}
             >
               <Surface radius={20} style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
                 <SiteIcon url={site.url} size={30} />
@@ -68,20 +78,23 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
               <Text numberOfLines={1} style={{ color: foreground, fontSize: 12, maxWidth: 76 }}>
                 {site.title || siteName(site.url)}
               </Text>
-            </Pressable>
+            </PressFeedback>
           ))}
         </View>
       ) : null}
       {recent.length ? (
         <Surface radius={22} style={{ paddingVertical: 4 }}>
           {recent.map((entry, index) => (
-            <Pressable
+            <PressFeedback
               key={entry.url}
               testID={`start-recent-${index}`}
               accessibilityRole="button"
               accessibilityLabel={`Open ${entry.title || siteName(entry.url)}`}
               onPress={() => onOpen(entry.url)}
-              className="min-h-12 flex-row items-center gap-3 px-4 py-2 active:opacity-60"
+              className="min-h-12 flex-row items-center gap-3 px-4 py-2"
+              layout={shift}
+              entering={arriving}
+              exiting={leaving}
             >
               <SiteIcon url={entry.url} size={22} />
               <View className="flex-1">
@@ -92,7 +105,7 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
                   {siteName(entry.url)}
                 </Text>
               </View>
-            </Pressable>
+            </PressFeedback>
           ))}
         </Surface>
       ) : null}

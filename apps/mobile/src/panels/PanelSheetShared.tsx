@@ -2,10 +2,13 @@ import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { BottomSheet, Typography, useThemeColor } from "heroui-native";
 import { Children, createContext, isValidElement, useContext, useState, type JSX, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
+import { ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
+import { SPRING, useReducedMotion } from "@/chrome/motion";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { Toggle } from "@/chrome/Toggle";
 
 export interface PanelSheetProps {
@@ -42,6 +45,7 @@ export function PanelSheetShared({
   const insets = useSafeAreaInsets();
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
+  const reduced = useReducedMotion();
   // HeroUI renders a closed sheet's content anyway, so every panel's rows would render with the browser. Content
   // mounts on open and stays until the sheet finishes animating closed.
   const [shown, setShown] = useState(visible);
@@ -65,6 +69,13 @@ export function PanelSheetShared({
           // Drag by the handle only: a pan gesture over the content competed with taps on its rows and buttons, and
           // on iOS quick taps were sometimes lost. The sheets are short; Done and tapping outside also close them.
           enableContentPanningGesture={false}
+          // Every sheet springs the same way (A8), so they all feel like one thing.
+          animationConfigs={{
+            damping: SPRING.damping,
+            stiffness: SPRING.stiffness,
+            mass: SPRING.mass,
+            reduceMotion: reduced ? ReduceMotion.Always : ReduceMotion.System,
+          }}
           onClose={() => setShown(false)}
           contentContainerClassName="h-full"
           backgroundClassName={backdrop ? "rounded-t-[28px] bg-transparent" : "rounded-t-[28px] bg-background"}
@@ -156,7 +167,7 @@ export function ActionRow({
   const grouped = useContext(InGroup);
 
   return (
-    <Pressable
+    <PressFeedback
       testID={testID}
       accessibilityRole={toggle === undefined ? "button" : "switch"}
       accessibilityLabel={label}
@@ -166,7 +177,7 @@ export function ActionRow({
       className={
         grouped
           ? "min-h-[52px] flex-row items-center gap-3.5 px-4 py-3 active:bg-foreground/5"
-          : "min-h-12 flex-row items-center gap-3 border-b border-foreground/5 py-3 active:opacity-60"
+          : "min-h-12 flex-row items-center gap-3 border-b border-foreground/5 py-3"
       }
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
@@ -193,7 +204,7 @@ export function ActionRow({
           ✓
         </Typography>
       ) : null}
-    </Pressable>
+    </PressFeedback>
   );
 }
 

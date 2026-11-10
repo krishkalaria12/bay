@@ -1,9 +1,10 @@
 import { Typography, useThemeColor } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 
@@ -64,18 +65,18 @@ function NavigationAction({
   const foreground = useThemeColor("foreground");
 
   return (
-    <Pressable
+    <PressFeedback
       testID={id}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+      className="h-12 flex-1 items-center justify-center rounded-full bg-default"
       style={{ opacity: disabled ? 0.35 : 1 }}
     >
       <Icon name={icon} color={foreground} size={22} />
-    </Pressable>
+    </PressFeedback>
   );
 }
 
@@ -100,20 +101,20 @@ function Tile({
   const accent = useThemeColor("accent");
 
   return (
-    <Pressable
+    <PressFeedback
       testID={id}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      className={`h-[72px] items-center justify-center gap-1.5 rounded-2xl active:opacity-70 ${active ? "bg-accent/15" : "bg-default"}`}
+      className={`h-[72px] items-center justify-center gap-1.5 rounded-2xl ${active ? "bg-accent/15" : "bg-default"}`}
       style={{ width: "23.5%" }}
     >
       <Icon name={icon} color={active ? accent : foreground} size={22} />
       <Typography numberOfLines={1} className={`px-1 text-[12px] ${active ? "text-accent" : "text-foreground"}`}>
         {label}
       </Typography>
-    </Pressable>
+    </PressFeedback>
   );
 }
 

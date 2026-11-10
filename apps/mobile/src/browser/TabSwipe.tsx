@@ -4,6 +4,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTim
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import type { CapsuleStyle } from "@/chrome/BrowserBar.types";
+import { press } from "@/chrome/haptics";
 
 const DISTANCE = 64;
 const VELOCITY = 600;
@@ -63,6 +64,8 @@ export function TabSwipe({
   function switched(step: 1 | -1, from: number): void {
     if (entering.current) clearTimeout(entering.current.timer);
     entering.current = { from, timer: setTimeout(enter, ENTER_FALLBACK_MS) };
+    // The switcher snapping onto a card answers the swipe (A3).
+    press();
     onSwipe(step);
   }
 
