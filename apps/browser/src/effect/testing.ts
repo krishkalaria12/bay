@@ -122,6 +122,13 @@ export const fakeHttp = (): FakeHttp => {
         return Effect.fail(new HttpError({ operation: { name: "http.send", resource: request.url }, status: 0, cause: answer }));
       }
 
+      // A status that isn't a success is a failure, as the real network says it is.
+      if (!answer.ok) {
+        return Effect.fail(
+          new HttpError({ operation: { name: "http.send", resource: request.url }, status: answer.status, cause: new Error(String(answer.status)) }),
+        );
+      }
+
       return Effect.succeed({ ...answer, headers: answer.headers ?? noHeaders });
     });
 

@@ -13,6 +13,8 @@ export type HttpRequest = {
   readonly body?: string;
   /** Whether the request carries the caller's credentials. The app's own requests send none. */
   readonly credentials?: "omit" | "include" | "same-origin";
+  /** Whether a redirect is followed. The app's own requests do not follow one. */
+  readonly redirect?: "follow" | "error" | "manual";
   /** The caller's own signal. It is cancelled along with the effect that made the request. */
   readonly signal?: AbortSignal;
 };
@@ -88,6 +90,7 @@ export class Http extends Context.Service<
               headers: request.headers,
               body: request.body,
               credentials: request.credentials ?? "omit",
+              redirect: request.redirect ?? "follow",
               signal: link(request.signal, signal),
             }).then(async (response) => {
               const body = await response.text();

@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { ActivityService, LiveSources } from "../activity/activityService";
 import { CalendarEngine, CalendarService } from "../activity/calendarService";
+import { SharingEngine, SharingService } from "../components/library/sharingService";
 import { PreviewService } from "../components/site/previewService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
@@ -38,6 +39,7 @@ export type AppServices =
   | PreviewService
   | ProfileCleanup
   | Scheduler
+  | SharingService
   | Sync;
 
 // One memo map, so a service that two layers need is one instance and not two.
@@ -67,6 +69,8 @@ const automation = AutomationService.layer.pipe(Layer.provide(Layer.mergeAll(Aut
 
 const preview = PreviewService.layer.pipe(Layer.provide(Http.layer));
 
+const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEngine.layer, Http.layer)));
+
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
   diagnostics,
@@ -85,6 +89,7 @@ export const appLayer = Layer.mergeAll(
   calendar,
   automation,
   preview,
+  sharing,
 ).pipe(Layer.provide(diagnostics));
 
 /**
