@@ -21,6 +21,7 @@ test("importing Live UI neither reads shared documents nor installs a writer", a
 
 test("explicit Live startup restores before subscribing and starts only once", async (t) => {
   docs.clear();
+
   const saved = {
     folderOrder: ["work"],
     config: { githubClientId: "saved" },
@@ -28,6 +29,7 @@ test("explicit Live startup restores before subscribing and starts only once", a
     dismissedAlerts: ["meeting"],
     status: { work: { state: "fetching" } },
   };
+
   docs.set("live.json", JSON.stringify(saved));
   const read = t.mock.method(docs, "get");
   const write = t.mock.method(docs, "set");

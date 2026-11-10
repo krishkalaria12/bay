@@ -25,29 +25,38 @@ const hostOf = (origin: string) => {
 
 function useShareFor(tabId: string): [string, TabShare] | null {
   const shares = useMedia((m) => m.tabShares);
+
   const capturing = usePages((p) =>
     Object.keys(shares)
       .filter((id) => p.pages[id]?.mediaAccess?.screen)
       .join(","),
   );
+
   // The capturing tabs in this tab's engine profile, in order; null for a tab no page can share to.
   const capturers = useBrowser((s) => {
     const tab = s.tabs[tabId];
+
     if (!tab || !/^https?:|^file:/.test(tab.url)) return null;
     const profile = engineProfile(tab.spaceId);
+
     return capturing
       .split(",")
       .filter((id) => {
         const owner = s.tabs[id];
+
         return !!owner && engineProfile(owner.spaceId) === profile;
       })
       .join(",");
   });
+
   if (capturers === null) return null;
+
   for (const capturer of capturers ? capturers.split(",") : []) {
     const share = shares[capturer];
+
     if (share && !share.dismissed[tabId]) return [capturer, share];
   }
+
   return null;
 }
 
@@ -60,13 +69,17 @@ export function startTabShareCleanup() {
     if (p.pages === prev.pages) return;
     const shares = useMedia.getState().tabShares;
     const ended = Object.keys(shares).filter((id) => prev.pages[id]?.mediaAccess?.screen && !p.pages[id]?.mediaAccess?.screen);
+
     if (!ended.length) return;
     setTimeout(() => {
       const gone = ended.filter((id) => !usePages.getState().pages[id]?.mediaAccess?.screen);
+
       if (!gone.length) return;
       useMedia.setState((m) => {
         const next = { ...m.tabShares };
+
         for (const id of gone) delete next[id];
+
         return { tabShares: next };
       });
     }, SHARE_END_MS);
@@ -76,26 +89,33 @@ export function startTabShareCleanup() {
 // The engine moves this capturer's share only (each share has its own bar on every tab), and says whether it did.
 async function shareInstead(capturer: string, tabId: string): Promise<boolean> {
   const ok = await changeCaptureSource(browserIdOf(capturer), browserIdOf(tabId));
+
   if (!ok) return false;
   useMedia.setState((m) => {
     const share = m.tabShares[capturer];
+
     return share ? { tabShares: { ...m.tabShares, [capturer]: { ...share, capturedTabId: tabId, dismissed: {} } } } : m;
   });
+
   return true;
 }
 
 // The NNCore acceptance run presses "Share This Tab Instead" as a click would.
-if (__DEV__) (globalThis as { nnShareBar?: unknown }).nnShareBar = { shareInstead, tabShares: () => useMedia.getState().tabShares };
+if (__DEV__)
+  // SAFETY: nnShareBar is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  (globalThis as { nnShareBar?: unknown }).nnShareBar = { shareInstead, tabShares: () => useMedia.getState().tabShares };
 
 function dismiss(capturer: string, tabId: string) {
   useMedia.setState((m) => {
     const share = m.tabShares[capturer];
+
     return share ? { tabShares: { ...m.tabShares, [capturer]: { ...share, dismissed: { ...share.dismissed, [tabId]: true } } } } : m;
   });
 }
 
 export function ShareBar({ tabId }: { tabId: string }) {
   const found = useShareFor(tabId);
+
   // Mounted with the shown page, so on every tab switch: its height and animation come with the first share.
   return useLatched(!!found) ? <Bar tabId={tabId} found={found} /> : null;
 }
@@ -111,15 +131,18 @@ function Bar({ tabId, found }: { tabId: string; found: ReturnType<typeof useShar
   const heightStyle = useAnimatedStyle(() => ({ height: height.get() }));
   // The last share shown stays while the bar closes.
   const [last, setLast] = useState(found);
+
   if (found && (found[0] !== last?.[0] || found[1] !== last[1])) setLast(found);
   const shown = found ?? last;
   const shownCapturer = shown?.[0];
   const pageOrigin = usePages((p) => (shownCapturer && p.pages[shownCapturer]?.security?.origin) || "");
   const capturerUrl = useBrowser((s) => (shownCapturer && s.tabs[shownCapturer]?.url) || "");
+
   if (!shown) return null;
   const [capturer, share] = shown;
   const isShared = share.capturedTabId === tabId;
   const host = hostOf(share.origin || pageOrigin || capturerUrl);
+
   return (
     <Animated.View style={[{ overflow: "hidden" }, heightStyle]}>
       <View

@@ -13,10 +13,12 @@ const imageDirectory = new URL("../../../node_modules/expo-image/ios/", import.m
 const readImageSource = (name) => readFileSync(new URL(name, imageDirectory), "utf8");
 const withoutExpoImport = (source) => source.replace("import ExpoModulesCore", "");
 const utilities = readImageSource("ImageUtils.swift");
+
 const between = (start, end) => {
   const from = utilities.indexOf(start);
   const to = utilities.indexOf(end, from);
   assert(from >= 0 && to > from, "Expo Image helper boundaries changed; update the native test extraction");
+
   return utilities.slice(from, to);
 };
 
@@ -24,7 +26,9 @@ const between = (start, end) => {
 // Expo's record-conversion types, which are irrelevant to geometry and AppKit bitmap drawing.
 const fixture = readFileSync(new URL("./image-macos-fixture.swift", import.meta.url), "utf8");
 const [support, checks] = fixture.split("// IMAGE_IMPLEMENTATION");
+
 assert(checks, "Native image fixture is missing its implementation marker");
+
 const source = [
   support,
   readImageSource("ImagePlatform.swift"),
@@ -38,6 +42,7 @@ const source = [
 ].join("\n");
 
 const directory = mkdtempSync(join(tmpdir(), "bay-image-macos-"));
+
 try {
   const swiftFile = join(directory, "main.swift");
   const executable = join(directory, "image-checks");

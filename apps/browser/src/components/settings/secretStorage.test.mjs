@@ -1,6 +1,7 @@
 // Settings copy for what protects saved passwords, and the Linux fixed-key warning.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { cardStoreName, passwordStorageDescription, secretStorageWarning } = await import("./secretStorage.ts");
 
 test("each desktop names its own key store", () => {

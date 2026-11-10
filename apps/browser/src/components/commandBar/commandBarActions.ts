@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { capabilities, isMac, shortcutForCommand } from "@bay/platform";
 import type { CommandAction } from "@bay/core";
 import type { BrowserCommand } from "@bay/desktop";
@@ -6,7 +7,6 @@ import { isBookmarked } from "../../store/bookmarks";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTab, bookmarkSpaceId } from "../../store/model";
-import { canSwitchEngine, tabEngine } from "../../store/engines";
 import { isDeveloperUrl, siteKey } from "../developer/localDevSites";
 import type { Tab } from "../../store/types";
 import { isInternalTab } from "../pages/pageUrls";
@@ -18,8 +18,10 @@ import { boostsAvailable, boostsForHost, useBoosts } from "../boosts/state";
 
 const siteHasBoosts = (url: string | undefined) => {
   const host = boostHost(url);
+
   return !!host && boostsForHost(useBoosts.getState(), host).length > 0;
 };
+
 const siteBoostsOn = (url: string) => useBoosts.getState().on && boostsForHost(useBoosts.getState(), boostHost(url)).some((b) => b.enabled);
 
 type Context = { s: BrowserState; windowId: string; tab: Tab | undefined };
@@ -31,7 +33,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "site" | "tab" | "split" | "spaces" | "boost" | "boosted" | "engine";
+  needs?: "page" | "site" | "tab" | "split" | "spaces" | "boost" | "boosted";
   available?: (context: Context) => boolean;
 };
 
@@ -63,7 +65,7 @@ const DEFS: ActionDef[] = [
   { command: "renameTab", title: "Rename Tab", icon: "pencil", needs: "tab" },
   { command: "searchTabs", title: "Search Tabs", icon: "magnifyingglass", hint: "⇧⌘A" },
   { command: "cleanUpTabs", title: "Clean Up Tabs", icon: "sparkles", hint: "⌥⌘K" },
-  { command: "tidyTabs", title: "Tidy Tabs", icon: "rectangle.stack", keywords: ["group tabs", "organize tabs", "group by site"] },
+  { command: "tidyTabs", title: "Tidy Tabs", icon: "rectangle.stack", keywords: ["group tabs", "organize tabs", "sort tabs", "group by topic"] },
   { command: "newGroupWithTabs", title: "New Group with Tab", icon: "folder.badge.plus", hint: "⌃⌘N", keywords: ["tab group"], needs: "tab" },
   { command: "reload", title: "Reload Page", icon: "arrow.clockwise", hint: "⌘R", keywords: ["refresh"], needs: page },
   { command: "forceReload", title: "Force Reload Page", icon: "arrow.clockwise", hint: "⇧⌘R", keywords: ["hard reload", "hard refresh"], needs: page },
@@ -73,13 +75,6 @@ const DEFS: ActionDef[] = [
     icon: "speaker.slash",
     keywords: ["mute", "unmute", "silence"],
     needs: page,
-  },
-  {
-    command: "togglePageEngine",
-    title: ({ s, tab }) => (tab && tabEngine(s, tab.id) === "webkit" ? "Open Page in Chromium" : "Open Page in WebKit"),
-    icon: "safari",
-    keywords: ["webkit", "chromium", "safari", "engine", "drm", "netflix", "protected video"],
-    needs: "engine",
   },
   { command: "copyUrl", title: "Copy URL", icon: "link", hint: "⇧⌘C", keywords: ["copy link"], needs: page },
   { command: "copyUrlAsMarkdown", title: "Copy URL as Markdown", icon: "link", hint: "⌥⇧⌘C", keywords: ["markdown link"], needs: page },
@@ -205,6 +200,7 @@ const DEFS: ActionDef[] = [
 // desktop hosts keep the same handlers discoverable in the command panel.
 const nativePage = ({ tab }: Context) => !!tab?.url && !isInternalTab(tab);
 const splitPage = ({ s, tab }: Context) => !!tab && !!splitOf(s, tab.id);
+
 const WINDOW_MENU_DEFS: ActionDef[] = [
   {
     command: "openFile",
@@ -270,27 +266,41 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
   const c: Context = { s, windowId, tab };
   const out: CommandAction[] = [];
   const defs = capabilities.menuBar ? DEFS : [...DEFS, ...WINDOW_MENU_DEFS];
+
   for (const d of defs) {
     if (!capabilities.menuBar && w?.kind === "small" && LITTLE_BAY_DISABLED_COMMANDS.includes(d.command)) continue;
+
     if (d.available && !d.available(c)) continue;
+
     if ((d.command === "newEasel" || d.command === "openLibrary") && !libraryAvailable()) continue;
+
     if ((d.needs === "boost" || d.needs === "boosted") && !boostsAvailable()) continue;
+
     if (d.needs === "page" && !tab?.url) continue;
+
     if (d.needs === "tab" && !tab) continue;
+
     if (d.needs === "split" && !(tab && pinnableSplit(s, tab.id))) continue;
+
     if (d.needs === "site" && !siteKey(tab?.url ?? "")) continue;
+
     if (d.needs === "spaces" && w?.incognito) continue;
+
     if (d.needs === "boost" && !boostHost(tab?.url)) continue;
+
     if (d.needs === "boosted" && !siteHasBoosts(tab?.url)) continue;
-    if (d.needs === "engine" && !canSwitchEngine(tab?.url)) continue;
-    out.push({
+
+    const action: CommandAction = {
       id: actionId(d),
-      title: typeof d.title === "string" ? d.title : d.title(c),
+      title: v.is(v.string(), d.title) ? d.title : d.title(c),
       icon: d.icon,
-      ...(d.hint ? { hint: shortcutForCommand(d.command, d.hint) } : {}),
-      ...(d.keywords ? { keywords: d.keywords } : {}),
-    });
+      ...(d.hint ? { hint: shortcutForCommand(d.command, d.hint) } : undefined),
+      ...(d.keywords ? { keywords: d.keywords } : undefined),
+    };
+
+    out.push(action);
   }
+
   if (w && !w.incognito) {
     s.spaceOrder.forEach((id, i) => {
       if (id === w.spaceId) return;
@@ -304,11 +314,13 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
       });
     });
   }
+
   return out;
 }
 
 export function runBarAction(id: string, windowId: string) {
   const i = id.indexOf(":");
+  // SAFETY: actionId builds ids from a BrowserCommand (optionally suffixed `:arg`), so the prefix before ':' is one.
   const command = (i < 0 ? id : id.slice(0, i)) as BrowserCommand;
   const arg = i < 0 ? null : id.slice(i + 1);
   runCommand({ command, arg, windowId });

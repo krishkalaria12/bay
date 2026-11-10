@@ -6,16 +6,20 @@ import { GRAIN_TILE, grainTile } from "./grain";
 import { fill } from "./ShaderView";
 
 let oklabGradients: boolean | undefined;
+
 /** The two-stop gradient, mixed in OKLab where CSS can, as the shader mixes it. */
 export function gradientCss(angle: number, from: string, to: string): string {
   oklabGradients ??= typeof CSS !== "undefined" && CSS.supports("background-image", "linear-gradient(in oklab, red, blue)");
+
   return `linear-gradient(${oklabGradients ? "in oklab " : ""}${angle}deg, ${from}, ${to})`;
 }
 
 /** Static grain over whatever is below, the shader's multiply as a black layer (see grain.ts). */
 export function GrainLayer({ opacity, scale }: { opacity: number; scale: number }) {
   const tile = opacity > 0 ? grainTile() : null;
+
   if (!tile) return null;
+
   return (
     <div
       aria-hidden="true"
@@ -35,6 +39,7 @@ export function GrainLayer({ opacity, scale }: { opacity: number; scale: number 
 export function AreaGlow({ source, colorHex, cornerRadius }: { source: Rect; colorHex: string; cornerRadius: number }) {
   const c = color(colorHex) ?? [1, 1, 1, 1];
   const spread = Math.max(source.width, source.height) * 0.35;
+
   return (
     <div
       aria-hidden="true"
@@ -55,6 +60,7 @@ export function AreaGlow({ source, colorHex, cornerRadius }: { source: Rect; col
 /** EdgeLight without a GPU: the lit outline, still. */
 export function EdgeOutline({ rect, colorHex, cornerRadius }: { rect: Rect; colorHex: string | undefined; cornerRadius: number }) {
   const c = (colorHex && color(colorHex)) || [1, 1, 1, 0.5];
+
   return (
     <div
       aria-hidden="true"

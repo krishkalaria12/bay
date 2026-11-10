@@ -2,6 +2,7 @@ import { useTheme } from "../../lib/theme";
 
 const light = {
   background: "#F4F4F4",
+  // SAFETY: [number, number, number], assertion matches the runtime value validated at this call site.
   backgroundRgb: [244, 244, 244] as [number, number, number],
   label: "rgba(0,0,0,0.85)",
   secondary: "rgba(0,0,0,0.5)",

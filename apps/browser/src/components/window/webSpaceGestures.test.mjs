@@ -8,14 +8,19 @@ function surface() {
   element.clientWidth = 300;
   element.getBoundingClientRect = () => ({ width: 300 });
   element.closest = () => null;
+
   return element;
 }
+
 function emit(element, name, fields) {
   const event = Object.assign(new Event(name, { cancelable: true }), fields);
   element.dispatchEvent(event);
+
   return event;
 }
+
 const wheel = (element, fields = {}) => emit(element, "wheel", { deltaX: 24, deltaY: 0, deltaMode: 0, ctrlKey: false, shiftKey: false, ...fields });
+
 const pointer = (element, name, x, y, fields = {}) =>
   emit(element, name, { pointerId: 1, pointerType: "touch", isPrimary: true, clientX: x, clientY: y, ...fields });
 
@@ -46,11 +51,13 @@ test("touch swipe selects once and suppresses its click without consuming vertic
   const element = surface();
   const seen = [];
   let time = 1000;
+
   const remove = bindSpaceGestures(
     element,
     () => ({ canSwipeBack: true, canSwipeForward: true, onSwipe: (event) => seen.push(event) }),
     () => time,
   );
+
   pointer(element, "pointerdown", 100, 50);
   assert.equal(pointer(element, "pointermove", 40, 52).defaultPrevented, true);
   assert.equal(pointer(element, "pointerup", 30, 52).defaultPrevented, true);

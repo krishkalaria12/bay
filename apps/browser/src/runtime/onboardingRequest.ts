@@ -19,11 +19,14 @@ export function requestOnboarding(windowId: string, step: OnboardingStep, picked
 /** Runs `start` for each new request naming this window, whether it came before this document started or after. */
 export function followOnboardingRequests(windowId: string, start: (request: OnboardingRequest) => void): () => void {
   let seen = 0;
+
   const follow = (request: OnboardingRequest) => {
     if (request.windowId !== windowId || request.session === seen) return;
     seen = request.session;
     start(request);
   };
+
   follow(useOnboardingRequest.getState());
+
   return useOnboardingRequest.subscribe(follow);
 }

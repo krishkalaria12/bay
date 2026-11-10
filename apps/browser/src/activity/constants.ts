@@ -20,6 +20,7 @@ export const LIVE_PAGE_SIZE = 8;
 export const CALENDAR_HORIZON_MS = 36 * 3_600_000;
 export const MEETING_FALLBACK_TITLE = "Meeting";
 export const MEETING_CLEANUP_IDLE_MS = 30 * 60_000;
+
 // Dia: 5 / 2 min.
 export const WIGGLE_MARKS_MIN = [5, 2];
 

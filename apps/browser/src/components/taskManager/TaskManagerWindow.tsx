@@ -17,7 +17,9 @@ import { Button, useFormColors } from "../settings/controls";
 import { TASK_POLL_MS, TASK_ROW_HEIGHT, TASK_TOOLBAR_HEIGHT } from "./constants";
 
 type SortKey = "task" | "memory" | "cpu" | "gpu";
+
 type Sort = { key: SortKey; descending: boolean };
+
 type Column = { key: SortKey; title: string; width?: number };
 
 const COLUMNS: Column[] = [
@@ -51,11 +53,15 @@ function taskRows(tasks: EngineTask[], tabs: Record<string, Tab>, browsers: Reco
     const first = tabIds[0] ? tabs[tabIds[0]] : undefined;
     const name = first ? first.customTitle || first.title || first.url || "New Tab" : "";
     const label = first ? `Tab: ${name}${tabIds.length > 1 ? ` (and ${tabIds.length - 1} more)` : ""}` : task.type === "browser" ? APP_NAME : task.title;
+
     return { ...task, label, tabIds, favicon: first ? { url: first.url, favicon: first.favicon, spaceId: first.spaceId } : null };
   });
+
   const value = (r: Row) => (sort.key === "memory" ? r.memory : sort.key === "cpu" ? r.cpu : sort.key === "gpu" ? r.gpuMemory : 0);
+
   return resolved.sort((a, b) => {
     const order = sort.key === "task" ? a.label.localeCompare(b.label) : value(a) - value(b);
+
     return (sort.descending ? -order : order) || a.id - b.id;
   });
 }
@@ -71,13 +77,16 @@ export function TaskManagerWindow() {
 
   useEffect(() => {
     let live = true;
+
     const poll = () =>
       void listTasks().then(
         (list) => live && setTasks(list),
         () => {},
       );
+
     poll();
     const timer = setInterval(poll, TASK_POLL_MS);
+
     return () => {
       live = false;
       clearInterval(timer);
@@ -174,6 +183,7 @@ function HeaderCell({
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} style={column.width ? { width: column.width } : { flex: 1 }}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Sort by ${column.title}`}>
@@ -216,12 +226,15 @@ function TaskRow({ row, stripe, selected, onSelect, onOpen }: { row: Row; stripe
   const text = selected ? "#FFFFFF" : theme.textPrimary;
   const detail = selected ? "rgba(255,255,255,0.85)" : theme.textSecondary;
   const icon = TYPE_ICONS[row.type] ?? "app.dashed";
+
   const press = () => {
     const now = Date.now();
+
     if (now - lastPress.current < 350) onOpen();
     lastPress.current = now;
     onSelect();
   };
+
   return (
     <Pressable onPress={press} accessibilityRole="button" accessibilityLabel={row.label} accessibilityState={{ selected }}>
       <View

@@ -12,22 +12,31 @@ import { useHover } from "../ui/primitives";
 import { useResetOn } from "../../lib/useResetOn";
 
 const useChoosers = create<{ byTab: Record<string, Chooser> }>()(() => ({ byTab: {} }));
-if (__DEV__) (globalThis as { nnDeviceChoosers?: unknown }).nnDeviceChoosers = { useChoosers, selectDevice, cancelDeviceChooser };
+
+if (__DEV__)
+  // SAFETY: nnDeviceChoosers is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  (globalThis as { nnDeviceChoosers?: unknown }).nnDeviceChoosers = { useChoosers, selectDevice, cancelDeviceChooser };
 
 let started = false;
+
 export function startDeviceChoosers() {
   if (started) return;
   started = true;
   onDeviceChooser((chooser) => {
     const tabId = tabForBrowser(chooser.browserId);
+
     if (!tabId) {
       if (chooser.open) void cancelDeviceChooser(chooser.id);
+
       return;
     }
+
     useChoosers.setState((s) => {
       const byTab = { ...s.byTab };
+
       if (chooser.open) byTab[tabId] = chooser;
       else if (byTab[tabId]?.id === chooser.id) delete byTab[tabId];
+
       return { byTab };
     });
   });
@@ -36,8 +45,10 @@ export function startDeviceChoosers() {
     if (s.tabs === prev.tabs) return;
     const { byTab } = useChoosers.getState();
     const gone = Object.keys(byTab).filter((id) => !s.tabs[id]);
+
     if (!gone.length) return;
     const next = { ...byTab };
+
     for (const id of gone) delete next[id];
     useChoosers.setState({ byTab: next });
   });
@@ -70,6 +81,7 @@ function OptionRow({
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} onDoubleClick={onChoose}>
       <Pressable onPress={onSelect}>
@@ -102,17 +114,22 @@ export function DeviceChooser({ tabId, left, top }: { tabId: string; left: numbe
   const chooser = useChoosers((s) => s.byTab[tabId]);
   const [selected, setSelected] = useState<number | null>(null);
   useResetOn(chooser?.id, () => setSelected(null));
+
   if (!chooser) return null;
   const scanning = chooser.bothButtonsEnabled;
   const blocked = chooser.adapterOff || chooser.unauthorized;
   const valid = scanning || (selected !== null && selected < chooser.options.length);
+
   const choose = (index = selected) => {
     if (scanning) return void selectDevice(chooser.id, -1);
+
     if (index !== null) void selectDevice(chooser.id, index);
   };
+
   const cancel = () => void cancelDeviceChooser(chooser.id);
 
   let body;
+
   if (chooser.unauthorized) {
     body = (
       <Notice
@@ -202,6 +219,7 @@ export function DeviceChooser({ tabId, left, top }: { tabId: string; left: numbe
 
 function Notice({ icon, text, link, onLink }: { icon: string; text: string; link?: string; onLink?: () => void }) {
   const theme = useTheme();
+
   return (
     <View style={{ flexDirection: "row", gap: 9, paddingVertical: 6, paddingHorizontal: 2 }}>
       <Symbol name={icon} size={13} color={theme.textSecondary} style={{ width: 18, height: 18 }} />
@@ -216,6 +234,7 @@ function Notice({ icon, text, link, onLink }: { icon: string; text: string; link
 function TextLink({ title, onPress }: { title: string; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>

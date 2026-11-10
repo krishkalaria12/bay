@@ -6,16 +6,19 @@ import { HOVER_HIDE_DELAY_MS, HOVER_SHOW_DELAY_MS } from "./constants";
 let showTimer: ReturnType<typeof setTimeout> | undefined;
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
 let suppressed = false;
+
 // Bumped by everything that ends or replaces a hover: a card measured for an older one never shows.
 let ticket = 0;
 
 export function suppressHover(value: boolean) {
   suppressed = value;
+
   if (value) dismissHover();
 }
 
 async function show(windowId: string, target: Target, mine: number) {
   const anchor = await measureRow(windowId, target.id);
+
   if (mine !== ticket || suppressed || !anchor || sidebarUi().iconPicker || sidebarUi().renaming) return;
   setSidebarUi({ hover: { windowId, ...target, anchor } });
 }
@@ -25,8 +28,10 @@ export function hoverEnter(windowId: string, target: Target) {
   clearTimeout(showTimer);
   clearTimeout(hideTimer);
   const current = sidebarUi().hover;
+
   if (current?.id === target.id) return;
   const mine = ++ticket;
+
   if (current) void show(windowId, target, mine);
   else showTimer = setTimeout(() => void show(windowId, target, mine), HOVER_SHOW_DELAY_MS);
 }
@@ -45,20 +50,25 @@ export function dismissHover() {
   ticket++;
   clearTimeout(showTimer);
   clearTimeout(hideTimer);
+
   if (sidebarUi().hover) setSidebarUi({ hover: null });
 }
 
 export function useRowHover(windowId: string, target: Target | null) {
   const [hovered, setHovered] = useState(false);
+
   const hoverProps = markHoverProps({
     onMouseEnter: () => {
       setHovered(true);
+
       if (target) hoverEnter(windowId, target);
     },
     onMouseLeave: () => {
       setHovered(false);
+
       if (target) hoverLeave();
     },
   });
+
   return { hovered, hoverProps };
 }

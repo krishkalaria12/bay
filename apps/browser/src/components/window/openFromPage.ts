@@ -20,45 +20,63 @@ export function openFromPage({ url, adoptId, disposition, point }: OpenWindowReq
   if (adoptId && pageFactsInCoordinator()) return;
   const s = browserRead.getState();
   const w = s.windows[from.windowId];
+
   if (!w) return;
+
   if (disposition === "current") {
     if (from.tabId) reportBrowserCommand(navigate(from.tabId, url, { userInitiated: false }));
+
     return;
   }
+
   // Links stay in Little Bay; new tabs (target=_blank, ⌘-click, split) open behind, in a main window.
   if (isSmall(s, w.id) && disposition !== "window" && disposition !== "incognito") {
     if (adoptId) return void legacyBrowser.getState().newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background: true });
+
     return reportBrowserCommand(newTab(w.id, { url, openerId: from.tabId, spaceId: from.spaceId, background: true }));
   }
+
   if (disposition === "split") {
     if (from.tabId) return openLinkInSplit(from.tabId, url, adoptId);
+
     return openPageInSplit(w.id, url, adoptId);
   }
+
   if (disposition === "incognito") {
     // A private tab Chrome already made (an extension's incognito window, Open Link in Incognito Window) moves in
     // live; anything else loads afresh in the private window.
     if (adoptId?.startsWith("tab:")) return void legacyBrowser.getState().createWindow({ incognito: true, url, adoptId });
+
     return reportBrowserCommand(openWindow({ incognito: true, url }));
   }
+
   // A private window's new window is private too: a session of its own, so the page loads afresh there.
   if (disposition === "window") {
     if (!w.incognito && adoptId) return void legacyBrowser.getState().createWindow({ spaceId: from.spaceId, url, adoptId });
+
     return reportBrowserCommand(openWindow(w.incognito ? { incognito: true, url } : { spaceId: from.spaceId, url }));
   }
+
   // A link a pinned tab or a favourite opens in front: a peek over its page, as Arc's (store/peeks.ts).
   if (disposition === "foreground" && from.tabId && opensInPeek(s, from.tabId, url)) {
     if (adoptId) return void legacyBrowser.getState().openPeek(from.tabId, url, adoptId, point);
+
     return reportBrowserCommand(openPeek(from.tabId, url, point));
   }
+
   const background = disposition === "background";
-  // A site chosen for the other engine (a streaming site, a website rule) loads afresh there, instead of in the page
-  // the opener's engine made for it. Only a build with WebKit (macOS, whose store is local) chooses another engine.
-  const engine = from.tabId && disposition !== "popup" ? chosenEngine(s, url) : undefined;
+  // A site that needs the other engine (a streaming site) loads afresh there, instead of in the page the opener's
+  // engine made for it. Only a build with WebKit (macOS) chooses another engine: Windows and Linux keep Chromium.
+  const engine = from.tabId && disposition !== "popup" ? chosenEngine(url) : undefined;
+
   if (engine && engine !== tabEngine(s, from.tabId!)) {
     const id = legacyBrowser.getState().newTab(w.id, { url, openerId: from.tabId, spaceId: from.spaceId, background });
+
     if (id) legacyBrowser.getState().updateTab(id, { engine });
+
     return;
   }
+
   if (adoptId) legacyBrowser.getState().newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background });
   else reportBrowserCommand(newTab(w.id, { url, openerId: from.tabId, spaceId: from.spaceId, background }));
 }
@@ -67,6 +85,8 @@ export function openFromPage({ url, adoptId, disposition, point }: OpenWindowReq
 export function pageSpaceId(windowId: string, pageProfile: string): string {
   const s = browserRead.getState();
   const w = s.windows[windowId];
+
   if (w && engineProfileFor(w.spaceId, s.spaces) === pageProfile) return w.spaceId;
+
   return s.spaceOrder.find((p) => engineProfileFor(p, s.spaces) === pageProfile) ?? w?.spaceId ?? s.settings.defaultSpaceId;
 }

@@ -4,6 +4,7 @@ import { createBrowserStore, useBrowser } from "../store/browserStore.ts";
 import { activeTabId } from "../store/model.ts";
 
 const tick = () => new Promise(setImmediate);
+
 function fixture({ held = false } = {}) {
   const store = createBrowserStore();
   const windowId = store.getState().createWindow({ url: "first.example" });
@@ -13,6 +14,7 @@ function fixture({ held = false } = {}) {
   let listener;
   let resolve;
   const commands = [];
+
   const strip = (active = first) => ({
     strip: 1,
     window: 1,
@@ -21,12 +23,15 @@ function fixture({ held = false } = {}) {
     tabs: [first, second].map((key, index) => ({ key, browser: index + 1, index, active: key === active, pinned: false, group: null })),
     groups: [],
   });
+
   const snapshot = { rev: 0, cmd: null, strips: [strip()] };
+
   const engine = {
     listeners: 0,
     listen(callback) {
       listener = callback;
       engine.listeners++;
+
       return {
         remove: () => {
           engine.listeners--;
@@ -41,10 +46,13 @@ function fixture({ held = false } = {}) {
         : Promise.resolve(snapshot),
     command: (command) => {
       commands.push(command);
+
       return commands.length;
     },
   };
+
   globalThis.nnTestTabStrip = engine;
+
   return {
     store,
     windowId,
@@ -58,6 +66,7 @@ function fixture({ held = false } = {}) {
 }
 
 globalThis.__DEV__ = false;
+
 const { startChromeTabs } = await import("./engineTabs.ts");
 
 test("the coordinator mirror writes its supplied authority and removes its subscriptions", async () => {

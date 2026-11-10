@@ -14,12 +14,15 @@ import { CHECK_IN_FRAME } from "./constants";
 export function CheckInBanner({ windowId }: { windowId: string }) {
   const checkIn = useDefaultBrowserCheckIn(windowId);
   const [leaving, setLeaving] = useState<null | (() => void)>(null);
+
   if (!checkIn.visible && !leaving) return null;
+
   const retire = (action: () => void) =>
     setLeaving(() => () => {
       action();
       setLeaving(null);
     });
+
   return (
     <View style={{ position: "absolute", left: 0, top: 0, width: CHECK_IN_FRAME.width, height: CHECK_IN_FRAME.height, padding: 8 }} pointerEvents="box-none">
       <Card leaving={leaving} onFeedback={() => retire(checkIn.leaveFeedback)} onClose={() => retire(checkIn.dismiss)} />
@@ -54,6 +57,7 @@ function Card({ leaving, onFeedback, onClose }: { leaving: null | (() => void); 
   }, [leaving]);
 
   const cardStyle = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ scale: scale.get() }] }));
+
   return (
     <Animated.View {...hoverProps} style={[{ flex: 1 }, cardStyle]} pointerEvents={leaving ? "none" : "auto"}>
       <Pressable
@@ -101,6 +105,7 @@ function CloseButton({ onPress }: { onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const fill = theme.dark ? (hovered ? "#FFFFFF4D" : "#FFFFFF14") : hovered ? "#0000004D" : "#00000033";
+
   return (
     <View {...hoverProps} tooltip="Dismiss">
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Dismiss">

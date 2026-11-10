@@ -69,9 +69,11 @@ test("meeting alert startup rolls back earlier native listeners when registratio
   const appBefore = appEventListeners.size;
   const windowsBefore = windowEventListeners.size;
   const failure = new Error("window events unavailable");
+
   const registration = t.mock.method(windowEventListeners, "add", () => {
     throw failure;
   });
+
   assert.throws(
     () => startMeetingAlerts(browser),
     (error) => error === failure,
@@ -92,13 +94,16 @@ test("meeting alert stop attempts every cleanup and releases ownership after a c
   const windowsBefore = windowEventListeners.size;
   const subscribe = useCalendar.subscribe;
   const warning = t.mock.method(console, "warn", () => {});
+
   const registration = t.mock.method(useCalendar, "subscribe", (...args) => {
     const unsubscribe = subscribe(...args);
+
     return () => {
       unsubscribe();
       throw new Error("cleanup failed");
     };
   });
+
   const stop = startMeetingAlerts(browser);
   stop();
   assert.equal(warning.mock.callCount(), 2);

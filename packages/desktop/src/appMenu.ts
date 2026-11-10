@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { requireNativeModule, nativeSnapshot, type EventSubscription } from "@bay/platform/native";
 import { capabilities } from "@bay/platform";
 import { playWebIntroMusic, setWebIntroMusicMuted, stopWebIntroMusic } from "./webIntroMusic";
@@ -29,6 +30,10 @@ export type AppIcon = { id: string; name: string; preview: string | null };
 
 export type NotificationPermission = "granted" | "denied" | "notDetermined" | "provisional";
 
+export type NotificationData = Record<string, string | number | boolean>;
+
+export type ScriptResult = Record<string, string | number | boolean | undefined>;
+
 export type NotificationOptions = {
   id?: string;
   title: string;
@@ -40,7 +45,7 @@ export type NotificationOptions = {
   windowId?: string;
   origin?: string;
   dismissible?: boolean;
-  data?: Record<string, unknown>;
+  data?: NotificationData;
 };
 
 export type NotificationResponse = {
@@ -139,7 +144,7 @@ type AppModule = {
   removeNotifications(ids: string[]): Promise<void>;
   openNotificationSettings?(): Promise<void>;
   setScriptState(state: ScriptState): Promise<void>;
-  replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;
+  replyToScript(id: string, result: ScriptResult | null, error: string | null): Promise<void>;
   systemInfo(): SystemInfo;
   openExternalURL(url: string): Promise<boolean>;
   launchEnvironment(name: string): string | null;
@@ -168,9 +173,11 @@ export const disintegrate = (windowId: string, rects: { x: number; y: number; wi
     windowId,
     rects.map((r) => [r.x, r.y, r.width, r.height]),
   );
+
 /** Each row's specks as `[x, y, r, g, b, a]` runs, in window points; empty where the host can't read the window. */
 export const documentSpecks = (rects: { x: number; y: number; width: number; height: number }[]): Promise<number[][]> =>
   App.documentSpecks?.(rects.map((r) => [r.x, r.y, r.width, r.height])) ?? Promise.resolve([]);
+
 export const onUpdatePending = (listener: (pending: PendingUpdate | null) => void) => App.addListener("onUpdatePending", (e) => listener(e.pending ?? null));
 export const setAutomaticUpdateChecks = (on: boolean) => App.setAutomaticUpdateChecks(on);
 export const setAutomaticUpdateDownloads = (on: boolean) => App.setAutomaticUpdateDownloads(on);
@@ -188,24 +195,27 @@ export const currentAppIcon = () => App.appIcon();
 export const setAppIcon = (id: string) => App.setAppIcon(id);
 
 // Some desktop notification services accept submissions without a permission API.
-export const hasNotificationPermissionQuery = () => typeof App.notificationPermission === "function";
+export const hasNotificationPermissionQuery = () => v.is(v.function_(), App.notificationPermission);
 export const notificationPermission = () => App.notificationPermission?.() ?? Promise.reject(new Error("Notification permission queries are unavailable"));
 
 export const crashReports = (since: number): Promise<CrashReport[]> => App.crashReports(since);
 export const devCrash = (kind?: "exception") => App.devCrash(kind);
+
 export const requestNotificationPermission = () =>
   App.requestNotificationPermission?.() ?? Promise.reject(new Error("Notification permission requests are unavailable"));
+
 export const postNotification = (options: NotificationOptions) => App.postNotification(options);
 export const removeNotifications = (ids: string[]) => App.removeNotifications(ids);
 export const openNotificationSettings = () => App.openNotificationSettings?.() ?? Promise.reject(new Error("Notification settings are unavailable"));
 export const onNotificationResponse = (listener: (e: NotificationResponse) => void) => App.addListener("onNotificationResponse", listener);
 
 export const setScriptState = (state: ScriptState) => App.setScriptState(state);
-export const replyToScript = (id: string, result: Record<string, unknown> | null, error: string | null = null) => App.replyToScript(id, result, error);
+export const replyToScript = (id: string, result: ScriptResult | null, error: string | null = null) => App.replyToScript(id, result, error);
 export const onScriptCommand = (listener: (e: ScriptCommand) => void) => App.addListener("onScriptCommand", listener);
 
 export const systemInfo = () => nativeSnapshot("BayApp", "systemInfo", [], () => App.systemInfo());
 export const openExternalURL = (url: string) => App.openExternalURL(url);
+
 export type IntroMusicCues = {
   icon: number;
   letters: number;
@@ -215,28 +225,37 @@ export type IntroMusicCues = {
   exit: number;
   end: number;
 };
+
 // A hidden test instance never makes a sound on the owner's computer (IntroMusic.swift); BAY_ALLOW_AUDIO=1 allows it.
 const quietInstance = () => launchEnvironment("BAY_BACKGROUND") === "1" && launchEnvironment("BAY_ALLOW_AUDIO") !== "1";
-const hasWebAudio = () => typeof AudioContext === "function";
+const hasWebAudio = () => v.is(v.function_(), globalThis.AudioContext);
+
 export const playIntroMusic = (cues: IntroMusicCues, muted: boolean) => {
   if (capabilities.introMusic) void App.playIntroMusic(cues, muted);
   else if (hasWebAudio() && !quietInstance()) playWebIntroMusic(cues, muted);
 };
+
 export const setIntroMusicMuted = (muted: boolean) => {
   if (capabilities.introMusic) void App.setIntroMusicMuted(muted);
   else if (hasWebAudio()) setWebIntroMusicMuted(muted);
 };
+
 export const stopIntroMusic = (fade = 0.4) => {
   if (capabilities.introMusic) void App.stopIntroMusic(fade);
   else if (hasWebAudio()) stopWebIntroMusic(fade);
 };
+
 export const devRenderIntroMusic = (cues: IntroMusicCues, path: string) => App.devRenderIntroMusic(cues, path);
 export const launchEnvironment = (name: string) => nativeSnapshot("BayApp", "launchEnvironment", [name], () => App.launchEnvironment(name));
 export const devRunAppleScript = (source: string) => App.devRunAppleScript(source);
+
 export const devSnapshotWindow = (windowId: string, path: string, transparent = false) =>
   transparent ? App.devSnapshotWindow(windowId, path, true) : App.devSnapshotWindow(windowId, path);
+
 export type KeyTiming = { due: number; handled: number; drawn: number };
+
 export const devTypeKeys = (windowId: string, text: string, interval: number) => App.devTypeKeys(windowId, text, interval);
+
 export type KeyPress = {
   key: string;
   keyCode: number;
@@ -248,6 +267,7 @@ export type KeyPress = {
   wait?: number;
   dry?: boolean;
 };
+
 export type KeyPressResult = {
   handledBy?: "page" | "window" | "menu" | "none";
   firstResponder?: string;
@@ -255,5 +275,6 @@ export type KeyPressResult = {
   matched?: { title: string; action: string; command?: string; arg?: string; enabled: boolean }[];
   error?: string;
 };
+
 export const devKeyEquivalent = (windowId: string, press: KeyPress): Promise<KeyPressResult> => App.devKeyEquivalent(windowId, press);
 export const devMenuCommand = (command: string, arg: string | null = null) => App.devMenuCommand(command, arg);

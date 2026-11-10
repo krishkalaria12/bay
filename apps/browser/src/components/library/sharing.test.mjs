@@ -8,6 +8,7 @@ const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator
 const secrets = new Map();
 const requests = [];
 let count;
+
 beforeEach(() => {
   docs.clear();
   secrets.clear();
@@ -24,17 +25,21 @@ beforeEach(() => {
   easelSharingAnswers.readRecords = () => docs.get("easel-shares.json") ?? null;
   globalThis.fetch = async (url, options) => {
     requests.push({ url, ...options });
+
     return new Response(null, { status: options.method === "DELETE" ? 204 : 200 });
   };
 });
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
+
   if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
   else delete globalThis.navigator;
   heldSaves.error = null;
   easelSharingAnswers.enabled = false;
   easelSharingAnswers.request = null;
 });
+
 const snapshot = async () => JSON.stringify({ version: 1, title: "References", background: "#FFFFFF", image: null, links: [] });
 
 test("disabled sharing cannot prepare, publish, create credentials or send requests", async () => {
@@ -66,8 +71,10 @@ test("publish persists ownership before upload and keeps its management key out 
     const saved = JSON.parse(docs.get("easel-shares.json"));
     assert.equal(saved.records.board.publishedAt, null);
     assert.equal(secrets.size, 1);
+
     return fetch(...args);
   };
+
   const url = await publishEasel("board", snapshot);
   assert.equal(url, easelShareURL("1".padStart(32, "0")));
   assert.ok(!url.includes("b".repeat(64)));
@@ -96,6 +103,7 @@ test("interrupted first upload retains its key and record for retry or revocatio
   globalThis.fetch = async () => {
     throw new Error("connection lost");
   };
+
   await assert.rejects(publishEasel("board", snapshot), /connection lost/);
   const pending = useEaselShares.getState().records.board;
   assert.equal(pending.publishedAt, null);
@@ -103,8 +111,10 @@ test("interrupted first upload retains its key and record for retry or revocatio
   globalThis.fetch = async (url, options) => {
     assert.ok(url.endsWith(pending.id));
     assert.equal(options.method, "DELETE");
+
     return new Response(null, { status: 204 });
   };
+
   await stopSharingEasel("board");
   assert.equal(useEaselShares.getState().records.board, undefined);
   assert.equal(secrets.size, 0);
@@ -165,6 +175,7 @@ test("registry read failures cannot masquerade as a missing file or discard publ
   easelSharingAnswers.readRecords = () => {
     throw new Error("Invalid UTF-8 or permission denied");
   };
+
   await assert.rejects(stopSharingEasel("board"), /read Easel sharing records/);
   await assert.rejects(publishEasel("other", snapshot), /read Easel sharing records/);
   assert.equal(docs.get("easel-shares.json"), saved);
@@ -179,6 +190,7 @@ test("failed requests reserve revisions durably before the next update", async (
     await fetch(...args);
     throw new Error("response lost");
   };
+
   await assert.rejects(publishEasel("board", snapshot), /response lost/);
   assert.equal(JSON.parse(docs.get("easel-shares.json")).records.board.revision, 2);
   globalThis.fetch = fetch;
@@ -191,6 +203,7 @@ test("failed requests reserve revisions durably before the next update", async (
 
 test("same-Easel mutations cannot race and simultaneous different Easels retain both durable records", async () => {
   let release;
+
   const pending = publishEasel(
     "board",
     () =>
@@ -198,6 +211,7 @@ test("same-Easel mutations cannot race and simultaneous different Easels retain 
         release = () => resolve("{}");
       }),
   );
+
   await assert.rejects(publishEasel("board", snapshot), /already being shared/);
   await assert.rejects(stopSharingEasel("board"), /already being shared/);
   const other = publishEasel("other", snapshot);
@@ -210,8 +224,10 @@ test("same-Easel mutations cannot race and simultaneous different Easels retain 
 test("failed post-upload save retains the pending record and management key", async () => {
   globalThis.fetch = async () => {
     heldSaves.error = new Error("disk full after upload");
+
     return new Response(null, { status: 200 });
   };
+
   await assert.rejects(publishEasel("board", snapshot), /disk full after upload/);
   assert.equal(useEaselShares.getState().records.board.publishedAt, null);
   assert.equal(secrets.size, 1);
@@ -222,8 +238,10 @@ test("web sharing uses the fixed native transport without a cross-origin rendere
   const native = [];
   easelSharingAnswers.request = async (...args) => {
     native.push(args);
+
     return { status: args[2] === "DELETE" ? 204 : 200 };
   };
+
   await publishEasel("board", snapshot);
   assert.equal(requests.length, 0);
   assert.equal(native.length, 1);
@@ -255,11 +273,13 @@ function webLocks() {
           names.push(name);
           const next = queue.then(run);
           queue = next.catch(() => {});
+
           return next;
         },
       },
     },
   });
+
   return names;
 }
 

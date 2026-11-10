@@ -11,6 +11,7 @@ import { platformWords } from "../../../lib/platformWords";
 
 export function ShareDiagnosticsSection() {
   const sharing = useTelemetry((s) => s.sharing);
+
   return (
     <>
       <SectionHeader settingId={SETTINGS.diagnostics.id} title={SETTINGS.diagnostics.title} />
@@ -30,6 +31,7 @@ export function ShareDiagnosticsSection() {
 
 export function WhatsSentSheet() {
   const theme = useTheme();
+
   return (
     <Sheet width={500} onClose={closeSettingsSheet}>
       <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>{SHARING_COPY.whatsSent}</Text>

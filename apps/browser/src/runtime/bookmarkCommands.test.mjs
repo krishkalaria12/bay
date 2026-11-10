@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as v from "valibot";
 import { test } from "node:test";
 import { createBrowserStore } from "../store/browserStore.ts";
 import { createBrowserAuthority } from "./authority.ts";
@@ -7,12 +8,14 @@ import { executeHistoryCommand, HISTORY_COMMAND_METHODS, parseHistoryCommand } f
 import { browserCommandResultKind } from "./userCommands.ts";
 
 const run = (store, command) => executeBookmarkCommand(store, parseBookmarkCommand(command));
+
 function setup() {
   const store = createBrowserStore();
   const s = () => store.getState();
   const page = run(store, { method: "addBookmark", options: { spaceId: "default", url: "https://a.example/", title: "A" } });
   const folder = run(store, { method: "addBookmarkFolder", options: { spaceId: "default", title: "Folder" } });
   const roots = s().bookmarks.roots.default;
+
   return { store, s, page, folder, roots };
 }
 
@@ -34,15 +37,19 @@ test("bookmark and history parsers close every command and nested object", () =>
     { method: "removeBookmarks", spaceId: "s", bookmarkIds: ["a", "b"] },
     { method: "restoreBookmarks", undoId: "u" },
   ];
+
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(BOOKMARK_COMMAND_METHODS));
+
   for (const command of commands) {
     const parsed = parseBookmarkCommand(command);
     assert.deepEqual(parsed, command);
     assert.notEqual(parsed, command);
     assert.throws(() => parseBookmarkCommand({ ...command, native: true }), { code: "invalid_request" });
+
     for (const key of ["options", "patch", "page"])
       if (command[key]) assert.throws(() => parseBookmarkCommand({ ...command, [key]: { ...command[key], syncKey: "x" } }), { code: "invalid_request" });
   }
+
   for (const command of [
     { method: "removeBookmarksWithUndo", spaceId: "s", bookmarkIds: [] },
     { method: "addBookmarkTree", spaceId: "s", drafts: [{ title: "x", url: "u", children: [] }] },
@@ -53,6 +60,7 @@ test("bookmark and history parsers close every command and nested object", () =>
   ])
     assert.throws(() => parseBookmarkCommand(command), { code: "invalid_request" }, JSON.stringify(command));
   let deep = [{ title: "leaf", url: "u" }];
+
   for (let i = 0; i < 20; i++) deep = [{ title: `f${i}`, children: deep }];
   assert.throws(() => parseBookmarkCommand({ method: "addBookmarkTree", spaceId: "s", drafts: deep }), { code: "invalid_request" });
 
@@ -60,8 +68,11 @@ test("bookmark and history parsers close every command and nested object", () =>
     { method: "removeHistory", spaceId: "s", urls: ["https://a.example/"] },
     { method: "clearHistory", spaceId: "s", since: 1_700_000_000_000 },
   ];
+
   assert.deepEqual(new Set(history.map((c) => c.method)), new Set(HISTORY_COMMAND_METHODS));
+
   for (const command of history) assert.deepEqual(parseHistoryCommand(command), command);
+
   for (const command of [
     { method: "removeHistory", spaceId: "s", urls: [] },
     { method: "clearHistory", spaceId: "s", since: -1 },
@@ -106,7 +117,7 @@ test("removed bookmarks come back from the coordinator's undo entry in one commi
   authority.subscribe((commit) => commits.push(commit.revision));
   const dispatch = (requestId, command) => authority.dispatch({ epoch: "bookmarks", clientId: "w", requestId, command });
   const undoId = (await dispatch(1, { method: "removeBookmarks", spaceId: "default", bookmarkIds: [page, folder] })).value;
-  assert.equal(typeof undoId, "string");
+  assert.ok(v.is(v.string(), undoId));
   assert.equal(s().bookmarks.nodes[page], undefined);
   assert.equal(s().bookmarkUndo.length, 1);
   assert.equal((await dispatch(2, { method: "removeBookmarks", spaceId: "default", bookmarkIds: [] })).value, null, "nothing removed has no undo");
@@ -131,6 +142,7 @@ test("bookmark and history commands stay within existing public spaces", () => {
       roots: { ...state.bookmarks.roots, [privateSpace]: { bar: "private-bar", other: "private-bar" } },
     },
   }));
+
   for (const command of [
     { method: "addBookmark", options: { spaceId: privateSpace, url: "u", title: "t" } },
     { method: "addBookmark", options: { spaceId: "missing", url: "u", title: "t" } },
@@ -150,6 +162,7 @@ test("bookmark and history commands stay within existing public spaces", () => {
     assert.throws(() => run(store, command), { code: "invalid_request" }, JSON.stringify(command));
     assert.equal(s(), before, JSON.stringify(command));
   }
+
   for (const command of [
     { method: "removeHistory", spaceId: privateSpace, urls: ["u"] },
     { method: "clearHistory", spaceId: "missing" },
@@ -158,6 +171,7 @@ test("bookmark and history commands stay within existing public spaces", () => {
     assert.throws(() => executeHistoryCommand(store, parseHistoryCommand(command)), { code: "invalid_request" });
     assert.equal(s(), before);
   }
+
   executeHistoryCommand(store, parseHistoryCommand({ method: "clearHistory", spaceId: "default" }));
   assert.deepEqual(s().history.default, []);
 });

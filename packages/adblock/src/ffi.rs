@@ -2,9 +2,9 @@
 //! links it as a static library (`bay_blocker_*`). Strings returned to the caller are owned by Rust; release them with
 //! `bay_string_free`, and bytes with `bay_bytes_free`.
 
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::panic::AssertUnwindSafe;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use serde::Deserialize;
 
@@ -135,19 +135,57 @@ pub unsafe extern "C" fn bay_blocker_new_with_permissions(
     Box::into_raw(Box::new(Blocker::from_lists(&lists)))
 }
 
-/// A blocker `bay_blocker_serialize` wrote, or null when the data is damaged or from another adblock-rust.
+/// Bytes the caller keeps until `release(owner)`, which runs once, on any thread.
+struct CallerBytes {
+    data: *const u8,
+    length: usize,
+    owner: *mut c_void,
+    release: extern "C" fn(*mut c_void),
+}
+
+// The caller's promise on `bay_blocker_deserialize`.
+unsafe impl Send for CallerBytes {}
+unsafe impl Sync for CallerBytes {}
+
+impl AsRef<[u8]> for CallerBytes {
+    fn as_ref(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.data, self.length) }
+    }
+}
+
+impl Drop for CallerBytes {
+    fn drop(&mut self) {
+        (self.release)(self.owner);
+    }
+}
+
+/// A blocker `bay_blocker_serialize` wrote, or null when the data is damaged or from another adblock-rust. It reads its
+/// rules from `data` instead of copying them, and calls `release(owner)` once it no longer needs them: when it's freed,
+/// or before returning null.
 ///
 /// # Safety
-/// `data` must point to `length` readable bytes.
+/// `data` must point to `length` bytes that stay readable and unchanged until `release(owner)`, which may run on any
+/// thread.
 #[no_mangle]
-pub unsafe extern "C" fn bay_blocker_deserialize(data: *const u8, length: usize) -> *mut Blocker {
+pub unsafe extern "C" fn bay_blocker_deserialize(
+    data: *const u8,
+    length: usize,
+    owner: *mut c_void,
+    release: extern "C" fn(*mut c_void),
+) -> *mut Blocker {
     if data.is_null() {
+        release(owner);
         return std::ptr::null_mut();
     }
-    Blocker::deserialize(std::slice::from_raw_parts(data, length))
-        .map_or(std::ptr::null_mut(), |blocker| {
-            Box::into_raw(Box::new(blocker))
-        })
+    Blocker::deserialize(Arc::new(CallerBytes {
+        data,
+        length,
+        owner,
+        release,
+    }))
+    .map_or(std::ptr::null_mut(), |blocker| {
+        Box::into_raw(Box::new(blocker))
+    })
 }
 
 /// The blocker's engine as bytes (`length` set to their count), for `bay_blocker_deserialize`. Free with
@@ -389,6 +427,43 @@ pub unsafe extern "C" fn bay_blocker_use_resources(
     (*blocker).use_resources(borrow(json))
 }
 
+/// The engine cached at `cache` for `version`, or one built from the `count` list files (then cached), with the
+/// resources file loaded; null when the lists can't be read. `platform`: 0 desktop, 1 Android, 2 iOS. Free with
+/// `bay_blocker_free`.
+///
+/// # Safety
+/// `files` must point to `count` valid strings; `cache`, `version` must be valid strings; `resources` may be null.
+#[no_mangle]
+pub unsafe extern "C" fn bay_blocker_load(
+    files: *const *const c_char,
+    count: usize,
+    cache: *const c_char,
+    version: *const c_char,
+    resources: *const c_char,
+    platform: u8,
+) -> *mut Blocker {
+    let paths: Vec<String> = (0..count).filter_map(|i| read(*files.add(i))).collect();
+    let platform = match platform {
+        1 => crate::Platform::AndroidWebView,
+        2 => crate::Platform::IosWebKit,
+        _ => crate::Platform::DesktopChromium,
+    };
+    let (Some(cache), Some(version)) = (read(cache), read(version)) else {
+        return std::ptr::null_mut();
+    };
+    let resources = read(resources).map(std::path::PathBuf::from);
+    crate::load_cached(
+        &paths,
+        std::path::Path::new(&cache),
+        &version,
+        platform,
+        resources.as_deref(),
+    )
+    .map_or(std::ptr::null_mut(), |blocker| {
+        Box::into_raw(Box::new(blocker))
+    })
+}
+
 /// Whether a response body can be rewritten at all (`$replace`, HTML `##^` filtering). A host wires
 /// `bay_blocker_body_filter_applies`/`bay_blocker_body_filter` only when this is true.
 ///
@@ -556,6 +631,7 @@ pub unsafe extern "C" fn bay_blocker_cname_blocked(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn take(text: *mut c_char) -> String {
         assert!(!text.is_null());
@@ -603,8 +679,11 @@ mod tests {
 
             let mut length = 0;
             let bytes = bay_blocker_serialize(blocker, &mut length);
-            let copy = bay_blocker_deserialize(bytes, length);
-            bay_bytes_free(bytes, length);
+            static RELEASED: AtomicUsize = AtomicUsize::new(0);
+            extern "C" fn released(_: *mut c_void) {
+                RELEASED.fetch_add(1, Ordering::SeqCst);
+            }
+            let copy = bay_blocker_deserialize(bytes, length, std::ptr::null_mut(), released);
             assert!(!copy.is_null());
             assert!(bay_blocker_should_block(
                 copy,
@@ -613,9 +692,19 @@ mod tests {
                 image.as_ptr(),
                 c"GET".as_ptr()
             ));
-            assert!(bay_blocker_deserialize([1u8, 2, 3].as_ptr(), 3).is_null());
+            assert!(bay_blocker_deserialize(
+                [1u8, 2, 3].as_ptr(),
+                3,
+                std::ptr::null_mut(),
+                released
+            )
+            .is_null());
+            assert_eq!(RELEASED.load(Ordering::SeqCst), 1);
 
+            // Still reading `bytes` until it's freed.
             bay_blocker_free(copy);
+            assert_eq!(RELEASED.load(Ordering::SeqCst), 2);
+            bay_bytes_free(bytes, length);
             bay_blocker_free(blocker);
         }
     }

@@ -21,6 +21,7 @@ export function dismissDefaultBrowserCheckIn() {
 export function useDefaultBrowserCheckIn(windowId: string) {
   const due = useCheckIn(checkInDue);
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
+
   return {
     visible: due && !incognito,
     leaveFeedback() {
@@ -31,4 +32,7 @@ export function useDefaultBrowserCheckIn(windowId: string) {
   };
 }
 
-if (__DEV__) (globalThis as { nnCheckIn?: unknown }).nnCheckIn = { store: useCheckIn, due: () => checkInDue(useCheckIn.getState()) };
+if (__DEV__) {
+  // SAFETY: nnCheckIn is the check-in's own dev-harness surface, read only by tests.
+  (globalThis as { nnCheckIn?: unknown }).nnCheckIn = { store: useCheckIn, due: () => checkInDue(useCheckIn.getState()) };
+}

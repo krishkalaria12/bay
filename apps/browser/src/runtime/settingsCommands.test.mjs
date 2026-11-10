@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createBrowserStore } from "../store/browserStore.ts";
@@ -13,6 +14,7 @@ test("settings parser accepts every editable serialized default and preference f
   delete editable.customSearchEngines;
   delete editable.extensionSearchEngines;
   assert.deepEqual(parsePatch(editable), editable);
+
   const variants = {
     launchTab: ["newTab", "lastTab"],
     commandBarPreference: ["website", "search"],
@@ -37,11 +39,13 @@ test("settings parser accepts every editable serialized default and preference f
       [1, 1],
     ],
   };
+
   for (const [key, values] of Object.entries(variants)) {
     for (const value of values) assert.deepEqual(parsePatch({ [key]: value }), { [key]: value }, key);
   }
+
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
-    if (typeof value === "boolean") assert.deepEqual(parsePatch({ [key]: !value }), { [key]: !value });
+    if (v.is(v.boolean(), value)) assert.deepEqual(parsePatch({ [key]: !value }), { [key]: !value });
   }
 });
 
@@ -57,6 +61,7 @@ test("settings parser copies nested preferences and link destinations", () => {
       { id: "window", pattern: "example.net", destination: { kind: "newWindow" } },
     ],
   };
+
   const parsed = parsePatch(patch);
   assert.deepEqual(parsed, patch);
   patch.shortcuts.newTab.push("shift");
@@ -118,16 +123,20 @@ test("settings parser rejects sparse preference arrays instead of accepting miss
   const hole = Array(1);
   const trailingHole = Array(2);
   trailingHole[0] = "example.com";
+
   for (const key of ["awakeSites", "mutedSites", "developerSites", "noAutoPictureInPictureSites"]) {
     for (const value of [hole, trailingHole]) assert.throws(() => parsePatch({ [key]: value }), { code: "invalid_request" });
   }
+
   for (const key of ["shortcuts", "neverTranslateSites"]) {
     for (const value of [hole, trailingHole]) assert.throws(() => parsePatch({ [key]: { default: value } }), { code: "invalid_request" });
   }
+
   const missingHeight = Array(2);
   missingHeight[0] = 900;
   const missingWidth = Array(2);
   missingWidth[1] = 640;
+
   for (const value of [Array(2), missingHeight, missingWidth]) assert.throws(() => parsePatch({ littleBaySize: value }), { code: "invalid_request" });
 });
 
@@ -140,10 +149,12 @@ test("settings command envelopes have closed fields and typed engine inputs", ()
     { method: "addCustomEngine", input: engine },
     { method: "updateCustomEngine", id: "custom", input: engine },
   ];
+
   for (const command of good) {
     assert.deepEqual(parseSettingsCommand(command), command);
     assert.throws(() => parseSettingsCommand({ ...command, windowId: "forged" }), { code: "invalid_request" });
   }
+
   for (const command of [
     null,
     [],
@@ -160,6 +171,7 @@ test("settings command envelopes have closed fields and typed engine inputs", ()
 
 test("custom engine commands report domain validation errors without mutating the store", () => {
   const store = createBrowserStore();
+
   const invalid = [
     [{ ...engine, name: "" }, "Enter a name."],
     [{ ...engine, keyword: "" }, "Enter a shortcut."],
@@ -167,13 +179,15 @@ test("custom engine commands report domain validation errors without mutating th
     [{ ...engine, url: "file:///tmp/%s" }, "Enter a URL that starts with http:// or https://."],
     [{ ...engine, url: "https://example.com/" }, "The URL must contain %s where the search terms go."],
   ];
+
   for (const [input, message] of invalid) {
     const before = store.getState();
     assert.throws(() => run(store, { method: "addCustomEngine", input }), { code: "invalid_request", message });
     assert.equal(store.getState(), before);
   }
+
   const id = run(store, { method: "addCustomEngine", input: engine });
-  assert.equal(typeof id, "string");
+  assert.ok(v.is(v.string(), id));
   assert.deepEqual(store.getState().settings.customSearchEngines, [{ id, ...engine }]);
   const before = store.getState();
   assert.throws(() => run(store, { method: "addCustomEngine", input: engine }), { code: "invalid_request", message: /already used/ });
@@ -194,6 +208,7 @@ test("custom engine commands report domain validation errors without mutating th
 
 test("settings commands reject missing spaces and search engines before mutation", () => {
   const store = createBrowserStore();
+
   for (const command of [
     { method: "updateSettings", patch: { defaultSpaceId: "missing" } },
     { method: "updateSettings", patch: { searchEngine: "missing" } },
@@ -203,6 +218,7 @@ test("settings commands reject missing spaces and search engines before mutation
     assert.throws(() => run(store, command), { code: "invalid_request" });
     assert.equal(store.getState(), before);
   }
+
   const spaceId = store.getState().createSpace({ name: "Work" });
   run(store, { method: "updateSettings", patch: { defaultSpaceId: spaceId, searchEngine: "google", cleanUpInactiveTabsAfterHours: null } });
   assert.equal(store.getState().settings.defaultSpaceId, spaceId);
@@ -211,6 +227,7 @@ test("settings commands reject missing spaces and search engines before mutation
 
 test("settings default space validation rejects inherited object properties without mutation", () => {
   const store = createBrowserStore();
+
   for (const defaultSpaceId of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
     assert.equal(Object.hasOwn(store.getState().spaces, defaultSpaceId), false);
     const before = store.getState();
@@ -237,6 +254,7 @@ test("setting global tab layout updates defaults and all window overrides in one
   assert.equal(snapshots.length, 1);
   const after = snapshots[0];
   assert.equal(after.settings.tabLayout, "top");
+
   for (const id of [first, second, small, privateWindow]) assert.deepEqual(after.windows[id], { ...before.windows[id], tabLayout: "top" });
   assert.equal(after.tabs, before.tabs);
   assert.equal(after.windowUi, before.windowUi);

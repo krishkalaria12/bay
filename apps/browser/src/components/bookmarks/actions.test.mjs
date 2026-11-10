@@ -14,20 +14,25 @@ const unavailableView =
   encodeURIComponent(
     'export const pageToSpace = () => { throw new Error("unexpected native pager"); }; export const requestCreateSpace = () => { throw new Error("unexpected space picker"); };',
   );
+
 const nativeStub = new URL("../../test-native-stub.mjs", import.meta.url).href;
+
 registerHooks({
   resolve(specifier, context, next) {
     if (context.parentURL?.endsWith("/lib/actions.ts")) {
       if (["../components/spaces/pager", "../components/spaces/CreateSpace"].includes(specifier)) return { url: unavailableView, shortCircuit: true };
+
       if (specifier === "@bay/chromium")
         return {
           url: "data:text/javascript," + encodeURIComponent(`export * from ${JSON.stringify(nativeStub)}; export const listExtensions = async () => [];`),
           shortCircuit: true,
         };
     }
+
     return next(specifier, context);
   },
 });
+
 const { openFolder } = await import("./actions.ts");
 const { openLittleBay } = await import("../littleBay/actions.ts");
 const tick = () => new Promise(setImmediate);
@@ -35,18 +40,21 @@ const tick = () => new Promise(setImmediate);
 async function remote(t, store) {
   const authority = createBrowserAuthority({ epoch: "workflow-epoch", store });
   const pending = [];
+
   const client = createBrowserClient({
     clientId: "workflow-window",
     transport: {
       getSnapshot: async () => authority.getSnapshot(),
       async dispatch(request) {
         const reply = await authority.dispatch(request);
+
         return new Promise((resolve) => pending.push({ command: request.command, release: () => resolve(reply) }));
       },
       subscribeCommits: (listener) => authority.subscribe(listener),
       subscribeClose: () => () => {},
     },
   });
+
   await client.ready;
   const restoreCommands = installBrowserCommands(createClientBrowserCommands(client));
   const restoreRead = browserRead.install(createClientBrowserReadSource(client));
@@ -56,12 +64,15 @@ async function remote(t, store) {
     client.close();
     authority.close();
   });
+
   return pending;
 }
 
 function bookmarkFolder(store) {
   const folder = store.getState().addBookmarkFolder({ spaceId: "default", title: "Three pages" });
+
   for (const title of ["one", "two", "three"]) store.getState().addBookmark({ spaceId: "default", parentId: folder, title, url: `https://${title}.example/` });
+
   return folder;
 }
 
@@ -73,9 +84,11 @@ test("opening a bookmark folder waits for each remote tab ID and preserves folde
   const legacy = useBrowser.getState();
   const pending = await remote(t, store);
   let done = false;
+
   const opening = openFolder(folder, windowId).then(() => {
     done = true;
   });
+
   await tick();
   assert.equal(pending.length, 1);
   assert.equal(pending[0].command.method, "newTab");
@@ -108,10 +121,13 @@ test("blank Little Bay creates its panel in one command and waits for acknowledg
   const legacy = useBrowser.getState();
   const pending = await remote(t, store);
   let done = false;
+
   const opening = openLittleBay().then((id) => {
     done = true;
+
     return id;
   });
+
   await tick();
   assert.equal(pending.length, 1);
   assert.deepEqual(pending[0].command, { method: "createWindow", options: { small: true }, openPanel: true });
@@ -138,6 +154,7 @@ test("failed remote folder and Little Bay commands never mutate the legacy singl
     installBrowserCommands({
       dispatch(command) {
         commands.push(command.method);
+
         return Promise.reject(new Error("runtime disconnected"));
       },
     }),

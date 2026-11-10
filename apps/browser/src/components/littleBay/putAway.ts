@@ -22,10 +22,12 @@ export function littleBaysToPutAway(
   { now, hours, usedAt, inUse }: { now: number; hours: number | null; usedAt: (windowId: string) => number | undefined; inUse: string | null },
 ): string[] {
   if (hours === null || !(hours > 0)) return [];
+
   return Object.values(s.windows)
     .filter((w) => w.kind === "small" && w.id !== inUse)
     .filter((w) => {
       const tabId = activeTabId(s, w.id);
+
       return !(tabId && s.live[tabId]?.playingAudio);
     })
     .filter((w) => now - Math.max(usedAt(w.id) ?? 0, w.createdAt) >= hours * HOUR)
@@ -40,33 +42,40 @@ const store = () => useBrowser.getState();
 /** Puts away the Little Bay windows left alone for their time (by `now`): the ones it closed. */
 export function putAwayIdleLittleBays(now = Date.now()): string[] {
   const s = store();
+
   const ids = littleBaysToPutAway(s, {
     now,
     hours: s.settings.littleBayPutAwayAfterHours,
     usedAt: (id) => usedAt.get(id),
     inUse: appActive ? s.ui.focusedWindowId : null,
   });
+
   for (const id of ids) {
     usedAt.delete(id);
     reportBrowserCommand(closeWindow(id));
   }
+
   return ids;
 }
 
 export function startLittleBayPutAway() {
   if (started) return;
   started = true;
+
   // A window stops being in use when another comes forward, or Bay goes to the background.
   const leave = () => {
     const front = store().ui.focusedWindowId;
+
     if (front) usedAt.set(front, Date.now());
   };
+
   onWindowEvent((e) => {
     if (e.type === "focus") {
       leave();
       usedAt.set(e.id, Date.now());
       appActive = true;
     }
+
     if (e.type === "close") usedAt.delete(e.id);
   });
   onAppEvent((e) => {

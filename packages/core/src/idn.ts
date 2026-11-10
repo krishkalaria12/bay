@@ -13,7 +13,9 @@ function adapt(delta: number, points: number, first: boolean): number {
   delta = first ? Math.floor(delta / DAMP) : delta >> 1;
   delta += Math.floor(delta / points);
   let k = 0;
+
   for (; delta > ((BASE - T_MIN) * T_MAX) >> 1; k += BASE) delta = Math.floor(delta / (BASE - T_MIN));
+
   return k + Math.floor(((BASE - T_MIN + 1) * delta) / (delta + SKEW));
 }
 
@@ -23,69 +25,90 @@ const digitChar = (d: number) => String.fromCharCode(d < 26 ? d + 0x61 : d + 22)
 export function punycodeDecode(input: string): string | null {
   const output: number[] = [];
   const delimiter = input.lastIndexOf("-");
+
   for (let j = 0; j < Math.max(delimiter, 0); j++) {
     const c = input.charCodeAt(j);
+
     if (c >= 0x80) return null;
     output.push(c);
   }
+
   let n = INITIAL_N;
   let bias = INITIAL_BIAS;
   let i = 0;
+
   for (let index = delimiter > 0 ? delimiter + 1 : 0; index < input.length;) {
     const oldI = i;
+
     for (let w = 1, k = BASE; ; k += BASE) {
       if (index >= input.length) return null;
       const digit = digitValue(input.charCodeAt(index++));
+
       if (digit >= BASE || digit > Math.floor((MAX_CODE_POINT - i) / w)) return null;
       i += digit * w;
       const t = k <= bias ? T_MIN : k >= bias + T_MAX ? T_MAX : k - bias;
+
       if (digit < t) break;
       w *= BASE - t;
     }
+
     const points = output.length + 1;
     bias = adapt(i - oldI, points, oldI === 0);
     n += Math.floor(i / points);
     i %= points;
+
     if (n > MAX_CODE_POINT || (n >= 0xd800 && n <= 0xdfff)) return null;
     output.splice(i++, 0, n);
   }
+
   return String.fromCodePoint(...output);
 }
 
 export function punycodeEncode(input: string): string {
   const points = Array.from(input, (c) => c.codePointAt(0)!);
+
   let output = points
     .filter((c) => c < 0x80)
     .map((c) => String.fromCharCode(c))
     .join("");
+
   const basic = output.length;
   let handled = basic;
+
   if (basic) output += "-";
   let n = INITIAL_N;
   let delta = 0;
   let bias = INITIAL_BIAS;
+
   while (handled < points.length) {
     const m = Math.min(...points.filter((c) => c >= n));
     delta += (m - n) * (handled + 1);
     n = m;
+
     for (const c of points) {
       if (c < n) delta++;
+
       if (c !== n) continue;
       let q = delta;
+
       for (let k = BASE; ; k += BASE) {
         const t = k <= bias ? T_MIN : k >= bias + T_MAX ? T_MAX : k - bias;
+
         if (q < t) break;
         output += digitChar(t + ((q - t) % (BASE - t)));
         q = Math.floor((q - t) / (BASE - t));
       }
+
       output += digitChar(q);
       bias = adapt(delta, handled + 1, handled === basic);
       delta = 0;
       handled++;
     }
+
     delta++;
     n++;
   }
+
   return output;
 }
 
@@ -122,19 +145,24 @@ const SCRIPTS = [
   "Bopomofo",
   "Han",
 ] as const;
+
 type Script = (typeof SCRIPTS)[number];
+
 function scx(name: string): string {
   try {
     new RegExp(`\\p{Script_Extensions=${name}}`, "u");
+
     return `\\p{Script_Extensions=${name}}`;
   } catch {
     return `\\p{Script=${name}}`;
   }
 }
+
 const SCRIPT_TESTS = SCRIPTS.map((name) => [name, new RegExp(scx(name), "u")] as const);
 const COMMON = /[\p{Script=Common}\p{Script=Inherited}]/u;
 
 const IDENTIFIER = /^[\p{Ll}\p{Lo}\p{Lm}\p{Mn}\p{Mc}\p{Nd}-]$/u;
+
 const EXCLUDED = new RegExp(
   "[" +
     "\\u0138\\u0149\\u017f\\u01c4-\\u01cc\\u01dd\\u0180-\\u019f\\u01a2-\\u01ae\\u01b1-\\u01cc\\u01f1-\\u01f3\\u01f6\\u01f7" +
@@ -150,34 +178,46 @@ const EXCLUDED = new RegExp(
     "]",
   "u",
 );
+
 // The combining marks come first: after a base character they would read as one glyph with it.
 const ALLOWED_COMMON =
   /^[\u0300-\u0304\u0306-\u030c\u030f\u0311\u0313\u0314\u031b\u0323-\u0328\u032d\u032e\u0330\u0331\u0335\u0338\u0339\u00b7\u30fb\u30fc\u3005-\u3007-]$/u;
 
 const isAscii = (s: string) => {
   for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) > 0x7f) return false;
+
   return true;
 };
 
 function isAllowed(c: string): boolean {
   if (ALLOWED_COMMON.test(c)) return true;
+
   if (!IDENTIFIER.test(c) || EXCLUDED.test(c)) return false;
+
   if (c.normalize("NFKC") !== c || c.toLowerCase() !== c) return false;
+
   return scriptsOf(c) !== null;
 }
 
 function scriptsOf(c: string): Script[] | null {
-  const scripts = SCRIPT_TESTS.filter(([, re]) => re.test(c)).map(([name]) => name);
+  const scripts = SCRIPT_TESTS.flatMap(([name, re]) => (re.test(c) ? [name] : []));
+
   if (scripts.length) return scripts;
+
   return COMMON.test(c) ? [] : null;
 }
 
 function augmented(scripts: Script[]): Set<string> {
   const set = new Set<string>(scripts);
+
   if (set.has("Han")) ["Hanb", "Jpan", "Kore"].forEach((s) => set.add(s));
+
   if (set.has("Hiragana") || set.has("Katakana")) set.add("Jpan");
+
   if (set.has("Hangul")) set.add("Kore");
+
   if (set.has("Bopomofo")) set.add("Hanb");
+
   return set;
 }
 
@@ -185,26 +225,48 @@ type Restriction = "ascii" | "single" | "highly" | "moderately" | "minimal";
 
 function restrictionLevel(chars: string[]): Restriction {
   if (chars.every((c) => c.charCodeAt(0) < 0x80)) return "ascii";
-  const sets = chars.map((c) => augmented(scriptsOf(c) ?? [])).filter((s) => s.size);
-  const intersect = (list: Set<string>[]) => list.reduce<Set<string> | null>((acc, s) => (acc ? new Set([...acc].filter((x) => s.has(x))) : new Set(s)), null);
+
+  const sets = chars.flatMap((c) => {
+    const set = augmented(scriptsOf(c) ?? []);
+
+    return set.size ? [set] : [];
+  });
+
+  const intersect = (list: Set<string>[]) =>
+    list.reduce<Set<string> | null>((acc, s) => {
+      if (!acc) return new Set(s);
+
+      for (const x of acc) if (!s.has(x)) acc.delete(x);
+
+      return acc;
+    }, null);
+
   const all = intersect(sets);
+
   if (!all || all.size) return "single";
   const nonLatin = intersect(sets.filter((s) => !s.has("Latin")));
+
   if (!nonLatin || !nonLatin.size) return "minimal";
+
   if (["Hanb", "Jpan", "Kore"].some((s) => nonLatin.has(s))) return "highly";
+
   if (!nonLatin.has("Cyrillic") && !nonLatin.has("Greek")) return "moderately";
+
   return "minimal";
 }
 
 function digitSystems(chars: string[]): Set<number> {
   const zeros = new Set<number>();
+
   for (const c of chars) {
     if (!/\p{Nd}/u.test(c)) continue;
     const cp = c.codePointAt(0)!;
     let zero = cp;
+
     while (zero > 0 && /\p{Nd}/u.test(String.fromCodePoint(zero - 1)) && cp - zero < 9) zero--;
     zeros.add(zero);
   }
+
   return zeros;
 }
 
@@ -269,30 +331,49 @@ export type SpoofReason =
 
 export function labelSpoofReason(label: string, tld: string): SpoofReason | null {
   const chars = Array.from(label);
+
   if (!chars.length) return "invalid";
+
   if (!chars.every(isAllowed)) return "disallowedCharacter";
+
   for (let i = 1; i < chars.length; i++) if (chars[i] === chars[i - 1] && /\p{M}/u.test(chars[i]!)) return "invisible";
+
   if (digitSystems(chars).size > 1) return "mixedNumbers";
   const level = restrictionLevel(chars);
+
   if (level === "minimal") return "mixedScripts";
+
   if (DEVIATIONS.test(label)) return "deviationCharacter";
+
   if (chars.length > 1 && tld !== "is" && /[þð]/u.test(label)) return "tldSpecificCharacter";
+
   if (chars.length > 1 && tld !== "az" && label.includes("ə")) return "tldSpecificCharacter";
+
   if (label.includes("·") && (tld !== "cat" || /[^l]·|·[^l]|^·|·$/u.test(label))) return "unsafeMiddleDot";
+
   if (level === "ascii") return null;
+
   if (DIGIT_LOOKALIKES.test(label) && chars.every((c) => /[0-9]/.test(c) || DIGIT_LOOKALIKES.test(c))) return "digitLookalikes";
+
   if (level === "single" && !KANA_EXCEPTIONS.test(label) && !COMBINING_DIACRITICS.test(label)) {
     const unicodeTld = decodeLabel(tld) ?? tld;
+
     for (const { script, lookalikes, tlds } of WHOLE_SCRIPT_CONFUSABLES) {
       const letters = chars.filter((c) => script.test(c));
+
       if (!letters.length || !letters.every((c) => lookalikes.test(c))) continue;
       const tldUsesScript = Array.from(unicodeTld).every((c) => script.test(c));
+
       if (!tlds.includes(tld) && !tldUsesScript) return "wholeScriptConfusable";
     }
+
     return null;
   }
+
   if (NON_ASCII_LATIN.test(label) && !LGC_OR_ASCII.test(label)) return "nonAsciiLatinMixed";
+
   if (DANGEROUS.test(label)) return "dangerousPattern";
+
   return null;
 }
 
@@ -300,8 +381,11 @@ function decodeLabel(label: string): string | null {
   if (!/^xn--/i.test(label)) return null;
   const ascii = label.slice(4).toLowerCase();
   const unicode = punycodeDecode(ascii);
+
   if (!unicode || isAscii(unicode)) return null;
+
   if (unicode.normalize("NFC") !== unicode || unicode.toLowerCase() !== unicode || punycodeEncode(unicode) !== ascii) return null;
+
   return unicode;
 }
 
@@ -326,73 +410,75 @@ const TOP_DOMAINS = (
   "irs.gov gov.uk"
 ).split(" ");
 
-const CONFUSABLES: Record<string, string> = {
-  ø: "o",
-  đ: "d",
-  ħ: "h",
-  ı: "i",
-  ł: "l",
-  ŧ: "t",
-  ð: "d",
-  þ: "p",
-  ə: "e",
-  ß: "ss",
-  œ: "oe",
-  æ: "ae",
-  а: "a",
-  в: "b",
-  е: "e",
-  з: "3",
-  и: "u",
-  к: "k",
-  м: "m",
-  н: "h",
-  о: "o",
-  п: "n",
-  р: "p",
-  с: "c",
-  т: "t",
-  у: "y",
-  х: "x",
-  ь: "b",
-  ѕ: "s",
-  і: "i",
-  ј: "j",
-  ԁ: "d",
-  һ: "h",
-  ӏ: "l",
-  ԛ: "q",
-  ԝ: "w",
-  ҽ: "e",
-  ѵ: "v",
-  ѡ: "w",
-  г: "r",
-  α: "a",
-  ι: "i",
-  κ: "k",
-  ν: "v",
-  ο: "o",
-  ρ: "p",
-  τ: "t",
-  υ: "u",
-  χ: "x",
-  ω: "w",
-  ϲ: "c",
-  օ: "o",
-  ս: "u",
-  հ: "h",
-  ց: "g",
-  ք: "p",
-  զ: "q",
-  ո: "n",
-  "0": "o",
-  "1": "l",
-  m: "rn",
-  w: "vv",
-};
+const CONFUSABLES = new Map<string, string>(
+  Object.entries({
+    ø: "o",
+    đ: "d",
+    ħ: "h",
+    ı: "i",
+    ł: "l",
+    ŧ: "t",
+    ð: "d",
+    þ: "p",
+    ə: "e",
+    ß: "ss",
+    œ: "oe",
+    æ: "ae",
+    а: "a",
+    в: "b",
+    е: "e",
+    з: "3",
+    и: "u",
+    к: "k",
+    м: "m",
+    н: "h",
+    о: "o",
+    п: "n",
+    р: "p",
+    с: "c",
+    т: "t",
+    у: "y",
+    х: "x",
+    ь: "b",
+    ѕ: "s",
+    і: "i",
+    ј: "j",
+    ԁ: "d",
+    һ: "h",
+    ӏ: "l",
+    ԛ: "q",
+    ԝ: "w",
+    ҽ: "e",
+    ѵ: "v",
+    ѡ: "w",
+    г: "r",
+    α: "a",
+    ι: "i",
+    κ: "k",
+    ν: "v",
+    ο: "o",
+    ρ: "p",
+    τ: "t",
+    υ: "u",
+    χ: "x",
+    ω: "w",
+    ϲ: "c",
+    օ: "o",
+    ս: "u",
+    հ: "h",
+    ց: "g",
+    ք: "p",
+    զ: "q",
+    ո: "n",
+    "0": "o",
+    "1": "l",
+    m: "rn",
+    w: "vv",
+  }),
+);
 
 function skeleton(text: string): string {
-  return Array.from(text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase(), (c) => CONFUSABLES[c] ?? c).join("");
+  return Array.from(text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase(), (c) => CONFUSABLES.get(c) ?? c).join("");
 }
 
 let topSkeletons: Map<string, string> | null = null;
@@ -401,10 +487,13 @@ export function similarTopDomain(host: string): string | null {
   topSkeletons ??= new Map(TOP_DOMAINS.map((d) => [skeleton(d), d]));
   const bare = host.replace(/^www\./, "").replace(/\.$/, "");
   const labels = bare.split(".");
+
   for (const candidate of [bare, labels.slice(-2).join("."), labels.slice(-3).join(".")]) {
     const match = topSkeletons.get(skeleton(candidate));
+
     if (match && match !== candidate) return match;
   }
+
   return null;
 }
 
@@ -415,32 +504,44 @@ const cache = new Map<string, string>();
 export function displayHost(host: string): string {
   if (!/(^|\.)xn--/i.test(host)) return host;
   const cached = cache.get(host);
+
   if (cached !== undefined) return cached;
   const labels = host.toLowerCase().split(".");
   const tld = labels[labels.length - 1] || labels[labels.length - 2] || "";
   let changed = false;
+
   const shown = labels.map((label) => {
     const unicode = decodeLabel(label);
+
     if (!unicode || labelSpoofReason(unicode, tld)) return label;
     changed = true;
+
     return unicode;
   });
+
   let result = changed ? shown.join(".") : host;
+
   if (changed && similarTopDomain(result)) result = host;
+
   if (cache.size > 500) cache.clear();
   cache.set(host, result);
+
   return result;
 }
 
 export function hostSpoofReason(host: string): SpoofReason | null {
   const labels = host.toLowerCase().split(".");
   const tld = labels[labels.length - 1] || "";
+
   for (const label of labels) {
     if (!label.startsWith("xn--")) continue;
     const unicode = decodeLabel(label);
+
     if (!unicode) return "invalid";
     const reason = labelSpoofReason(unicode, tld);
+
     if (reason) return reason;
   }
+
   return displayHost(host) === host && /(^|\.)xn--/.test(host.toLowerCase()) ? "topDomainLookalike" : null;
 }

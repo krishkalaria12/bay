@@ -13,6 +13,7 @@ test("web input supports the shared imperative selection API on the original DOM
       this.selectionEnd = end;
     },
   };
+
   const focus = input.focus;
   installTextInputSelection(input);
   input.setSelection(0, input.value.length);
@@ -26,12 +27,14 @@ test("web input supports the shared imperative selection API on the original DOM
 
 test("selection adapter preserves existing implementations and accepts a cleared ref", () => {
   const selected = [];
+
   const input = {
     setSelection: (start, end) => selected.push([start, end]),
     setSelectionRange() {
       assert.fail("existing selection implementation must remain in use");
     },
   };
+
   const select = input.setSelection;
   installTextInputSelection(input);
   installTextInputSelection(input);

@@ -9,20 +9,27 @@ import { join, resolve } from "node:path";
 import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
 const [appArg, port] = process.argv.slice(2);
+
 if (!appArg) {
   console.error("usage: node hover-shift-test.mjs <Debug Bay.app> [cdpPort]");
   process.exit(2);
 }
+
 const scratch = mkdtempSync(join(tmpdir(), "nn-hover-shift-"));
 const data = join(scratch, "data");
+
 mkdirSync(data);
+
 const rep = reporter(join(scratch, "hover-shift-test.log"), { name: "hover-shift-test" });
 const file = join(data, "report.pdf");
+
 writeFileSync(file, "%PDF-1.4\n");
 
 const ids = ["pin1", "pin2", "a1", "a2", "a3", "b1", "b2", ...Array.from({ length: 12 }, (_, i) => `t${i}`)];
+
 const tab = (id) => {
   const pinned = id.startsWith("pin");
+
   return {
     id,
     url: `https://example.com/?${id}`,
@@ -33,6 +40,7 @@ const tab = (id) => {
 };
 
 let app;
+
 try {
   app = await launch(resolve(appArg), {
     data,
@@ -70,12 +78,15 @@ try {
     ["tab strip", `nn.store.getState().updateSettings({ tabLayout: "top" });`, ["TopTabStrip"]],
     ["downloads", `nn.store.getState().updateSettings({ tabLayout: "sidebar" }); nn.store.getState().setDownloadsOpen("w1", true);`, ["DownloadsPanel"]],
   ];
+
   for (const [name, setup, scopes] of surfaces) {
     await rep.check(name, async () => {
       await nn(`${setup} return true;`);
       await sleep(1200);
       const { hovered, shifts } = await nn(`return nn.hoverShift.check({ scopes: ${JSON.stringify(scopes)} });`);
+
       if (!hovered) throw new Error("nothing hover-tracked found");
+
       if (shifts.length) {
         throw new Error(
           [
@@ -84,6 +95,7 @@ try {
           ].join("\n"),
         );
       }
+
       return `${hovered} hovered views, nothing moved`;
     });
   }
@@ -93,4 +105,5 @@ try {
   await app?.quit();
   rmSync(data, { recursive: true, force: true });
 }
+
 process.exit(rep.summary() ? 0 : 1);

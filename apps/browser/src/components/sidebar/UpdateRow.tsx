@@ -12,6 +12,7 @@ export const UPDATE_ROW_HEIGHT = 40;
 
 export function useUpdateRowShown() {
   useEffect(watchPendingUpdate, []);
+
   return usePendingUpdate((u) => !!u.pending);
 }
 
@@ -19,13 +20,18 @@ export function UpdateRow() {
   const theme = useTheme();
   const pending = usePendingUpdate((u) => u.pending);
   const { hovered, hoverProps } = useHover();
+
   if (!pending) return null;
   const downloading = !!pending.downloading;
+
   const fill = (pressed: boolean) => {
     if (downloading) return theme.tabHover;
+
     if (pressed) return theme.tabPressed;
+
     return hovered ? theme.tabSelected : theme.tabHover;
   };
+
   return (
     <View {...hoverProps} tooltip={`Bay ${pending.version}`}>
       <Pressable onPress={installUpdate} disabled={downloading} accessibilityRole="button">

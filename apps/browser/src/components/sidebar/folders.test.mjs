@@ -6,7 +6,9 @@ const { folderEntries, sidebarEntries, sidebarTabOrder, numberedTabs } = await i
 const { entryHeight, folderDragItemVisible, keptEntry, rowSpan } = await import("./rowGeometry.ts");
 const { DEFAULT_SETTINGS } = await import("../../store/settings.ts");
 const { childFolderIds, folderTabIds } = await import("../../store/folders.ts");
+
 DEFAULT_SETTINGS.newTabPosition = "bottom";
+
 const S = () => useBrowser.getState();
 
 function fixture() {
@@ -20,6 +22,7 @@ function fixture() {
   const parent = S().newPinnedFolder(w, { name: "Work", tabIds: [a] });
   const child = S().newPinnedFolder(w, { name: "Research", parentId: parent, tabIds: [b] });
   const empty = S().newPinnedFolder(w, { name: "Empty", parentId: child });
+
   return { w, loose, a, b, c, parent, child, empty };
 }
 
@@ -33,12 +36,14 @@ test("folder membership caches progress/UI reads and invalidates placement, list
   S().toggleSidebar(f.w);
   assert.strictEqual(folderTabIds(S(), f.parent), members);
   const state = S();
+
   const check = (patch, expected, direct) => {
     const s = { ...state, ...patch };
     assert.deepEqual(folderTabIds(s, f.parent), expected);
     assert.deepEqual(folderTabIds(s, f.parent, false), direct);
     assert.strictEqual(folderTabIds(s, f.parent), folderTabIds(s, f.parent));
   };
+
   check({ tabs: { ...state.tabs, [f.b]: { ...state.tabs[f.b], folderId: f.parent } } }, [f.a, f.b], [f.a, f.b]);
   check({ tabs: { ...state.tabs, [f.b]: { ...state.tabs[f.b], pinnedRow: false } } }, [f.a], [f.a]);
   check({ tabs: { ...state.tabs, [f.b]: { ...state.tabs[f.b], spaceId: "other" } } }, [f.a], [f.a]);
@@ -64,6 +69,7 @@ test("folder membership preserves list order and safely handles cyclic or cross-
     b: { id: "b", spaceId: "other", parentId: "a" },
     c: { id: "c", spaceId: "default", parentId: "b" },
   };
+
   const state = {
     pinnedFolders,
     spaces: {},
@@ -75,6 +81,7 @@ test("folder membership preserves list order and safely handles cyclic or cross-
       missing: { id: "missing", spaceId: "default", pinnedRow: true, folderId: "gone" },
     },
   };
+
   assert.deepEqual(folderTabIds(state, "a"), ["c", "a"]);
   assert.deepEqual(folderTabIds(state, "a", false), ["a"]);
   assert.deepEqual(folderTabIds(state, "b"), ["b"]);

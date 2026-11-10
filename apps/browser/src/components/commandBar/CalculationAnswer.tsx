@@ -7,6 +7,7 @@ import { Keycaps } from "./Keycaps";
 
 export function CalculationAnswer({ suggestion: s, selected }: { suggestion: Extract<Suggestion, { kind: "calc" }>; selected: boolean }) {
   const theme = useTheme();
+
   return (
     <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12 }}>
       <View

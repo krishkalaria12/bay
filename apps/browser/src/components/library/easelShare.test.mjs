@@ -12,10 +12,12 @@ const document = {
   updatedAt: 2,
   items: [],
 };
+
 const image = { data: "data:image/png;base64,cG5n", width: 100, height: 50 };
 const originalImage = globalThis.Image;
 const originalCanvas = globalThis.OffscreenCanvas;
 const originalNative = globalThis.nnTestNativeModules;
+
 afterEach(() => {
   globalThis.Image = originalImage;
   globalThis.OffscreenCanvas = originalCanvas;
@@ -29,6 +31,7 @@ test("a shared snapshot includes only the picture and unique safe source links",
     { kind: "link", url: "javascript:alert(1)" },
     { kind: "image", source: { url: "file:///private/local.png" } },
   ];
+
   const text = easelShareSnapshot({ ...document, items }, "Public title", image);
   assert.deepEqual(JSON.parse(text), {
     version: 1,
@@ -37,6 +40,7 @@ test("a shared snapshot includes only the picture and unique safe source links",
     image,
     links: [{ url: "https://example.test/", title: "Source" }],
   });
+
   for (const privateField of ["private", "live", "path", "profileId", "createdAt", "updatedAt"]) assert.equal(text.includes(privateField), false);
 });
 
@@ -97,10 +101,12 @@ test("HTML export embeds the canvas, escapes labels and never exports local path
     BayEasel: {
       saveDownload: async (...args) => {
         saved = args;
+
         return "/Downloads/Test.html";
       },
     },
   };
+
   const path = await imageFiles.exportHTML(
     JSON.stringify({
       ...document,
@@ -111,6 +117,7 @@ test("HTML export embeds the canvas, escapes labels and never exports local path
       ],
     }),
   );
+
   assert.equal(path, "/Downloads/Test.html");
   const html = Buffer.from(saved[0], "base64").toString("utf8");
   assert.match(html, /data:image\/png;base64,cG5n/);
@@ -139,6 +146,7 @@ test("retaining an imported image decodes in the renderer and stores normalized 
     }
     async convertToBlob(options) {
       assert.equal(options.type, "image/png");
+
       return new Blob(["normalized png"]);
     }
   };
@@ -147,10 +155,12 @@ test("retaining an imported image decodes in the renderer and stores normalized 
     BayEasel: {
       readImage: async (path) => {
         assert.equal(path, "/import/photo.jpg");
+
         return Buffer.from("source picture").toString("base64");
       },
       storeImage: async (...args) => {
         stored = args;
+
         return "/Library Media/retained.png";
       },
     },

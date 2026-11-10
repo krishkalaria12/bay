@@ -45,6 +45,7 @@ export function MiniPlayer({ tabId, onBackToTab }: { tabId: string; onBackToTab:
   const playing = isPlaying(session);
   useTicker(playing);
   const group = useMarqueeGroup(`${session?.title}|${session?.artist}`);
+
   if (!session || !tab) return null;
   const width = MINI_PLAYER_WIDTH;
   const textWidth = width - MINI_PLAYER_TEXT_X - MINI_PLAYER_CONTROLS_WIDTH - 8 - MINI_PLAYER_INSET;
@@ -134,6 +135,7 @@ function TransportButton({
 }) {
   const { hovered, hoverProps } = useHover();
   const box = Math.max(width, size + 4);
+
   return (
     <View {...hoverProps} tooltip={tooltip} style={{ position: "absolute", left: left - (box - width) / 2, top: 9, width: box, height: 38 }}>
       <Pressable onPress={onPress}>
@@ -175,6 +177,7 @@ function AlbumArt({
   const downloaded = useArtwork(tabId, session.artwork);
   const art = downloaded && downloaded !== failed ? downloaded : null;
   useEffect(() => fade.set(0), [art]);
+
   return (
     <View {...hoverProps} style={{ position: "absolute", left: MINI_PLAYER_INSET, top: MINI_PLAYER_INSET, width: MINI_PLAYER_ART, height: MINI_PLAYER_ART }}>
       <Pressable onPress={onPress} tooltip="Back to Tab">
@@ -240,7 +243,9 @@ function TimeBar({ tabId, session, tokens }: { tabId: string; session: Session; 
   const duration = session.duration;
   const shownPosition = drag !== null && duration ? drag * duration : positionOf(session);
   const label: TextStyle = { fontSize: 10, fontVariant: ["tabular-nums"], color: tokens.secondary };
+
   if (session.live) return <LiveLabel tabId={tabId} session={session} tokens={tokens} fontSize={10} />;
+
   return (
     <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
       <Text style={label}>{formatTime(shownPosition)}</Text>
@@ -273,6 +278,7 @@ export function LiveLabel({ tabId, session, tokens, fontSize }: { tabId: string;
   const { hovered, hoverProps } = useHover();
   const behind = liveBehindOf(session);
   const text: TextStyle = { fontSize, fontWeight: "600", fontVariant: ["tabular-nums"], color: behind && hovered ? tokens.label : tokens.secondary };
+
   return (
     <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
       {behind ? (
@@ -314,12 +320,15 @@ export function SeekBar({
   const progress = drag ?? (duration ? positionOf(session) / duration : 0);
   const measure = () => ref.current?.measureInWindow((x, _y, width) => (frame.current = { x, width: Math.max(1, width) }));
   const at = (e: GestureResponderEvent) => Math.min(1, Math.max(0, (e.nativeEvent.pageX - frame.current.x) / frame.current.width));
+
   const update = (p: number | null) => {
     setDrag(p);
     onDrag?.(p);
   };
+
   const radius = barHeight / 2;
   const top = (height - barHeight) / 2;
+
   return (
     <View
       ref={ref}

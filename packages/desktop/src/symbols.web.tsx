@@ -1,8 +1,16 @@
 import { createElement, type ReactNode } from "react";
 import { symbolNodes, type SymbolNode } from "./lucideSymbols.web";
+
 export { fluentSymbol } from "./fluentGlyphs.web";
 
-const aliases: Record<string, string> = {
+/** The web's symbol names, by the name the app knows. */
+type SymbolAliases = Record<string, string>;
+
+/** The web's fills, by symbol name. */
+type SymbolFills = Record<string, Fill>;
+
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
+const aliases: SymbolAliases = {
   "arrow.up.forward": "arrow.up.right",
   "arrow.triangle.pull": "arrow.triangle.2.circlepath",
   "arrow.triangle.swap": "arrow.triangle.2.circlepath",
@@ -15,12 +23,16 @@ const aliases: Record<string, string> = {
   "lock.open.trianglebadge.exclamationmark": "lock.open",
   "circle.slash": "nosign",
 };
+
 /** How an SF Symbol's `.fill` variant draws: listed parts solid (all when none are listed), or one part solid with the
  *  others cut out of it, as SF Symbols' filled badges are. Any other `.fill` name draws its outline. */
 type Fill = { solid?: readonly number[] } | { knockout: number };
+
 const SOLID: Fill = {};
 const BADGE: Fill = { knockout: 0 };
-const fills: Record<string, Fill> = {
+
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
+const fills: SymbolFills = {
   "arrow.down.circle": BADGE,
   "arrow.right.circle": BADGE,
   "arrow.uturn.backward.circle": BADGE,
@@ -54,6 +66,8 @@ const fills: Record<string, Fill> = {
   "speaker.wave.2": { solid: [0] },
   "speaker.wave.3": { solid: [0] },
   crown: { solid: [0] },
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
+  // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- The name is the shader's own uniform, not a shape this code describes.
   gearshape: { knockout: 0 },
   leaf: { solid: [0] },
   lock: { solid: [0] },
@@ -87,6 +101,7 @@ const draw = (nodes: readonly SymbolNode[], key: string, paint?: (index: number)
 /** One part filled, the others cut out of it through a mask, so the window shows through them. */
 function drawKnockout(nodes: readonly SymbolNode[], solid: number, maskId: string): ReactNode {
   const holes = nodes.filter((_, index) => index !== solid);
+
   return [
     createElement(
       "mask",
@@ -106,13 +121,18 @@ function drawKnockout(nodes: readonly SymbolNode[], solid: number, maskId: strin
 export function svgSymbol(name: string, maskId: string): ReactNode {
   const filled = name.endsWith(".fill");
   const base = filled ? name.slice(0, -".fill".length) : name;
-  const key = aliases[base] ?? base;
+  // SF Symbols' skip arrows carry their seconds (gobackward.15): the same arrows here, without the number.
+  const key = aliases[base] ?? base.replace(/^gobackward(\.\d+)?$/, "arrow.counterclockwise").replace(/^goforward(\.\d+)?$/, "arrow.clockwise");
   const nodes = symbolNodes[key] ?? symbolNodes["exclamationmark.circle"]!;
+
   // A dot: always solid.
   if (key === "circle") return draw(nodes, "c", () => SOLID_PAINT);
   const fill = filled ? fills[key] : undefined;
+
   if (!fill) return draw(nodes, "o");
+
   if ("knockout" in fill) return drawKnockout(nodes, fill.knockout, maskId);
   const solid = fill.solid;
+
   return draw(nodes, "s", (index) => (!solid || solid.includes(index) ? SOLID_PAINT : {}));
 }

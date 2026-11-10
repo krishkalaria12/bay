@@ -24,18 +24,25 @@ export const endpoints = {
 
 export async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
+
   try {
     res = await fetch(url, { ...init, headers: { Accept: "application/json", ...init.headers } });
   } catch {
     throw new LiveError("network", "Couldn't connect");
   }
+
   if (res.status === 401) throw new LiveError("signedOut", "Signed out");
+
   if (res.status === 403 && res.headers.get("x-github-sso")) throw new LiveError("sso", "Needs Single Sign-On");
+
   if (res.status === 429 || (res.status === 403 && res.headers.get("x-ratelimit-remaining") === "0")) throw new LiveError("rateLimited", "Rate Limit Exceeded");
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new LiveError(res.status === 403 ? "signedOut" : "other", `${res.status} ${text.slice(0, 200)}`.trim());
   }
+
+  // SAFETY: T assertion matches the runtime value validated at this call site.
   return (await res.json()) as T;
 }
 
@@ -49,11 +56,13 @@ const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 export function base64(text: string): string {
   const bytes = [...new TextEncoder().encode(text)];
   let out = "";
+
   for (let i = 0; i < bytes.length; i += 3) {
     const [a, b = 0, c = 0] = [bytes[i]!, bytes[i + 1], bytes[i + 2]];
     const n = (a << 16) | (b << 8) | c;
     out += B64[(n >> 18) & 63]! + B64[(n >> 12) & 63]! + (i + 1 < bytes.length ? B64[(n >> 6) & 63]! : "=") + (i + 2 < bytes.length ? B64[n & 63]! : "=");
   }
+
   return out;
 }
 

@@ -3,7 +3,7 @@ import { Pressable, View } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, prompt, showMenu, Symbol, type MenuItem } from "@bay/desktop";
 import { useState } from "react";
-import { PanResponder, StyleSheet, Text, type LayoutRectangle } from "react-native";
+import { PanResponder, StyleSheet, Text, type GestureResponderEvent, type LayoutRectangle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { reportBrowserCommand } from "../../runtime/commands";
@@ -13,7 +13,9 @@ import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { bookmarkSpaceId, isIncognitoSpace } from "../../store/model";
 import type { DeepReadonly } from "../../runtime/projection";
+
 type BookmarkNode = DeepReadonly<import("../../store/types").BookmarkNode>;
+
 import { openInternalPage } from "../pages/pageUrls";
 import { Favicon, useHover } from "../ui/primitives";
 import { openImport } from "../settings/windows";
@@ -26,7 +28,9 @@ import { updateSettings } from "../../runtime/settingsActions";
 export function BookmarksBar({ tabId, placeholder }: { tabId: string; placeholder?: boolean }) {
   const windowId = useWindowId();
   const shown = useBookmarksBarShown(tabId);
+
   if (!shown) return null;
+
   return placeholder ? <View style={{ height: BOOKMARKS_BAR_HEIGHT }} /> : <Bar windowId={windowId} />;
 }
 
@@ -34,7 +38,9 @@ export function useBookmarksBarShown(tabId: string): boolean {
   return useBrowser((s) => {
     const tab = s.tabs[tabId];
     const mode = s.settings.bookmarksBar;
+
     if (!tab || mode === "never" || isIncognitoSpace(tab.spaceId)) return false;
+
     return mode === "always" || !tab.url;
   });
 }
@@ -44,14 +50,19 @@ function Bar({ windowId }: { windowId: string }) {
   const spaceId = useBrowser((s) => bookmarkSpaceId(s, s.windows[windowId]));
   const barId = useBrowser((s) => s.bookmarks.roots[spaceId]?.bar);
   const otherId = useBrowser((s) => s.bookmarks.roots[spaceId]?.other);
+
   const children = useBrowser((s) => {
     const bar = barId ? s.bookmarks.nodes[barId] : undefined;
+
     return bar?.kind === "folder" ? bar.children : EMPTY;
   });
+
   const hasOther = useBrowser((s) => {
     const other = otherId ? s.bookmarks.nodes[otherId] : undefined;
+
     return other?.kind === "folder" && other.children.length > 0;
   });
+
   const hideImport = useBrowser((s) => s.settings.hideBookmarksBarImport);
 
   const [width, setWidth] = useState(0);
@@ -60,35 +71,47 @@ function Bar({ windowId }: { windowId: string }) {
 
   const reserved = hasOther ? 150 : 0;
   const available = width - reserved;
+
   const fits = (id: string) => {
     const f = frames[id];
+
     return !f || f.x + f.width <= available - (overflowing() ? BOOKMARKS_OVERFLOW_WIDTH : 0);
   };
+
   function overflowing() {
     const last = children.at(-1);
     const f = last ? frames[last] : undefined;
+
     return !!f && f.x + f.width > available;
   }
+
   const hidden = children.filter((id) => !fits(id));
 
   const dropAt = (id: string, dx: number): { index: number; into: string | null } | null => {
     const f = frames[id];
+
     if (!f || !barId) return null;
     const x = f.x + f.width / 2 + dx;
     const visible = children.filter((c) => frames[c] && fits(c));
+
     for (let i = 0; i < visible.length; i++) {
       const c = visible[i]!;
       const r = frames[c]!;
       const node = useBrowser.getState().bookmarks.nodes[c];
+
       if (c !== id && node?.kind === "folder" && x > r.x + r.width * 0.25 && x < r.x + r.width * 0.75) return { index: -1, into: c };
+
       if (x < r.x + r.width / 2) return { index: children.indexOf(c), into: null };
     }
+
     return { index: children.length, into: null };
   };
 
   const onDrop = (id: string, target: { index: number; into: string | null } | null) => {
     setDrop(null);
+
     if (!target || !barId) return;
+
     if (target.into) return reportBrowserCommand(moveBookmark(id, target.into));
     const from = children.indexOf(id);
     reportBrowserCommand(moveBookmark(id, barId, target.index > from ? target.index - 1 : target.index));
@@ -98,7 +121,9 @@ function Bar({ windowId }: { windowId: string }) {
     if (!drop || drop.into) return null;
     const id = children[drop.index];
     const f = id ? frames[id] : frames[children.at(-1) ?? ""];
+
     if (!f) return 8;
+
     return id ? f.x - 2 : f.x + f.width + 2;
   })();
 
@@ -185,6 +210,7 @@ function BarItem({
   const [dragging, setDragging] = useState(false);
   const dragMove = useEffectEvent(onDragMove);
   const dragEnd = useEffectEvent(onDragEnd);
+
   // One responder for the item's life: a new one mid-gesture would drop the gesture.
   const [responder] = useState(() =>
     PanResponder.create({
@@ -207,7 +233,9 @@ function BarItem({
       },
     }),
   );
+
   if (!node) return null;
+
   const open = (e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) =>
     node.kind === "url" ? reportBrowserCommand(openUrl(node.url, windowId, openModeFor(e))) : void openFolderMenu(windowId, node.children, undefined, node.id);
 
@@ -257,9 +285,13 @@ function BarButton({
   const { hovered, hoverProps } = useHover();
   const windowId = useWindowId();
   const spaceId = useBrowser((s) => bookmarkSpaceId(s, s.windows[windowId]));
+
+  // SAFETY: e.nativeEvent carries the press modifiers from the platform event; the component only reads metaKey/shiftKey/altKey.
+  const handlePress = (e: GestureResponderEvent) => onPress(e.nativeEvent as ClickMods);
+
   return (
     <View {...hoverProps} tooltip={tooltip}>
-      <Pressable onPress={(e) => onPress(e.nativeEvent as unknown as ClickMods)}>
+      <Pressable onPress={handlePress}>
         {({ pressed }) => (
           <View
             style={{
@@ -297,6 +329,7 @@ function ImportButton() {
     <ContextMenuArea
       onContextMenu={async () => {
         const choice = await showMenu([{ id: "hide", title: "Hide Import Bookmarks Button" }]);
+
         if (choice === "hide") reportBrowserCommand(settingsCommands.updateSettings({ hideBookmarksBarImport: true }));
       }}
     >
@@ -307,17 +340,23 @@ function ImportButton() {
 
 async function openFolderMenu(windowId: string, ids: readonly string[], _e?: ClickMods, folderId?: string) {
   const b = useBrowser.getState().bookmarks;
+
   const build = (list: readonly string[], parent?: string, depth = 0): MenuItem[] => {
     const items: MenuItem[] = list
-      .map((id) => b.nodes[id])
-      .filter((n): n is BookmarkNode => !!n)
+      .flatMap((id) => {
+        const n = b.nodes[id];
+
+        return n ? [n] : [];
+      })
       .map((n) =>
         n.kind === "url"
           ? { id: `open:${n.id}`, title: n.title || n.url, symbol: "globe" }
           : { id: `folder:${n.id}`, title: n.title, symbol: "folder", children: depth < 8 ? build(n.children, n.id, depth + 1) : [] },
       );
+
     if (!items.length) items.push({ id: "empty", title: "Empty", enabled: false });
     const links = parent ? folderLinks(b, parent).length : 0;
+
     if (links > 0) {
       items.push(
         { separator: true },
@@ -326,20 +365,28 @@ async function openFolderMenu(windowId: string, ids: readonly string[], _e?: Cli
         { id: `openAllIncognito:${parent}`, title: "Open All in Incognito Window" },
       );
     }
+
     return items;
   };
+
   const choice = await showMenu(build(ids, folderId));
+
   if (!choice) return;
   const [action, id] = splitChoice(choice);
   const node = id ? useBrowser.getState().bookmarks.nodes[id] : undefined;
+
   if (action === "open" && node?.kind === "url") reportBrowserCommand(openUrl(node.url, windowId, "current"));
+
   if (action === "openAll" && id) reportBrowserCommand(openFolder(id, windowId, "tabs"));
+
   if (action === "openAllWindow" && id) reportBrowserCommand(openFolder(id, windowId, "window"));
+
   if (action === "openAllIncognito" && id) reportBrowserCommand(openFolder(id, windowId, "incognito"));
 }
 
 const splitChoice = (choice: string): [string, string] => {
   const i = choice.indexOf(":");
+
   return i < 0 ? [choice, ""] : [choice.slice(0, i), choice.slice(i + 1)];
 };
 
@@ -347,6 +394,7 @@ async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode
   const s = useBrowser.getState();
   const barMode = s.settings.bookmarksBar;
   const items: MenuItem[] = [];
+
   if (node?.kind === "url") {
     items.push(
       { id: "tab", title: "Open in New Tab" },
@@ -371,6 +419,7 @@ async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode
       { separator: true },
     );
   }
+
   items.push(
     { id: "addPage", title: "Add Page…" },
     { id: "addFolder", title: "Add Folder…" },
@@ -387,30 +436,50 @@ async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode
     },
   );
   const choice = await showMenu(items);
+
   if (!choice) return;
   const bar = s.bookmarks.roots[spaceId]?.bar;
+
   if (node?.kind === "url") {
     if (choice === "tab") reportBrowserCommand(openUrl(node.url, windowId, "foreground"));
+
     if (choice === "window") reportBrowserCommand(openUrl(node.url, windowId, "window"));
+
     if (choice === "incognito") reportBrowserCommand(openUrl(node.url, windowId, "incognito"));
+
     if (choice === "split") reportBrowserCommand(openUrl(node.url, windowId, "split"));
+
     if (choice === "edit") void editBookmark(node.id, windowId);
+
     if (choice === "copy") copyText(cleanUrl(node.url));
   }
+
   if (node?.kind === "folder") {
     if (choice === "openAll") reportBrowserCommand(openFolder(node.id, windowId, "tabs"));
+
     if (choice === "openAllWindow") reportBrowserCommand(openFolder(node.id, windowId, "window"));
+
     if (choice === "openAllIncognito") reportBrowserCommand(openFolder(node.id, windowId, "incognito"));
+
     if (choice === "rename") void editBookmark(node.id, windowId);
   }
+
   if (choice === "delete" && node) reportBrowserCommand(removeBookmark(node.id));
   const parentId = node?.parentId ?? bar;
   const index = node && parentId ? folderChildren(useBrowser.getState().bookmarks, parentId).findIndex((n) => n.id === node.id) + 1 : undefined;
+
   if (choice === "addPage") void editBookmark(null, windowId, { spaceId, parentId: parentId ?? undefined, index });
+
   if (choice === "addFolder") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
+
     if (title) reportBrowserCommand(addBookmarkFolder({ spaceId, title, parentId: parentId ?? undefined, index }));
   }
+
   if (choice === "manage") reportBrowserCommand(openInternalPage("bookmarks", windowId));
-  if (choice.startsWith("bar:")) reportBrowserCommand(updateSettings({ bookmarksBar: choice.slice(4) as typeof barMode }));
+
+  if (choice.startsWith("bar:")) {
+    // SAFETY: the checks above established this shape.
+    reportBrowserCommand(updateSettings({ bookmarksBar: choice.slice(4) as typeof barMode }));
+  }
 }

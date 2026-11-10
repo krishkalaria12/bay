@@ -15,12 +15,14 @@ const navigation = (url = "https://page.example/", title = "Page") => ({
   audible: false,
   muted: false,
 });
+
 function setup(options = { url: "https://requested.example/" }) {
   const store = createBrowserStore();
   const windowId = store.getState().createWindow(options);
   const tabId = activeTabId(store.getState(), windowId);
   const consumer = createPageFactConsumer(store);
   let sequence = 0;
+
   const fact = (event, payload, extra = {}) => ({
     tabId,
     profile: engineProfileFor(store.getState().tabs[tabId]?.spaceId ?? "default", store.getState().spaces),
@@ -30,7 +32,9 @@ function setup(options = { url: "https://requested.example/" }) {
     payload,
     ...extra,
   });
+
   const apply = (event, payload, extra) => consumer.apply(fact(event, payload, extra));
+
   return { store, windowId, tabId, consumer, fact, apply };
 }
 
@@ -68,6 +72,7 @@ test("malformed facts do not mutate state or consume a later sequence", () => {
   const good = fact("onProgress", { progress: 0.5 }, { sequence: 100 });
   const sparse = [];
   sparse.length = 1;
+
   const bad = [
     null,
     [],
@@ -97,11 +102,14 @@ test("malformed facts do not mutate state or consume a later sequence", () => {
     { ...good, event: "onDiscarded", payload: { url: null } },
     { ...good, event: "onLoadError", payload: { url: "", code: NaN, text: "error" } },
   ];
+
   const before = store.getState();
+
   for (const input of bad) {
     assert.equal(consumer.apply(input), false);
     assert.equal(store.getState(), before);
   }
+
   assert.equal(consumer.apply({ ...good, sequence: 1 }), true);
   assert.equal(store.getState().live[good.tabId].progress, 0.5);
 });
@@ -238,12 +246,14 @@ test("profile changes release old page identity and disposal removes the structu
   store.subscribe = (listener) => {
     const unsubscribe = subscribe(listener);
     let stopped = false;
+
     return () => {
       if (!stopped) unsubscribed++;
       stopped = true;
       unsubscribe();
     };
   };
+
   const consumer = createPageFactConsumer(store);
   const fact = { tabId, profile: "", browserId: 1, sequence: 100, event: "onProgress", payload: { progress: 0.2 } };
   assert.equal(consumer.apply(fact), true);

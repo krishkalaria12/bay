@@ -10,7 +10,7 @@ import { useWindowId } from "../../store/hooks";
 import { Intro } from "./Intro";
 import { dismissOnboarding, FIRST_STEP, goToStep, useOnboarding } from "./state";
 import { DefaultBrowserStep, OutroStep, PersonalizeStep, PinnedTabsStep } from "./steps";
-import { ImportStep } from "./importStep";
+import { BackgroundImportStatus, ImportFlowHost, ImportStep } from "./importStep";
 import { PrivacyStep } from "./privacyStep";
 import { SearchStep } from "./searchStep";
 import { ToolTour } from "./tour/ToolTour";
@@ -21,9 +21,11 @@ export function OnboardingOverlay() {
   const windowId = useWindowId();
   const active = useOnboarding((s) => s.windowId === windowId);
   const session = useOnboarding((s) => s.session);
+  const importing = useOnboarding((s) => s.importInBackground === windowId);
+
   return (
     <>
-      {active ? <Overlay key={session} session={session} /> : null}
+      {active || importing ? <ImportFlowHost windowId={windowId}>{active ? <Overlay key={session} session={session} /> : null}</ImportFlowHost> : null}
       <ToolTour />
     </>
   );
@@ -59,6 +61,7 @@ function Overlay({ session }: { session: number }) {
     );
   }, [leaving]);
   const presenceStyle = useAnimatedStyle(() => ({ opacity: presence.get() }));
+
   const cardStyle = useAnimatedStyle(() => ({
     opacity: interpolate(card.get(), [0, 1, 2], [0, 1, 0]),
     transform: [{ translateY: interpolate(card.get(), [0, 1, 2], [24, 0, 0]) }, { scale: interpolate(card.get(), [0, 1, 2], [0.97, 1, 1.03]) }],
@@ -115,6 +118,7 @@ function Overlay({ session }: { session: number }) {
         </View>
       )}
       {step === "intro" && <Intro onDone={() => goToStep(FIRST_STEP)} />}
+      <BackgroundImportStatus bottom={Math.max(6, (size.height - height) / 2 - 40)} />
     </Animated.View>
   );
 }

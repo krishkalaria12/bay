@@ -24,9 +24,12 @@ export type ShortcutStroke = {
 export const modNativeName = (os: PlatformOS): "command" | "control" => (os === "macos" ? "command" : "control");
 
 // The glyphs macOS hints are written with, and the modifier each stands for.
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 const GLYPHS: Record<string, Modifier> = { "⌃": "ctrl", "⌥": "alt", "⇧": "shift", "⌘": "mod" };
 const GLYPH_OF: Record<Modifier, string> = { ctrl: "⌃", alt: "⌥", shift: "⇧", mod: "⌘" };
+
 // macOS spells some keys as glyphs; Windows spells them as words.
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 const KEY_GLYPH_MAC: Record<string, string> = {
   return: "↩",
   enter: "↩",
@@ -41,6 +44,8 @@ const KEY_GLYPH_MAC: Record<string, string> = {
   up: "↑",
   down: "↓",
 };
+
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 const KEY_WORD_WINDOWS: Record<string, string> = {
   return: "Enter",
   enter: "Enter",
@@ -75,8 +80,10 @@ export const isApplePlatform = (os: PlatformOS): boolean => os === "macos";
 const keyLabel = (key: string, os: PlatformOS): string => {
   if (isApplePlatform(os)) {
     const glyph = KEY_GLYPH_MAC[key.toLowerCase()];
+
     return glyph && key.length > 1 ? glyph : key;
   }
+
   return KEY_WORD_WINDOWS[key.toLowerCase()] ?? (key.length === 1 ? key.toUpperCase() : key);
 };
 
@@ -84,18 +91,28 @@ const keyLabel = (key: string, os: PlatformOS): string => {
 export function formatShortcut(stroke: ShortcutStroke, os: PlatformOS): string {
   if (isApplePlatform(os)) {
     const parts: string[] = [];
+
     if (stroke.ctrl) parts.push(GLYPH_OF.ctrl);
+
     if (stroke.alt) parts.push(GLYPH_OF.alt);
+
     if (stroke.shift) parts.push(GLYPH_OF.shift);
+
     if (stroke.mod) parts.push(GLYPH_OF.mod);
+
     return parts.join("") + keyLabel(stroke.key, os);
   }
+
   // Windows: `mod` is Control, so a stroke with both is still one Ctrl.
   const parts: string[] = [];
+
   if (stroke.ctrl || stroke.mod) parts.push("Ctrl");
+
   if (stroke.alt) parts.push("Alt");
+
   if (stroke.shift) parts.push("Shift");
   parts.push(keyLabel(stroke.key, os));
+
   return parts.join("+");
 }
 
@@ -112,6 +129,7 @@ export function menuShortcutStroke(key: string, modifiers: readonly ("command" |
 
 // AppKit's characters for keys without a letter, which the menus' `key` and a recorded shortcut use. Where two
 // characters are one key, the first is what a recording gives.
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 const MENU_KEY_NAMES: Record<string, string> = {
   "\t": "Tab",
   "\r": "Enter",
@@ -130,13 +148,16 @@ const MENU_KEY_NAMES: Record<string, string> = {
   "\uf72c": "PageUp",
   "\uf72d": "PageDown",
 };
+
 const F1_MENU_KEY = 0xf704;
 
 /** A menu's `key` by the name strokes use it by: "\uf700" is "Up", "\uf704" is "F1", and a letter stays itself. */
 export function menuKeyName(key: string): string {
   const name = MENU_KEY_NAMES[key];
+
   if (name) return name;
   const f = key.charCodeAt(0) - F1_MENU_KEY + 1;
+
   return key.length === 1 && f >= 1 && f <= 20 ? `F${f}` : key;
 }
 
@@ -144,8 +165,10 @@ export function menuKeyName(key: string): string {
 export function menuKeyOf(name: string): string {
   const lower = name.toLowerCase();
   const special = Object.entries(MENU_KEY_NAMES).find(([, known]) => known.toLowerCase() === lower);
+
   if (special) return special[0];
   const f = /^f([1-9]|1[0-9]|20)$/.exec(lower);
+
   return f ? String.fromCharCode(F1_MENU_KEY + Number(f[1]) - 1) : lower;
 }
 
@@ -163,13 +186,16 @@ export function menuModifiersOf(stroke: ShortcutStroke): ("control" | "option" |
 export function parseShortcut(hint: string): ShortcutStroke {
   const stroke: ShortcutStroke = { key: "" };
   let rest = hint;
+
   for (const [glyph, modifier] of Object.entries(GLYPHS)) {
     if (rest.includes(glyph)) {
       stroke[modifier] = true;
       rest = rest.split(glyph).join("");
     }
   }
+
   stroke.key = rest;
+
   return stroke;
 }
 
@@ -181,6 +207,7 @@ const GLYPH_RUN = /([⌃⌥⇧⌘]+)([^\s()⌃⌥⇧⌘]{1,3})/g;
  */
 export function relabelShortcuts(text: string, os: PlatformOS): string {
   if (isApplePlatform(os)) return text;
+
   return text.replace(GLYPH_RUN, (_all, glyphs: string, key: string) => formatShortcut({ ...parseShortcut(glyphs), key }, os));
 }
 
@@ -190,6 +217,7 @@ export function relabelShortcuts(text: string, os: PlatformOS): string {
  * counterpart, the same key with Ctrl is kept. Conflicts with Chrome's own bindings are called out:
  * the app's menu model decides which one runs (Phase 5).
  */
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   newTab: { key: "T", mod: true },
   newWindow: { key: "N", mod: true },
@@ -221,6 +249,7 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   inspectElements: { key: "C", mod: true, shift: true },
   viewSource: { key: "U", mod: true },
   savePage: { key: "S", mod: true },
+  capture: { key: "S", mod: true, shift: true },
   zoomIn: { key: "=", mod: true },
   zoomOut: { key: "-", mod: true },
   zoomReset: { key: "0", mod: true },
@@ -259,6 +288,7 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
  * do, and F11 toggles full screen. Super belongs to the compositor, so no stroke uses it (a stroke has no
  * meta modifier to ask for it).
  */
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 export const LINUX_SHORTCUTS: Record<string, ShortcutStroke> = {
   ...WINDOWS_SHORTCUTS,
   quit: { key: "Q", mod: true },
@@ -266,6 +296,7 @@ export const LINUX_SHORTCUTS: Record<string, ShortcutStroke> = {
 };
 
 // Windows virtual-key codes, which Chromium's key events carry on every desktop (ui::KeyboardCode).
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
 const VIRTUAL_KEYS: Record<string, number> = {
   backspace: 0x08,
   tab: 0x09,
@@ -299,13 +330,16 @@ const VIRTUAL_KEYS: Record<string, number> = {
 export function virtualKeyCode(key: string): number | null {
   if (/^[a-z0-9]$/i.test(key)) return key.toUpperCase().charCodeAt(0);
   const f = /^F([1-9]|1[0-9]|20)$/i.exec(key);
+
   if (f) return 0x6f + Number(f[1]);
+
   return VIRTUAL_KEYS[key.toLowerCase()] ?? null;
 }
 
 /** "Ctrl+Shift+T" for a command, or null when the table has none. */
 export function windowsShortcutLabel(command: string, os: PlatformOS = "windows"): string | null {
   const stroke = (os === "linux" ? LINUX_SHORTCUTS : WINDOWS_SHORTCUTS)[command];
+
   return stroke ? formatShortcut(stroke, os) : null;
 }
 
@@ -319,6 +353,7 @@ export function strokeMatches(
   const same = key === wanted || event.key === stroke.key;
   const command = event.metaKey ?? false;
   const control = event.ctrlKey ?? false;
+
   return (
     same &&
     !command &&

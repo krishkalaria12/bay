@@ -39,21 +39,28 @@ const ALLOWED = {
 };
 
 const root = fileURLToPath(new URL("..", import.meta.url));
+
 function* sources(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
+
     if (entry.isDirectory()) yield* sources(path);
     else if (/\.tsx?$/.test(entry.name)) yield path;
   }
 }
+
 const writable = /import\s*\{[^}]*\buseBrowser\b[^}]*\}\s*from\s*"(?:\.{1,2}\/)+(?:store\/)?browserStore"/;
 
 test("only coordinator services and legacy-guarded modules import the writable browser store", () => {
   const found = [];
+
   for (const path of sources(root)) {
     const file = relative(root, path).split(sep).join("/"); // Windows paths use backslashes
+
     if (file.startsWith("store/") && file !== "store/read.ts" && file !== "store/hooks.ts") continue; // the store itself
+
     if (writable.test(readFileSync(path, "utf8"))) found.push(file);
   }
+
   assert.deepEqual(found.sort(), Object.keys(ALLOWED).sort());
 });

@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { useEffect, useState } from "react";
 import { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "@bay/platform/motion";
 import type { Theme } from "../../lib/theme";
@@ -17,8 +18,10 @@ export type ToolbarPalette = {
 
 function channels(color: string): [number, number, number] | null {
   const m = /^#([0-9a-f]{6})/i.exec(color.trim());
+
   if (!m) return null;
   const n = parseInt(m[1]!, 16);
+
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
@@ -27,7 +30,9 @@ const cache = new Map<string, ToolbarPalette>();
 export function toolbarPalette(theme: Theme, websiteColor: string | null): ToolbarPalette {
   const key = `${theme.dark}|${theme.textPrimary}|${websiteColor ?? ""}`;
   let palette = cache.get(key);
+
   if (palette) return palette;
+
   if (!websiteColor || !channels(websiteColor)) {
     palette = {
       background: null,
@@ -65,7 +70,9 @@ export function toolbarPalette(theme: Theme, websiteColor: string | null): Toolb
           divider: "rgba(255,255,255,0.12)",
         };
   }
+
   cache.set(key, palette);
+
   return palette;
 }
 
@@ -78,6 +85,7 @@ export function useEasedColor(color: string | null, duration = 180): EasedColor 
   const [fade, setFade] = useState<[string, string]>(() => [color ?? "#00000000", color ?? "#00000000"]);
   const [from, to] = fade;
   const target = color ? color.slice(0, 7) : `${to.slice(0, 7)}00`;
+
   if (target !== to) setFade([to, target]);
   const colors = useSharedValue<[string, string]>(fade);
   useEffect(() => {
@@ -87,13 +95,15 @@ export function useEasedColor(color: string | null, duration = 180): EasedColor 
     progress.set(0);
     progress.set(withTiming(1, { duration, easing: Easing.out(Easing.quad) }));
   }, [target]);
+
   return { progress, colors };
 }
 
 /** A style with `color` (eased or plain) as its `prop`. */
 export function useEasedColorStyle(color: EasedColor | string, prop: "backgroundColor" | "borderColor") {
   return useAnimatedStyle(() => {
-    const value = typeof color === "string" ? color : interpolateColor(color.progress.get(), [0, 1], color.colors.get());
+    const value = v.is(v.string(), color) ? color : interpolateColor(color.progress.get(), [0, 1], color.colors.get());
+
     return prop === "backgroundColor" ? { backgroundColor: value } : { borderColor: value };
   }, [color, prop]);
 }

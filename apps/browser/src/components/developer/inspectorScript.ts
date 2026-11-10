@@ -1,4 +1,5 @@
 import { isMac } from "@bay/platform";
+
 // The Developer Mode inspector, run in the page by evaluate (in its main world, with `post` to answer and to message
 // the app as "devMode": devMode.ts › onDeveloperMessage). Rulers along the top and left, the element under the pointer
 // outlined with its margin and padding, and a click pins it with what it is: size, place, type, colours and the CSS

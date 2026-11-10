@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { formatShortcut, platformOS } from "@bay/platform";
+
 const { appMenuItems } = await import("./appMenu.ts");
 
 const state = (patch = {}) => ({
@@ -17,10 +18,12 @@ const state = (patch = {}) => ({
   warnBeforeQuitting: false,
   ...patch,
 });
+
 const find = (items, id) => {
   for (const item of items) {
     if (item.id === id) return item;
     const inner = item.children && find(item.children, id);
+
     if (inner) return inner;
   }
 };
@@ -57,6 +60,7 @@ test("bookmarks, recently closed and spaces fill their menus", () => {
       spaces: [{ id: "s1", title: "Home", current: true }],
     }),
   );
+
   assert.equal(find(items, "openBookmark:b1").title, "Docs");
   assert.equal(find(items, "openBookmark:b2").title, "https://work");
   assert.equal(find(items, "restoreClosed:c1").title, "Old Tab");
@@ -73,6 +77,7 @@ test("the Window and Extensions menus list what's open and installed", () => {
       ],
     }),
   );
+
   assert.equal(find(items, "focusWindow:w2").title, "Work");
   assert.equal(find(items, "openExtension:e1").enabled, true);
   assert.equal(find(items, "openExtension:e2").enabled, false);

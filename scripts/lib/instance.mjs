@@ -29,8 +29,10 @@ import { createServer, request as httpRequest } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as v from "valibot";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /** Linux or Windows, for a script's checks that need AppKit. BAY_INSTANCE_HOST=desktop drives the path on macOS, against a stand-in binary. */
 export const desktopHost = process.env.BAY_INSTANCE_HOST === "desktop" || process.platform !== "darwin";
 const here = fileURLToPath(import.meta.url);
@@ -46,31 +48,46 @@ export const freePort = () =>
       probe.close(() => resolve(port));
     });
   });
+
 export function parsePort(value) {
   const n = Number(value);
+
   if (!/^\d+$/.test(String(value)) || n < 1 || n > 65535) throw new Error(`a port is an integer 1..65535, got ${value}`);
+
   return n;
 }
+
 const pidList = (text) => [...new Set(text.split(/\s+/).filter(Boolean).map(Number))].filter((n) => Number.isInteger(n) && n > 0);
+
 // The main binary, not a helper (`…/Bay Helper.app/…/Bay Helper`) nor a longer name.
 export const commandIsBinary = (command, binary) => command === binary || command.startsWith(`${binary} `);
+
 export function listenerPids(port) {
   const r = spawnSync("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8", timeout: 5000 });
+
   if (r.error || r.status > 1) throw new Error(`lsof failed for port ${port}: ${r.error ?? r.stderr}`);
+
   return pidList(r.stdout);
 }
+
 // `ps -o lstart= -o command=`: a 5-token start time, then the full command.
 export function parseProcessLine(line) {
   const m = /^\s*(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.*\S)\s*$/.exec(line);
+
   return m ? { started: m[1], command: m[2] } : null;
 }
+
 export function processInfo(pid) {
   const r = spawnSync("ps", ["-ww", "-p", String(pid), "-o", "lstart=", "-o", "command="], { encoding: "utf8", timeout: 5000 });
+
   return r.status === 0 ? parseProcessLine(r.stdout) : null;
 }
+
 export function binaryPids(binary) {
   const r = spawnSync("ps", ["-ww", "-ax", "-o", "pid=", "-o", "command="], { encoding: "utf8", timeout: 5000 });
+
   if (r.status !== 0) throw new Error(`ps failed: ${r.stderr}`);
+
   return new Set(
     r.stdout
       .split("\n")
@@ -79,27 +96,36 @@ export function binaryPids(binary) {
       .map((m) => Number(m[1])),
   );
 }
+
 /** null while nothing listens yet; throws when the port's holder can't be this launch's app. */
 export function ownedCandidate(listeners, before, commandOf, binary) {
   if (!listeners.length) return null;
+
   if (listeners.length !== 1) throw new Error(`port has ${listeners.length} listeners: ${listeners.join(", ")}`);
   const [pid] = listeners;
   const command = commandOf(pid) ?? "";
+
   if (before.has(pid)) throw new Error(`port listener ${pid} predates the launch`);
+
   if (!commandIsBinary(command, binary)) throw new Error(`port listener ${pid} is not ${binary}: ${command}`);
+
   return pid;
 }
+
 export const isAlive = (pid) => {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch (e) {
     return e.code === "EPERM";
   }
 };
+
 /** On Linux and Windows, the binary or the folder it was built into. */
 export const desktopBinary = (app, platform = process.platform, isFile = (path) => statSync(path).isFile()) =>
   isFile(app) ? app : join(app, platform === "win32" ? "Bay.exe" : "bay");
+
 /** The app bundle's main executable. */
 export const binaryOf = (app) =>
   desktopHost
@@ -111,6 +137,7 @@ export const binaryOf = (app) =>
           .toString()
           .trim(),
       );
+
 /** The app's windows on screen (CoreGraphics' numbers, layer 0), for screencapture -l. */
 export const onScreenWindows = (pid) =>
   JSON.parse(
@@ -130,6 +157,7 @@ export const onScreenWindows = (pid) =>
 // MARK: Fixtures
 
 const profileColors = ["plum", "blue", "green", "orange", "red"];
+
 /**
  * A session.json the app restores at launch (store version 2). Everything is optional and filled in:
  *   spaces: ["Personal", "Work"] or [{ id, name, color }] (the first one's id is "default")
@@ -139,12 +167,16 @@ const profileColors = ["plum", "blue", "green", "orange", "red"];
  */
 export function session({ spaces = ["Personal"], windows = [{}], tabs = [], ...rest } = {}) {
   const ps = spaces.map((p, i) => {
-    const o = typeof p === "string" ? { name: p } : p;
+    const o = v.is(v.string(), p) ? { name: p } : p;
+
     return { id: o.id ?? (i ? o.name.toLowerCase() : "default"), name: o.name ?? o.id, color: o.color ?? profileColors[i % 5], icon: null, createdAt: i, ...o };
   });
+
   const ws = windows.map((w, i) => ({ id: w.id ?? `w${i + 1}`, spaceId: ps[0].id, ...w }));
+
   const ts = tabs.map((t) => {
     const windowId = t.windowId ?? ws[0].id;
+
     return {
       windowId,
       spaceId: ws.find((w) => w.id === windowId)?.spaceId ?? ps[0].id,
@@ -163,12 +195,16 @@ export function session({ spaces = ["Personal"], windows = [{}], tabs = [], ...r
       ...t,
     };
   });
+
   const fullWindows = ws.map((w, i) => {
     const tabIds = w.tabIds ?? ts.filter((t) => t.windowId === w.id).map((t) => t.id);
+
     const activeTabIds =
       w.activeTabIds ?? Object.fromEntries(ps.map((p) => [p.id, ts.find((t) => t.windowId === w.id && t.spaceId === p.id)?.id]).filter(([, id]) => id));
+
     return { incognito: false, sidebarOpen: true, frame: [80, 80, 1280, 800], createdAt: i + 1, ...w, tabIds, activeTabIds };
   });
+
   return {
     version: 2,
     spaces: Object.fromEntries(ps.map((p) => [p.id, p])),
@@ -198,35 +234,44 @@ async function metroProxyMain(data, metroPort) {
       res.writeHead(r.statusCode ?? 502, r.headers);
       r.pipe(res);
     });
+
     up.on("error", () => res.destroy());
     req.pipe(up);
   });
+
   proxy.on("upgrade", (req, socket) => socket.destroy());
   await new Promise((r) => proxy.listen(0, "127.0.0.1", r));
   process.stdout.write(`${proxy.address().port}\n`);
   let seen = Date.now();
   setInterval(() => {
     let pid = null;
+
     try {
       pid = JSON.parse(readFileSync(join(data, "instance.json"), "utf8")).pid;
     } catch {}
+
     if (pid && isAlive(pid)) seen = Date.now();
     else if (Date.now() - seen > (pid ? 60_000 : 5 * 60_000)) process.exit(0);
   }, 2000);
 }
+
 async function startMetroProxy(data, metroPort) {
   const child = spawn(process.execPath, [here, "--metro-proxy", data, String(metroPort)], { detached: true, stdio: ["ignore", "pipe", "ignore"] });
+
   const port = await new Promise((r, j) => {
     let out = "";
     child.stdout.on("data", (d) => {
       out += d;
+
       if (out.includes("\n")) r(Number(out.trim()));
     });
     child.on("exit", (code) => j(new Error(`the Metro proxy exited (${code})`)));
     setTimeout(() => j(new Error("the Metro proxy didn't start")), 5000);
   });
+
   child.stdout.destroy();
   child.unref();
+
   return { pid: child.pid, port, metroPort };
 }
 
@@ -236,23 +281,30 @@ async function startMetroProxy(data, metroPort) {
 export async function devtools(target, { name = target.url } = {}) {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = () => j(new Error(`DevTools connection to ${name} failed`)))));
+
   let seq = 0,
     closed = false;
+
   const pending = new Map(),
     listeners = new Map();
+
   ws.onmessage = (m) => {
     const msg = JSON.parse(m.data);
+
     if (msg.id && pending.has(msg.id)) {
       pending.get(msg.id)(msg);
       pending.delete(msg.id);
     } else if (msg.method) for (const fn of listeners.get(msg.method) ?? []) fn(msg.params);
   };
+
   // The target went (its page closed) with calls unanswered: say so now rather than wait out the timeout.
   ws.onclose = () => {
     closed = true;
+
     for (const [, r] of pending) r({ error: "the target closed before replying" });
     pending.clear();
   };
+
   const send = async (method, params = {}, { timeout = 10000 } = {}) => {
     if (closed) throw new Error(`DevTools: ${name} closed (${method})`);
     const id = ++seq;
@@ -260,20 +312,26 @@ export async function devtools(target, { name = target.url } = {}) {
     ws.send(JSON.stringify({ id, method, params }));
     const msg = await Promise.race([reply, sleep(timeout).then(() => ({ error: "cdp timeout" }))]);
     pending.delete(id);
+
     if (msg.error) throw new Error(`${method}: ${JSON.stringify(msg.error)}`);
+
     return msg.result;
   };
+
   return {
     target,
     send,
     /** The expression's value (awaited, by value); throws on an exception in the page. */
     async eval(expression, { userGesture = false, awaitPromise = true, timeout } = {}) {
       const r = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise, userGesture }, { timeout });
+
       if (r.exceptionDetails) throw new Error(`page: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text}`);
+
       return r.result?.value;
     },
     on(event, fn) {
       listeners.set(event, [...(listeners.get(event) ?? []), fn]);
+
       return () =>
         listeners.set(
           event,
@@ -296,6 +354,7 @@ export async function devtools(target, { name = target.url } = {}) {
 /** An async function body, as the dev harness runs one, as one expression for Runtime.evaluate. */
 export const harnessExpression = (body) => `(async (nn) => {\n${body}\n})(globalThis.nn)`;
 const HARNESS_URL = "chrome://bay/";
+
 const devToolsAnswers = async (port) => {
   try {
     return (await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000) })).ok;
@@ -319,6 +378,7 @@ class Instance {
   stillOwned() {
     if (desktopHost) return isAlive(this.pid) && (process.platform === "win32" || processInfo(this.pid)?.started === this.started);
     const info = processInfo(this.pid);
+
     return !!info && info.started === this.started && commandIsBinary(info.command, this.binary);
   }
   get exited() {
@@ -329,6 +389,7 @@ class Instance {
     // The instance's own fields, less its eval bookkeeping.
     const record = Object.fromEntries(Object.entries(this).filter(([key]) => key !== "evalQueue" && key !== "evalSeq"));
     writeFileSync(join(this.data, "instance.json"), JSON.stringify(record, null, 2));
+
     return this;
   }
 
@@ -339,6 +400,7 @@ class Instance {
   eval(body, { timeout = 20000, window } = {}) {
     const run = this.evalQueue.then(() => (desktopHost ? this.#evalDocument(body, timeout, window) : this.#eval(body, timeout)));
     this.evalQueue = run.catch(() => {});
+
     return run;
   }
   async #eval(body, timeout) {
@@ -346,25 +408,33 @@ class Instance {
     const result = join(this.data, "dev-eval-result.json");
     writeFileSync(join(this.data, "dev-eval.js"), `// ${id}\n${body}`);
     const deadline = Date.now() + timeout;
+
     for (let polls = 0; Date.now() < deadline; polls++) {
       if (polls % 4 === 0 && !isAlive(this.pid)) throw Object.assign(new Error(`the app (pid ${this.pid}) exited`), { appDied: true });
+
       try {
         const out = JSON.parse(readFileSync(result, "utf8"));
+
         if (out.id === id) {
           if (out.error) throw Object.assign(new Error(out.error), { fromApp: true });
+
           return out.result;
         }
       } catch (e) {
         if (e.fromApp) throw e;
+
         if (!(e instanceof SyntaxError) && e.code !== "ENOENT") throw e;
       }
+
       await sleep(25);
     }
+
     throw new Error(`eval timed out after ${timeout} ms: ${body.slice(0, 80)}`);
   }
   async #evalDocument(body, timeout, window) {
     if (!isAlive(this.pid)) throw Object.assign(new Error(`the app (pid ${this.pid}) exited`), { appDied: true });
     const document = await this.#document(window ?? "coordinator");
+
     try {
       return (await document.eval(harnessExpression(body), { timeout })) ?? null;
     } catch (e) {
@@ -373,23 +443,30 @@ class Instance {
   }
   async #document(key) {
     const known = this.#documents.get(key);
+
     if (known && !known.closed) return known;
+
     for (const target of await this.targets()) {
       if (!target.url.startsWith(HARNESS_URL) || !target.webSocketDebuggerUrl) continue;
       const document = await devtools(target).catch(() => null);
       const host = await document?.eval("globalThis.nn?.host ?? null", { timeout: 3000 }).catch(() => null);
+
       if (host && (key === "coordinator" ? host.role === "coordinator" : host.windowId === key)) {
         this.#documents.set(key, document);
+
         return document;
       }
+
       document?.close();
     }
+
     throw new Error(`no document with the dev harness for ${key}`);
   }
   /** Waits until the dev harness answers (and `test`, a body returning truthy, holds). */
   async ready({ timeout = 90000, test = "return true" } = {}) {
     const deadline = Date.now() + timeout;
     let last;
+
     while (Date.now() < deadline) {
       try {
         if ((last = await this.eval(test, { timeout: 3000 }))) return last;
@@ -397,8 +474,10 @@ class Instance {
         if (e.appDied) throw e;
         last = e.message;
       }
+
       await sleep(100);
     }
+
     throw new Error(`the app's dev harness never answered (is Metro running on :${this.js?.metroPort ?? 8081}?); last: ${last}`);
   }
 
@@ -407,16 +486,21 @@ class Instance {
   }
   /** The first page target whose URL contains `urlPart` (or matches the predicate), or null. */
   async pageTarget(urlPart) {
-    const test = typeof urlPart === "function" ? urlPart : (t) => t.url.includes(urlPart);
+    const test = v.is(v.function_(), urlPart) ? urlPart : (t) => t.url.includes(urlPart);
+
     return (await this.targets()).find((t) => t.type === "page" && test(t)) ?? null;
   }
   /** A DevTools session on a page, waiting up to `timeout` for it to appear. */
   async page(urlPart, { timeout = 10000 } = {}) {
     const deadline = Date.now() + timeout;
+
     for (;;) {
       const t = await this.pageTarget(urlPart);
+
       if (t) return devtools(t);
+
       if (Date.now() > deadline) throw new Error(`no page for ${urlPart}`);
+
       if (!isAlive(this.pid)) throw new Error(`the app (pid ${this.pid}) exited`);
       await sleep(100);
     }
@@ -424,10 +508,12 @@ class Instance {
   /** Chrome's browser target (Target.*, Browser.*). */
   async browser() {
     const version = await (await fetch(`http://127.0.0.1:${this.port}/json/version`)).json();
+
     return devtools({ url: "browser", webSocketDebuggerUrl: version.webSocketDebuggerUrl });
   }
   windows() {
     if (desktopHost) throw new Error("windows() asks CoreGraphics: on this host, BayCEF.chromeWindows() through eval");
+
     return onScreenWindows(this.pid);
   }
 
@@ -438,23 +524,29 @@ class Instance {
    */
   async quit(opts = {}) {
     const how = await this.#quit(opts);
+
     // The Metro proxy goes with it (a relaunch starts another).
     if (this.js?.mode === "pinned" && (processInfo(this.js.pid)?.command ?? "").includes(`--metro-proxy ${this.data} `))
       try {
         process.kill(this.js.pid);
       } catch {}
+
     return how;
   }
   async #quit({ timeout = 15000, graceful = true }) {
     const gone = async (ms) => {
       for (const end = Date.now() + ms; Date.now() < end; await sleep(100)) if (!isAlive(this.pid)) return true;
+
       return !isAlive(this.pid);
     };
+
     if (!this.stillOwned()) return { how: "gone" };
+
     if (graceful && desktopHost) {
       // Chrome's own shutdown, as the window manager or `taskkill` without /F asks for it.
       if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(this.pid)], { timeout: 10000 });
       else process.kill(this.pid, "SIGTERM");
+
       if (await gone(timeout)) return { how: "quit" };
     } else if (graceful) {
       spawnSync(
@@ -467,13 +559,18 @@ class Instance {
         ],
         { timeout: 10000 },
       );
+
       if (await gone(timeout)) return { how: "quit" };
     }
+
     if (!this.stillOwned()) return { how: "gone" };
     process.kill(this.pid, "SIGTERM");
+
     if (await gone(3000)) return { how: "SIGTERM" };
+
     if (this.stillOwned()) process.kill(this.pid, "SIGKILL");
     await gone(2000);
+
     return { how: "SIGKILL" };
   }
   kill(signal = "SIGKILL") {
@@ -503,28 +600,39 @@ class Instance {
  */
 export async function launch(app, opts = {}) {
   app = resolve(app);
+
   if (/^(\/Applications\/|\/opt\/|\/usr\/|[A-Za-z]:\\Program Files)/.test(app)) throw new Error("never an installed app: pass a build (apps/browser/build-*)");
   const data = resolve(opts.data ?? join(process.env.TMPDIR ?? "/tmp", `nn-instance-${process.pid}-${Date.now()}`));
+
   if (opts.fresh) rmSync(data, { recursive: true, force: true });
   mkdirSync(data, { recursive: true });
   // A relaunch on this data dir keeps the Metro proxy its last instance had, while it runs.
   let previous = null;
+
   try {
     previous = JSON.parse(readFileSync(join(data, "instance.json"), "utf8"));
   } catch {}
+
   for (const f of ["dev-eval.js", "dev-eval-result.json", "instance.json"]) rmSync(join(data, f), { force: true });
+
   if (opts.session) writeFileSync(join(data, "session.json"), JSON.stringify(opts.session));
+
   // A packed bundle isn't __DEV__, so on Linux and Windows a new data folder would otherwise open on onboarding.
   if (opts.onboarded ?? desktopHost) writeFileSync(join(data, "onboarding.json"), JSON.stringify({ version: 1, completedAt: 1 }));
+
   if (opts.probe) writeFileSync(join(data, "perf-probe"), "");
+
   if (desktopHost) writeFileSync(join(data, "dev-harness"), "");
-  for (const [name, text] of Object.entries(opts.files ?? {})) writeFileSync(join(data, name), typeof text === "string" ? text : JSON.stringify(text));
+
+  for (const [name, text] of Object.entries(opts.files ?? {})) writeFileSync(join(data, name), v.is(v.string(), text) ? text : JSON.stringify(text));
   const binary = binaryOf(app);
   const port = opts.port ? parsePort(opts.port) : await freePort();
+
   if (desktopHost ? await devToolsAnswers(port) : listenerPids(port).length) throw new Error(`DevTools port ${port} is already in use`);
   const metroPort = Number(opts.metroPort ?? process.env.METRO_PORT ?? 8081);
   const jsMode = opts.js ?? (desktopHost ? "none" : "pinned");
   let js = { mode: jsMode, metroPort };
+
   if (jsMode === "pinned") {
     const kept = previous?.js;
     js =
@@ -532,30 +640,37 @@ export async function launch(app, opts = {}) {
         ? kept
         : { mode: "pinned", ...(await startMetroProxy(data, metroPort)) };
   }
+
   const location = jsMode === "pinned" ? `localhost:${js.port}` : jsMode === "live" ? `localhost:${metroPort}` : jsMode === "none" ? null : jsMode;
   const switches = [opts.switches].flat().filter(Boolean).join(" ");
+
   const env = {
     BAY_BACKGROUND: "1",
     BAY_DATA_DIR: data,
     BAY_REMOTE_DEBUGGING_PORT: String(port),
-    ...(location ? { BAY_JS_LOCATION: location } : {}),
-    ...(switches ? { BAY_CHROMIUM_SWITCHES: switches } : {}),
+    ...(location ? { BAY_JS_LOCATION: location } : undefined),
+    ...(switches ? { BAY_CHROMIUM_SWITCHES: switches } : undefined),
     ...opts.env,
   };
+
   const log = resolve(opts.log ?? join(data, "app.out.log"));
   const launchedAt = Date.now();
   const startTimeout = opts.startTimeout ?? 60000;
+
   const started = desktopHost
     ? await startDesktop(binary, { env, log, port, args: opts.args, urls: opts.urls, switches, startTimeout })
     : await startMac(app, binary, { env, log, port, args: opts.args, urls: opts.urls, startTimeout });
+
   const instance = new Instance({ app, binary, data, port, log, launchedAt, js, ...started, meta: opts.meta ?? {} }).save();
+
   if (opts.ready !== false)
     try {
-      await instance.ready(typeof opts.ready === "string" ? { test: opts.ready } : typeof opts.ready === "object" ? opts.ready : {});
+      await instance.ready(v.is(v.string(), opts.ready) ? { test: opts.ready } : v.is(v.object({}), opts.ready) ? opts.ready : {});
     } catch (e) {
       await instance.quit({ graceful: false });
       throw e;
     }
+
   return instance;
 }
 
@@ -576,32 +691,42 @@ async function startMac(app, binary, { env, log, port, args, urls, startTimeout 
     ...(args?.length ? ["--args", ...args] : []),
   ]);
   let owned = null;
+
   for (const end = Date.now() + startTimeout; !owned && Date.now() < end; await sleep(100)) {
     let info;
     const pid = ownedCandidate(listenerPids(port), before, (p) => (info = processInfo(p))?.command, binary);
+
     if (pid && info) owned = { pid, started: info.started };
   }
+
   if (!owned) throw new Error(`the app didn't listen on DevTools port ${port} within ${startTimeout / 1000} s (log: ${log})`);
+
   return owned;
 }
 
 /** The binary itself, so its pid is ours from the start; the port was free, so what answers on it is this instance. */
 async function startDesktop(binary, { env, log, port, args = [], urls = [], switches, startTimeout }) {
   const output = openSync(log, "a");
+
   const child = spawn(binary, [`--remote-debugging-port=${port}`, ...switches.split(" ").filter(Boolean), ...args, ...urls], {
     env: Object.fromEntries(Object.entries({ ...process.env, ...env }).filter(([, value]) => value !== null && value !== undefined)),
     detached: true,
     stdio: ["ignore", output, output],
   });
+
   let failed = null;
   child.on("error", (error) => (failed = error));
   child.unref();
   closeSync(output);
+
   for (const end = Date.now() + startTimeout; Date.now() < end; await sleep(100)) {
     if (failed) throw new Error(`the app couldn't start: ${failed.message}`);
+
     if (child.exitCode !== null) throw new Error(`the app exited with ${child.exitCode} before listening (log: ${log})`);
+
     if (await devToolsAnswers(port)) return { pid: child.pid, started: processInfo(child.pid)?.started ?? null };
   }
+
   child.kill("SIGKILL");
   throw new Error(`the app didn't listen on DevTools port ${port} within ${startTimeout / 1000} s (log: ${log})`);
 }
@@ -610,9 +735,12 @@ async function startDesktop(binary, { env, log, port, args = [], urls = [], swit
 export function attach(dir) {
   dir = resolve(dir);
   const file = [join(dir, "instance.json"), join(dir, "data", "instance.json")].find(existsSync);
+
   if (!file) throw new Error(`no instance recorded in ${dir}`);
   const instance = new Instance(JSON.parse(readFileSync(file, "utf8")));
+
   if (!instance.stillOwned()) throw Object.assign(new Error(`the instance in ${dirname(file)} (pid ${instance.pid}) has gone`), { gone: true, instance });
+
   return instance;
 }
 
@@ -629,12 +757,16 @@ export function reporter(logFile, { name = "run" } = {}) {
   const results = [];
   const started = Date.now();
   let section = [];
+
   const write = (line) => {
     appendFileSync(logFile, `${line}\n`);
     section.push(line);
+
     if (process.env.VERBOSE) console.log(line);
   };
-  const text = (a) => (typeof a === "string" ? a : a instanceof Error ? (a.stack ?? a.message) : JSON.stringify(a));
+
+  const text = (a) => (v.is(v.string(), a) ? a : a instanceof Error ? (a.stack ?? a.message) : JSON.stringify(a));
+
   const r = {
     results,
     logFile,
@@ -657,13 +789,17 @@ export function reporter(logFile, { name = "run" } = {}) {
       section = [];
       results.push({ name: checkName, ok: !error, skipped: !!skip, ms, error: error ? String(error.message ?? error) : undefined, evidence });
       appendFileSync(logFile, `${status} ${checkName}${time}${evidence !== undefined ? ` ${text(evidence)}` : ""}${error ? `: ${text(error)}` : ""}\n`);
+
       if (!error) {
         console.log(`${status} ${checkName}${time}`);
+
         return;
       }
+
       const message = String(error.message ?? error).split("\n");
       const detail = [...message.slice(1), ...logged].filter((l) => l.trim()).slice(0, 19);
       console.log(`FAIL ${checkName}${time}: ${message[0].slice(0, 400)}`);
+
       for (const l of detail) console.log(`  ${l.slice(0, 300)}`);
       console.log(`  (log: ${logFile})`);
     },
@@ -672,16 +808,20 @@ export function reporter(logFile, { name = "run" } = {}) {
       section = [];
       appendFileSync(logFile, `\n## ${checkName}\n`);
       const t0 = Date.now();
+
       try {
         const evidence = await fn();
         r.record(checkName, { ms: Date.now() - t0, evidence });
+
         return true;
       } catch (error) {
         if (onFail)
           try {
             await onFail(error);
           } catch {}
+
         r.record(checkName, { ms: Date.now() - t0, error });
+
         return false;
       }
     },
@@ -691,14 +831,18 @@ export function reporter(logFile, { name = "run" } = {}) {
     summary() {
       const ran = results.filter((x) => !x.skipped);
       const failed = ran.filter((x) => !x.ok);
+
       const line =
         `${ran.length - failed.length}/${ran.length} passed in ${((Date.now() - started) / 1000).toFixed(1)} s` +
         `${failed.length ? `; failed: ${failed.map((x) => x.name).join(", ")}` : ""}. Log: ${logFile}`;
+
       appendFileSync(logFile, `\n${line}\n`);
       console.log(line);
+
       return !failed.length;
     },
   };
+
   return r;
 }
 
@@ -706,11 +850,13 @@ export function reporter(logFile, { name = "run" } = {}) {
 
 if (process.argv[1] === here) {
   const args = process.argv.slice(2);
+
   if (args[0] === "--metro-proxy") await metroProxyMain(args[1], Number(args[2]));
   else if (args[0] === "--self-test") {
     const bin = "/tmp/Bay.app/Contents/MacOS/Bay";
     const cmd = (map) => (pid) => map[pid];
     assert.equal(parsePort("9474"), 9474);
+
     for (const bad of ["0", "65536", "94.5", "-1", "", "9474x", "1e3"]) assert.throws(() => parsePort(bad), /1\.\.65535/, bad);
     assert.deepEqual(pidList("12\n34\n12\n"), [12, 34]);
     assert.deepEqual(pidList(""), []);

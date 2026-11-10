@@ -1,17 +1,21 @@
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "@bay/platform/native";
+import * as v from "valibot";
 import { GRAIN_OPACITY, GRAIN_SCALE } from "./constants";
 import type { AreaLightProps, EdgeLightProps, PowerUpProps, Rect, WindowBackdropProps } from "./types";
+
 export { DIA_SPECTRUM } from "./constants";
+
 export type { Rect, AreaLightPalette, AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps } from "./types";
 
-type NativeAreaLightProps = Omit<AreaLightProps, "source" | "palette"> & { shapeFrame: number[]; palette?: string[] };
+type NativeAreaLightProps = Omit<AreaLightProps, "source" | "palette"> & { areaRect: number[]; palette?: string[] };
 
 const NativeAreaLight = requireNativeViewManager<NativeAreaLightProps>("BayAreaLight");
 
 export function AreaLight({ source, palette = "pink", ...props }: AreaLightProps) {
-  const shapeFrame = source ? [source.x, source.y, source.width, source.height] : [0, 0, 0, 0];
-  return <NativeAreaLight pointerEvents="none" {...props} palette={typeof palette === "string" ? [palette] : palette} shapeFrame={shapeFrame} />;
+  const areaRect = source ? [source.x, source.y, source.width, source.height] : [0, 0, 0, 0];
+
+  return <NativeAreaLight pointerEvents="none" {...props} palette={v.is(v.string(), palette) ? [palette] : palette} areaRect={areaRect} />;
 }
 
 const NativeBackdrop = requireNativeViewManager<WindowBackdropProps>("BayWindowBackdrop");
@@ -53,6 +57,6 @@ const NativePowerUp = requireNativeViewManager<NativePowerUpProps>("BayPowerUp")
 
 export function PowerUp({ palette = "pink", halo = null, ...props }: PowerUpProps) {
   return (
-    <NativePowerUp pointerEvents="none" {...props} palette={typeof palette === "string" ? [palette] : palette} haloFrame={halo ? rect(halo) : [0, 0, 0, 0]} />
+    <NativePowerUp pointerEvents="none" {...props} palette={v.is(v.string(), palette) ? [palette] : palette} haloFrame={halo ? rect(halo) : [0, 0, 0, 0]} />
   );
 }

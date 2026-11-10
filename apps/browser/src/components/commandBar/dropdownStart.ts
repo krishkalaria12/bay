@@ -1,7 +1,9 @@
 import type { Suggestion } from "@bay/core";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { DeepReadonly } from "../../runtime/projection";
+
 type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
+
 import { NO_HISTORY } from "../../store/constants";
 import { DROPDOWN_RECENT_PAGES } from "./constants";
 
@@ -11,13 +13,17 @@ const pageKey = (url: string) => url.replace(/#.*$/, "");
 function recentPages(history: readonly HistoryEntry[], url: string): Suggestion[] {
   const seen = new Set(url ? [pageKey(url)] : []);
   const out: Suggestion[] = [];
+
   for (const h of [...history].sort((a, b) => b.lastVisit - a.lastVisit)) {
     const key = pageKey(h.url);
+
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ kind: "page", url: h.url, title: h.title, favicon: h.favicon, visited: true });
+
     if (out.length === DROPDOWN_RECENT_PAGES) break;
   }
+
   return out;
 }
 
@@ -27,5 +33,6 @@ export function useDropdownStart(enabled: boolean, tabId: string, spaceId: strin
   const favicon = useBrowser((s) => (enabled ? (s.tabs[tabId]?.favicon ?? null) : null));
   const history = useBrowser((s) => (enabled ? (s.history[spaceId] ?? NO_HISTORY) : NO_HISTORY));
   const recent = recentPages(history, url);
+
   return url ? [{ kind: "page" as const, url, title, favicon }, ...recent] : recent;
 }

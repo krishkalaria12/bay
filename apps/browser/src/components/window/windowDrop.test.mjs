@@ -13,6 +13,7 @@ if (!process.env.BAY_DROP_CHILD) {
     test(`${platform} coordinates=${coordinates}: drag placement policy`, () => {
       const env = { ...process.env, BAY_DROP_CHILD: "1", BAY_TEST_PLATFORM: platform, BAY_TEST_GLOBAL_COORDINATES: String(coordinates) };
       delete env.NODE_TEST_CONTEXT;
+
       const output = execFileSync(
         process.execPath,
         ["--no-warnings", "--import", "./src/test-loader.mjs", "--test", "src/components/window/windowDrop.test.mjs"],
@@ -22,6 +23,7 @@ if (!process.env.BAY_DROP_CHILD) {
           encoding: "utf8",
         },
       );
+
       assert.match(output, /fail 0\n/);
       assert.match(output, /pass [1-9]\d*\n/);
     });
@@ -38,6 +40,7 @@ if (!process.env.BAY_DROP_CHILD) {
   globalThis.__DEV__ = false;
   globalThis.nnDragLocalSize = { width: 600, height: 400 };
   const stubURL = new URL("../../test-native-stub.mjs", import.meta.url).href;
+
   const modules = {
     "react-native": "export const Dimensions = { get: () => globalThis.nnDragLocalSize };",
     "../../lib/actions": `export { focusWindow as focus } from ${JSON.stringify(stubURL)};`,
@@ -45,17 +48,21 @@ if (!process.env.BAY_DROP_CHILD) {
     "../../lib/webviews": "export const webviews = new Map();",
     "../split/splitActions": "export const dropTabIntoSplit = () => {};",
   };
+
   registerHooks({
     resolve(specifier, context, next) {
       if (context.parentURL?.endsWith("/tabStripDrag.ts") && specifier in modules)
         return { url: `data:text/javascript,${encodeURIComponent(modules[specifier])}`, shortCircuit: true };
+
       return next(specifier, context);
     },
   });
   const { beginTabDrag, updateTabDrag, endTabDrag, cancelTabDrag, setDragPicture, useTabDrag } = await import("../tabStrip/tabStripDrag.ts");
+
   const settle = async () => {
     for (let i = 0; i < 8; i++) await Promise.resolve();
   };
+
   const setup = () => {
     cancelTabDrag();
     useBrowser.getState().hydrate({});
@@ -67,6 +74,7 @@ if (!process.env.BAY_DROP_CHILD) {
     focusedWindows.length = 0;
     tabDragNative.frame = () => Promise.resolve(global ? [100, 100, 600, 400] : null);
     globalThis.nnDragLocalSize = { width: 600, height: 400 };
+
     return { source, other, tabId };
   };
 
@@ -83,13 +91,16 @@ if (!process.env.BAY_DROP_CHILD) {
   test("drop-out moves into the hit window on global hosts and creates a size-only window otherwise", async () => {
     const { source, other, tabId } = setup();
     let callback = false;
+
     const moved = await dropTabsOutside([tabId], source, 750, 20, () => {
       callback = true;
     });
+
     assert.ok(moved);
     const w = useBrowser.getState().windows[moved];
     assert.equal(useBrowser.getState().tabs[tabId].windowId, moved);
     assert.equal(callback, false);
+
     if (global) assert.equal(moved, other);
     else {
       assert.notEqual(moved, other);
@@ -116,10 +127,13 @@ if (!process.env.BAY_DROP_CHILD) {
   test("fresh desktop windows have a global frame only when supported", async () => {
     const { source, tabId } = setup();
     let asked = null;
+
     const moved = await dropTabsOutside([tabId], source, -100, 20, (frame) => {
       asked = frame;
     });
+
     const w = useBrowser.getState().windows[moved];
+
     if (global) {
       assert.deepEqual(asked, [-90, 150, 600, 400]);
       assert.deepEqual(w.frame, asked);
@@ -153,11 +167,13 @@ if (!process.env.BAY_DROP_CHILD) {
     const sequence = beginTabDrag(tabId);
     await settle();
     setDragPicture(sequence, [10, 10, 150, 30], [20, 20]);
+
     if (!global) {
       globalThis.nnDragLocalSize = { width: 1000, height: 800 };
       updateTabDrag(900, 20, false);
       assert.equal(useTabDrag.getState().outside, false, "restored 600px width must not replace actual maximized width");
     }
+
     updateTabDrag(-200, 20, true);
     assert.equal(useTabDrag.getState().outside, true);
     assert.equal(endTabDrag(), true);
@@ -165,6 +181,7 @@ if (!process.env.BAY_DROP_CHILD) {
     const moved = useBrowser.getState().tabs[tabId].windowId;
     assert.notEqual(moved, source);
     assert.deepEqual(focusedWindows, [moved]);
+
     if (!global) assert.deepEqual(tabDragNative.calls, [], "no begin/update/end/page native preview calls without global coordinates");
   });
 
@@ -172,17 +189,20 @@ if (!process.env.BAY_DROP_CHILD) {
     test(`${interrupt} prevents a late acknowledged drop from focusing or ending the new drag`, async (t) => {
       const { tabId } = setup();
       let resolve;
+
       const stop = installBrowserCommands({
         dispatch: () =>
           new Promise((yes) => {
             resolve = yes;
           }),
       });
+
       t.after(stop);
       beginTabDrag(tabId);
       await settle();
       updateTabDrag(-100, 20, true);
       endTabDrag();
+
       if (interrupt === "cancel") cancelTabDrag();
       else beginTabDrag(tabId);
       const before = tabDragNative.calls.length;
@@ -202,6 +222,7 @@ if (!process.env.BAY_DROP_CHILD) {
         reply = resolve;
       });
     beginTabDrag(tabId);
+
     if (!global) return cancelTabDrag();
     cancelTabDrag();
     tabDragNative.frame = () => Promise.resolve([100, 100, 600, 400]);

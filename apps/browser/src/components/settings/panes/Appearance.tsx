@@ -24,6 +24,7 @@ const MODES: { value: Settings["appearance"]; title: string; description: string
 export function AppearancePane() {
   const appearance = useBrowserRead((s) => s.settings.appearance);
   const choose = (mode: Settings["appearance"]) => reportBrowserCommand(updateSettings({ appearance: mode }));
+
   return (
     <View>
       <SectionHeader
@@ -56,6 +57,7 @@ function DensityPicker() {
   const density = useBrowserRead((s) => s.settings.density);
   const theme = useTheme();
   const colors = useFormColors();
+
   return (
     <>
       <SectionHeader
@@ -92,6 +94,7 @@ function DensityPicker() {
 function MaterialPicker() {
   const material = useBrowserRead((s) => s.settings.windowMaterial);
   const choose = (value: Settings["windowMaterial"]) => reportBrowserCommand(updateSettings({ windowMaterial: value }));
+
   return (
     <>
       <SectionHeader
@@ -113,6 +116,7 @@ function MaterialChoice({ value, title, selected, onPress }: { value: Settings["
   const glass = value === "glass";
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "#2C2C2F" : "#FFFFFF";
+
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }}>
       <View
@@ -164,6 +168,7 @@ function SidebarPositionPicker() {
   const position = useBrowserRead((s) => s.settings.sidebarPosition);
   const topTabs = useBrowserRead((s) => s.settings.tabLayout === "top");
   const choose = (value: Settings["sidebarPosition"]) => reportBrowserCommand(updateSettings({ sidebarPosition: value }));
+
   return (
     <>
       <SectionHeader
@@ -215,6 +220,7 @@ function SidebarPositionChoice({
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
   const right = value === "right";
+
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }}>
       <View
@@ -254,6 +260,7 @@ function AddressBarPicker() {
   const addressBar = useBrowserRead((s) => s.settings.addressBar);
   const topTabs = useBrowserRead((s) => s.settings.tabLayout === "top");
   const choose = (value: Settings["addressBar"]) => reportBrowserCommand(updateSettings({ addressBar: value }));
+
   return (
     <>
       <SectionHeader
@@ -280,6 +287,7 @@ function AddressBarChoice({ value, title, selected, onPress }: { value: Settings
   const field = theme.dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.08)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
   const sidebar = value === "sidebar";
+
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }}>
       <View
@@ -329,11 +337,14 @@ function AppIconPicker() {
       setCurrent(id);
     });
   }, []);
+
   if (icons.length < 2) return null;
+
   const choose = (id: string) => {
     setCurrent(id);
     void setAppIcon(id);
   };
+
   return (
     <>
       <SectionHeader
@@ -354,6 +365,7 @@ function IconChoice({ icon, selected, onPress }: { icon: AppIcon; selected: bool
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <Pressable onPress={onPress} {...hoverProps} style={{ width: 72, alignItems: "center", gap: 5 }} tooltip={icon.name}>
       <View
@@ -397,6 +409,7 @@ function ModeChoice({
 }) {
   const theme = useTheme();
   const colors = useFormColors();
+
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }} tooltip={description}>
       <View

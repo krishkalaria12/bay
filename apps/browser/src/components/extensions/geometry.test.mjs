@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { extensionPopupGeometry } = await import("./geometry.ts");
 
 test("extension popups opened from lower site-control tiles stay within the window", () => {

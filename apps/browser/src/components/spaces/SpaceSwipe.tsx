@@ -25,13 +25,16 @@ export function SpaceSwipe({ children, swipes = true }: { children: ReactNode; s
 export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sidebar" | "strip"; style: StyleProp<ViewStyle>; pageWidth?: number }) {
   const windowId = useWindowId();
   usePagerSurface(windowId);
+
   const [previous, next, multiple] = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
       const i = w && !w.incognito ? s.spaceOrder.indexOf(w.spaceId) : -1;
+
       return i < 0 ? [false, false, false] : [i > 0, i < s.spaceOrder.length - 1, s.spaceOrder.length > 1];
     }),
   );
+
   const area = useRef<SwipeAreaHandle>(null);
   const pager = pagerFor(windowId);
   const nativePager = usePagerNativeConfig(windowId, pageWidth);
@@ -39,6 +42,7 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
   // topPagerPosition (RCTComponentEvent's name) and Reanimated matches it as sent there, so a handler on
   // onPagerPosition alone never ran and the sidebar stayed on the space it opened with.
   const pos = pager.pos;
+
   const onPagerPosition = useEvent<{ position: number }>(
     (event) => {
       "worklet";
@@ -52,8 +56,11 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
       if (received.length >= 4096) received.shift();
       received.push({ at: performance.now(), surface, profile: useBrowser.getState().windows[windowId]?.spaceId, ...event });
     }
+
     const e = pageWidth ? { ...event, width: pageWidth } : event;
+
     if (e.phase === "swipe") return pager.step(e.direction === "back" ? -1 : 1);
+
     // Drags never need JS: the native pager tracks and settles them.
     if (e.phase === "wheel") pager.wheel(e);
   };
@@ -62,12 +69,14 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
     if (!__DEV__) return;
     const key = `${surface}:${windowId}`;
     devAreas.set(key, area);
+
     return () => void (devAreas.get(key) === area && devAreas.delete(key));
   }, [windowId, surface]);
 
   // Keep the native controller configured when the last extra profile is removed, so its absolute
   // position returns to zero. The area stays transparent and recognizes no single-profile drags.
   if (!multiple && !nativePager) return null;
+
   return (
     <>
       <SpaceSwipeGesture canSwipeBack={previous} canSwipeForward={next} onSwipe={onSwipe} />
@@ -92,7 +101,9 @@ export function SpaceTint() {
   const { pages, paging } = usePagerPages(windowId);
   const contrast = useHighContrast();
   const keys = useBrowser(useShallow((s) => pages.map((p) => themeKey(s, windowId, p.id, undefined, contrast))));
+
   if (!paging) return null;
+
   return (
     <>
       {pages.map((page, k) => {
@@ -109,6 +120,7 @@ function TintPage({ themeKey, from, slot }: { themeKey: string; from: number | n
   const { pager } = usePagerPages(useWindowId());
   const pos = pager.pos;
   const style = useAnimatedStyle(() => ({ opacity: from === null ? 1 : interpolate(pos.get(), [from, slot], [0, 1], Extrapolation.CLAMP) }), [from, slot]);
+
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
@@ -117,10 +129,19 @@ function TintPage({ themeKey, from, slot }: { themeKey: string; from: number | n
 }
 
 const devAreas = new Map<string, React.RefObject<SwipeAreaHandle | null>>();
+
 // DEV: every onSwipe JS received, to compare with the native emits.
 const received: object[] = [];
+
+type SwipeDevHandle = {
+  received?: () => object[];
+  sidebar?: (windowId: string) => SwipeAreaHandle | null;
+  strip?: (windowId: string) => SwipeAreaHandle | null;
+};
+
 if (__DEV__) {
-  const g = globalThis as { nnSwipe?: Record<string, unknown> };
+  // SAFETY: nnSwipe is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
+  const g = globalThis as { nnSwipe?: SwipeDevHandle };
   g.nnSwipe = {
     ...g.nnSwipe,
     received: () => received.splice(0),

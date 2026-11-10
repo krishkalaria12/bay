@@ -6,8 +6,10 @@ import { executeLocationCommand, parseLocationCommand } from "./locationCommands
 
 const windowWithTab = (store, options) => {
   const windowId = store.getState().createWindow(options);
+
   return { windowId, tabId: activeTabId(store.getState(), windowId) };
 };
+
 const run = (store, command, effects) => executeLocationCommand(store, parseLocationCommand(command), effects);
 
 test("location intent parser accepts only its closed fields and bounded typed values", () => {
@@ -19,12 +21,14 @@ test("location intent parser accepts only its closed fields and bounded typed va
     { method: "dismissCommandPanel", windowId: "window" },
     { method: "openCommandPanel", windowId: "window", initialText: "" },
   ];
+
   for (const command of good) {
     const parsed = parseLocationCommand(command);
     assert.deepEqual(parsed, command);
     assert.notEqual(parsed, command);
     assert.throws(() => parseLocationCommand({ ...command, spaceId: "forged" }), { code: "invalid_request" });
   }
+
   for (const command of [
     null,
     [],
@@ -74,6 +78,7 @@ test("blank source tabs never become an opener and current navigation preserves 
     openAppUrl: (url, windowId) => {
       if (url !== "yahu://newtab") return false;
       store.getState().openNewTabPanel(windowId);
+
       return true;
     },
   });
@@ -93,7 +98,9 @@ test("private dispositions stay private and new windows receive a fresh private 
   const store = createBrowserStore();
   const { windowId, tabId } = windowWithTab(store, { incognito: true, url: "secret.com" });
   const spaceId = store.getState().windows[windowId].spaceId;
+
   for (const disposition of ["newTab", "backgroundTab"]) run(store, { method: "openLocation", sourceTabId: tabId, url: "private.com", disposition });
+
   for (const tab of Object.values(store.getState().tabs)) assert.equal(tab.spaceId, spaceId);
   run(store, { method: "openLocation", sourceTabId: tabId, url: "newprivate.com", disposition: "newWindow" });
   const next = store.getState().windows[store.getState().windowOrder.at(-1)];
@@ -122,6 +129,7 @@ test("private switching cannot cross privacy boundaries or private window owners
   const publicTab = windowWithTab(store, { url: "public.com" });
   const a = windowWithTab(store, { incognito: true, url: "a.com" });
   const b = windowWithTab(store, { incognito: true, url: "b.com" });
+
   for (const [source, target] of [
     [publicTab, a],
     [a, publicTab],
@@ -131,6 +139,7 @@ test("private switching cannot cross privacy boundaries or private window owners
     assert.throws(() => run(store, { method: "switchToExistingTab", sourceTabId: source.tabId, targetTabId: target.tabId }), { code: "invalid_request" });
     assert.equal(store.getState(), before);
   }
+
   const targetTabId = store.getState().newTab(a.windowId, { url: "same-owner.com", background: true });
   run(store, { method: "switchToExistingTab", sourceTabId: a.tabId, targetTabId });
   assert.equal(activeTabId(store.getState(), a.windowId), targetTabId);
@@ -166,6 +175,7 @@ test("Harbor New Tab reuses the matching main window or opens a reusable initial
     assert.equal(store.getState().windowUi[target].panel.mode, existingMain ? "newTab" : "navigate");
     assert.equal(viewTabIds(store.getState(), harbor.windowId).length, 1);
     assert.deepEqual(focused, [target]);
+
     if (!existingMain) {
       const initial = activeTabId(store.getState(), target);
       run(store, { method: "openLocation", sourceTabId: initial, url: "first.com", disposition: "current" });
@@ -196,6 +206,7 @@ test("missing sources, malformed ownership and foreign groups reject before muta
   const foreignTab = store.getState().newTab(a.windowId, { spaceId: foreignProfile, url: "other.com" });
   const foreignGroup = store.getState().groupTabs([foreignTab]);
   store.getState().activate(a.tabId, a.windowId);
+
   for (const command of [
     { method: "openLocation", sourceTabId: "missing", url: "x.com", disposition: "newWindow" },
     { method: "requestNewTab", windowId: a.windowId, groupId },
@@ -209,6 +220,7 @@ test("missing sources, malformed ownership and foreign groups reject before muta
     assert.throws(() => run(store, command), { code: "invalid_request" }, JSON.stringify(command));
     assert.equal(store.getState(), before);
   }
+
   store.setState({ tabLists: { ...store.getState().tabLists, default: store.getState().tabLists.default.filter((id) => id !== a.tabId) } });
   const before = store.getState();
   assert.throws(() => run(store, { method: "openLocation", sourceTabId: a.tabId, url: "x.com", disposition: "newTab" }), { code: "invalid_request" });
@@ -225,6 +237,7 @@ test("a private window cannot use another private owner's space", () => {
     tabs: { ...store.getState().tabs, [a.tabId]: { ...store.getState().tabs[a.tabId], spaceId: foreignProfile } },
   });
   const before = store.getState();
+
   for (const command of [
     { method: "openLocation", sourceTabId: a.tabId, url: "x.com", disposition: "newTab" },
     { method: "requestNewTab", windowId: a.windowId },

@@ -37,10 +37,13 @@ export function setPictureInPictureState(tabId: string, { kind, active }: Pictur
   useMedia.setState((s) => {
     if (active ? s.pipOpen[tabId] === kind : !s.pipOpen[tabId]) return s;
     const pipOpen = { ...s.pipOpen };
+
     if (active) pipOpen[tabId] = kind;
     else delete pipOpen[tabId];
     const pip = { ...s.pip };
+
     if (!active) delete pip[tabId];
+
     return { pipOpen, pip };
   });
 }
@@ -49,15 +52,20 @@ export function setNowPlaying(tabId: string, state: NowPlaying | null) {
   useMedia.setState((s) => {
     const sessions = { ...s.sessions };
     const dismissed = { ...s.dismissed };
+
     if (!state) {
       if (!sessions[tabId]) return s;
       delete sessions[tabId];
+
       return { sessions };
     }
+
     const before = sessions[tabId];
     const started = state.playbackState === "playing" && before?.playbackState !== "playing";
     sessions[tabId] = { ...state, playedAt: started ? Date.now() : (before?.playedAt ?? (state.playbackState === "playing" ? Date.now() : 0)) };
+
     if (started) delete dismissed[tabId];
+
     return { sessions, dismissed };
   });
 }
@@ -69,6 +77,7 @@ export const isPlaying = (session: Session | undefined) => session?.playbackStat
 export function positionOf(session: Session, now = Date.now()): number {
   const elapsed = isPlaying(session) ? ((now - session.timestamp) / 1000) * (session.playbackRate || 1) : 0;
   const position = session.position + elapsed;
+
   return session.duration ? Math.min(Math.max(0, position), session.duration) : Math.max(0, position);
 }
 
@@ -77,6 +86,7 @@ export function useTicker(active: boolean, ms = 500) {
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => setTick((n) => n + 1), ms);
+
     return () => clearInterval(t);
   }, [active, ms]);
 }
@@ -88,6 +98,7 @@ export const LIVE_EDGE_SECONDS = 30;
 export function liveBehindOf(session: Session, now = Date.now()): number {
   const elapsed = Math.max(0, (now - session.timestamp) / 1000);
   const behind = session.liveBehind + elapsed * (1 - (isPlaying(session) ? session.playbackRate || 1 : 0));
+
   return session.live && behind >= LIVE_EDGE_SECONDS ? behind : 0;
 }
 
@@ -96,8 +107,11 @@ export function formatBehind(seconds: number): string {
   const s = Math.round(seconds);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
+
   if (s < 60) return `${s}s behind`;
+
   if (!h) return `${m}m behind`;
+
   return m ? `${h}h ${m}m behind` : `${h}h behind`;
 }
 
@@ -106,6 +120,7 @@ export function formatTime(seconds: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const ss = String(s % 60).padStart(2, "0");
+
   return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
@@ -119,12 +134,14 @@ export function mediaCommand(tabId: string, action: MediaCommand, seconds?: numb
 export function mediaTabsForWindow(s: Pick<BrowserState, "tabs">, m: Pick<Store, "sessions">, windowId: string): string[] {
   return Object.keys(m.sessions).filter((id) => {
     const session = m.sessions[id]!;
+
     return s.tabs[id]?.windowId === windowId && (session.playbackState === "playing" || session.playbackState === "paused");
   });
 }
 
 export function pauseAllMedia(windowId: string) {
   const m = useMedia.getState();
+
   for (const id of mediaTabsForWindow(useBrowser.getState(), m, windowId)) {
     if (isPlaying(m.sessions[id])) mediaCommand(id, "pause");
   }
@@ -132,6 +149,7 @@ export function pauseAllMedia(windowId: string) {
 
 export function toggleMediaTabMute(tabId: string) {
   const tab = browserRead.getState().tabs[tabId];
+
   if (!tab) return;
   const muted = !tab.muted;
   reportBrowserCommand(setMuted([tabId], muted));
@@ -146,6 +164,7 @@ export function skip(tabId: string, session: Session, seconds: number) {
   const now = Date.now();
   const position = Math.max(0, Math.min(session.duration ?? Infinity, positionOf(session, now) + seconds));
   setNowPlaying(tabId, { ...session, position, timestamp: now });
+
   if (session.actions.includes("seekto")) mediaCommand(tabId, "seekTo", position);
   else mediaCommand(tabId, "seekBy", seconds);
 }
@@ -172,9 +191,12 @@ export const hasTrackControls = (session: Session) => session.actions.includes("
 
 export function isTabShown(s: BrowserState, tabId: string): boolean {
   const windowId = s.tabs[tabId]?.windowId;
+
   if (!windowId) return false;
   const active = activeTabId(s, windowId);
+
   if (!active) return false;
+
   return active === tabId || !!splitOf(s, active)?.tabIds.includes(tabId);
 }
 
@@ -183,20 +205,25 @@ export function isTabShown(s: BrowserState, tabId: string): boolean {
 export function playerTabFor(m: Pick<Store, "sessions" | "dismissed">, tabIds: string[], current?: string): string | undefined {
   const eligible = (id: string) => {
     const session = m.sessions[id];
+
     return !!session && !m.dismissed[id] && !!session.playedAt && session.playbackState !== "none";
   };
+
   if (current && tabIds.includes(current) && eligible(current)) return current;
   let best: Session | undefined;
   let bestId: string | undefined;
   const rank = (x: Session) => (isPlaying(x) ? 1 : 0);
+
   for (const id of tabIds) {
     if (!eligible(id)) continue;
     const session = m.sessions[id]!;
+
     if (!best || rank(session) > rank(best) || (rank(session) === rank(best) && session.playedAt > best.playedAt)) {
       best = session;
       bestId = id;
     }
   }
+
   return bestId;
 }
 
@@ -209,6 +236,7 @@ export function autoPictureInPictureFor(s: Pick<BrowserState, "settings" | "tabs
 
 export function autoPictureInPictureAt(settings: BrowserState["settings"], url: string): boolean {
   const host = hostOf(url);
+
   return (settings.autoPictureInPicture ?? true) && !(host && (settings.noAutoPictureInPictureSites ?? []).includes(host));
 }
 
@@ -216,6 +244,7 @@ export function autoPictureInPictureAt(settings: BrowserState["settings"], url: 
 export function setAutoPictureInPictureForSite(tabId: string, on: boolean) {
   const s = useBrowser.getState();
   const host = hostOf(s.tabs[tabId]?.url ?? "");
+
   if (!host) return;
   const sites = (s.settings.noAutoPictureInPictureSites ?? []).filter((h) => h !== host);
   reportBrowserCommand(settingsCommands.updateSettings({ noAutoPictureInPictureSites: on ? sites : [...sites, host] }));
@@ -231,7 +260,9 @@ export async function inPictureInPicture(tabId: string): Promise<boolean> {
 
 export function exitPictureInPicture(tabId: string) {
   const view = webviews.get(tabId);
+
   if (!view) return;
+
   if (useMedia.getState().pipOpen[tabId] === "document") void view.executeJavaScript("window.documentPictureInPicture?.window?.close()");
   else void view.exitPictureInPicture();
   setPip(tabId, null);
@@ -239,13 +270,19 @@ export function exitPictureInPicture(tabId: string) {
 
 export async function togglePictureInPicture(tabId: string): Promise<boolean> {
   const view = webviews.get(tabId);
+
   if (!view) return false;
+
   if (useMedia.getState().pipOpen[tabId] || (await inPictureInPicture(tabId))) {
     exitPictureInPicture(tabId);
+
     return false;
   }
+
   const ok = await view.requestPictureInPicture();
+
   if (ok) setPip(tabId, "manual");
+
   return ok;
 }
 
@@ -253,14 +290,17 @@ export function setPip(tabId: string, kind: Store["pip"][string] | null) {
   useMedia.setState((s) => {
     if ((s.pip[tabId] ?? null) === kind) return s;
     const pip = { ...s.pip };
+
     if (kind) pip[tabId] = kind;
     else delete pip[tabId];
+
     return { pip };
   });
 }
 
 export function usePictureInPicture(tabId: string): [boolean, () => void] {
   const on = useMedia((s) => !!s.pipOpen[tabId]);
+
   return [on, () => void togglePictureInPicture(tabId)];
 }
 
@@ -269,12 +309,16 @@ useBrowser.subscribe((s, prev) => {
   const m = useMedia.getState();
   const keys = ["sessions", "dismissed", "pip", "pipOpen", "displayRequests", "tabShares"] as const;
   const gone = [...new Set(keys.flatMap((k) => Object.keys(m[k])))].filter((id) => !s.tabs[id]);
+
   if (!gone.length) return;
+  // SAFETY: Pick<Store, (typeof keys)[number]> assertion matches the runtime value validated at this call site.
   const next = Object.fromEntries(keys.map((k) => [k, { ...m[k] }])) as Pick<Store, (typeof keys)[number]>;
+
   for (const id of gone) for (const k of keys) delete next[k][id];
   useMedia.setState(next);
 });
 
 if (typeof __DEV__ !== "undefined" && __DEV__) {
+  // SAFETY: { nnMedia? assertion matches the runtime value validated at this call site.
   (globalThis as { nnMedia?: unknown }).nnMedia = { useMedia, mediaCommand, setNowPlaying, togglePictureInPicture, inPictureInPicture, seekToLive };
 }

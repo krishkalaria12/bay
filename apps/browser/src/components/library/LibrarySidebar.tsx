@@ -20,26 +20,24 @@ import { IconButton, useHover } from "../ui/primitives";
 import { PROFILE_INDICATOR_X } from "../spaces/constants";
 import { SearchField, useFormColors } from "../settings/controls";
 import { ADDRESS_LIGHTS_Y } from "../sidebar/constants";
-import { useSidebarTokens, useSidebarWidth } from "../sidebar/tokens";
+import { useSidebarTokens } from "../sidebar/tokens";
 import { newEasel, openLibraryPage } from "./actions";
 import { importMediaFiles, LibrarySectionBody } from "./LibraryPage";
 import { SECTIONS, type Section } from "./sections";
-import { closeLibrarySidebar, LIBRARY_RAIL as RAIL, showLibrarySidebar, useLibrarySidebar } from "./sidebarState";
+import { closeLibrarySidebar, LIBRARY_RAIL as RAIL, showLibrarySidebar } from "./sidebarState";
 import { startLibrary, useLibrary } from "./state";
 
 // Arc's Library in the sidebar: a rail of its sections down the left, and the chosen one's list beside it, with the
 // page still showing. Back goes to the tabs; the other button opens it as a page instead.
 
-export function LibrarySidebar({ windowId }: { windowId: string }) {
+export function LibrarySidebar({ windowId, section, width }: { windowId: string; section: Section; width: number }) {
   const colors = useFormColors();
-  const width = useSidebarWidth(windowId);
   const right = useSidebarOnRight();
   // The window buttons sit at the sidebar's top left: over the rail on the left, over the list on the right (where
   // they show only with the address bar in the sidebar). The field starts after them.
   const addressInSidebar = useAddressBarInSidebar();
   const lightsHere = !right || addressInSidebar;
   const fieldInset = !lightsHere ? 0 : right ? PROFILE_INDICATOR_X - layout.sidebarInset : PROFILE_INDICATOR_X - RAIL;
-  const section = useLibrarySidebar((l) => l[windowId]) ?? "media";
   const [query, setQuery] = useState("");
   const [listWidth, setListWidth] = useState(width - RAIL);
   const error = useLibrary((s) => s.error);
@@ -99,6 +97,7 @@ function RailButton({ title, icon, selected, onPress }: { title: string; icon: s
   const tokens = useSidebarTokens();
   const { hovered, hoverProps } = useHover();
   const color = selected ? theme.textPrimary : hovered ? theme.textSecondary : theme.textTertiary;
+
   return (
     <View {...hoverProps}>
       <Pressable
@@ -128,6 +127,7 @@ function RailButton({ title, icon, selected, onPress }: { title: string; icon: s
 function SectionAction({ windowId, section, disabled }: { windowId: string; section: Section; disabled: boolean }) {
   const [importing, setImporting] = useState(false);
   const clearable = useBrowser((s) => downloadsIn(s, windowId).some((d) => d.state !== "downloading"));
+
   if (section === "media")
     return (
       <IconButton
@@ -147,7 +147,9 @@ function SectionAction({ windowId, section, disabled }: { windowId: string; sect
         }}
       />
     );
+
   if (section === "easels") return <IconButton icon="plus" size={13} box={28} tooltip="New Easel" disabled={disabled} onPress={() => newEasel(windowId)} />;
+
   if (section === "downloads")
     return (
       <IconButton
@@ -159,6 +161,7 @@ function SectionAction({ windowId, section, disabled }: { windowId: string; sect
         onPress={() => reportBrowserCommand(clearDownloads(windowId))}
       />
     );
+
   return null;
 }
 
@@ -166,6 +169,7 @@ function SidebarDownloads({ windowId, query }: { windowId: string; query: string
   const theme = useTheme();
   const downloads = useBrowser(useShallow((s) => downloadsIn(s, windowId)));
   const shown = downloads.filter((d) => matchesQuery(query, d.filename, d.url));
+
   if (!shown.length)
     return (
       <EmptyState
@@ -173,6 +177,7 @@ function SidebarDownloads({ windowId, query }: { windowId: string; query: string
         title={query ? "No matching downloads" : "Files you download appear here"}
       />
     );
+
   return (
     <LegendList
       style={{ flex: 1 }}
@@ -192,11 +197,16 @@ const ARCHIVE = /\.(zip|tar|gz|tgz|bz2|xz|7z|rar)$/i;
 /** What a finished download is, in a word: "PDF", "Image", "Video"… else its extension. */
 function fileKind(name: string): string {
   if (IMAGE.test(name)) return "Image";
+
   if (VIDEO.test(name)) return "Video";
+
   if (AUDIO.test(name)) return "Audio";
+
   if (ARCHIVE.test(name)) return "Archive";
+
   if (/\.dmg$/i.test(name)) return "Disk Image";
   const ext = /\.([a-z0-9]{1,6})$/i.exec(name)?.[1];
+
   return ext ? ext.toUpperCase() : "File";
 }
 
@@ -209,10 +219,13 @@ function DownloadRow({ d, windowId }: { d: Download; windowId: string }) {
   const progress = d.total > 0 ? d.received / d.total : 0;
   const host = hostLabel(d.tabUrl || d.referrer || d.url);
   const detail = done ? `${fileKind(d.filename)}${host ? ` from ${host}` : ""}` : downloadStatus(d, exists);
+
   const open = async () => {
     if (!done) return;
+
     if (!(await openFile(d.path))) showToast(windowId, "Couldn't Open File", "The file may have been moved or deleted.");
   };
+
   return (
     <MouseArea path={done ? d.path : null}>
       <ContextMenuArea onContextMenu={() => void downloadMenu(d, windowId)}>

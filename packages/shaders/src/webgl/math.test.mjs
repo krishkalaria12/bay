@@ -48,6 +48,7 @@ test("grain is fixed per cell and spread over 0-1", () => {
   assert.equal(grainHash(3, 7), grainHash(3, 7));
   let sum = 0;
   const n = 64 * 64;
+
   for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) sum += grainHash(x, y);
   near(sum / n, 0.5, 0.03);
 });
@@ -76,6 +77,7 @@ test("render targets cap DPR at 2 and area at 8 megapixels", () => {
   assert.ok(big.width * big.height <= 8_000_000 + 4000);
   near(big.width / big.height, 3840 / 2160, 0.01);
   assert.ok(targetSize(20000, 10, 1, 4096).width <= 4096);
+
   for (const bad of [
     [0, 10],
     [10, 0],

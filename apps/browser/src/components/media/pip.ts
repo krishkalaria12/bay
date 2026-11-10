@@ -23,7 +23,9 @@ export function useAutoPictureInPicture(tabId: string, visible: boolean): boolea
   // Decided while the tab is shown, and kept once it isn't (the native view acts on it then).
   const wants = enabled && (audible || capturing);
   const [decided, setDecided] = useState(() => visible && wants);
+
   if (visible && decided !== wants) setDecided(wants);
+
   return visible ? wants : decided;
 }
 
@@ -35,10 +37,13 @@ export function startMedia() {
   void setDisplayMediaPicker(true);
   // Chrome's automatic PiP (a call's own window on a tab switch, Dia's behaviour) goes with ours.
   let autoPip: boolean | null = null;
+
   const syncAutoPip = () => {
     const on = useBrowser.getState().settings.autoPictureInPicture ?? true;
+
     if (on !== autoPip) void setAutoPictureInPicture((autoPip = on));
   };
+
   syncAutoPip();
   useBrowser.subscribe(syncAutoPip);
   cancelDisplayMediaOnNavigation();

@@ -13,7 +13,9 @@ function run(now: number) {
   frame = 0;
   const dt = last === null ? FRAME : (now - last) / 1000;
   last = now;
+
   for (const tick of ticks) tick(dt > 0.25 || dt < 0 ? FRAME : dt);
+
   if (ticks.size && !frame) frame = requestAnimationFrame(run);
   else last = null;
 }
@@ -21,9 +23,12 @@ function run(now: number) {
 /** Calls `tick` with seconds since the previous frame until the returned function is called. */
 export function subscribe(tick: Tick): () => void {
   ticks.add(tick);
+
   if (!frame) frame = requestAnimationFrame(run);
+
   return () => {
     ticks.delete(tick);
+
     if (!ticks.size && frame) {
       cancelAnimationFrame(frame);
       frame = 0;

@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { FREQUENT, ICONS, type Site } from "./sites";
+import { FREQUENT, iconFor, type Site } from "./sites";
 import { tabsOf, THEMES, type Bay, type Item, type SpaceIcon } from "./state";
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 const ARRIVE = "cubic-bezier(.2,.8,.2,1)";
+
 // A sidebar row, as yab measures it: 30px tall, 13px type, at 900px wide.
 const ROW =
   "flex h-[2.31em] w-full cursor-pointer items-center gap-[0.69em] rounded-[0.62em] pr-[0.62em] pl-[0.69em] text-left text-[0.925em] transition-colors";
@@ -37,15 +38,17 @@ function Ic({ d, className }: { d: keyof typeof PATHS; className?: string }) {
 }
 
 export function Mark({ site, size = 1.15 }: { site: Site; size?: number }) {
+  const path = iconFor(site.glyph);
+
   return (
     <span
       aria-hidden
       className="inline-grid shrink-0 place-items-center leading-none text-white"
       style={{ width: `${size}em`, height: `${size}em`, borderRadius: `${size * 0.28}em`, background: `linear-gradient(${site.tint}f2, ${site.tint}bf)` }}
     >
-      {ICONS[site.glyph] ? (
+      {path ? (
         <svg viewBox="0 0 24 24" style={{ width: "68%", height: "68%" }} fill={site.glyph === "play" ? "currentColor" : "none"}>
-          <path d={ICONS[site.glyph]} stroke="currentColor" strokeWidth={2.3} strokeLinecap="round" strokeLinejoin="round" />
+          <path d={path} stroke="currentColor" strokeWidth={2.3} strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ) : (
         <span className="font-bold" style={{ fontSize: `${size * 0.52}em` }}>
@@ -87,6 +90,7 @@ const SPACE_GLYPHS: Record<SpaceIcon, [string, string]> = {
 
 function SpaceGlyph({ icon }: { icon: SpaceIcon }) {
   const [d, color] = SPACE_GLYPHS[icon];
+
   return (
     <svg viewBox="0 0 24 24" className="size-[1.2em]" aria-hidden>
       <path d={d} fill={color} fillRule="evenodd" />
@@ -131,6 +135,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
   const { s } = bay;
   const site = s.sites[id];
   const b = site.body;
+
   const link =
     site.link && !inPeek ? (
       <button
@@ -149,6 +154,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
       ["09:40", "12:25", "€97"],
       ["13:20", "16:10", "€112"],
     ];
+
     return (
       <div className="flex h-full flex-col gap-[0.7em] p-[1.4em]">
         <p className="text-[1.55em] font-semibold tracking-tight">London to Lisbon</p>
@@ -210,6 +216,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
       </div>
     );
   }
+
   if (b.kind === "video") {
     return (
       <div className="flex h-full flex-col gap-[0.7em] p-[1.2em]">
@@ -224,6 +231,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
       </div>
     );
   }
+
   if (b.kind === "dev") {
     return (
       <div className="flex h-full flex-col">
@@ -242,6 +250,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
       </div>
     );
   }
+
   if (b.kind === "news") {
     const ad = (wide?: boolean) =>
       s.blocking ? (
@@ -271,6 +280,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
           )}
         </div>
       );
+
     return (
       <div className="relative flex h-full flex-col gap-[0.7em] p-[1.4em]">
         <p className="text-[0.75em] text-black/40">The Daily Example</p>
@@ -296,6 +306,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
       </div>
     );
   }
+
   if (b.kind === "blank") {
     return (
       <div className="grid h-full place-items-center">
@@ -310,6 +321,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
       </div>
     );
   }
+
   if (b.kind === "search") {
     return (
       <div className="flex h-full flex-col gap-[0.8em] p-[1.4em]">
@@ -324,6 +336,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
       </div>
     );
   }
+
   if (b.kind === "list") {
     return (
       <div className="flex h-full flex-col gap-[0.6em] p-[1.4em]">
@@ -342,6 +355,7 @@ function Page({ id, bay, inPeek }: { id: string; bay: Bay; inPeek?: boolean }) {
       </div>
     );
   }
+
   return (
     <div className="flex h-full flex-col gap-[0.7em] p-[1.4em]">
       <p className="text-[0.75em] text-black/40">{b.kicker}</p>
@@ -371,6 +385,7 @@ function Omni({ bay, quiet }: { bay: Bay; quiet: boolean }) {
   }, [quiet]);
 
   const sp = s.spaces[s.space];
+
   const sections = useMemo((): [string, OmniRow[]][] => {
     const tabRow = (id: string, headed: boolean): OmniRow => ({
       site: s.sites[id],
@@ -380,6 +395,7 @@ function Omni({ bay, quiet }: { bay: Bay; quiet: boolean }) {
       act: "Switch to Tab",
       run: () => bay.go(id),
     });
+
     const keptRow = (id: string): OmniRow => ({
       site: s.sites[id],
       key: s.sites[id].title,
@@ -388,8 +404,10 @@ function Omni({ bay, quiet }: { bay: Bay; quiet: boolean }) {
       act: "Bring Back",
       run: () => bay.restore(id),
     });
+
     const all = [...sp.pins, ...tabsOf(sp)].filter((id, i, a) => a.indexOf(id) === i);
     const ql = q.trim().toLowerCase();
+
     if (!ql) {
       return [
         [
@@ -409,8 +427,10 @@ function Omni({ bay, quiet }: { bay: Bay; quiet: boolean }) {
         ["Frequent", FREQUENT.map((id) => ({ site: s.sites[id], key: s.sites[id].title, sub: s.sites[id].host, act: "Open", run: () => bay.openSite(id) }))],
       ];
     }
+
     const hit = (id: string) => s.sites[id].title.toLowerCase().includes(ql) || s.sites[id].host.includes(ql);
     const url = /\.[a-z]{2,}/i.test(ql) && !/\s/.test(ql);
+
     const neu: OmniRow = url
       ? {
           site: { title: q, host: q, glyph: "◎", tint: "#8e8e93", body: { kind: "search", q } },
@@ -426,6 +446,7 @@ function Omni({ bay, quiet }: { bay: Bay; quiet: boolean }) {
           act: "Search",
           run: () => bay.open(q.trim(), true),
         };
+
     return [
       [
         "",
@@ -446,6 +467,7 @@ function Omni({ bay, quiet }: { bay: Bay; quiet: boolean }) {
 
   const rows = sections.flatMap(([, r]) => r);
   const at = Math.min(pick, rows.length - 1);
+
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       setPick(Math.min(rows.length - 1, at + 1));
@@ -470,7 +492,9 @@ function Omni({ bay, quiet }: { bay: Bay; quiet: boolean }) {
       {k}
     </kbd>
   );
+
   let i = -1;
+
   return (
     <div
       data-omni
@@ -501,8 +525,10 @@ function Omni({ bay, quiet }: { bay: Bay; quiet: boolean }) {
               {name ? <p className="px-[0.78em] pt-[0.87em] pb-[0.43em] text-[0.82em] text-[#959596]">{name}</p> : null}
               {list.map((r) => {
                 i++;
+
                 const on = i === at,
                   n = i;
+
                 return (
                   <button
                     key={`${name}-${r.key}-${n}`}
@@ -551,6 +577,7 @@ function Panel({ bay }: { bay: Bay }) {
   const id = s.spaces[s.space].active;
   const site = s.sites[id];
   const count = site.body.kind === "news" ? 38 : 3;
+
   const row = (icon: keyof typeof PATHS, label: string, value: string) => (
     <div className="flex items-center gap-[0.6em] px-[0.8em] py-[0.4em]">
       <Ic d={icon} className="text-black/45" />
@@ -558,6 +585,7 @@ function Panel({ bay }: { bay: Bay }) {
       <span className="ml-auto text-black/40">{value}</span>
     </div>
   );
+
   return (
     <div
       data-panel
@@ -620,13 +648,17 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
 
   // Peek grows out of the link it came from, and goes back into it.
   const linkRect = (to: string) => pageEl.current?.querySelector<HTMLElement>(`[data-peek-link="${to}"]`)?.getBoundingClientRect() ?? null;
+
   const toward = (card: HTMLElement, r: DOMRect) => {
     const c = card.getBoundingClientRect();
+
     return `translate(${r.left - c.left}px, ${r.top - c.top}px) scale(${r.width / c.width}, ${r.height / c.height})`;
   };
+
   const shownPeek = useRef<string | null>(null);
   useLayoutEffect(() => {
     const card = peekCard.current;
+
     if (s.peek && s.peek !== shownPeek.current && card && !s.peekQuiet) {
       const r = linkRect(s.peek);
       card.animate(
@@ -637,11 +669,13 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
         { duration: 460, easing: "cubic-bezier(.2,.9,.25,1.05)" },
       );
     }
+
     shownPeek.current = s.peek;
   }, [s.peek, s.peekQuiet]);
 
   const closePeek = async () => {
     const card = peekCard.current;
+
     if (!card || !s.peek) return bay.unpeek();
     const r = linkRect(s.peek);
     setPeekLeaving(true);
@@ -657,12 +691,15 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
     setPeekLeaving(false);
     bay.unpeek();
   };
+
   const peekToTab = async () => {
     const card = peekCard.current,
       page = pageEl.current;
+
     if (card && page) {
       const c = card.getBoundingClientRect(),
         p = page.getBoundingClientRect();
+
       await card
         .animate(
           [
@@ -673,47 +710,62 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
         )
         .finished.catch(() => {});
     }
+
     bay.peekToTab();
   };
 
   // Two fingers across the sidebar switch spaces, as on a trackpad; a finger does too.
   useEffect(() => {
     const el = stage.current;
+
     if (!el) return;
     const REACH = 110;
+
     let travel = 0,
       way: "x" | "y" | null = null,
       sumX = 0,
       sumY = 0,
       spent = false;
+
     let quiet = 0,
       idle = 0;
+
     const inner = () => el.querySelector<HTMLElement>("[data-rows]");
+
     const follow = () => {
       const r = inner();
+
       if (!r) return;
       const p = Math.min(1, Math.abs(travel) / REACH);
       r.style.transition = "none";
       r.style.transform = `translateX(${(-Math.sign(travel) * REACH * p * 0.6).toFixed(1)}px)`;
       r.style.opacity = String(Math.max(0, 1 - 1.4 * p));
     };
+
     const land = () => {
       const p = Math.min(1, Math.abs(travel) / REACH),
         w: 1 | -1 = travel > 0 ? 1 : -1;
+
       travel = 0;
+
       if (p >= 0.4) {
         bay.touch();
         bay.step(w);
+
         return true;
       }
+
       const r = inner();
+
       if (r) {
         r.style.transition = `transform .3s ${ARRIVE}, opacity .2s`;
         r.style.transform = "";
         r.style.opacity = "";
       }
+
       return false;
     };
+
     const wheel = (e: WheelEvent) => {
       clearTimeout(quiet);
       quiet = window.setTimeout(() => {
@@ -721,53 +773,68 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
         sumX = sumY = 0;
         spent = false;
       }, 160);
+
       if (spent) {
         if (way === "x") e.preventDefault();
+
         return;
       }
+
       if (!way) {
         sumX += e.deltaX;
         sumY += e.deltaY;
+
         if (Math.abs(sumY) > 8 && Math.abs(sumY) >= Math.abs(sumX)) way = "y";
         else if (Math.abs(sumX) > 10 && Math.abs(sumX) > Math.abs(sumY) * 2) way = "x";
         else {
           if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) e.preventDefault();
+
           return;
         }
       }
+
       if (way !== "x") return;
       e.preventDefault();
       travel += e.deltaX;
       follow();
       clearTimeout(idle);
+
       if (Math.abs(travel) >= REACH) {
         land();
         spent = true;
+
         return;
       }
+
       idle = window.setTimeout(() => {
         if (land()) spent = true;
       }, 140);
     };
+
     let startX: number | null = null;
+
     const down = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") startX = e.clientX;
     };
+
     const move = (e: PointerEvent) => {
       if (startX === null) return;
       travel = (startX - e.clientX) * 1.2;
       follow();
     };
+
     const up = () => {
       if (startX === null) return;
       startX = null;
       land();
     };
+
     el.addEventListener("wheel", wheel, { passive: false });
     el.addEventListener("pointerdown", down);
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
+
     return () => {
       el.removeEventListener("wheel", wheel);
       el.removeEventListener("pointerdown", down);
@@ -780,11 +847,15 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
   // A click beside a card puts it away.
   const onPointerDown = (e: ReactPointerEvent) => {
     bay.touch();
-    const t = e.target as HTMLElement;
-    if (s.omni && !t.closest("[data-omni]") && !t.closest("[data-new]")) bay.omni(false);
-    if (s.panel && !t.closest("[data-panel]") && !t.closest("[data-plate]")) bay.panel(false);
-    if (s.menu !== null && !t.closest("[data-space-menu]")) bay.menu(null);
+    const t = e.target instanceof Element ? e.target : null;
+
+    if (s.omni && !t?.closest("[data-omni]") && !t?.closest("[data-new]")) bay.omni(false);
+
+    if (s.panel && !t?.closest("[data-panel]") && !t?.closest("[data-plate]")) bay.panel(false);
+
+    if (s.menu !== null && !t?.closest("[data-space-menu]")) bay.menu(null);
   };
+
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
       if (s.omni) bay.omni(false);
@@ -792,6 +863,7 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
       else if (s.panel) bay.panel(false);
       else if (s.menu !== null) bay.menu(null);
     }
+
     if (e.ctrlKey && /^[1-9]$/.test(e.key) && +e.key <= s.spaces.length) {
       bay.toSpace(+e.key - 1);
       e.preventDefault();
@@ -804,12 +876,16 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
     const h = s.ages[id];
     const soon = h >= sp.keep - 4 && id !== sp.active;
     const label = h === 0 ? "now" : h < 48 ? `${h} h` : `${Math.round(h / 24)} d`;
+
     return <em className={cx("ml-auto shrink-0 pr-[0.2em] text-[0.78em] not-italic", soon ? "font-semibold text-[#e8663f]" : "text-black/35")}>{label}</em>;
   };
+
   const row = (id: string, indent = false) => {
     if (pair && id === pair.b) return null;
+
     if (sp.pair && id === sp.pair.a) {
       const on = !!pair;
+
       const half = (t: string) => (
         <button
           key={t}
@@ -824,6 +900,7 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
           <span className="truncate">{s.sites[t].title}</span>
         </button>
       );
+
       return (
         <div
           key={id}
@@ -839,8 +916,10 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
         </div>
       );
     }
+
     const on = sp.active === id && !pair;
     const leaving = s.leaving.includes(id);
+
     return (
       <div
         key={id}
@@ -878,10 +957,13 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
       </div>
     );
   };
+
   const item = (it: Item, i: number) => {
     if ("line" in it) return <i key={`line-${i}`} className="mx-[0.7em] my-[0.45em] block h-px bg-black/[0.08]" />;
+
     if ("tab" in it) return row(it.tab);
     const stays = it.kids.filter((k) => k === sp.active || k === pair?.a);
+
     return (
       <div key={it.folder}>
         <button
@@ -904,6 +986,7 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
 
   const plate = (() => {
     if (activeSite.body.kind === "dev" || pair) return null;
+
     if (activeSite.body.kind === "blank")
       return (
         <button
@@ -917,6 +1000,7 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
       );
     const name = activeSite.host.split("/")[0].replace(/^www\./, "");
     const owner = name.split(".").slice(-2).join(".");
+
     return (
       <button
         type="button"
@@ -970,6 +1054,7 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
         <div className="mb-[0.6em] grid grid-cols-4 gap-[0.42em]">
           {sp.pins.map((id) => {
             const on = sp.active === id && !pair;
+
             return (
               <button
                 key={id}
@@ -1015,6 +1100,7 @@ export default function LiveWindow({ bay }: LiveWindowProps) {
             {s.spaces.map((x, i) => {
               const on = i === s.space;
               const dots = s.spaces.length > 4;
+
               return (
                 <button
                   key={`${x.name}-${i}`}

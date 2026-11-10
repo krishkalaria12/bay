@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { fileDragPath, watchFileDrag } = await import("../../../../../packages/desktop/src/webFileDrag.ts");
 
 class Target {
@@ -14,6 +15,7 @@ class Target {
     for (const listener of this.listeners[type] ?? []) listener(event);
   }
 }
+
 const setup = (source = { path: "/Downloads/report.pdf", relative: null }) => {
   const document = new Target();
   const element = new Target();
@@ -21,13 +23,16 @@ const setup = (source = { path: "/Downloads/report.pdf", relative: null }) => {
   element.events = [];
   element.dispatchEvent = (event) => element.events.push(event.type);
   const drags = [];
+
   const stop = watchFileDrag(
     element,
     () => source,
     (file) => drags.push(file),
   );
+
   return { document, element, drags, stop };
 };
+
 const press = (mods = {}) => ({ button: 0, ctrlKey: false, clientX: 10, clientY: 10, ...mods });
 
 test("a press that moves past the threshold starts one drag and ends the view's press", () => {
@@ -46,10 +51,12 @@ test("a click, another button, a context click or nothing to drag start no drag"
   element.fire("pointerdown", press());
   document.fire("pointerup");
   document.fire("pointermove", { clientX: 90, clientY: 90 });
+
   for (const mods of [{ button: 1 }, { button: 2 }, { ctrlKey: true }]) {
     element.fire("pointerdown", press(mods));
     document.fire("pointermove", { clientX: 90, clientY: 90 });
   }
+
   assert.equal(drags.length, 0);
   const none = setup(null);
   none.element.fire("pointerdown", press());
@@ -59,11 +66,14 @@ test("a click, another button, a context click or nothing to drag start no drag"
 
 test("a drag that ends back on its row isn't a click, and the next press is", () => {
   const { document, element } = setup();
+
   const swallowed = () => {
     const event = { stopped: false, preventDefault() {}, stopPropagation: () => (event.stopped = true) };
     element.fire("click", event);
+
     return event.stopped;
   };
+
   element.fire("pointerdown", press());
   document.fire("pointermove", { clientX: 40, clientY: 10 });
   assert.equal(swallowed(), true);

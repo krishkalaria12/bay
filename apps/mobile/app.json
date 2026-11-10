@@ -1,0 +1,79 @@
+{
+  "expo": {
+    "name": "Bay",
+    "slug": "bay",
+    "version": "1.0.0",
+    // Rotating shows landscape (B10): mostly for fullscreen video, with the chrome keeping clear of the notch on
+    // either side. "default" turns this into all orientations with no Android lock attribute.
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    // Bay's own links, plus the web schemes it answers as a browser: iOS reads them for the default-browser offer and
+    // the Android VIEW filter takes them with BROWSABLE, so links from other apps open here (B9).
+    "scheme": ["bay", "http", "https"],
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.krishkalaria.bay.mobile",
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "UIBackgroundModes": ["audio"],
+        "NSLocationWhenInUseUsageDescription": "Bay shares your location with sites you allow."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "in.krishkalaria.bay.mobile",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "./modules/bay-engine/app.plugin.js",
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Bay uses Face ID to unlock your private tabs."
+        }
+      ],
+      "expo-status-bar",
+      [
+        "expo-dev-client",
+        {
+          "defaultLaunchURL": "http://127.0.0.1:8081",
+          "skipOnboarding": true,
+          "showMenuAtLaunch": false,
+          "toolsButton": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": false,
+          "cameraPermission": "Bay uses the camera when a site asks to take a photo or video.",
+          "microphonePermission": "Bay uses the microphone when a site asks to record audio."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

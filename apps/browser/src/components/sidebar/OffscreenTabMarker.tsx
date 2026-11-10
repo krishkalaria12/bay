@@ -15,12 +15,16 @@ export function OffscreenTabMarker({ windowId, side, top, onPress }: { windowId:
   const theme = useTheme();
   const windowTint = useWindowTint();
   const tokens = useSidebarTokens();
+
   const tab = useBrowser((s) => {
     const id = activeTabId(s, windowId);
+
     return id ? s.tabs[id] : undefined;
   });
+
   if (!tab) return null;
   const label = tab.customTitle || tab.title || "Current tab";
+
   return (
     <View
       pointerEvents="box-none"

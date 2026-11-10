@@ -35,10 +35,11 @@ import { WindowProfile } from "./components/window/WindowProfile";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { LibrarySidebar } from "./components/library/LibrarySidebar";
 import { closeLibrarySidebar, useLibrarySidebar } from "./components/library/sidebarState";
+import { useLibrarySlide } from "./components/library/useLibrarySlide";
 import { LittleBayWindow } from "./components/littleBay/LittleBayWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
 import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
-import { useSidebarWidth } from "./components/sidebar/tokens";
+import { useSidebarWidth, useTabsSidebarWidth } from "./components/sidebar/tokens";
 import { hex, ThemeScope, useTheme, useWindowTint } from "./lib/theme";
 import { layout } from "./lib/constants";
 import { useEffectEvent } from "./lib/useEffectEvent";
@@ -56,6 +57,7 @@ export function WindowRoot({ windowId }: { windowId?: string }) {
         <AppDialogHost windowId={windowId!} />
       </ThemeScope>
     );
+
   return <BrowserWindowRoot windowId={windowId} />;
 }
 
@@ -63,7 +65,9 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   const id = useBrowser((s) => windowId ?? s.ui.focusedWindowId ?? s.windowOrder[0] ?? null);
   const exists = useBrowser((s) => !!id && !!s.windows[id]);
   const small = useBrowser((s) => !!id && s.windows[id]?.kind === "small");
+
   if (!id || !exists) return null;
+
   return (
     <WindowContext.Provider value={id}>
       <ThemeScope>
@@ -87,22 +91,27 @@ function BrowserWindow() {
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left.
   const right = useSidebarOnRight();
   const addressInSidebar = useAddressBarInSidebar();
+
   // The top corners the page reaches: it has no toolbar there to hold caption buttons.
   const pageCorner = {
     left: !topTabs && addressInSidebar && (right || !showSidebar),
     right: !topTabs && addressInSidebar && (!right || !showSidebar),
   };
+
   // Where the page would run up under caption buttons, they live in a bar of their own over it, as in Zen: hidden in
   // the card's top gap until the pointer reaches the window's top, then open, pushing the page down rather than
   // covering it. Open, it lines up with the sidebar's toolbar row; it always moves the window.
   const buttons = useWindowButtonLayout();
+
   const captionBar =
     capabilities.captionButtons && !fullscreen && ((pageCorner.left && buttons.left.length > 0) || (pageCorner.right && buttons.right.length > 0));
+
   const captionRevealed = useCaptionRevealed(windowId, captionBar);
   const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
   const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   const captionBarHeight = captionRevealed ? captionHeight : layout.cardTop;
   let pageTop: number = layout.cardTop;
+
   if (showStrip) pageTop = TOP_STRIP_HEIGHT;
   else if (captionBar) pageTop = captionBarHeight;
   const pageInset = useSharedValue(pageTop);
@@ -121,6 +130,8 @@ function BrowserWindow() {
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);
   const library = useLibrarySidebar((l) => !!l[windowId]);
+  const tabsWidth = useTabsSidebarWidth(windowId);
+  const librarySlide = useLibrarySlide(windowId, sidebarWidth, right);
   // Hiding the sidebar (or moving tabs to the top) puts the Library away with it.
   useEffect(() => {
     if (!showSidebar) closeLibrarySidebar(windowId);
@@ -131,14 +142,18 @@ function BrowserWindow() {
   // on the card's (no clipping: the resize handle reaches past it). On the right it's already held at the slot's
   // start, so it goes out past the window's edge as the slot narrows.
   const hiddenBy = right ? 0 : sidebarWidth - layout.cardInset;
+
   const slotStyle = useAnimatedStyle(() => {
     "worklet";
+
     // In page full screen the slot sits outside the window at the sidebar's full width.
-    return { width: fullscreen ? sidebarWidth : interpolate(dock.progress.get(), [0, 1], [layout.cardInset, sidebarWidth]) };
+    return { width: fullscreen ? sidebarWidth : interpolate(dock.progress.get(), [0, 1], [layout.cardInset, librarySlide.slotWidth.get()]) };
   });
+
   const dockedStyle = useAnimatedStyle(() => {
     "worklet";
     const p = dock.progress.get();
+
     return { opacity: interpolate(p, [0, 0.6, 1], [0, 1, 1]), transform: [{ translateX: interpolate(p, [0, 1], [-hiddenBy, 0]) }] };
   });
 
@@ -153,14 +168,28 @@ function BrowserWindow() {
           style={[fullscreen ? { position: "absolute", top: 0, bottom: 0, ...(right ? { left: "100%" } : { right: "100%" }) } : { height: "100%" }, slotStyle]}
         >
           {dock.mounted ? (
-            <Animated.View style={[{ width: sidebarWidth, height: "100%" }, dockedStyle]}>
+            <Animated.View style={[{ height: "100%" }, librarySlide.slotStyle, dockedStyle]}>
               {/* The Library in the sidebar's place; the tabs stay mounted underneath, keeping their scroll and rows. */}
-              <View style={{ flex: 1, display: library ? "none" : "flex" }}>
+              <Animated.View
+                pointerEvents={library ? "none" : "auto"}
+                style={[
+                  { width: tabsWidth, height: "100%", display: librarySlide.covered ? "none" : "flex", ...(right ? { alignSelf: "flex-end" } : null) },
+                  librarySlide.tabsStyle,
+                ]}
+              >
                 <SpaceSwipe>
                   <Sidebar />
                 </SpaceSwipe>
-              </View>
-              {library ? <LibrarySidebar windowId={windowId} /> : null}
+              </Animated.View>
+              {librarySlide.shown ? (
+                <View pointerEvents={library ? "box-none" : "none"} style={[StyleSheet.absoluteFill, { overflow: "hidden" }]}>
+                  <Animated.View
+                    style={[{ height: "100%", width: librarySlide.shown.width, ...(right ? { alignSelf: "flex-end" } : null) }, librarySlide.libraryStyle]}
+                  >
+                    <LibrarySidebar windowId={windowId} section={librarySlide.shown.section} width={librarySlide.shown.width} />
+                  </Animated.View>
+                </View>
+              ) : null}
             </Animated.View>
           ) : null}
         </Animated.View>
@@ -245,7 +274,9 @@ function BrowserWindow() {
 // sit over the page's corner; with the top strip closed, only while the pointer is over the window's top, as Zen has it.
 function trafficLightsMode(o: { addressInSidebar: boolean; fullscreen: boolean; sidebarOpen: boolean; topTabs: boolean; peekOut: boolean }): TrafficLightsMode {
   if (!o.addressInSidebar || o.fullscreen || o.sidebarOpen) return "shown";
+
   if (o.topTabs) return "hover";
+
   return o.peekOut ? "shown" : "hidden";
 }
 
@@ -253,8 +284,11 @@ function trafficLightsMode(o: { addressInSidebar: boolean; fullscreen: boolean; 
 // it's out (nnPeekOut(windowId)).
 const devPeeks = new Map<string, () => void>();
 const devPeeksOut = new Map<string, boolean>();
+
 if (__DEV__) {
+  // SAFETY: globalThis is extensible; the cast only declares the optional nnPeek field this statement sets.
   (globalThis as { nnPeek?: unknown }).nnPeek = (windowId: string) => devPeeks.get(windowId)?.();
+  // SAFETY: globalThis is extensible; the cast only declares the optional nnPeekOut field this statement sets.
   (globalThis as { nnPeekOut?: unknown }).nnPeekOut = (windowId: string) => devPeeksOut.get(windowId) ?? false;
 }
 
@@ -267,43 +301,56 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
   useEffect(() => {
     if (!__DEV__) return;
     devPeeks.set(windowId, show);
+
     return () => void devPeeks.delete(windowId);
   }, [windowId, show]);
   // Holding Option shows it, as Arc's did, and letting go hides it unless the pointer has gone into it meanwhile.
   const pointerIn = useRef(false);
   const heldOut = useRef(false);
   const optionOn = useBrowser((s) => s.settings.showSidebarOnOption);
+
   const optionEvent = useEffectEvent((type: string, from?: string) => {
     if (type === "optionHeld" && from === windowId && optionOn && enabled) {
       heldOut.current = true;
       show();
     } else if (type === "optionReleased" && heldOut.current) {
       heldOut.current = false;
+
       if (!pointerIn.current) hide();
     }
   });
+
   useEffect(() => {
     const sub = onAppEvent((e) => optionEvent(e.type, "windowId" in e ? e.windowId : undefined));
+
     return () => sub.remove();
   }, []);
+
   const enter = () => {
     pointerIn.current = true;
     show();
   };
+
   const leave = () => {
     pointerIn.current = false;
     hide();
   };
+
   useEffect(() => {
     onOut(live);
+
     if (__DEV__) devPeeksOut.set(windowId, live);
+
     return () => onOut(false);
   }, [live, onOut]);
+
   const slideStyle = useAnimatedStyle(() => {
     "worklet";
     const p = slide.get();
+
     return { opacity: p, transform: [{ translateX: interpolate(p, [0, 1], [(right ? 1 : -1) * (sidebarWidth + 12), 0]) }] };
   });
+
   const side = right ? "right" : "left";
 
   return (

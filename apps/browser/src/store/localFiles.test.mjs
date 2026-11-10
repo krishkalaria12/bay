@@ -6,17 +6,21 @@ import { localFilePath, localFilePins, normalizeLocalFiles } from "./localFiles.
 const S = () => useBrowser.getState();
 const pdf = { path: "/Users/owner/Documents/A #1.pdf", name: "A #1.pdf", kind: "file" };
 const folder = { path: "/Users/owner/Documents/Work", name: "Work", kind: "folder" };
+
 const setup = () => {
   S().hydrate({});
+
   return S().createWindow({});
 };
 
 test("a Finder batch pins once, deduplicates paths per space and preserves metadata across hydrate", () => {
   const w = setup();
   let writes = 0;
+
   const stop = useBrowser.subscribe((s, prev) => {
     if (s.localFiles !== prev.localFiles) writes++;
   });
+
   const [a, b] = S().pinLocalFiles(w, [pdf, folder]);
   stop();
   assert.equal(writes, 1);
@@ -75,6 +79,7 @@ test("disk metadata whitelisting rejects traversal, poisoned ids, private spaces
   const value = { ...pdf, id: "a", spaceId: "default", createdAt: 10, order: 2, expanded: true, bookmark: "secret", access: "available" };
   const clean = normalizeLocalFiles({ a: value }, { default: {} });
   assert.deepEqual(clean.a, { ...pdf, id: "a", spaceId: "default", createdAt: 10, order: 2, expanded: false });
+
   for (const patch of [
     { id: "__proto__" },
     { id: "constructor" },
@@ -86,6 +91,7 @@ test("disk metadata whitelisting rejects traversal, poisoned ids, private spaces
   ]) {
     assert.deepEqual(normalizeLocalFiles({ a: { ...value, ...patch } }, { default: {} }), {});
   }
+
   assert.equal(localFilePath("/tmp/./secret"), null);
   assert.equal(localFilePath("/tmp/secret\0.pdf"), null);
   assert.equal(localFilePath("/a//b/"), "/a/b");
@@ -97,6 +103,7 @@ test("pins keep a Windows device's paths in their own form", () => {
   assert.equal(localFilePath("C:\\"), "C:\\");
   assert.equal(localFilePath("\\\\server\\share\\Work"), "\\\\server\\share\\Work");
   assert.equal(localFilePath("/tmp/back\\slash"), "/tmp/back\\slash");
+
   for (const path of ["C:notes", "notes\\secret", "C:\\Users\\..\\secret", "C:/Users/./secret", "\\\\server\\..\\x", "1:\\notes"])
     assert.equal(localFilePath(path), null, path);
   const id = setup();

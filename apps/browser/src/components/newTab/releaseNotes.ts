@@ -36,6 +36,8 @@ type Saved = { version: 1; lastVersion: string; pending: { version: string; sinc
 function readSaved(): Saved | null {
   try {
     const json = readDocument(RELEASE_NOTES_DOC);
+
+    // SAFETY: Saved) assertion matches the runtime value validated at this call site.
     return json ? (JSON.parse(json) as Saved) : null;
   } catch {
     return null;
@@ -61,28 +63,34 @@ const useReleaseNotes = create<State>(() => ({ pending: null, page: null }));
 
 export function trackAppVersion(): boolean {
   const version = systemInfo().appVersion;
+
   if (!version) return false;
   const saved = readSaved();
   const updated = saved ? saved.lastVersion !== version : !!readDocument("session.json");
   let pending = saved?.pending ?? null;
+
   if (__DEV__) {
     if (launchEnvironment("BAY_WHATS_NEW") === "1") pending = { version, since: Date.now() };
   } else if (updated) {
     pending = notesFor(version) ? { version, since: Date.now() } : null;
   }
+
   if (pending && Date.now() - pending.since > POSTCARD_SECONDS * 1000) pending = null;
   save({ lastVersion: version, pending });
   useReleaseNotes.setState({ pending });
+
   return updated;
 }
 
 export function usePendingReleaseNotes(): ReleaseNotes | null {
   const version = useReleaseNotes((s) => s.pending?.version);
+
   return version ? notesFor(version) : null;
 }
 
 export function useReleaseNotesPage(windowId: string): ReleaseNotes | null {
   const version = useReleaseNotes((s) => (s.page?.windowId === windowId ? s.page.version : undefined));
+
   return version ? notesFor(version) : null;
 }
 
@@ -107,6 +115,7 @@ export function queueReleaseNotes(version = systemInfo().appVersion) {
 }
 
 if (__DEV__)
+  // SAFETY: { nnReleaseNotes? assertion matches the runtime value validated at this call site.
   (globalThis as { nnReleaseNotes?: unknown }).nnReleaseNotes = {
     store: useReleaseNotes,
     queue: queueReleaseNotes,

@@ -44,6 +44,7 @@ const System = requireNativeModule<{
 
 /** A shortcut as typed: its character, its modifiers and the key's code (for a global shortcut). */
 export type RecordedShortcut = { key: string; modifiers: ShortcutModifier[]; keyCode: number };
+
 /** A global shortcut's registration: "taken" when another app holds the key, or macOS refused it. */
 export type HotKeyStatus = "ok" | "off" | "taken" | "unavailable";
 
@@ -54,19 +55,28 @@ export const setLaunchAtLogin = (enabled: boolean) => System.setLaunchAtLogin(en
 
 // macOS still exposes a synchronous Expo function; the web host performs async IO.
 export const fileExists = async (path: string): Promise<boolean> => System.fileExists(path);
+
 /** ~/Downloads, as macOS names it. */
 export const downloadsFolder = (): string | null => nativeSnapshot("BaySystem", "downloadsFolder", [], () => System.downloadsFolder?.() ?? null);
 export const openFile = (path: string) => System.openFile(path);
 export const revealFile = (path: string) => System.revealFile(path);
+
 /** A file URL on the pasteboard, ready to paste into Finder or attach to a message. */
 export const copyFile = (path: string): Promise<boolean> => System.copyFile?.(path) ?? Promise.resolve(false);
 export const moveToTrash = (path: string) => System.moveToTrash(path);
+
 /** Renames a file beside itself, with a fresh " (n)" name on a collision. The new path, or null. */
 export const renameFile = (path: string, name: string): Promise<string | null> => System.renameFile?.(path, name) ?? Promise.resolve(null);
 export const fileIcon = (path: string, size = 32) => System.fileIcon(path, size);
 export const runningAppIcon = (pid: number, size = 32) => System.appIcon(pid, size);
-export const hapticTick = () => System.hapticTick();
+
+// Only a Mac trackpad has one to play; the other hosts don't implement it.
+export const hapticTick = () => {
+  if (isMac) System.hapticTick();
+};
+
 export const menuShortcuts = () => System.menuShortcuts();
+
 /** The next key press as a shortcut, or null when cancelled. As on macOS a click cancels; the web host only sees keys,
  *  so its document watches for clicks, and for focus leaving it for a page or another window. */
 export const recordShortcut = async (): Promise<RecordedShortcut | null> => {
@@ -74,6 +84,7 @@ export const recordShortcut = async (): Promise<RecordedShortcut | null> => {
   const cancel = () => void System.cancelRecording();
   window.addEventListener("pointerdown", cancel, true);
   window.addEventListener("blur", cancel);
+
   try {
     return await System.recordShortcut();
   } finally {
@@ -81,9 +92,12 @@ export const recordShortcut = async (): Promise<RecordedShortcut | null> => {
     window.removeEventListener("blur", cancel);
   }
 };
+
 export const cancelShortcutRecording = () => System.cancelRecording();
+
 /** Little Bay's menu bar button (Settings › Links), opening one from any app. */
 export const setLittleBayMenuBarItem = (on: boolean) => System.setLittleBayMenuBarItem(on);
+
 /** Little Bay's shortcut from any app (a Carbon hot key); null turns it off. */
 export const setLittleBayHotKey = (keyCode: number | null, modifiers: ShortcutModifier[] = []) => System.setLittleBayHotKey(keyCode, modifiers);
 
@@ -108,6 +122,7 @@ const NativeMouseArea = System ? requireNativeViewManager<NativeMouseAreaProps>(
 
 export function MouseArea({ path, onMiddleClick, onSideButton, ...props }: MouseAreaProps) {
   if (!NativeMouseArea) return <View {...props} />;
+
   return (
     <NativeMouseArea
       path={path}

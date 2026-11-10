@@ -1,0 +1,76 @@
+# Reading tools: Reader opens with its settings sheet and exits, Copy as Markdown reports success, and Hide elements
+# zaps a picked paragraph, undoes it and finishes. Needs network access to www.iana.org.
+steps:
+  - run: ../flows/fresh-start
+
+  - tap: { id: start-screen }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "www.iana.org/help/example-domains" }
+  - await: { visible: { id: bar-more }, timeout: 30000 }
+  - await: { hidden: { id: page-progress }, timeout: 30000 }
+  # A tap on More while the page is still settling can be dropped, so wait until the screen holds still.
+  - await: { idle: true, stableFor: 1500, timeout: 30000 }
+
+  # Reader opens, changes text size and theme, and exits.
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, contains: "iana.org/help/example-domains" }, timeout: 10000 }
+  - tap: { id: page-reader }
+  - await: { visible: { id: reader-exit }, timeout: 20000 }
+  - await: { idle: true, timeout: 15000 }
+  # Reader settings persist, so the test changes them and puts them back.
+  - tap: { id: reader-larger }
+  - tap: { id: reader-smaller }
+  - tap: { id: reader-theme-sepia }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: reader-theme-paper }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: reader-settings-close }
+  - await: { hidden: { id: reader-exit }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-reader }, contains: "Reader settings" }, timeout: 10000 }
+  - tap: { id: page-reader }
+  - await: { visible: { id: reader-exit }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: reader-exit }
+  - await: { hidden: { id: reader-exit }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # Copy as Markdown.
+  - tap: { id: bar-more }
+  - await: { visible: { id: page-more-tools }, timeout: 10000 }
+  - tap: { id: page-more-tools }
+  - await: { visible: { id: page-markdown }, timeout: 10000 }
+  - tap: { id: page-markdown }
+  - await: { text: { in: { id: reading-notice }, contains: "Markdown copied" }, timeout: 20000 }
+  - await: { hidden: { id: reading-notice }, timeout: 10000 }
+
+  # Hide elements: pick, zap, undo, done.
+  - tap: { id: bar-more }
+  - await: { visible: { id: page-more-tools }, timeout: 10000 }
+  - tap: { id: page-more-tools }
+  - await: { visible: { id: page-hide-elements }, timeout: 10000 }
+  - tap: { id: page-hide-elements }
+  - await: { text: { in: { id: hide-instructions }, contains: "Tap an element" }, timeout: 20000 }
+  - await: { idle: true, timeout: 15000 }
+  # Pick the first paragraph. Android's tree has the page's text; iOS's runner tree has no web content, so it taps
+  # the paragraph where IANA's layout puts it on the iPhone 18 Pro.
+  - when: { platform: android }
+    steps:
+      - tap: { text: "A number of domains such as" }
+  - when: { platform: ios }
+    steps:
+      - tap: { x: 0.5, y: 0.44 }
+  - await: { visible: { id: hide-zap }, timeout: 10000 }
+  - tap: { id: hide-zap }
+  - await: { hidden: { id: hide-zap }, timeout: 10000 }
+  - await: { text: { in: { id: hide-instructions }, contains: "Tap an element" }, timeout: 10000 }
+  - when: { platform: android }
+    steps:
+      - await: { hidden: { text: "A number of domains such as" }, timeout: 10000 }
+  - tap: { id: hide-undo }
+  - when: { platform: android }
+    steps:
+      - await: { visible: { text: "A number of domains such as" }, timeout: 10000 }
+  - tap: { id: hide-done }
+  - await: { hidden: { id: hide-instructions }, timeout: 10000 }

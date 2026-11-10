@@ -10,12 +10,15 @@ test("final persistence waits for disk acknowledgements and freezes closing wind
   useBrowser.getState().hydrate({});
   const stop = startPersistence();
   heldSaves.on = true;
+
   try {
     const windowId = useBrowser.getState().createWindow({ url: "https://saved.example/" });
     let done = false;
+
     const final = flushPersistence({ final: true }).then(() => {
       done = true;
     });
+
     assert.equal(heldSaves.queue.length, 2);
     useBrowser.getState().closeWindow(windowId);
     assert.strictEqual(flushPersistence({ final: true }), flushPersistence({ final: true }));
@@ -40,6 +43,7 @@ test("failed final writes reject quit and can be saved after cancellation", asyn
   docs.clear();
   useBrowser.getState().hydrate({});
   const stop = startPersistence();
+
   try {
     const windowId = useBrowser.getState().createWindow({ url: "https://retry.example/" });
     heldSaves.error = new Error("disk full");
@@ -60,6 +64,7 @@ test("a final save acknowledged after cancellation cannot replace the newer save
   useBrowser.getState().hydrate({});
   const stop = startPersistence();
   heldSaves.on = true;
+
   try {
     useBrowser.getState().createWindow({ url: "https://cancel.example/" });
     const final = flushPersistence({ final: true });
@@ -91,11 +96,14 @@ test("an explicit owner restores only its store and starts no global data servic
   seedOwner.dispose();
   // Let callbacks from the preceding compatibility-wrapper tests finish first.
   await new Promise(setImmediate);
+
   const original = useBrowser.getState(),
     watches = historyWatches.length,
     bookmarkProfiles = bookmarkDbs.size;
+
   const store = createBrowserStore(),
     owner = createPersistence({ store });
+
   try {
     assert.ok(store.getState().windows[windowId]);
     assert.equal(store.getState().tabs[activeTabId(store.getState(), windowId)].url, "https://restored.example/");
@@ -112,8 +120,10 @@ test("recovery persistence skips hydrate and preserves accepted native and UI st
   docs.clear();
   docs.set("session.json", "invalid stale disk session");
   const store = createBrowserStore();
+
   const windowId = store.getState().createWindow({ url: "https://live.example/" }),
     tabId = activeTabId(store.getState(), windowId);
+
   store.getState().updateTab(tabId, { adoptId: "native-page-42" }, { progress: 0.7, isLoading: true });
   store.getState().openPanel(windowId, "retained query");
   let hydrated = 0;
@@ -123,8 +133,10 @@ test("recovery persistence skips hydrate and preserves accepted native and UI st
       throw new Error("recovery must not hydrate");
     },
   });
+
   const accepted = store.getState(),
     owner = createPersistence({ store, restoreSession: false });
+
   try {
     assert.equal(store.getState(), accepted);
     await owner.flush({ final: true });
@@ -141,10 +153,13 @@ test("recovery persistence skips hydrate and preserves accepted native and UI st
 
 test("one owner's final freeze does not freeze another owner or its resume", async () => {
   docs.clear();
+
   const a = createBrowserStore(),
     b = createBrowserStore();
+
   const ownerA = createPersistence({ store: a, restoreSession: false }),
     ownerB = createPersistence({ store: b, restoreSession: false });
+
   try {
     const windowA = a.getState().createWindow({ url: "https://a.example/" });
     const frozen = ownerA.flush({ final: true });
@@ -168,10 +183,13 @@ test("one owner's final freeze does not freeze another owner or its resume", asy
 test("disposal cancels only its timer and subscription", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   docs.clear();
+
   const a = createBrowserStore(),
     b = createBrowserStore();
+
   const ownerA = createPersistence({ store: a, restoreSession: false }),
     ownerB = createPersistence({ store: b, restoreSession: false });
+
   try {
     a.getState().createWindow({ url: "https://cancelled.example/" });
     context.mock.timers.tick(400);
@@ -199,13 +217,16 @@ test("disposal cancels only its timer and subscription", async (context) => {
 
 test("late acknowledgements from a disposed owner cannot alter its replacement's save cache", async () => {
   docs.clear();
+
   const store = createBrowserStore(),
     old = createPersistence({ store, restoreSession: false });
+
   store.getState().createWindow({ url: "https://replace.example/" });
   heldSaves.on = true;
   const pending = old.flush({ final: true });
   old.dispose();
   const replacement = createPersistence({ store, restoreSession: false });
+
   try {
     store.getState().updateSettings({ appearance: "dark" });
     await replacement.flush();

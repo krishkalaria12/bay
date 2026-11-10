@@ -5,7 +5,9 @@ import { docs, heldSaves, writeDocument } from "../test-native-stub.mjs";
 import { useBrowser } from "../store/browserStore.ts";
 
 globalThis.nnTelemetryTestWriteDocument = writeDocument;
+
 const shell = new URL("../test-native-stub.mjs", import.meta.url).href;
+
 const shellWithControlledWrites = `
   export { launchEnvironment, readDocument, saveDocument, systemInfo } from ${JSON.stringify(shell)};
   export function writeDocument(...args) { globalThis.nnTelemetryTestWriteDocument(...args); }
@@ -19,21 +21,28 @@ const observers = {
   "../sync/engine": "export const useSync = { getState: () => ({ status: 'off' }), subscribe() {} };",
   "./errors": "export async function reportNativeCrashes() {}",
 };
+
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (context.parentURL?.endsWith("/telemetry/client.ts") && specifier === "@bay/desktop") {
       return { url: `data:text/javascript,${encodeURIComponent(shellWithControlledWrites)}`, shortCircuit: true };
     }
+
     if (context.parentURL?.endsWith("/telemetry/usage.ts") && specifier in observers) {
       return { url: `data:text/javascript,${encodeURIComponent(observers[specifier])}`, shortCircuit: true };
     }
+
     return next(specifier, context);
   },
 });
+
 const { capture, devState, flush, queueLog, requestLog, setSharing } = await import("./client.ts");
 const { prepareTelemetryForQuit, resumeTelemetryAfterQuit, startUsage } = await import("./usage.ts");
+
 hooks.deregister();
+
 globalThis.__DEV__ = false;
+
 const settle = () => new Promise(setImmediate);
 const state = () => JSON.parse(docs.get("telemetry.json"));
 const queue = () => JSON.parse(docs.get("telemetry-queue.json"));
@@ -49,6 +58,7 @@ beforeEach(async (context) => {
   docs.clear();
   setSharing(true, "settings");
 });
+
 afterEach(async () => {
   globalThis.nnTelemetryTestWriteDocument = writeDocument;
   heldSaves.on = false;
@@ -175,6 +185,7 @@ for (const mode of ["delayed", "failed"]) {
       if (mode === "failed") throw new Error("background disk failure");
       background.push(() => writeDocument(...args));
     };
+
     setSharing(false, "settings");
     assert.equal(state().sharing, true); // Background writes have not reached disk.
     heldSaves.on = true;
@@ -206,6 +217,7 @@ test("a failed refreshed checkpoint rejects and cancellation repairs the opted-o
   globalThis.nnTelemetryTestWriteDocument = () => {
     throw new Error("background disk failure");
   };
+
   setSharing(false, "settings");
   heldSaves.error = new Error("acknowledged disk failure");
   await assert.rejects(prepareTelemetryForQuit(), /acknowledged disk failure/);

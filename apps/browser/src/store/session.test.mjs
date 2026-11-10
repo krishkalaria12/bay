@@ -1,6 +1,7 @@
 // What survives a quit, a relaunch and a closed window: session.json, history (Chrome's) and pinned tabs.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const { migrateHistoryFile, reloadHistory, startHistory } = await import("../lib/history.ts");
@@ -8,28 +9,35 @@ const { flushPersistence, loadSession, startPersistence } = await import("../lib
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
+
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.
 (await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
+
 const reset = () => S().hydrate({});
 const view = (w) => model.viewTabIds(S(), w).map((id) => S().tabs[id].url);
 const active = (w) => model.activeTabId(S(), w);
 
 let clock = Date.now();
+
 function at(fn) {
   const now = Date.now;
   Date.now = () => (clock += 1000);
+
   try {
     return fn();
   } finally {
     Date.now = now;
   }
 }
+
 const select = (id) => at(() => S().activate(id));
 
 function windowWith(...hosts) {
   const w = at(() => S().createWindow({ url: `${hosts[0]}.com` }));
   const ids = [model.viewTabIds(S(), w)[0]];
+
   for (const h of hosts.slice(1)) ids.push(at(() => S().newTab(w, { url: `${h}.com` })));
+
   return { w, ids };
 }
 
@@ -155,12 +163,14 @@ test("history.json moves into Chrome once: Chrome's own visits aren't doubled, a
   // d.com: Chrome has one of two visits 30 s apart; the other is still added.
   stub.chromeVisit("", "https://d.com/", "D", now - DAY);
   const entry = (url, times, title = url) => ({ url, title, favicon: null, visits: times.length, lastVisit: times.at(-1), visitTimes: times });
+
   const list = [
     entry("https://a.com/", [now - DAY]),
     entry("https://b.com/", [now - 3 * DAY, now - 2 * DAY]),
     entry("https://d.com/", [now - DAY, now - DAY + 30_000]),
     entry("https://old.com/", [now - 200 * DAY]),
   ];
+
   const workList = [entry("https://c.com/", [now - DAY])];
   stub.docs.set(
     "history.json",
@@ -201,6 +211,7 @@ test("history.json's move goes before watching Chrome's history; the view then h
   stub.docs.set("history.json", JSON.stringify({ version: 2, history: { default: [entry("https://moved.com/", [now - DAY, now - 1000])] } }));
   const stop = startHistory();
   assert.deepEqual(stub.historyWatches, [], "not watched while the file moves");
+
   for (let i = 0; i < 50 && !S().history.default?.length; i++) await new Promise((r) => setTimeout(r, 10));
   assert.deepEqual(stub.historyWatches, [""], "watched once it's in");
   assert.equal(S().history.default?.[0]?.url, "https://moved.com/");
@@ -239,10 +250,12 @@ test("history is a view of Chrome's: visits, deletions and a relaunch all read b
 
 test("⌘W on a pinned tab unloads its page; the tile stays with its title, icon and pinned URL", () => {
   reset();
+
   const {
     w,
     ids: [p, a],
   } = windowWith("mail", "a");
+
   S().togglePin(p);
   S().updateTab(p, { title: "Inbox", favicon: "data:mail" });
   select(p);
@@ -263,18 +276,23 @@ test("⌘W on a pinned tab unloads its page; the tile stays with its title, icon
 // 0.2.8: with a pinned tab open, holding ⌘W alternated forever between a New Tab page and the pinned site.
 test("holding ⌘W over pinned tiles ends by closing the window: no unloaded page wakes", () => {
   reset();
+
   const {
     w,
     ids: [x],
   } = windowWith("x", "a");
+
   S().togglePin(x);
   select(x);
   const wakes = [];
+
   for (let i = 0; i < 10 && S().windows[w]; i++) {
     const before = S().tabs[x].navigation;
     S().closeTab(active(w));
+
     if (S().windows[w] && !before && S().tabs[x].navigation) wakes.push(i);
   }
+
   assert.deepEqual(wakes, [], "x.com never loads again");
   assert.equal(S().windows[w], undefined, "the window closed, as in Dia");
   assert.ok(S().tabs[x].pinned && S().tabs[x].unloaded, "the tile stays the space's, unloaded, for its next window");
@@ -287,6 +305,7 @@ const sidebar = (w) =>
     .map((id) => {
       const t = S().tabs[id];
       const g = Object.values(S().groups).find((g) => g.tabIds.includes(id));
+
       return `${g ? `${g.name}/` : ""}${t.url}${t.navigation || t.adoptId ? " (loaded)" : ""}`;
     });
 
@@ -295,14 +314,17 @@ function pinnedWindow() {
     w,
     ids: [mail, docs, jira, wiki, a],
   } = windowWith("mail", "docs", "jira", "wiki", "a");
+
   S().togglePin(mail);
   S().togglePin(docs);
   const work = S().groupTabs([jira, wiki], { pinned: true });
   S().updateGroup(work, { name: "Work" });
   select(a);
   select(mail);
+
   return { w, mail, work };
 }
+
 const PINS = ["https://mail.com", "https://docs.com", "Work/https://jira.com", "Work/https://wiki.com"];
 
 // 0.2.8: closing a window took its pinned tabs with it, so the next window had none. They're the space's, as Arc's.
@@ -310,6 +332,7 @@ test("⌘W until the window closes, then ⌘N: the pinned tabs and pinned groups
   reset();
   const { w, mail, work } = pinnedWindow();
   assert.deepEqual(sidebar(w), ["https://mail.com (loaded)", "https://docs.com (loaded)", "Work/https://jira.com (loaded)", "Work/https://wiki.com (loaded)"]);
+
   for (let i = 0; i < 12 && S().windows[w]; i++) S().closeTab(active(w));
   assert.equal(S().windows[w], undefined, "the window closed");
   const n = S().createWindow();

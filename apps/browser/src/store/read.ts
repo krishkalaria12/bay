@@ -14,13 +14,16 @@ export function createLocalBrowserReadSource(store: BrowserStore): BrowserReadSo
   const project = createBrowserProjector();
   let previous: ReturnType<BrowserStore["getState"]> | undefined;
   let snapshot: BrowserProjection;
+
   return {
     getState() {
       const state = store.getState();
+
       if (state !== previous) {
         snapshot = project(state);
         previous = state;
       }
+
       return snapshot;
     },
     subscribe: (listener) => store.subscribe(listener),
@@ -33,7 +36,9 @@ export function createClientBrowserReadSource(
   return {
     getState() {
       const snapshot = client.getSnapshot();
+
       if (!snapshot || client.getStatus() === "closed") throw new Error("The browser runtime is not available");
+
       return snapshot.state;
     },
     subscribe: client.subscribe,
@@ -47,22 +52,29 @@ export function createBrowserReader(initial: BrowserReadSource) {
   const bindings = [{ source: initial }];
   let source = initial;
   const listeners = new Set<() => void>();
+
   const notify = () => {
     // oxlint-disable-next-line no-useless-spread -- Subscription changes during delivery apply to the next notification.
     for (const listener of [...listeners]) listener();
   };
+
   let unsubscribe: (() => void) | undefined;
+
   const connect = () => {
     unsubscribe?.();
     unsubscribe = listeners.size ? source.subscribe(notify) : undefined;
   };
+
   return {
     getState: () => source.getState(),
     subscribe(listener: () => void) {
       listeners.add(listener);
+
       if (listeners.size === 1) connect();
+
       return () => {
         listeners.delete(listener);
+
         if (!listeners.size) {
           unsubscribe?.();
           unsubscribe = undefined;
@@ -76,11 +88,14 @@ export function createBrowserReader(initial: BrowserReadSource) {
       source = next;
       connect();
       notify();
+
       return () => {
         const index = bindings.indexOf(binding);
+
         if (index < 0) return;
         const current = index === bindings.length - 1;
         bindings.splice(index, 1);
+
         if (current) {
           source = bindings[bindings.length - 1]!.source;
           connect();
@@ -93,6 +108,7 @@ export function createBrowserReader(initial: BrowserReadSource) {
 
 export const browserRead = createBrowserReader(createLocalBrowserReadSource(useBrowser));
 export const installBrowserReadSource = browserRead.install;
+
 function useRead<T>(select: (state: BrowserProjection) => T): T {
   return useSyncExternalStore(
     browserRead.subscribe,
@@ -107,8 +123,10 @@ export const useBrowserRead = Object.assign(useRead, {
   getInitialState: browserRead.getState,
   subscribe(listener: (state: BrowserProjection, previous: BrowserProjection) => void) {
     let previous = browserRead.getState();
+
     return browserRead.subscribe(() => {
       const state = browserRead.getState();
+
       if (state === previous) return;
       const before = previous;
       previous = state;

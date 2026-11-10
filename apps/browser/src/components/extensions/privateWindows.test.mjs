@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const native = await import("../../test-native-stub.mjs");
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { usePages } = await import("../window/pageState.ts");
@@ -16,6 +17,7 @@ function setup(list) {
   const tab = window.activeTabIds[window.spaceId];
   usePages.setState({ browsers: { 1: tab } });
   useExtensions.setState({ lists: { "": list }, actions: {}, popup: null, sidePanels: {} });
+
   return { normal, privateWindow };
 }
 
@@ -26,6 +28,7 @@ test("private toolbar and menus show allowed split and spanning extensions only"
     extension("split", { incognito: true, incognitoSplit: true }),
     extension("disabled", { incognito: true, enabled: false }),
   ]);
+
   const s = useBrowser.getState();
   assert.equal(extensionProfile(s, privateWindow), "");
   assert.match(pageProfile(s, privateWindow), /^incognito/);

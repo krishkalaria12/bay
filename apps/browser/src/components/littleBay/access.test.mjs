@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { DEFAULT_LITTLE_BAY_SHORTCUT, hotKeyCode } = await import("./access.ts");
 
 test("macOS registers its own key code, and other platforms the virtual key the name means", () => {

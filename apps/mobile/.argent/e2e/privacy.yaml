@@ -1,0 +1,65 @@
+# Privacy: tracking parameters are stripped, HTTP is upgraded to HTTPS, blocking pauses per site, and a private tab
+# leaves nothing in the archive. Needs network access to example.com and example.org.
+steps:
+  - run: ../flows/fresh-start
+
+  # The blocker is running with every filter list (the first run downloads them).
+  - tap: { id: bar-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { text: { in: { id: settings-block-content-detail }, contains: "8 lists active" }, timeout: 90000 }
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # Tracking parameters are dropped before the page loads; other parameters stay.
+  - tap: { id: start-screen }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "https://example.com/?utm_source=bay&id=1&fbclid=x" }
+  - await: { visible: { id: bar-more }, timeout: 30000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, equals: "https://example.com/?id=1" }, timeout: 20000 }
+
+  # Blocking pauses on this site and resumes.
+  - await: { text: { in: { id: page-blocking }, contains: On for this site }, timeout: 10000 }
+  - tap: { id: page-blocking }
+  - await: { text: { in: { id: page-blocking }, contains: Paused on this site }, timeout: 10000 }
+  - tap: { id: page-menu-close }
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-blocking }, contains: Paused on this site }, timeout: 10000 }
+  - tap: { id: page-blocking }
+  - await: { text: { in: { id: page-blocking }, contains: On for this site }, timeout: 10000 }
+  - tap: { id: page-menu-close }
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # An HTTP address opens over HTTPS.
+  - tap: { id: bar-search }
+  - await: { visible: { id: clear-address }, timeout: 10000 }
+  - tap: { id: clear-address }
+  - type: { into: { id: address-input }, text: "http://example.org/" }
+  - await: { idle: true, timeout: 20000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, equals: "https://example.org/" }, timeout: 20000 }
+  - tap: { id: page-menu-close }
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+
+  # A private tab: dark search card, marked in the switcher, and gone without a trace when closed.
+  - tap: { id: bar-tabs }
+  - await: { visible: { id: tab-card-0 }, timeout: 10000 }
+  - tap: { id: bar-search }
+  - await: { visible: { id: private-toggle }, timeout: 10000 }
+  - tap: { id: private-toggle }
+  - await: { visible: { id: private-notice }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "example.com" }
+  - await: { visible: { id: bar-tabs }, timeout: 30000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: bar-tabs }
+  - await: { visible: { id: tab-card-0 }, timeout: 10000 }
+  - scroll-to: { target: { id: tab-private-1 }, direction: right }
+  - tap: { id: tab-close-1 }
+  - await: { hidden: { id: tab-private-1 }, timeout: 10000 }
+  - tap: { id: bar-archive }
+  - await: { visible: { id: archive-empty }, timeout: 10000 }

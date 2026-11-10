@@ -26,6 +26,8 @@ export const installUpdate = () => void installPendingUpdate();
 
 export function updateTitle(pending: PendingUpdate) {
   if (pending.ready) return "Restart to Update";
+
   if (pending.downloading) return "Downloading Update…";
+
   return `Update ${APP_NAME}`;
 }

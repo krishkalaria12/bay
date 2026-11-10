@@ -7,6 +7,7 @@ import { createBrowserAuthority } from "./authority.ts";
 import { executeSplitCommand, parseSplitCommand, SPLIT_COMMAND_METHODS } from "./splitCommands.ts";
 
 const run = (store, command) => executeSplitCommand(store, parseSplitCommand(command));
+
 function setup() {
   const store = createBrowserStore();
   const s = () => store.getState();
@@ -15,6 +16,7 @@ function setup() {
   const a = activeTabId(s(), windowId);
   const b = s().newTab(windowId, { url: "b.com", background: true });
   const privateWindow = s().createWindow({ incognito: true, url: "private.com" });
+
   return { store, s, windowId, a, b, privateWindow, privateTab: activeTabId(s(), privateWindow) };
 }
 
@@ -32,13 +34,16 @@ test("split parser closes commands and excludes native page adoption", () => {
     { method: "openPeek", fromTabId: "t", url: "x.com" },
     { method: "openPeek", fromTabId: "t", url: "x.com", point: { x: 120, y: 80 } },
   ];
+
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(SPLIT_COMMAND_METHODS));
+
   for (const command of commands) {
     const parsed = parseSplitCommand(command);
     assert.deepEqual(parsed, command);
     assert.notEqual(parsed, command);
     assert.throws(() => parseSplitCommand({ ...command, native: true }), { code: "invalid_request" });
   }
+
   for (const command of [
     { method: "openSplitPane", windowId: "w", options: { adoptId: "chrome-tab" } },
     { method: "openPeek", fromTabId: "t", url: "x.com", adoptId: "chrome-tab" },
@@ -114,6 +119,7 @@ test("reopenPeekOrClosed reopens the last closed tab in one commit when no peek 
 test("split commands reject private and missing references without mutating", () => {
   const { store, s, windowId, a, b, privateWindow, privateTab } = setup();
   const split = s().createSplit([a, b]);
+
   for (const command of [
     { method: "createSplit", tabIds: [a, privateTab] },
     { method: "openSplitPane", windowId, options: { tabId: privateTab } },
@@ -129,6 +135,7 @@ test("split commands reject private and missing references without mutating", ()
     assert.throws(() => run(store, command), { code: "invalid_request" }, JSON.stringify(command));
     assert.equal(s(), before);
   }
+
   assert.ok(s().splits[split]);
 });
 

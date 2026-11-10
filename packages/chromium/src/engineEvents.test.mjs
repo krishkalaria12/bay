@@ -5,12 +5,16 @@ import "../../../apps/browser/src/test-loader.mjs";
 // The legacy architecture's module events reach every module's listeners for that name: both modules here hear each
 // event, as the app's do (a Chromium prompt came back after it was answered).
 const listeners = new Map();
+
 const addListener = (name, listener) => {
   if (!listeners.has(name)) listeners.set(name, new Set());
   listeners.get(name).add(listener);
+
   return { remove: () => listeners.get(name).delete(listener) };
 };
+
 const fire = (name, value) => [...(listeners.get(name) ?? [])].forEach((listener) => listener(value));
+
 globalThis.nnTestNativeModules = { BayCEF: { addListener }, BayWebKit: { addListener } };
 
 const { onDownload, onPermission, onPermissionDismissed } = await import("./nativeModule.ts");
@@ -18,9 +22,12 @@ const { onDownload, onPermission, onPermissionDismissed } = await import("./nati
 const received = (subscribe, name, ids) => {
   const seen = [];
   const subscription = subscribe((value) => seen.push(value.id));
+
   for (const id of ids) fire(name, { id });
   subscription.remove();
+
   for (const id of ids) fire(name, { id });
+
   return seen;
 };
 
@@ -38,11 +45,14 @@ test("each engine's download reaches the app once", () => {
 
 // The web host lists what a listener missed before it subscribed (BayCEF.listDownloads).
 const cef = globalThis.nnTestNativeModules.BayCEF;
+
 const listing = () => {
   let resolve, reject;
   cef.listDownloads = () => new Promise((yes, no) => ((resolve = yes), (reject = no)));
+
   return { resolve: (list) => resolve(list), reject: (error) => reject(error) };
 };
+
 const settle = () => new Promise((done) => setTimeout(done, 0));
 
 test("a host's download list reaches a new listener, unless an event already reported that download", async (t) => {

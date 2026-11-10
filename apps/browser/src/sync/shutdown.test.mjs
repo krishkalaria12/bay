@@ -5,7 +5,9 @@ import { test } from "node:test";
 // Each module instance has its own engine state. Native methods delegate through
 // one stable object because @bay/sync binds the native module once per renderer.
 globalThis.__DEV__ = false;
+
 let controls;
+
 const methods = [
   "newDeviceId",
   "deviceName",
@@ -23,22 +25,27 @@ const methods = [
   "enterPhrase",
   "deleteChain",
 ];
+
 const native = Object.fromEntries(
   methods.map((name) => [
     name,
     (...args) => {
       controls.calls[name].push(args);
+
       return controls.behavior[name](...args);
     },
   ]),
 );
+
 globalThis.nnTestNativeModules = { BaySync: native };
+
 const shell = await import("@bay/desktop");
 const { emptyScope } = await import("@bay/sync");
 const { useBrowser } = await import("../store/browserStore.ts");
 const tick = () => new Promise(setImmediate);
 let instance = 0;
 const types = () => ({ bookmarks: true, history: true, tabs: true, pinned: true, passwords: true, settings: true });
+
 function defaults(folder) {
   return {
     newDeviceId: () => "dev-new",
@@ -51,12 +58,14 @@ function defaults(folder) {
     write: async (_folder, scope, payload) => {
       const id = `file-${folder.size}`;
       folder.set(id, { scope, payload });
+
       return id;
     },
     read: async (_folder, scope, known) => {
       const files = [...folder].filter(([, item]) => item.scope === scope);
+
       return {
-        files: files.filter(([id]) => !known.includes(id)).map(([id, item]) => ({ id, payload: item.payload })),
+        files: files.flatMap(([id, item]) => (!known.includes(id) ? [{ id, payload: item.payload }] : [])),
         present: files.map(([id]) => id),
         pending: [],
         damaged: [],
@@ -70,6 +79,7 @@ function defaults(folder) {
     enterPhrase: async () => ({ ok: true }),
   };
 }
+
 async function fixture(context, { enabled = true, scopes = { app: emptyScope() }, journal = {}, seqs = {}, overrides = {}, rawMetadata, start = true } = {}) {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   shell.docs.clear();
@@ -77,8 +87,10 @@ async function fixture(context, { enabled = true, scopes = { app: emptyScope() }
   shell.heldSaves.error = null;
   shell.heldSaves.queue.length = 0;
   useBrowser.getState().hydrate({});
+
   const folder = new Map(),
     releases = [];
+
   controls = { calls: Object.fromEntries(methods.map((name) => [name, []])), behavior: { ...defaults(folder), ...overrides } };
   const state = controls;
   shell.docs.set(
@@ -104,6 +116,7 @@ async function fixture(context, { enabled = true, scopes = { app: emptyScope() }
   const engine = await import(`./engine.ts?shutdown-${++instance}`);
   context.after(async () => {
     state.behavior = defaults(folder);
+
     for (const release of releases) release();
     shell.heldSaves.on = false;
     shell.heldSaves.error = null;
@@ -113,29 +126,36 @@ async function fixture(context, { enabled = true, scopes = { app: emptyScope() }
     await tick();
     context.mock.timers.reset();
   });
+
   if (start) engine.startSync(useBrowser);
   await tick();
+
   return {
     engine,
     state,
     folder,
     hold(name, fallback) {
       let resolve, reject;
+
       const promise = new Promise((yes, no) => {
         resolve = yes;
         reject = no;
       });
+
       state.behavior[name] = () => promise;
       releases.push(() => resolve(fallback));
+
       return { resolve, reject };
     },
   };
 }
+
 async function landNext() {
   assert.ok(shell.heldSaves.queue.length);
   shell.heldSaves.queue.shift()();
   await tick();
 }
+
 const metadata = () => JSON.parse(shell.docs.get("sync.json"));
 
 test("quit saves state, journal and metadata acknowledgements without another folder cycle", async (context) => {
@@ -177,13 +197,17 @@ test("quit saves state, journal and metadata acknowledgements without another fo
 
 test("startup unlock and load finish before the final encrypted snapshot", async (context) => {
   let unlock, opened;
+
   const unlockPromise = new Promise((resolve) => {
     unlock = resolve;
   });
+
   const openPromise = new Promise((resolve) => {
     opened = resolve;
   });
+
   const scopes = { app: { ...emptyScope(), pending: 7 } };
+
   const { engine, state } = await fixture(context, {
     scopes,
     overrides: {
@@ -191,6 +215,7 @@ test("startup unlock and load finish before the final encrypted snapshot", async
       openLocal: (text) => (text.includes('"journal"') ? Promise.resolve(JSON.stringify({ journal: {} })) : openPromise),
     },
   });
+
   context.after(() => {
     unlock(true);
     opened(JSON.stringify(scopes));
@@ -216,8 +241,10 @@ test("startup unlock and load finish before the final encrypted snapshot", async
 
 test("locked sync retains ciphertext and metadata sequence counters", async (context) => {
   const { engine, state } = await fixture(context, { seqs: { app: 41 }, overrides: { unlock: async () => false } });
+
   const beforeState = shell.docs.get("sync-state.nns"),
     beforeJournal = shell.docs.get("sync-journal.nns");
+
   engine.setTypeSynced("history", false);
   await tick();
   assert.equal(shell.docs.get("sync-state.nns"), beforeState);
@@ -266,12 +293,15 @@ for (const [label, opened] of [
         overrides: {
           openLocal: async (text) => {
             const current = text.includes('"journal"') ? "sync-journal.nns" : "sync-state.nns";
+
             return current === name ? opened : text.slice(7);
           },
         },
       });
+
       const beforeState = shell.docs.get("sync-state.nns"),
         beforeJournal = shell.docs.get("sync-journal.nns");
+
       assert.equal(engine.useSync.getState().status, "locked");
       engine.setTypeSynced("history", false);
       await tick();
@@ -332,18 +362,22 @@ test("cancelling quit without native sync support preserves existing sync docume
     ],
     { cwd: new URL("../../", import.meta.url), encoding: "utf8" },
   );
+
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
 test("syncNow joins active work and quit waits for that work without starting a cycle", async (context) => {
   const { engine, state, hold } = await fixture(context),
     chain = hold("chainStatus", "unavailable");
+
   const syncing = engine.syncNow();
   await tick();
   let joined = false;
+
   const joining = engine.syncNow().then(() => {
     joined = true;
   });
+
   const pending = engine.prepareSyncForQuit();
   await tick();
   assert.equal(joined, false);
@@ -357,8 +391,10 @@ test("syncNow joins active work and quit waits for that work without starting a 
 
 test("a failed active cycle rejects quit rather than checkpointing unfinished work", async (context) => {
   context.mock.method(console, "warn", () => {});
+
   const { engine, state, hold } = await fixture(context),
     chain = hold("chainStatus", "unavailable");
+
   const syncing = engine.syncNow();
   await tick();
   const pending = engine.prepareSyncForQuit();
@@ -372,13 +408,16 @@ test("a failed active cycle rejects quit rather than checkpointing unfinished wo
 test("stuck I/O rejects below the native deadline and late completion cannot save", async (context) => {
   const { engine, state, hold } = await fixture(context),
     chain = hold("chainStatus", "unavailable");
+
   const syncing = engine.syncNow();
   await tick();
   const pending = engine.prepareSyncForQuit();
   let rejected = false;
+
   const refused = assert.rejects(pending, { code: "sync_quit_timeout" }).then(() => {
     rejected = true;
   });
+
   context.mock.timers.tick(14999);
   await tick();
   assert.equal(rejected, false);
@@ -393,6 +432,7 @@ test("stuck I/O rejects below the native deadline and late completion cannot sav
 test("cancelled seals cannot overwrite a newer quit attempt", async (context) => {
   const { engine, state, hold } = await fixture(context),
     seal = hold("sealLocal", "stale-ciphertext");
+
   const cancelled = engine.prepareSyncForQuit();
   await tick();
   const refused = assert.rejects(cancelled, { code: "sync_quit_cancelled" });
@@ -435,6 +475,7 @@ for (const stage of [0, 1, 2])
     shell.heldSaves.on = true;
     const pending = engine.prepareSyncForQuit();
     await tick();
+
     for (let index = 0; index < stage; index++) await landNext();
     const refused = assert.rejects(pending, /disk full/);
     shell.heldSaves.error = new Error("disk full");
@@ -454,6 +495,7 @@ test("sealing failures stop retrying and the explicit final failure propagates",
   state.behavior.sealLocal = async () => {
     throw new Error("seal failed");
   };
+
   engine.setTypeSynced("history", false);
   await tick();
   await tick();
@@ -469,6 +511,7 @@ test("sealing failures stop retrying and the explicit final failure propagates",
 test("checkpoint waits for setup already underway without forgetting the new key", async (context) => {
   const { engine, state, hold } = await fixture(context, { enabled: false }),
     creation = hold("createChain", undefined);
+
   const turningOn = engine.turnOnSync("/new-sync");
   await tick();
   const pending = engine.prepareSyncForQuit();

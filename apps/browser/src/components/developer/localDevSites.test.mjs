@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { developerTabShown, isDeveloperUrl, isLocalDevSite, siteKey } = await import("./localDevSites.ts");
 const { sidebarFieldShown } = await import("../window/layout.ts");
@@ -25,6 +26,7 @@ test("local servers are offered Developer Mode, other sites aren't", () => {
     "http://10.0.0.5:8000",
   ])
     assert.equal(isLocalDevSite(url), true, url);
+
   for (const url of ["https://example.com", "http://192.168.1.1/", "http://172.32.0.1:3000", "file:///tmp/a.html", "http://localhostx.com"])
     assert.equal(isLocalDevSite(url), false, url);
 });

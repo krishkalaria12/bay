@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 process.env.BAY_TEST_PLATFORM = "windows";
+
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { clickTab } = await import("./actions.ts");
 const { activeTabId, windowTabIds } = await import("../../store/model.ts");
@@ -13,6 +14,7 @@ function tabs() {
   const second = useBrowser.getState().newTab(windowId, { url: "https://second.example", background: true });
   const third = useBrowser.getState().newTab(windowId, { url: "https://third.example", background: true });
   clickTab(windowId, first);
+
   return { windowId, first, second, third };
 }
 

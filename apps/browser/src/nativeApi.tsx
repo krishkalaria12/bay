@@ -34,6 +34,7 @@ export function startSkewed(message: string) {
     </View>
   ));
   void requireNativeModule<Shell>("BayShell").openWindow("native-api-skew", { kind: "settings", title: "Bay", focus: false });
+
   if (__DEV__) answerWithSkew(message, "dev-eval.js", "dev-eval-result.json");
 }
 
@@ -45,6 +46,7 @@ export function answerWithSkew(message: string, command: string, result: string)
   let lastId = idOf(shell.readDocument(command)) ?? "";
   setInterval(() => {
     const id = idOf(shell.readDocument(command));
+
     if (!id || id === lastId) return;
     lastId = id;
     shell.writeDocument(result, JSON.stringify({ id, error: message }));

@@ -1,6 +1,7 @@
 import { parseSuggestions, suggestRequestUrl, type SearchEngine } from "./engines.ts";
 
 type FetchResponse = { ok: boolean; text(): Promise<string> };
+
 export type FetchLike = (url: string, init: { signal: AbortSignal }) => Promise<FetchResponse>;
 
 export type SuggestFetcher = {
@@ -25,6 +26,7 @@ export function createSuggestFetcher({ fetch, delay = 120, cacheSize = 64 }: { f
   const remember = (url: string, suggestions: string[]) => {
     cache.delete(url);
     cache.set(url, suggestions);
+
     if (cache.size > cacheSize) cache.delete(cache.keys().next().value!);
   };
 
@@ -33,13 +35,17 @@ export function createSuggestFetcher({ fetch, delay = 120, cacheSize = 64 }: { f
     request(engine, query, onResult) {
       cancel();
       const url = suggestRequestUrl(engine, query);
+
       if (!url) return;
       const current = generation;
       const cached = cache.get(url);
+
       if (cached) {
         void Promise.resolve().then(() => current === generation && onResult(cached));
+
         return;
       }
+
       timer = setTimeout(() => {
         timer = undefined;
         const controller = new AbortController();
@@ -47,6 +53,7 @@ export function createSuggestFetcher({ fetch, delay = 120, cacheSize = 64 }: { f
         fetch(url, { signal: controller.signal })
           .then(async (res) => {
             if (!res.ok) return [];
+
             try {
               return parseSuggestions(JSON.parse(await res.text()));
             } catch {
@@ -57,6 +64,7 @@ export function createSuggestFetcher({ fetch, delay = 120, cacheSize = 64 }: { f
             (suggestions) => {
               if (controller.signal.aborted) return;
               remember(url, suggestions);
+
               if (current === generation) {
                 inFlight = undefined;
                 onResult(suggestions);

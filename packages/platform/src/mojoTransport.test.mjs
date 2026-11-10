@@ -6,34 +6,42 @@ import { bindNativeModule, getNativeHostInfo } from "./nativeBridge.ts";
 const info = (overrides) => ({ contractVersion: 2, platform: "windows", modules: ["BayShell"], views: [], constants: {}, snapshots: {}, ...overrides });
 const windowInfo = (shell = {}) => info({ platform: "linux", constants: { BayShell: { sharedRuntime: true, runtimeRole: "window", ...shell } } });
 const nextTurn = () => new Promise(setImmediate);
+
 function endpoints(overrides = {}) {
   let nextId = 1,
     closed = 0;
+
   const callbacks = new Map(),
     calls = [];
+
   const event = (name) => ({
     addListener(callback) {
       const id = nextId++;
       callbacks.set(id, { name, callback });
+
       return id;
     },
   });
+
   const client = {
     onNativeEvent: event("event"),
     onHostInfoChanged: event("info"),
     removeListener: (id) => callbacks.delete(id),
     $: { bindNewPipeAndPassRemote: () => "client", close: () => closed++ },
   };
+
   const remote = {
     getHostInfo: async () => ({ infoJson: JSON.stringify(info()) }),
     invoke: async (...args) => {
       calls.push(args);
+
       return { resultJson: '{"value":["main"]}' };
     },
     setClient: (client) => calls.push(["client", client]),
     $: { close: () => closed++ },
     ...overrides,
   };
+
   return {
     client,
     remote,
@@ -46,15 +54,20 @@ function endpoints(overrides = {}) {
     },
   };
 }
+
 test("Mojo carries JSON contracts and isolates/removes event subscriptions", async () => {
   const native = endpoints(),
     transport = await createMojoTransport(native);
+
   const shell = bindNativeModule(transport, "BayShell"),
     received = [];
+
   const first = shell.addListener("onCommand", (e) => received.push(e));
+
   const other = transport.subscribe("BayApp", "onCommand", () => {
     throw new Error("wrong module");
   });
+
   native.emit("event", "BayShell", "onCommand", '{"command":"newTab"}');
   assert.deepEqual(received, [{ command: "newTab" }]);
   first.remove();
@@ -74,14 +87,17 @@ test("Mojo carries JSON contracts and isolates/removes event subscriptions", asy
   assert.equal(native.closed(), 2);
   await assert.rejects(windowIds(), { code: "transport_closed" });
 });
+
 test("newer host info received during initialization wins over old initial snapshot", async () => {
   let resolve;
+
   const native = endpoints({
     getHostInfo: () =>
       new Promise((done) => {
         resolve = done;
       }),
   });
+
   const ready = createMojoTransport(native);
   native.emit("info", JSON.stringify(info({ platform: "linux" })));
   resolve({ infoJson: JSON.stringify(info()) });
@@ -89,13 +105,17 @@ test("newer host info received during initialization wins over old initial snaps
   assert.equal(transport.getHostInfo().platform, "linux");
   transport.dispose();
 });
+
 test("shared window bootstrap waits through incomplete updates for its native-assigned id", async () => {
   const native = endpoints({ getHostInfo: async () => ({ infoJson: JSON.stringify(windowInfo()) }) });
   let settled = false;
+
   const ready = createMojoTransport(native).then((transport) => {
     settled = true;
+
     return transport;
   });
+
   await nextTurn();
   assert.equal(settled, false);
   native.emit("info", JSON.stringify(windowInfo({ windowId: "" })));
@@ -106,6 +126,7 @@ test("shared window bootstrap waits through incomplete updates for its native-as
   assert.equal(transport.getHostInfo().constants.BayShell.windowId, "restored-window");
   transport.dispose();
 });
+
 test("window assignment received before the initial reply wins over the unassigned snapshot", async () => {
   let resolve;
   const native = endpoints({ getHostInfo: () => new Promise((done) => (resolve = done)) });
@@ -116,6 +137,7 @@ test("window assignment received before the initial reply wins over the unassign
   assert.equal(transport.getHostInfo().constants.BayShell.windowId, "restored-window");
   transport.dispose();
 });
+
 test("coordinator, legacy and failed initialization metadata do not wait for window assignment", async () => {
   for (const shell of [
     { sharedRuntime: true, runtimeRole: "coordinator" },
@@ -130,6 +152,7 @@ test("coordinator, legacy and failed initialization metadata do not wait for win
     transport.dispose();
   }
 });
+
 test("unassigned window bootstrap times out and ignores late assignment", async () => {
   const native = endpoints({ getHostInfo: async () => ({ infoJson: JSON.stringify(windowInfo()) }) });
   await assert.rejects(createMojoTransport({ ...native, bootstrapTimeoutMs: 5 }), { code: "bootstrap_timeout" });
@@ -138,6 +161,7 @@ test("unassigned window bootstrap times out and ignores late assignment", async 
   native.emit("info", JSON.stringify(windowInfo({ windowId: "late-window" })));
   assert.equal(native.closed(), 2);
 });
+
 test("initial metadata and window assignment share one bootstrap timeout", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let resolve;
@@ -147,6 +171,7 @@ test("initial metadata and window assignment share one bootstrap timeout", async
   t.mock.timers.tick(60);
   resolve({ infoJson: JSON.stringify(windowInfo()) });
   await nextTurn();
+
   try {
     t.mock.timers.tick(40);
     await nextTurn();
@@ -156,6 +181,7 @@ test("initial metadata and window assignment share one bootstrap timeout", async
     await rejected;
   }
 });
+
 test("invalid host updates reject a pending window assignment and clean up endpoints", async () => {
   const native = endpoints({ getHostInfo: async () => ({ infoJson: JSON.stringify(windowInfo()) }) });
   const errors = [];
@@ -168,9 +194,11 @@ test("invalid host updates reject a pending window assignment and clean up endpo
   assert.equal(native.closed(), 2);
   assert.equal(native.callbacks.size, 0);
 });
+
 test("invalid host updates fail the transport and malformed events report errors", async () => {
   const native = endpoints(),
     errors = [];
+
   const transport = await createMojoTransport({ ...native, onProtocolError: (error) => errors.push(error) });
   native.emit("event", "BayShell", "onCommand", "{broken");
   assert.equal(errors[0].code, "invalid_event");
@@ -180,24 +208,29 @@ test("invalid host updates fail the transport and malformed events report errors
   await assert.rejects(transport.invoke("BayShell", "windowIds", "[]"), { code: "contract_mismatch" });
   transport.dispose();
 });
+
 test("failed bootstrap closes both Mojo endpoints and removes listeners", async () => {
   const native = endpoints({
     getHostInfo: async () => {
       throw new Error("disconnected");
     },
   });
+
   await assert.rejects(createMojoTransport(native), /disconnected/);
   assert.equal(native.closed(), 2);
   assert.equal(native.callbacks.size, 0);
 });
+
 test("unresponsive bootstrap times out and closes endpoints before a late reply", async () => {
   let resolve;
+
   const native = endpoints({
     getHostInfo: () =>
       new Promise((done) => {
         resolve = done;
       }),
   });
+
   await assert.rejects(createMojoTransport({ ...native, bootstrapTimeoutMs: 5 }), { code: "bootstrap_timeout" });
   assert.equal(native.closed(), 2);
   assert.equal(native.callbacks.size, 0);
@@ -205,9 +238,11 @@ test("unresponsive bootstrap times out and closes endpoints before a late reply"
   await Promise.resolve();
   assert.equal(native.closed(), 2);
 });
+
 test("web bootstrap installs host identity before application imports", async () => {
   const native = endpoints(),
     installed = await initializeWebNativeBridge(native);
+
   assert.equal(getNativeHostInfo().platform, "windows");
   installed.remove();
 });
@@ -215,6 +250,7 @@ test("web bootstrap installs host identity before application imports", async ()
 test("duplicate callback registrations remain independent subscriptions", async () => {
   const native = endpoints(),
     transport = await createMojoTransport(native);
+
   let count = 0;
   const callback = () => count++;
   const first = transport.subscribe("BayShell", "onCommand", callback);
@@ -233,6 +269,7 @@ const drain = () => new Promise(queueMicrotask);
 
 test("notification activations emitted by SetClient and during bootstrap replay after subscription", async () => {
   let finishBootstrap;
+
   const native = endpoints({
     setClient() {
       notification(native, { id: "cold-start" });
@@ -242,11 +279,14 @@ test("notification activations emitted by SetClient and during bootstrap replay 
         finishBootstrap = resolve;
       }),
   });
+
   const ready = createMojoTransport(native);
   notification(native, { id: "during-bootstrap" });
   finishBootstrap({ infoJson: JSON.stringify(info()) });
+
   const transport = await ready,
     received = [];
+
   transport.subscribe("BayApp", "onNotificationResponse", (payload) => received.push(payload));
   assert.deepEqual(received, [], "subscription never synchronously invokes application code");
   await drain();
@@ -258,9 +298,11 @@ test("notification replay stays ordered with events arriving before and during i
   const native = endpoints(),
     transport = await createMojoTransport(native),
     received = [];
+
   notification(native, 1);
   transport.subscribe("BayApp", "onNotificationResponse", (payload) => {
     received.push(payload);
+
     if (payload === 1) notification(native, 4);
   });
   notification(native, 2);
@@ -277,6 +319,7 @@ test("a throwing notification replay subscriber does not interrupt other subscri
   const native = endpoints(),
     errors = [],
     received = [];
+
   const transport = await createMojoTransport({ ...native, onProtocolError: (error) => errors.push(error) });
   notification(native, 1);
   transport.subscribe("BayApp", "onNotificationResponse", () => {
@@ -284,6 +327,7 @@ test("a throwing notification replay subscriber does not interrupt other subscri
   });
   transport.subscribe("BayApp", "onNotificationResponse", (payload) => {
     received.push(payload);
+
     if (payload === 2) notification(native, 3);
   });
   notification(native, 2);
@@ -302,6 +346,7 @@ test("unsubscribing before a drain retains notification responses for the next s
     transport = await createMojoTransport(native),
     first = [],
     next = [];
+
   notification(native, 1);
   const subscription = transport.subscribe("BayApp", "onNotificationResponse", (payload) => first.push(payload));
   subscription.remove();
@@ -318,6 +363,7 @@ test("notification retention evicts the oldest responses after the count limit",
   const native = endpoints(),
     transport = await createMojoTransport(native),
     received = [];
+
   for (let i = 0; i < 40; i++) notification(native, i);
   transport.subscribe("BayApp", "onNotificationResponse", (payload) => received.push(payload));
   await drain();
@@ -332,6 +378,7 @@ test("notification retention bounds UTF-8 bytes and drops an oversized response"
   const native = endpoints(),
     transport = await createMojoTransport(native),
     received = [];
+
   // Each response is about 180 KiB in UTF-8 but only 60 Ki UTF-16 code units.
   notification(native, { id: 1, text: "界".repeat(60 * 1024) });
   notification(native, { id: 2, text: "界".repeat(60 * 1024) });
@@ -347,6 +394,7 @@ test("disposing before notification replay prevents queued delivery", async () =
   const native = endpoints(),
     transport = await createMojoTransport(native),
     received = [];
+
   notification(native, { id: "queued" });
   transport.subscribe("BayApp", "onNotificationResponse", (payload) => received.push(payload));
   transport.dispose();
@@ -359,15 +407,18 @@ test("only notification responses retain events and delivered responses do not r
   const native = endpoints(),
     transport = await createMojoTransport(native),
     received = [];
+
   native.emit("event", "BayApp", "onCommand", '"app-command"');
   native.emit("event", "BayShell", "onNotificationResponse", '"other-module"');
   native.emit("event", "BayApp", "onNativeEvent", '"other-event"');
+
   const subscriptions = [
     transport.subscribe("BayApp", "onCommand", (payload) => received.push(payload)),
     transport.subscribe("BayShell", "onNotificationResponse", (payload) => received.push(payload)),
     transport.subscribe("BayApp", "onNativeEvent", (payload) => received.push(payload)),
     transport.subscribe("BayApp", "onNotificationResponse", (payload) => received.push(payload)),
   ];
+
   notification(native, "delivered");
   await drain();
   assert.deepEqual(received, ["delivered"]);
@@ -401,6 +452,7 @@ test("install prompts arriving before extension bridge subscription are retained
 test("install prompt queue overflow explicitly cancels the excess native callback", async () => {
   const native = endpoints();
   const transport = await createMojoTransport(native);
+
   for (let id = 0; id < 33; id++) native.emit("event", "BayExtensions", "onInstallPrompt", JSON.stringify({ requestId: String(id) }));
   await Promise.resolve();
   assert.deepEqual(native.calls.at(-1), ["BayExtensions", "resolveInstallPrompt", '["32",false]']);

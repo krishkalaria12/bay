@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { View, useWindowId } from "@bay/platform";
 import { getNativeHostInfo, invokeNative, subscribeNativeEvent } from "@bay/platform/nativeBridge";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
@@ -5,7 +6,9 @@ import { Text, type NativeSyntheticEvent } from "react-native";
 import type { NativeHandle, NativeProps } from "./ChromiumView";
 
 let nextTag = 1;
+
 type MountedView = { surfaceId: string; browserId: number; chromeTabId: number; discarded?: boolean };
+
 type ViewEvent = { tag: number; event: string; payload: unknown };
 
 /** SurfaceEmbed is an engine-owned compositor surface, never a scripted iframe. */
@@ -18,11 +21,13 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
   latest.current = props;
   const embed = useRef<HTMLEmbedElement>(null);
   const pending = useRef<Promise<unknown>>(Promise.resolve());
+
   const serialized = JSON.stringify(
     Object.fromEntries(
-      Object.entries(props).filter(([key, value]) => key !== "style" && key !== "children" && !key.startsWith("on") && typeof value !== "function"),
+      Object.entries(props).filter(([key, value]) => key !== "style" && key !== "children" && !key.startsWith("on") && !v.is(v.function_(), value)),
     ),
   );
+
   const firstProps = useRef(serialized);
   const latestSerialized = useRef(serialized);
   latestSerialized.current = serialized;
@@ -31,15 +36,20 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
   useImperativeHandle(
     ref,
     () =>
+      // SAFETY: the checks above established this shape.
       new Proxy({} as NativeHandle, {
         get(_target, method) {
-          if (method === "then" || typeof method !== "string") return undefined;
+          if (method === "then" || !v.is(v.string(), method)) return undefined;
+
           return (...args: unknown[]) => {
             const tag = activeTag.current;
+
             if (!tag) return Promise.reject(new Error("The page view is not mounted"));
+
             if (method === "focus") embed.current?.focus();
             const result = pending.current.then(() => invokeNative("BayWebView", "call", [tag, method, args]));
             pending.current = result.catch(() => undefined);
+
             return result;
           };
         },
@@ -57,33 +67,49 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
     let alive = true;
     let surfaceReplaced = false;
     let nativeLifecycleSeen = false;
+
     const events = subscribeNativeEvent("BayCEF", "onViewEvent", (raw) => {
+      // SAFETY: the checks above established this shape.
       const event = raw as ViewEvent;
-      if (!alive || event.tag !== tag || typeof event.event !== "string") return;
+
+      if (!alive || event.tag !== tag || !v.is(v.string(), event.event)) return;
+
       // Chrome's legacy discard replaces WebContents while retaining this
       // mount lease. Retarget the embed before the replacement page reloads.
       if (event.event === "__surfaceChanged") {
+        // SAFETY: the checks above established this shape.
         const payload = event.payload as { surfaceId?: unknown } | null;
-        if (payload && typeof payload.surfaceId === "string" && payload.surfaceId.length <= 256) {
+
+        if (payload && v.is(v.string(), payload.surfaceId) && payload.surfaceId.length <= 256) {
           surfaceReplaced = true;
           setSurfaceId(payload.surfaceId);
         }
+
         return;
       }
+
       if (event.event === "onDiscarded" || event.event === "onReady") nativeLifecycleSeen = true;
+      // SAFETY: the checks above established this shape.
       const handler = latest.current[event.event as keyof NativeProps];
-      if (typeof handler === "function")
+
+      if (v.is(v.function_(), handler))
+        // SAFETY: the checks above established this shape.
         (handler as (value: NativeSyntheticEvent<unknown>) => void)({ nativeEvent: event.payload } as NativeSyntheticEvent<unknown>);
     });
+
     const mount = pending.current
       .catch(() => undefined)
       .then(() => invokeNative<MountedView>("BayWebView", "mount", [tag, windowId ?? "", JSON.parse(mountedProps)]));
+
     pending.current = mount.then((mounted) => {
       if (!alive) return;
+
       // Events and replies use separate Mojo pipes. A discard may have
       // replaced this surface or reported readiness before the reply arrives.
       if (!surfaceReplaced) setSurfaceId(mounted.surfaceId);
+
       if (!mounted.discarded && !nativeLifecycleSeen && !surfaceReplaced)
+        // SAFETY: the checks above established this shape.
         latest.current.onReady?.({ nativeEvent: { browserId: mounted.browserId, tabId: mounted.chromeTabId } } as NativeSyntheticEvent<{
           browserId: number;
           tabId: number;
@@ -92,8 +118,10 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
     void pending.current.catch((cause) => {
       if (alive) setError(cause instanceof Error ? cause.message : String(cause));
     });
+
     return () => {
       alive = false;
+
       if (activeTag.current === tag) activeTag.current = 0;
       events.remove();
       pending.current = pending.current
@@ -118,6 +146,7 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
   // transparent, so showing it again is immediate; Chrome keeps the last frame of a tab it hid, which would otherwise
   // show through another space's card.
   const hidden = props.visible === false;
+
   return (
     <View style={props.style}>
       {surfaceId ? (

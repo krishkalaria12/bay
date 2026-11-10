@@ -2,7 +2,9 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { SITES, type Site } from "./sites";
 
 export type Item = { tab: string } | { folder: string; name: string; open: boolean; kids: string[] } | { line: true };
+
 export type Pair = { a: string; b: string; front: string };
+
 export type SpaceIcon = "house" | "briefcase" | "leaf" | "sparkles";
 
 /** Bay's theme colours, as a space's menu offers them. */
@@ -216,18 +218,22 @@ const initial = (name: PresetName): State => ({
   picked: null,
   held: false,
   made: 0,
-  ...structuredClone(PRESETS[name] as Preset),
+  ...structuredClone(PRESETS[name]),
 });
 
 // MARK: reading a space
 
 export const tabsOf = (s: Space) => {
   const out: string[] = [];
+
   for (const it of s.items) {
     if ("tab" in it) out.push(it.tab);
+
     if ("kids" in it) out.push(...it.kids);
   }
+
   if (s.pair && !out.includes(s.pair.b)) out.push(s.pair.b);
+
   return out;
 };
 
@@ -239,15 +245,19 @@ const after = (s: Space, id: string, neu: string) => {
     if ("kids" in it && it.kids.includes(id)) {
       it.kids.splice(it.kids.indexOf(id) + 1, 0, neu);
       it.open = true;
+
       return;
     }
+
   const i = s.items.findIndex((it) => "tab" in it && it.tab === id);
+
   if (i >= 0) s.items.splice(i + 1, 0, { tab: neu });
   else s.items.push({ tab: neu });
 };
 
 const drop = (s: Space, id: string) => {
   s.items = s.items.filter((it) => !("tab" in it) || it.tab !== id);
+
   for (const it of s.items) if ("kids" in it) it.kids = it.kids.filter((k) => k !== id);
 };
 
@@ -263,18 +273,22 @@ export function useBay(name: PresetName) {
       setS((prev) => {
         const n = structuredClone(prev);
         fn(n);
+
         return n;
       }),
     [],
   );
+
   const later = (ms: number, fn: () => void) => {
     timers.current.push(window.setTimeout(fn, ms));
   };
 
   const actions = useMemo(() => {
     const where = (n: State): Loc => [n.space, n.spaces[n.space].active];
+
     const goIn = (n: State, id: string) => {
       const sp = n.spaces[n.space];
+
       if (sp.active === id && !n.peek) return;
       n.back.push(where(n));
       n.fwd = [];
@@ -283,12 +297,15 @@ export function useBay(name: PresetName) {
       n.panel = false;
       n.held = false;
       n.picked = null;
+
       if (n.ages[id] !== undefined) n.ages[id] = 0;
     };
+
     const toSpaceIn = (n: State, to: number) => {
       const count = n.spaces.length;
       const next = ((to % count) + count) % count;
       n.menu = null;
+
       if (next === n.space) return;
       n.back.push(where(n));
       n.fwd = [];
@@ -344,6 +361,7 @@ export function useBay(name: PresetName) {
       fold: (id: string) =>
         mut((n) => {
           const it = n.spaces[n.space].items.find((x) => "folder" in x && x.folder === id);
+
           if (it && "folder" in it) it.open = !it.open;
         }),
       close: (id: string) =>
@@ -352,17 +370,22 @@ export function useBay(name: PresetName) {
           const order = tabsOf(sp);
           const i = order.indexOf(id);
           drop(sp, id);
+
           if (sp.active === id) sp.active = tabsOf(sp)[Math.min(i, tabsOf(sp).length - 1)] ?? sp.pins[0];
         }),
       nav: (way: "back" | "fwd" | "reload") =>
         mut((n) => {
           if (way === "reload") {
             n.reloads++;
+
             return;
           }
+
           const from = way === "back" ? n.back : n.fwd,
             to = way === "back" ? n.fwd : n.back;
+
           const loc = from.pop();
+
           if (!loc) return;
           to.push(where(n));
           n.dir = 0;
@@ -384,8 +407,10 @@ export function useBay(name: PresetName) {
       peekToTab: () =>
         mut((n) => {
           const to = n.peek;
+
           if (!to) return;
           const sp = n.spaces[n.space];
+
           if (!has(sp, to)) after(sp, sp.active, to);
           n.born = to;
           goIn(n, to);
@@ -393,6 +418,7 @@ export function useBay(name: PresetName) {
       peekToSplit: () =>
         mut((n) => {
           const to = n.peek;
+
           if (!to) return;
           const sp = n.spaces[n.space];
           drop(sp, to);
@@ -402,6 +428,7 @@ export function useBay(name: PresetName) {
       front: (id: string) =>
         mut((n) => {
           const sp = n.spaces[n.space];
+
           if (!sp.pair) return;
           sp.pair.front = id;
           sp.active = sp.pair.a;
@@ -411,8 +438,10 @@ export function useBay(name: PresetName) {
         mut((n) => {
           const sp = n.spaces[n.space];
           const p = sp.pair;
+
           if (!p) return;
           sp.pair = null;
+
           if (!tabsOf(sp).includes(p.b)) after(sp, p.a, p.b);
           sp.active = p.a === id ? p.b : p.a;
         }),
@@ -428,10 +457,12 @@ export function useBay(name: PresetName) {
       open: (q: string, search: boolean) =>
         mut((n) => {
           const id = `n${++n.made}`;
+
           const host = q
             .replace(/^https?:\/\//, "")
             .replace(/\/.*$/, "")
             .replace(/^www\./, "");
+
           const word = host.split(".")[0];
           n.sites[id] = search
             ? { title: q, host: "search.example", glyph: "search", tint: "#8e8e93", body: { kind: "search", q } }
@@ -450,10 +481,12 @@ export function useBay(name: PresetName) {
       openSite: (id: string) =>
         mut((n) => {
           const sp = n.spaces[n.space];
+
           if (!has(sp, id)) {
             sp.items.push({ tab: id });
             n.born = id;
           }
+
           n.omni = false;
           goIn(n, id);
         }),
@@ -462,7 +495,9 @@ export function useBay(name: PresetName) {
           const kept = n.putAway.find((p) => p.id === id);
           n.putAway = n.putAway.filter((p) => p.id !== id);
           const sp = n.spaces[kept?.space ?? n.space];
+
           if (!tabsOf(sp).includes(id)) sp.items.push({ tab: id });
+
           if (kept) n.space = kept.space;
           n.born = id;
           n.omni = false;
@@ -492,16 +527,19 @@ export function useBay(name: PresetName) {
       skip: (hours: number) => {
         mut((n) => {
           const sp = n.spaces[n.space];
+
           for (const id of tabsOf(sp)) {
             if (id === sp.active) continue;
             n.ages[id] = (n.ages[id] ?? 0) + hours;
           }
+
           n.leaving = sp.items.flatMap((it) => ("tab" in it && it.tab !== sp.active && (n.ages[it.tab] ?? 0) >= sp.keep ? [it.tab] : []));
         });
         later(420, () =>
           mut((n) => {
             const sp = n.spaces[n.space];
             const leaving = n.leaving;
+
             if (!leaving.length) return;
             leaving.forEach((id) => drop(sp, id));
             n.putAway.push(...leaving.map((id) => ({ id, space: n.space })));

@@ -36,6 +36,7 @@ export type UiSlice = {
 export function downloadVisibleIn(d: Pick<Download, "profile">, window: { incognito: boolean; spaceId: string } | undefined): boolean {
   if (!window) return false;
   const incognito = !!d.profile && isIncognitoSpace(d.profile);
+
   return window.incognito ? d.profile === window.spaceId : !incognito;
 }
 
@@ -47,6 +48,7 @@ export const CLOSED_FIND: FindState = { open: false, query: "", count: null, act
 
 function patchWindowUi(s: BrowserState, windowId: string, patch: Partial<WindowUi>): Partial<BrowserState> {
   if (!s.windows[windowId]) return {};
+
   return { windowUi: { ...s.windowUi, [windowId]: { ...(s.windowUi[windowId] ?? DEFAULT_WINDOW_UI), ...patch } } };
 }
 
@@ -58,6 +60,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
 
   setFocusedWindow(id) {
     const { ui, windows } = get();
+
     if (!windows[id] || ui.focusedWindowId === id) return;
     set({ ui: { ...ui, focusedWindowId: id, focusOrder: [id, ...ui.focusOrder.filter((w) => w !== id)] } });
   },
@@ -75,10 +78,11 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     const s = get();
     const window = s.windows[windowId];
     const group = groupId ? s.groups[groupId] : undefined;
+
     if (!window || window.kind === "small" || (groupId && (!group || group.spaceId !== window.spaceId))) return;
     set(
       patchWindowUi(s, windowId, {
-        panel: { open: true, initialText: "", mode: "newTab", sessionId: newId("panel"), ...(groupId ? { groupId } : {}) },
+        panel: { open: true, initialText: "", mode: "newTab", sessionId: newId("panel"), ...(groupId ? { groupId } : undefined) },
         downloadsOpen: false,
       }),
     );
@@ -88,16 +92,22 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     const s = get();
     const window = s.windows[windowId];
     const panel = s.windowUi[windowId]?.panel;
+
     if (!window || window.kind === "small" || !url.trim() || !panel?.open || panel.mode !== "newTab") return "";
+
     if (panel.groupId) {
       const group = s.groups[panel.groupId];
+
       if (!group || group.spaceId !== window.spaceId) {
         s.closePanel(windowId);
+
         return "";
       }
     }
+
     // Close first: internal URLs can open a fresh panel through the app-URL handler.
     s.closePanel(windowId);
+
     return panel.groupId ? get().newTabInGroup(panel.groupId, url) : get().newTab(windowId, { url });
   },
 
@@ -116,12 +126,15 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
   upsertDownload(d) {
     set((s) => {
       const exists = s.downloads.some((x) => x.id === d.id);
+
       // A private window's downloads leave with it; the engine's late "cancelled" update mustn't bring one back.
       if (!exists && d.profile && isIncognitoSpace(d.profile) && !Object.values(s.windows).some((w) => w.spaceId === d.profile)) {
         return {};
       }
+
       // Chromium still names the path it saved after Tidy Downloads renamed the file; the renamed one stands.
       const keep = (x: Download): Download => (x.renamedFrom === d.path ? { ...d, filename: x.filename, path: x.path, renamedFrom: x.renamedFrom } : d);
+
       // A new download doesn't open the panel: the magnet flies its icon to the downloads button instead.
       return { downloads: exists ? s.downloads.map((x) => (x.id === d.id ? keep(x) : x)) : [d, ...s.downloads].slice(0, MAX_DOWNLOADS) };
     });
@@ -133,7 +146,8 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
         if (d.id !== id) return d;
         const saved = d.renamedFrom ?? d.path;
         const { renamedFrom: _, ...rest } = d;
-        return { ...rest, filename: patch.filename, path: patch.path, ...(patch.path === saved ? {} : { renamedFrom: saved }) };
+
+        return { ...rest, filename: patch.filename, path: patch.path, ...(patch.path === saved ? undefined : { renamedFrom: saved }) };
       }),
     }));
   },

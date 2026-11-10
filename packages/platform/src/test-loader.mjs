@@ -1,4 +1,5 @@
 import { registerHooks } from "node:module";
+
 registerHooks({
   resolve(specifier, context, next) {
     try {
@@ -9,6 +10,7 @@ registerHooks({
           return next(specifier + ".ts", context);
         } catch {}
       }
+
       throw error;
     }
   },

@@ -1,8 +1,9 @@
 import { listInstalledBrowsers, type BrowserSource } from "@bay/import";
 import { isMac, Pressable, View } from "@bay/platform";
+import { lookup } from "@bay/core";
 import { WindowBackdrop } from "@bay/shaders";
 import { fileIcon, hapticTick, Surface, Symbol } from "@bay/desktop";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, PanResponder, StyleSheet, Text, type ImageSourcePropType } from "react-native";
 import { Image } from "expo-image";
 import Animated, {
@@ -29,6 +30,7 @@ import { KINDS } from "../import/constants";
 import { useImportFlow, type ImportFlow, type Status } from "../import/useImportFlow";
 import { useHover } from "../ui/primitives";
 import { openImport } from "../settings/windows";
+import { showToast } from "../split/splitActions";
 import {
   BAY_GLOW,
   BAY_SKY,
@@ -42,7 +44,7 @@ import {
   HANDOFF_TOOTH,
 } from "./constants";
 import { bundledBrowserIcon, detectBrowsers } from "./browsers";
-import { nextStep, skipStep } from "./state";
+import { continueImportInBackground, nextStep, skipStep, useOnboarding } from "./state";
 import { Reveal, StepProgress } from "./ui";
 
 // "Where are you coming from?" as a handoff: the card tears in two, the browser you're leaving on the left in its
@@ -55,8 +57,10 @@ const ICON = HANDOFF_ICON;
 const EASE = Easing.inOut(Easing.cubic);
 const shortName = (name: string) => name.replace(/^(Google|Microsoft) /, "");
 const listed = (items: string[]) => (items.length < 2 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`);
+
 // Dia's tabs come over through Dia itself, so only its data import is offered here.
 const offeredBrowsers = (flow: ImportFlow) => flow.browsers.filter((b) => b.family !== "automation");
+
 // Full Disk Access (and Safari without it) has its own steps: those stay in the import window.
 const needsWindow = (flow: ImportFlow, s: BrowserSource) => !!s.needsFullDiskAccess || (s.family === "safari" && !flow.fullDiskAccess);
 
@@ -68,6 +72,7 @@ type Leaving = { id: string; name: string; app?: string; iconPath?: string };
 function leavingList(found: Leaving[], flow: ImportFlow, scanned: boolean): Leaving[] {
   if (!scanned) return found;
   const sources = offeredBrowsers(flow);
+
   return [
     ...found.filter((b) => sources.some((s) => s.id === b.id)),
     ...sources.filter((s) => !found.some((b) => b.id === s.id)).map((s) => ({ id: s.id, name: s.name, iconPath: s.iconPath })),
@@ -76,22 +81,32 @@ function leavingList(found: Leaving[], flow: ImportFlow, scanned: boolean): Leav
 
 function phaseOf(flow: ImportFlow, handedOff: boolean, queued: boolean, leaving: boolean): Phase {
   if (handedOff) return "window";
+
   if (flow.step === "done") return "welcome";
+
   if (queued || flow.unlocking || flow.step === "progress") return "moving";
+
   if (leaving) return "handoff";
+
   return flow.step === "loading" ? "loading" : "empty";
 }
 
 type Chip = { id: string; title: string; color?: string; on: boolean; toggle: () => void };
 
 // Before the scan has a browser's profiles, and for one with a single profile: nothing to choose.
-const NO_CHIPS = { chips: [] as Chip[], hint: "Thanks for all the tabs." };
+const NO_CHIPS: ImportChips = { chips: [], hint: "Thanks for all the tabs." };
 const USUAL_CARGO = "your tabs, passwords and history";
 
+interface ImportChips {
+  chips: Chip[];
+  hint: string;
+}
+
 // Arc's spaces, or another browser's profiles, to leave behind or bring along. One of either needs no choosing.
-function chipsOf(flow: ImportFlow): { chips: Chip[]; hint: string } {
+function chipsOf(flow: ImportFlow): ImportChips {
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   const source = flow.source;
+
   if (flow.isArc && flow.allSpaces.length > 1) {
     return {
       hint: "Click a space to leave it behind.",
@@ -104,6 +119,7 @@ function chipsOf(flow: ImportFlow): { chips: Chip[]; hint: string } {
       })),
     };
   }
+
   if (source && source.family !== "safari" && source.profiles.length > 1) {
     return {
       hint: "Click a profile to bring it along too.",
@@ -116,26 +132,106 @@ function chipsOf(flow: ImportFlow): { chips: Chip[]; hint: string } {
       })),
     };
   }
+
   return NO_CHIPS;
 }
 
 // What the drop brings, for the right half's line: "3 spaces", "2 profiles", or the usual things.
 function cargoOf(flow: ImportFlow) {
   if (flow.isArc && flow.allSpaces.length > 1) return plural(flow.spaces.length, "space");
+
   if (flow.sourceProfiles.length > 1) return plural(flow.sourceProfiles.length, "profile");
+
   return USUAL_CARGO;
 }
 
 function canDrop(flow: ImportFlow) {
   const s = flow.source;
+
   if (!s) return false;
+
   if (needsWindow(flow, s) || s.family === "safari") return true;
+
   if (!flow.kinds.size) return false;
+
   return flow.isArc && flow.allSpaces.length ? flow.spaces.length > 0 : flow.sourceProfiles.length > 0;
 }
 
-export function ImportStep() {
+const ImportFlowContext = createContext<ImportFlow | null>(null);
+
+// Holds the import for the whole of onboarding, so it can carry on behind the other steps and past the last of them.
+export function ImportFlowHost({ windowId, children }: { windowId: string; children: ReactNode }) {
   const flow = useImportFlow();
+  const background = useOnboarding((s) => s.importInBackground === windowId);
+  const onboarding = useOnboarding((s) => s.windowId === windowId);
+  const moving = flow.step === "progress";
+  const finishedAfterCard = useRef(false);
+  useEffect(() => {
+    if (!background || onboarding) return;
+
+    if (moving) {
+      finishedAfterCard.current = true;
+
+      return;
+    }
+
+    if (finishedAfterCard.current) {
+      const summary = importedSummary(flow.counts);
+      showToast(windowId, flow.failures.length ? "Some of your things didn't move in" : "Moved in", summary.length ? `${listed(summary)} came along.` : "");
+    }
+
+    useOnboarding.setState({ importInBackground: null });
+  }, [background, onboarding, moving]);
+
+  return <ImportFlowContext.Provider value={flow}>{children}</ImportFlowContext.Provider>;
+}
+
+// Below the card while the import runs behind the other steps, then what it brought.
+export function BackgroundImportStatus({ bottom }: { bottom: number }) {
+  const flow = useContext(ImportFlowContext);
+  const background = useOnboarding((s) => s.importInBackground !== null);
+  const step = useOnboarding((s) => s.step);
+
+  if (!flow || !background || step === "import" || step === "intro") return null;
+  const name = flow.source ? shortName(flow.source.name) : "your browser";
+  const moving = flow.step === "progress";
+  const summary = importedSummary(flow.counts);
+  let text = `Moved in from ${name}.`;
+
+  if (moving) text = `Moving in from ${name}…`;
+  else if (flow.failures.length) text = `Some of your things from ${name} didn't make it.`;
+  else if (summary.length) text = `${listed(summary)} came along.`;
+
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom, alignItems: "center" }}>
+      <Reveal key={moving ? "moving" : "done"}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 7,
+            height: 28,
+            paddingHorizontal: 12,
+            borderRadius: 14,
+            backgroundColor: "rgba(20,20,24,0.72)",
+          }}
+        >
+          {moving ? (
+            <ActivityIndicator size="small" color="#FFFFFF" style={{ transform: [{ scale: 0.6 }], width: 14, height: 14 }} />
+          ) : (
+            <Symbol name={flow.failures.length ? "exclamationmark.triangle.fill" : "checkmark"} size={11} color="#FFFFFF" style={{ width: 14, height: 14 }} />
+          )}
+          <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "500", color: "#FFFFFF", maxWidth: 560 }}>
+            {text}
+          </Text>
+        </View>
+      </Reveal>
+    </View>
+  );
+}
+
+export function ImportStep() {
+  const flow = useContext(ImportFlowContext)!;
   const [found, setFound] = useState<Leaving[]>(() => (isMac ? detectBrowsers() : []));
   useEffect(() => {
     if (isMac) return;
@@ -145,6 +241,7 @@ export function ImportStep() {
         if (active) setFound(browsers);
       })
       .catch(() => {});
+
     return () => {
       active = false;
     };
@@ -164,10 +261,13 @@ export function ImportStep() {
   const phase = phaseOf(flow, handedOff, !!queued, !!leaving);
   const ready = phase === "handoff" && (!detail || canDrop(flow));
   const name = leaving ? shortName(leaving.name) : "";
+
   // The app's own icon once the system has it, the scan's copy of it, or the bundled one.
   const iconOf = (b: Leaving): ImageSourcePropType | null => {
     if (icons[b.id]) return { uri: icons[b.id] };
+
     if (b.iconPath) return { uri: `file://${b.iconPath}` };
+
     return bundledBrowserIcon(b.id);
   };
 
@@ -187,12 +287,16 @@ export function ImportStep() {
 
   const begin = () => {
     const s = flow.source;
+
     if (!s) return;
+
     if (needsWindow(flow, s)) {
       openImport(s.id);
       setHandedOff(true);
+
       return;
     }
+
     flow.importNow();
   };
 
@@ -202,6 +306,7 @@ export function ImportStep() {
     void Promise.all(found.map(async (b) => [b.id, b.app ? await fileIcon(b.app, 256).catch(() => null) : null] as const)).then((list) => {
       if (active) setIcons(Object.fromEntries(list.filter((e): e is [string, string] => !!e[1])));
     });
+
     return () => {
       active = false;
     };
@@ -210,15 +315,19 @@ export function ImportStep() {
   // The flow picks a browser of its own when its scan is done: it follows the one shown here.
   useEffect(() => {
     const s = leaving && offeredBrowsers(flow).find((b) => b.id === leaving.id);
+
     if (scanned && s && flow.source?.id !== s.id) flow.choose(s);
   }, [scanned, leaving?.id]);
 
   useEffect(() => {
     if (!queued || !scanned) return;
+
     if (detail?.id === queued) {
       setQueued(null);
+
       return begin();
     }
+
     // The scan found nothing in it to bring over.
     if (!offeredBrowsers(flow).some((b) => b.id === queued)) {
       setNotice(`${shortName(found.find((b) => b.id === queued)?.name ?? "That browser")} has nothing to bring over yet.`);
@@ -228,8 +337,10 @@ export function ImportStep() {
 
   useEffect(() => {
     const open = phase === "handoff";
+
     if (reduceMotion()) split.set(withTiming(open ? 0 : 1, { duration: 160 }));
     else split.set(withTiming(open ? 0 : 1, { duration: open ? 620 : 560, easing: EASE }));
+
     // Back to the handoff (macOS refused the keychain, or Try Again): the icon returns to its side.
     if (open) {
       dropping.current = false;
@@ -239,7 +350,10 @@ export function ImportStep() {
       lift.set(withTiming(0, { duration: 160 }));
       absorb.set(withTiming(0, { duration: 260 }));
     }
-    const t = setTimeout(() => (keys.current as unknown as { focus?: () => void } | null)?.focus?.(), 50);
+
+    // SAFETY: { focus? assertion matches the runtime value validated at this call site.
+    const t = setTimeout(() => (keys.current as { focus?: () => void } | null)?.focus?.(), 50);
+
     return () => clearTimeout(t);
   }, [phase]);
 
@@ -251,14 +365,17 @@ export function ImportStep() {
     hapticTick();
     const id = leaving.id;
     const done = () => (detail ? begin() : setQueued(id));
+
     if (reduceMotion()) {
       absorb.set(
         withTiming(1, { duration: 140 }, (finished) => {
           if (finished) runOnJS(done)();
         }),
       );
+
       return;
     }
+
     const travel = fromDrag ? 220 : 520;
     tx.set(withTiming(half, { duration: travel, easing: EASE }));
     ty.set(
@@ -296,12 +413,14 @@ export function ImportStep() {
   const [pan] = useState(() => {
     let over = false;
     let moved = false;
+
     const settle = () => {
       tx.set(withSpring(0, HANDOFF_SPRING));
       ty.set(withSpring(0, HANDOFF_SPRING));
       lift.set(withTiming(0, { duration: 180 }));
       near.set(withTiming(0, { duration: 140 }));
     };
+
     return PanResponder.create({
       onStartShouldSetPanResponder: canGrab,
       onPanResponderGrant: () => {
@@ -314,14 +433,17 @@ export function ImportStep() {
         tx.set(g.dx);
         ty.set(g.dy);
         const inside = overBay(g.dx, g.dy);
+
         if (inside === over) return;
         over = inside;
+
         if (inside) hapticTick();
         near.set(withTiming(inside ? 1 : 0, { duration: 140 }));
       },
       onPanResponderRelease: () => {
         if (over) return dropped();
         settle();
+
         if (!moved) nudge();
       },
       onPanResponderTerminate: settle,
@@ -334,19 +456,25 @@ export function ImportStep() {
 
   const primary = () => {
     if (phase === "handoff") return drop(false);
+
     if (phase === "welcome") return finish();
+
     if (phase === "window") return nextStep(picked);
+
     if (phase === "empty") return nextStep([]);
   };
 
   const leftStyle = useAnimatedStyle(() => ({ width: half * (1 - split.get()) }));
+
   const seamStyle = useAnimatedStyle(() => ({
     opacity: interpolate(split.get(), [0, 0.92, 1], [1, 1, 0]),
     transform: [{ translateX: half * (1 - split.get()) }],
   }));
+
   const pathStyle = useAnimatedStyle(() => ({
     opacity: interpolate(split.get(), [0, 0.12], [1, 0], Extrapolation.CLAMP) * (1 - absorb.get()) * interpolate(lift.get(), [0, 1], [1, 0.5]),
   }));
+
   const iconStyle = useAnimatedStyle(() => ({
     opacity: (1 - absorb.get()) * interpolate(split.get(), [0, 0.3], [1, 0], Extrapolation.CLAMP),
     transform: [
@@ -444,10 +572,11 @@ function FarewellHalf({
   lift: SharedValue<number>;
   children: ReactNode;
 }) {
-  const colors = HANDOFF_COLORS[leaving.id] ?? HANDOFF_FALLBACK_COLORS;
+  const colors = lookup(HANDOFF_COLORS, leaving.id) ?? HANDOFF_FALLBACK_COLORS;
   const { chips, hint } = parts;
   const farewell = useAnimatedStyle(() => ({ opacity: 1 - lift.get(), transform: [{ translateY: interpolate(lift.get(), [0, 1], [0, -6]) }] }));
   const goodbye = useAnimatedStyle(() => ({ opacity: lift.get(), transform: [{ translateY: interpolate(lift.get(), [0, 1], [6, 0]) }] }));
+
   return (
     // Anchored to the seam, so as the half folds away its content slides out to the left.
     <View style={{ position: "absolute", top: 0, bottom: 0, right: 0, width }}>
@@ -475,6 +604,7 @@ function FarewellHalf({
 
 function SourceIcon({ name, icon }: { name: string; icon: ImageSourcePropType | null }) {
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip={`Drag ${name} into ${APP_NAME}`} style={{ transform: [{ scale: hovered ? 1.04 : 1 }] }}>
       <AppIcon icon={icon} size={ICON} />
@@ -484,6 +614,7 @@ function SourceIcon({ name, icon }: { name: string; icon: ImageSourcePropType | 
 
 function AppIcon({ icon, size }: { icon: ImageSourcePropType | null; size: number }) {
   if (!icon) return <Symbol name="globe" size={Math.round(size * 0.6)} color="#FFFFFF" style={{ width: size, height: size }} />;
+
   return <Image cachePolicy="memory" source={icon} style={{ width: size, height: size }} />;
 }
 
@@ -499,6 +630,7 @@ function Chips({ chips }: { chips: Chip[] }) {
 
 function ChipButton({ chip }: { chip: Chip }) {
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={chip.toggle} accessibilityRole="checkbox" accessibilityState={{ checked: chip.on }} accessibilityLabel={chip.title}>
@@ -558,6 +690,7 @@ function Switcher({
 
 function SwitcherIcon({ name, icon, selected, onPress }: { name: string; icon: ImageSourcePropType | null; selected: boolean; onPress: () => void }) {
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip={name}>
       <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={name}>
@@ -614,10 +747,13 @@ function BayHalf({
     if (phase !== "moving" || reduceMotion()) return breathe.set(withTiming(0, { duration: 200 }));
     breathe.set(withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.sin) }), -1, true));
   }, [phase]);
+
   const iconStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 + near.get() * 0.1 + gulp.get() * 0.14 + breathe.get() * 0.04 }],
   }));
+
   const ringStyle = useAnimatedStyle(() => ({ opacity: near.get(), transform: [{ scale: interpolate(near.get(), [0, 1], [0.9, 1]) }] }));
+
   return (
     <View style={{ flex: 1, height: "100%", backgroundColor: BAY_SKY }}>
       <Stars />
@@ -673,7 +809,9 @@ function BayHalf({
 // The right half's text comes in again for each phase, and for each wait within "moving".
 function revealKey(phase: Phase, waiting: boolean, unlocking: boolean) {
   if (waiting) return "waiting";
+
   if (unlocking) return "unlocking";
+
   return phase;
 }
 
@@ -702,6 +840,7 @@ function BayContent({
 }) {
   const idle = useAnimatedStyle(() => ({ opacity: 1 - near.get() }));
   const over = useAnimatedStyle(() => ({ opacity: near.get() }));
+
   switch (phase) {
     case "loading":
       return <ActivityIndicator size="small" color="#FFFFFF" />;
@@ -721,6 +860,7 @@ function BayContent({
       );
     case "handoff": {
       const problem = flow.error ?? notice;
+
       return (
         <>
           <View style={{ alignSelf: "stretch" }}>
@@ -745,8 +885,10 @@ function BayContent({
         </>
       );
     }
+
     case "moving":
       if (waiting) return <Headline title="Getting ready…" subtitle={`Looking through ${name}'s profiles.`} />;
+
       return flow.unlocking ? (
         <Headline
           title="One quick check"
@@ -758,8 +900,11 @@ function BayContent({
         />
       ) : (
         <>
-          <Headline title="Moving in…" subtitle={`Bringing your things over from ${name}.`} />
+          <Headline title="Moving in…" subtitle={`Bringing your things over from ${name}. You needn't wait for it.`} />
           <KindPills status={flow.status} />
+          <Actions>
+            <PillButton title="Keep Setting Up" filled onPress={continueImportInBackground} />
+          </Actions>
         </>
       );
     case "welcome":
@@ -780,12 +925,14 @@ function BayContent({
 function Welcome({ flow, onContinue }: { flow: ImportFlow; onContinue: () => void }) {
   const summary = importedSummary(flow.counts);
   const failed = flow.failures.map((f) => KINDS.find((k) => k.kind === f.kind)?.title.toLowerCase() ?? f.kind);
+
   const subtitle = [
     summary.length ? `${listed(summary)} came along.` : "There was nothing new to bring over.",
     failed.length ? `${listed(failed).replace(/^./, (c) => c.toUpperCase())} didn't make it.` : "",
   ]
     .filter(Boolean)
     .join(" ");
+
   return (
     <>
       <Headline title={summary.length || !failed.length ? `Welcome to ${APP_NAME}.` : "That didn't work"} subtitle={subtitle} />
@@ -822,12 +969,15 @@ function KindPills({ status }: { status: Partial<Record<string, Status>> }) {
 
 function pillSymbol(status: Status, icon: string) {
   if (status === "done") return "checkmark";
+
   if (status === "failed") return "exclamationmark.triangle.fill";
+
   return icon;
 }
 
 function KindPill({ title, icon, status }: { title: string; icon: string; status: Status }) {
   const pending = status === "pending";
+
   return (
     <View
       style={{
@@ -874,6 +1024,7 @@ function Actions({ children }: { children: ReactNode }) {
 
 function PillButton({ title, onPress, filled }: { title: string; onPress: () => void; filled?: boolean }) {
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
@@ -919,6 +1070,7 @@ function Glow({ color, opacity, top }: { color: string; opacity: number; top: nu
 // The tear: a column of diamonds in Bay's sky over the seam, so the left half's edge zigzags.
 function Teeth({ height }: { height: number }) {
   const step = HANDOFF_TOOTH * Math.SQRT2;
+
   return Array.from({ length: Math.ceil(height / step) + 1 }, (_, i) => (
     <View
       key={i}
@@ -942,8 +1094,10 @@ function DottedPath({ from, to, y }: { from: number; to: number; y: number }) {
     if (reduceMotion()) return;
     march.set(withRepeat(withTiming(1, { duration: 1800, easing: Easing.linear }), -1, false));
   }, []);
+
   return Array.from({ length: HANDOFF_DOTS }, (_, i) => {
     const t = i / (HANDOFF_DOTS - 1);
+
     return <PathDot key={i} t={t} march={march} x={from + (to - from) * t} y={y + Math.sin(t * Math.PI) * HANDOFF_DIP} />;
   });
 }
@@ -951,8 +1105,10 @@ function DottedPath({ from, to, y }: { from: number; to: number; y: number }) {
 function PathDot({ t, march, x, y }: { t: number; march: SharedValue<number>; x: number; y: number }) {
   const style = useAnimatedStyle(() => {
     const behind = (march.get() - t + 1) % 1;
+
     return { opacity: 0.3 + 0.6 * Math.max(0, 1 - behind * 4) };
   });
+
   return (
     <Animated.View style={[{ position: "absolute", left: x - 1.5, top: y - 1.5, width: 3, height: 3, borderRadius: 1.5, backgroundColor: "#FFFFFF" }, style]} />
   );

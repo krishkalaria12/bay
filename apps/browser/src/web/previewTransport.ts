@@ -1,14 +1,19 @@
 import type { NativeHostInfo, NativeTransport, JSONValue } from "@bay/platform/nativeBridge";
+import { checked } from "../lib/checked";
+import type { JsonValue } from "../lib/json";
 
 /** Local UI fixture. This transport is never selected by a privileged WebUI. */
 export function createPreviewTransport(): NativeTransport {
   const query = new URLSearchParams(location.search);
+
   const documents: Record<string, JSONValue> = query.has("onboarding")
     ? {}
     : {
         "onboarding.json": JSON.stringify({ version: 1, completedAt: 1 }),
       };
-  const listeners = new Map<string, Set<(value: unknown) => void>>();
+
+  const listeners = new Map<string, Set<(value: JsonValue) => void>>();
+
   const info: NativeHostInfo = {
     contractVersion: 2,
     // ?platform=linux previews the Linux host's look (no caption buttons, its UI font and icons).
@@ -24,7 +29,7 @@ export function createPreviewTransport(): NativeTransport {
     ],
     constants: {
       BayApp: { apiVersion: 9 },
-      BayShell: { preview: true, hostingSpike: query.has("spike"), ...(query.has("window") ? { windowId: String(query.get("window")) } : {}) },
+      BayShell: { preview: true, hostingSpike: query.has("spike"), ...(query.has("window") ? { windowId: String(query.get("window")) } : undefined) },
     },
     snapshots: {
       BayShell: { documents, windowButtonLayout: { left: [], right: ["minimize", "maximize", "close"] } },
@@ -51,10 +56,13 @@ export function createPreviewTransport(): NativeTransport {
       },
     },
   };
-  const emit = (module: string, event: string, value: unknown) => {
+
+  const emit = (module: string, event: string, value: JsonValue) => {
     for (const listener of listeners.get(`${module}.${event}`) ?? []) listener(value);
   };
+
   const windows = new Set<string>();
+
   const noResult = new Set([
     "BayShell.setAppearance",
     "BayShell.setMenuState",
@@ -83,13 +91,16 @@ export function createPreviewTransport(): NativeTransport {
     "BayChromeUI.watchCastRoutes",
     "BayCEF.setSearchEngineName",
   ]);
+
   return {
     getHostInfo: () => info,
     subscribe(module, event, listener) {
       const key = `${module}.${event}`;
       let values = listeners.get(key);
+
       if (!values) listeners.set(key, (values = new Set()));
       values.add(listener);
+
       return {
         remove: () => {
           values.delete(listener);
@@ -99,24 +110,30 @@ export function createPreviewTransport(): NativeTransport {
     async invoke(module, method, json) {
       const args: unknown[] = JSON.parse(json);
       const key = `${module}.${method}`;
-      const ok = (value: unknown = null) => JSON.stringify({ value });
+      const ok = (value: JsonValue = null) => JSON.stringify({ value });
+
       if (noResult.has(key)) return ok();
+
       switch (key) {
         case "BayShell.readDocument":
           return ok(documents[String(args[0])] ?? null);
         case "BayShell.writeDocument":
         case "BayShell.saveDocument":
           documents[String(args[0])] = String(args[1]);
+
           return ok();
         case "BayShell.removeDocument":
           delete documents[String(args[0])];
+
           return ok();
         case "BayShell.openWindow":
           windows.add(String(args[0]));
+
           return ok();
         case "BayShell.closeWindow":
           windows.delete(String(args[0]));
-          emit("BayShell", "onWindowEvent", { type: "close", id: args[0] });
+          emit("BayShell", "onWindowEvent", { type: "close", id: checked<JsonValue>(args[0]) });
+
           return ok();
         case "BayShell.windowIds":
           return ok([...windows]);
@@ -177,9 +194,12 @@ export function createPreviewTransport(): NativeTransport {
                 other: { id: "other", k: "f", t: "Other bookmarks", a: 0, c: [] },
               }),
             );
+
           if (args[0] === "nn_favicons_get") return ok(JSON.stringify({ pages: {}, icons: {} }));
+
           return ok(JSON.stringify({ ok: true, entries: [], engines: [], visits: [] }));
         }
+
         case "BayWebView.mount":
           return ok({ surfaceId: "", browserId: Number(args[0]), chromeTabId: Number(args[0]) });
         case "BayWebView.update":
@@ -187,12 +207,16 @@ export function createPreviewTransport(): NativeTransport {
           return ok();
         case "BayWebView.call": {
           const command = String(args[1]);
+
           if (["executeJavaScript", "focus", "loadUrl", "setMuted", "setFrozen", "stopLoading", "reload", "forceReload"].includes(command)) return ok();
+
           if (command === "discard") return ok("refused");
           break;
         }
       }
+
       console.warn(`[bay preview] Native service unavailable: ${key}`);
+
       return JSON.stringify({ error: { code: "preview_unavailable", message: `${key} needs the native Chrome host` } });
     },
     dispose() {

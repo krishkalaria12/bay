@@ -1,14 +1,17 @@
 import { displayUrl, hostOf, parseUrl, type Suggestion } from "@bay/core";
 import type { Tab } from "../../store/types";
 import type { DeepReadonly } from "../../runtime/projection";
+
 type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 
 // `host` marks a frequent site: a whole site, not one page.
 export type PaletteSuggestion = Suggestion & { detail?: string; host?: string };
+
 export type PaletteSection = { id: string; title?: string; items: PaletteSuggestion[] };
 
 export function currentPageActions(tab: Pick<Tab, "url" | "title" | "customTitle">): PaletteSection[] {
   const title = tab.customTitle || tab.title || displayUrl(tab.url);
+
   return [
     {
       id: "page",
@@ -29,6 +32,7 @@ export function paletteStart(tabs: Tab[], history: readonly HistoryEntry[], curr
     .map((t) => ({ kind: "page", tabId: t.id, url: t.url, title: t.customTitle || t.title, favicon: t.favicon }));
 
   const frequent = frequentSites(history);
+
   return [
     ...(recent.length ? [{ id: "recent", title: "Recent Tabs", items: recent }] : []),
     ...(frequent.length ? [{ id: "frequent", title: "Frequent", items: frequent }] : []),
@@ -37,39 +41,50 @@ export function paletteStart(tabs: Tab[], history: readonly HistoryEntry[], curr
 
 // A visit replaces the history array. Tab changes and new palette mounts can reuse its three frequent sites.
 const frequentCache = new WeakMap<readonly HistoryEntry[], PaletteSuggestion[]>();
+
 // History writes reuse unchanged rows. Weak keys let deleted rows and their derived hosts go away together.
 const historyHosts = new WeakMap<HistoryEntry, string>();
 
 function frequentSites(history: readonly HistoryEntry[]): PaletteSuggestion[] {
   const cached = frequentCache.get(history);
+
   if (cached) return cached;
   const sites = new Map<string, { visits: number; lastVisit: number; page: HistoryEntry }>();
   // Metro resolves imported exports at each use; keep that out of the history loop.
   const hostFor = hostOf;
+
   for (const page of history) {
     let host = historyHosts.get(page);
+
     if (host === undefined) {
       host = /^https?:\/\//i.test(page.url) ? hostFor(page.url) : "";
       historyHosts.set(page, host);
     }
+
     if (!host) continue;
     const site = sites.get(host);
+
     if (!site) sites.set(host, { visits: page.visits, lastVisit: page.lastVisit, page });
     else {
       site.visits += page.visits;
+
       if (page.lastVisit > site.lastVisit) {
         site.lastVisit = page.lastVisit;
         site.page = page;
       }
     }
   }
+
   const frequent: PaletteSuggestion[] = [...sites.entries()]
     .sort((a, b) => b[1].visits - a[1].visits || b[1].lastVisit - a[1].lastVisit)
     .slice(0, 3)
     .map(([host, site]) => {
       const parts = parseUrl(site.page.url)!;
+
       return { kind: "page", title: host, host, url: `${parts.scheme}://${parts.host}${parts.port ? `:${parts.port}` : ""}/`, favicon: site.page.favicon };
     });
+
   frequentCache.set(history, frequent);
+
   return frequent;
 }

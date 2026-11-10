@@ -18,11 +18,13 @@ import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { SETTINGS_WINDOW_ID } from "../windows";
 
 type SiteAccess = "allSites" | "specificSites" | "onClick";
+
 const SITE_ACCESS: { value: SiteAccess; title: string }[] = [
   { value: "allSites", title: "On all sites" },
   { value: "specificSites", title: "On specific sites" },
   { value: "onClick", title: "On click" },
 ];
+
 const siteAccessOf = (ext: InstalledExtension): SiteAccess =>
   ext.siteAccess === "ON_CLICK" ? "onClick" : ext.siteAccess === "ON_SPECIFIC_SITES" ? "specificSites" : "allSites";
 
@@ -39,6 +41,7 @@ export function ExtensionsPane() {
   }, [profile]);
 
   const showInstall = () => showSettingsSheet(<InstallDialogHost windowId={SETTINGS_WINDOW_ID} onClosed={closeSettingsSheet} />);
+
   const addLink = () => {
     if (!link.trim()) return;
     void addFromWebStore(SETTINGS_WINDOW_ID, link.trim(), profile);
@@ -47,6 +50,7 @@ export function ExtensionsPane() {
   };
 
   const selected = detail ? list.find((x) => x.id === detail) : undefined;
+
   if (selected) return <ExtensionDetails ext={selected} profile={profile} onBack={() => setDetail(null)} />;
 
   return (
@@ -90,6 +94,7 @@ export function ExtensionsPane() {
             title="Open Web Store"
             onPress={() => {
               const windowId = resolveWindowId(useBrowser.getState());
+
               if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" }));
             }}
           />
@@ -120,10 +125,13 @@ export function ExtensionsPane() {
 
 function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; profile: string; onBack: () => void }) {
   const theme = useTheme();
+
   const openTab = (url: string) => {
     const windowId = resolveWindowId(useBrowser.getState());
+
     if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url }));
   };
+
   return (
     <View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 18 }}>

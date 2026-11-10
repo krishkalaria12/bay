@@ -7,9 +7,11 @@ const windowUi = {
   "../components/split/splitActions": "data:text/javascript,export const showToast = () => {};",
   "../components/pages/pageUrls": "data:text/javascript,export const isInternalTab = () => false;",
 };
+
 registerHooks({
   resolve(specifier, context, next) {
     const url = context.parentURL?.endsWith("/lib/tidyDownloads.ts") && windowUi[specifier];
+
     return url ? { url, shortCircuit: true } : next(specifier, context);
   },
 });
@@ -18,6 +20,7 @@ const { useBrowser } = await import("./browserStore.ts");
 const { applyTidyName } = await import("../lib/tidyDownloads.ts");
 
 const S = () => useBrowser.getState();
+
 const download = (patch = {}) => ({
   id: "d1",
   url: "https://example.com/IMG_20261024_8812.pdf",
@@ -32,6 +35,7 @@ const download = (patch = {}) => ({
   profile: "",
   ...patch,
 });
+
 const find = () => S().downloads.find((d) => d.id === "d1");
 
 test("a tidied download keeps its new name when the engine reports the old path again", () => {

@@ -13,15 +13,18 @@ export function useCaptionRevealed(windowId: string, enabled: boolean): boolean 
   useEffect(() => {
     if (!enabled) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
+
     const events = onWindowEvent((event) => {
       if (event.type !== "caption" || event.id !== windowId) return;
       clearTimeout(timer);
       timer = setTimeout(() => setRevealed(event.revealed), event.revealed ? OPEN_DELAY_MS : CLOSE_DELAY_MS);
     });
+
     return () => {
       clearTimeout(timer);
       events.remove();
     };
   }, [windowId, enabled]);
+
   return enabled && revealed;
 }

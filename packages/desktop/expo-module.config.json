@@ -21,6 +21,7 @@
       "InlineCompletionModule",
       "TranslateModule",
       "TidyNamesModule",
+      "TidyTabsModule",
       "WindowProfileModule",
       "CaptureModule",
       "EaselModule",

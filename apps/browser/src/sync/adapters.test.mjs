@@ -1,6 +1,7 @@
 // Two simulated Macs share one sync folder; each round trip runs the real adapters against the real store.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { useBrowser } = await import("../store/browserStore.ts");
 const model = await import("../store/model.ts");
 const { Clock, emptyScope, syncScope } = await import("@bay/sync");
@@ -8,7 +9,9 @@ const adapters = await import("./adapters.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const { configureSyncStore } = await import("./store.ts");
+
 configureSyncStore(useBrowser);
+
 const S = () => useBrowser.getState();
 
 class Folder {
@@ -19,11 +22,13 @@ class Folder {
       write: async (scope, payload) => {
         const id = `f${++this.counter}`;
         this.files.set(id, { scope, payload });
+
         return id;
       },
       read: async (scope, known) => {
-        const files = [...this.files].filter(([id, f]) => f.scope === scope && !known.includes(id)).map(([id, f]) => ({ id, payload: f.payload }));
-        return { files, pending: [], damaged: [], present: [...this.files].filter(([, f]) => f.scope === scope).map(([id]) => id) };
+        const files = [...this.files].flatMap(([id, f]) => (f.scope === scope && !known.includes(id) ? [{ id, payload: f.payload }] : []));
+
+        return { files, pending: [], damaged: [], present: [...this.files].flatMap(([id, f]) => (f.scope === scope ? [id] : [])) };
       },
       remove: async (_scope, ids) => ids.forEach((id) => this.files.delete(id)),
     };
@@ -46,6 +51,7 @@ class Device {
   with(fn) {
     stub.current.device = this.id;
     useBrowser.setState(this.browser, true);
+
     try {
       return fn();
     } finally {
@@ -55,6 +61,7 @@ class Device {
   async sync(spaceId = "default") {
     stub.current.device = this.id;
     useBrowser.setState(this.browser, true);
+
     const run = (scope, list, options) =>
       syncScope({
         scope,
@@ -65,7 +72,9 @@ class Device {
         device: this.id,
         options,
       });
+
     const app = await run("app", [adapters.settingsAdapter]);
+
     const p = await run(
       "p",
       [
@@ -77,7 +86,9 @@ class Device {
       ],
       { expired: adapters.historyExpired },
     );
+
     this.browser = S();
+
     return { published: app.published + p.published };
   }
 }
@@ -90,10 +101,13 @@ function tree(device, spaceId = "default") {
   return device.with(() => {
     const b = S().bookmarks;
     const roots = b.roots[spaceId];
+
     const walk = (id) => {
       const n = b.nodes[id];
+
       return n.kind === "url" ? `${n.title}=${n.url}` : { [n.title]: n.children.map(walk) };
     };
+
     return { bar: walk(roots.bar), other: walk(roots.other) };
   });
 }
@@ -101,8 +115,10 @@ function tree(device, spaceId = "default") {
 function assertTreeWhole(device) {
   device.with(() => {
     const b = S().bookmarks;
+
     for (const n of Object.values(b.nodes)) {
       if (n.parentId) assert.ok(b.nodes[n.parentId]?.children.includes(n.id), `${n.title} is in its parent`);
+
       if (n.kind === "folder") for (const c of n.children) assert.equal(b.nodes[c]?.parentId, n.id);
     }
   });
@@ -157,6 +173,7 @@ test("pinned tabs stay their space's when a window closes: not deleted elsewhere
   });
   b.with(() => S().createWindow({ url: "https://b-home.example/" }));
   await syncAll([a, b]);
+
   const pins = (d) =>
     d.with(() =>
       [
@@ -167,6 +184,7 @@ test("pinned tabs stay their space's when a window closes: not deleted elsewhere
         ),
       ].sort(),
     );
+
   assert.deepEqual(pins(b), ["https://cal.example/", "https://mail.example/"]);
 
   // They're the space's: one tab each, whatever window is open, so one record each stays.
@@ -184,6 +202,7 @@ test("pinned tabs stay their space's when a window closes: not deleted elsewhere
     S().pinTabs([cal], false);
   });
   await syncAll([b, a]);
+
   const tiles = (w) =>
     a.with(() =>
       model
@@ -191,6 +210,7 @@ test("pinned tabs stay their space's when a window closes: not deleted elsewhere
         .filter((id) => S().tabs[id].pinned)
         .map((id) => `${S().tabs[id].pinnedUrl} ${S().tabs[id].customTitle}`),
     );
+
   assert.deepEqual(tiles(aWork), ["https://mail.example/ Inbox"]);
   assert.equal((await a.sync()).published, 0, "settled");
 
@@ -263,7 +283,9 @@ test("history: two Macs settle on the union of their visits in Chrome, publish n
   const folder = new Folder();
   const a = new Device("devA", folder);
   const b = new Device("devB", folder);
+
   for (const d of [a, b]) stub.historyDbs.delete(d.id);
+
   // What lib/history.ts does from Chrome's reports: the store's view is Chrome's history.
   const readChrome = async (d) => {
     stub.current.device = d.id;
@@ -275,10 +297,13 @@ test("history: two Macs settle on the union of their visits in Chrome, publish n
       }),
     );
   };
+
   const sync = async (d) => {
     await readChrome(d);
+
     return d.sync();
   };
+
   const visits = (d, url) => stub.historyDbs.get(d.id)?.get("")?.get(url)?.visits ?? [];
   const t = Date.now() - 3_600_000;
   const visit = (d, url, at) => d.with(() => ((stub.current.device = d.id), stub.chromeVisit("", url, url, at)));
@@ -286,6 +311,7 @@ test("history: two Macs settle on the union of their visits in Chrome, publish n
   visit(a, "https://x.example/", t + 1000);
   visit(b, "https://x.example/", t + 2000);
   visit(b, "https://y.example/", t + 3000);
+
   for (let i = 0; i < 3; i++) for (const d of [a, b]) await sync(d);
   assert.deepEqual(visits(a, "https://x.example/"), [t, t + 1000, t + 2000]);
   assert.deepEqual(visits(b, "https://x.example/"), [t, t + 1000, t + 2000]);
@@ -341,16 +367,19 @@ test("bookmarks: a Mac on old ids and one on Chrome's UUIDs keep one tree", asyn
     const a = S().addBookmark({ spaceId: "default", url: "https://a.example/", title: "A", parentId: f });
     const b = S().addBookmark({ spaceId: "default", url: "https://b.example/", title: "B", parentId: f });
     const nodes = { ...S().bookmarks.nodes };
+
     const rename = (id, legacy) => {
       const node = { ...nodes[id], id: bookmarkUuidFor(legacy), syncKey: legacy, addedAt: 5 };
       delete nodes[id];
       nodes[node.id] = node;
     };
+
     rename(f, "bm-f");
     rename(a, "bm-a");
     rename(b, "bm-b");
     const uf = bookmarkUuidFor("bm-f");
     nodes[uf] = { ...nodes[uf], children: [bookmarkUuidFor("bm-a"), bookmarkUuidFor("bm-b")] };
+
     for (const id of [bookmarkUuidFor("bm-a"), bookmarkUuidFor("bm-b")]) nodes[id] = { ...nodes[id], parentId: uf };
     const bar = S().bookmarks.roots.default.bar;
     nodes[bar] = { ...nodes[bar], children: [uf] };
@@ -397,6 +426,7 @@ test("nested pinned folders, empty descendants and loose rows sync to a new devi
   const transport = new Folder();
   const a = new Device("A", transport);
   const b = new Device("B", transport);
+
   const ids = a.with(() => {
     const w = S().createWindow({ url: "https://root.example" });
     const first = model.viewTabIds(S(), w)[0];
@@ -406,8 +436,10 @@ test("nested pinned folders, empty descendants and loose rows sync to a new devi
     const child = S().newPinnedFolder(w, { name: "Research", parentId: root, tabIds: [second] });
     const empty = S().newPinnedFolder(w, { name: "Empty", parentId: child });
     S().pinRows([loose], true);
+
     return { root, child, empty, first, second, loose };
   });
+
   await syncAll([a, b], 3);
   b.with(() => {
     assert.equal(S().pinnedFolders[ids.child].parentId, ids.root);
@@ -444,14 +476,20 @@ test("folder records remain visible through the old flat pinned-group wire forma
   const child = S().newPinnedFolder(w, { name: "Child", parentId: root, tabIds: [second] });
   const adapter = adapters.pinnedAdapter("default");
   const { values } = adapter.extract(() => undefined);
+
   // Pre-folder clients read n/i/c/pos as a pinned group, and g as its direct membership.
-  const flatGroups = [...values]
-    .filter(([key]) => key.startsWith("pin:g:"))
-    .map(([key, value]) => ({
-      name: value.n,
-      tabs: [...values].filter(([pinKey, pin]) => pinKey.startsWith("pin:t:") && pin.g === key.slice(6)).map(([, pin]) => pin.u),
-      id: key.slice(6),
-    }));
+  const flatGroups = [...values].flatMap(([key, value]) =>
+    key.startsWith("pin:g:")
+      ? [
+          {
+            name: value.n,
+            tabs: [...values].flatMap(([pinKey, pin]) => (pinKey.startsWith("pin:t:") && pin.g === key.slice(6) ? [pin.u] : [])),
+            id: key.slice(6),
+          },
+        ]
+      : [],
+  );
+
   assert.deepEqual(
     flatGroups.map((group) => [group.name, group.tabs]),
     [
@@ -459,12 +497,14 @@ test("folder records remain visible through the old flat pinned-group wire forma
       ["Child", ["https://child.example"]],
     ],
   );
+
   for (const id of [root, child]) {
     const group = values.get(`pin:g:${id}`);
     assert.equal(group.c, null);
     const member = [...values].find(([key, pin]) => key.startsWith("pin:t:") && pin.g === id);
     assert.ok(member, "each nested folder is an independently readable flat group");
   }
+
   // Simulate an older client's rewrite, which has only the original pin fields.
   const legacy = new Map(
     [...values].map(([key, value]) => [
@@ -474,6 +514,7 @@ test("folder records remain visible through the old flat pinned-group wire forma
         : { g: value.g, u: value.u, t: value.t, i: value.i, ti: value.ti, pos: value.pos },
     ]),
   );
+
   adapter.apply(legacy, new Set(legacy.keys()), () => undefined);
   assert.equal(S().pinnedFolders[root], undefined);
   assert.equal(S().pinnedFolders[child], undefined);
@@ -500,6 +541,7 @@ test("sync retains loose rows around folders, mixed child rows and empty sibling
     S().newPinnedFolder(w, { name: "Empty child", parentId: root, beforeId: ids[3] });
   });
   const { folderEntries, sidebarEntries } = await import("../components/sidebar/sidebarEntries.ts");
+
   const snapshot = (device) =>
     device.with(() => {
       const render = (entry) =>
@@ -509,9 +551,12 @@ test("sync retains loose rows around folders, mixed child rows and empty sibling
               children: folderEntries(S(), entry.slice(2)).map(render),
             }
           : S().tabs[entry.slice(2)].url;
+
       const window = S().windowOrder[0] ?? S().createWindow({ spaceId: "default", url: "https://new.example" });
+
       return sidebarEntries(S(), window).pinned.map(render);
     });
+
   const expected = snapshot(a);
   assert.deepEqual(expected, [
     "https://a.example",

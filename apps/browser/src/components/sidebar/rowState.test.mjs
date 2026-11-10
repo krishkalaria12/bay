@@ -16,6 +16,7 @@ test("tab row notifications ignore progress and route only display flags to the 
   const seen = [];
   let unrelated = 0;
   const stops = [shown.subscribe(() => unrelated++), background.subscribe((value) => seen.push(value))];
+
   try {
     for (let i = 1; i <= 60; i++) S().updateLive(other, { progress: i / 100 });
     assert.deepEqual(seen, []);
@@ -48,15 +49,18 @@ test("row snapshots preserve window ownership, per-space activation and reentran
   const own = tabRowStore(w, tab);
   const elsewhere = tabRowStore(second, tab);
   const stops = [own.subscribe(() => {}), elsewhere.subscribe(() => {})];
+
   try {
     assert.equal(own.getState(), ACTIVE);
     assert.equal(elsewhere.getState(), 0);
     S().activate(tab, second);
     assert.equal(elsewhere.getState() & ACTIVE, ACTIVE);
     assert.equal(own.getState() & ACTIVE, ACTIVE, "the source window keeps its selected open-elsewhere row");
+
     const stop = elsewhere.subscribe((flags) => {
       if (flags & SELECTED) S().setSelection(second, []);
     });
+
     S().setSelection(second, [tab]);
     assert.equal(elsewhere.getState(), rowFlags(S(), second, tab));
     assert.equal(elsewhere.getState() & SELECTED, 0);
@@ -79,6 +83,7 @@ test("tab row flags follow the installed window reader instead of the local sing
   const row = tabRowStore(windowId, tabId);
   const seen = [];
   const stop = row.subscribe((value) => seen.push(value));
+
   try {
     assert.equal(row.getState(), ACTIVE);
     assert.equal(S().tabs[tabId], undefined);
@@ -86,6 +91,7 @@ test("tab row flags follow the installed window reader instead of the local sing
     assert.deepEqual(seen, [ACTIVE | LOADING]);
     state().setSelection(windowId, [tabId]);
     assert.equal(seen.at(-1), ACTIVE | LOADING | SELECTED);
+
     for (let i = 1; i <= 10; i++) state().updateLive(tabId, { progress: i / 10 });
     assert.equal(seen.length, 2);
   } finally {

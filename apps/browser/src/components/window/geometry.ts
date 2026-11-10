@@ -2,7 +2,9 @@ import type { WindowButtonLayout } from "@bay/desktop";
 import { layout } from "../../lib/constants";
 import { slotsOf } from "../../store/splits";
 import type { DeepReadonly } from "../../runtime/projection";
+
 type SplitView = DeepReadonly<import("../../store/types").SplitView>;
+
 import { MIN_PANE, PANE_GAP, SIDEBAR_BUTTON_END_ROOM, TRAFFIC_LIGHTS_OFFSET } from "./constants";
 import { getWindowButtonLayout, LIGHTS_WIDTH, windowButtonRoom } from "./windowButtons";
 
@@ -15,10 +17,12 @@ export type SplitGeometry = { panes: Record<string, Rect>; dividers: Divider[] }
 function cut(total: number, sizes: readonly number[], gap: number): { start: number; size: number }[] {
   const free = Math.max(0, total - gap * (sizes.length - 1));
   let at = 0;
+
   return sizes.map((f) => {
     const size = Math.round(free * f);
     const out = { start: at, size };
     at += size + gap;
+
     return out;
   });
 }
@@ -33,6 +37,7 @@ export function splitGeometry(split: SplitView, width: number, height: number, g
   slots.forEach((slot, i) => {
     const { start, size } = main[i]!;
     const slotRect: Rect = horizontal ? { x: start, y: 0, width: size, height } : { x: 0, y: start, width, height: size };
+
     if (slot.length === 1) panes[slot[0]!] = slotRect;
     else {
       const inner = cut(horizontal ? slotRect.height : slotRect.width, split.stack?.sizes ?? [0.5, 0.5], gap);
@@ -47,6 +52,7 @@ export function splitGeometry(split: SplitView, width: number, height: number, g
         rect: horizontal ? { x: slotRect.x, y: d.size, width: slotRect.width, height: gap } : { x: d.size, y: slotRect.y, width: gap, height: slotRect.height },
       });
     }
+
     if (i < slots.length - 1) {
       dividers.push({
         kind: "root",
@@ -56,6 +62,7 @@ export function splitGeometry(split: SplitView, width: number, height: number, g
       });
     }
   });
+
   return { panes, dividers };
 }
 
@@ -68,6 +75,7 @@ export function resize(sizes: readonly number[], a: number, delta: number, total
   const next = [...px];
   next[a] = left;
   next[a + 1] = pair - left;
+
   return next.map((p) => p / free);
 }
 
@@ -95,7 +103,9 @@ export function toolbarGeometry(o: ToolbarLayout, buttons = getWindowButtonLayou
   const end = o.captionEnd ? Math.max(0, room.right - layout.cardInset) : 0;
   const key = `${o.sidebarButton}|${start}|${!!o.sidebarButtonEnd}|${!!o.captionEnd}|${end}`;
   let g = geometries.get(key);
+
   if (!g) geometries.set(key, (g = computeToolbarGeometry(o, start, end)));
+
   return g;
 }
 
@@ -103,6 +113,7 @@ function computeToolbarGeometry(o: ToolbarLayout, offset: number, captionRoom: n
   const end = !!o.sidebarButtonEnd;
   const captionEnd = !!o.captionEnd;
   const [c0, c1, c2, c3] = layout.toolbarIconCenters;
+
   if (o.sidebarButton)
     return {
       sidebarButton: offset + c0,
@@ -115,6 +126,7 @@ function computeToolbarGeometry(o: ToolbarLayout, offset: number, captionRoom: n
       urlLeft: offset + layout.breadcrumbX - 8,
     };
   const shift = c1 - c0;
+
   return {
     sidebarButton: null,
     sidebarButtonEnd: end,
@@ -140,21 +152,26 @@ export const NO_TOOLBAR: ToolbarGeometry = {
   reload: 21,
   urlLeft: 8,
 };
+
 const noToolbars = new Map<number, ToolbarGeometry>();
 
 /** No toolbar, but developer bars and prompts must still clear the window's corners. */
 export function noToolbarGeometry(clearStart: boolean, buttons = getWindowButtonLayout()): ToolbarGeometry {
   const room = windowButtonRoom(buttons);
   const start = clearStart ? (LIGHTS_WIDTH ? TRAFFIC_LIGHTS_OFFSET : Math.max(8, room.left - layout.cardInset)) : 8;
+
   if (start === 8) return NO_TOOLBAR;
   let g = noToolbars.get(start);
+
   if (!g) noToolbars.set(start, (g = { ...NO_TOOLBAR, urlLeft: start }));
+
   return g;
 }
 
 /** A strip or a docked sidebar holds the buttons on the window edges it occupies. */
 export function paneButtonClearance(leading: boolean, trailing: boolean, tabLayout: "sidebar" | "top", sidebarOpen: boolean, sidebarRight: boolean) {
   const strip = tabLayout === "top" && sidebarOpen;
+
   return {
     clearTrafficLights: leading && tabLayout === "sidebar" && !strip && (!sidebarOpen || sidebarRight),
     captionEnd: trailing && !strip && (!sidebarOpen || !sidebarRight),
@@ -164,5 +181,6 @@ export function paneButtonClearance(leading: boolean, trailing: boolean, tabLayo
 /** Sidebar header room only at its outer window edge. */
 export function sidebarButtonRoom(buttons: WindowButtonLayout, right: boolean) {
   const room = windowButtonRoom(buttons);
+
   return { left: right ? 0 : room.left, right: right ? room.right : 0 };
 }

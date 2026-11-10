@@ -7,13 +7,16 @@ export const GRAIN_TILE = 128;
 /** Dave Hoskins' hash12, the shader's grainHash. */
 export function grainHash(x: number, y: number): number {
   const fract = (v: number) => v - Math.floor(v);
+
   let p0 = fract(x * 0.1031),
     p1 = fract(y * 0.1031),
     p2 = fract(x * 0.1031);
+
   const d = p0 * (p1 + 33.33) + p1 * (p2 + 33.33) + p2 * (p0 + 33.33);
   p0 += d;
   p1 += d;
   p2 += d;
+
   return fract((p0 + p1) * p2);
 }
 
@@ -21,6 +24,7 @@ export function grainHash(x: number, y: number): number {
 export function grainInputs(opacity: number | undefined, scale: number | undefined, defaults: { opacity: number; scale: number }) {
   const o = Number.isFinite(opacity) ? opacity! : defaults.opacity;
   const s = Number.isFinite(scale) ? scale! : defaults.scale;
+
   return { opacity: Math.min(1, Math.max(0, o)), scale: Math.max(0.25, s) };
 }
 
@@ -28,15 +32,19 @@ export function grainInputs(opacity: number | undefined, scale: number | undefin
 export const grainPixel = (g: number) => ({ value: g < 0.5 ? 0 : 255, alpha: Math.round(Math.abs(g - 0.5) * 2 * 255) });
 
 let tile: string | null | undefined;
+
 /** A GRAIN_TILE-cell square of grainPixels, as a data URL; null without a DOM canvas. */
 export function grainTile(): string | null {
   if (tile !== undefined) return tile;
+
   try {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = GRAIN_TILE;
     const ctx = canvas.getContext("2d");
+
     if (!ctx) return (tile = null);
     const image = ctx.createImageData(GRAIN_TILE, GRAIN_TILE);
+
     for (let y = 0; y < GRAIN_TILE; y++)
       for (let x = 0; x < GRAIN_TILE; x++) {
         const { value, alpha } = grainPixel(grainHash(x, y));
@@ -44,10 +52,12 @@ export function grainTile(): string | null {
         image.data.fill(value, pixel, pixel + 3);
         image.data[pixel + 3] = alpha;
       }
+
     ctx.putImageData(image, 0, 0);
     tile = canvas.toDataURL("image/png");
   } catch {
     tile = null;
   }
+
   return tile;
 }

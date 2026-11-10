@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Session, Tab, PageLoadTimeout, WaitTimeout } from "../src/browser.ts";
 import { EndpointError } from "../src/endpoint.ts";
-import type { CdpListener } from "../src/cdp.ts";
+import type { CdpListener, CdpObject } from "../src/cdp.ts";
 
 function fixture() {
   const session = new Session({ ws: "ws://127.0.0.1:1/devtools/browser/test", source: "test", explicit: true, active: null });
@@ -9,19 +9,26 @@ function fixture() {
   const listeners = new Set<CdpListener>();
   session.cdp.addListener = (listener) => {
     listeners.add(listener);
+
     return () => {
       listeners.delete(listener);
     };
   };
-  session.cdp.send = async (method, params) => {
+
+  session.cdp.send = async (method: string, params?: CdpObject): Promise<CdpObject> => {
     if (method === "Target.attachToTarget") return { sessionId: "target-session" };
+
     if (method === "Page.navigate") emit("Page.loadEventFired", "unrelated-session");
+
     if (method === "Runtime.evaluate") return { result: { value: params?.expression === "document.visibilityState" ? "visible" : "loading" } };
+
     return {};
   };
+
   function emit(method: string, id = "target-session", params = {}) {
     for (const listener of listeners) listener(method, params, id);
   }
+
   return { session, tab, emit };
 }
 
@@ -53,9 +60,12 @@ describe("browser sessions", () => {
     const send = session.cdp.send;
     session.cdp.send = async (method, ...rest) => {
       sent.push(method);
+
       if (method === "Emulation.setFocusEmulationEnabled") throw new Error("refused by an older Bay");
+
       return send.call(session.cdp, method, ...rest);
     };
+
     await tab.send("Runtime.evaluate", { expression: "1" });
     expect(sent).not.toContain("Emulation.setFocusEmulationEnabled");
     await tab.pressKey("a");
@@ -68,6 +78,7 @@ describe("browser sessions", () => {
     session.cdp.open = async () => {
       throw new Error("connection refused");
     };
+
     await expect(session.connect()).rejects.toBeInstanceOf(EndpointError);
   });
   it("escapes both quote kinds in a text selector", async () => {
@@ -75,8 +86,11 @@ describe("browser sessions", () => {
     let expression = "";
     tab.evaluate = async <T>(source: string) => {
       expression = source;
+
+      // SAFETY: Tab.find's query requests a boolean from evaluate; the stub returns true for that T to capture the expression.
       return true as T;
     };
+
     await tab.find({ text: `both "double" and 'single' quotes` });
     const literal = `concat('both "double" and ', "'", 'single', "'", ' quotes')`;
     expect(expression).toContain(JSON.stringify(literal).slice(1, -1));
@@ -86,8 +100,11 @@ describe("browser sessions", () => {
     const expressions: string[] = [];
     tab.evaluate = async <T>(source: string) => {
       expressions.push(source);
+
+      // SAFETY: Tab.find's query requests a boolean from evaluate; the stub returns true for that T to capture the expression.
       return true as T;
     };
+
     await tab.find({ tagName: "button", dataTestid: "save", aria_label: "Save" });
     expect(expressions.join("\n")).toContain(JSON.stringify(`button[data-testid="save"][aria-label="Save"]`));
   });

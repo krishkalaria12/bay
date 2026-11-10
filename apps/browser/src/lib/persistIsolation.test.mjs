@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const stub = await import("../test-native-stub.mjs");
 const { useBrowser } = await import("../store/browserStore.ts");
 const { loadSession, startPersistence } = await import("./persist.ts");
@@ -58,6 +59,7 @@ test("legacy cache migrations retain shared data only in the original owner", ()
 
 test("a pre-space session retains tabs, parked pins, native directories and saved preferences", () => {
   stub.docs.clear();
+
   const snapshot = {
     profileId: "work",
     url: "https://saved.example/",
@@ -70,6 +72,7 @@ test("a pre-space session retains tabs, parked pins, native directories and save
     customIcon: null,
     pinnedUrl: null,
   };
+
   const original = JSON.stringify({
     ...legacy(),
     profiles: { work: { id: "work", name: "Work", color: "green", icon: null, createdAt: 1, dataId: "retained-engine" } },
@@ -101,8 +104,10 @@ test("a pre-space session retains tabs, parked pins, native directories and save
       },
     ],
   });
+
   stub.docs.set("session.json", original);
   const stop = startPersistence();
+
   try {
     const state = useBrowser.getState();
     assert.equal(state.tabs.tab.url, "https://saved.example/");
@@ -135,6 +140,7 @@ test("current settings take precedence over legacy names and SmallYahu preferenc
   assert.equal(old.openLinksInLittleBay, true);
   assert.deepEqual(old.littleBaySize, [800, 600]);
   assert.deepEqual(old.shortcuts, { newLittleBay: ["cmd+n"] });
+
   const current = restoreSettings({
     defaultSpaceId: "current",
     defaultProfileId: "old",
@@ -144,6 +150,7 @@ test("current settings take precedence over legacy names and SmallYahu preferenc
     harborSize: [800, 600],
     shortcuts: { newLittleBay: ["cmd+t"], newHarbor: ["cmd+n"] },
   });
+
   assert.equal(current.defaultSpaceId, "current");
   assert.equal(current.openLinksInLittleBay, false);
   assert.deepEqual(current.littleBaySize, [900, 700]);
@@ -157,6 +164,7 @@ test("explicit shared sign-ins from dataId sessions remain shared after the rena
   saved.profiles.work.dataId = "default";
   stub.docs.set("session.json", JSON.stringify(saved));
   const stop = startPersistence();
+
   try {
     assert.equal(engineProfile("work"), engineProfile("default"));
     assert.equal(useBrowser.getState().spaces.work.sharesSignIns, true);

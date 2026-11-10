@@ -1,8 +1,11 @@
 // The native calls alone. webNativeViews uses them while nativeViews is still loading, so nothing here may need a view.
+import type { JsonObject } from "./json.ts";
 import { requireNativeModule } from "@bay/platform/native";
 
 export type LocalFileDescriptor = { path: string; name: string; kind: "file" | "folder" };
+
 export type LocalFileStatus = "available" | "missing" | "inaccessible";
+
 export type LocalFileAccess = {
   status: LocalFileStatus;
   path?: string;
@@ -11,7 +14,9 @@ export type LocalFileAccess = {
   url?: string;
   browserReadable?: boolean;
 };
+
 export type LocalFileEntry = LocalFileDescriptor & { relativePath: string };
+
 export type LocalFileListing = { access: LocalFileAccess; entries: LocalFileEntry[] };
 
 const Native = () =>
@@ -24,8 +29,10 @@ const Native = () =>
     acceptDrop?(): Promise<{ files: LocalFileDescriptor[]; errors: string[] }>;
     // The Chrome-hosted desktop: `relative` names a granted pin's file, null a download's own path.
     startDrag?(path: string, relative: string | null): Promise<{ started: boolean; operation: "none" | "copy" | "link"; error?: string }>;
-    devDrop?(windowId: string, paths: string[]): Promise<Record<string, unknown>>;
-    devUpload?(windowId: string, rootPath: string, relativePath: string, x: number, y: number): Promise<Record<string, unknown>>;
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
+    devDrop?(windowId: string, paths: string[]): Promise<JsonObject>;
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- The table is a lookup by name, so its open shape is the point.
+    devUpload?(windowId: string, rootPath: string, relativePath: string, x: number, y: number): Promise<JsonObject>;
   }>("BayLocalFiles");
 
 /** Paths are metadata. Only a native Finder drop or file picker can grant access on this Mac. */

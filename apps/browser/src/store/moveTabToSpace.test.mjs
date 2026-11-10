@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 await import("../test-native-stub.mjs");
+
 const { useBrowser } = await import("./browserStore.ts");
 const { dropTabsOutside } = await import("../components/window/windowDrop.ts");
 
@@ -14,6 +16,7 @@ function twoSpaces() {
   const staying = S().newTab(left, { url: "https://a2.example", background: true });
   const space = S().createSpace({ name: "Right" });
   const right = S().createWindow({ spaceId: space, url: "https://b1.example", frame: [1000, 0, 400, 400] });
+
   return { left, right, space, moving, staying, home: S().windows[left].spaceId };
 }
 

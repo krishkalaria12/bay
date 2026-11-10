@@ -40,6 +40,7 @@ test("Hermes stacks keep function and bundle names, not the dev host, query or d
     "    at apply (native)",
     "    at ?anon_0_ (index.bundle:1:2)",
   ].join("\n");
+
   const frames = parseStack(stack);
   const json = JSON.stringify(frames);
   assert.deepEqual(leaks(json, "localhost", "8081", "platform=macos", "alice", "DerivedData", "Users"), []);
@@ -50,6 +51,7 @@ test("Hermes stacks keep function and bundle names, not the dev host, query or d
   assert.equal(frames.at(-2).filename, "main.jsbundle");
   assert.equal(frames.at(-3).filename, "native");
   assert.equal(frames.at(-3).in_app, false);
+
   for (const f of frames) assert.equal(f.platform, "custom");
 });
 
@@ -65,6 +67,7 @@ test("event properties are flat, plain and scrubbed", () => {
     list: ["a"],
     "bad key": 1,
   });
+
   assert.deepEqual(out, { kind: "history", count: 3, ok: true, none: null, url: "<url>" });
 });
 
@@ -83,6 +86,7 @@ test("an uncaught NSException sends its name and throw site first, never its rea
       { image: "BayShell", symbol: "TabStrip.select(_:)" },
     ],
   });
+
   assert.equal(name, "NSRangeException");
   assert.equal(signal, "SIGTRAP");
   assert.deepEqual(

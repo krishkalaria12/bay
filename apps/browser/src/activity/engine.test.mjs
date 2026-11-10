@@ -3,9 +3,13 @@ import { registerHooks } from "node:module";
 import { test } from "node:test";
 
 globalThis.__DEV__ = false;
+
 const listeners = new Set();
+
 globalThis.liveEngineWindowListeners = listeners;
+
 const stub = new URL("../test-native-stub.mjs", import.meta.url).href;
+
 const shell = `export * from ${JSON.stringify(stub)};
 export const onWindowEvent = (listener) => {
   if (globalThis.liveEngineWindowListenerError) throw globalThis.liveEngineWindowListenerError;
@@ -13,24 +17,30 @@ export const onWindowEvent = (listener) => {
   listeners.add(listener);
   return { remove: () => listeners.delete(listener) };
 };`;
+
 registerHooks({
   resolve(specifier, context, next) {
     return specifier === "@bay/desktop" ? { url: `data:text/javascript,${encodeURIComponent(shell)}`, shortCircuit: true } : next(specifier, context);
   },
 });
+
 const { createBrowserStore, useBrowser } = await import("../store/browserStore.ts");
 const { refreshFolder, startLiveEngine } = await import("./activityEngine.ts");
 const { createFolder, live, setLive } = await import("./activityStore.ts");
 const { SOURCES } = await import("./sources.ts");
 const { COMPLETION_MS } = await import("./constants.ts");
 const tick = () => new Promise(setImmediate);
+
 const deferred = () => {
   let resolve;
+
   const promise = new Promise((done) => {
     resolve = done;
   });
+
   return { promise, resolve };
 };
+
 const item = (id) => ({ id, source: "github", title: id, url: `https://example.com/${id}`, subtitle: "", icon: null, updatedAt: 1 });
 
 function setup(context) {
@@ -46,6 +56,7 @@ function setup(context) {
     startLiveEngine(browser)();
     context.mock.timers.reset();
   });
+
   return { browser, folderId };
 }
 
@@ -75,8 +86,10 @@ test("live disposal removes timers and watchers and uses the coordinator browser
 
 test("live results after disposal cannot overwrite a restarted fetch or clear its inflight entry", async (context) => {
   const { browser, folderId } = setup(context);
+
   const old = deferred(),
     current = deferred();
+
   SOURCES.github.fetch.mock.mockImplementation(() => old.promise);
   const stop = startLiveEngine(browser);
   const previous = refreshFolder(folderId);
@@ -146,12 +159,17 @@ for (const failure of ["native registration", "later subscription"]) {
     const error = new Error("registration failed");
     const subscribe = browser.subscribe;
     let subscriptions = 0;
+
     const browserSubscribe = context.mock.method(browser, "subscribe", (...args) => {
       subscriptions++;
+
       if (failure === "later subscription" && subscriptions === 2) throw error;
+
       return subscribe(...args);
     });
+
     if (failure === "native registration") globalThis.liveEngineWindowListenerError = error;
+
     try {
       assert.throws(
         () => startLiveEngine(browser),
@@ -161,6 +179,7 @@ for (const failure of ["native registration", "later subscription"]) {
       globalThis.liveEngineWindowListenerError = undefined;
       browserSubscribe.mock.restore();
     }
+
     assert.equal(listeners.size, 0);
     context.mock.timers.tick(60_000);
     await tick();

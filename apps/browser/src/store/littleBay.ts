@@ -23,17 +23,20 @@ export function mainWindowFor(s: BrowserState, spaceId?: string): string | undef
 export function mainWindowFor(s: ReadonlySmallState, spaceId?: string): string | undefined;
 export function mainWindowFor(s: BrowserState | ReadonlySmallState, spaceId?: string): string | undefined {
   const order = [...new Set([...s.ui.focusOrder, ...s.windowOrder])].filter((id) => isMain(s.windows[id]));
+
   return (spaceId ? order.find((id) => s.windows[id]!.spaceId === spaceId) : undefined) ?? order[0];
 }
 
 // A new Little Bay uses the profile the frontmost main window shows, else the default profile.
 export function littleBayProfile(s: BrowserState | ReadonlySmallState): string {
   const main = mainWindowFor(s);
+
   return main ? s.windows[main]!.spaceId : s.settings.defaultSpaceId;
 }
 
 // Utility windows, Little Bay and private windows never change the most recent regular Space.
 export function mostRecentSpace(s: BrowserState | ReadonlySmallState): string {
   const main = mainWindowFor(s);
+
   return main ? s.windows[main]!.spaceId : s.settings.defaultSpaceId;
 }

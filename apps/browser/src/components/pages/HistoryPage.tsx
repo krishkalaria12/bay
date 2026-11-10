@@ -1,3 +1,4 @@
+import { checked } from "../../lib/checked";
 import { Pressable, View } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { confirm, ContextMenuArea, copyText, MouseArea, showMenu, Symbol } from "@bay/desktop";
@@ -5,9 +6,12 @@ import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
+
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { DeepReadonly } from "../../runtime/projection";
+
 type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
+
 import { openModeFor, openUrl } from "../bookmarks/actions";
 import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { Button, Checkbox, useFormColors } from "../settings/controls";
@@ -18,6 +22,9 @@ import { NO_HISTORY } from "../../store/constants";
 import { useResetOn } from "../../lib/useResetOn";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { removeHistory } from "../../runtime/bookmarkActions";
+
+/** The press modifiers a row reads: the platform's own event fields. */
+type ClickMods = { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
 
 type Item = { type: "day"; key: string; label: string } | { type: "row"; key: string; entry: HistoryEntry; first: boolean; last: boolean };
 
@@ -32,10 +39,12 @@ function listItems(history: readonly HistoryEntry[], query: string): Item[] {
   const matches = history.filter((h) => matchesQuery(query, h.title, h.url));
   matches.forEach((entry, i) => {
     const start = dayStart(entry.lastVisit);
+
     if (start !== day) {
       day = start;
       out.push({ type: "day", key: `d${start}`, label: dayLabel(start) });
     }
+
     const next = matches[i + 1];
     out.push({
       type: "row",
@@ -45,6 +54,7 @@ function listItems(history: readonly HistoryEntry[], query: string): Item[] {
       last: !next || dayStart(next.lastVisit) !== start,
     });
   });
+
   return out;
 }
 
@@ -76,11 +86,13 @@ export function HistoryPage({ tabId, spaceId, initialQuery }: { tabId: string; s
   const toggle = (url: string, shift: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev);
+
       if (shift && lastClicked.current && rowUrls.includes(lastClicked.current)) {
         const [a, b] = [rowUrls.indexOf(lastClicked.current), rowUrls.indexOf(url)].sort((x, y) => x - y);
         rowUrls.slice(a!, b! + 1).forEach((u) => next.add(u));
       } else if (next.has(url)) next.delete(url);
       else next.add(url);
+
       return next;
     });
     lastClicked.current = url;
@@ -94,6 +106,7 @@ export function HistoryPage({ tabId, spaceId, initialQuery }: { tabId: string; s
       destructive: true,
       windowId,
     });
+
     if (!confirmed) return;
     reportBrowserCommand(removeHistory(spaceId, [...selected]));
     setSelected(new Set());
@@ -191,6 +204,7 @@ function HistoryRow({
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
+
   const menu = async () => {
     const choice = await showMenu([
       { id: "tab", title: "Open in New Tab" },
@@ -202,14 +216,22 @@ function HistoryRow({
       { separator: true },
       { id: "remove", title: "Remove from History" },
     ]);
+
     if (choice === "tab") openUrl(entry.url, windowId, "foreground");
+
     if (choice === "window") openUrl(entry.url, windowId, "window");
+
     if (choice === "incognito") openUrl(entry.url, windowId, "incognito");
+
     if (choice === "copy") copyText(cleanUrl(entry.url));
+
     if (choice === "more") onMoreFromSite();
+
     if (choice === "remove") onRemove();
   };
+
   const r = 10;
+
   return (
     <View
       {...hoverProps}
@@ -243,7 +265,9 @@ function HistoryRow({
           <MouseArea style={{ flex: 1 }} onMiddleClick={() => openUrl(entry.url, windowId, "background")}>
             <Pressable
               onPress={(e) => {
-                const ev = e.nativeEvent as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+                // SAFETY: the checks above established this shape.
+                const ev = checked<ClickMods>(e.nativeEvent);
+
                 if (selecting) return onToggle(!!ev.shiftKey);
                 openUrl(entry.url, windowId, openModeFor(ev));
               }}

@@ -7,12 +7,15 @@ export function useFileExists(path: string | undefined, enabled = true): boolean
 
   useEffect(() => {
     let live = true;
+
     if (!enabled || !path) {
       setResult(null);
+
       return () => {
         live = false;
       };
     }
+
     setResult(null);
     void fileExists(path).then(
       (value) => {
@@ -22,6 +25,7 @@ export function useFileExists(path: string | undefined, enabled = true): boolean
         if (live) setResult(null);
       },
     );
+
     return () => {
       live = false;
     };

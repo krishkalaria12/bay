@@ -6,6 +6,7 @@ import { nodeTag } from "../../lib/nodeTag";
  *  the change through onChangeText). Null when the field can't take it. */
 export function writeInline(input: TextInput | null, typed: string, completion: string): Promise<InlineWrite> | null {
   const tag = nodeTag(input);
+
   return tag == null ? null : completeInline(tag, typed, completion);
 }
 

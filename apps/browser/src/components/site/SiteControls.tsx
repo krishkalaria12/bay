@@ -1,6 +1,7 @@
 import * as settingsCommands from "../../runtime/settingsActions";
 import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
+import * as v from "valibot";
 import { useShallow } from "zustand/react/shallow";
 import {
   getContentBlocker,
@@ -11,7 +12,6 @@ import {
   setSiteSetting,
   setWebKitSiteSetting,
   WEBKIT_SITE_SETTINGS,
-  type PageEngine,
   type SecurityInfo,
   type SiteSettingType,
   type SiteSettingValue,
@@ -28,9 +28,9 @@ import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
-import { bookmarkSpaceId, engineProfile, isIncognitoSpace, tabLabel } from "../../store/model";
-import { canSwitchEngine, defaultEngine, ENGINE_NAMES, engineForUrl, otherEngine, recommendedEngineFor, ruleFor, tabEngine } from "../../store/engines";
-import { openPageIn, setWebsiteEngine, togglePageEngine } from "../../lib/pageEngines";
+import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
+import { protectedVideoSite, tabEngine } from "../../store/engines";
+import { openSettings } from "../settings/windows";
 import { Favicon, useHover } from "../ui/primitives";
 import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../toolbar/buttons";
 import { toggleDeveloperMode } from "../developer/devMode";
@@ -67,6 +67,7 @@ const choiceTitle = (type: SiteSettingType, value: SiteSettingValue) =>
 function originOf(url: string): string | null {
   try {
     const u = new URL(url);
+
     return u.protocol === "http:" || u.protocol === "https:" ? u.origin : null;
   } catch {
     return null;
@@ -106,10 +107,13 @@ export function SiteControls({
   const bookmarked = useIsBookmarked(url);
   const extensions = useWindowExtensions(tab?.windowId ?? "");
   const translate = useTranslateState(tabId);
+
   const browserId = usePages((p) => {
     for (const [id, page] of Object.entries(p.browsers)) if (page === tabId) return Number(id);
+
     return 0;
   });
+
   const actions = useExtensions((e) => e.actions[browserId]);
   const origin = originOf(url);
   const host = origin ? new URL(origin).hostname : "";
@@ -126,9 +130,6 @@ export function SiteControls({
   const webkitPage = pageEngine === "webkit";
   const permissions = webkitPage ? PERMISSIONS.filter((p) => WEBKIT_SITE_SETTINGS.includes(p.type)) : PERMISSIONS;
   const readSettings = webkitPage ? getWebKitSiteSettings : getSiteSettings;
-  const engineRule = useBrowser((s) => ruleFor(s, url));
-  const recommended = useBrowser((s) => recommendedEngineFor(s, url));
-  const usesDefault = useBrowser((s) => recommendedEngineFor(s, url) === defaultEngine(s));
 
   useEffect(() => {
     if (!origin) return;
@@ -140,6 +141,7 @@ export function SiteControls({
       .get(tabId)
       ?.getSecurityInfo()
       .then((info) => live && info && patchPage(tabId, { security: info }));
+
     return () => {
       live = false;
     };
@@ -151,31 +153,42 @@ export function SiteControls({
     if (!origin) return;
     await (webkitPage ? setWebKitSiteSetting : setSiteSetting)(profile, origin, type, value);
     setSettings(await readSettings(profile, origin));
+
     if (type === "sound") {
       await setMuted([tabId], value === "block");
       void webviews.get(tabId)?.setMuted(value === "block");
     }
   };
+
   const pickPermission = async (type: SiteSettingType, choices: SiteSettingValue[]) => {
     const current = settings?.[type]?.value;
     const choice = await showMenu(choices.map((v) => ({ id: v, title: choiceTitle(type, v), checked: v === current })));
-    if (choice) void setPermission(type, choice as SiteSettingValue);
+
+    if (choice) {
+      // SAFETY: choice is the id of a menu item built from choices (SiteSettingValue[]).
+      void setPermission(type, choice as SiteSettingValue);
+    }
   };
+
   const toggleBlocker = async (on: boolean) => {
     // A change that fails changed nothing: the toggle shows what the blocker has, and the window says so.
     const failed = await setContentBlockerAllowed(host, !on).then(
       () => false,
       () => true,
     );
+
     const allowed = await isContentBlockerAllowed(host);
     setBlocker((b) => (b ? { ...b, allowed } : b));
+
     if (failed)
       return showToast(tab.windowId, "Couldn't Change the Ad Blocker", `Blocking on ${host} is as it was. Try again.`, { icon: "exclamationmark.triangle" });
     // Reload: blocking changes affect new requests only.
     void webviews.get(tabId)?.reload();
   };
+
   const clearData = async () => {
     if (!origin) return;
+
     const { confirmed } = await confirm({
       title: `Clear cookies and site data for ${host}?`,
       message: "You'll be signed out of this site, and its offline data will be deleted.",
@@ -183,34 +196,14 @@ export function SiteControls({
       destructive: true,
       windowId: tab.windowId,
     });
+
     if (!confirmed) return;
     const result = await webviews.get(tabId)?.clearSiteData();
-    const n = result && typeof result.cookies === "number" ? result.cookies : 0;
+    const n = result && v.is(v.number(), result.cookies) ? result.cookies : 0;
     setCleared(n ? `Cleared ${n} cookie${n === 1 ? "" : "s"} and site data` : "Cleared site data");
     void webviews.get(tabId)?.reload();
   };
-  // Which engine the site opens in: a website rule, else the recommended one (WebKit for streaming sites). A private
-  // window's choice moves this page only.
-  const privatePage = isIncognitoSpace(tab.spaceId);
-  const recommendedTitle = `${usesDefault ? "Default" : "Recommended"} (${ENGINE_NAMES[recommended]})`;
-  const opensIn = privatePage ? ENGINE_NAMES[pageEngine] : engineRule ? ENGINE_NAMES[engineRule] : recommendedTitle;
-  const pickEngine = async () => {
-    const checked = (engine: PageEngine) => (privatePage ? pageEngine === engine : engineRule === engine);
-    const choice = await showMenu([
-      ...(privatePage ? [] : [{ id: "default", title: recommendedTitle, checked: !engineRule }, { separator: true as const }]),
-      { id: "chromium", title: ENGINE_NAMES.chromium, checked: checked("chromium") },
-      { id: "webkit", title: ENGINE_NAMES.webkit, checked: checked("webkit") },
-    ]);
-    if (!choice) return;
-    close();
-    if (choice === "default") {
-      setWebsiteEngine(url, null);
-      void openPageIn(tabId, engineForUrl(useBrowser.getState(), url));
-    } else {
-      const engine: PageEngine = choice === "webkit" ? "webkit" : "chromium";
-      void openPageIn(tabId, engine, { rule: engine });
-    }
-  };
+
   const copyClean = () => {
     copyText(cleanUrl(url));
     setCopied(true);
@@ -219,13 +212,9 @@ export function SiteControls({
 
   const more = async () => {
     const items: MenuItem[] = [];
+
     if (origin) items.push({ id: "clear", title: `Clear Cookies and Data for ${displayHost(host)}…`, symbol: "trash" });
-    if (origin && canSwitchEngine(url))
-      items.push({
-        id: "engine",
-        title: `Open Page in ${ENGINE_NAMES[otherEngine(pageEngine)]}`,
-        symbol: otherEngine(pageEngine) === "webkit" ? "safari" : "globe",
-      });
+
     if (origin && translation && (translate.source || translate.status !== "idle")) {
       items.push({
         id: "translate",
@@ -233,6 +222,7 @@ export function SiteControls({
         symbol: "translate",
       });
     }
+
     items.push(
       { id: "markdown", title: "Copy Markdown Link", symbol: "link" },
       { id: "captureFullPage", title: "Capture Full Page", symbol: "camera" },
@@ -245,11 +235,9 @@ export function SiteControls({
       { id: "settings", title: "All Site Settings…", checked: detailsOpen },
     );
     const choice = await showMenu(items);
+
     if (choice === "clear") void clearData();
-    else if (choice === "engine") {
-      close();
-      void togglePageEngine(tabId);
-    } else if (choice === "translate") {
+    else if (choice === "translate") {
       close();
       toggleTranslation(tabId);
     } else if (choice === "captureFullPage") {
@@ -263,11 +251,13 @@ export function SiteControls({
       showToast(tab.windowId, "Copied Markdown Link", undefined, { icon: "link" });
     } else if (choice === "manage" || choice === "store" || choice === "unpacked") {
       close();
+
       if (choice === "manage") openManageExtensions();
       else if (choice === "store") openWebStore(tab.windowId);
       else void loadUnpacked(tab.windowId);
     } else if (choice === "settings") setDetailsOpen((open) => !open);
   };
+
   const tileWidth = Math.floor((width - 49) / 5);
   const secure = security?.level === "secure";
   const local = !security || security.level === "none" || security.level === "local";
@@ -324,33 +314,53 @@ export function SiteControls({
               <ActionTile icon="plus.magnifyingglass" title="Zoom and Site Settings" onPress={() => setDetailsOpen((open) => !open)} />
             </View>
 
-            <View
-              style={{ paddingHorizontal: 14, paddingTop: 17, paddingBottom: 9, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Extensions</Text>
-              <Pressable
-                onPress={() => {
+            {webkitPage ? (
+              <ProtectedMedia
+                url={url}
+                host={host}
+                onLearnMore={() => {
                   close();
-                  openManageExtensions();
-                }}
-              >
-                <Text style={{ fontSize: 12, color: theme.textSecondary }}>Manage</Text>
-              </Pressable>
-            </View>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7, paddingHorizontal: 10 }}>
-              {extensions.map((ext) => (
-                <ExtensionTile key={ext.id} ext={ext} state={actions?.[ext.id]} windowId={tab.windowId} width={tileWidth} onClose={close} />
-              ))}
-              <ActionTile
-                icon="plus"
-                title="Add Extension"
-                width={tileWidth}
-                onPress={() => {
-                  close();
-                  openWebStore(tab.windowId);
+                  openSettings("engines");
                 }}
               />
-            </View>
+            ) : (
+              <>
+                <View
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingTop: 17,
+                    paddingBottom: 9,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Extensions</Text>
+                  <Pressable
+                    onPress={() => {
+                      close();
+                      openManageExtensions();
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, color: theme.textSecondary }}>Manage</Text>
+                  </Pressable>
+                </View>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7, paddingHorizontal: 10 }}>
+                  {extensions.map((ext) => (
+                    <ExtensionTile key={ext.id} ext={ext} state={actions?.[ext.id]} windowId={tab.windowId} width={tileWidth} onClose={close} />
+                  ))}
+                  <ActionTile
+                    icon="plus"
+                    title="Add Extension"
+                    width={tileWidth}
+                    onPress={() => {
+                      close();
+                      openWebStore(tab.windowId);
+                    }}
+                  />
+                </View>
+              </>
+            )}
 
             {origin ? (
               <>
@@ -375,13 +385,6 @@ export function SiteControls({
                   }
                   accessory={blocker?.enabled && !webkitPage ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
                 />
-                {canSwitchEngine(url) ? (
-                  <PopoverRow
-                    icon={webkitPage ? "safari" : "globe"}
-                    title="Opens in"
-                    accessory={<ValueButton title={opensIn} onPress={() => void pickEngine()} />}
-                  />
-                ) : null}
                 <PopoverRow
                   icon="chevron.left.forwardslash.chevron.right"
                   title="Developer Mode"
@@ -440,6 +443,7 @@ export function SiteControls({
                 title="Cast…"
                 onPress={() => {
                   close();
+
                   if (tab) void toggleCastPicker(tab.windowId);
                 }}
               />
@@ -507,6 +511,31 @@ export function SiteControls({
   );
 }
 
+// Why a WebKit page has no extensions or DevTools. Bay chose the engine (store/engines.ts), so this explains; it offers
+// no switch.
+function ProtectedMedia({ url, host, onLearnMore }: { url: string; host: string; onLearnMore: () => void }) {
+  const theme = useTheme();
+
+  const why = protectedVideoSite(url)
+    ? `${displayHost(host).replace(/^www\./, "")} plays with Safari's engine, which has the DRM it needs.`
+    : "This page runs in Safari's engine, which has the DRM protected media needs.";
+
+  return (
+    <>
+      <Text style={{ paddingHorizontal: 14, paddingTop: 17, paddingBottom: 5, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>
+        Protected Media
+      </Text>
+      <Text style={{ paddingHorizontal: 14, paddingBottom: 5, fontSize: 13, lineHeight: 18, color: theme.textPrimary }}>{why} Here, that means:</Text>
+      <PopoverRow icon="person.crop.circle" title="You sign in here once" />
+      <PopoverRow icon="puzzlepiece.extension" title="Extensions don't run here" />
+      <PopoverRow icon="hammer" title="DevTools don't open here" />
+      <Pressable onPress={onLearnMore} accessibilityRole="link" style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingTop: 5 }}>
+        <Text style={{ fontSize: 12, color: theme.textSecondary }}>Learn more</Text>
+      </Pressable>
+    </>
+  );
+}
+
 // Arc's Boosts in Site Controls: the site's Boosts, each switched on or off here (a click opens it in the editor),
 // and a new one.
 function BoostRows({ tabId, url }: { tabId: string; url: string }) {
@@ -514,7 +543,9 @@ function BoostRows({ tabId, url }: { tabId: string; url: string }) {
   const host = boostHost(url);
   const boosts = useBoosts(useShallow((s) => (host ? boostsForHost(s, host) : NO_BOOSTS)));
   const on = useBoosts((s) => s.on);
+
   if (!host || !boostsAvailable()) return null;
+
   return (
     <>
       <Text style={{ paddingHorizontal: 14, paddingTop: 13, paddingBottom: 5, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Boosts</Text>
@@ -560,6 +591,7 @@ function ActionTile({
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View tooltip={title} {...hoverProps} style={width === undefined ? { flex: 1 } : { width }}>
       <Pressable onPress={onPress} disabled={disabled} accessibilityLabel={title} accessibilityRole="button">
@@ -598,6 +630,7 @@ function ExtensionTile({
   const theme = useTheme();
   const ref = useRef<View>(null);
   const icon = state?.icon || ext.actionIcon || ext.icon;
+
   const open = () => {
     ref.current?.measureInWindow((x, y, measuredWidth, height) => {
       const anchor: Anchor = { x, y, width: measuredWidth, height };
@@ -605,6 +638,7 @@ function ExtensionTile({
       void activateExtension(windowId, ext, anchor, state);
     });
   };
+
   return (
     <View ref={ref} style={{ width }}>
       <ActionTile title={state?.title || ext.actionTitle || ext.name} width={width} onPress={open}>
@@ -634,6 +668,7 @@ function ConnectionRow({ security, open, onToggle }: { security: SecurityInfo | 
   const secure = level === "secure";
   const local = level === "local" || level === "none";
   const title = secure ? "Connection is secure" : local ? "This is a local or internal page" : "Connection is not secure";
+
   const detail =
     level === "certificateError"
       ? "The site's certificate isn't valid. Don't enter passwords or payment details."
@@ -644,6 +679,7 @@ function ConnectionRow({ security, open, onToggle }: { security: SecurityInfo | 
           : secure && security?.certificate
             ? `Certificate issued by ${security.certificate.issuer.organizations[0] || security.certificate.issuer.commonName}`
             : undefined;
+
   return (
     <PopoverRow
       icon={secure ? "lock.fill" : local ? "info.circle" : "lock.open.trianglebadge.exclamationmark.fill"}
@@ -664,15 +700,19 @@ function CertificateDetails({ security }: { security: SecurityInfo }) {
   const theme = useTheme();
   const cert = security.certificate!;
   const date = (ms: number) => new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+
   const rows: [string, string][] = [
     ["Issued to", cert.subject.commonName || cert.subject.displayName],
     ["Organization", cert.subject.organizations.join(", ") || "—"],
     ["Issued by", cert.issuer.commonName || cert.issuer.displayName],
     ["Valid from", date(cert.validFrom)],
     ["Expires", date(cert.validUntil)],
-    ...(security.protocol ? [["Protocol", security.protocol] as [string, string]] : []),
-    ...(cert.sha256 ? [["SHA-256", cert.sha256.replace(/(.{2})(?!$)/g, "$1 ").slice(0, 47) + "…"] as [string, string]] : []),
   ];
+
+  if (security.protocol) rows.push(["Protocol", security.protocol]);
+
+  if (cert.sha256) rows.push(["SHA-256", cert.sha256.replace(/(.{2})(?!$)/g, "$1 ").slice(0, 47) + "…"]);
+
   return (
     <View
       style={{
@@ -704,6 +744,7 @@ function ZoomRow({ tabId, zoom }: { tabId: string; zoom: number }) {
 function ValueButton({ title, onPress }: { title: string; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>

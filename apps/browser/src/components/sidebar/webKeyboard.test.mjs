@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { holdsTyping, startWebSidebarKeyboard } = await import("./webKeyboard.ts");
 
 class Element {
@@ -11,6 +12,7 @@ class Element {
   focus() {
     const previous = doc.activeElement;
     doc.activeElement = this;
+
     if (previous !== this) doc.dispatch("focusin", { target: this });
   }
   blur() {
@@ -20,6 +22,7 @@ class Element {
     this.removed = true;
   }
 }
+
 const doc = {
   activeElement: null,
   listeners: {},
@@ -35,11 +38,14 @@ const doc = {
     this.listeners[type]?.(event);
   },
 };
+
 const key = (name, mods = {}) => {
   const event = { key: name, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, defaultPrevented: false, ...mods };
   event.preventDefault = () => (event.defaultPrevented = true);
   event.stopPropagation = () => {};
+
   doc.dispatch("keydown", event);
+
   return event.defaultPrevented;
 };
 
@@ -47,6 +53,7 @@ const setup = () => {
   doc.activeElement = null;
   const calls = [];
   const state = { active: false, undo: 0 };
+
   const keyboard = startWebSidebarKeyboard(
     {
       active: () => state.active,
@@ -60,6 +67,7 @@ const setup = () => {
     },
     { document: doc },
   );
+
   return { calls, state, keyboard };
 };
 
@@ -68,6 +76,7 @@ test("focus on the sidebar takes the keys macOS's responder took, and nothing wi
   assert.equal(key("ArrowDown"), false, "nothing before the sidebar has focus");
   state.active = true;
   keyboard.changed(true);
+
   for (const name of ["ArrowDown", "ArrowUp", "Enter", " ", "Backspace", "Home", "End", "Escape"]) assert.equal(key(name), true, name);
   assert.equal(key("ArrowDown", { shiftKey: true }), false);
   assert.equal(key("a"), false);
@@ -117,5 +126,6 @@ test("typing is a field, an editor or a page", () => {
   assert.equal(holdsTyping(null), false);
   assert.equal(holdsTyping({ tagName: "DIV" }), false);
   assert.equal(holdsTyping({ tagName: "DIV", isContentEditable: true }), true);
+
   for (const tagName of ["INPUT", "TEXTAREA", "EMBED"]) assert.equal(holdsTyping({ tagName }), true);
 });

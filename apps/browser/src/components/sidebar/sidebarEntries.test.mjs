@@ -19,14 +19,19 @@ function fixture() {
   const root = S().newPinnedFolder(w, { name: "Root" });
   const child = S().newPinnedFolder(w, { name: "Child", parentId: root, tabIds: [leaf] });
   const empty = S().newPinnedFolder(w, { name: "Empty", beforeId: root });
+
   const a = add("a"),
     b = add("b");
+
   const group = S().createGroup([a, b]);
+
   const c = add("c"),
     d = add("d");
+
   const split = S().createSplit([c, d]);
   const second = S().createWindow({ url: "https://second.example" });
   S().activate(page, w);
+
   return { w, page, favorite, leaf, root, child, empty, a, b, group, c, d, split, second };
 }
 
@@ -41,36 +46,46 @@ function select(s, f, api = entries, activity = live()) {
 }
 
 let check = 0;
+
 // A separate module starts with empty selector caches. Compare the warm selectors to a fresh computation,
 // without duplicating their dependency fields or entry-building logic in the test.
 async function assertFresh(s, f, activity = live()) {
   const fresh = await import(`./sidebarEntries.ts?fresh=${++check}`);
   const actual = select(s, f, entries, activity);
   assert.deepEqual(actual, select(s, f, fresh, activity));
+
   return actual;
 }
 
 test("real metadata updates reuse entries and keyboard rows without scanning tabs or lists", () => {
   const f = fixture();
+
   let reads = 0,
     enumerations = 0;
+
   const sentinel = new Proxy(S().tabs[f.leaf], {
     get(target, key) {
       if (key === "spaceId" || key === "pinnedRow") reads++;
-      return Reflect.get(target, key);
+
+      // Fixture tab object has no getters; indexing forwards the stored properties.
+      return target[key];
     },
   });
+
   const tabs = new Proxy(
     { ...S().tabs, [f.leaf]: sentinel },
     {
       ownKeys(target) {
         enumerations++;
+
         return Reflect.ownKeys(target);
       },
     },
   );
+
   useBrowser.setState({ tabs });
   const before = select(S(), f);
+
   for (const patch of [
     { title: "New title" },
     { favicon: "new-icon" },
@@ -81,14 +96,17 @@ test("real metadata updates reuse entries and keyboard rows without scanning tab
     S().updateTab(f.page, patch);
     reads = enumerations = 0;
     const after = select(S(), f);
+
     for (const key of Object.keys(before)) assert.strictEqual(after[key], before[key], `${key} after ${Object.keys(patch)}`);
     assert.equal(reads, 0, "unchanged folder members must not be scanned again");
     assert.equal(enumerations, 0, "known updateTab deltas must not enumerate the prior tabs map");
   }
+
   for (const windowId of [f.w, f.second]) {
     S().setWindowFrame(windowId, [5, 10, 1200, 800]);
     reads = 0;
     const after = select(S(), f);
+
     for (const key of Object.keys(before)) assert.strictEqual(after[key], before[key], `${key} after window frame`);
     assert.equal(reads, 0);
   }
@@ -101,6 +119,7 @@ test("activation skips entry rebuilding while keyboard disclosure and numbered s
   const before = select(S(), f);
   S().activate(f.leaf, f.w);
   const leaf = select(S(), f);
+
   for (const key of ["main", "group", "root", "child"]) assert.strictEqual(leaf[key], before[key]);
   assert.ok(leaf.rows.some((row) => row.id === `t:${f.leaf}` && row.parentId === `f:${f.root}`));
   S().activate(f.a, f.w);
@@ -117,6 +136,7 @@ test("activation skips entry rebuilding while keyboard disclosure and numbered s
 test("warm caches preserve structural tab dependencies for arbitrary and back-and-forth snapshots", async () => {
   const f = fixture();
   const state = S();
+
   const patches = [
     [f.page, { pinned: true }],
     [f.page, { pinnedRow: true }],
@@ -127,6 +147,7 @@ test("warm caches preserve structural tab dependencies for arbitrary and back-an
     [f.c, { pinnedRow: true, folderId: f.root }],
     [f.page, { liveItem: { folderId: "feed", itemId: "one" } }],
   ];
+
   for (const [id, patch] of patches) {
     select(state, f);
     const next = { ...state, tabs: { ...state.tabs, [id]: { ...state.tabs[id], ...patch } } };
@@ -137,12 +158,14 @@ test("warm caches preserve structural tab dependencies for arbitrary and back-an
     await assertFresh(titled, f);
     await assertFresh(state, f);
   }
+
   for (const id of [f.page, f.leaf, f.c]) {
     const tabs = { ...state.tabs };
     delete tabs[id];
     await assertFresh({ ...state, tabs }, f);
     await assertFresh(state, f);
   }
+
   // An added tab already referenced by an arbitrary list must invalidate existence-dependent caches.
   const missing = { ...state, tabLists: { ...state.tabLists, default: [...state.tabLists.default, "added"] } };
   select(missing, f);
@@ -156,6 +179,7 @@ test("real pin, folder, group, split, move and hydrate actions retain fresh stru
   const f = fixture();
   const saved = S();
   select(saved, f);
+
   const actions = [
     () => S().pinTabs([f.page], true),
     () => S().pinTabs([f.page], false),
@@ -175,10 +199,12 @@ test("real pin, folder, group, split, move and hydrate actions retain fresh stru
     () => S().switchSpace(f.w, S().spaceOrder.at(-1)),
     () => S().hydrate(saved),
   ];
+
   for (const action of actions) {
     action();
     await assertFresh(S(), f);
   }
+
   // A real complete replacement has no known delta, even with reused window and group identities.
   useBrowser.setState({ ...saved, tabs: { ...saved.tabs, [f.favorite]: { ...saved.tabs[f.favorite], pinned: false } } }, true);
   assert.ok(!(await assertFresh(S(), f)).main.tiles.includes(f.favorite));
@@ -188,13 +214,16 @@ test("real pin, folder, group, split, move and hydrate actions retain fresh stru
 test("window identity, kind, shown space, privacy and other window kinds remain dependencies", async () => {
   const f = fixture();
   const state = S();
+
   const activity = {
     ...live(),
     folders: { feed: { id: "feed", kind: "documents", spaceId: "default", collapsed: false } },
     folderOrder: ["feed"],
     items: { feed: [{ id: "one", title: "One", url: "https://one.example", source: "drive" }] },
   };
+
   const small = { ...state.windows[f.w], kind: "small" };
+
   for (const windows of [
     {},
     { ...state.windows, [f.w]: { ...state.windows[f.w], spaceId: "other" } },
@@ -209,6 +238,7 @@ test("window identity, kind, shown space, privacy and other window kinds remain 
     await assertFresh(state, f, activity);
     assert.deepEqual(entries.sidebarEntries(next, f.w, "default"), (await import(`./sidebarEntries.ts?fresh=${++check}`)).sidebarEntries(next, f.w, "default"));
   }
+
   // activeTabId consults the active tab's owning window kind, including windows other than this selector's.
   const elsewhere = { ...state, tabs: { ...state.tabs, [f.page]: { ...state.tabs[f.page], windowId: f.second } } };
   select(elsewhere, f);
@@ -218,6 +248,7 @@ test("window identity, kind, shown space, privacy and other window kinds remain 
 test("live item membership changes invalidate rows even when the main entry IDs stay equal", async () => {
   const f = fixture();
   const item = (id) => ({ id, title: id, url: `https://${id}.example`, source: "drive" });
+
   const activity = {
     ...live(),
     folders: {
@@ -227,10 +258,13 @@ test("live item membership changes invalidate rows even when the main entry IDs 
     folderOrder: ["one", "two"],
     items: { one: [item("a"), item("b")], two: [item("a")] },
   };
+
   for (const liveItem of [{ folderId: "one", itemId: "a" }, { folderId: "one", itemId: "b" }, { folderId: "two", itemId: "a" }, undefined]) {
     S().updateTab(f.page, { liveItem });
     const result = await assertFresh(S(), f, activity);
+
     if (liveItem?.folderId === "one") assert.ok(result.rows.some((row) => row.id === `live|one|${liveItem.itemId}` && row.tabIds.includes(f.page)));
+
     if (!liveItem) assert.ok(result.main.list.includes(`t:${f.page}`));
   }
 });

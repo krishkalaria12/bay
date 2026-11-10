@@ -1,3 +1,4 @@
+import { lookup } from "@bay/core";
 import { fileExists } from "@bay/desktop";
 import type { ImageSourcePropType } from "react-native";
 
@@ -27,12 +28,13 @@ const CANDIDATES: { id: string; name: string; apps: string[] }[] = [
 export function detectBrowsers(): InstalledBrowser[] {
   return CANDIDATES.flatMap(({ id, name, apps }) => {
     const app = apps.map((a) => (a.startsWith("/") ? a : `/Applications/${a}`)).find(fileExists);
+
     return app ? [{ id, name, app }] : [];
   });
 }
 
 // Shown until the app's own icon comes back from the system.
-const BUNDLED: Record<string, ImageSourcePropType> = {
+const BUNDLED = {
   arc: require("../../../assets/browsers/arc.png"),
   dia: require("../../../assets/browsers/dia.png"),
   chrome: require("../../../assets/browsers/chrome.png"),
@@ -41,6 +43,12 @@ const BUNDLED: Record<string, ImageSourcePropType> = {
   firefox: require("../../../assets/browsers/firefox.png"),
   zen: require("../../../assets/browsers/zen.png"),
   safari: require("../../../assets/browsers/safari.png"),
+  opera: require("../../../assets/browsers/opera.png"),
+  operaGX: require("../../../assets/browsers/operaGX.png"),
+  vivaldi: require("../../../assets/browsers/vivaldi.png"),
+  chromium: require("../../../assets/browsers/chromium.png"),
+  helium: require("../../../assets/browsers/helium.png"),
+  island: require("../../../assets/browsers/island.png"),
 };
 
-export const bundledBrowserIcon = (id: string): ImageSourcePropType | null => BUNDLED[id] ?? null;
+export const bundledBrowserIcon = (id: string): ImageSourcePropType | null => lookup(BUNDLED, id) ?? null;

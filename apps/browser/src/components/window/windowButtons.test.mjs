@@ -8,11 +8,13 @@ if (!process.env.BAY_WINDOW_BUTTONS_CHILD) {
     test(`${platform} caption geometry`, () => {
       const env = { ...process.env, BAY_WINDOW_BUTTONS_CHILD: "1", BAY_TEST_PLATFORM: platform };
       delete env.NODE_TEST_CONTEXT;
+
       const output = execFileSync(
         process.execPath,
         ["--no-warnings", "--import", "./src/test-loader.mjs", "--test", "src/components/window/windowButtons.test.mjs"],
         { cwd: new URL("../../../", import.meta.url), env, encoding: "utf8" },
       );
+
       assert.match(output, /fail 0\n/);
       assert.match(output, /pass [1-9]\d*\n/);
     });
@@ -21,8 +23,10 @@ if (!process.env.BAY_WINDOW_BUTTONS_CHILD) {
   const platform = process.env.BAY_TEST_PLATFORM;
   const mac = platform === "macos";
   const windows = platform === "windows";
+
   const { CAPTION_BUTTON_WIDTH, captionMaximizeRect, getWindowButtonLayout, LIGHTS_WIDTH, useWindowButtonLayout, windowButtonRoom } =
     await import("./windowButtons.ts");
+
   const { noToolbarGeometry, NO_TOOLBAR, paneButtonClearance, sidebarButtonRoom, toolbarEndRoom, toolbarGeometry } = await import("./geometry.ts");
   const { SIDEBAR_BUTTON_END_ROOM, TRAFFIC_LIGHTS_OFFSET } = await import("./constants.ts");
   const { capabilities } = await import("@bay/platform");
@@ -52,6 +56,7 @@ if (!process.env.BAY_WINDOW_BUTTONS_CHILD) {
   test("toolbars clear the window's buttons with a sidebar on either side", () => {
     const right = windows ? 138 : 0;
     const baseline = toolbarGeometry({ sidebarButton: false, clearTrafficLights: false }, buttons);
+
     for (const sidebarRight of [false, true]) {
       for (const sidebarOpen of [false, true]) {
         const clearance = paneButtonClearance(true, true, "sidebar", sidebarOpen, sidebarRight);
@@ -70,6 +75,7 @@ if (!process.env.BAY_WINDOW_BUTTONS_CHILD) {
         assert.equal(noToolbarGeometry(start, buttons), bare);
       }
     }
+
     assert.equal(noToolbarGeometry(false, buttons), NO_TOOLBAR);
   });
 

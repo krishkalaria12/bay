@@ -2,7 +2,7 @@ import type { PagePoint } from "@bay/chromium";
 import type { StateCreator } from "zustand";
 import type { DeepReadonly } from "../runtime/projection";
 import { matchingLinkRule } from "../lib/externalLinkRules";
-import type { BrowserState, BrowserShape } from "./browserStore";
+import type { BrowserState, QuietBrowserState } from "./browserStore";
 import { IDLE_LIVE, activeTabId, findLast, listIds, makeTab, pinnedFirst, pinnedPage, spaceListKey, withList } from "./model";
 import { insertionIndex } from "./openerOrder";
 import { groupWithOpener } from "./tabTidying";
@@ -70,36 +70,44 @@ const SECOND_LEVEL = [
 export function siteOf(host: string): string {
   const labels = host.toLowerCase().replace(/\.$/, "").split(".");
   const two = labels.slice(-2).join(".");
+
   return labels.length > 2 && SECOND_LEVEL.includes(two) ? labels.slice(-3).join(".") : two;
 }
+
 const hostOf = (url: string) => url.match(/^https?:\/\/([^/?#:]*)/i)?.[1] ?? "";
 
 /** Whether `fromId` peeks its links: a pinned tab or a favourite in a main window, with the setting on. */
-export function peeksLinks(s: BrowserShape, fromId: string): boolean {
+export function peeksLinks(s: QuietBrowserState, fromId: string): boolean {
   const from = s.tabs[fromId];
+
   if (!s.settings.peekLinksFromPinnedTabs || !from || isPeek(from) || !pinnedPage(from)) return false;
   const w = s.windows[from.windowId];
+
   return !!w && !w.incognito && w.kind !== "small";
 }
 
 /** Whether a link `fromId` opens goes to a peek: one to another site, from a tab that peeks its links (Arc's rule). */
-export function opensInPeek(s: BrowserShape, fromId: string, url: string): boolean {
+export function opensInPeek(s: QuietBrowserState, fromId: string, url: string): boolean {
   const host = hostOf(url);
+
   return !!host && peeksLinks(s, fromId) && siteOf(host) !== siteOf(hostOf(s.tabs[fromId]!.url));
 }
 
 /** The window's peek while it's on screen: its opener is the shown tab, or a pane of the shown split. */
-export function shownPeek(s: BrowserShape, windowId: string): DeepReadonly<Peek> | undefined {
+export function shownPeek(s: QuietBrowserState, windowId: string): DeepReadonly<Peek> | undefined {
   const peek = s.peeks[windowId];
+
   if (!peek || !s.tabs[peek.tabId]) return undefined;
   const shown = activeTabId(s, windowId);
+
   return shown === peek.fromId || splitOf(s, shown)?.tabIds.includes(peek.fromId) ? peek : undefined;
 }
 
-const lastClosedTab = (s: BrowserShape, windowId: string) => findLast(s.closedTabs, (c) => c.windowId === windowId)?.id ?? null;
+const lastClosedTab = (s: QuietBrowserState, windowId: string) => findLast(s.closedTabs, (c) => c.windowId === windowId)?.id ?? null;
 
 const withoutPeek = (s: BrowserState, windowId: string): BrowserState => {
   const { [windowId]: _, ...peeks } = s.peeks;
+
   return { ...s, peeks };
 };
 
@@ -107,6 +115,7 @@ const withoutPeek = (s: BrowserState, windowId: string): BrowserState => {
 function listPeek(s: BrowserState, windowId: string, background: boolean): [BrowserState, Peek | undefined] {
   const peek = s.peeks[windowId];
   const tab = peek && s.tabs[peek.tabId];
+
   if (!peek || !tab) return [s, undefined];
   const { peekOf: _, ...rest } = tab;
   const tabs = { ...s.tabs, [tab.id]: rest };
@@ -114,7 +123,9 @@ function listPeek(s: BrowserState, windowId: string, background: boolean): [Brow
   const list = { key, tabIds: [...listIds(s, key)] };
   list.tabIds.splice(insertionIndex({ ...s, tabs }, list, rest, background), 0, tab.id);
   let next = withList({ ...withoutPeek(s, windowId), tabs }, { key, tabIds: pinnedFirst(list.tabIds, tabs) });
+
   if (rest.openerId) next = groupWithOpener(next, tab.id, rest.openerId, background);
+
   return [next, peek];
 }
 
@@ -125,28 +136,34 @@ export const createPeeksSlice: StateCreator<BrowserState, [], [], PeeksSlice> = 
   openPeek(fromId, url, adoptId, at) {
     let s = get();
     const from = s.tabs[fromId];
+
     if (!from || !s.windows[from.windowId]) return undefined;
     const windowId = from.windowId;
     const replaced = s.peeks[windowId];
+
     if (replaced) s = withoutPeek(removeTabs(s, [replaced.tabId], false), windowId);
     const tab = { ...makeTab(windowId, from.spaceId, url), openerId: fromId, peekOf: fromId };
+
     if (adoptId) {
       // Chrome's browser for the link is already loading it; loading it again would drop its POST body and opener.
       tab.adoptId = adoptId;
       tab.navigation = null;
     }
+
     set({
       ...s,
       tabs: { ...s.tabs, [tab.id]: tab },
       live: { ...s.live, [tab.id]: IDLE_LIVE },
       peeks: { ...s.peeks, [windowId]: { tabId: tab.id, fromId, ...(at && { at }) } },
     });
+
     return tab.id;
   },
 
   closePeek(windowId) {
     const s = get();
     const peek = s.peeks[windowId];
+
     if (!peek) return;
     const url = s.tabs[peek.tabId]?.url;
     const closedPeeks = url ? { ...s.closedPeeks, [windowId]: { url, fromId: peek.fromId, afterTab: lastClosedTab(s, windowId) } } : s.closedPeeks;
@@ -156,11 +173,13 @@ export const createPeeksSlice: StateCreator<BrowserState, [], [], PeeksSlice> = 
   reopenPeek(windowId) {
     const s = get();
     const closed = s.closedPeeks[windowId];
+
     // A tab closed in the window since is what ⌘⇧T reopens.
     if (!closed || lastClosedTab(s, windowId) !== closed.afterTab || s.tabs[closed.fromId]?.windowId !== windowId) return false;
     const { [windowId]: _, ...closedPeeks } = s.closedPeeks;
     set({ closedPeeks });
     get().activate(closed.fromId, windowId);
+
     return !!get().openPeek(closed.fromId, closed.url);
   },
 
@@ -170,24 +189,32 @@ export const createPeeksSlice: StateCreator<BrowserState, [], [], PeeksSlice> = 
     const tab = current && state.tabs[current.tabId];
     const route = tab && !state.windows[windowId]?.incognito ? matchingLinkRule(state.settings.externalLinkRules, tab.url)?.destination : undefined;
     const [next, peek] = listPeek(state, windowId, false);
+
     if (!peek) return;
     set(apply(next, activated(next, peek.tabId, windowId)));
+
     if (route?.kind === "littleBay" && tab) return get().createWindow({ small: true, tabIds: [peek.tabId], spaceId: tab.spaceId });
+
     if (route?.kind === "newWindow") return get().moveTabsToWindow([peek.tabId], null);
     const spaceId = route?.kind === "mostRecentSpace" ? mostRecentSpace(state) : route?.kind === "space" ? route.spaceId : undefined;
+
     if (!spaceId || !state.spaces[spaceId] || spaceId === tab?.spaceId) return windowId;
     const target = mainWindowFor(state, spaceId) ?? windowId;
+
     // Hand the page to its destination window before switching profiles, so the opener's window stays in its Space.
     if (target !== windowId) get().moveTabsToWindow([peek.tabId], target);
     get().moveTabToSpace(peek.tabId, spaceId);
+
     return target;
   },
 
   splitPeek(windowId) {
     const [next, peek] = listPeek(get(), windowId, true);
+
     if (!peek) return;
     set(next);
     const result = get().openSplitPane(windowId, { tabId: peek.tabId, anchorTabId: peek.fromId, side: "right", background: true });
+
     // A split the opener can't take (it's full): the peek's page is still kept, as a tab of its own.
     if (!result.ok) get().activate(peek.tabId, windowId);
   },

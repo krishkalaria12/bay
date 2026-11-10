@@ -9,7 +9,9 @@ export { installErrorReporting };
 
 export function startTelemetry() {
   const stop = startUsage();
+
   if (__DEV__) {
+    // SAFETY: nnTelemetry is telemetry's own dev-harness surface, read only by tests.
     (globalThis as { nnTelemetry?: unknown }).nnTelemetry = {
       store: useTelemetry,
       state: devState,
@@ -28,12 +30,16 @@ export function startTelemetry() {
         ),
       rejectTestPromise: () => void Promise.reject(new RangeError("Telemetry test rejection at https://private.example/x")),
       showWhatsSent: () => {
+        // SAFETY: require returns the sheet module, which exports showSettingsSheet.
         const { showSettingsSheet } = require("../components/settings/sheet") as typeof import("../components/settings/sheet");
+
+        // SAFETY: require returns the diagnostics pane module, which exports WhatsSentSheet.
         const { WhatsSentSheet } = require("../components/settings/panes/ShareDiagnostics") as typeof import("../components/settings/panes/ShareDiagnostics");
         showSettingsSheet(createElement(WhatsSentSheet));
       },
       crash: devCrash,
     };
   }
+
   return stop;
 }

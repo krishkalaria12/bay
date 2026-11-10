@@ -7,6 +7,7 @@ export const toggleDownloads = (windowId: string) => setDownloadsOpen(windowId, 
 export const setFind = (tabId: string, patch: FindPatch) => dispatchBrowserCommand({ method: "setFind", tabId, patch });
 export const removeDownload = (windowId: string, downloadId: string) => dispatchBrowserCommand({ method: "removeDownload", windowId, downloadId });
 export const clearDownloads = (windowId: string) => dispatchBrowserCommand({ method: "clearDownloads", windowId });
+
 // The command panel's own commands (runtime/locationCommands.ts).
 export const openCommandPanel = (windowId: string, initialText?: string) => dispatchBrowserCommand({ method: "openCommandPanel", windowId, initialText });
 export const dismissCommandPanel = (windowId: string) => dispatchBrowserCommand({ method: "dismissCommandPanel", windowId });

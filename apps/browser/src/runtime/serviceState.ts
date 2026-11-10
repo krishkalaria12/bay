@@ -23,22 +23,32 @@ export type ServiceState = {
   onboarding: OnboardingRequest;
   cli: CliControlStatus | null;
 };
+
 // What a window's settings pane shows of terminal control. The engine's status also names its control file, which
 // stays with the coordinator: the native runtime accepts only these fields from a service.
 const WINDOW_CLI_FIELDS = new Set(["state", "connections", "generation", "port", "reason"]);
+
 function windowCliStatus(server: CliControlStatus | null): CliControlStatus | null {
   if (!server) return null;
+
+  // SAFETY: the checks above established this shape.
   return Object.fromEntries(Object.entries(server).filter(([key]) => WINDOW_CLI_FIELDS.has(key))) as CliControlStatus;
 }
+
 const installed = new Map<string, object>();
+
+// SAFETY: the checks above established this shape.
 const detach = <T>(value: DeepReadonly<T>): T => JSON.parse(JSON.stringify(value)) as T;
+
 export function installServiceState(state: DeepReadonly<Partial<ServiceState>>) {
   const install = <K extends keyof ServiceState>(key: K, apply: (value: ServiceState[K]) => void) => {
     const value = state[key];
+
     if (!value || installed.get(key) === value) return;
     installed.set(key, value);
     apply(detach<ServiceState[K]>(value));
   };
+
   install("live", (value) => useLive.setState(value, true));
   install("calendar", (value) => useCalendar.setState(value, true));
   install("alerts", (value) => useMeetingAlert.setState(value, true));
@@ -47,9 +57,11 @@ export function installServiceState(state: DeepReadonly<Partial<ServiceState>>) 
   install("onboarding", (value) => useOnboardingRequest.setState(value, true));
   install("cli", (server) => useCli.setState({ server }));
 }
+
 export function startServiceStateOwner(store: BrowserStore, { restore = true } = {}): () => void {
   if (restore) installServiceState(store.getState().services);
   const stops = [bindLiveBrowser(store), bindGoogleBrowser(store), startAccountRequests(), stopServiceCommands];
+
   const publish = () => {
     const services: ServiceState = {
       live: useLive.getState(),
@@ -60,8 +72,10 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
       onboarding: useOnboardingRequest.getState(),
       cli: windowCliStatus(useCli.getState().server),
     };
+
     store.setState({ services });
   };
+
   stops.push(
     useLive.subscribe(publish),
     useCalendar.subscribe(publish),
@@ -72,6 +86,7 @@ export function startServiceStateOwner(store: BrowserStore, { restore = true } =
     useCli.subscribe(publish),
   );
   publish();
+
   return () => {
     for (const stop of stops.reverse()) stop();
   };

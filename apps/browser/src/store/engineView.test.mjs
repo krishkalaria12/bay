@@ -13,8 +13,10 @@ test("engine badge subscribers skip transient updates and follow all engine inpu
   const id = S().windows[w].activeTabIds.default;
   let calls = 0;
   const stop = useEngineView.subscribe(() => calls++);
+
   try {
     const before = useEngineView.getState();
+
     for (let i = 0; i < 60; i++) S().updateLive(id, { progress: i / 100 });
     S().setSelection(w, [id]);
     S().toggleSidebar(w);
@@ -23,12 +25,8 @@ test("engine badge subscribers skip transient updates and follow all engine inpu
     S().updateTab(id, { engine: "webkit" });
     assert.equal(calls, 1);
     assert.equal(engineMark(useEngineView.getState(), id), "webkit");
-    S().updateSettings({ pageEngine: "webkit" });
-    assert.equal(calls, 2);
-    assert.equal(engineMark(useEngineView.getState(), id), null);
     S().hydrate({});
     assert.strictEqual(useEngineView.getState().tabs, browserRead.getState().tabs);
-    assert.strictEqual(useEngineView.getState().settings, browserRead.getState().settings);
     assert.equal(engineMark(useEngineView.getState(), id), null);
   } finally {
     stop();
@@ -55,6 +53,7 @@ test("engine selectors skip a tab switch's stamp and titles, and follow what sel
   const two = S().newTab(w, { url: "https://two.example", background: true });
   let calls = 0;
   const stop = useEngineView.subscribe(() => calls++);
+
   try {
     S().activate(two);
     S().activate(one);
@@ -74,4 +73,15 @@ test("engine selectors skip a tab switch's stamp and titles, and follow what sel
   } finally {
     stop();
   }
+});
+
+test("a restored tab takes its engine from its address, not the one it was saved with", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://example.com" });
+  const id = S().windows[w].activeTabIds.default;
+  S().updateTab(id, { engine: "webkit", url: "https://example.com/" });
+  const saved = S();
+  S().hydrate({ windows: saved.windows, tabs: saved.tabs, windowOrder: saved.windowOrder, spaces: saved.spaces, spaceOrder: saved.spaceOrder });
+  assert.equal(S().tabs[id].engine, undefined);
+  assert.equal(engineMark(useEngineView.getState(), id), null);
 });

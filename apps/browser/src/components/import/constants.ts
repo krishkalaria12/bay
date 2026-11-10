@@ -21,10 +21,12 @@ export const ENCRYPTED: ImportKind[] = ["passwords", "cookies", "autofill"];
 // reports locked v11 rows in the result, preserving every selected category.
 export function kindsWithoutUnlock(kinds: Set<ImportKind>, basicStore: boolean): Set<ImportKind> {
   const wanted = new Set(kinds);
+
   if (!basicStore) {
     wanted.delete("passwords");
     wanted.delete("cookies");
   }
+
   return wanted;
 }
 
@@ -32,6 +34,7 @@ export const DIA_NOT_SHARED = "Custom tab names, colours, spaces and folders sta
 
 // How long the finished progress list stays before the summary.
 export const DONE_DELAY_MS = 700;
+
 // Dia launched from here gets this long to open a window before an empty read counts.
 export const DIA_LAUNCH_MS = 15_000;
 export const DIA_POLL_MS = 1500;

@@ -4,6 +4,7 @@ import { joinableMeeting } from "./meetings.ts";
 
 const MIN = 60_000;
 const NOW = Date.UTC(2026, 9, 26, 10, 0);
+
 const event = (id, startMin, endMin, extra = {}) => ({
   id,
   occurrence: id,
@@ -22,6 +23,7 @@ const event = (id, startMin, endMin, extra = {}) => ({
   attendees: [],
   ...extra,
 });
+
 const LEAD = 10 * MIN;
 
 test("⌃⌘J joins the meeting that's on, or about to start", () => {

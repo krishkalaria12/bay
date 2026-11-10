@@ -28,12 +28,15 @@ export function useMarqueeGroup(resetKey: string): MarqueeGroup {
   useEffect(() => {
     cancelAnimation(progress);
     progress.set(0);
+
     if (max < 1) return;
     const duration = (max / MARQUEE_SPEED) * 1000;
     const leg = (toValue: number) => withDelay(MARQUEE_PAUSE_MS, withTiming(toValue, { duration, easing: Easing.linear }));
     progress.set(withRepeat(withSequence(leg(1), leg(0)), -1, false));
+
     return () => cancelAnimation(progress);
   }, [max, resetKey]);
+
   return {
     progress,
     report: (key, overflow) => setOverflows((o) => (Math.abs((o[key] ?? 0) - overflow) < 0.5 ? o : { ...o, [key]: overflow })),
@@ -63,6 +66,7 @@ export function Marquee({
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: overflow ? -overflow * progress.get() : 0 }] }), [overflow]);
   const leading = useAnimatedStyle(() => ({ opacity: overflow ? interpolate(progress.get(), [0, 0.03], [0, 1], Extrapolation.CLAMP) : 0 }), [overflow]);
   const trailing = useAnimatedStyle(() => ({ opacity: overflow ? interpolate(progress.get(), [0.97, 1], [1, 0], Extrapolation.CLAMP) : 0 }), [overflow]);
+
   return (
     <View style={{ height, overflow: "hidden" }} onLayout={(e) => setBox(e.nativeEvent.layout.width)}>
       <Animated.View style={[{ position: "absolute", left: 0, top: 0, height, width: 4000, flexDirection: "row", alignItems: "center" }, slide]}>
@@ -93,6 +97,7 @@ function Fade({
 }) {
   const [r, g, b] = background;
   const w = MARQUEE_FADE / MARQUEE_FADE_STEPS;
+
   return (
     <Animated.View
       pointerEvents="none"

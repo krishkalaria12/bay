@@ -51,6 +51,7 @@ function Caption({ windowId, height, glyphCenter, reveal = 0, hidden = false }: 
 
   if (!shown) return null;
   const glyphTop = (glyphCenter ?? height / 2) - GLYPH / 2;
+
   return (
     <>
       {(["left", "right"] as const).map((side) =>
@@ -115,6 +116,7 @@ function CaptionButton({
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip={tooltip ? label : undefined}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
@@ -130,6 +132,7 @@ function CaptionButton({
               : hovered
                 ? theme.toolbarHover
                 : undefined;
+
           return (
             <View style={{ width: CAPTION_BUTTON_WIDTH, height, backgroundColor: fill }}>
               <Symbol

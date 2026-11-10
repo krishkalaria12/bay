@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
+
 const { fieldKeepsKey, keyBindings, keyShortcuts, shortcutCatalog, shortcutForKeyEvent } = await import("./keyBindings.ts");
 const { SHORTCUT_ACTIONS } = await import("./shortcutCatalog.ts");
 
@@ -19,6 +20,7 @@ test("Ctrl+Shift+C copies the URL, as ⇧⌘C does, and no key runs two commands
 
 test("Ctrl+1…8 select those tabs, Ctrl+9 the last", () => {
   const shortcuts = keyShortcuts(keyBindings());
+
   for (let n = 1; n <= 8; n++)
     assert.deepEqual(
       find(shortcuts, 0x30 + n, { ctrl: true }).map((s) => [s.command, s.arg]),
@@ -32,7 +34,9 @@ test("Ctrl+1…8 select those tabs, Ctrl+9 the last", () => {
 
 test("the keys left to pages are the web's own, and a window's close stays Chrome's", () => {
   const commands = new Set(keyBindings().map((b) => b.command));
+
   for (const command of ["showOnboarding", "returnToPinnedUrl"]) assert.equal(commands.has(command), false, command);
+
   for (const command of ["taskManager", "searchTabs", "closeAllTabs"]) assert.equal(commands.has(command), true, command);
   const shortcuts = keyShortcuts(keyBindings());
   assert.deepEqual(find(shortcuts, 0x57, { ctrl: true, shift: true }), []);
@@ -46,9 +50,11 @@ test("every action Settings lists has a command that runs it", () => {
   const source = ["lib/appCommands.ts", "lib/appMenuIntegration.ts", "components/sidebar/sidebarCommands.ts"]
     .map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"))
     .join("\n");
+
   const unhandled = [...new Set(SHORTCUT_ACTIONS.map((action) => action.id.split(":")[0]))].filter(
     (command) => !source.includes(`case "${command}"`) && !source.includes(`command === "${command}"`) && !source.includes(`"${command}",`),
   );
+
   assert.deepEqual(unhandled, []);
 });
 
@@ -110,6 +116,7 @@ test("Settings can't bind what the app doesn't run, or an id only macOS has", ()
   const commands = keyBindings({ showOnboarding: ["y", "command"], togglePageEngine: ["y", "option"], "std:Edit > Copy": ["y", "shift"] }).map(
     (b) => b.command,
   );
+
   for (const command of ["showOnboarding", "togglePageEngine", "std:Edit > Copy"]) assert.equal(commands.includes(command), false, command);
 });
 
@@ -144,11 +151,14 @@ test("the catalog has the visible actions of macOS's menu", () => {
   // WebKit is macOS's, and Move to New Window is under a menu Settings skips there too.
   const notHere = new Set(["togglePageEngine", "moveTabToWindow:new"]);
   const missing = [];
+
   for (const match of menus.matchAll(/cmd\("[^"]*", "(\w+)"(?:, arg: "(\w+)")?[^\n]*/g)) {
     if (match[0].includes(".hiddenShortcut()")) continue;
     const id = match[2] ? `${match[1]}:${match[2]}` : match[1];
+
     if (!ids.has(id) && !notHere.has(id)) missing.push(id);
   }
+
   assert.deepEqual(missing, []);
 });
 
@@ -174,10 +184,13 @@ test("Ctrl+Tab opens the recent-tab switcher, as on macOS, and Ctrl+PageDown and
 
 test("a text field keeps what it types and edits with, and window shortcuts still reach past it", () => {
   const key = (name, mods = {}) => ({ key: name, ctrlKey: false, altKey: false, isComposing: false, ...mods });
+
   for (const typed of [key("a"), key("A"), key("Enter"), key("Tab"), key("ArrowLeft"), key("Backspace")]) assert.equal(fieldKeepsKey(typed), true, typed.key);
+
   for (const edit of [key("ArrowLeft", { ctrlKey: true }), key("Home", { ctrlKey: true }), key("Backspace", { ctrlKey: true })])
     assert.equal(fieldKeepsKey(edit), true, edit.key);
   assert.equal(fieldKeepsKey(key("t", { ctrlKey: true, isComposing: true })), true, "an IME is composing");
+
   for (const shortcut of [key("t", { ctrlKey: true }), key("ArrowLeft", { altKey: true }), key("F6"), key("F10")])
     assert.equal(fieldKeepsKey(shortcut), false, shortcut.key);
 });

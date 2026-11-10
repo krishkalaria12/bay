@@ -4,12 +4,15 @@ import { test } from "node:test";
 
 // Cycles run only when the test calls syncNow.
 globalThis.setTimeout = () => 0;
+
 globalThis.clearTimeout = () => {};
+
 globalThis.__DEV__ = false;
 
 const folder = new Map();
 let onWrite = null;
 let ids = 0;
+
 globalThis.nnTestNativeModules = {
   BaySync: {
     newDeviceId: () => `dev${++ids}`,
@@ -23,11 +26,13 @@ globalThis.nnTestNativeModules = {
       const id = `f${folder.size + 1}`;
       folder.set(id, { scope, payload });
       onWrite?.(JSON.parse(payload));
+
       return id;
     },
     read: async (_folder, scope, known) => {
       const here = [...folder].filter(([, f]) => f.scope === scope);
-      const files = here.filter(([id]) => !known.includes(id)).map(([id, f]) => ({ id, payload: f.payload }));
+      const files = here.flatMap(([id, f]) => (known.includes(id) ? [] : [{ id, payload: f.payload }]));
+
       return { files, pending: [], damaged: [], present: here.map(([id]) => id) };
     },
     remove: async (_folder, _scope, list) => list.forEach((id) => folder.delete(id)),
@@ -40,6 +45,7 @@ globalThis.nnTestNativeModules = {
 const shell = await import("@bay/desktop");
 const { useBrowser } = await import("../store/browserStore.ts");
 const S = () => useBrowser.getState();
+
 // Bookmarks are the store's alone here (lib/bookmarks.ts, which reads Chrome's, isn't running).
 const reset = () => (S().hydrate({}), useBrowser.setState({ bookmarksReady: { default: true } }));
 
@@ -56,27 +62,33 @@ test("a crash after a batch lands: after the restart it's sent again as it was, 
   onWrite = (file) => {
     if (!disk && file.ops?.some((op) => op.v?.t === "Two")) disk = new Map(shell.docs);
   };
+
   S().addBookmark({ spaceId: "default", url: "https://two.example/", title: "Two" });
   await first.syncNow();
   onWrite = null;
   assert.ok(disk);
   shell.docs.clear();
+
   for (const [name, contents] of disk) shell.docs.set(name, contents);
 
   const second = await import("./engine.ts?second");
   second.startSync(useBrowser);
+
   for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
   S().addBookmark({ spaceId: "default", url: "https://three.example/", title: "Three" });
   await second.syncNow();
 
   const batches = new Map();
+
   for (const { scope, payload } of folder.values()) {
     const file = JSON.parse(payload);
+
     if (file.kind !== "log") continue;
     const key = `${scope} ${file.device} ${file.seq}`;
     assert.equal(batches.get(key) ?? payload, payload, `${key} was published twice with different changes`);
     batches.set(key, payload);
   }
+
   const three = [...folder.values()].map((f) => JSON.parse(f.payload)).find((f) => f.ops?.some((op) => op.v?.t === "Three"));
   assert.deepEqual(
     three.ops.map((op) => op.v?.t),
@@ -92,16 +104,24 @@ test("a batch is published only once the journal holding it is on disk", async (
   engine.startSync(useBrowser);
   assert.ok("ok" in (await engine.turnOnSync("/sync")));
   await engine.syncNow();
-  const published = () => [...folder.values()].map((f) => JSON.parse(f.payload)).filter((f) => f.ops?.some((op) => op.v?.t === "Held"));
+
+  const published = () =>
+    [...folder.values()].flatMap((f) => {
+      const parsed = JSON.parse(f.payload);
+
+      return parsed.ops?.some((op) => op.v?.t === "Held") ? [parsed] : [];
+    });
 
   shell.heldSaves.on = true;
   S().addBookmark({ spaceId: "default", url: "https://held.example/", title: "Held" });
   const syncing = engine.syncNow();
+
   for (let i = 0; i < 20; i++) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(published().length, 0, "nothing goes out while the journal save is still pending");
   assert.ok(shell.heldSaves.queue.length > 0, "the journal save is waiting");
 
   shell.heldSaves.on = false;
+
   for (const land of shell.heldSaves.queue.splice(0)) land();
   await syncing;
   assert.equal(published().length, 1, "published once the journal landed");

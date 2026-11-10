@@ -1,8 +1,13 @@
+import * as v from "valibot";
+import type { JsonInput, JsonValue } from "../lib/json";
+
 // OTLP/HTTP JSON log records for bay.krishkalaria.in/otel/v1/logs.
 // Events keep their PostHog names so old and new data query the same.
 
 export type OtlpValue = { stringValue: string } | { intValue: string } | { doubleValue: number } | { boolValue: boolean };
+
 export type OtlpAttribute = { key: string; value: OtlpValue };
+
 export type OtlpLogRecord = {
   timeUnixNano: string;
   severityNumber: number;
@@ -11,31 +16,36 @@ export type OtlpLogRecord = {
   attributes: OtlpAttribute[];
 };
 
-export type QueuedEvent = { uuid: string; event: string; distinct_id: string; timestamp: string; properties: Record<string, unknown> };
+export type QueuedEvent = { uuid: string; event: string; distinct_id: string; timestamp: string; properties: Record<string, JsonValue> };
 
 // OTLP JSON has no nested values here: objects and arrays go as JSON text, int64 as a decimal string.
-export function otlpValue(value: unknown): OtlpValue | null {
-  switch (typeof value) {
-    case "string":
-      return { stringValue: value };
-    case "boolean":
-      return { boolValue: value };
-    case "number":
-      if (!Number.isFinite(value)) return null;
-      return Number.isSafeInteger(value) ? { intValue: String(value) } : { doubleValue: value };
-    case "object":
-      return value === null ? null : { stringValue: JSON.stringify(value) };
-    default:
-      return null;
+export function otlpValue(value: JsonInput): OtlpValue | null {
+  if (v.is(v.string(), value)) return { stringValue: value };
+
+  if (v.is(v.boolean(), value)) return { boolValue: value };
+
+  if (v.is(v.number(), value)) {
+    if (!Number.isFinite(value)) return null;
+
+    return Number.isSafeInteger(value) ? { intValue: String(value) } : { doubleValue: value };
   }
+
+  if (value === null) return null;
+
+  if (Array.isArray(value) || v.is(v.object({}), value)) return { stringValue: JSON.stringify(value) };
+
+  return null;
 }
 
-export function otlpAttributes(values: Record<string, unknown>): OtlpAttribute[] {
+export function otlpAttributes(values: Record<string, JsonValue>): OtlpAttribute[] {
   const out: OtlpAttribute[] = [];
+
   for (const [key, v] of Object.entries(values)) {
     const value = otlpValue(v);
+
     if (value) out.push({ key, value });
   }
+
   return out;
 }
 
@@ -43,6 +53,7 @@ const nanos = (ms: number) => `${Math.round(ms)}000000`;
 
 export function eventRecord(e: QueuedEvent): OtlpLogRecord {
   const ms = Date.parse(e.timestamp);
+
   return {
     timeUnixNano: nanos(Number.isFinite(ms) ? ms : Date.now()),
     severityNumber: 9,
@@ -52,7 +63,7 @@ export function eventRecord(e: QueuedEvent): OtlpLogRecord {
   };
 }
 
-export function logRecord(level: "warn" | "error", message: string, attributes: Record<string, unknown>, at = Date.now()): OtlpLogRecord {
+export function logRecord(level: "warn" | "error", message: string, attributes: Record<string, JsonValue>, at = Date.now()): OtlpLogRecord {
   return {
     timeUnixNano: nanos(at),
     severityNumber: level === "error" ? 17 : 13,
@@ -62,7 +73,7 @@ export function logRecord(level: "warn" | "error", message: string, attributes: 
   };
 }
 
-export function logsRequest(resource: Record<string, unknown>, scope: string, records: OtlpLogRecord[]): string {
+export function logsRequest(resource: Record<string, JsonValue>, scope: string, records: OtlpLogRecord[]): string {
   return JSON.stringify({
     resourceLogs: [{ resource: { attributes: otlpAttributes(resource) }, scopeLogs: [{ scope: { name: scope }, logRecords: records }] }],
   });
@@ -74,7 +85,10 @@ export type Outcome = "sent" | "drop" | "split" | "retry";
 
 export function outcome(status: number, count: number): Outcome {
   if (status >= 200 && status < 300) return "sent";
+
   if (status === 400) return "drop";
+
   if (status === 413) return count > 1 ? "split" : "drop";
+
   return "retry";
 }

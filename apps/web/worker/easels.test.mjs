@@ -10,6 +10,7 @@ const KEY = "b".repeat(64);
 const OTHER_KEY = "c".repeat(64);
 const ORIGIN = "https://bay.example";
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=";
+
 const snapshot = (extra = {}) => ({
   version: 1,
   revision: 1,
@@ -26,10 +27,12 @@ class FakeR2 {
   beforePut;
   async head(key) {
     const object = this.objects.get(key);
+
     return object ? { etag: object.etag, customMetadata: { ...object.customMetadata } } : null;
   }
   async get(key) {
     const object = this.objects.get(key);
+
     return object ? { ...(await this.head(key)), text: async () => object.body } : null;
   }
   async put(key, body, options) {
@@ -37,15 +40,20 @@ class FakeR2 {
     // Match R2's atomic condition check and content-derived ETag, including identical PUTs.
     const object = this.objects.get(key);
     const condition = options.onlyIf;
+
     if (condition.etagDoesNotMatch === "*" && object) return null;
+
     if (condition.etagMatches && condition.etagMatches !== object?.etag) return null;
+
     const saved = {
       body,
       etag: createHash("md5").update(body).digest("hex"),
       customMetadata: { ...options.customMetadata },
     };
+
     this.objects.set(key, saved);
     this.writes++;
+
     return this.head(key);
   }
 }
@@ -53,6 +61,7 @@ class FakeR2 {
 function setup() {
   const bucket = new FakeR2();
   const limiterKeys = [];
+
   const env = {
     BAY_EASEL_WEB_SHARING: "true",
     EASELS: bucket,
@@ -60,26 +69,31 @@ function setup() {
     EASEL_MUTATIONS: {
       limit: async ({ key }) => {
         limiterKeys.push(key);
+
         return { success: true };
       },
     },
   };
+
   const send = (method, body, { key = KEY, path = `/api/easels/${ID}`, headers = {} } = {}) =>
     worker.fetch(
       new Request(`${ORIGIN}${path}`, {
         method,
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...headers },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(body === undefined ? undefined : { body: JSON.stringify(body) }),
       }),
       env,
     );
+
   const page = (method = "GET", id = ID) => send(method, undefined, { path: `/easel/${id}/` });
+
   return { bucket, env, send, page, limiterKeys };
 }
 
 test("web sharing stays off unless explicitly true, with no R2 or rate limiter required", async () => {
   for (const flag of [undefined, "false", "0", "TRUE", "1", ""]) {
     const env = { BAY_EASEL_WEB_SHARING: flag, ASSETS: { fetch: async () => new Response("static asset") } };
+
     for (const [method, path] of [
       ["PUT", `/api/easels/${ID}`],
       ["DELETE", `/api/easels/${ID}`],
@@ -90,6 +104,7 @@ test("web sharing stays off unless explicitly true, with no R2 or rate limiter r
       assert.equal(response.status, 404);
       assert.equal(response.headers.get("cache-control"), "no-store");
     }
+
     assert.equal(await (await worker.fetch(new Request(ORIGIN), env)).text(), "static asset");
   }
 });
@@ -140,11 +155,13 @@ test("owner can update; public id and other credentials cannot edit or revoke", 
   assert.equal((await send("PUT", snapshot({ title: "Updated", revision: 2 }))).status, 200);
   assert.match(await (await page()).text(), /Updated/);
   const writes = bucket.writes;
+
   for (const method of ["PUT", "DELETE"]) {
     assert.equal((await send(method, method === "PUT" ? snapshot() : undefined, { key: OTHER_KEY })).status, 403);
     assert.equal((await send(method, undefined, { headers: { Authorization: "" } })).status, 401);
     assert.equal((await send(method, undefined, { key: KEY.toUpperCase() })).status, 401);
   }
+
   assert.equal(bucket.writes, writes);
 });
 
@@ -158,6 +175,7 @@ test("escapes titles and URL attributes without permitting scripts or local/priv
   assert.match(html, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
   assert.match(html, /q=&quot;&lt;tag&gt;/);
   const writes = bucket.writes;
+
   const invalid = [
     { ...snapshot(), profileId: "private-profile" },
     { ...snapshot(), id: ID },
@@ -177,6 +195,7 @@ test("escapes titles and URL attributes without permitting scripts or local/priv
     snapshot({ image: { data: PNG, width: 2, height: 1 } }),
     snapshot({ image: { data: PNG, width: 1, height: 1, path: "/Users/private/image.png" } }),
   ];
+
   for (const value of invalid) assert.equal((await send("PUT", value)).status, 400);
   assert.equal(bucket.writes, writes);
 });
@@ -191,9 +210,11 @@ test("null image and empty sources render an accessible empty snapshot", async (
 
 test("bounded streaming body rejects oversized chunked/lying-length UTF-8 requests and cancels input", async () => {
   const { env, bucket } = setup();
+
   for (const declared of [undefined, "1"]) {
     let cancelled = false;
     const bytes = new TextEncoder().encode("é".repeat(512 * 1024));
+
     const stream = new ReadableStream({
       pull(controller) {
         controller.enqueue(bytes);
@@ -202,8 +223,11 @@ test("bounded streaming body rejects oversized chunked/lying-length UTF-8 reques
         cancelled = true;
       },
     });
+
     const headers = { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
+
     if (declared) headers["Content-Length"] = declared;
+
     const response = await worker.fetch(
       new Request(`${ORIGIN}/api/easels/${ID}`, {
         method: "PUT",
@@ -213,12 +237,15 @@ test("bounded streaming body rejects oversized chunked/lying-length UTF-8 reques
       }),
       env,
     );
+
     assert.equal(response.status, 413);
     assert.equal(cancelled, true);
   }
+
   assert.equal(bucket.writes, 0);
   const json = JSON.stringify(snapshot({ image: null }));
   const body = json + " ".repeat(MAX_BODY_BYTES - Buffer.byteLength(json));
+
   const response = await worker.fetch(
     new Request(`${ORIGIN}/api/easels/${ID}`, {
       method: "PUT",
@@ -227,6 +254,7 @@ test("bounded streaming body rejects oversized chunked/lying-length UTF-8 reques
     }),
     env,
   );
+
   assert.equal(response.status, 200, "exactly 16 MiB is accepted");
 });
 
@@ -234,6 +262,7 @@ test("rejects malformed JSON, invalid UTF-8, wrong media types, and excessive de
   const { env, bucket, send } = setup();
   assert.equal((await send("PUT", snapshot(), { headers: { "Content-Length": String(MAX_BODY_BYTES + 1) } })).status, 413);
   assert.equal((await send("PUT", snapshot(), { headers: { "Content-Type": "text/plain" } })).status, 415);
+
   for (const body of ["{bad json", new Uint8Array([0xff])]) {
     const response = await worker.fetch(
       new Request(`${ORIGIN}/api/easels/${ID}`, {
@@ -243,28 +272,34 @@ test("rejects malformed JSON, invalid UTF-8, wrong media types, and excessive de
       }),
       env,
     );
+
     assert.equal(response.status, 400);
   }
+
   assert.equal(bucket.writes, 0);
 });
 
 test("rejects cross-origin browser mutations, accepts native and same-origin mutations, limits per IP", async () => {
   const { send, env, bucket, limiterKeys } = setup();
+
   for (const origin of ["https://attacker.test", "null"]) {
     assert.equal((await send("PUT", snapshot(), { headers: { Origin: origin } })).status, 403);
     assert.equal((await send("DELETE", undefined, { headers: { Origin: origin } })).status, 403);
   }
+
   assert.equal(bucket.writes, 0);
   assert.equal((await send("PUT", snapshot(), { headers: { Origin: ORIGIN, "CF-Connecting-IP": "203.0.113.7" } })).status, 200);
   assert.equal(limiterKeys.at(-1), "203.0.113.7");
   const writes = bucket.writes;
   env.EASEL_MUTATIONS.limit = async () => ({ success: false });
+
   for (const method of ["PUT", "DELETE"]) {
     const response = await send(method, method === "PUT" ? snapshot() : undefined);
     assert.equal(response.status, 429);
     assert.equal(response.headers.get("retry-after"), "60");
     assert.equal(response.headers.get("access-control-allow-origin"), null);
   }
+
   assert.equal(bucket.writes, writes);
   const config = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
   assert.match(config, /"name": "EASEL_MUTATIONS"/);
@@ -304,24 +339,29 @@ test("DELETE of a missing id writes an authenticated tombstone", async () => {
 function pauseNextPut(bucket, predicate) {
   let resume;
   let reached;
+
   const ready = new Promise((resolve) => {
     reached = resolve;
   });
+
   const gate = new Promise((resolve) => {
     resume = resolve;
   });
+
   bucket.beforePut = async (_key, body) => {
     if (!predicate(body)) return;
     bucket.beforePut = undefined;
     reached();
     await gate;
   };
+
   return { ready, resume: () => resume() };
 }
 
 for (const existing of [false, true]) {
   test(`concurrent revoke beats paused ${existing ? "update" : "initial publish"} without resurrection`, async () => {
     const { send, bucket, page } = setup();
+
     if (existing) await send("PUT", snapshot());
     const pause = pauseNextPut(bucket, (body) => body !== "");
     const publishing = send("PUT", snapshot({ title: "In-flight change", revision: existing ? 2 : 1 }));
@@ -361,6 +401,7 @@ test("simultaneous first publishers cannot overwrite another owner's claim", asy
 for (const existing of [false, true]) {
   test(`an older delayed ${existing ? "update" : "first publish"} cannot overwrite a newer snapshot`, async () => {
     const { send, bucket, page } = setup();
+
     if (existing) await send("PUT", snapshot());
     const pause = pauseNextPut(bucket, () => true);
     const older = send("PUT", snapshot({ title: "Old snapshot", revision: existing ? 2 : 1 }));
@@ -380,9 +421,11 @@ for (const existing of [false, true]) {
 
 test("invalid routes and methods never mutate storage", async () => {
   const { send, bucket } = setup();
+
   for (const path of [`/api/easels/${ID.toUpperCase()}`, `/api/easels/short`, `/api/easels/${ID}/`]) {
     assert.equal((await send("PUT", snapshot(), { path })).status, 404);
   }
+
   assert.equal((await send("POST", snapshot())).status, 405);
   assert.equal((await send("GET")).status, 405);
   assert.equal((await send("PUT", snapshot(), { path: `/easel/${ID}/` })).status, 405);
@@ -396,13 +439,16 @@ test("storage and limiter failures return safe 503 messages", async () => {
     env.EASELS[operation] = async () => {
       throw new Error(`secret R2 failure ${KEY}`);
     };
+
     const response = await (operation === "get" ? page() : send("PUT", snapshot()));
     assert.equal(response.status, 503);
     assert.doesNotMatch(await response.text(), /secret|R2|bbbb/);
   }
+
   const { env, send } = setup();
   env.EASEL_MUTATIONS.limit = async () => {
     throw new Error("binding failure");
   };
+
   assert.equal((await send("DELETE")).status, 503);
 });

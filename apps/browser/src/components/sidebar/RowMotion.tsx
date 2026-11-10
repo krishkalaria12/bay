@@ -29,14 +29,18 @@ const closed = new Map<string, ClosingTab & { at: number }>();
 useBrowser.subscribe((s, prev) => {
   if (s.tabLists === prev.tabLists) return;
   const now = Date.now();
+
   for (const [key, was] of Object.entries(prev.tabLists)) {
     if (s.tabLists[key] === was) continue;
+
     for (const id of was) {
       const tab = prev.tabs[id];
+
       if (s.tabs[id] || !tab) continue;
       closed.set(id, { tab, active: Object.keys(prev.windows).some((w) => activeTabId(prev, w) === id), at: now });
     }
   }
+
   for (const [id, c] of closed) if (now - c.at > ROW_FRESH_MS) closed.delete(id);
 });
 
@@ -62,6 +66,7 @@ export function useRowMotion(entries: string[], enabled: boolean): RowMotion {
   const [before, setBefore] = useState(entries);
   const [ghosts, setGhosts] = useState<Ghost[]>([]);
   const [opening, setOpening] = useState<ReadonlySet<string>>(NONE);
+
   // Decided in the render that changes the rows, so no frame shows the list closed up (or the new row whole) first.
   if (entries !== before) {
     setBefore(entries);
@@ -74,35 +79,45 @@ export function useRowMotion(entries: string[], enabled: boolean): RowMotion {
     const fresh = entries.filter((e) => !had.has(e) && e.startsWith("t:") && now - (tabs[e.slice(2)]?.createdAt ?? 0) <= ROW_FRESH_MS);
     const stillOpening = [...opening].filter((e) => listed.has(e));
     const nextOpening = animate && fresh.length <= MAX_MOVING_ROWS ? [...stillOpening, ...fresh] : stillOpening;
+
     if (nextOpening.length !== opening.size || nextOpening.some((e) => !opening.has(e))) setOpening(nextOpening.length ? new Set(nextOpening) : NONE);
 
     const gone: Ghost[] = [];
     before.forEach((entry, i) => {
       const closing = !listed.has(entry) && entry.startsWith("t:") ? closed.get(entry.slice(2)) : undefined;
+
       if (!closing || now - closing.at > ROW_FRESH_MS) return;
       // Placed after the nearest entry above it that stays (null: the top of the list).
       let after: string | null = null;
+
       for (let k = i - 1; k >= 0 && after === null; k--) if (listed.has(before[k]!)) after = before[k]!;
       gone.push({ tab: closing.tab, active: closing.active, after });
     });
     // A row whose place went too can't stay; one placed at the top stays there.
     const staying = ghosts.filter((g) => g.after === null || listed.has(g.after));
     const next = animate && gone.length <= MAX_MOVING_ROWS ? [...staying, ...gone] : staying;
+
     if (next.length !== ghosts.length || next.some((g, i) => g !== ghosts[i])) setGhosts(next);
   }
+
   // Made once: every row gets them, and a new function would re-render them all.
   const [gone] = useState(() => (tabId: string) => setGhosts((all) => all.filter((g) => g.tab.id !== tabId)));
+
   const [opened] = useState(
     () => (entry: string) =>
       setOpening((all) => {
         if (!all.has(entry)) return all;
         const rest = [...all].filter((e) => e !== entry);
+
         return rest.length ? new Set(rest) : NONE;
       }),
   );
+
   if (!ghosts.length) return { rows: entries, opening, gone, opened };
   const rows: (string | ClosingTab)[] = ghosts.filter((g) => g.after === null);
+
   for (const entry of entries) rows.push(entry, ...ghosts.filter((g) => g.after === entry));
+
   return { rows, opening, gone, opened };
 }
 
@@ -130,6 +145,7 @@ export function OpeningRow({
   // Dragged, its entry closes up inside this wrapper: the wrapper takes back the list's gap after it, or the rows
   // below moved down by it as a drag began.
   const dragged = useDragSource(entry);
+
   if (grows) {
     return (
       <GrowingRow entry={entry} opening={opening} onOpened={onOpened} dragged={dragged}>
@@ -137,6 +153,7 @@ export function OpeningRow({
       </GrowingRow>
     );
   }
+
   return <View style={dragged ? { marginBottom: -layout.rowGap } : null}>{children}</View>;
 }
 
@@ -158,9 +175,11 @@ function GrowingRow({
   useEffect(() => {
     progress.set(play(() => onOpened(entry)));
   }, []);
+
   // Every value, "auto" at rest: a value the style stops giving keeps the last one it gave.
   const style = useAnimatedStyle(() => {
     const p = opening ? progress.get() : 1;
+
     return {
       height: opening ? p * metrics.rowHeight : "auto",
       marginBottom: (p - 1) * layout.rowGap,
@@ -168,6 +187,7 @@ function GrowingRow({
       overflow: opening ? "hidden" : "visible",
     };
   }, [opening, metrics.rowHeight]);
+
   return <Animated.View style={[style, dragged ? { marginBottom: -layout.rowGap } : null]}>{children}</Animated.View>;
 }
 
@@ -179,11 +199,15 @@ export function ClosingTabRow({ row, onGone }: { row: ClosingTab; onGone: (tabId
   useEffect(() => {
     progress.set(play(() => onGone(row.tab.id)));
   }, []);
+
   const style = useAnimatedStyle(() => {
     const p = progress.get();
+
     return { height: (1 - p) * metrics.rowHeight, marginBottom: -p * layout.rowGap, opacity: interpolate(p, [0, 0.75], [1, 0], Extrapolation.CLAMP) };
   });
+
   const { tab, active } = row;
+
   return (
     <Animated.View pointerEvents="none" style={[{ overflow: "hidden" }, style]}>
       <View style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}>

@@ -15,9 +15,13 @@ class Field {
     this.selectionEnd = end;
   }
 }
+
 globalThis.HTMLInputElement = Field;
+
 globalThis.HTMLTextAreaElement = class {};
+
 globalThis.document = { activeElement: null };
+
 const { selectInline, writeInline } = await import("./writeInline.web.ts");
 
 const focusedField = (value, caret = value.length) => {
@@ -25,6 +29,7 @@ const focusedField = (value, caret = value.length) => {
   field.value = value;
   field.setSelectionRange(caret, value.length);
   document.activeElement = field;
+
   return field;
 };
 

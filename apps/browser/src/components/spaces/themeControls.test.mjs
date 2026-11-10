@@ -1,6 +1,7 @@
 // The theme editor's wave (intensity) and dial (grain).
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { dialPoint, dialValue, segment, wavePoints } = await import("./themeControls.ts");
 
 test("the wave is a flat line at no intensity and swings its full height at full", () => {

@@ -8,7 +8,9 @@ export type KeyDownEventSpec = {
   ctrlKey?: boolean;
   charactersIgnoringModifiers?: string;
 };
+
 type DropEvent = { nativeEvent: { dataTransfer?: { files?: { uri: string }[] } } };
+
 export type MacOnlyProps = {
   tooltip?: string;
   enableFocusRing?: boolean;
@@ -22,12 +24,19 @@ export type MacOnlyProps = {
   onDragLeave?: (event: DropEvent) => void;
   onDrop?: (event: DropEvent) => void;
 };
+
 export type DesktopViewStyle = Omit<ViewStyle, "cursor"> & { cursor?: ViewStyle["cursor"] | "col-resize" | "row-resize" };
+
 type DesktopTextStyle = Omit<TextStyle, "cursor"> & { cursor?: DesktopViewStyle["cursor"] };
+
 type DesktopProps<P> = Omit<P, keyof MacOnlyProps | "style"> & MacOnlyProps;
+
 export type CompatViewProps = DesktopProps<ViewProps> & { style?: StyleProp<DesktopViewStyle> };
+
 export type CompatPressableProps = DesktopProps<PressableProps> & {
   style?: StyleProp<DesktopViewStyle> | ((state: { pressed: boolean }) => StyleProp<DesktopViewStyle>);
 };
+
 export type CompatTextInputProps = DesktopProps<TextInputProps> & { style?: StyleProp<DesktopTextStyle> };
+
 export type CompatScrollViewProps = DesktopProps<ScrollViewProps> & { style?: StyleProp<DesktopViewStyle> };

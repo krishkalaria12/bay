@@ -31,13 +31,17 @@ const cleanUpTitle = (hours: number) => CLEAN_UP_CHOICES.find((c) => c.value ===
 // A space's clean-up time as its menu has it: the app's setting ("app", unset), "never" (null), or hours.
 function cleanUpChoice(hours: number | null | undefined): string {
   if (hours === undefined) return "app";
+
   if (hours === null) return "never";
+
   return String(hours);
 }
 
 function cleanUpHoursOf(choice: string): number | null | "app" {
   if (choice === "app") return "app";
+
   if (choice === "never") return null;
+
   return Number(choice);
 }
 
@@ -110,17 +114,21 @@ function SpaceRow({
   const go = useSettingsNav((n) => n.go);
   const panHandlers = useSpaceDrag(reorder, spaceId, "y");
   const offsetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }), [offset]);
+
   if (!profile) return null;
 
   const description = isDefault ? "Default" : null;
+
   const openMenu = async () => {
     const s = browserRead.getState();
+
     const choice = await showMenu([
       { id: "details", title: "Show Space Details" },
       { id: "default", title: "Make Default Space", enabled: !isDefault },
       { separator: true },
       { id: "delete", title: "Delete Space…", enabled: s.spaceOrder.length > 1 },
     ]);
+
     if (choice === "details") go("spaces", spaceId);
     else if (choice === "default") reportBrowserCommand(setDefaultSpace(spaceId));
     else if (choice === "delete") void deleteSpace(spaceId);
@@ -175,12 +183,17 @@ function SpaceRow({
 function bookmarkCount(s: BrowserState, spaceId: string): number {
   const roots = s.bookmarks.roots[spaceId];
   let count = 0;
+
   const walk = (id: string) => {
     const n = s.bookmarks.nodes[id];
+
     if (n?.kind === "url") count++;
+
     if (n?.kind === "folder") n.children.forEach(walk);
   };
+
   if (roots) [roots.bar, roots.other].forEach(walk);
+
   return count;
 }
 
@@ -194,14 +207,21 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
   const [name, setName] = useState(profile?.name ?? "");
   const [picking, setPicking] = useState(false);
   const colors = useFormColors();
+
   if (!profile) return null;
   const update = (patch: UserSpacePatch) => reportBrowserCommand(updateSpace(spaceId, patch));
+
   // The editor shows in a browser window (settings is its own), on this space, so the window is its preview.
   const customize = () => {
     const windowId = resolveWindowId(useBrowser.getState());
+
     if (windowId) openThemeEditor(windowId, spaceId);
   };
+
   const commitName = () => (name.trim() ? update({ name: name.trim() }) : setName(profile.name));
+
+  // SAFETY: SPACE_COLORS is keyed by SpaceColor; Object.keys yields exactly those keys at runtime.
+  const spaceColors = Object.keys(SPACE_COLORS) as SpaceColor[];
 
   return (
     <View>
@@ -238,7 +258,7 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
         ) : null}
         <Row title="Theme colour" description="Tints this space's windows and New Tab page.">
           <View style={{ flexDirection: "row", gap: 7 }}>
-            {(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => (
+            {spaceColors.map((c) => (
               <Pressable key={c} onPress={() => update({ color: c, theme: null })} tooltip={SPACE_COLORS[c].name}>
                 <View
                   style={{

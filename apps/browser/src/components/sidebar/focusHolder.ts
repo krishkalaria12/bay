@@ -5,5 +5,6 @@ export function createFocusHolder(doc: Pick<Document, "createElement" | "body">)
   holder.setAttribute("aria-hidden", "true");
   Object.assign(holder.style, { position: "fixed", width: "0", height: "0", overflow: "hidden", outline: "none" });
   doc.body.append(holder);
+
   return holder;
 }

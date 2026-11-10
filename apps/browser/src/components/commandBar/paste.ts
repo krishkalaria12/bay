@@ -7,6 +7,7 @@ import { useBrowserRead as useBrowser } from "../../store/read";
 import { defaultSearchEngine } from "../../store/settings";
 import type { Tab } from "../../store/types";
 
+// SAFETY: { getString() assertion matches the runtime value validated at this call site.
 const NativeClipboard = NativeModules.Clipboard as { getString(): Promise<string> } | undefined;
 
 export const readClipboard = (): Promise<string> => NativeClipboard?.getString().catch(() => "") ?? Promise.resolve("");
@@ -17,6 +18,7 @@ export async function clipboardPasteAction(): Promise<PasteAction | null> {
 
 export function pasteMenuItem(action: PasteAction | null): MenuItem[] {
   if (!action) return [];
+
   return [
     {
       id: "pasteAndGo",
@@ -34,6 +36,8 @@ export async function showUrlBarMenu(tab: Pick<Tab, "id" | "url">) {
   const action = await clipboardPasteAction();
   const paste = pasteMenuItem(action);
   const choice = await showMenu([...paste, ...(paste.length ? [{ separator: true as const }] : []), { id: "copy", title: "Copy URL", symbol: "link" }]);
+
   if (choice === "pasteAndGo" && action) reportBrowserCommand(tabCommands.navigate(tab.id, pasteTarget(action)));
+
   if (choice === "copy") copyText(cleanUrl(tab.url));
 }

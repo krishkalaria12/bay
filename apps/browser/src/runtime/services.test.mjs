@@ -17,11 +17,14 @@ test("one authority owns cleanup and data services across its windows, and dispo
   store.getState().createWindow();
   const legacy = useBrowser.getState();
   const before = listeners();
+
   let cleaned = 0,
     abandoned = 0;
+
   store.setState({
     cleanUpInactiveTabs() {
       cleaned++;
+
       return 0;
     },
     closeAbandonedNewTabs() {
@@ -76,9 +79,11 @@ test("background persistence preserves recovered state and acknowledges both fin
   await tick();
   heldSaves.on = true;
   let acknowledged = false;
+
   const final = owner.flush({ final: true }).then(() => {
     acknowledged = true;
   });
+
   assert.equal(heldSaves.queue.length, 3, "session, downloads and Live all use acknowledged saves");
   store.getState().closeWindow(windowId);
   updateConfig({ githubClientId: "changed-during-quit" });

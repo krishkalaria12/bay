@@ -30,13 +30,21 @@ export function HoverCard({ windowId, windowWidth }: { windowId: string; windowW
   const calendar = useIsCalendarTab(hover?.kind === "tab" ? hover.id : null);
   const site = useSitePreview(hover?.kind === "tab" ? hover.id : undefined);
   const folders = useBrowser((s) => s.settings.previewFolders);
+
   if (!hover) return null;
+
   if (hover.kind === "live") return <LiveItemCard id={hover.id} windowId={windowId} anchor={hover.anchor} />;
+
   if (hover.kind === "tab" && player) return <HoverPlayer tabId={hover.id} windowId={windowId} anchor={hover.anchor} windowWidth={windowWidth} />;
+
   if (capabilities.calendar && hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
+
   if (hover.kind === "tab" && site) return <SitePreview key={hover.id} tabId={hover.id} site={site} anchor={hover.anchor} />;
+
   if (hover.kind === "tab") return <TabCard tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
+
   if (!folders) return null;
+
   return hover.kind === "folder" ? (
     <FolderPeek folderId={hover.id} windowId={windowId} anchor={hover.anchor} />
   ) : (
@@ -47,6 +55,7 @@ export function HoverCard({ windowId, windowWidth }: { windowId: string; windowW
 function Card({ anchor, children }: { anchor: Anchor; children: React.ReactNode }) {
   const theme = useTheme();
   const right = useSidebarOnRight();
+
   return (
     <Surface
       onMouseEnter={keepHover}
@@ -76,13 +85,17 @@ function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string;
   const theme = useTheme();
   const tab = useBrowser((s) => s.tabs[tabId]);
   const sleeping = useIsSleeping(tabId);
+
   // The page on screen (the shown tab, or one in its split) needs no preview: just what it is and where.
   const onScreen = useBrowser((s) => {
     const active = activeTabId(s, windowId);
+
     return active === tabId || !!(active && splitOf(s, active)?.tabIds.includes(tabId));
   });
+
   if (!tab) return null;
   const away = !onScreen && awayFromPin(tab);
+
   return (
     <Card anchor={anchor}>
       {!onScreen && tab.url ? <PagePreview tabId={tabId} /> : null}
@@ -118,10 +131,12 @@ function PagePreview({ tabId }: { tabId: string }) {
   const theme = useTheme();
   const incognito = useBrowser((s) => isIncognitoSpace(s.tabs[tabId]?.spaceId ?? ""));
   const picture = incognito ? null : lastPicture(tabId);
+
   if (!picture) return null;
   const [, , width, height] = picture.frame;
   // The page's top, at the card's width: the image keeps its shape and the frame crops the rest.
   const shown = width > 0 ? (HOVER_CARD_WIDTH * height) / width : HOVER_CARD_PREVIEW_HEIGHT;
+
   return (
     <View
       style={{
@@ -148,7 +163,9 @@ function PagePreview({ tabId }: { tabId: string }) {
 function GroupPeek({ groupId, windowId, anchor }: { groupId: string; windowId: string; anchor: Anchor }) {
   const group = useBrowser((s) => s.groups[groupId]);
   const label = useBrowser((s) => (s.groups[groupId] ? groupLabel(s, s.groups[groupId]!) : ""));
+
   if (!group) return null;
+
   return <Peek label={label} tabIds={group.tabIds} windowId={windowId} anchor={anchor} />;
 }
 
@@ -156,13 +173,16 @@ function GroupPeek({ groupId, windowId, anchor }: { groupId: string; windowId: s
 function FolderPeek({ folderId, windowId, anchor }: { folderId: string; windowId: string; anchor: Anchor }) {
   const name = useBrowser((s) => s.pinnedFolders[folderId]?.name);
   const tabIds = useBrowser(useShallow((s) => folderTabIds(s, folderId)));
+
   if (name === undefined || !tabIds.length) return null;
+
   return <Peek label={name || "New Folder"} tabIds={tabIds} windowId={windowId} anchor={anchor} />;
 }
 
 function Peek({ label, tabIds, windowId, anchor }: { label: string; tabIds: readonly string[]; windowId: string; anchor: Anchor }) {
   const theme = useTheme();
   const more = tabIds.length - HOVER_CARD_PEEK_ROWS;
+
   return (
     <Card anchor={anchor}>
       <Text style={{ fontSize: 12, fontWeight: "600", color: theme.textSecondary, marginBottom: 4, marginLeft: 4 }}>
@@ -180,7 +200,9 @@ function PeekRow({ tabId, windowId }: { tabId: string; windowId: string }) {
   const theme = useTheme();
   const tab = useBrowser((s) => s.tabs[tabId]);
   const [hovered, setHovered] = useState(false);
+
   if (!tab) return null;
+
   return (
     <Pressable
       onPress={() => {

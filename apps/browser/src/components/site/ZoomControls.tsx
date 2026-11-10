@@ -12,6 +12,7 @@ import { useHover } from "../ui/primitives";
 // Chrome's zoom icon: in the address field whenever the page isn't at 100%, opening − / + / Reset.
 export function ZoomIndicator({ tabId, zoom, palette, onFocus }: { tabId: string; zoom: number; palette: ToolbarPalette; onFocus: () => void }) {
   if (Math.abs(zoom - 1) < 0.001) return null;
+
   return (
     <ToolbarButton
       palette={palette}
@@ -31,6 +32,7 @@ export function ZoomIndicator({ tabId, zoom, palette, onFocus }: { tabId: string
 export function ZoomPopover({ tabId, right, left, top }: { tabId: string; right?: number; left?: number; top: number }) {
   const theme = useTheme();
   const zoom = useTab(tabId)?.zoom ?? 1;
+
   return (
     <Popover width={236} top={top} right={right} left={left} onDismiss={() => setPopover(tabId, null)}>
       <View style={{ flexDirection: "row", alignItems: "center", height: 48, paddingLeft: 16, paddingRight: 10, gap: 8 }}>
@@ -44,6 +46,7 @@ export function ZoomPopover({ tabId, right, left, top }: { tabId: string; right?
 
 export function ZoomStepper({ tabId, zoom, percent = true }: { tabId: string; zoom: number; percent?: boolean }) {
   const theme = useTheme();
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: percent ? 2 : 4 }}>
       <StepButton icon="minus" tooltip="Zoom Out (⌘-)" onPress={() => void webviews.get(tabId)?.zoomStep(-1)} />
@@ -64,6 +67,7 @@ export function ZoomStepper({ tabId, zoom, percent = true }: { tabId: string; zo
 function StepButton({ icon, tooltip, onPress }: { icon: string; tooltip: string; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip={tooltip}>
       <Pressable onPress={onPress}>

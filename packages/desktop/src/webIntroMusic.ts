@@ -16,10 +16,13 @@ let muted = false;
 function hall(audio: AudioContext): AudioBuffer {
   const length = Math.floor(2.6 * audio.sampleRate);
   const impulse = audio.createBuffer(2, length, audio.sampleRate);
+
   for (let channel = 0; channel < 2; channel++) {
     const data = impulse.getChannelData(channel);
+
     for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 3);
   }
+
   return impulse;
 }
 
@@ -41,7 +44,9 @@ function start(left: Float32Array, right: Float32Array, late: number, current: n
   if (late * SAMPLE_RATE >= left.length) return;
   const audio = new AudioContext({ sampleRate: SAMPLE_RATE });
   const buffer = audio.createBuffer(2, left.length, SAMPLE_RATE);
+  // SAFETY: the checks above established this shape.
   buffer.copyToChannel(left as Float32Array<ArrayBuffer>, 0);
+  // SAFETY: the checks above established this shape.
   buffer.copyToChannel(right as Float32Array<ArrayBuffer>, 1);
   const source = audio.createBufferSource();
   source.buffer = buffer;
@@ -73,6 +78,7 @@ export function playWebIntroMusic(cues: IntroMusicCues, mutedNow: boolean) {
   setTimeout(() => {
     if (session !== current) return;
     const [left, right] = synthesizeIntroMusic(cues);
+
     if (session === current) start(left, right, (performance.now() - requestedAt) / 1000, current);
   }, 0);
 }

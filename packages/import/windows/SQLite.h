@@ -1,6 +1,7 @@
 #pragma once
 #include "ImportCore.h"
 #ifdef _WIN32
+#include <cmath>
 #include <winsqlite/winsqlite3.h>
 #pragma comment(lib, "winsqlite3.lib")
 #elif defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
@@ -190,7 +191,8 @@ inline std::int64_t integer(sqlite3_stmt *s, const std::string &name) {
   int i = column(s, name);
   return i < 0 ? 0 : sqlite3_column_int64(s, i);
 }
+// Whole milliseconds: the app's import commands reject a fractional time.
 inline double chromiumTime(std::int64_t micros) {
-  return micros > 0 ? (micros - 11644473600000000LL) / 1000.0 : 0;
+  return micros > 0 ? std::floor((micros - 11644473600000000LL) / 1000.0) : 0;
 }
 } // namespace bay::importer

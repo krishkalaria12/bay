@@ -657,11 +657,13 @@ export function convertUnit(value: number, from: UnitLookupEntry, to: UnitLookup
   if (from.category.name === "temperature") {
     if (from.def.name === to.def.name) return value;
     const celsius = from.def.name === "fahrenheit" ? ((value - 32) * 5) / 9 : from.def.name === "kelvin" ? value - 273.15 : value;
+
     return to.def.name === "fahrenheit" ? (celsius * 9) / 5 + 32 : to.def.name === "kelvin" ? celsius + 273.15 : celsius;
   }
 
   // Standard factor-based conversion
   const baseValue = value * from.def.factor;
+
   return baseValue / to.def.factor;
 }
 

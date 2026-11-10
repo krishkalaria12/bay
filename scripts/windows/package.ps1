@@ -44,6 +44,14 @@ try {
     Copy-Item (Join-Path $repo 'packaging/windows/licenses') $stage -Recurse
     # Keep debugging symbols separate from the downloadable application.
     Get-ChildItem $stage -Filter '*.pdb' -Recurse | Remove-Item
+    # The engine's output folder also holds its build tools, test programs and
+    # size reports. Only these programs ship; the GPU fallbacks stay.
+    $programs = 'Bay.exe', 'chrome_proxy.exe', 'chrome_pwa_launcher.exe', 'elevated_tracing_service.exe', 'elevation_service.exe', 'notification_helper.exe'
+    Get-ChildItem $stage -Filter '*.exe' -File | Where-Object Name -NotIn $programs | Remove-Item
+    Get-ChildItem $stage -Filter '*.pak.info' -Recurse | Remove-Item
+    foreach ($unused in 'msdia140.dll', 'symsrv.dll', 'VkICD_mock_icd.dll', 'VkLayer_khronos_validation.dll') {
+        Remove-Item (Join-Path $stage $unused) -ErrorAction SilentlyContinue
+    }
     Copy-Item (Join-Path $repo 'packaging/windows/update.ps1') $stage
     $signArgs = @('/fd', 'SHA256', '/tr', 'http://timestamp.digicert.com', '/td', 'SHA256')
     if (-not $Unsigned) {

@@ -24,22 +24,29 @@ export function useSidebarPlayerTab(windowId: string): string | undefined {
   // Only tabs with a media session can have a player: start from those (usually none) rather than
   // filtering every tab in the window on every store update.
   const sessions = useMedia(useShallow((m) => Object.keys(m.sessions)));
+
   const hidden = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
+
       if (!sessions.length || !w) return NO_IDS;
       const ids = sessions.filter((id) => s.tabs[id]?.windowId === windowId && s.tabs[id]!.spaceId === w.spaceId && !isTabShown(s, id));
       // In sidebar order, which breaks ties between equally recent sessions.
       const order = listIds(s, windowListKey(s, w));
+
       return ids.length > 1 ? ids.sort((a, b) => order.indexOf(a) - order.indexOf(b)) : ids;
     }),
   );
+
   // The player keeps the tab it shows (playerTabFor): a pause, or a report that was already on its way, never swaps it.
   const [shown, setShown] = useState<string | undefined>(undefined);
+
   const next = useMedia(
     (m) => playerTabFor(m, hidden, shown) ?? (all.length > 1 ? (playerTabFor(m, all, shown) ?? all.find((id) => !m.dismissed[id])) : undefined),
   );
+
   if (next !== shown) setShown(next);
+
   return next;
 }
 
@@ -53,6 +60,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
   const playing = isPlaying(session);
   const { hovered, hoverProps } = useHover();
   const artwork = useArtwork(tabId, session?.artwork);
+
   if (!session || !tab) return null;
   const tracks = hasTrackControls(session);
   const title = session.title || tab.title;
@@ -99,7 +107,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
         <View style={{ flexDirection: "row", alignItems: "center", height: 24, marginTop: 4, marginLeft: -4 }}>
           <IconButton
             icon={tracks ? "backward.fill" : `gobackward.${SKIP_SECONDS}`}
-            size={tracks ? 10 : 12}
+            size={tracks ? 13 : 15}
             box={24}
             radius={6}
             tooltip={tracks ? "Play Previous Track" : `Skip back ${SKIP_SECONDS} seconds`}
@@ -107,7 +115,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
           />
           <IconButton
             icon={playing ? "pause.fill" : "play.fill"}
-            size={13}
+            size={16}
             box={24}
             radius={6}
             tooltip={playing ? "Pause" : "Play"}
@@ -115,7 +123,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
           />
           <IconButton
             icon={tracks ? "forward.fill" : `goforward.${SKIP_SECONDS}`}
-            size={tracks ? 10 : 12}
+            size={tracks ? 13 : 15}
             box={24}
             radius={6}
             tooltip={tracks ? "Play Next Track" : `Skip ahead ${SKIP_SECONDS} seconds`}
@@ -143,7 +151,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
         </View>
       </Surface>
       {hovered ? (
-        <View style={{ position: "absolute", top: -6, right: -6, flexDirection: "row", gap: 2 }}>
+        <View style={{ position: "absolute", top: -8, right: -8, flexDirection: "row", gap: 3 }}>
           <CornerButton
             icon={tab.muted ? "speaker.wave.2.fill" : "speaker.slash.fill"}
             tooltip={tab.muted ? "Unmute Site" : "Mute Site"}
@@ -159,27 +167,29 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
 // The bar is the only part that moves with the clock: it ticks on its own instead of re-rendering the player.
 function TickingSeekBar({ playing, ...props }: { playing: boolean } & ComponentProps<typeof SeekBar>) {
   useTicker(playing, 1000);
+
   return <SeekBar {...props} />;
 }
 
 function CornerButton({ icon, tooltip, onPress }: { icon: string; tooltip: string; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps} tooltip={tooltip}>
       <Pressable onPress={onPress}>
         <Surface
           fill={hex(theme.panel)}
-          cornerRadius={9}
+          cornerRadius={12}
           borderColor={hex(theme.panelBorder)}
           borderWidth={0.5}
           shadowColor="#000000"
           shadowOpacity={theme.panelShadowOpacity * 0.5}
           shadowRadius={3}
           shadowOffset={[0, 1]}
-          style={{ width: 18, height: 18, alignItems: "center", justifyContent: "center" }}
+          style={{ width: 24, height: 24, alignItems: "center", justifyContent: "center" }}
         >
-          <Symbol name={icon} size={8} weight="bold" color={hovered ? theme.textPrimary : theme.textSecondary} style={{ width: 12, height: 12 }} />
+          <Symbol name={icon} size={13} weight="bold" color={hovered ? theme.textPrimary : theme.textSecondary} style={{ width: 16, height: 16 }} />
         </Surface>
       </Pressable>
     </View>

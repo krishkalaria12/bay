@@ -1,3 +1,5 @@
+import type { JsonInput } from "../lib/json";
+import * as v from "valibot";
 import type { LocationCommandEffects } from "./locationCommands";
 import type { BrowserStore } from "../store/browserStore";
 import { MAX_SPLIT_PANES } from "../store/constants";
@@ -20,7 +22,9 @@ import {
 
 // A link Chrome already opened (`adoptId`) is a native page handoff, not a user command.
 export type UserPaneOptions = Omit<OpenPaneOptions, "adoptId">;
+
 export type SplitPatch = { sizes?: number[]; stackSizes?: [number, number] };
+
 export type SplitCommand =
   | { method: "createSplit"; tabIds: string[]; orientation?: SplitView["orientation"] }
   | { method: "openSplitPane"; windowId: string; options?: UserPaneOptions }
@@ -53,68 +57,86 @@ export const SPLIT_COMMAND_METHODS = [
 ] as const;
 
 const SIDES: readonly string[] = ["left", "right", "top", "bottom"];
-const side = (value: unknown): SplitSide => (typeof value === "string" && SIDES.includes(value) ? (value as SplitSide) : invalidCommand("invalid split side"));
-const delta = (value: unknown): 1 | -1 => (value === 1 || value === -1 ? value : invalidCommand("invalid pane direction"));
-function fractions(value: unknown, length?: number): number[] {
+
+// SAFETY: the checks above established this shape.
+const side = (value: JsonInput): SplitSide => (v.is(v.string(), value) && SIDES.includes(value) ? (value as SplitSide) : invalidCommand("invalid split side"));
+const delta = (value: JsonInput): 1 | -1 => (value === 1 || value === -1 ? value : invalidCommand("invalid pane direction"));
+
+function fractions(value: JsonInput, length?: number): number[] {
   if (!Array.isArray(value) || value.length < 2 || value.length > MAX_SPLIT_PANES || (length !== undefined && value.length !== length))
     return invalidCommand("invalid split sizes");
-  return Array.from(value, (size) =>
-    typeof size === "number" && Number.isFinite(size) && size > 0 && size <= 1 ? size : invalidCommand("invalid split size"),
-  );
+
+  return Array.from(value, (size) => (v.is(v.number(), size) && Number.isFinite(size) && size > 0 && size <= 1 ? size : invalidCommand("invalid split size")));
 }
 
-export function parseSplitCommand(value: unknown): SplitCommand {
+export function parseSplitCommand(value: JsonInput): SplitCommand {
   const c = commandObject(value);
   const fields = (...allowed: string[]) => commandObject(c, ["method", ...allowed]);
   const tabId = () => commandText(c.tabId);
   const windowId = () => commandText(c.windowId);
   const splitId = () => commandText(c.splitId);
+
   switch (c.method) {
     case "createSplit": {
       fields("tabIds", "orientation");
       const tabIds = commandIds(c.tabIds);
+
       if (tabIds.length < 2 || tabIds.length > MAX_SPLIT_PANES) return invalidCommand("invalid split tabs");
+
       if (c.orientation !== undefined && c.orientation !== "horizontal" && c.orientation !== "vertical") return invalidCommand("invalid split orientation");
-      return { method: c.method, tabIds, ...(c.orientation !== undefined ? { orientation: c.orientation } : {}) };
+
+      return { method: c.method, tabIds, ...(c.orientation !== undefined ? { orientation: c.orientation } : undefined) };
     }
+
     case "openSplitPane": {
       fields("windowId", "options");
+
       if (c.options === undefined) return { method: c.method, windowId: windowId() };
       const o = commandObject(c.options, ["tabId", "url", "anchorTabId", "side", "background"]);
+
       return {
         method: c.method,
         windowId: windowId(),
         options: commandFields<UserPaneOptions>(o, { tabId: commandText, url: commandUrl, anchorTabId: commandText, side, background: commandBoolean }),
       };
     }
+
     case "replaceSplitPane":
       fields("paneTabId", "tabId");
+
       return { method: c.method, paneTabId: commandText(c.paneTabId), tabId: tabId() };
     case "removeTabFromSplit":
       fields("tabId");
+
       return { method: c.method, tabId: tabId() };
     case "separateSplit":
     case "flipSplit":
     case "toggleSplitOrientation":
       fields("splitId");
+
       return { method: c.method, splitId: splitId() };
     case "updateSplit": {
       fields("splitId", "patch");
       const p = commandObject(c.patch, ["sizes", "stackSizes"]);
+
       return {
         method: c.method,
         splitId: splitId(),
         patch: commandFields<SplitPatch>(p, {
           sizes: (v) => fractions(v),
+          // SAFETY: the checks above established this shape.
           stackSizes: (v) => fractions(v, 2) as [number, number],
         }),
       };
     }
+
     case "movePane":
       fields("tabId", "delta");
+
       return { method: c.method, tabId: tabId(), delta: delta(c.delta) };
     case "focusPane":
       fields("windowId", "delta");
+
       return { method: c.method, windowId: windowId(), delta: delta(c.delta) };
     case "toggleTabLayout":
     case "closePeek":
@@ -122,22 +144,27 @@ export function parseSplitCommand(value: unknown): SplitCommand {
     case "splitPeek":
     case "reopenPeekOrClosed":
       fields("windowId");
+
       return { method: c.method, windowId: windowId() };
     case "openPeek": {
       fields("fromTabId", "url", "point");
       let point: { x: number; y: number } | undefined;
+
       if (c.point !== undefined) {
         const p = commandObject(c.point, ["x", "y"]);
-        if (typeof p.x !== "number" || !Number.isFinite(p.x) || typeof p.y !== "number" || !Number.isFinite(p.y)) return invalidCommand("invalid peek point");
+
+        if (!v.is(v.number(), p.x) || !Number.isFinite(p.x) || !v.is(v.number(), p.y) || !Number.isFinite(p.y)) return invalidCommand("invalid peek point");
         point = { x: p.x, y: p.y };
       }
+
       return {
         method: c.method,
         fromTabId: commandText(c.fromTabId),
         url: commandUrl(c.url),
-        ...(point ? { point } : {}),
+        ...(point ? { point } : undefined),
       };
     }
+
     default:
       return invalidCommand("unknown split command");
   }
@@ -145,22 +172,29 @@ export function parseSplitCommand(value: unknown): SplitCommand {
 
 export function executeSplitCommand(store: BrowserStore, command: SplitCommand, effects?: LocationCommandEffects): string | null {
   const s = store.getState();
+
   switch (command.method) {
     case "createSplit":
       requireCommandTabs(s, command.tabIds);
+
       return s.createSplit(command.tabIds, command.orientation) || invalidCommand("tabs cannot share a split");
     case "openSplitPane": {
       const window = requireCommandWindow(s, command.windowId);
       const o = command.options ?? {};
+
       for (const id of [o.tabId, o.anchorTabId]) {
         if (!id) continue;
         const tab = requireCommandTab(s, id);
+
         if (window.incognito ? tab.spaceId !== window.spaceId : isIncognitoSpace(tab.spaceId))
           return invalidCommand("tab cannot cross private window boundaries");
       }
+
       const result = s.openSplitPane(command.windowId, o);
+
       return result.ok ? result.tabId : null;
     }
+
     case "replaceSplitPane":
       requireCommandTabs(s, [command.paneTabId, command.tabId]);
       s.replaceSplitPane(command.paneTabId, command.tabId);
@@ -189,18 +223,23 @@ export function executeSplitCommand(store: BrowserStore, command: SplitCommand, 
       break;
     case "openPeek":
       requireCommandTab(s, command.fromTabId);
+
       return s.openPeek(command.fromTabId, command.url, undefined, command.point) ?? null;
     case "reopenPeekOrClosed":
       // One commit: a closed peek comes back over its tab, else the window's last closed tab.
       requireCommandWindow(s, command.windowId);
+
       if (!s.reopenPeek(command.windowId)) store.getState().reopenClosed(command.windowId);
       break;
     case "keepPeek": {
       requireCommandWindow(s, command.windowId);
       const destination = s.keepPeek(command.windowId) ?? null;
+
       if (destination) effects?.focusWindow(destination);
+
       return destination;
     }
+
     case "toggleTabLayout":
     case "closePeek":
     case "splitPeek":
@@ -208,5 +247,6 @@ export function executeSplitCommand(store: BrowserStore, command: SplitCommand, 
       s[command.method](command.windowId);
       break;
   }
+
   return null;
 }

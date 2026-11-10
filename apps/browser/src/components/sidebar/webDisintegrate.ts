@@ -18,7 +18,9 @@ const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
 /** A row's specks from the host's `[x, y, r, g, b, a]` runs, each with its own path and timing. */
 export function specksFor(row: Anchor, runs: number[], random: () => number = Math.random): Speck[] {
   const specks: Speck[] = [];
+
   for (let i = 0; i + 5 < runs.length; i += 6) {
+    // SAFETY: the checks above established this shape.
     const [x, y, r, g, b, a] = runs.slice(i, i + 6) as [number, number, number, number, number, number];
     const drift: [number, number] = [x - between(random, 14, 34), y + between(random, -4, 6)];
     specks.push({
@@ -32,6 +34,7 @@ export function specksFor(row: Anchor, runs: number[], random: () => number = Ma
       end: [drift[0] + between(random, -46, 30), drift[1] + between(random, -42, 42)],
     });
   }
+
   return specks;
 }
 
@@ -40,17 +43,23 @@ const along = (from: [number, number], to: [number, number], k: number) => ({ x:
 // Solid, then to three quarters, then gone: Core Animation's keyframes [1, 1, 0.75, 0] at [0, 0.35, 0.7, 1].
 function opacityAt(t: number): number {
   if (t < 0.35) return 1;
+
   if (t < 0.7) return 1 - 0.25 * ((t - 0.35) / 0.35);
+
   return 0.75 * (1 - (t - 0.7) / 0.3);
 }
 
 /** Where a speck is `seconds` in, and how opaque; it waits where it started until its turn. Null once it's gone. */
 export function speckAt(speck: Speck, seconds: number): { x: number; y: number; opacity: number } | null {
   const t = (seconds - speck.delay) / speck.life;
+
   if (t >= 1) return null;
+
   if (t <= 0) return { x: speck.x, y: speck.y, opacity: 1 };
   const opacity = opacityAt(t);
+
   if (t < 0.4) return { ...along([speck.x, speck.y], speck.drift, easeIn(t / 0.4)), opacity };
+
   return { ...along(speck.drift, speck.end, easeOut((t - 0.4) / 0.6)), opacity };
 }
 
@@ -58,6 +67,7 @@ export function speckAt(speck: Speck, seconds: number): { x: number; y: number; 
 export async function webDisintegrate(rows: Anchor[]): Promise<void> {
   const runs = await documentSpecks(rows);
   const specks = rows.flatMap((row, i) => specksFor(row, runs[i] ?? []));
+
   if (!specks.length) return;
   const canvas = document.createElement("canvas");
   const scale = window.devicePixelRatio || 1;
@@ -66,22 +76,28 @@ export async function webDisintegrate(rows: Anchor[]): Promise<void> {
   Object.assign(canvas.style, { position: "fixed", inset: "0", width: "100%", height: "100%", pointerEvents: "none", zIndex: "10000" });
   document.body.append(canvas);
   const context = canvas.getContext("2d");
+
   if (!context) return canvas.remove();
   context.scale(scale, scale);
   const start = performance.now();
+
   const frame = (now: number) => {
     context.clearRect(0, 0, window.innerWidth, window.innerHeight);
     let drawn = false;
+
     for (const speck of specks) {
       const at = speckAt(speck, (now - start) / 1000);
+
       if (!at) continue;
       drawn = true;
       context.globalAlpha = at.opacity;
       context.fillStyle = speck.color;
       context.fillRect(at.x - speck.size / 2, at.y - speck.size / 2, speck.size, speck.size);
     }
+
     if (drawn) requestAnimationFrame(frame);
     else canvas.remove();
   };
+
   requestAnimationFrame(frame);
 }

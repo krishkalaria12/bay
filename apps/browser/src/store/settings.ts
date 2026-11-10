@@ -10,7 +10,7 @@ import {
   type ExtensionSearchEngine,
   type SearchEngine,
 } from "@bay/core";
-import type { PageEngine } from "@bay/chromium";
+import * as v from "valibot";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browserStore";
 import { layout } from "../lib/constants";
@@ -55,6 +55,8 @@ export type Settings = {
   // Off by default; reversible via Reset Name. macOS 26 with Apple Intelligence in Arc;
   // Bay ships a heuristic that runs everywhere.
   tidyTabTitles: boolean;
+  // Arc Max's Tidy Tabs: the divider's Tidy button. The sidebar menu and command bar offer it either way.
+  tidyTabs: boolean;
   cleanUpInactiveTabsAfterHours: number | null;
   awakeSites: string[];
   mutedSites: string[];
@@ -107,12 +109,6 @@ export type Settings = {
   littleBayMenuBarItem: boolean;
   // A Little Bay left alone this long is put away, its page in the Library's archive (littleBay/putAway.ts); null never.
   littleBayPutAwayAfterHours: number | null;
-
-  // Where pages open (store/engines.ts): the default engine, website rules ("https://host[:port]" to an engine), and
-  // whether streaming sites open in WebKit, where their protected video plays.
-  pageEngine: PageEngine;
-  websiteEngines: Record<string, PageEngine>;
-  protectedVideoInWebKit: boolean;
 };
 
 export type LittleBayShortcut = { key: string; keyCode: number; modifiers: ("control" | "option" | "shift" | "command")[] };
@@ -145,6 +141,8 @@ export const DEFAULT_SETTINGS: Settings = {
   optShiftClickOpensInGroup: true,
   autoGroupMeetingTabs: true,
   tidyTabTitles: false,
+  // On, as in Arc: it waits for a click.
+  tidyTabs: true,
   // On, as Arc's archive (its default is 12 hours). A saved session keeps its choice.
   cleanUpInactiveTabsAfterHours: 12,
   awakeSites: [...DEFAULT_AWAKE_SITES],
@@ -180,9 +178,6 @@ export const DEFAULT_SETTINGS: Settings = {
   littleBayMenuBarItem: false,
   // Arc's: six hours.
   littleBayPutAwayAfterHours: 6,
-  pageEngine: "chromium",
-  websiteEngines: {},
-  protectedVideoInWebKit: true,
 };
 
 type LegacySettings = Partial<Settings> & {
@@ -198,17 +193,24 @@ type LegacySettings = Partial<Settings> & {
 export function restoreSettings(saved: LegacySettings | null = {}): Settings {
   const { defaultProfileId, warnBeforeMovingTabsToProfile, openLinksInHarbor, harborSize, openLinksInSmallYahu, smallYahuSize, ...current } = saved ?? {};
   const settings = { ...DEFAULT_SETTINGS, ...current };
+
   if (current.defaultSpaceId === undefined && defaultProfileId) settings.defaultSpaceId = defaultProfileId;
-  if (current.warnBeforeMovingTabsToSpace === undefined && typeof warnBeforeMovingTabsToProfile === "boolean") {
+
+  if (current.warnBeforeMovingTabsToSpace === undefined && v.is(v.boolean(), warnBeforeMovingTabsToProfile)) {
     settings.warnBeforeMovingTabsToSpace = warnBeforeMovingTabsToProfile;
   }
+
   const externalLinks = openLinksInHarbor ?? openLinksInSmallYahu;
-  if (current.openLinksInLittleBay === undefined && typeof externalLinks === "boolean") settings.openLinksInLittleBay = externalLinks;
+
+  if (current.openLinksInLittleBay === undefined && v.is(v.boolean(), externalLinks)) settings.openLinksInLittleBay = externalLinks;
   const size = harborSize ?? smallYahuSize;
+
   if (current.littleBaySize === undefined && Array.isArray(size) && size.length === 2 && size.every((n) => Number.isFinite(n) && n > 0)) {
     settings.littleBaySize = [...size];
   }
+
   const shortcuts = { ...settings.shortcuts };
+
   for (const [legacy, name] of [
     ["newSmallYahu", "newLittleBay"],
     ["newHarbor", "newLittleBay"],
@@ -223,7 +225,9 @@ export function restoreSettings(saved: LegacySettings | null = {}): Settings {
     if (shortcuts[legacy] && !shortcuts[name]) shortcuts[name] = shortcuts[legacy]!;
     delete shortcuts[legacy];
   }
+
   settings.shortcuts = shortcuts;
+
   return settings;
 }
 
@@ -240,13 +244,17 @@ export function searchEngines(settings: SearchSettings): SearchEngine[] {
   const custom = settings.customSearchEngines ?? NO_CUSTOM_ENGINES;
   const extension = settings.extensionSearchEngines ?? NO_EXTENSION_ENGINES;
   const cached = engineCache.get(custom);
+
   if (cached && cached.legacyUrl === settings.customSearchUrl && cached.extension === extension) return cached.engines;
   const engines = allEngines(custom, extension);
+
   if (settings.customSearchUrl?.includes("%s")) {
     const at = engines.findIndex((e) => e.extension);
     engines.splice(at < 0 ? engines.length : at, 0, { id: "custom", name: "Custom", keyword: "custom", url: settings.customSearchUrl, custom: true });
   }
+
   engineCache.set(custom, { legacyUrl: settings.customSearchUrl, extension, engines });
+
   return engines;
 }
 
@@ -256,6 +264,7 @@ export function controllingSearchExtension(settings: Pick<SearchSettings, "exten
 
 export function defaultSearchEngine(settings: SearchSettings): SearchEngine {
   const controlling = controllingSearchExtension(settings);
+
   return engineById(searchEngines(settings), controlling ? extensionEngineId(controlling.extensionId) : settings.searchEngine);
 }
 
@@ -294,8 +303,10 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
           : "openLinksInLittleBay" in patch
             ? { externalLinkDefault: null }
             : {}),
-        ...("externalLinkRules" in patch ? { externalLinkRules: normalizeExternalLinkRules(patch.externalLinkRules) } : {}),
-        ...("awakeSites" in patch ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites } : {}),
+        ...("externalLinkRules" in patch ? { externalLinkRules: normalizeExternalLinkRules(patch.externalLinkRules) } : undefined),
+        ...("awakeSites" in patch
+          ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites }
+          : undefined),
       },
     }));
   },
@@ -307,18 +318,23 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
   addCustomEngine(input) {
     const { settings } = get();
     const error = validateCustomEngine(settings, input);
+
     if (error) return { error };
     const engine = makeCustomEngine(input, newEngineId());
     get().updateSettings({ customSearchEngines: [...settings.customSearchEngines, engine] });
+
     return { id: engine.id };
   },
 
   updateCustomEngine(id, input) {
     const { settings } = get();
+
     if (!settings.customSearchEngines.some((e) => e.id === id)) return "This search engine no longer exists.";
     const error = validateCustomEngine(settings, input, id);
+
     if (error) return error;
     get().updateSettings({ customSearchEngines: settings.customSearchEngines.map((e) => (e.id === id ? makeCustomEngine(input, id) : e)) });
+
     return null;
   },
 
@@ -326,7 +342,7 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
     const { settings } = get();
     get().updateSettings({
       customSearchEngines: settings.customSearchEngines.filter((e) => e.id !== id),
-      ...(settings.searchEngine === id ? { searchEngine: DEFAULT_SETTINGS.searchEngine } : {}),
+      ...(settings.searchEngine === id ? { searchEngine: DEFAULT_SETTINGS.searchEngine } : undefined),
     });
   },
 });

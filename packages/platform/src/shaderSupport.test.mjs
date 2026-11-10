@@ -8,7 +8,9 @@ const fakeDoc = (gl, calls) => ({
     height: 0,
     getContext: (type, options) => {
       calls.push({ type, options });
+
       if (gl instanceof Error) throw gl;
+
       return gl;
     },
   }),
@@ -43,12 +45,14 @@ test("the probe without a DOM is false", async () => {
 test("shaders follow the probe on the web hosts and the modules on macOS", () => {
   const all = () => true,
     none = () => false;
+
   for (const os of ["windows", "linux"]) {
     assert.equal(capabilitiesFor(os, all).shaders, false);
     assert.equal(capabilitiesFor(os, none, true).shaders, true);
     // The probe is independent of the host's backdrop treatment.
     assert.equal(capabilitiesFor(os, none, true).vibrancy, false);
   }
+
   assert.equal(capabilitiesFor("macos", all).shaders, true);
   assert.equal(capabilitiesFor("macos", none, true).shaders, false);
 });

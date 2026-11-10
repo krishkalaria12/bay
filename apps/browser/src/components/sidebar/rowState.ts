@@ -13,10 +13,15 @@ export function rowFlags(s: BrowserProjection, windowId: string, tabId: string):
   const tab = s.tabs[tabId];
   const live = s.live[tabId];
   let flags = 0;
+
   if (tab && activeTabId(s, windowId, tab.spaceId) === tabId) flags |= ACTIVE;
+
   if (s.selection[windowId]?.includes(tabId)) flags |= SELECTED;
+
   if (live?.playingAudio) flags |= PLAYING;
+
   if (live?.isLoading) flags |= LOADING;
+
   return flags;
 }
 
@@ -24,18 +29,22 @@ export function rowFlags(s: BrowserProjection, windowId: string, tabId: string):
 // tab's progress must never ask every row to recompute them. Keep one scalar snapshot so a combined update renders once.
 export function tabRowStore(windowId: string, tabId: string): Pick<StoreApi<number>, "getState" | "getInitialState" | "subscribe"> {
   const read = () => rowFlags(browserRead.getState(), windowId, tabId);
+
   return {
     getState: read,
     getInitialState: () => rowFlags(browserRead.getState(), windowId, tabId),
     subscribe(listener) {
       let previous = read();
+
       const changed = () => {
         const next = read();
+
         if (next === previous) return;
         const before = previous;
         previous = next;
         listener(next, before);
       };
+
       const stops = [
         tabStore(tabId).subscribe(changed),
         tabLiveStore(tabId).subscribe(changed),
@@ -43,6 +52,7 @@ export function tabRowStore(windowId: string, tabId: string): Pick<StoreApi<numb
         // activeTabId also validates a tab's owning window, including a Little Bay in another window.
         windowsStore.subscribe(changed),
       ];
+
       return () => stops.forEach((stop) => stop());
     },
   };

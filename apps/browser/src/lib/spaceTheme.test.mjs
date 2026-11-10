@@ -1,6 +1,7 @@
 // The theme editor's colour field and a space's own theme as the window's.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { defaultHarmony, editableTheme, harmonize, harmonyAfterRemoving, nextHarmony, wheelColor, wheelPosition } = await import("./spaceTheme.ts");
 const { hslOf } = await import("./windowTint.ts");
 const { spaceThemeKey, themeFor } = await import("./theme.ts");
@@ -14,6 +15,7 @@ test("a colour picked on the wheel puts its dot back where it was picked", () =>
     const at = wheelPosition(wheelColor(angle, distance));
     assert.ok(Math.abs(at.angle - angle) < 0.01 && Math.abs(at.distance - distance) < 0.01, `${angle},${distance} → ${at.angle},${at.distance}`);
   }
+
   assert.match(wheelColor(-0.25, 2), /^#[0-9A-F]{6}$/, "past the edge, or a turn back: still a colour");
   assert.ok(hslOf(wheelColor(0, 0))[2] < hslOf(wheelColor(0, 1))[2], "dark in the middle, light at the edge");
 });
@@ -136,6 +138,7 @@ test("theme previews stay local and clearing one window keeps another preview", 
   const b = S().createWindow({ url: "https://example.org" });
   const original = S();
   const before = themeKey(original, a, null);
+
   try {
     setPreviewLook(a, { color: "plum", theme: { colors: ["#123456"], intensity: 0.5, grain: 0.3 } });
     setPreviewLook(b, { color: "plum", theme: { colors: ["#654321"], intensity: 0.5, grain: 0.3 } });
@@ -177,11 +180,14 @@ test("a page's colour reaches the window's fill without replacing the theme rows
   S().updateSpace(space, { theme: null });
   const w = S().createWindow({ spaceId: space, url: "https://example.com" });
   const tab = S().windows[w].activeTabIds[space];
+
   const page = (themeColor) => {
     useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor } } });
     const key = themeKey(S(), w, null);
+
     return { theme: themeFor(spaceKeyOf(key)), windowTint: themeFor(key).windowTint, shown: themeFor(key) };
   };
+
   const plain = page(null);
   const red = page("#AA2222");
   const blue = page("#2244AA");

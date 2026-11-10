@@ -1,18 +1,41 @@
 export * from "./appUrls.ts";
+
 export * from "./bangs.ts";
+
 export * from "./calculator.ts";
+
 export * from "./currency.ts";
+
+export * from "./dictionary.ts";
+
 export * from "./cleanUrl.ts";
+
 export * from "./engines.ts";
+
 export * from "./emoji.ts";
+
 export * from "./emojiData.ts";
+
 export * from "./fuzzy.ts";
+
 export * from "./idn.ts";
+
 export * from "./input.ts";
+
+export * from "./json.ts";
+
 export * from "./quickCreate.ts";
+
 export * from "./sharedCollection.ts";
+
 export * from "./siteSearch.ts";
+
 export * from "./suggest.ts";
+
 export * from "./suggestFetcher.ts";
+
 export * from "./textFragment.ts";
+
 export * from "./tidyDownloads.ts";
+
+export * from "./tidyTabs.ts";

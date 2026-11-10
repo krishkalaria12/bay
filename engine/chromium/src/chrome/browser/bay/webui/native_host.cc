@@ -2511,6 +2511,10 @@ WindowShortcut RunWindowShortcut(BrowserWindowInterface* browser,
       }
       if (shortcut.command.empty())
         return WindowShortcut::kRan;
+      // The command bar types in the document, and a page that holds the
+      // keyboard keeps it until the browser moves it.
+      if (shortcut.command == "focusCommandBar")
+        document->Focus();
       host->Emit("BayShell", "onCommand",
                  base::Value(base::DictValue()
                                  .Set("command", shortcut.command)

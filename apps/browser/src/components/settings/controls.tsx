@@ -1,4 +1,5 @@
 import { Pressable, TextInput, View } from "@bay/platform";
+import * as v from "valibot";
 import { showMenu, Surface, Symbol, type MenuItem } from "@bay/desktop";
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
@@ -57,11 +58,14 @@ export function Toggle({ value, onChange, disabled }: { value: boolean; onChange
   useEffect(() => {
     t.set(withTiming(value ? 1 : 0, { duration: 160, easing: Easing.out(Easing.cubic) }));
   }, [value]);
+
   const track = useAnimatedStyle(
     () => ({ backgroundColor: interpolateColor(t.get(), [0, 1], [colors.switchOff, colors.accent]) }),
     [colors.switchOff, colors.accent],
   );
+
   const knob = useAnimatedStyle(() => ({ transform: [{ translateX: t.get() * 14 }] }));
+
   return (
     <Pressable disabled={disabled} onPress={() => onChange(!value)} style={{ opacity: disabled ? 0.45 : 1 }}>
       <Animated.View style={[{ width: 32, height: 18, borderRadius: 9, padding: 1.5 }, track]}>
@@ -92,6 +96,7 @@ export function Checkbox({
   const theme = useTheme();
   const colors = useFormColors();
   const on = value || mixed;
+
   return (
     <Pressable
       disabled={disabled}
@@ -136,14 +141,21 @@ export function PopUp<T extends string>({
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
   const current = options.find((o) => o.value === value);
+
   const open = async () => {
     const items: MenuItem[] = options.flatMap((o) => [
       ...(o.separatorBefore ? [{ separator: true as const }] : []),
       { id: o.value, title: o.title, checked: o.value === value },
     ]);
+
     const choice = await showMenu(items);
-    if (choice !== null && choice !== value) onChange(choice as T);
+
+    if (choice !== null && choice !== value) {
+      // SAFETY: showMenu returns one of the ids built from options above; T is the value type of those options.
+      onChange(choice as T);
+    }
   };
+
   return (
     <View {...hoverProps} style={{ opacity: disabled ? 0.45 : 1 }}>
       <Pressable disabled={disabled} onPress={open}>
@@ -197,6 +209,7 @@ export function Button({
   const primary = kind === "primary";
   const plain = kind === "plain";
   const textColor = primary ? "#FFFFFF" : kind === "destructive" ? colors.destructive : plain ? colors.accent : theme.textPrimary;
+
   return (
     <View {...hoverProps} style={[{ opacity: disabled ? 0.45 : 1 }, style]}>
       <Pressable disabled={disabled} onPress={onPress}>
@@ -253,6 +266,7 @@ export function SearchField({
 }) {
   const theme = useTheme();
   const colors = useFormColors();
+
   return (
     <View
       style={[
@@ -321,6 +335,7 @@ export function TextField({
 }) {
   const theme = useTheme();
   const colors = useFormColors();
+
   return (
     <View
       style={[
@@ -371,18 +386,31 @@ function useSearchHighlight(settingId?: SettingId) {
     // After the pane's first layout, so the row has its place.
     const frame = requestAnimationFrame(() => ref.current && scrollTo?.(ref.current));
     const timer = setTimeout(() => useSettingsNav.setState({ highlight: null }), HIGHLIGHT_MS);
+
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(timer);
     };
   }, [marked, scrollTo]);
+
   return { ref, marked };
 }
 
-export function SectionHeader({ settingId, title, description, action }: { settingId?: SettingId; title: string; description?: string; action?: ReactNode }) {
+export function SectionHeader({
+  settingId,
+  title,
+  description,
+  action,
+}: {
+  settingId?: SettingId;
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+}) {
   const theme = useTheme();
   const colors = useFormColors();
   const { ref, marked } = useSearchHighlight(settingId);
+
   return (
     <View ref={ref} style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 22, marginBottom: 8, paddingHorizontal: 2 }}>
       <View style={{ flex: 1 }}>
@@ -397,6 +425,7 @@ export function SectionHeader({ settingId, title, description, action }: { setti
 export function Group({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const colors = useFormColors();
   const rows = (Array.isArray(children) ? children.flat() : [children]).filter(Boolean);
+
   return (
     <View
       style={[
@@ -434,8 +463,10 @@ export function Row({
   const { hovered, hoverProps } = useHover();
   const { ref, marked } = useSearchHighlight(settingId);
   let fill: string | undefined;
+
   if (marked) fill = `${colors.accent}2E`;
   else if (onPress && hovered) fill = colors.selected;
+
   const body = (
     <View
       ref={ref}
@@ -451,9 +482,9 @@ export function Row({
     >
       {icon}
       <View style={{ flex: 1 }}>
-        {typeof title === "string" ? <Text style={{ fontSize: 13, color: theme.textPrimary }}>{title}</Text> : title}
+        {v.is(v.string(), title) ? <Text style={{ fontSize: 13, color: theme.textPrimary }}>{title}</Text> : title}
         {description ? (
-          typeof description === "string" ? (
+          v.is(v.string(), description) ? (
             <Text style={{ fontSize: 11.5, marginTop: 2, color: theme.textSecondary, lineHeight: 15 }}>{description}</Text>
           ) : (
             description
@@ -464,7 +495,9 @@ export function Row({
       {onPress && <Symbol name="chevron.right" size={11} weight="semibold" color={theme.textTertiary} style={{ width: 12, height: 14 }} />}
     </View>
   );
+
   if (!onPress) return body;
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>{body}</Pressable>
@@ -485,6 +518,7 @@ export function SettingToggle({
   description?: string;
 }) {
   const value = useBrowserRead((s) => !!s.settings[setting]);
+
   return (
     <Row settingId={settingId} title={title} description={description}>
       <Toggle value={value} onChange={(v) => reportBrowserCommand(updateSettings({ [setting]: v }))} />
@@ -494,6 +528,7 @@ export function SettingToggle({
 
 export function Sheet({ width = 440, onClose, children }: { width?: number; onClose: () => void; children: ReactNode }) {
   const theme = useTheme();
+
   return (
     <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
       <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.15)" }]} onPress={onClose} />

@@ -5,7 +5,9 @@ import { useBrowser } from "../store/browserStore.ts";
 import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules.ts";
 
 const { configureSyncStore } = await import("./store.ts");
+
 configureSyncStore(useBrowser);
+
 const S = () => useBrowser.getState();
 const rule = (id, destination) => ({ id, pattern: `${id}.example/*`, destination });
 const extract = (adapter) => adapter.extract(() => undefined);
@@ -14,16 +16,19 @@ const apply = (adapter, values) => adapter.apply(values, new Set(values.keys()),
 function memoryTransport() {
   const files = new Map();
   let counter = 0;
+
   return {
     write: async (scope, payload) => {
       const id = `file-${++counter}`;
       files.set(id, { scope, payload });
+
       return id;
     },
     read: async (scope, known) => {
       const entries = [...files].filter(([, file]) => file.scope === scope);
+
       return {
-        files: entries.filter(([id]) => !known.includes(id)).map(([id, file]) => ({ id, payload: file.payload })),
+        files: entries.flatMap(([id, file]) => (known.includes(id) ? [] : [{ id, payload: file.payload }])),
         pending: [],
         damaged: [],
         present: entries.map(([id]) => id),
@@ -46,6 +51,7 @@ class Device {
   }
   with(fn) {
     useBrowser.setState(this.browser, true);
+
     try {
       return fn();
     } finally {
@@ -54,6 +60,7 @@ class Device {
   }
   async sync() {
     useBrowser.setState(this.browser, true);
+
     try {
       return await syncScope({
         scope: "app",
@@ -117,10 +124,12 @@ test("unresolved rules survive unchanged until their profile is linked; malforme
   resolveLinkRuleSpaces(links);
   assert.equal(S().settings.externalLinkRules[0].destination.spaceId, local);
   const current = S().settings.externalLinkRules;
+
   for (const rules of [null, [null], [{ ...rule("bad", { kind: "space" }), pattern: "bad.example" }], [rule("bad", { kind: "unknown" })]]) {
     apply(adapter, new Map([["linkRules:ordered", { rules }]]));
     assert.deepEqual(S().settings.externalLinkRules, current);
   }
+
   S().updateSettings({ externalLinkRules: [rule("deleted", { kind: "space", spaceId: "never-synced-deleted-space" }), ...current] });
   resolveLinkRuleSpaces(links);
   const deleted = extract(adapter).values.get("linkRules:ordered").rules[0];
@@ -186,6 +195,7 @@ test("syncScope retries remote apply without erasing unpublished local edits bef
   const local = new Device("local", transport);
   await local.sync();
   const base = local.state.base["linkRules:ordered"];
+
   const spaceId = local.with(() => {
     const id = S().createSpace({ name: "Not linked yet" });
     S().updateSettings({
@@ -195,8 +205,10 @@ test("syncScope retries remote apply without erasing unpublished local edits bef
         { ...rule("window", { kind: "newWindow" }), pattern: "edited.example/*" },
       ],
     });
+
     return id;
   });
+
   const edits = local.with(() => S().settings.externalLinkRules);
   remote.with(() => S().updateSettings({ externalLinkRules: [rule("remote-edit", { kind: "newWindow" })] }));
   await remote.sync();
@@ -264,11 +276,14 @@ test("an initial join with an unlinked local destination defers adoption until l
   await remote.sync();
   await remote.sync();
   const local = new Device("local", transport);
+
   const spaceId = local.with(() => {
     const id = S().createSpace({ name: "Not linked yet" });
     S().updateSettings({ externalLinkRules: [rule("local", { kind: "space", spaceId: id })] });
+
     return id;
   });
+
   assert.equal((await local.sync()).published, 0);
   assert.equal(local.state.joined, true);
   assert.deepEqual(local.state.unapplied, ["linkRules:ordered"]);

@@ -108,6 +108,7 @@ function BoostsRow() {
   const on = useBoosts((s) => s.on);
   const count = useBoosts((s) => Object.keys(s.boosts).length);
   useEffect(() => startBoosts(), []);
+
   return (
     <Row
       settingId={SETTINGS.boosts.id}

@@ -6,17 +6,22 @@ import { installNativeTransport } from "./nativeBridge.ts";
 // Resolve the web adapters and real shell facade without loading native views.
 const appURL = new URL("../../desktop/src/appMenu.ts", import.meta.url).href;
 const shellURL = `data:text/javascript,${encodeURIComponent(`export * from ${JSON.stringify(appURL)}; export const confirm = async () => { throw new Error("Unexpected permission prompt"); };`)}`;
+
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@bay/platform") return { url: new URL("./os.web.ts", import.meta.url).href, shortCircuit: true };
+
     if (specifier === "@bay/platform/native") return { url: new URL("./native.web.ts", import.meta.url).href, shortCircuit: true };
+
     if (specifier === "@bay/desktop") return { url: shellURL, shortCircuit: true };
+
     return next(specifier, context);
   },
 });
 
 test("notification preflight follows the real host method contract", async (t) => {
   const calls = [];
+
   const info = {
     contractVersion: 2,
     platform: "linux",
@@ -25,15 +30,19 @@ test("notification preflight follows the real host method contract", async (t) =
     constants: {},
     optionalMethods: ["BayApp.postNotification", "BayApp.removeNotifications"],
   };
+
   let permission = "granted";
+
   const connection = installNativeTransport({
     getHostInfo: () => info,
     invoke: async (module, method) => {
       calls.push(`${module}.${method}`);
+
       return JSON.stringify({ value: method === "notificationPermission" ? permission : true });
     },
     subscribe: () => ({ remove() {} }),
   });
+
   t.after(() => connection.remove());
   const app = await import(appURL);
   const { ensureNotificationPermission } = await import("../../../apps/browser/src/lib/notificationPermission.ts");

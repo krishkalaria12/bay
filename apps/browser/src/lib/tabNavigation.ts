@@ -22,6 +22,7 @@ const handedOff = new Map<string, string>();
 /** The tab's page outlives its current view (a view going, or the tab leaving its window). */
 export function handOff(tabId: string, profile: string) {
   handedOff.set(tabId, profile);
+
   if (!pageFactsInCoordinator()) prepareTabTransfer(tabId);
 }
 
@@ -31,14 +32,18 @@ export function handOff(tabId: string, profile: string) {
 export function startTabPages() {
   return useBrowser.subscribe((s, prev) => {
     if (s.tabs === prev.tabs) return;
+
     for (const id of changedIds(s.tabs, prev.tabs)) {
       const tab = s.tabs[id];
       const before = prev.tabs[id];
       const profile = tab && engineProfile(tab.spaceId);
+
       if (tab && before && tab.windowId !== before.windowId && webviews.has(id) && profile === engineProfile(before.spaceId)) handOff(id, profile!);
       const kept = handedOff.get(id);
+
       if (kept !== undefined && !(wantsPage(tab) && profile === kept)) {
         handedOff.delete(id);
+
         if (!pageFactsInCoordinator()) releaseTabTransfer(id);
       }
     }

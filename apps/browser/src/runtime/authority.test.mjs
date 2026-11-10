@@ -15,8 +15,10 @@ test("isolated stores never call the default application's URL opener", () => {
   const calls = [];
   setAppUrlOpener((...args) => {
     calls.push(args);
+
     return true;
   });
+
   try {
     const store = createBrowserStore();
     const w = store.getState().createWindow();
@@ -71,6 +73,7 @@ test("projections detach and freeze JSON data while preserving native page state
     p.settings.shortcuts.other = [];
   }, TypeError);
   assert.notEqual(p.settings, store.getState().settings);
+
   for (const value of [DEFAULT_SETTINGS, DEFAULT_SPACE, IDLE_LIVE]) assert.ok(!Object.isFrozen(value));
   store.getState().updateTab(t, { title: "Later" });
   const next = project(store.getState());
@@ -87,10 +90,12 @@ test("commands execute in order and reply with immutable committed results", asy
   const opened = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
   const w = opened.value;
   assert.ok(opened.commit.state.windows[w]);
+
   const [a, b] = await Promise.all([
     authority.dispatch(request(2, { method: "newTab", windowId: w, options: { url: "https://two.example/" } })),
     authority.dispatch(request(3, { method: "newTab", windowId: w, options: { url: "https://three.example/" } })),
   ]);
+
   assert.ok(a.commit.state.tabs[a.value]);
   assert.equal(a.commit.state.tabs[b.value], undefined);
   assert.ok(b.commit.state.tabs[a.value] && b.commit.state.tabs[b.value]);
@@ -106,6 +111,7 @@ test("commands execute in order and reply with immutable committed results", asy
 test("invalid and stale requests cannot mutate state or block later commands", async () => {
   const authority = createBrowserAuthority({ epoch: "epoch-1" });
   const before = authority.getSnapshot();
+
   for (const input of [
     request(1, { method: "hydrate", options: {} }),
     request(1, { method: "updateLive", tabId: "tab", patch: {} }),
@@ -142,6 +148,7 @@ test("evicted requests are rejected instead of executed again", async () => {
   const authority = createBrowserAuthority({ epoch: "epoch-1" });
   const first = request(1, { method: "reopenClosedWindow" });
   await authority.dispatch(first);
+
   for (let id = 2; id <= 131; id++) await authority.dispatch(request(id, { method: "reopenClosedWindow" }));
   await assert.rejects(authority.dispatch(first), { code: "request_expired" });
   authority.close();
@@ -155,6 +162,7 @@ for (const external of [false, true])
     const authority = createBrowserAuthority({ epoch: "epoch-1", store });
     const commits = [];
     authority.subscribe((commit) => commits.push(commit));
+
     if (external) store.getState().closeWindow(w);
     else await authority.dispatch(request(1, { method: "closeWindow", windowId: w }));
     assert.equal(commits.length, 1);
@@ -253,9 +261,11 @@ test("authority routes focus through an injected effect and commits the final de
   store.getState().setFocusedWindow(source);
   const focused = [];
   const authority = createBrowserAuthority({ epoch: "epoch-1", store, effects: { focusWindow: (id) => focused.push(id) } });
+
   const reply = await authority.dispatch(
     request(1, { method: "switchToExistingTab", sourceTabId: viewTabIds(store.getState(), source)[0], targetTabId: viewTabIds(store.getState(), target)[0] }),
   );
+
   assert.equal(reply.value, null);
   assert.equal(reply.commit.revision, 1);
   assert.equal(reply.commit.state.ui.focusedWindowId, target);
@@ -279,23 +289,28 @@ test("native handoff mutations share command order and publish one final commit"
   const authority = createBrowserAuthority({ store, epoch: "native-open" });
   const commits = [];
   authority.subscribe((commit) => commits.push(commit));
+
   const before = authority.dispatch({
     epoch: "native-open",
     clientId: "one",
     requestId: 1,
     command: { method: "newTab", windowId, options: { url: "https://first.example/" } },
   });
+
   const native = authority.dispatchNative((owner) => {
     const a = owner.getState().newTab(windowId, { url: "https://posted.example/", adoptId: "trusted-native-offer" });
     owner.getState().openPeek(a, "https://peek.example/", "trusted-peek-offer");
+
     return a;
   });
+
   const after = authority.dispatch({
     epoch: "native-open",
     clientId: "one",
     requestId: 2,
     command: { method: "newTab", windowId, options: { url: "https://last.example/" } },
   });
+
   const [a, b, c] = await Promise.all([before, native, after]);
   assert.deepEqual([a.commit.revision, b.commit.revision, c.commit.revision], [1, 2, 3]);
   assert.equal(commits.length, 3);
@@ -308,13 +323,17 @@ test("service IO deduplicates without blocking tab commands or service-only publ
   const store = createBrowserStore();
   const windowId = store.getState().createWindow();
   let complete, entered;
+
   const running = new Promise((resolve) => {
     entered = resolve;
   });
+
   const io = new Promise((resolve) => {
     complete = resolve;
   });
+
   let calls = 0;
+
   const authority = createBrowserAuthority({
     epoch: "epoch-1",
     store,
@@ -322,9 +341,11 @@ test("service IO deduplicates without blocking tab commands or service-only publ
       calls++;
       entered();
       await io;
+
       return null;
     },
   });
+
   const input = request(1, { method: "serviceAction", action: "calendarRefresh", args: [] });
   const service = authority.dispatch(input);
   assert.equal(authority.dispatch(input), service);
@@ -342,22 +363,28 @@ test("service IO deduplicates without blocking tab commands or service-only publ
 
 test("retired authority rejects a late service reply without replay", async () => {
   let complete, entered;
+
   const running = new Promise((resolve) => {
     entered = resolve;
   });
+
   const io = new Promise((resolve) => {
     complete = resolve;
   });
+
   let active;
+
   const authority = createBrowserAuthority({
     epoch: "epoch-1",
     executeAsync: async (_command, isActive) => {
       active = isActive;
       entered();
       await io;
+
       return null;
     },
   });
+
   const reply = authority.dispatch(request(1, { method: "serviceAction", action: "calendarRefresh", args: [] }));
   await running;
   authority.close();
@@ -372,6 +399,7 @@ test("service actions record undo for the authenticated origin, not the focused 
   const focused = store.getState().createWindow();
   store.getState().setFocusedWindow(focused);
   const seen = [];
+
   const authority = createBrowserAuthority({
     epoch: "epoch-1",
     store,
@@ -379,9 +407,11 @@ test("service actions record undo for the authenticated origin, not the focused 
       seen.push(sidebarUndoWindow());
       await Promise.resolve();
       seen.push(sidebarUndoWindow());
+
       return null;
     },
   });
+
   await authority.dispatch(request(1, { method: "serviceAction", action: "calendarRefresh", args: [] }, { originWindowId: origin }));
   // The synchronous reducer step sees the origin; later IO does not inherit it.
   assert.deepEqual(seen, [origin, undefined]);

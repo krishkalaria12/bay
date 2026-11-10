@@ -9,7 +9,6 @@ import {
   setLaunchAtLogin,
   setUpdateChannel,
   Symbol,
-  tidyNames,
   updaterState,
   type UpdateChannel,
   type UpdaterState,
@@ -23,6 +22,7 @@ import { useTheme } from "../../../lib/theme";
 import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
+import { TidyModelNote } from "../TidyModelNote";
 import { openImport } from "../windows";
 import { APP_NAME } from "../../../lib/constants";
 
@@ -155,30 +155,45 @@ function UpdatesSection() {
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
+
     return () => sub.remove();
   }, []);
+
   if (!state?.available) return null;
   const ready = state.configured;
   const channelBusy = state.sessionInProgress || state.pending?.ready === true;
+
   const set = (patch: { automaticChecks?: boolean; automaticDownloads?: boolean; channel?: UpdateChannel }) => {
     setState({ ...state, ...patch });
+
     if (patch.automaticChecks !== undefined) void setAutomaticUpdateChecks(patch.automaticChecks).finally(refresh);
+
     if (patch.automaticDownloads !== undefined) void setAutomaticUpdateDownloads(patch.automaticDownloads).finally(refresh);
+
     if (patch.channel !== undefined) void setUpdateChannel(patch.channel).finally(refresh);
   };
+
   const lastCheck = state.lastCheck
     ? `Last checked ${new Date(state.lastCheck).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
     : "Not checked yet.";
-  const localCleaner = isMac ? "Bay cleans the name on this Mac. Nothing leaves it." : "Bay cleans the name on your computer. Nothing leaves it.";
+
   return (
     <>
-      <SectionHeader title="Downloads" description={tidyNames ? "Apple's on-device model writes the suggested name. Nothing leaves this Mac." : localCleaner} />
+      <SectionHeader
+        title="Downloads"
+        description={
+          <TidyModelNote
+            available="Apple's on-device model writes the new names. Nothing leaves this Mac."
+            fallback="Bay cleans the names on this Mac. Nothing leaves it."
+          />
+        }
+      />
       <Group>
         <SettingToggle
           setting="tidyDownloads"
           settingId={SETTINGS.tidyDownloads.id}
           title={SETTINGS.tidyDownloads.title}
-          description="Offer a readable name for files the web hands over with machine names, like IMG_20261024_8812.pdf. You choose whether to rename each file; files you named yourself are left alone."
+          description="Rename files the web hands over with machine names, like IMG_20261024_8812.pdf, as they finish downloading, so you can find them later. You can undo each rename; files you named yourself are left alone."
         />
       </Group>
 
@@ -233,20 +248,25 @@ function DefaultBrowserBanner() {
   // Why setting the default failed, when trying again can't help (Linux without bay.desktop installed).
   const [problem, setProblem] = useState<string | null>(null);
   const refresh = () => void isDefaultBrowser().then(setIsDefault);
+
   const makeDefault = () =>
     void setAsDefaultBrowser().then(
       (value) => {
         setProblem(null);
         setIsDefault(value);
       },
-      (failure: unknown) => setProblem(failure instanceof Error ? failure.message : "The default browser wasn't changed. Try again."),
+      (failure: Error) => setProblem(failure instanceof Error ? failure.message : "The default browser wasn't changed. Try again."),
     );
+
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
+
     return () => sub.remove();
   }, []);
+
   if (isDefault === null) return <View style={{ height: 20 }} />;
+
   return (
     <View
       style={{

@@ -3,21 +3,28 @@ import { test } from "node:test";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { createBrowserAuthority } from "./authority.ts";
 import { createBrowserClient } from "./client.ts";
+
 const tick = () => new Promise(setImmediate);
+
 const deferred = () => {
   let resolve, reject;
+
   const promise = new Promise((a, b) => {
     resolve = a;
     reject = b;
   });
+
   return { promise, resolve, reject };
 };
+
 function fakeTransport() {
   const commits = new Set(),
     closures = new Set(),
     snapshots = [],
     commands = [];
+
   let released = 0;
+
   return {
     snapshots,
     commands,
@@ -25,15 +32,18 @@ function fakeTransport() {
       getSnapshot() {
         const d = deferred();
         snapshots.push(d);
+
         return d.promise;
       },
       dispatch(request) {
         const d = deferred();
         commands.push({ ...d, request });
+
         return d.promise;
       },
       subscribeCommits(listener) {
         commits.add(listener);
+
         return () => {
           released++;
           commits.delete(listener);
@@ -41,6 +51,7 @@ function fakeTransport() {
       },
       subscribeClose(listener) {
         closures.add(listener);
+
         return () => {
           released++;
           closures.delete(listener);
@@ -60,21 +71,25 @@ function fakeTransport() {
     },
   };
 }
+
 const makeAuthority = () => createBrowserAuthority({ epoch: "epoch-1" });
 const copy = (value) => JSON.parse(JSON.stringify(value));
 const request = (id, command) => ({ epoch: "epoch-1", clientId: "source", requestId: id, command });
+
 async function connect(snapshot) {
   const fake = fakeTransport();
   const client = createBrowserClient({ clientId: "window-1", transport: fake.transport });
   await tick();
   fake.snapshots[0].resolve(snapshot);
   await client.ready;
+
   return { fake, client };
 }
 
 test("complete mirror snapshots are detached and expose no local reducer API", async () => {
   const authority = makeAuthority(),
     source = copy(authority.getSnapshot());
+
   const { fake, client } = await connect(source);
   source.state.settings.sidebarWidth = 1234;
   source.state.spaceOrder.push("injected");
@@ -86,6 +101,7 @@ test("complete mirror snapshots are detached and expose no local reducer API", a
   assert.throws(() => {
     client.getSnapshot().state.settings.sidebarWidth = 1;
   }, TypeError);
+
   for (const name of ["hydrate", "setState", "getState", "createWindow", "newTab"]) assert.ok(!(name in client));
   assert.equal(fake.snapshots.length, 1);
   client.close();
@@ -95,6 +111,7 @@ test("complete mirror snapshots are detached and expose no local reducer API", a
 test("commands wait for bootstrap and detach arguments before yielding", async () => {
   const authority = makeAuthority(),
     fake = fakeTransport();
+
   const client = createBrowserClient({ clientId: "window-1", transport: fake.transport });
   const input = { method: "createWindow", options: { url: "https://original.example/", spaceId: undefined } };
   const opened = client.dispatch(input);
@@ -125,6 +142,7 @@ test("commands wait for bootstrap and detach arguments before yielding", async (
 test("revision gaps request one complete resync and hold new commands", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());
+
   const first = await authority.dispatch(request(1, { method: "createWindow" }));
   const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value }));
   fake.emit(second.commit);
@@ -150,14 +168,17 @@ test("revision gaps request one complete resync and hold new commands", async ()
 test("command replies resolve only after the matching revision is installed", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());
+
   const pending = client.dispatch({ method: "createWindow" });
   let settled = false;
   void pending.then(() => {
     settled = true;
   });
   await tick();
+
   const sent = fake.commands[0],
     opened = await authority.dispatch(sent.request);
+
   const later = await authority.dispatch(request(1, { method: "newTab", windowId: opened.value }));
   sent.resolve({ ...opened, commit: later.commit });
   await tick();
@@ -174,9 +195,12 @@ test("command replies resolve only after the matching revision is installed", as
 test("events during bootstrap cannot be overwritten by an older snapshot", async () => {
   const authority = makeAuthority(),
     initial = authority.getSnapshot();
+
   const first = await authority.dispatch(request(1, { method: "createWindow" }));
+
   const fake = fakeTransport(),
     client = createBrowserClient({ clientId: "window-1", transport: fake.transport });
+
   await tick();
   fake.emit(first.commit);
   fake.snapshots[0].resolve(initial);
@@ -191,6 +215,7 @@ test("events during bootstrap cannot be overwritten by an older snapshot", async
 test("duplicate and delayed commits never regress a ready mirror", async () => {
   const authority = makeAuthority(),
     initial = authority.getSnapshot();
+
   const first = await authority.dispatch(request(1, { method: "createWindow" }));
   const { fake, client } = await connect(first.commit);
   let changed = 0;
@@ -209,6 +234,7 @@ test("duplicate and delayed commits never regress a ready mirror", async () => {
 test("epoch changes reject uncertain commands and require fresh bootstrap", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());
+
   const pending = client.dispatch({ method: "createWindow" });
   await tick();
   const rejected = assert.rejects(pending, { code: "epoch_changed" });
@@ -228,6 +254,7 @@ test("epoch changes reject uncertain commands and require fresh bootstrap", asyn
 test("transport close rejects bootstrap and queued commands before dispatch", async () => {
   const fake = fakeTransport(),
     client = createBrowserClient({ clientId: "window-1", transport: fake.transport });
+
   const pending = client.dispatch({ method: "createWindow" });
   const rejected = Promise.all([assert.rejects(client.ready, { code: "transport_closed" }), assert.rejects(pending, { code: "transport_closed" })]);
   fake.disconnect();
@@ -241,6 +268,7 @@ test("transport close rejects bootstrap and queued commands before dispatch", as
 test("transport close rejects an in-flight mutation immediately", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());
+
   const pending = client.dispatch({ method: "createWindow" });
   await tick();
   const rejected = assert.rejects(pending, { code: "transport_closed" });
@@ -253,6 +281,7 @@ test("transport close rejects an in-flight mutation immediately", async () => {
 test("normal command rejection leaves the client usable", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());
+
   const failed = client.dispatch({ method: "createWindow" });
   await tick();
   const rejected = assert.rejects(failed, /command refused/);
@@ -272,8 +301,10 @@ test("normal command rejection leaves the client usable", async () => {
 test("stale-epoch rejection fails all pending mutations", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());
+
   const a = client.dispatch({ method: "createWindow" }),
     b = client.dispatch({ method: "createWindow" });
+
   await tick();
   const rejected = Promise.all([assert.rejects(a, { code: "epoch_changed" }), assert.rejects(b, { code: "epoch_changed" })]);
   fake.commands[0].reject(Object.assign(new Error("stale"), { code: "stale_epoch" }));
@@ -329,9 +360,12 @@ for (const [name, damage] of [
   test(`malformed bootstrap rejects ${name} before installation`, async () => {
     const authority = makeAuthority(),
       snapshot = copy(authority.getSnapshot());
+
     damage(snapshot);
+
     const fake = fakeTransport(),
       client = createBrowserClient({ clientId: "window-1", transport: fake.transport });
+
     await tick();
     const rejected = assert.rejects(client.ready, { code: "invalid_protocol" });
     fake.snapshots[0].resolve(snapshot);
@@ -344,10 +378,13 @@ for (const [name, damage] of [
 test("malformed replies cannot change the mirror", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());
+
   const pending = client.dispatch({ method: "createWindow" });
   await tick();
+
   const rejected = assert.rejects(pending, { code: "invalid_protocol" }),
     reply = await authority.dispatch(fake.commands[0].request);
+
   fake.commands[0].resolve({ ...reply, requestId: 100 });
   await rejected;
   assert.equal(client.getSnapshot().revision, 0);
@@ -358,6 +395,7 @@ test("resync rejects snapshots older than an observed revision without looping",
   const authority = makeAuthority(),
     initial = authority.getSnapshot(),
     { fake, client } = await connect(initial);
+
   const first = await authority.dispatch(request(1, { method: "createWindow" }));
   const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value }));
   fake.emit(second.commit);
@@ -373,6 +411,7 @@ test("resync rejects snapshots older than an observed revision without looping",
 test("snapshot failure rejects bootstrap and pending commands", async () => {
   const fake = fakeTransport(),
     client = createBrowserClient({ clientId: "window-1", transport: fake.transport });
+
   const pending = client.dispatch({ method: "createWindow" });
   await tick();
   const rejected = Promise.all([assert.rejects(client.ready, { code: "snapshot_failed" }), assert.rejects(pending, { code: "snapshot_failed" })]);
@@ -385,6 +424,7 @@ test("snapshot failure rejects bootstrap and pending commands", async () => {
 test("closing before a scheduled dispatch prevents that unsent mutation", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());
+
   const pending = client.dispatch({ method: "createWindow" });
   const rejected = assert.rejects(pending, { code: "closed" });
   client.close();
@@ -397,6 +437,7 @@ test("closing before a scheduled dispatch prevents that unsent mutation", async 
 test("a synchronous transport close releases subscriptions and skips bootstrap", async () => {
   let released = 0,
     reads = 0;
+
   const transport = {
     subscribeCommits() {
       return () => {
@@ -405,6 +446,7 @@ test("a synchronous transport close releases subscriptions and skips bootstrap",
     },
     subscribeClose(listener) {
       listener();
+
       return () => {
         released++;
       };
@@ -417,6 +459,7 @@ test("a synchronous transport close releases subscriptions and skips bootstrap",
       throw new Error("should not dispatch");
     },
   };
+
   const client = createBrowserClient({ clientId: "window-1", transport });
   await assert.rejects(client.ready, { code: "transport_closed" });
   assert.equal(released, 2);
@@ -425,6 +468,7 @@ test("a synchronous transport close releases subscriptions and skips bootstrap",
 
 test("a transport that closed before subscribing reports why", async () => {
   const closed = Object.assign(new Error("Browser runtime closed; pending mutation outcomes may be uncertain"), { code: "new_epoch" });
+
   const transport = {
     subscribeCommits() {
       throw closed;
@@ -439,6 +483,7 @@ test("a transport that closed before subscribing reports why", async () => {
       throw new Error("should not dispatch");
     },
   };
+
   const client = createBrowserClient({ clientId: "window-1", transport });
   await assert.rejects(client.ready, {
     code: "transport_closed",
@@ -449,6 +494,7 @@ test("a transport that closed before subscribing reports why", async () => {
 test("a gap before the scheduled send holds that command through resync", async () => {
   const authority = makeAuthority(),
     { fake, client } = await connect(authority.getSnapshot());
+
   const first = await authority.dispatch(request(1, { method: "createWindow" }));
   const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value }));
   const pending = client.dispatch({ method: "reopenClosedWindow" });
@@ -470,9 +516,11 @@ test("unchanged JSON nodes keep their identities across full snapshot commits", 
   const first = await authority.dispatch(request(1, { method: "createWindow", options: { url: "https://one.example/" } }));
   const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value, options: { url: "https://two.example/" } }));
   const { fake, client } = await connect(copy(second.commit));
+
   const before = client.getSnapshot().state,
     unchanged = second.value,
     active = Object.keys(before.tabs).find((id) => id !== unchanged);
+
   const changed = await authority.dispatch(request(3, { method: "navigate", tabId: active, url: "https://changed.example/" }));
   const incoming = copy(changed.commit);
   fake.emit(incoming);
@@ -493,6 +541,7 @@ test("a command held by resync rejects replies predating its actual send", async
   const authority = makeAuthority(),
     initial = authority.getSnapshot(),
     { fake, client } = await connect(initial);
+
   const first = await authority.dispatch(request(1, { method: "createWindow" }));
   const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value }));
   const pending = client.dispatch({ method: "reopenClosedWindow" });
@@ -500,8 +549,10 @@ test("a command held by resync rejects replies predating its actual send", async
   await tick();
   fake.snapshots[1].resolve(second.commit);
   await tick();
+
   const sent = fake.commands[0],
     rejected = assert.rejects(pending, { code: "invalid_protocol" });
+
   sent.resolve({ clientId: "window-1", requestId: sent.request.requestId, value: null, commit: initial });
   await rejected;
   assert.equal(client.getSnapshot().revision, 2);
@@ -512,6 +563,7 @@ test("a command held by resync rejects replies predating its actual send", async
 test("a window that opens while the runtime isn't ready asks again, and says why if it never is", async () => {
   const authority = makeAuthority(),
     fake = fakeTransport();
+
   const notReady = () => Object.assign(new Error("Application state is not ready"), { code: "not_ready" });
   const client = createBrowserClient({ clientId: "window-1", transport: fake.transport });
   await tick();

@@ -1,3 +1,6 @@
+import { isJsonObject } from "../lib/json";
+import type { JsonInput } from "../lib/json";
+import * as v from "valibot";
 import { executeLocalFileCommand, parseLocalFileCommand, LOCAL_FILE_COMMAND_METHODS, type LocalFileCommand } from "./localFileCommands";
 import {
   executeImportCommand,
@@ -8,6 +11,7 @@ import {
   type ImportCommandResult,
 } from "./importCommands";
 import { parseServiceCommand, parseServiceResult, type ServiceCommand, type ServiceResult } from "./serviceCommands";
+import { checked } from "../lib/checked";
 import type { BrowserStore } from "../store/browserStore";
 import { executeLocationCommand, parseLocationCommand, type LocationCommand, type LocationCommandEffects } from "./locationCommands";
 import { executeTabCommand, parseTabCommand, TAB_COMMAND_METHODS, type TabCommand } from "./tabCommands";
@@ -51,7 +55,9 @@ const ID_METHODS = [
   "addBookmark",
   "addBookmarkFolder",
 ] as const;
+
 const OPTIONAL_ID_METHODS = ["duplicateTab", "moveTabsToWindow", "restoreCleaned", "openSplitPane", "openPeek", "removeBookmarks", "keepPeek"] as const;
+
 export type BrowserCommandValue<C extends BrowserCommand> = C extends ImportCommand
   ? ImportCommandResult
   : C extends ServiceCommand
@@ -62,32 +68,66 @@ export type BrowserCommandValue<C extends BrowserCommand> = C extends ImportComm
         ? string
         : C extends { method: (typeof OPTIONAL_ID_METHODS)[number] }
           ? string | null
-          : null;
+          : C extends { method: "tidyTabs" }
+            ? number
+            : null;
 
-export function browserCommandResultKind(method: BrowserCommand["method"]): "id" | "optionalId" | "ids" | "json" | "none" {
+export function browserCommandResultKind(method: BrowserCommand["method"]): "id" | "optionalId" | "ids" | "json" | "count" | "none" {
   if (method === "pinLocalFiles") return "ids";
+
+  // SAFETY: the checks above established this shape.
   if (method === "serviceAction" || (IMPORT_COMMAND_METHODS as readonly string[]).includes(method)) return "json";
+
+  if (method === "tidyTabs") return "count";
+
+  // SAFETY: the checks above established this shape.
   if ((ID_METHODS as readonly string[]).includes(method)) return "id";
+
+  // SAFETY: the checks above established this shape.
   if ((OPTIONAL_ID_METHODS as readonly string[]).includes(method)) return "optionalId";
+
   return "none";
 }
 
-export function parseBrowserCommand(value: unknown): BrowserCommand {
-  const method = value && typeof value === "object" && "method" in value ? value.method : undefined;
-  if (typeof method === "string") {
+export function parseBrowserCommand(value: JsonInput): BrowserCommand {
+  const method = isJsonObject(value) ? value.method : undefined;
+
+  if (v.is(v.string(), method)) {
+    // SAFETY: the checks above established this shape.
     if ((LOCAL_FILE_COMMAND_METHODS as readonly string[]).includes(method)) return parseLocalFileCommand(value);
+
     if (method === "serviceAction") return parseServiceCommand(value);
+
+    // SAFETY: the checks above established this shape.
     if ((IMPORT_COMMAND_METHODS as readonly string[]).includes(method)) return parseImportCommand(value);
+
+    // SAFETY: the checks above established this shape.
     if ((TAB_COMMAND_METHODS as readonly string[]).includes(method)) return parseTabCommand(value);
+
+    // SAFETY: the checks above established this shape.
     if ((WINDOW_COMMAND_METHODS as readonly string[]).includes(method)) return parseWindowCommand(value);
+
     if (SETTINGS_COMMAND_METHODS.includes(method)) return parseSettingsCommand(value);
+
+    // SAFETY: the checks above established this shape.
     if ((ORGANIZE_COMMAND_METHODS as readonly string[]).includes(method)) return parseOrganizeCommand(value);
+
+    // SAFETY: the checks above established this shape.
     if ((SPLIT_COMMAND_METHODS as readonly string[]).includes(method)) return parseSplitCommand(value);
+
+    // SAFETY: the checks above established this shape.
     if ((SPACE_COMMAND_METHODS as readonly string[]).includes(method)) return parseSpaceCommand(value);
+
+    // SAFETY: the checks above established this shape.
     if ((BOOKMARK_COMMAND_METHODS as readonly string[]).includes(method)) return parseBookmarkCommand(value);
+
+    // SAFETY: the checks above established this shape.
     if ((HISTORY_COMMAND_METHODS as readonly string[]).includes(method)) return parseHistoryCommand(value);
+
+    // SAFETY: the checks above established this shape.
     if ((WINDOW_UI_COMMAND_METHODS as readonly string[]).includes(method)) return parseWindowUiCommand(value);
   }
+
   return parseLocationCommand(value);
 }
 
@@ -95,35 +135,101 @@ export function executeBrowserCommand(
   store: BrowserStore,
   command: BrowserCommand,
   effects?: LocationCommandEffects,
-): string | string[] | null | ImportCommandResult {
-  if ((LOCAL_FILE_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeLocalFileCommand(store, command as LocalFileCommand);
-  if ((IMPORT_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeImportCommand(store, command as ImportCommand);
+): string | string[] | number | null | ImportCommandResult {
+  // SAFETY: the checks above established this shape.
+  if ((LOCAL_FILE_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeLocalFileCommand(store, command as LocalFileCommand);
+  }
+
+  // SAFETY: the checks above established this shape.
+  if ((IMPORT_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeImportCommand(store, command as ImportCommand);
+  }
+
   if (command.method === "serviceAction") throw new Error("Service actions require the application owner");
-  if ((TAB_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeTabCommand(store, command as TabCommand, effects);
-  if ((WINDOW_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeWindowCommand(store, command as WindowCommand, effects);
-  if (SETTINGS_COMMAND_METHODS.includes(command.method)) return executeSettingsCommand(store, command as SettingsCommand);
-  if ((ORGANIZE_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeOrganizeCommand(store, command as OrganizeCommand);
-  if ((SPLIT_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeSplitCommand(store, command as SplitCommand, effects);
-  if ((SPACE_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeSpaceCommand(store, command as SpaceCommand);
-  if ((BOOKMARK_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeBookmarkCommand(store, command as BookmarkCommand);
-  if ((HISTORY_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeHistoryCommand(store, command as HistoryCommand);
-  if ((WINDOW_UI_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeWindowUiCommand(store, command as WindowUiCommand);
+
+  // SAFETY: the checks above established this shape.
+  if ((TAB_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeTabCommand(store, command as TabCommand, effects);
+  }
+
+  // SAFETY: the checks above established this shape.
+  if ((WINDOW_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeWindowCommand(store, command as WindowCommand, effects);
+  }
+
+  // SAFETY: the checks above established this shape.
+  if (SETTINGS_COMMAND_METHODS.includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeSettingsCommand(store, command as SettingsCommand);
+  }
+
+  // SAFETY: the checks above established this shape.
+  if ((ORGANIZE_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeOrganizeCommand(store, command as OrganizeCommand);
+  }
+
+  // SAFETY: the checks above established this shape.
+  if ((SPLIT_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeSplitCommand(store, command as SplitCommand, effects);
+  }
+
+  // SAFETY: the checks above established this shape.
+  if ((SPACE_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeSpaceCommand(store, command as SpaceCommand);
+  }
+
+  // SAFETY: the checks above established this shape.
+  if ((BOOKMARK_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeBookmarkCommand(store, command as BookmarkCommand);
+  }
+
+  // SAFETY: the checks above established this shape.
+  if ((HISTORY_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeHistoryCommand(store, command as HistoryCommand);
+  }
+
+  // SAFETY: the checks above established this shape.
+  if ((WINDOW_UI_COMMAND_METHODS as readonly string[]).includes(command.method)) {
+    // SAFETY: the checks above established this shape.
+    return executeWindowUiCommand(store, command as WindowUiCommand);
+  }
+
+  // SAFETY: the checks above established this shape.
   return executeLocationCommand(store, command as LocationCommand, effects);
 }
 
-export function validateBrowserCommandResult(command: BrowserCommand, value: unknown): boolean {
+export function validateBrowserCommandResult(command: BrowserCommand, value: JsonInput): boolean {
   const kind = browserCommandResultKind(command.method);
-  if (kind === "ids") return Array.isArray(value) && value.length <= 10_000 && value.every((id) => typeof id === "string" && !!id.trim() && id.length <= 1024);
-  if (kind === "id") return typeof value === "string" && !!value;
-  if (kind === "optionalId") return value === null || (typeof value === "string" && !!value);
+
+  if (kind === "ids") return Array.isArray(value) && value.length <= 10_000 && value.every((id) => v.is(v.string(), id) && !!id.trim() && id.length <= 1024);
+
+  if (kind === "id") return v.is(v.string(), value) && !!value;
+
+  if (kind === "optionalId") return value === null || (v.is(v.string(), value) && !!value);
+
+  if (kind === "count") return v.is(v.number(), value) && Number.isSafeInteger(value) && value >= 0;
+
   if (command.method === "serviceAction") {
     try {
-      parseServiceResult(value, command.action);
+      parseServiceResult(checked<JsonInput>(value), command.action);
+
       return true;
     } catch {
       return false;
     }
   }
+
   if (kind === "json") return validateImportReply(command.method, value);
+
   return value === null;
 }

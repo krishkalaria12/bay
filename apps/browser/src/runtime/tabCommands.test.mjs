@@ -7,12 +7,16 @@ import { executeTabCommand, parseTabCommand, TAB_COMMAND_METHODS } from "./tabCo
 const sparseArray = (length) => {
   const array = [];
   array.length = length;
+
   return array;
 };
+
 const run = (store, command) => executeTabCommand(store, parseTabCommand(command));
+
 const setup = (options) => {
   const store = createBrowserStore();
   const windowId = store.getState().createWindow(options);
+
   return { store, windowId, tabId: activeTabId(store.getState(), windowId) };
 };
 
@@ -31,15 +35,20 @@ test("tab parser closes user command fields and copies options and ID arrays", (
     ...["wakeTab", "syncInternalPage", "hideNewTab"].map((method) => ({ method, tabId: "t" })),
     { method: "showNewTab", tabId: "t", first: { url: "https://a.example/", title: "A" } },
   ];
+
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(TAB_COMMAND_METHODS));
+
   for (const command of commands) {
     const parsed = parseTabCommand(command);
     assert.deepEqual(parsed, command);
     assert.notEqual(parsed, command);
+
     if (command.options) assert.notEqual(parsed.options, command.options);
+
     if (command.tabIds) assert.notEqual(parsed.tabIds, command.tabIds);
     assert.throws(() => parseTabCommand({ ...command, native: true }), { code: "invalid_request" });
   }
+
   for (const command of [
     null,
     [],
@@ -101,6 +110,7 @@ test("tab commands validate every reference before invoking any reducer", () => 
   const privateTab = activeTabId(store.getState(), privateWindow);
   const otherPrivate = store.getState().createWindow({ incognito: true });
   const small = store.getState().createWindow({ small: true });
+
   for (const command of [
     { method: "newTab", windowId: "missing" },
     { method: "newTab", windowId, options: { spaceId: "missing" } },
@@ -120,6 +130,7 @@ test("tab commands validate every reference before invoking any reducer", () => 
     assert.throws(() => run(store, command), { code: "invalid_request" }, JSON.stringify(command));
     assert.equal(store.getState(), before);
   }
+
   run(store, { method: "activate", tabId: privateTab, windowId: privateWindow });
   assert.equal(activeTabId(store.getState(), privateWindow), privateTab);
 });
@@ -153,12 +164,15 @@ test("showTab focuses its actual owner once while activate preserves focus", () 
 
 test("newTab preserves the empty result for an app URL handled outside tabs", () => {
   const routed = [];
+
   const store = createBrowserStore({
     openAppUrl: (url, windowId) => {
       routed.push([url, windowId]);
+
       return true;
     },
   });
+
   const windowId = store.getState().createWindow();
   const before = store.getState();
   assert.equal(run(store, { method: "newTab", windowId, options: { url: "yahu://newtab" } }), "");
@@ -213,6 +227,7 @@ test("syncInternalPage handles Library and derives an Easel title from library d
   assert.equal(store.getState().tabs[tabId].title, "Library");
   const spaceId = store.getState().windows[windowId].spaceId;
   const prior = useLibrary.getState();
+
   try {
     useLibrary.setState({ easels: { "easel one": { id: "easel one", spaceId, title: "Project notes" } } });
     store.getState().navigate(tabId, "bay://easel/easel%20one");

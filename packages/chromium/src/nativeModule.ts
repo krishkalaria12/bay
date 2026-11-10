@@ -65,6 +65,7 @@ export type PermissionKind =
   | "cameraPanTiltZoom";
 
 export type PermissionRequest = { id: string; browserId: number; origin: string; permissions: PermissionKind[] };
+
 export type PermissionResult = "accept" | "deny" | "dismiss";
 
 export type EngineInfo = {
@@ -136,9 +137,11 @@ export type CliControlStatus = {
 export const cliControlStatus = () => engineCall<CliControlStatus>("nn_cli_control", "");
 export const setCliControl = (on: boolean) => engineCall<CliControlStatus>("nn_cli_control", "", { on });
 export const setCliActiveTab = (active: number | null) => engineCall<CliControlStatus>("nn_cli_control", "", { active });
+
 export const onCliControlChanged = (listener: (status: CliControlStatus) => void) =>
   onEngineEvent((_topic, payload) => {
     const state = payload.state;
+
     if (state === "off" || state === "starting" || state === "on" || state === "external") listener({ ...payload, state });
   }, "cliControl");
 
@@ -170,18 +173,22 @@ export type ChromeWindowState = {
   hasRoot: boolean;
   translucent?: boolean;
 };
+
 export const chromeWindows = () => Cef.chromeWindows();
 export const devWindowNumber = (browserId: number) => Cef.devWindowNumber(browserId);
 export const devWindowAction = (windowNumber: number, action: string) => Cef.devWindow(windowNumber, action);
+
 // Whichever engine the tab's page is in keeps it for the tab's next view.
 export const prepareTabTransfer = (transferKey: string) => {
   Cef.prepareTransfer(transferKey);
   WebKit?.prepareTransfer(transferKey);
 };
+
 export const releaseTabTransfer = (transferKey: string) => {
   Cef.releaseTransfer(transferKey);
   WebKit?.releaseTransfer(transferKey);
 };
+
 export const listComponents = () => Cef.components();
 
 export const beginTracing = () => Cef.beginTracing();
@@ -197,14 +204,17 @@ export type SystemState = {
   memoryPressure: "normal" | "warning" | "critical";
   physicalMemory: number;
 };
+
 export const systemState = () => Cef.systemState();
 export const onSystemState = (listener: (state: SystemState) => void) => Cef.addListener("onSystemState", listener);
 
 // These settings control the screen-share picker and the page menu's search item.
 export const setDisplayMediaPicker = (enabled: boolean) => Cef.setDisplayMediaPicker?.(enabled) ?? Promise.resolve();
+
 // Chrome's automatic Picture in Picture (a call's own document PiP on a tab switch) follows the app's setting. (Builds
 // before it have no such function: Chrome's default, its prompt, stays.)
 export const setAutoPictureInPicture = (enabled: boolean) => Cef.setAutoPictureInPicture?.(enabled) ?? Promise.resolve();
+
 // Boosts (Arc's site tweaks), every one that's on: the engine puts their sheets into the pages of their site at document
 // start and runs their script in its own isolated world (NNCoreEngine setBoosts:). Builds before it ignore them.
 export const setBoosts = (boosts: EngineBoost[]) => Cef.setBoosts?.(boosts) ?? Promise.resolve();
@@ -214,34 +224,57 @@ export const getDisplayMediaSources = () => Cef.displayMediaSources();
 // Downloads and permission prompts from both engines, in one list; a WebKit one's id says so (webkit.ts). On the
 // legacy architecture a module's event reaches the listeners of every module declaring that name, so each engine's
 // subscription takes only its own: otherwise every prompt arrives twice, and comes back after it's answered.
-const bothEngines = <T extends { id: string }>(
-  name: "onDownload" | "onPermission" | "onPermissionDismissed",
-  isWebKit: (id: string) => boolean,
-  listener: (value: T) => void,
-) => {
-  const chromium = Cef.addListener(
-    name as "onDownload",
-    ((value: T) => {
-      if (!isWebKit(value.id)) listener(value);
-    }) as unknown as (d: Download) => void,
-  );
-  const webkit = webKitListener<T>(name, (value) => {
-    if (isWebKit(value.id)) listener(value);
+function subscribeDownload(listener: (d: Download) => void) {
+  const chromium = Cef.addListener("onDownload", (value) => {
+    if (!isWebKitDownload(value.id)) listener(value);
   });
+
+  const webkit = webKitListener<Download>("onDownload", (value) => {
+    if (isWebKitDownload(value.id)) listener(value);
+  });
+
   return { remove: () => (chromium.remove(), webkit.remove()) };
-};
+}
+
+function subscribePermission(listener: (p: PermissionRequest) => void) {
+  const chromium = Cef.addListener("onPermission", (value) => {
+    if (!isWebKitPermission(value.id)) listener(value);
+  });
+
+  const webkit = webKitListener<PermissionRequest>("onPermission", (value) => {
+    if (isWebKitPermission(value.id)) listener(value);
+  });
+
+  return { remove: () => (chromium.remove(), webkit.remove()) };
+}
+
+function subscribePermissionDismissed(listener: (p: { id: string }) => void) {
+  const chromium = Cef.addListener("onPermissionDismissed", (value) => {
+    if (!isWebKitPermission(value.id)) listener(value);
+  });
+
+  const webkit = webKitListener<{ id: string }>("onPermissionDismissed", (value) => {
+    if (isWebKitPermission(value.id)) listener(value);
+  });
+
+  return { remove: () => (chromium.remove(), webkit.remove()) };
+}
+
 const webKitDownload = (action: "cancel" | "pause" | "resume", id: string) => WebKit?.downloadCommand(action, id) ?? Promise.resolve();
 
 export function onDownload(listener: (d: Download) => void) {
   // A host that has the list gives it after subscribing, so nothing reported before is lost. An event can overtake
   // the list's reply: the event is newer, so the list's copy of that download is dropped.
   let reported: Set<string> | null = new Set<string>();
-  const subscription = bothEngines<Download>("onDownload", isWebKitDownload, (d) => {
+
+  const subscription = subscribeDownload((d) => {
     reported?.add(d.id);
     listener(d);
   });
+
   let removed = false;
   const listed = Cef.listDownloads?.();
+
   if (!listed) reported = null;
   void listed?.then(
     (downloads) => {
@@ -250,6 +283,7 @@ export function onDownload(listener: (d: Download) => void) {
     },
     () => (reported = null),
   );
+
   return {
     remove: () => {
       removed = true;
@@ -257,21 +291,27 @@ export function onDownload(listener: (d: Download) => void) {
     },
   };
 }
+
 export const cancelDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("cancel", id) : Cef.cancelDownload(id));
 export const pauseDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("pause", id) : Cef.pauseDownload(id));
 export const resumeDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("resume", id) : Cef.resumeDownload(id));
 
-export const onPermission = (listener: (p: PermissionRequest) => void) => bothEngines("onPermission", isWebKitPermission, listener);
-export const onPermissionDismissed = (listener: (p: { id: string }) => void) => bothEngines("onPermissionDismissed", isWebKitPermission, listener);
+export const onPermission = subscribePermission;
+export const onPermissionDismissed = subscribePermissionDismissed;
+
 export const resolvePermission = (id: string, result: PermissionResult, remember = false) =>
   isWebKitPermission(id) ? (WebKit?.resolvePermission(id, result, remember) ?? Promise.resolve()) : Cef.resolvePermission(id, result, remember);
 
 export type BrowsingDataType = "history" | "siteData" | "cache" | "downloads";
+
 export const clearBrowsingData = (profile: string, types: BrowsingDataType[], since?: number) =>
   Promise.all([Cef.clearBrowsingData(profile, types, since ?? null), WebKit?.clearBrowsingData(profile, types, since ?? null).catch(() => {})]).then(() => {});
+
 export const releaseProfile = (profile: string) => Cef.releaseProfile(profile);
+
 // Resolves with the kinds of data that couldn't be deleted (none when it all went).
 export const deleteProfileData = async (profile: string): Promise<string[]> => {
   const [chromium, webkit] = await Promise.all([Cef.deleteProfileData(profile), WebKit?.deleteProfileData(profile).catch(() => false) ?? true]);
+
   return [...(chromium?.remaining ?? ["data"]), ...(webkit ? [] : ["WebKit data"])];
 };

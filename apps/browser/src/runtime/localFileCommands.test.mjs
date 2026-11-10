@@ -13,8 +13,10 @@ test("local file commands validate paths and reject native authority and extra f
   const command = { method: "pinLocalFiles", windowId: "w", files: [file] };
   assert.deepEqual(parseLocalFileCommand(command), command);
   assert.equal(parseLocalFileCommand({ ...command, files: [{ ...file, path: "//Users/test//notes.txt" }] }).files[0].path, file.path);
+
   for (const path of ["relative.txt", "file:///tmp/a", "/tmp/../secret", "/tmp/./a", "/tmp/a\0b"])
     assert.throws(() => parseLocalFileCommand({ ...command, files: [{ ...file, path }] }), { code: "invalid_request" });
+
   for (const key of ["grant", "bookmark", "nativeHandle", "id", "spaceId", "createdAt"])
     assert.throws(() => parseBrowserCommand({ ...command, files: [{ ...file, [key]: "forged" }] }), { code: "invalid_request" });
   assert.throws(() => parseBrowserCommand({ ...command, trusted: true }), { code: "invalid_request" });
@@ -40,6 +42,7 @@ test("local file commands run metadata reducers and reject invalid contexts befo
   const [other] = run(store, { method: "pinLocalFiles", windowId, spaceId: otherSpace, files: [file] });
   const privateId = s().createWindow({ incognito: true });
   const smallId = s().createWindow({ small: true, url: "https://example.com" });
+
   for (const command of [
     { method: "pinLocalFiles", windowId: privateId, files: [file] },
     { method: "pinLocalFiles", windowId: smallId, files: [file] },
@@ -51,13 +54,16 @@ test("local file commands run metadata reducers and reject invalid contexts befo
     assert.throws(() => run(store, command), { code: "invalid_request" });
     assert.strictEqual(s(), before);
   }
+
   run(store, { method: "removeLocalFile", id });
   assert.equal(s().localFiles[id], undefined);
 });
 
 test("pin replies accept only a bounded ID list, including duplicate pins and no files", () => {
   const c = parseBrowserCommand({ method: "pinLocalFiles", windowId: "w", files: [] });
+
   for (const value of [[], ["id"], ["id", "id"]]) assert.ok(validateBrowserCommandResult(c, value));
+
   for (const value of [null, "id", [""], [" "], [42], ["x".repeat(1025)], Array(10_001).fill("id")])
     assert.equal(validateBrowserCommandResult(c, value), false);
 });
@@ -76,6 +82,7 @@ test("authority attributes sidebar edits to authenticated command origin and rou
   assert.equal(commit.state.localFiles[id].path, file.path);
   assert.equal(commit.state.sidebarUndo[windowId].length, 1);
   assert.equal(commit.state.sidebarUndo[focused], undefined);
+
   for (const originWindowId of [store.getState().createWindow({ incognito: true }), store.getState().createWindow({ small: true })]) {
     const before = store.getState();
     await assert.rejects(
@@ -90,6 +97,7 @@ test("authority attributes sidebar edits to authenticated command origin and rou
     );
     assert.strictEqual(store.getState(), before);
   }
+
   await send(2, { method: "renameLocalFile", id, name: "Renamed" });
   await send(3, { method: "undoSidebarEdit", windowId });
   assert.equal(store.getState().localFiles[id].name, file.name);

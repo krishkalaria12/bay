@@ -10,6 +10,7 @@
 //   animation frame work p95 within 16.7 ms at DPR 1
 //   no shader-caused main-thread task over 50 ms
 // GPU time comes from EXT_disjoint_timer_query_webgl2 when the driver exposes it; missing GPU time is not zero cost.
+import * as v from "valibot";
 import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { findChromium, withChromium } from "../../../../packages/shaders/scripts/browser.mjs";
@@ -17,8 +18,10 @@ import { findChromium, withChromium } from "../../../../packages/shaders/scripts
 const { values: opts } = parseArgs({
   options: { runs: { type: "string", default: "3" }, headed: { type: "string", default: "0" }, chromium: { type: "string" }, json: { type: "string" } },
 });
+
 const runs = Number(opts.runs);
 const headed = opts.headed === "1";
+
 const args = headed
   ? ["--ozone-platform-hint=auto", "--ignore-gpu-blocklist", "--window-size=1920,1080"]
   : ["--headless=new", "--use-angle=gl", "--ignore-gpu-blocklist", "--enable-gpu-rasterization"];
@@ -26,8 +29,10 @@ const args = headed
 const pct = (xs, p) => {
   if (!xs.length) return NaN;
   const s = [...xs].sort((a, b) => a - b);
+
   return s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))];
 };
+
 const ms = (v) => (Number.isFinite(v) ? `${v.toFixed(2)} ms` : "n/a");
 
 const scenarios = [
@@ -42,36 +47,50 @@ const scenarios = [
 
 const report = {};
 let failed = false;
+
 await withChromium({ browser: findChromium(opts.chromium), args }, async (open) => {
   for (const sc of scenarios) {
     const merged = {};
     let gpu = "";
+
     for (let r = 0; r < runs; r++) {
       const res = await open("bench.html", { width: 1920, height: 1080, ...sc.page });
       gpu = res.gpu;
+
       for (const [k, v] of Object.entries(res)) if (Array.isArray(v)) (merged[k] ??= []).push(...v);
-      for (const k of ["first", "compile"]) if (typeof res[k] === "number") (merged[k] ??= []).push(res[k]);
+
+      for (const k of ["first", "compile"]) if (v.is(v.number(), res[k])) (merged[k] ??= []).push(res[k]);
     }
+
     report[sc.name] = { gpu, ...merged };
     const line = [`${sc.name}`];
+
     for (const k of ["context", "start", "poll", "linked", "first", "compile", "flush", "settled", "work", "gpuMs", "intervals"]) {
       if (!merged[k]?.length) continue;
       line.push(`${k} p50 ${ms(pct(merged[k], 50))} p95 ${ms(pct(merged[k], 95))}`);
     }
+
     if (merged.intervals?.length)
       line.push(`missed frames ${merged.intervals.filter((i) => i > 1.5 * pct(merged.intervals, 50)).length}/${merged.intervals.length}`);
     const long = (merged.longTasks ?? []).filter((d) => d > 50);
     line.push(`long tasks >50ms: ${long.length}${long.length ? ` (max ${ms(Math.max(...long))})` : ""}`);
+
     if (long.length) failed = true;
+
     if (sc.gate) {
       const v = pct(merged[sc.gate.key], 95);
       const ok = v < sc.gate.p95;
+
       if (!ok) failed = true;
       line.push(`gate ${sc.gate.key} p95 < ${sc.gate.p95} ms: ${ok ? "pass" : "FAIL"}`);
     }
+
     console.log(line.join("\n  "));
   }
+
   console.log(`GPU: ${Object.values(report)[0]?.gpu}`);
 });
+
 if (opts.json) writeFileSync(opts.json, JSON.stringify(report, null, 2));
+
 process.exitCode = failed ? 1 : 0;

@@ -9,22 +9,27 @@ export function WebActivitySpinner(props: ViewProps) {
   const color = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)";
   useEffect(() => {
     const node = ring.current;
+
     if (!node) return;
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let rotation: Animation | undefined;
+
     const update = () => {
       rotation?.cancel();
       rotation = motion.matches
         ? undefined
         : node.animate([{ transform: "rotate(0deg)" }, { transform: "rotate(360deg)" }], { duration: 1880, iterations: Infinity });
     };
+
     update();
     motion.addEventListener("change", update);
+
     return () => {
       motion.removeEventListener("change", update);
       rotation?.cancel();
     };
   }, []);
+
   return (
     <View {...props} accessible={false} pointerEvents="none">
       <svg ref={ring} aria-hidden="true" width="100%" height="100%" viewBox="0 0 12 12" style={{ display: "block", transformOrigin: "center" }}>

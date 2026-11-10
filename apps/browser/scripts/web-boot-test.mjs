@@ -10,7 +10,9 @@ import { promisify } from "node:util";
 import { findChromium } from "../../../packages/shaders/scripts/browser.mjs";
 
 const dist = fileURLToPath(new URL("../dist", import.meta.url));
+
 if (!existsSync(join(dist, "index.html"))) throw new Error("Nothing to boot: run pnpm build:web first");
+
 const types = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".css": "text/css", ".ttf": "font/ttf", ".woff2": "font/woff2" };
 
 // Exercise the rendered images too: a successful boot can still leave every bundled icon broken.
@@ -37,23 +39,30 @@ const server = createServer((request, response) => {
     .writeHead(200, { "content-type": types[extname(file)] ?? "application/octet-stream" })
     .end(extname(file) === ".html" ? body.toString().replace("</body>", `${imageProbe}</body>`) : body);
 });
+
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
 const { port } = server.address();
 
 const browser = findChromium(process.argv[2]);
 let failed = false;
+
 for (const platform of ["linux", "windows"]) {
   const { stdout } = await promisify(execFile)(
     browser,
     ["--headless=new", "--no-sandbox", "--disable-gpu", "--virtual-time-budget=20000", "--dump-dom", `http://localhost:${port}/?platform=${platform}`],
     { maxBuffer: 64 * 1024 * 1024 },
   );
+
   const failure = /Bay could not start[^<]*/.exec(stdout)?.[0];
   // The views' own stylesheet and the sidebar's field: the app rendered, rather than only not failing.
   const rendered = stdout.includes("bay-view-focus-rings") && stdout.includes("Search or enter address");
   const imagesDecoded = stdout.includes('data-bay-images="decoded"');
   console.log(`${platform}: ${failure ?? (rendered ? "booted" : "rendered nothing")}, images ${imagesDecoded ? "decoded" : "failed"}`);
+
   if (failure || !rendered || !imagesDecoded) failed = true;
 }
+
 server.close();
+
 process.exitCode = failed ? 1 : 0;

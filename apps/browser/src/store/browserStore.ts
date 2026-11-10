@@ -20,6 +20,7 @@ import type { BrowserWindow, PinnedFolder, Tab, TabGroup } from "./types";
 import { createUiSlice, type UiSlice } from "./windowUi";
 import { createWindowsSlice, type WindowsSlice } from "./windows";
 import { createSharedCollectionsSlice, type SharedCollectionsSlice } from "./sharedCollections";
+import * as v from "valibot";
 
 export type BrowserState = SidebarUndoSlice &
   SpacesSlice &
@@ -75,29 +76,35 @@ type SavedWindow = BrowserWindow & { tabIds?: string[] };
 
 // Groups and pinned folders were once saved with the window they were in; they belong to their space now.
 function withoutWindowId<T extends { windowId?: string }>(saved: T): Omit<T, "windowId"> {
+  // SAFETY: copy spreads T, whose windowId is optional per the constraint; the intersection keeps T's other fields deleteable.
   const copy = { ...saved } as { windowId?: string } & Omit<T, "windowId">;
   delete copy.windowId;
+
   return copy;
 }
 
 // Batch external updates; React Native otherwise commits once per subscriber.
 let batch = (update: () => void) => update();
+
 export function setStoreBatching(batchedUpdates: (update: () => void) => void) {
   batch = batchedUpdates;
 }
+
 /** For the app's other stores: their subscribers re-render in one commit. */
 export const batchStoreUpdates = (update: () => void) => batch(update);
 
 const batched =
   <T>(creator: StateCreator<T>): StateCreator<T> =>
   (set, get, api) => {
+    // SAFETY: batchedSet forwards set's full tuple; the inner cast restores the tuple arity Zustand's generic set expects.
     const batchedSet = ((...args: Parameters<typeof set>) => batch(() => (set as (...a: typeof args) => void)(...args))) as typeof set;
     api.setState = batchedSet;
+
     return creator(batchedSet, get, api);
   };
 
-/** Durable data visible to selectors that do not read page progress. */
-export type BrowserShape = Omit<BrowserProjection, "live">;
+/** The published state without `live`: what a selector on the quiet view reads (store/derivedStores.ts). */
+export type QuietBrowserState = Omit<BrowserProjection, "live">;
 
 // A store per runtime owner: the app's own (useBrowser), or an isolated one (runtime/authority.ts, tests) that doesn't
 // publish engine profiles or open app URLs on the app's behalf.
@@ -135,9 +142,12 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
           settings.density = settings.density === "compact" ? "compact" : "comfortable";
           settings.searchShortcutMode = settings.searchShortcutMode === "duckduckgo" ? "duckduckgo" : "arc";
           settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
-          settings.tidyDownloads = typeof settings.tidyDownloads === "boolean" ? settings.tidyDownloads : DEFAULT_SETTINGS.tidyDownloads;
+          settings.tidyDownloads = v.is(v.boolean(), settings.tidyDownloads) ? settings.tidyDownloads : DEFAULT_SETTINGS.tidyDownloads;
+          settings.tidyTabs = v.is(v.boolean(), settings.tidyTabs) ? settings.tidyTabs : DEFAULT_SETTINGS.tidyTabs;
+
           if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
           settings.externalLinkDefault = normalizeLinkDestination(settings.externalLinkDefault);
+
           if (settings.externalLinkDefault?.kind === "space" && !spaces[settings.externalLinkDefault.spaceId])
             settings.externalLinkDefault = { kind: "space", spaceId: settings.defaultSpaceId };
 
@@ -146,11 +156,14 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
           // A private window's tabs and a Little Bay's page only come back with their window.
           const kept = (w: SavedWindow | undefined) => !!w && (w.incognito || w.kind === "small");
           const tabs: Record<string, Tab> = {};
+
           for (const t of Object.values(data.tabs ?? {})) {
             const own = rawWindows[t.windowId];
+
             // A peek is thrown away with its window's session (store/peeks.ts).
             if (!spaceOk(t.spaceId) || (isIncognitoSpace(t.spaceId) && !own) || t.peekOf) continue;
-            const { adoptId: _, wakeAdoptId: _wake, ...rest } = t;
+            // Its engine comes from its address again, so a page a website rule once moved isn't stuck there.
+            const { adoptId: _, wakeAdoptId: _wake, engine: _engine, ...rest } = t;
             tabs[t.id] = {
               ...rest,
               windowId: own ? t.windowId : "",
@@ -158,69 +171,94 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
               pinnedUrl: rest.pinnedUrl ?? (pinnedPage(rest) ? rest.url || null : null),
             };
           }
+
           // Each list: the saved one's order, then (an older session) each window's.
           const lookup = { spaces, windows: rawWindows };
           const lists: Record<string, string[]> = {};
+
           const add = (id: string) => {
             const t = tabs[id];
+
             if (!t) return;
             const list = (lists[tabListKey(lookup, t)] ??= []);
+
             if (!list.includes(id)) list.push(id);
           };
+
           for (const ids of Object.values(data.tabLists ?? {})) ids.forEach(add);
+
           for (const w of Object.values(rawWindows)) (w.tabIds ?? []).forEach(add);
           Object.keys(tabs).forEach(add);
           const tabLists = Object.fromEntries(Object.entries(lists).map(([key, ids]) => [key, placeFolders(pinnedFirst(ids, tabs), tabs, data.pinnedFolders)]));
 
           const windows: Record<string, BrowserWindow> = {};
+
           for (const { tabIds: _, ...w } of Object.values(rawWindows)) {
             if (kept(w) && !tabLists[windowListKey(lookup, w)]) continue;
             const spaceId = w.incognito || w.kind === "small" || spaces[w.spaceId] ? w.spaceId : settings.defaultSpaceId;
+
             const listed = (p: string, id: string) =>
               !!tabs[id] && (w.kind === "small" ? tabs[id]!.windowId === w.id : tabListKey(lookup, tabs[id]!) === spaceListKey({ spaces }, p));
+
             windows[w.id] = { ...w, spaceId, activeTabIds: Object.fromEntries(Object.entries(w.activeTabIds).filter(([p, id]) => listed(p, id))) };
           }
+
           for (const t of Object.values(tabs)) if (t.windowId && !windows[t.windowId]) tabs[t.id] = { ...t, windowId: "" };
+
           const windowOrder = [
             ...(data.windowOrder ?? []).filter((id) => windows[id]),
             ...Object.keys(windows).filter((id) => !data.windowOrder?.includes(id)),
           ];
+
           type SavedGroup = TabGroup & { windowId?: string };
+
+          // SAFETY: data.groups may carry an older windowId field, stripped by withoutWindowId in the map below.
           const groups = Object.fromEntries(
             Object.values((data.groups ?? {}) as Record<string, SavedGroup>)
               .map((saved) => {
                 const g = withoutWindowId(saved);
+
                 return { ...g, tabIds: g.tabIds.filter((id) => tabs[id]?.spaceId === g.spaceId) };
               })
               .filter((g) => g.tabIds.length)
               .map((g) => [g.id, g]),
           );
+
           const splits = sanitizeSplits(data.splits ?? {}, tabs);
           let bookmarks = data.bookmarks ?? EMPTY_BOOKMARKS;
           const history: BrowserState["history"] = {};
           const replacedRoots = new Set<string>();
+
           // Shared native data stays with its canonical owner. Other spaces retain their tabs but start clean.
           for (const [owner, ids] of owners) {
             const source = [owner, ...ids].find((id) => data.history?.[id]);
+
             if (source) history[owner] = data.history![source]!;
             const roots = [owner, ...ids].map((id) => bookmarks.roots[id]).find(Boolean);
+
             if (roots) {
               const expected = rootIdsFor(engineIdOf(spaces[owner]!));
               const nodes = { ...bookmarks.nodes };
+
               for (const kind of ["bar", "other"] as const) {
                 const from = roots[kind];
                 const to = expected[kind];
                 const node = nodes[from];
+
                 if (from === to || node?.kind !== "folder") continue;
                 nodes[to] = { ...node, id: to };
                 replacedRoots.add(from);
+
                 for (const child of node.children) if (nodes[child]) nodes[child] = { ...nodes[child]!, parentId: to };
               }
+
               bookmarks = { nodes, roots: { ...bookmarks.roots, [owner]: expected } };
             }
           }
+
           for (const id of spaceOrder) {
             const engine = engineIdOf(spaces[id]!);
+
             if (detached.has(id)) {
               const roots = rootIdsFor(engine);
               const nodes = { ...bookmarks.nodes };
@@ -228,18 +266,23 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
               delete nodes[roots.other];
               bookmarks = { ...bookmarks, nodes };
             }
+
             bookmarks = engineRoots(bookmarks, id, engine)[0];
           }
+
           // Replaced permanent folders are aliases, not another bookmark tree.
           if (replacedRoots.size) {
             const liveRoots = new Set(spaceOrder.flatMap((id) => Object.values(bookmarks.roots[id]!)));
             const nodes = { ...bookmarks.nodes };
+
             for (const id of replacedRoots) if (!liveRoots.has(id)) delete nodes[id];
             bookmarks = { ...bookmarks, nodes };
           }
+
           const focused = data.focusedWindowId && windows[data.focusedWindowId] ? data.focusedWindowId : (windowOrder.at(-1) ?? null);
 
           const engines = new Set(Object.values(spaces).map(engineIdOf));
+
           let next: BrowserState = {
             ...s,
             spaces,
@@ -289,14 +332,17 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
             find: {},
             ui: { ...s.ui, focusedWindowId: focused, focusOrder: focused ? [focused, ...windowOrder.filter((id) => id !== focused).reverse()] : [] },
           };
+
           next = prunePinnedFolders(next);
           // Each window shows the tab it showed, else its space's most recent one, else a new tab. A launch that starts on
           // a new tab shows a blank one, its space's tabs waiting in the sidebar.
           const blank = data.launch && settings.launchTab === "newTab";
+
           for (const w of Object.values(windows)) {
             const shown = blank ? blankTabToShow(next, w.id, w.spaceId) : tabToShow(next, w.id, w.spaceId);
             next = shown ? apply(next, activated(next, shown, w.id)) : withNewTab(next, w.id)[0];
           }
+
           set(next);
         },
       },
@@ -310,16 +356,20 @@ export function createBrowserStore(options: { publishEngineProfiles?: boolean; o
   store.subscribe((s, prev) => {
     if (s.spaces !== prev.spaces && Object.values(s.localFiles).some((pin) => !s.spaces[pin.spaceId]))
       store.setState({ localFiles: normalizeLocalFiles(s.localFiles, s.spaces) });
+
     if (s.windows !== prev.windows && Object.keys(s.sidebarUndo).some((id) => !s.windows[id]))
       store.setState({ sidebarUndo: Object.fromEntries(Object.entries(s.sidebarUndo).filter(([id]) => s.windows[id])) });
     const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
+
     if (patch) store.setState(patch);
   });
+
   return store;
 }
 
 // Native integrations on macOS still use model.engineProfile without an explicit registry.
 export const useBrowser = createBrowserStore({ publishEngineProfiles: true, openAppUrl: registeredAppUrlOpener });
+
 export type BrowserStore = ReturnType<typeof createBrowserStore>;
 
 export type { CreateWindowOptions } from "./windows";

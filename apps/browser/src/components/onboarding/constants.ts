@@ -10,6 +10,7 @@ import { tensionSpring } from "../../lib/springPresets";
 export const INTRO_LETTER = 0.52;
 export const INTRO_TAGLINE = 0.6;
 export const INTRO_EXIT = 0.65;
+
 // When the music's cues fall, in seconds from the start: the icon, the wordmark's letters, the tagline, the exit.
 export const INTRO_CUES: IntroMusicCues = (() => {
   const icon = 0.25;
@@ -18,8 +19,10 @@ export const INTRO_CUES: IntroMusicCues = (() => {
   const letterCount = APP_NAME.length;
   const tagline = letters + (letterCount - 1) * letterStep + INTRO_LETTER + 0.15;
   const exit = tagline + INTRO_TAGLINE + 1.1;
+
   return { icon, letters, letterStep, letterCount, tagline, exit, end: exit + INTRO_EXIT };
 })();
+
 // Animated's old spring: tension 50, friction 7.
 export const INTRO_ICON_SPRING = tensionSpring(50, 7);
 
@@ -31,7 +34,7 @@ export const ONBOARDING_DOC = "onboarding.json";
 // MARK: Import handoff (importStep.tsx)
 
 // The browser you're leaving gets its own colours, [top right, bottom left]; Bay's half is its icon's night sky.
-export const HANDOFF_COLORS: Record<string, [string, string]> = {
+export const HANDOFF_COLORS = {
   arc: ["#F2507B", "#2A1FD0"],
   dia: ["#F55FD0", "#2F5BF2"],
   chrome: ["#4C8DF6", "#1648B8"],
@@ -49,18 +52,23 @@ export const HANDOFF_COLORS: Record<string, [string, string]> = {
   operaGX: ["#FA1E4E", "#2A0F38"],
   vivaldi: ["#F25757", "#8E1F2A"],
   island: ["#4F86FF", "#14306E"],
-};
+} satisfies Record<string, [string, string]>;
+
 export const HANDOFF_FALLBACK_COLORS: [string, string] = ["#7A78F0", "#2B2A63"];
 export const BAY_SKY = "#2A2C4B";
 export const BAY_GLOW = "#E8714A";
 export const HANDOFF_ICON = 84;
+
 // The tear between the halves: diamonds of Bay's sky biting into the other side.
 export const HANDOFF_TOOTH = 8;
+
 // How close the dragged icon's centre has to come to Bay's for it to take it.
 export const HANDOFF_DROP_RADIUS = 76;
+
 // How far the dotted path, and the icon sent along it with Return, dips between the two.
 export const HANDOFF_DIP = 26;
 export const HANDOFF_DOTS = 15;
+
 // Animated's old spring: tension 120, friction 8.
 export const HANDOFF_SPRING = tensionSpring(120, 8);
 
@@ -70,5 +78,6 @@ export const TOUR_CARD_WIDTH = 296;
 export const TOUR_GAP = 14;
 export const TOUR_MARGIN = 12;
 export const TOUR_SCRIM_REACH = 6000;
+
 // Animated's old spring: tension 70, friction 10.
 export const TOUR_SPOT_SPRING = tensionSpring(70, 10);

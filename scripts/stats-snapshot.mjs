@@ -26,6 +26,7 @@ const OTEL = {
   // What the view leaves out: the endpoints' self-tests.
   base: "Event != '' AND ResourceAttributes['service.version'] != '0.0.0-selftest'",
 };
+
 const POSTHOG = {
   table: "telemetry.posthog_events",
   p: "properties",
@@ -37,17 +38,21 @@ const POSTHOG = {
   app: "{p}['$lib'] = 'bay-telemetry'",
   base: "1",
 };
+
 const fill = (sql, t) =>
   sql
     .replace(/\{(site|app)\}/g, (_, k) => `(${t[k]})`)
     .replaceAll("{mac}", "({p}['$os'] = 'Mac OS X' AND {p}['$device_type'] = 'Desktop')")
     .replace(/\{(p|ts|t|e|d)\}/g, (_, k) => t[k]);
+
 const both = (select, where, { final = false } = {}) =>
   [OTEL, POSTHOG].map((t) => `SELECT ${fill(select, t)} FROM ${t.table}${final ? " FINAL" : ""} WHERE ${fill(where, t)} AND ${t.base}`).join(" UNION ALL ");
+
 const VERSION = "'^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$'";
 
 const gh = async (path) => JSON.parse((await promisify(execFile)("gh", ["api", path])).stdout);
 const problems = [];
+
 const attempt = async (name, fn) => {
   try {
     return await fn();
@@ -57,6 +62,7 @@ const attempt = async (name, fn) => {
         .split("\n")[0]
         .slice(0, 160)}`,
     );
+
     return null;
   }
 };
@@ -65,6 +71,7 @@ const github = attempt("github", async () => {
   const [repo, releases] = await Promise.all([gh(`repos/${REPO}`), gh(`repos/${REPO}/releases?per_page=100`)]);
   const count = (release, ext) => release.assets.find((a) => a.name.endsWith(ext))?.download_count ?? 0;
   const latest = releases.find((r) => !r.draft && !r.prerelease);
+
   return {
     stars: repo.stargazers_count,
     forks: repo.forks_count,
@@ -76,6 +83,7 @@ const github = attempt("github", async () => {
 });
 
 const telemetry = {};
+
 if (hasTelemetryEnv()) {
   // One request: each round trip to the server costs ~300 ms, more than any of these queries.
   const firstHour = Math.floor(Date.now() / 3_600_000) - 23;
@@ -115,11 +123,13 @@ if (hasTelemetryEnv()) {
     telemetry.site = { allTime, day, hour, downloads, macDownloads };
     telemetry.hourly = hourly.map(Number);
     telemetry.macRate = { clicked: macClicked, visitors: macVisitors };
+
     const range = (checks, firsts) => ({
       low: copies.reduce((sum, r) => sum + Math.ceil(r[checks] / 3), 0),
       high: copies.reduce((sum, r) => sum + r[checks], 0),
       firsts: copies.reduce((sum, r) => sum + r[firsts], 0),
     });
+
     telemetry.copies = {
       firstLaunches: copies.reduce((sum, r) => sum + r[5], 0),
       yesterday: range(1, 3),

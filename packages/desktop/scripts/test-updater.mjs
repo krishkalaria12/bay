@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 const shell = resolve(import.meta.dirname, "..");
 const frameworks = resolve(shell, "../../apps/browser/macos/Pods/Sparkle");
 const root = mkdtempSync(join(tmpdir(), "bay-updater-test-"));
+
 try {
   const main = join(root, "main.swift");
   writeFileSync(main, readFileSync(join(shell, "ios/Updater.swift"), "utf8") + readFileSync(join(shell, "tests/updater.swift"), "utf8"));

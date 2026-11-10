@@ -20,6 +20,7 @@ describe("desktop data layout", () => {
 describe.skipIf(process.platform === "win32")("private control files", () => {
   it("rejects a readable token file and a link before returning its endpoint", () => {
     const root = mkdtempSync(join(tmpdir(), "bay-control-test-"));
+
     try {
       const path = join(root, "BayControl.json");
       writeFileSync(path, JSON.stringify({ port: 1234, browser: "/devtools/browser/test", token: "private-test-token", pid: process.pid }), { mode: 0o600 });
@@ -38,6 +39,7 @@ describe.skipIf(process.platform === "win32")("private control files", () => {
     const path = join(root, "token");
     writeFileSync(path, "original", { mode: 0o600 });
     const fd = openSync(path, "r");
+
     try {
       rmSync(path);
       mkdirSync(path);
@@ -54,6 +56,7 @@ describe.skipIf(process.platform !== "win32")("private Windows control files", (
     "accepts an owner-only DACL and refuses a token inherited by other principals",
     () => {
       const root = mkdtempSync(join(tmpdir(), "bay-control-acl-test-"));
+
       try {
         const path = join(root, "BayControl.json");
         writeFileSync(path, JSON.stringify({ port: 1234, browser: "/devtools/browser/test", token: "private-test-token", pid: process.pid }));

@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { Cdp, CdpError, ConnectionLost } from "./cdp.ts";
+import * as v from "valibot";
+import { Cdp, CdpError, ConnectionLost, isCdpObject, type CdpObject } from "./cdp.ts";
 import { Endpoint, EndpointError, NOT_REACHABLE } from "./endpoint.ts";
 import { redact } from "./redact.ts";
 import * as urlmatch from "./urlmatch.ts";
 import { Build, rules, SourceMap, SOURCE_URL_PREFIX } from "./userscript.ts";
+import { type JsonValue } from "./util.ts";
 
 export const CONNECT_TIMEOUT = 10_000;
 export const RUN_TIMEOUT = 30_000;
@@ -15,12 +17,12 @@ export const EXPECT_POLL = 100;
 export const MAX_PAGE_ERRORS = 5;
 export const MAX_TEXT = 2000;
 
-export const LEVELS: Record<string, string> = {
-  warning: "warn",
-  startGroup: "group",
-  startGroupCollapsed: "groupCollapsed",
-  endGroup: "groupEnd",
-};
+export const LEVELS = new Map<string, string>([
+  ["warning", "warn"],
+  ["startGroup", "group"],
+  ["startGroupCollapsed", "groupCollapsed"],
+  ["endGroup", "groupEnd"],
+]);
 
 const PRELUDE = `(() => {
 const mark = __MARK__;
@@ -82,6 +84,26 @@ export interface ExpectResult {
   expression?: string;
 }
 
+interface RunReport {
+  ok: boolean;
+  ran: boolean;
+  unfinished_passes: number;
+  script: string;
+  url: string;
+  final_url: string | null;
+  run_at: string;
+  frames: FrameResult[];
+  console: ConsoleEntry[];
+  exceptions: ExceptionEntry[];
+  page_errors: ExceptionEntry[];
+  page_console_messages: number;
+  expect: ExpectResult | null;
+  screenshot: string | null;
+  warnings: string[];
+  error: string | null;
+  kept_target: string | null;
+}
+
 export class Report {
   script: string;
   url: string;
@@ -111,6 +133,7 @@ export class Report {
   get unsettled(): number {
     const starts = this.frames.filter((f) => f.state === "start").length;
     const dones = this.frames.filter((f) => f.state === "done").length;
+
     return Math.max(0, starts - dones);
   }
 
@@ -118,10 +141,11 @@ export class Report {
     if (this.error || !this.ran || this.exceptions.length > 0 || this.unsettled > 0) {
       return false;
     }
+
     return this.expect === null || (!this.expect.error && Boolean(this.expect.truthy));
   }
 
-  to_dict(): Record<string, unknown> {
+  to_dict(): RunReport {
     return {
       ok: this.ok,
       ran: this.ran,
@@ -146,11 +170,14 @@ export class Report {
 
 export function wrap(build: Build, mark: string): [string, string, number] {
   const sourceUrl = `${SOURCE_URL_PREFIX}${build.meta.id}.user.js`;
+
   const head = PRELUDE.replace("__MARK__", JSON.stringify(mark))
     .replace("__RULES__", JSON.stringify(rules(build.meta)))
     .replace("__MATCHER__", urlmatch.JS);
+
   const body = build.js.endsWith("\n") ? build.js : `${build.js}\n`;
   const tail = POSTLUDE.replace("__SOURCE_URL__", sourceUrl);
+
   return [head + body + tail, sourceUrl, (head.match(/\n/g) || []).length];
 }
 
@@ -190,22 +217,27 @@ export class Run {
   notifyTopSettled(): void {
     if (this.topSettled) return;
     this.topSettled = true;
+
     for (const waiter of this.topSettledWaiters) waiter();
     this.topSettledWaiters.length = 0;
   }
 
   waitTopSettled(timeoutMs: number): Promise<boolean> {
     if (this.topSettled) return Promise.resolve(true);
+
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         const idx = this.topSettledWaiters.indexOf(done);
+
         if (idx !== -1) this.topSettledWaiters.splice(idx, 1);
         resolve(this.topSettled);
       }, timeoutMs);
+
       const done = () => {
         clearTimeout(timer);
         resolve(true);
       };
+
       this.topSettledWaiters.push(done);
     });
   }
@@ -213,22 +245,27 @@ export class Run {
   notifyLoaded(): void {
     if (this.loaded) return;
     this.loaded = true;
+
     for (const waiter of this.loadedWaiters) waiter();
     this.loadedWaiters.length = 0;
   }
 
   waitLoaded(timeoutMs: number): Promise<boolean> {
     if (this.loaded) return Promise.resolve(true);
+
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         const idx = this.loadedWaiters.indexOf(done);
+
         if (idx !== -1) this.loadedWaiters.splice(idx, 1);
         resolve(this.loaded);
       }, timeoutMs);
+
       const done = () => {
         clearTimeout(timer);
         resolve(true);
       };
+
       this.loadedWaiters.push(done);
     });
   }
@@ -237,11 +274,15 @@ export class Run {
     if (line < this.bodyStart || line >= this.bodyEnd) {
       return "bay test wrapper";
     }
+
     const found = this.map.lookup(line, column);
+
     if (found) {
       return `${found[0]}:${found[1]}:${found[2]}`;
     }
+
     const filename = this.build.path.split("/").pop() || "script";
+
     return `${filename} (compiled):${line - this.bodyStart + 1}:${column + 1}`;
   }
 
@@ -251,26 +292,27 @@ export class Run {
     });
   }
 
-  ours(frames: Array<Record<string, unknown>>): Record<string, unknown> | null {
+  ours(frames: Array<CdpObject>): CdpObject | null {
     return frames.find((f) => f.url === this.sourceUrl) || null;
   }
 
-  onEvent(method: string, params: Record<string, unknown>, session: string | undefined): void {
+  onEvent(method: string, params: CdpObject, session: string | undefined): void {
     if (method === "Runtime.consoleAPICalled") {
       this.onConsole(params, session);
     } else if (method === "Runtime.exceptionThrown") {
-      this.onException((params.exceptionDetails as Record<string, unknown>) || {}, session);
+      this.onException(isCdpObject(params.exceptionDetails) ? params.exceptionDetails : {}, session);
     } else if (method === "Page.loadEventFired" && session === this.topSession) {
       this.notifyLoaded();
-    } else if (method === "Target.attachedToTarget" && session && params.sessionId && params.sessionId !== this.topSession) {
-      const p = this.setupChild(params.sessionId as string, Boolean(params.waitingForDebugger));
+    } else if (method === "Target.attachedToTarget" && session && v.is(v.string(), params.sessionId) && params.sessionId !== this.topSession) {
+      const p = this.setupChild(params.sessionId, Boolean(params.waitingForDebugger));
       this.children.add(p);
       p.finally(() => this.children.delete(p));
     }
   }
 
-  onConsole(params: Record<string, unknown>, session: string | undefined): void {
-    const args = Array.isArray(params.args) ? (params.args as Array<Record<string, unknown>>) : [];
+  onConsole(params: CdpObject, session: string | undefined): void {
+    const args = Array.isArray(params.args) ? params.args.filter(isCdpObject) : [];
+
     if (args.length && args[0]?.value === this.mark) {
       const values = args.slice(1, 5).map((a) => a.value);
       const [state, href, top, detail] = [values[0], values[1], values[2], values[3]];
@@ -280,46 +322,57 @@ export class Run {
         state: String(state || ""),
         detail: detail ? String(detail) : null,
       });
+
       if (top && (state === "done" || state === "skip")) {
         this.notifyTopSettled();
       }
+
       return;
     }
-    const stackTrace = params.stackTrace as Record<string, unknown> | undefined;
-    const frames = Array.isArray(stackTrace?.callFrames) ? (stackTrace!.callFrames as Array<Record<string, unknown>>) : [];
+
+    const stackTrace = isCdpObject(params.stackTrace) ? params.stackTrace : undefined;
+    const rawFrames = isCdpObject(stackTrace) && Array.isArray(stackTrace.callFrames) ? stackTrace.callFrames : [];
+    const frames = rawFrames.filter(isCdpObject);
     const frame = this.ours(frames);
+
     if (!frame) {
       this.report.page_console += 1;
+
       return;
     }
+
     const text = args.map((arg) => describeArg(arg)).join(" ");
     const type = String(params.type || "log");
     this.report.console.push({
-      level: LEVELS[type] || type,
+      level: LEVELS.get(type) ?? type,
       text: clipText(this.mapText(text)),
       at: this.mapped(Number(frame.lineNumber || 0), Number(frame.columnNumber || 0)),
       frame: session === this.topSession ? null : "iframe",
     });
   }
 
-  onException(details: Record<string, unknown>, session: string | undefined): void {
-    const exception = (details.exception as Record<string, unknown>) || {};
+  onException(details: CdpObject, session: string | undefined): void {
+    const exception = isCdpObject(details.exception) ? details.exception : {};
     const description = exception.description || exception.value;
     const text = details.text || "Uncaught";
     const message = description && (text === "Uncaught" || text === "Uncaught (in promise)") ? `${text} ${description}` : description || text;
-    const stackTrace = details.stackTrace as Record<string, unknown> | undefined;
-    const frames = Array.isArray(stackTrace?.callFrames) ? (stackTrace!.callFrames as Array<Record<string, unknown>>) : [];
+    const stackTrace = isCdpObject(details.stackTrace) ? details.stackTrace : undefined;
+    const rawFrames = isCdpObject(stackTrace) && Array.isArray(stackTrace.callFrames) ? stackTrace.callFrames : [];
+    const frames = rawFrames.filter(isCdpObject);
     const frame = this.ours(frames);
     const ours = frame !== null || details.url === this.sourceUrl || String(message).includes(this.sourceUrl);
+
     const entry: ExceptionEntry = {
       text: clipText(this.mapText(String(message))),
       frame: session === this.topSession ? null : "iframe",
     };
+
     if (frame !== null) {
       entry.at = this.mapped(Number(frame.lineNumber || 0), Number(frame.columnNumber || 0));
     } else if (details.url === this.sourceUrl) {
       entry.at = this.mapped(Number(details.lineNumber || 0), Number(details.columnNumber || 0));
     }
+
     if (ours) {
       this.report.exceptions.push(entry);
     } else if (this.report.page_errors.length < MAX_PAGE_ERRORS) {
@@ -329,6 +382,7 @@ export class Run {
 
   async setupChild(session: string, waiting: boolean): Promise<void> {
     if (!this.cdp) return;
+
     try {
       await this.cdp.send("Runtime.enable", {}, session);
       await this.cdp.send("Page.enable", {}, session);
@@ -345,43 +399,56 @@ export class Run {
   }
 }
 
-export function describeArg(arg: Record<string, unknown>): string {
-  if (arg.preview && typeof arg.preview === "object") {
-    return preview(arg.preview as Record<string, unknown>);
+export function describeArg(arg: CdpObject): string {
+  if (isCdpObject(arg.preview)) {
+    return preview(arg.preview);
   }
+
   if ("value" in arg) {
     const val = arg.value;
-    return typeof val === "string" ? val : JSON.stringify(val);
+
+    return v.is(v.string(), val) ? val : JSON.stringify(val);
   }
+
   if ("unserializableValue" in arg) {
     return String(arg.unserializableValue);
   }
+
   if (arg.type === "undefined") {
     return "undefined";
   }
+
   return String(arg.description || arg.className || arg.type || "?");
 }
 
-function preview(data: Record<string, unknown>): string {
+function preview(data: CdpObject): string {
   const items: string[] = [];
-  const props = Array.isArray(data.properties) ? (data.properties as Array<Record<string, unknown>>) : [];
+  const props = Array.isArray(data.properties) ? data.properties.filter(isCdpObject) : [];
+
   for (const prop of props) {
     let value = prop.value !== undefined ? prop.value : prop.type || "?";
+
     if (prop.type === "string") {
       value = JSON.stringify(value);
     }
+
     items.push(data.subtype === "array" ? String(value) : `${prop.name}: ${value}`);
   }
+
   if (data.overflow) {
     items.push("…");
   }
+
   if (data.subtype === "array") {
     return `[${items.join(", ")}]`;
   }
+
   if (data.type === "object" && (!data.subtype || data.subtype === "") && (data.description === "Object" || !data.description)) {
     return `{${items.join(", ")}}`;
   }
+
   const head = String(data.description || data.type || "?");
+
   return items.length ? `${head} {${items.join(", ")}}` : head;
 }
 
@@ -415,19 +482,26 @@ export async function evaluateExpect(cdp: Cdp, session: string, expression: stri
     },
     session,
   );
-  if (result.exceptionDetails && typeof result.exceptionDetails === "object") {
-    const details = result.exceptionDetails as Record<string, unknown>;
-    const exception = (details.exception as Record<string, unknown>) || {};
+
+  if (isCdpObject(result.exceptionDetails)) {
+    const details = result.exceptionDetails;
+    const exception = isCdpObject(details.exception) ? details.exception : {};
+
     return {
       truthy: false,
       error: clipText(String(exception.description || details.text || "threw")),
     };
   }
-  const value = (result.result as Record<string, unknown>)?.value;
-  if (typeof value !== "object" || value === null) {
+
+  const rawResult = isCdpObject(result.result) ? result.result : undefined;
+  const value = rawResult?.value;
+
+  if (!isCdpObject(value)) {
     return { truthy: false, error: "the expression's value couldn't be read" };
   }
-  const val = value as Record<string, unknown>;
+
+  const val = value;
+
   return {
     truthy: Boolean(val.truthy),
     value: val.value,
@@ -435,31 +509,42 @@ export async function evaluateExpect(cdp: Cdp, session: string, expression: stri
   };
 }
 
-export async function evaluatePlain(cdp: Cdp, session: string, expression: string): Promise<unknown> {
+export async function evaluatePlain(cdp: Cdp, session: string, expression: string): Promise<JsonValue> {
   const result = await cdp.send("Runtime.evaluate", { expression, returnByValue: true }, session);
-  return (result.result as Record<string, unknown>)?.value;
+  const rawResult = isCdpObject(result.result) ? result.result : undefined;
+
+  return rawResult?.value ?? null;
 }
 
 export async function listenExpect(cdp: Cdp, session: string, expression: string | undefined, wait: number): Promise<ExpectResult | null> {
   if (!expression) {
     if (wait > 0) await Bun.sleep(wait * 1000);
+
     return null;
   }
+
   const deadline = Date.now() + Math.max(wait, 0) * 1000;
   let outcome: ExpectResult | null = null;
+
   while (true) {
     outcome = await evaluateExpect(cdp, session, expression);
     outcome.expression = expression;
+
     if ((!outcome.error && outcome.truthy) || Date.now() >= deadline) {
       break;
     }
+
     await Bun.sleep(EXPECT_POLL);
+
     if (cdp.closed) throw new ConnectionLost();
   }
+
   const remaining = deadline - Date.now();
+
   if (remaining > 0) {
     await Bun.sleep(remaining);
   }
+
   return outcome;
 }
 
@@ -469,9 +554,11 @@ export async function captureScreenshot(cdp: Cdp, session: string, path: string,
     const target = resolve(path);
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, Buffer.from(String(shot.data), "base64"));
+
     return target;
   } catch (error) {
     report.warnings.push(`no screenshot: ${error instanceof Error ? error.message : String(error)}`);
+
     return null;
   }
 }
@@ -487,6 +574,7 @@ export async function runTest(
 ): Promise<Report> {
   const report = new Report(build.path, url, build.meta.run_at);
   report.warnings.push(...build.meta.warnings, ...build.warnings);
+
   if (build.meta.world === "ISOLATED") {
     report.warnings.push(
       "@inject-into content: this test runs the script in the page's world (bay command connections can't " +
@@ -503,6 +591,7 @@ export async function runTest(
     if (endpoint.explicit) {
       throw new EndpointError(redact(`can't connect to ${endpoint.source} (${error instanceof Error ? error.message : String(error)})`));
     }
+
     throw new EndpointError(NOT_REACHABLE);
   }
 
@@ -514,28 +603,44 @@ export async function runTest(
   try {
     try {
       const created = await cdp.send("Target.createTarget", { url: "about:blank", background: true });
-      target = created.targetId as string;
+
+      if (!v.is(v.string(), created.targetId)) {
+        throw new CdpError("Target.createTarget returned no targetId");
+      }
+
+      target = created.targetId;
       const attached = await cdp.send("Target.attachToTarget", { targetId: target, flatten: true });
-      const session = (run.topSession = attached.sessionId as string);
+
+      if (!v.is(v.string(), attached.sessionId)) {
+        throw new CdpError("Target.attachToTarget returned no sessionId");
+      }
+
+      const session = (run.topSession = attached.sessionId);
       await cdp.send("Runtime.enable", {}, session);
       await cdp.send("Page.enable", {}, session);
       const added = await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: run.source }, session);
-      scriptId = (added.identifier as string) || null;
+      scriptId = v.is(v.string(), added.identifier) && added.identifier ? added.identifier : null;
+
       if (!build.meta.noframes) {
         await cdp.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, session);
       }
+
       const navigated = await cdp.send("Page.navigate", { url }, session, RUN_TIMEOUT);
+
       if (navigated.errorText) {
         report.error = `couldn't open ${url}: ${navigated.errorText}`;
+
         return report;
       }
 
       // Settle
       const settled = await run.waitTopSettled(RUN_TIMEOUT);
+
       if (!settled || !run.topSettled) {
         report.error = report.unsettled
           ? `the script's first pass in the top frame didn't finish within ${RUN_TIMEOUT / 1000}s (an endless loop?)`
           : `the top frame didn't run or skip the script within ${RUN_TIMEOUT / 1000}s`;
+
         return report;
       }
 
@@ -544,7 +649,10 @@ export async function runTest(
       // Final URL
       try {
         const info = await cdp.send("Target.getTargetInfo", { targetId: target });
-        report.final_url = ((info.targetInfo as Record<string, unknown>)?.url as string) || null;
+        const targetInfo = isCdpObject(info.targetInfo) ? info.targetInfo : undefined;
+        const urlText = v.is(v.string(), targetInfo?.url) ? targetInfo.url : null;
+
+        report.final_url = urlText || null;
       } catch {}
 
       // Expect & listen
@@ -553,8 +661,9 @@ export async function runTest(
       // Check frames
       if (!build.meta.noframes) {
         const counted = await evaluatePlain(cdp, session, 'document.querySelectorAll("iframe, frame").length');
-        const frames = typeof counted === "number" ? counted : 0;
+        const frames = v.is(v.number(), counted) ? counted : 0;
         const reported = report.frames.filter((f) => !f.top && (f.state === "done" || f.state === "skip")).length;
+
         if (frames > reported) {
           report.warnings.push(
             `${frames - reported} of the page's ${frames} iframes never reported back: they hadn't loaded, or they show ` +
@@ -571,12 +680,14 @@ export async function runTest(
       if (error instanceof ConnectionLost) {
         throw new EndpointError(!endpoint.explicit ? NOT_REACHABLE : redact(`lost the connection to ${endpoint.source}`));
       }
+
       if (error instanceof CdpError) {
         report.error = redact(error.message);
       } else {
         report.error = error instanceof Error ? error.message : String(error);
       }
     }
+
     return report;
   } finally {
     if (target && keep) {
@@ -587,26 +698,32 @@ export async function runTest(
           await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: scriptId }, run.topSession, CLEANUP_TIMEOUT);
         } catch {}
       }
+
       if (target) {
         try {
           await cdp.send("Target.closeTarget", { targetId: target }, undefined, CLEANUP_TIMEOUT);
         } catch {}
       }
     }
+
     await cdp.close();
   }
 }
 
 export function formatReport(report: Report): string {
   const lines: string[] = [];
+
   for (const warning of report.warnings) {
     lines.push(`warning: ${warning}`);
   }
+
   lines.push(`url: ${report.final_url || report.url}`);
   const top = report.frames.filter((f) => f.top);
   const sub = report.frames.filter((f) => !f.top);
+
   if (top.length) {
     const last = top[top.length - 1];
+
     if (last && last.state === "skip") {
       lines.push(`top frame: skipped (${last.detail})`);
     } else if (last && last.state === "start") {
@@ -652,19 +769,26 @@ export function formatReport(report: Report): string {
   if (report.screenshot) {
     lines.push(`screenshot: ${report.screenshot}`);
   }
+
   if (report.kept) {
     lines.push(`kept the tab open (target ${report.kept})`);
   }
+
   lines.push(report.ok ? "ok" : `failed: ${failure(report)}`);
+
   return redact(lines.join("\n"));
 }
 
 export function failure(report: Report): string {
   if (report.error) return report.error;
+
   if (!report.ran) return "the script didn't run on this page";
+
   if (report.exceptions.length > 0) {
     return `${report.exceptions.length} uncaught exception${report.exceptions.length > 1 ? "s" : ""}`;
   }
+
   if (report.unsettled > 0) return "the script's first pass never finished in some frame (an endless loop?)";
+
   return "--expect wasn't truthy";
 }

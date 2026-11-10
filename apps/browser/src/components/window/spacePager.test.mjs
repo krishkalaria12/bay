@@ -5,8 +5,11 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 
 process.env.BAY_TEST_PLATFORM = "windows";
+
 globalThis.__DEV__ = false;
+
 const native = new URL("../../test-native-stub.mjs", import.meta.url).href;
+
 const motion =
   "data:text/javascript," +
   encodeURIComponent(`
@@ -17,6 +20,7 @@ export const Extrapolation = {CLAMP: 0};
 export const interpolate = () => 0;
 export const useAnimatedStyle = (update) => update();
 `);
+
 registerHooks({
   load(url, context, next) {
     if (url.endsWith("/pager.ts"))
@@ -26,10 +30,12 @@ registerHooks({
           .outputText,
         shortCircuit: true,
       };
+
     return next(url, context);
   },
   resolve(specifier, context, next) {
     if (specifier === "@bay/platform/motion") return { url: motion, shortCircuit: true };
+
     if (specifier === "@bay/chromium" && context.parentURL?.endsWith("/pager.ts"))
       return {
         url:
@@ -43,9 +49,11 @@ export const pagerState = () => null;
 `),
         shortCircuit: true,
       };
+
     return next(specifier, context);
   },
 });
+
 const { createBrowserStore } = await import("../../store/browserStore.ts");
 const { installBrowserReadSource, createLocalBrowserReadSource } = await import("../../store/read.ts");
 const { createLocalBrowserCommands, installBrowserCommands } = await import("../../runtime/commands.ts");
@@ -59,6 +67,7 @@ test("mounted web sidebar switches canonical space and reconciles its visual pag
   const removeCommands = installBrowserCommands(createLocalBrowserCommands(store));
   const pager = pagerFor(windowId);
   const detach = pager.attach();
+
   try {
     assert.equal(pager.active, false);
     pager.switchTo(spaceId);
@@ -85,6 +94,7 @@ test("web wheel input crosses the existing pager threshold once per cooldown", a
   const pager = pagerFor(windowId);
   const detach = pager.attach();
   const wheel = () => pager.wheel({ phase: "wheel", direction: "forward", distance: 0.5, dy: 0, velocity: 0, available: true, width: 300 });
+
   try {
     wheel();
     wheel();
@@ -92,6 +102,7 @@ test("web wheel input crosses the existing pager threshold once per cooldown", a
     wheel();
     await new Promise(setImmediate);
     assert.equal(store.getState().windows[windowId].spaceId, next);
+
     for (let i = 0; i < 20; i++) wheel();
     await new Promise(setImmediate);
     assert.equal(store.getState().windows[windowId].spaceId, next);

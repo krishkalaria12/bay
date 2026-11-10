@@ -6,12 +6,14 @@ import { createBrowserProjector } from "./projection.ts";
 
 test("browser-assigned window startup never invokes coordinator services", async () => {
   const calls = [];
+
   const transport = {
     bootstrap: { role: "window", windowId: "window-1" },
     dispose() {
       calls.push("dispose");
     },
   };
+
   const owner = { dispose() {} };
   assert.equal(
     await startSharedRuntime({
@@ -22,6 +24,7 @@ test("browser-assigned window startup never invokes coordinator services", async
       window: async (received) => {
         assert.equal(received, transport);
         calls.push("window");
+
         return owner;
       },
     }),
@@ -32,12 +35,14 @@ test("browser-assigned window startup never invokes coordinator services", async
 
 test("failed shared startup disposes its connection without starting a local writer", async () => {
   const calls = [];
+
   const transport = {
     bootstrap: { role: "coordinator" },
     dispose() {
       calls.push("dispose");
     },
   };
+
   await assert.rejects(
     startSharedRuntime({
       transport,

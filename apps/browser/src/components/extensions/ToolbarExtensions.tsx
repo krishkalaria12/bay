@@ -26,6 +26,7 @@ import { EXTENSION_BUTTON } from "./constants";
 
 function useToolbarExtensions(windowId: string) {
   const shown = useWindowExtensions(windowId);
+
   return { pinned: shown.filter((x) => x.pinned), overflow: shown.some((x) => !x.pinned) };
 }
 
@@ -33,6 +34,7 @@ export function useToolbarExtensionsWidth(windowId: string): number {
   const { pinned, overflow } = useToolbarExtensions(windowId);
   const casting = useCastRoutes(windowId).length > 0;
   const count = pinned.length + (overflow ? 1 : 0) + (casting ? 1 : 0);
+
   return count ? count * EXTENSION_BUTTON + 6 : 0;
 }
 
@@ -52,11 +54,15 @@ export const ToolbarExtensions = memo(function ToolbarExtensions({
 }) {
   const { pinned, overflow } = useToolbarExtensions(windowId);
   const routes = useCastRoutes(windowId);
+
   const browserId = usePages((p) => {
     for (const [id, tab] of Object.entries(p.browsers)) if (tab === tabId) return Number(id);
+
     return 0;
   });
+
   if (!pinned.length && !overflow && !routes.length) return null;
+
   return (
     <View style={{ position: "absolute", top, right, flexDirection: "row" }}>
       {routes.length ? <CastButton windowId={windowId} routes={routes} palette={palette} /> : null}
@@ -70,9 +76,11 @@ export const ToolbarExtensions = memo(function ToolbarExtensions({
 
 function useAnchor(key: string) {
   const ref = useRef<View>(null);
+
   const measure = () =>
     new Promise<Anchor>((resolve) => {
       const view = ref.current;
+
       if (!view) return resolve({ x: 0, y: 0, width: EXTENSION_BUTTON, height: EXTENSION_BUTTON });
       view.measureInWindow((x, y, width, height) => {
         const anchor = { x, y, width, height };
@@ -80,6 +88,7 @@ function useAnchor(key: string) {
         resolve(anchor);
       });
     });
+
   return { ref, measure };
 }
 
@@ -88,6 +97,7 @@ function ExtensionButton({ ext, windowId, browserId, palette }: { ext: Installed
   // the manifest's icon without the badge. A click goes by the tab's own state (its popup), never the held one.
   const fetched = useExtensions((e) => (browserId ? e.actions[browserId] : undefined));
   const [held, setHeld] = useState<ActionState | undefined>(undefined);
+
   if (fetched && fetched[ext.id] !== held) setHeld(fetched[ext.id]);
   const state = fetched ? fetched[ext.id] : held;
   const open = useExtensions((e) => e.popup?.windowId === windowId && e.popup.extensionId === ext.id);
@@ -97,6 +107,7 @@ function ExtensionButton({ ext, windowId, browserId, palette }: { ext: Installed
   const dimmed = state ? !state.enabled : false;
   const title = state?.title || ext.actionTitle || ext.name;
   const icon = state?.icon || ext.actionIcon || ext.icon;
+
   return (
     <View ref={ref} tooltip={title} {...hoverProps} onLayout={() => void measure()}>
       <ContextMenuArea onContextMenu={() => void showExtensionMenu(windowId, ext)}>
@@ -128,6 +139,7 @@ function ExtensionButton({ ext, windowId, browserId, palette }: { ext: Installed
 
 function Badge({ text, color, textColor }: { text: string; color?: string | null; textColor?: string | null }) {
   const fill = color && color !== "#000000" ? color : "#5F6368";
+
   return (
     <View
       pointerEvents="none"
@@ -154,6 +166,7 @@ function Badge({ text, color, textColor }: { text: string; color?: string | null
 function contrastText(hex: string) {
   const n = parseInt(hex.slice(1, 7), 16);
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+
   return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? "#000000" : "#FFFFFF";
 }
 
@@ -161,15 +174,18 @@ function CastButton({ windowId, routes, palette }: { windowId: string; routes: C
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const tooltip = routes.map((r) => (r.description ? `${r.description} on ${r.sink}` : `Casting to ${r.sink}`)).join("\n");
+
   const menu = async () => {
     const choice = await showMenu([
       ...routes.map((r) => ({ id: `stop:${r.id}`, title: `Stop Casting to ${r.sink}`, symbol: "stop.circle" })),
       { separator: true as const },
       { id: "open", title: "Cast…", symbol: "tv.and.mediabox" },
     ]);
+
     if (choice === "open") void toggleCastPicker(windowId);
     else if (choice?.startsWith("stop:")) void terminateCastRoute(choice.slice(5));
   };
+
   return (
     <View tooltip={tooltip} {...hoverProps}>
       <ContextMenuArea onContextMenu={() => void menu()}>
@@ -197,9 +213,11 @@ function CastButton({ windowId, routes, palette }: { windowId: string; routes: C
 function OverflowButton({ windowId, palette }: { windowId: string; palette: ToolbarPalette }) {
   const { hovered, hoverProps } = useHover();
   const { ref, measure } = useAnchor(`${windowId}|*`);
+
   const onPress = async () => {
     const anchor = await measure();
     const enabled = windowExtensions(useBrowser.getState(), windowId);
+
     const choice = await showMenu([
       ...enabled.map((x) => ({ id: `open:${x.id}`, title: x.name, symbol: x.pinned ? "pin.fill" : undefined })),
       ...(enabled.length ? [{ separator: true as const }] : []),
@@ -207,12 +225,17 @@ function OverflowButton({ windowId, palette }: { windowId: string; palette: Tool
       { id: "manage", title: "Manage Extensions…", symbol: "puzzlepiece.extension" },
       { id: "add", title: "Add Extension…", symbol: "plus" },
     ]);
+
     if (choice === "pin") return openPinDialog(windowId);
+
     if (choice === "manage") return openManageExtensions();
+
     if (choice === "add") return openWebStore(windowId);
     const ext = choice?.startsWith("open:") ? enabled.find((x) => x.id === choice.slice(5)) : undefined;
+
     if (ext) void activateExtension(windowId, ext, anchor);
   };
+
   return (
     <View ref={ref} tooltip="Extensions" {...hoverProps} onLayout={() => void measure()}>
       <Pressable onPress={onPress}>

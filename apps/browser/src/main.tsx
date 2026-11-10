@@ -19,23 +19,38 @@ import { startCliControl } from "./components/cli/driverControl";
 import { startUserScripts } from "./components/cli/userScripts";
 
 probeStore("browser", useBrowser);
+
 // Reports stay silent until the user shares them.
 installErrorReporting();
+
 setStoreBatching(batchedUpdates);
+
 const backgroundServices = startCoordinatorServices({ store: useBrowser, restoreSession: true });
+
 // Before the native sync: a moved tab's page is handed off before the window it left closes (lib/tabNavigation.ts).
 startTabPages();
+
 startNativeSync({ persistence: backgroundServices });
+
 // After the first window is made: the tab each window starts on doesn't open the command bar.
 quietLaunchTabs();
+
 startAppIntegration();
+
 if (isMac) startCliControl();
+
 startUserScripts();
+
 startTabLifecycle();
+
 startTranslate();
+
 startSync(useBrowser);
+
 startTelemetry();
+
 if (__DEV__ || perfProbeEnabled) require("./lib/devHarness").startDevHarness();
 
 registerWindowApplication({ onFirstMount: markFirstWindow });
+
 perfMark("bundleEnd");

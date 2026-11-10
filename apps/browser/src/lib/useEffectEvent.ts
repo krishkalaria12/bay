@@ -11,5 +11,6 @@ export function useEffectEvent<A extends unknown[], R>(fn: (...args: A) => R): (
   useInsertionEffect(() => {
     latest.current = fn;
   });
+
   return useCallback((...args: A) => latest.current(...args), []);
 }

@@ -22,6 +22,7 @@ export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: num
   // Mounted with the shown page, so on every tab switch: its fade comes with the page's first status. One there as
   // the page shows is shown at once, as before; a later one fades in.
   const [instant] = useState(!!status);
+
   return useLatched(!!status) ? <Bubble status={status} instant={instant} maxWidth={maxWidth} /> : null;
 }
 
@@ -33,9 +34,12 @@ function Bubble({ status, instant, maxWidth }: { status: string; instant: boolea
     if (status) {
       setShown(status);
       opacity.set(withTiming(1, { duration: 90, easing: Easing.out(Easing.quad) }));
+
       return;
     }
+
     const hide = () => setShown("");
+
     const timer = setTimeout(() => {
       opacity.set(
         withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) }, (finished) => {
@@ -43,10 +47,13 @@ function Bubble({ status, instant, maxWidth }: { status: string; instant: boolea
         }),
       );
     }, 180);
+
     return () => clearTimeout(timer);
   }, [status]);
   const fade = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+
   if (!shown) return null;
+
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 6, bottom: 6, maxWidth }, fade]}>
       <Surface
@@ -70,20 +77,26 @@ function Bubble({ status, instant, maxWidth }: { status: string; instant: boolea
 
 function displayUrl(url: string) {
   let out = /^https?:\/\//i.test(url) ? urlForDisplay(url) : toAppUrl(url);
+
   try {
     out = decodeURI(out);
   } catch {}
+
   return out;
 }
 
 /** The tab's page is in another window (as Arc's, a space's tab shows in one window at a time): Show Here brings it. */
 export function OpenElsewhere({ tabId, windowId }: { tabId: string; windowId: string }) {
   const theme = useTheme();
+
   const elsewhere = useQuietBrowser((s) => {
     const shownIn = s.tabs[tabId]?.windowId;
+
     return !!shownIn && shownIn !== windowId && !!s.windows[shownIn];
   });
+
   if (!elsewhere) return null;
+
   return (
     <View
       style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}
@@ -105,14 +118,17 @@ export function BlockedPage({ tabId }: { tabId: string }) {
   const url = usePage(tabId, (p) => p.blockedPage);
   const canGoBack = useBrowserRead((s) => !!s.live[tabId]?.canGoBack);
   const incognito = useQuietBrowser((s) => isIncognitoSpace(s.tabs[tabId]?.spaceId ?? ""));
+
   if (!url) return null;
   const host = url.match(/^https?:\/\/([^/?#:]*)/i)?.[1] ?? url;
+
   const visit = (remember: boolean) => {
     void setBlockedPageAllowed(host, true, remember).then(() => {
       patchPage(tabId, { blockedPage: null });
       void webviews.get(tabId)?.reload();
     });
   };
+
   return (
     <View
       style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}
@@ -145,6 +161,7 @@ export function SadTab({ tabId }: { tabId: string }) {
   const theme = useTheme();
   const crashed = usePage(tabId, (p) => !!p.crashed);
   const unresponsive = usePage(tabId, (p) => p.unresponsive);
+
   if (crashed) {
     return (
       <View
@@ -166,7 +183,9 @@ export function SadTab({ tabId }: { tabId: string }) {
       </View>
     );
   }
+
   if (!unresponsive) return null;
+
   return (
     <View
       style={[

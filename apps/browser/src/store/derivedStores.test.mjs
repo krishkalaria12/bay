@@ -24,6 +24,7 @@ test("space folding inputs skip transient updates and follow single-space header
   let calls = 0;
   const stops = [space.subscribe(() => calls++), spaceHeaderHiddenStore.subscribe(() => calls++)];
   const folded = () => !!space.getState()?.folded && !spaceHeaderHiddenStore.getState();
+
   try {
     for (let i = 0; i < 60; i++) useBrowser.getState().updateLive(id, { progress: i / 100 });
     useBrowser.getState().setSelection(w, [id]);
@@ -52,11 +53,13 @@ test("record views share one source subscription and only notify changed mounted
   source.subscribe = (listener) => {
     connections++;
     const stop = subscribe(listener);
+
     return () => {
       connections--;
       stop();
     };
   };
+
   const view = recordStores(source, (s) => s.records);
   let calls = 0;
   const stops = Array.from({ length: 1000 }, (_, id) => view(String(id)).subscribe(() => calls++));
@@ -95,13 +98,16 @@ test("views read the latest source during reentrant updates and respect unsubscr
   const views = recordStores(source, (s) => s.records);
   const seen = [];
   let stopB = () => {};
+
   const stopA = views("a").subscribe((value) => {
     if (value === 1) {
       stopB();
       source.setState({ records: { a: 2, b: 2 } });
     }
+
     seen.push(views("a").getState());
   });
+
   stopB = views("b").subscribe(() => assert.fail("unsubscribed listener ran"));
   source.setState({ records: { a: 1, b: 1 } });
   assert.deepEqual(seen, [2, 2]);
@@ -115,11 +121,13 @@ test("field views share subscriptions and preserve Object.is semantics", () => {
   source.subscribe = (listener) => {
     connections++;
     const stop = subscribe(listener);
+
     return () => {
       connections--;
       stop();
     };
   };
+
   const view = selectStore(source, (s) => s.field);
   const seen = [];
   const stop = view.subscribe((value) => seen.push(value));
@@ -143,6 +151,7 @@ test("browser views route live reports separately from tab, window, settings and
   const id = useBrowser.getState().windows[w].activeTabIds.default;
   const other = useBrowser.getState().newTab(w, { url: "https://two.example", background: true });
   const counts = { tab: 0, live: 0, other: 0, window: 0, settings: 0, appearance: 0 };
+
   const stops = [
     tabStore(id).subscribe(() => counts.tab++),
     tabLiveStore(id).subscribe(() => counts.live++),
@@ -151,6 +160,7 @@ test("browser views route live reports separately from tab, window, settings and
     settingsStore.subscribe(() => counts.settings++),
     appearanceStore.subscribe(() => counts.appearance++),
   ];
+
   try {
     for (let i = 1; i <= 60; i++) useBrowser.getState().updateLive(other, { progress: i / 100 });
     assert.deepEqual(counts, { tab: 0, live: 0, other: 60, window: 0, settings: 0, appearance: 0 });
@@ -178,6 +188,7 @@ test("the quiet view skips live updates and follows everything else", async () =
   const id = useBrowser.getState().windows[w].activeTabIds.default;
   let calls = 0;
   const stop = quietStore.subscribe(() => calls++);
+
   try {
     for (let i = 0; i < 20; i++) useBrowser.getState().updateLive(id, { progress: i / 100 });
     assert.equal(calls, 0);
@@ -205,6 +216,7 @@ test("scoped and engine views follow the installed runtime source and restore th
   let durable = 0;
   let live = 0;
   const stops = [quietStore.subscribe(() => durable++), tabLiveStore(id).subscribe(() => live++)];
+
   try {
     assert.equal(tabStore(id).getState().url, "https://remote.example");
     assert.strictEqual(useEngineView.getState().tabs, browserRead.getState().tabs);
@@ -221,6 +233,7 @@ test("scoped and engine views follow the installed runtime source and restore th
     stops.forEach((stop) => stop());
     restore();
   }
+
   assert.equal(tabStore(id).getState(), undefined);
   assert.strictEqual(useEngineView.getState().tabs, browserRead.getState().tabs);
 });

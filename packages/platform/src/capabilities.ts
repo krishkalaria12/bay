@@ -77,6 +77,7 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
   const mac = os === "macos";
   const windows = os === "windows";
   const webDesktop = windows || os === "linux";
+
   return {
     globalWindowCoordinates: mac || windows,
     liquidGlass: mac && hasModule("BayGlassEffect"),

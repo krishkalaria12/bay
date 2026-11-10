@@ -5,9 +5,11 @@ import { join } from "node:path";
 import { compileCode } from "../src/runner.ts";
 
 const skill = readFileSync(join(import.meta.dir, "../src/skill/SKILL.md"), "utf8");
+
 // A Windows checkout may have CRLF line ends, which these patterns don't expect.
 const blocks = (language: string) =>
   [...skill.replaceAll("\r\n", "\n").matchAll(new RegExp("```" + language + "\\n([\\s\\S]*?)```", "g"))].map((match) => match[1]!);
+
 const commands = blocks("sh").flatMap((block) => [...block.matchAll(/^bay exec (?:--json )?'(.*)'$/gm)].map((match) => match[1]!));
 
 it("finds the skill's recipes", () => {
@@ -21,10 +23,12 @@ it.each([...blocks("ts"), ...commands])("compiles the recipe %s", (recipe) => {
 
 it("installs the skill with its API reference", () => {
   const project = mkdtempSync(join(tmpdir(), "bay-skill-test-"));
+
   try {
     const result = Bun.spawnSync([process.execPath, join(import.meta.dir, "../bin/bay.ts"), "skills", "install", "--project", "--target", "claude-code"], {
       cwd: project,
     });
+
     expect(result.exitCode).toBe(0);
     const folder = join(project, ".claude", "skills", "bay");
     expect(readFileSync(join(folder, "SKILL.md"), "utf8")).toBe(skill);

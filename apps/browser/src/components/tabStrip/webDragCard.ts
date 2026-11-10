@@ -34,6 +34,7 @@ function make(document: Document) {
   const title = document.createElement("div");
   element.append(icon, title);
   document.body.append(element);
+
   return { element, title, icon };
 }
 
@@ -42,6 +43,7 @@ export function showDragCard(pointer: [number, number], title: string, favicon: 
   card ??= make(document);
   card.title.textContent = title;
   card.icon.style.display = favicon ? "" : "none";
+
   if (favicon && card.icon.src !== favicon) card.icon.src = favicon;
   card.element.style.left = `${pointer[0] - WIDTH / 2}px`;
   card.element.style.top = `${pointer[1] - HEIGHT / 2}px`;

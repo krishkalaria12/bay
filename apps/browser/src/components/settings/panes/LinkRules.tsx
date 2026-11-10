@@ -15,6 +15,7 @@ import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 
 export function showRuleEditor(ruleId?: string) {
   const rule = ruleId === undefined ? undefined : browserRead.getState().settings.externalLinkRules.find((candidate) => candidate.id === ruleId);
+
   if (ruleId !== undefined && !rule) return;
   showSettingsSheet(<RuleSheet key={rule?.id ?? "new"} rule={rule} />);
 }
@@ -25,15 +26,28 @@ export function LinkRules() {
   const rules = settings.externalLinkRules;
   const defaultDestination = defaultLinkDestination(settings);
   const selectedDefault = defaultDestination.kind === "space" ? `space:${defaultDestination.spaceId}` : defaultDestination.kind;
+
+  // SAFETY: PopUp options are built from these three values plus "space:<id>"; anything not starting with "space:" is one of them.
+  const onDefaultChange = (value: string) =>
+    reportBrowserCommand(
+      updateSettings({
+        externalLinkDefault: value.startsWith("space:")
+          ? { kind: "space", spaceId: value.slice(6) }
+          : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
+      }),
+    );
+
   const move = (id: string, direction: number) => {
     const state = browserRead.getState();
     const next = [...state.settings.externalLinkRules];
     const from = next.findIndex((rule) => rule.id === id);
     const to = from + direction;
+
     if (from < 0 || to < 0 || to >= next.length) return;
     [next[from], next[to]] = [next[to]!, next[from]!];
     reportBrowserCommand(updateSettings({ externalLinkRules: next }));
   };
+
   return (
     <>
       <SectionHeader
@@ -56,15 +70,7 @@ export function LinkRules() {
               { value: "littleBay", title: "Little Bay" },
               ...(defaultDestination.kind === "newWindow" ? [{ value: "newWindow", title: "New window" }] : []),
             ]}
-            onChange={(value) =>
-              reportBrowserCommand(
-                updateSettings({
-                  externalLinkDefault: value.startsWith("space:")
-                    ? { kind: "space", spaceId: value.slice(6) }
-                    : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
-                }),
-              )
-            }
+            onChange={onDefaultChange}
             minWidth={180}
           />
         </Row>
@@ -73,6 +79,7 @@ export function LinkRules() {
         ) : (
           rules.map((rule, index) => {
             const destination = rule.destination;
+
             const target =
               destination.kind === "space"
                 ? (spaces.find((space) => space.id === destination.spaceId)?.name ?? "Missing space. Edit this rule to choose another.")
@@ -81,7 +88,9 @@ export function LinkRules() {
                   : destination.kind === "littleBay"
                     ? "Little Bay"
                     : "New window";
+
             const matchLabel = rule.matchType === "contains" ? "Contains" : rule.matchType === "equals" ? "Is equal to" : "Wildcard (existing rule)";
+
             return (
               <Row key={rule.id} title={`${index + 1}. ${rule.pattern}`} description={`${matchLabel} · ${rule.sourceApp || "Any app"} → ${target}`}>
                 <IconButton icon="arrow.up" size={11} box={24} radius={6} disabled={index === 0} tooltip="Move rule up" onPress={() => move(rule.id, -1)} />
@@ -115,23 +124,30 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
   const [error, setError] = useState<string | null>(null);
   const selected = destination.kind === "space" ? `space:${destination.spaceId}` : destination.kind;
   const missingSpace = destination.kind === "space" && !spaces.some((space) => space.id === destination.spaceId);
+
   const save = async () => {
     const cleanPattern = pattern.trim();
     const cleanSource = sourceApp.trim();
     const patternError = validateLinkPattern(cleanPattern, matchType);
+
     if (patternError) return setError(patternError);
+
     if (cleanSource && !/^[\w.-]+$/.test(cleanSource)) return setError("Enter an app bundle ID without spaces, or leave it blank for any app.");
     const state = browserRead.getState();
+
     if (destination.kind === "space" && !state.spaces[destination.spaceId]) return setError("Choose an existing space for this rule.");
+
     const saved: ExternalLinkRule = {
       id: rule?.id ?? newId("link-rule"),
       pattern: cleanPattern,
-      ...(matchType ? { matchType } : {}),
-      ...(cleanSource ? { sourceApp: cleanSource } : {}),
+      ...(matchType ? { matchType } : undefined),
+      ...(cleanSource ? { sourceApp: cleanSource } : undefined),
       destination,
     };
+
     const rules = state.settings.externalLinkRules;
     const externalLinkRules = rule ? rules.map((existing) => (existing.id === rule.id ? saved : existing)) : [...rules, saved];
+
     try {
       await updateSettings({ externalLinkRules });
       closeSettingsSheet();
@@ -139,8 +155,10 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
       setError(failure instanceof Error ? failure.message : "Couldn't save the link rule.");
     }
   };
+
   const labelStyle = { fontSize: 11.5, marginBottom: 5, color: theme.textSecondary };
   const helpStyle = { fontSize: 11.5, lineHeight: 16, marginTop: 5, color: theme.textSecondary };
+
   return (
     <Sheet width={460} onClose={closeSettingsSheet}>
       <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>{rule ? "Edit Link Rule" : "Add Link Rule"}</Text>
@@ -201,6 +219,7 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
           ]}
           onChange={(value) =>
             setDestination(
+              // SAFETY: target type assertion matches the runtime value validated at this call site.
               value.startsWith("space:") ? { kind: "space", spaceId: value.slice(6) } : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
             )
           }
@@ -215,6 +234,7 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
             kind="destructive"
             onPress={async () => {
               const state = browserRead.getState();
+
               try {
                 await updateSettings({ externalLinkRules: state.settings.externalLinkRules.filter((existing) => existing.id !== rule.id) });
                 closeSettingsSheet();

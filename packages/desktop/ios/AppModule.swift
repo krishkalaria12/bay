@@ -224,6 +224,12 @@ public class AppModule: Module {
       #if DEBUG
       // "tiling:<windowId>": the window's own Move & Resize menu (the green button's), and whether AppKit tiles it.
       var tiling: NSMenu?
+      // "textInput:<windowId>": the right-click menu of the window's focused text field.
+      var textMenu: NSMenu?
+      if title.hasPrefix("textInput:"),
+         let editor = WindowManager.shared.windows[String(title.dropFirst(10))]?.firstResponder as? NSTextView {
+        textMenu = InlineCompletionModule.editingMenu(editor, items: [], target: MenuChoice())
+      }
       var flags: [String: Any] = [:]
       if title.hasPrefix("tiling:"), let window = WindowManager.shared.windows[String(title.dropFirst(7))] {
         for name in ["_canEnterTileMode", "_implicitlyDisallowTiling", "_cgsWindowSaysSupportsTiling"] {
@@ -235,7 +241,7 @@ public class AppModule: Module {
         let sel = NSSelectorFromString("_windowTilingMenu")
         if window.responds(to: sel) { tiling = window.perform(sel)?.takeUnretainedValue() as? NSMenu }
       }
-      guard var menu = tiling ?? NSApp.mainMenu?.items.first(where: { $0.title == title })?.submenu else { return flags.isEmpty ? [] : [flags] }
+      guard var menu = textMenu ?? tiling ?? NSApp.mainMenu?.items.first(where: { $0.title == title })?.submenu else { return flags.isEmpty ? [] : [flags] }
       func items(_ menu: NSMenu) -> [[String: Any]] {
         menu.delegate?.menuNeedsUpdate?(menu)
         // The items AppKit adds as the menu opens (Window › Fill, Center, Move & Resize…).

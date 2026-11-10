@@ -5,57 +5,71 @@ import { createBrowserStore } from "../store/browserStore.ts";
 import { createBrowserAuthority } from "./authority.ts";
 import { createBrowserCoordinator as createCoordinator } from "./coordinator.ts";
 import { emitPageEvent, emitPageOpen, finishedPageOpens, pageOpenListeners, pageEventListeners, pageEventSource } from "../test-native-stub.mjs";
+
 const createBrowserCoordinator = (options) =>
   createCoordinator({
     startServices: () => ({ flush: async () => {}, resume() {}, dispose() {} }),
     ...options,
   });
+
 const tick = () => new Promise(setImmediate);
+
 const deferred = () => {
   let resolve, reject;
+
   const promise = new Promise((a, b) => {
     resolve = a;
     reject = b;
   });
+
   return { promise, resolve, reject };
 };
+
 function coordinatorTransport({ manualPublish = false, bootstrap = {} } = {}) {
   const published = [],
     resolutions = [],
     publicationAcks = [],
     calls = [];
+
   let commandHandler,
     closeHandler,
     disposed = 0,
     ready = 0;
+
   const transport = {
     bootstrap: { version: 1, role: "coordinator", epoch: "new-epoch", clientId: "coordinator-1", ...bootstrap },
     publish(commit) {
       published.push(commit);
       calls.push(["publish", commit.revision]);
+
       if (!manualPublish) return Promise.resolve();
       const ack = deferred();
       publicationAcks.push(ack);
+
       return ack.promise;
     },
     resolve(token, reply) {
       resolutions.push({ token, reply });
       calls.push(["resolve", token]);
+
       return Promise.resolve();
     },
     announceReady() {
       ready++;
       calls.push(["ready"]);
+
       return Promise.resolve();
     },
     subscribeCommands(callback) {
       commandHandler = callback;
+
       return () => {
         commandHandler = null;
       };
     },
     subscribeClose(callback) {
       closeHandler = callback;
+
       return () => {
         closeHandler = null;
       };
@@ -67,6 +81,7 @@ function coordinatorTransport({ manualPublish = false, bootstrap = {} } = {}) {
       callback?.(new Error("disposed"));
     },
   };
+
   return {
     transport,
     published,
@@ -92,6 +107,7 @@ test("coordinator publishes revision zero before explicit readiness", async () =
   const store = createBrowserStore(),
     native = coordinatorTransport(),
     errors = [];
+
   const runtime = await createBrowserCoordinator({ store, transport: native.transport, onError: (error) => errors.push(error) });
   assert.deepEqual(native.calls, [["publish", 0]]);
   assert.equal(native.ready, 0);
@@ -114,6 +130,7 @@ test("commands resolve their native token only after their commit is accepted", 
   const store = createBrowserStore(),
     native = coordinatorTransport({ manualPublish: true }),
     errors = [];
+
   const pageStarts = pageEventSource.starts;
   const starting = createBrowserCoordinator({ store, transport: native.transport, onError: (error) => errors.push(error) });
   await tick();
@@ -142,6 +159,7 @@ test("commands resolve their native token only after their commit is accepted", 
 test("multiple native commands preserve authority order and publication sequence", async () => {
   const store = createBrowserStore(),
     native = coordinatorTransport();
+
   const runtime = await createBrowserCoordinator({ store, transport: native.transport });
   native.command("token-1", { method: "createWindow", options: { url: "https://first.example/" } }, 1);
   native.command("token-2", { method: "createWindow", options: { url: "https://second.example/" } }, 2);
@@ -162,6 +180,7 @@ test("multiple native commands preserve authority order and publication sequence
 test("invalid user commands resolve errors without breaking subsequent commands", async () => {
   const store = createBrowserStore(),
     native = coordinatorTransport();
+
   const runtime = await createBrowserCoordinator({ store, transport: native.transport });
   native.command("bad-token", { method: "hydrate", state: {} }, 1);
   native.command("good-token", { method: "createWindow" }, 2);
@@ -180,12 +199,16 @@ test("invalid user commands resolve errors without breaking subsequent commands"
 test("crash recovery preserves accepted live, navigation, adoption and UI state without hydrate", async () => {
   const previousStore = createBrowserStore(),
     previous = createBrowserAuthority({ epoch: "old-epoch", store: previousStore });
+
   const windowId = previousStore.getState().createWindow({ url: "https://saved.example/" }),
     tabId = viewTabIds(previousStore.getState(), windowId)[0];
+
   previousStore.getState().updateTab(tabId, { adoptId: "native-page-7" }, { isLoading: true, progress: 0.7 });
   previousStore.getState().openPanel(windowId, "keep me");
+
   const recovery = previous.getSnapshot().state,
     store = createBrowserStore();
+
   let hydrated = 0;
   const createWindow = store.getState().createWindow;
   store.setState({
@@ -214,6 +237,7 @@ test("recovery validation fails before mutating the store and closes its pipe", 
   const store = createBrowserStore(),
     original = store.getState(),
     native = coordinatorTransport({ bootstrap: { recoveryState: { tabs: {} } } });
+
   await assert.rejects(createBrowserCoordinator({ store, transport: native.transport }), { code: "invalid_protocol" });
   assert.equal(store.getState(), original);
   assert.equal(native.disposed, 1);
@@ -223,6 +247,7 @@ test("recovery validation fails before mutating the store and closes its pipe", 
 test("window connections cannot start a coordinator", async () => {
   const store = createBrowserStore(),
     native = coordinatorTransport({ bootstrap: { role: "window", windowId: "window-1" } });
+
   await assert.rejects(createBrowserCoordinator({ store, transport: native.transport }), /coordinator connection/);
   assert.equal(native.disposed, 1);
   assert.equal(native.published.length, 0);
@@ -232,6 +257,7 @@ test("publication failure closes the authority and leaves command outcome uncert
   const store = createBrowserStore(),
     native = coordinatorTransport({ manualPublish: true }),
     errors = [];
+
   const starting = createBrowserCoordinator({ store, transport: native.transport, onError: (error) => errors.push(error) });
   await tick();
   native.publicationAcks[0].resolve();
@@ -251,6 +277,7 @@ test("disconnect stops publication and never replays a pending command", async (
   const store = createBrowserStore(),
     native = coordinatorTransport(),
     errors = [];
+
   const runtime = await createBrowserCoordinator({ store, transport: native.transport, onError: (error) => errors.push(error) });
   native.disconnect();
   store.getState().createWindow();
@@ -264,6 +291,7 @@ test("disconnect stops publication and never replays a pending command", async (
 test("readiness waits for outstanding publications and is never automatic", async () => {
   const store = createBrowserStore(),
     native = coordinatorTransport({ manualPublish: true });
+
   const starting = createBrowserCoordinator({ store, transport: native.transport });
   await tick();
   native.publicationAcks[0].resolve();
@@ -281,10 +309,12 @@ test("readiness waits for outstanding publications and is never automatic", asyn
 test("coordinator owns one service lifecycle and publishes startup mutations before readiness", async () => {
   const store = createBrowserStore(),
     native = coordinatorTransport();
+
   let starts = 0,
     stops = 0,
     flushes = 0,
     resumes = 0;
+
   const runtime = await createBrowserCoordinator({
     store,
     transport: native.transport,
@@ -292,6 +322,7 @@ test("coordinator owns one service lifecycle and publishes startup mutations bef
       starts++;
       assert.equal(authority, store);
       authority.getState().createWindow();
+
       return {
         flush: async () => {
           flushes++;
@@ -305,6 +336,7 @@ test("coordinator owns one service lifecycle and publishes startup mutations bef
       };
     },
   });
+
   await Promise.all([runtime.announceReady(), runtime.announceReady()]);
   assert.deepEqual(native.calls, [["publish", 0], ["publish", 1], ["ready"]]);
   await runtime.flushPersistence({ final: true });
@@ -317,7 +349,9 @@ test("coordinator owns one service lifecycle and publishes startup mutations bef
 test("coordinator publication failure disposes services before startup rejects", async () => {
   const store = createBrowserStore(),
     native = coordinatorTransport({ manualPublish: true });
+
   let stopped = 0;
+
   const starting = createBrowserCoordinator({
     store,
     transport: native.transport,
@@ -330,6 +364,7 @@ test("coordinator publication failure disposes services before startup rejects",
       },
     }),
   });
+
   await tick();
   native.publicationAcks[0].reject(new Error("startup publication refused"));
   await assert.rejects(starting, /startup publication refused/);
@@ -339,12 +374,15 @@ test("coordinator publication failure disposes services before startup rejects",
 test("native page replay reaches the authority before readiness and stops with the coordinator", async (t) => {
   const store = createBrowserStore(),
     native = coordinatorTransport();
+
   const windowId = store.getState().createWindow({ url: "https://requested.example/" });
   const tabId = viewTabIds(store.getState(), windowId)[0];
   const event = { tabId, profile: "", browserId: 7, sequence: 1, event: "onProgress", payload: { progress: 0.6 } };
+
   const before = pageEventListeners.size,
     starts = pageEventSource.starts,
     stops = pageEventSource.stops;
+
   pageEventSource.replay = [event];
   t.after(() => {
     pageEventSource.replay = [];
@@ -373,6 +411,7 @@ test("native page startup rejection unwinds services and native subscriptions", 
   const store = createBrowserStore(),
     native = coordinatorTransport(),
     errors = [];
+
   const before = pageEventListeners.size;
   let stopped = 0;
   pageEventSource.error = new Error("native page replay unavailable");
@@ -415,10 +454,14 @@ const offeredPage = (store, windowId, patch = {}) => ({
 test("page offers publish before native reconciliation and acknowledge only afterward", async (t) => {
   const store = createBrowserStore(),
     native = coordinatorTransport({ manualPublish: true });
+
   const windowId = store.getState().createWindow({ url: "https://opener.example/" });
+
   const input = offeredPage(store, windowId),
     reconciling = deferred();
+
   const before = finishedPageOpens.length;
+
   const starting = createBrowserCoordinator({
     store,
     transport: native.transport,
@@ -426,6 +469,7 @@ test("page offers publish before native reconciliation and acknowledge only afte
       if (commit.revision === 1) await reconciling.promise;
     },
   });
+
   await tick();
   native.publicationAcks[0].resolve();
   const runtime = await starting;
@@ -452,6 +496,7 @@ test("page offers publish before native reconciliation and acknowledge only afte
 test("rejected offers and deliberate fresh private sessions release their native pages", async (t) => {
   const store = createBrowserStore(),
     native = coordinatorTransport();
+
   const windowId = store.getState().createWindow({ url: "https://opener.example/" });
   const runtime = await createBrowserCoordinator({ store, transport: native.transport });
   t.after(() => runtime.dispose());
@@ -497,9 +542,12 @@ test("failed handoff publication leaves the native offer unacknowledged for reco
   const store = createBrowserStore(),
     native = coordinatorTransport({ manualPublish: true }),
     errors = [];
+
   const windowId = store.getState().createWindow({ url: "https://opener.example/" });
+
   const input = offeredPage(store, windowId),
     before = finishedPageOpens.length;
+
   const listeners = pageOpenListeners.size;
   const starting = createBrowserCoordinator({ store, transport: native.transport, onError: (error) => errors.push(error) });
   await tick();
