@@ -1,4 +1,7 @@
 import * as v from "valibot";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../effect/runtime";
+import { Sync, SyncFailure, SyncStopped, type SyncWorker } from "./service";
 import { ownsProfileData } from "../store/spaces";
 import { readDocument, saveDocument, writeDocument } from "@bay/desktop";
 import {
@@ -35,7 +38,7 @@ import {
   type DeviceTabs,
   type ProfileRecord,
 } from "./adapters";
-import { APP_SCOPE, SYNC_AFTER_EDIT_MS, SYNC_CYCLE_MS, SYNC_DOC, SYNC_JOURNAL_FILE, SYNC_STATE_FILE } from "./constants";
+import { APP_SCOPE, SYNC_AFTER_EDIT_MS, SYNC_DOC, SYNC_JOURNAL_FILE, SYNC_STATE_FILE } from "./constants";
 import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules";
 import { localFilesAdapter } from "./localFiles";
 import { boostsAdapter } from "./boosts";
@@ -128,8 +131,9 @@ export const useSync = create<SyncUi>(() => ({
 let doc: SyncDoc = emptyDoc();
 let savedJson = "";
 let running = false;
-let again = false;
-let timer: ReturnType<typeof setTimeout> | undefined;
+let stopping = false;
+let worker: SyncWorker | undefined;
+let opening: Promise<SyncWorker> | undefined;
 let forcePasswords = false;
 const passwordAdapters = new Map<string, Adapter>();
 
@@ -220,8 +224,8 @@ function save() {
   const json = JSON.stringify({ ...meta, seqs: Object.fromEntries(Object.entries(scopes).map(([k, s]) => [k, writtenSeq(s)])) });
 
   if (json !== savedJson) {
-    savedJson = json;
     writeDocument(SYNC_DOC, json);
+    savedJson = json;
   }
 
   const state = doc.enabled ? JSON.stringify(scopes) : "";
@@ -237,6 +241,8 @@ function save() {
 
   const seqs = Object.fromEntries(Object.entries(scopes).map(([k, s]) => [k, s.seq]));
   sealing = (async () => {
+    let written = false;
+
     try {
       const sealed = await SyncNative?.sealLocal(state);
 
@@ -245,6 +251,7 @@ function save() {
         await saveDocument(SYNC_STATE_FILE, sealed);
         savedState = state;
         pruneJournal(seqs);
+        written = true;
       }
     } catch (error) {
       console.warn("[sync] couldn't save the sync state", error);
@@ -252,8 +259,14 @@ function save() {
       sealing = null;
     }
 
-    if (doc.enabled && JSON.stringify(doc.scopes) !== savedState) save();
+    // A failed disk write waits for the next cycle instead of starting an unbounded retry loop.
+    if (written && doc.enabled && JSON.stringify(doc.scopes) !== savedState) save();
   })();
+}
+
+async function settled() {
+  // A successful save can discover a newer state while landing. Wait for that write too.
+  while (sealing) await sealing;
 }
 
 function publishUi(patch: Partial<SyncUi> = {}) {
@@ -307,30 +320,30 @@ function profileAdapters(spaceId: string, retiring: boolean): Adapter[] {
 // MARK: The cycle
 
 export function scheduleSync(delay = SYNC_AFTER_EDIT_MS) {
-  if (!doc.enabled) return;
-  clearTimeout(timer);
-  timer = setTimeout(() => void runCycle(), delay);
+  if (!doc.enabled || stopping) return;
+
+  if (worker) worker.schedule(delay);
+  else
+    void getWorker()
+      .then((ready) => ready.schedule(delay))
+      .catch(() => publishUi({ status: "stalled", error: "Couldn't start sync." }));
 }
 
 export async function syncNow() {
-  forcePasswords = true;
-  await runCycle();
+  if (stopping) throw new SyncStopped();
+
+  const ready = await getWorker();
+
+  await runDesktop(ready.now);
 }
 
-async function runCycle({ retiring = false } = {}) {
+async function runCycle(retiring: boolean, forced: boolean) {
   const native = SyncNative;
 
   if (!native || !doc.enabled || !doc.folder || !doc.deviceId) return;
 
-  if (running) {
-    again = true;
-
-    return;
-  }
-
   running = true;
-  clearTimeout(timer);
-  const slow = setTimeout(() => useSync.getState().status === "updated" && publishUi({ status: "updating" }), 1000);
+  forcePasswords = forced;
 
   try {
     const status = await native.chainStatus(doc.folder);
@@ -398,18 +411,9 @@ async function runCycle({ retiring = false } = {}) {
     console.warn("[sync] cycle failed", error);
     publishUi({ status: "stalled", error: errorText(error) });
   } finally {
-    clearTimeout(slow);
     running = false;
     save();
-
-    if (doc.enabled) {
-      if (again) {
-        again = false;
-        scheduleSync(0);
-      } else {
-        scheduleSync(SYNC_CYCLE_MS);
-      }
-    }
+    await settled();
   }
 }
 
@@ -512,10 +516,12 @@ export async function chooseSyncFolder(): Promise<string | null> {
 }
 
 function begin(folder: string, deviceId: string, joining: boolean) {
+  stopping = false;
   doc = { ...emptyDoc(), types: doc.types, enabled: true, folder, deviceId, setupAt: Date.now(), joining };
   clearJournal();
   save();
   publishUi({ status: "starting", error: null });
+  worker?.resume();
   scheduleSync(0);
 }
 
@@ -565,18 +571,18 @@ export async function enterRecoveryPhrase(folder: string, text: string): Promise
 }
 
 export async function stopSync({ deleteData = false } = {}) {
+  stopping = true;
+
+  const ready = await getWorker();
+
+  await runDesktop(ready.stop(deleteData));
+}
+
+async function finishStop(deleteData: boolean) {
   const native = SyncNative;
 
   if (!native || !doc.enabled) return;
-  clearTimeout(timer);
-
-  while (running) await new Promise((r) => setTimeout(r, 100));
-
-  try {
-    if (useSync.getState().status !== "locked") await runCycle({ retiring: true });
-  } catch {}
-
-  clearTimeout(timer);
+  await settled();
   const folder = doc.folder;
 
   if (deleteData && folder) {
@@ -591,6 +597,9 @@ export async function stopSync({ deleteData = false } = {}) {
   doc = { ...emptyDoc(), folder, types: doc.types };
   passwordAdapters.clear();
   clearJournal();
+  // A locked launch may never have sealed this instance's state, but its old file must still go.
+  writeDocument(SYNC_STATE_FILE, "");
+  savedState = "";
   save();
   publishUi({ status: "off", error: null });
 }
@@ -633,36 +642,86 @@ export function addRemoteProfile(syncId: string): string | null {
 
 // MARK: Launch
 
+const getWorker = (): Promise<SyncWorker> => {
+  opening ??= runDesktop(
+    Effect.gen(function* () {
+      const service = yield* Sync;
+
+      const ready = yield* service.open({
+        enabled: () => doc.enabled,
+        initialize: Effect.tryPromise({
+          try: async () => {
+            if (!SyncNative || !doc.enabled || !doc.deviceId) return;
+
+            const ok = await SyncNative.unlock(doc.deviceId);
+
+            if (!ok) return publishUi({ status: "locked", error: "Enter your recovery phrase to keep syncing on this Mac." });
+            await loadState();
+            publishUi();
+            scheduleSync(500);
+          },
+          catch: (cause) => {
+            publishUi({ status: "stalled", error: "Couldn't read the saved sync state." });
+
+            return new SyncFailure({ operation: "initialize", cause });
+          },
+        }),
+        cycle: (retiring, forced) =>
+          Effect.tryPromise({
+            try: () => runCycle(retiring, forced),
+            catch: (cause) => new SyncFailure({ operation: "cycle", cause }),
+          }),
+        updating: () => {
+          if (useSync.getState().status === "updated") publishUi({ status: "updating" });
+        },
+        retire: () => useSync.getState().status !== "locked",
+        stop: (deleteData) =>
+          Effect.tryPromise({
+            try: () => finishStop(deleteData),
+            catch: (cause) => new SyncFailure({ operation: "stop", cause }),
+          }),
+        subscribe: (schedule) => {
+          const stopBrowser = useBrowser.subscribe((s, prev) => {
+            if (!doc.enabled || running) return;
+
+            if (
+              s.bookmarks !== prev.bookmarks ||
+              s.settings !== prev.settings ||
+              s.spaces !== prev.spaces ||
+              s.groups !== prev.groups ||
+              s.localFiles !== prev.localFiles
+            )
+              schedule();
+          });
+
+          const stopBoosts = useBoosts.subscribe((s, prev) => {
+            if (doc.enabled && !running && s.boosts !== prev.boosts) schedule();
+          });
+
+          return () => {
+            stopBrowser();
+            stopBoosts();
+          };
+        },
+      });
+
+      worker = ready;
+
+      return ready;
+    }),
+  );
+
+  return opening;
+};
+
+let started = false;
+
 export function startSync() {
-  if (!SyncNative) return;
+  if (!SyncNative || started) return;
+  started = true;
   load();
   publishUi({ status: doc.enabled ? "starting" : "off" });
-
-  if (doc.enabled && doc.deviceId) {
-    void SyncNative.unlock(doc.deviceId).then(async (ok) => {
-      if (!ok) return publishUi({ status: "locked", error: "Enter your recovery phrase to keep syncing on this Mac." });
-      await loadState();
-      publishUi();
-      scheduleSync(500);
-    });
-  }
-
-  useBrowser.subscribe((s, prev) => {
-    if (!doc.enabled || running) return;
-
-    if (
-      s.bookmarks !== prev.bookmarks ||
-      s.settings !== prev.settings ||
-      s.spaces !== prev.spaces ||
-      s.groups !== prev.groups ||
-      s.localFiles !== prev.localFiles
-    )
-      scheduleSync();
-  });
-  // Boosts (Settings' type): their own store.
-  useBoosts.subscribe((s, prev) => {
-    if (doc.enabled && !running && s.boosts !== prev.boosts) scheduleSync();
-  });
+  void getWorker().catch(() => publishUi({ status: "stalled", error: "Couldn't start sync." }));
 
   if (__DEV__) {
     // SAFETY: globalThis is the dev debug surface that holds the nnSync sync hook only.

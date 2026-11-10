@@ -6,6 +6,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { Persistence } from "../lib/persistenceService";
+import { Sync } from "../sync/service";
 import { ProfileCleanup, ProfileEngine } from "../lib/profileCleanup";
 import { captureException } from "../telemetry/errors";
 import { Diagnostics } from "./ports/diagnostics";
@@ -14,7 +15,7 @@ import { Http } from "./ports/http";
 import { Scheduler } from "./ports/scheduler";
 
 /** The services every desktop workflow can rely on. */
-export type AppServices = Bookmarks | Diagnostics | Documents | History | Http | Persistence | ProfileCleanup | Scheduler;
+export type AppServices = Bookmarks | Diagnostics | Documents | History | Http | Persistence | ProfileCleanup | Scheduler | Sync;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -27,10 +28,20 @@ const bookmarks = Bookmarks.layer.pipe(Layer.provide(BookmarkEngine.layer));
 
 const profileCleanup = ProfileCleanup.layer.pipe(Layer.provide(ProfileEngine.layer));
 
+const sync = Sync.layer;
+
 /** The app's services, ready to be built. */
-export const appLayer = Layer.mergeAll(diagnostics, Documents.layer, Http.layer, Scheduler.layer, Persistence.layer, history, bookmarks, profileCleanup).pipe(
-  Layer.provide(diagnostics),
-);
+export const appLayer = Layer.mergeAll(
+  diagnostics,
+  Documents.layer,
+  Http.layer,
+  Scheduler.layer,
+  Persistence.layer,
+  history,
+  bookmarks,
+  profileCleanup,
+  sync,
+).pipe(Layer.provide(diagnostics));
 
 /**
  * The app's runtime. It is built on first use and kept for the life of the JavaScript instance, so every window
