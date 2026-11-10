@@ -3,16 +3,36 @@ import { BottomSheetTextInput, useBottomSheetScrollableCreator } from "@gorhom/b
 import { LegendList } from "@legendapp/list/react-native";
 import { Typography, useThemeColor } from "heroui-native";
 import { useState, type JSX } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { Icon } from "@/chrome/Icon";
+import { SPRING } from "@/chrome/motion";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { SiteIcon } from "@/browser/SiteIcon";
 import type { HistoryEntry } from "@/store/types";
 import { groupByDay } from "./historyGroups";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
 
 const SHOWN = 200;
+
+/** How far a row is swiped before it is removed, and how fast a flick has to be to count (A7). */
+const REMOVE_DISTANCE = 96;
+const REMOVE_WIDTH = 400;
+const REMOVE_VELOCITY = -900;
+
+const styles = StyleSheet.create({
+  cover: {
+    position: "absolute",
+    right: 20,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+  },
+});
 
 type Row = { kind: "label"; label: string } | { kind: "entry"; entry: HistoryEntry };
 
@@ -171,35 +191,75 @@ export function SiteRow(props: {
 }) {
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
+  const danger = useThemeColor("danger");
+  // How far the row goes when it is swiped away, and how far it has to go to count.
+  const offset = useSharedValue(0);
+
+  const pan = usePanGesture({
+    // Sideways only: a vertical drag scrolls the list, and a tap still opens the page.
+    activeOffsetX: [-18, 18],
+    failOffsetY: [-14, 14],
+    onUpdate: (event) => {
+      "worklet";
+      // The row only goes left, where the remove button waits.
+      offset.value = Math.min(0, event.translationX);
+    },
+    onDeactivate: (event) => {
+      "worklet";
+
+      if (!event.canceled && (offset.value < -REMOVE_DISTANCE || event.velocityX < -REMOVE_VELOCITY)) {
+        offset.value = withTiming(-REMOVE_WIDTH, { duration: 160 }, (finished) => {
+          if (finished) scheduleOnRN(props.onRemove);
+        });
+
+        return;
+      }
+
+      offset.value = withSpring(0, SPRING);
+    },
+  });
+
+  const row = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
+  const cover = useAnimatedStyle(() => ({ opacity: interpolate(-offset.value, [0, REMOVE_DISTANCE], [0, 1], Extrapolation.CLAMP) }));
 
   return (
-    <View className="min-h-14 flex-row items-center gap-3 border-b border-foreground/5">
-      <Pressable
-        testID={props.testID}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${props.title}`}
-        onPress={props.onPress}
-        className="flex-1 flex-row items-center gap-3 py-2 active:opacity-60"
-      >
-        <SiteIcon url={props.url} size={28} />
-        <View className="flex-1">
-          <Text numberOfLines={1} style={{ color: foreground, fontSize: 15 }}>
-            {props.title}
-          </Text>
-          <Text numberOfLines={1} style={{ color: muted, fontSize: 12.5 }}>
-            {props.detail}
-          </Text>
-        </View>
-      </Pressable>
-      <Pressable
-        testID={props.removeTestID}
-        accessibilityRole="button"
-        accessibilityLabel={props.removeLabel}
-        onPress={props.onRemove}
-        className="h-11 w-11 items-center justify-center active:opacity-60"
-      >
-        <Icon name="close" color={muted} size={18} />
-      </Pressable>
+    <View className="relative">
+      {/* What the swipe uncovers. */}
+      <Animated.View pointerEvents="none" style={[styles.cover, cover]}>
+        <Icon name="delete" color={danger} size={20} />
+      </Animated.View>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={row}>
+          <View className="min-h-14 flex-row items-center gap-3 border-b border-foreground/5">
+            <PressFeedback
+              testID={props.testID}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${props.title}`}
+              onPress={props.onPress}
+              className="flex-1 flex-row items-center gap-3 py-2"
+            >
+              <SiteIcon url={props.url} size={28} />
+              <View className="flex-1">
+                <Text numberOfLines={1} style={{ color: foreground, fontSize: 15 }}>
+                  {props.title}
+                </Text>
+                <Text numberOfLines={1} style={{ color: muted, fontSize: 12.5 }}>
+                  {props.detail}
+                </Text>
+              </View>
+            </PressFeedback>
+            <Pressable
+              testID={props.removeTestID}
+              accessibilityRole="button"
+              accessibilityLabel={props.removeLabel}
+              onPress={props.onRemove}
+              className="h-11 w-11 items-center justify-center active:opacity-60"
+            >
+              <Icon name="close" color={muted} size={18} />
+            </Pressable>
+          </View>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
