@@ -4,8 +4,9 @@ import type { JSX } from "react";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
 
-import { barButtons, barInsecure, barNewTab, barSite, type BrowserBarProps } from "./BrowserBar.types";
+import { barButtons, barInsecure, barLoading, barNewTab, barProgress, barSite, type BrowserBarProps } from "./BrowserBar.types";
 import { GlassIconButton } from "./GlassIconButton";
+import { LoadProgress } from "./LoadProgress";
 import { SwipeUp } from "./SwipeUp";
 import { TabCount } from "./TabCount";
 import { useStableCallback } from "./useStableCallback";
@@ -61,6 +62,8 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
             )}
           </Button>
         </Host>
+        {/* The load's progress runs along the capsule's edge (A6). */}
+        <LoadProgress progress={barProgress(props)} loading={barLoading(props)} />
       </Animated.View>
       <GlassIconButton
         id={right.id}

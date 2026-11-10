@@ -77,7 +77,6 @@ const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLo
 export function BrowserScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const muted = useThemeColor("muted");
-  const accent = useThemeColor("accent");
 
   const {
     ready,
@@ -709,13 +708,6 @@ export function BrowserScreen(): JSX.Element {
         >
           {/* Dark icons on a light page, light ones on a dark page. */}
           {topColor ? <StatusBar style={0.2126 * topColor[0] + 0.7152 * topColor[1] + 0.0722 * topColor[2] > 140 ? "dark" : "light"} /> : null}
-          {page.isLoading ? (
-            <View
-              testID="page-progress"
-              className="absolute bottom-0 left-0 h-0.5"
-              style={{ width: `${Math.max(8, page.progress * 100)}%`, backgroundColor: accent }}
-            />
-          ) : null}
         </View>
       ) : null}
 
@@ -822,6 +814,9 @@ export function BrowserScreen(): JSX.Element {
                   site={locked && active.private ? undefined : host}
                   insecure={active.url.startsWith("http:")}
                   privately={Boolean(active.private)}
+                  // The capsule's edge carries the load's progress (A6).
+                  progress={page.progress}
+                  loading={page.isLoading}
                   onTabs={() => showTabs()}
                   onTabsLongPress={() => {
                     tick();

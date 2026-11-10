@@ -3,7 +3,8 @@ import type { JSX } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 
-import { barButtons, barInsecure, barNewTab, barSite, type BarButton, type BrowserBarProps } from "./BrowserBar.types";
+import { barButtons, barInsecure, barLoading, barNewTab, barProgress, barSite, type BarButton, type BrowserBarProps } from "./BrowserBar.types";
+import { LoadProgress } from "./LoadProgress";
 import { MaterialSymbol, type MaterialSymbolName } from "./MaterialSymbol";
 import { SwipeUp } from "./SwipeUp";
 import { TabCount } from "./TabCount";
@@ -81,6 +82,8 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
           insecure={barInsecure(props)}
           privately={props.privately}
         />
+        {/* The load's progress runs along the capsule's edge (A6). */}
+        <LoadProgress progress={barProgress(props)} loading={barLoading(props)} />
       </Animated.View>
       <BarPressable button={right} icon={right.icon} privately={props.privately} />
     </View>

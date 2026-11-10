@@ -30,6 +30,10 @@ export type BrowserBarProps = (
       tabCount?: number;
       /** The page came over plain http. */
       insecure?: boolean;
+      /** How far the page has loaded, for the capsule's progress line (A6). */
+      progress?: number;
+      /** Whether the page is still loading, for the capsule's progress line (A6). */
+      loading?: boolean;
     }
 ) & {
   /** Dark controls over a private page. */
@@ -59,6 +63,16 @@ export function barNewTab(props: BrowserBarProps): boolean {
 /** A page loaded without encryption gets a warning in the capsule. */
 export function barInsecure(props: BrowserBarProps): boolean {
   return props.mode === "page" && Boolean(props.site) && props.insecure === true;
+}
+
+/** How far the page has loaded, for the capsule's progress line (A6). */
+export function barProgress(props: BrowserBarProps): number {
+  return props.mode === "page" ? (props.progress ?? 0) : 0;
+}
+
+/** Whether the page is still loading, for the capsule's progress line (A6). */
+export function barLoading(props: BrowserBarProps): boolean {
+  return props.mode === "page" && props.loading === true;
 }
 
 export function barButtons(props: BrowserBarProps): [BarButton & { icon: "archive" | "tabs" }, BarButton, BarButton & { icon: "settings" | "more" }] {
