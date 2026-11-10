@@ -11,7 +11,6 @@ const { fakeDiagnostics } = await import("../effect/testing.ts");
 const { Bookmarks, BookmarkEngine, BookmarkError } = await import("./bookmarkService.ts");
 
 const S = () => useBrowser.getState();
-const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 // Chrome's bookmarks, as a test wants them: the tree it holds, the ops it was sent, and what it refuses.
 const fakeEngine = () => {
@@ -20,6 +19,7 @@ const fakeEngine = () => {
   const fake = {
     trees: new Map(),
     applied: [],
+    appliedOnce: Promise.withResolvers(),
     watches: [],
     // The failure the read or the apply meets, when there is one.
     failure: null,
@@ -41,6 +41,7 @@ const fakeEngine = () => {
         if (fake.failure) throw fake.failure;
 
         fake.applied.push({ engine, ops });
+        fake.appliedOnce.resolve();
 
         return { skipped: 0, invalid: [] };
       }),
@@ -107,7 +108,7 @@ test("the store's edits go to Chrome as ops", async () => {
 
   const added = S().addBookmark({ spaceId: "default", url: "https://a.example/", title: "A" });
 
-  await tick();
+  await engine.appliedOnce.promise;
 
   assert.ok(added);
   assert.ok(engine.applied.length > 0, "the edit went to Chrome");
