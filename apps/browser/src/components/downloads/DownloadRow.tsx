@@ -2,7 +2,8 @@ import { View } from "@bay/platform";
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/chromium";
 import { copyFile, copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, showMenu, Symbol, type MenuItem } from "@bay/desktop";
 import { memo, useEffect, useRef, useState } from "react";
-import { Image, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import { Image } from "expo-image";
 import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
@@ -144,7 +145,7 @@ export const FileIcon = memo(function FileIcon({ path, size = 28 }: { path: stri
     };
   }, [key]);
   return uri ? (
-    <Image source={{ uri }} style={{ width: size, height: size }} />
+    <Image cachePolicy="memory" source={{ uri }} style={{ width: size, height: size }} />
   ) : (
     <Symbol name="doc" size={size * 0.62} color={theme.icon} style={{ width: size, height: size }} />
   );

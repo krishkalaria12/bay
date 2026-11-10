@@ -3,7 +3,8 @@ import { Pressable, View } from "@bay/platform";
 import { killTask, listTasks, type EngineTask } from "@bay/chromium";
 import { Symbol, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import { switchToTab } from "../../lib/actions";
 import { APP_NAME } from "../../lib/constants";
 import { APP_ICON } from "../../lib/assets";
@@ -237,7 +238,7 @@ function TaskRow({ row, stripe, selected, onSelect, onOpen }: { row: Row; stripe
           {row.favicon ? (
             <Favicon url={row.favicon.url} favicon={row.favicon.favicon} size={16} spaceId={row.favicon.spaceId} />
           ) : row.type === "browser" ? (
-            <Image source={APP_ICON} style={{ width: 16, height: 16 }} />
+            <Image cachePolicy="memory" source={APP_ICON} style={{ width: 16, height: 16 }} />
           ) : (
             <Symbol name={icon} size={12} color={detail} style={{ width: 16, height: 16 }} />
           )}

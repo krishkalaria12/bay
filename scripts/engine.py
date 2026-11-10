@@ -573,10 +573,10 @@ def build(root, env, targets, jobs, platform="win", ci_minutes=None):
     if ci_minutes is None:
         run(args, cwd=src, env=env)
     else:
-        deadline = time.monotonic() + ci_minutes * 60
+        started = time.monotonic()
         if not compile_changes_first(src, lock["outputDirectory"], targets, jobs, env, ci_minutes):
             return False
-        minutes = (deadline - time.monotonic()) / 60
+        minutes = ci_minutes - (time.monotonic() - started) / 60
         if minutes <= 0 or not run_until(args, src, env, minutes):
             return False
     (root / "bay-engine-build.json").write_text(json.dumps(build_identity(platform), indent=2) + "\n")

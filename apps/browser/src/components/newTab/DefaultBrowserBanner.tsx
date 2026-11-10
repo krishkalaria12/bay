@@ -1,7 +1,8 @@
 import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol, VisualEffect } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "@bay/platform/motion";
 import { useDefaultBrowserCheckIn } from "../../lib/defaultBrowserPrompt";
 import { CHECK_IN_COPY } from "../../lib/constants";
@@ -76,7 +77,7 @@ function Card({ leaving, onFeedback, onClose }: { leaving: null | (() => void); 
         />
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", paddingHorizontal: 10, gap: 10 }}>
           <View style={{ width: 37, height: 37, borderRadius: 6, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
-            <Image source={APP_ICON} style={{ width: 37, height: 37 }} />
+            <Image cachePolicy="memory" source={APP_ICON} style={{ width: 37, height: 37 }} />
           </View>
           <View style={{ flex: 1, gap: 2, paddingLeft: 4 }}>
             <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "500", color: theme.dark ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.8)" }}>

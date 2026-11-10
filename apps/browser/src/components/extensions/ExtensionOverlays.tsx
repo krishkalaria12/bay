@@ -3,7 +3,8 @@ import { Pressable, View } from "@bay/platform";
 import { permissionWarnings, WebView, type InstalledExtension, type WebViewHandle } from "@bay/chromium";
 import { Surface } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, StyleSheet, Text, useWindowDimensions } from "react-native";
+import { StyleSheet, Text, useWindowDimensions } from "react-native";
+import { Image } from "expo-image";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -188,7 +189,7 @@ function InstallDialog({ request }: { request: InstallRequest }) {
     body = (
       <>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          {pkg?.icon ? <Image source={{ uri: pkg.icon }} style={{ width: 36, height: 36 }} /> : null}
+          {pkg?.icon ? <Image cachePolicy="memory" source={{ uri: pkg.icon }} style={{ width: 36, height: 36 }} /> : null}
           <Text style={{ flex: 1, fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>{title}</Text>
         </View>
         {warnings.length ? (
@@ -266,7 +267,7 @@ function PinRow({ ext, onChange }: { ext: InstalledExtension; onChange: (pinned:
   return (
     <Pressable onPress={() => onChange(!ext.pinned)} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 }}>
       <Checkbox value={ext.pinned} onChange={onChange} />
-      <Image source={{ uri: ext.actionIcon || ext.icon }} style={{ width: 16, height: 16 }} />
+      <Image cachePolicy="memory" source={{ uri: ext.actionIcon || ext.icon }} style={{ width: 16, height: 16 }} />
       <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
         {ext.name}
       </Text>

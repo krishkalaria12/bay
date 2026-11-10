@@ -2,7 +2,8 @@ import { Pressable, View, capabilities } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { Image, Text } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
 import { besideRow, useSidebarOnRight } from "../window/layout";
@@ -134,7 +135,12 @@ function PagePreview({ tabId }: { tabId: string }) {
         borderBottomColor: theme.panelBorder,
       }}
     >
-      <Image source={{ uri: `data:image/jpeg;base64,${picture.data}` }} style={{ width: HOVER_CARD_WIDTH, height: shown }} accessibilityIgnoresInvertColors />
+      <Image
+        cachePolicy="memory"
+        source={{ uri: `data:image/jpeg;base64,${picture.data}` }}
+        style={{ width: HOVER_CARD_WIDTH, height: shown }}
+        accessibilityIgnoresInvertColors
+      />
     </View>
   );
 }

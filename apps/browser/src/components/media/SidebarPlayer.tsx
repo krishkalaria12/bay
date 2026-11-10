@@ -2,7 +2,7 @@ import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useShallow } from "zustand/react/shallow";
 import { useState, type ComponentProps } from "react";
-import { Image } from "react-native";
+import { Image } from "expo-image";
 import { switchToTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -82,7 +82,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
               }}
             >
               {artwork ? (
-                <Image source={{ uri: artwork }} resizeMode="cover" style={{ width: 32, height: 32 }} />
+                <Image cachePolicy="memory" source={{ uri: artwork }} contentFit="cover" style={{ width: 32, height: 32 }} />
               ) : (
                 <Favicon url={tab.url} favicon={tab.favicon} size={18} spaceId={tab.spaceId} />
               )}

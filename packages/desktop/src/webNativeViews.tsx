@@ -10,7 +10,8 @@ import {
   type CSSProperties,
   type ForwardedRef,
 } from "react";
-import { Image, Text, type TextStyle } from "react-native";
+import { Text, type TextStyle } from "react-native";
+import { Image } from "expo-image";
 import { View, type ViewProps } from "@bay/platform";
 import { surfaceBorderColors } from "./webSurfaceBorder";
 import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEffectProps, SurfaceProps, SymbolProps, VisualEffectProps } from "./index";
@@ -204,7 +205,7 @@ function DockSelection({
       ]}
     >
       {image ? (
-        <Image source={{ uri: image }} style={{ width: iconSize, height: iconSize }} />
+        <Image cachePolicy="memory" source={{ uri: image }} style={{ width: iconSize, height: iconSize }} />
       ) : emoji ? (
         <Text style={{ fontSize: iconSize }}>{emoji}</Text>
       ) : null}

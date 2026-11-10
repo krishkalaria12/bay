@@ -1,7 +1,8 @@
 import { Pressable, View, capabilities, shortcutForCommand } from "@bay/platform";
 import { appIcons, currentAppIcon, setAppIcon, Symbol, type AppIcon } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Image, Text } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { reportBrowserCommand } from "../../../runtime/commands";
 import { updateSettings } from "../../../runtime/settingsActions";
 import { useBrowserRead } from "../../../store/read";
@@ -367,7 +368,9 @@ function IconChoice({ icon, selected, onPress }: { icon: AppIcon; selected: bool
           backgroundColor: hovered && !selected ? colors.selected : "transparent",
         }}
       >
-        {icon.preview ? <Image source={{ uri: icon.preview }} style={{ width: APP_ICON_CHOICE_SIZE, height: APP_ICON_CHOICE_SIZE }} /> : null}
+        {icon.preview ? (
+          <Image cachePolicy="memory" source={{ uri: icon.preview }} style={{ width: APP_ICON_CHOICE_SIZE, height: APP_ICON_CHOICE_SIZE }} />
+        ) : null}
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
         {selected && <Symbol name="checkmark.circle.fill" size={11} color={colors.accent} style={{ width: 13, height: 13 }} />}

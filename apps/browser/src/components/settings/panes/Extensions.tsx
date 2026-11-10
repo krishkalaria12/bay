@@ -3,7 +3,8 @@ import * as tabCommands from "../../../runtime/tabActions";
 import { View } from "@bay/platform";
 import { reloadExtension, type InstalledExtension } from "@bay/chromium";
 import { useEffect, useState } from "react";
-import { Image, Text } from "react-native";
+import { Text } from "react-native";
+import { Image } from "expo-image";
 import { browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../../store/read";
@@ -62,7 +63,7 @@ export function ExtensionsPane() {
           {list.map((ext) => (
             <Row
               key={ext.id}
-              icon={<Image source={{ uri: ext.icon }} style={{ width: 24, height: 24, opacity: ext.enabled ? 1 : 0.5 }} />}
+              icon={<Image cachePolicy="memory" source={{ uri: ext.icon }} style={{ width: 24, height: 24, opacity: ext.enabled ? 1 : 0.5 }} />}
               title={
                 <Text numberOfLines={1} style={{ fontSize: 13, color: theme.textPrimary }}>
                   {ext.name}
@@ -129,7 +130,7 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
         <Button title="All Extensions" icon="chevron.left" kind="plain" onPress={onBack} />
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginTop: 14 }}>
-        <Image source={{ uri: ext.icon }} style={{ width: 48, height: 48 }} />
+        <Image cachePolicy="memory" source={{ uri: ext.icon }} style={{ width: 48, height: 48 }} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary }}>{ext.name}</Text>
           <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
