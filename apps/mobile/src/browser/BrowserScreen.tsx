@@ -36,6 +36,7 @@ import { parseImagePress } from "@/pagescripts/images";
 import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
+import type { BrowserTab } from "@/store/types";
 import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
 import { saveLogin, savedLoginFor } from "./credentials";
 import { originOf } from "./logins";
@@ -45,6 +46,7 @@ import { StartPage } from "./StartPage";
 import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
 import { TabSwipe } from "./TabSwipe";
+import { TabZoom, type Frame } from "./TabZoom";
 import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
 import { fetchFavicon } from "./favicons";
@@ -118,6 +120,8 @@ export function BrowserScreen(): JSX.Element {
   const [fullscreenByTab, setFullscreenByTab] = useState<Record<string, boolean>>({});
   // The tab open before this one, for Arc's drag up on Tabs; activating a tab makes the one it left the last.
   const lastTab = useRef<string | null>(null);
+  // A card in the switcher, growing into the page it stands for (A1).
+  const [zoom, setZoom] = useState<{ tab: BrowserTab; frame: Frame } | null>(null);
   // A link another app handed Bay (B9): `null` between links, whatever they sent until the tabs can take it.
   const incoming = useRef<string | null>(null);
   const barHidden = useSharedValue(0);
@@ -414,6 +418,17 @@ export function BrowserScreen(): JSX.Element {
   function showTabs(): void {
     if (hasPage) capture(active.id);
     setOverlay("tabs");
+  }
+
+  // A card in the switcher grows into the page it stands for (A1). A tab with no picture has nothing to grow from.
+  function pickTab(tab: BrowserTab, frame: Frame): void {
+    if (!tab.snapshot) {
+      activate(tab.id);
+
+      return;
+    }
+
+    setZoom({ tab, frame });
   }
 
   // A sheet reports its dismissal after it animates away, by which time another panel may have opened.
@@ -738,7 +753,7 @@ export function BrowserScreen(): JSX.Element {
           <TabSwitcher
             tabs={switcherTabs}
             activeTabId={active.id}
-            onSelect={activate}
+            onPick={pickTab}
             onClose={archiveTab}
             onCloseAll={archiveAll}
             privateLocked={locked}
@@ -1040,6 +1055,21 @@ export function BrowserScreen(): JSX.Element {
         onResolveDestination={() => resolveDestination(link?.url ?? "")}
       />
       <PageRequestPanel request={pageRequest?.request ?? null} onAnswer={answerPageRequest} />
+
+      {/* The card's picture, grown into the page (A1). It is drawn over everything, and the live page takes over. */}
+      {zoom ? (
+        <TabZoom
+          snapshot={zoom.tab.snapshot ?? ""}
+          from={zoom.frame}
+          onDone={() => {
+            const target = zoom;
+
+            setZoom(null);
+
+            if (target) activate(target.tab.id);
+          }}
+        />
+      ) : null}
     </View>
   );
 }

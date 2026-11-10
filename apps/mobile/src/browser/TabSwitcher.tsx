@@ -1,6 +1,6 @@
 import { displayUrl } from "@bay/core/src/suggest.ts";
 import { useThemeColor } from "heroui-native";
-import type { JSX } from "react";
+import { useRef, type ComponentRef, type JSX } from "react";
 import { Image, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -19,11 +19,13 @@ import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
 import type { BrowserFolder, BrowserSpace, BrowserTab, SpaceColor } from "@/store/types";
 import { SiteIcon } from "./SiteIcon";
+import type { Frame } from "./TabZoom";
 
 export interface TabSwitcherProps {
   tabs: readonly BrowserTab[];
   activeTabId: string;
-  onSelect: (id: string) => void;
+  /** The user picked a card; the switcher reports where the card sits, so the page can grow out of it (A1). */
+  onPick: (tab: BrowserTab, frame: Frame) => void;
   onClose: (id: string) => void;
   onCloseAll: () => void;
   /** Private pages are hidden while private tabs are locked. */
@@ -71,7 +73,7 @@ interface Layout {
 export function TabSwitcher({
   tabs,
   activeTabId,
-  onSelect,
+  onPick,
   onClose,
   onCloseAll,
   privateLocked,
@@ -225,7 +227,7 @@ export function TabSwitcher({
             scrollX={scrollX}
             active={tab.id === activeTabId}
             hidden={Boolean(tab.private && privateLocked)}
-            onSelect={onSelect}
+            onPick={onPick}
             onClose={onClose}
           />
         ))}
@@ -241,7 +243,7 @@ function TabCard({
   scrollX,
   active,
   hidden,
-  onSelect,
+  onPick,
   onClose,
 }: {
   tab: BrowserTab;
@@ -250,7 +252,7 @@ function TabCard({
   scrollX: SharedValue<number>;
   active: boolean;
   hidden: boolean;
-  onSelect: (id: string) => void;
+  onPick: (tab: BrowserTab, frame: Frame) => void;
   onClose: (id: string) => void;
 }): JSX.Element {
   const foreground = useThemeColor("foreground");
@@ -258,10 +260,27 @@ function TabCard({
   const title = tab.title || (tab.url ? displayUrl(tab.url) : "New tab");
   const { width, cardWidth, cardHeight, step, left } = layout;
   const lift = useSharedValue(0);
+  // The card's frame on the screen, so the page can grow out of it (A1).
+  const card = useRef<ComponentRef<typeof View>>(null);
 
   const close = () => {
     tick();
     onClose(tab.id);
+  };
+
+  // The card's place on the screen is measured, not worked out: the stack moves as it is swiped.
+  const pick = () => {
+    const measure = card.current?.measureInWindow;
+
+    if (!measure) {
+      onPick(tab, { x: 0, y: 0, width: cardWidth, height: cardHeight });
+
+      return;
+    }
+
+    measure.call(card.current, (x: number, y: number, measuredWidth: number, measuredHeight: number) => {
+      onPick(tab, { x, y, width: measuredWidth, height: measuredHeight });
+    });
   };
 
   const pan = usePanGesture({
@@ -333,12 +352,13 @@ function TabCard({
           </Pressable>
         </Animated.View>
         <Pressable
+          ref={card}
           testID={`tab-card-${index}`}
           accessibilityRole="button"
           accessibilityLabel={`Open ${title}`}
           accessibilityHint="Swipe up to close"
           accessibilityState={{ selected: active }}
-          onPress={() => onSelect(tab.id)}
+          onPress={pick}
           className={
             tab.private
               ? "overflow-hidden rounded-[22px] border border-white/10 bg-neutral-900"
