@@ -7,7 +7,6 @@ import {
   onOpenURLs,
   onWindowEvent,
   openWindow,
-  replyToTerminate,
   setAppearance,
   setMenuStateParts,
   setWindowTitle,
@@ -36,14 +35,11 @@ import { everySlowly } from "./throttledTimers";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./appCommands";
 import { startSidebarMoveUndoSync } from "./folderUndo";
-import { flushPersistence, resumePersistence } from "./persistenceService";
+import { beginQuit, cancelQuit, isQuitting } from "./quit";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
 import { subscribeMenuInputs } from "./menuUpdates";
-
-let quitting = false;
-export const isQuitting = () => quitting;
 
 export function startNativeSync() {
   const store = useBrowser;
@@ -73,16 +69,9 @@ export function startNativeSync() {
 
     if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
 
-    if (e.type === "willQuit") {
-      quitting = true;
-      flushPersistence({ final: true });
-      void replyToTerminate(true);
-    }
+    if (e.type === "willQuit") beginQuit();
 
-    if (e.type === "quitCancelled") {
-      quitting = false;
-      resumePersistence();
-    }
+    if (e.type === "quitCancelled") cancelQuit();
   });
 
   onWindowEvent((e) => {
@@ -93,7 +82,7 @@ export function startNativeSync() {
     if (e.type === "frame") s.setWindowFrame(e.id, e.frame);
 
     if (e.type === "close") {
-      if (quitting) return;
+      if (isQuitting()) return;
       open.delete(e.id);
       s.closeWindow(e.id);
       releaseIfIncognito(e.id, s);

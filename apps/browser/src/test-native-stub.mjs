@@ -93,6 +93,10 @@ export const setSidebarMoveUndo = (windowId, available, focus = false) => (sideb
 export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise.resolve());
 export const openWindow = () => Promise.resolve();
 export const onAppEvent = () => ({ remove() {} });
+
+// The native side's answer to the app's quit: what it was told.
+export const terminated = [];
+export const replyToTerminate = (ok) => (terminated.push(ok), Promise.resolve());
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();
 export const fetchFavicon = () => Promise.resolve(null);
