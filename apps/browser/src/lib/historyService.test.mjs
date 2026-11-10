@@ -136,6 +136,8 @@ test("a change that arrives while a read is running is kept, and shown", async (
     ["https://late.com/", "https://a.com/"],
     "the visit that arrived during the read is not lost",
   );
+
+  await runtime.dispose();
 });
 
 test("a read that fails is reported once, and the profile stays unread", async () => {
@@ -149,6 +151,8 @@ test("a read that fails is reported once, and the profile stays unread", async (
   assert.equal(diagnostics.reports.length, 1);
   assert.equal(diagnostics.reports[0].operation.name, "history.read");
   assert.equal(diagnostics.reports[0].operation.resource, "");
+
+  await runtime.dispose();
 });
 
 test("the app's old history.json is moved into Chrome, and deleted only once it is there", async () => {
@@ -177,6 +181,8 @@ test("the app's old history.json is moved into Chrome, and deleted only once it 
   assert.equal(engine.adds.length, 1);
   assert.equal(engine.adds[0].pages[0].url, "https://old.com/");
   assert.equal(stub.docs.has("history.json"), false, "the file is deleted once Chrome has the visits");
+
+  await runtime.dispose();
 });
 
 test("a move that fails keeps the file, for the next launch", async () => {
@@ -204,4 +210,6 @@ test("a move that fails keeps the file, for the next launch", async () => {
 
   assert.equal(result, "kept");
   assert.ok(stub.docs.has("history.json"), "the file is kept");
+
+  await runtime.dispose();
 });

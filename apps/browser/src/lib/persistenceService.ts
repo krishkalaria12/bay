@@ -16,7 +16,6 @@ import { useBrowser, type BrowserState } from "../store/browserStore";
 import { SAVE_DELAY_MS } from "./constants";
 import { startFavicons } from "./favicons";
 import { DOCS, forgetClosedIncognito, loadSession, sessionNeedsRewrite, type Doc } from "./persist";
-import { startProfileDataCleanup } from "./profileCleanup";
 
 /** The app's saving, as the quit handshake and the runtime reach it. */
 export type PersistenceCoordinator = {
@@ -124,7 +123,7 @@ const createCoordinator = (): PersistenceCoordinator => {
     hydrate();
     check(useBrowser.getState());
 
-    const stops = [startFavicons(), startProfileDataCleanup(), startLiveFolders()];
+    const stops = [startFavicons(), startLiveFolders()];
 
     const stopSession = useBrowser.subscribe((s, prev) => {
       check(s);
