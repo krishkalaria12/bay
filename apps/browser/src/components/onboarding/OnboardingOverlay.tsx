@@ -1,8 +1,8 @@
-import { Surface, VisualEffect, WindowDragRegion } from "@bay/shell";
+import { Surface, VisualEffect, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
-import { tensionSpring } from "../../lib/springs";
+import { tensionSpring } from "../../lib/springPresets";
 import { hex } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
 import { Intro } from "./Intro";
@@ -19,6 +19,7 @@ export function OnboardingOverlay() {
   const windowId = useWindowId();
   const active = useOnboarding((s) => s.windowId === windowId);
   const session = useOnboarding((s) => s.session);
+
   return (
     <>
       {active ? <Overlay key={session} session={session} /> : null}
@@ -55,6 +56,7 @@ function Overlay({ session }: { session: number }) {
     );
   }, [leaving]);
   const presenceStyle = useAnimatedStyle(() => ({ opacity: presence.get() }));
+
   const cardStyle = useAnimatedStyle(() => ({
     opacity: interpolate(card.get(), [0, 1, 2], [0, 1, 0]),
     transform: [{ translateY: interpolate(card.get(), [0, 1, 2], [24, 0, 0]) }, { scale: interpolate(card.get(), [0, 1, 2], [0.97, 1, 1.03]) }],

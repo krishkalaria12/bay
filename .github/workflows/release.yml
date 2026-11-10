@@ -88,8 +88,8 @@ jobs:
           fi
           if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then check "v$VERSION is already published"; fi
           tree="$(git rev-parse HEAD:engine)"
-          if [ "$skip" = false ] && ! awk -v t="$tree" '$1 == t { found = 1 } END { exit !found }' packages/nncore/prebuilt-engines.tsv; then
-            fail "no prebuilt engine for engine/ tree ${tree:0:12}: build it on the Mac, run scripts/publish-engine.sh, and commit packages/nncore/prebuilt-engines.tsv"
+          if [ "$skip" = false ] && ! awk -v t="$tree" '$1 == t { found = 1 } END { exit !found }' packages/chromium/prebuilt-engines.tsv; then
+            fail "no prebuilt engine for engine/ tree ${tree:0:12}: build it on the Mac, run scripts/publish-engine.sh, and commit packages/chromium/prebuilt-engines.tsv"
           fi
           if [ "$DRY_RUN" = true ]; then dist="dist/$VERSION-rc"; else dist="dist/$VERSION"; fi
           {
@@ -164,7 +164,7 @@ jobs:
           key: engine-${{ env.TREE }}
       - name: Engine
         run: |
-          framework="$(packages/nncore/scripts/fetch-engine.sh)"
+          framework="$(packages/chromium/scripts/fetch-engine.sh)"
           { echo "NNCORE_FRAMEWORK=$framework"; echo "NNCORE_FRAMEWORK_ENGINE=$TREE"; } >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v6
         with:
@@ -181,10 +181,8 @@ jobs:
             ~/Library/Caches/CocoaPods
           key: pods-${{ runner.os }}-${{ hashFiles('apps/browser/macos/Podfile', 'apps/browser/macos/Podfile.lock', 'pnpm-lock.yaml', 'patches/**') }}
           restore-keys: pods-${{ runner.os }}-
-      - uses: actions/cache@v6
-        with:
-          path: packages/nncore/vendor/ubo
-          key: ubo-${{ hashFiles('packages/nncore/scripts/ubo.sh') }}
+      - name: Rust (the content blocker, packages/adblock)
+        run: rustup target add aarch64-apple-darwin
       - name: Pods
         run: pnpm pods
       - uses: oven-sh/setup-bun@v2
@@ -204,7 +202,7 @@ jobs:
           dirty="$(git status --porcelain -- apps/browser apps/cli packages engine | grep -v ' apps/browser/build' || true)"
           [ -z "$dirty" ] || { echo "::error::installing changed tracked files, so release.sh would refuse the tree:"; echo "$dirty"; exit 1; }
       - name: Update channels
-        run: python3 packages/shell/scripts/test-updater.py
+        run: node packages/desktop/scripts/test-updater.mjs
       - name: Build
         run: |
           args=("$VERSION" --channel "$CHANNEL" --phase build)

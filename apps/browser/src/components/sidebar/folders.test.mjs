@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const { useBrowser } = await import("../../store/browser.ts");
-const { folderEntries, sidebarEntries, sidebarTabOrder, numberedTabs } = await import("./entries.ts");
-const { entryHeight, folderDragItemVisible, keptEntry, rowSpan } = await import("./geometry.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
+const { folderEntries, sidebarEntries, sidebarTabOrder, numberedTabs } = await import("./sidebarEntries.ts");
+const { entryHeight, folderDragItemVisible, keptEntry, rowSpan } = await import("./rowGeometry.ts");
 const { DEFAULT_SETTINGS } = await import("../../store/settings.ts");
+const { childFolderIds, folderTabIds } = await import("../../store/folders.ts");
+
 DEFAULT_SETTINGS.newTabPosition = "bottom";
+
 const S = () => useBrowser.getState();
 
 function fixture() {
@@ -19,8 +22,71 @@ function fixture() {
   const parent = S().newPinnedFolder(w, { name: "Work", tabIds: [a] });
   const child = S().newPinnedFolder(w, { name: "Research", parentId: parent, tabIds: [b] });
   const empty = S().newPinnedFolder(w, { name: "Empty", parentId: child });
+
   return { w, loose, a, b, c, parent, child, empty };
 }
+
+test("folder membership caches progress/UI reads and invalidates placement, lists and hierarchy", () => {
+  const f = fixture();
+  const members = folderTabIds(S(), f.parent);
+  assert.deepEqual(members, [f.a, f.b]);
+  assert.deepEqual(folderTabIds(S(), f.parent, false), [f.a]);
+  S().updateLive(f.b, { progress: 0.4 });
+  S().setSelection(f.w, [f.a]);
+  S().toggleSidebar(f.w);
+  assert.strictEqual(folderTabIds(S(), f.parent), members);
+  const state = S();
+
+  const check = (patch, expected, direct) => {
+    const s = { ...state, ...patch };
+    assert.deepEqual(folderTabIds(s, f.parent), expected);
+    assert.deepEqual(folderTabIds(s, f.parent, false), direct);
+    assert.strictEqual(folderTabIds(s, f.parent), folderTabIds(s, f.parent));
+  };
+
+  check({ tabs: { ...state.tabs, [f.b]: { ...state.tabs[f.b], folderId: f.parent } } }, [f.a, f.b], [f.a, f.b]);
+  check({ tabs: { ...state.tabs, [f.b]: { ...state.tabs[f.b], pinnedRow: false } } }, [f.a], [f.a]);
+  check({ tabs: { ...state.tabs, [f.b]: { ...state.tabs[f.b], spaceId: "other" } } }, [f.a], [f.a]);
+  check({ tabs: { ...state.tabs, [f.b]: undefined } }, [f.a], [f.a]);
+  check({ tabLists: { ...state.tabLists, default: [...state.tabLists.default].reverse() } }, [f.b, f.a], [f.a]);
+  check({ pinnedFolders: { ...state.pinnedFolders, [f.child]: { ...state.pinnedFolders[f.child], parentId: undefined } } }, [f.a], [f.a]);
+  check({ pinnedFolders: { ...state.pinnedFolders, [f.parent]: { ...state.pinnedFolders[f.parent], spaceId: "other" } } }, [], []);
+  const gone = { ...state.pinnedFolders };
+  delete gone[f.parent];
+  assert.deepEqual(folderTabIds({ ...state, pinnedFolders: gone }, f.parent), []);
+  const children = childFolderIds(state, f.parent);
+  assert.deepEqual(children, [f.child]);
+  assert.strictEqual(childFolderIds(state, f.parent), children);
+  assert.deepEqual(
+    childFolderIds({ pinnedFolders: { ...state.pinnedFolders, [f.child]: { ...state.pinnedFolders[f.child], parentId: undefined } } }, f.parent),
+    [],
+  );
+});
+
+test("folder membership preserves list order and safely handles cyclic or cross-space ancestors", () => {
+  const pinnedFolders = {
+    a: { id: "a", spaceId: "default", parentId: "b" },
+    b: { id: "b", spaceId: "other", parentId: "a" },
+    c: { id: "c", spaceId: "default", parentId: "b" },
+  };
+
+  const state = {
+    pinnedFolders,
+    spaces: {},
+    tabLists: { default: ["c", "b", "a", "missing"], other: ["b"] },
+    tabs: {
+      a: { id: "a", spaceId: "default", pinnedRow: true, folderId: "a" },
+      b: { id: "b", spaceId: "other", pinnedRow: true, folderId: "b" },
+      c: { id: "c", spaceId: "default", pinnedRow: true, folderId: "c" },
+      missing: { id: "missing", spaceId: "default", pinnedRow: true, folderId: "gone" },
+    },
+  };
+
+  assert.deepEqual(folderTabIds(state, "a"), ["c", "a"]);
+  assert.deepEqual(folderTabIds(state, "a", false), ["a"]);
+  assert.deepEqual(folderTabIds(state, "b"), ["b"]);
+  assert.deepEqual(folderTabIds(state, "c"), ["c"]);
+});
 
 test("nested pinned entries appear once at each level, including empty children", () => {
   const { w, parent, child, empty, a, b, loose, c } = fixture();

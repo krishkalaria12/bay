@@ -10,6 +10,7 @@ const code = ts.transpileModule(readFileSync(new URL("./userScripts.ts", import.
 function fixture({ folder = { state: "ready", generation: 1, path: "/data/Scripts/extension", token: "one" }, existing = [] } = {}) {
   const calls = [];
   const statuses = [];
+
   const state = {
     settings: { cliControl: true },
     spaceOrder: ["default", "shared", "work", "incognito:private"],
@@ -20,20 +21,24 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
       "incognito:private": { name: "Private" },
     },
   };
+
   let current = folder;
   let notice = () => {};
   const installed = new Map();
+
   for (const profile of ["", "work"])
     installed.set(
       profile,
       existing.map((x) => ({ ...x })),
     );
+
   const mocks = {
-    "@bay/nncore": {
+    "@bay/chromium": {
       listExtensions: async (profile) => installed.get(profile) ?? [],
       installExtension: async ({ path }, profile) => {
         calls.push(["install", profile, path]);
         installed.set(profile, [{ id: "scripts", path, enabled: true }]);
+
         return "scripts";
       },
       reloadExtension: async (id, profile) => {
@@ -47,9 +52,10 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
         );
       },
     },
-    "@bay/shell": {
+    "@bay/desktop": {
       onUserScriptsChange: (callback) => {
         notice = callback;
+
         return { remove() {} };
       },
       readUserScripts: async () => current,
@@ -59,22 +65,25 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
         statuses.push(JSON.parse(json));
       },
     },
-    "../../store/browser": { useBrowser: { getState: () => state, subscribe() {} } },
+    "../../store/browserStore": { useBrowser: { getState: () => state, subscribe() {} } },
     "../../store/model": {
       isIncognitoSpace: (id) => id.startsWith("incognito:"),
       engineProfile: (id) => (["default", "shared"].includes(id) ? "" : id),
     },
   };
+
   const module = { exports: {} };
   new Function("require", "module", "exports", "__DEV__", code)(
     (id) => {
       assert.ok(id in mocks, `unexpected import ${id}`);
+
       return mocks[id];
     },
     module,
     module.exports,
     false,
   );
+
   return {
     ...module.exports,
     calls,
@@ -120,6 +129,7 @@ test("removes loaded copies when the folder is invalid or uninstalled", async ()
       folder: { state, generation: 2, path: "/data/Scripts/extension", error: "forbidden permissions", token: "two" },
       existing: [{ id: "scripts", path: "/data/Scripts/extension", enabled: true }],
     });
+
     f.startUserScripts();
     await f.settled();
     assert.equal(f.calls.filter((x) => x[0] === "uninstall").length, 2);

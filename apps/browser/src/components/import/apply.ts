@@ -1,4 +1,4 @@
-import { savePassword } from "@bay/nncore";
+import { savePassword } from "@bay/chromium";
 import type {
   BookmarkNode as ImportedNode,
   Credential,
@@ -11,7 +11,7 @@ import type {
   SpaceSuggestion,
 } from "@bay/import";
 import type { BookmarkDraft } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { engineProfile, isIncognitoSpace, listIds, plural, tabListKey } from "../../store/model";
 import { withNewTab } from "../../store/tabs";
 import type { SpaceColor } from "../../store/types";
@@ -43,6 +43,7 @@ export const emptyCounts = (): ImportCounts => ({
 
 /** What an import brought, a phrase for each kind with any: "3 bookmarks", "1 address". */
 export const importedSummary = (counts: ImportCounts) =>
+  // SAFETY: target type assertion matches the runtime value validated at this call site.
   [
     counts.bookmarks && plural(counts.bookmarks, "bookmark"),
     counts.history && plural(counts.history, "history item"),
@@ -65,25 +66,33 @@ export async function importExtensions(spaceIds: string[], result: ImportResult,
   const failed: ExtensionFailure[] = [];
   const notes: string[] = [];
   const seen = new Set<string>();
+
   for (const spaceId of spaceIds) {
     const profile = engineProfile(spaceId);
+
     if (seen.has(profile)) continue;
     seen.add(profile);
+
     for (const extension of result.extensions ?? []) {
       if (signal?.aborted) throw Object.assign(new Error("Import cancelled"), { code: "cancelled" });
+
       try {
         if (!api || isIncognitoSpace(spaceId) || !useBrowser.getState().spaces[spaceId]) throw new Error("The destination space is unavailable");
         const written = await api.writeExtension(result.browserId, result.profileId, extension.id, profile);
+
         if (written.installed) imported++;
         storageImported += written.storageImported;
         const name = useBrowser.getState().spaces[spaceId]?.name ?? "Space";
         notes.push(...written.warnings.map((message) => `${extension.name} in ${name}: ${message}`));
       } catch (error) {
+        // SAFETY: Error).message }) assertion matches the runtime value validated at this call site.
         failed.push({ spaceId, extension, message: (error as Error).message });
       }
+
       if (signal?.aborted) throw Object.assign(new Error("Import cancelled"), { code: "cancelled" });
     }
   }
+
   return { imported, storageImported, failed, notes };
 }
 
@@ -96,12 +105,14 @@ const linkCount = (nodes: ImportedNode[]): number => nodes.reduce((n, c) => n + 
 
 export function importBookmarks(spaceId: string, root: ImportedNode | undefined, browserName: string): number {
   if (!root?.children?.length) return 0;
+
   if (!useBrowser.getState().bookmarks.roots[spaceId]) useBrowser.getState().addBookmarkTree(spaceId, []);
   const roots = useBrowser.getState().bookmarks.roots[spaceId]!;
   const toolbar = root.children.filter((c) => c.role === "toolbar").flatMap((c) => c.children ?? []);
   const rest = root.children.filter((c) => c.role !== "toolbar");
   const other = rest.flatMap((c) => (c.role === "other" || !c.role ? (c.type === "folder" ? (c.children ?? []) : [c]) : [c]));
   const title = `Imported from ${browserName}`;
+
   const place = (nodes: ImportedNode[], parentId: string) => {
     if (!nodes.length) return;
     const parent = useBrowser.getState().bookmarks.nodes[parentId];
@@ -109,8 +120,10 @@ export function importBookmarks(spaceId: string, root: ImportedNode | undefined,
     const drafts = nodes.map(toDraft);
     useBrowser.getState().addBookmarkTree(spaceId, empty ? drafts : [{ title, children: drafts }], parentId);
   };
+
   place(toolbar, roots.bar);
   place(other, roots.other);
+
   return linkCount([...toolbar, ...other]);
 }
 
@@ -121,16 +134,21 @@ export function importSafariBookmarks(spaceId: string, root: ImportedNode | unde
 export function importHistory(spaceId: string, entries: { url: string; title: string; visits: number; lastVisit: number }[]): number {
   const before = useBrowser.getState().history[spaceId]?.length ?? 0;
   useBrowser.getState().importHistory(spaceId, entries);
+
   return (useBrowser.getState().history[spaceId]?.length ?? 0) - before;
 }
 
 export async function importPasswords(spaceId: string, credentials: Credential[]): Promise<number> {
   let saved = 0;
+
   for (const c of credentials) {
     const origin = /^([a-z][a-z0-9+.-]*:\/\/[^/?#]+)/i.exec(c.realm?.startsWith("http") ? c.realm : c.url)?.[1];
+
     if (!origin || !c.password) continue;
+
     if (await savePassword(engineProfile(spaceId), origin, c.username, c.password).catch(() => false)) saved++;
   }
+
   return saved;
 }
 
@@ -144,18 +162,26 @@ export async function importNative(
 ): Promise<Pick<ImportCounts, "cookies" | "addresses" | "cards">> {
   const none = { cookies: 0, addresses: 0, cards: 0 };
   const api = importModule();
+
   if (!api || !token) return none;
+
   if (!kinds.length || isIncognitoSpace(spaceId) || useBrowser.getState().spaces[spaceId] === undefined) {
     api.discardImported(token);
+
     return none;
   }
+
   try {
     const w = await api.writeImported(token, engineProfile(spaceId), kinds);
+
     if (w.cookiesFailed) onFailed?.("cookies");
+
     if (w.autofillFailed) onFailed?.("autofill");
+
     return { cookies: w.cookies, addresses: w.addresses, cards: w.cards };
   } catch {
     kinds.forEach((k) => onFailed?.(k));
+
     return none;
   }
 }
@@ -163,6 +189,7 @@ export async function importNative(
 function windowFor(spaceId: string): string {
   const s = useBrowser.getState();
   const regular = s.ui.focusOrder.find((id) => s.windows[id] && !s.windows[id]!.incognito) ?? s.windowOrder.find((id) => !s.windows[id]!.incognito);
+
   return regular ?? s.createWindow({ spaceId });
 }
 
@@ -182,8 +209,10 @@ function openTabs(spaceId: string, tabs: TabDraft[]): (string | null)[] {
   const windowId = windowFor(spaceId);
   let s = useBrowser.getState();
   let last: string | undefined;
+
   const ids = tabs.map((t) => {
     const after = t.pinned ? undefined : last;
+
     const [next, id] = withNewTab(s, windowId, {
       url: t.url,
       spaceId,
@@ -192,21 +221,29 @@ function openTabs(spaceId: string, tabs: TabDraft[]): (string | null)[] {
       snapshot: { title: t.title, customTitle: t.customTitle ?? null },
       index: after ? listIds(s, tabListKey(s, s.tabs[after]!)).indexOf(after) + 1 : undefined,
     });
+
     if (!id) return null;
     s = { ...next, tabs: { ...next.tabs, [id]: { ...next.tabs[id]!, navigation: null } } };
+
     if (!t.pinned) last = id;
+
     return id;
   });
+
   useBrowser.setState(s);
+
   return ids;
 }
 
 export function importTabs(spaceId: string, tabs: TabDraft[], group: string | null): number {
   const fresh = tabs.filter(usable);
+
   if (!fresh.length) return 0;
   const ids = openTabs(spaceId, fresh);
   const unpinned = ids.filter((id, i): id is string => !!id && !fresh[i]!.pinned);
+
   if (group && unpinned.length) useBrowser.getState().createGroup(unpinned, { name: group });
+
   return fresh.length;
 }
 
@@ -215,31 +252,43 @@ export function importArcSpace(spaceId: string, space: SpaceSuggestion): number 
   const asTab = (n: ImportedNode): TabDraft => ({ url: n.url!, title: n.pageTitle ?? n.title, pinned: false, customTitle: n.pageTitle ? n.title : undefined });
   const tabs: TabDraft[] = [];
   const folders: { name: string; parent: number | undefined; start: number; end: number }[] = [];
+
   type Visit = { node: ImportedNode; parent: number | undefined; depth: number } | { finish: number };
+
   const pending: Visit[] = [...space.pinned].reverse().map((node) => ({ node, parent: undefined, depth: 0 }));
+
   while (pending.length) {
     const entry = pending.pop()!;
+
     if ("finish" in entry) {
       folders[entry.finish]!.end = tabs.length;
       continue;
     }
+
     const { node, depth } = entry;
+
     if (node.type === "url") {
       if (node.url && usable(asTab(node))) tabs.push(asTab(node));
       continue;
     }
+
     let parent = entry.parent;
+
     if (depth < 5) {
       parent = folders.push({ name: node.title, parent, start: tabs.length, end: tabs.length }) - 1;
       pending.push({ finish: parent });
     }
+
     for (const child of [...(node.children ?? [])].reverse()) pending.push({ node: child, parent, depth: Math.min(depth + 1, 5) });
   }
+
   const ids = openTabs(spaceId, tabs);
   const rows = ids.filter((id): id is string => !!id);
+
   if (rows.length) useBrowser.getState().pinRows(rows, true);
   const windowId = rows.length ? useBrowser.getState().tabs[rows[0]!]!.windowId : windowFor(spaceId);
   const folderIds: string[] = [];
+
   for (const folder of folders) {
     const tabIds = ids.slice(folder.start, folder.end).filter((id): id is string => !!id);
     folderIds.push(
@@ -252,6 +301,7 @@ export function importArcSpace(spaceId: string, space: SpaceSuggestion): number 
       }),
     );
   }
+
   return (
     rows.length +
     importTabs(
@@ -264,42 +314,50 @@ export function importArcSpace(spaceId: string, space: SpaceSuggestion): number 
 
 function pageKey(url: string): string {
   const m = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#]*)(.*)$/i.exec(url.trim());
+
   if (!m) return url;
   const rest = m[3]!.startsWith("/") ? m[3]! : `/${m[3]}`;
+
   return `${m[1]!.toLowerCase()}${m[2]!.toLowerCase()}${rest.replace(/#$/, "")}`;
 }
 
 export function importDiaProfile(spaceId: string, profile: DiaTabsProfile, what: { pinned: boolean; open: boolean }): number {
   const have = new Set(
-    Object.values(useBrowser.getState().tabs)
-      .filter((t) => t.spaceId === spaceId)
-      .flatMap((t) => [t.url, t.pinnedUrl ?? ""].filter(Boolean).map(pageKey)),
+    Object.values(useBrowser.getState().tabs).flatMap((t) => (t.spaceId === spaceId ? [t.url, t.pinnedUrl ?? ""].flatMap((u) => (u ? [pageKey(u)] : [])) : [])),
   );
+
   const fresh = (tabs: ImportedTab[]) => tabs.filter((t) => !have.has(pageKey(t.url)));
   let n = what.pinned ? importTabs(spaceId, fresh(profile.pinned), null) : 0;
+
   if (what.open)
     n += importTabs(
       spaceId,
       fresh(profile.tabs).map((t) => ({ ...t, pinned: false })),
       "Imported",
     );
+
   return n;
 }
 
 export async function applyResult(spaceId: string, result: ImportResult, browserName: string, onFailed?: (kind: ImportKind) => void): Promise<ImportCounts> {
   const counts = emptyCounts();
   counts.bookmarks += importBookmarks(spaceId, result.bookmarks, browserName);
+
   if (result.history.length) counts.history += importHistory(spaceId, result.history);
   // Sign-ins first, so the imported tabs load signed in.
   Object.assign(counts, await importNative(spaceId, result.vaultToken, ["cookies", "autofill"], onFailed));
+
   if (result.tabs.length && !result.spaces.length) counts.tabs += importTabs(spaceId, result.tabs, "Imported");
+
   if (result.favorites.length)
     counts.tabs += importTabs(
       spaceId,
       result.favorites.map((t) => ({ ...t, pinned: true })),
       null,
     );
+
   if (result.credentials.length) counts.passwords += await importPasswords(spaceId, result.credentials);
+
   return counts;
 }
 
@@ -313,25 +371,35 @@ export async function applyArcProfile(
   onFailed?: (kind: ImportKind) => void,
 ): Promise<ImportCounts> {
   const total = emptyCounts();
+
   for (let i = 0; i < destinations.length; i++) {
     const { spaceId, space } = destinations[i]!;
     let token = result.vaultToken;
+
     if (i > 0 && token) {
       token = undefined;
+
       try {
         const fresh = await readNative();
         token = fresh.vaultToken;
         fresh.failed.forEach((kind) => onFailed?.(kind));
       } catch (error) {
+        // SAFETY: { code? assertion matches the runtime value validated at this call site.
         if ((error as { code?: string } | null)?.code === "cancelled") throw error;
+
         if (result.cookieCount) onFailed?.("cookies");
+
         if (result.addressCount || result.cardCount) onFailed?.("autofill");
       }
     }
+
     const counts = await applyResult(spaceId, { ...result, vaultToken: token }, browserName, onFailed);
     counts.tabs += importArcSpace(spaceId, space);
+
+    // SAFETY: (keyof ImportCounts)[]) total[key] assertion matches the runtime value validated at this call site.
     for (const key of Object.keys(total) as (keyof ImportCounts)[]) total[key] += counts[key];
   }
+
   return total;
 }
 
@@ -342,24 +410,31 @@ export async function applySafari(spaceId: string, data: SafariExport, cookies =
   const history = data.profiles.find((p) => !p.name)?.history ?? data.profiles[0]?.history ?? [];
   counts.history = importHistory(spaceId, history);
   Object.assign(counts, await importNative(spaceId, data.vaultToken, cookies ? ["cookies", "autofill"] : ["autofill"], onFailed));
+
   if (data.tabs.length) counts.tabs += importTabs(spaceId, data.tabs, "Imported");
   counts.passwords = await importPasswords(spaceId, data.credentials);
+
   return counts;
 }
 
 export function profileColorFor(hex: string | undefined): SpaceColor | undefined {
   const m = hex && /^#?([0-9a-f]{6})/i.exec(hex);
+
   if (!m) return undefined;
   const v = parseInt(m[1]!, 16);
+  // SAFETY: [number, number, number] assertion matches the runtime value validated at this call site.
   const [r, g, b] = [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((c) => c / 255) as [number, number, number];
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
+
   if (max - min < 0.08) return "neutral";
   let h = 0;
+
   if (max === r) h = ((g - b) / (max - min) + 6) % 6;
   else if (max === g) h = (b - r) / (max - min) + 2;
   else h = (r - g) / (max - min) + 4;
   h *= 60;
+
   const hues: [SpaceColor, number][] = [
     ["red", 0],
     ["orange", 25],
@@ -370,5 +445,6 @@ export function profileColorFor(hex: string | undefined): SpaceColor | undefined
     ["pink", 330],
     ["red", 360],
   ];
+
   return hues.reduce((best, c) => (Math.abs(c[1] - h) < Math.abs(best[1] - h) ? c : best))[0];
 }

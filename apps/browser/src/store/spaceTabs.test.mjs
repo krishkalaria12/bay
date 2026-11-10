@@ -3,14 +3,17 @@
 // are their window's own.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+
+const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const stub = await import("../test-native-stub.mjs");
 const { flushPersistence, loadSession, startPersistence } = await import("../lib/persist.ts");
 
 const S = () => useBrowser.getState();
+
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.
 (await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
+
 const short = (id) => S().tabs[id].url.replace(/^https:\/\/|\.com\/?$/g, "");
 const listed = (w) => model.viewTabIds(S(), w).map(short);
 const shown = (w) => short(model.activeTabId(S(), w));
@@ -23,6 +26,7 @@ const setup = () => {
   const b = S().newTab(one, { url: "https://b.com", background: true });
   const two = S().createWindow({ url: "https://c.com" });
   const c = model.activeTabId(S(), two);
+
   return { one, two, a, b, c };
 };
 
@@ -123,12 +127,35 @@ test("a session keeps each space's tabs in order, and none of a private window's
   flushPersistence();
   stop();
   S().hydrate(loadSession());
+
   const urls = Object.values(S().tabs)
     .map((t) => short(t.id))
     .sort();
+
   assert.deepEqual(urls, ["a", "b", "c"]);
   assert.deepEqual(model.spaceTabIds(S(), "default").map(short), ["a", "b", "c"]);
   assert.equal(S().windowOrder.length, 2);
+});
+
+test("a JS reload keeps each window on the tab it showed, and its other tabs, whatever a launch would do", () => {
+  stub.docs.clear();
+  const stop = startPersistence();
+  const { one } = setup();
+  const b = Object.values(S().tabs).find((t) => short(t.id) === "b").id;
+  S().activate(b, one);
+  S().updateSettings({ restoreSession: false });
+  flushPersistence();
+  stop();
+  stub.jsReload.on = true;
+
+  try {
+    S().hydrate(loadSession());
+    assert.equal(model.activeTabId(S(), one), b, "not a blank tab");
+    assert.deepEqual(listed(one).filter(Boolean), ["a", "b", "c"], "restoreSession closes nothing");
+  } finally {
+    stub.jsReload.on = false;
+    S().updateSettings({ restoreSession: true });
+  }
 });
 
 test("a launch starts each window on a blank tab, and the next launch reuses it", () => {

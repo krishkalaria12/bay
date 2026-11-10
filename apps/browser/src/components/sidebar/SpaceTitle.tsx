@@ -1,9 +1,9 @@
-import { ContextMenuArea, Surface, Symbol } from "@bay/shell";
+import { ContextMenuArea, Surface, Symbol } from "@bay/desktop";
 import { Pressable, Text, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
-import { useHover } from "../primitives";
+import { useBrowser } from "../../store/browserStore";
+import { useHover } from "../ui/primitives";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
 import { openSpaceMenu } from "../spaces/SpaceSwitcher";
 import { useFold } from "./Fold";
@@ -20,6 +20,7 @@ export function SpaceTitle({ windowId, spaceId }: { windowId: string; spaceId: s
   // The chevron turns with the pinned section folding under it.
   const { open } = useFold(folded);
   const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${(open.get() - 1) * 90}deg` }] }));
+
   if (name === undefined) return null;
   const menu = () => void openSpaceMenu(windowId, spaceId);
 

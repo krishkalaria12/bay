@@ -1,21 +1,21 @@
 import { useRef } from "react";
-import { FadeLabel } from "@bay/shell";
+import { FadeLabel } from "@bay/desktop";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useActiveTab, useTabLive, useWindowId } from "../../store/hooks";
 import { splitOf } from "../../store/splits";
 import type { Tab } from "../../store/types";
-import { useHistoryAvailability } from "../layout/history";
-import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
-import { ToolbarButton } from "../layout/controls";
-import { addressBarInSidebar, setUrlAnchor, useSidebarSymbol } from "../layout/windowLayout";
-import { SIDEBAR_FIELD } from "../layout/constants";
-import { GlassFill, useLiquidGlass } from "../glass";
+import { useHistoryAvailability } from "../window/historyMenu";
+import { toolbarPalette, type ToolbarPalette } from "../toolbar/colors";
+import { ToolbarButton } from "../toolbar/buttons";
+import { addressBarInSidebar, setUrlAnchor, useSidebarSymbol } from "../window/layout";
+import { SIDEBAR_FIELD } from "../window/constants";
+import { GlassFill, useLiquidGlass } from "../ui/glass";
 import { useSidebarMetrics } from "./tokens";
-import { useHover } from "../primitives";
-import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
+import { useHover } from "../ui/primitives";
+import { HistoryButton, ReloadButton, UrlField } from "../toolbar/Toolbar";
 import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X } from "./constants";
 
 const toggleMinWidth = (x: number) => x + ADDRESS_BUTTON / 2 + ADDRESS_NAV_GAP + ADDRESS_NAV_WIDTH + ADDRESS_EDGE;
@@ -26,6 +26,7 @@ export function SidebarHeaderTools({ width }: { width: number }) {
   const palette = toolbarPalette(useTheme(), null);
   const top = ADDRESS_LIGHTS_Y - ADDRESS_BUTTON / 2;
   const sidebarSymbol = useSidebarSymbol();
+
   return (
     <>
       {width >= toggleMinWidth(ADDRESS_TOGGLE_X) ? (
@@ -49,6 +50,7 @@ const alreadyFocused = () => {};
 function NavigationButtons({ tab, palette }: { tab: Tab; palette: ToolbarPalette }) {
   const loading = useTabLive(tab.id, (l) => l.isLoading);
   const history = useHistoryAvailability(tab.id);
+
   return (
     <>
       <HistoryButton tab={tab} direction={-1} disabled={!history.back} palette={palette} onFocus={alreadyFocused} />
@@ -63,6 +65,7 @@ export function SidebarAddressRow() {
   const windowId = useWindowId();
   const tab = useActiveTab();
   const field = useRef<View>(null);
+
   const anchor = () =>
     field.current?.measureInWindow((x, y, width, height) => {
       if (width && addressBarInSidebar(useBrowser.getState(), windowId)) setUrlAnchor(windowId, { left: x, top: y, width, sidebar: { height } });
@@ -83,6 +86,7 @@ function PageField({ tab, windowId }: { tab: Tab; windowId: string }) {
   const metrics = useSidebarMetrics();
   const palette = toolbarPalette(useTheme(), null);
   const inSplit = useBrowser((s) => !!splitOf(s, tab.id));
+
   return <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={alreadyFocused} sidebar={{ height: metrics.addressHeight }} />;
 }
 
@@ -91,9 +95,11 @@ function EmptyField({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const glass = useLiquidGlass();
   const { hovered, hoverProps } = useHover();
+
   const open = () => {
     useBrowser.getState().openPanel(windowId, "");
   };
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={open}>

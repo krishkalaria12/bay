@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-// page_script.js › Protected video: when Chromium tells the app a page needs DRM it can't play (lib/engines.ts).
+// page_script.js › Protected video: when Chromium tells the app a page needs DRM it can't play (lib/pageEngines.ts).
 
-const script = readFileSync(new URL("../../../../packages/nncore/ios/page_script.js", import.meta.url), "utf8");
+const script = readFileSync(new URL("../../../../packages/chromium/ios/page_script.js", import.meta.url), "utf8");
 const start = script.indexOf("    const NavigatorType = window.Navigator;\n");
 const end = script.indexOf("  } catch {}\n", start);
+
 assert.ok(start > 0 && end > start, "page_script.js has the DRM block");
+
 const source = script.slice(start, end);
 
 class HTMLMediaElement {
@@ -26,7 +28,9 @@ function page(supported) {
   let now = 0;
   const inDocument = [];
   const documentListeners = {};
+
   class Navigator {}
+
   Object.defineProperty(Navigator.prototype, "requestMediaKeySystemAccess", {
     value(keySystem) {
       return supported.includes(keySystem) ? Promise.resolve({ keySystem }) : Promise.reject(new Error("NotSupportedError"));
@@ -37,19 +41,41 @@ function page(supported) {
   });
   const navigator = new Navigator();
   navigator.userActivation = { isActive: false };
+
   const document = {
     querySelectorAll: () => inDocument,
     addEventListener: (type, fn) => (documentListeners[type] ??= []).push(fn),
   };
+
   const setTimeout = (fn, ms) => timers.push({ at: now + ms, fn });
+
   const guard = (fn) =>
     function () {
       try {
-        return Reflect.apply(fn, this, arguments);
+        return fn.apply(this, arguments);
       } catch {}
     };
+
   const detachedMediaWatchers = [];
-  const run = new Function("window", "apply", "send", "document", "navigator", "HTMLMediaElement", "setTimeout", "guard", "detachedMediaWatchers", source);
+
+  // The slice uses page_script.js's own null-prototype-proof string check; mirrors it here.
+  const isStr = (value) => value !== null && value !== undefined && !(value instanceof Object) && Object.getPrototypeOf(value) === String.prototype;
+
+  const run = new Function(
+    "window",
+    "apply",
+    "send",
+    "document",
+    "navigator",
+    "HTMLMediaElement",
+    "setTimeout",
+    "guard",
+    "detachedMediaWatchers",
+    "FN",
+    "isStr",
+    source,
+  );
+
   run(
     { Navigator, setTimeout },
     Reflect.apply,
@@ -60,34 +86,47 @@ function page(supported) {
     setTimeout,
     guard,
     detachedMediaWatchers,
+    Function,
+    isStr,
   );
+
   const advance = (ms) => {
     now += ms;
+
     for (let due; (due = timers.filter((t) => t.at <= now).sort((a, b) => a.at - b.at)[0]);) {
       timers.splice(timers.indexOf(due), 1);
       due.fn();
     }
   };
+
   const fire = (m, type) => {
     for (const fn of documentListeners[type] ?? []) fn({ type, target: m });
   };
+
   const fireDetached = (m, type) => {
     for (const fn of m.listeners[type] ?? []) fn({ type, target: m });
   };
+
   const addMedia = (state) => {
     const m = new HTMLMediaElement(state);
     inDocument.push(m);
+
     return m;
   };
+
   const detachedPlay = (state) => {
     const m = new HTMLMediaElement(state);
+
     for (const watch of detachedMediaWatchers) watch(m);
+
     return m;
   };
+
   const refuse = async (keySystem = "com.widevine.alpha") => {
     await assert.rejects(navigator.requestMediaKeySystemAccess(keySystem, []));
     await settle();
   };
+
   return { navigator, Navigator, sent, advance, fire, fireDetached, addMedia, detachedPlay, refuse };
 }
 

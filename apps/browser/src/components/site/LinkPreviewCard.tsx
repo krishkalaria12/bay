@@ -1,9 +1,9 @@
-import { Surface, Symbol } from "@bay/shell";
+import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { copyLinkPreview, fetchLinkSummary, openLinkPreview, peekLinkPreview, setLinkPreview, useLinkPreview } from "./linkPreview";
 
 export function LinkPreview({ tabId, zoom }: { tabId: string; zoom: number }) {
@@ -16,8 +16,10 @@ export function LinkPreview({ tabId, zoom }: { tabId: string; zoom: number }) {
   useEffect(() => {
     if (!preview) {
       setSummary("");
+
       return;
     }
+
     let live = true;
     setLoading(true);
     void fetchLinkSummary(preview.url).then((s) => {
@@ -26,6 +28,7 @@ export function LinkPreview({ tabId, zoom }: { tabId: string; zoom: number }) {
         setLoading(false);
       }
     });
+
     return () => {
       live = false;
     };
@@ -75,6 +78,7 @@ export function LinkPreview({ tabId, zoom }: { tabId: string; zoom: number }) {
 function ActionButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>

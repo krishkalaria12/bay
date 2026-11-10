@@ -1,9 +1,9 @@
-import type { ActionState, ExtensionInstallPrompt, ExtensionPackage, InstalledExtension } from "@bay/nncore";
+import type { ActionState, ExtensionInstallPrompt, ExtensionPackage, InstalledExtension } from "@bay/chromium";
 
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId, engineProfile } from "../../store/model";
-import { usePages } from "../layout/pageState";
+import { usePages } from "../window/pageState";
 
 export type Anchor = { x: number; y: number; width: number; height: number };
 
@@ -43,6 +43,7 @@ const EMPTY: InstalledExtension[] = [];
 /** The profile whose extensions a window lists. Private windows are the default profile's, off the record. */
 export function extensionProfile(s: BrowserState, windowId: string | null | undefined): string {
   const w = windowId ? s.windows[windowId] : undefined;
+
   return !w || w.incognito ? "" : engineProfile(w.spaceId);
 }
 
@@ -62,12 +63,14 @@ export function useWindowExtensions(windowId: string): InstalledExtension[] {
   const profile = useBrowser((s) => extensionProfile(s, windowId));
   const priv = useBrowser((s) => isPrivate(s, windowId));
   const list = useExtensionList(profile);
+
   return list.filter((x) => showsExtension(priv, x));
 }
 
 export function windowExtensions(s: BrowserState, windowId: string | undefined): InstalledExtension[] {
   if (!windowId) return EMPTY;
   const priv = isPrivate(s, windowId);
+
   return (useExtensions.getState().lists[extensionProfile(s, windowId)] ?? EMPTY).filter((x) => showsExtension(priv, x));
 }
 
@@ -79,7 +82,9 @@ export function useExtensionList(profile: string): InstalledExtension[] {
 
 export function browserIdOf(tabId: string | undefined): number {
   if (!tabId) return 0;
+
   for (const [browserId, tab] of Object.entries(usePages.getState().browsers)) if (tab === tabId) return Number(browserId);
+
   return 0;
 }
 

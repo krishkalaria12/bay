@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+
+const { useBrowser } = await import("./browserStore.ts");
 
 const S = () => useBrowser.getState();
+
 const download = (patch = {}) => ({
   id: "d1",
   url: "https://example.com/IMG_20261024_8812.pdf",
@@ -17,6 +19,7 @@ const download = (patch = {}) => ({
   profile: "",
   ...patch,
 });
+
 const find = () => S().downloads.find((d) => d.id === "d1");
 
 test("a tidied download keeps its new name when the engine reports the old path again", () => {

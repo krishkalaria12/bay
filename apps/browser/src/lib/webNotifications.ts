@@ -1,4 +1,4 @@
-import type { WebNotification } from "@bay/nncore";
+import type { WebNotification } from "@bay/chromium";
 import {
   confirm,
   notificationPermission,
@@ -7,8 +7,8 @@ import {
   removeNotifications,
   requestNotificationPermission,
   type NotificationResponse,
-} from "@bay/shell";
-import { useBrowser } from "../store/browser";
+} from "@bay/desktop";
+import { useBrowser } from "../store/browserStore";
 import { focus, switchToTab } from "./actions";
 import { webviews } from "./webviews";
 import { NOTIFICATION_ICON_PIXELS, NOTIFICATION_ICON_TIMEOUT_MS } from "./constants";
@@ -21,17 +21,21 @@ export function showWebNotification(tabId: string, n: WebNotification) {
   const s = useBrowser.getState();
   const tab = s.tabs[tabId];
   const window = tab ? s.windows[tab.windowId] : undefined;
+
   // Dismiss incognito notifications.
   if (!tab || !window || window.incognito) return void webviews.get(tabId)?.notificationAction(n.id, "close");
   const id = macId(n);
   shown.set(id, n.id);
   let site = n.origin;
+
   try {
     site = new URL(n.origin).host;
   } catch {}
+
   void ensureNotificationPermission(tab.windowId).then(async (allowed) => {
     if (!allowed || shown.get(id) !== n.id) return;
     const icon = n.icon ? await iconFor(tabId, n.icon) : undefined;
+
     if (shown.get(id) !== n.id) return;
     void postNotification({
       id,
@@ -52,9 +56,11 @@ export function showWebNotification(tabId: string, n: WebNotification) {
 // Load icons through the page tab's request context.
 async function iconFor(tabId: string, url: string): Promise<string | undefined> {
   const view = webviews.get(tabId);
+
   if (!view) return undefined;
   const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), NOTIFICATION_ICON_TIMEOUT_MS));
   const image = await Promise.race([view.downloadImage(url, NOTIFICATION_ICON_PIXELS).catch(() => null), timeout]);
+
   return image?.uri ?? undefined;
 }
 
@@ -68,15 +74,22 @@ export function closeWebNotification(engineId: string) {
 
 export function handleWebNotificationResponse({ id, action, tabId, data }: NotificationResponse): boolean {
   if (!id.startsWith("web:")) return false;
+
+  // SAFETY: data comes from this module's own postNotification data field, which sets engineId as a string.
   const engineId = (data as { engineId?: string } | null)?.engineId;
+
   if (engineId && shown.get(id) === engineId) shown.delete(id);
   const tab = tabId ? useBrowser.getState().tabs[tabId] : undefined;
+
   if (!tab) return true;
+
   if (action === "click") {
     switchToTab(tab.id);
     focus(tab.windowId);
   }
+
   if (engineId) void webviews.get(tab.id)?.notificationAction(engineId, action);
+
   return true;
 }
 
@@ -85,10 +98,14 @@ let asked = false;
 // Ask once before opening Notification Settings.
 export async function ensureNotificationPermission(windowId?: string): Promise<boolean> {
   const status = await notificationPermission();
+
   if (status === "granted" || status === "provisional") return true;
+
   if (status === "notDetermined") return requestNotificationPermission();
+
   if (asked) return false;
   asked = true;
+
   const { confirmed } = await confirm({
     title: "Bay Needs Notifications Permission",
     message: "You need to open System Settings to give Bay permission to show you Notifications.",
@@ -96,8 +113,13 @@ export async function ensureNotificationPermission(windowId?: string): Promise<b
     cancelTitle: "Not Now",
     windowId,
   });
+
   if (confirmed) void openNotificationSettings();
+
   return false;
 }
 
-if (__DEV__) (globalThis as { nnNotifications?: unknown }).nnNotifications = { shown };
+if (__DEV__) {
+  // SAFETY: nnNotifications is the notifications helper's own dev-harness surface, read only by tests.
+  (globalThis as { nnNotifications?: unknown }).nnNotifications = { shown };
+}

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+
+const { useBrowser } = await import("./browserStore.ts");
 const { viewTabIds } = await import("./model.ts");
 const S = () => useBrowser.getState();
+
 function setup() {
   S().hydrate({});
   S().updateSettings({ newTabPosition: "bottom", cmdClickCreatesTabGroup: false });
@@ -10,6 +12,7 @@ function setup() {
   const a = viewTabIds(S(), w)[0];
   const b = S().newTab(w, { url: "https://b.test", background: true });
   const c = S().newTab(w, { url: "https://c.test", background: true });
+
   return { w, a, b, c };
 }
 
@@ -126,10 +129,12 @@ test("automatic cleanup and remote edits never enter sidebar undo history", asyn
 
 test("file pin, rename, reorder and remove use the same per-window undo history", () => {
   const { w } = setup();
+
   const [file, folder] = S().pinLocalFiles(w, [
     { path: "/tmp/a.pdf", name: "A", kind: "file" },
     { path: "/tmp/docs", name: "Docs", kind: "folder" },
   ]);
+
   S().renameLocalFile(file, "Reference");
   S().moveLocalFile(folder, file);
   S().removeLocalFile(file);
@@ -253,6 +258,7 @@ test("undo close repairs active mappings in every affected window", () => {
   S().setFocusedWindow(w);
   S().closeTabs([a, b, c]);
   S().undoSidebarEdit(w);
+
   for (const window of Object.values(S().windows)) assert.ok(S().tabs[window.activeTabIds[window.spaceId]]);
   assert.equal(S().windows[other].activeTabIds.default, b);
 });
@@ -260,7 +266,7 @@ test("undo close repairs active mappings in every affected window", () => {
 test("live-folder names and icons respect explicit window ownership", async () => {
   const { w } = setup();
   const { withSidebarUndoWindow } = await import("./sidebarUndo.ts");
-  const { setLive, updateFolder, live } = await import("../live/store.ts");
+  const { setLive, updateFolder, live } = await import("../activity/activityStore.ts");
   const other = S().createWindow();
   setLive({
     folders: {

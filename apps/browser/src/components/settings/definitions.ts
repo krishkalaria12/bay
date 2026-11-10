@@ -17,7 +17,13 @@ export const SETTINGS = {
   automaticUpdateChecks: { id: "general.automaticUpdateChecks", pane: "general", title: "Check for updates automatically", words: "updates" },
   automaticUpdateDownloads: { id: "general.automaticUpdateDownloads", pane: "general", title: `Automatically update ${APP_NAME}`, words: "updates install" },
   updateChannel: { id: "general.updateChannel", pane: "general", title: "Update channel", words: "updates nightly stable beta" },
-  tidyDownloads: { id: "general.tidyDownloads", pane: "general", title: "Tidy Downloads", words: "tidy downloads rename readable file name arc max on device" },
+  libraryIn: { id: "general.libraryIn", pane: "general", title: "Open Library in", words: "library media downloads easels archive sidebar page" },
+  tidyDownloads: {
+    id: "general.tidyDownloads",
+    pane: "general",
+    title: "Tidy Downloads",
+    words: "tidy downloads rename readable file name apple intelligence arc max on device",
+  },
   importBrowser: {
     id: "general.importBrowser",
     pane: "general",
@@ -72,6 +78,12 @@ export const SETTINGS = {
   autoPictureInPicture: { id: "tabs.autoPictureInPicture", pane: "tabs", title: "Automatic Picture in Picture", words: "pip video call" },
   autoGroupMeetingTabs: { id: "tabs.autoGroupMeetingTabs", pane: "tabs", title: "Automatically group tabs for meetings", words: "tab groups" },
   tidyTabTitles: { id: "tabs.tidyTabTitles", pane: "tabs", title: "Tidy tab titles when pinning", words: "tidy short name rename pinned arc max" },
+  tidyTabs: {
+    id: "tabs.tidyTabs",
+    pane: "tabs",
+    title: "Tidy Tabs",
+    words: "tidy tabs sort group today topic organize broom apple intelligence arc max on device",
+  },
   awakeSites: {
     id: "tabs.awakeSites",
     pane: "tabs",
@@ -169,16 +181,15 @@ export const SETTINGS = {
   downloads: { id: "advanced.downloads", pane: "advanced", title: "Downloads", words: "files" },
   chromium: { id: "advanced.chromium", pane: "advanced", title: "Chromium", words: "web engine version" },
   liveFolders: { id: "liveFolders.liveFolders", pane: "liveFolders", title: "Live folders", words: "refresh" },
-  defaultEngine: { id: "engines.defaultEngine", pane: "engines", title: "Open pages in", words: "engine webkit chromium safari drm netflix fairplay widevine" },
-  protectedVideoInWebKit: {
-    id: "engines.protectedVideoInWebKit",
+  protectedMedia: {
+    id: "engines.protectedMedia",
     pane: "engines",
-    title: "Open streaming sites in WebKit",
-    words: "netflix disney prime video hulu max spotify apple tv drm protected video fairplay widevine",
+    title: "Streaming sites",
+    words: "engine webkit chromium safari netflix disney prime video hulu max spotify apple tv drm protected media fairplay widevine",
   },
-  websiteEngines: { id: "engines.websiteEngines", pane: "engines", title: "Website rules", words: "opens in site engine rule webkit chromium" },
   engineSignIns: { id: "engines.engineSignIns", pane: "engines", title: "Separate sign-ins", words: "cookies site data sign in logged out webkit" },
 } as const satisfies Record<string, { id: string; pane: SettingsPane; title: string; topTabsTitle?: string; words?: string }>;
 
 export type SettingEntry = (typeof SETTINGS)[keyof typeof SETTINGS];
+
 export type SettingId = SettingEntry["id"];

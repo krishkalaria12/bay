@@ -68,7 +68,7 @@ Bay's own: the window, sidebar, command bar, menus and animations.
 
 **Bay's own**
 
-- **Ad blocking built in**, with uBlock Origin.
+- **Ad blocking built in**: Bay's own blocker on Brave's adblock-rust, with uBlock Origin's default filter lists.
 - **Chrome extensions** from the Chrome Web Store, with their toolbar buttons and side panels.
 - **Import** from Arc (spaces, pinned tabs, folders, favorites), Chrome, Safari, Firefox, Dia, Brave,
   Opera and Helium: bookmarks, history and passwords too.
@@ -149,8 +149,8 @@ fix, open an issue first so we can agree on the approach before you spend time o
 
 1. Fork the repository and create a branch from `main`.
 2. Set up the project ([Building from source](#building-from-source) below). `pnpm install` also turns
-   on the git hooks: a commit formats its files with oxfmt, and a push stops if lint or the format
-   check fails.
+   on the git hooks: a commit formats its files with oxfmt, and a push stops if lint, the format
+   check or the anti-slop rules (`pnpm slop`) fail.
 3. Make your change. Keep it focused: one fix or feature per pull request.
 4. Run the checks CI runs:
    ```bash
@@ -190,8 +190,9 @@ engine/
   nncore/             The layer: src/bay/core, plus the hooks that make Chrome's framework link it
   patches/            The patch series (series, series.py) and the source-build steps
 packages/
-  nncore/             JS API over the engine (tab strips, autofill, extensions, content blocker)
-  shell/              Native menu bar + shortcuts → JS, windows, SF Symbols, native primitives
+  chromium/           JS API over the engine (tab strips, autofill, extensions, content blocker)
+  adblock/            The content blocker: adblock-rust behind a C ABI, linked into the app (and the mobile app)
+  desktop/            Native menu bar + shortcuts → JS, windows, SF Symbols, native primitives
   shaders/            Metal animations + grained OKLab window backdrop
   import/             Import from other browsers (bookmarks, history, passwords, Arc spaces)
   sync/               Encrypted sync: sealed files in a folder, merged on a recovery phrase
@@ -238,6 +239,7 @@ pnpm macos
 Other tasks: `pnpm typecheck`, `pnpm test`, `pnpm lint` (oxlint), `pnpm fmt` / `pnpm fmt:check` (oxfmt),
 `pnpm shaders:check` (compiles the embedded Metal offline), `pnpm build` (Release `.app` with a Hermes bytecode
 bundle in `apps/browser/build/`). CI (`.github/workflows`) runs the same checks on every push and pull request.
+`pnpm slop` runs the anti-slop lint rules (`tools/oxlint/anti-slop`); the pre-push hook enforces them, CI doesn't.
 Swift package tests need full Xcode for XCTest. The test runner uses `/Applications/Xcode.app`
 if the selected Command Line Tools lack XCTest. Set `DEVELOPER_DIR` to use another Xcode installation;
 the runner leaves the global `xcode-select` setting unchanged.
@@ -296,7 +298,7 @@ Bay is open source under the [Apache License 2.0](LICENSE). You may use, modify 
 including commercially, as long as you keep the copyright and license notices, state the files you
 changed, and pass on the [NOTICE](NOTICE) file. Contributions are accepted under the same license.
 
-Bay builds on Chromium, the Chromium Embedded Framework and ungoogled-chromium, and ships uBlock Origin,
+Bay builds on Chromium, the Chromium Embedded Framework and ungoogled-chromium, and ships adblock-rust,
 Sparkle and React Native, each under its own license. [NOTICE](NOTICE) lists them, and
 `chrome://credits` in the app has Chromium's full list.
 

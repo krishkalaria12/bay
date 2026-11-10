@@ -1,10 +1,10 @@
-import { appIcons, currentAppIcon, setAppearance, setAppIcon, Symbol, type AppIcon } from "@bay/shell";
+import { appIcons, currentAppIcon, setAppearance, setAppIcon, Symbol, type AppIcon } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import type { Settings } from "../../../store/settings";
-import { useHover } from "../../primitives";
+import { useHover } from "../../ui/primitives";
 import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { APP_ICON_CHOICE_SIZE } from "../constants";
@@ -17,10 +17,12 @@ const MODES: { value: Settings["appearance"]; title: string; description: string
 
 export function AppearancePane() {
   const appearance = useBrowser((s) => s.settings.appearance);
+
   const choose = (mode: Settings["appearance"]) => {
     useBrowser.getState().updateSettings({ appearance: mode });
     void setAppearance(mode);
   };
+
   return (
     <View>
       <SectionHeader
@@ -53,6 +55,7 @@ function DensityPicker() {
   const density = useBrowser((s) => s.settings.density);
   const theme = useTheme();
   const colors = useFormColors();
+
   return (
     <>
       <SectionHeader
@@ -89,6 +92,7 @@ function DensityPicker() {
 function MaterialPicker() {
   const material = useBrowser((s) => s.settings.windowMaterial);
   const choose = (value: Settings["windowMaterial"]) => useBrowser.getState().updateSettings({ windowMaterial: value });
+
   return (
     <>
       <SectionHeader
@@ -110,6 +114,7 @@ function MaterialChoice({ value, title, selected, onPress }: { value: Settings["
   const glass = value === "glass";
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "#2C2C2F" : "#FFFFFF";
+
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }}>
       <View
@@ -161,6 +166,7 @@ function SidebarPositionPicker() {
   const position = useBrowser((s) => s.settings.sidebarPosition);
   const topTabs = useBrowser((s) => s.settings.tabLayout === "top");
   const choose = (value: Settings["sidebarPosition"]) => useBrowser.getState().updateSettings({ sidebarPosition: value });
+
   return (
     <>
       <SectionHeader
@@ -212,6 +218,7 @@ function SidebarPositionChoice({
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
   const right = value === "right";
+
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }}>
       <View
@@ -252,6 +259,7 @@ function AddressBarPicker() {
   const addressBar = useBrowser((s) => s.settings.addressBar);
   const topTabs = useBrowser((s) => s.settings.tabLayout === "top");
   const choose = (value: Settings["addressBar"]) => useBrowser.getState().updateSettings({ addressBar: value });
+
   return (
     <>
       <SectionHeader
@@ -278,6 +286,7 @@ function AddressBarChoice({ value, title, selected, onPress }: { value: Settings
   const field = theme.dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.08)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
   const sidebar = value === "sidebar";
+
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }}>
       <View
@@ -327,11 +336,14 @@ function AppIconPicker() {
       setCurrent(id);
     });
   }, []);
+
   if (icons.length < 2) return null;
+
   const choose = (id: string) => {
     setCurrent(id);
     void setAppIcon(id);
   };
+
   return (
     <>
       <SectionHeader
@@ -352,6 +364,7 @@ function IconChoice({ icon, selected, onPress }: { icon: AppIcon; selected: bool
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <Pressable onPress={onPress} {...hoverProps} style={{ width: 72, alignItems: "center", gap: 5 }} tooltip={icon.name}>
       <View
@@ -393,6 +406,7 @@ function ModeChoice({
 }) {
   const theme = useTheme();
   const colors = useFormColors();
+
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }} tooltip={description}>
       <View

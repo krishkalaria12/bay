@@ -7,37 +7,48 @@
 // Cases (all of them when no name is given):
 //   entries        sidebar, strip and group entries of 500/1000-tab windows after a title or progress update
 //   groupNames     a big group's automatic name after a progress or title update
+//   sidebar-selectors shared keyboard rows/IDs and nested folder membership on progress/UI notifications
+//   cleanup        cleanup enumeration and boolean query on progress updates and grouped duplicates
 //   suggest        omnibox pool rebuilds after a visit, with 25k/50k bookmarks (the longest 4 ms slice)
 //   suggest-seed   omnibox keystrokes on js-bench's seed profile (seed.mjs: 5000 history entries, 200 tabs, 1000
 //                  bookmarks); `suggest-seed=<query>` types another query. js-bench `typing` is what a key costs in the app.
 
-const { useBrowser } = await import("../../src/store/browser.ts");
-const { sidebarEntries, groupEntries } = await import("../../src/components/sidebar/entries.ts");
-const { groupLabel } = await import("../../src/store/organize.ts");
-const strip = await import("../../src/components/layout/stripGroups.ts");
+const { useBrowser } = await import("../../src/store/browserStore.ts");
+const { sidebarEntries, groupEntries, sidebarKeyboardRows, sidebarKeyboardRowIds } = await import("../../src/components/sidebar/sidebarEntries.ts");
+const { folderTabIds } = await import("../../src/store/folders.ts");
+const { groupLabel, cleanUpCandidates, hasCleanUpCandidates } = await import("../../src/store/tabTidying.ts");
+const strip = await import("../../src/components/tabStrip/tabStripGroups.ts");
+
 await import("../../src/test-native-stub.mjs");
+
 const core = await import("../../../../packages/core/src/index.ts");
 const { buildSeed } = await import("./seed.mjs");
 
 const S = () => useBrowser.getState();
 const now = () => performance.now();
 const median = (xs) => [...xs].sort((a, b) => a - b)[xs.length >> 1];
+
 const time = (fn, runs = 30) => {
   const out = [];
+
   for (let i = 0; i < runs; i++) {
     const t = now();
     fn(i);
     out.push(now() - t);
   }
+
   return median(out);
 };
-const report = (name, value, unit = "ms") => console.log(`${name.padEnd(52)} ${typeof value === "number" ? value.toFixed(3) : value} ${unit}`);
+
+const report = (name, value, unit = "ms") =>
+  console.log(`${name.padEnd(52)} ${Object.prototype.toString.call(value) === "[object Number]" ? value.toFixed(3) : value} ${unit}`);
 
 // One window with `count` tabs: every 10th pair a split, groups of 20 (one of `bigGroup` members), titled pages.
 function bigSession(count, bigGroup = 0) {
   const tabs = {};
   const ids = [];
   const t0 = Date.now();
+
   for (let i = 0; i < count; i++) {
     const id = `t${i}`;
     const host = ["github.com", "x.com", "news.ycombinator.com", "en.wikipedia.org"][i % 4];
@@ -60,8 +71,10 @@ function bigSession(count, bigGroup = 0) {
     };
     ids.push(id);
   }
+
   const groups = {};
   let at = 0;
+
   if (bigGroup) {
     groups.big = {
       id: "big",
@@ -77,6 +90,7 @@ function bigSession(count, bigGroup = 0) {
     };
     at = bigGroup;
   }
+
   for (let g = 0; at + 20 <= count && g < count / 40; g++, at += 40) {
     groups[`g${g}`] = {
       id: `g${g}`,
@@ -91,7 +105,9 @@ function bigSession(count, bigGroup = 0) {
       createdAt: t0,
     };
   }
+
   const splits = {};
+
   for (let i = 0; i + 1 < count; i += 10)
     splits[`s${i}`] = { id: `s${i}`, windowId: "w", tabIds: [ids[i], ids[i + 1]], orientation: "horizontal", sizes: [0.5, 0.5] };
   S().hydrate({
@@ -105,10 +121,98 @@ function bigSession(count, bigGroup = 0) {
     groups,
     splits,
   });
+
   return ids;
 }
 
 const benches = {
+  cleanup() {
+    for (const count of [200, 1000]) {
+      const ids = bigSession(count);
+      // bigSession staggers timestamps into the future; Clear must see genuinely inactive tabs.
+      const lastActiveAt = Date.now() - 60_000;
+      useBrowser.setState({ tabs: Object.fromEntries(ids.map((id) => [id, { ...S().tabs[id], lastActiveAt }])) });
+
+      for (const [name, select] of [
+        ["enumerate", (s) => cleanUpCandidates(s, "w", 0).length > 0],
+        ["boolean", (s) => hasCleanUpCandidates(s, "w", 0)],
+      ]) {
+        report(
+          `cleanup ${name}, ${count} tabs, 61 progress updates`,
+          time((run) => {
+            for (let i = 0; i < 61; i++) {
+              S().updateLive(ids[count - 1], { progress: ((run + i) % 10) / 10 });
+
+              if (!select(S())) throw new Error("expected clearable tabs");
+            }
+          }),
+        );
+      }
+
+      // All grouped: inactivity cannot qualify; duplicate detection must still find a removable member.
+      const s = S();
+
+      const grouped = {
+        ...s,
+        groups: { all: { ...Object.values(s.groups)[0], tabIds: ids } },
+        splits: {},
+        tabs: Object.fromEntries(ids.map((id) => [id, { ...s.tabs[id], url: "https://duplicate.test" }])),
+      };
+
+      for (const [name, select] of [
+        ["enumerate", (s) => cleanUpCandidates(s, "w", 0).length > 0],
+        ["boolean", (s) => hasCleanUpCandidates(s, "w", 0)],
+      ])
+        report(
+          `cleanup ${name}, ${count} grouped duplicates`,
+          time(() => {
+            if (!select(grouped)) throw new Error("expected grouped duplicates");
+          }, 100),
+        );
+    }
+  },
+
+  "sidebar-selectors"() {
+    for (const count of [200, 1000]) {
+      const ids = bigSession(count);
+      const folders = [];
+
+      for (let i = 0; i < 10; i++) {
+        const root = S().newPinnedFolder("w", { name: `Root ${i}`, tabIds: ids.slice(i * 10, i * 10 + 5) });
+        const child = S().newPinnedFolder("w", { name: `Child ${i}`, parentId: root, tabIds: ids.slice(i * 10 + 5, i * 10 + 10) });
+        folders.push(root, child);
+      }
+
+      const rows = sidebarKeyboardRows(S(), "w");
+      const rowIds = sidebarKeyboardRowIds(S(), "w");
+      const members = folders.map((id) => folderTabIds(S(), id));
+
+      const select = () => {
+        for (let page = 0; page < 4; page++) {
+          if (sidebarKeyboardRows(S(), "w") !== rows || sidebarKeyboardRowIds(S(), "w") !== rowIds) throw new Error("keyboard cache missed");
+          folders.forEach((id, i) => {
+            if (folderTabIds(S(), id) !== members[i]) throw new Error("folder cache missed");
+          });
+        }
+      };
+
+      report(
+        `sidebar selectors, ${count} tabs, progress, four scopes`,
+        time((i) => {
+          S().updateLive(ids[count - 1], { progress: (i % 10) / 10 });
+          select();
+        }, 100),
+      );
+      report(
+        `sidebar selectors, ${count} tabs, window UI, four scopes`,
+        time(() => {
+          S().toggleSidebar("w");
+          select();
+        }, 100),
+      );
+    }
+  },
+
   entries() {
     for (const count of [500, 1000]) {
       const ids = bigSession(count);
@@ -142,6 +246,7 @@ const benches = {
         }),
       );
     }
+
     const ids = bigSession(1000, 500);
     let i = 0;
     report(
@@ -184,10 +289,13 @@ const benches = {
   suggest() {
     const history = [];
     const t0 = Date.now();
+
     for (let i = 0; i < 5000; i++)
       history.push({ url: `https://h${i % 300}.com/page/${i}`, title: `History ${i}`, favicon: null, visits: 1 + (i % 7), lastVisit: t0 - i * 1000 });
+
     for (const count of [25_000, 50_000]) {
       const bookmarks = [];
+
       for (let i = 0; i < count; i++) bookmarks.push({ url: `https://b${i % 900}.com/bm/${i}`, title: `Bookmark ${i}`, favicon: null });
       const source = { tabs: [], history, bookmarks };
       core.prepareSuggestions(source, Infinity);
@@ -195,16 +303,19 @@ const benches = {
       // A visit replaces the history array (one entry moved to the front): the pool is rebuilt.
       const slices = [];
       let h = history;
+
       for (let k = 0; k < 5; k++) {
         h = [{ ...h[k + 1], lastVisit: Date.now() }, ...h.filter((_, j) => j !== k + 1)];
         const next = { tabs: [], history: h, bookmarks };
         let done = false;
+
         while (!done) {
           const t = now();
           done = core.prepareSuggestions(next, Date.now() + 4);
           slices.push(now() - t);
         }
       }
+
       report(`suggestions: longest 4 ms slice after a visit, ${count / 1000}k bookmarks`, Math.max(...slices));
       report(`suggestions: slices per rebuild, ${count / 1000}k bookmarks`, slices.length / 5, "slices");
     }
@@ -214,23 +325,29 @@ const benches = {
     const seed = buildSeed("http://127.0.0.1:47817");
     const history = seed["history.json"].history.default;
     const tabs = seed["session.json"].tabs.filter((t) => t.spaceId === "default");
+
     const bookmarks = Object.values(seed["bookmarks.json"].bookmarks.nodes)
       .filter((n) => n.kind === "url")
       .map((n) => ({ url: n.url, title: n.title, favicon: n.favicon }));
+
     const source = { tabs, history, bookmarks };
     let t = now();
     core.prepareSuggestions(source, Infinity);
     report("suggestions on the seed profile: prepare (cold)", now() - t);
     const rounds = [];
+
     for (let r = 0; r < 20; r++) {
       const keys = [];
+
       for (let i = 1; i <= query.length; i++) {
         t = now();
         core.buildSuggestions(query.slice(0, i), source, { now: Date.now() });
         keys.push(now() - t);
       }
+
       rounds.push(keys);
     }
+
     const perKey = rounds.slice(5).flat();
     report(`suggestions on the seed profile: keystroke median (${query.length} keys × 15 warm rounds)`, median(perKey));
     report("suggestions on the seed profile: slowest warm keystroke", Math.max(...perKey));
@@ -243,5 +360,7 @@ const benches = {
 
 // `name` or `name=argument`.
 const wanted = new Map(process.argv.slice(2).map((a) => [a.split("=")[0], a.includes("=") ? a.slice(a.indexOf("=") + 1) : undefined]));
+
 for (const name of wanted.keys()) if (!(name in benches)) throw new Error(`no case ${name}; cases: ${Object.keys(benches).join(", ")}`);
+
 for (const [name, run] of Object.entries(benches)) if (!wanted.size || wanted.has(name)) await run(wanted.get(name));

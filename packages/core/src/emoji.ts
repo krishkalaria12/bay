@@ -10,24 +10,34 @@ const normalize = (text: string): string =>
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
-const entries = EMOJI_GROUPS.flatMap((group) =>
-  group.emoji.map((entry) => {
-    const separator = entry.indexOf(" ");
-    const name = entry.slice(separator + 1);
-    const normalized = normalize(name);
-    return { value: entry.slice(0, separator), name, normalized, words: normalized.split(" ") };
-  }),
-);
+type Entry = { value: string; name: string; normalized: string; words: string[] };
+
+// Built at the first emoji search, not as the package loads: normalizing every name costs startup ~20 ms (V8), more
+// in Hermes, for a search few launches make.
+let entries: Entry[] | null = null;
+
+const allEntries = (): Entry[] =>
+  (entries ??= EMOJI_GROUPS.flatMap((group) =>
+    group.emoji.map((entry) => {
+      const separator = entry.indexOf(" ");
+      const name = entry.slice(separator + 1);
+      const normalized = normalize(name);
+
+      return { value: entry.slice(0, separator), name, normalized, words: normalized.split(" ") };
+    }),
+  ));
 
 /** Explicit emoji searches keep ordinary queries such as "heart" available for web search. */
 export function findEmoji(raw: string, limit = 5): EmojiMatch[] {
   const match = raw.trim().match(/^emoji\s+(.+)$/i);
+
   if (!match || !Number.isFinite(limit) || limit < 1) return [];
   const query = normalize(match[1]!);
+
   if (!query) return [];
   const tokens = query.split(" ");
 
-  return entries
+  return allEntries()
     .filter((entry) => tokens.every((token) => entry.words.some((word) => word.startsWith(token))))
     .map((entry) => ({
       entry,

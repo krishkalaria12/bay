@@ -1,0 +1,15 @@
+#!/bin/bash
+# Pins Bay Dev's window to the recording frame and records it, pointer included, into public/clips/NAME.mov in the
+# background (its pid in /tmp/bay-rec.pid). screencapture starts a second or two late: record long, trim in the edit.
+#
+#   scripts/capture/rec NAME SECONDS
+here=$(cd "$(dirname "$0")" && pwd)
+P=$(pgrep -f "build-dev/Build/Products/Release/Bay.app/Contents/MacOS/Bay$")
+osascript -e "tell application \"System Events\" to tell (first process whose unix id is $P) to set position of window 1 to {23, 40}" \
+  -e "tell application \"System Events\" to tell (first process whose unix id is $P) to set size of window 1 to {1424, 801}" \
+  -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $P) to true" >/dev/null
+sleep 0.4
+out="$here/../../public/clips/$1.mov"
+rm -f "$out"
+screencapture -v -V "$2" -C -R23,40,1424,801 "$out" >/dev/null 2>&1 &
+echo $! > /tmp/bay-rec.pid

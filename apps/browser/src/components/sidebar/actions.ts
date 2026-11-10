@@ -1,15 +1,16 @@
 import { cleanUrl, markdownLink } from "@bay/core";
-import { copyText, prompt } from "@bay/shell";
-import { updateFolder } from "../../live/store";
-import { useBrowser } from "../../store/browser";
+import { copyText, prompt } from "@bay/desktop";
+import { updateFolder } from "../../activity/activityStore";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId, bookmarkSpaceId, pinnedPage, viewTabIds } from "../../store/model";
-import { groupOf, selectedTabIds } from "../../store/organize";
+import { groupOf, selectedTabIds } from "../../store/tabTidying";
 import { folderDepth, MAX_FOLDER_DEPTH } from "../../store/folders";
 import { withSidebarUndoWindow } from "../../store/sidebarUndo";
 import type { Tab } from "../../store/types";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
 
 const store = () => useBrowser.getState();
+
 // An Essential or a pinned row: never in a group.
 const inPinnedSection = (s: ReturnType<typeof store>, id: string) => !!s.tabs[id] && pinnedPage(s.tabs[id]!);
 
@@ -17,24 +18,31 @@ const anchors = new Map<string, string>();
 
 export function clickTab(windowId: string, tabId: string, mods: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean } = {}) {
   const s = store();
+
   if (mods.altKey && mods.shiftKey && !mods.metaKey && s.settings.optShiftClickOpensInGroup) return openInCurrentGroup(windowId, tabId);
   const view = viewTabIds(s, windowId);
   const active = activeTabId(s, windowId);
   const current = s.selection[windowId] ?? [];
+
   if (mods.metaKey) {
     const base = current.length ? current : active ? [active] : [];
     const next = base.includes(tabId) ? base.filter((id) => id !== tabId) : [...base, tabId];
     anchors.set(windowId, tabId);
+
     return s.setSelection(windowId, next.length > 1 ? next : []);
   }
+
   if (mods.shiftKey) {
     const from = view.indexOf(anchors.get(windowId) ?? active ?? tabId);
     const to = view.indexOf(tabId);
+
     if (from >= 0 && to >= 0) {
       const [a, b] = from < to ? [from, to] : [to, from];
+
       return s.setSelection(windowId, view.slice(a, b + 1));
     }
   }
+
   anchors.set(windowId, tabId);
   s.setSelection(windowId, []);
   s.activate(tabId, windowId);
@@ -43,11 +51,14 @@ export function clickTab(windowId: string, tabId: string, mods: { metaKey?: bool
 function openInCurrentGroup(windowId: string, tabId: string) {
   const s = store();
   const active = activeTabId(s, windowId);
+
   if (active && active !== tabId && !inPinnedSection(s, tabId) && !inPinnedSection(s, active)) {
     const group = groupOf(s, active);
+
     if (group) s.addTabsToGroup(group.id, [tabId]);
     else s.groupTabs([active, tabId]);
   }
+
   anchors.set(windowId, tabId);
   store().setSelection(windowId, []);
   store().activate(tabId, windowId);
@@ -55,9 +66,12 @@ function openInCurrentGroup(windowId: string, tabId: string) {
 
 export async function startRename(windowId: string, target: Target) {
   const s = store();
+
   if (target.kind === "tab") {
     const tab = s.tabs[target.id];
+
     if (!tab) return;
+
     // A tile has no title to edit in place.
     if (tab.pinned) {
       const name = await prompt({
@@ -67,26 +81,34 @@ export async function startRename(windowId: string, target: Target) {
         confirmTitle: "Update",
         windowId,
       });
+
       if (name !== null) withSidebarUndoWindow(windowId, () => store().updateTab(tab.id, { customTitle: name }));
+
       return;
     }
+
     const group = groupOf(s, tab.id);
+
     if (group?.collapsed && activeTabId(s, windowId) !== tab.id) s.updateGroup(group.id, { collapsed: false });
     const folder = tab.pinnedRow && tab.folderId ? s.pinnedFolders[tab.folderId] : undefined;
     let parent = folder;
+
     while (parent) {
       if (parent.collapsed) s.updatePinnedFolder(parent.id, { collapsed: false });
       parent = parent.parentId ? s.pinnedFolders[parent.parentId] : undefined;
     }
   }
+
   setSidebarUi({ renaming: { windowId, ...target } });
 }
 
 export function commitRename(target: Target, text: string) {
   return withSidebarUndoWindow(sidebarUi().renaming?.windowId, () => {
     const name = text.trim();
+
     if (target.kind === "tab") {
       const tab = store().tabs[target.id];
+
       if (tab) store().updateTab(tab.id, { customTitle: name && name !== tab.title ? name : null });
     } else if (target.kind === "folder") store().updatePinnedFolder(target.id, { name });
     else store().updateGroup(target.id, { name });
@@ -96,6 +118,7 @@ export function commitRename(target: Target, text: string) {
 
 export function endRename(target: Target) {
   const r = sidebarUi().renaming;
+
   if (r && r.id === target.id) setSidebarUi({ renaming: null });
 }
 
@@ -117,7 +140,9 @@ export function setIcon(target: Target & { windowId?: string }, icon: string | n
 
 export function newGroupWithSelection(windowId: string, ids = selectedTabIds(store(), windowId)) {
   const groupId = store().groupTabs(ids.filter((id) => !inPinnedSection(store(), id)));
+
   if (groupId) void startRename(windowId, { kind: "group", id: groupId });
+
   return groupId;
 }
 
@@ -127,10 +152,16 @@ export const urlLabel = (url: string) =>
     .replace(/^[a-z][\w+.-]*:\/\//i, "")
     .replace(/^www\./, "")
     .replace(/\/$/, "");
+
 export const tabTitle = (t: Pick<Tab, "customTitle" | "title" | "url">) => t.customTitle || t.title || (t.url && urlLabel(t.url)) || "New Tab";
 
 export function copyUrls(ids: string[], markdown: boolean) {
-  const tabs = ids.map((id) => store().tabs[id]).filter((t): t is Tab => !!t?.url);
+  const tabs = ids.flatMap((id) => {
+    const t = store().tabs[id];
+
+    return t?.url ? [t] : [];
+  });
+
   if (!tabs.length) return;
   const lines = tabs.map((t) => (markdown ? markdownLink(tabTitle(t), t.url) : cleanUrl(t.url)));
   copyText(markdown && lines.length > 1 ? lines.map((l) => `- ${l}`).join("\n") : lines.join("\n"));
@@ -140,13 +171,17 @@ export async function bookmarkTabs(windowId: string, ids: string[], folder: stri
   const s = store();
   const spaceId = bookmarkSpaceId(s, s.windows[windowId]);
   let parentId: string | undefined = folder === "bar" ? undefined : folder;
+
   if (folder === "new") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
+
     if (!title) return;
     parentId = store().addBookmarkFolder({ spaceId, title });
   }
+
   for (const id of ids) {
     const t = store().tabs[id];
+
     if (t?.url) store().addBookmark({ spaceId, url: t.url, title: tabTitle(t), favicon: t.favicon, parentId });
   }
 }
@@ -154,15 +189,20 @@ export async function bookmarkTabs(windowId: string, ids: string[], folder: stri
 /** A new folder in the Pinned section, with `ids` pinned into it; its name is typed in place. */
 export function newPinnedFolderWith(windowId: string, ids: string[] = [], parentId?: string) {
   if (parentId && folderDepth(store(), parentId) >= MAX_FOLDER_DEPTH) return "";
+
   if (parentId) store().updatePinnedFolder(parentId, { collapsed: false });
   const folderId = store().newPinnedFolder(windowId, { tabIds: ids, parentId });
+
   if (folderId) void startRename(windowId, { kind: "folder", id: folderId });
+
   return folderId;
 }
 
 export async function editPinnedPage(windowId: string, tabId: string) {
   const tab = store().tabs[tabId];
+
   if (!tab || !pinnedPage(tab)) return;
+
   const url = await prompt({
     title: "Edit Pinned Page",
     value: tab.pinnedUrl ?? tab.url,
@@ -170,6 +210,7 @@ export async function editPinnedPage(windowId: string, tabId: string) {
     confirmTitle: "Save",
     windowId,
   });
+
   if (url) store().setPinnedUrl(tabId, url.includes("://") ? url : `https://${url}`);
 }
 
@@ -180,5 +221,6 @@ export function muteAll(windowId: string, muted: boolean) {
 export const allMuted = (windowId: string) => {
   const s = store();
   const view = viewTabIds(s, windowId).filter((id) => s.tabs[id]!.url);
+
   return view.length > 0 && view.every((id) => s.tabs[id]!.muted);
 };

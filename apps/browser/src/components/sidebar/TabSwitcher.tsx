@@ -1,11 +1,11 @@
-import { FadeLabel, Surface } from "@bay/shell";
+import { FadeLabel, Surface } from "@bay/desktop";
 import { Pressable, Text, View } from "react-native";
 import { displayUrl } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { tabTitle } from "./actions";
 import { useSidebarUi } from "./state";
-import { commitSwitcher, focusSwitcherRow } from "./switcher";
+import { commitSwitcher, focusSwitcherRow } from "./spaceSwitcher";
 import { TabIcon } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";
 import { SWITCHER_ROW, SWITCHER_WIDTH } from "./constants";
@@ -14,8 +14,10 @@ export function TabSwitcher({ windowId, windowWidth, windowHeight }: { windowId:
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const switcher = useSidebarUi((u) => (u.switcher?.windowId === windowId && u.switcher.visible ? u.switcher : null));
+
   if (!switcher) return null;
   const height = switcher.ids.length * SWITCHER_ROW + 16 + 26;
+
   return (
     <Surface
       fill={hex(theme.panel)}
@@ -45,7 +47,9 @@ export function TabSwitcher({ windowId, windowWidth, windowHeight }: { windowId:
 function SwitcherRow({ tabId, focused, index, focusFill, outline }: { tabId: string; focused: boolean; index: number; focusFill: string; outline: string }) {
   const theme = useTheme();
   const tab = useBrowser((s) => s.tabs[tabId]);
+
   if (!tab) return null;
+
   // Switch on mouse-down; the following mouse-up would close the switcher.
   return (
     <Pressable onPressIn={() => commitSwitcher(index)}>

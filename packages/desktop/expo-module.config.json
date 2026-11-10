@@ -1,0 +1,31 @@
+{
+  "platforms": ["apple"],
+  "apple": {
+    "modules": [
+      "ShellModule",
+      "CliModule",
+      "SymbolModule",
+      "FadeLabelModule",
+      "ActivitySpinnerModule",
+      "ContextMenuAreaModule",
+      "SurfaceModule",
+      "VisualEffectModule",
+      "GlassEffectModule",
+      "SystemModule",
+      "FileDragModule",
+      "LocalFilesModule",
+      "AppModule",
+      "CalendarModule",
+      "KeychainModule",
+      "DockSelectionModule",
+      "InlineCompletionModule",
+      "TranslateModule",
+      "TidyNamesModule",
+      "TidyTabsModule",
+      "WindowProfileModule",
+      "CaptureModule",
+      "EaselModule",
+      "UserScriptsModule"
+    ]
+  }
+}

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { offscreenSide } = await import("./geometry.ts");
+
+const { offscreenSide } = await import("./rowGeometry.ts");
 
 test("the window's tab is marked only once it's wholly out of the sidebar's view", () => {
   const row = { y: 400, height: 34 };

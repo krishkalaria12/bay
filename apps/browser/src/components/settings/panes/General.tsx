@@ -8,18 +8,18 @@ import {
   setLaunchAtLogin,
   setUpdateChannel,
   Symbol,
-  tidyNames,
   updaterState,
   type UpdateChannel,
   type UpdaterState,
-} from "@bay/shell";
+} from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { AppState, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
+import { TidyModelNote } from "../TidyModelNote";
 import { openImport } from "../windows";
 import { APP_NAME } from "../../../lib/constants";
 
@@ -97,6 +97,21 @@ export function GeneralPane() {
         </Row>
       </Group>
 
+      <SectionHeader title="Library" description="Media, downloads, Easels, spaces, Boosts and archived tabs." />
+      <Group>
+        <Row settingId={SETTINGS.libraryIn.id} title={SETTINGS.libraryIn.title} description="With tabs on top or the sidebar hidden, it opens as a page.">
+          <PopUp
+            value={settings.libraryIn}
+            options={[
+              { value: "sidebar", title: "The Sidebar" },
+              { value: "page", title: "A Page" },
+            ]}
+            onChange={(v) => update({ libraryIn: v })}
+            minWidth={190}
+          />
+        </Row>
+      </Group>
+
       <SectionHeader title="Command bar" description="What happens when what you type could be a website or a search." />
       <Group>
         <Row settingId={SETTINGS.commandBarPreference.id} title={SETTINGS.commandBarPreference.title}>
@@ -134,26 +149,37 @@ function UpdatesSection() {
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
+
     return () => sub.remove();
   }, []);
+
   if (!state?.available) return null;
   const ready = state.configured;
   const channelBusy = state.sessionInProgress || state.pending?.ready === true;
+
   const set = (patch: { automaticChecks?: boolean; automaticDownloads?: boolean; channel?: UpdateChannel }) => {
     setState({ ...state, ...patch });
+
     if (patch.automaticChecks !== undefined) void setAutomaticUpdateChecks(patch.automaticChecks).finally(refresh);
+
     if (patch.automaticDownloads !== undefined) void setAutomaticUpdateDownloads(patch.automaticDownloads).finally(refresh);
+
     if (patch.channel !== undefined) void setUpdateChannel(patch.channel).finally(refresh);
   };
+
   const lastCheck = state.lastCheck
     ? `Last checked ${new Date(state.lastCheck).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
     : "Not checked yet.";
+
   return (
     <>
       <SectionHeader
         title="Downloads"
         description={
-          tidyNames ? "Apple's on-device model writes the suggested name. Nothing leaves this Mac." : "Bay cleans the name on this Mac. Nothing leaves it."
+          <TidyModelNote
+            available="Apple's on-device model writes the new names. Nothing leaves this Mac."
+            fallback="Bay cleans the names on this Mac. Nothing leaves it."
+          />
         }
       />
       <Group>
@@ -161,7 +187,7 @@ function UpdatesSection() {
           setting="tidyDownloads"
           settingId={SETTINGS.tidyDownloads.id}
           title={SETTINGS.tidyDownloads.title}
-          description="Offer a readable name for files the web hands over with machine names, like IMG_20261024_8812.pdf. You choose whether to rename each file; files you named yourself are left alone."
+          description="Rename files the web hands over with machine names, like IMG_20261024_8812.pdf, as they finish downloading, so you can find them later. You can undo each rename; files you named yourself are left alone."
         />
       </Group>
 
@@ -217,9 +243,12 @@ function DefaultBrowserBanner() {
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
+
     return () => sub.remove();
   }, []);
+
   if (isDefault === null) return <View style={{ height: 20 }} />;
+
   return (
     <View
       style={{

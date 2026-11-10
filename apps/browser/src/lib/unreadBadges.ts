@@ -24,6 +24,7 @@ const GENERAL = /^\((\d[\d,.]*)\+?\)\s/;
 
 function hostOf(url: string): string | null {
   const m = /^https?:\/\/(?:[^@/?#]*@)?([^/?#:]+)/i.exec(url);
+
   return m ? m[1]!.toLowerCase().replace(/^www\./, "") : null;
 }
 
@@ -32,16 +33,22 @@ const parseCount = (text: string | undefined) => (text ? Number(text.replace(/[,
 /** What a tab's title says is waiting on its site, or null: nothing, or not a page that says. */
 export function unreadFromTitle(url: string, title: string): Unread | null {
   const host = hostOf(url);
+
   if (!host || !title) return null;
   const text = title.trim();
   const site = SITES.find((s) => s.hosts.test(host));
   const match = (site ? site.count : GENERAL)?.exec(text);
+
   if (match) {
     const count = parseCount(match.slice(1).find((g) => g !== undefined));
+
     if (Number.isFinite(count) && count > 0) return { count };
+
     if (count === 0) return null;
   }
+
   if (site?.dot?.test(text)) return { dot: true };
+
   return null;
 }
 

@@ -1,5 +1,5 @@
-import { extensionActionStates } from "@bay/nncore";
-import { useBrowser } from "../../store/browser";
+import { extensionActionStates } from "@bay/chromium";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { browserIdOf, useExtensions, windowExtensions } from "./store";
 
@@ -11,8 +11,10 @@ let again = false;
 export function refreshActionStates(): Promise<void> {
   if (running) {
     again = true;
+
     return running;
   }
+
   running = (async () => {
     try {
       do {
@@ -23,6 +25,7 @@ export function refreshActionStates(): Promise<void> {
       running = null; // in the same turn as the last check of `again`: no request falls between
     }
   })();
+
   return running;
 }
 
@@ -34,10 +37,13 @@ async function pass() {
       const ids = windowExtensions(s, windowId)
         .filter((x) => x.hasAction !== false && (x.pinned || popup?.extensionId === x.id))
         .map((x) => x.id);
+
       const browserId = browserIdOf(activeTabId(s, windowId));
+
       if (!ids.length || !browserId) return;
       const states = await extensionActionStates(browserId, ids).catch(() => null);
       const previous = useExtensions.getState().actions[browserId];
+
       if (!states || (previous && JSON.stringify(previous) === JSON.stringify(states))) return;
       useExtensions.setState((e) => ({ actions: { ...e.actions, [browserId]: states } }));
     }),

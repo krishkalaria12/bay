@@ -4,9 +4,11 @@ import { mock, test } from "node:test";
 import { BUILT_IN_ENGINES, engineById } from "./engines.ts";
 import { buildSuggestions, type Suggestion } from "./suggest.ts";
 import { createSuggestFetcher, type FetchLike } from "./suggestFetcher.ts";
+import type { JsonValue } from "./json.ts";
 
 const now = Date.UTC(2026, 8, 24);
 const DAY = 86_400_000;
+
 const history = [
   { url: "https://x.com/home", title: "(1) Home / X", favicon: null, visits: 40, lastVisit: now - 1000 },
   { url: "https://x.com/notifications", title: "Notifications / X", favicon: null, visits: 5, lastVisit: now - 5000 },
@@ -36,6 +38,7 @@ function rows(items: Suggestion[]): string[] {
 test("inline completion never takes a long query URL: 'm' completes to the host", () => {
   const signIn =
     "https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fmail.google.com%2Fmail%2Fu%2F0%2F&service=mail&flowName=GlifWebSignIn&flowEntry=AccountChooser&ec=asw-gmail-globalnav-signin#inbox";
+
   const hist = [
     {
       url: "https://mail.google.com/mail/u/0/?service=mail&continue=" + encodeURIComponent(signIn) + "#inbox",
@@ -46,6 +49,7 @@ test("inline completion never takes a long query URL: 'm' completes to the host"
     },
     { url: signIn, title: "Sign in - Google Accounts", favicon: null, visits: 3, lastVisit: now - 2000 },
   ];
+
   const m = buildSuggestions("m", { tabs: [], history: hist }, { now });
   assert.equal(m.completion, "ail.google.com");
   assert.deepEqual(m.items[0], { kind: "page", url: "https://mail.google.com/", title: "", favicon: "gmail.ico" });
@@ -70,17 +74,93 @@ test("open tabs are marked so the bar can switch to them, except the bar's own t
   assert.equal(own.items[0]?.kind === "page" && own.items[0].tabId, undefined);
 });
 
+test("a site's address goes to the tab already on that site, wherever in the site it is", () => {
+  const essential = { id: "x", url: "https://x.com/krish", title: "Krish / X", favicon: "x.ico", pinnedUrl: "https://x.com/home", lastActiveAt: now - 5000 };
+  const tabs = [{ id: "later", url: "https://x.com/notifications", title: "Notifications / X", favicon: null, lastActiveAt: now }, essential];
+
+  for (const typed of ["x", "x.com"]) {
+    const { items } = buildSuggestions(typed, { tabs, history }, { now });
+    assert.deepEqual(items[0], { kind: "page", url: essential.url, title: "Krish / X", favicon: "x.ico", tabId: "x" });
+  }
+
+  // Without a pin, the tab used last; its www doesn't matter.
+  const youtube = [
+    { id: "old", url: "https://www.youtube.com/watch?v=1", title: "One", favicon: null, lastActiveAt: now - 1000 },
+    { id: "new", url: "https://www.youtube.com/watch?v=2", title: "Two", favicon: null, lastActiveAt: now },
+  ];
+
+  const first = buildSuggestions("youtube.com", { tabs: youtube, history }, { now }).items[0];
+  assert.equal(first?.kind === "page" && first.tabId, "new");
+
+  // An Essential that has left its site still answers for it, and a custom name is its title.
+  const away = [
+    {
+      id: "cal",
+      url: "https://accounts.google.com/signin",
+      title: "Sign in",
+      customTitle: "Calendar",
+      favicon: null,
+      pinnedUrl: "https://calendar.google.com/",
+    },
+  ];
+
+  const cal = buildSuggestions("calendar.google.com", { tabs: away, history }, { now }).items[0];
+  assert.equal(cal?.kind === "page" && cal.tabId, "cal");
+  assert.equal(cal?.kind === "page" && cal.title, "Calendar");
+});
+
+test("a tab on the very page wins, and the site's address stays a row of its own", () => {
+  const tabs = [
+    { id: "deep", url: "https://x.com/krish", title: "Krish / X", favicon: null, pinnedUrl: "https://x.com/home" },
+    { id: "root", url: "https://x.com/", title: "X", favicon: null },
+  ];
+
+  const first = buildSuggestions("x.com", { tabs, history }, { now }).items[0];
+  assert.equal(first?.kind === "page" && first.tabId, "root");
+
+  const list = rows(
+    buildSuggestions("x.com", { tabs: tabs.slice(0, 1), history: [{ url: "https://x.com/", title: "X", favicon: null, visits: 3, lastVisit: now }] }, { now })
+      .items,
+  );
+
+  assert.deepEqual(list.slice(0, 3), ["tab:https://x.com/krish", "search:x.com", "https://x.com/"]);
+});
+
+test("only a bare host as typed looks for a site's tab: a scheme or a path is that address", () => {
+  const tabs = [{ id: "x", url: "https://x.com/krish", title: "Krish / X", favicon: null, pinnedUrl: "https://x.com/home" }];
+
+  for (const typed of ["https://x.com", "x.com/explore"]) {
+    const first = buildSuggestions(typed, { tabs, history }, { now }).items[0];
+    assert.equal(first?.kind === "page" && first.tabId, undefined, typed);
+  }
+
+  // Not the bar's own tab, another site, or a subdomain.
+  const own = buildSuggestions("x.com", { tabs, history }, { now, currentTabId: "x" }).items[0];
+  assert.equal(own?.kind === "page" && own.tabId, undefined);
+  const other = buildSuggestions("github.com", { tabs, history }, { now }).items[0];
+  assert.equal(other?.kind === "page" && other.tabId, undefined);
+  const mail = [{ id: "m", url: "https://mail.google.com/", title: "Mail", favicon: null }];
+  const mailFirst = buildSuggestions("google.com", { tabs: mail, history: [] }, { now }).items[0];
+  assert.equal(mailFirst?.kind === "page" && mailFirst.tabId, undefined);
+  // A scheme with no host doesn't match every tab that has none.
+  const blank = [{ id: "b", url: "about:blank", title: "", favicon: null }];
+  const blankFirst = buildSuggestions("about:config", { tabs: blank, history: [] }, { now }).items[0];
+  assert.equal(blankFirst?.kind === "page" && blankFirst.tabId, undefined);
+});
+
 test("cleaned up tabs are found and marked so the bar can restore them", () => {
   const cleaned = [{ id: "c1", url: "https://linear.app/team/issue/BAY-12", title: "BAY-12 Archive search", favicon: null, closedAt: now - DAY }];
   const { items } = buildSuggestions("archive", { tabs: [], history, cleaned }, { now });
   const row = items.find((i) => i.kind === "page" && i.url === cleaned[0]!.url);
   assert.equal(row?.kind === "page" && row.cleanedId, "c1");
+
   // Its page in history is the same row, restored rather than opened.
   const visited = buildSuggestions(
     "notif",
     { tabs: [], history, cleaned: [{ id: "c2", url: "https://x.com/notifications", title: "Notifications / X", favicon: null, closedAt: now }] },
     { now },
   );
+
   const rowsFor = visited.items.filter((i) => i.kind === "page" && i.url === "https://x.com/notifications");
   assert.equal(rowsFor.length, 1);
   assert.equal(rowsFor[0]?.kind === "page" && rowsFor[0].cleanedId, "c2");
@@ -88,11 +168,13 @@ test("cleaned up tabs are found and marked so the bar can restore them", () => {
 
 test("an open tab wins over a cleaned up copy of its page, and the newest cleaned entry wins over older ones", () => {
   const tabs = [{ id: "t1", url: "https://github.com/", title: "GitHub", favicon: null }];
+
   const cleaned = [
     { id: "new", url: "https://github.com/", title: "GitHub", favicon: null, closedAt: now },
     { id: "docs-new", url: "https://docs.rs/", title: "Docs.rs", favicon: null, closedAt: now },
     { id: "docs-old", url: "https://docs.rs/", title: "Docs.rs", favicon: null, closedAt: now - DAY },
   ];
+
   const gh = buildSuggestions("gith", { tabs, history, cleaned }, { now }).items[0];
   assert.equal(gh?.kind === "page" && gh.tabId, "t1");
   assert.equal(gh?.kind === "page" && gh.cleanedId, undefined);
@@ -111,6 +193,7 @@ test("frecency: frequent + recent beats old, and multi-word queries match words"
     { url: "https://a.com/docs", title: "Rust docs", favicon: null, visits: 2, lastVisit: now - DAY * 60 },
     { url: "https://b.com/docs", title: "Rust docs", favicon: null, visits: 20, lastVisit: now - DAY },
   ];
+
   const { items } = buildSuggestions("docs rust", { tabs: [], history: hist }, { now });
   assert.deepEqual(rows(items), ["search:docs rust", "https://b.com/docs", "https://a.com/docs"]);
 });
@@ -118,20 +201,24 @@ test("frecency: frequent + recent beats old, and multi-word queries match words"
 const google = engineById(BUILT_IN_ENGINES, "google");
 const flush = () => new Promise((r) => setImmediate(r));
 
-function fakeFetch(respond: (url: string) => unknown = (url) => [decodeURIComponent(url.split("q=").at(-1)!), ["a", "b"]]) {
+function fakeFetch(respond: (url: string) => JsonValue = (url) => [decodeURIComponent(url.split("q=").at(-1)!), ["a", "b"]]) {
   const calls: { url: string; signal: AbortSignal }[] = [];
+
   const fetch: FetchLike = (url, { signal }) => {
     calls.push({ url, signal });
+
     return new Promise((resolve, reject) => {
       signal.addEventListener("abort", () => reject(new Error("aborted")));
       queueMicrotask(() => resolve({ ok: true, text: async () => JSON.stringify(respond(url)) }));
     });
   };
+
   return { fetch, calls };
 }
 
 test("a newer request aborts the one in flight, which never answers", async () => {
   mock.timers.enable({ apis: ["setTimeout"] });
+
   try {
     const { fetch, calls } = fakeFetch();
     const results: string[] = [];
@@ -149,16 +236,35 @@ test("a newer request aborts the one in flight, which never answers", async () =
   }
 });
 
-test("remoteFirst lists the engine's suggestions before matching pages, the best one aside", () => {
+test("pagesAhead lists visited pages before the engine's suggestions, as the palette shows them", () => {
   const remote = Array.from({ length: 10 }, (_, i) => `what is the best ${i}`);
+
   const hist = [
     { url: "https://blog.example/what-is-the-best-editor", title: "What is the best editor", favicon: null, visits: 2, lastVisit: now - 1000 },
     { url: "https://news.example/what-is-the-best-phone", title: "What is the best phone", favicon: null, visits: 1, lastVisit: now - 5000 },
   ];
-  const list = rows(buildSuggestions("what is the best", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 10, remoteFirst: true }).items);
-  assert.equal(list.filter((r) => r.startsWith("suggest:")).length, 10);
+
+  const list = rows(buildSuggestions("what is the best", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 8, pagesAhead: 8 }).items);
+  assert.equal(list.filter((r) => r.startsWith("suggest:")).length, 8);
   assert.equal(list[0], "https://blog.example/what-is-the-best-editor");
-  assert.ok(list.indexOf("suggest:what is the best 9") < list.indexOf("https://news.example/what-is-the-best-phone"));
+  assert.ok(list.indexOf("https://news.example/what-is-the-best-phone") < list.indexOf("suggest:what is the best 0"));
+});
+
+test("a site's visited pages come before the engine's suggestions in the palette", () => {
+  const remote = ["github desktop", "github download", "gitanjali raman", "git commands", "gitlab"];
+
+  const hist = [
+    { url: "https://github.com/me", title: "me (Me)", favicon: null, visits: 20, lastVisit: now - 1000 },
+    { url: "https://github.com/me?tab=repositories", title: "Your Repositories", favicon: null, visits: 8, lastVisit: now - 2000 },
+    { url: "https://github.com/me/musico", title: "me/musico", favicon: null, visits: 5, lastVisit: now - 3000 },
+  ];
+
+  const list = rows(buildSuggestions("git", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 8, pagesAhead: 8 }).items);
+  const firstSuggest = list.indexOf("suggest:github desktop");
+  assert.ok(firstSuggest > 0);
+
+  for (const url of ["https://github.com/me", "https://github.com/me?tab=repositories", "https://github.com/me/musico"])
+    assert.ok(list.indexOf(url) >= 0 && list.indexOf(url) < firstSuggest, url);
 });
 
 test("remoteLimit raises how many engine suggestions show, history pages still come first", () => {
@@ -175,6 +281,7 @@ test("remoteLimit raises how many engine suggestions show, history pages still c
 
 test("a word that starts sites' addresses lists each site once, ahead of the engine's suggestions and their deeper pages", () => {
   const remote = Array.from({ length: 10 }, (_, i) => `dash ${i}`);
+
   const hist = [
     { url: "https://dash.cloudflare.com/3bd6d50d63c2/home", title: "Cloudflare Dashboard", favicon: null, visits: 30, lastVisit: now - 1000 },
     { url: "https://dash.cloudflare.com/login", title: "Cloudflare Dashboard", favicon: null, visits: 4, lastVisit: now - 9000 },
@@ -183,14 +290,17 @@ test("a word that starts sites' addresses lists each site once, ahead of the eng
     { url: "https://dashboard.convex.dev/t/me/app", title: "Convex Dashboard", favicon: null, visits: 2, lastVisit: now - DAY * 2 },
     { url: "https://example.com/dashboards", title: "Example", favicon: null, visits: 1, lastVisit: now - DAY * 3 },
   ];
-  const list = rows(buildSuggestions("dash", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 10, remoteFirst: true }).items);
+
+  const list = rows(buildSuggestions("dash", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 10, pagesAhead: 4 }).items);
   const firstSuggest = list.indexOf("suggest:dash 0");
   // The best site completes inline and comes first; the others follow the search row, before the engine's suggestions.
   assert.equal(list[0], "https://dash.cloudflare.com/");
+
   for (const site of ["https://dashboard.render.com/", "https://dashboard.convex.dev/"]) {
     assert.ok(list.includes(site), site);
     assert.ok(list.indexOf(site) < firstSuggest, site);
   }
+
   assert.ok(list.indexOf("https://dashboard.render.com/web/srv-d2stabn5r7bs73bnm9p0/env") > firstSuggest);
   // "com" names no site: the domain's end isn't one of its names.
   const com = rows(buildSuggestions("com", { tabs: [], history: hist }, { now, remote: [], limit: 20 }).items);

@@ -1,6 +1,7 @@
 // The theme editor's colour field and a space's own theme as the window's.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const { defaultHarmony, editableTheme, harmonize, harmonyAfterRemoving, nextHarmony, wheelColor, wheelPosition } = await import("./spaceTheme.ts");
 const { hslOf } = await import("./windowTint.ts");
 const { spaceThemeKey, themeFor } = await import("./theme.ts");
@@ -14,6 +15,7 @@ test("a colour picked on the wheel puts its dot back where it was picked", () =>
     const at = wheelPosition(wheelColor(angle, distance));
     assert.ok(Math.abs(at.angle - angle) < 0.01 && Math.abs(at.distance - distance) < 0.01, `${angle},${distance} → ${at.angle},${at.distance}`);
   }
+
   assert.match(wheelColor(-0.25, 2), /^#[0-9A-F]{6}$/, "past the edge, or a turn back: still a colour");
   assert.ok(hslOf(wheelColor(0, 0))[2] < hslOf(wheelColor(0, 1))[2], "dark in the middle, light at the edge");
 });
@@ -81,7 +83,7 @@ test("a solid window over a page with a colour fills with it, in the look that r
 });
 
 test("a space's own theme shows over a page with a colour; a preset colour gives way to the page", async () => {
-  const { useBrowser } = await import("../store/browser.ts");
+  const { useBrowser } = await import("../store/browserStore.ts");
   const { themeKey } = await import("./theme.ts");
   const S = () => useBrowser.getState();
   S().hydrate({});
@@ -100,7 +102,7 @@ test("a space's own theme shows over a page with a colour; a preset colour gives
 // 1.0.0: a light page (Bay's site, #EDEEF1) turned a dark-mode window light, and a dark one (apple.com) a light-mode
 // window dark. Light or dark is the user's; the page's colour is fitted to it, keeping its hue.
 test("a page's colour never overrides the user's light or dark", async () => {
-  const { useBrowser } = await import("../store/browser.ts");
+  const { useBrowser } = await import("../store/browserStore.ts");
   const { themeKey, themeFor } = await import("./theme.ts");
   const { isLightColor } = await import("./windowTint.ts");
   const S = () => useBrowser.getState();
@@ -126,4 +128,39 @@ test("a page's colour never overrides the user's light or dark", async () => {
   assert.equal(isLightColor(tint()), true);
   page("#FFFFFF");
   assert.match(themeKey(S(), w, null), /:light@#FFFFFF$/, "a light page shows as it is");
+});
+
+// Switching between differently coloured sites changes only the window's fill: the theme every row, icon and badge
+// reads stays the same object, so they don't all render again.
+test("a page's colour reaches the window's fill without replacing the theme rows read", async () => {
+  const { useBrowser } = await import("../store/browserStore.ts");
+  const { themeKey, themeFor, spaceKeyOf } = await import("./theme.ts");
+  const S = () => useBrowser.getState();
+  S().hydrate({});
+  const space = S().settings.defaultSpaceId;
+  S().updateSpace(space, { theme: null });
+  const w = S().createWindow({ spaceId: space, url: "https://example.com" });
+  const tab = S().windows[w].activeTabIds[space];
+
+  const page = (themeColor) => {
+    useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor } } });
+    const key = themeKey(S(), w, null);
+
+    return { theme: themeFor(spaceKeyOf(key)), windowTint: themeFor(key).windowTint, shown: themeFor(key) };
+  };
+
+  const plain = page(null);
+  const red = page("#AA2222");
+  const blue = page("#2244AA");
+  assert.strictEqual(red.theme, plain.theme);
+  assert.strictEqual(blue.theme, plain.theme);
+  assert.strictEqual(red.windowTint, red.shown.windowTint);
+  assert.strictEqual(blue.windowTint, blue.shown.windowTint);
+  assert.notDeepEqual(red.windowTint, blue.windowTint);
+  assert.deepEqual(plain.windowTint, plain.theme.windowTint, "without a page colour the fill is the space's");
+  // The page-coloured theme differs from its space's only in the fill.
+  const { windowTint: _a, ...tinted } = blue.shown;
+  const { windowTint: _b, ...own } = plain.theme;
+  assert.deepEqual(tinted, own);
+  assert.strictEqual(page("#2244AA").windowTint, blue.windowTint);
 });

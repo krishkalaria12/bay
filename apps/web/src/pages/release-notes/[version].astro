@@ -9,6 +9,7 @@ import { ids, downloadLink, site } from "../../site";
 
 export function getStaticPaths() {
   const all = releases();
+
   return all.map((release, i) => ({ params: { version: release.version }, props: { release, latest: i === 0 } }));
 }
 
@@ -16,6 +17,7 @@ interface Props {
   release: Release;
   latest: boolean;
 }
+
 const { release, latest } = Astro.props;
 const url = `${site.url}/release-notes/${release.version}/`;
 const title = `Bay ${release.version}: what’s new`;

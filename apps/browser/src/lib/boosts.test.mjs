@@ -25,6 +25,7 @@ const boost = (patch = {}) => ({ ...newBoost("b1", "news.example.com", 1000), ..
 test("boosts name a site by its host without www, and only web pages", () => {
   assert.equal(boostHost("https://www.Example.com/path?q=1"), "example.com");
   assert.equal(boostHost("http://news.ycombinator.com:8080/"), "news.ycombinator.com");
+
   for (const url of ["bay://library", "file:///tmp/a.html", "chrome://settings", "", undefined, "about:blank"]) assert.equal(boostHost(url), "", url);
 });
 
@@ -39,6 +40,7 @@ test("normalizing drops what isn't a boost and keeps code out", () => {
   assert.equal(normalizeBoost(null), null);
   assert.equal(normalizeBoost({ id: "x" }), null);
   assert.equal(normalizeBoost({ id: "x", host: "javascript:alert(1)" }), null);
+
   const b = normalizeBoost({
     id: "x",
     host: "WWW.Example.com",
@@ -50,6 +52,7 @@ test("normalizing drops what isn't a boost and keeps code out", () => {
     script: "alert(1)",
     color: { accent: "nope", contrast: 4 },
   });
+
   assert.equal(b.host, "example.com");
   assert.equal(b.name, "My Boost");
   assert.deepEqual(b.zaps, [".a"]);
@@ -63,6 +66,7 @@ test("normalizing drops what isn't a boost and keeps code out", () => {
 
 test("selectors can't end a rule early", () => {
   assert.equal(cleanSelector(" .ad "), ".ad");
+
   for (const bad of ["a { }", "a}", "/* x", "<script>", "a\\", "a\\\nbody", ".a)", '[title="unterminated]', "", 5])
     assert.equal(cleanSelector(bad), null, String(bad));
 });
@@ -72,6 +76,7 @@ test("selector validation preserves CSS.escape identifiers without allowing rule
     assert.equal(cleanSelector(selector), selector);
   assert.equal(cleanSelector(" div#name\\  "), "div#name\\ ");
   assert.equal(cleanSelector(" div#name\\\\ "), "div#name\\\\", "an escaped backslash does not escape trailing padding");
+
   for (const selector of [".a\\\\{color:red}", ".a\\5c {color:red}", ".a\\/*comment*/", ".a); body", ".a@import"])
     assert.equal(cleanSelector(selector), null, selector);
 });
@@ -96,6 +101,7 @@ test("the tint's inverse gives images their colours back", () => {
   const back = invertTint(tint);
   assert.ok(back);
   const apply = ({ m, b }, c) => m.map((row, i) => row[0] * c[0] + row[1] * c[1] + row[2] * c[2] + b[i]);
+
   for (const c of [
     [0.2, 0.4, 0.6],
     [0.9, 0.1, 0.3],
@@ -104,6 +110,7 @@ test("the tint's inverse gives images their colours back", () => {
     const round = apply(tint, apply(back, c));
     round.forEach((v, i) => assert.ok(Math.abs(v - c[i]) < 1e-6, `${v} vs ${c[i]}`));
   }
+
   // White takes the light end, black the dark end, mixed in by the contrast.
   const white = apply(tint, [1, 1, 1]);
   const black = apply(tint, [0, 0, 0]);
@@ -151,6 +158,7 @@ test("the tab's sheet exposes only Bay's palette names", () => {
     hover: "#FFFFFF29",
     colors: ["#B5556B", "#4F7BE8"],
   };
+
   const css = tabBoostCss(palette);
   assert.match(css, /--bay-palette-background: #111111;/);
   assert.doesNotMatch(css, /--arc-/);
@@ -211,6 +219,7 @@ test("Zen's boost files import for the current site", () => {
     customCSS: "p{}",
     saturation: 0.25,
   });
+
   const { boost: b, script } = importBoost(zen, "z", "zen.example", 1);
   assert.equal(b.host, "zen.example");
   assert.equal(b.name, "Zen");

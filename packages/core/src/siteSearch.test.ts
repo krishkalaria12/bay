@@ -25,3 +25,46 @@ test("custom shortcuts take priority over defaults while domains and site names 
   assert.equal(findScope("yt cats", { engines }), null);
   assert.equal(findScope("unknown-shortcut", { engines }), null);
 });
+
+test("scope matching does not collect known hosts for shortcuts or ordinary search words", () => {
+  const hosts = () => {
+    assert.fail("known hosts should only be read for a hostname without a built-in scope");
+  };
+
+  for (const text of ["", " ", "react", "react hooks", "gh", "yt", "google", "github.com", "https://www.youtube.com/"]) {
+    assert.deepEqual(findScope(text, { engines: BUILT_IN_ENGINES, hosts }), findScope(text, { engines: BUILT_IN_ENGINES }));
+  }
+});
+
+test("lazy known hosts preserve eager scope results and read the current source on each lookup", () => {
+  let calls = 0;
+  let current: readonly string[] = ["research.example", "other.example"];
+
+  const hosts = () => {
+    calls++;
+
+    return current;
+  };
+
+  for (const text of ["research.example", "HTTPS://WWW.Research.Example/", "https://name:pass@research.example:8443/path", "unknown.example"]) {
+    const before = calls;
+    assert.deepEqual(findScope(text, { engines: BUILT_IN_ENGINES, hosts }), findScope(text, { engines: BUILT_IN_ENGINES, hosts: current }));
+    assert.equal(calls, before + 1);
+  }
+
+  current = [];
+  assert.equal(findScope("research.example", { engines: BUILT_IN_ENGINES, hosts }), null, "deleted history must not keep its scope");
+  current = ["research.example"];
+  assert.equal(findScope("research.example", { engines: BUILT_IN_ENGINES, hosts })?.kind, "history");
+});
+
+test("custom engine and popular-site scopes take priority over lazy history hosts", () => {
+  const engines = allEngines([{ id: "custom", name: "Custom", keyword: "research.example", url: "https://search.example/?q=%s" }]);
+
+  const hosts = () => {
+    assert.fail("an already matched scope should not collect history hosts");
+  };
+
+  assert.equal(findScope("research.example", { engines, hosts })?.engineId, "custom");
+  assert.equal(findScope("docs.github.com", { engines, hosts })?.host, "github.com");
+});

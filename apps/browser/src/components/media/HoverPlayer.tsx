@@ -1,8 +1,8 @@
-import { Surface } from "@bay/shell";
+import { Surface } from "@bay/desktop";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
-import { useBrowser } from "../../store/browser";
+import { besideRow, useSidebarOnRight } from "../window/layout";
+import { useBrowser } from "../../store/browserStore";
 import { clickTab } from "../sidebar/actions";
 import { dismissHover, hoverLeave, keepHover } from "../sidebar/hover";
 import { measureRow, setSidebarUi, type Anchor } from "../sidebar/state";
@@ -14,10 +14,13 @@ import { useMediaTokens } from "./tokens";
 
 export function useShowsMiniPlayer(tabId: string | undefined): boolean {
   const pinned = useBrowser((s) => !!tabId && !!s.tabs[tabId]?.pinned);
+
   const hasSession = useMedia((s) => {
     const session = tabId ? s.sessions[tabId] : undefined;
+
     return !!session && session.playbackState !== "none" && !!(session.title || session.artwork);
   });
+
   return pinned && hasSession;
 }
 
@@ -26,10 +29,12 @@ export function HoverPlayer({ tabId, windowId, anchor, windowWidth }: { tabId: s
   const tokens = useMediaTokens();
   const right = useSidebarOnRight();
   const sidebarWidth = useSidebarWidth(windowId);
+
   // Clear of the sidebar's inner edge, as a pinned tile's anchor can stop short of it.
   const left = right
     ? besideRow({ x: Math.min(anchor.x, windowWidth - sidebarWidth + layout.sidebarInset), width: 0 }, MINI_PLAYER_WIDTH, true)
     : Math.max(anchor.x + anchor.width, sidebarWidth - layout.sidebarInset) + 8;
+
   return (
     <Surface
       onMouseEnter={keepHover}
@@ -56,10 +61,13 @@ export function HoverPlayer({ tabId, windowId, anchor, windowWidth }: { tabId: s
 }
 
 if (__DEV__) {
+  // SAFETY: { nnMediaHover? assertion matches the runtime value validated at this call site.
   (globalThis as { nnMediaHover?: unknown }).nnMediaHover = async (windowId: string, tabId: string | null) => {
     if (!tabId) return setSidebarUi({ hover: null });
     const anchor = await measureRow(windowId, tabId);
+
     if (anchor) setSidebarUi({ hover: { windowId, kind: "tab", id: tabId, anchor } });
+
     return anchor;
   };
 }

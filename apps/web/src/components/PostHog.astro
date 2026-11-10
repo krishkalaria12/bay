@@ -11,6 +11,7 @@
       startedAt: number;
       lastSeenAt: number;
     }
+
     let session: Session | undefined;
     let pageviewSent = false;
     // The client router swaps pages without loading them: the page before this one, as the referrer.
@@ -20,6 +21,7 @@
     function getVisitorId() {
       if (!visitorId) {
         visitorId = crypto.randomUUID();
+
         try {
           // Keep the existing ID so visits and download clicks belong to the same visitor.
           visitorId = localStorage.getItem("bay_download_visitor_id") || visitorId;
@@ -28,13 +30,16 @@
           // Keep the in-memory ID when browser storage is unavailable.
         }
       }
+
       return visitorId;
     }
 
     function getSessionId() {
       const now = Date.now();
+
       try {
         const stored: Session | null = JSON.parse(localStorage.getItem("bay_analytics_session") || "null");
+
         if (
           stored &&
           /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(stored.id) &&
@@ -59,16 +64,19 @@
         const id = `${time.slice(0, 8)}-${time.slice(8)}-7${crypto.randomUUID().slice(15)}`;
         session = { id, startedAt: now, lastSeenAt: now };
       }
+
       session.lastSeenAt = now;
+
       try {
         localStorage.setItem("bay_analytics_session", JSON.stringify(session));
       } catch {
         // Events can still be sent without browser storage.
       }
+
       return session.id;
     }
 
-    function capture(event: string, properties: Record<string, unknown> = {}) {
+    function capture(event: string, properties: Record<string, string | number | boolean | null | undefined> = {}) {
       const body = JSON.stringify({
         api_key: token,
         event,
@@ -93,6 +101,7 @@
       } catch {
         // Fall back if the browser cannot queue a beacon.
       }
+
       void fetch(endpoint, {
         method: "POST",
         body,
@@ -118,9 +127,11 @@
 
     function trackDownload(event: MouseEvent) {
       if (event.defaultPrevented || !(event.target instanceof Element)) return;
+
       if (event.type === "auxclick" && event.button !== 1) return;
 
       const link = event.target.closest<HTMLAnchorElement>("a[data-download-location]");
+
       if (!link) return;
 
       // Record short visits too, even when someone downloads before the idle callback.
@@ -136,13 +147,17 @@
     // the first waits for its assets to load, as before.
     document.addEventListener("astro:page-load", () => {
       const url = window.location.origin + window.location.pathname;
+
       if (url === currentUrl) return;
+
       if (currentUrl) {
         capturePageview();
         previousUrl = currentUrl;
       }
+
       currentUrl = url;
       pageviewSent = false;
+
       if (document.readyState === "complete") schedulePageview();
       else window.addEventListener("load", schedulePageview, { once: true });
     });

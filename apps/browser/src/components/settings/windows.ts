@@ -1,4 +1,4 @@
-import { openWindow } from "@bay/shell";
+import { openWindow } from "@bay/desktop";
 import { create } from "zustand";
 import { TASK_MANAGER_WINDOW_ID } from "../taskManager/window";
 import type { SettingId } from "./definitions";
@@ -46,17 +46,20 @@ export const useSettingsNav = create<Nav>((set, get) => ({
   highlight: null,
   go(pane, spaceId = null, highlight = null) {
     const { pane: from, spaceId: fromProfile, back } = get();
+
     if (from === pane && fromProfile === spaceId) return set({ highlight });
     set({ pane, spaceId, highlight, back: [...back, { pane: from, spaceId: fromProfile }].slice(-30), forward: [] });
   },
   goBack() {
     const { back, forward, pane, spaceId } = get();
     const prev = back.at(-1);
+
     if (prev) set({ ...prev, highlight: null, back: back.slice(0, -1), forward: [{ pane, spaceId }, ...forward] });
   },
   goForward() {
     const { back, forward, pane, spaceId } = get();
     const next = forward[0];
+
     if (next) set({ ...next, highlight: null, forward: forward.slice(1), back: [...back, { pane, spaceId }] });
   },
 }));

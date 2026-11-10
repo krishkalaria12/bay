@@ -1,6 +1,6 @@
-import { cancelDownload, endWebKitPrivateSession, type Download } from "@bay/nncore";
-import { readDocument, writeDocument } from "@bay/shell";
-import { useBrowser, type BrowserState, type HydrateData } from "../store/browser";
+import { cancelDownload, endWebKitPrivateSession, isJsReload, type Download } from "@bay/chromium";
+import { readDocument, writeDocument } from "@bay/desktop";
+import { useBrowser, type BrowserState, type HydrateData } from "../store/browserStore";
 import { inPinnedContainer, isIncognitoSpace, newId, snapshotTab } from "../store/model";
 import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
 import { isolateSavedSpaces } from "../store/spaces";
@@ -10,18 +10,93 @@ import { startBoosts } from "../components/boosts/state";
 import { startFavicons } from "./favicons";
 import { startBookmarks } from "./bookmarks";
 import { startHistory } from "./history";
-import { startProfileDataCleanup } from "./profileData";
+import { startProfileDataCleanup } from "./profileCleanup";
 import { PERSIST_VERSION, SAVE_DELAY_MS } from "./constants";
 
 type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
 
 const serialized =
-  (serialize: (s: BrowserState) => unknown) =>
+  <T>(serialize: (s: BrowserState) => T) =>
   (s: BrowserState): string =>
     JSON.stringify(serialize(s));
 
 const persistedTab = ({ navigation: _n, adoptId: _a, wakeAdoptId: _w, ...t }: Tab) => t;
 const publicTab = (t: { spaceId: string }) => !isIncognitoSpace(t.spaceId);
+
+// Tabs are almost all of session.json (~65 KB of 70 KB with 200 tabs), and a save follows most interactions (a tab
+// switch stamps lastActiveAt). Each tab's JSON is kept with its record, so a save stringifies only the tabs that
+// changed: the string is what JSON.stringify of the whole document would write.
+const tabJson = new WeakMap<Tab, string>();
+
+// Closing a window leaves its tabs in their space. Keep their detached JSON too; a record's owner can disappear
+// or return without changing the record, so neither representation can stand in for the other.
+const detachedTabJson = new WeakMap<Tab, string>();
+
+function persistedTabJson(t: Tab, detached: boolean): string {
+  const cache = detached ? detachedTabJson : tabJson;
+  let json = cache.get(t);
+
+  if (json === undefined) cache.set(t, (json = JSON.stringify(persistedTab(detached ? { ...t, windowId: "" } : t))));
+
+  return json;
+}
+
+/** An object's JSON from its fields' JSON, in order; a field whose JSON is undefined is left out, as JSON.stringify does. */
+function objectJson(fields: [string, string | undefined][]): string {
+  const parts: string[] = [];
+
+  for (const [key, json] of fields) {
+    if (json === undefined) continue;
+    parts.push(`${JSON.stringify(key)}:${json}`);
+  }
+
+  return `{${parts.join(",")}}`;
+}
+
+/** session.json's document. */
+export function sessionJson(s: BrowserState): string {
+  // Private windows, Little Bay and peeks aren't restored: closing (or quitting) throws their pages away.
+  const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
+  const kept = new Set(windows.map((w) => w.id));
+  const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small" && !t.peekOf;
+  const tabs = Object.values(s.tabs).filter(own);
+  const saved = new Set(tabs.map((t) => t.id));
+
+  // SAFETY: JSON.stringify returns undefined only for undefined, functions and symbols, which the fields never hold.
+  const json = <T>(value: T) => JSON.stringify(value) as string | undefined;
+
+  return objectJson([
+    ["version", json(PERSIST_VERSION)],
+    ["spaces", json(s.spaces)],
+    ["spaceOrder", json(s.spaceOrder)],
+    ["orphanedProfileData", json(s.orphanedProfileData)],
+    ["settings", json(s.settings)],
+    ["windows", json(windows)],
+    ["windowOrder", json(s.windowOrder.filter((id) => kept.has(id)))],
+    ["focusedWindowId", json(s.ui.focusOrder.find((id) => kept.has(id)) ?? null)],
+    ["tabs", `[${tabs.map((t) => persistedTabJson(t, !kept.has(t.windowId))).join(",")}]`],
+    [
+      "tabLists",
+      json(
+        Object.fromEntries(
+          Object.entries(s.tabLists)
+            .map(([key, ids]) => [key, ids.filter((id) => saved.has(id))])
+            .filter(([, ids]) => ids!.length),
+        ),
+      ),
+    ],
+    ["groups", json(Object.values(s.groups).filter((g) => !isIncognitoSpace(g.spaceId)))],
+    ["pinnedFolders", json(Object.values(s.pinnedFolders))],
+    ["localFiles", json(Object.values(normalizeLocalFiles(s.localFiles, s.spaces)))],
+    ["splits", json(Object.values(s.splits).filter((v) => v.tabIds.every((id) => saved.has(id))))],
+    // The store keeps private windows out of these lists; filter again so nothing private is ever written.
+    ["closedTabs", json(s.closedTabs.filter((c) => publicTab(c.tab)))],
+    ["closedWindows", json(s.closedWindows.filter((c) => c.tabs.every(publicTab)))],
+    ["closedGroups", json(s.closedGroups.filter((c) => c.tabs.every(publicTab)))],
+    ["deletedGroups", json(s.deletedGroups.filter((c) => c.tabs.every(publicTab)))],
+    ["cleanedTabs", json(s.cleanedTabs.filter((c) => publicTab(c.tab)))],
+  ]);
+}
 
 const DOCS: Doc[] = [
   {
@@ -54,49 +129,19 @@ const DOCS: Doc[] = [
       s.deletedGroups,
       s.cleanedTabs,
     ],
-    json: serialized((s) => {
-      // Private windows, Little Bay and peeks aren't restored: closing (or quitting) throws their pages away.
-      const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
-      const kept = new Set(windows.map((w) => w.id));
-      const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small" && !t.peekOf;
-      const tabs = Object.values(s.tabs).filter(own);
-      const saved = new Set(tabs.map((t) => t.id));
-      return {
-        version: PERSIST_VERSION,
-        spaces: s.spaces,
-        spaceOrder: s.spaceOrder,
-        orphanedProfileData: s.orphanedProfileData,
-        settings: s.settings,
-        windows,
-        windowOrder: s.windowOrder.filter((id) => kept.has(id)),
-        focusedWindowId: s.ui.focusOrder.find((id) => kept.has(id)) ?? null,
-        tabs: tabs.map((t) => persistedTab(kept.has(t.windowId) ? t : { ...t, windowId: "" })),
-        tabLists: Object.fromEntries(
-          Object.entries(s.tabLists)
-            .map(([key, ids]) => [key, ids.filter((id) => saved.has(id))])
-            .filter(([, ids]) => ids!.length),
-        ),
-        groups: Object.values(s.groups).filter((g) => !isIncognitoSpace(g.spaceId)),
-        pinnedFolders: Object.values(s.pinnedFolders),
-        localFiles: Object.values(normalizeLocalFiles(s.localFiles, s.spaces)),
-        splits: Object.values(s.splits).filter((v) => v.tabIds.every((id) => saved.has(id))),
-        // The store keeps private windows out of these lists; filter again so nothing private is ever written.
-        closedTabs: s.closedTabs.filter((c) => publicTab(c.tab)),
-        closedWindows: s.closedWindows.filter((c) => c.tabs.every(publicTab)),
-        closedGroups: s.closedGroups.filter((c) => c.tabs.every(publicTab)),
-        deletedGroups: s.deletedGroups.filter((c) => c.tabs.every(publicTab)),
-        cleanedTabs: s.cleanedTabs.filter((c) => publicTab(c.tab)),
-      };
-    }),
+    json: sessionJson,
   },
 ];
 
 function read<T>(name: string): T | null {
   try {
     const json = readDocument(name);
+
+    // SAFETY: JSON.parse yields the persisted document shape written by write for this name; callers check version.
     return json ? (JSON.parse(json) as T) : null;
   } catch (error) {
     console.warn(`Couldn't read ${name}`, error);
+
     return null;
   }
 }
@@ -138,6 +183,7 @@ type SessionV2 = {
 function backupBeforeIsolation(name: string) {
   const original = readDocument(name);
   const backup = `${name.replace(/\.json$/, "")}.before-space-isolation.json`;
+
   if (original && !readDocument(backup)) writeDocument(backup, original);
 }
 
@@ -146,42 +192,61 @@ function backupBeforeIsolation(name: string) {
 function isolateLegacyFiles(owners: Map<string, string[]>, detached: Set<string>) {
   for (const name of ["history.json", "bookmarks.json"]) {
     const file = read<{ history?: BrowserState["history"]; bookmarks?: BrowserState["bookmarks"] }>(name);
+
     if (!file) continue;
     backupBeforeIsolation(name);
+
     if (file.history) {
       const history = { ...file.history };
+
       for (const [owner, ids] of owners) {
         const source = [owner, ...ids].find((id) => history[id]);
+
         if (source) history[owner] = history[source]!;
       }
+
       for (const id of detached) delete history[id];
       file.history = history;
     }
+
     if (file.bookmarks) {
       const roots = { ...file.bookmarks.roots };
+
       for (const [owner, ids] of owners) {
         const source = [owner, ...ids].find((id) => roots[id]);
+
         if (source) roots[owner] = roots[source]!;
       }
+
       for (const id of detached) delete roots[id];
       file.bookmarks = { ...file.bookmarks, roots };
     }
+
     writeDocument(name, JSON.stringify(file));
   }
 }
 
 export function loadSession(): HydrateData | null {
   const session = read<SessionV2>("session.json");
+
   if (session?.version !== 2) return null;
+  // A JS reload isn't a launch: each window's page is parked for it to show again (NNCoreWebView), and one not shown soon
+  // closes, so windows keep the tabs they showed whatever settings.launchTab and restoreSession say.
+  const reloaded = isJsReload();
   const spaces = session.spaces ?? session.profiles;
   const spaceOrder = session.spaceOrder ?? session.profileOrder ?? [];
+
   if (spaces) {
     const order = [...new Set([...spaceOrder.filter((id) => spaces[id]), ...Object.keys(spaces)])];
     const { owners, detached } = isolateSavedSpaces(spaces, order, session.orphanedProfileData ?? []);
+
     if (detached.size || (!session.spaces && session.profiles)) backupBeforeIsolation("session.json");
+
     if (detached.size) isolateLegacyFiles(owners, detached);
   }
+
   const downloads = read<{ downloads: Download[] }>("downloads.json");
+
   const data: HydrateData = {
     spaces,
     spaceOrder,
@@ -194,7 +259,7 @@ export function loadSession(): HydrateData | null {
     tabLists: session.tabLists ?? {},
     groups: byId(session.groups),
     pinnedFolders: byId(session.pinnedFolders),
-    localFiles: normalizeLocalFiles({ ...session.localFiles }, spaces),
+    localFiles: normalizeLocalFiles(Object.fromEntries((session.localFiles ?? []).map((pin, index) => [String(index), pin])), spaces),
     splits: byId(session.splits),
     closedTabs: session.closedTabs,
     closedWindows: session.closedWindows,
@@ -202,9 +267,10 @@ export function loadSession(): HydrateData | null {
     deletedGroups: session.deletedGroups ?? [],
     cleanedTabs: session.cleanedTabs ?? [],
     downloads: (downloads?.downloads ?? []).map((d, i) => ({ ...d, id: `saved-${i}` })),
-    launch: true,
+    launch: !reloaded,
   };
-  if (session.settings && session.settings.restoreSession === false) {
+
+  if (!reloaded && session.settings && session.settings.restoreSession === false) {
     // A launch that doesn't restore the last session: each space keeps its pinned tabs, and its other tabs wait in
     // Recently Closed, one window's worth per space (where a window showed it).
     const now = Date.now();
@@ -212,39 +278,44 @@ export function loadSession(): HydrateData | null {
     const loose = Object.values(data.tabs ?? {}).filter((t) => !inPinnedContainer(pinSource, t.id));
     const shownAt = (spaceId: string) => session.windows.find((w) => w.spaceId === spaceId) ?? session.windows[0];
     const bySpace = new Map<string, Tab[]>();
+
     for (const t of loose) bySpace.set(t.spaceId, [...(bySpace.get(t.spaceId) ?? []), t]);
     data.closedWindows = [
       ...(data.closedWindows ?? []),
-      ...[...bySpace]
-        .map(([spaceId, tabs]) => {
-          const w = shownAt(spaceId);
-          return {
-            kind: "window" as const,
-            id: newId("cw"),
-            window: { spaceId, sidebarOpen: w?.sidebarOpen ?? true, frame: w?.frame ?? null },
-            tabs: tabs.map((t) => ({ ...snapshotTab(t), active: session.windows.some((x) => x.activeTabIds[spaceId] === t.id) })),
-            groups: [],
-            closedAt: now,
-          };
-        })
-        .filter((c) => c.tabs.some((t) => t.url)),
+      ...[...bySpace].flatMap(([spaceId, tabs]) => {
+        const w = shownAt(spaceId);
+
+        const closedWindow = {
+          kind: "window" as const,
+          id: newId("cw"),
+          window: { spaceId, sidebarOpen: w?.sidebarOpen ?? true, frame: w?.frame ?? null },
+          tabs: tabs.map((t) => ({ ...snapshotTab(t), active: session.windows.some((x) => x.activeTabIds[spaceId] === t.id) })),
+          groups: [],
+          closedAt: now,
+        };
+
+        return closedWindow.tabs.some((t) => t.url) ? [closedWindow] : [];
+      }),
     ].slice(-10);
     const gone = new Set(loose.map((t) => t.id));
     data.windows = {};
     data.windowOrder = [];
     data.tabs = Object.fromEntries(Object.entries(data.tabs ?? {}).filter(([id]) => !gone.has(id)));
   }
+
   return data;
 }
 
 let flush: () => void = () => {};
 let resume: () => void = () => {};
+
 // From the quit's last save until the quit ends or is cancelled: what the quit itself does to the store (its windows
 // closing) is never saved.
 let frozen = false;
 
 export function flushPersistence({ final = false } = {}) {
   flush();
+
   if (final) frozen = true;
 }
 
@@ -268,31 +339,42 @@ export function startPersistence() {
   const save = () => {
     clearTimeout(timer);
     timer = undefined;
+
     if (frozen) return;
     const s = useBrowser.getState();
+
     for (const doc of DOCS.filter((d) => dirty.has(d))) {
       const json = doc.json(s);
+
       if (lastJson.get(doc.name) !== json) {
         lastJson.set(doc.name, json);
         write(doc.name, json);
       }
     }
+
     dirty.clear();
   };
+
   flush = save;
 
   const check = (s: BrowserState, initial = false) => {
     if (frozen) return;
+
     for (const doc of DOCS) {
       const sources = doc.sources(s);
       const prev = lastSources.get(doc.name);
+
       if (prev && sources.every((v, i) => v === prev[i])) continue;
       lastSources.set(doc.name, sources);
+
       if (!initial) dirty.add(doc);
     }
+
     if (dirty.size && !timer) timer = setTimeout(save, SAVE_DELAY_MS);
   };
+
   check(useBrowser.getState(), true);
+
   if (
     session?.spaces &&
     (!read<SessionV2>("session.json")?.spaces ||
@@ -301,18 +383,23 @@ export function startPersistence() {
     dirty.add(DOCS.find((doc) => doc.name === "session.json")!);
     save();
   }
+
   resume = () => {
     check(useBrowser.getState());
     save();
   };
+
   const stopFavicons = startFavicons();
   const stopHistory = startHistory();
   const stopBookmarks = startBookmarks();
   const stopProfileData = startProfileDataCleanup();
+
   const stopSession = useBrowser.subscribe((s, prev) => {
     check(s);
+
     if (s.windows !== prev.windows) forgetClosedIncognito(s, prev);
   });
+
   return () => {
     stopFavicons();
     stopHistory();
@@ -325,6 +412,7 @@ export function startPersistence() {
 function forgetClosedIncognito(s: BrowserState, prev: BrowserState) {
   for (const w of Object.values(prev.windows)) {
     if (!w.incognito || s.windows[w.id]) continue;
+
     for (const d of s.downloads) if (d.profile === w.spaceId && d.state === "downloading") void cancelDownload(d.id);
     s.forgetDownloads(w.spaceId);
     // Its WebKit pages' cookies and site data, kept in memory for the window, go with it.

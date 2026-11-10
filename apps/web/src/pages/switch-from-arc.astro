@@ -3,12 +3,14 @@ import Layout from "../layouts/Layout.astro";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import Sticky from "../components/Sticky.astro";
-import { faqPage, fromArc, ids, downloadLink, site } from "../site";
+import { faqPage, fromArc, ids, downloadLink, site, type JsonLd } from "../site";
 
 const url = `${site.url}/switch-from-arc/`;
 const title = "How to switch from Arc to Bay";
+
 const description =
   "Move from Arc to Bay in a few minutes: import your spaces, tabs, pinned tabs, folders, favorites, bookmarks, history and passwords, then pick up where you left off.";
+
 const published = "2026-10-09";
 const updated = "2026-10-09";
 
@@ -47,7 +49,7 @@ const faqs = [
   },
 ] as const;
 
-const schema = [
+const schema: JsonLd[] = [
   {
     "@type": "TechArticle",
     "@id": `${url}#article`,

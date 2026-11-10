@@ -3,11 +3,12 @@
 import { registerHooks } from "node:module";
 
 const stub = new URL("./test-native-stub.mjs", import.meta.url).href;
-const native = new Set(["@bay/shell", "@bay/nncore", "expo-modules-core"]);
+const native = new Set(["@bay/desktop", "@bay/chromium", "expo-modules-core"]);
 
 registerHooks({
   resolve(specifier, context, next) {
     if (native.has(specifier)) return { url: stub, shortCircuit: true };
+
     try {
       return next(specifier, context);
     } catch (error) {
@@ -18,6 +19,7 @@ registerHooks({
           } catch {}
         }
       }
+
       throw error;
     }
   },

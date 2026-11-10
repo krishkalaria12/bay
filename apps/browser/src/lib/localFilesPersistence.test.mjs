@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const stub = await import("../test-native-stub.mjs");
-const { useBrowser } = await import("../store/browser.ts");
+const { useBrowser } = await import("../store/browserStore.ts");
 const { startPersistence, flushPersistence, loadSession } = await import("./persist.ts");
 const S = () => useBrowser.getState();
 
 test("file pins survive relaunch as metadata without bookmark grants or device status", () => {
   stub.docs.clear();
   const stop = startPersistence();
+
   try {
     const value = {
       id: "pdf",
@@ -19,6 +21,7 @@ test("file pins survive relaunch as metadata without bookmark grants or device s
       order: 2,
       expanded: false,
     };
+
     useBrowser.setState({ localFiles: { pdf: { ...value, bookmark: "native-secret", status: "available" } } });
     flushPersistence();
     const saved = JSON.parse(stub.docs.get("session.json"));
@@ -43,6 +46,7 @@ test("file pins survive relaunch as metadata without bookmark grants or device s
 test("session file pins reject private, unknown-space and malformed paths", () => {
   stub.docs.clear();
   const stop = startPersistence();
+
   try {
     const pin = {
       id: "valid",
@@ -54,6 +58,7 @@ test("session file pins reject private, unknown-space and malformed paths", () =
       order: 0,
       expanded: false,
     };
+
     useBrowser.setState({
       localFiles: {
         valid: pin,

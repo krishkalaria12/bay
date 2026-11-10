@@ -1,5 +1,5 @@
 import type { BrowserSource, SpaceSummary } from "@bay/import";
-import { Symbol, VisualEffect, WindowDragRegion } from "@bay/shell";
+import { Symbol, VisualEffect, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
@@ -7,7 +7,7 @@ import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { useSpaces } from "../../store/hooks";
 import { plural } from "../../store/model";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 import { Button, Checkbox, PopUp, useFormColors } from "../settings/controls";
 import { CHECK_SPRING, SUCCESS_SPRING } from "./constants";
 import type { Status } from "./useImportFlow";
@@ -16,6 +16,7 @@ import { BrowserIcon } from "./BrowserIcon";
 /** The window's backdrop, the same under every step (a step's own views come and go with it). */
 export function ImportBackdrop({ children }: { children: ReactNode }) {
   const theme = useTheme();
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.dark ? "#1E1E1E" : "#F4F4F4" }}>
       <VisualEffect material="windowBackground" blendingMode="behindWindow" style={StyleSheet.absoluteFill} />
@@ -28,6 +29,7 @@ export function ImportBackdrop({ children }: { children: ReactNode }) {
 /** A step: its content scrolls, its buttons sit in the bar at the foot. */
 export function StepLayout({ footer, children }: { footer: ReactNode; children: ReactNode }) {
   const theme = useTheme();
+
   return (
     <>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 32, paddingTop: 46, paddingBottom: 20 }}>
@@ -54,7 +56,9 @@ export function StepLayout({ footer, children }: { footer: ReactNode; children: 
 export function TargetPicker({ value, onChange }: { value: string; onChange: (spaceId: string) => void }) {
   const theme = useTheme();
   const profiles = useSpaces();
+
   if (profiles.length < 2) return <View />;
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
       <Text style={{ fontSize: 12, color: theme.textSecondary }}>Import into</Text>
@@ -69,6 +73,7 @@ export function Spacer() {
 
 export function Title({ title, subtitle, spinner }: { title: string; subtitle?: string; spinner?: boolean }) {
   const theme = useTheme();
+
   return (
     <View style={{ marginBottom: 20 }}>
       <Text style={{ fontSize: 22, fontWeight: "700", color: theme.textPrimary }}>{title}</Text>
@@ -84,6 +89,7 @@ export function Title({ title, subtitle, spinner }: { title: string; subtitle?: 
 
 export function Note({ text }: { text: string }) {
   const theme = useTheme();
+
   return <Text style={{ fontSize: 13, color: theme.textSecondary, marginTop: 20, textAlign: "center" }}>{text}</Text>;
 }
 
@@ -94,6 +100,7 @@ export function ErrorText({ text }: { text: string }) {
 /** The source browser's icon handing over to what it's asked for (a keychain item, AppleScript). */
 export function Handoff({ iconPath, symbol }: { iconPath?: string; symbol: string }) {
   const theme = useTheme();
+
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
       <BrowserIcon iconPath={iconPath} size={56} color={theme.icon} />
@@ -108,6 +115,7 @@ export function BrowserRow({ browser, selected, onPress }: { browser: BrowserSou
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
   const spaces = browser.profiles.reduce((n, p) => n + (p.spaces?.length ?? 0), 0);
+
   const detail = browser.needsFullDiskAccess
     ? "Needs Full Disk Access"
     : browser.family === "automation"
@@ -119,6 +127,7 @@ export function BrowserRow({ browser, selected, onPress }: { browser: BrowserSou
           : browser.profiles.length > 1
             ? plural(browser.profiles.length, "profile")
             : "";
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
@@ -148,6 +157,7 @@ export function BrowserRow({ browser, selected, onPress }: { browser: BrowserSou
 
 function Radio({ on }: { on: boolean }) {
   const colors = useFormColors();
+
   return (
     <View
       style={{
@@ -181,6 +191,7 @@ export function SelectRow({
 }) {
   const theme = useTheme();
   const colors = useFormColors();
+
   return (
     <Pressable onPress={() => onToggle(!selected)}>
       <View
@@ -241,6 +252,7 @@ export function CategoryRow({ title, icon, status, index }: { title: string; ico
   const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ translateY: interpolate(appear.get(), [0, 1], [8, 0]) }] }));
   const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: check.get() }] }));
   const active = status === "active";
+
   return (
     <Animated.View
       style={[
@@ -282,6 +294,7 @@ export function SuccessMark() {
     scale.set(withSpring(1, SUCCESS_SPRING));
   }, []);
   const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
+
   return (
     <Animated.View style={scaleStyle}>
       <Symbol name="checkmark.circle.fill" size={46} color="#30D158" style={{ width: 60, height: 60 }} />
@@ -302,6 +315,7 @@ export function FullDiskAccessSteps({ onOpen, onRecheck }: { onOpen: () => void;
 
 export function SettingsSteps({ steps, openTitle, onOpen, onRecheck }: { steps: string[]; openTitle: string; onOpen: () => void; onRecheck: () => void }) {
   const theme = useTheme();
+
   return (
     <>
       <View style={{ gap: 10, marginBottom: 16 }}>
@@ -326,6 +340,7 @@ export function FileDrop({ onFile, onChoose }: { onFile: (path: string) => void;
   const theme = useTheme();
   const colors = useFormColors();
   const [over, setOver] = useState(false);
+
   return (
     <View
       draggedTypes={["fileUrl"]}
@@ -334,6 +349,7 @@ export function FileDrop({ onFile, onChoose }: { onFile: (path: string) => void;
       onDrop={(e) => {
         setOver(false);
         const uri = e.nativeEvent.dataTransfer?.files?.[0]?.uri;
+
         if (uri) onFile(decodeURIComponent(uri.replace(/^file:\/\//, "")));
       }}
       style={{

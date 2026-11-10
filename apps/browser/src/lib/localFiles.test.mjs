@@ -1,25 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { localFileAnswers } from "../test-native-stub.mjs";
-import { useBrowser } from "../store/browser.ts";
+import { useBrowser } from "../store/browserStore.ts";
 import { closeLocalFileTab, openLocalFile, peekLocalFile, reconnectLocalFile, localFileStatusText } from "./localFiles.ts";
 
 const S = () => useBrowser.getState();
+
 const setup = () => {
   S().hydrate({});
   const windowId = S().createWindow({});
   const [id] = S().pinLocalFiles(windowId, [{ path: "/Users/owner/A #1.pdf", name: "Report", kind: "file" }]);
+
   return { windowId, id };
 };
 
 test("PDF/image/HTML native browser opens create one file tab and reuse it", async () => {
   const { windowId, id } = setup();
+
   for (const filename of ["A%20%231.pdf", "photo.png", "index.html"]) {
     localFileAnswers.open = async (root, relative) => {
       assert.equal(root, "/Users/owner/A #1.pdf");
       assert.equal(relative, "");
+
       return { status: "available", url: `file:///Users/owner/${filename}`, name: "Original", browserReadable: true };
     };
+
     const count = Object.keys(S().tabs).length;
     await openLocalFile(windowId, id);
     await openLocalFile(windowId, id);
@@ -32,6 +37,7 @@ test("PDF/image/HTML native browser opens create one file tab and reuse it", asy
 test("missing grants, external formats and invalid native URLs do not create browser tabs", async () => {
   const { windowId, id } = setup();
   const count = Object.keys(S().tabs).length;
+
   for (const access of [
     { status: "missing" },
     { status: "inaccessible" },
@@ -42,6 +48,7 @@ test("missing grants, external formats and invalid native URLs do not create bro
     await openLocalFile(windowId, id);
     assert.equal(Object.keys(S().tabs).length, count);
   }
+
   assert.equal(localFileStatusText({ status: "missing" }), "Missing on this Mac");
   assert.equal(localFileStatusText({ status: "inaccessible" }), "Access required on this Mac");
 });
@@ -51,8 +58,10 @@ test("nested file opens forward only a root grant plus relative path", async () 
   localFileAnswers.open = async (root, relative) => {
     assert.equal(root, "/Users/owner/A #1.pdf");
     assert.equal(relative, "Work/Photo.png");
+
     return { status: "available", browserReadable: true, url: "file:///Users/owner/Work/Photo.png", name: "Photo.png" };
   };
+
   await openLocalFile(windowId, id, "Work/Photo.png");
   assert.equal(Object.values(S().tabs).find((t) => t.url.endsWith("Photo.png")).title, "Photo.png");
 });
@@ -78,8 +87,10 @@ test("reconnecting changes only the native local grant and cancelled pickers pre
   localFileAnswers.reconnect = async (root, kind) => {
     assert.equal(root, "/Users/owner/A #1.pdf");
     assert.equal(kind, "file");
+
     return { path: "/Users/other/A.pdf", kind: "file", name: "A.pdf" };
   };
+
   assert.equal(await reconnectLocalFile(id), true);
   assert.equal(S().localFiles, before);
   localFileAnswers.reconnect = async () => null;

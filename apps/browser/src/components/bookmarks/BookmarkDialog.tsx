@@ -1,21 +1,23 @@
-import { prompt, Surface } from "@bay/shell";
+import { prompt, Surface } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkDialog, type BookmarkDialogState } from "./actions";
 import { FolderTree } from "./FolderTree";
-import { useSidebarFieldShown, useSidebarOnRight } from "../layout/windowLayout";
-import { SIDEBAR_FIELD } from "../layout/constants";
+import { useSidebarFieldShown, useSidebarOnRight } from "../window/layout";
+import { SIDEBAR_FIELD } from "../window/constants";
 import { useSidebarMetrics, useSidebarWidth } from "../sidebar/tokens";
 
 export function BookmarkDialog() {
   const windowId = useWindowId();
   const open = useBookmarkDialog((d) => (d.open?.windowId === windowId ? d.open : null));
+
   if (!open) return null;
+
   return <DialogPanel key={open.kind === "page" ? open.bookmarkId : "all"} state={open} />;
 }
 
@@ -33,9 +35,11 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
   const bookmark = useBrowser((s) => (state.kind === "page" ? s.bookmarks.nodes[state.bookmarkId] : undefined));
   const spaceId = state.kind === "page" ? profileOfNode(state.bookmarkId) : state.spaceId;
   const [name, setName] = useState(() => (state.kind === "page" ? (bookmark?.title ?? "") : ""));
+
   const [folderId, setFolderId] = useState<string | null>(() =>
     state.kind === "page" ? (bookmark?.parentId ?? null) : (useBrowser.getState().bookmarks.roots[state.spaceId]?.bar ?? null),
   );
+
   const close = () => useBookmarkDialog.getState().set(null);
 
   useEffect(() => {
@@ -44,14 +48,18 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
 
   const done = () => {
     const s = useBrowser.getState();
+
     if (state.kind === "page") {
       if (!s.bookmarks.nodes[state.bookmarkId]) return close();
+
       if (name.trim() && name !== bookmark?.title) s.updateBookmark(state.bookmarkId, { title: name.trim() });
+
       if (folderId && folderId !== bookmark?.parentId) s.moveBookmark(state.bookmarkId, folderId);
     } else {
       const title = name.trim() || "Tabs";
       s.addBookmarkTree(state.spaceId, [{ title, children: state.tabs.map((t) => ({ title: t.title, url: t.url })) }], folderId ?? undefined);
     }
+
     close();
   };
 
@@ -62,6 +70,7 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
 
   const newFolder = async () => {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId: state.windowId });
+
     if (!title || !spaceId) return;
     const id = useBrowser.getState().addBookmarkFolder({ spaceId, title, parentId: folderId ?? undefined });
     setFolderId(id);
@@ -130,7 +139,10 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
 function profileOfNode(id: string): string | null {
   const b = useBrowser.getState().bookmarks;
   let node = b.nodes[id];
+
   for (let i = 0; node?.parentId && i < 64; i++) node = b.nodes[node.parentId];
+
   if (!node) return null;
+
   return Object.entries(b.roots).find(([, r]) => r.bar === node!.id || r.other === node!.id)?.[0] ?? null;
 }

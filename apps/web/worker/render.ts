@@ -16,9 +16,11 @@ function escape(value: string): string {
 
 export function render(snapshot: Snapshot | null): string {
   const title = snapshot?.title || (snapshot ? "Untitled Easel" : "Easel unavailable");
+
   const sources = snapshot?.links
     .map((link) => `<li><a href="${escape(link.url)}" rel="noreferrer noopener nofollow">${escape(link.title || link.url)}</a></li>`)
     .join("");
+
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">

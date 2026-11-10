@@ -1,4 +1,4 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "ignorePatterns": ["**/fixtures/**", "engine/**", "**/dist/**", "**/build/**", "**/build-*/**"]
+  "ignorePatterns": ["**/fixtures/**", "engine/**", "**/dist/**", "**/build/**", "**/build-*/**", "tools/oxlint/anti-slop/**"]
 }

@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+// A real, smooth drag with cliclick: press, eased drag moves, release. Each drag step takes ~100 ms.
+// usage: scripts/capture/drag X1 Y1 X2 Y2 [ms]   (screen points)
+import { spawnSync } from "node:child_process";
+
+const args = process.argv.slice(2);
+const [x1, y1, x2, y2] = args.slice(0, 4).map(Number);
+const ms = args.length > 4 ? Number(args[4]) : 900;
+if (args.length < 4 || ![x1, y1, x2, y2].every(Number.isFinite) || !Number.isInteger(ms)) {
+  throw new Error("usage: scripts/capture/drag X1 Y1 X2 Y2 [ms]");
+}
+const steps = Math.max(6, Math.floor(ms / 100));
+const ease = (t) => t * t * (3 - 2 * t);
+// Python's round() chooses the even integer for an exact half, including negative coordinates.
+function round(value) {
+  const lower = Math.floor(value);
+  return value - lower === 0.5 ? (lower % 2 === 0 ? lower : lower + 1) : Math.round(value);
+}
+const cmds = [`dd:${Math.trunc(x1)},${Math.trunc(y1)}`, "w:180", `dm:${Math.trunc(x1) + 2},${Math.trunc(y1) - 3}`, "w:60"];
+for (let i = 1; i <= steps; i++) {
+  const t = ease(i / steps);
+  cmds.push(`dm:${round(x1 + (x2 - x1) * t)},${round(y1 + (y2 - y1) * t)}`);
+}
+cmds.push("w:250", `du:${Math.trunc(x2)},${Math.trunc(y2)}`);
+const result = spawnSync("cliclick", ["-e", "0", "-w", "0", ...cmds], { stdio: "inherit" });
+if (result.error) throw result.error;
+if (result.status !== 0) process.exit(result.status ?? 1);

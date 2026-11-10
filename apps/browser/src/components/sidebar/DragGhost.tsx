@@ -1,12 +1,12 @@
-import { FadeLabel, Surface } from "@bay/shell";
+import { FadeLabel, Surface } from "@bay/desktop";
 import { Text, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
 import { SYMBOL_PREFIX } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
-import { groupLabel } from "../../store/organize";
+import { useBrowser } from "../../store/browserStore";
+import { groupLabel } from "../../store/tabTidying";
 import { tabTitle } from "./actions";
-import { useTabDrag } from "../layout/tabDrag";
+import { useTabDrag } from "../tabStrip/tabStripDrag";
 import type { Ghost } from "./dnd";
 import { TabIcon } from "./TabIcon";
 import { useSidebarMetrics, useSidebarTokens } from "./tokens";
@@ -18,16 +18,22 @@ export function DragGhost({ ghost }: { ghost: Ghost }) {
   const { item, count, width, height, position } = ghost;
   const tab = useBrowser((s) => s.tabs[item.tabIds[0] ?? ""]);
   const folder = useBrowser((s) => (item.folderId ? s.pinnedFolders[item.folderId] : undefined));
+
   const label = useBrowser((s) => {
     const group = item.groupId ? s.groups[item.groupId] : undefined;
+
     if (group) return groupLabel(s, group);
+
     if (folder) return folder.name || "New Folder";
+
     return tab ? tabTitle(tab) : "";
   });
+
   const tile = item.kind === "tile";
   // Over the page the tab shows as the page's own card (SplitChrome.tsx).
   const onPage = useTabDrag((d) => d.onPage);
   const at = useAnimatedStyle(() => ({ transform: [{ translateX: position.x.get() }, { translateY: position.y.get() }] }), [position]);
+
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, top: 0, width, height, opacity: onPage ? 0 : 1 }, at]}>
       <Surface

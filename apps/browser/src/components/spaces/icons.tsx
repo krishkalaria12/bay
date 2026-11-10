@@ -1,9 +1,9 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { Text, View } from "react-native";
 import { SPACE_COLORS } from "../../lib/theme";
 import type { Space } from "../../store/types";
 import { SYMBOL_PREFIX } from "../../lib/constants";
-import type { IconChoice } from "../IconGrid";
+import type { IconChoice } from "../iconPicker/IconGrid";
 
 // Arc's space icons: a set of glyphs, filled, to tell spaces apart at a glance in the switcher. [symbol, title, words]
 const SPACE_SET: [string, string, string][] = [
@@ -110,7 +110,9 @@ export const profileSymbol = (icon: string | null) => (icon?.startsWith(SYMBOL_P
 /** The icon's name for a label: its symbol's title, the emoji itself, or "Initial". */
 export function spaceIconTitle(icon: string | null): string {
   const symbol = profileSymbol(icon);
+
   if (symbol) return SPACE_SYMBOLS.find((s) => s.name === symbol)?.title ?? "Symbol";
+
   return icon ?? "Initial";
 }
 
@@ -119,6 +121,7 @@ export { SPACE_EMOJI, unusedSpaceIcon } from "../../store/spaces";
 export function SpaceBadge({ profile, size = 26 }: { profile: Pick<Space, "name" | "color" | "icon"> & Partial<Pick<Space, "theme">>; size?: number }) {
   const swatch = profile.theme?.colors[0] ?? SPACE_COLORS[profile.color]?.swatch ?? SPACE_COLORS.plum.swatch;
   const symbol = profileSymbol(profile.icon);
+
   return (
     <View
       style={{

@@ -1,15 +1,15 @@
-import { Surface, Symbol } from "@bay/shell";
+import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { layout } from "../../lib/constants";
 import { onEscapeKey } from "../../lib/escapeKey";
 import { hex, setPreviewLook, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId, pinnedPage } from "../../store/model";
 import { unusedSpaceLook } from "../../store/spaces";
-import { useSidebarOnRight } from "../layout/windowLayout";
-import { useHover } from "../primitives";
+import { useSidebarOnRight } from "../window/layout";
+import { useHover } from "../ui/primitives";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { SPACE_EMOJI, unusedSpaceIcon } from "./icons";
 import { ThemeControls, type Look } from "./ThemeEditor";
@@ -19,6 +19,7 @@ import { NEW_SPACE_FADE_MS, NEW_SPACE_PAD, PROFILE_DOTS_HEIGHT } from "./constan
 // choose its look (the window shows it meanwhile), then whether it shares the current space's sign-ins.
 
 type Step = "start" | "name" | "look" | "signins";
+
 const ORDER: Step[] = ["start", "name", "look", "signins"];
 const TITLES: Record<Step, string> = { start: "New Space", name: "New Space", look: "Look", signins: "Sign-ins" };
 
@@ -31,17 +32,22 @@ export function NewSpacePanel({ windowId, presetName, onDone }: { windowId: stri
   const sidebarWidth = useSidebarWidth(windowId);
   const fromSpace = useBrowser((s) => s.windows[windowId]?.spaceId ?? s.settings.defaultSpaceId);
   const fromName = useBrowser((s) => s.spaces[fromSpace]?.name ?? "your other spaces");
+
   // The tab "Take This Tab" moves: the one on screen, unless it's a favourite or pinned (those stay put). Plain values,
   // so the store hands back the same ones until they change.
   const takeId = useBrowser((s) => {
     const id = activeTabId(s, windowId);
     const t = id ? s.tabs[id] : undefined;
+
     return t && t.url && !t.pinned && !pinnedPage(t) ? t.id : null;
   });
+
   const takeTitle = useBrowser((s) => {
     const t = takeId ? s.tabs[takeId] : undefined;
+
     return t ? t.customTitle || t.title || t.url : "";
   });
+
   const tab = takeId ? { id: takeId, title: takeTitle } : null;
 
   const [step, setStep] = useState<Step>(presetName ? "name" : "start");
@@ -57,6 +63,7 @@ export function NewSpacePanel({ windowId, presetName, onDone }: { windowId: stri
   const closing = useRef(false);
   useEffect(() => shown.set(withTiming(1, { duration: NEW_SPACE_FADE_MS, easing: Easing.out(Easing.cubic) })), []);
   const panel = useAnimatedStyle(() => ({ opacity: shown.get(), transform: [{ translateY: (1 - shown.get()) * 10 }] }));
+
   const finish = (id: string | null) => {
     if (closing.current) return;
     closing.current = true;
@@ -74,19 +81,24 @@ export function NewSpacePanel({ windowId, presetName, onDone }: { windowId: stri
     setBack(ORDER.indexOf(next) < ORDER.indexOf(step));
     setStep(next);
   };
+
   const previous = () => go(ORDER[Math.max(0, ORDER.indexOf(step) - (presetName && step === "name" ? 0 : 1))]!);
 
   const create = () => {
     const s = useBrowser.getState();
     const id = s.createSpace({ name: name.trim() || "Untitled", color: look.color, theme: look.theme, icon, shareWith: shared ? fromSpace : null });
+
     if (look.followSite !== undefined) s.updateSpace(id, { followSite: look.followSite });
+
     if (take && tab) s.moveTabToSpace(tab.id, id);
     finish(id);
   };
 
   // A test drives the steps it can't click through (a hidden instance takes no clicks).
   useEffect(() => {
+    // SAFETY: Step), setName, take assertion matches the runtime value validated at this call site.
     devPanels.set(windowId, { go: (to: string) => go(to as Step), setName, take: () => setTake(true), create });
+
     return () => void devPanels.delete(windowId);
   });
 
@@ -194,12 +206,14 @@ function Slide({ back, children }: { back: boolean; children: ReactNode }) {
   const p = useSharedValue(0);
   useEffect(() => p.set(withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) })), []);
   const style = useAnimatedStyle(() => ({ opacity: p.get(), transform: [{ translateX: (1 - p.get()) * (back ? -18 : 18) }] }));
+
   return <Animated.View style={style}>{children}</Animated.View>;
 }
 
 function HeaderButton({ icon, label, onPress }: { icon: string; label: string; onPress(): void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityLabel={label} tooltip={label}>
@@ -226,6 +240,7 @@ const tile = (dark: boolean, hovered = false) =>
 function Choice({ icon, title, subtitle, onPress }: { icon: string; title: string; subtitle: string; onPress(): void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
@@ -250,6 +265,7 @@ function Choice({ icon, title, subtitle, onPress }: { icon: string; title: strin
 function Card({ icon, name, take, big, onIcon }: { icon: string; name: string; take: boolean; big: boolean; onIcon?: (icon: string) => void }) {
   const theme = useTheme();
   const [picking, setPicking] = useState(false);
+
   return (
     <View style={{ borderRadius: 14, backgroundColor: tile(theme.dark), padding: big ? 14 : 10 }}>
       <View style={{ flexDirection: big ? "column" : "row", alignItems: big ? "flex-start" : "center", gap: big ? 10 : 10 }}>
@@ -318,8 +334,10 @@ function NameField({ value, onChange, onSubmit, onEscape }: { value: string; onC
   const input = useRef<TextInput>(null);
   useEffect(() => {
     const t = setTimeout(() => input.current?.focus(), 60);
+
     return () => clearTimeout(t);
   }, []);
+
   return (
     <View
       style={{
@@ -352,6 +370,7 @@ function NameField({ value, onChange, onSubmit, onEscape }: { value: string; onC
 function Option({ title, subtitle, on, onPress }: { title: string; subtitle: string; on: boolean; onPress(): void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={title}>
@@ -382,6 +401,7 @@ function Option({ title, subtitle, on, onPress }: { title: string; subtitle: str
 
 function PrimaryButton({ title, onPress }: { title: string; onPress(): void }) {
   const theme = useTheme();
+
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
       {({ pressed }) => (

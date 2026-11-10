@@ -5,7 +5,7 @@ const html = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "
 
 export function externalLinkRulesFixture(baseURL) {
   const host = new URL(baseURL).host;
-  const rule = (id, path, destination, sourceApp) => ({ id, matchType: "contains", pattern: `${host}${path.replace(/\*$/, "")}`, ...(sourceApp ? { sourceApp } : {}), destination });
+  const rule = (id, path, destination, sourceApp) => ({ id, matchType: "contains", pattern: `${host}${path.replace(/\*$/, "")}`, ...(sourceApp ? { sourceApp } : undefined), destination });
   const intro = `<!doctype html><meta charset="utf-8"><title>External link rules playground</title>
     <body style="font:19px system-ui;max-width:760px;padding:52px;background:#f6f3ed;color:#282b32">
     <h1>External link rules playground</h1><p>This disposable profile contains fake Personal and Work spaces. Every test page is served locally.</p>

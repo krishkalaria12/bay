@@ -9,16 +9,20 @@ const NONE: Lease = { release: async () => {} };
 
 export function takeLease(): Lease {
   let root: string;
+
   try {
     root = leaseRoot(process.execPath);
   } catch {
     return NONE;
   }
+
   const leases = join(root, ".leases");
+
   try {
     if (!statSync(leases).isDirectory()) return NONE;
     const path = join(leases, String(process.pid));
     closeSync(openSync(path, "w", 0o644));
+
     return {
       release: async () => {
         try {

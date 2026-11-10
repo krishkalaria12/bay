@@ -1,10 +1,10 @@
 import { displayUrl, fuzzyScore } from "@bay/core";
-import { FadeLabel, Surface, Symbol } from "@bay/shell";
+import { FadeLabel, Surface, Symbol } from "@bay/desktop";
 import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { switchToTab } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { tabLabel } from "../../store/model";
 import { tabTitle } from "./actions";
 import { setSidebarUi, useSidebarUi } from "./state";
@@ -18,11 +18,18 @@ type Row =
 
 type Sources = Pick<BrowserState, "tabs" | "windows" | "windowOrder" | "closedTabs" | "closedGroups">;
 
-function candidates(s: Sources, windowId: string): { open: Row[]; closed: Row[] } {
+interface CandidateRows {
+  open: Row[];
+  closed: Row[];
+}
+
+function candidates(s: Sources, windowId: string): CandidateRows {
   const w = s.windows[windowId];
+
   if (!w) return { open: [], closed: [] };
   const spaceId = w.spaceId;
   const windowNumber = (id: string) => s.windowOrder.filter((x) => !s.windows[x]?.incognito || x === windowId).indexOf(id) + 1;
+
   const open: Row[] = Object.values(s.tabs)
     .filter((t) => t.spaceId === spaceId && !t.peekOf)
     .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
@@ -36,6 +43,7 @@ function candidates(s: Sources, windowId: string): { open: Row[]; closed: Row[] 
       where: t.windowId === windowId ? null : `Window ${windowNumber(t.windowId)}`,
       current: s.windows[windowId]?.activeTabIds[spaceId] === t.id,
     }));
+
   const closed: Row[] = [
     ...s.closedTabs
       .filter((c) => c.tab.spaceId === spaceId)
@@ -62,6 +70,7 @@ function candidates(s: Sources, windowId: string): { open: Row[]; closed: Row[] 
   ]
     .sort((a, b) => b.at - a.at)
     .map((row) => ({ kind: row.kind, id: row.id, title: row.title, url: row.url, favicon: row.favicon, icon: row.icon, detail: row.detail }));
+
   return { open, closed };
 }
 
@@ -79,12 +88,17 @@ function rankedSections({ open, closed }: { open: Row[]; closed: Row[] }, q: str
       { title: "Open Tabs", rows: open },
       { title: "Recently Closed", rows: closed.slice(0, 8) },
     ];
+
   const rank = (rows: Row[]) =>
     rows
-      .map((r) => ({ r, score: Math.max(fuzzyScore(q, r.title), fuzzyScore(q, host(r.url)) * 0.9, fuzzyScore(q, r.url) * 0.6) }))
-      .filter((x) => x.score > 0)
+      .flatMap((r) => {
+        const score = Math.max(fuzzyScore(q, r.title), fuzzyScore(q, host(r.url)) * 0.9, fuzzyScore(q, r.url) * 0.6);
+
+        return score > 0 ? [{ r, score }] : [];
+      })
       .sort((a, b) => b.score - a.score)
       .map((x) => x.r);
+
   return [
     { title: "Open Tabs", rows: rank(open) },
     { title: "Recently Closed", rows: rank(closed).slice(0, 8) },
@@ -93,6 +107,7 @@ function rankedSections({ open, closed }: { open: Row[]; closed: Row[] }, q: str
 
 export function SearchTabs({ windowId, windowWidth }: { windowId: string; windowWidth: number }) {
   const open = useSidebarUi((u) => u.searchTabs === windowId);
+
   return open ? <Panel windowId={windowId} windowWidth={windowWidth} /> : null;
 }
 
@@ -111,12 +126,15 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
   // Each section's first row's place in `rows`, for the keyboard selection.
   const starts = sections.map((_, i) => sections.slice(0, i).reduce((n, s) => n + s.rows.length, 0));
   const close = () => setSidebarUi({ searchTabs: null });
+
   const choose = (row: Row | undefined) => {
     if (!row) return;
     close();
+
     if (row.kind === "tab") switchToTab(row.id);
     else useBrowser.getState().restoreClosed(row.id, windowId);
   };
+
   const move = (delta: number) => {
     const next = Math.max(0, Math.min(rows.length - 1, selected + delta));
     setSelected(next);
@@ -163,7 +181,9 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
             keyDownEvents={[{ key: "Escape" }, { key: "ArrowUp" }, { key: "ArrowDown" }]}
             onKeyDown={(e) => {
               const key = e.nativeEvent.key;
+
               if (key === "ArrowDown") move(1);
+
               if (key === "ArrowUp") move(-1);
             }}
             style={{ flex: 1, fontSize: 16, color: theme.textPrimary, paddingVertical: 0 }}
@@ -180,6 +200,7 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
                 <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary, paddingHorizontal: 10, paddingVertical: 4 }}>{section.title}</Text>
                 {section.rows.map((row, j) => {
                   const i = starts[k]! + j;
+
                   return (
                     <ResultRow key={`${row.kind}:${row.id}`} row={row} selected={i === selected} onHover={() => setSelected(i)} onPress={() => choose(row)} />
                   );
@@ -196,6 +217,7 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
 function ResultRow({ row, selected, onHover, onPress }: { row: Row; selected: boolean; onHover(): void; onPress(): void }) {
   const theme = useTheme();
   const detail = row.kind === "tab" ? (row.current && !row.where ? "Current Tab" : row.where) : row.detail;
+
   return (
     <Pressable onPress={onPress}>
       <View

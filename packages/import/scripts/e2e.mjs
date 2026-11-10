@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // End-to-end import of cookies, addresses and cards into a hidden Bay instance, from a fake Chrome home
-// (scripts/e2e_fixture.py; never a real profile). It drives the real import window through the dev harness
+// (scripts/e2e_fixture.mjs; never a real profile). It drives the real import window through the dev harness
 // (apps/browser/src/lib/devHarness.ts) and its `globalThis.nnImport` hook (components/import/ImportWindow.tsx,
 // Debug builds only), reads the profile's cookies over CDP, and checks a local fixture site receives them.
 //
@@ -29,41 +29,54 @@ const HERE = path.dirname(new URL(import.meta.url).pathname);
 const args = process.argv.slice(2);
 const keep = args.includes("--keep");
 const [appArg, scratchArg, phaseArg = "all"] = args.filter((a) => !a.startsWith("--"));
+
 if (args.includes("--help") || args.includes("-h") || !appArg || !scratchArg || !["import", "restart", "all"].includes(phaseArg)) {
   const lines = fs
     .readFileSync(new URL(import.meta.url), "utf8")
     .split("\n")
     .slice(1);
+
   const header = lines.slice(
     0,
     lines.findIndex((l) => !l.startsWith("//")),
   );
+
   console.log(header.map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
   process.exit(args.includes("--help") || args.includes("-h") ? 0 : 64);
 }
+
 const APP = path.resolve(appArg);
+
 if (APP.startsWith("/Applications/")) throw new Error("never run against an installed app; pass a build under apps/browser/build-*");
+
 if (!fs.existsSync(path.join(APP, "Contents/MacOS"))) throw new Error(`not an app bundle: ${APP}`);
+
 const SCRATCH = path.resolve(scratchArg);
 const DATA = path.join(SCRATCH, "data");
 const HOME = path.join(SCRATCH, "home");
 const SECRET = "e2e-test-secret";
 
 fs.mkdirSync(SCRATCH, { recursive: true });
+
 const report = reporter(path.join(SCRATCH, "e2e.log"), { name: "import e2e" });
+
 // What happened since the last check: in the log, and printed under a failing check.
 const note = report.log;
+
 // An assertion on collected data (untimed).
 const record = (name, ok, detail = "") => report.record(name, { error: ok ? null : detail || "the assertion failed" });
 
 // The fixture site: records the Cookie header of each request.
 const seen = [];
+
 const server = http.createServer((req, res) => {
   seen.push({ url: req.url, cookie: req.headers.cookie ?? "" });
   res.writeHead(200, { "content-type": "text/html" });
   res.end("<title>fixture</title>ok");
 });
+
 const SERVER_PORT = await freePort();
+
 await new Promise((r) => server.listen(SERVER_PORT, "127.0.0.1", r));
 
 // The instance of this phase (scripts/lib/instance.mjs): one at a time, on DATA.
@@ -90,18 +103,23 @@ const evaluate = (body, timeout = 60_000) => app.eval(body, { timeout });
 async function until(body, test, timeout = 60_000) {
   const deadline = Date.now() + timeout;
   let last;
+
   while (Date.now() < deadline) {
     last = await evaluate(body).catch((e) => ({ error: String(e) }));
+
     if (test(last)) return last;
+
     if (app.exited) break;
     await sleep(500);
   }
+
   throw new Error(`until timed out: ${JSON.stringify(last)?.slice(0, 300)}`);
 }
 
 // Chrome's browser target, one socket per call.
 async function cdp(method, params = {}) {
   const browser = await app.browser();
+
   try {
     return await browser.send(method, params, { timeout: 20_000 });
   } finally {
@@ -142,11 +160,13 @@ async function importPhase(ok) {
   const step = await until("return globalThis.nnImport.step", (r) => ["unlock", "progress", "done"].includes(r), 10_000);
   ok(step === "unlock", "unlock step shown for encrypted kinds");
   await evaluate(`globalThis.nnImport.unlock(); return true`);
+
   const done = await until(
     "const g = globalThis.nnImport; return { step: g.step, counts: g.counts, failures: g.failures, notes: g.notes }",
     (r) => r?.step === "done",
     60_000,
   );
+
   note("done:", JSON.stringify(done));
   ok(done.counts.cookies === 5, `5 cookies imported (got ${done.counts.cookies})`);
   ok(done.counts.addresses === 1 && done.counts.cards === 1, "1 address and 1 card imported");
@@ -175,6 +195,7 @@ async function importPhase(ok) {
 
   // The site sees the cookies on its next request.
   await evaluate(`nn.actions.openUrls(["http://localhost:${SERVER_PORT}/"]); return true`);
+
   for (const deadline = Date.now() + 20_000; !seen.length && Date.now() < deadline;) await sleep(250);
   const header = seen[0]?.cookie ?? "";
   note("server saw:", JSON.stringify(seen));
@@ -205,20 +226,26 @@ async function restartPhase(ok) {
 }
 
 const phases = phaseArg === "all" ? ["import", "restart"] : [phaseArg];
+
 try {
   if (phases[0] === "import") {
     for (const dir of [DATA, HOME]) fs.rmSync(dir, { recursive: true, force: true });
-    execFileSync("python3", [path.join(HERE, "e2e_fixture.py"), HOME, SECRET, String(SERVER_PORT)], { stdio: "ignore" });
+    execFileSync(process.execPath, [path.join(HERE, "e2e_fixture.mjs"), HOME, SECRET, String(SERVER_PORT)], { stdio: "ignore" });
   } else if (!fs.existsSync(DATA)) {
     throw new Error(`${DATA} doesn't exist: run the import phase first`);
   }
+
   for (const [i, phase] of phases.entries()) {
     const failed = [];
+
     const ok = (cond, msg) => {
       record(msg, cond);
+
       if (!cond) failed.push(msg);
     };
+
     note(`== ${phase}`);
+
     try {
       await launch();
       await (phase === "import" ? importPhase(ok) : restartPhase(ok));
@@ -229,11 +256,14 @@ try {
       failed.push(stack);
     } finally {
       fs.writeFileSync(path.join(SCRATCH, `result-${phase}.json`), JSON.stringify({ failed }, null, 2));
+
       if (!(keep && i === phases.length - 1)) await quit();
     }
   }
 } finally {
   server.close();
+
   if (keep && app && !app.exited) report.say(`kept pid ${app.pid}: scripts/agent/nn eval ${DATA} '<js>'`);
 }
+
 process.exit(report.summary() ? 0 : 1);

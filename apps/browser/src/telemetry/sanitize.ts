@@ -1,3 +1,6 @@
+import * as v from "valibot";
+import type { JsonInput, JsonValue } from "../lib/json";
+
 const FILE_EXTENSIONS =
   "json|jsonl|js|mjs|cjs|jsx|ts|tsx|map|bundle|jsbundle|hbc|html?|css|txt|md|rtf|csv|log|ips|plist|xml|ya?ml|pdf|docx?|xlsx?|pptx?|key|pages|numbers|png|jpe?g|gif|webp|heic|svg|ico|icns|mp[34]|m4[av]|mov|avi|mkv|webm|wav|aac|flac|zip|gz|tgz|tar|7z|rar|dmg|pkg|app|crx|xpi|db|sqlite|sqlite3|ldb|sst";
 
@@ -20,43 +23,62 @@ const RULES: [RegExp, string][] = [
   [/\b(?:0x)?[0-9a-f]{12,}\b/gi, "<hex>"],
 ];
 
-export function scrubText(input: unknown, max = 200): string {
-  if (typeof input !== "string") return "";
+/** A thrown value telemetry classifies: a JSON value from the page, an Error, or nothing thrown. */
+export type TelemetryError = JsonInput | Error;
+
+export function scrubText(input: JsonInput, max = 200): string {
+  if (!v.is(v.string(), input)) return "";
   let text = input.split(/\r?\n/, 1)[0] ?? "";
+
   for (const [pattern, placeholder] of RULES) text = text.replace(pattern, placeholder);
   text = text.replace(/\s+/g, " ").trim();
+
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]{0,60}$/;
 
-export function errorType(error: unknown): string {
-  if (error && typeof error === "object") {
+export function errorType(error: TelemetryError): string {
+  if (Array.isArray(error) || v.is(v.object({}), error)) {
+    // SAFETY: error is an object or array, so reading its name and constructor name is safe.
     const name = (error as { name?: unknown }).name;
-    if (typeof name === "string" && IDENTIFIER.test(name)) return name;
+
+    if (v.is(v.string(), name) && IDENTIFIER.test(name)) return name;
+
+    // SAFETY: error is an object or array, so its constructor name is readable.
     const ctor = (error as { constructor?: { name?: unknown } }).constructor?.name;
-    if (typeof ctor === "string" && IDENTIFIER.test(ctor)) return ctor;
+
+    if (v.is(v.string(), ctor) && IDENTIFIER.test(ctor)) return ctor;
+
     return "Error";
   }
-  if (typeof error === "string") return "Error";
+
+  if (v.is(v.string(), error)) return "Error";
+
   return typeof error === "undefined" ? "Undefined" : error === null ? "Null" : "NonError";
 }
 
 // Expo's failed native call names the Swift function, a code identifier; the cause lines are dropped with the rest.
 const NATIVE_CALL = /^Calling the '([A-Za-z_$][\w$]{0,60})' function has failed$/;
 
-export function errorMessage(error: unknown): string {
-  const message = error && typeof error === "object" ? (error as { message?: unknown }).message : error;
-  if (typeof message !== "string") return "";
+export function errorMessage(error: TelemetryError): string {
+  // SAFETY: error is an object or array, so reading its message field is safe; otherwise message is error itself.
+  const message = Array.isArray(error) || v.is(v.object({}), error) ? (error as { message?: unknown }).message : error;
+
+  if (!v.is(v.string(), message)) return "";
   const call = NATIVE_CALL.exec(message.split(/\r?\n/, 1)[0]!.trim());
+
   if (call) return `Calling the '${call[1]}' function has failed`;
+
   return scrubText(message, 300);
 }
 
 // Expo's CodedError codes (ERR_…) and Node's (ENOENT) are constants, never user data.
-export function errorCode(error: unknown): string | null {
-  const code = error && typeof error === "object" ? (error as { code?: unknown }).code : undefined;
-  return typeof code === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(code) ? code : null;
+export function errorCode(error: TelemetryError): string | null {
+  // SAFETY: error is an object or array, so reading its code field is safe; otherwise code is undefined.
+  const code = Array.isArray(error) || v.is(v.object({}), error) ? (error as { code?: unknown }).code : undefined;
+
+  return v.is(v.string(), code) && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(code) ? code : null;
 }
 
 export type ExceptionFrame = {
@@ -73,13 +95,17 @@ export type ExceptionFrame = {
 
 function frameFunction(name: string | undefined): string {
   const fn = (name ?? "").trim();
+
   if (!fn || fn === "?" || fn === "anonymous" || fn === "<anonymous>") return "<anonymous>";
+
   return /^[\w$.<>[\]# :-]{1,100}$/.test(fn) ? fn : "<anonymous>";
 }
 
 export function frameFile(location: string | undefined): string {
   const raw = (location ?? "").replace(/^address at /, "").trim();
+
   if (!raw || raw === "native") return raw || "<unknown>";
+
   // Metro puts bundle options after "//&".
   const base =
     raw
@@ -87,6 +113,7 @@ export function frameFile(location: string | undefined): string {
       .split("/")
       .filter(Boolean)
       .at(-1) ?? "";
+
   return /^[\w.-]{1,80}$/.test(base) ? base : "<unknown>";
 }
 
@@ -94,21 +121,25 @@ const V8_FRAME = /^\s*at (?:(.*?) \((.*?)\)|(.*?))\s*$/;
 const JSC_FRAME = /^\s*(.*?)@(.*?)\s*$/;
 const LOCATION = /^(.*?)(?::(\d+))?(?::(\d+))?$/;
 
-export function parseStack(stack: unknown, limit = 50): ExceptionFrame[] {
-  if (typeof stack !== "string") return [];
+export function parseStack(stack: JsonInput, limit = 50): ExceptionFrame[] {
+  if (!v.is(v.string(), stack)) return [];
   const frames: ExceptionFrame[] = [];
+
   for (const line of stack.split("\n")) {
     let fn: string | undefined;
     let location: string | undefined;
     const v8 = V8_FRAME.exec(line);
+
     if (v8) {
       if (v8[2] !== undefined) [fn, location] = [v8[1], v8[2]];
       else location = v8[3];
     } else {
       const jsc = JSC_FRAME.exec(line);
+
       if (!jsc || !jsc[2]) continue;
       [fn, location] = [jsc[1], jsc[2]];
     }
+
     const loc = LOCATION.exec((location ?? "").replace(/^address at /, "")) ?? [];
     const filename = frameFile(loc[1]);
     frames.push({
@@ -122,8 +153,10 @@ export function parseStack(stack: unknown, limit = 50): ExceptionFrame[] {
       resolved: false,
       in_app: filename !== "native" && filename !== "<unknown>" && !filename.startsWith("InternalBytecode"),
     });
+
     if (frames.length >= limit) break;
   }
+
   return frames.reverse();
 }
 
@@ -136,13 +169,15 @@ export function nativeFrames(frames: NativeFrame[], limit = 64): ExceptionFrame[
     .slice(0, limit)
     .map((f): ExceptionFrame => {
       const image = frameFile(f.image.replace(/\s/g, "_")).replace(/_/g, " ");
+
       const symbol =
-        typeof f.symbol === "string" && f.symbol
+        v.is(v.string(), f.symbol) && f.symbol
           ? f.symbol
               .replace(/\S*\/\S*/g, "<path>")
               .replace(/"[^"]*"/g, "<text>")
               .slice(0, 200)
           : null;
+
       return {
         platform: "custom",
         lang: "native",
@@ -159,6 +194,7 @@ export function nativeFrames(frames: NativeFrame[], limit = 64): ExceptionFrame[
 }
 
 const SYSTEM_NAME = /^[A-Z][A-Z0-9_ ()]{1,40}$/;
+
 // Framework-prefixed constants only (NSRangeException, CALayerInvalidGeometry, RCTFatalException).
 const EXCEPTION_NAME = /^[A-Z]{2,4}[A-Z][a-z][A-Za-z0-9]{1,60}$/;
 
@@ -177,21 +213,30 @@ export function nativeCrashExceptions(report: NativeCrash) {
   const signal = report.signal && SYSTEM_NAME.test(report.signal) ? report.signal : null;
   const name = report.exceptionName && EXCEPTION_NAME.test(report.exceptionName) ? report.exceptionName : null;
   const crash = { type: machType, value: signal ? `${machType} (${signal})` : machType, frames: nativeFrames(report.frames) };
+
   if (!report.exceptionFrames?.length) return { name, signal, exceptions: [crash] };
   const thrown = { type: name ?? "NSException", value: `Uncaught ${name ?? "NSException"}`, frames: nativeFrames(report.exceptionFrames) };
+
   return { name, signal, exceptions: [thrown, crash] };
 }
 
 export type PropertyValue = string | number | boolean | null;
 
-export function cleanProperties(props: Record<string, unknown>): Record<string, PropertyValue> {
-  const out: Record<string, PropertyValue> = {};
+export interface Properties {
+  [key: string]: PropertyValue;
+}
+
+export function cleanProperties(props: Record<string, JsonValue>): Properties {
+  const out: Properties = {};
+
   for (const [key, value] of Object.entries(props)) {
     if (!/^\$?[a-z][a-z0-9_]{0,48}$/i.test(key)) continue;
-    if (value === null || typeof value === "boolean") out[key] = value;
-    else if (typeof value === "number") {
+
+    if (value === null || v.is(v.boolean(), value)) out[key] = value;
+    else if (v.is(v.number(), value)) {
       if (Number.isFinite(value)) out[key] = value;
-    } else if (typeof value === "string") out[key] = scrubText(value, 64);
+    } else if (v.is(v.string(), value)) out[key] = scrubText(value, 64);
   }
+
   return out;
 }

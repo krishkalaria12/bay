@@ -1,4 +1,4 @@
-import { Surface } from "@bay/shell";
+import { Surface } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -17,8 +17,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { hex, useTheme } from "../../../lib/theme";
 import { useWindowId } from "../../../store/hooks";
-import type { Rect } from "../../layout/geometry";
-import { useHover } from "../../primitives";
+import type { Rect } from "../../window/geometry";
+import { useHover } from "../../ui/primitives";
 import { useOnboardingColors } from "../ui";
 import { locateAnchor } from "./anchors";
 import { endToolTour, openVideoTour, stepToolTour, useTour, videoTourUrl, type TourStop } from "./state";
@@ -47,6 +47,7 @@ export function ToolTour() {
   const presenceStyle = useAnimatedStyle(() => ({ opacity: presence.get() }));
 
   if (shown === null) return null;
+
   return (
     <Animated.View style={[StyleSheet.absoluteFill, presenceStyle]} pointerEvents={active ? "box-none" : "none"}>
       <Tour key={shown} windowId={windowId} />
@@ -55,7 +56,10 @@ export function ToolTour() {
 }
 
 type Hole = Rect & { radius: number };
+
 type HoleValues = { x: SharedValue<number>; y: SharedValue<number>; w: SharedValue<number>; h: SharedValue<number>; r: SharedValue<number> };
+
+const HOLE_KEYS = ["x", "y", "w", "h", "r"] as const;
 
 function Tour({ windowId }: { windowId: string }) {
   const theme = useTheme();
@@ -72,12 +76,15 @@ function Tour({ windowId }: { windowId: string }) {
   useEffect(() => {
     if (!stop?.anchor) return setTarget(null);
     let cancelled = false;
+
     const update = () =>
       void locateAnchor(windowId, stop.anchor!).then((rect) => {
         if (!cancelled) setTarget((prev) => (sameRect(prev, rect) ? prev : rect));
       });
+
     update();
     const timer = setInterval(update, 400);
+
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -91,16 +98,19 @@ function Tour({ windowId }: { windowId: string }) {
     if (!size.width || !stop) return;
     const to = { x: spot.x, y: spot.y, w: spot.width, h: spot.height, r: spot.radius };
     const cardTo = { x: cardAt.x, y: cardAt.y };
+
     if (!placed.current) {
       placed.current = true;
-      (Object.keys(to) as (keyof typeof to)[]).forEach((k) => hole[k].set(to[k]));
+      HOLE_KEYS.forEach((k) => hole[k].set(to[k]));
       card.x.set(cardTo.x);
       card.y.set(cardTo.y);
+
       return;
     }
+
     // Layout (left/top/width/height), and the radius Ring follows.
     const spring = (v: SharedValue<number>, toValue: number) => v.set(withSpring(toValue, TOUR_SPOT_SPRING));
-    (Object.keys(to) as (keyof typeof to)[]).forEach((k) => spring(hole[k], to[k]));
+    HOLE_KEYS.forEach((k) => spring(hole[k], to[k]));
     spring(card.x, cardTo.x);
     spring(card.y, cardTo.y);
   }, [spot.x, spot.y, spot.width, spot.height, spot.radius, cardAt.x, cardAt.y, size.width, !!stop]);
@@ -113,11 +123,13 @@ function Tour({ windowId }: { windowId: string }) {
     height: hole.h.get() + TOUR_SCRIM_REACH * 2,
     borderRadius: hole.r.get() + TOUR_SCRIM_REACH,
   }));
+
   const above = useAnimatedStyle(() => ({ height: hole.y.get() }));
   const below = useAnimatedStyle(() => ({ top: hole.y.get() + hole.h.get() }));
   const leftOf = useAnimatedStyle(() => ({ width: hole.x.get(), top: hole.y.get(), height: hole.h.get() }));
   const rightOf = useAnimatedStyle(() => ({ left: hole.x.get() + hole.w.get(), top: hole.y.get(), height: hole.h.get() }));
   const cardStyle = useAnimatedStyle(() => ({ left: card.x.get(), top: card.y.get() }));
+
   if (!stop) return null;
   const scrim = theme.dark ? "#00000080" : "#0000004D";
 
@@ -156,11 +168,13 @@ function Ring({ hole }: { hole: HoleValues }) {
   useEffect(() => {
     const leg = (to: number) => withTiming(to, { duration: 1100, easing: Easing.inOut(Easing.sin) });
     pulse.set(withRepeat(withSequence(leg(1), leg(0)), -1, false));
+
     return () => cancelAnimation(pulse);
   }, []);
   const out = 3;
   const frame = useAnimatedStyle(() => ({ left: hole.x.get() - out, top: hole.y.get() - out, width: hole.w.get() + out * 2, height: hole.h.get() + out * 2 }));
   const pulseStyle = useAnimatedStyle(() => ({ opacity: interpolate(pulse.get(), [0, 1], [0.45, 1]) }));
+
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute" }, frame]}>
       <Animated.View style={[StyleSheet.absoluteFill, pulseStyle]}>
@@ -174,6 +188,7 @@ function CoachMark({ stop, index, count, windowId }: { stop: TourStop; index: nu
   const theme = useTheme();
   const last = index === count - 1;
   const video = last ? videoTourUrl() : null;
+
   return (
     <Surface
       fill={hex(theme.panel)}
@@ -204,6 +219,7 @@ function CoachMark({ stop, index, count, windowId }: { stop: TourStop; index: nu
 function PillButton({ title, onPress, primary }: { title: string; onPress: () => void; primary?: boolean }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
@@ -229,6 +245,7 @@ function PillButton({ title, onPress, primary }: { title: string; onPress: () =>
 function TextButton({ title, onPress }: { title: string; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
@@ -246,6 +263,7 @@ const sameRect = (a: Rect | null, b: Rect | null) =>
 function spotlight(stop: TourStop | undefined, target: Rect | null, size: { width: number; height: number }): Hole {
   if (!stop?.anchor || !target) return { x: size.width / 2, y: size.height / 2, width: 0, height: 0, radius: 0 };
   const pad = stop.pad ?? 4;
+
   return {
     x: target.x - pad,
     y: target.y - pad,
@@ -259,19 +277,25 @@ function placeCard(stop: TourStop | undefined, spot: Hole, size: { width: number
   const clampX = (x: number) => Math.min(Math.max(x, TOUR_MARGIN), Math.max(TOUR_MARGIN, size.width - TOUR_CARD_WIDTH - TOUR_MARGIN));
   const clampY = (y: number) => Math.min(Math.max(y, TOUR_MARGIN), Math.max(TOUR_MARGIN, size.height - height - TOUR_MARGIN));
   const centre = { x: clampX(size.width / 2 - TOUR_CARD_WIDTH / 2), y: clampY(size.height * 0.62 - height / 2) };
+
   if (!stop?.anchor || !spot.width) return centre;
+
   switch (stop.placement) {
     case "right": {
       const x = spot.x + spot.width + TOUR_GAP;
+
       if (x + TOUR_CARD_WIDTH > size.width - TOUR_MARGIN) return { x: clampX(spot.x), y: clampY(spot.y + spot.height + TOUR_GAP) };
+
       return { x, y: clampY(spot.y + spot.height / 2 - 36) };
     }
+
     case "inside":
       return { x: clampX(spot.x + spot.width / 2 - TOUR_CARD_WIDTH / 2), y: clampY(spot.y + spot.height * 0.7 - height / 2) };
     default: {
       const below = spot.y + spot.height + TOUR_GAP;
       const y = below + height > size.height - TOUR_MARGIN ? spot.y - TOUR_GAP - height : below;
       const x = spot.width < TOUR_CARD_WIDTH / 2 ? spot.x - 10 : spot.x + spot.width / 2 - TOUR_CARD_WIDTH / 2;
+
       return { x: clampX(x), y: clampY(y) };
     }
   }

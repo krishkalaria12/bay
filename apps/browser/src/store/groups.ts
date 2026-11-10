@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { listOfTab, newId, pinnedPage, withList, type TabList } from "./model";
-import { closingGroup } from "./organize";
+import { closingGroup } from "./tabTidying";
 import type { GroupColor, PinnedFolder, Tab, TabGroup } from "./types";
 
 export type GroupsSlice = {
@@ -21,15 +21,18 @@ export function syncGroupOrder(groups: Record<string, TabGroup>, list: TabList):
   let changed = false;
   const next = { ...groups };
   const inList = new Set(list.tabIds);
+
   for (const g of Object.values(groups)) {
     if (!g.tabIds.some((id) => inList.has(id))) continue;
     const members = new Set(g.tabIds);
     const tabIds = list.tabIds.filter((id) => members.has(id));
+
     if (tabIds.some((id, i) => id !== g.tabIds[i])) {
       next[g.id] = { ...g, tabIds };
       changed = true;
     }
   }
+
   return changed ? next : groups;
 }
 
@@ -45,46 +48,60 @@ export function orderSections(
       .filter((g) => g.pinned)
       .flatMap((g) => g.tabIds),
   );
+
   const rank = (id: string) => {
     if (tabs[id]?.pinned) return 0;
+
     if (tabs[id]?.pinnedRow) return 1;
+
     if (pinnedGroup.has(id)) return 2;
+
     return 3;
   };
+
   const out = placeFolders(
     [0, 1, 2, 3].flatMap((r) => ids.filter((id) => rank(id) === r)),
     tabs,
     folders,
   );
+
   return out.every((id, i) => id === ids[i]) ? ids : out;
 }
 
 /** Keep each subtree together, allowing direct rows to sit before and after its child folders. */
 export function placeFolders(ids: string[], tabs: Record<string, Tab>, folders: Record<string, PinnedFolder> = {}): string[] {
   const blocks = new Map<string, { depth: number; members: Set<string> }>();
+
   for (const id of ids) {
     const tab = tabs[id];
+
     if (!tab?.pinnedRow || !tab.folderId) continue;
     const path: string[] = [];
     let at: string | undefined = tab.folderId;
+
     while (at && !path.includes(at)) {
       path.unshift(at);
       const parent: string | undefined = folders[at]?.parentId;
       at = parent && folders[parent]?.spaceId === tab.spaceId ? parent : undefined;
     }
+
     path.forEach((folderId, depth) => {
       let block = blocks.get(folderId);
+
       if (!block) blocks.set(folderId, (block = { depth, members: new Set() }));
       block.members.add(id);
     });
   }
+
   let out = ids;
+
   for (const block of [...blocks.values()].sort((a, b) => a.depth - b.depth)) {
     out = placeBlock(
       out,
       out.filter((id) => block.members.has(id)),
     );
   }
+
   return out;
 }
 
@@ -94,17 +111,25 @@ export function placeBlock(tabIds: string[], block: string[]): string[] {
   const rest = tabIds.filter((id) => !members.has(id));
   const before = tabIds.slice(0, at).filter((id) => !members.has(id)).length;
   rest.splice(before, 0, ...block);
+
   return rest;
 }
 
-export function leaveGroups(groups: Record<string, TabGroup>, ids: Set<string>): Record<string, TabGroup> {
+export interface GroupsById {
+  [id: string]: TabGroup;
+}
+
+export function leaveGroups(groups: Record<string, TabGroup>, ids: Set<string>): GroupsById {
   if (!Object.values(groups).some((g) => g.tabIds.some((id) => ids.has(id)))) return groups;
-  const next: Record<string, TabGroup> = {};
+  const next: GroupsById = {};
+
   for (const g of Object.values(groups)) {
     const tabIds = g.tabIds.filter((id) => !ids.has(id));
+
     if (tabIds.length === g.tabIds.length) next[g.id] = g;
     else if (tabIds.length > (g.autoUngroup ? 1 : 0)) next[g.id] = { ...g, tabIds };
   }
+
   return next;
 }
 
@@ -116,8 +141,10 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
     const tabs = tabIds.map((id) => s.tabs[id]).filter((t) => t && !pinnedPage(t));
     const first = tabs[0];
     const list = first && listOfTab(s, first.id);
+
     if (!first || !list || tabs.some((t) => t!.spaceId !== first.spaceId)) return "";
     const members = new Set(tabs.map((t) => t!.id));
+
     const window = {
       key: list.key,
       tabIds: placeBlock(
@@ -125,6 +152,7 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
         list.tabIds.filter((id) => members.has(id)),
       ),
     };
+
     const group: TabGroup = {
       id: newId("g"),
       spaceId: first.spaceId,
@@ -136,18 +164,23 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
       tabIds: window.tabIds.filter((id) => members.has(id)),
       createdAt: Date.now(),
     };
+
     set({ groups: { ...leaveGroups(s.groups, members), [group.id]: group }, tabLists: withList(s, window).tabLists });
+
     return group.id;
   },
 
   updateGroup(id, patch) {
     set((s) => {
       const g = s.groups[id];
+
       if (!g) return {};
       const groups = { ...s.groups, [id]: { ...g, ...patch } };
       const list = g.tabIds[0] ? listOfTab(s, g.tabIds[0]) : undefined;
+
       if (patch.pinned === undefined || patch.pinned === g.pinned || !list) return { groups };
       const next = { key: list.key, tabIds: orderSections(list.tabIds, s.tabs, groups, s.pinnedFolders) };
+
       return { groups: syncGroupOrder(groups, next), tabLists: withList(s, next).tabLists };
     });
   },
@@ -155,16 +188,22 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
   addTabsToGroup(groupId, tabIds) {
     set((s) => {
       const group = s.groups[groupId];
+
       if (!group) return {};
+
       const adding = tabIds.filter((id) => {
         const t = s.tabs[id];
+
         return t && !pinnedPage(t) && t.spaceId === group.spaceId && !group.tabIds.includes(id);
       });
+
       const list = listOfTab(s, adding[0] ?? "");
+
       if (!adding.length || !list) return {};
       const window = { key: list.key, tabIds: placeBlock(list.tabIds, [...group.tabIds, ...adding]) };
       // A new map: leaveGroups returns the current one when no added tab was in a group.
       const groups = { ...leaveGroups(s.groups, new Set(adding)), [groupId]: { ...group, tabIds: [...group.tabIds, ...adding] } };
+
       return { groups, tabLists: withList(s, window).tabLists };
     });
   },
@@ -174,13 +213,17 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
       const leaving = new Set(tabIds);
       const groups: Record<string, TabGroup> = {};
       let next = s;
+
       for (const g of Object.values(s.groups)) {
         const kept = g.tabIds.filter((id) => !leaving.has(id));
+
         if (kept.length === g.tabIds.length) {
           groups[g.id] = g;
           continue;
         }
+
         const list = listOfTab(next, g.tabIds[0]!);
+
         if (!kept.length || !list) continue;
         const out = g.tabIds.filter((id) => leaving.has(id));
         const tabIds = list.tabIds.filter((id) => !out.includes(id));
@@ -188,6 +231,7 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
         next = withList(next, { key: list.key, tabIds });
         groups[g.id] = { ...g, tabIds: kept };
       }
+
       return { groups, tabLists: next.tabLists };
     });
   },
@@ -195,6 +239,7 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
   ungroup(groupId) {
     set((s) => {
       const { [groupId]: _, ...groups } = s.groups;
+
       return { groups };
     });
   },

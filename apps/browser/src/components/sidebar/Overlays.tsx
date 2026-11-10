@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useWindowId } from "../../store/hooks";
-import { startSidebarEffects } from "./effects";
+import { startSidebarEffects } from "./sidebarEffects";
 import { MediaSessionsOverlay } from "../media/SessionList";
-import { MeetingAlert } from "../live/MeetingAlert";
+import { MeetingAlert } from "../activity/MeetingAlert";
 import { HoverCard } from "./HoverCard";
 import { IconPicker } from "./IconPicker";
 import { NewMenu } from "./NewMenu";
@@ -16,6 +16,7 @@ export function SidebarOverlays({ windowWidth }: { windowWidth: number }) {
   const sidebarWidth = useSidebarWidth(windowId);
   const [height, setHeight] = useState(0);
   useEffect(startSidebarEffects, []);
+
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
       <HoverCard windowId={windowId} windowWidth={windowWidth} />

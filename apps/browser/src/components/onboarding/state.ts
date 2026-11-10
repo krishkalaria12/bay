@@ -1,6 +1,6 @@
-import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/shell";
+import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { resolveWindowId } from "../../store/model";
 import { pinSites } from "./sites";
 import { endToolTour, startToolTour } from "./tour/state";
@@ -36,16 +36,19 @@ const stepAfter = (step: OnboardingStep, delta: number) => STEPS[STEPS.indexOf(s
 // The step is saved as it shows, so a relaunch picks up where you were.
 export function goToStep(step: OnboardingStep) {
   useOnboarding.setState({ step });
+
   if (step !== "intro") save({ step });
 }
 
 function advance(step: OnboardingStep, picked: string[] | undefined) {
   const all = { ...useOnboarding.getState().picked };
+
   if (picked?.length) all[step] = picked;
   else delete all[step];
   useOnboarding.setState({ picked: all });
   save({ picked: all });
   const after = stepAfter(step, 1);
+
   if (after) goToStep(after);
   else finishOnboarding();
 }
@@ -58,6 +61,7 @@ export const skipStep = () => advance(useOnboarding.getState().step, undefined);
 
 export function previousStep() {
   const before = stepAfter(useOnboarding.getState().step, -1);
+
   if (before && before !== "intro") goToStep(before);
 }
 
@@ -77,6 +81,8 @@ type Saved = {
 function readSaved(): Saved | null {
   try {
     const json = readDocument(ONBOARDING_DOC);
+
+    // SAFETY: Saved) assertion matches the runtime value validated at this call site.
     return json ? (JSON.parse(json) as Saved) : null;
   } catch {
     return null;
@@ -107,9 +113,11 @@ export const saveIntroMusicMuted = (muted: boolean) => save({ introMusicMuted: m
 
 export function startOnboarding(windowId?: string | null, step: OnboardingStep = "intro", picked: OnboardingState["picked"] = {}) {
   const id = resolveWindowId(useBrowser.getState(), windowId);
+
   if (!id) return;
   endToolTour();
   useOnboarding.setState((s) => ({ windowId: id, step, picked, leaving: false, tourAfter: false, session: s.session + 1 }));
+
   if (step !== "intro") save({ step });
 }
 
@@ -117,30 +125,39 @@ export function finishOnboarding(options: { tour?: boolean } = {}) {
   markCompleted();
   stopIntroMusic(0.6);
   const { windowId } = useOnboarding.getState();
+
   if (windowId) useOnboarding.setState({ leaving: true, tourAfter: !!options.tour });
 }
 
 export function dismissOnboarding(session: number) {
   const { session: current, windowId, tourAfter } = useOnboarding.getState();
+
   if (current !== session) return;
   useOnboarding.setState({ windowId: null, step: "intro", leaving: false, tourAfter: false, picked: {} });
+
   if (tourAfter && windowId) startToolTour(windowId);
 }
 
 export function maybeStartOnboarding() {
   const saved = readSaved();
+
   if (saved?.completedAt) return;
+
   if (saved?.startedAt) {
     const step = saved.step && STEPS.includes(saved.step) && saved.step !== "intro" ? saved.step : FIRST_STEP;
+
     return startOnboarding(null, step, saved.picked ?? {});
   }
+
   if (readDocument("session.json")) return markCompleted();
+
   if (__DEV__ && launchEnvironment("BAY_ONBOARDING") !== "1") return;
   save({ startedAt: Date.now() });
   startOnboarding();
 }
 
 if (__DEV__)
+  // SAFETY: { nnOnboarding? assertion matches the runtime value validated at this call site.
   (globalThis as { nnOnboarding?: unknown }).nnOnboarding = {
     store: useOnboarding,
     go: goToStep,

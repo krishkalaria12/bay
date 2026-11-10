@@ -26,10 +26,12 @@ import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.
 
 const args = process.argv.slice(2);
 const appArg = args.find((a) => !a.startsWith("--"));
+
 if (!appArg) {
   console.error("usage: node windowing-test.mjs <Debug Bay.app> [--port=<DevTools port>] [--keep-data]");
   process.exit(2);
 }
+
 const appPath = resolve(appArg);
 const port = args.find((a) => a.startsWith("--port="))?.slice(7);
 const keep = args.includes("--keep-data");
@@ -41,15 +43,19 @@ const rep = reporter(join(scratch, "windowing-test.log"), { name: "windowing-tes
 const page = (bg, ink, title) => `<!doctype html><title>${title}</title><body style="margin:0;background:${bg};color:${ink};font:22px Georgia">
   <h1 style="font:900 110px/1 Helvetica;text-align:center;margin:40px 0">${title.toUpperCase()}</h1>
   ${Array.from({ length: 60 }, (_, i) => `<p style="margin:0 40px 18px">Paragraph ${i}: members who stop answering are noticed again.</p>`).join("")}</body>`;
+
 const server = createServer((req, res) => {
   const blue = req.url.startsWith("/blue");
   res.writeHead(200, { "content-type": "text/html" });
   res.end(blue ? page("#1d3557", "#f1faee", "Blue post") : page("#ece6da", "#141210", "Official gazette"));
 });
+
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
+
 const base = `http://127.0.0.1:${server.address().port}`;
 
 const tab = (id, windowId, url, createdAt) => ({ id, windowId, url, title: url ? id : "", createdAt, lastActiveAt: createdAt });
+
 // Frames are AppKit's (from the bottom of the screen); w2 sits clear of w1, to the right.
 const fixture = () =>
   session({
@@ -70,6 +76,7 @@ const fixture = () =>
   });
 
 let app = null;
+
 const HELPERS = `
 const C = globalThis.expo.modules.BayCEF;
 const st = () => nn.store.getState();
@@ -77,7 +84,9 @@ const win = (id) => C.chromeWindows().then((ws) => { const f = st().windows[id].
 const act = (id, a) => win(id).then((n) => C.devWindow(n, a));
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 `;
+
 const run = (body) => app.eval(`${HELPERS}\n${body}`);
+
 // A check's own windows go even when it fails: one left open sat over w1's tab list and took the last check's drop.
 const closeWindowsBut = (ids) =>
   run(
@@ -88,6 +97,7 @@ const closeWindowsBut = (ids) =>
 
 const recorderSource = join(dirname(fileURLToPath(import.meta.url)), "windowing-rec.swift");
 const recorder = join(data, "windowing-rec");
+
 // Why frames can't be recorded (null: they can).
 let noScreen = null;
 
@@ -103,24 +113,33 @@ async function record(seconds, during) {
   child.stdout.on("data", (d) => (said += d));
   child.stderr.on("data", (d) => rep.log(`recorder: ${String(d).trim()}`));
   const done = new Promise((r) => child.on("exit", r));
+
   for (const start = Date.now(); !said.includes("started") && Date.now() - start < 8000; await sleep(20)) if (child.exitCode !== null) break;
+
   if (!said.includes("started")) {
     child.kill("SIGKILL");
+
     return null;
   }
+
   await sleep(300);
   await during();
   // A capture can hang with the screen locked: give it a deadline.
   const ended = await Promise.race([done, sleep((seconds + 10) * 1000).then(() => "timeout")]);
+
   if (ended === "timeout") child.kill("SIGKILL");
+
   if (!existsSync(file)) return null;
+
   const frames = readFileSync(file, "utf8")
     .split("\n")
     .filter(Boolean)
     .map((l) => {
       const f = JSON.parse(l);
+
       return { t: f.t, w: f.w, h: f.h, g: Buffer.from(f.g, "base64") };
     });
+
   return frames.length > 10 ? frames : null;
 }
 
@@ -131,20 +150,29 @@ const regionOf = (frame, H, inset = { left: 0, top: 0, right: 0, bottom: 0 }) =>
   w: Math.round((frame[2] - inset.left - inset.right) / 8),
   h: Math.round((frame[3] - inset.top - inset.bottom) / 8),
 });
+
 const crop = (f, r) => {
   const out = new Uint8Array(r.w * r.h);
+
   for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) out[y * r.w + x] = f.g[(r.y + y) * f.w + r.x + x] ?? 0;
+
   return out;
 };
+
 const diff = (a, b) => {
   let s = 0;
+
   for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]);
+
   return s / a.length;
 };
+
 const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+
 // How much a crop varies: a blank page doesn't.
 const sd = (c) => {
   const m = mean(c);
+
   return Math.sqrt(c.reduce((s, v) => s + (v - m) ** 2, 0) / c.length);
 };
 
@@ -152,14 +180,18 @@ const sd = (c) => {
 function blendOff(c, a, b) {
   let num = 0,
     den = 0;
+
   for (let i = 0; i < c.length; i++) {
     const d = a[i] - b[i];
     num += (c[i] - b[i]) * d;
     den += d * d;
   }
+
   const t = den ? Math.min(1, Math.max(0, num / den)) : 0;
   let off = 0;
+
   for (let i = 0; i < c.length; i++) off += Math.abs(c[i] - (t * a[i] + (1 - t) * b[i]));
+
   return off / c.length;
 }
 
@@ -168,19 +200,24 @@ function blendOff(c, a, b) {
 function glitches(frames, r, tolerance = 4) {
   const crops = frames.map((f) => crop(f, r));
   const runs = [];
+
   for (let i = 0; i < crops.length; i++) {
     if (runs.length && diff(crops[i], crops[runs.at(-1).at]) < 1) runs.at(-1).n++;
     else runs.push({ at: i, n: 1 });
   }
+
   const restingRuns = runs.filter((run) => run.n >= 3);
   const resting = restingRuns.map((run) => crops[run.at]);
+
   const found = runs.filter((run) => {
     if (run.n >= 3 || resting.some((s) => diff(crops[run.at], s) <= tolerance)) return false;
     // A tab switch crossfades its pages (switchMotion.ts): a frame mixing the states either side of it is no glitch.
     const before = restingRuns.findLast((r) => r.at < run.at);
     const after = restingRuns.find((r) => r.at > run.at);
+
     return !before || !after || blendOff(crops[run.at], crops[before.at], crops[after.at]) > tolerance;
   });
+
   return Object.assign(
     found.map((run) => ({ t: frames[run.at].t, frames: run.n })),
     { crops: [...resting, ...found.map((run) => crops[run.at])] },
@@ -203,13 +240,17 @@ function dump(name, crops, r) {
 // An 8-bit RGB(A) PNG's pixels (what devSnapshotWindow writes): { width, height, channels, data }.
 function readPng(path) {
   const buf = readFileSync(path);
+
   let width = 0,
     height = 0,
     channels = 4;
+
   const idat = [];
+
   for (let at = 8; at < buf.length;) {
     const length = buf.readUInt32BE(at),
       type = buf.toString("ascii", at + 4, at + 8);
+
     if (type === "IHDR") {
       width = buf.readUInt32BE(at + 8);
       height = buf.readUInt32BE(at + 12);
@@ -218,36 +259,45 @@ function readPng(path) {
     } else if (type === "IDAT") idat.push(buf.subarray(at + 8, at + 8 + length));
     at += 12 + length;
   }
+
   const raw = inflateSync(Buffer.concat(idat));
   const stride = width * channels;
   const out = Buffer.alloc(stride * height);
+
   for (let y = 0; y < height; y++) {
     const filter = raw[y * (stride + 1)];
+
     for (let x = 0; x < stride; x++) {
       const v = raw[y * (stride + 1) + 1 + x];
       const a = x >= channels ? out[y * stride + x - channels] : 0;
       const b = y ? out[(y - 1) * stride + x] : 0;
       const c = x >= channels && y ? out[(y - 1) * stride + x - channels] : 0;
+
       const p = a + b - c,
         pa = Math.abs(p - a),
         pb = Math.abs(p - b),
         pc = Math.abs(p - c);
+
       const pred = [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][filter];
       out[y * stride + x] = (v + pred) & 255;
     }
   }
+
   return { width, height, channels, data: out };
 }
+
 // A snapshot (2x) as the recorder sees the screen: grey, one pixel per 8 × 8 points, a box of the window in points.
 function snapshotGrey(path, [x0, y0, x1, y1]) {
   const png = readPng(path);
   const r = { w: Math.round((x1 - x0) / 8), h: Math.round((y1 - y0) / 8) };
   const out = new Uint8Array(r.w * r.h);
+
   for (let y = 0; y < r.h; y++)
     for (let x = 0; x < r.w; x++) {
       const i = ((y0 + y * 8 + 4) * 2 * png.width + (x0 + x * 8 + 4) * 2) * png.channels;
       out[y * r.w + x] = Math.round(0.2126 * png.data[i] + 0.7152 * png.data[i + 1] + 0.0722 * png.data[i + 2]);
     }
+
   return Object.assign(out, { r });
 }
 
@@ -258,6 +308,7 @@ function snapshotGrey(path, [x0, y0, x1, y1]) {
  */
 async function newWindowInProcess(ids) {
   const shots = [join(data, "new-window-shown.png"), join(data, "new-window-settled.png")];
+
   const shown = await run(`
     let before, t0, id, at = null;
     const poll = () => C.chromeWindows().then((ws) => {
@@ -269,6 +320,7 @@ async function newWindowInProcess(ids) {
       .then((created) => { id = created; return poll(); })
       .then((saved) => saved && settle(1500).then(() => nn.shell.devSnapshotWindow(id, ${JSON.stringify(shots[1])})))
       .then((saved) => ({ id, at, saved, frame: st().windows[id] && st().windows[id].frame }));`);
+
   assert.ok(shown.id && !ids.includes(shown.id), "a new window");
   assert.ok(shown.at !== null, "the window never turned opaque");
   assert.ok(shown.saved, "devSnapshotWindow failed");
@@ -276,6 +328,7 @@ async function newWindowInProcess(ids) {
   const [first, settled] = shots.map((path) => snapshotGrey(path, box));
   const off = diff(first, settled);
   rep.log(`opaque ${shown.at} ms after openWindow; its sidebar then ${off.toFixed(1)} levels from settled (in-process snapshots)`);
+
   if (off >= 6) dump("new-window", [first, settled], first.r);
   assert.ok(off < 6, `opaque ${shown.at} ms after opening, its sidebar ${off.toFixed(1)} levels from the settled window`);
 }
@@ -283,6 +336,7 @@ async function newWindowInProcess(ids) {
 // A check that returns a reason was skipped (reporter.check has no skip).
 async function check(name, fn) {
   const t0 = Date.now();
+
   try {
     const skip = await fn();
     rep.record(name, { ms: Date.now() - t0, skip: skip || undefined });
@@ -294,6 +348,7 @@ async function check(name, fn) {
 try {
   mkdirSync(data, { recursive: true });
   const built = spawnSync("swiftc", ["-O", recorderSource, "-o", recorder], { encoding: "utf8" });
+
   if (built.status !== 0) rep.log(`(no recorder: ${built.stderr.trim().split("\n")[0]})`);
   // perf-probe: a Release build runs the dev harness only for a data folder holding it.
   app = await launch(appPath, { data, port, session: fixture(), onboarded: true, probe: true });
@@ -302,10 +357,12 @@ try {
   await run(`nn.developer.setDeveloperMode(${JSON.stringify(base)}, false); return 1;`);
   await sleep(2500);
   let probe = null;
+
   if (!existsSync(recorder)) noScreen = "no frame recorder (swiftc failed)";
   else if (screenLocked()) noScreen = "needs unlocked screen: it is locked, WindowServer records nothing";
   else if (!(probe = await record(0.5, async () => {}))) noScreen = "needs a recordable screen: the recorder got no frames (display asleep?)";
   const H = probe ? probe[0].h * 8 : 0;
+
   if (noScreen) rep.log(`(frames can't be recorded: ${noScreen})`);
 
   await check("tab switches show the old page or the new one, never a blank or half-drawn page", async () => {
@@ -313,17 +370,20 @@ try {
     const frame = await run(`return st().windows.w1.frame;`);
     // Each page once first (a page loading for the first time is white until it paints, rightly).
     await run(`nn.actions.switchToTab("b1"); return settle(1500).then(() => { nn.actions.switchToTab("g1"); return settle(1000); });`);
+
     // Switches 400 ms apart, recorded.
     const switches = (order) =>
       record(order.length * 0.4 + 1.5, () =>
         run(`${JSON.stringify(order)}.forEach((id, i) => setTimeout(() => nn.actions.switchToTab(id), i * 400)); return 1;`),
       );
+
     // The page area, clear of the sidebar and the toolbar.
     const region = regionOf(frame, H, { left: 200, top: 56, right: 16, bottom: 16 });
     // Web page to web page: every frame one page, the other, or a mix of the two (the switch's crossfade).
     const frames = await switches(["b1", "g1", "b1", "g1", "g1", "b1", "g1", "b1", "b1", "g1", "b1", "g1"]);
     assert.ok(frames, "no frames");
     const found = glitches(frames, region);
+
     if (found.length > 4) dump("tab-switches", found.crops, region);
     // 0.2.22 RC: 7–13 in 20 switches (the old page blank or half-drawn while the app still showed its tab). Left: the
     // incoming page a frame late now and then, or a tile.
@@ -334,12 +394,14 @@ try {
     assert.ok(newTab, "no frames");
     const blank = newTab.map((f) => crop(f, region)).filter((c) => sd(c) < 3);
     rep.log(`${blank.length} frames of the New Tab switches blank`);
+
     if (blank.length) dump("new-tab-switches", blank, region);
     assert.equal(blank.length, 0, `${blank.length} frames of a New Tab switch blank`);
   });
 
   await check("a new window shows up with its content", async () => {
     const ids = await run(`return Object.keys(st().windows);`);
+
     try {
       if (noScreen) return await newWindowInProcess(ids);
       let frames;
@@ -356,6 +418,7 @@ try {
       assert.ok(first > 0, "the window never showed");
       // Its first frame on screen is (nearly) what it settles on: not an empty window, nor one still drawing its sidebar.
       const off = diff(crops[first], crops.at(-1));
+
       if (off >= 6) {
         rep.log(
           `frame ${first} of ${crops.length} first differs (${diff(crops[first], crops[0]).toFixed(1)} from the one before the window); then ${crops
@@ -365,6 +428,7 @@ try {
         );
         dump("new-window", [crops[0], ...crops.slice(Math.max(1, first - 2), first + 8), crops.at(-1)], r);
       }
+
       assert.ok(off < 6, `first frame ${off.toFixed(1)} levels from the settled window`);
     } finally {
       await closeWindowsBut(ids);
@@ -377,10 +441,13 @@ try {
     // g1's row in w1's tab list: the row a click there activates. Below the sidebar's address field (80 pt): a click
     // on it opens the command bar over the window.
     let row = null;
+
     for (let y = 90; y <= 230 && row === null; y += 12) {
       await run(`return act("w1", "click:60,${y}").then(() => settle(250));`);
+
       if ((await run(`return st().windows.w1.activeTabIds.default;`)) === "g1") row = y;
     }
+
     assert.ok(row !== null, "g1's row in w1's tab list");
     // Each page painted once, the torn one shown last.
     await run(`nn.actions.switchToTab("b1"); return settle(800).then(() => { nn.actions.switchToTab("g1"); return settle(1200); });`);
@@ -389,18 +456,21 @@ try {
     const target = [w1[2] + 300, w1[3] - 50];
     const path = `60,${row};60,${row + 20};${w1[2] - 100},${row + 60};${target.join(",")};${target[0] + 2},${target[1] + 2};${target.join(",")}`;
     let frames, torn;
+
     try {
       frames = await record(5, () => run(`return act("w1", "drag:${path}").then(() => settle(${6 * 12 * 16 + 1500}));`));
       torn = (await run(`return Object.values(st().windows).map((w) => [w.id, w.tabIds]);`)).find(([id]) => !ids.includes(id));
     } finally {
       await closeWindowsBut(ids);
     }
+
     assert.ok(torn && torn[1].includes("g1"), "g1 in a new window");
     assert.ok(frames, "no frames");
     const page = regionOf(w1, H, { left: 200, top: 56, right: 16, bottom: 16 });
     const crops = frames.map((f) => crop(f, page));
     const blank = crops.filter((c) => sd(c) < 3);
     rep.log(`${blank.length} frames of w1's page blank`);
+
     if (blank.length > 5)
       dump(
         "tear-off",
@@ -451,16 +521,19 @@ try {
     const crops = frames.map((f) => crop(f, r));
     const was = crops[0];
     const between = crops.filter((c) => diff(c, was) > 4 && mean(c) > 3);
+
     if (between.length > 1) {
       rep.log(`w2's place, frame by frame (levels from w2 as it was, mean): ${crops.map((c) => `${diff(c, was).toFixed(0)}/${mean(c).toFixed(0)}`).join(" ")}`);
       dump("emptied-window", [was, ...between], r);
     }
+
     assert.ok(between.length <= 1, `${between.length} frames of w2 neither as it was nor gone`);
     // w1's page goes from its own page to the moved one; at most a frame blank while Chrome draws it in its new
     // window (0.2.22 RC: ~280 ms, the page loading again).
     const page = regionOf(w1, H, { left: 200, top: 56, right: 16, bottom: 16 });
     const pages = frames.map((f) => crop(f, page));
     const blank = pages.filter((c) => sd(c) < 3);
+
     if (blank.length > 1)
       dump(
         "dropped-page",
@@ -472,7 +545,9 @@ try {
 } finally {
   await app?.quit();
   server.close();
+
   if (!keep) rmSync(data, { recursive: true, force: true });
   else rep.say(`data: ${data}`);
 }
+
 process.exit(rep.summary() ? 0 : 1);

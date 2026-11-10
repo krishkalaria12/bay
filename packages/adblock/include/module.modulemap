@@ -1,0 +1,4 @@
+module BayAdblock {
+  header "bay_adblock.h"
+  export *
+}

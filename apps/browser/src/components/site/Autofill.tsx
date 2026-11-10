@@ -1,7 +1,7 @@
-import { showAutofillSuggestions, type CardNetwork } from "@bay/nncore";
-import { Symbol } from "@bay/shell";
+import { showAutofillSuggestions, type CardNetwork } from "@bay/chromium";
+import { Symbol } from "@bay/desktop";
 import { Text, View } from "react-native";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
 import { openSettings } from "../settings/windows";
@@ -9,6 +9,7 @@ import { openSettings } from "../settings/windows";
 export async function requestAutofill(windowId: string, arg: string | null) {
   const passwords = arg === "passwords";
   const browserId = browserIdOf(activeTabId(useBrowser.getState(), windowId));
+
   if (browserId && (await showAutofillSuggestions(browserId, passwords ? "passwords" : "field"))) return;
   const s = useBrowser.getState();
   const w = s.windows[windowId];
@@ -29,6 +30,7 @@ const BADGES: Record<CardNetwork, { label: string; fill: string; text: string }>
 
 export function NetworkBadge({ network }: { network: CardNetwork }) {
   const badge = BADGES[network] ?? BADGES.card;
+
   return (
     <View
       style={{ width: 28, height: 19, borderRadius: 3.5, backgroundColor: badge.fill, alignItems: "center", justifyContent: "center", flexDirection: "row" }}

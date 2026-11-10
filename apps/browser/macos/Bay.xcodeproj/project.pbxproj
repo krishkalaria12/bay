@@ -15,6 +15,7 @@
 		8BCF4D4113B3117AB0BC70B7 /* libPods-Bay-macOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C1D4F94ED9B4A4D62FC468D0 /* libPods-Bay-macOS.a */; };
 		8F617A53519DD1FCC02CBCA4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE21821D6B4527B7E023B602 /* main.swift */; };
 		9C21C633DCE93A2C521A0862 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BFBFB605DF6F35370DCDEB9 /* ExpoModulesProvider.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* HermesProfiler.mm in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718293A4B5C6D /* HermesProfiler.mm */; };
 		EB6C4E3A222E6D1BF85AB612 /* Bay.sdef in Resources */ = {isa = PBXBuildFile; fileRef = 4F6F34DACD396890604E4F3F /* Bay.sdef */; };
 /* End PBXBuildFile section */
 
@@ -28,6 +29,7 @@
 		514201592437B4B40078DB4F /* Bay.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Bay.entitlements; sourceTree = "<group>"; };
 		6BFBFB605DF6F35370DCDEB9 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Bay-macOS/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		B061BE5464342E57C82A2F6C /* Pods-Bay-macOS.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Bay-macOS.debug.xcconfig"; path = "Target Support Files/Pods-Bay-macOS/Pods-Bay-macOS.debug.xcconfig"; sourceTree = "<group>"; };
+		B2C3D4E5F60718293A4B5C6D /* HermesProfiler.mm */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.objcpp; path = HermesProfiler.mm; sourceTree = "<group>"; };
 		B5B616A5F60952076D0F8358 /* AppDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		C1D4F94ED9B4A4D62FC468D0 /* libPods-Bay-macOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Bay-macOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C35C3DFDC1BA58B94EE6A74C /* Pods-Bay-macOS.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Bay-macOS.release.xcconfig"; path = "Target Support Files/Pods-Bay-macOS/Pods-Bay-macOS.release.xcconfig"; sourceTree = "<group>"; };
@@ -87,6 +89,7 @@
 				ECCA23360FAE34CDF7FD998D /* BrowserWindow.swift */,
 				3E0CAE61008516DE07A12694 /* PrivacyInfo.xcprivacy */,
 				E9A15241E979C9B4F4BB79D8 /* DisableFusebox.mm */,
+				B2C3D4E5F60718293A4B5C6D /* HermesProfiler.mm */,
 				4F6F34DACD396890604E4F3F /* Bay.sdef */,
 			);
 			path = "Bay-macOS";
@@ -310,7 +313,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$PROJECT_DIR/../../../packages/nncore/scripts/stage-framework.sh\"\n";
+			shellScript = "\"$PROJECT_DIR/../../../packages/chromium/scripts/stage-framework.sh\"\n";
 		};
 		D0C71E5E2E9A4B1D00D0C001 /* Build Dock Tile Plug-in, embed NNCore */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -329,7 +332,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$PROJECT_DIR/../../../packages/shell/docktile/build.sh\" && \"$PROJECT_DIR/../../../packages/nncore/scripts/embed.sh\" && \"$PROJECT_DIR/../../../packages/shell/scripts/bundle-cli-installer.sh\"\n";
+			shellScript = "\"$PROJECT_DIR/../../../packages/desktop/docktile/build.sh\" && \"$PROJECT_DIR/../../../packages/chromium/scripts/embed.sh\" && \"$PROJECT_DIR/../../../packages/desktop/scripts/bundle-cli-installer.sh\"\n";
 		};
 		F2B782290948FD07702EBCEC /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -338,7 +341,8 @@
 			);
 			inputPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Bay-macOS/Pods-Bay-macOS-resources.sh",
-				"${PODS_ROOT}/../../../../packages/nncore/ios/page_script.js",
+				"${PODS_ROOT}/../../../../packages/chromium/ios/page_script.js",
+				"${PODS_ROOT}/../../../../packages/chromium/ios/filter_lists.json",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem_privacy.bundle",
@@ -351,6 +355,7 @@
 			name = "[CP] Copy Pods Resources";
 			outputPaths = (
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/page_script.js",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/filter_lists.json",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXConstants.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoConstants_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoFileSystem_privacy.bundle",
@@ -377,6 +382,7 @@
 				793DD2DF8D4FBD44ADF01157 /* BrowserWindow.swift in Sources */,
 				9C21C633DCE93A2C521A0862 /* ExpoModulesProvider.swift in Sources */,
 				3FF132665BBAFDDFE46449C0 /* DisableFusebox.mm in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* HermesProfiler.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -394,7 +400,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Bay-macOS/Bay.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEAD_CODE_STRIPPING = NO;
 				DEVELOPMENT_TEAM = GP328GJT66;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -402,7 +408,7 @@
 				INFOPLIST_FILE = "Bay-macOS/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5.4;
+				MARKETING_VERSION = 1.6.0;
 				NNCORE_STAGE_DIR = "$(OBJROOT)/NNCoreFramework";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -430,7 +436,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Bay-macOS/Bay.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = GP328GJT66;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -438,7 +444,7 @@
 				INFOPLIST_FILE = "Bay-macOS/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5.4;
+				MARKETING_VERSION = 1.6.0;
 				NNCORE_STAGE_DIR = "$(OBJROOT)/NNCoreFramework";
 				OTHER_LDFLAGS = (
 					"$(inherited)",

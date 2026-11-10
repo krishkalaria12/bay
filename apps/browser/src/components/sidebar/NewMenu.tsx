@@ -1,4 +1,4 @@
-import { Surface, Symbol } from "@bay/shell";
+import { Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -6,10 +6,10 @@ import { newEasel, openLibrary } from "../library/actions";
 import { createSpace, switchSpace } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { installUpdate, updateTitle, usePendingUpdate } from "../../lib/updates";
-import { useBrowser } from "../../store/browser";
-import { splitWithCurrentTab } from "../layout/splitActions";
-import { useSidebarOnRight } from "../layout/windowLayout";
-import { useHover } from "../primitives";
+import { useBrowser } from "../../store/browserStore";
+import { splitWithCurrentTab } from "../split/splitActions";
+import { useSidebarOnRight } from "../window/layout";
+import { useHover } from "../ui/primitives";
 import { newPinnedFolderWith } from "./actions";
 import { measureRow, setSidebarUi, useSidebarUi } from "./state";
 import { NEW_MENU_ID, NEW_MENU_MS, NEW_MENU_WIDTH } from "./constants";
@@ -27,16 +27,20 @@ export async function openNewMenu(windowId: string) {
 
 // The panel's own close runs its fade first; this is for a second press of the + (the panel then goes at once).
 const closers = new Map<string, () => void>();
+
 export function closeNewMenu() {
   const menu = useSidebarUi.getState().newMenu;
+
   if (!menu) return;
   const close = closers.get(menu.windowId);
+
   if (close) close();
   else setSidebarUi({ newMenu: null });
 }
 
 async function newSpace(windowId: string) {
   const id = await createSpace(windowId);
+
   if (id) switchSpace(windowId, id);
 }
 
@@ -52,6 +56,7 @@ function run(windowId: string, id: string) {
 
 export function NewMenu({ windowId, windowWidth, windowHeight }: { windowId: string; windowWidth: number; windowHeight: number }) {
   const menu = useSidebarUi((u) => (u.newMenu?.windowId === windowId ? u.newMenu : null));
+
   return menu ? <Panel windowId={windowId} anchor={menu.anchor} windowWidth={windowWidth} windowHeight={windowHeight} /> : null;
 }
 
@@ -72,22 +77,29 @@ function Panel({
   const shown = useSharedValue(0);
   const closing = useRef(false);
   useEffect(() => shown.set(withTiming(1, { duration: NEW_MENU_MS, easing: Easing.out(Easing.cubic) })), []);
+
   const close = (then?: () => void) => {
     if (closing.current) return;
     closing.current = true;
+
     const done = () => {
       setSidebarUi({ newMenu: null });
       then?.();
     };
+
     shown.set(withTiming(0, { duration: NEW_MENU_MS * 0.7, easing: Easing.in(Easing.cubic) }, (finished) => finished && runOnJS(done)()));
   };
+
   useEffect(() => {
     closers.set(windowId, () => close());
+
     return () => void closers.delete(windowId);
   });
+
   // Rises out of the +: up from below it, growing from its corner.
   const style = useAnimatedStyle(() => {
     const p = shown.get();
+
     return { opacity: p, transform: [{ translateY: (1 - p) * 10 }, { translateX: (1 - p) * (right ? 8 : -8) }, { scale: 0.94 + p * 0.06 }] };
   });
 
@@ -104,6 +116,7 @@ function Panel({
     { id: "split", title: "Split View", icon: "rectangle.split.2x1", shortcut: "⌃⇧=" },
     { id: "tab", title: "New Tab", icon: "plus", shortcut: "⌘T" },
   ];
+
   // Just above the +, starting at it and reaching over the page (from its right edge toward the page when the
   // sidebar is on the right), inside the window.
   const x = anchor ? (right ? anchor.x + anchor.width - NEW_MENU_WIDTH + 6 : anchor.x - 6) : 8;
@@ -144,6 +157,7 @@ function Panel({
 function Row({ item, onPress }: { item: Exclude<Item, "separator">; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress} accessibilityRole="menuitem" accessibilityLabel={item.title}>

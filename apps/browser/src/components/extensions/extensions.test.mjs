@@ -2,9 +2,10 @@
 // switch while one is on its way must still land.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 const native = await import("../../test-native-stub.mjs");
-const { useBrowser } = await import("../../store/browser.ts");
-const { usePages } = await import("../layout/pageState.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
+const { usePages } = await import("../window/pageState.ts");
 const { useExtensions } = await import("./store.ts");
 const { refreshActionStates } = await import("./actions.ts");
 const panels = await import("./sidePanels.ts");
@@ -25,10 +26,12 @@ function setup() {
   const ask = (what) => (browserId) => new Promise((resolve) => asked.push({ what, browserId, resolve }));
   native.extensionAnswers.actionStates = ask("states");
   native.extensionAnswers.sidePanelUrl = ask("panel");
+
   const answer = async (i, value) => {
     asked[i].resolve(value);
     await new Promise((r) => setImmediate(r));
   };
+
   return { w, a, b, asked, answer };
 }
 

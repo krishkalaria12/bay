@@ -1,13 +1,14 @@
-import { Symbol } from "@bay/shell";
+import { Symbol } from "@bay/desktop";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser } from "../../../store/browserStore";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, TextField, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
+import { TidyModelNote } from "../TidyModelNote";
 import { CLEAN_UP_CHOICES } from "../constants";
-import { updateCalendarSettings, useLive } from "../../../live/store";
-import { normalizeAwakeSite } from "../../../lib/awakeSites";
+import { updateCalendarSettings, useLive } from "../../../activity/activityStore";
+import { normalizeAwakeSite } from "../../../lib/keptAwakeSites";
 
 export function TabsPane() {
   const settings = useBrowser((s) => s.settings);
@@ -52,9 +53,20 @@ export function TabsPane() {
         />
       </Group>
 
-      <SectionHeader title="Tab groups" />
+      <SectionHeader
+        title="Tab groups"
+        description={
+          <TidyModelNote available="Apple's on-device model sorts your tabs by topic. Nothing leaves this Mac." fallback="Tidy sorts your tabs by site." />
+        }
+      />
       <Group>
         <SettingToggle setting="autoGroupMeetingTabs" settingId={SETTINGS.autoGroupMeetingTabs.id} title={SETTINGS.autoGroupMeetingTabs.title} />
+        <SettingToggle
+          setting="tidyTabs"
+          settingId={SETTINGS.tidyTabs.id}
+          title={SETTINGS.tidyTabs.title}
+          description="Show Tidy on the sidebar's line once six tabs are open. It sorts your loose tabs into named groups; ⌘Z puts them back."
+        />
         <SettingToggle
           setting="tidyTabTitles"
           settingId={SETTINGS.tidyTabTitles.id}
@@ -113,21 +125,28 @@ function AwakeSites() {
   const theme = useTheme();
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+
   const add = () => {
     const site = normalizeAwakeSite(input);
+
     if (!site) {
       setError("Enter a website such as example.com.");
+
       return;
     }
+
     const s = useBrowser.getState();
+
     if (!s.settings.awakeSites.includes(site)) s.updateSettings({ awakeSites: [...s.settings.awakeSites, site] });
     setInput("");
     setError(null);
   };
+
   const remove = (site: string) => {
     const s = useBrowser.getState();
     s.updateSettings({ awakeSites: s.settings.awakeSites.filter((item) => item !== site) });
   };
+
   return (
     <View>
       <SectionHeader
@@ -163,16 +182,21 @@ function AwakeSites() {
 function LayoutChoice({ layout, title, selected }: { layout: "sidebar" | "top"; title: string; selected: boolean }) {
   const theme = useTheme();
   const colors = useFormColors();
+
   const choose = () => {
     const s = useBrowser.getState();
     s.updateSettings({ tabLayout: layout });
+
     for (const w of Object.values(s.windows)) {
       if ((w.tabLayout ?? s.settings.tabLayout) !== layout) useBrowser.getState().toggleTabLayout(w.id);
     }
+
     useBrowser.getState().updateSettings({ tabLayout: layout });
   };
+
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
+
   return (
     <Pressable onPress={choose} style={{ flex: 1, alignItems: "center", gap: 8 }}>
       <View
@@ -214,6 +238,7 @@ function LayoutChoice({ layout, title, selected }: { layout: "sidebar" | "top"; 
 // The calendar's own setting (Settings › Calendar), listed with the other previews.
 function CalendarPreviewToggle() {
   const on = useLive((s) => s.calendar.showPreview);
+
   return (
     <Row title="Calendar" description="Today's events, with Join.">
       <Toggle value={on} onChange={(v) => updateCalendarSettings({ showPreview: v })} />

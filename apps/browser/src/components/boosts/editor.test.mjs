@@ -5,15 +5,18 @@ import { test } from "node:test";
 // The editor only needs showToast from the layout actions. Loading the rest would pull in native UI.
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "../layout/splitActions" && context.parentURL?.endsWith("/boosts/editor.ts")) {
+    if (specifier === "../split/splitActions" && context.parentURL?.endsWith("/boosts/editor.ts")) {
       return { url: "data:text/javascript,export const showToast = (...args) => globalThis.boostTestToasts.push(args)", shortCircuit: true };
     }
+
     return next(specifier, context);
   },
 });
+
 globalThis.boostTestToasts = [];
+
 const native = await import("../../test-native-stub.mjs");
-const { useBrowser } = await import("../../store/browser.ts");
+const { useBrowser } = await import("../../store/browserStore.ts");
 const { webviews } = await import("../../lib/webviews.ts");
 const { exportBoost, newBoost } = await import("../../lib/boosts.ts");
 const { useBoosts, startBoosts } = await import("./state.ts");
@@ -40,21 +43,26 @@ function setup() {
   webviews.set(tabId, {
     evaluate: async (script) => {
       evaluations.push(script);
+
       return [];
     },
     focus() {},
     setBoostStyle() {},
   });
   globalThis.boostTestToasts.length = 0;
+
   return { tabId, evaluations };
 }
+
 const move = (tabId, url) => useBrowser.setState((s) => ({ tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], url } } }));
+
 const pendingFile = () => {
   let answer;
   native.shellDialogAnswers.openTextFile = () =>
     new Promise((resolve) => {
       answer = resolve;
     });
+
   return (value) => answer(value);
 };
 
@@ -147,6 +155,7 @@ for (const mode of ["zap", "focus", "pick"]) {
     const selector = "div#promo\\:banner.ad\\[slot\\]";
     editor.onBoostMessage(tabId, { type: "select", mode, pickerId, selector });
     const boost = useBoosts.getState().boosts.a;
+
     if (mode === "zap") assert.deepEqual(boost.zaps, [selector]);
     else if (mode === "focus") assert.deepEqual(boost.focus, [selector]);
     else {
@@ -168,13 +177,17 @@ function countingPage() {
   const pending = [];
   webviews.get(tabId).evaluate = (script) => {
     if (!script.startsWith("const SELECTORS")) return Promise.resolve([]);
+
     return new Promise((resolve) => pending.push({ script, resolve }));
   };
+
   editor.openBoostEditor(tabId, { boostId: "a" });
+
   const answer = async (index, counts) => {
     pending[index].resolve(counts);
     await new Promise((resolve) => setImmediate(resolve));
   };
+
   return { tabId, pending, answer };
 }
 
@@ -209,6 +222,7 @@ test("closing and reopening the same boost invalidates its earlier count request
 for (const navigation of ["same-host URL", "same-URL navigation request", "loading start"]) {
   test(`${navigation} invalidates counts from the previous document`, async () => {
     const { tabId, answer } = countingPage();
+
     if (navigation === "same-host URL") move(tabId, "https://a.example/next");
     else if (navigation === "same-URL navigation request") {
       useBrowser.setState((s) => ({ tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], navigation: { url: s.tabs[tabId].url, seq: 12345 } } } }));
@@ -235,10 +249,12 @@ function pendingConfirmation() {
   const asked = [];
   native.shellDialogAnswers.confirm = (options) => {
     asked.push(options);
+
     return new Promise((answer) => {
       resolve = answer;
     });
   };
+
   return { asked, answer: (confirmed) => resolve({ confirmed, suppressed: false }) };
 }
 
@@ -293,6 +309,7 @@ for (const stale of ["boost host", "tab host"]) {
     const { tabId } = setup();
     useBoosts.setState({ scriptsAcknowledged: true });
     const { asked } = pendingConfirmation();
+
     if (stale === "boost host") useBoosts.setState((s) => ({ boosts: { ...s.boosts, a: { ...s.boosts.a, host: "other.example" } } }));
     else move(tabId, "https://b.example/");
     assert.equal(await editor.toggleBoostScript(tabId, "a", "a.example", true), false);

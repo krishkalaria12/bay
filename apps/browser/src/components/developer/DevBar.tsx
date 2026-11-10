@@ -1,28 +1,28 @@
-import { ContextMenuArea, Symbol, WindowDragRegion } from "@bay/shell";
+import { ContextMenuArea, Symbol, WindowDragRegion } from "@bay/desktop";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
 import { layout, MONO_FONT } from "../../lib/constants";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { useTabLive } from "../../store/hooks";
-import { ToolbarButton } from "../layout/controls";
-import type { ToolbarGeometry } from "../layout/geometry";
-import { useHistoryAvailability } from "../layout/history";
-import { setPopover, usePages } from "../layout/pageState";
-import { closePane, showSplitMenu } from "../layout/splitActions";
-import { toolbarPalette } from "../layout/toolbarColors";
-import { useSidebarSymbol } from "../layout/windowLayout";
-import { showUrlBarMenu } from "../omnibox/paste";
-import { useHover } from "../primitives";
+import { ToolbarButton } from "../toolbar/buttons";
+import type { ToolbarGeometry } from "../window/geometry";
+import { useHistoryAvailability } from "../window/historyMenu";
+import { setPopover, usePages } from "../window/pageState";
+import { closePane, showSplitMenu } from "../split/splitActions";
+import { toolbarPalette } from "../toolbar/colors";
+import { useSidebarSymbol } from "../window/layout";
+import { showUrlBarMenu } from "../commandBar/paste";
+import { useHover } from "../ui/primitives";
 import { copyPageUrl } from "../site/selection";
-import { HistoryButton, ReloadButton, TabProgressBar } from "../Toolbar";
+import { HistoryButton, ReloadButton, TabProgressBar } from "../toolbar/Toolbar";
 import { copyScreenshot } from "./screenshot";
 import { toggleInspecting, useIsInspecting } from "./devMode";
-import { isLocalDevSite } from "./sites";
+import { isLocalDevSite } from "./localDevSites";
 import { DEV_BAR_HEIGHT, STRIPE_GAP } from "./constants";
-import { TOOLBAR_BUTTON_MID } from "../layout/constants";
+import { TOOLBAR_BUTTON_MID } from "../window/constants";
 
 /**
  * A page in Developer Mode's bar, as yab has it: its whole address on a hatched band, with the inspector, DevTools, its
@@ -53,13 +53,17 @@ export function DevBar({
   const controlsOpen = usePages((s) => s.popover[tabId] === "siteControls");
   const [width, setWidth] = useState(0);
   const sidebarSymbol = useSidebarSymbol();
+
   const focus = () => {
     if (!focused) useBrowser.getState().activate(tabId);
   };
+
   const height = navigation ? layout.toolbarHeight : DEV_BAR_HEIGHT;
+
   if (!tab) return <View style={{ height }} />;
   const center = navigation ? TOOLBAR_BUTTON_MID : DEV_BAR_HEIGHT / 2;
   const at = (x: number | null) => ({ position: "absolute" as const, top: center - layout.toolbarButton / 2, left: (x ?? 0) - layout.toolbarButton / 2 });
+
   const button = (icon: string, tooltip: string, onPress: () => void, active = false) => (
     <ToolbarButton
       palette={palette}
@@ -136,12 +140,14 @@ function Address({ url, tabId, windowId, onFocus }: { url: string; tabId: string
   const { hovered, hoverProps } = useHover();
   const scheme = /^[a-z][\w+.-]*:\/\//i.exec(url)?.[0] ?? "";
   const secure = url.startsWith("https:") || isLocalDevSite(url);
+
   return (
     <View {...hoverProps} style={{ flex: 1, height: 28 }}>
       <ContextMenuArea
         style={{ flex: 1 }}
         onContextMenu={() => {
           const tab = useBrowser.getState().tabs[tabId];
+
           if (tab) void showUrlBarMenu(tab);
         }}
       >
@@ -176,6 +182,7 @@ function Hatch({ width, height, color }: { width: number; height: number; color:
   if (!width) return null;
   const length = height * Math.SQRT2 + 2;
   const count = Math.ceil((width + height) / STRIPE_GAP);
+
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: "hidden" }]}>
       {Array.from({ length: count }, (_, i) => (

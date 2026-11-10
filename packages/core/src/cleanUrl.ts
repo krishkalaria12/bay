@@ -91,8 +91,16 @@ const SITE_PARAMS: { hosts: string[]; params: string[]; prefixes?: string[] }[] 
   },
 ];
 
+/** The parameter table as data, for engines that strip parameters natively (Bay mobile's Rust blocker). */
+export const TRACKING_PARAMS = {
+  global: [...GLOBAL_PARAMS],
+  prefixes: GLOBAL_PREFIXES,
+  sites: SITE_PARAMS.map((site) => ({ hosts: site.hosts, params: site.params, prefixes: site.prefixes ?? [] })),
+};
+
 function siteRules(hostname: string) {
   const host = hostname.toLowerCase().replace(/^www\./, "");
+
   return SITE_PARAMS.filter((r) => r.hosts.some((h) => host === h || host.endsWith(`.${h}`)));
 }
 
@@ -106,25 +114,33 @@ function decodeName(raw: string): string {
 
 export function isTrackingParam(name: string, hostname = ""): boolean {
   const key = name.toLowerCase();
+
   if (GLOBAL_PARAMS.has(key) || GLOBAL_PREFIXES.some((p) => key.startsWith(p))) return true;
+
   return siteRules(hostname).some((r) => r.params.includes(key) || r.prefixes?.some((p) => key.startsWith(p)));
 }
 
 export function cleanUrl(url: string): string {
   const match = /^([^?#]*)(\?[^#]*)?(#.*)?$/.exec(url);
+
   if (!match?.[2]) return url;
   let hostname = "";
+
   try {
     const parsed = new URL(url);
+
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return url;
     hostname = parsed.hostname;
   } catch {
     return url;
   }
+
   const [, base = "", query = "", hash = ""] = match;
   const pairs = query.slice(1).split("&");
   const kept = pairs.filter((pair) => pair && !isTrackingParam(decodeName(pair.split("=")[0]!), hostname));
+
   if (kept.length === pairs.length) return url;
+
   return `${base}${kept.length ? `?${kept.join("&")}` : ""}${hash}`;
 }
 

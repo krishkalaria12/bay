@@ -1,9 +1,9 @@
-import { showMenu, translation, type MenuItem } from "@bay/shell";
+import { showMenu, translation, type MenuItem } from "@bay/desktop";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { isIncognitoSpace } from "../../store/model";
-import { PopoverRow, PopoverSeparator, Toggle, ToolbarButton } from "../layout/controls";
-import type { ToolbarPalette } from "../layout/toolbarColors";
+import { PopoverRow, PopoverSeparator, Toggle, ToolbarButton } from "../toolbar/buttons";
+import type { ToolbarPalette } from "../toolbar/colors";
 import {
   defaultTarget,
   isNeverTranslated,
@@ -15,13 +15,15 @@ import {
   translatePage,
   translateStateOf,
   useTranslateState,
-} from "./translate";
+} from "./translateState";
 
 export function TranslateButton({ tabId, palette, onFocus }: { tabId: string; palette: ToolbarPalette; onFocus: () => void }) {
   const theme = useTheme();
   const state = useTranslateState(tabId);
+
   if (!translation || (!state.source && state.status === "idle")) return null;
   const translated = state.status !== "idle";
+
   return (
     <ToolbarButton
       palette={palette}
@@ -45,23 +47,29 @@ async function chooseLanguage(tabId: string) {
   const current = translateStateOf(tabId).target;
   const items: MenuItem[] = languages.map((l) => ({ id: l.id, title: l.name, checked: l.id === current }));
   const choice = await showMenu(items);
+
   if (choice) void translatePage(tabId, choice);
 }
 
 async function showTranslateMenu(tabId: string) {
   const tab = useBrowser.getState().tabs[tabId];
+
   if (!tab) return;
   const translated = translateStateOf(tabId).status !== "idle";
+
   const items: MenuItem[] = [
     translated
       ? { id: "original", title: "Show Original", symbol: "arrow.uturn.backward" }
       : { id: "translate", title: `Translate to ${languageName(defaultTarget())}`, symbol: "translate" },
     { id: "choose", title: "Choose Another Language…", symbol: "globe" },
   ];
+
   if (!isIncognitoSpace(tab.spaceId)) {
     items.push({ separator: true }, { id: "never", title: "Never Translate This Site", checked: isNeverTranslated(tab.spaceId, tab.url) });
   }
+
   const choice = await showMenu(items);
+
   if (choice === "original") void revertPage(tabId);
   else if (choice === "translate") void translatePage(tabId);
   else if (choice === "choose") void chooseLanguage(tabId);
@@ -73,8 +81,10 @@ export function TranslateRows({ tabId, onClose }: { tabId: string; onClose: () =
   const tab = useBrowser((s) => s.tabs[tabId]);
   useBrowser((s) => s.settings.neverTranslateSites);
   const never = tab ? isNeverTranslated(tab.spaceId, tab.url) : false;
+
   if (!translation || !tab || (!state.source && state.status === "idle" && !never)) return null;
   const translated = state.status !== "idle";
+
   return (
     <>
       {!never && (

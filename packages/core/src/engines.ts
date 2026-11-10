@@ -1,5 +1,7 @@
+import * as v from "valibot";
 import { BANG_PLACEHOLDER, isValidBangTemplate } from "./bangs.ts";
-import { hostOf, searchUrlFor } from "./omnibox.ts";
+import { hostOf, searchUrlFor } from "./input.ts";
+import { isJsonObject, type JsonValue } from "./json.ts";
 
 export type SearchEngine = {
   id: string;
@@ -90,6 +92,7 @@ export const BUILT_IN_ENGINES: readonly SearchEngine[] = [
 export function allEngines(custom: readonly CustomSearchEngine[] = [], extension: readonly ExtensionSearchEngine[] = []): SearchEngine[] {
   const engines: SearchEngine[] = [...BUILT_IN_ENGINES, ...custom.map((e) => ({ ...e, custom: true }))];
   const seen = new Set<string>();
+
   for (const e of extension) {
     if (seen.has(e.extensionId)) continue;
     seen.add(e.extensionId);
@@ -102,6 +105,7 @@ export function allEngines(custom: readonly CustomSearchEngine[] = [], extension
       extension: { id: e.extensionId, name: e.extensionName },
     });
   }
+
   return engines;
 }
 
@@ -113,27 +117,41 @@ export function controllingExtensionEngine(extension: readonly ExtensionSearchEn
 
 const withoutPlaceholders = (url: string) => url.replace(/\{[^{}%]*\}/g, "");
 
-export function extensionEnginesFromChrome(profile: string, list: unknown): ExtensionSearchEngine[] {
-  const groups = list && typeof list === "object" ? Object.values(list as Record<string, unknown>) : [];
+// A search engine's extension as Chrome records it; the rest of the row is read field by field below.
+interface ChromeExtensionRef {
+  id: string;
+  name?: JsonValue;
+}
+
+const isChromeExtensionRef = (value: unknown): value is ChromeExtensionRef => v.is(v.object({ id: v.string() }), value);
+
+export function extensionEnginesFromChrome(profile: string, list: JsonValue | null | undefined): ExtensionSearchEngine[] {
+  const groups = isJsonObject(list) ? Object.values(list) : [];
   const out: ExtensionSearchEngine[] = [];
+
   for (const group of groups) {
     if (!Array.isArray(group)) continue;
-    for (const e of group as Record<string, unknown>[]) {
-      const ext = e?.extension as { id?: unknown; name?: unknown } | undefined;
-      if (!ext || typeof ext.id !== "string" || e.isOmniboxExtension) continue;
-      if (typeof e.url !== "string" || !e.url.includes("%s") || out.some((o) => o.extensionId === ext.id)) continue;
+
+    for (const row of group) {
+      if (!isJsonObject(row)) continue;
+      const ext = row.extension;
+
+      if (!isChromeExtensionRef(ext) || row.isOmniboxExtension) continue;
+
+      if (!v.is(v.string(), row.url) || !row.url.includes("%s") || out.some((o) => o.extensionId === ext.id)) continue;
       out.push({
         profile,
         extensionId: ext.id,
-        extensionName: typeof ext.name === "string" ? ext.name : "",
-        name: typeof e.name === "string" && e.name ? e.name : String(ext.name ?? ""),
-        keyword: typeof e.keyword === "string" ? e.keyword : "",
-        url: withoutPlaceholders(e.url),
-        suggestUrl: typeof e.suggestionsUrl === "string" && e.suggestionsUrl.includes("%s") ? withoutPlaceholders(e.suggestionsUrl) : undefined,
-        isDefault: e.default === true,
+        extensionName: v.is(v.string(), ext.name) ? ext.name : "",
+        name: v.is(v.string(), row.name) && row.name ? row.name : String(ext.name ?? ""),
+        keyword: v.is(v.string(), row.keyword) ? row.keyword : "",
+        url: withoutPlaceholders(row.url),
+        suggestUrl: v.is(v.string(), row.suggestionsUrl) && row.suggestionsUrl.includes("%s") ? withoutPlaceholders(row.suggestionsUrl) : undefined,
+        isDefault: row.default === true,
       });
     }
   }
+
   return out;
 }
 
@@ -147,9 +165,13 @@ export const suggestRequestUrl = (engine: SearchEngine, query: string) => (engin
 
 export const engineHost = (engine: Pick<SearchEngine, "url">) => hostOf(engine.url.replace(/%s/g, "q"));
 
-export function parseSuggestions(body: unknown): string[] {
-  if (!Array.isArray(body) || !Array.isArray(body[1])) return [];
-  return (body[1] as unknown[]).filter((s): s is string => typeof s === "string" && s.trim() !== "").map((s) => s.trim());
+export function parseSuggestions(body: JsonValue): string[] {
+  if (!Array.isArray(body)) return [];
+  const suggestions = body[1];
+
+  if (!Array.isArray(suggestions)) return [];
+
+  return suggestions.flatMap((s) => (v.is(v.string(), s) && s.trim() !== "" ? [s.trim()] : []));
 }
 
 export type EngineInput = { name: string; keyword: string; url: string };
@@ -158,14 +180,23 @@ export function validateEngine(input: EngineInput, engines: readonly SearchEngin
   const name = input.name.trim();
   const keyword = input.keyword.trim().toLowerCase();
   const url = input.url.trim();
+
   if (!name) return "Enter a name.";
+
   if (!keyword) return "Enter a shortcut.";
+
   if (/\s/.test(keyword)) return "The shortcut can't contain spaces.";
+
   if (keyword.includes("!")) return "Enter the shortcut without !, for example yt for !yt.";
+
   if (!/^https?:\/\/[^/?#\s]+/i.test(url)) return "Enter a URL that starts with http:// or https://.";
+
   if (!url.includes("%s")) return "The URL must contain %s where the search terms go.";
+
   if (!isValidBangTemplate(url.split("%s").join(BANG_PLACEHOLDER))) return "Use a fixed website address, with %s only in the path, query or fragment.";
+
   if (engines.some((e) => e.id !== ignoreId && e.keyword.toLowerCase() === keyword)) return `“${keyword}” is already used by another search engine.`;
+
   return null;
 }
 

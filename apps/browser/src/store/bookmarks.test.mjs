@@ -1,7 +1,8 @@
 // Bookmarks are Chrome's (BookmarkModel): the store's tree and Chrome's stay alike, and bookmarks.json moved in once.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { useBrowser } = await import("./browser.ts");
+
+const { useBrowser } = await import("./browserStore.ts");
 const { bookmarkUuidFor } = await import("./bookmarks.ts");
 const { migrateBookmarksFile, reloadBookmarks, startBookmarks } = await import("../lib/bookmarks.ts");
 const stub = await import("../test-native-stub.mjs");
@@ -12,26 +13,35 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 // Chrome's tree and the store's, as "title" for a link and { title: [...] } for a folder.
 function chromeTree(profile = "") {
   const db = stub.chromeBookmarks(profile);
+
   const walk = (id) => {
     const n = db.get(id);
+
     return n.k === "u" ? `${n.t}=${n.u}` : { [n.t]: n.children.map(walk) };
   };
+
   return { bar: walk("bar"), other: walk("other") };
 }
+
 function storeTree(spaceId = "default") {
   const b = S().bookmarks;
   const roots = b.roots[spaceId];
+
   const walk = (id) => {
     const n = b.nodes[id];
+
     return n.kind === "url" ? `${n.title}=${n.url}` : { [n.title]: n.children.map(walk) };
   };
+
   return { bar: walk(roots.bar), other: walk(roots.other) };
 }
 
 function legacyFile() {
   const bar = "bm-bar1",
     other = "bm-other1";
+
   const node = (id, parentId, extra) => ({ id, parentId, addedAt: 5, ...extra });
+
   return {
     version: 2,
     bookmarks: {
@@ -54,10 +64,12 @@ test("bookmarks.json moves into Chrome once, each bookmark under the UUID sync r
   stub.bookmarkDbs.clear();
   stub.docs.set("bookmarks.json", JSON.stringify(legacyFile()));
   assert.equal(await migrateBookmarksFile({ keepMs: 0 }), "moved");
+
   const expected = {
     bar: { "Bookmarks Bar": ["A=https://a.example/", { F: ["B=https://b.example/"] }] },
     other: { "Other Bookmarks": ["C=https://c.example/"] },
   };
+
   assert.deepEqual(chromeTree(), expected);
   assert.ok(stub.chromeBookmarks("").has(bookmarkUuidFor("bm-b")), "the UUID its old id maps to");
   assert.equal(stub.chromeBookmarks("").get(bookmarkUuidFor("bm-b")).key, "bm-b", "the old id stays its sync key");

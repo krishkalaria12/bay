@@ -1,16 +1,16 @@
-import { ContextMenuArea, fileExists, MouseArea, openFile, showMenu, Surface, Symbol } from "@bay/shell";
+import { ContextMenuArea, fileExists, MouseArea, openFile, showMenu, Surface, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser } from "../../store/browserStore";
 import { isIncognitoSpace } from "../../store/model";
-import { downloadsIn } from "../../store/ui";
-import { downloadMenu, FileIcon } from "../Downloads";
-import { showToast } from "../layout/splitActions";
-import { IconButton, useHover } from "../primitives";
+import { downloadsIn } from "../../store/windowUi";
+import { downloadMenu, FileIcon } from "../downloads/DownloadRow";
+import { showToast } from "../split/splitActions";
+import { IconButton, useHover } from "../ui/primitives";
 import { useSidebarWidth } from "../sidebar/tokens";
-import { openLibrary } from "./actions";
+import { openLibrary, openLibraryPage, toggleLibrary } from "./actions";
 import { startLibrary, useLibrary } from "./state";
 
 type RecentTypes = { media: boolean; downloads: boolean };
@@ -27,10 +27,12 @@ export function LibraryButton({ windowId }: { windowId: string }) {
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const width = useSidebarWidth(windowId) - 20;
+
   const cancelTimer = () => {
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = null;
   };
+
   useEffect(
     () => () => {
       if (timer.current !== null) clearTimeout(timer.current);
@@ -43,32 +45,55 @@ export function LibraryButton({ windowId }: { windowId: string }) {
 
   const keepOpen = () => {
     cancelTimer();
+
     if (!privateWindow) setOpen(true);
   };
+
   const enter = () => {
     cancelTimer();
+
     if (!privateWindow) timer.current = setTimeout(() => setOpen(true), 250);
   };
+
   const leave = () => {
     cancelTimer();
     timer.current = setTimeout(() => setOpen(false), 280);
   };
+
   const openPage = (section?: string) => {
     cancelTimer();
     setOpen(false);
     openLibrary(windowId, section);
   };
+
   async function preferences() {
     cancelTimer();
     setOpen(false);
+    const inPage = useBrowser.getState().settings.libraryIn === "page";
+
     const choice = await showMenu([
       { id: "media", title: "Show Recent Media", checked: recentTypes.media },
       { id: "downloads", title: "Show Recent Downloads", checked: recentTypes.downloads },
       { separator: true },
       { id: "library", title: "Open Library" },
+      { id: "libraryPage", title: "Open Library as Page" },
+      {
+        id: "libraryIn",
+        title: "Open Library In",
+        children: [
+          { id: "in:sidebar", title: "Sidebar", checked: !inPage },
+          { id: "in:page", title: "Page", checked: inPage },
+        ],
+      },
     ]);
+
     if (choice === "media" || choice === "downloads") setRecentTypes((types) => ({ ...types, [choice]: !types[choice] }));
+
     if (choice === "library") openPage();
+
+    if (choice === "libraryPage") openLibraryPage(windowId);
+
+    if (choice === "in:sidebar" || choice === "in:page") useBrowser.getState().updateSettings({ libraryIn: choice === "in:page" ? "page" : "sidebar" });
   }
 
   return (
@@ -85,7 +110,11 @@ export function LibraryButton({ windowId }: { windowId: string }) {
           box={28}
           radius={7}
           tooltip={downloading.length ? `Library · ${downloading.length} downloading` : "Library"}
-          onPress={() => openPage()}
+          onPress={() => {
+            cancelTimer();
+            setOpen(false);
+            toggleLibrary(windowId);
+          }}
         />
       </ContextMenuArea>
       {downloading.length ? (
@@ -143,17 +172,20 @@ function RecentLibrary({
   const media = useLibrary((s) => s.media);
   const error = useLibrary((s) => s.error);
   const downloads = useBrowser(useShallow((s) => downloadsIn(s, windowId)));
+
   const recentMedia = types.media
     ? Object.values(media)
         .filter((m) => !m.source?.profileId || !isIncognitoSpace(m.source.profileId))
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, 5)
     : [];
+
   const recentDownloads = types.downloads ? downloads.filter((d) => d.state === "finished").slice(0, 5) : [];
   useEffect(() => startLibrary(), []);
 
   async function open(path: string) {
     onOpenFile();
+
     try {
       if (!(await openFile(path))) showToast(windowId, "Couldn't Open File", "The file may have been moved or deleted.");
     } catch (error) {
@@ -201,6 +233,7 @@ function RecentLibrary({
 
 function RecentHeading({ title, onPress }: { title: string; onPress: () => void }) {
   const theme = useTheme();
+
   return (
     <Pressable onPress={onPress} style={{ paddingHorizontal: 13, paddingTop: 10, paddingBottom: 5 }}>
       <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary }}>{title}</Text>
@@ -212,6 +245,7 @@ function RecentFile({ name, path, icon, onPress }: { name: string; path: string;
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const exists = fileExists(path);
+
   return (
     <MouseArea path={exists ? path : null}>
       <View {...hoverProps} style={{ marginHorizontal: 5, borderRadius: 7, backgroundColor: hovered ? theme.rowHover : undefined }}>
@@ -236,7 +270,9 @@ function RecentFile({ name, path, icon, onPress }: { name: string; path: string;
 function RecentImage({ path }: { path: string }) {
   const theme = useTheme();
   const [broken, setBroken] = useState(false);
+
   if (broken || !fileExists(path)) return <Symbol name="photo" size={20} color={theme.textTertiary} style={{ width: 30, height: 30 }} />;
+
   return (
     <Image
       source={{ uri: `file://${path.split("/").map(encodeURIComponent).join("/")}` }}

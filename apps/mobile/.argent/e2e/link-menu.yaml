@@ -1,0 +1,48 @@
+# Link menu: long-press a link for Bay's menu instead of the engine's, open it in a background tab, and check
+# where a link goes without opening it. Needs network access to www.iana.org.
+steps:
+  - run: ../flows/fresh-start
+  - tap: { id: start-screen }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "www.iana.org/help/example-domains" }
+  - when: { platform: android }
+    steps:
+      - await: { visible: { text: Protocols }, timeout: 30000 }
+      - await: { idle: true, timeout: 20000 }
+      - long-press: { text: Protocols }
+  # iOS: WKWebView's links are in the accessibility tree but not the runner's view tree (and a raw tool step would
+  # unpin the app), so wait for the page to settle and long-press the "Protocols" link where IANA's header puts it
+  # on the iPhone 18 Pro.
+  - when: { platform: ios }
+    steps:
+      - await: { visible: { id: bar-more }, timeout: 30000 }
+      # The header moves down once IANA's logo loads, so press only after the load finishes.
+      - await: { hidden: { id: page-progress }, timeout: 30000 }
+      - await: { idle: true, stableFor: 1500, timeout: 30000 }
+      - long-press: { x: 0.34, y: 0.195 }
+  - await: { text: { in: { id: link-menu-url }, contains: "iana.org/protocols" }, timeout: 10000 }
+  - tap: { id: link-open-background }
+  - await: { hidden: { id: link-menu-url }, timeout: 10000 }
+  - tap: { id: bar-tabs }
+  - await: { visible: { id: tab-card-1 }, timeout: 10000 }
+  - tap: { id: tab-card-0 }
+  - when: { platform: android }
+    steps:
+      - await: { visible: { text: Protocols }, timeout: 30000 }
+      - await: { idle: true, timeout: 20000 }
+      - long-press: { text: Protocols }
+  # iOS: WKWebView's links are in the accessibility tree but not the runner's view tree (and a raw tool step would
+  # unpin the app), so wait for the page to settle and long-press the "Protocols" link where IANA's header puts it
+  # on the iPhone 18 Pro.
+  - when: { platform: ios }
+    steps:
+      - await: { visible: { id: bar-more }, timeout: 30000 }
+      # The header moves down once IANA's logo loads, so press only after the load finishes.
+      - await: { hidden: { id: page-progress }, timeout: 30000 }
+      - await: { idle: true, stableFor: 1500, timeout: 30000 }
+      - long-press: { x: 0.34, y: 0.195 }
+  - await: { visible: { id: link-destination }, timeout: 10000 }
+  - tap: { id: link-destination }
+  - await: { text: { in: { id: link-destination-result }, contains: "iana.org/protocols" }, timeout: 20000 }
+  - tap: { id: link-menu-close }
+  - await: { hidden: { id: link-menu-url }, timeout: 10000 }

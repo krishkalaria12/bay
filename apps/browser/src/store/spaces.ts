@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { BrowserState } from "./browser";
+import type { BrowserState } from "./browserStore";
 import { bookmarkRoots, engineRoots, removeBookmarkTree } from "./bookmarks";
 import { newId, setSpaceProfiles, tabToShow, viewTabIds, without } from "./model";
 import { DEFAULT_GRAIN, DEFAULT_INTENSITY } from "../lib/constants";
@@ -12,7 +12,7 @@ import type { Space, SpaceColor, SpaceTheme } from "./types";
 export type SpacesSlice = {
   spaces: Record<string, Space>;
   spaceOrder: string[];
-  // Engine spaces whose data a deleted profile left behind, until it's gone (lib/profileData.ts).
+  // Engine spaces whose data a deleted profile left behind, until it's gone (lib/profileCleanup.ts).
   orphanedProfileData: string[];
 
   /** Without a colour or theme, the space gets a look no other space has (unusedSpaceLook). */
@@ -59,15 +59,22 @@ export const SPACE_LOOKS: { name: string; color: SpaceColor; theme: SpaceTheme }
  * A new space's look, so that no two spaces look alike: the first gradient no space wears, then a theme of a colour
  * no space has. Always a theme, so the space shows as itself over any page.
  */
-export function unusedSpaceLook(spaces: Record<string, Space>): { color: SpaceColor; theme: SpaceTheme } {
+export interface SpaceLook {
+  color: SpaceColor;
+  theme: SpaceTheme;
+}
+
+export function unusedSpaceLook(spaces: Record<string, Space>): SpaceLook {
   const worn = new Set(Object.values(spaces).map((p) => p.theme?.colors.join()));
   const look = LOOKS.find(([name]) => !worn.has(presetTheme(name).colors.join()));
+
   if (look) return { color: look[1], theme: presetTheme(look[0]) };
+
   return themeOfColor(unusedSpaceColor(spaces));
 }
 
 /** A space's look from one of the preset colours: its swatch, as a theme. */
-export function themeOfColor(color: SpaceColor): { color: SpaceColor; theme: SpaceTheme } {
+export function themeOfColor(color: SpaceColor): SpaceLook {
   return { color, theme: { colors: [SPACE_SWATCHES[color]], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN } };
 }
 
@@ -115,16 +122,19 @@ export function unusedSpaceIcon(profiles: Record<string, Pick<Space, "icon">>): 
   const used = new Set(Object.values(profiles).map((p) => p.icon));
   const free = SPACE_EMOJI.filter((e) => !used.has(e));
   const from = free.length ? free : SPACE_EMOJI;
+
   return from[Math.floor(Math.random() * from.length)]!;
 }
 
 /** Every space shows an emoji: a saved one without (an older session, a space synced without one) gets a free one. */
 export function withSpaceEmoji(spaces: Record<string, Space>, order: string[]): Record<string, Space> {
-  let next = spaces;
+  const next = Object.assign({}, spaces);
+
   for (const id of order) {
     if (!next[id] || next[id]!.icon) continue;
-    next = { ...next, [id]: { ...next[id]!, icon: unusedSpaceIcon(next) } };
+    Object.assign(next, { [id]: { ...next[id]!, icon: unusedSpaceIcon(next) } });
   }
+
   return next;
 }
 
@@ -139,43 +149,54 @@ export const engineIdOf = (space: Space) => (profileIdOf(space) === DEFAULT_SPAC
  */
 export function ownsProfileData(s: Pick<BrowserState, "spaces" | "spaceOrder">, id: string): boolean {
   const space = s.spaces[id];
+
   if (!space) return false;
   const profile = profileIdOf(space);
   const named = s.spaces[profile];
+
   if (named && profileIdOf(named) === profile) return profile === id;
+
   return s.spaceOrder.find((other) => s.spaces[other] && profileIdOf(s.spaces[other]!) === profile) === id;
 }
 
 /** Split older shared profiles without discarding the original owner's native data. */
 export function isolateSavedSpaces(spaces: Record<string, Space>, order: string[], orphaned: string[]) {
   const groups = new Map<string, string[]>();
+
   for (const id of order) {
     const profile = profileIdOf(spaces[id]!);
     groups.set(profile, [...(groups.get(profile) ?? []), id]);
   }
+
   const reserved = new Set([...groups.keys(), ...Object.keys(spaces), ...orphaned.map((id) => id || DEFAULT_SPACE_ID)]);
   const next = { ...spaces };
   const detached = new Set<string>();
   const owners = new Map<string, string[]>();
+
   for (const [profile, ids] of groups) {
     const owner = ids.includes(profile) ? profile : ids[0]!;
     owners.set(owner, ids);
+
     for (const id of ids) {
       // A space made to share its sign-ins stays with them; only older, unchosen sharing is split.
       if (id === owner || spaces[id]!.sharesSignIns) continue;
       // Its former directory may belong to another space or still be queued for deletion.
       let nativeId = id;
+
       if (groups.has(id) || orphaned.includes(id === DEFAULT_SPACE_ID ? "" : id)) {
         nativeId = `${id}-isolated`;
         let suffix = 1;
+
         while (reserved.has(nativeId)) nativeId = `${id}-isolated-${suffix++}`;
       }
+
       reserved.add(nativeId);
       const { profileId: _, ...space } = spaces[id]!;
       next[id] = nativeId === id ? space : { ...space, profileId: nativeId };
       detached.add(id);
     }
   }
+
   return { spaces: next, detached, owners };
 }
 
@@ -195,17 +216,20 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
       const s = get();
       const source = shareWith ? s.spaces[shareWith] : undefined;
       const look = color || theme !== undefined ? { color: color ?? unusedSpaceColor(s.spaces), theme: theme ?? null } : unusedSpaceLook(s.spaces);
+
       const profile: Space = {
         id: newId("p"),
         name: name.trim() || `Profile ${s.spaceOrder.length + 1}`,
         color: look.color,
-        ...(look.theme ? { theme: look.theme } : {}),
+        ...(look.theme ? { theme: look.theme } : undefined),
         icon: icon || unusedSpaceIcon(s.spaces),
         createdAt: Date.now(),
-        ...(source ? { profileId: profileIdOf(source), sharesSignIns: true } : {}),
+        ...(source ? { profileId: profileIdOf(source), sharesSignIns: true } : undefined),
       };
+
       const bookmarks = engineRoots(s.bookmarks, profile.id, engineIdOf(profile))[0];
       set({ spaces: { ...s.spaces, [profile.id]: profile }, spaceOrder: [...s.spaceOrder, profile.id], bookmarks });
+
       return profile.id;
     },
 
@@ -218,9 +242,11 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
 
     deleteSpace(id) {
       let s = get();
+
       if (!s.spaces[id] || s.spaceOrder.length <= 1) return;
       const spaceOrder = s.spaceOrder.filter((p) => p !== id);
       const fallback = s.settings.defaultSpaceId === id ? spaceOrder[0]! : s.settings.defaultSpaceId;
+
       const settings = {
         ...s.settings,
         defaultSpaceId: s.settings.defaultSpaceId === id ? fallback : s.settings.defaultSpaceId,
@@ -231,6 +257,7 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
             ? { kind: "space" as const, spaceId: fallback }
             : s.settings.externalLinkDefault,
       };
+
       const engine = engineIdOf(s.spaces[id]!);
       // Another space shares its sign-ins: the profile, and its bookmarks, stay theirs.
       const shared = spaceOrder.some((p) => engineIdOf(s.spaces[p]!) === engine);
@@ -240,10 +267,12 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
       for (const w of Object.values(s.windows)) {
         if (w.spaceId !== id || w.kind === "small") continue;
         let tab = tabToShow(s, w.id, fallback);
+
         if (!tab) [s, tab] = withNewTab(s, w.id, { spaceId: fallback, background: true });
         s = { ...s, windows: { ...s.windows, [w.id]: { ...s.windows[w.id]!, spaceId: fallback } } };
         s = apply(s, activated(s, tab, w.id));
       }
+
       s = removeTabs(
         s,
         Object.values(s.tabs)
@@ -252,9 +281,11 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         false,
       );
       const windows = { ...s.windows };
+
       for (const w of Object.values(windows)) {
         if (w.activeTabIds[id]) windows[w.id] = { ...w, activeTabIds: without(w.activeTabIds, [id]) };
       }
+
       const roots = bookmarkRoots(s.bookmarks, id);
       set({
         ...s,
@@ -274,6 +305,7 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         closedWindows: s.closedWindows.filter((c) => c.window.spaceId !== id).map((c) => ({ ...c, tabs: c.tabs.filter((t) => t.spaceId !== id) })),
         pinnedFolders: Object.fromEntries(Object.entries(s.pinnedFolders).filter(([, f]) => f.spaceId !== id)),
       });
+
       for (const w of Object.values(get().windows)) {
         if (!viewTabIds(get(), w.id).length) get().newTab(w.id);
       }
@@ -282,6 +314,7 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
     reorderSpaces(ids) {
       set((s) => {
         const known = ids.filter((id) => s.spaces[id]);
+
         return { spaceOrder: [...known, ...s.spaceOrder.filter((id) => !known.includes(id))] };
       });
     },

@@ -5,5 +5,6 @@ export function extensionPopupGeometry(anchor: Anchor, size: { width: number; he
   const height = Math.min(size.height + 1, Math.max(1, window.height - 16));
   const left = Math.max(8, Math.min(anchor.x + anchor.width - width, window.width - width - 8));
   const top = Math.max(8, Math.min(anchor.y + anchor.height + 6, window.height - height - 8));
+
   return { width, height, left, top };
 }

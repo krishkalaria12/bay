@@ -13,14 +13,17 @@ const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 // because this only ever sets `customTitle`.
 export function tidyTabTitle(title: string, url: string = ""): string | null {
   const t = (title || "").trim();
+
   if (!t || t === url) return null;
 
   let host = "";
+
   try {
     host = new URL(url).hostname.replace(/^www\./, "");
   } catch {
     host = "";
   }
+
   const brand = host ? tidyHost(host) : "";
   const brandSquash = brand ? squash(brand) : "";
 
@@ -44,12 +47,16 @@ export function tidyTabTitle(title: string, url: string = ""): string | null {
 
   // Collect every piece a separator splits the title into.
   const pieces: string[] = [];
+
   for (const sep of SEPARATORS) {
     const last = t.lastIndexOf(sep);
+
     if (last > 0) {
       pieces.push(t.slice(0, last).trim(), t.slice(last + sep.length).trim());
     }
+
     const first = t.indexOf(sep);
+
     if (first > 0 && first !== last) {
       pieces.push(t.slice(0, first).trim(), t.slice(first + sep.length).trim());
     }
@@ -60,8 +67,10 @@ export function tidyTabTitle(title: string, url: string = ""): string | null {
     for (const c of pieces) {
       if (!c || c === t) continue;
       const cs = squash(c);
+
       if (!cs) continue;
       const matches = cs === brandSquash || (cs.length >= 3 && (brandSquash.includes(cs) || cs.includes(brandSquash)));
+
       if (matches && c.length < t.length) return c;
     }
   }
@@ -69,13 +78,17 @@ export function tidyTabTitle(title: string, url: string = ""): string | null {
   // If one side is a generic page word, the other side is the name.
   for (const sep of SEPARATORS) {
     const idx = t.lastIndexOf(sep);
+
     if (idx <= 0) continue;
     const a = t.slice(0, idx).trim();
     const b = t.slice(idx + sep.length).trim();
+
     if (a && b && a !== t && b !== t) {
       const aGen = GENERIC.has(squash(a));
       const bGen = GENERIC.has(squash(b));
+
       if (aGen && !bGen) return b;
+
       if (bGen && !aGen) return a;
     }
   }
@@ -84,17 +97,22 @@ export function tidyTabTitle(title: string, url: string = ""): string | null {
   // shorter. On a tie, prefer the right-hand side (the common "Page – Site"
   // convention), which is why candidates are tried right side first.
   let best: string | null = null;
+
   for (const sep of SEPARATORS) {
     const idx = t.lastIndexOf(sep);
+
     if (idx <= 0) continue;
     const a = t.slice(0, idx).trim();
     const b = t.slice(idx + sep.length).trim();
+
     for (const c of [b, a]) {
       if (!c || c === t) continue;
+
       if (c.length <= 24 && c.length < t.length - 2) {
         if (!best || c.length < best.length) best = c;
       }
     }
   }
+
   return best;
 }

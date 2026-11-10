@@ -1,9 +1,9 @@
-import { Surface, Symbol } from "@bay/shell";
+import { Surface, Symbol } from "@bay/desktop";
 import { useEffect } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { installUpdate, updateTitle, usePendingUpdate, watchPendingUpdate } from "../../lib/updates";
-import { useHover } from "../primitives";
+import { useHover } from "../ui/primitives";
 
 /** The row over the sidebar's foot while an update waits (as Arc's): "Update Bay", "Downloading Update…" with a spinner
  * while it downloads in the background, or "Restart to Update" once it's downloaded. */
@@ -11,6 +11,7 @@ export const UPDATE_ROW_HEIGHT = 40;
 
 export function useUpdateRowShown() {
   useEffect(watchPendingUpdate, []);
+
   return usePendingUpdate((u) => !!u.pending);
 }
 
@@ -18,13 +19,18 @@ export function UpdateRow() {
   const theme = useTheme();
   const pending = usePendingUpdate((u) => u.pending);
   const { hovered, hoverProps } = useHover();
+
   if (!pending) return null;
   const downloading = !!pending.downloading;
+
   const fill = (pressed: boolean) => {
     if (downloading) return theme.tabHover;
+
     if (pressed) return theme.tabPressed;
+
     return hovered ? theme.tabSelected : theme.tabHover;
   };
+
   return (
     <View {...hoverProps} tooltip={`Bay ${pending.version}`}>
       <Pressable onPress={installUpdate} disabled={downloading} accessibilityRole="button">

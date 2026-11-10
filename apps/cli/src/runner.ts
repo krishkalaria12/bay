@@ -15,6 +15,8 @@ import { Endpoint, EndpointError } from "./endpoint.ts";
 import { redact } from "./redact.ts";
 import { createSourceFile, isExpressionStatement, ScriptKind, ScriptTarget } from "typescript";
 import { ConnectionLost } from "./cdp.ts";
+import { type JsonValue } from "./util.ts";
+import * as v from "valibot";
 
 export const NO_PAGE_TAB = "the user isn't on a web page (New Tab or another Bay view); open one with new_tab(url) or pick one from tabs";
 export const NO_VISIBLE_TAB = "no web page is visible (New Tab, another Bay view, or a hidden window); open one with new_tab(url) or pick one from tabs";
@@ -37,14 +39,17 @@ export class ExecInterrupted extends Error {
   override name = "ExecInterrupted";
 }
 
-export function createNoTab(message = NO_PAGE_TAB): unknown {
+export function createNoTab(message = NO_PAGE_TAB) {
   return new Proxy(
     {},
     {
       get(_, prop) {
         if (prop === Symbol.toPrimitive) return () => false;
+
         if (prop === "toString") return () => "<no web page tab>";
+
         if (prop === "valueOf") return () => false;
+
         if (prop === "then") return undefined;
         throw new NoPageTab(message);
       },
@@ -56,35 +61,43 @@ export function prepareCode(source: string): string {
   // Find the final expression before transpilation can discard its value.
   const parsed = createSourceFile("exec.ts", source, ScriptTarget.Latest, true, ScriptKind.TS);
   const last = parsed.statements.at(-1);
+
   if (last && isExpressionStatement(last)) {
     source = `${source.slice(0, last.getStart(parsed))}return (\n${last.expression.getText(parsed)}\n);${source.slice(last.end)}`;
   }
+
   const transpiler = new Bun.Transpiler({ loader: "ts" });
+
   return transpiler.transformSync(`return (async () => {\n${source}\n})();`).trim();
 }
 
-export function compileCode(source: string, filename: string): (scope: Record<string, unknown>) => Promise<unknown> {
+export function compileCode<Scope>(source: string, filename: string): (scope: Scope) => Promise<JsonValue> {
   const prepared = prepareCode(source);
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
   const sourceUrl = filename.replace(/\s/g, (char) => encodeURIComponent(char));
+
   return new AsyncFunction("scope", `with (scope) {\n${prepared}\n}\n//# sourceURL=${sourceUrl}`);
 }
 
-export function buildNamespace(session: Session, filename: string, dataRoot?: string): Record<string, unknown> {
+export function buildNamespace(session: Session, filename: string, dataRoot?: string) {
   const tabs: Tab[] = [];
 
   const newTab = async (url = "about:blank", background = true): Promise<Tab> => {
     const tab = await session.newTab(url, background);
     tabs.push(tab);
+
     return tab;
   };
 
-  const js = async (expression: string, tab?: Tab): Promise<unknown> => {
+  const js = async (expression: string, tab?: Tab): Promise<JsonValue> => {
     const target = tab ?? (namespace.tab instanceof Tab ? namespace.tab : session.opened.at(-1));
+
     if (!target) {
       throw new NoPageTab(NO_PAGE_TAB);
     }
-    return target.evaluate(expression);
+
+    // SAFETY: evaluate defaults to returnByValue + awaitPromise, so the CDP value is JSON-serializable, i.e. a JsonValue.
+    return target.evaluate<JsonValue>(expression);
   };
 
   const pinned = async (): Promise<browsing.PinnedTab[]> => {
@@ -99,11 +112,11 @@ export function buildNamespace(session: Session, filename: string, dataRoot?: st
       space?: string;
       domains?: boolean;
     } = {},
-  ): Promise<unknown> => {
+  ): Promise<JsonValue> => {
     return browsing.history(dataRoot ?? null, { ...options, space: options.space ?? options.profile ?? undefined });
   };
 
-  const namespace: Record<string, unknown> = {
+  const namespace = {
     __filename: filename,
     browser: session,
     session,
@@ -129,7 +142,7 @@ export function buildNamespace(session: Session, filename: string, dataRoot?: st
   return namespace;
 }
 
-export async function runCode(source: string, filename: string, endpoint: Endpoint, timeoutSeconds: number | null, dataRoot?: string): Promise<unknown> {
+export async function runCode(source: string, filename: string, endpoint: Endpoint, timeoutSeconds: number | null, dataRoot?: string): Promise<JsonValue> {
   const fn = compileCode(source, filename);
   const session = new Session(endpoint);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -141,12 +154,13 @@ export async function runCode(source: string, filename: string, endpoint: Endpoi
     const namespace = buildNamespace(session, filename, dataRoot);
     const active = await session.activeTarget();
     const pageTabs = await session.pageTabs(active);
-    (namespace.tabs as Tab[]).push(...pageTabs);
+    namespace.tabs.push(...pageTabs);
 
     const current = await session.currentTab(pageTabs, active);
     namespace.tab = current ?? createNoTab(NO_VISIBLE_TAB);
 
     const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : 0;
+
     const executePromise = (async () => {
       try {
         return await fn(namespace);
@@ -159,15 +173,18 @@ export async function runCode(source: string, filename: string, endpoint: Endpoi
     const cdpClosedPromise = session.cdp.whenClosed().then(() => {
       throw new EndpointError(`lost the connection to ${session.lost()}`);
     });
+
     const interrupted = new Promise<never>((_, reject) => {
       interrupt = () => reject(new ExecInterrupted("interrupted"));
+
       for (const signal of signals) process.on(signal, interrupt);
     });
 
     if (timeoutMs > 0) {
-      const timeoutPromise = new Promise((_, reject) => {
+      const timeoutPromise = new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new ExecTimeout(`timed out after ${timeoutSeconds}s`)), timeoutMs);
       });
+
       return await Promise.race([executePromise, cdpClosedPromise, timeoutPromise, interrupted]);
     }
 
@@ -179,22 +196,26 @@ export async function runCode(source: string, filename: string, endpoint: Endpoi
   }
 }
 
-export function formatValue(value: unknown, asJson: boolean): string | null {
+export function formatValue<T>(value: T, asJson: boolean): string | null {
   if (asJson) {
-    return JSON.stringify(value, (_, v) => (typeof v === "bigint" ? v.toString() : v), 2) ?? null;
+    return JSON.stringify(value, (_, nested: JsonValue) => (v.is(v.bigint(), nested) ? nested.toString() : nested), 2) ?? null;
   }
+
   if (value === undefined || value === null) {
     return null;
   }
-  if (typeof value === "string") {
+
+  if (v.is(v.string(), value)) {
     return value;
   }
+
   return Bun.inspect(value);
 }
 
 export function formatUserError(error: UserCodeError): string {
   const exc = error.error;
   const stack = exc.stack || `${exc.name}: ${exc.message}`;
+
   return redact(stack);
 }
 

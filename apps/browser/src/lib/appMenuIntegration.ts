@@ -1,0 +1,357 @@
+import * as cef from "@bay/chromium";
+import {
+  confirm,
+  copyText,
+  onCommand,
+  onNotificationResponse,
+  onScriptCommand,
+  openExternalURL,
+  replyToScript,
+  revealFile,
+  setScriptState,
+  setWindowActivity,
+  systemInfo,
+  updaterState,
+  type CommandEvent,
+  type ScriptCommand,
+  type ScriptResult,
+  type ScriptState,
+} from "@bay/desktop";
+import { maybeStartOnboarding, openVideoTour, startOnboarding, startToolTour } from "../components/onboarding/index";
+import { trackAppVersion } from "../components/newTab/releaseNotes";
+import { openTaskManager } from "../components/taskManager/window";
+import { useBrowser, type BrowserState } from "../store/browserStore";
+import { changedIds } from "../store/recordDiff";
+import { activeTabId, listIds, resolveWindowId, viewTabIds, windowListKey, windowTitle } from "../store/model";
+import { focus, openUrls, openWindow, switchSpace, switchToTab } from "./actions";
+import { openReleaseNotesAfterUpdate, openReleaseNotesPage } from "./releaseNotesPage";
+import { webviews } from "./webviews";
+import { handleWebNotificationResponse } from "./webNotifications";
+import type { JsonInput } from "./json";
+
+type ScriptError = JsonInput | Error;
+
+export function startAppIntegration() {
+  onCommand(runAppCommand);
+  onNotificationResponse((response) => {
+    if (handleWebNotificationResponse(response) || response.action !== "click") return;
+    const s = useBrowser.getState();
+    const { tabId, windowId } = response;
+
+    if (tabId && s.tabs[tabId]) switchToTab(tabId);
+    else if (windowId && s.windows[windowId]) focus(windowId);
+  });
+  startHandoff();
+  startScripting();
+  const updated = trackAppVersion();
+  maybeStartOnboarding();
+
+  if (updated) openReleaseNotesAfterUpdate();
+}
+
+function runAppCommand({ command, windowId }: CommandEvent) {
+  switch (command) {
+    case "sendFeedback":
+      return void sendFeedback(windowId);
+    case "copyDiagnostics":
+      return void diagnostics().then(copyText);
+    case "recordPerformanceIssue":
+      return void recordPerformanceIssue();
+    case "showOnboarding":
+      return startOnboarding(windowId);
+    case "toolTour":
+      return void startToolTour(windowId);
+    case "videoTour":
+      return openVideoTour(windowId);
+    case "releaseNotes":
+      return openReleaseNotesPage(windowId);
+    case "taskManager":
+      return openTaskManager();
+  }
+}
+
+// MARK: Feedback and diagnostics
+
+export async function sendFeedback(windowId?: string | null) {
+  const app = systemInfo();
+  const report = await diagnostics();
+  const body = `What happened?\n\n\nWhat did you expect?\n\n\n---\n${report}`;
+  const page = app.feedbackURL && /^https?:/i.test(app.feedbackURL) ? app.feedbackURL : null;
+
+  if (page) return openUrls([page.replace("%s", encodeURIComponent(body))], windowId);
+  const to = app.feedbackEmail && !/[\s?&]/.test(app.feedbackEmail) ? app.feedbackEmail : "";
+  const draft = `mailto:${to}?subject=${encodeURIComponent(`${app.appName} Feedback`)}&body=${encodeURIComponent(body)}`;
+
+  if (!(await openExternalURL(draft))) copyText(body);
+}
+
+export async function diagnostics(): Promise<string> {
+  const app = systemInfo();
+  const [engine, updates] = await Promise.all([cef.engineInfo().catch(() => null), updaterState().catch(() => null)]);
+  const s = useBrowser.getState();
+  const regular = s.windowOrder.filter((id) => !s.windows[id]?.incognito);
+
+  return [
+    `${app.appName} ${app.appVersion} (${app.appBuild}) — ${app.configuration}`,
+    engine ? `Engine: NNCore, Chromium ${engine.chromiumVersion}` : "Engine: unavailable",
+    `macOS ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
+    `Bundle: ${app.bundleId}, locale ${app.locale}`,
+    `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, profiles: ${s.spaceOrder.length}`,
+    !updates?.available
+      ? "Updates: not built in"
+      : !updates.configured
+        ? "Updates: not set up for this build"
+        : `Updates: automatic checks ${updates.automaticChecks ? "on" : "off"}, feed ${updates.feedURL ?? "none"}`,
+  ].join("\n");
+}
+
+async function recordPerformanceIssue() {
+  if (await cef.isTracing()) return;
+
+  const start = await confirm({
+    title: "Record a performance issue?",
+    message: "Bay records what the engine does while you reproduce the problem. The recording is saved to your Downloads folder.",
+    confirmTitle: "Start Recording",
+  });
+
+  if (!start.confirmed || !(await cef.beginTracing())) return;
+  const stop = await confirm({ title: "Recording…", message: "Reproduce the problem now, then click Stop.", confirmTitle: "Stop", cancelTitle: "Discard" });
+  const path = await cef.endTracing(stop.confirmed);
+
+  if (path) void revealFile(path);
+}
+
+// MARK: Handoff
+
+function startHandoff() {
+  const last = new Map<string, string>();
+
+  const sync = (s: BrowserState) => {
+    for (const id of s.windowOrder) {
+      const w = s.windows[id]!;
+      const tabId = activeTabId(s, id);
+      const tab = tabId ? s.tabs[tabId] : undefined;
+      const url = !w.incognito && tab?.url && /^https?:/i.test(tab.url) ? tab.url : null;
+      const title = tab ? tab.customTitle || tab.title : "";
+      const key = `${url}\n${title}`;
+
+      if (last.get(id) === key) continue;
+      last.set(id, key);
+      void setWindowActivity(id, url, title || null);
+    }
+
+    for (const id of last.keys()) if (!s.windows[id]) last.delete(id);
+  };
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  useBrowser.subscribe((s, prev) => {
+    if (s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows) return;
+    timer ??= setTimeout(() => {
+      timer = undefined;
+      sync(useBrowser.getState());
+    }, 250);
+  });
+  setTimeout(() => sync(useBrowser.getState()), 1000);
+}
+
+// MARK: AppleScript
+
+function scriptState(s: BrowserState): ScriptState {
+  return {
+    windows: s.windowOrder.map((id) => {
+      const w = s.windows[id]!;
+
+      return {
+        id,
+        title: windowTitle(s, id),
+        profileId: w.spaceId,
+        incognito: w.incognito,
+        activeTabId: activeTabId(s, id) ?? null,
+        tabs: viewTabIds(s, id).map((tabId) => {
+          const t = s.tabs[tabId]!;
+
+          return {
+            id: tabId,
+            title: t.customTitle || t.title,
+            url: t.url,
+            loading: !!s.live[tabId]?.isLoading,
+            pinned: t.pinned,
+          };
+        }),
+      };
+    }),
+    profiles: s.spaceOrder.map((id) => ({ id, name: s.spaces[id]!.name })),
+  };
+}
+
+function startScripting() {
+  let lastJson = "";
+
+  const push = () => {
+    const state = scriptState(useBrowser.getState());
+    const json = JSON.stringify(state);
+
+    if (json === lastJson) return Promise.resolve();
+    lastJson = json;
+
+    return setScriptState(state);
+  };
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  useBrowser.subscribe((s, prev) => {
+    // Of `live` the state has only whether a tab is loading: a page's progress doesn't build it again (it's all the tabs).
+    const loading = s.live !== prev.live && changedIds(s.live, prev.live).some((id) => !!s.live[id]?.isLoading !== !!prev.live[id]?.isLoading);
+
+    if (s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows && !loading && s.spaces === prev.spaces) return;
+    timer ??= setTimeout(() => {
+      timer = undefined;
+      void push();
+    }, 100);
+  });
+  void push();
+
+  onScriptCommand((request) => {
+    let result: ScriptResult | null = null;
+    Promise.resolve()
+      .then(async () => {
+        result = (await runScriptCommand(request)) ?? {};
+      })
+      .then(
+        // Push state before replying so the script sees the change.
+        () => push().then(() => replyToScript(request.id, result)),
+        (error: ScriptError) => push().then(() => replyToScript(request.id, null, error instanceof Error ? error.message : String(error))),
+      );
+  });
+}
+
+async function runScriptCommand(request: ScriptCommand): Promise<ScriptResult | void> {
+  const s = useBrowser.getState();
+
+  const tabOf = (tabId: string) => {
+    const tab = s.tabs[tabId];
+
+    if (!tab) throw new Error("That tab no longer exists.");
+
+    return tab;
+  };
+
+  const loaded = (tabId: string) => {
+    const web = webviews.get(tabId);
+
+    if (!web) throw new Error("The tab hasn't loaded yet; focus it first.");
+
+    return web;
+  };
+
+  switch (request.command) {
+    case "newWindow": {
+      const windowId = openWindow({ url: request.url, incognito: request.incognito, spaceId: request.profileId });
+
+      return { windowId };
+    }
+
+    case "newTab": {
+      const windowId = resolveWindowId(s, request.windowId);
+
+      if (!windowId) {
+        const created = openWindow({ url: request.url });
+
+        return { windowId: created, tabId: activeTabId(useBrowser.getState(), created) };
+      }
+
+      const view = viewTabIds(s, windowId);
+      const w = s.windows[windowId]!;
+      let index: number | undefined;
+
+      if (request.index !== undefined) {
+        const pinned = view.filter((id) => s.tabs[id]!.pinned).length;
+        const at = Math.max(request.index, pinned);
+        const list = listIds(s, windowListKey(s, w));
+        index = at < view.length ? list.indexOf(view[at]!) : list.length;
+      }
+
+      const tabId = s.newTab(windowId, { url: request.url, index });
+
+      return { windowId, tabId };
+    }
+
+    case "setURL":
+      tabOf(request.tabId);
+
+      return s.navigate(request.tabId, request.url);
+    case "closeTab":
+      tabOf(request.tabId);
+
+      return s.closeTab(request.tabId);
+    case "closeWindow":
+      if (!s.windows[request.windowId]) throw new Error("That window no longer exists.");
+
+      return s.closeWindow(request.windowId);
+    case "reload": {
+      const tab = tabOf(request.tabId);
+      const web = webviews.get(request.tabId);
+
+      if (web) return void (await web.reload());
+
+      if (tab.url) s.navigate(tab.id, tab.url);
+
+      return;
+    }
+
+    case "back":
+      tabOf(request.tabId);
+
+      return void (await loaded(request.tabId).goBack());
+    case "forward":
+      tabOf(request.tabId);
+
+      return void (await loaded(request.tabId).goForward());
+    case "focusTab":
+      tabOf(request.tabId);
+
+      return switchToTab(request.tabId);
+    case "setActiveTabIndex": {
+      if (!s.windows[request.windowId]) throw new Error("That window no longer exists.");
+
+      if (request.index < 1 || request.index > viewTabIds(s, request.windowId).length) throw new Error("There's no tab at that index.");
+
+      return s.activateIndex(request.windowId, request.index - 1);
+    }
+
+    case "focusProfile": {
+      const windowId = resolveWindowId(s, null);
+
+      if (!s.spaces[request.profileId]) throw new Error("That profile no longer exists.");
+
+      if (!windowId || s.windows[windowId]!.incognito) throw new Error("There's no window to show the space in.");
+
+      return switchSpace(windowId, request.profileId);
+    }
+
+    case "execute": {
+      tabOf(request.tabId);
+      const outcome = await loaded(request.tabId).evaluate<{ value?: string; error?: string }>(executeWrapper(request.code));
+
+      if (!outcome) throw new Error("The page didn't answer.");
+
+      if (outcome.error) throw new Error(outcome.error);
+
+      return { value: outcome.value ?? "" };
+    }
+  }
+}
+
+function executeWrapper(code: string) {
+  return `
+const text = (v) => {
+  if (v === undefined || v === null) return "";
+  if (typeof v === "string") return v;
+  try { const json = JSON.stringify(v); return json === undefined ? String(v) : json; } catch { return String(v); }
+};
+let value;
+try { value = (0, eval)(${JSON.stringify(code)}); } catch (e) { post("result", JSON.stringify({ error: String(e) })); return; }
+Promise.resolve(value).then(
+  (v) => post("result", JSON.stringify({ value: text(v) })),
+  (e) => post("result", JSON.stringify({ error: String(e) })),
+);`;
+}

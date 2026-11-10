@@ -1,20 +1,20 @@
 import { breadcrumb } from "@bay/core";
 import { WindowBackdrop } from "@bay/shaders";
-import { ContextMenuArea, FadeLabel, setTrafficLightsCenter, Symbol, WindowDragRegion } from "@bay/shell";
+import { ContextMenuArea, FadeLabel, setTrafficLightsCenter, Symbol, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useTheme, useWindowTint } from "../../lib/theme";
+import { useBrowser } from "../../store/browserStore";
 import { useActiveTab, useTabLive, useWindowId, useWindowUi } from "../../store/hooks";
 import type { Tab } from "../../store/types";
-import { CommandPanel } from "../CommandPanel";
-import { ContentCard } from "../ContentCard";
-import { DownloadsPanel } from "../DownloadsPanel";
-import { usePage } from "../layout/pageState";
-import { setUrlAnchor } from "../layout/windowLayout";
-import { showUrlBarMenu } from "../omnibox/paste";
-import { Favicon, IconButton, useHover } from "../primitives";
+import { CommandPanel } from "../commandBar/CommandBarPanel";
+import { ContentCard } from "../window/TabPageCard";
+import { DownloadsPanel } from "../downloads/DownloadsPanel";
+import { usePage } from "../window/pageState";
+import { setUrlAnchor } from "../window/layout";
+import { showUrlBarMenu } from "../commandBar/paste";
+import { Favicon, IconButton, useHover } from "../ui/primitives";
 import { copyPageUrl } from "../site/selection";
 import { openInMainWindow } from "./actions";
 import { SMALL_BAR_HEIGHT, SMALL_BAR_INSET, SMALL_BAR_MID, SMALL_BUTTON, SMALL_FIELD_HEIGHT, SMALL_FIELD_LEFT, SMALL_LIGHTS_CENTER } from "./constants";
@@ -25,9 +25,10 @@ import { SMALL_BAR_HEIGHT, SMALL_BAR_INSET, SMALL_BAR_MID, SMALL_BUTTON, SMALL_F
 export function LittleBayWindow() {
   const theme = useTheme();
   const [size, setSize] = useState({ width: 0, height: 0 });
+
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={useWindowTint()} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <View
         style={{
           flex: 1,
@@ -111,10 +112,12 @@ function PageField({ tab, windowId, hidden }: { tab: Tab; windowId: string; hidd
   const insecure = usePage(tab.id, (p) => !!p.security && (p.security.level === "insecure" || p.security.level === "certificateError"));
   const { hovered, hoverProps } = useHover();
   const field = useRef<View>(null);
+
   const anchor = () =>
     field.current?.measureInWindow((x, y, width, height) => {
       if (width) setUrlAnchor(windowId, { left: x, top: y, width, sidebar: { height } });
     });
+
   const isFile = tab.url.startsWith("file:");
   const host = !tab.url ? "" : isFile ? "File" : breadcrumb(tab.url).host;
   const title = tab.customTitle || tab.title;
@@ -170,6 +173,7 @@ function Progress({ progress, color }: { progress: number; color: string }) {
     width.set(withTiming(Math.max(progress, 0.08), { duration: 200, easing: Easing.out(Easing.quad) }));
   }, [progress]);
   const widthStyle = useAnimatedStyle(() => ({ width: `${width.get() * 96}%` }));
+
   return (
     <Animated.View style={[{ position: "absolute", left: 8, bottom: 0, height: 1.5, borderRadius: 1, backgroundColor: color, opacity: 0.85 }, widthStyle]} />
   );
