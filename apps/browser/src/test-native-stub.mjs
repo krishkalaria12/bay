@@ -35,6 +35,7 @@ export const jsReload = { on: false };
 export const isJsReload = () => jsReload.on;
 export const appInfo = { appVersion: "1.0" };
 export const systemInfo = () => ({ ...appInfo });
+export const crashReports = () => Promise.resolve([]);
 export const calendarAuthorization = () => "notDetermined";
 export const requestCalendarAccess = () => Promise.resolve(false);
 export const systemCalendars = () => Promise.resolve([]);
