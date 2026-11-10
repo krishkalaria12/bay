@@ -69,14 +69,10 @@ module.exports = function withBayEngine(config) {
     const activity = application?.activity?.find((entry) => entry.$["android:name"] === ".MainActivity");
 
     if (application && activity) {
-      // Video can leave the page into picture in picture (B17): the activity must say so, and must survive the
-      // config change it makes rather than the system recreating it mid-playback.
+      // Video can leave the page into picture in picture (B17): the activity must say so. The config changes that
+      // picture in picture brings (the screen shrinks) are already in the list Expo writes, so the activity is not
+      // recreated mid-playback; "pictureInPicture" is not a configChanges flag, and naming it fails the build.
       activity.$["android:supportsPictureInPicture"] = "true";
-      const changes = String(activity.$["android:configChanges"] ?? "");
-
-      if (!changes.split("|").includes("pictureInPicture")) {
-        activity.$["android:configChanges"] = changes ? `${changes}|pictureInPicture` : "pictureInPicture";
-      }
 
       // Sharing into Bay (B14): what other apps share as text matches here, and the engine reads the web address out
       // of it (BayEngineModule.takeShare). The B9 web scheme filter answers links other apps open directly.
