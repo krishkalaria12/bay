@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Image, StyleSheet, useWindowDimensions } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -31,17 +31,18 @@ export function TabZoom({ snapshot, from, onDone }: TabZoomProps): JSX.Element {
   const { width, height } = useWindowDimensions();
   const progress = useSharedValue(0);
   const reduced = useReducedMotion();
-  // The zoom runs once. The caller's handler changes with every render, so it is kept here instead of in the effect's
-  // dependencies: a changing handler would start the zoom over, and it would never arrive.
-  const finish = useRef(onDone);
+  // The zoom runs once. The caller's handler changes with every render, so it is kept in a ref and reached through a
+  // stable function: a changing handler would start the zoom over, and it would never arrive.
+  const handler = useRef(onDone);
+  const finish = useCallback(() => handler.current(), []);
 
-  finish.current = onDone;
+  handler.current = onDone;
 
   useEffect(() => {
     progress.value = withTiming(1, { ...SETTLE, duration: reduced ? 0 : SETTLE.duration }, (finished) => {
-      if (finished) scheduleOnRN(() => finish.current());
+      if (finished) scheduleOnRN(finish);
     });
-  }, [progress, reduced]);
+  }, [finish, progress, reduced]);
 
   const style = useAnimatedStyle(() => {
     const at = progress.value;
