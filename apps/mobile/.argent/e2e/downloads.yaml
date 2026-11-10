@@ -7,6 +7,10 @@ steps:
   - await: { visible: { id: address-input }, timeout: 10000 }
   - type: { into: { id: address-input }, text: "proof.ovh.net/files/1Mb.dat" }
   - await: { visible: { id: download-toast }, timeout: 30000 }
+  # iOS asks for notifications when the first download starts; the prompt would sit over the app.
+  - when: { visible: { text: "Allow" } }
+    steps:
+      - tap: { text: "Allow" }
   - await: { visible: { id: download-toast-open }, timeout: 60000 }
   - await: { text: { in: { id: download-toast-status }, contains: "1.0 MB" }, timeout: 10000 }
   # The navigation that became a download isn't an error and doesn't keep loading.

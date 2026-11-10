@@ -594,6 +594,20 @@
                 so the repo's <code>node_modules</code> is watched now.
               </td>
             </tr>
+            <tr>
+              <th scope="row">What the iPhone shows <span class="kind">Next round</span></th>
+              <td>
+                The iOS app had never been compiled, so the first run on the simulator found more than the compiler did: the widget extension's
+                <code>Info.plist</code> named a principal class, which WidgetKit extensions may not do, so the app could not be installed; and the share that
+                launched Bay cold asked the module for something it had no answer for, which stopped the app on its first frame.
+              </td>
+              <td><code>81d15293</code>, <code>a85d8544</code></td>
+              <td>
+                <span class="status landed">Landed</span> The app builds, installs and runs on the simulator now. One thing is still wrong: a sheet opened over
+                a page draws its rows on top of the page but has no background of its own, so the page shows through it — the Liquid Glass behind the sheet does
+                not appear.
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>

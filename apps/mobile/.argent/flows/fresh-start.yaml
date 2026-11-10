@@ -20,6 +20,9 @@ steps:
       - tap: { id: bar-settings }
   - await: { visible: { id: settings-screen }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
+  # "Clear browsing data" sits below the fold of a phone-sized sheet, so scroll to it before tapping.
+  - swipe: { from: { x: 0.5, y: 0.75 }, direction: up }
+  - scroll-to: { target: { id: settings-clear-data } }
   - tap: { id: settings-clear-data }
   - await: { visible: { id: clear-data-confirm }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
