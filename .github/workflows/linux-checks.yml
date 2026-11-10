@@ -6,9 +6,13 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: linux-checks-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   shared:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -43,6 +47,7 @@ jobs:
           pnpm --filter @bay/core --filter @bay/platform --filter @bay/shaders --filter @bay/browser test
           pnpm --filter @bay/sync exec node --test 'src/**/*.test.ts'
       - name: Check WebGL shaders in Chromium
+        timeout-minutes: 5
         run: CHROMIUM="$(command -v google-chrome || command -v chromium)" pnpm --filter @bay/shaders test:web
       - name: Test Linux sync services
         run: |
