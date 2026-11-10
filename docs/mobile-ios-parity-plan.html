@@ -558,6 +558,42 @@
               <td><code>f7318207</code></td>
               <td><span class="status extra">New</span> Checked against the real lists on a Mac, not yet on the phone.</td>
             </tr>
+            <tr>
+              <th scope="row">A1 to A8 Motion <span class="kind">Next round</span></th>
+              <td>
+                The next round of the plan: one spring and one press feedback for everything (<code>src/chrome/motion.ts</code>,
+                <code>src/chrome/PressFeedback.tsx</code>), haptics for pin, unpin, long press and the switcher's snap, the start page's tiles that close the
+                gap when one is taken away, the load's progress along the capsule's edge, the search card that grows out of the capsule, the tab card that zooms
+                into the page, and a history row that is swiped away to remove it.
+              </td>
+              <td><code>08a5b33f</code> to <code>2f9160a3</code></td>
+              <td>
+                <span class="status landed">Landed</span> Checked on the Android phone: the tab zoom, the search card and the capsule's progress line were
+                watched in a screen recording. The iOS build is still being made.
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">B8 Release setup <span class="kind">Next round</span></th>
+              <td>
+                <code>eas.json</code> with the development, preview and production builds; <code>supportsTablet: false</code>, as D7 says, until there is a
+                tablet layout; and a crash report: Bay keeps what went wrong and Settings offers to send it on (<code>src/crashReports.ts</code>).
+              </td>
+              <td><code>feat/implement-pr-14</code></td>
+              <td><span class="status extra">New</span> The EAS project itself still has to be made, and the builds have never been run.</td>
+            </tr>
+            <tr>
+              <th scope="row">Builds that failed <span class="kind">Next round</span></th>
+              <td>
+                Four things stopped the apps from building at all: <code>pictureInPicture</code> is not a <code>configChanges</code> flag, so AAPT2 refused the
+                Android manifest; the iOS quick actions overrode a method no superclass has; the iOS download resume called a <code>WKDownload</code> method
+                that does not exist; and the voice search and media controls used APIs the current SDK renamed.
+              </td>
+              <td><code>2222f488</code> and the iOS fixes after it</td>
+              <td>
+                <span class="status landed">Landed</span> Android builds and runs again. Metro also could not resolve <code>@bay/core</code>'s own dependencies,
+                so the repo's <code>node_modules</code> is watched now.
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
