@@ -3,6 +3,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import { ActivityService, LiveSources } from "../activity/activityService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { Persistence } from "../lib/persistenceService";
@@ -16,7 +17,18 @@ import { Http } from "./ports/http";
 import { Scheduler } from "./ports/scheduler";
 
 /** The services every desktop workflow can rely on. */
-export type AppServices = Bookmarks | Diagnostics | Documents | History | Http | ImportWorkflow | Persistence | ProfileCleanup | Scheduler | Sync;
+export type AppServices =
+  | ActivityService
+  | Bookmarks
+  | Diagnostics
+  | Documents
+  | History
+  | Http
+  | ImportWorkflow
+  | Persistence
+  | ProfileCleanup
+  | Scheduler
+  | Sync;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -33,6 +45,8 @@ const sync = Sync.layer;
 
 const importWorkflow = ImportWorkflow.layer.pipe(Layer.provide(ImportEngine.layer));
 
+const activity = ActivityService.layer.pipe(Layer.provide(Layer.mergeAll(Scheduler.layer, LiveSources.layer)));
+
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
   diagnostics,
@@ -45,6 +59,7 @@ export const appLayer = Layer.mergeAll(
   profileCleanup,
   sync,
   importWorkflow,
+  activity,
 ).pipe(Layer.provide(diagnostics));
 
 /**
