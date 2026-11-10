@@ -1,5 +1,5 @@
 import { Button, Host } from "@expo/ui/swift-ui";
-import { accessibilityLabel, buttonStyle, controlSize, disabled } from "@expo/ui/swift-ui/modifiers";
+import { accessibilityIdentifier, accessibilityLabel, buttonStyle, controlSize, disabled } from "@expo/ui/swift-ui/modifiers";
 import type { JSX } from "react";
 import { View } from "react-native";
 
@@ -14,7 +14,18 @@ export function PillButton({ testID, label, accessibilityLabel: a11yLabel, onPre
   return (
     <View testID={testID} collapsable={false}>
       <Host matchContents>
-        <Button label={label} onPress={press} modifiers={[buttonStyle("glass"), controlSize("regular"), accessibilityLabel(a11yLabel), disabled(isDisabled)]} />
+        <Button
+          label={label}
+          onPress={press}
+          modifiers={[
+            buttonStyle("glass"),
+            controlSize("regular"),
+            accessibilityLabel(a11yLabel),
+            // The identifier belongs on the button itself: the view around it is only a frame.
+            accessibilityIdentifier(testID),
+            disabled(isDisabled),
+          ]}
+        />
       </Host>
     </View>
   );

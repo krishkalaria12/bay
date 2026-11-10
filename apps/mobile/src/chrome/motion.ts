@@ -5,8 +5,6 @@ import {
   LinearTransition,
   ReduceMotion,
   useReducedMotion,
-  withSpring,
-  withTiming,
   type BaseAnimationBuilder,
   type EntryOrExitLayoutType,
 } from "react-native-reanimated";
@@ -24,25 +22,8 @@ export const TAP = { duration: 160, easing: Easing.out(Easing.cubic) } as const;
 /** A change worth noticing, but not worth waiting for. */
 export const SETTLE = { duration: 240, easing: Easing.out(Easing.cubic) } as const;
 
-/** A fade, for when the motion is turned down: the change still happens, it just doesn't travel. */
-export const CROSSFADE = { duration: 160, easing: Easing.linear } as const;
-
 /** Whether the system asks for less motion. Every animation in Bay turns into a fade when it does. */
 export { useReducedMotion };
-
-/** A spring that settles at `value`; with reduced motion it arrives there at once. */
-export function settle(value: number, reduced: boolean): number {
-  "worklet";
-
-  return withSpring(value, { ...SPRING, reduceMotion: reduced ? ReduceMotion.Always : ReduceMotion.System });
-}
-
-/** A fade to `value`: the timing curve of a tap, or a plain fade when the motion is reduced. */
-export function fade(value: number, reduced: boolean): number {
-  "worklet";
-
-  return withTiming(value, reduced ? CROSSFADE : TAP);
-}
 
 /**
  * The layout shift a grid's items share (A5): when one of them is taken away, the rest close the gap instead of

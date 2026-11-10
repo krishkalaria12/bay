@@ -142,7 +142,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
 
   if (tools) {
     return (
-      <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setTools(false)} title="Page tools" testID="page-menu" height="64%">
+      <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setTools(false)} title="Page tools" testID="page-menu" height="70%">
         <Group>
           <ActionRow
             testID="page-hide-elements"
@@ -164,7 +164,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
       onClose={props.onClose}
       title="Page"
       testID="page-menu"
-      height="64%"
+      height="70%"
       header={<SiteHeader title={props.title} url={props.url} blocking={props.blocking} />}
     >
       {props.blocking !== "off" || props.hiddenCount ? (
