@@ -6,6 +6,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { ActivityService, LiveSources } from "../activity/activityService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
+import { NotificationEngine, NotificationService } from "../lib/notificationService";
 import { Persistence } from "../lib/persistenceService";
 import { Sync } from "../sync/service";
 import { ImportEngine, ImportWorkflow } from "../components/import/workflow";
@@ -25,6 +26,7 @@ export type AppServices =
   | History
   | Http
   | ImportWorkflow
+  | NotificationService
   | Persistence
   | ProfileCleanup
   | Scheduler
@@ -47,6 +49,8 @@ const importWorkflow = ImportWorkflow.layer.pipe(Layer.provide(ImportEngine.laye
 
 const activity = ActivityService.layer.pipe(Layer.provide(Layer.mergeAll(Scheduler.layer, LiveSources.layer)));
 
+const notifications = NotificationService.layer.pipe(Layer.provide(NotificationEngine.layer));
+
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
   diagnostics,
@@ -60,6 +64,7 @@ export const appLayer = Layer.mergeAll(
   sync,
   importWorkflow,
   activity,
+  notifications,
 ).pipe(Layer.provide(diagnostics));
 
 /**

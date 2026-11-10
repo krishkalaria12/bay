@@ -99,6 +99,12 @@ export const terminated = [];
 export const replyToTerminate = (ok) => (terminated.push(ok), Promise.resolve());
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();
+
+// The app's notification permission, and the questions the native side asks.
+export const notificationAnswers = { permission: "granted", request: true, settings: 0 };
+export const notificationPermission = () => Promise.resolve(notificationAnswers.permission);
+export const requestNotificationPermission = () => Promise.resolve(notificationAnswers.request);
+export const openNotificationSettings = () => (notificationAnswers.settings++, Promise.resolve());
 export const fetchFavicon = () => Promise.resolve(null);
 export const iconTheme = () => Promise.resolve(null);
 export const cancelDownload = () => Promise.resolve();
