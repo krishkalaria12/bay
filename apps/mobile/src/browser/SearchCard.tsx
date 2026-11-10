@@ -3,12 +3,14 @@ import { displayUrl } from "@bay/core/src/suggest.ts";
 import { startListening } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import { useThemeColor } from "heroui-native";
-import { useRef, useState, type ComponentRef, type JSX } from "react";
+import { useEffect, useRef, useState, type ComponentRef, type JSX } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
+import Animated, { Extrapolation, interpolate, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/chrome/Icon";
+import { SPRING, useReducedMotion } from "@/chrome/motion";
 import { Surface } from "@/chrome/Surface";
 import type { BrowserData } from "@/store/types";
 import { resolveAddress } from "./address";
@@ -64,6 +66,23 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 
   const cardPosition = useAnimatedStyle(() => ({ bottom: Math.max(keyboard.height.value, insets.bottom) + 8 }));
 
+  // The field grows out of the capsule it replaces (A2): the pill widens from the capsule's width to the field's,
+  // and what is written in it comes in as it widens.
+  const [fieldWidth, setFieldWidth] = useState(0);
+  const grown = useSharedValue(0);
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    grown.value = withSpring(1, { ...SPRING, reduceMotion: reduced ? ReduceMotion.Always : ReduceMotion.System });
+  }, [grown, reduced]);
+
+  const pill = useAnimatedStyle(() => ({
+    width: fieldWidth ? interpolate(grown.value, [0, 1], [fieldWidth / 2, fieldWidth]) : fieldWidth,
+    alignSelf: "center",
+  }));
+
+  const contents = useAnimatedStyle(() => ({ opacity: interpolate(grown.value, [0.25, 1], [0, 1], Extrapolation.CLAMP) }));
+
   function change(next: string): void {
     setAddressSelected(false);
     // Deleting shows what's left without completing it again.
@@ -118,79 +137,92 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
         <Surface radius={30} style={{ padding: 10 }} testID={privately ? "search-card-private" : undefined}>
           {privately ? <View className="absolute inset-0 rounded-[30px] bg-neutral-900/95" pointerEvents="none" /> : null}
           <View
-            className={
-              privately
-                ? "flex-row items-center rounded-full border border-white/10 bg-white/10 pl-4"
-                : "flex-row items-center rounded-full border border-black/10 bg-white/60 pl-4 dark:border-white/10 dark:bg-white/10"
-            }
+            className="relative"
+            onLayout={(event) => {
+              const width = event.nativeEvent.layout.width;
+
+              if (width && width !== fieldWidth) setFieldWidth(width);
+            }}
           >
-            <View className="flex-1 justify-center" style={{ minWidth: 0 }}>
-              {completion ? (
-                <Text
-                  testID="address-completion"
-                  numberOfLines={1}
-                  pointerEvents="none"
-                  style={[inputTextStyle, { position: "absolute", left: 0, right: 0, top: 0, height: 46, lineHeight: 46, color: text }]}
+            {/* The pill the capsule grows into (A2): it starts as wide as the capsule and widens into the field. */}
+            <Animated.View
+              pointerEvents="none"
+              className={
+                privately
+                  ? "absolute top-0 bottom-0 rounded-full border border-white/10 bg-white/10"
+                  : "absolute top-0 bottom-0 rounded-full border border-black/10 bg-white/60 dark:border-white/10 dark:bg-white/10"
+              }
+              style={pill}
+            />
+            <Animated.View style={contents} className="flex-row items-center pl-4">
+              <View className="flex-1 justify-center" style={{ minWidth: 0 }}>
+                {completion ? (
+                  <Text
+                    testID="address-completion"
+                    numberOfLines={1}
+                    pointerEvents="none"
+                    style={[inputTextStyle, { position: "absolute", left: 0, right: 0, top: 0, height: 46, lineHeight: 46, color: text }]}
+                  >
+                    <Text style={{ color: "transparent" }}>{query}</Text>
+                    <Text style={{ backgroundColor: privately ? "rgba(255,255,255,0.18)" : "rgba(10,132,255,0.22)" }}>{completion}</Text>
+                  </Text>
+                ) : null}
+                <TextInput
+                  ref={input}
+                  testID="address-input"
+                  accessibilityLabel="Search or enter address"
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="web-search"
+                  returnKeyType="go"
+                  placeholder="Search or enter address"
+                  placeholderTextColor={secondary}
+                  keyboardAppearance={privately ? "dark" : "default"}
+                  style={[inputTextStyle, { color: text, height: 46 }]}
+                  value={query}
+                  selection={selection}
+                  onChangeText={change}
+                  onSubmitEditing={submit}
+                />
+              </View>
+              {query ? (
+                <Pressable
+                  testID="clear-address"
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear"
+                  className="h-11 w-11 items-center justify-center"
+                  onPress={() => fill("")}
                 >
-                  <Text style={{ color: "transparent" }}>{query}</Text>
-                  <Text style={{ backgroundColor: privately ? "rgba(255,255,255,0.18)" : "rgba(10,132,255,0.22)" }}>{completion}</Text>
-                </Text>
+                  <Icon name="close" color={secondary} size={20} />
+                </Pressable>
               ) : null}
-              <TextInput
-                ref={input}
-                testID="address-input"
-                accessibilityLabel="Search or enter address"
-                autoFocus
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="web-search"
-                returnKeyType="go"
-                placeholder="Search or enter address"
-                placeholderTextColor={secondary}
-                keyboardAppearance={privately ? "dark" : "default"}
-                style={[inputTextStyle, { color: text, height: 46 }]}
-                value={query}
-                selection={selection}
-                onChangeText={change}
-                onSubmitEditing={submit}
-              />
-            </View>
-            {query ? (
               <Pressable
-                testID="clear-address"
+                testID="voice-search"
                 accessibilityRole="button"
-                accessibilityLabel="Clear"
+                accessibilityLabel={listening ? "Listening" : "Voice search"}
+                accessibilityState={{ disabled: listening }}
+                disabled={listening}
                 className="h-11 w-11 items-center justify-center"
-                onPress={() => fill("")}
+                onPress={() => void listen()}
               >
-                <Icon name="close" color={secondary} size={20} />
+                <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={22} />
               </Pressable>
-            ) : null}
-            <Pressable
-              testID="voice-search"
-              accessibilityRole="button"
-              accessibilityLabel={listening ? "Listening" : "Voice search"}
-              accessibilityState={{ disabled: listening }}
-              disabled={listening}
-              className="h-11 w-11 items-center justify-center"
-              onPress={() => void listen()}
-            >
-              <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={22} />
-            </Pressable>
-            {privateAvailable ? (
-              <Pressable
-                testID="private-toggle"
-                accessibilityRole="switch"
-                accessibilityLabel="Private"
-                accessibilityState={{ checked: privately }}
-                className="h-11 w-11 items-center justify-center"
-                onPress={() => setPrivately((on) => !on)}
-              >
-                <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={22} />
-              </Pressable>
-            ) : (
-              <View className="w-3" />
-            )}
+              {privateAvailable ? (
+                <Pressable
+                  testID="private-toggle"
+                  accessibilityRole="switch"
+                  accessibilityLabel="Private"
+                  accessibilityState={{ checked: privately }}
+                  className="h-11 w-11 items-center justify-center"
+                  onPress={() => setPrivately((on) => !on)}
+                >
+                  <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={22} />
+                </Pressable>
+              ) : (
+                <View className="w-3" />
+              )}
+            </Animated.View>
           </View>
           {privately ? (
             <Text testID="private-notice" style={{ color: secondary, fontSize: 13, marginTop: 8, marginLeft: 16 }}>
