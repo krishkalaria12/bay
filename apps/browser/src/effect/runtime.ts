@@ -9,6 +9,7 @@ import { ConnectionEngine, ConnectionService } from "../activity/connectionServi
 import { LibraryEngine, LibraryService } from "../components/library/libraryService";
 import { SharingEngine, SharingService } from "../components/library/sharingService";
 import { ExtensionsEngine, ExtensionsService } from "../components/extensions/service";
+import { MediaEngine, MediaService } from "../components/media/service";
 import { PreviewEngine, PreviewService } from "../components/site/previewService";
 import { BoostEngine, BoostsService } from "../components/boosts/service";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
@@ -56,6 +57,7 @@ export type AppServices =
   | ImportWorkflow
   | LibraryService
   | LocalFileService
+  | MediaService
   | NotificationService
   | PageWorkService
   | Persistence
@@ -103,6 +105,8 @@ const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEn
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
+const media = MediaService.layer.pipe(Layer.provide(MediaEngine.layer));
+
 const pageWork = PageWorkService.layer.pipe(Layer.provide(PageWorkEngine.layer));
 
 const search = SearchService.layer.pipe(Layer.provide(SearchNetwork.layer));
@@ -145,6 +149,7 @@ export const appLayer = Layer.mergeAll(
   downloads,
   boosts,
   connections,
+  media,
   pageWork,
   search,
   telemetry,

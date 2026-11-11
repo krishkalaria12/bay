@@ -111,6 +111,17 @@ export const listTasks = () => Promise.resolve([]);
 
 export const onExtensionsChanged = () => ({ remove() {} });
 
+// The engine's media: its share sources, its cast dialogs and routes, and its own Picture in Picture.
+export const killTask = () => Promise.resolve(true);
+export const getDisplayMediaSources = () => Promise.resolve([]);
+export const onCastDialog = () => ({ remove() {} });
+export const onCastRoutes = () => ({ remove() {} });
+export const showCastDialog = () => Promise.resolve(true);
+export const closeCastDialog = () => Promise.resolve();
+export const watchCastRoutes = () => Promise.resolve();
+export const setDisplayMediaPicker = () => Promise.resolve();
+export const setAutoPictureInPicture = () => Promise.resolve();
+
 // The native side's answer to the app's quit: what it was told.
 export const terminated = [];
 export const replyToTerminate = (ok) => (terminated.push(ok), Promise.resolve());
