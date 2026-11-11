@@ -1,5 +1,7 @@
 import { onAppEvent } from "@bay/desktop";
-import { everySlowly } from "../../lib/throttledTimers";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../../effect/runtime";
+import { Scheduler } from "../../effect/ports/scheduler";
 import { webviews } from "../../lib/webviews";
 import { startLive } from "../../activity/index";
 import { useBrowser } from "../../store/browserStore";
@@ -38,5 +40,13 @@ export function startSidebarEffects() {
     if (e.type === "switcherKey" && e.key !== "escape") moveSwitcher(e.key === "next" ? 1 : -1);
   });
 
-  everySlowly({ every: AUTO_CLEAN_EVERY_MS, run: () => useBrowser.getState().cleanUpInactiveTabs() });
+  // The clean-up of inactive tabs is a job on the app's grid: it wakes the app with the rest of the periodic work, and
+  // the app's scope owns it.
+  void runDesktop(
+    Effect.gen(function* () {
+      const scheduler = yield* Scheduler;
+
+      yield* scheduler.every({ every: AUTO_CLEAN_EVERY_MS, run: Effect.sync(() => useBrowser.getState().cleanUpInactiveTabs()) });
+    }),
+  );
 }
