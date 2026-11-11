@@ -1,5 +1,6 @@
-// Effect is the desktop app's own: only apps/browser depends on it, the shared packages and the other apps stay
-// free of it, the app's pure store code never reaches it, and no Node, Bun or DOM platform adapter goes into Hermes.
+// Effect belongs to the desktop app and the bay CLI: only apps/browser and apps/cli depend on it, the shared packages
+// and the other apps stay free of it, the app's pure store code never reaches it, and no Node, Bun or DOM platform
+// adapter goes into Hermes. The CLI is a standalone Bun tool with its own lockfile: its Bun platform layer is its own.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -40,7 +41,7 @@ const workspaces = () =>
       .filter((dir) => statSync(dir).isDirectory()),
   );
 
-test("only the desktop app depends on effect", () => {
+test("only the desktop app and the CLI depend on effect", () => {
   for (const dir of workspaces()) {
     let manifest;
 
@@ -55,13 +56,18 @@ test("only the desktop app depends on effect", () => {
     const rel = path.relative(ROOT, dir);
 
     if (rel === path.join("apps", "browser")) assert.deepEqual(named, ["effect"], "the desktop app pins effect alone");
-    else assert.deepEqual(named, [], `${rel} stays free of effect`);
+    else if (rel === path.join("apps", "cli")) {
+      assert.deepEqual(named.sort(), ["@effect/platform-bun", "effect"], "the CLI pins effect and its Bun platform");
+      assert.equal(deps.effect, deps["@effect/platform-bun"], "the CLI's effect and its Bun platform are one release");
+    } else assert.deepEqual(named, [], `${rel} stays free of effect`);
   }
 });
 
 test("no shared package or other app imports effect", () => {
   for (const dir of workspaces()) {
-    if (path.relative(ROOT, dir) === path.join("apps", "browser")) continue;
+    const rel = path.relative(ROOT, dir);
+
+    if (rel === path.join("apps", "browser") || rel === path.join("apps", "cli")) continue;
 
     for (const file of sources(dir)) assert.deepEqual(effectImports(file), [], path.relative(ROOT, file));
   }
