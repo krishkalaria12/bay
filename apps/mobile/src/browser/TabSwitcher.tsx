@@ -1,7 +1,7 @@
 import { displayUrl } from "@bay/core/src/suggest.ts";
 import { useThemeColor } from "heroui-native";
-import { useRef, type ComponentRef, type JSX } from "react";
-import { Image, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import { useRef, useState, type ComponentRef, type JSX } from "react";
+import { Image, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   Extrapolation,
@@ -18,11 +18,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
 import { Text } from "@/chrome/Text";
+import { iconSize, radius, space } from "@/chrome/tokens";
 import { useT } from "@/i18n";
+import { useBrowserStore } from "@/store/browser";
 import { spaceName } from "@/store/spaceName";
 import type { BrowserFolder, BrowserSpace, BrowserTab, SpaceColor } from "@/store/types";
 import { SiteIcon } from "./SiteIcon";
 import type { Frame } from "./TabZoom";
+import { Wallpaper } from "./Wallpaper";
 
 export interface TabSwitcherProps {
   tabs: readonly BrowserTab[];
@@ -54,6 +57,15 @@ const SPACE_COLORS: Record<SpaceColor, string> = {
 
 /** How far the stack scrolls per card, as a share of the card's width. */
 const STEP = 0.56;
+
+/** iOS lifts the cards off the wallpaper; Android draws them flat (no elevation, as Arc Search does). */
+const CARD_LIFT = Platform.select({
+  ios: { shadowColor: "#000000", shadowOpacity: 0.16, shadowRadius: 18, shadowOffset: { width: 0, height: 10 } },
+  default: {},
+});
+
+/** The row above each card: its site, title and close button. */
+const CARD_HEADER = 40;
 
 /** A card dragged up this far (share of its height), or flicked up this fast, closes. */
 const CLOSE_DISTANCE = 0.28;
@@ -89,15 +101,16 @@ export function TabSwitcher({
 }: TabSwitcherProps): JSX.Element {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const foreground = useThemeColor("foreground");
-  const muted = useThemeColor("muted");
   const t = useT();
   // Landscape (B10) keeps the cards clear of the notch on either side, and turns them smaller and squarer so the
   // next one still peeks in from the right, like the switcher does in portrait.
   const innerWidth = width - insets.left - insets.right;
   const portrait = height >= width;
+  // The stack fills what the header and chips leave, measured, so the cards never run under them.
+  const [stage, setStage] = useState(0);
   const cardWidth = Math.round(innerWidth * (portrait ? 0.68 : 0.42));
-  const cardHeight = Math.round(Math.min(height * (portrait ? 0.58 : 0.72), cardWidth * (portrait ? 2.05 : 1.35)));
+  const fits = stage ? stage - CARD_HEADER - space.lg : Infinity;
+  const cardHeight = Math.round(Math.min(height * (portrait ? 0.58 : 0.72), cardWidth * (portrait ? 2.05 : 1.35), fits));
   const layout: Layout = { width: innerWidth, left: insets.left, cardWidth, cardHeight, step: Math.round(cardWidth * STEP) };
 
   const activeIndex = Math.max(
@@ -111,13 +124,12 @@ export function TabSwitcher({
     scrollX.value = event.contentOffset.x;
   });
 
+  const gutter = { paddingLeft: insets.left + space.gutter, paddingRight: insets.right + space.gutter };
+
   return (
-    <View testID="tab-switcher" className="flex-1 justify-center">
-      <View
-        className="absolute inset-x-0 top-2 flex-row items-center justify-between px-5"
-        style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
-      >
-        <Text testID="tab-switcher-count" accessibilityRole="header" variant="headline">
+    <View testID="tab-switcher" className="flex-1">
+      <View className="flex-row items-center justify-between" style={[gutter, { paddingTop: space.sm, minHeight: 44 }]}>
+        <Text testID="tab-switcher-count" accessibilityRole="header" variant="title">
           {tabs.length === 1 ? t("tabs.one") : t("tabs.count", { count: tabs.length })}
         </Text>
         {tabs.length > 1 ? (
@@ -126,127 +138,109 @@ export function TabSwitcher({
             accessibilityRole="button"
             accessibilityLabel={t("tabs.archiveAllCount", { count: tabs.length })}
             onPress={onCloseAll}
-            className="min-h-11 justify-center px-2 active:opacity-60"
+            hitSlop={8}
+            className="h-9 justify-center rounded-full bg-default active:opacity-60"
+            style={{ paddingHorizontal: space.md + 2 }}
           >
-            <Text variant="callout" weight="medium" tone="muted">
+            <Text variant="subhead" weight="medium">
               {t("tabs.archiveAll")}
             </Text>
           </Pressable>
         ) : null}
       </View>
-      {/* Spaces (B21): one stack per space, rather than one flat list for every tab. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="absolute inset-x-0 top-16"
-        style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
-      >
-        <View className="flex-row gap-2">
-          {spaces.map((space) => {
-            const active = space.id === activeSpaceId;
-            const name = spaceName(space, t);
-
-            return (
-              <Pressable
-                key={space.id}
-                testID={`space-chip-${space.id}`}
-                accessibilityRole="button"
-                accessibilityLabel={name}
-                accessibilityState={{ selected: active }}
-                onPress={() => onSelectSpace(space.id)}
-                className="h-10 flex-row items-center gap-2 rounded-full px-4 active:opacity-60"
-                style={{
-                  backgroundColor: active ? `${SPACE_COLORS[space.color]}33` : undefined,
-                  borderWidth: 1,
-                  borderColor: active ? SPACE_COLORS[space.color] : muted + "55",
-                }}
-              >
-                <View className="h-2 w-2 rounded-full" style={{ backgroundColor: SPACE_COLORS[space.color] }} />
-                <Text variant="subhead" weight={active ? "semibold" : "medium"}>
-                  {name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </ScrollView>
+      {/* Spaces (B21): one stack per space, rather than one flat list for every tab. A lone space has nothing to switch
+          to, so its chip would only take room. */}
+      {spaces.length > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="grow-0"
+          contentContainerStyle={[gutter, { gap: space.sm, paddingTop: space.md }]}
+        >
+          {spaces.map((entry) => (
+            <Chip
+              key={entry.id}
+              testID={`space-chip-${entry.id}`}
+              label={spaceName(entry, t)}
+              active={entry.id === activeSpaceId}
+              dot={SPACE_COLORS[entry.color]}
+              onPress={() => onSelectSpace(entry.id)}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
       {/* Folders (B21) inside the active space: a filter across the stack. */}
       {folders.length ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          className="absolute inset-x-0 top-[7rem]"
-          style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
+          className="grow-0"
+          contentContainerStyle={[gutter, { gap: space.sm, paddingTop: space.sm }]}
         >
-          <View className="flex-row gap-2">
-            <Pressable
-              testID="folder-chip-all"
-              accessibilityRole="button"
-              accessibilityLabel={t("tabs.all")}
-              accessibilityState={{ selected: activeFolderId === null }}
-              onPress={() => onSelectFolder(null)}
-              className="h-9 flex-row items-center rounded-full px-3 active:opacity-60"
-              style={{
-                backgroundColor: activeFolderId === null ? foreground + "14" : undefined,
-                borderWidth: 1,
-                borderColor: activeFolderId === null ? foreground : muted + "55",
-              }}
-            >
-              <Text variant="footnote" weight={activeFolderId === null ? "semibold" : "medium"}>
-                {t("tabs.all")}
-              </Text>
-            </Pressable>
-            {folders.map((folder) => {
-              const active = folder.id === activeFolderId;
-
-              return (
-                <Pressable
-                  key={folder.id}
-                  testID={`folder-chip-${folder.id}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={folder.name}
-                  accessibilityState={{ selected: active }}
-                  onPress={() => onSelectFolder(folder.id)}
-                  className="h-9 flex-row items-center rounded-full px-3 active:opacity-60"
-                  style={{ backgroundColor: active ? foreground + "14" : undefined, borderWidth: 1, borderColor: active ? foreground : muted + "55" }}
-                >
-                  <Text variant="footnote" weight={active ? "semibold" : "medium"}>
-                    {folder.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Chip testID="folder-chip-all" label={t("tabs.all")} active={activeFolderId === null} onPress={() => onSelectFolder(null)} />
+          {folders.map((folder) => (
+            <Chip
+              key={folder.id}
+              testID={`folder-chip-${folder.id}`}
+              label={folder.name}
+              active={folder.id === activeFolderId}
+              onPress={() => onSelectFolder(folder.id)}
+            />
+          ))}
         </ScrollView>
       ) : null}
-      <Animated.ScrollView
-        horizontal
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        contentOffset={{ x: activeIndex * layout.step, y: 0 }}
-        showsHorizontalScrollIndicator={false}
-        // Lands on a card after a fling of any length, like the app switcher.
-        snapToInterval={layout.step}
-        decelerationRate="normal"
-        style={{ flexGrow: 0 }}
-        contentContainerStyle={{ width: layout.width + (tabs.length - 1) * layout.step, height: cardHeight + 44 }}
-      >
-        {tabs.map((tab, index) => (
-          <TabCard
-            key={tab.id}
-            tab={tab}
-            index={index}
-            count={tabs.length}
-            layout={layout}
-            scrollX={scrollX}
-            active={tab.id === activeTabId}
-            hidden={Boolean(tab.private && privateLocked)}
-            onPick={onPick}
-            onClose={onClose}
-          />
-        ))}
-      </Animated.ScrollView>
+      <View className="flex-1 justify-center" onLayout={(event) => setStage(Math.round(event.nativeEvent.layout.height))}>
+        <Animated.ScrollView
+          horizontal
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          contentOffset={{ x: activeIndex * layout.step, y: 0 }}
+          showsHorizontalScrollIndicator={false}
+          // Lands on a card after a fling of any length, like the app switcher.
+          snapToInterval={layout.step}
+          decelerationRate="normal"
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={{ width: layout.width + (tabs.length - 1) * layout.step, height: cardHeight + CARD_HEADER }}
+        >
+          {tabs.map((tab, index) => (
+            <TabCard
+              key={tab.id}
+              tab={tab}
+              index={index}
+              count={tabs.length}
+              layout={layout}
+              scrollX={scrollX}
+              active={tab.id === activeTabId}
+              hidden={Boolean(tab.private && privateLocked)}
+              onPick={onPick}
+              onClose={onClose}
+            />
+          ))}
+        </Animated.ScrollView>
+      </View>
     </View>
+  );
+}
+
+/** A space or folder to switch to: a quiet capsule, filled in when it is the one showing. */
+function Chip({ testID, label, active, dot, onPress }: { testID: string; label: string; active: boolean; dot?: string; onPress: () => void }): JSX.Element {
+  const background = useThemeColor("background");
+
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      className={`h-9 flex-row items-center rounded-full active:opacity-60 ${active ? "bg-foreground" : "bg-default"}`}
+      style={{ gap: space.sm, paddingHorizontal: space.md + 2 }}
+    >
+      {dot ? <View className="h-2 w-2 rounded-full" style={{ backgroundColor: dot }} /> : null}
+      <Text variant="subhead" weight={active ? "semibold" : "medium"} color={active ? background : undefined}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -279,6 +273,8 @@ function TabCard({
   const position = t(tab.private ? "tabs.privatePosition" : "tabs.position", { index: index + 1, count });
   const { width, cardWidth, cardHeight, step, left } = layout;
   const lift = useSharedValue(0);
+  const wallpaper = useBrowserStore((state) => state.data.preferences.wallpaper);
+  const wallpaperPhoto = useBrowserStore((state) => state.data.preferences.wallpaperPhoto);
   // The card's frame on the screen, so the page can grow out of it (A1).
   const card = useRef<ComponentRef<typeof View>>(null);
 
@@ -350,22 +346,26 @@ function TabCard({
   return (
     <GestureDetector gesture={pan}>
       <Animated.View style={[{ position: "absolute", left: index * step + left + (width - cardWidth) / 2, top: 0, width: cardWidth, zIndex: index }, style]}>
-        <Animated.View className="mb-2 flex-row items-center gap-2 pl-1" style={header}>
+        <Animated.View
+          className="flex-row items-center"
+          style={[{ height: CARD_HEADER - space.sm, marginBottom: space.sm, gap: space.sm, paddingLeft: space.xs }, header]}
+        >
           {/* The card below says all of this, so readers go from the card to its close button. */}
           {tab.private ? (
             <View
               testID={`tab-private-${index}`}
               accessibilityElementsHidden
               importantForAccessibility="no-hide-descendants"
-              className="flex-row items-center gap-1 rounded-full bg-neutral-900 px-2 py-0.5"
+              className="h-6 flex-row items-center rounded-full bg-neutral-900"
+              style={{ gap: space.xs, paddingHorizontal: space.sm }}
             >
-              <Icon name="private" color="#F4F4F5" size={14} />
+              <Icon name="private" color="#F4F4F5" size={iconSize.inline} />
               <Text variant="micro" color={"#F4F4F5"}>
                 {t("tabs.private")}
               </Text>
             </View>
           ) : null}
-          {tab.url && !hidden ? <SiteIcon url={tab.url} size={18} /> : null}
+          {tab.url && !hidden ? <SiteIcon url={tab.url} size={20} /> : null}
           <Text
             numberOfLines={1}
             accessibilityElementsHidden
@@ -382,45 +382,64 @@ function TabCard({
             accessibilityLabel={t("tabs.closeLabel", { title })}
             hitSlop={6}
             onPress={close}
-            className="h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10"
+            className="h-7 w-7 items-center justify-center rounded-full bg-default"
           >
-            <Icon name="close" color={muted} size={16} />
+            <Icon name="close" color={muted} size={iconSize.inline} />
           </Pressable>
         </Animated.View>
-        <Pressable
-          ref={card}
-          testID={`tab-card-${index}`}
-          accessibilityRole="button"
-          accessibilityLabel={t("tabs.openLabel", { title })}
-          // Which card this is, read after its title: "Tab 2 of 5".
-          accessibilityValue={{ text: position }}
-          accessibilityHint={t("tabs.swipeToClose")}
-          accessibilityState={{ selected: active }}
-          onPress={pick}
-          className={
-            tab.private
-              ? "overflow-hidden rounded-[22px] border border-white/10 bg-neutral-900"
-              : "overflow-hidden rounded-[22px] border border-black/10 bg-white dark:border-white/10 dark:bg-neutral-900"
-          }
-          style={{ height: cardHeight, borderWidth: active ? 2 : 1 }}
-        >
-          {hidden ? (
-            <View className="flex-1 items-center justify-center">
-              <Icon name="lock" color="#A1A1AA" size={28} />
-            </View>
-          ) : tab.snapshot ? (
-            <Image source={{ uri: tab.snapshot }} resizeMode="cover" style={{ width: cardWidth, height: cardHeight }} />
-          ) : (
-            <View className="flex-1 items-center justify-center gap-3">
-              {tab.url ? <SiteIcon url={tab.url} size={44} /> : null}
-              <Text variant="footnote" tone="muted">
-                {tab.url ? displayUrl(tab.url) : t("tabs.newTab")}
-              </Text>
-            </View>
-          )}
-          {/* Cards further back sit in shadow. */}
-          <Animated.View pointerEvents="none" className="absolute inset-0 bg-black" style={shade} />
-        </Pressable>
+        {/* The lift: a soft shadow on iOS; Android's surfaces stay flat, with only their hairline. */}
+        <View style={[{ borderRadius: radius.panel }, CARD_LIFT]}>
+          <Pressable
+            ref={card}
+            testID={`tab-card-${index}`}
+            accessibilityRole="button"
+            accessibilityLabel={t("tabs.openLabel", { title })}
+            // Which card this is, read after its title: "Tab 2 of 5".
+            accessibilityValue={{ text: position }}
+            accessibilityHint={t("tabs.swipeToClose")}
+            accessibilityState={{ selected: active }}
+            onPress={pick}
+            className={tab.private ? "overflow-hidden bg-neutral-900" : "overflow-hidden bg-white dark:bg-neutral-900"}
+            style={{ height: cardHeight, borderRadius: radius.panel }}
+          >
+            {hidden ? (
+              <View className="flex-1 items-center justify-center">
+                <Icon name="lock" color="#A1A1AA" size={28} />
+              </View>
+            ) : tab.snapshot ? (
+              <Image source={{ uri: tab.snapshot }} resizeMode="cover" style={{ width: cardWidth, height: cardHeight }} />
+            ) : tab.url ? (
+              <View className="flex-1 items-center justify-center" style={{ gap: space.md }}>
+                <SiteIcon url={tab.url} size={44} />
+                <Text variant="footnote" tone="muted">
+                  {displayUrl(tab.url)}
+                </Text>
+              </View>
+            ) : (
+              // A new tab shows the start page, so its card shows the start page's wallpaper.
+              <View className="flex-1 items-center justify-end" style={{ paddingBottom: space.xl }}>
+                {tab.private ? null : <Wallpaper id={wallpaper} photo={wallpaperPhoto} scale={0.6} />}
+                <Text variant="footnote" weight="medium" tone="muted">
+                  {t("tabs.newTab")}
+                </Text>
+              </View>
+            )}
+            {/* Cards further back sit in shadow. */}
+            <Animated.View pointerEvents="none" className="absolute inset-0 bg-black" style={shade} />
+            {/* The edge sits over the page's picture: the current tab gets the accent, the others a hairline. */}
+            <View
+              pointerEvents="none"
+              className={
+                active
+                  ? "absolute inset-0 border-accent"
+                  : tab.private
+                    ? "absolute inset-0 border-white/10"
+                    : "absolute inset-0 border-black/10 dark:border-white/10"
+              }
+              style={{ borderRadius: radius.panel, borderWidth: active ? 2.5 : StyleSheet.hairlineWidth }}
+            />
+          </Pressable>
+        </View>
       </Animated.View>
     </GestureDetector>
   );
