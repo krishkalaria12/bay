@@ -1,9 +1,10 @@
 import { useThemeColor } from "heroui-native";
 import type { JSX } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useT, type MessageKey } from "@/i18n";
 import { READER_FONTS, READER_SIZES, READER_THEMES, type ReaderFont, type ReaderSettings, type ReaderThemeId } from "@/pagescripts/reader";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { Text } from "@/chrome/Text";
 
 const FONT_NAMES: Record<ReaderFont, MessageKey> = { serif: "reader.fontSerif", sans: "reader.fontSans", mono: "reader.fontMono" };
 
@@ -91,7 +92,9 @@ export function ReaderPanel({
                 className="size-9 items-center justify-center rounded-full"
                 style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: "rgba(127,127,127,0.35)" }}
               >
-                <Text style={{ color: theme.text, fontSize: 14 }}>Aa</Text>
+                <Text variant="subhead" color={theme.text}>
+                  Aa
+                </Text>
               </View>
             </Pressable>
           );

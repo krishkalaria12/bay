@@ -1,11 +1,11 @@
 import { hostOf } from "@bay/core/src/input.ts";
-import { useThemeColor } from "heroui-native";
 import { useRef, type JSX } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 
 import { gridShift, tileArriving, tileLeaving, useReducedMotion } from "@/chrome/motion";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Surface } from "@/chrome/Surface";
+import { Text } from "@/chrome/Text";
 import { useT } from "@/i18n";
 import type { HistoryEntry, PinnedSite } from "@/store/types";
 import { SiteIcon } from "./SiteIcon";
@@ -24,8 +24,6 @@ const siteName = (url: string) => hostOf(url).replace(/^www\./, "");
 
 /** Pinned sites and the last few pages, over the wallpaper above "Tap to search". */
 export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): JSX.Element | null {
-  const foreground = useThemeColor("foreground");
-  const muted = useThemeColor("muted");
   const t = useT();
   // Unpin when the finger lifts: removing the pressed tile mid-gesture made Android swallow the next tap (the toast's Undo).
   const unpinning = useRef<PinnedSite | null>(null);
@@ -78,7 +76,7 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
               <Surface radius={20} style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
                 <SiteIcon url={site.url} size={30} />
               </Surface>
-              <Text numberOfLines={1} style={{ color: foreground, fontSize: 12, maxWidth: 76 }}>
+              <Text numberOfLines={1} variant="caption" weight="regular" style={{ maxWidth: 76 }}>
                 {site.title || siteName(site.url)}
               </Text>
             </PressFeedback>
@@ -101,10 +99,10 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
             >
               <SiteIcon url={entry.url} size={22} />
               <View className="flex-1">
-                <Text numberOfLines={1} style={{ color: foreground, fontSize: 15 }}>
+                <Text numberOfLines={1} variant="callout">
                   {entry.title || siteName(entry.url)}
                 </Text>
-                <Text numberOfLines={1} style={{ color: muted, fontSize: 12.5 }}>
+                <Text numberOfLines={1} variant="footnote" tone="muted">
                   {siteName(entry.url)}
                 </Text>
               </View>

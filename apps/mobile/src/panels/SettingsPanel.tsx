@@ -1,13 +1,14 @@
 import Constants from "expo-constants";
 import { File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { Image, Pressable, View } from "react-native";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
 import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
 import { Icon } from "@/chrome/Icon";
+import { Text } from "@/chrome/Text";
 import {
   detectLocale,
   LOCALE_IDS,
@@ -99,7 +100,11 @@ const pages: Record<Page, { title: MessageKey; parent: Page }> = {
 
 /** Explains the rows above it, in the sheet's muted small print. */
 function Note({ children }: { children: string }): JSX.Element {
-  return <Typography className="mt-2 px-1 text-[13px] leading-5 text-muted">{children}</Typography>;
+  return (
+    <Text variant="footnote" tone="muted" className="mt-2 px-1">
+      {children}
+    </Text>
+  );
 }
 
 /** The language the phone is set to, as Bay would show it, so the System row can say what it means today. */
@@ -569,16 +574,18 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             />
           </Group>
           {busy ? (
-            <Typography testID="clear-data-busy" accessibilityLiveRegion="polite" className="mt-3 px-1 text-sm text-muted">
+            <Text testID="clear-data-busy" accessibilityLiveRegion="polite" variant="subhead" tone="muted" className="mt-3 px-1">
               {t("settings.clearingWebsiteData")}
-            </Typography>
+            </Text>
           ) : null}
           {error ? (
-            <Typography testID="clear-data-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-3 px-1 text-sm text-danger">
+            <Text testID="clear-data-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-3 px-1">
               {error}
-            </Typography>
+            </Text>
           ) : null}
-          <Typography className="mt-6 text-center text-xs text-muted">{t("settings.version", { version: Constants.expoConfig?.version ?? "" })}</Typography>
+          <Text variant="caption" weight="regular" tone="muted" className="mt-6 text-center">
+            {t("settings.version", { version: Constants.expoConfig?.version ?? "" })}
+          </Text>
         </>
       );
   }
@@ -607,15 +614,15 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
   return (
     <>
       <View className="rounded-[20px] bg-default p-4">
-        <Typography className="text-muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
+        <Text tone="muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
           example.com
-        </Typography>
-        <Typography className="mt-1 font-semibold" style={{ fontSize: (20 * value) / 100, lineHeight: (26 * value) / 100 }}>
+        </Text>
+        <Text weight="semibold" className="mt-1" style={{ fontSize: (20 * value) / 100, lineHeight: (26 * value) / 100 }}>
           {t("settings.zoom.previewTitle")}
-        </Typography>
-        <Typography className="mt-1" style={{ fontSize: (16 * value) / 100, lineHeight: (23 * value) / 100 }}>
+        </Text>
+        <Text className="mt-1" style={{ fontSize: (16 * value) / 100, lineHeight: (23 * value) / 100 }}>
           {t("settings.zoom.previewBody")}
-        </Typography>
+        </Text>
       </View>
       <View className="mt-4 flex-row items-center gap-3">
         <Pressable
@@ -630,9 +637,9 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
         >
           <Icon name="textSize" color={foreground} size={16} />
         </Pressable>
-        <Typography testID="text-size-value" accessibilityLiveRegion="polite" className="w-16 text-center text-lg font-semibold">
+        <Text testID="text-size-value" accessibilityLiveRegion="polite" variant="headline" className="w-16 text-center">
           {`${value}%`}
-        </Typography>
+        </Text>
         <Pressable
           testID="text-size-larger"
           accessibilityRole="button"
@@ -742,18 +749,29 @@ function WallpaperPicker({
                   </View>
                 )}
               </View>
-              <Typography className={selected ? "text-sm font-medium text-accent" : "text-sm"}>
+              <Text variant="subhead" weight={selected ? "medium" : undefined} tone={selected ? "accent" : "default"}>
                 {empty ? t("settings.wallpaper.choose") : t(WALLPAPER_NAMES[id])}
-              </Typography>
+              </Text>
             </Pressable>
           );
         })}
       </View>
-      {photo ? <Typography className="mt-4 px-1 text-sm text-muted">{t("settings.wallpaper.chooseAgain")}</Typography> : null}
+      {photo ? (
+        <Text variant="subhead" tone="muted" className="mt-4 px-1">
+          {t("settings.wallpaper.chooseAgain")}
+        </Text>
+      ) : null}
       {error ? (
-        <Typography testID="settings-wallpaper-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-3 px-1 text-sm text-danger">
+        <Text
+          testID="settings-wallpaper-error"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+          variant="subhead"
+          tone="danger"
+          className="mt-3 px-1"
+        >
           {t("settings.wallpaper.failed")}
-        </Typography>
+        </Text>
       ) : null}
     </>
   );

@@ -1,10 +1,11 @@
 import { EngineView, type PageRequest, type Tab } from "@bay/engine";
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { View } from "react-native";
 
 import { useT } from "@/i18n";
 import { ActionRow, PanelSheet } from "./PanelSheet";
+import { Text } from "@/chrome/Text";
 
 export interface LinkMenuProps {
   visible: boolean;
@@ -72,11 +73,11 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
 
   return (
     <>
-      {props.title && props.title !== props.url ? <Typography numberOfLines={2}>{props.title}</Typography> : null}
+      {props.title && props.title !== props.url ? <Text numberOfLines={2}>{props.title}</Text> : null}
       <Peek url={props.url} privately={props.privately} desktopMode={props.desktopMode} />
-      <Typography testID="link-menu-url" className="mb-3 text-sm text-muted" numberOfLines={3}>
+      <Text testID="link-menu-url" variant="subhead" tone="muted" className="mb-3" numberOfLines={3}>
         {props.url}
-      </Typography>
+      </Text>
       <ActionRow testID="link-open-tab" label={props.image ? t("linkMenu.openImage") : t("linkMenu.openTab")} onPress={() => act(props.onOpenTab)} />
       {props.image ? (
         <>
@@ -101,16 +102,18 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
       )}
       {destination ? (
         <View className="mt-3 rounded-2xl bg-default p-3" accessibilityLiveRegion="polite">
-          <Typography className="mb-1 text-sm text-muted">{t("linkMenu.destination")}</Typography>
-          <Typography testID="link-destination-result" selectable>
+          <Text variant="subhead" tone="muted" className="mb-1">
+            {t("linkMenu.destination")}
+          </Text>
+          <Text testID="link-destination-result" selectable>
             {destination}
-          </Typography>
+          </Text>
         </View>
       ) : null}
       {error ? (
-        <Typography testID="link-destination-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-3 text-sm text-danger">
+        <Text testID="link-destination-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-3">
           {error}
-        </Typography>
+        </Text>
       ) : null}
     </>
   );

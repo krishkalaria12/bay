@@ -18,15 +18,15 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useThemeColor } from "heroui-native";
 import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { tick } from "@/chrome/haptics";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
+import { Text } from "@/chrome/Text";
 import { crashReportText, crashReports } from "@/crashReports";
 import { t as translate, useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
@@ -82,7 +82,6 @@ const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLo
 
 export function BrowserScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
-  const muted = useThemeColor("muted");
   const t = useT();
   // An open sheet is modal for screen readers: the browser behind it steps out of their way. Toasts stay, since they
   // answer what was done in the sheet.
@@ -769,8 +768,12 @@ export function BrowserScreen(): JSX.Element {
               </View>
               {/* The backdrop's label says this; touches pass through to it. */}
               <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="items-center">
-                <Text style={{ color: muted, fontSize: 14 }}>{t("start.tapToSearch")}</Text>
-                <Text style={{ color: muted, fontSize: 14, marginTop: 2 }}>↓</Text>
+                <Text variant="subhead" tone="muted">
+                  {t("start.tapToSearch")}
+                </Text>
+                <Text variant="subhead" tone="muted" style={{ marginTop: 2 }}>
+                  ↓
+                </Text>
               </View>
             </View>
           </View>

@@ -1,10 +1,12 @@
 import { hostOf } from "@bay/core/src/input.ts";
 import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useRef, useState, type JSX } from "react";
 import { View } from "react-native";
 
 import { PillButton } from "@/chrome/PillButton";
+import { Text } from "@/chrome/Text";
+import { inputFont } from "@/chrome/tokens";
 import { useT, type MessageKey } from "@/i18n";
 
 import { ActionRow, PanelSheet } from "./PanelSheet";
@@ -87,24 +89,24 @@ function RequestBody({
   return (
     <>
       {request.kind === "auth" ? (
-        <Typography testID="page-request-realm" className="text-sm text-muted">
+        <Text testID="page-request-realm" variant="subhead" tone="muted">
           {request.realm ? t("pageRequest.auth.realm", { realm: request.realm }) : t("pageRequest.auth.site")}
-        </Typography>
+        </Text>
       ) : request.kind === "permission" ? (
-        <Typography testID="page-request-permission-message" style={{ fontSize: 16, lineHeight: 22 }}>
+        <Text testID="page-request-permission-message" variant="body">
           {t(permissionMessages[request.permission ?? "camera"])}
-        </Typography>
+        </Text>
       ) : request.kind === "external" ? (
         <>
-          <Typography testID="page-request-external-message">{t("pageRequest.external")}</Typography>
-          <Typography testID="page-request-external" className="mt-2 text-sm text-muted" numberOfLines={2}>
+          <Text testID="page-request-external-message">{t("pageRequest.external")}</Text>
+          <Text testID="page-request-external" variant="subhead" tone="muted" className="mt-2" numberOfLines={2}>
             {request.externalUrl ?? ""}
-          </Typography>
+          </Text>
         </>
       ) : request.message ? (
-        <Typography testID="page-request-message" style={{ fontSize: 16, lineHeight: 22 }}>
+        <Text testID="page-request-message" variant="body">
           {request.message}
-        </Typography>
+        </Text>
       ) : null}
       {request.kind === "prompt" ? (
         <View className="mt-3 flex-row items-center rounded-full bg-default px-4">
@@ -117,7 +119,7 @@ function RequestBody({
             autoCorrect={false}
             returnKeyType="done"
             onSubmitEditing={submit}
-            style={{ flex: 1, color: foreground, fontSize: 16, paddingVertical: 10 }}
+            style={[inputFont("body"), { flex: 1, color: foreground, paddingVertical: 10 }]}
           />
         </View>
       ) : null}
@@ -133,7 +135,7 @@ function RequestBody({
               autoCapitalize="none"
               autoCorrect={false}
               textContentType="username"
-              style={{ flex: 1, color: foreground, fontSize: 16, paddingVertical: 10 }}
+              style={[inputFont("body"), { flex: 1, color: foreground, paddingVertical: 10 }]}
             />
           </View>
           <View className="mt-2 flex-row items-center rounded-full bg-default px-4">
@@ -149,7 +151,7 @@ function RequestBody({
               textContentType="password"
               returnKeyType="go"
               onSubmitEditing={submit}
-              style={{ flex: 1, color: foreground, fontSize: 16, paddingVertical: 10 }}
+              style={[inputFont("body"), { flex: 1, color: foreground, paddingVertical: 10 }]}
             />
           </View>
           <View className="mt-2">
@@ -195,9 +197,9 @@ function RequestBody({
         />
       </View>
       {request.url ? (
-        <Typography testID="page-request-url" className="mt-3 text-sm text-muted" numberOfLines={1}>
+        <Text testID="page-request-url" variant="subhead" tone="muted" className="mt-3" numberOfLines={1}>
           {request.url}
-        </Typography>
+        </Text>
       ) : null}
     </>
   );

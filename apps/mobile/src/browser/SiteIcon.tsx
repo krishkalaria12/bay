@@ -1,7 +1,8 @@
 import { hostOf } from "@bay/core/src/input.ts";
 import { useState, type JSX } from "react";
-import { Image, Text, useColorScheme, View } from "react-native";
+import { Image, useColorScheme, View } from "react-native";
 
+import { Text } from "@/chrome/Text";
 import { useBrowserStore } from "@/store/browser";
 import { siteHost } from "@/store/model";
 
@@ -59,7 +60,9 @@ export function SiteIcon({ url, size = 28 }: { url: string; size?: number }): JS
       className="items-center justify-center border border-black/5"
       style={{ width: size, height: size, borderRadius: radius, backgroundColor: tints[Math.abs(hash) % tints.length] }}
     >
-      <Text style={{ fontSize: size * 0.48, fontWeight: "600", color: "#26313D" }}>{letter}</Text>
+      <Text weight="semibold" color="#26313D" style={{ fontSize: size * 0.48, lineHeight: size * 0.6 }}>
+        {letter}
+      </Text>
     </View>
   );
 }

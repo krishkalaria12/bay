@@ -2,12 +2,13 @@ import { hostOf } from "@bay/core/src/input.ts";
 import { runPageScript, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, Pressable, Text, useColorScheme, View } from "react-native";
+import { Platform, Pressable, useColorScheme, View } from "react-native";
 import { useThemeColor } from "heroui-native";
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
+import { Text } from "@/chrome/Text";
 import { useT } from "@/i18n";
 import { Toast } from "./Toast";
 import { INSPECT_SCRIPT, type InspectedElement } from "@/pagescripts/inspect";
@@ -335,8 +336,6 @@ function PickerCard({
   hint: string;
   children: ReactNode;
 }) {
-  const foreground = useThemeColor("foreground");
-  const muted = useThemeColor("muted");
   const accent = useThemeColor("accent");
   const t = useT();
   // Behind an open sheet (the inspector's details) the card steps out of screen readers' way, like the bar.
@@ -352,10 +351,10 @@ function PickerCard({
             <Icon name={icon} color={accent} size={20} />
           </View>
           <View className="flex-1">
-            <Text testID={testID} numberOfLines={1} accessibilityLiveRegion="polite" style={{ color: foreground, fontSize: 15.5, fontWeight: "500" }}>
+            <Text testID={testID} numberOfLines={1} accessibilityLiveRegion="polite" variant="callout" weight="medium">
               {picked ? picked.label : hint}
             </Text>
-            <Text numberOfLines={1} style={{ color: muted, fontSize: 12.5, marginTop: 1 }}>
+            <Text numberOfLines={1} variant="footnote" tone="muted" style={{ marginTop: 1 }}>
               {picked ? `${picked.tag} · ${picked.width} × ${picked.height}` : t("picker.linksClosed")}
             </Text>
           </View>
@@ -400,7 +399,7 @@ function ToolButton({
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
       {icon ? <Icon name={icon} color={primary ? accentForeground : foreground} size={18} /> : null}
-      <Text numberOfLines={1} style={{ color: primary ? accentForeground : foreground, fontSize: 15, fontWeight: primary ? "600" : "400" }}>
+      <Text variant="callout" weight={primary ? "semibold" : "regular"} color={primary ? accentForeground : foreground} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>

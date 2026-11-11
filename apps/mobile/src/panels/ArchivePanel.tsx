@@ -1,6 +1,6 @@
 import { useBottomSheetScrollableCreator } from "@gorhom/bottom-sheet";
 import { LegendList } from "@legendapp/list/react-native";
-import { Typography } from "heroui-native";
+
 import { useEffect, useState, type JSX } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,6 +9,7 @@ import { useT } from "@/i18n";
 import { groupByDay } from "./historyGroups";
 import { DAY_GROUP_LABELS, pageTitle, SearchField, siteName, SiteRow, time } from "./HistoryPanel";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { Text } from "@/chrome/Text";
 
 type Row = { kind: "label"; label: string } | { kind: "entry"; item: ArchiveItem };
 
@@ -77,17 +78,19 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
     <PanelSheet visible={visible} onClose={onClose} title={t("archive.title")} testID="archive-screen" height="85%" listMode>
       {items.length === 0 ? (
         <View testID="archive-empty" className="py-12">
-          <Typography accessibilityRole="header" className="text-center">
+          <Text accessibilityRole="header" className="text-center">
             {t("archive.empty")}
-          </Typography>
-          <Typography className="mt-2 text-center text-sm text-muted">{t("archive.emptyDetail")}</Typography>
+          </Text>
+          <Text variant="subhead" tone="muted" className="mt-2 text-center">
+            {t("archive.emptyDetail")}
+          </Text>
         </View>
       ) : groups.length === 0 ? (
         <>
           <SearchField testID="archive-search" value={query} onChange={setQuery} placeholder={t("archive.search")} />
-          <Typography testID="archive-no-matches" accessibilityLiveRegion="polite" className="py-8 text-center text-muted">
+          <Text testID="archive-no-matches" accessibilityLiveRegion="polite" tone="muted" className="py-8 text-center">
             {t("archive.noMatches", { query: query.trim() })}
-          </Typography>
+          </Text>
           {clearFooter()}
         </>
       ) : (

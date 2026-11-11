@@ -1,7 +1,7 @@
 import { displayUrl } from "@bay/core/src/suggest.ts";
 import { useThemeColor } from "heroui-native";
 import { useRef, type ComponentRef, type JSX } from "react";
-import { Image, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { Image, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   Extrapolation,
@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
+import { Text } from "@/chrome/Text";
 import { useT } from "@/i18n";
 import { spaceName } from "@/store/spaceName";
 import type { BrowserFolder, BrowserSpace, BrowserTab, SpaceColor } from "@/store/types";
@@ -116,7 +117,7 @@ export function TabSwitcher({
         className="absolute inset-x-0 top-2 flex-row items-center justify-between px-5"
         style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
       >
-        <Text testID="tab-switcher-count" accessibilityRole="header" style={{ color: foreground, fontSize: 17, fontWeight: "600" }}>
+        <Text testID="tab-switcher-count" accessibilityRole="header" variant="headline">
           {tabs.length === 1 ? t("tabs.one") : t("tabs.count", { count: tabs.length })}
         </Text>
         {tabs.length > 1 ? (
@@ -127,7 +128,9 @@ export function TabSwitcher({
             onPress={onCloseAll}
             className="min-h-11 justify-center px-2 active:opacity-60"
           >
-            <Text style={{ color: muted, fontSize: 15, fontWeight: "500" }}>{t("tabs.archiveAll")}</Text>
+            <Text variant="callout" weight="medium" tone="muted">
+              {t("tabs.archiveAll")}
+            </Text>
           </Pressable>
         ) : null}
       </View>
@@ -159,7 +162,9 @@ export function TabSwitcher({
                 }}
               >
                 <View className="h-2 w-2 rounded-full" style={{ backgroundColor: SPACE_COLORS[space.color] }} />
-                <Text style={{ color: foreground, fontSize: 14, fontWeight: active ? "600" : "500" }}>{name}</Text>
+                <Text variant="subhead" weight={active ? "semibold" : "medium"}>
+                  {name}
+                </Text>
               </Pressable>
             );
           })}
@@ -187,7 +192,9 @@ export function TabSwitcher({
                 borderColor: activeFolderId === null ? foreground : muted + "55",
               }}
             >
-              <Text style={{ color: foreground, fontSize: 13, fontWeight: activeFolderId === null ? "600" : "500" }}>{t("tabs.all")}</Text>
+              <Text variant="footnote" weight={activeFolderId === null ? "semibold" : "medium"}>
+                {t("tabs.all")}
+              </Text>
             </Pressable>
             {folders.map((folder) => {
               const active = folder.id === activeFolderId;
@@ -203,7 +210,9 @@ export function TabSwitcher({
                   className="h-9 flex-row items-center rounded-full px-3 active:opacity-60"
                   style={{ backgroundColor: active ? foreground + "14" : undefined, borderWidth: 1, borderColor: active ? foreground : muted + "55" }}
                 >
-                  <Text style={{ color: foreground, fontSize: 13, fontWeight: active ? "600" : "500" }}>{folder.name}</Text>
+                  <Text variant="footnote" weight={active ? "semibold" : "medium"}>
+                    {folder.name}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -263,7 +272,6 @@ function TabCard({
   onPick: (tab: BrowserTab, frame: Frame) => void;
   onClose: (id: string) => void;
 }): JSX.Element {
-  const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
   const t = useT();
   // A locked private tab's title stays hidden from screen readers too.
@@ -352,7 +360,9 @@ function TabCard({
               className="flex-row items-center gap-1 rounded-full bg-neutral-900 px-2 py-0.5"
             >
               <Icon name="private" color="#F4F4F5" size={14} />
-              <Text style={{ color: "#F4F4F5", fontSize: 11, fontWeight: "600" }}>{t("tabs.private")}</Text>
+              <Text variant="micro" color={"#F4F4F5"}>
+                {t("tabs.private")}
+              </Text>
             </View>
           ) : null}
           {tab.url && !hidden ? <SiteIcon url={tab.url} size={18} /> : null}
@@ -361,7 +371,8 @@ function TabCard({
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
             className="flex-1"
-            style={{ color: foreground, fontSize: 13, fontWeight: "500" }}
+            variant="footnote"
+            weight="medium"
           >
             {title}
           </Text>
@@ -402,7 +413,9 @@ function TabCard({
           ) : (
             <View className="flex-1 items-center justify-center gap-3">
               {tab.url ? <SiteIcon url={tab.url} size={44} /> : null}
-              <Text style={{ color: muted, fontSize: 13 }}>{tab.url ? displayUrl(tab.url) : t("tabs.newTab")}</Text>
+              <Text variant="footnote" tone="muted">
+                {tab.url ? displayUrl(tab.url) : t("tabs.newTab")}
+              </Text>
             </View>
           )}
           {/* Cards further back sit in shadow. */}

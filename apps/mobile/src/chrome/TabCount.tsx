@@ -1,6 +1,7 @@
 import { useThemeColor } from "heroui-native";
 import type { JSX } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
+import { Text } from "./Text";
 
 /** The number of open tabs, on the corner of the Tabs button. The button's own label says the count, so readers skip the badge. */
 export function TabCount({ count }: { count: number }): JSX.Element | null {
@@ -19,7 +20,9 @@ export function TabCount({ count }: { count: number }): JSX.Element | null {
       className="absolute -right-1 -top-1 h-5 min-w-5 items-center justify-center rounded-full px-1"
       style={{ backgroundColor: foreground }}
     >
-      <Text style={{ color: background, fontSize: 11, fontWeight: "700" }}>{count > 99 ? "99+" : count}</Text>
+      <Text variant="micro" weight="bold" color={background}>
+        {count > 99 ? "99+" : count}
+      </Text>
     </View>
   );
 }

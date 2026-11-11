@@ -4,7 +4,7 @@ import { startListening } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type ComponentRef, type JSX } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text as Span, TextInput, View } from "react-native";
 import Animated, { Extrapolation, interpolate, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/chrome/Icon";
 import { SPRING, useReducedMotion } from "@/chrome/motion";
 import { Surface } from "@/chrome/Surface";
+import { Text } from "@/chrome/Text";
+import { inputFont } from "@/chrome/tokens";
 import { useT, type Translate } from "@/i18n";
 import type { BrowserData } from "@/store/types";
 import { resolveAddress } from "./address";
@@ -174,8 +176,9 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                     importantForAccessibility="no-hide-descendants"
                     style={[inputTextStyle, { position: "absolute", left: 0, right: 0, top: 0, height: 46, lineHeight: 46, color: text }]}
                   >
-                    <Text style={{ color: "transparent" }}>{query}</Text>
-                    <Text style={{ backgroundColor: privately ? "rgba(255,255,255,0.18)" : "rgba(10,132,255,0.22)" }}>{completion}</Text>
+                    {/* Spans: they take the line's font and colour from the text around them. */}
+                    <Span style={{ color: "transparent" }}>{query}</Span>
+                    <Span style={{ backgroundColor: privately ? "rgba(255,255,255,0.18)" : "rgba(10,132,255,0.22)" }}>{completion}</Span>
                   </Text>
                 ) : null}
                 <TextInput
@@ -236,7 +239,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
             </Animated.View>
           </View>
           {privately ? (
-            <Text testID="private-notice" accessibilityLiveRegion="polite" style={{ color: secondary, fontSize: 13, marginTop: 8, marginLeft: 16 }}>
+            <Text testID="private-notice" accessibilityLiveRegion="polite" variant="footnote" color={secondary} style={{ marginTop: 8, marginLeft: 16 }}>
               {t("search.privateNotice")}
             </Text>
           ) : null}
@@ -252,7 +255,9 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
               className="mt-2 h-10 flex-row items-center gap-2 rounded-2xl px-3 active:bg-black/5 dark:active:bg-white/10"
             >
               <Icon name="copy" color={secondary} size={18} />
-              <Text style={{ color: text, fontSize: 15 }}>{t("search.pasteAndGo")}</Text>
+              <Text variant="callout" color={text}>
+                {t("search.pasteAndGo")}
+              </Text>
             </Pressable>
           )}
 
@@ -298,7 +303,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 }
 
 // Shared by the field and its completion so the completion lines up after the typed text.
-const inputTextStyle = { fontSize: 17, padding: 0, margin: 0, includeFontPadding: false } as const;
+const inputTextStyle = { ...inputFont("headline", "regular"), padding: 0, margin: 0 } as const;
 
 function rowText(row: Row, engine: SearchEngine, t: Translate) {
   switch (row.kind) {
@@ -354,10 +359,10 @@ function SuggestionRow({
     >
       <View className="w-7 items-center">{row.kind === "page" ? <SiteIcon url={row.url} /> : <Icon name="search" color={muted} size={20} />}</View>
       <View className="flex-1 py-1.5">
-        <Text numberOfLines={1} style={{ color: foreground, fontSize: 16 }}>
+        <Text numberOfLines={1} color={foreground}>
           {title}
         </Text>
-        <Text numberOfLines={1} style={{ color: muted, fontSize: 12.5 }}>
+        <Text numberOfLines={1} variant="footnote" color={muted}>
           {detail}
         </Text>
       </View>

@@ -1,12 +1,14 @@
 import { useThemeColor } from "heroui-native";
 import { type JSX } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, TextInput, View } from "react-native";
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
 import { Surface } from "@/chrome/Surface";
+import { Text } from "@/chrome/Text";
+import { inputFont } from "@/chrome/tokens";
 import { useT } from "@/i18n";
 
 export interface FindBarProps {
@@ -45,14 +47,14 @@ export function FindBar({ query, count, index, onChange, onStep, onDone }: FindB
               returnKeyType="search"
               placeholder={t("find.placeholder")}
               placeholderTextColor={muted}
-              style={{ flex: 1, fontSize: 16, color: foreground, height: 44 }}
+              style={[inputFont("body"), { flex: 1, color: foreground, height: 44 }]}
               value={query}
               onChangeText={onChange}
               onSubmitEditing={() => onStep(1)}
               blurOnSubmit={false}
             />
             {/* TalkBack reads each new count as it changes; VoiceOver reads it with the field. */}
-            <Text testID="find-count" accessibilityLiveRegion="polite" style={{ color: muted, fontSize: 13 }}>
+            <Text testID="find-count" accessibilityLiveRegion="polite" variant="footnote" tone="muted">
               {status}
             </Text>
           </View>
@@ -65,7 +67,9 @@ export function FindBar({ query, count, index, onChange, onStep, onDone }: FindB
             onPress={onDone}
             className="h-11 items-center justify-center rounded-full px-3"
           >
-            <Text style={{ color: foreground, fontSize: 15, fontWeight: "600" }}>{t("find.done")}</Text>
+            <Text variant="callout" weight="semibold">
+              {t("find.done")}
+            </Text>
           </Pressable>
         </View>
       </Surface>

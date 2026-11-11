@@ -1,8 +1,8 @@
-import { Typography } from "heroui-native";
 import type { JSX } from "react";
 import { Pressable } from "react-native";
 
 import type { PillButtonProps } from "./PillButton.types";
+import { Text } from "@/chrome/Text";
 
 // A short text action ("Open", "Cancel"): a flat translucent capsule.
 export function PillButton({ testID, label, accessibilityLabel, onPress, disabled = false, compact }: PillButtonProps): JSX.Element {
@@ -17,7 +17,7 @@ export function PillButton({ testID, label, accessibilityLabel, onPress, disable
       className={`min-h-11 items-center justify-center rounded-full bg-default ${compact ? "px-3" : "px-4"}`}
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
-      <Typography className="text-sm">{label}</Typography>
+      <Text variant="subhead">{label}</Text>
     </Pressable>
   );
 }
