@@ -5,6 +5,13 @@ const { withAndroidManifest, withEntitlementsPlist, withGradleProperties, withIn
 // grant (or an App Store submission) can use it; without the flag, local dev builds keep signing as they do today.
 const defaultBrowser = process.env.BAY_DEFAULT_BROWSER === "1";
 
+// Passkeys in pages (B20): WebKit lets a third-party browser's WKWebView use WebAuthn on any site only with the
+// browser entitlement above plus Apple's managed `com.apple.developer.web-browser.public-key-credential`, granted
+// on a separate request. Its own flag, BAY_WEB_PASSKEYS=1, so a build never claims it before the profile carries
+// it (signing fails on an entitlement the profile lacks). Password AutoFill in pages (QuickType suggestions and
+// saving to Passwords on any site) rides on the browser entitlement alone; neither needs any WKWebView setting.
+const webPasskeys = defaultBrowser && process.env.BAY_WEB_PASSKEYS === "1";
+
 const gradleProperties = {
   // The Rust ad blocker (libbay_adblock.so, scripts/adblock) is built for arm64 only, so other ABIs would crash on
   // the first page load, and each extra ABI adds a copy of every native library. The Apple-Silicon emulator is arm64.
@@ -50,6 +57,8 @@ module.exports = function withBayEngine(config) {
   });
   config = withEntitlementsPlist(config, (mod) => {
     if (defaultBrowser) mod.modResults["com.apple.developer.web-browser"] = true;
+
+    if (webPasskeys) mod.modResults["com.apple.developer.web-browser.public-key-credential"] = true;
 
     return mod;
   });
