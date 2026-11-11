@@ -33,6 +33,7 @@ import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
@@ -477,50 +478,53 @@ export class AutomationService extends Context.Service<
         });
 
       // The installer runs once at a time: a second ask waits for the first.
-      let installation: Effect.Effect<CliInstallResult> | undefined;
+      let installation: Fiber.Fiber<CliInstallResult> | undefined;
 
       const install = (): Effect.Effect<CliInstallResult> =>
-        Effect.gen(function* () {
-          const running = installation;
+        Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const running = installation;
 
-          if (running) return yield* running;
+            if (running) return yield* restore(Fiber.join(running));
 
-          yield* Effect.sync(() => useCli.setState({ installing: true, step: null, error: null }));
+            yield* Effect.sync(() => useCli.setState({ installing: true, step: null, error: null }));
 
-          const lines = engine.onInstallLine((line) => {
-            const step = /^step (\S+)/.exec(line)?.[1];
+            const lines = engine.onInstallLine((line) => {
+              const step = /^step (\S+)/.exec(line)?.[1];
 
-            if (step) useCli.setState({ step });
-          });
+              if (step) useCli.setState({ step });
+            });
 
-          const job = engine.install().pipe(
-            Effect.catch((error) => Effect.succeed(failedInstall(error.cause))),
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                const error = result.ok ? null : (result.error ?? "The installer stopped.");
-                const binPath = result.binPath ?? useCli.getState().binPath;
+            const job = engine.install().pipe(
+              Effect.catch((error) => Effect.succeed(failedInstall(error.cause))),
+              Effect.tap((result) =>
+                Effect.sync(() => {
+                  const error = result.ok ? null : (result.error ?? "The installer stopped.");
+                  const binPath = result.binPath ?? useCli.getState().binPath;
 
-                useCli.setState({ installing: false, step: null, installedVersion: installedCliVersion(), binPath, error });
+                  useCli.setState({ installing: false, step: null, installedVersion: installedCliVersion(), binPath, error });
 
-                try {
-                  writeDocument(INSTALL_DOC, JSON.stringify({ version: 1, binPath, error }));
-                } catch (failure) {
-                  console.warn("[cli] couldn't save the install status", failure);
-                }
-              }),
-            ),
-            Effect.ensuring(
-              Effect.sync(() => {
-                lines();
-                installation = undefined;
-              }),
-            ),
-          );
+                  try {
+                    writeDocument(INSTALL_DOC, JSON.stringify({ version: 1, binPath, error }));
+                  } catch (failure) {
+                    console.warn("[cli] couldn't save the install status", failure);
+                  }
+                }),
+              ),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  lines();
+                  installation = undefined;
+                  useCli.setState({ installing: false, step: null });
+                }),
+              ),
+            );
 
-          installation = job;
+            installation = yield* Effect.forkIn(restore(job), scope);
 
-          return yield* job;
-        });
+            return yield* restore(Fiber.join(installation));
+          }),
+        );
 
       const startCli = Effect.gen(function* () {
         const stopListening = cli.onChanged((server) => {

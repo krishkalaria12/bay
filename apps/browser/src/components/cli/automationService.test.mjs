@@ -15,7 +15,11 @@ const code = ts.transpileModule(readFileSync(new URL("./automationService.ts", i
 
 const real = createRequire(import.meta.url);
 
-function fixture({ folder = { state: "ready", generation: 1, path: "/data/Scripts/extension", token: "one" }, existing = [] } = {}) {
+function fixture({
+  folder = { state: "ready", generation: 1, path: "/data/Scripts/extension", token: "one" },
+  existing = [],
+  installer = async () => ({ ok: false, appVersion: "", error: "not installed", lines: [] }),
+} = {}) {
   const calls = [];
   const statuses = [];
 
@@ -74,8 +78,12 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
       },
       installedCliVersion: () => null,
       writeDocument: () => {},
-      installCli: async () => ({ ok: false, appVersion: "", error: "not installed", lines: [] }),
-      onCliInstallLine: () => ({ remove() {} }),
+      installCli: async () => {
+        calls.push(["installCli"]);
+
+        return await installer();
+      },
+      onCliInstallLine: () => ({ remove: () => calls.push(["removeInstallListener"]) }),
     },
     "../../store/browserStore": {
       useBrowser: {
@@ -104,7 +112,7 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
   const { AutomationEngine, AutomationService, CliEngine } = module.exports;
   const runtime = ManagedRuntime.make(AutomationService.layer.pipe(Layer.provide(Layer.mergeAll(AutomationEngine.layer, CliEngine.layer))));
 
-  const run = (program) => runtime.runPromise(program);
+  const run = (program, signal) => runtime.runPromise(program, { signal });
 
   const start = () =>
     run(
@@ -131,6 +139,11 @@ function fixture({ folder = { state: "ready", generation: 1, path: "/data/Script
     state,
     start,
     schedule,
+    install: (signal) =>
+      run(
+        Effect.flatMap(AutomationService, (automation) => automation.install()),
+        signal,
+      ),
     setFolder: (value) => {
       current = value;
       notice();
@@ -210,4 +223,83 @@ test("reports spaces whose names match object prototype properties", async () =>
   assert.deepEqual(f.statuses[0].profiles.__proto__, { ok: true });
   assert.equal(Object.hasOwn(f.statuses[0].profiles, "__proto__"), true);
   await f.dispose();
+});
+
+test("overlapping CLI installations share one native installer and listener", async () => {
+  let release;
+
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  const result = { ok: true, appVersion: "1.0", binPath: "/usr/local/bin/bay", lines: [] };
+
+  const f = fixture({
+    installer: async () => {
+      await gate;
+
+      return result;
+    },
+  });
+
+  const installs = [];
+
+  try {
+    installs.push(f.install());
+    await f.settled();
+    assert.equal(f.calls.filter((call) => call[0] === "installCli").length, 1);
+    installs.push(f.install());
+    await f.settled();
+    assert.equal(f.calls.filter((call) => call[0] === "installCli").length, 1);
+    release();
+    assert.deepEqual(await Promise.all(installs), [result, result]);
+    assert.equal(f.calls.filter((call) => call[0] === "removeInstallListener").length, 1);
+    assert.equal(f.useCli.getState().installing, false);
+    await f.install();
+    assert.equal(f.calls.filter((call) => call[0] === "installCli").length, 2);
+  } finally {
+    release();
+    await Promise.allSettled(installs);
+    await f.dispose();
+  }
+});
+
+test("cancelling an install caller keeps the shared installer and progress listener alive", async () => {
+  let release;
+
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  const result = { ok: true, appVersion: "1.0", lines: [] };
+
+  const f = fixture({
+    installer: async () => {
+      await gate;
+
+      return result;
+    },
+  });
+
+  const controller = new AbortController();
+  const cancelled = assert.rejects(f.install(controller.signal), /interrupted/);
+
+  try {
+    await f.settled();
+    controller.abort();
+    await cancelled;
+    assert.equal(f.useCli.getState().installing, true);
+    assert.equal(f.calls.filter((call) => call[0] === "removeInstallListener").length, 0);
+
+    const second = f.install();
+
+    release();
+    assert.deepEqual(await second, result);
+    assert.equal(f.calls.filter((call) => call[0] === "installCli").length, 1);
+    assert.equal(f.calls.filter((call) => call[0] === "removeInstallListener").length, 1);
+    assert.equal(f.useCli.getState().installing, false);
+  } finally {
+    release();
+    await f.dispose();
+  }
 });
