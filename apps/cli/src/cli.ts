@@ -18,6 +18,7 @@ import { dataDirFlag, portFlag, secondsFlag, toggle, wsFlag } from "./cliFlags.t
 import { scripts } from "./scriptsCli.ts";
 import { install as installSkills, TARGETS } from "./skills.ts";
 import { VERSION } from "./version.ts";
+import { redact } from "./redact.ts";
 
 export const DESCRIPTION = "Control a running Bay from the terminal.";
 
@@ -189,7 +190,7 @@ const presenter: CliOutput.Presenter = {
       // Named as the top command, as the error lines of every bay command are: `bay scripts: ...`.
       const command = event.commandPath.slice(0, 2).join(" ") || "bay";
 
-      return Effect.sync(() => void process.stderr.write(`${command}: ${first ? first.message : "invalid arguments"}\n`));
+      return Effect.sync(() => void process.stderr.write(redact(`${command}: ${first ? first.message : "invalid arguments"}\n`)));
     }
 
     return CliOutput.defaultPresenter.present(event);
