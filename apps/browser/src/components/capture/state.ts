@@ -1,97 +1,41 @@
-import * as v from "valibot";
-import { isJsonObject, type JsonInput } from "../../lib/json";
-import type { CapturedImage } from "@bay/chromium";
-import { copyCaptureImage, portraitCaptureImage, revealFile, saveCaptureImage, shareCaptureImage } from "@bay/desktop";
-import { PixelRatio } from "react-native";
-import { create } from "zustand";
-import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browserStore";
-import { showToast } from "../split/splitActions";
-import { isInternalTab } from "../pages/index";
-import { saveLibraryMedia } from "../library/state";
-import { chooseEasel, libraryWindow } from "../library/actions";
-import { webLink } from "../library/model";
-import { engineProfile } from "../../store/model";
-import { themeFor, themeKey } from "../../lib/theme";
-import { captureScript } from "./captureScript";
-import { captureName } from "./regionGeometry";
-
 // Capture, as Arc's (⇧⌘2, the command bar, Site Controls, or ⌘⇧ and a drag on the page): pick a block of the page or
 // drag over an area (captureScript.ts, in the page), then copy, save, share or mark up the picture over the page
 // (CaptureLayer.tsx). Capture Full Page saves the whole page to Downloads at once.
+//
+// The work is the capture service's (service.ts): each capture is a job that belongs to its tab and its document.
+// This is where the app reaches it, and where the overlay's own state changes at once.
+import type { CapturedImage } from "@bay/chromium";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../../effect/runtime";
+import type { JsonInput } from "../../lib/json";
+import { CaptureService, readyOf, sessionOf, setSession, useCaptures, type Capture } from "./service";
 
-/** What was taken, in the page's CSS px from the viewport's top-left, with the viewport's size then. */
-export type CaptureArea = { x?: number; y?: number; left: number; top: number; width: number; height: number; viewportWidth: number; viewportHeight: number };
+export { useCaptures, type CaptureArea, type CaptureSession } from "./service";
 
-export type CaptureSession =
-  | { phase: "selecting" | "shooting"; url: string }
-  | { phase: "ready" | "markup"; url: string; image: CapturedImage; area: CaptureArea | null; name: string };
-
-export const useCaptures = create<{ sessions: Record<string, CaptureSession> }>()(() => ({ sessions: {} }));
 export const useCapture = (tabId: string) => useCaptures((c) => c.sessions[tabId] ?? null);
 
-const sessionOf = (tabId: string) => useCaptures.getState().sessions[tabId] ?? null;
+/** Runs something with the capture service, on the runtime the app shares. */
+const withCapture = <A>(program: (capture: Capture) => Effect.Effect<A>): Promise<A> =>
+  runDesktop(
+    Effect.gen(function* () {
+      const capture = yield* CaptureService;
 
-function setSession(tabId: string, session: CaptureSession | null) {
-  useCaptures.setState((c) => {
-    const sessions = { ...c.sessions };
-
-    if (session) sessions[tabId] = session;
-    else delete sessions[tabId];
-
-    return { sessions };
-  });
-}
-
-// A page Chrome shows: not an app page (bay:), which isn't a web page to capture.
-function capturableTab(tabId: string) {
-  const tab = useBrowser.getState().tabs[tabId];
-
-  if (!tab?.url) return null;
-
-  if (isInternalTab(tab)) {
-    showToast(tab.windowId, "Can’t Capture This Page", "Capture works on web pages.", { icon: "camera.viewfinder" });
-
-    return null;
-  }
-
-  return tab;
-}
-
-// The page's pixels per CSS px: the screen's scale times the tab's zoom.
-const pixelRatioOf = (tabId: string) => PixelRatio.get() * (useBrowser.getState().tabs[tabId]?.zoom ?? 1);
+      return yield* program(capture);
+    }),
+  );
 
 /** Capture on a tab's page: its selection, or with one up, takes it away (⇧⌘2 again). `start` begins with a drag. */
-export async function startCapture(tabId: string, start?: { x: number; y: number }) {
-  const current = sessionOf(tabId);
-
-  if (current?.phase === "selecting" && !start) return cancelCapture(tabId);
-
-  if (current?.phase === "shooting") return;
-  const tab = capturableTab(tabId);
-  const web = webviews.get(tabId);
-
-  if (!tab || !web) return;
-  setSession(tabId, { phase: "selecting", url: tab.url });
-  const installed = await web.evaluate<boolean>(captureScript(true, start));
-
-  if (sessionOf(tabId)?.phase !== "selecting") return;
-
-  // A page scripts can't run in (Chrome's own pages, a PDF): what it shows.
-  if (installed !== true) return void shoot(tabId, {}, null);
-  void web.focus();
+export function startCapture(tabId: string, start?: { x: number; y: number }) {
+  return withCapture((capture) => capture.begin(tabId, start));
 }
 
 export function cancelCapture(tabId: string) {
-  if (sessionOf(tabId)?.phase === "selecting") void webviews.get(tabId)?.evaluate(captureScript(false));
-  setSession(tabId, null);
+  void withCapture((capture) => capture.cancel(tabId));
 }
 
 /** Puts the capture away (and the page's selection, if it's up), the page taking the keyboard back. */
 export function closeCapture(tabId: string) {
-  if (!sessionOf(tabId)) return;
-  cancelCapture(tabId);
-  void webviews.get(tabId)?.focus();
+  void withCapture((capture) => capture.close(tabId));
 }
 
 /** Esc in the page: puts away the capture over it. */
@@ -105,135 +49,35 @@ export function closeCaptureOnEscape(tabId: string) {
 }
 
 export function retakeCapture(tabId: string) {
-  setSession(tabId, null);
-  void startCapture(tabId);
+  void withCapture((capture) => capture.retake(tabId));
 }
-
-const finite = (value: unknown): value is number => v.is(v.number(), value) && Number.isFinite(value);
 
 /** What the selection in a page sends (captureScript's send): untrusted, as everything from a page. */
 export function onCaptureMessage(tabId: string, data: JsonInput) {
-  const m = isJsonObject(data) ? data : null;
-
-  if (!m || sessionOf(tabId)?.phase !== "selecting") return;
-
-  if (m.type === "cancel") return setSession(tabId, null);
-
-  if (m.type === "fullPage") {
-    setSession(tabId, null);
-
-    return void (m.portrait === true ? capturePortrait(tabId) : captureFullPage(tabId));
-  }
-
-  if (m.type !== "capture") return;
-  const { x, y, width, height, left, top, viewportWidth, viewportHeight } = m;
-
-  if (![x, y, width, height, left, top, viewportWidth, viewportHeight].every(finite)) return setSession(tabId, null);
-
-  // SAFETY: number) < 1 || (height as number) < 1 || (viewportWidth as n assertion matches the runtime value validated at this call site.
-  if ((width as number) < 1 || (height as number) < 1 || (viewportWidth as number) < 1) return setSession(tabId, null);
-  // SAFETY: CaptureArea assertion matches the runtime value validated at this call site.
-  const area = { x, y, left, top, width, height, viewportWidth, viewportHeight } as CaptureArea;
-  // SAFETY: number, y as number, width as number, height as number], bey assertion matches the runtime value validated at this call site.
-  void shoot(tabId, { clip: [x as number, y as number, width as number, height as number], beyond: m.beyond === true }, area);
+  void withCapture((capture) => capture.message(tabId, data));
 }
 
 /** ⌘⇧ pressed on the page (page_script.js › Capture): Capture, with a drag from there. */
 export function onCaptureGesture(tabId: string, data: JsonInput) {
-  const m = isJsonObject(data) ? data : null;
-
-  if (!m || !finite(m.x) || !finite(m.y) || sessionOf(tabId)?.phase === "shooting") return;
-  void startCapture(tabId, { x: m.x, y: m.y });
+  void withCapture((capture) => capture.gesture(tabId, data));
 }
 
-async function shoot(tabId: string, options: { clip?: [number, number, number, number]; beyond?: boolean }, area: CaptureArea | null) {
-  const tab = useBrowser.getState().tabs[tabId];
-
-  if (!tab) return setSession(tabId, null);
-  setSession(tabId, { phase: "shooting", url: tab.url });
-  const image = await webviews.get(tabId)?.captureImage({ ...options, pixelRatio: pixelRatioOf(tabId) });
-
-  // Put away (or the page left) while it was taken.
-  if (sessionOf(tabId)?.phase !== "shooting") return;
-
-  if (!image) {
-    setSession(tabId, null);
-
-    return showToast(tab.windowId, "Couldn’t Capture the Page", "The page didn’t paint in time.", { icon: "camera.viewfinder" });
-  }
-
-  const now = useBrowser.getState().tabs[tabId] ?? tab;
-  setSession(tabId, { phase: "ready", url: tab.url, image, area, name: captureName(now.customTitle || now.title, now.url, new Date()) });
-}
-
-// MARK: The picture
-
-const readyOf = (tabId: string) => {
-  const session = sessionOf(tabId);
-
-  return session && (session.phase === "ready" || session.phase === "markup") ? session : null;
-};
-
-const windowOf = (tabId: string) => useBrowser.getState().tabs[tabId]?.windowId ?? null;
-
-export async function copyCapture(tabId: string) {
-  const session = readyOf(tabId);
-  const windowId = windowOf(tabId);
-
-  if (!session || !windowId) return;
-  const copied = await copyCaptureImage(session.image.path);
-  closeCapture(tabId);
-
-  if (copied) showToast(windowId, "Copied Capture", undefined, { icon: "doc.on.doc" });
-  else showToast(windowId, "Couldn’t Copy the Capture", undefined, { icon: "camera.viewfinder" });
+export function copyCapture(tabId: string) {
+  return withCapture((capture) => capture.copy(tabId));
 }
 
 /** Explicit saves retain a copy outside Chromium's temporary capture cache. */
-export async function captureToLibrary(tabId: string, toEasel = false) {
-  const session = readyOf(tabId);
-  const tab = useBrowser.getState().tabs[tabId];
-
-  if (!session || !tab || !libraryWindow(tab.windowId)) return;
-  const area = session.area;
-
-  const source = webLink(session.url)
-    ? {
-        url: session.url,
-        title: tab.customTitle || tab.title,
-        profileId: engineProfile(tab.spaceId),
-        ...(area
-          ? { clip: [area.x ?? area.left, area.y ?? area.top, area.width, area.height], viewportWidth: area.viewportWidth, viewportHeight: area.viewportHeight }
-          : undefined),
-      }
-    : undefined;
-
-  const media = await saveLibraryMedia(session.image, session.name, source);
-
-  if (!media) return showToast(tab.windowId, "Couldn't Save Capture", "Bay couldn't save the image to Library.", { icon: "camera.viewfinder" });
-
-  if (toEasel) {
-    if (await chooseEasel(media, tab.windowId)) closeCapture(tabId);
-  } else {
-    closeCapture(tabId);
-    showToast(tab.windowId, "Saved to Library", undefined, { icon: "books.vertical" });
-  }
+export function captureToLibrary(tabId: string, toEasel = false) {
+  return withCapture((capture) => capture.toLibrary(tabId, toEasel));
 }
 
-export async function saveCapture(tabId: string) {
-  const session = readyOf(tabId);
-  const windowId = windowOf(tabId);
-
-  if (!session || !windowId) return;
-  const saved = await saveCaptureImage(session.image.path, session.name);
-  closeCapture(tabId);
-  savedToast(windowId, saved, "Saved Capture");
+export function saveCapture(tabId: string) {
+  return withCapture((capture) => capture.save(tabId));
 }
 
 /** The share menu for the picture, under `anchor` (its button, in the window from its top-left). */
 export function shareCapture(tabId: string, anchor?: [number, number, number, number]) {
-  const session = readyOf(tabId);
-
-  if (session) void shareCaptureImage(session.image.path, session.name, windowOf(tabId), anchor);
+  void withCapture((capture) => capture.share(tabId, anchor));
 }
 
 export function setMarkingUp(tabId: string, on: boolean) {
@@ -249,59 +93,22 @@ export function applyMarkup(tabId: string, image: CapturedImage) {
   if (session) setSession(tabId, { ...session, phase: "ready", image });
 }
 
-function savedToast(windowId: string, path: string | null, title: string) {
-  if (!path) return showToast(windowId, "Couldn’t Save the Capture", "Bay couldn’t write to Downloads.", { icon: "camera.viewfinder" });
-  const file = path.split("/").pop() ?? path;
-  showToast(windowId, title, `In Downloads as ${file}`, {
-    icon: "arrow.down.circle",
-    key: "capture",
-    action: { title: "Show in Finder", run: () => void revealFile(path) },
-  });
-}
-
 /** The whole page, top to bottom, saved to Downloads at once (as Arc's Capture Full Page). */
-export async function captureFullPage(tabId: string) {
-  const tab = capturableTab(tabId);
-  const web = webviews.get(tabId);
-
-  if (!tab || !web) return;
-  showToast(tab.windowId, "Capturing Full Page…", undefined, { icon: "camera.viewfinder", key: "capture", sticky: true });
-  const image = await web.captureImage({ fullPage: true, pixelRatio: pixelRatioOf(tabId) });
-
-  if (!image) return showToast(tab.windowId, "Couldn’t Capture the Page", "The page didn’t paint in time.", { icon: "camera.viewfinder", key: "capture" });
-  const now = useBrowser.getState().tabs[tabId] ?? tab;
-  const saved = await saveCaptureImage(image.path, captureName(now.customTitle || now.title, now.url, new Date(), true));
-  savedToast(tab.windowId, saved, "Saved Full Page Capture");
+export function captureFullPage(tabId: string) {
+  return withCapture((capture) => capture.fullPage(tabId));
 }
 
 /**
  * Capture in Portrait, as Arc's Portrait Mode: the page as it's shown, at 2×, framed on its space's colours. It's
  * copied, and saved to Downloads and the Library.
  */
-export async function capturePortrait(tabId: string) {
-  const tab = capturableTab(tabId);
-  const web = webviews.get(tabId);
+export function capturePortrait(tabId: string) {
+  return withCapture((capture) => capture.portrait(tabId));
+}
 
-  if (!tab || !web) return;
-  showToast(tab.windowId, "Capturing in Portrait…", undefined, { icon: "camera.viewfinder", key: "capture", sticky: true });
-  const failed = () => showToast(tab.windowId, "Couldn’t Capture the Page", "The page didn’t paint in time.", { icon: "camera.viewfinder", key: "capture" });
-  const shot = await web.captureImage({ pixelRatio: 2 * (tab.zoom ?? 1) });
-
-  if (!shot) return failed();
-  const s = useBrowser.getState();
-  const theme = themeFor(themeKey(s, tab.windowId, tab.spaceId));
-  const own = s.spaces[tab.spaceId]?.theme?.colors ?? [];
-  const framed = await portraitCaptureImage(shot.path, own.length ? own : [theme.accent, theme.windowTint[1]], theme.dark);
-
-  if (!framed) return failed();
-  const now = useBrowser.getState().tabs[tabId] ?? tab;
-  const name = captureName(now.customTitle || now.title, now.url, new Date(), "portrait");
-  await copyCaptureImage(framed.path);
-  const source = webLink(now.url) ? { url: now.url, title: now.customTitle || now.title, profileId: engineProfile(now.spaceId) } : undefined;
-
-  if (libraryWindow(tab.windowId)) void saveLibraryMedia(framed, name, source);
-  const saved = await saveCaptureImage(framed.path, name);
-  savedToast(tab.windowId, saved, "Copied Portrait Capture");
+/** The page as it's shown, on the clipboard: a PNG at the screen's scale (the developer's screenshot). */
+export function copyScreenshot(tabId: string) {
+  return withCapture((capture) => capture.screenshot(tabId));
 }
 
 let started = false;
@@ -310,15 +117,5 @@ let started = false;
 export function startCaptures() {
   if (started) return;
   started = true;
-  const page = (url: string) => url.replace(/#.*$/, "");
-  useBrowser.subscribe((s, prev) => {
-    if (s.tabs === prev.tabs) return;
-
-    for (const [tabId, session] of Object.entries(useCaptures.getState().sessions)) {
-      const url = s.tabs[tabId]?.url;
-
-      if (url === undefined) setSession(tabId, null);
-      else if (page(url) !== page(session.url)) cancelCapture(tabId);
-    }
-  });
+  void withCapture((capture) => capture.start);
 }

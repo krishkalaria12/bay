@@ -8,6 +8,8 @@ import { CalendarEngine, CalendarService } from "../activity/calendarService";
 import { ConnectionEngine, ConnectionService } from "../activity/connectionService";
 import { LibraryEngine, LibraryService } from "../components/library/libraryService";
 import { SharingEngine, SharingService } from "../components/library/sharingService";
+import { captureEngineLayer } from "../components/capture/captureEngine";
+import { CaptureService } from "../components/capture/service";
 import { ExtensionsEngine, ExtensionsService } from "../components/extensions/service";
 import { MediaEngine, MediaService } from "../components/media/service";
 import { PreviewEngine, PreviewService } from "../components/site/previewService";
@@ -44,6 +46,7 @@ export type AppServices =
   | Bookmarks
   | BoostsService
   | CalendarService
+  | CaptureService
   | ConnectionService
   | Diagnostics
   | DiagnosticsService
@@ -105,6 +108,8 @@ const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEn
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
+const capture = CaptureService.layer.pipe(Layer.provide(Layer.mergeAll(captureEngineLayer, library)));
+
 const media = MediaService.layer.pipe(Layer.provide(MediaEngine.layer));
 
 const pageWork = PageWorkService.layer.pipe(Layer.provide(PageWorkEngine.layer));
@@ -149,6 +154,7 @@ export const appLayer = Layer.mergeAll(
   downloads,
   boosts,
   connections,
+  capture,
   media,
   pageWork,
   search,

@@ -111,6 +111,14 @@ export const listTasks = () => Promise.resolve([]);
 
 export const onExtensionsChanged = () => ({ remove() {} });
 
+// The Mac's capture calls: the clipboard, Downloads, the share menu and Portrait's frame.
+export const copyCaptureImage = () => Promise.resolve(true);
+export const saveCaptureImage = () => Promise.resolve(null);
+export const shareCaptureImage = () => Promise.resolve();
+export const portraitCaptureImage = () => Promise.resolve(null);
+export const copyImage = () => false;
+export const revealFile = () => Promise.resolve();
+
 // The engine's media: its share sources, its cast dialogs and routes, and its own Picture in Picture.
 export const killTask = () => Promise.resolve(true);
 export const getDisplayMediaSources = () => Promise.resolve([]);
