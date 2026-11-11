@@ -68,6 +68,7 @@ export type ImportJob = {
   readonly browserId: string;
   readonly profileId: string;
   readonly kinds: ImportKind[];
+  readonly spaceIds?: string[];
   readonly signal: AbortSignal;
   readonly onProgress?: (progress: ImportProgress) => void;
 };
@@ -75,6 +76,8 @@ export type ImportJob = {
 /** The options the native module takes: the job's signal, and its progress when the caller wants it. */
 const jobOptions = (job: ImportJob): ImportOptions => {
   const options: ImportOptions = { signal: job.signal };
+
+  if (job.spaceIds) options.spaceIds = job.spaceIds;
 
   if (job.onProgress) options.onProgress = job.onProgress;
 
@@ -289,6 +292,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
                   browserId: request.source.id,
                   profileId: profile.id,
                   kinds: order,
+                  spaceIds: isArc ? request.spaceIds : undefined,
                   signal: request.signal,
                   onProgress: request.onProgress,
                 }),
@@ -348,6 +352,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
                           browserId: request.source.id,
                           profileId: profile.id,
                           kinds: nativeKinds,
+                          spaceIds: request.spaceIds,
                           signal: request.signal,
                         }),
                       refused,

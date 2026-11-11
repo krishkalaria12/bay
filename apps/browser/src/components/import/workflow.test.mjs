@@ -34,6 +34,8 @@ const fakeEngine = () => {
     diaStatuses: [],
     statusChecks: 0,
     asked: [],
+    jobs: [],
+    nativeJobs: [],
     unlocked: 0,
     forgotten: 0,
     reads: 0,
@@ -54,8 +56,10 @@ const fakeEngine = () => {
     importData: (job) =>
       Effect.suspend(() => {
         lab.asked.push(job.profileId);
+        lab.jobs.push(job);
 
-        const answer = lab.answers.get(job.profileId);
+        const configured = lab.answers.get(job.profileId);
+        const answer = Predicate.isFunction(configured) ? configured(job) : configured;
 
         if (Predicate.isString(answer)) return Effect.fail(new ImportFailure({ code: answer, operation: "import.data", cause: new Error(answer) }));
 
@@ -80,7 +84,11 @@ const fakeEngine = () => {
           },
         );
       }),
-    importNative: () => Promise.resolve({ vaultToken: undefined, failed: [] }),
+    importNative: (job) => {
+      lab.nativeJobs.push(job);
+
+      return Promise.resolve({ vaultToken: undefined, failed: [] });
+    },
     discardImported: () => {},
     importSafariExport: () => Effect.succeed({ profiles: [], bookmarks: undefined, passwordCSV: undefined }),
     importSafariDirect: () => Effect.succeed({ profiles: [], bookmarks: undefined, passwordCSV: undefined }),
@@ -199,6 +207,46 @@ test("the browser's keychain item is opened once, and only when it is needed", a
     );
 
     assert.equal(lab.unlocked, 1);
+  });
+});
+
+test("Arc imports only the chosen spaces and keeps that selection when rereading native data", async () => {
+  await withWorkflow(async ({ lab, runtime }) => {
+    S().hydrate({});
+
+    const spaces = ["personal", "work", "travel"].map((id) => ({ id, name: id, profileId: "one", pinned: [], tabs: [] }));
+    const selected = ["personal", "travel"];
+    const arc = { ...source, id: "arc", family: "arc", profiles: [{ ...source.profiles[0], spaces }] };
+
+    lab.answers.set("one", (job) => ({
+      browserId: "arc",
+      profileId: "one",
+      spaces: spaces.filter((space) => !job.spaceIds || job.spaceIds.includes(space.id)),
+      history: [],
+      tabs: [],
+      favorites: [],
+      credentials: [],
+      warnings: [],
+      failed: [],
+      vaultToken: "first-destination-token",
+      cookieCount: 1,
+      addressCount: 0,
+      cardCount: 0,
+      extensions: [],
+    }));
+
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const workflow = yield* ImportWorkflow;
+
+        return yield* workflow.import({ ...request(), source: arc, profileIds: [], spaceIds: selected, kinds: new Set(["tabs", "cookies"]) });
+      }),
+    );
+
+    assert.deepEqual(lab.jobs[0].spaceIds, selected, "the native import receives the selected spaces");
+    assert.equal(S().spaceOrder.length, 2, "a deselected space does not create a destination");
+    assert.equal(lab.nativeJobs.length, 1, "the second chosen space gets a fresh native token");
+    assert.deepEqual(lab.nativeJobs[0].spaceIds, selected, "the native reread keeps the same space selection");
   });
 });
 
