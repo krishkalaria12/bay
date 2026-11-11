@@ -1,13 +1,15 @@
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
 import { View } from "react-native";
 
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
 import { PressFeedback } from "@/chrome/PressFeedback";
+import { Text } from "@/chrome/Text";
+import { iconSize, radius, space } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { useT } from "@/i18n";
-import { ActionRow, Group, PanelSheet } from "./PanelSheet";
+import { ActionRow, Group, PanelSheet, SheetIconButton } from "./PanelSheet";
 
 export interface PageMenuProps {
   visible: boolean;
@@ -76,7 +78,7 @@ function NavigationAction({
       className="h-12 flex-1 items-center justify-center rounded-full bg-default"
       style={{ opacity: disabled ? 0.35 : 1 }}
     >
-      <Icon name={icon} color={foreground} size={22} />
+      <Icon name={icon} color={foreground} size={iconSize.control} />
     </PressFeedback>
   );
 }
@@ -108,20 +110,24 @@ function Tile({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      className={`h-[72px] items-center justify-center gap-1.5 rounded-2xl ${active ? "bg-accent/15" : "bg-default"}`}
-      style={{ width: "23.5%" }}
+      className={`items-center justify-center ${active ? "bg-accent/15" : "bg-default"}`}
+      style={{ width: TILE_WIDTH, height: 76, gap: 6, borderRadius: radius.tile }}
     >
-      <Icon name={icon} color={active ? accent : foreground} size={22} />
-      <Typography numberOfLines={1} className={`px-1 text-[12px] ${active ? "text-accent" : "text-foreground"}`}>
+      <Icon name={icon} color={active ? accent : foreground} size={iconSize.control} />
+      <Text variant="caption" tone={active ? "accent" : "default"} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
         {label}
-      </Typography>
+      </Text>
     </PressFeedback>
   );
 }
 
+/** Four tiles to a row, with the same gap between them as between the rows. */
+const TILE_GAP = space.sm;
+const TILE_WIDTH = `${(100 - 3 * 2.2) / 4}%` as const;
+
 function TileGrid({ children }: { children: JSX.Element | (JSX.Element | null)[] }): JSX.Element {
   return (
-    <View className="mt-3 flex-row flex-wrap" style={{ columnGap: "2%", rowGap: 8 }}>
+    <View className="flex-row flex-wrap" style={{ marginTop: TILE_GAP, columnGap: "2.2%", rowGap: TILE_GAP }}>
       {children}
     </View>
   );
@@ -181,6 +187,8 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
       testID="page-menu"
       height="70%"
       header={<SiteHeader title={props.title} url={props.url} blocking={props.blocking} />}
+      // Settings sits beside the close button, so the twelve page actions fill the grid's three rows.
+      accessory={<SheetIconButton testID="page-settings" icon="settings" label={t("pageMenu.settings")} onPress={act(props.onSettings)} tone="default" />}
     >
       {props.blocking !== "off" || props.hiddenCount ? (
         <Group>
@@ -204,7 +212,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
           ) : null}
         </Group>
       ) : null}
-      <View className="mt-3 flex-row gap-2">
+      <View className="flex-row" style={{ marginTop: space.md, gap: TILE_GAP }}>
         <NavigationAction id="page-back" icon="back" label={t("pageMenu.back")} disabled={!props.canGoBack} onPress={act(props.onBack)} />
         <NavigationAction id="page-forward" icon="forward" label={t("pageMenu.forward")} disabled={!props.canGoForward} onPress={act(props.onForward)} />
         <NavigationAction
@@ -241,7 +249,6 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
         <Tile id="page-history" icon="history" label={t("pageMenu.history")} onPress={act(props.onHistory)} />
         <Tile id="page-downloads" icon="download" label={t("pageMenu.downloads")} onPress={act(props.onDownloads)} />
         <Tile id="page-close-tab" icon="archive" label={t("pageMenu.archive")} onPress={act(props.onCloseTab)} />
-        <Tile id="page-settings" icon="settings" label={t("pageMenu.settings")} onPress={act(props.onSettings)} />
       </TileGrid>
     </PanelSheet>
   );
@@ -263,21 +270,21 @@ function SiteHeader({ title, url, blocking }: { title: string; url: string; bloc
     .join(" · ");
 
   return (
-    <View className="flex-row items-center gap-3">
-      {url ? <SiteIcon url={url} size={40} /> : null}
+    <View className="flex-row items-center" style={{ gap: space.md }}>
+      {url ? <SiteIcon url={url} size={44} /> : null}
       <View className="flex-1">
-        <Typography numberOfLines={1} accessibilityRole="header" className="text-[17px] font-semibold">
+        <Text variant="headline" numberOfLines={1} accessibilityRole="header">
           {title || url}
-        </Typography>
-        <Typography testID="page-menu-url" numberOfLines={1} className="text-[13px] text-muted">
+        </Text>
+        <Text testID="page-menu-url" variant="footnote" tone="muted" numberOfLines={1}>
           {url}
-        </Typography>
+        </Text>
         {status ? (
-          <View className="mt-0.5 flex-row items-center gap-1" accessible accessibilityLabel={status}>
-            {web ? <Icon name={insecure ? "error" : "lock"} color={insecure ? danger : muted} size={12} /> : null}
-            <Typography numberOfLines={1} className={insecure ? "text-xs text-danger" : "text-xs text-muted"}>
+          <View className="flex-row items-center" style={{ gap: space.xs, marginTop: space.xxs }} accessible accessibilityLabel={status}>
+            {web ? <Icon name={insecure ? "error" : "lock"} color={insecure ? danger : muted} size={iconSize.inline - 2} /> : null}
+            <Text variant="caption" weight="regular" tone={insecure ? "danger" : "muted"} numberOfLines={1}>
               {status}
-            </Typography>
+            </Text>
           </View>
         ) : null}
       </View>
