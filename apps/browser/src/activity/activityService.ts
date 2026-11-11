@@ -4,6 +4,7 @@
 // A folder's refresh is a job: it runs once at a time, each source is asked on its own (one provider failing
 // cannot erase another's items), and a folder that was deleted while it ran writes nothing.
 import { onWindowEvent } from "@bay/desktop";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -65,12 +66,15 @@ export class ActivityService extends Context.Service<
       const scheduler = yield* Scheduler;
       const sources = yield* LiveSources;
       const scope = yield* Scope.Scope;
+      const services = yield* Effect.context<never>();
 
       // The refresh each folder is having now.
       const jobs = new Map<string, Fiber.Fiber<void>>();
 
-      // The folders the app asks to refresh. The worker asks for them, one at a time.
+      // The folders the app asks to refresh. Dispatch does not wait for a provider's answer.
       const requests = yield* Queue.unbounded<string>();
+
+      yield* Scope.addFinalizer(scope, Queue.shutdown(requests));
 
       // The sources this folder has answered for, so an item that arrives quietly is not shown as new.
       const fetchedSources = new Map<string, Set<LiveSourceId>>();
@@ -107,7 +111,7 @@ export class ActivityService extends Context.Service<
 
             if (Exit.isSuccess(r)) next.push(...r.value);
             else {
-              failed.push({ source, error: asError(r.cause) });
+              failed.push({ source, error: asError(Cause.squash(r.cause)) });
               next.push(...prev.filter((it) => it.source === source && !animating.has(it.id)));
             }
           });
@@ -165,32 +169,41 @@ export class ActivityService extends Context.Service<
         });
 
       const refresh = (folderId: string): Effect.Effect<void> =>
-        Effect.gen(function* () {
-          const running = jobs.get(folderId);
+        Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const running = jobs.get(folderId);
 
-          // A folder is refreshed once at a time: the second ask waits for the first.
-          if (running) {
-            yield* Fiber.join(running);
+            // A folder is refreshed once at a time: the second ask waits for the first.
+            if (running) {
+              yield* restore(Fiber.join(running));
 
-            return;
-          }
+              return;
+            }
 
-          const fiber = yield* Effect.forkIn(runFolder(folderId), scope);
+            let fiber: Fiber.Fiber<void>;
 
-          jobs.set(folderId, fiber);
+            const work = runFolder(folderId).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  if (jobs.get(folderId) === fiber) jobs.delete(folderId);
+                }),
+              ),
+            );
 
-          yield* Fiber.join(fiber);
+            fiber = yield* Effect.forkIn(restore(work), scope);
+            jobs.set(folderId, fiber);
 
-          jobs.delete(folderId);
-        });
+            yield* restore(Fiber.join(fiber));
+          }),
+        );
 
       // A refresh the app asks for and does not wait for.
       const ask = (folderId: string): void => {
         Queue.offerUnsafe(requests, folderId);
       };
 
-      // The worker asks for the folders the app wants refreshed, in the app's scope.
-      yield* Effect.forkIn(Effect.forever(Effect.flatMap(Queue.take(requests), (folderId) => refresh(folderId))), scope);
+      // Different folders refresh independently; refresh joins an existing job for the same folder.
+      yield* Effect.forkIn(Effect.forever(Effect.flatMap(Queue.take(requests), (folderId) => Effect.forkIn(refresh(folderId), scope))), scope);
 
       const due = (id: string, maxAge: number) => {
         const f = live().folders[id];
@@ -264,10 +277,13 @@ export class ActivityService extends Context.Service<
             if (!folderId || Date.now() - (lastNudge.get(folderId) ?? 0) < 20_000) continue;
 
             lastNudge.set(folderId, Date.now());
-            void Effect.runFork(
-              Effect.andThen(
-                Effect.sleep(Duration.millis(3_000)),
-                Effect.sync(() => ask(folderId)),
+            void Effect.runForkWith(services)(
+              Effect.forkIn(
+                Effect.andThen(
+                  Effect.sleep(Duration.millis(3_000)),
+                  Effect.sync(() => ask(folderId)),
+                ),
+                scope,
               ),
             );
           }

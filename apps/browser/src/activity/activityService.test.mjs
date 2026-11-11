@@ -8,9 +8,9 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 
 const { useBrowser } = await import("../store/browserStore.ts");
 const { ActivityService, LiveSources } = await import("./activityService.ts");
-const { Diagnostics } = await import("../effect/ports/diagnostics.ts");
-const { Scheduler } = await import("../effect/ports/scheduler.ts");
-const { createFolder, live, removeFolder } = await import("./activityStore.ts");
+const { fakeScheduler } = await import("../effect/testing.ts");
+const { createFolder, live, removeFolder, useLive } = await import("./activityStore.ts");
+const { LiveError } = await import("./types.ts");
 
 const item = (source, id) => ({
   id: `${source}:${id}`,
@@ -28,6 +28,7 @@ const fakeSources = () => {
     asked: [],
     gate: null,
     failing: false,
+    failure: null,
   };
 
   const sources = {
@@ -42,6 +43,8 @@ const fakeSources = () => {
         if (lab.gate) await lab.gate;
 
         if (lab.failing) throw new Error("GitHub is down");
+
+        if (lab.failure) throw lab.failure;
 
         return [item("github", "one")];
       },
@@ -66,13 +69,12 @@ const fakeSources = () => {
 
 const withService = async (use) => {
   const sources = fakeSources();
+  const scheduler = fakeScheduler();
 
-  const runtime = ManagedRuntime.make(
-    ActivityService.layer.pipe(Layer.provide(Layer.mergeAll(sources.layer, Scheduler.layer.pipe(Layer.provide(Diagnostics.layer))))),
-  );
+  const runtime = ManagedRuntime.make(ActivityService.layer.pipe(Layer.provide(Layer.mergeAll(sources.layer, scheduler.layer))));
 
   try {
-    await use({ lab: sources.lab, runtime });
+    await use({ lab: sources.lab, runtime, scheduler });
   } finally {
     await runtime.dispose();
   }
@@ -84,13 +86,14 @@ const untilAsked = async (lab, count) => {
   for (let i = 0; i < 1000 && lab.asked.length < count; i++) await new Promise((resolve) => setTimeout(resolve, 5));
 };
 
-const refresh = (runtime, folderId) =>
+const refresh = (runtime, folderId, signal) =>
   runtime.runPromise(
     Effect.gen(function* () {
       const activity = yield* ActivityService;
 
       yield* activity.refresh(folderId);
     }),
+    { signal },
   );
 
 test("a folder is refreshed once at a time: the second ask waits for the first", async () => {
@@ -162,5 +165,88 @@ test("a folder that was deleted while it refreshed writes nothing", async () => 
 
     assert.equal(live().folders[folderId], undefined);
     assert.equal(live().items[folderId], undefined, "the late answer was not written");
+  });
+});
+
+test("provider failures keep the kind that tells the user how to reconnect", async () => {
+  await withService(async ({ lab, runtime }) => {
+    useBrowser.getState().hydrate({});
+
+    const folderId = createFolder("default", "pullRequests", ["github"]);
+
+    lab.failure = new LiveError("signedOut", "Sign in to GitHub again");
+    await refresh(runtime, folderId);
+
+    assert.deepEqual(live().status[folderId]?.error, {
+      kind: "signedOut",
+      message: "Sign in to GitHub again",
+      source: "github",
+    });
+  });
+});
+
+test("an automatic refresh does not wait for another folder's provider", async () => {
+  await withService(async ({ lab, runtime, scheduler }) => {
+    useBrowser.getState().hydrate({});
+    useLive.setState({ folders: {}, folderOrder: [], items: {}, status: {} });
+
+    const slow = createFolder("default", "pullRequests", ["github"]);
+    const fast = createFolder("default", "pullRequests", ["bitbucket"]);
+    let release;
+
+    lab.gate = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    try {
+      await runtime.runPromise(Effect.flatMap(ActivityService, (activity) => activity.start));
+      await scheduler.fire();
+
+      for (let attempt = 0; attempt < 100 && live().status[fast]?.state !== "idle"; attempt++) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+
+      assert.equal(live().status[fast]?.state, "idle");
+      assert.equal(live().status[fast]?.lastFetch !== null, true);
+      assert.equal(live().status[slow]?.lastFetch, null);
+      await scheduler.fire();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(lab.asked.filter((source) => source === "github").length, 1, "repeated sweeps share the running folder refresh");
+    } finally {
+      release();
+    }
+  });
+});
+
+test("a cancelled caller does not leave a completed folder refresh cached forever", async () => {
+  await withService(async ({ lab, runtime }) => {
+    useBrowser.getState().hydrate({});
+
+    const folderId = createFolder("default", "pullRequests", ["github"]);
+    let release;
+
+    lab.gate = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    const controller = new AbortController();
+    const cancelled = assert.rejects(refresh(runtime, folderId, controller.signal), /interrupted/);
+
+    try {
+      await untilAsked(lab, 1);
+      controller.abort();
+      await cancelled;
+      release();
+
+      for (let attempt = 0; attempt < 100 && live().status[folderId]?.state !== "idle"; attempt++) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+
+      assert.equal(live().status[folderId]?.state, "idle", "the shared job still completed after its caller left");
+      await refresh(runtime, folderId);
+      assert.equal(lab.asked.length, 2, "the next refresh asked the provider again");
+    } finally {
+      release();
+    }
   });
 });
