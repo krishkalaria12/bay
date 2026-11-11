@@ -9,13 +9,17 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import { startLiveFolders } from "../activity/activityStore";
+import { liveFoldersDocument } from "../activity/activityStore";
 import { startBoosts } from "../components/boosts/state";
 import { readLibrary } from "../components/library/libraryService";
 import { useBrowser, type BrowserState } from "../store/browserStore";
 import { SAVE_DELAY_MS } from "./constants";
 import { startFavicons } from "./favicons";
 import { DOCS, forgetClosedIncognito, loadSession, sessionNeedsRewrite, type Doc } from "./persist";
+import type { SavedDocument } from "./savedDocument";
+
+// The documents other stores keep, saved with the session's own: one timer, the same retry, and the same quit.
+const OTHER_DOCS: readonly SavedDocument[] = [liveFoldersDocument];
 
 /** The app's saving, as the quit handshake and the runtime reach it. */
 export type PersistenceCoordinator = {
@@ -35,6 +39,7 @@ const createCoordinator = (): PersistenceCoordinator => {
   let lastSources = new Map<string, unknown[]>();
   let lastJson = new Map<string, string>();
   let dirty = new Set<Doc>();
+  let dirtyOther = new Set<SavedDocument>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   // From the quit's last save until the quit ends or is cancelled: what the quit itself does to the store (its
   // windows closing) is never saved.
@@ -78,6 +83,23 @@ const createCoordinator = (): PersistenceCoordinator => {
       lastJson.set(doc.name, json);
       dirty.delete(doc);
     }
+
+    for (const doc of dirtyOther) {
+      const json = doc.json();
+
+      if (lastJson.get(doc.name) !== json && !write(doc.name, json)) continue;
+
+      lastJson.set(doc.name, json);
+      dirtyOther.delete(doc);
+    }
+  };
+
+  // Another store's document changed: it is written with the session's, after the same wait.
+  // While the quit is saving, the change waits: a cancelled quit writes it when saving resumes.
+  const otherChanged = (doc: SavedDocument) => {
+    dirtyOther.add(doc);
+
+    if (!frozen && !timer) timer = setTimeout(save, SAVE_DELAY_MS);
   };
 
   const check = (s: BrowserState, initial = false) => {
@@ -123,7 +145,7 @@ const createCoordinator = (): PersistenceCoordinator => {
     hydrate();
     check(useBrowser.getState());
 
-    const stops = [startFavicons(), startLiveFolders()];
+    const stops = [startFavicons(), ...OTHER_DOCS.map((doc) => doc.watch(() => otherChanged(doc)))];
 
     const stopSession = useBrowser.subscribe((s, prev) => {
       check(s);
@@ -142,6 +164,7 @@ const createCoordinator = (): PersistenceCoordinator => {
       lastSources = new Map();
       lastJson = new Map();
       dirty = new Set();
+      dirtyOther = new Set();
       hydrated = false;
     };
 

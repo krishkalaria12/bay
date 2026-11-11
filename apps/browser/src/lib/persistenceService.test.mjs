@@ -108,3 +108,47 @@ test("the quit freezes the saving, and a cancelled quit resumes it", async () =>
     stop();
   }
 });
+
+test("the live folders are saved with the session: one write a burst, again after a failure, and at the quit", async () => {
+  const { setLive, live } = await import("../activity/activityStore.ts");
+  const { LIVE_DOC } = await import("../activity/constants.ts");
+
+  stub.docs.clear();
+  stub.writes.length = 0;
+
+  const stop = startPersistence();
+  const fold = () => setLive((s) => ({ expandedStacks: { ...s.expandedStacks, a: !s.expandedStacks.a } }));
+
+  try {
+    fold();
+    fold();
+    fold();
+    await wait(1_000);
+    assert.equal(writes(LIVE_DOC), 1, "a burst is one write");
+
+    stub.writeErrors.set(LIVE_DOC, new Error("disk full"));
+    fold();
+    await wait(1_000);
+    assert.equal(writes(LIVE_DOC), 2);
+
+    stub.writeErrors.delete(LIVE_DOC);
+
+    // The failed write is still owed, and the quit's flush writes it.
+    fold();
+    flushPersistence({ final: true });
+    assert.equal(JSON.parse(stub.docs.get(LIVE_DOC)).expandedStacks.a, live().expandedStacks.a);
+
+    // While the quit saves, a change waits; a cancelled quit writes it.
+    fold();
+    await wait(1_000);
+
+    const before = writes(LIVE_DOC);
+
+    resumePersistence();
+    assert.equal(writes(LIVE_DOC), before + 1);
+  } finally {
+    stub.writeErrors.delete(LIVE_DOC);
+    resumePersistence();
+    stop();
+  }
+});
