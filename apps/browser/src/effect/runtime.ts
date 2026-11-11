@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { ActivityService, LiveSources } from "../activity/activityService";
 import { CalendarEngine, CalendarService } from "../activity/calendarService";
+import { ConnectionEngine, ConnectionService } from "../activity/connectionService";
 import { LibraryEngine, LibraryService } from "../components/library/libraryService";
 import { SharingEngine, SharingService } from "../components/library/sharingService";
 import { ExtensionsEngine, ExtensionsService } from "../components/extensions/service";
@@ -40,6 +41,7 @@ export type AppServices =
   | Bookmarks
   | BoostsService
   | CalendarService
+  | ConnectionService
   | Diagnostics
   | DownloadWorkService
   | Documents
@@ -113,6 +115,8 @@ const usage = UsageService.layer.pipe(Layer.provide(Scheduler.layer));
 
 const boosts = BoostsService.layer.pipe(Layer.provide(Layer.mergeAll(BoostEngine.layer, Documents.layer)));
 
+const connections = ConnectionService.layer.pipe(Layer.provide(ConnectionEngine.layer));
+
 const updater = UpdaterService.layer.pipe(Layer.provide(UpdaterEngine.layer));
 
 /** The app's services, ready to be built. */
@@ -132,6 +136,7 @@ export const appLayer = Layer.mergeAll(
   localFiles,
   downloads,
   boosts,
+  connections,
   search,
   calendar,
   automation,

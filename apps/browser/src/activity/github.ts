@@ -43,6 +43,29 @@ export const GITHUB_STATE_QUERY = `query LiveFolderGone($ids: [ID!]!) {
 
 export const VIEWER_QUERY = `query { viewer { login name avatarUrl(size: 64) } }`;
 
+/** The answer to a query about the viewer. */
+export type ViewerAnswer = { data?: { viewer: { login: string; name: string | null; avatarUrl: string } } };
+
+/** What GitHub's answer means: an error beside the data is the answer's own. */
+export type GithubAnswer<A> = { readonly ok: true; readonly data: A } | { readonly ok: false; readonly error: LiveError };
+
+/** The headers a GitHub request carries. */
+export const githubHeaders = (token: string) => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
+
+/** The body a GitHub request carries. */
+export const githubBody = (query: string, variables: Record<string, string | string[]> = {}) => JSON.stringify({ query, variables });
+
+/** What GitHub answered: the data, or the failure it answered with. */
+export const githubAnswer = <A>(json: A & { errors?: { type?: string; message: string }[] }): GithubAnswer<A> => {
+  const error = json.errors?.[0];
+
+  // SAFETY: { data? assertion matches the runtime value validated at this call site.
+  if (error && !(json as { data?: unknown }).data)
+    return { ok: false, error: new LiveError(error.type === "RATE_LIMITED" ? "rateLimited" : "other", error.message) };
+
+  return { ok: true, data: json };
+};
+
 type RawCheck =
   | { __typename: "CheckRun"; name: string; status: string; conclusion: string | null; detailsUrl: string | null }
   | { __typename: "StatusContext"; context: string; state: string; targetUrl: string | null };
