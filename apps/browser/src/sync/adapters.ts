@@ -11,7 +11,15 @@ import { engineProfile, IDLE_LIVE, listIds, makeTab, pinnedFirst, spaceListKey, 
 import { removeTabs } from "../store/tabs";
 import type { Settings } from "../store/settings";
 import type { HistoryEntry, PinnedFolder, Space, Tab, TabGroup, TabSnapshot } from "../store/types";
-import { HISTORY_WINDOW_MS, MAX_DEVICE_TABS, PASSWORD_READ_INTERVAL_MS, SAME_VISIT_MS } from "./constants";
+import {
+  HISTORY_WINDOW_MS,
+  MAX_DEVICE_TABS,
+  LOGIN_QUIET_AFTER_MS,
+  PASSWORD_READ_INTERVAL_MS,
+  LOGIN_WRITE_CHECK_GAP_MS,
+  LOGIN_WRITE_CHECKS,
+  SAME_VISIT_MS,
+} from "./constants";
 
 const store = () => useBrowser.getState();
 
@@ -823,18 +831,21 @@ export function passwordsAdapter(
         }
       }
 
-      // Wait for Chrome to write password changes before reading them.
+      // The writes are Chrome's, and it says nothing when they land: the apply waits for them, a bounded number of
+      // reads apart, so the sync cycle holding this profile does not let go before Chrome has them. This stays a
+      // plain wait: the shared sync core calls apply as a promise, and running the runtime inside it would nest one.
       let settled = false;
 
-      for (let i = 0; i < 20 && !settled; i++) {
+      for (let i = 0; i < LOGIN_WRITE_CHECKS && !settled; i++) {
         const now = await read();
         // SAFETY: pw values in visible are written by passwordsAdapter extract as PasswordValue values.
         settled = !!now && [...changed].every((k) => (visible.get(k) as PasswordValue | undefined)?.p === now.get(k)?.p);
 
-        if (!settled) await new Promise((r) => setTimeout(r, 250));
+        if (!settled) await new Promise((r) => setTimeout(r, LOGIN_WRITE_CHECK_GAP_MS));
       }
 
-      if (!settled) quietUntil = Date.now() + 30_000;
+      // Chrome has not caught up: the next reads would see the old passwords as changes, so they wait a while.
+      if (!settled) quietUntil = Date.now() + LOGIN_QUIET_AFTER_MS;
 
       return ok;
     },
