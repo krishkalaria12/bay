@@ -12,7 +12,10 @@ If the work can be done through any of the expo libraries, then you can use it.
 - **One design on both platforms: Lens** (see the reference below): the same screens, layout and behaviour on iPhone and Android.
 - **iOS draws it in Liquid Glass** with `@expo/ui/swift-ui`.
 - **Android draws the same design with our own React Native views, the way Arc Search does on Android**: flat surfaces with translucent fills and hairline edges, no Material components (no `@expo/ui/jetpack-compose`, no Material ripples or elevation) and no imitation glass.
-- Icons: SF Symbols by name on iOS; Material Symbols outline paths on Android (`src/chrome/MaterialSymbol.tsx`, from google/material-design-icons, Apache-2.0, drawn with react-native-svg).
+- Icons: SF Symbols by name on iOS; Material Symbols outline paths on Android (`src/chrome/MaterialSymbol.tsx`, from google/material-design-icons, Apache-2.0, drawn with react-native-svg). Every icon sits in a fixed `size × size` square on both platforms, so text beside icons lines up.
+- **Tokens, not numbers** (`src/chrome/tokens.ts`): corners come from `radius` (control 12, tile 18, card 22, panel 28, sheet 32; nested shapes step down the scale), spacing from `space` (4pt grid, `gutter` 20), icon sizes from `iconSize`, row height from `rowHeight`. Don't write a new corner, font size or padding by hand.
+- **All text goes through `Text`** (`src/chrome/Text.tsx`) with a `variant` from the type scale (title, headline, body, callout, subhead, footnote, caption, micro), an optional `weight`, and a `tone` (default, muted, accent, danger) or `color`. Text fields take `inputFont(variant)`. iOS sets it in San Francisco; Android in Inter (loaded by `useAppFonts`, one face per weight). Never use React Native's `Text` or HeroUI's `Typography` directly, except for nested spans that must inherit their parent's font.
+- Fills: controls and grouped rows use `bg-default`, a translucent tint of the text colour (`global.css`), so they read the same over Liquid Glass and Android's solid sheets. Switches use the accent on both platforms.
 
 ## Both platforms, always
 
