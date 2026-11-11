@@ -6,7 +6,7 @@ import { useSync } from "../sync/engine";
 import { capture, endSession, flush, isSharing, startClient } from "./client";
 import { reportNativeCrashes } from "./errors";
 import { takeOmniboxLatency } from "./track";
-import { EXTENSION_SETTLE_MS, FIRST_MEMORY_SAMPLE_MS } from "./config";
+import { EXTENSION_SETTLE_MS } from "./config";
 
 const HOUR_MS = 60 * 60_000;
 
@@ -139,6 +139,18 @@ function hourly() {
   void sampleMemory();
 }
 
+/**
+ * The hourly sample, as the app's grid runs it. The counters it resets are reset whether or not the user shares
+ * anything, so the job is needed either way.
+ */
+export const sampleUsage = hourly;
+
+/** The memory sample the app takes once, a while after it starts. */
+export const sampleMemoryOnce = () => sampleMemory();
+
+/** The native crashes of the last run, which the Mac keeps for a while. */
+export const reportNativeCrashesOnce = () => reportNativeCrashes();
+
 export function startUsage() {
   const session = startClient();
 
@@ -146,15 +158,14 @@ export function startUsage() {
     capture("app_launched", { previous_session: session.previous });
 
     if (session.updatedFrom) capture("app_updated", { from_version: session.updatedFrom });
-    setTimeout(() => void reportNativeCrashes(), 5000);
   }
 
   watchStore();
   watchSync();
   watchTranslate();
   watchExtensions();
-  setTimeout(() => void sampleMemory(), FIRST_MEMORY_SAMPLE_MS);
-  setInterval(hourly, HOUR_MS);
+
+  // The session ends with the app: the counters go out before the process goes.
   onAppEvent((e) => e.type === "willQuit" && sessionEnding());
 }
 
