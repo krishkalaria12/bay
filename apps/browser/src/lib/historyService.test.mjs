@@ -9,15 +9,28 @@ const stub = await import("../test-native-stub.mjs");
 const { useBrowser } = await import("../store/browserStore.ts");
 const { fakeDiagnostics } = await import("../effect/testing.ts");
 const { History, HistoryEngine, HistoryError } = await import("./historyService.ts");
+const { engineProfile } = await import("../store/model.ts");
 
 const S = () => useBrowser.getState();
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const until = async (ready) => {
+  for (let turn = 0; turn < 100; turn++) {
+    if (ready()) return;
+
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  assert.fail("the expected history work did not finish");
+};
 
 // Chrome's history, as a test wants it: what it holds, what it was asked for, and what it refuses.
 const fakeEngine = () => {
   const fake = {
     profiles: new Map(),
     watches: [],
+    queries: [],
+    profileGates: new Map(),
     adds: [],
     // A read waits for this, when it is set.
     gate: null,
@@ -32,13 +45,18 @@ const fakeEngine = () => {
       }),
     query: (profile) =>
       Effect.suspend(() => {
+        fake.queries.push(profile);
+
         if (fake.failure) return Effect.fail(new HistoryError({ operation: { name: "history.query", resource: profile }, cause: fake.failure }));
 
-        const gate = fake.gate;
+        const gate = fake.profileGates.get(profile) ?? fake.gate;
 
         if (!gate) return Effect.succeed(fake.profiles.get(profile) ?? []);
 
-        return Effect.promise(() => gate.then(() => fake.profiles.get(profile) ?? []));
+        return Effect.tryPromise({
+          try: () => gate.then(() => fake.profiles.get(profile) ?? []),
+          catch: (cause) => new HistoryError({ operation: { name: "history.query", resource: profile }, cause }),
+        });
       }),
     add: (profile, pages) =>
       Effect.sync(() => {
@@ -153,6 +171,66 @@ test("a read that fails is reported once, and the profile stays unread", async (
   assert.equal(diagnostics.reports[0].operation.resource, "");
 
   await runtime.dispose();
+});
+
+test("a pending profile query does not delay clearing another profile's history", async () => {
+  const { engine, runtime } = setup();
+  const held = Promise.withResolvers();
+
+  S().hydrate({});
+  engine.profiles.set("", [{ url: "https://deleted.example/", title: "Deleted", visits: 1, visitTimes: [1] }]);
+  await start(runtime);
+
+  const slow = S().createSpace({ name: "Slow" });
+  const slowProfile = engineProfile(slow);
+
+  engine.profileGates.set(slowProfile, held.promise);
+
+  try {
+    await until(() => engine.queries.includes(slowProfile));
+    engine.profiles.set("", []);
+    stub.chromeHistoryChange({ kind: "deleted", profile: "", all: true });
+
+    await until(() => S().history.default?.length === 0);
+    assert.equal(engine.queries.filter((profile) => profile === slowProfile).length, 1, "the other profile's query is still pending");
+  } finally {
+    held.resolve();
+    await runtime.dispose();
+  }
+});
+
+test("a failed query preserves follow-up requests made while it was pending", async () => {
+  for (const trigger of ["change", "read"]) {
+    const { engine, diagnostics, runtime } = setup();
+    const held = Promise.withResolvers();
+
+    S().hydrate({});
+    engine.profiles.set("", [{ url: "https://deleted.example/", title: "Deleted", visits: 1, visitTimes: [1] }]);
+    await start(runtime);
+    engine.profileGates.set("", held.promise);
+
+    const reading = read(runtime, "");
+    let followup;
+
+    try {
+      await until(() => engine.queries.length === 2);
+      engine.profiles.set("", []);
+
+      if (trigger === "change") stub.chromeHistoryChange({ kind: "deleted", profile: "", all: true });
+      else followup = read(runtime, "");
+
+      engine.profileGates.delete("");
+      held.reject(new Error("The query failed"));
+      await Promise.all([reading, followup]);
+      await until(() => S().history.default?.length === 0);
+
+      assert.equal(engine.queries.length, 3, "only the requested follow-up query runs after failure");
+      assert.equal(diagnostics.reports.length, 1);
+    } finally {
+      held.resolve();
+      await runtime.dispose();
+    }
+  }
 });
 
 test("the app's old history.json is moved into Chrome, and deleted only once it is there", async () => {

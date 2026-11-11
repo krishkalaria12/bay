@@ -304,20 +304,40 @@ export class History extends Context.Service<
 
           state.done = done;
 
-          const exit = yield* Effect.exit(readProfile(profile, state));
+          for (;;) {
+            const exit = yield* Effect.exit(readProfile(profile, state));
+
+            if (Exit.isSuccess(exit)) break;
+
+            yield* report({ name: "history.read", resource: profile }, exit.cause);
+
+            // A failed query consumes its own request, but a change or another caller that arrived while it
+            // waited still needs a pass. Without a new signal, leave the failure for the next request.
+            if (!state.again && !state.queued.length) break;
+          }
 
           state.done = undefined;
           reads.delete(profile);
 
           yield* Deferred.done(done, Exit.succeed(undefined));
-
-          if (Exit.isFailure(exit)) {
-            yield* report({ name: "history.read", resource: profile }, exit.cause);
-          }
         });
 
-      // The reads the app asks for run here, in the app's scope: a read stops when the app does.
-      yield* Effect.forkScoped(Effect.forever(Effect.flatMap(Queue.take(requests), (profile) => read(profile))));
+      // Each profile progresses independently. Another request for a running profile joins its next pass
+      // instead of creating another waiting fiber. Closing the app stops every profile's read.
+      const dispatch = (profile: string): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          const state = reads.get(profile);
+
+          if (state?.done) {
+            state.again = true;
+
+            return;
+          }
+
+          yield* Effect.forkIn(read(profile), scope, { startImmediately: true });
+        });
+
+      yield* Effect.forkScoped(Effect.forever(Effect.flatMap(Queue.take(requests), dispatch)));
 
       const wanted = () => engineProfiles(store()).filter((profile) => !loaded.has(profile) && !reads.has(profile));
 
