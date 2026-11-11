@@ -17,7 +17,7 @@ If the work can be done through any of the expo libraries, then you can use it.
 ## Both platforms, always
 
 - Test iOS completely: every flow, every screen, every state.
-- **Every UI change is also tested on Android** before it's done: run it on the emulator, screenshot it next to iOS, and pass `pnpm e2e` on both. iOS passing is never enough on its own; the Android UI is our own code and breaks independently.
+- **Every UI change is also tested on Android** before it's done: run it on the emulator, screenshot it next to iOS, and pass the e2e tests on both in the batch's run (see "Testing efficiently"). iOS passing is never enough on its own; the Android UI is our own code and breaks independently.
 - Platform-specific code goes in `Name.ios.tsx` and `Name.android.tsx`; shared code stays in `Name.tsx`. Metro picks the file for each platform, and `tsconfig.json` sets `moduleSuffixes` so `import … from "./Name"` type-checks. Give each pair one shared props type so they can't drift. Example: `src/chrome/StartToolbar.ios.tsx` / `StartToolbar.android.tsx`.
 - Never import `@expo/ui/swift-ui` outside a `.ios.tsx` file.
 
@@ -67,6 +67,19 @@ Writing e2e tests:
 - SwiftUI buttons get their handler through `useStableCallback` (`src/chrome`): a handler that changes while a page loads can drop a tap.
 
 The CLI does the same outside MCP: `argent run <tool> --udid <id> ...` (`argent tools` lists them).
+
+## Testing efficiently
+
+A full e2e round on both devices takes about 15–20 minutes; debugging one test can eat an hour. Spend device time where it finds bugs.
+
+- Batch: build several changes, checking each with `pnpm typecheck` and `pnpm test`, then run the e2e tests once for the batch. Don't run devices after every edit.
+- Run only the tests the batch touches while fixing; run the whole suite once, at the end of the batch, on iOS and Android in parallel (each platform has its own device, so neither waits).
+- One passing run per test is enough. Rerun a test only when it failed, or when it's new and you suspect it's flaky.
+- Give a failing test at most two fix attempts. If it still fails, stop: record the test, the failure and your best guess in the plan's known gaps, and move on.
+- Make tests depend on Bay, not on live sites: use testIDs, pages in `.argent/pages/`, or `data:` URLs. Text on someone else's page changes and fails tests that prove nothing about Bay.
+- Rebuild a dev client only after native changes (`modules/`, config plugins, `app.json`); JavaScript reaches both apps through Metro.
+- Run tests through Argent's MCP runner (`e2e-execute`), one file at a time while fixing; the `pnpm e2e` CLI has failed tests that pass there.
+- Things simulators can't check (Face ID, the lock screen, real sign-ins, AutoFill) go on a list for the person with the phones; don't fake them.
 
 ## Design reference
 
