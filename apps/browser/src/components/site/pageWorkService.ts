@@ -21,6 +21,7 @@ import { create } from "zustand";
 import * as v from "valibot";
 import type { Operation } from "../../effect/errors";
 import { useBrowser } from "../../store/browserStore";
+import { changedIds } from "../../store/recordDiff";
 import { isIncognitoSpace } from "../../store/model";
 import { wantsPage } from "../../lib/tabNavigation";
 import { webviews } from "../../lib/webviews";
@@ -171,9 +172,12 @@ export class PageWorkEngine extends Context.Service<
     readonly translateBlocks: (source: string, target: string, blocks: string[][]) => Effect.Effect<(string[] | null)[], PageWorkFailure>;
     /** Asks the user a question the app cannot answer itself. */
     readonly ask: (question: PageQuestion) => Effect.Effect<boolean, PageWorkFailure>;
+    /** Whether the Mac can translate at all. */
+    readonly available: () => Effect.Effect<boolean>;
   }
 >()("bay/PageWorkEngine") {
   static readonly layer = Layer.succeed(PageWorkEngine)({
+    available: () => Effect.sync(() => !!desktop.translation),
     view: (tabId) =>
       Effect.suspend(() => {
         const handle = webviews.get(tabId);
@@ -305,6 +309,8 @@ export class PageWorkService extends Context.Service<
     readonly unsavedWork: (tabId: string) => Effect.Effect<boolean>;
     /** Whether the page may move to another engine, asking the user when it holds work. */
     readonly mayLeavePage: (tabId: string, question: PageQuestion) => Effect.Effect<boolean>;
+    /** Works out each page's language once it has loaded, and forgets the tabs that closed. Once, in the app's scope. */
+    readonly start: Effect.Effect<void>;
   }
 >()("bay/PageWorkService") {
   static readonly layer = Layer.effect(
@@ -637,7 +643,36 @@ export class PageWorkService extends Context.Service<
           return yield* Effect.succeed(answer);
         });
 
-      return PageWorkService.of({ translate, revert, detect, languages, unsavedWork, mayLeavePage });
+      let started = false;
+
+      const start = Effect.gen(function* () {
+        if (started || !(yield* engine.available())) return;
+
+        started = true;
+
+        const stop = useBrowser.subscribe((s, prev) => {
+          for (const id of changedIds(s.live, prev.live)) {
+            // A page that finished loading is read for its language, in the app's scope.
+            if (s.live[id] && prev.live[id]?.isLoading && !s.live[id].isLoading) void Effect.runFork(Effect.forkIn(detect(id), scope));
+          }
+
+          if (s.tabs === prev.tabs) return;
+
+          const gone = Object.keys(useTranslate.getState()).filter((id) => !s.tabs[id]);
+
+          if (gone.length) useTranslate.setState(Object.fromEntries(gone.map((id) => [id, undefined])));
+        });
+
+        yield* Scope.addFinalizer(
+          scope,
+          Effect.sync(() => {
+            stop();
+            started = false;
+          }),
+        );
+      });
+
+      return PageWorkService.of({ translate, revert, detect, languages, unsavedWork, mayLeavePage, start });
     }),
   );
 }

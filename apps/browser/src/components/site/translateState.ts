@@ -6,10 +6,9 @@ import { translation } from "@bay/desktop";
 import * as Effect from "effect/Effect";
 import { runDesktop } from "../../effect/runtime";
 import { useBrowser } from "../../store/browserStore";
-import { changedIds } from "../../store/recordDiff";
 import { isIncognitoSpace } from "../../store/model";
 import { hideKeyedToast, showToast } from "../split/splitActions";
-import { PageWorkService, baseLanguage, forgetSource, hostOf, translateStateOf, useTranslate, type PageWork } from "./pageWorkService";
+import { PageWorkService, baseLanguage, forgetSource, hostOf, translateStateOf, type PageWork } from "./pageWorkService";
 import { TRANSLATE_PROGRESS_AFTER_MS, TRANSLATE_PROGRESS_TOAST } from "./constants";
 
 export { baseLanguage, isNeverTranslated, translateStateOf, useTranslate, useTranslateState } from "./pageWorkService";
@@ -127,17 +126,7 @@ function detect(tabId: string) {
 
 // MARK: Wiring
 
+/** Starts reading each page's language once it loads: the page work does it, in the app's scope. */
 export function startTranslate() {
-  if (!translation) return () => {};
-
-  return useBrowser.subscribe((s, prev) => {
-    for (const id of changedIds(s.live, prev.live)) {
-      if (s.live[id] && prev.live[id]?.isLoading && !s.live[id].isLoading) void detect(id);
-    }
-
-    if (s.tabs === prev.tabs) return;
-    const gone = Object.keys(useTranslate.getState()).filter((id) => !s.tabs[id]);
-
-    if (gone.length) useTranslate.setState(Object.fromEntries(gone.map((id) => [id, undefined])));
-  });
+  void withWork((work) => work.start);
 }

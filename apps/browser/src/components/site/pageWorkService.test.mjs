@@ -22,7 +22,7 @@ const question = {
 // A page that answers what the service asks, and keeps what it was told.
 const fakePage = (lab) => ({
   identity: () => Effect.succeed(lab.token),
-  sample: () => Effect.succeed({ lang: "fr", text: lab.text, active: lab.token !== null }),
+  sample: () => Effect.sync(() => (lab.samples++, { lang: "fr", text: lab.text, active: lab.token !== null })),
   start: (token) =>
     Effect.sync(() => {
       lab.token = token;
@@ -54,6 +54,7 @@ const fakePage = (lab) => ({
 
 const fakeEngine = (lab) =>
   Layer.succeed(PageWorkEngine)({
+    available: () => Effect.succeed(true),
     view: () => Effect.succeed(fakePage(lab)),
     userLanguages: () => Effect.succeed(["en-US", "fr-FR"]),
     languageName: (language) => Effect.succeed(language),
@@ -90,6 +91,7 @@ const withWork = async (use) => {
     reached: null,
     questions: [],
     reverts: 0,
+    samples: 0,
     started: [],
     text: "Bonjour, le monde. ".repeat(4),
     token: null,
@@ -225,5 +227,22 @@ test("the engine switch goes ahead without asking when the page holds nothing", 
 
     assert.equal(allowed, true);
     assert.deepEqual(lab.questions, [], "there was nothing to ask about");
+  });
+});
+
+test("a page that finished loading is read for its language, and a closed tab's state goes", async () => {
+  await withWork(async ({ lab, work }) => {
+    await work((service) => service.start);
+    await work((service) => service.start);
+
+    useBrowser.setState((s) => ({ live: { ...s.live, [TAB]: { isLoading: true } } }));
+    useBrowser.setState((s) => ({ live: { ...s.live, [TAB]: { isLoading: false } } }));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(lab.samples, 1, "the page is read once it loaded, by one watch");
+
+    useBrowser.setState({ tabs: {} });
+    assert.equal(useTranslate.getState()[TAB], undefined, "the closed tab's state is forgotten");
   });
 });
