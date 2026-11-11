@@ -26,11 +26,14 @@ import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { tick } from "@/chrome/haptics";
+import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { crashReportText, crashReports } from "@/crashReports";
+import { t as translate, useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
 import { ImportPanel } from "@/panels/ImportPanel";
+import { useSheetOpen } from "@/panels/openSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { parseImagePress } from "@/pagescripts/images";
@@ -80,6 +83,10 @@ const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLo
 export function BrowserScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const muted = useThemeColor("muted");
+  const t = useT();
+  // An open sheet is modal for screen readers: the browser behind it steps out of their way. Toasts stay, since they
+  // answer what was done in the sheet.
+  const behindSheet = hiddenFromScreenReaders(useSheetOpen());
 
   const {
     ready,
@@ -236,7 +243,7 @@ export function BrowserScreen(): JSX.Element {
   }, [ready]);
 
   async function authenticate(): Promise<boolean> {
-    const result = await LocalAuthentication.authenticateAsync({ promptMessage: "Unlock private tabs" });
+    const result = await LocalAuthentication.authenticateAsync({ promptMessage: t("lock.prompt") });
 
     return result.success;
   }
@@ -252,7 +259,7 @@ export function BrowserScreen(): JSX.Element {
   }, [mountedKey, barHidden]);
 
   const showToast = toast.show;
-  const fail = useCallback((_tabId: string, cause: unknown) => showToast(cause instanceof Error ? cause.message : "Something went wrong."), [showToast]);
+  const fail = useCallback((_tabId: string, cause: unknown) => showToast(cause instanceof Error ? cause.message : t("toast.somethingWrong")), [showToast, t]);
 
   const downloads = useDownloads((message) => toast.show(message));
   // The download toast rides on the bottom bar, so a download started (or finished) while the bar is scrolled away
@@ -451,12 +458,12 @@ export function BrowserScreen(): JSX.Element {
 
   function copy(url: string): void {
     // Android 13+ confirms copies itself with the system clipboard preview.
-    void Clipboard.setStringAsync(cleanUrl(url)).then(() => Platform.OS === "ios" && toast.show("Link copied"));
+    void Clipboard.setStringAsync(cleanUrl(url)).then(() => Platform.OS === "ios" && toast.show(t("toast.linkCopied")));
   }
 
   // What went wrong since Bay was opened (B8): sent on, so it can be looked at.
   async function reportProblem(): Promise<void> {
-    await Share.share({ message: crashReportText() });
+    await Share.share({ message: crashReports().length ? crashReportText() : t("crash.none") });
   }
 
   // Closing a tab archives it, so it can come straight back.
@@ -465,7 +472,7 @@ export function BrowserScreen(): JSX.Element {
     closeTab(id);
 
     if (!tab?.url || tab.private) return;
-    toast.show("Tab archived", { label: "Undo", onPress: () => void restoreTab(id) });
+    toast.show(t("toast.tabArchived"), { label: t("toast.undo"), onPress: () => void restoreTab(id) });
   }
 
   function importLinks(tabs: readonly ImportedTab[], target: "tabs" | "archive"): void {
@@ -473,12 +480,14 @@ export function BrowserScreen(): JSX.Element {
     setPanel(null);
 
     if (!count) {
-      toast.show("Those links are already here");
+      toast.show(t("toast.linksAlreadyHere"));
 
       return;
     }
 
-    toast.show(target === "tabs" ? `Opened ${count} ${count === 1 ? "tab" : "tabs"}` : `Archived ${count} ${count === 1 ? "tab" : "tabs"}`);
+    const message = target === "tabs" ? (count === 1 ? "toast.openedTab" : "toast.openedTabs") : count === 1 ? "toast.archivedTab" : "toast.archivedTabs";
+
+    toast.show(t(message, { count }));
   }
 
   function onPageRequest(tabId: string, request: PageRequest): void {
@@ -534,8 +543,8 @@ export function BrowserScreen(): JSX.Element {
     setOverlay("none");
 
     if (!archived.length) return;
-    toast.show(archived.length === 1 ? "1 tab archived" : `${archived.length} tabs archived`, {
-      label: "Undo",
+    toast.show(archived.length === 1 ? t("toast.oneTabArchived") : t("toast.tabsArchived", { count: archived.length }), {
+      label: t("toast.undo"),
       onPress: () => {
         for (const id of archived) restoreTab(id);
 
@@ -646,150 +655,164 @@ export function BrowserScreen(): JSX.Element {
 
   return (
     <View className="flex-1 bg-background">
-      <Wallpaper id={data.preferences.wallpaper} photo={data.preferences.wallpaperPhoto} />
-      {ready ? (
-        <View style={[StyleSheet.absoluteFill, { top: insets.top }]} pointerEvents="box-none">
-          {mounted.map((id) => {
-            const tab = data.tabs.find((entry) => entry.id === id)!;
-            const visible = showPages && id === active.id && hasPage;
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none" collapsable={false} {...behindSheet}>
+        <Wallpaper id={data.preferences.wallpaper} photo={data.preferences.wallpaperPhoto} />
+        {ready ? (
+          <View style={[StyleSheet.absoluteFill, { top: insets.top }]} pointerEvents="box-none">
+            {mounted.map((id) => {
+              const tab = data.tabs.find((entry) => entry.id === id)!;
+              const visible = showPages && id === active.id && hasPage;
 
-            return (
-              <TabPage
-                key={id}
-                tab={tab}
-                visible={visible}
-                // The active tab stays live behind the switcher and search so its snapshot and return are instant.
-                suspended={id !== active.id && !playing.includes(id)}
-                hiddenSelectors={[...reading.selectorsFor(tab), ...youtubeSelectors(data.preferences.youtube, hostOf(tab.url))]}
-                // A site's own zoom (B12) takes over the global one.
-                tweaks={{
-                  textSize: siteSettingFor(data.preferences.siteSettings, tab.url).textSize ?? data.preferences.textSize,
-                  skipAmp: data.preferences.skipAmp,
-                }}
-                desktopMode={siteSettingFor(data.preferences.siteSettings, tab.url).desktopMode}
-                pullToRefresh={data.preferences.pullToRefresh}
-                pageColor={pageColors[id] ?? null}
-                onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
-                onPageMessage={(message) => {
-                  if (!media.pageMessage(id, message) && id === active.id) {
-                    // A bare image's long press (B13), reported by the page on iOS; Android's hit test covers it natively.
-                    const press = Platform.OS === "ios" ? parseImagePress(message) : null;
+              return (
+                <TabPage
+                  key={id}
+                  tab={tab}
+                  visible={visible}
+                  // The active tab stays live behind the switcher and search so its snapshot and return are instant.
+                  suspended={id !== active.id && !playing.includes(id)}
+                  hiddenSelectors={[...reading.selectorsFor(tab), ...youtubeSelectors(data.preferences.youtube, hostOf(tab.url))]}
+                  // A site's own zoom (B12) takes over the global one.
+                  tweaks={{
+                    textSize: siteSettingFor(data.preferences.siteSettings, tab.url).textSize ?? data.preferences.textSize,
+                    skipAmp: data.preferences.skipAmp,
+                  }}
+                  desktopMode={siteSettingFor(data.preferences.siteSettings, tab.url).desktopMode}
+                  pullToRefresh={data.preferences.pullToRefresh}
+                  pageColor={pageColors[id] ?? null}
+                  onPageColor={(color) => setPageColors((previous) => (String(previous[id]) === String(color) ? previous : { ...previous, [id]: color }))}
+                  onPageMessage={(message) => {
+                    if (!media.pageMessage(id, message) && id === active.id) {
+                      // A bare image's long press (B13), reported by the page on iOS; Android's hit test covers it natively.
+                      const press = Platform.OS === "ios" ? parseImagePress(message) : null;
 
-                    if (press) {
+                      if (press) {
+                        tick();
+                        setLink(press);
+                      } else reading.pageMessage(message);
+                    }
+                  }}
+                  register={(view) => (view ? views.set(id, view) : views.delete(id))}
+                  onNavigation={(state) => onNavigation(id, state)}
+                  onError={({ url, message }) => {
+                    failed.add(id);
+                    setError({ tabId: id, url: url || tab.url, message });
+                  }}
+                  onScroll={(scroll) => onScroll(id, scroll)}
+                  onLinkPress={(press) => {
+                    if (id === active.id) {
                       tick();
                       setLink(press);
-                    } else reading.pageMessage(message);
+                    }
+                  }}
+                  onPageRequest={(request) => onPageRequest(id, request)}
+                  onNewWindow={(window) => {
+                    // New windows (B19) become a real tab: the opener's own page is untouched, a private opener stays
+                    // private, and the tab opens to the front — the way a popup sign-in takes the screen.
+                    if (isWebURL(window.url)) openTab(window.url, false, Boolean(window.private));
+                  }}
+                  onFullscreenChange={(fullscreen) =>
+                    setFullscreenByTab((previous) => (previous[id] === fullscreen ? previous : { ...previous, [id]: fullscreen }))
                   }
-                }}
-                register={(view) => (view ? views.set(id, view) : views.delete(id))}
-                onNavigation={(state) => onNavigation(id, state)}
-                onError={({ url, message }) => {
-                  failed.add(id);
-                  setError({ tabId: id, url: url || tab.url, message });
-                }}
-                onScroll={(scroll) => onScroll(id, scroll)}
-                onLinkPress={(press) => {
-                  if (id === active.id) {
-                    tick();
-                    setLink(press);
-                  }
-                }}
-                onPageRequest={(request) => onPageRequest(id, request)}
-                onNewWindow={(window) => {
-                  // New windows (B19) become a real tab: the opener's own page is untouched, a private opener stays
-                  // private, and the tab opens to the front — the way a popup sign-in takes the screen.
-                  if (isWebURL(window.url)) openTab(window.url, false, Boolean(window.private));
-                }}
-                onFullscreenChange={(fullscreen) =>
-                  setFullscreenByTab((previous) => (previous[id] === fullscreen ? previous : { ...previous, [id]: fullscreen }))
-                }
-              />
-            );
-          })}
-        </View>
-      ) : null}
-
-      {tabError && hasPage && showPages ? (
-        <View style={[StyleSheet.absoluteFill, { top: insets.top }]}>
-          <PageError
-            url={tabError.url}
-            message={tabError.message}
-            onRetry={() => {
-              setError(null);
-              navigate(active.id, tabError.url);
-            }}
-          />
-        </View>
-      ) : null}
-
-      {hasPage && showPages && !fullscreen ? (
-        <View
-          className="absolute inset-x-0 top-0 bg-background"
-          style={{ height: insets.top, backgroundColor: topColor ? `rgb(${topColor.join(",")})` : undefined }}
-        >
-          {/* Dark icons on a light page, light ones on a dark page. */}
-          {topColor ? <StatusBar style={0.2126 * topColor[0] + 0.7152 * topColor[1] + 0.0722 * topColor[2] > 140 ? "dark" : "light"} /> : null}
-        </View>
-      ) : null}
-
-      {ready && !hasPage && overlay === "none" ? (
-        <Pressable testID="start-screen" accessibilityLabel="Tap to search" style={StyleSheet.absoluteFill} onPress={() => search(false)}>
-          <View className="flex-1 items-center justify-end" style={{ paddingBottom: insets.bottom + BAR_HEIGHT + 40 }}>
-            <View className="mb-8 w-full" style={{ paddingLeft: insets.left, paddingRight: insets.right }}>
-              <StartPage
-                pins={data.pinnedSites}
-                history={data.history}
-                onOpen={(url) => open({ kind: "url", url }, false)}
-                onUnpin={(site) => {
-                  const index = data.pinnedSites.indexOf(site);
-                  tick();
-                  dispatch({ type: "remove-pin", id: site.id });
-                  toast.show("Unpinned", { label: "Undo", onPress: () => dispatch({ type: "add-pin", site, index }) });
-                }}
-              />
-            </View>
-            <Text style={{ color: muted, fontSize: 14 }}>Tap to search</Text>
-            <Text style={{ color: muted, fontSize: 14, marginTop: 2 }}>↓</Text>
+                />
+              );
+            })}
           </View>
-        </Pressable>
-      ) : null}
+        ) : null}
 
-      {overlay === "tabs" ? (
-        <View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, paddingBottom: insets.bottom + BAR_HEIGHT + 16 }]}>
-          <TabSwitcher
-            tabs={switcherTabs}
-            activeTabId={active.id}
-            onPick={pickTab}
-            onClose={archiveTab}
-            onCloseAll={archiveAll}
-            privateLocked={locked}
-            spaces={data.spaces}
-            activeSpaceId={data.activeSpaceId}
-            onSelectSpace={(id) => {
-              if (id !== data.activeSpaceId) {
-                setActiveFolderId(null);
-                selectSpace(id);
-              }
+        {tabError && hasPage && showPages ? (
+          <View style={[StyleSheet.absoluteFill, { top: insets.top }]}>
+            <PageError
+              url={tabError.url}
+              message={tabError.message}
+              onRetry={() => {
+                setError(null);
+                navigate(active.id, tabError.url);
+              }}
+            />
+          </View>
+        ) : null}
+
+        {hasPage && showPages && !fullscreen ? (
+          <View
+            className="absolute inset-x-0 top-0 bg-background"
+            style={{ height: insets.top, backgroundColor: topColor ? `rgb(${topColor.join(",")})` : undefined }}
+          >
+            {/* Dark icons on a light page, light ones on a dark page. */}
+            {topColor ? <StatusBar style={0.2126 * topColor[0] + 0.7152 * topColor[1] + 0.0722 * topColor[2] > 140 ? "dark" : "light"} /> : null}
+          </View>
+        ) : null}
+
+        {ready && !hasPage && overlay === "none" ? (
+          <View style={StyleSheet.absoluteFill}>
+            {/* The whole screen searches. The pins sit beside it rather than inside it: VoiceOver can't reach controls
+              inside another control, so nested in the backdrop they would be lost to it. */}
+            <Pressable
+              testID="start-screen"
+              accessibilityRole="button"
+              accessibilityLabel={t("start.tapToSearch")}
+              style={StyleSheet.absoluteFill}
+              onPress={() => search(false)}
+            />
+            <View className="flex-1 items-center justify-end" style={{ paddingBottom: insets.bottom + BAR_HEIGHT + 40 }} pointerEvents="box-none">
+              <View className="mb-8 w-full" style={{ paddingLeft: insets.left, paddingRight: insets.right }} pointerEvents="box-none">
+                <StartPage
+                  pins={data.pinnedSites}
+                  history={data.history}
+                  onOpen={(url) => open({ kind: "url", url }, false)}
+                  onUnpin={(site) => {
+                    const index = data.pinnedSites.indexOf(site);
+                    tick();
+                    dispatch({ type: "remove-pin", id: site.id });
+                    toast.show(t("toast.unpinned"), { label: t("toast.undo"), onPress: () => dispatch({ type: "add-pin", site, index }) });
+                  }}
+                />
+              </View>
+              {/* The backdrop's label says this; touches pass through to it. */}
+              <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="items-center">
+                <Text style={{ color: muted, fontSize: 14 }}>{t("start.tapToSearch")}</Text>
+                <Text style={{ color: muted, fontSize: 14, marginTop: 2 }}>↓</Text>
+              </View>
+            </View>
+          </View>
+        ) : null}
+
+        {overlay === "tabs" ? (
+          <View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, paddingBottom: insets.bottom + BAR_HEIGHT + 16 }]}>
+            <TabSwitcher
+              tabs={switcherTabs}
+              activeTabId={active.id}
+              onPick={pickTab}
+              onClose={archiveTab}
+              onCloseAll={archiveAll}
+              privateLocked={locked}
+              spaces={data.spaces}
+              activeSpaceId={data.activeSpaceId}
+              onSelectSpace={(id) => {
+                if (id !== data.activeSpaceId) {
+                  setActiveFolderId(null);
+                  selectSpace(id);
+                }
+              }}
+              folders={data.folders.filter((folder) => folder.spaceId === data.activeSpaceId)}
+              activeFolderId={activeFolderId}
+              onSelectFolder={setActiveFolderId}
+            />
+          </View>
+        ) : null}
+
+        {locked && active.private && overlay === "none" ? (
+          <PrivateLock
+            bottomInset={insets.bottom + BAR_HEIGHT}
+            onUnlock={() => {
+              void authenticate().then((success) => success && setLocked(false));
             }}
-            folders={data.folders.filter((folder) => folder.spaceId === data.activeSpaceId)}
-            activeFolderId={activeFolderId}
-            onSelectFolder={setActiveFolderId}
           />
-        </View>
-      ) : null}
+        ) : null}
 
-      {locked && active.private && overlay === "none" ? (
-        <PrivateLock
-          bottomInset={insets.bottom + BAR_HEIGHT}
-          onUnlock={() => {
-            void authenticate().then((success) => success && setLocked(false));
-          }}
-        />
-      ) : null}
-
-      {find.open && overlay === "none" && hasPage ? (
-        <FindBar query={find.query} count={find.count} index={find.index} onChange={find.change} onStep={find.step} onDone={find.done} />
-      ) : null}
+        {find.open && overlay === "none" && hasPage ? (
+          <FindBar query={find.query} count={find.count} index={find.index} onChange={find.change} onStep={find.step} onDone={find.done} />
+        ) : null}
+      </View>
 
       {overlay !== "search" && !find.open && !fullscreen ? (
         <Animated.View
@@ -799,20 +822,22 @@ export function BrowserScreen(): JSX.Element {
         >
           {hasPage && showPages && !(locked && active.private) ? reading.controls : null}
           {player ? (
-            <MiniPlayer
-              title={player.title}
-              site={hostOf(player.tab.url)}
-              playing={player.playing}
-              video={player.video}
-              onOpen={() => {
-                setOverlay("none");
-                activate(player.tab.id);
-              }}
-              onToggle={() => media.toggle(player.tab.id)}
-              onSeek={(seconds) => media.seek(player.tab.id, seconds)}
-              onPictureInPicture={() => media.pictureInPicture(player.tab.id)}
-              onClose={() => media.stop(player.tab.id)}
-            />
+            <View collapsable={false} {...behindSheet}>
+              <MiniPlayer
+                title={player.title}
+                site={hostOf(player.tab.url)}
+                playing={player.playing}
+                video={player.video}
+                onOpen={() => {
+                  setOverlay("none");
+                  activate(player.tab.id);
+                }}
+                onToggle={() => media.toggle(player.tab.id)}
+                onSeek={(seconds) => media.seek(player.tab.id, seconds)}
+                onPictureInPicture={() => media.pictureInPicture(player.tab.id)}
+                onClose={() => media.stop(player.tab.id)}
+              />
+            </View>
           ) : null}
           {downloads.toast && !(locked && downloads.toast.private) ? (
             <DownloadToast
@@ -826,46 +851,53 @@ export function BrowserScreen(): JSX.Element {
             />
           ) : null}
           {toast.toast ? <Toast key={toast.toast.key} text={toast.toast.text} action={toast.toast.action} onDone={toast.dismiss} /> : null}
-          {hasPage && showPages ? (
-            <TabSwipe onSwipe={swipeTabs} hasPrevious={activeIndex > 0} hasNext={activeIndex < data.tabs.length - 1} contentKey={`${active.id} ${host ?? ""}`}>
-              {(capsuleStyle) => (
-                <BrowserBar
-                  capsuleStyle={capsuleStyle}
-                  mode="page"
-                  site={locked && active.private ? undefined : host}
-                  insecure={active.url.startsWith("http:")}
-                  privately={Boolean(active.private)}
-                  // The capsule's edge carries the load's progress (A6).
-                  progress={page.progress}
-                  loading={page.isLoading}
-                  onTabs={() => showTabs()}
-                  onTabsLongPress={() => {
-                    tick();
-                    setPanel("tabs");
-                  }}
-                  onTabsSwipeUp={lastOpenTab}
-                  tabCount={data.tabs.length}
-                  onSearch={() => search(false)}
-                  onMore={() => {
-                    if (!(locked && active.private)) setPanel("page");
-                  }}
-                  onMoreLongPress={() => {
-                    if (locked && active.private) return;
-                    tick();
-                    void share(active.url);
-                  }}
-                />
-              )}
-            </TabSwipe>
-          ) : (
-            <BrowserBar
-              mode="start"
-              newTab={overlay === "tabs"}
-              onArchive={() => setPanel("archive")}
-              onSearch={() => search(overlay === "tabs")}
-              onSettings={() => setPanel("settings")}
-            />
-          )}
+          <View collapsable={false} {...behindSheet}>
+            {hasPage && showPages ? (
+              <TabSwipe
+                onSwipe={swipeTabs}
+                hasPrevious={activeIndex > 0}
+                hasNext={activeIndex < data.tabs.length - 1}
+                contentKey={`${active.id} ${host ?? ""}`}
+              >
+                {(capsuleStyle) => (
+                  <BrowserBar
+                    capsuleStyle={capsuleStyle}
+                    mode="page"
+                    site={locked && active.private ? undefined : host}
+                    insecure={active.url.startsWith("http:")}
+                    privately={Boolean(active.private)}
+                    // The capsule's edge carries the load's progress (A6).
+                    progress={page.progress}
+                    loading={page.isLoading}
+                    onTabs={() => showTabs()}
+                    onTabsLongPress={() => {
+                      tick();
+                      setPanel("tabs");
+                    }}
+                    onTabsSwipeUp={lastOpenTab}
+                    tabCount={data.tabs.length}
+                    onSearch={() => search(false)}
+                    onMore={() => {
+                      if (!(locked && active.private)) setPanel("page");
+                    }}
+                    onMoreLongPress={() => {
+                      if (locked && active.private) return;
+                      tick();
+                      void share(active.url);
+                    }}
+                  />
+                )}
+              </TabSwipe>
+            ) : (
+              <BrowserBar
+                mode="start"
+                newTab={overlay === "tabs"}
+                onArchive={() => setPanel("archive")}
+                onSearch={() => search(overlay === "tabs")}
+                onSettings={() => setPanel("settings")}
+              />
+            )}
+          </View>
         </Animated.View>
       ) : null}
 
@@ -917,7 +949,7 @@ export function BrowserScreen(): JSX.Element {
           tick();
           const pinned = data.pinnedSites.some((site) => site.url === active.url);
           dispatch({ type: "pin-site", tabId: active.id, pinId: newId() });
-          toast.show(pinned ? "Unpinned" : "Pinned");
+          toast.show(pinned ? t("toast.unpinned") : t("toast.pinned"));
         }}
         onShare={() => void share(active.url)}
         onCopy={() => copy(active.url)}
@@ -996,7 +1028,7 @@ export function BrowserScreen(): JSX.Element {
         archiveAfterDays={data.preferences.archiveAfterDays}
         onArchiveAfterDaysChange={(days) => dispatch({ type: "archive-days", days })}
         blockContent={blockContent}
-        blockerDetail={blockerDetail(blockerStatus)}
+        blockerDetail={blockerDetail(blockerStatus, t)}
         onBlockContentChange={(enabled) => dispatch({ type: "block-content", enabled })}
         privateAvailable={privateBrowsingSupported}
         lockPrivateTabs={lockPrivateTabs}
@@ -1057,8 +1089,8 @@ export function BrowserScreen(): JSX.Element {
         onSave={() => {
           if (!link) return;
           void saveImage(link.url)
-            .then(() => toast.show(Platform.OS === "ios" ? "Saved to your photo library" : "Saved in Downloads"))
-            .catch(() => toast.show("The image couldn't be saved"));
+            .then(() => toast.show(Platform.OS === "ios" ? t("toast.savedToPhotos") : t("toast.savedToDownloads")))
+            .catch(() => toast.show(t("toast.imageNotSaved")));
         }}
         onResolveDestination={() => resolveDestination(link?.url ?? "")}
       />
@@ -1082,16 +1114,16 @@ export function BrowserScreen(): JSX.Element {
   );
 }
 
-function blockerDetail(status: BlockerStatus): string {
+function blockerDetail(status: BlockerStatus, t: Translate): string {
   switch (status.state) {
     case "ready":
-      return `uBlock Origin's lists · ${status.lists} lists active, updated daily`;
+      return t("settings.blocker.ready", { lists: status.lists });
     case "loading":
-      return "Downloading filter lists…";
+      return t("settings.blocker.loading");
     case "failed":
-      return "Filter lists couldn't load. Bay will try again.";
+      return t("settings.blocker.failed");
     case "off":
-      return "uBlock Origin's lists, updated daily";
+      return t("settings.blocker.off");
   }
 }
 
@@ -1115,7 +1147,7 @@ async function resolveDestination(url: string): Promise<string> {
 
     return response.url || url;
   } catch {
-    throw new Error("Couldn't reach this link. Check your connection and try again.");
+    throw new Error(translate("linkMenu.unreachable"));
   } finally {
     clearTimeout(timeout);
   }

@@ -49,7 +49,15 @@ export function LoadProgress({ progress, loading }: LoadProgressProps): JSX.Elem
 
   if (!visible) return null;
 
-  return <Animated.View testID="page-progress" style={[styles.line, { backgroundColor: accent }, style]} />;
+  // Only a sign that something is happening, drawn under the capsule, so readers skip it.
+  return (
+    <Animated.View
+      testID="page-progress"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.line, { backgroundColor: accent }, style]}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

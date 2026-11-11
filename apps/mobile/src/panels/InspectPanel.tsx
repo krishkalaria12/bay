@@ -2,6 +2,7 @@ import { Typography } from "heroui-native";
 import type { JSX } from "react";
 import { Platform, Pressable, View } from "react-native";
 
+import { useT, type Translate } from "@/i18n";
 import type { InspectedElement, InspectedFont } from "@/pagescripts/inspect";
 
 import { PanelSheet, SectionLabel } from "./PanelSheet";
@@ -20,13 +21,14 @@ export interface InspectPanelProps {
 /** What the picked element is: its font first (the font identifier), then size, colours and the CSS that matches. */
 export function InspectPanel({ element, title, onClose, onParent, onCopy }: InspectPanelProps): JSX.Element {
   const font = element?.font;
+  const t = useT();
 
   return (
-    <PanelSheet visible={element !== null} onClose={onClose} title="Inspect" testID="inspect-panel" height="62%">
+    <PanelSheet visible={element !== null} onClose={onClose} title={t("inspect.title")} testID="inspect-panel" height="62%">
       {element && font ? (
         <>
           {title ? (
-            <Typography testID="inspect-title" numberOfLines={2} className="mb-1 text-lg font-semibold">
+            <Typography testID="inspect-title" numberOfLines={2} accessibilityRole="header" className="mb-1 text-lg font-semibold">
               {title}
             </Typography>
           ) : null}
@@ -44,37 +46,37 @@ export function InspectPanel({ element, title, onClose, onParent, onCopy }: Insp
             </Typography>
           </View>
           <View className="mt-3 flex-row gap-2">
-            <Action id="inspect-parent" label="Parent" onPress={onParent} />
-            <Action id="inspect-copy" label="Copy for agent" onPress={onCopy} />
+            <Action id="inspect-parent" label={t("inspect.parent")} onPress={onParent} />
+            <Action id="inspect-copy" label={t("inspect.copy")} onPress={onCopy} />
           </View>
 
-          <SectionLabel>Font</SectionLabel>
+          <SectionLabel>{t("inspect.font")}</SectionLabel>
           <Typography testID="inspect-font" className="text-lg font-semibold">
             {font.rendered}
           </Typography>
           <Typography testID="inspect-font-kind" className="text-sm text-muted">
-            {fontKind(font)}
+            {fontKind(font, t)}
           </Typography>
-          <Row label="Size" value={`${font.size} / ${font.lineHeight}`} />
-          <Row label="Weight" value={font.style === "normal" ? font.weight : `${font.weight} ${font.style}`} />
-          {font.letterSpacing !== "normal" ? <Row label="Spacing" value={font.letterSpacing} /> : null}
-          <Row label="Stack" value={font.stack.join(", ")} />
-          {font.source ? <Row label="File" value={font.source} /> : null}
+          <Row label={t("inspect.size")} value={`${font.size} / ${font.lineHeight}`} />
+          <Row label={t("inspect.weight")} value={font.style === "normal" ? font.weight : `${font.weight} ${font.style}`} />
+          {font.letterSpacing !== "normal" ? <Row label={t("inspect.spacing")} value={font.letterSpacing} /> : null}
+          <Row label={t("inspect.stack")} value={font.stack.join(", ")} />
+          {font.source ? <Row label={t("inspect.file")} value={font.source} /> : null}
 
-          <SectionLabel>Colour</SectionLabel>
+          <SectionLabel>{t("inspect.colour")}</SectionLabel>
           <View className="flex-row items-center gap-2">
             <Swatch color={element.swatches.color} />
             <Typography testID="inspect-color" style={{ fontFamily: MONOSPACE }} className="text-sm">
               {element.color}
             </Typography>
-            <Typography className="text-sm text-muted">on</Typography>
+            <Typography className="text-sm text-muted">{t("inspect.on")}</Typography>
             <Swatch color={element.swatches.background} />
             <Typography style={{ fontFamily: MONOSPACE }} className="text-sm">
               {element.background}
             </Typography>
           </View>
 
-          {element.rules.length ? <SectionLabel>Matched CSS</SectionLabel> : null}
+          {element.rules.length ? <SectionLabel>{t("inspect.css")}</SectionLabel> : null}
           {element.rules.map((rule, index) => (
             <View key={`${rule.selector}-${index}`} className="mb-2 rounded-xl bg-default p-3">
               <View className="flex-row justify-between gap-2">
@@ -122,11 +124,11 @@ const GENERIC_FAMILIES = new Set([
 ]);
 
 /** Where the rendered font comes from, and why it isn't the first choice when it isn't. */
-function fontKind(font: InspectedFont): string {
-  const kind = font.web ? "Web font" : GENERIC_FAMILIES.has(font.rendered.toLowerCase()) ? "The system's default font" : "Installed font";
+function fontKind(font: InspectedFont, t: Translate): string {
+  const kind = font.web ? t("inspect.webFont") : GENERIC_FAMILIES.has(font.rendered.toLowerCase()) ? t("inspect.systemFont") : t("inspect.installedFont");
   const first = font.stack[0];
 
-  return first && first !== font.rendered ? `${kind}; ${first} isn't available` : kind;
+  return first && first !== font.rendered ? t("inspect.fontMissing", { kind, first }) : kind;
 }
 
 function Action({ id, label, onPress }: { id: string; label: string; onPress: () => void }) {
@@ -154,6 +156,14 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+// The colour's value is written beside it, so readers skip the swatch.
 function Swatch({ color }: { color: string }) {
-  return <View className="h-4 w-4 rounded border border-black/15 dark:border-white/20" style={{ backgroundColor: color }} />;
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      className="h-4 w-4 rounded border border-black/15 dark:border-white/20"
+      style={{ backgroundColor: color }}
+    />
+  );
 }

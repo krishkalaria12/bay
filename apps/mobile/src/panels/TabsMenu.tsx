@@ -4,6 +4,8 @@ import { useState, type JSX } from "react";
 import { View } from "react-native";
 
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { useT } from "@/i18n";
+import { spaceName } from "@/store/spaceName";
 import type { BrowserFolder, BrowserSpace } from "@/store/types";
 
 export interface TabsMenuProps {
@@ -40,6 +42,7 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
   const [page, setPage] = useState<MenuPage>("main");
   const [name, setName] = useState("");
   const foreground = useThemeColor("foreground");
+  const t = useT();
 
   function act(action: () => void): void {
     props.onClose();
@@ -48,16 +51,21 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
   }
 
   const activeSpace = props.spaces.find((space) => space.id === props.activeSpaceId) ?? props.spaces[0];
+  const activeSpaceName = activeSpace ? spaceName(activeSpace, t) : t("space.unnamed");
   const folders = props.folders;
 
   // A rename or a new folder: one input row and a done row, inside this same sheet.
   if (page === "renameSpace" || page === "renameFolder" || page === "newFolder") {
+    const folderName = folders.find((folder) => folder.id === props.activeFolderId)?.name;
+
     const title =
       page === "renameSpace"
-        ? `Rename ${activeSpace?.name ?? "space"}`
+        ? t("tabsMenu.rename", { name: activeSpaceName })
         : page === "newFolder"
-          ? "New folder"
-          : `Rename ${folders.find((folder) => folder.id === props.activeFolderId)?.name ?? "folder"}`;
+          ? t("tabsMenu.newFolderTitle")
+          : folderName
+            ? t("tabsMenu.rename", { name: folderName })
+            : t("tabsMenu.renameFolder");
 
     return (
       <PanelSheet visible={props.visible} onClose={props.onClose} title={title} testID="tabs-menu" height="45%">
@@ -81,28 +89,28 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
             style={{ flex: 1, color: foreground, fontSize: 16, paddingVertical: 10 }}
           />
         </View>
-        <ActionRow testID={`tabs-menu-name-save`} label="Done" onPress={() => setPage("main")} />
+        <ActionRow testID={`tabs-menu-name-save`} label={t("tabsMenu.done")} onPress={() => setPage("main")} />
       </PanelSheet>
     );
   }
 
   if (page === "move") {
     return (
-      <PanelSheet visible={props.visible} onClose={props.onClose} title="Move tab" testID="tabs-menu" height="45%">
-        <ActionRow testID="tabs-menu-move-back" label="Back to Tabs" onPress={() => setPage("main")} />
-        <SectionLabel>Spaces</SectionLabel>
+      <PanelSheet visible={props.visible} onClose={props.onClose} title={t("tabsMenu.moveTab")} testID="tabs-menu" height="45%">
+        <ActionRow testID="tabs-menu-move-back" label={t("tabsMenu.backToTabs")} onPress={() => setPage("main")} />
+        <SectionLabel>{t("tabsMenu.spaces")}</SectionLabel>
         {props.spaces.map((space) => (
           <ActionRow
             key={space.id}
             testID={`tabs-menu-move-space-${space.id}`}
-            label={space.name}
+            label={spaceName(space, t)}
             selected={space.id === props.activeSpaceId}
             onPress={() => act(() => props.onMoveTab(space.id, null))}
           />
         ))}
         {folders.length ? (
           <>
-            <SectionLabel>Folders</SectionLabel>
+            <SectionLabel>{t("tabsMenu.folders")}</SectionLabel>
             {folders.map((folder) => (
               <ActionRow
                 key={folder.id}
@@ -119,37 +127,37 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
   }
 
   return (
-    <PanelSheet visible={props.visible} onClose={props.onClose} title="Tabs" testID="tabs-menu" height="45%">
-      <ActionRow testID="tabs-menu-new" icon="add" label="New tab" onPress={() => act(props.onNewTab)} />
+    <PanelSheet visible={props.visible} onClose={props.onClose} title={t("tabsMenu.title")} testID="tabs-menu" height="45%">
+      <ActionRow testID="tabs-menu-new" icon="add" label={t("tabsMenu.newTab")} onPress={() => act(props.onNewTab)} />
       {props.privateAvailable ? (
-        <ActionRow testID="tabs-menu-private" icon="private" label="New private tab" onPress={() => act(props.onNewPrivateTab)} />
+        <ActionRow testID="tabs-menu-private" icon="private" label={t("tabsMenu.newPrivateTab")} onPress={() => act(props.onNewPrivateTab)} />
       ) : null}
-      <ActionRow testID="tabs-menu-archive" icon="archive" label="Archive this tab" onPress={() => act(props.onArchiveTab)} />
+      <ActionRow testID="tabs-menu-archive" icon="archive" label={t("tabsMenu.archiveTab")} onPress={() => act(props.onArchiveTab)} />
       {props.tabCount > 1 ? (
         <ActionRow
           testID="tabs-menu-archive-all"
           icon="archive"
-          label={`Archive all ${props.tabCount} tabs`}
+          label={t("tabsMenu.archiveAll", { count: props.tabCount })}
           destructive
           onPress={() => act(props.onArchiveAll)}
         />
       ) : null}
-      <SectionLabel>Spaces</SectionLabel>
+      <SectionLabel>{t("tabsMenu.spaces")}</SectionLabel>
       {props.spaces.map((space) => (
         <ActionRow
           key={space.id}
           testID={`tabs-menu-space-${space.id}`}
-          label={space.name}
+          label={spaceName(space, t)}
           selected={space.id === props.activeSpaceId}
           onPress={() => act(() => props.onSelectSpace(space.id))}
         />
       ))}
-      <ActionRow testID="tabs-menu-new-space" icon="add" label="New space" onPress={() => act(props.onNewSpace)} />
+      <ActionRow testID="tabs-menu-new-space" icon="add" label={t("tabsMenu.newSpace")} onPress={() => act(props.onNewSpace)} />
       {activeSpace ? (
         <>
           <ActionRow
             testID="tabs-menu-rename-space"
-            label={`Rename ${activeSpace.name}`}
+            label={t("tabsMenu.rename", { name: activeSpaceName })}
             onPress={() => {
               setName(activeSpace.name);
               setPage("renameSpace");
@@ -158,17 +166,17 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
           {props.spaces.length > 1 ? (
             <ActionRow
               testID="tabs-menu-delete-space"
-              label={`Delete ${activeSpace.name}`}
-              detail="Tabs move to the first space"
+              label={t("tabsMenu.deleteSpace", { name: activeSpaceName })}
+              detail={t("tabsMenu.deleteSpace.detail")}
               destructive
               onPress={() => act(() => props.onDeleteSpace(activeSpace.id))}
             />
           ) : null}
         </>
       ) : null}
-      <SectionLabel>Move tab</SectionLabel>
-      <ActionRow testID="tabs-menu-move" label={`Move tab to…`} onPress={() => setPage("move")} />
-      <SectionLabel>Folders</SectionLabel>
+      <SectionLabel>{t("tabsMenu.moveTab")}</SectionLabel>
+      <ActionRow testID="tabs-menu-move" label={t("tabsMenu.moveTabTo")} onPress={() => setPage("move")} />
+      <SectionLabel>{t("tabsMenu.folders")}</SectionLabel>
       {folders.length ? (
         folders.map((folder) => (
           <ActionRow
@@ -180,23 +188,23 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
           />
         ))
       ) : (
-        <ActionRow testID="tabs-menu-folders-empty" label="No folders yet" onPress={() => setPage("newFolder")} />
+        <ActionRow testID="tabs-menu-folders-empty" label={t("tabsMenu.noFolders")} onPress={() => setPage("newFolder")} />
       )}
       <ActionRow
         testID="tabs-menu-new-folder"
         icon="add"
-        label="New folder…"
+        label={t("tabsMenu.newFolder")}
         onPress={() => {
           setName("");
           setPage("newFolder");
         }}
       />
-      {props.activeFolderId ? <ActionRow testID="tabs-menu-rename-folder" label="Rename folder" onPress={() => setPage("renameFolder")} /> : null}
+      {props.activeFolderId ? <ActionRow testID="tabs-menu-rename-folder" label={t("tabsMenu.renameFolder")} onPress={() => setPage("renameFolder")} /> : null}
       {props.activeFolderId ? (
         <ActionRow
           testID="tabs-menu-delete-folder"
-          label="Delete folder"
-          detail="Tabs return to the top level"
+          label={t("tabsMenu.deleteFolder")}
+          detail={t("tabsMenu.deleteFolder.detail")}
           destructive
           onPress={() => act(() => props.onDeleteFolder(props.activeFolderId!))}
         />

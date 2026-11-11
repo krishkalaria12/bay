@@ -35,7 +35,18 @@ export interface PressFeedbackProps extends Omit<PressableProps, "style"> {
  * eases back when it is released. With reduced motion the shrink is left out and only the dim stays, so the change is
  * still there without anything travelling.
  */
-export function PressFeedback({ children, style, layout, entering, exiting, onPressIn, onPressOut, ...rest }: PressFeedbackProps): JSX.Element {
+export function PressFeedback({
+  children,
+  style,
+  layout,
+  entering,
+  exiting,
+  onPressIn,
+  onPressOut,
+  accessibilityRole = "button",
+  accessibilityState,
+  ...rest
+}: PressFeedbackProps): JSX.Element {
   const held = useSharedValue(0);
   const reduced = useReducedMotion();
   // A row that is turned off is already dim; the press only takes it a little further.
@@ -49,6 +60,9 @@ export function PressFeedback({ children, style, layout, entering, exiting, onPr
   return (
     <AnimatedPressable
       {...rest}
+      // Every tile and row is a control, and a turned-off one says so to VoiceOver and TalkBack.
+      accessibilityRole={accessibilityRole}
+      accessibilityState={{ disabled: Boolean(rest.disabled), ...accessibilityState }}
       layout={layout}
       entering={entering}
       exiting={exiting}

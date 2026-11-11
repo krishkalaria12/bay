@@ -17,6 +17,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
+import { useT } from "@/i18n";
+import { spaceName } from "@/store/spaceName";
 import type { BrowserFolder, BrowserSpace, BrowserTab, SpaceColor } from "@/store/types";
 import { SiteIcon } from "./SiteIcon";
 import type { Frame } from "./TabZoom";
@@ -88,6 +90,7 @@ export function TabSwitcher({
   const insets = useSafeAreaInsets();
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
+  const t = useT();
   // Landscape (B10) keeps the cards clear of the notch on either side, and turns them smaller and squarer so the
   // next one still peeks in from the right, like the switcher does in portrait.
   const innerWidth = width - insets.left - insets.right;
@@ -114,17 +117,17 @@ export function TabSwitcher({
         style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
       >
         <Text testID="tab-switcher-count" accessibilityRole="header" style={{ color: foreground, fontSize: 17, fontWeight: "600" }}>
-          {tabs.length === 1 ? "1 tab" : `${tabs.length} tabs`}
+          {tabs.length === 1 ? t("tabs.one") : t("tabs.count", { count: tabs.length })}
         </Text>
         {tabs.length > 1 ? (
           <Pressable
             testID="tab-switcher-archive-all"
             accessibilityRole="button"
-            accessibilityLabel={`Archive all ${tabs.length} tabs`}
+            accessibilityLabel={t("tabs.archiveAllCount", { count: tabs.length })}
             onPress={onCloseAll}
             className="min-h-11 justify-center px-2 active:opacity-60"
           >
-            <Text style={{ color: muted, fontSize: 15, fontWeight: "500" }}>Archive all</Text>
+            <Text style={{ color: muted, fontSize: 15, fontWeight: "500" }}>{t("tabs.archiveAll")}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -138,13 +141,14 @@ export function TabSwitcher({
         <View className="flex-row gap-2">
           {spaces.map((space) => {
             const active = space.id === activeSpaceId;
+            const name = spaceName(space, t);
 
             return (
               <Pressable
                 key={space.id}
                 testID={`space-chip-${space.id}`}
                 accessibilityRole="button"
-                accessibilityLabel={space.name}
+                accessibilityLabel={name}
                 accessibilityState={{ selected: active }}
                 onPress={() => onSelectSpace(space.id)}
                 className="h-10 flex-row items-center gap-2 rounded-full px-4 active:opacity-60"
@@ -155,7 +159,7 @@ export function TabSwitcher({
                 }}
               >
                 <View className="h-2 w-2 rounded-full" style={{ backgroundColor: SPACE_COLORS[space.color] }} />
-                <Text style={{ color: foreground, fontSize: 14, fontWeight: active ? "600" : "500" }}>{space.name}</Text>
+                <Text style={{ color: foreground, fontSize: 14, fontWeight: active ? "600" : "500" }}>{name}</Text>
               </Pressable>
             );
           })}
@@ -173,7 +177,7 @@ export function TabSwitcher({
             <Pressable
               testID="folder-chip-all"
               accessibilityRole="button"
-              accessibilityLabel="All"
+              accessibilityLabel={t("tabs.all")}
               accessibilityState={{ selected: activeFolderId === null }}
               onPress={() => onSelectFolder(null)}
               className="h-9 flex-row items-center rounded-full px-3 active:opacity-60"
@@ -183,7 +187,7 @@ export function TabSwitcher({
                 borderColor: activeFolderId === null ? foreground : muted + "55",
               }}
             >
-              <Text style={{ color: foreground, fontSize: 13, fontWeight: activeFolderId === null ? "600" : "500" }}>All</Text>
+              <Text style={{ color: foreground, fontSize: 13, fontWeight: activeFolderId === null ? "600" : "500" }}>{t("tabs.all")}</Text>
             </Pressable>
             {folders.map((folder) => {
               const active = folder.id === activeFolderId;
@@ -223,6 +227,7 @@ export function TabSwitcher({
             key={tab.id}
             tab={tab}
             index={index}
+            count={tabs.length}
             layout={layout}
             scrollX={scrollX}
             active={tab.id === activeTabId}
@@ -239,6 +244,7 @@ export function TabSwitcher({
 function TabCard({
   tab,
   index,
+  count,
   layout,
   scrollX,
   active,
@@ -248,6 +254,8 @@ function TabCard({
 }: {
   tab: BrowserTab;
   index: number;
+  /** How many cards the stack holds, so a reader hears where this one sits. */
+  count: number;
   layout: Layout;
   scrollX: SharedValue<number>;
   active: boolean;
@@ -257,7 +265,10 @@ function TabCard({
 }): JSX.Element {
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
-  const title = tab.title || (tab.url ? displayUrl(tab.url) : "New tab");
+  const t = useT();
+  // A locked private tab's title stays hidden from screen readers too.
+  const title = hidden ? t("tabs.locked") : tab.title || (tab.url ? displayUrl(tab.url) : t("tabs.newTab"));
+  const position = t(tab.private ? "tabs.privatePosition" : "tabs.position", { index: index + 1, count });
   const { width, cardWidth, cardHeight, step, left } = layout;
   const lift = useSharedValue(0);
   // The card's frame on the screen, so the page can grow out of it (A1).
@@ -310,9 +321,11 @@ function TabCard({
     const scale = interpolate(position, [-3, 0], [0.84, 1], Extrapolation.CLAMP);
 
     // The card sits clear of the notch side and stays put on screen while the scroll view moves its content: add the
-    // scroll back, then place it.
+    // scroll back, then place it. It is laid out where it sits when it is in front and moved from there, because Android
+    // works out what is on screen (for TalkBack and the accessibility tree) from the layout box: a card moved wholly out
+    // of a box at the stack's start went missing, the next card and its close button with it.
     return {
-      transform: [{ translateX: scrollX.value + left + (width - cardWidth) / 2 + x }, { translateY: lift.value }, { scale }],
+      transform: [{ translateX: scrollX.value - index * step + x }, { translateY: lift.value }, { scale }],
       opacity: interpolate(lift.value, [-cardHeight, 0], [0, 1], Extrapolation.CLAMP),
     };
   });
@@ -328,22 +341,34 @@ function TabCard({
 
   return (
     <GestureDetector gesture={pan}>
-      <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: cardWidth, zIndex: index }, style]}>
+      <Animated.View style={[{ position: "absolute", left: index * step + left + (width - cardWidth) / 2, top: 0, width: cardWidth, zIndex: index }, style]}>
         <Animated.View className="mb-2 flex-row items-center gap-2 pl-1" style={header}>
+          {/* The card below says all of this, so readers go from the card to its close button. */}
           {tab.private ? (
-            <View testID={`tab-private-${index}`} className="flex-row items-center gap-1 rounded-full bg-neutral-900 px-2 py-0.5">
+            <View
+              testID={`tab-private-${index}`}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              className="flex-row items-center gap-1 rounded-full bg-neutral-900 px-2 py-0.5"
+            >
               <Icon name="private" color="#F4F4F5" size={14} />
-              <Text style={{ color: "#F4F4F5", fontSize: 11, fontWeight: "600" }}>Private</Text>
+              <Text style={{ color: "#F4F4F5", fontSize: 11, fontWeight: "600" }}>{t("tabs.private")}</Text>
             </View>
           ) : null}
           {tab.url && !hidden ? <SiteIcon url={tab.url} size={18} /> : null}
-          <Text numberOfLines={1} className="flex-1" style={{ color: foreground, fontSize: 13, fontWeight: "500" }}>
-            {hidden ? "Locked" : title}
+          <Text
+            numberOfLines={1}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            className="flex-1"
+            style={{ color: foreground, fontSize: 13, fontWeight: "500" }}
+          >
+            {title}
           </Text>
           <Pressable
             testID={`tab-close-${index}`}
             accessibilityRole="button"
-            accessibilityLabel={`Close ${title}`}
+            accessibilityLabel={t("tabs.closeLabel", { title })}
             hitSlop={6}
             onPress={close}
             className="h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10"
@@ -355,8 +380,10 @@ function TabCard({
           ref={card}
           testID={`tab-card-${index}`}
           accessibilityRole="button"
-          accessibilityLabel={`Open ${title}`}
-          accessibilityHint="Swipe up to close"
+          accessibilityLabel={t("tabs.openLabel", { title })}
+          // Which card this is, read after its title: "Tab 2 of 5".
+          accessibilityValue={{ text: position }}
+          accessibilityHint={t("tabs.swipeToClose")}
           accessibilityState={{ selected: active }}
           onPress={pick}
           className={
@@ -375,7 +402,7 @@ function TabCard({
           ) : (
             <View className="flex-1 items-center justify-center gap-3">
               {tab.url ? <SiteIcon url={tab.url} size={44} /> : null}
-              <Text style={{ color: muted, fontSize: 13 }}>{tab.url ? displayUrl(tab.url) : "New tab"}</Text>
+              <Text style={{ color: muted, fontSize: 13 }}>{tab.url ? displayUrl(tab.url) : t("tabs.newTab")}</Text>
             </View>
           )}
           {/* Cards further back sit in shadow. */}

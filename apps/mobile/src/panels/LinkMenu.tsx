@@ -3,6 +3,7 @@ import { Typography, useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { View } from "react-native";
 
+import { useT } from "@/i18n";
 import { ActionRow, PanelSheet } from "./PanelSheet";
 
 export interface LinkMenuProps {
@@ -26,8 +27,10 @@ export interface LinkMenuProps {
 }
 
 export function LinkMenu(props: LinkMenuProps): JSX.Element {
+  const t = useT();
+
   return (
-    <PanelSheet visible={props.visible} onClose={props.onClose} title="Link" testID="link-menu" height="85%">
+    <PanelSheet visible={props.visible} onClose={props.onClose} title={t("linkMenu.title")} testID="link-menu" height="85%">
       {props.visible ? <LinkActions key={props.url} {...props} /> : null}
     </PanelSheet>
   );
@@ -37,6 +40,7 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
   const [resolving, setResolving] = useState(false);
   const [destination, setDestination] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const t = useT();
   const mounted = useRef(true);
   useEffect(
     () => () => {
@@ -60,7 +64,7 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
 
       if (mounted.current) setDestination(url);
     } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : "Couldn't check this link. Try again.");
+      if (mounted.current) setError(cause instanceof Error ? cause.message : t("linkMenu.failed"));
     } finally {
       if (mounted.current) setResolving(false);
     }
@@ -73,21 +77,21 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
       <Typography testID="link-menu-url" className="mb-3 text-sm text-muted" numberOfLines={3}>
         {props.url}
       </Typography>
-      <ActionRow testID="link-open-tab" label={props.image ? "Open image" : "Open in new tab"} onPress={() => act(props.onOpenTab)} />
+      <ActionRow testID="link-open-tab" label={props.image ? t("linkMenu.openImage") : t("linkMenu.openTab")} onPress={() => act(props.onOpenTab)} />
       {props.image ? (
         <>
-          <ActionRow testID="link-image-copy" label="Copy image address" onPress={() => act(props.onCopy)} />
-          <ActionRow testID="link-image-share" label="Share image" onPress={() => act(props.onShare)} />
-          <ActionRow testID="link-image-save" label="Save image" onPress={() => act(props.onSave)} />
+          <ActionRow testID="link-image-copy" label={t("linkMenu.copyImage")} onPress={() => act(props.onCopy)} />
+          <ActionRow testID="link-image-share" label={t("linkMenu.shareImage")} onPress={() => act(props.onShare)} />
+          <ActionRow testID="link-image-save" label={t("linkMenu.saveImage")} onPress={() => act(props.onSave)} />
         </>
       ) : (
         <>
-          <ActionRow testID="link-open-background" label="Open in background" onPress={() => act(props.onOpenBackground)} />
-          <ActionRow testID="link-copy" label="Copy link" onPress={() => act(props.onCopy)} />
-          <ActionRow testID="link-share" label="Share" onPress={() => act(props.onShare)} />
+          <ActionRow testID="link-open-background" label={t("linkMenu.openBackground")} onPress={() => act(props.onOpenBackground)} />
+          <ActionRow testID="link-copy" label={t("linkMenu.copyLink")} onPress={() => act(props.onCopy)} />
+          <ActionRow testID="link-share" label={t("linkMenu.share")} onPress={() => act(props.onShare)} />
           <ActionRow
             testID="link-destination"
-            label={resolving ? "Checking destination…" : "Where does it go?"}
+            label={resolving ? t("linkMenu.checking") : t("linkMenu.where")}
             disabled={resolving}
             onPress={() => {
               void resolveDestination();
@@ -96,15 +100,15 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
         </>
       )}
       {destination ? (
-        <View className="mt-3 rounded-2xl bg-default p-3">
-          <Typography className="mb-1 text-sm text-muted">Destination</Typography>
+        <View className="mt-3 rounded-2xl bg-default p-3" accessibilityLiveRegion="polite">
+          <Typography className="mb-1 text-sm text-muted">{t("linkMenu.destination")}</Typography>
           <Typography testID="link-destination-result" selectable>
             {destination}
           </Typography>
         </View>
       ) : null}
       {error ? (
-        <Typography testID="link-destination-error" accessibilityRole="alert" className="mt-3 text-sm text-danger">
+        <Typography testID="link-destination-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-3 text-sm text-danger">
           {error}
         </Typography>
       ) : null}

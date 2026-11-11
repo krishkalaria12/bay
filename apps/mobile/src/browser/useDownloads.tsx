@@ -18,6 +18,8 @@ import Animated, {
 import { Icon } from "@/chrome/Icon";
 import { PillButton } from "@/chrome/PillButton";
 import { Surface } from "@/chrome/Surface";
+import { announce } from "@/chrome/screenReader";
+import { t as translate, useT } from "@/i18n";
 import { DownloadProgress, downloadStatus } from "@/panels/DownloadsPanel";
 import { useBrowserStore } from "@/store/browser";
 import type { DownloadItem } from "@/store/types";
@@ -59,7 +61,7 @@ export function useDownloads(onError: (message: string) => void) {
   }, [settled, toastId]);
 
   function open(item: DownloadItem): void {
-    openDownload(item).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : "Couldn't open the file."));
+    openDownload(item).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : translate("toast.fileNotOpened")));
   }
 
   return {
@@ -74,6 +76,16 @@ export function useDownloads(onError: (message: string) => void) {
 }
 
 export function DownloadToast({ item, onOpen, onShowAll }: { item: DownloadItem; onOpen: () => void; onShowAll: () => void }): JSX.Element {
+  const t = useT();
+  const status = downloadStatus(item, t);
+  const heading = item.state === "finished" ? t("downloadToast.downloaded", { filename: item.filename }) : item.filename;
+
+  // Read out when the download starts and when it ends, not with every progress step.
+  useEffect(() => {
+    announce(item.state === "downloading" ? item.filename : `${heading}. ${status}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, item.state]);
+
   return (
     <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOutDown.duration(180)}>
       <Surface radius={18} style={{ padding: 12 }}>
@@ -82,20 +94,25 @@ export function DownloadToast({ item, onOpen, onShowAll }: { item: DownloadItem;
           <Pressable
             testID="download-toast"
             accessibilityRole="button"
-            accessibilityLabel={`${item.filename}, ${downloadStatus(item)}. Show downloads`}
+            accessibilityLabel={t("downloadToast.showAll", { filename: item.filename, status })}
             onPress={onShowAll}
             className="flex-1"
           >
             <Typography numberOfLines={1} className="font-medium">
-              {item.state === "finished" ? `Downloaded ${item.filename}` : item.filename}
+              {heading}
             </Typography>
             <Typography testID="download-toast-status" numberOfLines={1} className="text-sm text-muted">
-              {downloadStatus(item)}
+              {status}
             </Typography>
           </Pressable>
           {item.state === "finished" ? (
             <Animated.View entering={FadeIn.duration(200)}>
-              <PillButton testID="download-toast-open" label="Open" accessibilityLabel={`Open ${item.filename}`} onPress={onOpen} />
+              <PillButton
+                testID="download-toast-open"
+                label={t("downloadToast.open")}
+                accessibilityLabel={t("downloadToast.openLabel", { filename: item.filename })}
+                onPress={onOpen}
+              />
             </Animated.View>
           ) : null}
         </View>

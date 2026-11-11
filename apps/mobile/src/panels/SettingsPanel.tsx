@@ -8,6 +8,19 @@ import { Image, Pressable, View } from "react-native";
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
 import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
 import { Icon } from "@/chrome/Icon";
+import {
+  detectLocale,
+  LOCALE_IDS,
+  LOCALE_NAMES,
+  matchLocale,
+  setLocale,
+  useLocale,
+  useSavedLocale,
+  useT,
+  type Locale,
+  type MessageKey,
+  type Translate,
+} from "@/i18n";
 import { START_PAGE_HOURS, TEXT_SIZE, WALLPAPERS } from "@/store/model";
 import type { SimplePreferences, ThemeChoice, WallpaperId } from "@/store/types";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
@@ -50,48 +63,95 @@ export interface SettingsPanelProps {
   onReportProblem: () => void;
 }
 
-const archiveOptions = [
-  { days: 0.5, label: "After 12 hours" },
-  { days: 1, label: "After 1 day" },
-  { days: 7, label: "After 7 days" },
-  { days: 30, label: "After 30 days" },
-  { days: null, label: "Never" },
+/** Each choice's label, and the shorter value the Browsing page shows for it. */
+const archiveOptions: { days: number | null; label: MessageKey; short: MessageKey }[] = [
+  { days: 0.5, label: "settings.archive.halfDay", short: "settings.archive.halfDayShort" },
+  { days: 1, label: "settings.archive.oneDay", short: "settings.archive.oneDayShort" },
+  { days: 7, label: "settings.archive.week", short: "settings.archive.weekShort" },
+  { days: 30, label: "settings.archive.month", short: "settings.archive.monthShort" },
+  { days: null, label: "settings.archive.never", short: "settings.archive.never" },
 ];
 
-const startPageOptions = START_PAGE_HOURS.map((hours) => ({
-  hours,
-  label: hours === null ? "Never" : hours === 1 ? "After 1 hour away" : `After ${hours} hours away`,
-}));
+function startPageLabel(hours: number | null, t: Translate): string {
+  return hours === null ? t("settings.startPage.never") : hours === 1 ? t("settings.startPage.oneHour") : t("settings.startPage.hours", { hours });
+}
 
-const themes: { id: ThemeChoice; label: string }[] = [
-  { id: "system", label: "Match phone" },
-  { id: "light", label: "Light" },
-  { id: "dark", label: "Dark" },
+const themes: { id: ThemeChoice; label: MessageKey }[] = [
+  { id: "system", label: "settings.theme.system" },
+  { id: "light", label: "settings.theme.light" },
+  { id: "dark", label: "settings.theme.dark" },
 ];
 
-type Page = "main" | "engine" | "privacy" | "appearance" | "browsing" | "wallpaper" | "textSize" | "archive" | "startPage";
+type Page = "main" | "engine" | "privacy" | "appearance" | "browsing" | "language" | "wallpaper" | "textSize" | "archive" | "startPage";
 
-const pages: Record<Page, { title: string; parent: Page }> = {
-  main: { title: "Settings", parent: "main" },
-  engine: { title: "Search engine", parent: "main" },
-  privacy: { title: "Privacy", parent: "main" },
-  appearance: { title: "Appearance", parent: "main" },
-  browsing: { title: "Browsing", parent: "main" },
-  wallpaper: { title: "Wallpaper", parent: "appearance" },
-  textSize: { title: "Page zoom", parent: "appearance" },
-  archive: { title: "Archive inactive tabs", parent: "browsing" },
-  startPage: { title: "Start page", parent: "browsing" },
+const pages: Record<Page, { title: MessageKey; parent: Page }> = {
+  main: { title: "settings.title", parent: "main" },
+  engine: { title: "settings.searchEngine", parent: "main" },
+  privacy: { title: "settings.privacy", parent: "main" },
+  appearance: { title: "settings.appearance", parent: "main" },
+  browsing: { title: "settings.browsing", parent: "main" },
+  language: { title: "settings.language", parent: "main" },
+  wallpaper: { title: "settings.wallpaper", parent: "appearance" },
+  textSize: { title: "settings.pageZoom", parent: "appearance" },
+  archive: { title: "settings.archiveInactive", parent: "browsing" },
+  startPage: { title: "settings.startPage", parent: "browsing" },
 };
-
-const count = (n: number, one: string, many: string) => (n ? `${n} ${n === 1 ? one : many}` : undefined);
 
 /** Explains the rows above it, in the sheet's muted small print. */
 function Note({ children }: { children: string }): JSX.Element {
   return <Typography className="mt-2 px-1 text-[13px] leading-5 text-muted">{children}</Typography>;
 }
 
+/** The language the phone is set to, as Bay would show it, so the System row can say what it means today. */
+function useDeviceLocale(): Locale {
+  const [device, setDevice] = useState<Locale>(() => matchLocale(Intl.DateTimeFormat().resolvedOptions().locale));
+
+  useEffect(() => {
+    void detectLocale().then(setDevice);
+  }, []);
+
+  return device;
+}
+
+/** System first (it follows the phone), then each language in its own name. Choosing one changes the app at once. */
+function LanguagePicker({ onChosen }: { onChosen: () => void }): JSX.Element {
+  const t = useT();
+  const saved = useSavedLocale();
+  const device = useDeviceLocale();
+
+  return (
+    <Group>
+      <ActionRow
+        testID="settings-language-system"
+        label={t("settings.language.system")}
+        detail={t("settings.language.systemDetail", { language: LOCALE_NAMES[device] })}
+        selected={saved === null}
+        onPress={() => {
+          setLocale(null);
+          onChosen();
+        }}
+      />
+      {LOCALE_IDS.map((locale) => (
+        <ActionRow
+          key={locale}
+          testID={`settings-language-${locale}`}
+          label={LOCALE_NAMES[locale]}
+          selected={saved === locale}
+          onPress={() => {
+            setLocale(locale);
+            onChosen();
+          }}
+        />
+      ))}
+    </Group>
+  );
+}
+
 // The sheet stays mounted and toggles open, like the other panels; each opening starts on the main page.
 export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
+  const t = useT();
+  const locale = useLocale();
+  const savedLocale = useSavedLocale();
   const [page, setPage] = useState<Page>("main");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -136,7 +196,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       // The empty start page behind the sheet shows the result.
       props.onClose();
     } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : "Couldn't clear browsing data. Try again.");
+      if (mounted.current) setError(cause instanceof Error ? cause.message : t("settings.clearDataFailed"));
     } finally {
       if (mounted.current) setBusy(false);
     }
@@ -144,6 +204,10 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
   const { preferences: prefs, onPreferencesChange: change } = props;
   const engineName = props.engines.find((engine) => engine.id === props.searchEngineId)?.name;
+  const archiveValue = archiveOptions.find((option) => option.days === props.archiveAfterDays);
+  const themeLabel = themes.find((theme) => theme.id === prefs.theme)?.label;
+  /** "1 page", "12 pages": nothing at all while there are none. */
+  const count = (n: number, one: string, many: string) => (n ? (n === 1 ? one : many) : undefined);
   const back = () => setPage(pages[page].parent);
 
   // A choice goes back to the page it was made from.
@@ -176,27 +240,29 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           <Group>
             <ActionRow
               testID="settings-suggestions"
-              label="Search suggestions"
+              label={t("settings.searchSuggestions")}
               detail={
                 prefs.searchSuggestions
-                  ? `${engineName ?? "Your search engine"} sees what you type as you type it`
-                  : "Nothing you type leaves Bay until you search"
+                  ? engineName
+                    ? t("settings.searchSuggestions.on", { engine: engineName })
+                    : t("settings.searchSuggestions.default")
+                  : t("settings.searchSuggestions.off")
               }
               toggle={prefs.searchSuggestions}
               onPress={() => change({ searchSuggestions: !prefs.searchSuggestions })}
             />
             <ActionRow
               testID="settings-skip-amp"
-              label="Skip AMP pages"
-              detail="Open the publisher's own page instead of Google's copy"
+              label={t("settings.skipAmp")}
+              detail={t("settings.skipAmp.detail")}
               toggle={prefs.skipAmp}
               onPress={() => change({ skipAmp: !prefs.skipAmp })}
             />
             {props.privateAvailable ? (
               <ActionRow
                 testID="settings-lock-private"
-                label="Lock private tabs"
-                detail="Ask for your fingerprint, face or passcode when you come back"
+                label={t("settings.lockPrivate")}
+                detail={t("settings.lockPrivate.detail")}
                 toggle={props.lockPrivateTabs}
                 onPress={() => props.onLockPrivateTabsChange(!props.lockPrivateTabs)}
               />
@@ -204,30 +270,36 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           </Group>
           {props.pausedHosts.length ? (
             <>
-              <Group label="Blocking paused on">
+              <Group label={t("settings.group.paused")}>
                 {props.pausedHosts.map((host) => (
-                  <ActionRow key={host} testID={`settings-paused-${host}`} label={host} value="Resume" onPress={() => props.onResumeBlocking(host)} />
+                  <ActionRow
+                    key={host}
+                    testID={`settings-paused-${host}`}
+                    label={host}
+                    value={t("settings.paused.resume")}
+                    onPress={() => props.onResumeBlocking(host)}
+                  />
                 ))}
               </Group>
-              <Note>Pause blocking from a site's menu when it doesn't work right.</Note>
+              <Note>{t("settings.paused.note")}</Note>
             </>
           ) : null}
           {logins && logins.length ? (
             <>
-              <Group label="Saved passwords">
+              <Group label={t("settings.group.passwords")}>
                 {logins.map((login) => (
                   <ActionRow
                     key={`${login.origin}\n${login.username}`}
                     testID={`saved-login-${login.origin}-${login.username}`}
                     label={login.username}
                     detail={login.origin}
-                    value="Delete"
+                    value={t("settings.passwords.delete")}
                     destructive
                     onPress={() => void forgetSaved(login)}
                   />
                 ))}
               </Group>
-              <Note>Saved only on this phone, in its secure store, and signed in silently on a site you've saved before.</Note>
+              <Note>{t("settings.passwords.note")}</Note>
             </>
           ) : null}
         </>
@@ -236,28 +308,35 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     case "appearance":
       content = (
         <>
-          <Group label="Theme">
+          <Group label={t("settings.group.theme")}>
             {themes.map((theme) => (
               <ActionRow
                 key={theme.id}
                 testID={`settings-theme-${theme.id}`}
-                label={theme.label}
+                label={t(theme.label)}
                 selected={prefs.theme === theme.id}
                 onPress={() => change({ theme: theme.id })}
               />
             ))}
           </Group>
-          <Note>Changes Bay's own screens. Sites may keep following your phone.</Note>
-          <Group label="Start page and pages">
+          <Note>{t("settings.appearance.note")}</Note>
+          <Group label={t("settings.group.startPage")}>
             <ActionRow
               testID="settings-wallpaper"
               icon="wallpaper"
-              label="Wallpaper"
-              value={WALLPAPER_NAMES[props.wallpaper]}
+              label={t("settings.wallpaper")}
+              value={t(WALLPAPER_NAMES[props.wallpaper])}
               chevron
               onPress={() => setPage("wallpaper")}
             />
-            <ActionRow testID="settings-text-size" icon="textSize" label="Page zoom" value={`${prefs.textSize}%`} chevron onPress={() => setPage("textSize")} />
+            <ActionRow
+              testID="settings-text-size"
+              icon="textSize"
+              label={t("settings.pageZoom")}
+              value={`${prefs.textSize}%`}
+              chevron
+              onPress={() => setPage("textSize")}
+            />
           </Group>
         </>
       );
@@ -268,56 +347,58 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     case "browsing":
       content = (
         <>
-          <Group label="Tabs">
+          <Group label={t("settings.group.tabs")}>
             <ActionRow
               testID="settings-archive"
               icon="archive"
-              label="Archive inactive tabs"
-              value={archiveOptions.find((option) => option.days === props.archiveAfterDays)?.label.replace("After ", "")}
+              label={t("settings.archiveInactive")}
+              value={archiveValue ? t(archiveValue.short) : undefined}
               chevron
               onPress={() => setPage("archive")}
             />
             <ActionRow
               testID="settings-start-page"
               icon="history"
-              label="Start page after"
-              value={prefs.startPageAfterHours === null ? "Never" : `${prefs.startPageAfterHours} h away`}
+              label={t("settings.startPageAfter")}
+              value={
+                prefs.startPageAfterHours === null ? t("settings.startPage.never") : t("settings.startPage.hoursAway", { hours: prefs.startPageAfterHours })
+              }
               chevron
               onPress={() => setPage("startPage")}
             />
           </Group>
-          <Group label="Pages">
+          <Group label={t("settings.group.pages")}>
             <ActionRow
               testID="settings-pull-refresh"
               icon="reload"
-              label="Pull to refresh"
+              label={t("settings.pullToRefresh")}
               toggle={prefs.pullToRefresh}
               onPress={() => change({ pullToRefresh: !prefs.pullToRefresh })}
             />
           </Group>
-          <Group label="YouTube">
+          <Group label={t("settings.group.youtube")}>
             <ActionRow
               testID="settings-yt-shorts"
-              label="Hide Shorts"
+              label={t("settings.youtube.shorts")}
               toggle={prefs.youtube.shorts}
               onPress={() => change({ youtube: { ...prefs.youtube, shorts: !prefs.youtube.shorts } })}
             />
             <ActionRow
               testID="settings-yt-suggestions"
-              label="Hide suggested videos"
-              detail="Up next and end screens"
+              label={t("settings.youtube.suggestions")}
+              detail={t("settings.youtube.suggestionsDetail")}
               toggle={prefs.youtube.suggestions}
               onPress={() => change({ youtube: { ...prefs.youtube, suggestions: !prefs.youtube.suggestions } })}
             />
             <ActionRow
               testID="settings-yt-distractions"
-              label="Hide comments"
-              detail="And sign-in prompts"
+              label={t("settings.youtube.distractions")}
+              detail={t("settings.youtube.distractionsDetail")}
               toggle={prefs.youtube.distractions}
               onPress={() => change({ youtube: { ...prefs.youtube, distractions: !prefs.youtube.distractions } })}
             />
           </Group>
-          <Note>Uses Brave's YouTube lists.</Note>
+          <Note>{t("settings.youtube.note")}</Note>
         </>
       );
       break;
@@ -329,13 +410,13 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               <ActionRow
                 key={option.days ?? "never"}
                 testID={`settings-archive-${option.days ?? "never"}`}
-                label={option.label}
+                label={t(option.label)}
                 selected={props.archiveAfterDays === option.days}
                 onPress={choose(() => props.onArchiveAfterDaysChange(option.days))}
               />
             ))}
           </Group>
-          <Note>Your current tab stays open. You can restore archived tabs at any time.</Note>
+          <Note>{t("settings.archive.note")}</Note>
         </>
       );
       break;
@@ -343,19 +424,22 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       content = (
         <>
           <Group>
-            {startPageOptions.map((option) => (
+            {START_PAGE_HOURS.map((hours) => (
               <ActionRow
-                key={option.hours ?? "never"}
-                testID={`settings-start-page-${option.hours ?? "never"}`}
-                label={option.label}
-                selected={prefs.startPageAfterHours === option.hours}
-                onPress={choose(() => change({ startPageAfterHours: option.hours }))}
+                key={hours ?? "never"}
+                testID={`settings-start-page-${hours ?? "never"}`}
+                label={startPageLabel(hours, t)}
+                selected={prefs.startPageAfterHours === hours}
+                onPress={choose(() => change({ startPageAfterHours: hours }))}
               />
             ))}
           </Group>
-          <Note>Come back after a while to a fresh start page. Your tabs stay where they were.</Note>
+          <Note>{t("settings.startPage.note")}</Note>
         </>
       );
+      break;
+    case "language":
+      content = <LanguagePicker onChosen={back} />;
       break;
     case "wallpaper":
       content = <WallpaperPicker value={props.wallpaper} photo={props.wallpaperPhoto} onChange={props.onWallpaperChange} />;
@@ -367,18 +451,18 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-block-content"
               icon="shield"
-              label="Block ads and trackers"
+              label={t("settings.blockContent")}
               detail={props.blockerDetail}
               toggle={props.blockContent}
               disabled={busy}
               onPress={() => props.onBlockContentChange(!props.blockContent)}
             />
           </Group>
-          <Group label="Browser">
+          <Group label={t("settings.group.browser")}>
             <ActionRow
               testID="settings-engine"
               icon="search"
-              label="Search engine"
+              label={t("settings.searchEngine")}
               value={engineName}
               chevron
               disabled={busy}
@@ -387,8 +471,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-privacy"
               icon="lock"
-              label="Privacy"
-              value={props.pausedHosts.length ? `Paused on ${props.pausedHosts.length}` : undefined}
+              label={t("settings.privacy")}
+              value={props.pausedHosts.length ? t("settings.paused.count", { count: props.pausedHosts.length }) : undefined}
               chevron
               disabled={busy}
               onPress={() => setPage("privacy")}
@@ -396,29 +480,38 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-appearance"
               icon="palette"
-              label="Appearance"
-              value={themes.find((theme) => theme.id === prefs.theme)?.label}
+              label={t("settings.appearance")}
+              value={themeLabel ? t(themeLabel) : undefined}
               chevron
               disabled={busy}
               onPress={() => setPage("appearance")}
             />
             <ActionRow
+              testID="settings-language"
+              icon="translate"
+              label={t("settings.language")}
+              value={savedLocale === null ? t("settings.language.system") : LOCALE_NAMES[locale]}
+              chevron
+              disabled={busy}
+              onPress={() => setPage("language")}
+            />
+            <ActionRow
               testID="settings-browsing"
               icon="tune"
-              label="Browsing"
-              detail="Tabs, gestures and YouTube"
+              label={t("settings.browsing")}
+              detail={t("settings.browsing.detail")}
               chevron
               disabled={busy}
               onPress={() => setPage("browsing")}
             />
           </Group>
-          <Group label="Your data">
-            <ActionRow testID="settings-import" icon="add" label="Import tabs" chevron disabled={busy} onPress={props.onImport} />
+          <Group label={t("settings.group.data")}>
+            <ActionRow testID="settings-import" icon="add" label={t("settings.importTabs")} chevron disabled={busy} onPress={props.onImport} />
             <ActionRow
               testID="settings-history"
               icon="history"
-              label="History"
-              value={count(props.historyCount, "page", "pages")}
+              label={t("settings.history")}
+              value={count(props.historyCount, t("settings.historyOnePage"), t("settings.historyPages", { count: props.historyCount }))}
               chevron
               disabled={busy}
               onPress={props.onHistory}
@@ -426,8 +519,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             <ActionRow
               testID="settings-downloads"
               icon="download"
-              label="Downloads"
-              value={count(props.downloadCount, "file", "files")}
+              label={t("settings.downloads")}
+              value={count(props.downloadCount, t("settings.downloadsOneFile"), t("settings.downloadsFiles", { count: props.downloadCount }))}
               chevron
               disabled={busy}
               onPress={props.onDownloads}
@@ -436,8 +529,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               <ActionRow
                 testID="clear-data-confirm"
                 icon="delete"
-                label={busy ? "Clearing data…" : "Clear all browsing data"}
-                detail="Tabs, archive, history, pins, cookies and website data. Settings stay."
+                label={busy ? t("settings.clearingData") : t("settings.clearAllData")}
+                detail={t("settings.clearAllData.detail")}
                 destructive
                 disabled={busy}
                 onPress={() => {
@@ -448,7 +541,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               <ActionRow
                 testID="settings-clear-data"
                 icon="delete"
-                label="Clear browsing data"
+                label={t("settings.clearData")}
                 destructive
                 disabled={busy}
                 onPress={() => {
@@ -457,29 +550,35 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                 }}
               />
             )}
-            {confirming ? <ActionRow testID="clear-data-cancel" label="Keep browsing data" disabled={busy} onPress={() => setConfirming(false)} /> : null}
+            {confirming ? <ActionRow testID="clear-data-cancel" label={t("settings.keepData")} disabled={busy} onPress={() => setConfirming(false)} /> : null}
           </Group>
-          <Group label="Help">
+          <Group label={t("settings.group.help")}>
             <ActionRow
               testID="settings-report-problem"
               icon="error"
-              label="Report a problem"
-              detail={props.crashCount ? `${props.crashCount} ${props.crashCount === 1 ? "error" : "errors"} kept` : "Sends what went wrong"}
+              label={t("settings.reportProblem")}
+              detail={
+                props.crashCount
+                  ? props.crashCount === 1
+                    ? t("settings.reportProblem.oneError")
+                    : t("settings.reportProblem.errors", { count: props.crashCount })
+                  : t("settings.reportProblem.detail")
+              }
               disabled={busy}
               onPress={props.onReportProblem}
             />
           </Group>
           {busy ? (
-            <Typography testID="clear-data-busy" className="mt-3 px-1 text-sm text-muted">
-              Clearing website data…
+            <Typography testID="clear-data-busy" accessibilityLiveRegion="polite" className="mt-3 px-1 text-sm text-muted">
+              {t("settings.clearingWebsiteData")}
             </Typography>
           ) : null}
           {error ? (
-            <Typography testID="clear-data-error" accessibilityRole="alert" className="mt-3 px-1 text-sm text-danger">
+            <Typography testID="clear-data-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-3 px-1 text-sm text-danger">
               {error}
             </Typography>
           ) : null}
-          <Typography className="mt-6 text-center text-xs text-muted">Bay {Constants.expoConfig?.version ?? ""}</Typography>
+          <Typography className="mt-6 text-center text-xs text-muted">{t("settings.version", { version: Constants.expoConfig?.version ?? "" })}</Typography>
         </>
       );
   }
@@ -489,7 +588,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       visible={props.visible}
       onClose={props.onClose}
       onBack={page === "main" ? undefined : back}
-      title={pages[page].title}
+      title={t(pages[page].title)}
       testID="settings-screen"
       height="85%"
       dismissible={!busy}
@@ -502,6 +601,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 /** A preview at the chosen zoom, with smaller and larger steps. */
 function TextSize({ value, onChange }: { value: number; onChange: (size: number) => void }): JSX.Element {
   const foreground = useThemeColor("foreground");
+  const t = useT();
   const step = (delta: number) => onChange(Math.min(TEXT_SIZE.max, Math.max(TEXT_SIZE.min, value + delta)));
 
   return (
@@ -511,17 +611,18 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
           example.com
         </Typography>
         <Typography className="mt-1 font-semibold" style={{ fontSize: (20 * value) / 100, lineHeight: (26 * value) / 100 }}>
-          The quiet bay
+          {t("settings.zoom.previewTitle")}
         </Typography>
         <Typography className="mt-1" style={{ fontSize: (16 * value) / 100, lineHeight: (23 * value) / 100 }}>
-          Every site shows its text and images at this size. Reader has its own text size.
+          {t("settings.zoom.previewBody")}
         </Typography>
       </View>
       <View className="mt-4 flex-row items-center gap-3">
         <Pressable
           testID="text-size-smaller"
           accessibilityRole="button"
-          accessibilityLabel="Zoom out"
+          accessibilityLabel={t("settings.zoom.out")}
+          accessibilityState={{ disabled: value <= TEXT_SIZE.min }}
           disabled={value <= TEXT_SIZE.min}
           onPress={() => step(-TEXT_SIZE.step)}
           className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
@@ -529,13 +630,14 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
         >
           <Icon name="textSize" color={foreground} size={16} />
         </Pressable>
-        <Typography testID="text-size-value" className="w-16 text-center text-lg font-semibold">
+        <Typography testID="text-size-value" accessibilityLiveRegion="polite" className="w-16 text-center text-lg font-semibold">
           {`${value}%`}
         </Typography>
         <Pressable
           testID="text-size-larger"
           accessibilityRole="button"
-          accessibilityLabel="Zoom in"
+          accessibilityLabel={t("settings.zoom.in")}
+          accessibilityState={{ disabled: value >= TEXT_SIZE.max }}
           disabled={value >= TEXT_SIZE.max}
           onPress={() => step(TEXT_SIZE.step)}
           className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
@@ -547,7 +649,7 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
       {value !== 100 ? (
         <View className="mt-4">
           <Group>
-            <ActionRow testID="text-size-reset" label="Back to 100%" onPress={() => onChange(100)} />
+            <ActionRow testID="text-size-reset" label={t("settings.zoom.reset")} onPress={() => onChange(100)} />
           </Group>
         </View>
       ) : null}
@@ -586,6 +688,7 @@ function WallpaperPicker({
 }): JSX.Element {
   const [error, setError] = useState(false);
   const foreground = useThemeColor("foreground");
+  const t = useT();
   const tiles: WallpaperId[] = [...WALLPAPERS, "photo"];
 
   return (
@@ -600,8 +703,8 @@ function WallpaperPicker({
               key={id}
               testID={`settings-wallpaper-${id}`}
               accessibilityRole="radio"
-              accessibilityLabel={empty ? "Choose a photo" : WALLPAPER_NAMES[id]}
-              accessibilityState={{ selected }}
+              accessibilityLabel={empty ? t("settings.wallpaper.chooseLabel") : t(WALLPAPER_NAMES[id])}
+              accessibilityState={{ selected, checked: selected }}
               onPress={() => {
                 if (id !== "photo") return onChange(id);
                 setError(false);
@@ -639,15 +742,17 @@ function WallpaperPicker({
                   </View>
                 )}
               </View>
-              <Typography className={selected ? "text-sm font-medium text-accent" : "text-sm"}>{empty ? "Choose photo" : WALLPAPER_NAMES[id]}</Typography>
+              <Typography className={selected ? "text-sm font-medium text-accent" : "text-sm"}>
+                {empty ? t("settings.wallpaper.choose") : t(WALLPAPER_NAMES[id])}
+              </Typography>
             </Pressable>
           );
         })}
       </View>
-      {photo ? <Typography className="mt-4 px-1 text-sm text-muted">Tap your photo again to choose another.</Typography> : null}
+      {photo ? <Typography className="mt-4 px-1 text-sm text-muted">{t("settings.wallpaper.chooseAgain")}</Typography> : null}
       {error ? (
-        <Typography testID="settings-wallpaper-error" accessibilityRole="alert" className="mt-3 px-1 text-sm text-danger">
-          Couldn't use that photo. Try another.
+        <Typography testID="settings-wallpaper-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-3 px-1 text-sm text-danger">
+          {t("settings.wallpaper.failed")}
         </Typography>
       ) : null}
     </>

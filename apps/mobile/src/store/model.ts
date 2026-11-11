@@ -76,6 +76,10 @@ const DOWNLOAD_STATES = ["downloading", "finished", "failed", "cancelled"] as co
 /** The one space every tab started in: documents saved before spaces existed (v1) land here. */
 export const PERSONAL_SPACE_ID = "personal";
 export const PERSONAL_SPACE: BrowserSpace = { id: PERSONAL_SPACE_ID, name: "Personal", color: "blue" };
+
+/** The error a download keeps when Bay closed during it; shown in the reader's language when it is read back. */
+export const INTERRUPTED_DOWNLOAD = "Bay closed before it finished.";
+
 export const SPACE_COLORS: readonly SpaceColor[] = ["blue", "green", "orange", "red", "violet", "gray"];
 const SPACE_COLOR_PICKLIST: readonly SpaceColor[] = SPACE_COLORS;
 
@@ -886,7 +890,7 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
         received: bytes(entry.received),
         total: bytes(entry.total),
         ...(v.is(v.string(), entry.path) && entry.path ? { path: entry.path } : undefined),
-        ...(interrupted ? { error: "Bay closed before it finished." } : v.is(v.string(), entry.error) ? { error: entry.error } : {}),
+        ...(interrupted ? { error: INTERRUPTED_DOWNLOAD } : v.is(v.string(), entry.error) ? { error: entry.error } : {}),
         startedAt: entry.startedAt,
       },
     ];

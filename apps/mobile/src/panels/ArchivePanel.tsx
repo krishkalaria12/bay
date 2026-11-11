@@ -5,8 +5,9 @@ import { useEffect, useState, type JSX } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { groupByDay } from "./historyGroups";
-import { pageTitle, SearchField, siteName, SiteRow, time } from "./HistoryPanel";
+import { DAY_GROUP_LABELS, pageTitle, SearchField, siteName, SiteRow, time } from "./HistoryPanel";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
 
 type Row = { kind: "label"; label: string } | { kind: "entry"; item: ArchiveItem };
@@ -32,6 +33,7 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
   const [confirming, setConfirming] = useState(false);
   const insets = useSafeAreaInsets();
   const Scrollable = useBottomSheetScrollableCreator();
+  const t = useT();
   useEffect(() => {
     if (visible) setConfirming(false);
   }, [visible]);
@@ -40,7 +42,7 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
   const groups = groupByDay(matches, Date.now(), (item) => item.closedAt);
 
   const rows: Row[] = groups.flatMap((group) => [
-    { kind: "label" as const, label: group.label },
+    { kind: "label" as const, label: t(DAY_GROUP_LABELS[group.id]) },
     ...group.entries.map((item) => ({ kind: "entry" as const, item })),
   ]);
 
@@ -54,35 +56,37 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
             <ActionRow
               testID="archive-clear-confirm"
               icon="delete"
-              label="Clear archive"
-              detail="Open tabs, history and pins stay."
+              label={t("archive.clear")}
+              detail={t("archive.clear.detail")}
               destructive
               onPress={() => {
                 setConfirming(false);
                 onClear();
               }}
             />
-            <ActionRow testID="archive-clear-cancel" label="Keep archive" onPress={() => setConfirming(false)} />
+            <ActionRow testID="archive-clear-cancel" label={t("archive.keep")} onPress={() => setConfirming(false)} />
           </>
         ) : (
-          <ActionRow testID="archive-clear" icon="delete" label="Clear archive" destructive onPress={() => setConfirming(true)} />
+          <ActionRow testID="archive-clear" icon="delete" label={t("archive.clear")} destructive onPress={() => setConfirming(true)} />
         )}
       </View>
     );
   }
 
   return (
-    <PanelSheet visible={visible} onClose={onClose} title="Archive" testID="archive-screen" height="85%" listMode>
+    <PanelSheet visible={visible} onClose={onClose} title={t("archive.title")} testID="archive-screen" height="85%" listMode>
       {items.length === 0 ? (
         <View testID="archive-empty" className="py-12">
-          <Typography className="text-center">No archived tabs</Typography>
-          <Typography className="mt-2 text-center text-sm text-muted">Closed tabs and tabs you haven't used in a while wait here.</Typography>
+          <Typography accessibilityRole="header" className="text-center">
+            {t("archive.empty")}
+          </Typography>
+          <Typography className="mt-2 text-center text-sm text-muted">{t("archive.emptyDetail")}</Typography>
         </View>
       ) : groups.length === 0 ? (
         <>
-          <SearchField testID="archive-search" value={query} onChange={setQuery} placeholder="Search archived tabs" />
-          <Typography testID="archive-no-matches" className="py-8 text-center text-muted">
-            Nothing matches “{query.trim()}”
+          <SearchField testID="archive-search" value={query} onChange={setQuery} placeholder={t("archive.search")} />
+          <Typography testID="archive-no-matches" accessibilityLiveRegion="polite" className="py-8 text-center text-muted">
+            {t("archive.noMatches", { query: query.trim() })}
           </Typography>
           {clearFooter()}
         </>
@@ -94,7 +98,7 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
           keyboardShouldPersistTaps="handled"
           renderScrollComponent={Scrollable}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
-          ListHeaderComponent={<SearchField testID="archive-search" value={query} onChange={setQuery} placeholder="Search archived tabs" />}
+          ListHeaderComponent={<SearchField testID="archive-search" value={query} onChange={setQuery} placeholder={t("archive.search")} />}
           ListFooterComponent={clearFooter()}
           renderItem={({ item }) => {
             if (item.kind === "label") return <SectionLabel>{item.label}</SectionLabel>;
@@ -113,7 +117,7 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
                   onClose();
                 }}
                 onRemove={() => onRemove(entry.id)}
-                removeLabel={`Remove ${title} from the archive`}
+                removeLabel={t("archive.removeLabel", { title })}
               />
             );
           }}

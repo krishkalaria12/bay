@@ -3,6 +3,7 @@ import { useEffect, useState, type JSX } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 
+import { announce } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
 
 export interface ToastAction {
@@ -37,6 +38,11 @@ export function useToast() {
 export function Toast({ text, action, onDone, testID = "toast" }: { text: string; action?: ToastAction; onDone?: () => void; testID?: string }): JSX.Element {
   const foreground = useThemeColor("foreground");
   const accent = useThemeColor("accent");
+
+  // A toast appears where focus isn't, so it reads itself out; one with an action says the action too.
+  useEffect(() => {
+    announce(action ? `${text}. ${action.label}` : text);
+  }, [text, action]);
 
   return (
     <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOutDown.duration(150)}>

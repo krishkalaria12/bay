@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/chrome/Icon";
 import { SPRING, useReducedMotion } from "@/chrome/motion";
 import { Surface } from "@/chrome/Surface";
+import { useT, type Translate } from "@/i18n";
 import type { BrowserData } from "@/store/types";
 import { resolveAddress } from "./address";
 import { SiteIcon } from "./SiteIcon";
@@ -45,6 +46,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
   const keyboard = useAnimatedKeyboard();
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
+  const t = useT();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const [privately, setPrivately] = useState(initialPrivate && privateAvailable);
   const onOpen = (target: OpenTarget): void => open(target, privately);
@@ -132,7 +134,13 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 
   return (
     <View style={StyleSheet.absoluteFill} testID="search-card">
-      <Pressable testID="search-dismiss" accessibilityLabel="Close search" style={StyleSheet.absoluteFill} onPress={onDismiss} />
+      <Pressable
+        testID="search-dismiss"
+        accessibilityRole="button"
+        accessibilityLabel={t("search.close")}
+        style={StyleSheet.absoluteFill}
+        onPress={onDismiss}
+      />
       <Animated.View style={[{ position: "absolute", left: 8 + insets.left, right: 8 + insets.right }, cardPosition]}>
         <Surface radius={30} style={{ padding: 10 }} testID={privately ? "search-card-private" : undefined}>
           {privately ? <View className="absolute inset-0 rounded-[30px] bg-neutral-900/95" pointerEvents="none" /> : null}
@@ -161,6 +169,9 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                     testID="address-completion"
                     numberOfLines={1}
                     pointerEvents="none"
+                    // The completion is read with the field's own value, not as a second line.
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
                     style={[inputTextStyle, { position: "absolute", left: 0, right: 0, top: 0, height: 46, lineHeight: 46, color: text }]}
                   >
                     <Text style={{ color: "transparent" }}>{query}</Text>
@@ -170,13 +181,13 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                 <TextInput
                   ref={input}
                   testID="address-input"
-                  accessibilityLabel="Search or enter address"
+                  accessibilityLabel={t("search.placeholder")}
                   autoFocus
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="web-search"
                   returnKeyType="go"
-                  placeholder="Search or enter address"
+                  placeholder={t("search.placeholder")}
                   placeholderTextColor={secondary}
                   keyboardAppearance={privately ? "dark" : "default"}
                   style={[inputTextStyle, { color: text, height: 46 }]}
@@ -190,7 +201,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                 <Pressable
                   testID="clear-address"
                   accessibilityRole="button"
-                  accessibilityLabel="Clear"
+                  accessibilityLabel={t("search.clear")}
                   className="h-11 w-11 items-center justify-center"
                   onPress={() => fill("")}
                 >
@@ -200,7 +211,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
               <Pressable
                 testID="voice-search"
                 accessibilityRole="button"
-                accessibilityLabel={listening ? "Listening" : "Voice search"}
+                accessibilityLabel={listening ? t("search.listening") : t("search.voice")}
                 accessibilityState={{ disabled: listening }}
                 disabled={listening}
                 className="h-11 w-11 items-center justify-center"
@@ -212,7 +223,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                 <Pressable
                   testID="private-toggle"
                   accessibilityRole="switch"
-                  accessibilityLabel="Private"
+                  accessibilityLabel={t("search.private")}
                   accessibilityState={{ checked: privately }}
                   className="h-11 w-11 items-center justify-center"
                   onPress={() => setPrivately((on) => !on)}
@@ -225,8 +236,8 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
             </Animated.View>
           </View>
           {privately ? (
-            <Text testID="private-notice" style={{ color: secondary, fontSize: 13, marginTop: 8, marginLeft: 16 }}>
-              You're browsing privately. Nothing you open here is saved.
+            <Text testID="private-notice" accessibilityLiveRegion="polite" style={{ color: secondary, fontSize: 13, marginTop: 8, marginLeft: 16 }}>
+              {t("search.privateNotice")}
             </Text>
           ) : null}
 
@@ -234,14 +245,14 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
             <Pressable
               testID="paste-and-go"
               accessibilityRole="button"
-              accessibilityLabel="Paste and Go"
+              accessibilityLabel={t("search.pasteAndGo")}
               onPress={() => {
                 void pasteAndGo();
               }}
               className="mt-2 h-10 flex-row items-center gap-2 rounded-2xl px-3 active:bg-black/5 dark:active:bg-white/10"
             >
               <Icon name="copy" color={secondary} size={18} />
-              <Text style={{ color: text, fontSize: 15 }}>Paste and Go</Text>
+              <Text style={{ color: text, fontSize: 15 }}>{t("search.pasteAndGo")}</Text>
             </Pressable>
           )}
 
@@ -289,16 +300,16 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 // Shared by the field and its completion so the completion lines up after the typed text.
 const inputTextStyle = { fontSize: 17, padding: 0, margin: 0, includeFontPadding: false } as const;
 
-function rowText(row: Row, engine: SearchEngine) {
+function rowText(row: Row, engine: SearchEngine, t: Translate) {
   switch (row.kind) {
     case "page": {
       const address = displayUrl(row.url);
 
-      return { title: row.title || address, detail: row.tabId ? `Switch to tab · ${address}` : address };
+      return { title: row.title || address, detail: row.tabId ? t("search.switchToTab", { address }) : address };
     }
 
     case "search":
-      return { title: row.query, detail: `Search ${engine.name}` };
+      return { title: row.query, detail: t("search.withEngine", { engine: engine.name }) };
     case "calc":
       return { title: `= ${row.value}`, detail: row.expression };
   }
@@ -324,13 +335,20 @@ function SuggestionRow({
   const themeMuted = useThemeColor("muted");
   const foreground = colors?.text ?? themeForeground;
   const muted = colors?.secondary ?? themeMuted;
-  const { title, detail } = rowText(row, engine);
+  const t = useT();
+  const { title, detail } = rowText(row, engine, t);
+  const fillText = row.kind === "page" ? row.url : row.kind === "search" ? row.query : null;
 
   return (
     <Pressable
       testID={`suggestion-${index}`}
       accessibilityRole="button"
-      accessibilityLabel={title}
+      accessibilityLabel={`${title}, ${detail}`}
+      // VoiceOver can't reach the fill button inside the row, so the row offers it as an action too.
+      accessibilityActions={fillText === null ? undefined : [{ name: "fill", label: t("search.fillIn", { title }) }]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "fill" && fillText !== null) onFill(fillText);
+      }}
       onPress={onOpen}
       className="min-h-[52px] flex-row items-center gap-3 rounded-2xl pl-2 active:bg-black/5"
     >
@@ -347,7 +365,7 @@ function SuggestionRow({
         <Pressable
           testID={`suggestion-fill-${index}`}
           accessibilityRole="button"
-          accessibilityLabel={`Fill in ${title}`}
+          accessibilityLabel={t("search.fillIn", { title })}
           onPress={() => onFill(row.kind === "page" ? row.url : row.query)}
           className="h-11 w-11 items-center justify-center"
         >

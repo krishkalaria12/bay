@@ -7,6 +7,7 @@ import { View } from "react-native";
 import { PillButton } from "@/chrome/PillButton";
 import type { ImportedTab } from "@/browser/importTabs";
 import { importedTabs } from "@/browser/importTabs";
+import { useT } from "@/i18n";
 
 import { PanelSheet } from "./PanelSheet";
 
@@ -24,6 +25,7 @@ export interface ImportPanelProps {
 export function ImportPanel({ visible, onClose, onImport }: ImportPanelProps): JSX.Element {
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
+  const t = useT();
   const [text, setText] = useState("");
   const [pasteFailed, setPasteFailed] = useState(false);
 
@@ -48,14 +50,12 @@ export function ImportPanel({ visible, onClose, onImport }: ImportPanelProps): J
   }
 
   return (
-    <PanelSheet visible={visible} onClose={onClose} title="Import tabs" testID="import-screen" height="80%">
-      <Typography className="text-sm text-muted">
-        Paste a list of tabs copied from Arc Search or another browser. Bay finds the links and ignores the rest.
-      </Typography>
+    <PanelSheet visible={visible} onClose={onClose} title={t("import.title")} testID="import-screen" height="80%">
+      <Typography className="text-sm text-muted">{t("import.help")}</Typography>
       <View className="mt-3 rounded-[20px] bg-default p-3">
         <BottomSheetTextInput
           testID="import-text"
-          accessibilityLabel="Tabs to import"
+          accessibilityLabel={t("import.field")}
           value={text}
           onChangeText={setText}
           placeholder="https://example.com&#10;https://another.com"
@@ -67,13 +67,13 @@ export function ImportPanel({ visible, onClose, onImport }: ImportPanelProps): J
         />
       </View>
       <View className="mt-2 flex-row items-center justify-between">
-        <Typography testID="import-count" className="text-sm text-muted">
-          {count ? `${count} ${count === 1 ? "link" : "links"} found` : "No links yet"}
+        <Typography testID="import-count" accessibilityLiveRegion="polite" className="text-sm text-muted">
+          {count ? (count === 1 ? t("import.oneLink") : t("import.linksFound", { count })) : t("import.none")}
         </Typography>
         <PillButton
           testID="import-paste"
-          label="Paste"
-          accessibilityLabel="Paste from the clipboard"
+          label={t("import.paste")}
+          accessibilityLabel={t("import.pasteLabel")}
           compact
           onPress={() => {
             void paste();
@@ -81,27 +81,27 @@ export function ImportPanel({ visible, onClose, onImport }: ImportPanelProps): J
         />
       </View>
       {pasteFailed ? (
-        <Typography testID="import-paste-error" accessibilityRole="alert" className="mt-2 text-sm text-danger">
-          Couldn't read the clipboard. Paste the list into the field instead.
+        <Typography testID="import-paste-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-2 text-sm text-danger">
+          {t("import.pasteFailed")}
         </Typography>
       ) : null}
       <View className="mt-4 flex-row items-center justify-end gap-2">
         <PillButton
           testID="import-archive"
-          label="Archive"
-          accessibilityLabel="Archive the links"
+          label={t("import.archive")}
+          accessibilityLabel={t("import.archiveLabel")}
           disabled={!count}
           onPress={() => onImport(tabs, "archive")}
         />
         <PillButton
           testID="import-open"
-          label="Open tabs"
-          accessibilityLabel="Open the links as tabs"
+          label={t("import.open")}
+          accessibilityLabel={t("import.openLabel")}
           disabled={!count}
           onPress={() => onImport(tabs, "tabs")}
         />
       </View>
-      <Typography className="mt-3 text-xs text-muted">Links already open in a tab are skipped. Archive keeps them until you open them.</Typography>
+      <Typography className="mt-3 text-xs text-muted">{t("import.note")}</Typography>
     </PanelSheet>
   );
 }

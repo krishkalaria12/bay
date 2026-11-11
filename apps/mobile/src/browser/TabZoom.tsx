@@ -63,7 +63,13 @@ export function TabZoom({ snapshot, from, onDone }: TabZoomProps): JSX.Element {
   });
 
   return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.picture, style]}>
+    // A picture of the page for the length of the zoom; the page itself is what readers find.
+    <Animated.View
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[StyleSheet.absoluteFill, styles.picture, style]}
+    >
       <Image source={{ uri: snapshot }} resizeMode="cover" style={StyleSheet.absoluteFill} />
     </Animated.View>
   );

@@ -13,8 +13,9 @@ import { Icon } from "@/chrome/Icon";
 import { SPRING } from "@/chrome/motion";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { SiteIcon } from "@/browser/SiteIcon";
+import { formatDate, useT, type MessageKey } from "@/i18n";
 import type { HistoryEntry } from "@/store/types";
-import { groupByDay } from "./historyGroups";
+import { groupByDay, type DayGroupId } from "./historyGroups";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
 
 const SHOWN = 200;
@@ -45,7 +46,16 @@ export interface HistoryPanelProps {
   onClear: () => void;
 }
 
-export const time = (at: number) => new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+export const time = (at: number) => formatDate(at, { hour: "numeric", minute: "2-digit" });
+
+/** A day group's heading, as a message. */
+export const DAY_GROUP_LABELS: Record<DayGroupId, MessageKey> = {
+  today: "history.group.today",
+  yesterday: "history.group.yesterday",
+  week: "history.group.week",
+  earlier: "history.group.earlier",
+};
+
 export const siteName = (url: string) => hostOf(url).replace(/^www\./, "");
 
 /** A page's title, or its site when the title is missing or just an address. */
@@ -56,12 +66,13 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
   const [confirming, setConfirming] = useState(false);
   const insets = useSafeAreaInsets();
   const Scrollable = useBottomSheetScrollableCreator();
+  const t = useT();
   const needle = query.trim().toLowerCase();
   const matches = needle ? history.filter((entry) => entry.title.toLowerCase().includes(needle) || entry.url.toLowerCase().includes(needle)) : history;
   const groups = groupByDay(matches.slice(0, SHOWN), Date.now(), (entry) => entry.lastVisit);
 
   const rows: Row[] = groups.flatMap((group) => [
-    { kind: "label" as const, label: group.label },
+    { kind: "label" as const, label: t(DAY_GROUP_LABELS[group.id]) },
     ...group.entries.map((entry) => ({ kind: "entry" as const, entry })),
   ]);
 
@@ -73,38 +84,40 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
         <ActionRow
           testID="history-clear-confirm"
           icon="delete"
-          label="Clear all history"
-          detail="Tabs, archive and pins stay."
+          label={t("history.clearAll")}
+          detail={t("history.clearAll.detail")}
           destructive
           onPress={() => {
             setConfirming(false);
             onClear();
           }}
         />
-        <ActionRow testID="history-clear-cancel" label="Keep history" onPress={() => setConfirming(false)} />
+        <ActionRow testID="history-clear-cancel" label={t("history.keep")} onPress={() => setConfirming(false)} />
       </View>
     ) : (
       <View className="mt-4">
-        <ActionRow testID="history-clear" icon="delete" label="Clear history" destructive onPress={() => setConfirming(true)} />
+        <ActionRow testID="history-clear" icon="delete" label={t("history.clear")} destructive onPress={() => setConfirming(true)} />
       </View>
     );
   }
 
   return (
-    <PanelSheet visible={visible} onClose={onClose} title="History" testID="history-screen" height="85%" listMode>
+    <PanelSheet visible={visible} onClose={onClose} title={t("history.title")} testID="history-screen" height="85%" listMode>
       {history.length === 0 ? (
         <>
-          <SearchField testID="history-search" value={query} onChange={setQuery} placeholder="Search history" />
+          <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
           <View testID="history-empty" className="py-12">
-            <Typography className="text-center">No history yet</Typography>
-            <Typography className="mt-2 text-center text-sm text-muted">Pages you visit show up here. Private tabs never do.</Typography>
+            <Typography accessibilityRole="header" className="text-center">
+              {t("history.empty")}
+            </Typography>
+            <Typography className="mt-2 text-center text-sm text-muted">{t("history.emptyDetail")}</Typography>
           </View>
         </>
       ) : groups.length === 0 ? (
         <>
-          <SearchField testID="history-search" value={query} onChange={setQuery} placeholder="Search history" />
-          <Typography testID="history-no-matches" className="py-8 text-center text-muted">
-            Nothing matches “{query.trim()}”
+          <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
+          <Typography testID="history-no-matches" accessibilityLiveRegion="polite" className="py-8 text-center text-muted">
+            {t("history.noMatches", { query: query.trim() })}
           </Typography>
           {clearFooter()}
         </>
@@ -116,7 +129,7 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
           keyboardShouldPersistTaps="handled"
           renderScrollComponent={Scrollable}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
-          ListHeaderComponent={<SearchField testID="history-search" value={query} onChange={setQuery} placeholder="Search history" />}
+          ListHeaderComponent={<SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />}
           ListFooterComponent={clearFooter()}
           renderItem={({ item }) => {
             if (item.kind === "label") return <SectionLabel>{item.label}</SectionLabel>;
@@ -135,7 +148,7 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
                   onOpen(entry.url);
                 }}
                 onRemove={() => onRemove(entry.url)}
-                removeLabel={`Remove ${title} from history`}
+                removeLabel={t("history.removeLabel", { title })}
               />
             );
           }}
@@ -167,6 +180,7 @@ export function SearchField({
         testID={testID}
         value={value}
         onChangeText={onChange}
+        accessibilityLabel={placeholder}
         placeholder={placeholder}
         placeholderTextColor={muted}
         autoCapitalize="none"
@@ -192,6 +206,7 @@ export function SiteRow(props: {
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
   const danger = useThemeColor("danger");
+  const t = useT();
   // How far the row goes when it is swiped away, and how far it has to go to count.
   const offset = useSharedValue(0);
 
@@ -234,7 +249,9 @@ export function SiteRow(props: {
             <PressFeedback
               testID={props.testID}
               accessibilityRole="button"
-              accessibilityLabel={`Open ${props.title}`}
+              accessibilityLabel={t("history.openLabel", { title: props.title })}
+              // The site and time, read after the title.
+              accessibilityValue={{ text: props.detail }}
               onPress={props.onPress}
               className="flex-1 flex-row items-center gap-3 py-2"
             >

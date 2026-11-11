@@ -1,5 +1,7 @@
 import type { useAnimatedStyle } from "react-native-reanimated";
 
+import type { Translate } from "@/i18n";
+
 /** The search capsule's motion while the bar is swiped to change tabs (TabSwipe). */
 export type CapsuleStyle = ReturnType<typeof useAnimatedStyle>;
 
@@ -75,17 +77,21 @@ export function barLoading(props: BrowserBarProps): boolean {
   return props.mode === "page" && props.loading === true;
 }
 
-export function barButtons(props: BrowserBarProps): [BarButton & { icon: "archive" | "tabs" }, BarButton, BarButton & { icon: "settings" | "more" }] {
+/** The bar's three buttons, labelled in the language `t` speaks. */
+export function barButtons(
+  props: BrowserBarProps,
+  t: Translate,
+): [BarButton & { icon: "archive" | "tabs" }, BarButton, BarButton & { icon: "settings" | "more" }] {
   return props.mode === "start"
     ? [
-        { id: "bar-archive", label: "Archive", icon: "archive", onPress: props.onArchive },
-        { id: "bar-search", label: props.newTab ? "New tab" : "Search", onPress: props.onSearch },
-        { id: "bar-settings", label: "Settings", icon: "settings", onPress: props.onSettings },
+        { id: "bar-archive", label: t("bar.archive"), icon: "archive", onPress: props.onArchive },
+        { id: "bar-search", label: props.newTab ? t("bar.newTab") : t("bar.search"), onPress: props.onSearch },
+        { id: "bar-settings", label: t("bar.settings"), icon: "settings", onPress: props.onSettings },
       ]
     : [
         {
           id: "bar-tabs",
-          label: props.tabCount && props.tabCount > 1 ? `Tabs, ${props.tabCount} open` : "Tabs",
+          label: props.tabCount && props.tabCount > 1 ? t("bar.tabsOpen", { count: props.tabCount }) : t("bar.tabs"),
           icon: "tabs",
           onPress: props.onTabs,
           onLongPress: props.onTabsLongPress,
@@ -93,9 +99,9 @@ export function barButtons(props: BrowserBarProps): [BarButton & { icon: "archiv
         },
         {
           id: "bar-search",
-          label: props.site ? `Search or enter address, ${props.insecure ? "not secure, " : ""}${props.site}` : "Search",
+          label: props.site ? t(props.insecure ? "bar.searchOrEnterInsecure" : "bar.searchOrEnter", { site: props.site }) : t("bar.search"),
           onPress: props.onSearch,
         },
-        { id: "bar-more", label: "More", icon: "more", onPress: props.onMore, onLongPress: props.onMoreLongPress },
+        { id: "bar-more", label: t("bar.more"), icon: "more", onPress: props.onMore, onLongPress: props.onMoreLongPress },
       ];
 }

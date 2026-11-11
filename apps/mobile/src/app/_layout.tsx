@@ -1,12 +1,27 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { HeroUINativeProvider } from "heroui-native";
-import type { JSX } from "react";
+import { useEffect, type JSX } from "react";
+import { AppState } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+
+import { loadLocale, refreshDeviceLocale } from "@/i18n";
 
 import "../global.css";
 
+// The saved language is read before the first screen draws, alongside the browsing state, so the app opens in it.
+void loadLocale();
+
 export default function RootLayout(): JSX.Element {
+  // A language changed in the phone's settings while Bay was away shows on return, unless one was picked in Bay.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refreshDeviceLocale();
+    });
+
+    return () => subscription.remove();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider>

@@ -4,6 +4,8 @@ import type { JSX } from "react";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
 
+import { useT } from "@/i18n";
+
 import { barButtons, barInsecure, barLoading, barNewTab, barProgress, barSite, type BrowserBarProps } from "./BrowserBar.types";
 import { GlassIconButton } from "./GlassIconButton";
 import { LoadProgress } from "./LoadProgress";
@@ -16,7 +18,8 @@ const PRIVATE_TINT = "#18181B";
 
 // iOS: Liquid Glass buttons, a wide search capsule between two round ones.
 export function BrowserBar(props: BrowserBarProps): JSX.Element {
-  const [left, search, right] = barButtons(props);
+  const t = useT();
+  const [left, search, right] = barButtons(props, t);
   const site = barSite(props);
   const insecure = barInsecure(props);
   const onSearch = useStableCallback(search.onPress);
@@ -49,7 +52,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
             {barNewTab(props) ? (
               <HStack spacing={6} modifiers={[frame({ width: 136, height: 20 })]}>
                 <Image systemName="plus" size={15} />
-                <Text modifiers={[font({ size: 15, weight: "medium" })]}>New tab</Text>
+                <Text modifiers={[font({ size: 15, weight: "medium" })]}>{t("bar.newTab")}</Text>
               </HStack>
             ) : site ? (
               // A fixed height keeps the host on one line, truncated.

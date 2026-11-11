@@ -1,5 +1,5 @@
 import { Host, Image } from "@expo/ui/swift-ui";
-import { font, foregroundStyle } from "@expo/ui/swift-ui/modifiers";
+import { accessibilityHidden, font, foregroundStyle } from "@expo/ui/swift-ui/modifiers";
 import type { ComponentProps, JSX } from "react";
 
 import type { IconName, IconProps } from "./Icon.types";
@@ -51,11 +51,12 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   visibility: "eye",
 };
 
-// An SF Symbol inside React Native layout. The host ignores touches so the surrounding Pressable gets them.
+// An SF Symbol inside React Native layout. The host ignores touches so the surrounding Pressable gets them, and
+// VoiceOver skips it: the control around it carries the label, and SwiftUI would otherwise read the symbol's name.
 export function Icon({ name, color, size = 24 }: IconProps): JSX.Element {
   return (
     <Host matchContents pointerEvents="none">
-      <Image systemName={symbols[name]} modifiers={[font({ size: size * 0.75 }), foregroundStyle(color)]} />
+      <Image systemName={symbols[name]} modifiers={[font({ size: size * 0.75 }), foregroundStyle(color), accessibilityHidden(true)]} />
     </Host>
   );
 }

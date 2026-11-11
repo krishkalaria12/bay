@@ -3,6 +3,8 @@ import type { JSX } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 
+import { useT } from "@/i18n";
+
 import { barButtons, barInsecure, barLoading, barNewTab, barProgress, barSite, type BarButton, type BrowserBarProps } from "./BrowserBar.types";
 import { LoadProgress } from "./LoadProgress";
 import { MaterialSymbol, type MaterialSymbolName } from "./MaterialSymbol";
@@ -65,7 +67,8 @@ function BarPressable({
 }
 
 export function BrowserBar(props: BrowserBarProps): JSX.Element {
-  const [left, search, right] = barButtons(props);
+  const t = useT();
+  const [left, search, right] = barButtons(props, t);
 
   return (
     <View className="flex-row items-center justify-center gap-4">
@@ -77,7 +80,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
           button={search}
           icon="search"
           wide
-          text={barNewTab(props) ? "New tab" : barSite(props)}
+          text={barNewTab(props) ? t("bar.newTab") : barSite(props)}
           leading={barNewTab(props) ? "add" : undefined}
           insecure={barInsecure(props)}
           privately={props.privately}

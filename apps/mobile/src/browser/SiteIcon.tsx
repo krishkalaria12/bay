@@ -7,7 +7,10 @@ import { siteHost } from "@/store/model";
 
 const tints = ["#DCE8F5", "#F3E2D6", "#E3EEDF", "#ECE1F2", "#F5E9C9", "#DDEEEE"];
 
-/** The site's saved icon on a tile matching the theme, else a monogram. Icons are local files (`favicons.ts`), so this never loads anything. */
+/**
+ * The site's saved icon on a tile matching the theme, else a monogram. Icons are local files (`favicons.ts`), so this
+ * never loads anything. It always sits beside the site's name, so screen readers skip it.
+ */
 export function SiteIcon({ url, size = 28 }: { url: string; size?: number }): JSX.Element {
   const host = siteHost(url);
   const icon = useBrowserStore((state) => state.data.favicons[host]);
@@ -21,6 +24,9 @@ export function SiteIcon({ url, size = 28 }: { url: string; size?: number }): JS
 
     return (
       <View
+        accessible={false}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         className="items-center justify-center border border-black/5 dark:border-white/10"
         style={{ width: size, height: size, borderRadius: radius, backgroundColor: tile }}
       >
@@ -47,6 +53,9 @@ export function SiteIcon({ url, size = 28 }: { url: string; size?: number }): JS
 
   return (
     <View
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
       className="items-center justify-center border border-black/5"
       style={{ width: size, height: size, borderRadius: radius, backgroundColor: tints[Math.abs(hash) % tints.length] }}
     >

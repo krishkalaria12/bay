@@ -71,9 +71,10 @@ const paths = {
 
 export type MaterialSymbolName = keyof typeof paths;
 
+// Icons are drawn beside a label that says what the control does, so screen readers skip the drawing itself.
 export function MaterialSymbol({ name, size = 24, color }: { name: MaterialSymbolName; size?: number; color: string }): JSX.Element {
   return (
-    <Svg width={size} height={size} viewBox="0 0 960 960">
+    <Svg width={size} height={size} viewBox="0 0 960 960" accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <Path d={paths[name]} fill={color} />
     </Svg>
   );

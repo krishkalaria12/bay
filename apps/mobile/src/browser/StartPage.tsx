@@ -6,6 +6,7 @@ import { Text, View } from "react-native";
 import { gridShift, tileArriving, tileLeaving, useReducedMotion } from "@/chrome/motion";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Surface } from "@/chrome/Surface";
+import { useT } from "@/i18n";
 import type { HistoryEntry, PinnedSite } from "@/store/types";
 import { SiteIcon } from "./SiteIcon";
 
@@ -25,6 +26,7 @@ const siteName = (url: string) => hostOf(url).replace(/^www\./, "");
 export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): JSX.Element | null {
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
+  const t = useT();
   // Unpin when the finger lifts: removing the pressed tile mid-gesture made Android swallow the next tap (the toast's Undo).
   const unpinning = useRef<PinnedSite | null>(null);
   // A tile that is taken away leaves a gap; the rest close it (A5).
@@ -48,16 +50,17 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
   if (!pins.length && !recent.length) return null;
 
   return (
-    <View testID="start-page" className="w-full gap-6 px-5">
+    // Touches between the tiles fall through to the start screen behind, which opens search.
+    <View testID="start-page" className="w-full gap-6 px-5" pointerEvents="box-none">
       {pins.length ? (
-        <View className="flex-row flex-wrap justify-center" style={{ rowGap: 16 }}>
+        <View className="flex-row flex-wrap justify-center" style={{ rowGap: 16 }} pointerEvents="box-none">
           {pins.slice(0, PINS).map((site, index) => (
             <PressFeedback
               key={site.id}
               testID={`start-pin-${index}`}
               accessibilityRole="button"
-              accessibilityLabel={`Open ${site.title || siteName(site.url)}`}
-              accessibilityHint="Long press to unpin"
+              accessibilityLabel={t("start.openSite", { name: site.title || siteName(site.url) })}
+              accessibilityHint={t("start.longPressToUnpin")}
               onPress={() => onOpen(site.url)}
               onLongPress={() => {
                 unpinning.current = site;
@@ -89,7 +92,7 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
               key={entry.url}
               testID={`start-recent-${index}`}
               accessibilityRole="button"
-              accessibilityLabel={`Open ${entry.title || siteName(entry.url)}`}
+              accessibilityLabel={t("start.openSite", { name: entry.title || siteName(entry.url) })}
               onPress={() => onOpen(entry.url)}
               className="min-h-12 flex-row items-center gap-3 px-4 py-2"
               layout={shift}

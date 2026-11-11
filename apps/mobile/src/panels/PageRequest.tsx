@@ -5,6 +5,7 @@ import { useRef, useState, type JSX } from "react";
 import { View } from "react-native";
 
 import { PillButton } from "@/chrome/PillButton";
+import { useT, type MessageKey } from "@/i18n";
 
 import { ActionRow, PanelSheet } from "./PanelSheet";
 import type { PageRequest } from "@bay/engine";
@@ -20,11 +21,11 @@ export interface PageRequestPanelProps {
 }
 
 /** What a page asking for a device says, in Bay's own words on both apps. */
-const permissionMessages: Record<NonNullable<PageRequest["permission"]>, string> = {
-  camera: "This site would like to use your camera.",
-  microphone: "This site would like to use your microphone.",
-  location: "This site would like to use your location.",
-  "camera-microphone": "This site would like to use your camera and microphone.",
+const permissionMessages: Record<NonNullable<PageRequest["permission"]>, MessageKey> = {
+  camera: "pageRequest.permission.camera",
+  microphone: "pageRequest.permission.microphone",
+  location: "pageRequest.permission.location",
+  "camera-microphone": "pageRequest.permission.cameraMicrophone",
 };
 
 /**
@@ -33,6 +34,7 @@ const permissionMessages: Record<NonNullable<PageRequest["permission"]>, string>
  * page paused until this answers, so dismissing the sheet cancels the dialog, as a dismissed browser dialog would.
  */
 export function PageRequestPanel({ request, onAnswer }: PageRequestPanelProps): JSX.Element {
+  const t = useT();
   const host = request ? hostOf(request.url) : "";
   // Answering closes the sheet, and the sheet closing reports back as a dismissal too: answer each dialog once, so
   // the dismissal can't cancel the next dialog in the queue.
@@ -48,7 +50,7 @@ export function PageRequestPanel({ request, onAnswer }: PageRequestPanelProps): 
     <PanelSheet
       visible={request !== null}
       onClose={() => answer(false)}
-      title={host || "This page"}
+      title={host || t("pageRequest.thisPage")}
       testID="page-request"
       height={request?.kind === "auth" ? "72%" : "52%"}
     >
@@ -65,6 +67,7 @@ function RequestBody({
   onAnswer: (accepted: boolean, value?: string, username?: string, password?: string, save?: boolean) => void;
 }): JSX.Element {
   const foreground = useThemeColor("foreground");
+  const t = useT();
   const [value, setValue] = useState(request.defaultValue ?? "");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -85,15 +88,15 @@ function RequestBody({
     <>
       {request.kind === "auth" ? (
         <Typography testID="page-request-realm" className="text-sm text-muted">
-          {request.realm ? `Enter the username and password for “${request.realm}”.` : "Enter the username and password for this site."}
+          {request.realm ? t("pageRequest.auth.realm", { realm: request.realm }) : t("pageRequest.auth.site")}
         </Typography>
       ) : request.kind === "permission" ? (
         <Typography testID="page-request-permission-message" style={{ fontSize: 16, lineHeight: 22 }}>
-          {permissionMessages[request.permission ?? "camera"]}
+          {t(permissionMessages[request.permission ?? "camera"])}
         </Typography>
       ) : request.kind === "external" ? (
         <>
-          <Typography testID="page-request-external-message">This link opens in another app. Bay stays on this page.</Typography>
+          <Typography testID="page-request-external-message">{t("pageRequest.external")}</Typography>
           <Typography testID="page-request-external" className="mt-2 text-sm text-muted" numberOfLines={2}>
             {request.externalUrl ?? ""}
           </Typography>
@@ -107,7 +110,7 @@ function RequestBody({
         <View className="mt-3 flex-row items-center rounded-full bg-default px-4">
           <BottomSheetTextInput
             testID="page-request-input"
-            accessibilityLabel="Your answer"
+            accessibilityLabel={t("pageRequest.answer")}
             value={value}
             onChangeText={setValue}
             autoCapitalize="none"
@@ -123,10 +126,10 @@ function RequestBody({
           <View className="mt-3 flex-row items-center rounded-full bg-default px-4">
             <BottomSheetTextInput
               testID="page-request-username"
-              accessibilityLabel="Username"
+              accessibilityLabel={t("pageRequest.username")}
               value={username}
               onChangeText={setUsername}
-              placeholder="Username"
+              placeholder={t("pageRequest.username")}
               autoCapitalize="none"
               autoCorrect={false}
               textContentType="username"
@@ -136,10 +139,10 @@ function RequestBody({
           <View className="mt-2 flex-row items-center rounded-full bg-default px-4">
             <BottomSheetTextInput
               testID="page-request-password"
-              accessibilityLabel="Password"
+              accessibilityLabel={t("pageRequest.password")}
               value={password}
               onChangeText={setPassword}
-              placeholder="Password"
+              placeholder={t("pageRequest.password")}
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
@@ -152,7 +155,7 @@ function RequestBody({
           <View className="mt-2">
             <ActionRow
               testID="page-request-save-password"
-              label={`Save password for ${hostOf(request.url) || "this site"}`}
+              label={t("pageRequest.savePassword", { host: hostOf(request.url) || t("pageRequest.thisSite") })}
               toggle={save}
               onPress={() => setSave((on) => !on)}
             />
@@ -163,16 +166,30 @@ function RequestBody({
         {request.kind !== "alert" ? (
           <PillButton
             testID="page-request-cancel"
-            label={request.kind === "permission" ? "Don't Allow" : "Cancel"}
-            accessibilityLabel={request.kind === "permission" ? "Don't Allow" : "Cancel"}
+            label={request.kind === "permission" ? t("pageRequest.dontAllow") : t("pageRequest.cancel")}
+            accessibilityLabel={request.kind === "permission" ? t("pageRequest.dontAllow") : t("pageRequest.cancel")}
             onPress={() => onAnswer(false)}
           />
         ) : null}
         <PillButton
           testID="page-request-ok"
-          label={request.kind === "auth" ? "Sign in" : request.kind === "external" ? "Open" : request.kind === "permission" ? "Allow" : "OK"}
+          label={
+            request.kind === "auth"
+              ? t("pageRequest.signIn")
+              : request.kind === "external"
+                ? t("pageRequest.open")
+                : request.kind === "permission"
+                  ? t("pageRequest.allow")
+                  : t("pageRequest.ok")
+          }
           accessibilityLabel={
-            request.kind === "auth" ? "Sign in" : request.kind === "external" ? "Open in another app" : request.kind === "permission" ? "Allow" : "OK"
+            request.kind === "auth"
+              ? t("pageRequest.signIn")
+              : request.kind === "external"
+                ? t("pageRequest.openElsewhere")
+                : request.kind === "permission"
+                  ? t("pageRequest.allow")
+                  : t("pageRequest.ok")
           }
           onPress={submit}
         />
