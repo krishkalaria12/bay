@@ -555,13 +555,7 @@ export class Bookmarks extends Context.Service<
       const sendOps = (profile: string, ops: BookmarkOp[]): Effect.Effect<boolean> =>
         engine.apply(profile, ops).pipe(
           Effect.map((result) => !result.skipped && !result.invalid.length),
-          Effect.catch((error) =>
-            Effect.sync(() => {
-              void report({ name: "bookmarks.apply", resource: profile }, error);
-
-              return false;
-            }),
-          ),
+          Effect.catch((error) => report({ name: "bookmarks.apply", resource: profile }, error).pipe(Effect.as(false))),
         );
 
       /** Reads Chrome's tree and makes the store's edits since the last confirmed tree again on it. */
@@ -618,7 +612,7 @@ export class Bookmarks extends Context.Service<
           yield* pushTree(profile, state);
         });
 
-      // The work itself: one profile at a time, and a caller that asks while the work runs waits for it.
+      // Each profile runs one step at a time, and a caller that asks while its work runs waits for it.
       const work = (request: Request): Effect.Effect<void> =>
         Effect.gen(function* () {
           const state = stateOf(request.engine);
@@ -649,14 +643,25 @@ export class Bookmarks extends Context.Service<
 
             if (Exit.isFailure(exit)) {
               yield* report({ name: "bookmarks.work", resource: request.engine }, exit.cause);
-
-              return;
             }
           }
         });
 
-      // The work the app asks for runs here, in the app's scope: it stops when the app does.
-      yield* Effect.forkScoped(Effect.forever(Effect.flatMap(Queue.take(requests), (request) => work(request))));
+      // Profiles progress independently. A running profile takes new flags into its existing drain instead of
+      // making every change another waiting fiber. The drain belongs to the app's scope.
+      const dispatch = (request: Request): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          const state = stateOf(request.engine);
+
+          if (request.kind === "read") state.needRead = true;
+          else state.needPush = true;
+
+          if (state.done) return;
+
+          yield* Effect.forkIn(work(request), scope, { startImmediately: true });
+        });
+
+      yield* Effect.forkScoped(Effect.forever(Effect.flatMap(Queue.take(requests), dispatch)));
 
       const read = (profile: string): Effect.Effect<void> => work({ engine: profile, kind: "read" });
 
@@ -824,7 +829,7 @@ export class Bookmarks extends Context.Service<
 
           legacyMoved = result !== "kept";
 
-          for (const profile of engineProfiles(store())) yield* read(profile);
+          yield* reload();
         });
       });
 
