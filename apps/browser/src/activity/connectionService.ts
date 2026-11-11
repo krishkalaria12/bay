@@ -195,18 +195,35 @@ export class ConnectionService extends Context.Service<
 
       // The refresh an account is having: one at a time, so two readers share one refresh.
       const locks = new Map<LiveSourceId, Semaphore.Semaphore>();
+      // Keychain changes serialize separately, so disconnect never waits for a provider request.
+      const mutations = new Map<LiveSourceId, Semaphore.Semaphore>();
 
-      const lockOf = (source: LiveSourceId) => {
-        const held = locks.get(source);
+      const lockOf = (source: LiveSourceId, pool = locks) => {
+        const held = pool.get(source);
 
         if (held) return held;
 
         const made = Semaphore.makeUnsafe(1);
 
-        locks.set(source, made);
+        pool.set(source, made);
 
         return made;
       };
+
+      const writeCurrentSecret = (source: LiveSourceId, secret: string, gen: number): Effect.Effect<void, LiveError> =>
+        Effect.suspend(() =>
+          lockOf(source, mutations).withPermit(
+            Effect.gen(function* () {
+              if (generation(source) !== gen) return yield* Effect.fail(CANCELLED);
+
+              // Native Keychain writes cannot be cancelled. Keep the permit until the write actually lands,
+              // so a disconnect's delete follows it even when the caller is interrupted.
+              yield* engine.writeSecret(source, secret);
+
+              if (generation(source) !== gen) return yield* Effect.fail(CANCELLED);
+            }).pipe(Effect.uninterruptible),
+          ),
+        );
 
       // The flow an account is having.
       const flows = new Map<LiveSourceId, Flow>();
@@ -238,7 +255,10 @@ export class ConnectionService extends Context.Service<
 
       const refreshToken = (source: LiveSourceId): Effect.Effect<string, LiveError> =>
         Effect.gen(function* () {
+          const gen = generation(source);
           const secret = yield* engine.readSecret(source);
+
+          if (generation(source) !== gen) return yield* Effect.fail(new LiveError("signedOut", NOT_SIGNED_IN));
 
           if (!secret) return yield* Effect.fail(new LiveError(live().accounts[source] ? "signedOut" : "notConfigured", NOT_SIGNED_IN));
 
@@ -250,8 +270,6 @@ export class ConnectionService extends Context.Service<
           if (!stored) return yield* Effect.fail(new LiveError("signedOut", "The stored sign-in is not usable"));
 
           if (stored.expires_at > Date.now() + 60_000) return yield* Effect.succeed(stored.access_token);
-
-          const gen = generation(source);
 
           const json = yield* engine.send<{ access_token: string; expires_in: number }>({
             url: endpoints.googleToken,
@@ -268,7 +286,11 @@ export class ConnectionService extends Context.Service<
           // The account was disconnected while the token was being refreshed: the answer belongs to nobody.
           if (generation(source) !== gen) return yield* Effect.fail(new LiveError("signedOut", NOT_SIGNED_IN));
 
-          yield* engine.writeSecret(source, JSON.stringify({ ...stored, access_token: json.access_token, expires_at: Date.now() + json.expires_in * 1000 }));
+          yield* writeCurrentSecret(
+            source,
+            JSON.stringify({ ...stored, access_token: json.access_token, expires_at: Date.now() + json.expires_in * 1000 }),
+            gen,
+          );
 
           return yield* Effect.succeed(json.access_token);
         }).pipe(Effect.catch((error) => report("connection.refresh", source, error)));
@@ -296,7 +318,7 @@ export class ConnectionService extends Context.Service<
           // The account was disconnected while the token was being checked: it stays disconnected.
           if (generation("github") !== gen) return yield* Effect.fail(CANCELLED);
 
-          yield* engine.writeSecret("github", secret);
+          yield* writeCurrentSecret("github", secret, gen);
 
           setAccount("github", account(viewer.login, viewer.name, viewer.avatarUrl));
         }).pipe(Effect.catch((error) => report("connection.github", "github", error)));
@@ -313,7 +335,7 @@ export class ConnectionService extends Context.Service<
           // The account was disconnected while the token was being checked: it stays disconnected.
           if (generation("bitbucket") !== gen) return yield* Effect.fail(CANCELLED);
 
-          yield* engine.writeSecret("bitbucket", token.trim());
+          yield* writeCurrentSecret("bitbucket", token.trim(), gen);
 
           updateConfig({ bitbucketUser: user.trim() });
 
@@ -332,7 +354,7 @@ export class ConnectionService extends Context.Service<
           // The account was disconnected while the token was being checked: it stays disconnected.
           if (generation("notion") !== gen) return yield* Effect.fail(CANCELLED);
 
-          yield* engine.writeSecret("notion", token.trim());
+          yield* writeCurrentSecret("notion", token.trim(), gen);
 
           setAccount("notion", account(me.bot?.workspace_name ?? me.name ?? "Notion", me.bot?.workspace_name ?? null, null));
         }).pipe(Effect.catch((error) => report("connection.notion", "notion", error)));
@@ -354,7 +376,7 @@ export class ConnectionService extends Context.Service<
           // The account was disconnected while the token was being checked: it stays disconnected.
           if (generation("confluence") !== gen) return yield* Effect.fail(CANCELLED);
 
-          yield* engine.writeSecret("confluence", token.trim());
+          yield* writeCurrentSecret("confluence", token.trim(), gen);
 
           updateConfig({ confluenceSite: base, confluenceEmail: email.trim() });
 
@@ -392,7 +414,7 @@ export class ConnectionService extends Context.Service<
           // The account was disconnected while the code was being exchanged: it stays disconnected.
           if (generation("gdrive") !== gen) return yield* Effect.fail(CANCELLED);
 
-          yield* engine.writeSecret("gdrive", JSON.stringify(tokens));
+          yield* writeCurrentSecret("gdrive", JSON.stringify(tokens), gen);
 
           const about = yield* engine
             .send<{ user?: { displayName: string; emailAddress: string; photoLink?: string } }>({
@@ -598,10 +620,11 @@ export class ConnectionService extends Context.Service<
 
           yield* endFlow(source);
 
-          yield* engine.deleteSecret(source);
-
-          yield* Effect.sync(() => setAccount(source, null));
-        }).pipe(Effect.catch((error) => report("connection.keychain", source, error)));
+          yield* lockOf(source, mutations).withPermit(engine.deleteSecret(source).pipe(Effect.andThen(Effect.sync(() => setAccount(source, null)))));
+        }).pipe(
+          Effect.uninterruptible,
+          Effect.catch((error) => report("connection.keychain", source, error)),
+        );
 
       const service = ConnectionService.of({
         connectGithub,

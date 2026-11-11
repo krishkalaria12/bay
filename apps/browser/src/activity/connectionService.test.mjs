@@ -21,11 +21,24 @@ const DEVICE_TOKEN = `${endpoints.githubWeb}/login/oauth/access_token`;
 // The engine a test drives: the Keychain, the network and the tabs are all the test's own.
 const fakeEngine = (lab) =>
   Layer.succeed(ConnectionEngine)({
-    readSecret: (source) => Effect.sync(() => lab.secrets.get(source) ?? null),
+    readSecret: (source) =>
+      Effect.suspend(() => {
+        const secret = lab.secrets.get(source) ?? null;
+
+        lab.reads.push(source);
+
+        return lab.readGate ? Effect.promise(() => lab.readGate.promise).pipe(Effect.as(secret)) : Effect.succeed(secret);
+      }),
     writeSecret: (source, secret) =>
-      Effect.sync(() => {
-        lab.secrets.set(source, secret);
-        lab.writes.push(source);
+      Effect.suspend(() => {
+        lab.writesStarted.push(source);
+
+        const write = Effect.sync(() => {
+          lab.secrets.set(source, secret);
+          lab.writes.push(source);
+        });
+
+        return lab.writeGate ? Effect.promise(() => lab.writeGate.promise).pipe(Effect.andThen(write)) : write;
       }),
     deleteSecret: (source) =>
       Effect.sync(() => {
@@ -74,12 +87,16 @@ const withConnections = async (use) => {
     closed: [],
     deletes: [],
     gate: null,
+    readGate: null,
+    writeGate: null,
+    reads: [],
     opened: [],
     requests: [],
     secrets: new Map(),
     stopped: [],
     watchers: [],
     writes: [],
+    writesStarted: [],
   };
 
   const diagnostics = fakeDiagnostics();
@@ -232,6 +249,95 @@ test("the refresh of an account is one at a time", async () => {
 
     assert.deepEqual(tokens, ["fresh-token", "fresh-token"]);
     assert.equal(lab.requests.length, 1, "the token was refreshed once");
+  });
+});
+
+test("disconnect invalidates a pending Keychain read before it can refresh or return a token", async () => {
+  for (const [source, secret] of [
+    ["gdrive", googleTokens("expired-token")],
+    ["gdrive", googleTokens("current-token", Date.now() + 3_600_000)],
+    ["github", "github-token"],
+  ]) {
+    await withConnections(async ({ lab, work }) => {
+      lab.secrets.set(source, secret);
+      lab.answers.set(GOOGLE_TOKEN, { access_token: "fresh-token", expires_in: 3600 });
+      lab.readGate = Promise.withResolvers();
+
+      const reading = work((service) => service.token(source));
+
+      await tick();
+      assert.deepEqual(lab.reads, [source]);
+      await work((service) => service.disconnect(source));
+      lab.readGate.resolve();
+
+      await assert.rejects(reading, (error) => error.kind === "signedOut");
+      assert.equal(lab.requests.length, 0, "a stale read never refreshes the credential");
+      assert.equal(lab.secrets.has(source), false);
+    });
+  }
+});
+
+test("disconnect deletes a pending credential write after it lands and prevents reconnection", async () => {
+  for (const source of ["gdrive", "github"]) {
+    await withConnections(async ({ lab, work }) => {
+      lab.writeGate = Promise.withResolvers();
+      lab.secrets.set("gdrive", googleTokens("expired-token"));
+      lab.answers.set(GOOGLE_TOKEN, { access_token: "fresh-token", expires_in: 3600 });
+      lab.answers.set(endpoints.githubGraphql, { data: { viewer: { login: "bay", name: "Bay", avatarUrl: "avatar" } } });
+
+      const writing = work((service) => (source === "gdrive" ? service.token(source) : service.connectGithub("github-token")));
+
+      await tick();
+      assert.deepEqual(lab.writesStarted, [source]);
+
+      const disconnecting = work((service) => service.disconnect(source));
+
+      await tick();
+      lab.writeGate.resolve();
+
+      await assert.rejects(writing, (error) => error.kind === "signedOut");
+      await disconnecting;
+      assert.deepEqual(lab.deletes, [source]);
+      assert.equal(lab.secrets.has(source), false, "the pending write cannot restore the removed credential");
+      assert.equal(live().accounts[source], undefined, "the pending write cannot reconnect the account");
+    });
+  }
+});
+
+test("interrupting a native write does not let disconnect delete before the write lands", async () => {
+  await withConnections(async ({ lab, runtime, work }) => {
+    lab.writeGate = Promise.withResolvers();
+    lab.answers.set(endpoints.githubGraphql, { data: { viewer: { login: "bay", name: "Bay", avatarUrl: "avatar" } } });
+
+    const controller = new AbortController();
+
+    const connecting = runtime.runPromise(
+      Effect.gen(function* () {
+        const service = yield* ConnectionService;
+
+        yield* service.connectGithub("github-token");
+      }),
+      { signal: controller.signal },
+    );
+
+    await tick();
+    assert.deepEqual(lab.writesStarted, ["github"]);
+    controller.abort();
+
+    const interrupted = assert.rejects(connecting);
+    const disconnecting = work((service) => service.disconnect("github"));
+
+    try {
+      await tick();
+      assert.deepEqual(lab.deletes, [], "disconnect waits for the uncancellable native write");
+    } finally {
+      lab.writeGate.resolve();
+      await interrupted;
+      await disconnecting;
+    }
+
+    assert.equal(lab.secrets.has("github"), false);
+    assert.equal(live().accounts.github, undefined);
   });
 });
 
