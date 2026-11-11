@@ -8,6 +8,7 @@ import { createCurrencyConverter, createSuggestFetcher, type CurrencyAnswer, typ
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -24,7 +25,14 @@ export class SearchFailure extends TaggedError("SearchFailure")<{
 }> {}
 
 /** What the network said: the payload, and whether the server answered with a success. */
-export type SearchPayload = { readonly ok: boolean; readonly body: string };
+export type SearchPayload = {
+  /** The status the server answered with. */
+  readonly status: number;
+  readonly ok: boolean;
+  readonly body: string;
+  /** The answer's headers, as the caller reads them. */
+  readonly headers: { readonly get: (name: string) => string | null };
+};
 
 /** A signal that is cancelled when either of the two is. */
 const link = (outer: AbortSignal, inner: AbortSignal): AbortSignal => {
@@ -39,22 +47,40 @@ const link = (outer: AbortSignal, inner: AbortSignal): AbortSignal => {
   return controller.signal;
 };
 
+/** The headers one request carries. */
+export type SearchHeaders = { readonly [name: string]: string };
+
+/** How a request goes out: the headers it carries, and whether it carries the user's cookies. */
+export type SearchRequest = {
+  readonly headers?: SearchHeaders;
+  readonly credentials?: "omit" | "include" | "same-origin";
+};
+
 /** The network, as the search work reaches it. */
 export class SearchNetwork extends Context.Service<
   SearchNetwork,
   {
     /** Reads the payload at `url`. The caller's signal stops the request when the work is cancelled. */
-    readonly fetch: (url: string, signal: AbortSignal) => Effect.Effect<SearchPayload, SearchFailure>;
+    readonly fetch: (url: string, signal: AbortSignal, request?: SearchRequest) => Effect.Effect<SearchPayload, SearchFailure>;
   }
 >()("bay/SearchNetwork") {
   static readonly layer = Layer.succeed(SearchNetwork)({
-    fetch: (url, signal) =>
+    fetch: (url, signal, request) =>
       Effect.tryPromise({
-        try: (effectSignal) =>
-          fetch(url, { signal: link(signal, effectSignal) }).then(async (response) => ({
+        try: (effectSignal) => {
+          const init: RequestInit = { signal: link(signal, effectSignal) };
+
+          if (request?.headers) init.headers = request.headers;
+
+          if (request?.credentials) init.credentials = request.credentials;
+
+          return fetch(url, init).then(async (response) => ({
+            status: response.status,
             ok: response.ok,
             body: await response.text(),
-          })),
+            headers: { get: (name: string) => response.headers.get(name) },
+          }));
+        },
         catch: (cause) => new SearchFailure({ operation: { name: "search.fetch", resource: url }, cause }),
       }),
   });
@@ -95,6 +121,27 @@ export type ConvertRequest = {
 
 // MARK: The service
 
+/** Where the bang list comes from, and what may be asked of it. */
+const BANG_LIST_URL = "https://services.helium.imput.net/bangs.json";
+
+/** How long the bang list may take. */
+const BANG_LIST_TIMEOUT_MS = 10_000;
+
+/** The largest bang list the app keeps. */
+const MAX_BANG_LIST_CHARS = 5_000_000;
+
+/** What the bang list's answer was. */
+export type BangListReply = {
+  /** The status the server answered with. */
+  readonly status: number;
+  /** The list itself, when the server sent one. */
+  readonly body: string | null;
+  /** What the list says it is. */
+  readonly contentType: string | null;
+  /** The version the list has, for the next ask. */
+  readonly etag: string | null;
+};
+
 /** One command bar's search work: its own fetcher, its own rates, and the requests that are current. */
 type Session = {
   /** The suggestions' debounce and cache: the shared fetcher owns both. */
@@ -124,6 +171,8 @@ export class SearchService extends Context.Service<
     readonly stopConversion: (session: string) => Effect.Effect<void>;
     /** Stops everything the session has and lets it go: the palette closed. */
     readonly close: (session: string) => Effect.Effect<void>;
+    /** Asks for the bang list. The list is the app's one network for it: there is no second fetch. */
+    readonly bangList: (etag: string | null) => Effect.Effect<BangListReply, SearchFailure>;
   }
 >()("bay/SearchService") {
   static readonly layer = Layer.effect(
@@ -312,10 +361,58 @@ export class SearchService extends Context.Service<
           state.currencyFiber = undefined;
 
           if (suggestions) yield* Fiber.interrupt(suggestions);
+
           if (conversion) yield* Fiber.interrupt(conversion);
         });
 
-      return SearchService.of({ suggest, convert, stopSuggestions, stopConversion, close });
+      // The bang list: the app's own network for it, with the same timeout and the same size guard as before.
+      const bangList = (etag: string | null): Effect.Effect<BangListReply, SearchFailure> =>
+        Effect.gen(function* () {
+          const headers = { Accept: "application/json" };
+
+          if (etag) Object.assign(headers, { "If-None-Match": etag });
+
+          const controller = new AbortController();
+
+          const answer = yield* network.fetch(BANG_LIST_URL, controller.signal, { headers, credentials: "omit" }).pipe(
+            Effect.timeout(Duration.millis(BANG_LIST_TIMEOUT_MS)),
+            // A list that takes too long is a failure like any other: the app keeps the one it has.
+            Effect.catch((cause) =>
+              Effect.fail(
+                new SearchFailure({
+                  operation: { name: "search.bangList", resource: BANG_LIST_URL },
+                  cause,
+                }),
+              ),
+            ),
+          );
+
+          // A list that says it is too big is not read: the app keeps the one it has.
+          const length = Number(answer.headers.get("content-length") ?? 0);
+
+          if (length > MAX_BANG_LIST_CHARS) {
+            return yield* Effect.fail(
+              new SearchFailure({ operation: { name: "search.bangList", resource: BANG_LIST_URL }, cause: new Error("The bang list is too large") }),
+            );
+          }
+
+          const body = answer.status === 200 ? answer.body : null;
+
+          if (body && body.length > MAX_BANG_LIST_CHARS) {
+            return yield* Effect.fail(
+              new SearchFailure({ operation: { name: "search.bangList", resource: BANG_LIST_URL }, cause: new Error("The bang list is too large") }),
+            );
+          }
+
+          return {
+            status: answer.status,
+            body,
+            contentType: answer.headers.get("content-type"),
+            etag: answer.headers.get("etag"),
+          } satisfies BangListReply;
+        });
+
+      return SearchService.of({ suggest, convert, stopSuggestions, stopConversion, close, bangList });
     }),
   );
 }

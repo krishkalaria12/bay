@@ -24,23 +24,27 @@ const fakeNetwork = () => {
     requests: [],
     /** Whether the requests wait for the test to give them their answer. */
     holding: false,
+    /** The answers the network gives, by URL. */
+    answers: new Map(),
   };
 
   const layer = Layer.succeed(SearchNetwork)({
-    fetch: (url, signal) =>
+    fetch: (url, signal, request) =>
       Effect.promise(
         () =>
           new Promise((resolve) => {
-            const request = {
+            const asked = {
               url,
               signal,
+              /** The headers and the cookie policy the request carried. */
+              request,
               /** Gives the request its answer. */
-              give: (body) => resolve({ ok: true, body }),
+              give: (body) => resolve({ status: 200, ok: true, body, headers: { get: () => null } }),
             };
 
-            fake.requests.push(request);
+            fake.requests.push(asked);
 
-            if (!fake.holding) request.give("");
+            if (!fake.holding) asked.give("");
           }),
       ),
   });
@@ -214,5 +218,26 @@ test("two command bars keep their own work", async () => {
     await until("the second request", () => network.fake.requests.length === 2);
 
     assert.equal(network.fake.requests[0].signal.aborted, false, "one command bar does not stop another's work");
+  });
+});
+
+test("the bang list is asked for without cookies, and with the version it has", async () => {
+  const network = fakeNetwork();
+
+  await withService(network, async (runtime) => {
+    const reply = await runtime.runPromise(
+      Effect.gen(function* () {
+        const search = yield* SearchService;
+
+        return yield* search.bangList("etag-1");
+      }),
+    );
+
+    const asked = network.fake.requests[0];
+
+    assert.equal(asked.request.credentials, "omit", "the bang list carries no cookies");
+    assert.equal(asked.request.headers["If-None-Match"], "etag-1", "the list is asked for by the version the app has");
+    assert.equal(reply.status, 200, "the answer is the one the server gave");
+    assert.equal(reply.body, "", "the body comes back whole");
   });
 });
