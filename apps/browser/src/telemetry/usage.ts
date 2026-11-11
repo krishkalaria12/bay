@@ -1,6 +1,6 @@
 import { listTasks, onExtensionsChanged } from "@bay/chromium";
 import { onAppEvent } from "@bay/desktop";
-import { useTranslate } from "../components/site/translateState";
+import { useTranslate } from "../components/site/pageWorkService";
 import { useBrowser } from "../store/browserStore";
 import { useSync } from "../sync/engine";
 import { capture, endSession, flush, isSharing, startClient } from "./client";

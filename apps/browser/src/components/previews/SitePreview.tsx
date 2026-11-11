@@ -74,6 +74,7 @@ function usePreviewData<T>(tabId: string, site: PreviewSite): State<T> {
         setState(answer as Answer<T>);
       }
     });
+
     return () => {
       live = false;
     };

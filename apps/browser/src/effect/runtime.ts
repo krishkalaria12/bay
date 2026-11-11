@@ -17,6 +17,7 @@ import { EnrichmentEngine, EnrichmentService } from "../lib/enrichmentService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { AutomationEngine, AutomationService, CliEngine } from "../components/cli/automationService";
 import { SearchNetwork, SearchService } from "../components/commandBar/searchService";
+import { PageWorkEngine, PageWorkService } from "../components/site/pageWorkService";
 import { DownloadEngine, DownloadWorkService } from "../lib/downloadWorkService";
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
@@ -56,6 +57,7 @@ export type AppServices =
   | LibraryService
   | LocalFileService
   | NotificationService
+  | PageWorkService
   | Persistence
   | PreviewService
   | ProfileCleanup
@@ -101,6 +103,7 @@ const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEn
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
+const pageWork = PageWorkService.layer.pipe(Layer.provide(PageWorkEngine.layer));
 
 const search = SearchService.layer.pipe(Layer.provide(SearchNetwork.layer));
 
@@ -142,6 +145,7 @@ export const appLayer = Layer.mergeAll(
   downloads,
   boosts,
   connections,
+  pageWork,
   search,
   telemetry,
   calendar,

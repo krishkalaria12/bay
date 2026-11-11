@@ -156,6 +156,7 @@ export class PreviewService extends Context.Service<
             Effect.catch(() => Effect.succeed(null)),
           );
 
+          // SAFETY: the page answers with the fetched list the script asked for; the parse reads that shape.
           const all = answer as Fetched[] | null;
 
           if (!all?.length) return yield* Effect.succeed({ kind: "unreadable" } as const);
