@@ -1,6 +1,6 @@
-import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { BottomSheetScrollView, type BottomSheetBackgroundProps } from "@gorhom/bottom-sheet";
 import { BottomSheet, Typography, useThemeColor } from "heroui-native";
-import { Children, createContext, isValidElement, useContext, useState, type JSX, type ReactNode } from "react";
+import { Children, createContext, isValidElement, useContext, useEffect, useState, type FC, type JSX, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,6 +10,9 @@ import type { IconName } from "@/chrome/Icon.types";
 import { SPRING, useReducedMotion } from "@/chrome/motion";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Toggle } from "@/chrome/Toggle";
+import { useT } from "@/i18n";
+
+import { holdSheetOpen } from "./openSheets";
 
 export interface PanelSheetProps {
   visible: boolean;
@@ -23,8 +26,11 @@ export interface PanelSheetProps {
   onBack?: () => void;
   /** Drawn in place of the title (which still names the close button). */
   header?: ReactNode;
-  /** Drawn behind the sheet's content (iOS's Liquid Glass); the sheet's own background is transparent then. */
-  backdrop?: ReactNode;
+  /**
+   * Draws the sheet's background surface in place of the solid one (iOS's Liquid Glass). It is the bottom sheet's
+   * background layer, so it sits under the handle as well as the content. Pass a stable component, not an inline one.
+   */
+  background?: FC<BottomSheetBackgroundProps>;
   /** The children bring their own scrolling (a LegendList); the sheet doesn't wrap them in a scroll view. */
   listMode?: boolean;
 }
@@ -39,18 +45,27 @@ export function PanelSheetShared({
   dismissible = true,
   onBack,
   header,
-  backdrop,
+  background,
   listMode = false,
 }: PanelSheetProps): JSX.Element {
   const insets = useSafeAreaInsets();
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
   const reduced = useReducedMotion();
+  const t = useT();
   // HeroUI renders a closed sheet's content anyway, so every panel's rows would render with the browser. Content
   // mounts on open and stays until the sheet finishes animating closed.
   const [shown, setShown] = useState(visible);
 
   if (visible && !shown) setShown(true);
+
+  // While it is open the browser behind steps out of VoiceOver and TalkBack (openSheets.ts). It counts from the moment
+  // it opens to the moment it is asked to close, not to the end of its animation, so the page is back at once.
+  useEffect(() => {
+    if (!visible) return;
+
+    return holdSheetOpen();
+  }, [visible]);
 
   return (
     <BottomSheet
@@ -59,7 +74,10 @@ export function PanelSheetShared({
         if (!open && dismissible) onClose();
       }}
     >
-      <BottomSheet.Portal unstable_accessibilityContainerViewIsModal>
+      {/* In the app's own window, not react-native-screens' full-window overlay (iOS only). That overlay hangs off the
+          UIWindow with no view controller above it, and Expo UI's Host only draws its SwiftUI when it finds one, so a
+          sheet there lost its glass, its icons and its pill buttons. */}
+      <BottomSheet.Portal disableFullWindowOverlay>
         <BottomSheet.Overlay variant="default" isCloseOnPress={dismissible} />
         <BottomSheet.Content
           snapPoints={[height]}
@@ -78,17 +96,18 @@ export function PanelSheetShared({
           }}
           onClose={() => setShown(false)}
           contentContainerClassName="h-full"
-          backgroundClassName={backdrop ? "rounded-t-[28px] bg-transparent" : "rounded-t-[28px] bg-background"}
+          backgroundClassName={background ? "rounded-t-[28px] bg-transparent" : "rounded-t-[28px] bg-background"}
+          backgroundComponent={background}
         >
-          {backdrop}
-          <View testID={testID} className="flex-1">
+          {/* Modal for VoiceOver: what sits beside the sheet's content inside the sheet is skipped too. */}
+          <View testID={testID} className="flex-1" accessibilityViewIsModal>
             <View className="flex-row items-center gap-3 px-5 pb-3" style={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}>
               <View className="flex-1 flex-row items-center gap-1">
                 {onBack ? (
                   <Pressable
                     testID={`${testID}-back`}
                     accessibilityRole="button"
-                    accessibilityLabel="Back"
+                    accessibilityLabel={t("sheet.back")}
                     onPress={onBack}
                     className="-ml-2.5 h-11 w-11 items-center justify-center rounded-full active:opacity-60"
                   >
@@ -98,13 +117,15 @@ export function PanelSheetShared({
                 {header && !onBack ? (
                   <View className="flex-1">{header}</View>
                 ) : (
-                  <BottomSheet.Title className="text-xl font-semibold">{title}</BottomSheet.Title>
+                  <BottomSheet.Title accessibilityRole="header" className="text-xl font-semibold">
+                    {title}
+                  </BottomSheet.Title>
                 )}
               </View>
               <Pressable
                 testID={`${testID}-close`}
                 accessibilityRole="button"
-                accessibilityLabel={`Close ${title}`}
+                accessibilityLabel={t("sheet.close", { title })}
                 accessibilityState={{ disabled: !dismissible }}
                 disabled={!dismissible}
                 onPress={onClose}
@@ -165,6 +186,9 @@ export function ActionRow({
   const danger = useThemeColor("danger");
   const foreground = useThemeColor("foreground");
   const grouped = useContext(InGroup);
+  const t = useT();
+  // The row reads as one control, so its current setting and its explanation are read after the label.
+  const spoken = [value, detail].filter(Boolean).join(", ");
 
   return (
     <PressFeedback
@@ -172,6 +196,7 @@ export function ActionRow({
       accessibilityRole={toggle === undefined ? "button" : "switch"}
       accessibilityLabel={label}
       accessibilityState={toggle === undefined ? { disabled, selected } : { disabled, checked: toggle }}
+      accessibilityValue={spoken ? { text: spoken } : undefined}
       disabled={disabled}
       onPress={onPress}
       className={
@@ -200,7 +225,7 @@ export function ActionRow({
       {chevron ? <Icon name="chevron" color={muted} size={20} /> : null}
       {toggle !== undefined ? <Toggle value={toggle} disabled={disabled} /> : null}
       {selected ? (
-        <Typography accessibilityLabel="Selected" className="text-accent">
+        <Typography accessibilityLabel={t("sheet.selected")} className="text-accent">
           ✓
         </Typography>
       ) : null}
@@ -209,7 +234,11 @@ export function ActionRow({
 }
 
 export function SectionLabel({ children }: { children: ReactNode }): JSX.Element {
-  return <Typography className="mt-5 mb-1 text-sm font-medium text-muted">{children}</Typography>;
+  return (
+    <Typography accessibilityRole="header" className="mt-5 mb-1 text-sm font-medium text-muted">
+      {children}
+    </Typography>
+  );
 }
 
 const InGroup = createContext(false);
@@ -221,7 +250,11 @@ export function Group({ label, children, testID }: { label?: string; children: R
   // SAFETY: rows are the card's ActionRow children, whose props carry the icon name exactly when an icon is drawn.
   return (
     <View testID={testID}>
-      {label ? <Typography className="mb-2 mt-5 px-1 text-[13px] font-medium text-muted">{label}</Typography> : null}
+      {label ? (
+        <Typography accessibilityRole="header" className="mb-2 mt-5 px-1 text-[13px] font-medium text-muted">
+          {label}
+        </Typography>
+      ) : null}
       <InGroup.Provider value>
         <View className="overflow-hidden rounded-[20px] bg-default">
           {rows.map((row, index) => (
