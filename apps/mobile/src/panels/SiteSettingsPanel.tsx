@@ -1,10 +1,11 @@
 import { useEffect, useState, type JSX } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
 import { SiteIcon } from "@/browser/SiteIcon";
 import { useT } from "@/i18n";
 import { TEXT_SIZE } from "@/store/model";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
 import { radius } from "@/chrome/tokens";
 
@@ -139,37 +140,37 @@ function SiteZoom({
         </Text>
       </View>
       <View className="mt-4 flex-row items-center gap-3">
-        <Pressable
+        <PressFeedback
           testID="site-zoom-smaller"
           accessibilityRole="button"
           accessibilityLabel={t("site.zoom.out")}
           accessibilityState={{ disabled: value <= TEXT_SIZE.min }}
           disabled={value <= TEXT_SIZE.min}
           onPress={() => step(-1)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value <= TEXT_SIZE.min ? 0.35 : 1 }}
         >
           <Text variant="callout" weight="medium">
             A
           </Text>
-        </Pressable>
+        </PressFeedback>
         <Text testID="site-zoom-value" accessibilityLiveRegion="polite" variant="headline" className="w-16 text-center">
           {`${value}%`}
         </Text>
-        <Pressable
+        <PressFeedback
           testID="site-zoom-larger"
           accessibilityRole="button"
           accessibilityLabel={t("site.zoom.in")}
           accessibilityState={{ disabled: value >= TEXT_SIZE.max }}
           disabled={value >= TEXT_SIZE.max}
           onPress={() => step(1)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value >= TEXT_SIZE.max ? 0.35 : 1 }}
         >
           <Text variant="title" weight="medium">
             A
           </Text>
-        </Pressable>
+        </PressFeedback>
       </View>
       {textSize !== null ? (
         <View className="mt-4">

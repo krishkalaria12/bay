@@ -1,7 +1,8 @@
 import { useEffect, useState, type JSX } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { announce } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
@@ -53,7 +54,7 @@ export function Toast({ text, action, onDone, testID = "toast" }: { text: string
             {text}
           </Text>
           {action ? (
-            <Pressable
+            <PressFeedback
               testID={`${testID}-action`}
               accessibilityRole="button"
               accessibilityLabel={action.label}
@@ -61,12 +62,12 @@ export function Toast({ text, action, onDone, testID = "toast" }: { text: string
                 onDone?.();
                 action.onPress();
               }}
-              className="min-h-11 items-center justify-center rounded-full px-4 active:opacity-60"
+              className="min-h-11 items-center justify-center rounded-full px-4"
             >
               <Text variant="callout" weight="semibold" tone="accent">
                 {action.label}
               </Text>
-            </Pressable>
+            </PressFeedback>
           ) : null}
         </View>
       </Surface>

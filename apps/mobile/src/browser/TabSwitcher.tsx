@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
 import { iconSize, radius, space } from "@/chrome/tokens";
 import { useT } from "@/i18n";
@@ -133,19 +134,19 @@ export function TabSwitcher({
           {tabs.length === 1 ? t("tabs.one") : t("tabs.count", { count: tabs.length })}
         </Text>
         {tabs.length > 1 ? (
-          <Pressable
+          <PressFeedback
             testID="tab-switcher-archive-all"
             accessibilityRole="button"
             accessibilityLabel={t("tabs.archiveAllCount", { count: tabs.length })}
             onPress={onCloseAll}
             hitSlop={8}
-            className="h-9 justify-center rounded-full bg-default active:opacity-60"
+            className="h-9 justify-center rounded-full bg-default"
             style={{ paddingHorizontal: space.md + 2 }}
           >
             <Text variant="subhead" weight="medium">
               {t("tabs.archiveAll")}
             </Text>
-          </Pressable>
+          </PressFeedback>
         ) : null}
       </View>
       {/* Spaces (B21): one stack per space, rather than one flat list for every tab. A lone space has nothing to switch
@@ -227,20 +228,20 @@ function Chip({ testID, label, active, dot, onPress }: { testID: string; label: 
   const background = useThemeColor("background");
 
   return (
-    <Pressable
+    <PressFeedback
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      className={`h-9 flex-row items-center rounded-full active:opacity-60 ${active ? "bg-foreground" : "bg-default"}`}
+      className={`h-9 flex-row items-center rounded-full ${active ? "bg-foreground" : "bg-default"}`}
       style={{ gap: space.sm, paddingHorizontal: space.md + 2 }}
     >
       {dot ? <View className="h-2 w-2 rounded-full" style={{ backgroundColor: dot }} /> : null}
       <Text variant="subhead" weight={active ? "semibold" : "medium"} color={active ? background : undefined}>
         {label}
       </Text>
-    </Pressable>
+    </PressFeedback>
   );
 }
 

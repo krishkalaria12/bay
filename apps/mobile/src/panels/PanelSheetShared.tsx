@@ -1,7 +1,7 @@
 import { BottomSheetScrollView, type BottomSheetBackgroundProps } from "@gorhom/bottom-sheet";
 import { BottomSheet, useThemeColor } from "heroui-native";
 import { Children, createContext, isValidElement, useContext, useEffect, useState, type FC, type JSX, type ReactNode } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -258,7 +258,7 @@ export function SheetIconButton({
   const color = useThemeColor(tone === "muted" ? "muted" : "foreground");
 
   return (
-    <Pressable
+    <PressFeedback
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -266,11 +266,11 @@ export function SheetIconButton({
       disabled={disabled}
       onPress={onPress}
       hitSlop={6}
-      className="h-9 w-9 items-center justify-center rounded-full bg-default active:opacity-60"
+      className="h-9 w-9 items-center justify-center rounded-full bg-default"
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
       <Icon name={icon} color={color} size={iconSize.small} />
-    </Pressable>
+    </PressFeedback>
   );
 }
 

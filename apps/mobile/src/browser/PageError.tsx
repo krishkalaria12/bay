@@ -1,9 +1,10 @@
 import { hostOf } from "@bay/core/src/input.ts";
 import { useThemeColor } from "heroui-native";
 import type { JSX } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
 import { Icon } from "@/chrome/Icon";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
 import { radius, space } from "@/chrome/tokens";
@@ -46,19 +47,13 @@ export function PageError({ url, message, onRetry }: { url: string; message: str
       <Text testID="navigation-error" variant={known ? "caption" : "subhead"} weight="regular" tone="muted" style={{ marginTop: 6, textAlign: "center" }}>
         {message}
       </Text>
-      <Pressable
-        testID="page-error-retry"
-        accessibilityRole="button"
-        accessibilityLabel={t("pageError.tryAgain")}
-        onPress={onRetry}
-        className="mt-6 active:opacity-70"
-      >
+      <PressFeedback testID="page-error-retry" accessibilityRole="button" accessibilityLabel={t("pageError.tryAgain")} onPress={onRetry} className="mt-6">
         <Surface radius={radius.card} style={{ paddingHorizontal: space.xl, paddingVertical: space.md }}>
           <Text variant="callout" weight="medium">
             {t("pageError.tryAgain")}
           </Text>
         </Surface>
-      </Pressable>
+      </PressFeedback>
     </View>
   );
 }

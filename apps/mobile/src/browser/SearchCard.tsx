@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/chrome/Icon";
 import { SPRING, useReducedMotion } from "@/chrome/motion";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
 import { iconSize, inputFont, radius, rowHeight, space } from "@/chrome/tokens";
@@ -266,20 +267,20 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
           {pins.length && !query ? (
             <View className="flex-row" style={{ marginTop: space.sm, gap: space.sm }}>
               {pins.map((site, index) => (
-                <Pressable
+                <PressFeedback
                   key={site.id}
                   testID={`pinned-${index}`}
                   accessibilityRole="button"
                   accessibilityLabel={site.title || displayUrl(site.url)}
                   onPress={() => onOpen({ kind: "url", url: site.url })}
-                  className={privately ? "flex-1 items-center bg-white/10 active:bg-white/20" : "flex-1 items-center bg-default active:opacity-70"}
+                  className={privately ? "flex-1 items-center bg-white/10" : "flex-1 items-center bg-default"}
                   style={{ gap: space.xs + 2, paddingTop: space.md, paddingBottom: space.sm + 2, borderRadius: radius.tile }}
                 >
                   <SiteIcon url={site.url} size={28} />
                   <Text variant="caption" color={text} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
                     {site.title || siteName(site.url)}
                   </Text>
-                </Pressable>
+                </PressFeedback>
               ))}
               {Array.from({ length: 4 - pins.length }, (_, index) => (
                 <View key={`empty-${index}`} className="flex-1" />

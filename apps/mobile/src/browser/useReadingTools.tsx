@@ -2,10 +2,11 @@ import { hostOf } from "@bay/core/src/input.ts";
 import { runPageScript, type Tab } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, Pressable, useColorScheme, View } from "react-native";
+import { Platform, useColorScheme, View } from "react-native";
 import { useThemeColor } from "heroui-native";
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
@@ -385,7 +386,7 @@ function ToolButton({
   const accentForeground = useThemeColor("accent-foreground");
 
   return (
-    <Pressable
+    <PressFeedback
       testID={id}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -394,8 +395,8 @@ function ToolButton({
       onPress={onPress}
       className={
         primary
-          ? "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-accent px-3 active:opacity-80"
-          : "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-default px-3 active:opacity-70"
+          ? "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-accent px-3"
+          : "h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-default px-3"
       }
       style={{ opacity: disabled ? 0.4 : 1 }}
     >
@@ -403,7 +404,7 @@ function ToolButton({
       <Text variant="callout" weight={primary ? "semibold" : "regular"} color={primary ? accentForeground : foreground} numberOfLines={1}>
         {label}
       </Text>
-    </Pressable>
+    </PressFeedback>
   );
 }
 

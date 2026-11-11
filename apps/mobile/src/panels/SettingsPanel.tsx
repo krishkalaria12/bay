@@ -3,11 +3,12 @@ import { File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
 import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
-import { Image, Pressable, View } from "react-native";
+import { Image, View } from "react-native";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
 import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
 import { Icon } from "@/chrome/Icon";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
 import { radius } from "@/chrome/tokens";
 import {
@@ -626,33 +627,33 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
         </Text>
       </View>
       <View className="mt-4 flex-row items-center gap-3">
-        <Pressable
+        <PressFeedback
           testID="text-size-smaller"
           accessibilityRole="button"
           accessibilityLabel={t("settings.zoom.out")}
           accessibilityState={{ disabled: value <= TEXT_SIZE.min }}
           disabled={value <= TEXT_SIZE.min}
           onPress={() => step(-TEXT_SIZE.step)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value <= TEXT_SIZE.min ? 0.35 : 1 }}
         >
           <Icon name="textSize" color={foreground} size={16} />
-        </Pressable>
+        </PressFeedback>
         <Text testID="text-size-value" accessibilityLiveRegion="polite" variant="headline" className="w-16 text-center">
           {`${value}%`}
         </Text>
-        <Pressable
+        <PressFeedback
           testID="text-size-larger"
           accessibilityRole="button"
           accessibilityLabel={t("settings.zoom.in")}
           accessibilityState={{ disabled: value >= TEXT_SIZE.max }}
           disabled={value >= TEXT_SIZE.max}
           onPress={() => step(TEXT_SIZE.step)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value >= TEXT_SIZE.max ? 0.35 : 1 }}
         >
           <Icon name="textSize" color={foreground} size={26} />
-        </Pressable>
+        </PressFeedback>
       </View>
       {value !== 100 ? (
         <View className="mt-4">
@@ -707,7 +708,7 @@ function WallpaperPicker({
           const empty = id === "photo" && !photo;
 
           return (
-            <Pressable
+            <PressFeedback
               key={id}
               testID={`settings-wallpaper-${id}`}
               accessibilityRole="radio"
@@ -724,7 +725,7 @@ function WallpaperPicker({
                   () => setError(true),
                 );
               }}
-              className="items-center gap-2 active:opacity-70"
+              className="items-center gap-2"
               style={{ width: "31%", marginRight: index % 3 === 2 ? 0 : "3.5%" }}
             >
               <View
@@ -753,7 +754,7 @@ function WallpaperPicker({
               <Text variant="subhead" weight={selected ? "medium" : undefined} tone={selected ? "accent" : "default"}>
                 {empty ? t("settings.wallpaper.choose") : t(WALLPAPER_NAMES[id])}
               </Text>
-            </Pressable>
+            </PressFeedback>
           );
         })}
       </View>

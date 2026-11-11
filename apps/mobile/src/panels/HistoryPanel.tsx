@@ -3,7 +3,7 @@ import { BottomSheetTextInput, useBottomSheetScrollableCreator } from "@gorhom/b
 import { LegendList } from "@legendapp/list/react-native";
 import { useThemeColor } from "heroui-native";
 import { useState, type JSX } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -268,15 +268,15 @@ export function SiteRow(props: {
                 </Text>
               </View>
             </PressFeedback>
-            <Pressable
+            <PressFeedback
               testID={props.removeTestID}
               accessibilityRole="button"
               accessibilityLabel={props.removeLabel}
               onPress={props.onRemove}
-              className="h-11 w-11 items-center justify-center active:opacity-60"
+              className="h-11 w-11 items-center justify-center"
             >
               <Icon name="close" color={muted} size={18} />
-            </Pressable>
+            </PressFeedback>
           </View>
         </Animated.View>
       </GestureDetector>
