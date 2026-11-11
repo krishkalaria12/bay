@@ -683,7 +683,8 @@ export type PageWork = PageWorkService["Service"];
 /** What went wrong, in words the app can show. */
 function reasonOf(cause: Cause.Cause<PageWorkFailure>): string {
   const squashed = Cause.squash(cause);
-  const message = squashed instanceof Error ? squashed.message : String(squashed);
+  const failure = squashed instanceof PageWorkFailure ? squashed.cause : squashed;
+  const message = failure instanceof Error ? failure.message : String(failure);
 
   return message.replace(/[.\s]+$/, "");
 }

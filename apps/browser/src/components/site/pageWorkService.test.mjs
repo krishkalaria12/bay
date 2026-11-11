@@ -7,7 +7,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as TestClock from "effect/testing/TestClock";
 
 const { useBrowser } = await import("../../store/browserStore.ts");
-const { PageWorkEngine, PageWorkService, translateStateOf, useTranslate } = await import("./pageWorkService.ts");
+const { PageWorkEngine, PageWorkFailure, PageWorkService, translateStateOf, useTranslate } = await import("./pageWorkService.ts");
 
 const TAB = "page";
 
@@ -61,7 +61,12 @@ const fakeEngine = (lab) =>
     detect: () => Effect.succeed("fr"),
     status: () => Effect.succeed("supported"),
     supportedLanguages: () => Effect.succeed(["de-DE", "fr-FR", "fr-CA"]),
-    prepare: () => Effect.sync(() => void lab.prepared++),
+    prepare: () =>
+      Effect.suspend(() => {
+        if (lab.prepareFailure) return Effect.fail(new PageWorkFailure({ operation: { name: "translation.prepare" }, cause: lab.prepareFailure }));
+
+        return Effect.sync(() => void lab.prepared++);
+      }),
     translate: (source, target, texts) => Effect.sync(() => texts.map((text) => `de:${text}`)),
     translateBlocks: (source, target, blocks) =>
       Effect.promise(async () => {
@@ -88,6 +93,7 @@ const withWork = async (use) => {
     confirmed: false,
     gate: null,
     prepared: 0,
+    prepareFailure: null,
     reached: null,
     questions: [],
     reverts: 0,
@@ -145,6 +151,17 @@ test("a document that was replaced never gets a late result", async () => {
     assert.equal(outcome.kind, "stopped", "the translation did not finish");
     assert.deepEqual(lab.applied, [], "the late result was not put into the page");
     assert.equal(translateStateOf(TAB).status, "idle", "the replaced document is not translated");
+  });
+});
+
+test("a model preparation failure reports its native error", async () => {
+  await withWork(async ({ lab, work }) => {
+    lab.prepareFailure = new Error("Not enough disk space to download the translation model.");
+
+    const outcome = await work((service) => service.translate(TAB, { target: "de" }));
+
+    assert.deepEqual(outcome, { kind: "failed", reason: "Not enough disk space to download the translation model" });
+    assert.equal(translateStateOf(TAB).status, "idle");
   });
 });
 
