@@ -13,7 +13,7 @@ import { Icon } from "@/chrome/Icon";
 import { SPRING, useReducedMotion } from "@/chrome/motion";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
-import { iconSize, inputFont, radius, space } from "@/chrome/tokens";
+import { iconSize, inputFont, radius, rowHeight, space } from "@/chrome/tokens";
 import { useT, type Translate } from "@/i18n";
 import type { BrowserData } from "@/store/types";
 import { resolveAddress } from "./address";
@@ -145,8 +145,8 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
         onPress={onDismiss}
       />
       <Animated.View style={[{ position: "absolute", left: 8 + insets.left, right: 8 + insets.right }, cardPosition]}>
-        <Surface radius={30} style={{ padding: 10 }} testID={privately ? "search-card-private" : undefined}>
-          {privately ? <View className="absolute inset-0 rounded-[30px] bg-neutral-900/95" pointerEvents="none" /> : null}
+        <Surface radius={radius.panel} style={{ padding: 10 }} testID={privately ? "search-card-private" : undefined}>
+          {privately ? <View className="absolute inset-0 bg-neutral-900/95" style={{ borderRadius: radius.panel }} pointerEvents="none" /> : null}
           <View
             className="relative"
             onLayout={(event) => {
@@ -361,7 +361,8 @@ function SuggestionRow({
         if (event.nativeEvent.actionName === "fill" && fillText !== null) onFill(fillText);
       }}
       onPress={onOpen}
-      className="min-h-[52px] flex-row items-center gap-3 rounded-2xl pl-2 active:bg-black/5"
+      className="flex-row items-center gap-3 pl-2 active:bg-black/5 dark:active:bg-white/10"
+      style={{ minHeight: rowHeight, borderRadius: radius.tile }}
     >
       <View className="w-7 items-center">{row.kind === "page" ? <SiteIcon url={row.url} /> : <Icon name="search" color={muted} size={20} />}</View>
       <View className="flex-1 py-1.5">

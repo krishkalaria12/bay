@@ -9,6 +9,7 @@ import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
 import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
 import { Icon } from "@/chrome/Icon";
 import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 import {
   detectLocale,
   LOCALE_IDS,
@@ -613,7 +614,7 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
 
   return (
     <>
-      <View className="rounded-[20px] bg-default p-4">
+      <View className="bg-default p-4" style={{ borderRadius: radius.card }}>
         <Text tone="muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
           example.com
         </Text>
@@ -729,10 +730,10 @@ function WallpaperPicker({
               <View
                 className={
                   selected
-                    ? "w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-accent"
-                    : "w-full items-center justify-center overflow-hidden rounded-2xl border border-foreground/10"
+                    ? "w-full items-center justify-center overflow-hidden border-2 border-accent"
+                    : "w-full items-center justify-center overflow-hidden border border-foreground/10"
                 }
-                style={{ aspectRatio: 0.62 }}
+                style={{ aspectRatio: 0.62, borderRadius: radius.tile }}
               >
                 {empty ? (
                   <Icon name="add" size={28} color={foreground} />

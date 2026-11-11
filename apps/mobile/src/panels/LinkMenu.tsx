@@ -6,6 +6,7 @@ import { View } from "react-native";
 import { useT } from "@/i18n";
 import { ActionRow, PanelSheet } from "./PanelSheet";
 import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 
 export interface LinkMenuProps {
   visible: boolean;
@@ -101,7 +102,7 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
         </>
       )}
       {destination ? (
-        <View className="mt-3 rounded-2xl bg-default p-3" accessibilityLiveRegion="polite">
+        <View className="mt-3 bg-default p-3" style={{ borderRadius: radius.tile }} accessibilityLiveRegion="polite">
           <Text variant="subhead" tone="muted" className="mb-1">
             {t("linkMenu.destination")}
           </Text>
@@ -141,7 +142,7 @@ function Peek({ url, privately, desktopMode }: { url: string; privately: boolean
   return (
     <View
       testID="link-preview"
-      className="mb-3 overflow-hidden rounded-2xl bg-default"
+      className="mb-3 overflow-hidden bg-default"
       style={{ height: PREVIEW_HEIGHT }}
       pointerEvents="none"
       accessibilityElementsHidden

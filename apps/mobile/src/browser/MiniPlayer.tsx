@@ -5,6 +5,7 @@ import { Pressable, View } from "react-native";
 import { Icon } from "@/chrome/Icon";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
 import { useT } from "@/i18n";
 
 export interface MiniPlayerProps {
@@ -27,7 +28,7 @@ export function MiniPlayer({ title, site, playing, video, onOpen, onToggle, onSe
   const t = useT();
 
   return (
-    <Surface radius={22} style={{ paddingVertical: 6, paddingLeft: 14, paddingRight: 6 }}>
+    <Surface radius={radius.card} style={{ paddingVertical: space.xs + 2, paddingLeft: space.md + 2, paddingRight: space.xs + 2 }}>
       <View className="flex-row items-center gap-1">
         <Pressable
           testID="mini-player"

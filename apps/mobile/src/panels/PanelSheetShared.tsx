@@ -278,15 +278,18 @@ export function SheetIconButton({
 const ROW_INSET = space.lg;
 const ROW_GAP = 14;
 
-/** A group's heading: small, quiet, and lined up with the rows' text. */
-export function SectionLabel({ children }: { children: ReactNode }): JSX.Element {
+/**
+ * A section's heading: small, quiet, and lined up with what follows it. Over a group it steps in to the rows' inset;
+ * over a plain list it starts where the list does.
+ */
+export function SectionLabel({ children, inset = false }: { children: ReactNode; inset?: boolean }): JSX.Element {
   return (
     <Text
       accessibilityRole="header"
       variant="footnote"
       weight="semibold"
       tone="muted"
-      style={{ marginTop: space.xl, marginBottom: space.sm, paddingHorizontal: ROW_INSET }}
+      style={{ marginTop: space.xl, marginBottom: space.sm, paddingHorizontal: inset ? ROW_INSET : 0 }}
     >
       {children}
     </Text>
@@ -302,7 +305,7 @@ export function Group({ label, children, testID }: { label?: string; children: R
   // SAFETY: rows are the card's ActionRow children, whose props carry the icon name exactly when an icon is drawn.
   return (
     <View testID={testID}>
-      {label ? <SectionLabel>{label}</SectionLabel> : null}
+      {label ? <SectionLabel inset>{label}</SectionLabel> : null}
       <InGroup.Provider value>
         <View className="overflow-hidden bg-default" style={{ borderRadius: radius.card }}>
           {rows.map((row, index) => (

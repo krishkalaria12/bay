@@ -9,6 +9,7 @@ import type { IconName } from "@/chrome/Icon.types";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
 import { useT } from "@/i18n";
 import { Toast } from "./Toast";
 import { INSPECT_SCRIPT, type InspectedElement } from "@/pagescripts/inspect";
@@ -345,7 +346,7 @@ function PickerCard({
 
   return (
     <View collapsable={false} {...behindSheet}>
-      <Surface radius={26} style={[{ padding: 14, gap: 12 }, Platform.OS === "android" && { backgroundColor: solid }]}>
+      <Surface radius={radius.card} style={[{ padding: 14, gap: space.md }, Platform.OS === "android" && { backgroundColor: solid }]}>
         <View className="flex-row items-center gap-3">
           <View className="h-10 w-10 items-center justify-center rounded-full bg-accent/15">
             <Icon name={icon} color={accent} size={20} />

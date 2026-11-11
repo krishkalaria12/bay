@@ -6,6 +6,7 @@ import type { InspectedElement, InspectedFont } from "@/pagescripts/inspect";
 
 import { PanelSheet, SectionLabel } from "./PanelSheet";
 import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 
 const MONOSPACE = Platform.select({ ios: "Menlo", default: "monospace" });
 
@@ -83,7 +84,7 @@ export function InspectPanel({ element, title, onClose, onParent, onCopy }: Insp
 
           {element.rules.length ? <SectionLabel>{t("inspect.css")}</SectionLabel> : null}
           {element.rules.map((rule, index) => (
-            <View key={`${rule.selector}-${index}`} className="mb-2 rounded-xl bg-default p-3">
+            <View key={`${rule.selector}-${index}`} className="mb-2 bg-default p-3" style={{ borderRadius: radius.tile }}>
               <View className="flex-row justify-between gap-2">
                 <Text numberOfLines={1} variant="caption" weight="semibold" className="flex-1" style={{ fontFamily: MONOSPACE }}>
                   {rule.selector}
@@ -143,7 +144,7 @@ function Action({ id, label, onPress }: { id: string; label: string; onPress: ()
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      className="min-h-11 flex-1 items-center justify-center rounded-2xl bg-default px-3"
+      className="min-h-11 flex-1 items-center justify-center rounded-full bg-default px-3"
     >
       <Text variant="subhead">{label}</Text>
     </Pressable>

@@ -6,6 +6,7 @@ import { useT } from "@/i18n";
 import { TEXT_SIZE } from "@/store/model";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 
 export interface SiteSettingsPanelProps {
   visible: boolean;
@@ -126,7 +127,7 @@ function SiteZoom({
 
   return (
     <>
-      <View className="rounded-[20px] bg-default p-4">
+      <View className="bg-default p-4" style={{ borderRadius: radius.card }}>
         <Text tone="muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
           example.com
         </Text>

@@ -6,6 +6,7 @@ import { Pressable, View } from "react-native";
 import { Icon } from "@/chrome/Icon";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
 import { useT } from "@/i18n";
 import { describePageError, pageErrorId } from "./pageErrors";
 
@@ -52,7 +53,7 @@ export function PageError({ url, message, onRetry }: { url: string; message: str
         onPress={onRetry}
         className="mt-6 active:opacity-70"
       >
-        <Surface radius={22} style={{ paddingHorizontal: 22, paddingVertical: 12 }}>
+        <Surface radius={radius.card} style={{ paddingHorizontal: space.xl, paddingVertical: space.md }}>
           <Text variant="callout" weight="medium">
             {t("pageError.tryAgain")}
           </Text>

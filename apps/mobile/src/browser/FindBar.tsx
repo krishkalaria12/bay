@@ -8,7 +8,7 @@ import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
-import { inputFont } from "@/chrome/tokens";
+import { inputFont, radius, space } from "@/chrome/tokens";
 import { useT } from "@/i18n";
 
 export interface FindBarProps {
@@ -35,7 +35,7 @@ export function FindBar({ query, count, index, onChange, onStep, onDone }: FindB
 
   return (
     <Animated.View style={[{ position: "absolute", left: 8 + insets.left, right: 8 + insets.right }, position]} testID="find-bar">
-      <Surface radius={24} style={{ padding: 8 }}>
+      <Surface radius={radius.card} style={{ padding: space.sm }}>
         <View className="flex-row items-center gap-1">
           <View className="h-11 flex-1 flex-row items-center rounded-full border border-black/10 bg-white/60 pl-4 pr-3 dark:border-white/10 dark:bg-white/10">
             <TextInput

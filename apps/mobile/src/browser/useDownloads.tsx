@@ -20,6 +20,7 @@ import { PillButton } from "@/chrome/PillButton";
 import { Surface } from "@/chrome/Surface";
 import { announce } from "@/chrome/screenReader";
 import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
 import { t as translate, useT } from "@/i18n";
 import { DownloadProgress, downloadStatus } from "@/panels/DownloadsPanel";
 import { useBrowserStore } from "@/store/browser";
@@ -89,7 +90,7 @@ export function DownloadToast({ item, onOpen, onShowAll }: { item: DownloadItem;
 
   return (
     <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOutDown.duration(180)}>
-      <Surface radius={18} style={{ padding: 12 }}>
+      <Surface radius={radius.card} style={{ padding: space.md }}>
         <View className="flex-row items-center gap-3">
           <DownloadBadge key={item.state} state={item.state} />
           <Pressable

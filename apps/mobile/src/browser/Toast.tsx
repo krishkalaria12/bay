@@ -5,6 +5,7 @@ import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 import { announce } from "@/chrome/screenReader";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
 
 export interface ToastAction {
   label: string;
@@ -43,7 +44,10 @@ export function Toast({ text, action, onDone, testID = "toast" }: { text: string
 
   return (
     <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOutDown.duration(150)}>
-      <Surface radius={22} style={{ paddingLeft: 16, paddingRight: action ? 6 : 16, paddingVertical: action ? 6 : 12 }}>
+      <Surface
+        radius={radius.card}
+        style={{ paddingLeft: space.lg, paddingRight: action ? space.xs + 2 : space.lg, paddingVertical: action ? space.xs + 2 : space.md }}
+      >
         <View className="flex-row items-center gap-2">
           <Text testID={testID} accessibilityRole="alert" numberOfLines={2} className="flex-1" variant="callout">
             {text}

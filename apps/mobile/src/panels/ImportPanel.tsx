@@ -6,7 +6,7 @@ import { View } from "react-native";
 
 import { PillButton } from "@/chrome/PillButton";
 import { Text } from "@/chrome/Text";
-import { fontFor } from "@/chrome/tokens";
+import { fontFor, radius } from "@/chrome/tokens";
 import type { ImportedTab } from "@/browser/importTabs";
 import { importedTabs } from "@/browser/importTabs";
 import { useT } from "@/i18n";
@@ -56,7 +56,7 @@ export function ImportPanel({ visible, onClose, onImport }: ImportPanelProps): J
       <Text variant="subhead" tone="muted">
         {t("import.help")}
       </Text>
-      <View className="mt-3 rounded-[20px] bg-default p-3">
+      <View className="mt-3 bg-default p-3" style={{ borderRadius: radius.tile }}>
         <BottomSheetTextInput
           testID="import-text"
           accessibilityLabel={t("import.field")}
