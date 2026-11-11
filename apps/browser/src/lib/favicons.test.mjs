@@ -35,7 +35,7 @@ const { useBrowser } = await import("../store/browserStore.ts");
 const { setSpaceProfiles } = await import("../store/model.ts");
 const { webviews } = await import("./webviews.ts");
 const { FAVICON_FLUSH_MS, FAVICON_LOOKUP_DELAY_MS, MAX_FAVICONS, APPEARANCE_SWAP_MS } = await import("./constants.ts");
-const { EnrichmentEngine, EnrichmentFailure, EnrichmentService } = await import("./enrichmentService.ts");
+const { EnrichmentEngine, EnrichmentFailure, EnrichmentService, held } = await import("./enrichmentService.ts");
 const { fakeDiagnostics, testClockLayer } = await import("../effect/testing.ts");
 
 const { useFavicons, noteFavicon, faviconFailed, pruneProfileFavicons, resolveFavicon, startFavicons, useFavicon, useFaviconTheme } =
@@ -201,6 +201,12 @@ test("a burst bounds map enumeration and never mutates published snapshots", asy
 
   for (let i = 0; i < 1000; i++) noteFavicon(String(i), `src:${i}`);
   await drain();
+
+  // Bounded download workers need several turns for a large burst. Measure the flush once all answers landed.
+  for (let attempt = 0; attempt < 1000 && held().length; attempt++) await advance();
+
+  assert.deepEqual(held(), [], "the whole burst finished before measuring its cache write");
+
   const keys = Object.keys;
   let scanned = 0;
   Object.keys = (map) => {

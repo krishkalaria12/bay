@@ -18,6 +18,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import { ARTWORK_MAX_PIXELS } from "../components/media/constants";
 import type { Operation } from "../effect/errors";
@@ -180,6 +181,10 @@ let queuedIcons = new Map<string, Map<string, FaviconRequest>>();
 
 // The icons that are fetched, by profile and address. The pages that report the same icon share one fetch.
 let queuedFetches = new Map<string, Set<IconRequest>>();
+const runningFetches = new Map<string, Set<IconRequest>>();
+
+// Work handed to the bounded workers, including requests still waiting for a worker.
+const pendingJobs = new Set<string>();
 
 // The icons waiting for the Mac's answer.
 let queuedThemes = new Map<string, ThemeRequest>();
@@ -197,10 +202,10 @@ const forgottenArtworks = new Set<string>();
 // What each profile's icons are at: the number moves when the profile is forgotten, and an answer that was asked
 // for before the move is not the answer the profile has now.
 const generations = new Map<string, number>();
+const pageGenerations = new Map<string, number>();
 
 // The pages whose answer is on its way, and the ones that were forgotten while it was.
 const inFlight = new Set<string>();
-const forgotten = new Set<string>();
 
 // The burst's fiber. It is set when the app's runtime builds the service, and it is what does the waiting.
 let startBurst: (() => void) | undefined;
@@ -232,6 +237,14 @@ export const askFavicons = (request: FaviconRequest): void => {
 /** Asks for an icon. The pages that report the same icon share one fetch. */
 export const askIcon = (request: IconRequest): void => {
   const key = fetchKey(request.profile, request.src);
+  const running = runningFetches.get(key);
+
+  if (running) {
+    running.add(request);
+
+    return;
+  }
+
   const waiting = queuedFetches.get(key) ?? new Set<IconRequest>();
 
   waiting.add(request);
@@ -264,17 +277,6 @@ export const askArtwork = (request: ArtworkRequest): void => {
 /** Forgets a profile's icons: the work that was on its way is not the profile's any more. */
 export const forgetProfile = (profile: string): void => {
   generations.set(profile, (generations.get(profile) ?? 0) + 1);
-
-  const pages = queuedIcons.get(profile);
-
-  if (!pages) return;
-
-  for (const page of pages.keys()) {
-    const key = pageKey(profile, page);
-
-    if (inFlight.has(key)) forgotten.add(key);
-  }
-
   queuedIcons.delete(profile);
 };
 
@@ -282,9 +284,8 @@ export const forgetProfile = (profile: string): void => {
 export const forgetPage = (profile: string, page: string): void => {
   const key = pageKey(profile, page);
 
+  pageGenerations.set(key, (pageGenerations.get(key) ?? 0) + 1);
   queuedIcons.get(profile)?.delete(page);
-
-  if (inFlight.has(key)) forgotten.add(key);
 };
 
 /** Forgets a tab: the artwork that was on its way is not the tab's any more. */
@@ -313,6 +314,8 @@ export const held = (): readonly string[] => {
   for (const key of runningArtworks) names.push(`artwork:${key}`);
 
   for (const key of inFlight) names.push(`icons:${key}`);
+
+  for (const job of pendingJobs) names.push(job);
 
   return names;
 };
@@ -353,6 +356,12 @@ export class EnrichmentService extends Context.Service<
       const diagnostics = yield* Diagnostics;
       const clock = yield* Clock.Clock;
       const scope = yield* Scope.Scope;
+      const lookupWork = yield* Queue.unbounded<Effect.Effect<void>>();
+      const iconWork = yield* Queue.unbounded<Effect.Effect<void>>();
+      const themeWork = yield* Queue.unbounded<Effect.Effect<void>>();
+      const pictureWork = yield* Queue.unbounded<Effect.Effect<void>>();
+      const artworkWork = yield* Queue.unbounded<Effect.Effect<void>>();
+      let nextJob = 0;
 
       // A failure the service could not carry is reported once, where every other failure goes.
       const report = (operation: Operation, cause: Cause.Cause<unknown>) =>
@@ -363,16 +372,47 @@ export class EnrichmentService extends Context.Service<
           yield* diagnostics.report({ operation, message: error.message, cause: error });
         });
 
+      const enqueue = (queue: Queue.Queue<Effect.Effect<void>>, resource: string, work: Effect.Effect<void>) => {
+        const key = `${resource}:${++nextJob}`;
+
+        pendingJobs.add(key);
+        Queue.offerUnsafe(
+          queue,
+          work.pipe(
+            Effect.catchCauseIf(
+              (cause) => !Cause.hasInterruptsOnly(cause),
+              (cause) => report({ name: "enrichment.work", resource }, cause),
+            ),
+            Effect.ensuring(Effect.sync(() => void pendingJobs.delete(key))),
+          ),
+        );
+      };
+
+      // Each kind has its own workers, so a remote download cannot hold up local cache or drawing work.
+      const workers = [
+        [lookupWork, 1],
+        [iconWork, 4],
+        [themeWork, 1],
+        [pictureWork, 2],
+        [artworkWork, 4],
+      ] as const;
+
+      for (const [queue, count] of workers) {
+        for (let worker = 0; worker < count; worker++) {
+          yield* Effect.forkIn(Effect.forever(Effect.flatMap(Queue.take(queue), (work) => work)), scope);
+        }
+      }
+
       // The icons Chrome has for the pages of a profile. The pages of one burst are one lookup, and the answer of
       // one lookup is one write.
-      const lookUpIcons = (batches: Map<string, Map<string, FaviconRequest>>) =>
+      const lookUpIcons = (batches: Map<string, Map<string, FaviconRequest>>, pageVersions: ReadonlyMap<string, number>) =>
         Effect.gen(function* () {
           for (const [profile, requests] of batches) {
             const pages = [...requests.keys()];
+            const generation = generations.get(profile) ?? 0;
 
             for (let i = 0; i < pages.length; i += FAVICON_LOOKUP_BATCH) {
               const chunk = pages.slice(i, i + FAVICON_LOOKUP_BATCH);
-              const generation = generations.get(profile) ?? 0;
 
               for (const page of chunk) inFlight.add(pageKey(profile, page));
 
@@ -396,7 +436,9 @@ export class EnrichmentService extends Context.Service<
 
               for (const page of chunk) {
                 // The page was forgotten while its answer was on its way.
-                if (forgotten.delete(pageKey(profile, page))) continue;
+                const key = pageKey(profile, page);
+
+                if ((pageGenerations.get(key) ?? 0) !== pageVersions.get(key)) continue;
 
                 const request = requests.get(page);
 
@@ -456,9 +498,11 @@ export class EnrichmentService extends Context.Service<
 
       // A window's tab is photographed once it has been shown for a moment: a page out of view is not painted, so
       // it cannot be captured then.
-      const takePicture = (request: PictureRequest) =>
+      const takePicture = (request: PictureRequest, readyAt: number) =>
         Effect.gen(function* () {
-          yield* clock.sleep(Duration.millis(PICTURE_SETTLE_MS));
+          if (!shownTab(request.windowId, request.tabId)) return;
+
+          yield* clock.sleep(Duration.millis(Math.max(0, readyAt - clock.currentTimeMillisUnsafe())));
 
           if (!shownTab(request.windowId, request.tabId)) return;
 
@@ -516,15 +560,50 @@ export class EnrichmentService extends Context.Service<
           queuedPictures = new Map();
           queuedArtworks = new Map();
 
-          yield* lookUpIcons(icons);
-          yield* fetchIcons(fetches);
-          yield* analyseThemes(themes);
+          for (const [profile, requests] of icons) {
+            const generation = generations.get(profile) ?? 0;
+            const pageVersions = new Map<string, number>();
 
-          for (const request of pictures.values()) yield* Effect.forkIn(takePicture(request), scope, { startImmediately: true });
+            for (const page of requests.keys()) {
+              const key = pageKey(profile, page);
+
+              inFlight.add(key);
+              pageVersions.set(key, pageGenerations.get(key) ?? 0);
+            }
+
+            enqueue(
+              lookupWork,
+              `icons:${profile}`,
+              Effect.suspend(() =>
+                (generations.get(profile) ?? 0) === generation ? lookUpIcons(new Map([[profile, requests]]), pageVersions) : Effect.void,
+              ).pipe(
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    for (const page of requests.keys()) {
+                      inFlight.delete(pageKey(profile, page));
+                    }
+                  }),
+                ),
+              ),
+            );
+          }
+
+          for (const [key, requests] of fetches) {
+            runningFetches.set(key, requests);
+            enqueue(iconWork, `icon:${key}`, fetchIcons(new Map([[key, requests]])).pipe(Effect.ensuring(Effect.sync(() => void runningFetches.delete(key)))));
+          }
+
+          for (const [uri, request] of themes) enqueue(themeWork, `theme:${uri}`, analyseThemes(new Map([[uri, request]])));
+
+          for (const request of pictures.values()) {
+            const readyAt = clock.currentTimeMillisUnsafe() + PICTURE_SETTLE_MS;
+
+            enqueue(pictureWork, `picture:${request.windowId}`, takePicture(request, readyAt));
+          }
 
           for (const [key, request] of artworks) {
             runningArtworks.add(key);
-            yield* Effect.forkIn(takeArtwork(request, key), scope, { startImmediately: true });
+            enqueue(artworkWork, `artwork:${key}`, takeArtwork(request, key));
           }
 
           // Work that arrived while the burst was working is the next round's work.
@@ -581,11 +660,16 @@ export class EnrichmentService extends Context.Service<
           queuedThemes = new Map();
           queuedPictures = new Map();
           queuedArtworks = new Map();
+          runningFetches.clear();
+          pendingJobs.clear();
+
+          for (const [queue] of workers) Queue.shutdownUnsafe(queue);
+
           runningArtworks.clear();
           forgottenArtworks.clear();
           inFlight.clear();
-          forgotten.clear();
           generations.clear();
+          pageGenerations.clear();
         }),
       );
 

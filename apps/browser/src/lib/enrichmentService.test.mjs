@@ -24,6 +24,7 @@ const fakeEngine = () => {
     held: null,
     heldArtwork: null,
     heldPicture: null,
+    heldIcons: new Map(),
   };
 
   const layer = Layer.succeed(EnrichmentEngine)({
@@ -45,10 +46,17 @@ const fakeEngine = () => {
         return Effect.succeed(new Map(pages.map((page) => [page, `icon:${page}`])));
       }),
     icon: (tabId, src) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         lab.icons.push([tabId, src]);
 
-        return `icon:${src}`;
+        const answer = lab.heldIcons.get(src);
+
+        if (!answer) return Effect.succeed(`icon:${src}`);
+
+        return Effect.tryPromise({
+          try: () => answer.promise,
+          catch: (cause) => new EnrichmentFailure({ operation: { name: "enrichment.icon", resource: src }, cause }),
+        });
       }),
     favicon: (url) => Effect.succeed(`icon:${url}`),
     theme: (uri) =>
@@ -351,5 +359,172 @@ test("the service lets go of everything it held when its scope closes", async ()
     account();
 
     assert.deepEqual(ledger.outstanding(), [], "the service gave everything back");
+  });
+});
+
+test("a pending remote icon does not block later enrichment work", async () => {
+  await withService(async ({ service, lab, runtime }) => {
+    const answer = deferred();
+    const written = [];
+
+    lab.heldIcons.set("https://slow/icon.png", answer);
+    service.requestIcon({ profile: "work", page: "https://slow", src: "https://slow/icon.png", tabId: "slow", onIcon: () => {} });
+    assert.ok(await settle(runtime, () => lab.icons.length === 1));
+    useBrowser.setState({
+      windows: { w1: { id: "w1", spaceId: "work", activeTabIds: { work: "ready" } } },
+      tabs: { ready: { id: "ready", url: "https://site/ready", spaceId: "work", windowId: "w1" } },
+    });
+
+    service.requestFavicons({ profile: "work", page: "https://site/ready", onAnswers: () => written.push("cache") });
+    service.requestIcon({
+      profile: "work",
+      page: "https://site/ready",
+      src: "https://site/ready.png",
+      tabId: "ready",
+      onIcon: () => written.push("icon"),
+    });
+    service.requestTheme({ uri: "icon:ready", onTheme: () => written.push("theme") });
+    service.requestPicture({ windowId: "w1", tabId: "ready", onPicture: () => written.push("picture") });
+    service.requestArtwork({ tabId: "ready", url: "https://site/art.png", onArtwork: () => written.push("artwork") });
+
+    assert.ok(await settle(runtime, () => written.length === 5, PICTURE_SETTLE_MS), "all other work completed while the remote icon was pending");
+    assert.deepEqual(new Set(written), new Set(["cache", "icon", "theme", "picture", "artwork"]));
+  });
+});
+
+test("requests for an icon already being fetched share its answer", async () => {
+  await withService(async ({ service, lab, runtime }) => {
+    const answer = deferred();
+    const written = [];
+    const request = { profile: "work", page: "https://site/a", src: "https://site/icon.png", tabId: "a" };
+
+    lab.heldIcons.set(request.src, answer);
+    service.requestIcon({ ...request, onIcon: (uri) => written.push(["first", uri]) });
+    assert.ok(await settle(runtime, () => lab.icons.length === 1));
+    service.requestIcon({ ...request, page: "https://site/b", tabId: "b", onIcon: (uri) => written.push(["second", uri]) });
+    await settle(runtime, () => false);
+    assert.equal(lab.icons.length, 1);
+    answer.resolve("icon:shared");
+    assert.ok(await settle(runtime, () => written.length === 2));
+    assert.deepEqual(written, [
+      ["first", "icon:shared"],
+      ["second", "icon:shared"],
+    ]);
+    assert.equal(lab.icons.length, 1, "both callers received the same download");
+  });
+});
+
+test("remote icon downloads use a bounded set of workers", async () => {
+  await withService(async ({ service, lab, runtime }) => {
+    const answers = Array.from({ length: 10 }, () => deferred());
+    const written = [];
+
+    for (let i = 0; i < answers.length; i++) {
+      const src = `https://site/${i}.png`;
+
+      lab.heldIcons.set(src, answers[i]);
+      service.requestIcon({ profile: "work", page: `https://site/${i}`, src, tabId: `${i}`, onIcon: (uri) => written.push(uri) });
+    }
+
+    assert.ok(await settle(runtime, () => lab.icons.length >= 2));
+    await settle(runtime, () => false);
+    assert.ok(lab.icons.length <= 4, "pending downloads leave the rest queued");
+
+    for (const answer of answers) answer.resolve("icon:ready");
+
+    assert.ok(await settle(runtime, () => written.length === 10));
+  });
+});
+
+test("a profile invalidated while its lookup waits for a worker gets no stale answer", async () => {
+  await withService(async ({ service, lab, runtime }) => {
+    const answer = deferred();
+    const written = [];
+
+    lab.held = answer;
+    service.requestFavicons({ profile: "first", page: "https://site/first", onAnswers: () => {} });
+    service.requestFavicons({ profile: "next", page: "https://site/next", onAnswers: (icons) => written.push(icons) });
+    assert.ok(await settle(runtime, () => lab.lookups.length === 1));
+    service.invalidateProfile("next");
+    answer.resolve(new Map([["https://site/next", "icon:stale"]]));
+    await settle(runtime, () => !service.held().length);
+
+    assert.deepEqual(written, []);
+    assert.deepEqual(
+      lab.lookups.map(([profile]) => profile),
+      ["first"],
+    );
+  });
+});
+
+test("scope disposal interrupts pending downloads and releases queued work", async () => {
+  await withService(async ({ service, lab, runtime }) => {
+    const answer = deferred();
+    const written = [];
+
+    for (let i = 0; i < 6; i++) {
+      const src = `https://site/${i}.png`;
+
+      lab.heldIcons.set(src, answer);
+      service.requestIcon({ profile: "work", page: `https://site/${i}`, src, tabId: `${i}`, onIcon: (uri) => written.push(uri) });
+    }
+
+    assert.ok(await settle(runtime, () => lab.icons.length === 4));
+    assert.ok(service.held().length > 0);
+    await runtime.dispose();
+    assert.deepEqual(service.held(), []);
+    answer.resolve("icon:late");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(written, []);
+    assert.equal(lab.icons.length, 4, "queued downloads did not start during teardown");
+  });
+});
+
+test("forgetting a page invalidates every earlier lookup waiting for a worker", async () => {
+  await withService(async ({ service, lab, runtime }) => {
+    const first = deferred();
+    const blocker = deferred();
+    const written = [];
+    const page = "https://site/repeated";
+
+    lab.held = first;
+    service.requestFavicons({ profile: "work", page, onAnswers: () => {} });
+    assert.ok(await settle(runtime, () => lab.lookups.length === 1));
+    service.requestFavicons({ profile: "blocker", page: "https://site/blocker", onAnswers: () => {} });
+    service.requestFavicons({ profile: "work", page, onAnswers: (icons) => written.push(icons) });
+    assert.ok(await settle(runtime, () => service.held().filter((name) => /^icons:.*:\d+$/.test(name)).length === 3));
+
+    lab.held = blocker;
+    first.resolve(new Map([[page, "icon:old"]]));
+    assert.ok(await settle(runtime, () => lab.lookups.length === 2));
+    service.forgetPage("work", page);
+    lab.held = null;
+    blocker.resolve(new Map());
+    assert.ok(await settle(runtime, () => service.held().length === 0));
+    assert.deepEqual(written, [], "the earlier completion could not consume the later lookup's invalidation");
+
+    service.requestFavicons({ profile: "work", page, onAnswers: (icons) => written.push(icons) });
+    assert.ok(await settle(runtime, () => written.length === 1), "a new lookup after invalidation can still answer");
+  });
+});
+
+test("rapid tab switches keep the current picture's own settle deadline", async () => {
+  await withService(async ({ service, lab, runtime }) => {
+    for (let i = 0; i < 10; i++) {
+      const tabId = `t${i}`;
+
+      useBrowser.setState({
+        windows: { w1: { id: "w1", spaceId: "work", activeTabIds: { work: tabId } } },
+        tabs: { [tabId]: { id: tabId, url: `https://site/${tabId}`, spaceId: "work", windowId: "w1" } },
+      });
+      service.requestPicture({ windowId: "w1", tabId, onPicture: () => {} });
+      await runtime.runPromise(TestClock.adjust(20));
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    assert.deepEqual(lab.pictures, []);
+    await runtime.runPromise(TestClock.adjust(PICTURE_SETTLE_MS));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(lab.pictures, ["t9"], "stale pictures did not each add another settle delay");
   });
 });
