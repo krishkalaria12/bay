@@ -1,5 +1,6 @@
 // The desktop runtime: one per JavaScript application instance, shared by every window. Its layers are the app's
 // infrastructure — the ports a workflow reaches the outside world through — and the services that own a workflow.
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -227,36 +228,33 @@ export const startAppServices = (): Promise<void> =>
         yield* persistence.start;
 
         const history = yield* History;
-
-        yield* history.start;
-
         const bookmarks = yield* Bookmarks;
-
-        yield* bookmarks.start;
-
         const cleanup = yield* ProfileCleanup;
-
-        yield* cleanup.start;
-
         const library = yield* LibraryService;
-
-        yield* library.start;
-
         const updater = yield* UpdaterService;
-
-        yield* updater.start;
-
         const usage = yield* UsageService;
-
-        yield* usage.start;
-
         const littleBay = yield* LittleBayService;
-
-        yield* littleBay.start;
-
         const lifecycle = yield* PageLifecycleService;
 
-        yield* lifecycle.start;
+        // Each service owns its startup. A native read that waits or fails must not hold up the others.
+        yield* Effect.forEach(
+          [history.start, bookmarks.start, cleanup.start, library.start, updater.start, usage.start, littleBay.start, lifecycle.start],
+          (start) =>
+            start.pipe(
+              Effect.catchCauseIf(
+                (cause) => !Cause.hasInterruptsOnly(cause),
+                (cause) =>
+                  Effect.sync(() => {
+                    const failure = Cause.squash(cause);
+                    const error = failure instanceof Error ? failure : new Error(String(failure));
+
+                    captureException(error, "console");
+                    console.error("An app service could not start", error);
+                  }),
+              ),
+            ),
+          { concurrency: "unbounded", discard: true },
+        );
       }),
     )
     .catch((cause: unknown) => {
