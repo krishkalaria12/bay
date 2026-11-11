@@ -520,7 +520,8 @@
             synchronous and UI-local work.
           </li>
           <li>
-            Keep mobile, the website, videos and the standalone Bun CLI outside this migration. Their shared package interfaces remain usable without importing
+            Keep mobile, the website and videos outside this migration. The standalone Bun CLI moves to Effect on its own (its commands on
+            <code>effect/cli</code>, its own pinned runtime), with no share in the desktop runtime. Shared package interfaces remain usable without importing
             Effect.
           </li>
           <li>Preserve saved data, sync protocol, permissions, authentication, privacy behavior, undo, native event order and browser responsiveness.</li>
@@ -2168,11 +2169,15 @@ apps/browser/src/
                     ><a class="source" data-source="scripts/release.sh" data-line="1" href="../scripts/release.sh"><code>scripts/release.sh:1</code></a>
                     <p class="label">Implementation</p>
                     <p>
-                      No Effect dependency or migration in these areas. Desktop website-sharing calls remain in scope, while the website server is unchanged.
-                      Existing release commands continue to ship the desktop build.
+                      No Effect dependency or migration in mobile, the website, videos or release tooling. Desktop website-sharing calls remain in scope, while
+                      the website server is unchanged. The Bun CLI is migrated separately, on <code>effect/cli</code> and <code>@effect/platform-bun</code>,
+                      pinned to the desktop's Effect release in its own lockfile. Existing release commands continue to ship the desktop build and the CLI.
                     </p>
                     <p class="label">Required proof</p>
-                    <p>Only apps/browser directly gains effect; the shared package manifests and all standalone lockfiles remain untouched.</p>
+                    <p>
+                      Only apps/browser and apps/cli directly gain effect, at one release; the shared package manifests and the other standalone lockfiles
+                      remain untouched (<code>scripts/tests/test-effect-boundary.mjs</code>).
+                    </p>
                   </details>
                 </td>
               </tr>
@@ -2729,8 +2734,8 @@ apps/browser/src/
             Existing saved data, sync peers, permissions, incognito boundaries, protected credentials, sharing recovery and telemetry consent remain compatible.
           </li>
           <li>
-            Only the desktop app gains Effect. No unrequested schema migration, new UI store, platform rewrite or standalone-workspace adoption is bundled into
-            the change.
+            Only the desktop app and the Bun CLI gain Effect. No unrequested schema migration, new UI store, platform rewrite or other standalone-workspace
+            adoption is bundled into the change.
           </li>
           <li>
             A reviewable implementation includes the inventory disposition, test outputs and before/after performance artifacts. Release readiness preserves
