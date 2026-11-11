@@ -11,8 +11,6 @@ import { isInternalTab } from "../components/pages/pageUrls";
 import { sidebarMenuState } from "../components/sidebar/sidebarCommands";
 import { openWindow as createWindow } from "./actions";
 import { openExternalUrls } from "../components/littleBay/actions";
-import { startLittleBayAccess } from "../components/littleBay/access";
-import { startLittleBayPutAway } from "../components/littleBay/putAway";
 import { meetingToJoin } from "../activity/meetingAlerts";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./appCommands";
@@ -52,13 +50,11 @@ export function startNativeSync() {
 
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
-  // The app's own wiring: the sidebar's undo, the window that asks before it closes, the extensions and Little
-  // Bay. It stays here, and it stays synchronous.
+  // The app's own wiring: the sidebar's undo, the window that asks before it closes and the extensions. It stays
+  // here, and it stays synchronous. Little Bay's put-away and shortcut are its service's (startAppServices).
   startSidebarMoveUndoSync();
   startWindowCloseGuard();
   startExtensionsBridge();
-  startLittleBayAccess();
-  startLittleBayPutAway();
   startTidyDownloads();
 
   // The app's own appearance: the Mac is asked about it, and told what the app wants.

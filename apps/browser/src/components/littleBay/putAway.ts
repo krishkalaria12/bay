@@ -1,8 +1,6 @@
-import { onAppEvent, onWindowEvent } from "@bay/desktop";
-import { everySlowly } from "../../lib/throttledTimers";
+import type { AppEvent, WindowEvent } from "@bay/desktop";
 import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId } from "../../store/model";
-import { PUT_AWAY_SWEEP_MS } from "./constants";
 
 // Little Bay windows left alone are put away, as Arc did with Little Arc (every six hours by default, its time in
 // Settings › Links): the window closes and its page goes to the Library's archive, under Little Bay. One in front,
@@ -31,10 +29,39 @@ export function littleBaysToPutAway(
     .map((w) => w.id);
 }
 
-let started = false;
+// When each Little Bay was last in front, and whether Bay is the app in front. The Little Bay service hears the
+// Mac's events and tells this (service.ts); the sweep is its job on the shared grid.
 const usedAt = new Map<string, number>();
 let appActive = true;
 const store = () => useBrowser.getState();
+
+// A window stops being in use when another comes forward, or Bay goes to the background.
+const leave = () => {
+  const front = store().ui.focusedWindowId;
+
+  if (front) usedAt.set(front, Date.now());
+};
+
+/** A window came forward or closed. */
+export function noteWindowEvent(e: WindowEvent) {
+  if (e.type === "focus") {
+    leave();
+    usedAt.set(e.id, Date.now());
+    appActive = true;
+  }
+
+  if (e.type === "close") usedAt.delete(e.id);
+}
+
+/** Bay went to the background. */
+export function noteAppEvent(e: AppEvent) {
+  if (e.type !== "resignActive") return;
+  leave();
+  appActive = false;
+}
+
+/** Whether the sweep has anything to look at: a Little Bay, and a time to put it away after. */
+export const putAwayNeeded = () => store().settings.littleBayPutAwayAfterHours !== null && Object.values(store().windows).some((w) => w.kind === "small");
 
 /** Puts away the Little Bay windows left alone for their time (by `now`): the ones it closed. */
 export function putAwayIdleLittleBays(now = Date.now()): string[] {
@@ -47,46 +74,12 @@ export function putAwayIdleLittleBays(now = Date.now()): string[] {
     inUse: appActive ? s.ui.focusedWindowId : null,
   });
 
+  // A window is closed once: closing it archives its page, and one already gone is not closed again.
   for (const id of ids) {
     usedAt.delete(id);
-    store().closeWindow(id);
+
+    if (store().windows[id]) store().closeWindow(id);
   }
 
   return ids;
-}
-
-export function startLittleBayPutAway() {
-  if (started) return;
-  started = true;
-
-  // A window stops being in use when another comes forward, or Bay goes to the background.
-  const leave = () => {
-    const front = store().ui.focusedWindowId;
-
-    if (front) usedAt.set(front, Date.now());
-  };
-
-  onWindowEvent((e) => {
-    if (e.type === "focus") {
-      leave();
-      usedAt.set(e.id, Date.now());
-      appActive = true;
-    }
-
-    if (e.type === "close") usedAt.delete(e.id);
-  });
-  onAppEvent((e) => {
-    if (e.type !== "resignActive") return;
-    leave();
-    appActive = false;
-  });
-  everySlowly({
-    every: PUT_AWAY_SWEEP_MS,
-    run: () => void putAwayIdleLittleBays(),
-    needed: () => store().settings.littleBayPutAwayAfterHours !== null && Object.values(store().windows).some((w) => w.kind === "small"),
-    watch: (changed) =>
-      useBrowser.subscribe((s, prev) => {
-        if (s.windows !== prev.windows || s.settings !== prev.settings) changed();
-      }),
-  });
 }

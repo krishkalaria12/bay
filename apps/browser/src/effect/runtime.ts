@@ -11,9 +11,11 @@ import { SharingEngine, SharingService } from "../components/library/sharingServ
 import { captureEngineLayer } from "../components/capture/captureEngine";
 import { CaptureService } from "../components/capture/service";
 import { ExtensionsEngine, ExtensionsService } from "../components/extensions/service";
+import { LittleBayEngine, LittleBayService } from "../components/littleBay/service";
 import { MediaEngine, MediaService } from "../components/media/service";
 import { PreviewEngine, PreviewService } from "../components/site/previewService";
 import { BoostEngine, BoostsService } from "../components/boosts/service";
+import { AppIntegrationService, IntegrationEngine } from "../lib/appIntegrationService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { EngineTabsEngine, EngineTabsService } from "../lib/engineTabs";
 import { EnrichmentEngine, EnrichmentService } from "../lib/enrichmentService";
@@ -42,6 +44,7 @@ import { Scheduler } from "./ports/scheduler";
 /** The services every desktop workflow can rely on. */
 export type AppServices =
   | ActivityService
+  | AppIntegrationService
   | AutomationService
   | Bookmarks
   | BoostsService
@@ -59,6 +62,7 @@ export type AppServices =
   | Http
   | ImportWorkflow
   | LibraryService
+  | LittleBayService
   | LocalFileService
   | MediaService
   | NotificationService
@@ -110,6 +114,10 @@ const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
 const capture = CaptureService.layer.pipe(Layer.provide(Layer.mergeAll(captureEngineLayer, library)));
 
+const littleBay = LittleBayService.layer.pipe(Layer.provide(Layer.mergeAll(LittleBayEngine.layer, Scheduler.layer)));
+
+const integration = AppIntegrationService.layer.pipe(Layer.provide(IntegrationEngine.layer));
+
 const media = MediaService.layer.pipe(Layer.provide(MediaEngine.layer));
 
 const pageWork = PageWorkService.layer.pipe(Layer.provide(PageWorkEngine.layer));
@@ -155,6 +163,8 @@ export const appLayer = Layer.mergeAll(
   boosts,
   connections,
   capture,
+  integration,
+  littleBay,
   media,
   pageWork,
   search,
@@ -229,6 +239,10 @@ export const startAppServices = (): Promise<void> =>
         const usage = yield* UsageService;
 
         yield* usage.start;
+
+        const littleBay = yield* LittleBayService;
+
+        yield* littleBay.start;
       }),
     )
     .catch((cause: unknown) => {

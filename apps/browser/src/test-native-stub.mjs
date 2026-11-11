@@ -119,6 +119,16 @@ export const portraitCaptureImage = () => Promise.resolve(null);
 export const copyImage = () => false;
 export const revealFile = () => Promise.resolve();
 
+// Little Bay from any app, Handoff and AppleScript.
+export const setLittleBayHotKey = () => Promise.resolve("off");
+export const setLittleBayMenuBarItem = () => Promise.resolve();
+export const setWindowActivity = () => Promise.resolve();
+export const setScriptState = () => Promise.resolve();
+export const replyToScript = () => Promise.resolve();
+export const onCommand = () => ({ remove() {} });
+export const onNotificationResponse = () => ({ remove() {} });
+export const onScriptCommand = () => ({ remove() {} });
+
 // The engine's media: its share sources, its cast dialogs and routes, and its own Picture in Picture.
 export const killTask = () => Promise.resolve(true);
 export const getDisplayMediaSources = () => Promise.resolve([]);
