@@ -8,6 +8,7 @@ import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import { newId } from "../../store/model";
 import { readLibrary as readLibraryDocument, type CaptureSource, type LibraryData, type LibraryMedia } from "./model";
 
@@ -73,8 +74,17 @@ export class LibraryService extends Context.Service<
     LibraryService,
     Effect.gen(function* () {
       const engine = yield* LibraryEngine;
+      const scope = yield* Scope.Scope;
 
       let stop: (() => void) | undefined;
+
+      yield* Scope.addFinalizer(
+        scope,
+        Effect.sync(() => {
+          stop?.();
+          stop = undefined;
+        }),
+      );
 
       const start = Effect.sync(() => {
         if (stop) return;
