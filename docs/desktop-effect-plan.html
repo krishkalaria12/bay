@@ -2698,10 +2698,6 @@ apps/browser/src/
               scheduled work is needed.
             </li>
             <li>Steady app physical footprint increase: at most 5 MiB under the same loaded session, with no upward growth across repeated churn.</li>
-            <li>
-              Hermes bytecode increase: at most 512 KiB. Record the raw/minified bundle and bytecode deltas; do not claim tree-shaking alone guarantees the
-              result.
-            </li>
           </ul>
           <p>
             Keep benchmark/probe revisions identical between compared bundles. If instrumentation must change, rebuild the baseline with the same
