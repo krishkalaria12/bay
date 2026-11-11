@@ -21,10 +21,11 @@ import { DownloadEngine, DownloadWorkService } from "../lib/downloadWorkService"
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
 import { Persistence } from "../lib/persistenceService";
-import { TidyEngine, TidyWorkService } from "../lib/tidyWorkService";
 import { ShellEngine, ShellService } from "../lib/shellService";
+import { TidyEngine, TidyWorkService } from "../lib/tidyWorkService";
 import { UpdaterEngine, UpdaterService } from "../lib/updaterService";
 import { Sync } from "../sync/service";
+import { DiagnosticsService, TelemetryEngine } from "../telemetry/service";
 import { UsageService } from "../telemetry/usageService";
 import { ImportEngine, ImportWorkflow } from "../components/import/workflow";
 import { ProfileCleanup, ProfileEngine } from "../lib/profileCleanup";
@@ -43,11 +44,12 @@ export type AppServices =
   | CalendarService
   | ConnectionService
   | Diagnostics
+  | DiagnosticsService
   | DownloadWorkService
   | Documents
+  | EnrichmentService
   | EngineTabsService
   | ExtensionsService
-  | EnrichmentService
   | History
   | Http
   | ImportWorkflow
@@ -56,15 +58,15 @@ export type AppServices =
   | NotificationService
   | Persistence
   | PreviewService
-  | SearchService
   | ProfileCleanup
   | Scheduler
-  | ShellService
+  | SearchService
   | SharingService
-  | UpdaterService
-  | UsageService
+  | ShellService
   | Sync
-  | TidyWorkService;
+  | TidyWorkService
+  | UpdaterService
+  | UsageService;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -95,29 +97,32 @@ const automation = AutomationService.layer.pipe(Layer.provide(Layer.mergeAll(Aut
 
 const preview = PreviewService.layer.pipe(Layer.provide(Layer.mergeAll(Http.layer, PreviewEngine.layer)));
 
-const search = SearchService.layer.pipe(Layer.provide(SearchNetwork.layer));
-
 const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEngine.layer, Http.layer)));
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
-const extensions = ExtensionsService.layer.pipe(Layer.provide(ExtensionsEngine.layer));
 
-const tidy = TidyWorkService.layer.pipe(Layer.provide(TidyEngine.layer));
-
-const engineTabs = EngineTabsService.layer.pipe(Layer.provide(EngineTabsEngine.layer));
+const search = SearchService.layer.pipe(Layer.provide(SearchNetwork.layer));
 
 const shell = ShellService.layer.pipe(Layer.provide(Layer.mergeAll(ShellEngine.layer, Scheduler.layer)));
 
+const tidy = TidyWorkService.layer.pipe(Layer.provide(TidyEngine.layer));
+
 const enrichment = EnrichmentService.layer.pipe(Layer.provide(EnrichmentEngine.layer));
+
+const engineTabs = EngineTabsService.layer.pipe(Layer.provide(EngineTabsEngine.layer));
+
+const extensions = ExtensionsService.layer.pipe(Layer.provide(ExtensionsEngine.layer));
+
+const updater = UpdaterService.layer.pipe(Layer.provide(UpdaterEngine.layer));
+
+const telemetry = DiagnosticsService.layer.pipe(Layer.provide(Layer.mergeAll(TelemetryEngine.layer, Scheduler.layer)));
 
 const usage = UsageService.layer.pipe(Layer.provide(Scheduler.layer));
 
 const boosts = BoostsService.layer.pipe(Layer.provide(Layer.mergeAll(BoostEngine.layer, Documents.layer)));
 
 const connections = ConnectionService.layer.pipe(Layer.provide(ConnectionEngine.layer));
-
-const updater = UpdaterService.layer.pipe(Layer.provide(UpdaterEngine.layer));
 
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
@@ -138,18 +143,19 @@ export const appLayer = Layer.mergeAll(
   boosts,
   connections,
   search,
+  telemetry,
   calendar,
   automation,
   preview,
   sharing,
   library,
   extensions,
-  tidy,
-  engineTabs,
   shell,
-  enrichment,
-  usage,
+  tidy,
   updater,
+  usage,
+  enrichment,
+  engineTabs,
 ).pipe(Layer.provide(diagnostics));
 
 /**

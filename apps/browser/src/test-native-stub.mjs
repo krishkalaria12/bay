@@ -96,16 +96,19 @@ export const onAppEvent = () => ({ remove() {} });
 
 // The updater: what it knows, and what it reports.
 export const updaterAnswers = { state: { available: false }, pending: null };
+
 export const onUpdatePending = (listener) => {
   updaterAnswers.listener = listener;
 
   return { remove() {} };
 };
+
 export const updaterState = () => Promise.resolve(updaterAnswers.state);
 export const installPendingUpdate = () => Promise.resolve();
 
 // The engine's own tasks, and the extensions it reports.
 export const listTasks = () => Promise.resolve([]);
+
 export const onExtensionsChanged = () => ({ remove() {} });
 
 // The native side's answer to the app's quit: what it was told.
