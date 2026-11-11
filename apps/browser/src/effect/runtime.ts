@@ -9,6 +9,7 @@ import { LibraryEngine, LibraryService } from "../components/library/libraryServ
 import { SharingEngine, SharingService } from "../components/library/sharingService";
 import { PreviewEngine, PreviewService } from "../components/site/previewService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
+import { EngineTabsEngine, EngineTabsService } from "../lib/engineTabs";
 import { EnrichmentEngine, EnrichmentService } from "../lib/enrichmentService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { AutomationEngine, AutomationService, CliEngine } from "../components/cli/automationService";
@@ -17,6 +18,7 @@ import { DownloadEngine, DownloadWorkService } from "../lib/downloadWorkService"
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
 import { Persistence } from "../lib/persistenceService";
+import { ShellEngine, ShellService } from "../lib/shellService";
 import { UpdaterEngine, UpdaterService } from "../lib/updaterService";
 import { Sync } from "../sync/service";
 import { UsageService } from "../telemetry/usageService";
@@ -37,6 +39,7 @@ export type AppServices =
   | Diagnostics
   | DownloadWorkService
   | Documents
+  | EngineTabsService
   | EnrichmentService
   | History
   | Http
@@ -49,6 +52,7 @@ export type AppServices =
   | SearchService
   | ProfileCleanup
   | Scheduler
+  | ShellService
   | SharingService
   | UpdaterService
   | UsageService
@@ -89,6 +93,10 @@ const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEn
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
+const engineTabs = EngineTabsService.layer.pipe(Layer.provide(EngineTabsEngine.layer));
+
+const shell = ShellService.layer.pipe(Layer.provide(Layer.mergeAll(ShellEngine.layer, Scheduler.layer)));
+
 const enrichment = EnrichmentService.layer.pipe(Layer.provide(EnrichmentEngine.layer));
 
 const usage = UsageService.layer.pipe(Layer.provide(Scheduler.layer));
@@ -117,6 +125,8 @@ export const appLayer = Layer.mergeAll(
   preview,
   sharing,
   library,
+  engineTabs,
+  shell,
   enrichment,
   usage,
   updater,

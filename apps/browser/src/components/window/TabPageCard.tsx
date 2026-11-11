@@ -11,7 +11,7 @@ import { JsonValueSchema } from "../../lib/json";
 import { isQuitting } from "../../lib/quit";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { startChromeTabs } from "../../lib/engineTabs";
+import { startChromeTabs } from "../../lib/chromeTabs";
 import { handOff, wantsPage } from "../../lib/tabNavigation";
 import { noteDiscarded, noteGone, noteReady } from "../../lib/tabLifecycle";
 import { followSiteChoice, noteWebKitPage, persistEngine, playInWebKit } from "../../lib/pageEngines";

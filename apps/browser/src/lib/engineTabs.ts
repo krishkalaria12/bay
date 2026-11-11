@@ -1,3 +1,12 @@
+// Chrome's tab strips and the store. Chrome commits; the engine reports each
+// change as a transaction with a revision and its cause. Transactions apply in revision order. The app's own
+// changes come back with their command and only update the mirror; Chrome's become the same change in the store
+// (store/tabStripSync.ts). After every change the store's plan for each strip is compared with Chrome's, and a command
+// goes out where they differ: one per strip at a time, and never the same command twice against the same strip.
+//
+// The service owns the engine's side of it: the listener that reads the transactions, the snapshot they are applied
+// to, and what happens when that snapshot cannot be read. The reconciliation itself stays as it is — synchronous,
+// batched in a microtask, and a command goes out only where the store and Chrome disagree.
 import {
   chromeWindows,
   devWindowAction,
@@ -9,17 +18,54 @@ import {
   type TabStripCommand,
   type TabStripTransaction,
 } from "@bay/chromium";
+import * as Context from "effect/Context";
+import { TaggedError } from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import type { Operation } from "../effect/errors";
+import { Diagnostics } from "../effect/ports/diagnostics";
 import { useBrowser, type BrowserState } from "../store/browserStore";
 import { changedIds } from "../store/recordDiff";
 import { chromeChanged, groupStep, stripActual, stripPlan, type GroupBindings } from "../store/tabStripSync";
 
-// Chrome's tab strips and the store. Chrome commits; the engine reports each
-// change as a transaction with a revision and its cause. Transactions apply in revision order. The app's own
-// changes come back with their command and only update the mirror; Chrome's become the same change in the store
-// (store/tabStripSync.ts). After every change the store's plan for each strip is compared with Chrome's, and a command
-// goes out where they differ: one per strip at a time, and never the same command twice against the same strip.
+/** The engine could not report its tab strips. */
+export class EngineTabsFailure extends TaggedError("EngineTabsFailure")<{
+  readonly operation: Operation;
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
 
-let started = false;
+/** The engine's tab strips, as the app reaches them. */
+export class EngineTabsEngine extends Context.Service<
+  EngineTabsEngine,
+  {
+    /** Registers the one handler for the engine's transactions. The answer gives the handler back. */
+    readonly onTransaction: (listener: (transaction: TabStripTransaction) => void) => Effect.Effect<() => void>;
+    /** The strips as they are now, with the revision they are at. */
+    readonly snapshot: () => Effect.Effect<TabStripTransaction, EngineTabsFailure>;
+  }
+>()("bay/EngineTabsEngine") {
+  static readonly layer = Layer.succeed(EngineTabsEngine)({
+    onTransaction: (listener) =>
+      Effect.sync(() => {
+        const subscription = onTabStripTransaction(listener);
+
+        return () => subscription.remove();
+      }),
+    snapshot: () =>
+      Effect.tryPromise({
+        try: () => tabStrips(),
+        catch: (cause) =>
+          new EngineTabsFailure({
+            operation: { name: "engineTabs.snapshot" },
+            message: "The engine's tab strips could not be read.",
+            cause,
+          }),
+      }),
+  });
+}
+
 const mirror = new Map<number, StripState>();
 
 // -1 until the first snapshot arrives; transactions before it wait.
@@ -52,29 +98,6 @@ if (__DEV__) {
     strips: () => [...mirror.values()],
     state: () => ({ lastRev, inflight: Object.fromEntries(inflight), tried: Object.fromEntries(tried), groups: Object.fromEntries(groups) }),
   };
-}
-
-export function startChromeTabs() {
-  if (started) return;
-  started = true;
-  onTabStripTransaction((tx) => (lastRev < 0 ? early.push(tx) : receive(tx)));
-  void tabStrips().then((snapshot) => {
-    for (const strip of snapshot.strips) {
-      mirror.set(strip.strip, strip);
-
-      for (const t of strip.tabs) if (t.key) seen.add(t.key);
-    }
-
-    lastRev = snapshot.rev;
-    const queued = early;
-    early = [];
-
-    for (const tx of queued) receive(tx);
-    scheduleProject();
-  });
-  useBrowser.subscribe((s, prev) => {
-    if (s.windows !== prev.windows || s.tabLists !== prev.tabLists || s.groups !== prev.groups || placed(s, prev)) scheduleProject();
-  });
 }
 
 // Whether a tab came, went or changed what the plans read of it (stripPlan, groupStep: its window, profile and pin).
@@ -141,6 +164,23 @@ function receive(tx: TabStripTransaction) {
   scheduleProject();
 }
 
+// The snapshot the transactions that arrived before it are applied to: the strips as they are now, and the
+// revision they are at.
+function applySnapshot(snapshot: TabStripTransaction) {
+  for (const strip of snapshot.strips) {
+    mirror.set(strip.strip, strip);
+
+    for (const t of strip.tabs) if (t.key) seen.add(t.key);
+  }
+
+  lastRev = snapshot.rev;
+  const queued = early;
+  early = [];
+
+  for (const tx of queued) receive(tx);
+  scheduleProject();
+}
+
 // MARK: Store → Chrome
 
 let projectQueued = false;
@@ -189,3 +229,157 @@ function send(strip: number, kind: Kind, sig: string, command: TabStripCommand, 
   tried.set(`${strip}:${kind}`, { sig, since });
   inflight.set(strip, { kind, cmd: sendTabStripCommand(command), ...(command.op !== "activate" ? { keys: command.keys } : undefined), makes, successor });
 }
+
+// MARK: The service
+
+export class EngineTabsService extends Context.Service<
+  EngineTabsService,
+  {
+    /** Reads the engine's transactions and the strips they are applied to. */
+    readonly start: Effect.Effect<void>;
+    /** Gives the engine's transactions back. */
+    readonly stop: Effect.Effect<void>;
+  }
+>()("bay/EngineTabsService") {
+  static readonly layer = Layer.effect(
+    EngineTabsService,
+    Effect.gen(function* () {
+      const engine = yield* EngineTabsEngine;
+      const diagnostics = yield* Diagnostics;
+      const scope = yield* Scope.Scope;
+
+      // The listener the engine's transactions reach, and the subscription that projects the store's changes.
+      let remove: (() => void) | undefined;
+      let stopStore: (() => void) | undefined;
+
+      // Whether the strips are known: the app sends nothing before they are.
+      let known = false;
+
+      // Whether the strips are being read: one read at a time, however many things ask for it.
+      let reading = false;
+
+      // Whether a failure has been reported: it is reported once, not once per attempt.
+      let reported = false;
+
+      // The failure behind the snapshot, as an error the diagnostics can carry.
+      const asError = (cause: unknown): Error => (cause instanceof Error ? cause : new Error(String(cause)));
+
+      // A branch of the reconciliation's work: it starts at once, it runs in the app's scope, and it is interrupted
+      // when that scope closes.
+      const branch = (work: Effect.Effect<void>): void => {
+        void Effect.runFork(Effect.forkIn(work, scope, { startImmediately: true }));
+      };
+
+      // A failure is reported once, where every other failure goes. A read that works again lets the next failure
+      // be reported too: one outage is one report, not one per attempt.
+      const report = (failure: EngineTabsFailure): Effect.Effect<void> => {
+        if (reported) return Effect.void;
+        reported = true;
+
+        return diagnostics.report({
+          operation: failure.operation,
+          message: failure.message,
+          cause: asError(failure.cause),
+        });
+      };
+
+      // The strips as they are now. The transactions that arrived before it are applied to it, and only then does
+      // the app send a command: the state is read again before anything goes out.
+      const readSnapshot = (): Effect.Effect<void, EngineTabsFailure> =>
+        Effect.gen(function* () {
+          const snapshot = yield* engine.snapshot();
+
+          yield* Effect.sync(() => {
+            applySnapshot(snapshot);
+            known = true;
+            reported = false;
+          });
+        });
+
+      // The strips are asked for when they are not known and something needs them: the engine is talking, or the
+      // app wants to change a strip it cannot see yet. Nothing goes out until the state is in.
+      const ensureSnapshot = (): void => {
+        if (known || reading) return;
+        reading = true;
+
+        branch(
+          readSnapshot().pipe(
+            Effect.catch((failure) => report(failure)),
+            Effect.ensuring(
+              Effect.sync(() => {
+                reading = false;
+              }),
+            ),
+          ),
+        );
+      };
+
+      // The engine's transactions: the ones that arrive before the snapshot wait for it.
+      const onTransaction = (transaction: TabStripTransaction): void => {
+        // The state is not known yet: the transaction waits for it, and the engine is asked for it.
+        if (!known) {
+          early.push(transaction);
+          ensureSnapshot();
+
+          return;
+        }
+
+        receive(transaction);
+      };
+
+      // The listener and the subscription are given back, once.
+      const stopListening = (): void => {
+        remove?.();
+        remove = undefined;
+        stopStore?.();
+        stopStore = undefined;
+
+        // What the app believed about the strips is stale now: a shell that starts again reads the state again.
+        known = false;
+      };
+
+      const start = Effect.gen(function* () {
+        // The engine is read once: a second start would read its transactions twice.
+        if (remove) return;
+
+        remove = yield* engine.onTransaction(onTransaction);
+        stopStore = useBrowser.subscribe((s, prev) => {
+          if (s.windows !== prev.windows || s.tabLists !== prev.tabLists || s.groups !== prev.groups || placed(s, prev)) {
+            // The app wants to change a strip it cannot see yet: the state is read before anything goes out.
+            if (!known) {
+              ensureSnapshot();
+
+              return;
+            }
+
+            scheduleProject();
+          }
+        });
+
+        // The app's scope owns the listener: it gives it back when it closes, once.
+        yield* Scope.addFinalizer(scope, Effect.sync(stopListening));
+
+        // The strips are read now. A snapshot that could not be read is reported once, and the app sends nothing
+        // until the state is known: the engine is asked again when it talks, or when the app wants to change a
+        // strip it cannot see.
+        reading = true;
+
+        yield* readSnapshot().pipe(
+          Effect.catch((failure) => report(failure)),
+          Effect.ensuring(
+            Effect.sync(() => {
+              reading = false;
+            }),
+          ),
+        );
+      });
+
+      const stop = Effect.sync(stopListening);
+
+      return EngineTabsService.of({ start, stop });
+    }),
+  );
+}
+
+/** What the engine's tab strips can do. */
+export type EngineTabs = EngineTabsService["Service"];
