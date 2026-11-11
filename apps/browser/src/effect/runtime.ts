@@ -7,6 +7,7 @@ import { ActivityService, LiveSources } from "../activity/activityService";
 import { CalendarEngine, CalendarService } from "../activity/calendarService";
 import { LibraryEngine, LibraryService } from "../components/library/libraryService";
 import { SharingEngine, SharingService } from "../components/library/sharingService";
+import { ExtensionsEngine, ExtensionsService } from "../components/extensions/service";
 import { PreviewEngine, PreviewService } from "../components/site/previewService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { EngineTabsEngine, EngineTabsService } from "../lib/engineTabs";
@@ -41,6 +42,7 @@ export type AppServices =
   | DownloadWorkService
   | Documents
   | EngineTabsService
+  | ExtensionsService
   | EnrichmentService
   | History
   | Http
@@ -95,6 +97,8 @@ const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEn
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
+const extensions = ExtensionsService.layer.pipe(Layer.provide(ExtensionsEngine.layer));
+
 const tidy = TidyWorkService.layer.pipe(Layer.provide(TidyEngine.layer));
 
 const engineTabs = EngineTabsService.layer.pipe(Layer.provide(EngineTabsEngine.layer));
@@ -129,6 +133,7 @@ export const appLayer = Layer.mergeAll(
   preview,
   sharing,
   library,
+  extensions,
   tidy,
   engineTabs,
   shell,
