@@ -99,10 +99,10 @@ const pages: Record<Page, { title: MessageKey; parent: Page }> = {
   startPage: { title: "settings.startPage", parent: "browsing" },
 };
 
-/** Explains the rows above it, in the sheet's muted small print. */
+/** Explains the rows above it, in the sheet's muted small print, lined up with the rows' text. */
 function Note({ children }: { children: string }): JSX.Element {
   return (
-    <Text variant="footnote" tone="muted" className="mt-2 px-1">
+    <Text variant="footnote" tone="muted" className="mt-2 px-4">
       {children}
     </Text>
   );
@@ -575,12 +575,12 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             />
           </Group>
           {busy ? (
-            <Text testID="clear-data-busy" accessibilityLiveRegion="polite" variant="subhead" tone="muted" className="mt-3 px-1">
+            <Text testID="clear-data-busy" accessibilityLiveRegion="polite" variant="subhead" tone="muted" className="mt-3 px-4">
               {t("settings.clearingWebsiteData")}
             </Text>
           ) : null}
           {error ? (
-            <Text testID="clear-data-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-3 px-1">
+            <Text testID="clear-data-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-3 px-4">
               {error}
             </Text>
           ) : null}
@@ -758,7 +758,7 @@ function WallpaperPicker({
         })}
       </View>
       {photo ? (
-        <Text variant="subhead" tone="muted" className="mt-4 px-1">
+        <Text variant="subhead" tone="muted" className="mt-4 px-4">
           {t("settings.wallpaper.chooseAgain")}
         </Text>
       ) : null}
@@ -769,7 +769,7 @@ function WallpaperPicker({
           accessibilityLiveRegion="assertive"
           variant="subhead"
           tone="danger"
-          className="mt-3 px-1"
+          className="mt-3 px-4"
         >
           {t("settings.wallpaper.failed")}
         </Text>
