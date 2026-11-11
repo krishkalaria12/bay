@@ -10,6 +10,17 @@ steps:
           url: exp+bay://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081
   - await: { visible: { id: bar-search }, timeout: 60000 }
   - await: { idle: true, timeout: 15000 }
+  # Bay asks for notifications at the first download; a run that stopped there leaves the system prompt over the app
+  # at the next launch.
+  - when: { visible: { text: "Allow" } }
+    steps:
+      - tap: { text: "Allow" }
+      - await: { hidden: { text: "Allow" }, timeout: 10000 }
+  # A restored tab can ask something as it loads again (a sign-in, an alert): turn it down.
+  - when: { visible: { id: page-request-cancel } }
+    steps:
+      - tap: { id: page-request-cancel }
+      - await: { hidden: { id: page-request-cancel }, timeout: 10000 }
   - when: { visible: { id: bar-more } }
     steps:
       - tap: { id: bar-more }
