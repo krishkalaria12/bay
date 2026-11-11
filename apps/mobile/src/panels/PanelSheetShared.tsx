@@ -196,7 +196,9 @@ export function ActionRow({
       accessibilityRole={toggle === undefined ? "button" : "switch"}
       accessibilityLabel={label}
       accessibilityState={toggle === undefined ? { disabled, selected } : { disabled, checked: toggle }}
-      accessibilityValue={spoken ? { text: spoken } : undefined}
+      // Always an object: Android keeps the last value when the prop goes away, so a row reused for another setting
+      // would still read the old one ("Pull to refresh, Google").
+      accessibilityValue={{ text: spoken }}
       disabled={disabled}
       onPress={onPress}
       className={
