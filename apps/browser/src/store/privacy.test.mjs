@@ -273,6 +273,8 @@ test("favicons: incognito icons stay in memory and in their own profile; nothing
   const { noteFavicon, resolveFavicon, useFavicons } = await import("../lib/favicons.ts");
   const { webviews } = await import("../lib/webviews.ts");
   stub.docs.clear();
+  // The icons are fetched by the enrichment service, which the runtime owns.
+  await runDesktop(Effect.void);
   const stop = startPersistence();
   const normal = S().createWindow({ url: "https://site.example/a" });
   const incognito = S().createWindow({ incognito: true, url: "https://secret.example/x" });

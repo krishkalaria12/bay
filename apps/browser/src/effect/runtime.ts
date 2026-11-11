@@ -9,6 +9,7 @@ import { LibraryEngine, LibraryService } from "../components/library/libraryServ
 import { SharingEngine, SharingService } from "../components/library/sharingService";
 import { PreviewEngine, PreviewService } from "../components/site/previewService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
+import { EnrichmentEngine, EnrichmentService } from "../lib/enrichmentService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { AutomationEngine, AutomationService, CliEngine } from "../components/cli/automationService";
 import { SearchNetwork, SearchService } from "../components/commandBar/searchService";
@@ -36,6 +37,7 @@ export type AppServices =
   | Diagnostics
   | DownloadWorkService
   | Documents
+  | EnrichmentService
   | History
   | Http
   | ImportWorkflow
@@ -87,6 +89,8 @@ const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEn
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
+const enrichment = EnrichmentService.layer.pipe(Layer.provide(EnrichmentEngine.layer));
+
 const usage = UsageService.layer.pipe(Layer.provide(Scheduler.layer));
 
 const updater = UpdaterService.layer.pipe(Layer.provide(UpdaterEngine.layer));
@@ -113,6 +117,7 @@ export const appLayer = Layer.mergeAll(
   preview,
   sharing,
   library,
+  enrichment,
   usage,
   updater,
 ).pipe(Layer.provide(diagnostics));

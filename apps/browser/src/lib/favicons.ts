@@ -1,5 +1,5 @@
-import { faviconsFor, fetchFavicon, onHistoryChanged, removeLegacyFavicons } from "@bay/chromium";
-import { iconTheme, readDocument, removeDocument, type IconTheme } from "@bay/desktop";
+import { onHistoryChanged, removeLegacyFavicons } from "@bay/chromium";
+import { readDocument, removeDocument, type IconTheme } from "@bay/desktop";
 import { useEffect } from "react";
 import { create, useStore } from "zustand";
 import { batchStoreUpdates, useBrowser, type BrowserState } from "../store/browserStore";
@@ -7,7 +7,8 @@ import { engineProfile, isIncognitoSpace } from "../store/model";
 import { DEFAULT_SPACE_ID } from "../store/constants";
 import { appearanceStore } from "../store/derivedStores";
 import { webviews } from "./webviews";
-import { APPEARANCE_SWAP_MS, FAVICON_FLUSH_MS, FAVICON_LOOKUP_BATCH, FAVICON_LOOKUP_DELAY_MS, MAX_FAVICONS } from "./constants";
+import { APPEARANCE_SWAP_MS, FAVICON_FLUSH_MS, MAX_FAVICONS } from "./constants";
+import { askFavicons, askIcon, askTheme, forgetPage, forgetProfile } from "./enrichmentService";
 
 // Favicons are Chrome's (FaviconService): Chrome saves a page's icon when the page shows it and drops it with the
 // page's history. This is the app's in-memory cache of them, by page, plus what Chrome doesn't keep:
@@ -120,64 +121,57 @@ const touchAll = () => void (touched = null);
 
 // MARK: Asking Chrome
 
-const queued = new Map<string, Set<string>>();
+// The pages that have been asked for, by profile. A page is asked again when its lookup failed, or when its
+// history was deleted.
 const asked = new Set<string>();
-let lookupTimer: ReturnType<typeof setTimeout> | undefined;
+
+// The answers for a profile land in its cache. One sink per profile, so the answer of a lookup is one write.
+const sinks = new Map<string, (icons: ReadonlyMap<string, string | null>) => void>();
+
+const sinkFor = (profile: string) => {
+  const existing = sinks.get(profile);
+
+  if (existing) return existing;
+
+  const sink = (answers: ReadonlyMap<string, string | null>) => {
+    update(
+      profile,
+      (icons) => {
+        let next: Record<string, string | null> | undefined;
+
+        for (const [page, uri] of answers) {
+          if (icons.pages[page] === uri) continue;
+          next ??= { ...icons.pages };
+          next[page] = uri;
+          touch(page);
+        }
+
+        return next ? { ...icons, pages: next } : icons;
+        // One answer is already a batch (up to LOOKUP_BATCH pages): it lands at once, not on another timer.
+      },
+      true,
+    );
+  };
+
+  sinks.set(profile, sink);
+
+  return sink;
+};
 
 function ask(key: string, page: string) {
   if (isIncognitoSpace(key) || asked.has(`${key}|${page}`)) return;
   asked.add(`${key}|${page}`);
 
-  if (!queued.has(key)) queued.set(key, new Set());
-  queued.get(key)!.add(page);
-  lookupTimer ??= setTimeout(lookUp, FAVICON_LOOKUP_DELAY_MS);
-}
-
-function lookUp() {
-  lookupTimer = undefined;
-  const batches = [...queued];
-  queued.clear();
-
-  for (const [key, pages] of batches) {
-    const all = [...pages];
-
-    for (let i = 0; i < all.length; i += FAVICON_LOOKUP_BATCH) lookUpPages(key, all.slice(i, i + FAVICON_LOOKUP_BATCH));
-  }
-}
-
-function lookUpPages(key: string, list: string[]) {
-  void faviconsFor(key, list)
-    .then((found) =>
-      update(
-        key,
-        (icons) => {
-          let next: Record<string, string | null> | undefined;
-
-          for (const page of list) {
-            const uri = found.pages.get(page)?.uri ?? null;
-
-            if (icons.pages[page] === uri) continue;
-            next ??= { ...icons.pages };
-            next[page] = uri;
-            touch(page);
-          }
-
-          return next ? { ...icons, pages: next } : icons;
-          // One answer is already a batch (up to LOOKUP_BATCH pages): it lands at once, not on another timer.
-        },
-        true,
-      ),
-    )
-    .catch((error) => {
-      // Asked again next time it's shown.
-      for (const page of list) asked.delete(`${key}|${page}`);
-      console.warn("[favicons] lookup failed", error);
-    });
+  askFavicons({
+    profile: key,
+    page,
+    onAnswers: sinkFor(key),
+    // Asked again next time the page is shown.
+    onFailed: () => void asked.delete(`${key}|${page}`),
+  });
 }
 
 // MARK: Recording
-
-const inflight = new Map<string, Promise<string | null>>();
 
 /** A tab reports its page's icon: shown at once, and Chrome keeps it with the page. */
 export function noteFavicon(tabId: string, src: string) {
@@ -189,22 +183,19 @@ export function noteFavicon(tabId: string, src: string) {
   const known = useFavicons.getState().profiles[key]?.srcs[src];
 
   if (known) return remember(key, page, src, known);
-  const handle = webviews.get(tabId);
 
-  if (!handle) return;
-  const id = `${key}|${src}`;
-  let pending = inflight.get(id);
+  if (!webviews.get(tabId)) return;
 
-  if (!pending) {
-    pending = handle
-      .downloadFavicon(src)
-      .then((image) => image?.uri ?? null)
-      .catch(() => null);
-    inflight.set(id, pending);
-    void pending.finally(() => inflight.delete(id));
-  }
-
-  void pending.then((uri) => uri && remember(key, page, src, uri));
+  // The tabs that report the same icon share one fetch.
+  askIcon({
+    profile: key,
+    page,
+    src,
+    tabId,
+    onIcon: (uri) => {
+      if (uri) remember(key, page, src, uri);
+    },
+  });
 }
 
 function remember(key: string, page: string, src: string, uri: string) {
@@ -242,18 +233,17 @@ function fetchMissing(spaceId: string, url: string, src: string) {
   if (isIncognitoSpace(spaceId) || !/^https?:/i.test(src)) return;
   const id = `${key}|${src}`;
 
-  if (inflight.has(id) || failedFetches.has(id)) return;
+  if (failedFetches.has(id)) return;
 
-  const pending = fetchFavicon(src, key, pageKey(url))
-    .then((image) => image?.uri ?? null)
-    .catch(() => null);
-
-  inflight.set(id, pending);
-  void pending.then((uri) => {
-    inflight.delete(id);
-
-    if (uri) remember(key, pageKey(url), src, uri);
-    else failedFetches.add(id);
+  askIcon({
+    profile: key,
+    page: pageKey(url),
+    src,
+    tabId: null,
+    onIcon: (uri) => {
+      if (uri) remember(key, pageKey(url), src, uri);
+      else failedFetches.add(id);
+    },
   });
 }
 
@@ -383,19 +373,17 @@ export function useFavicon(url: string, src?: string | null, spaceId?: string): 
 
 // MARK: Themes
 
-const theming = new Set<string>();
-
 export function useFaviconTheme(url: string, src?: string | null, spaceId?: string): IconTheme | null | undefined {
   const uri = useFavicons(() => resolveFavicon(url, src, spaceId)?.uri ?? null);
   const theme = useFavicons((f) => (uri ? f.themes[uri] : undefined));
   const pending = !!uri && theme === undefined;
   useEffect(() => {
-    if (!pending || !uri || theming.has(uri)) return;
-    theming.add(uri);
-    void iconTheme({ uri })
-      .catch(() => null)
-      .then((found) => queue((f, batch) => (f.themes[uri] === (found ?? null) ? f : { ...f, themes: batch.set(f.themes, uri, found ?? null, true) })))
-      .finally(() => theming.delete(uri));
+    if (!pending || !uri) return;
+
+    askTheme({
+      uri,
+      onTheme: (found) => queue((f, batch) => (f.themes[uri] === (found ?? null) ? f : { ...f, themes: batch.set(f.themes, uri, found ?? null, true) })),
+    });
   }, [pending, uri]);
 
   return theme;
@@ -405,6 +393,8 @@ export function useFaviconTheme(url: string, src?: string | null, spaceId?: stri
 
 function forget(key: string) {
   for (const id of Array.from(asked)) if (id.startsWith(`${key}|`)) asked.delete(id);
+  // The work that was on its way is not the profile's any more.
+  forgetProfile(key);
   touchAll();
   update(key, () => EMPTY, true);
 }
@@ -438,7 +428,12 @@ export function startFavicons() {
     const gone = new Set(change.urls.map(pageKey));
     const key = change.profile;
 
-    for (const page of gone) asked.delete(`${key}|${page}`);
+    for (const page of gone) {
+      asked.delete(`${key}|${page}`);
+      // The answer that was on its way is not the page's any more.
+      forgetPage(key, page);
+    }
+
     update(key, (icons) => {
       if (!Object.keys(icons.pages).some((page) => gone.has(page))) return icons;
 
