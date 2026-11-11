@@ -1,0 +1,19 @@
+import type { ChromeStrings } from "./chrome.ts";
+
+export const chromeEs: ChromeStrings = {
+  // The bar.
+  "bar.archive": "Archivar",
+  "bar.search": "Buscar",
+  "bar.newTab": "Pestaña nueva",
+  "bar.settings": "Ajustes",
+  "bar.tabs": "Pestañas",
+  "bar.tabsOpen": "Pestañas, {count} abiertas",
+  "bar.searchOrEnter": "Busca o escribe una dirección, {site}",
+  "bar.searchOrEnterInsecure": "Busca o escribe una dirección, no es seguro, {site}",
+  "bar.more": "Más",
+
+  // The sheet's chrome.
+  "sheet.back": "Atrás",
+  "sheet.close": "Cerrar {title}",
+  "sheet.selected": "Seleccionado",
+};
