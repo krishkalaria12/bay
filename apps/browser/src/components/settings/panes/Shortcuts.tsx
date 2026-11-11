@@ -1,5 +1,5 @@
 import { lookup } from "@bay/core";
-import { cancelShortcutRecording, menuShortcuts, recordShortcut, Symbol, type MenuShortcut } from "@bay/desktop";
+import { menuShortcuts, Symbol, type MenuShortcut } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
@@ -7,6 +7,10 @@ import { useBrowser } from "../../../store/browserStore";
 import { IconButton, useHover } from "../../ui/primitives";
 import { matchesQuery } from "../../pages/PageLayout";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, useFormColors } from "../controls";
+import { withWorkflows } from "../settingsCommands";
+
+// The recorder this pane is: closing it stops its own recording, and no other pane's.
+const RECORDER = "shortcuts";
 
 type Combo = { key: string; modifiers: string[] };
 
@@ -58,7 +62,8 @@ export function ShortcutsPane() {
   useEffect(() => {
     void menuShortcuts().then(setItems);
 
-    return () => void cancelShortcutRecording();
+    // The pane's recording stops with the pane.
+    return () => void withWorkflows((w) => w.stopRecording(RECORDER));
   }, []);
 
   const effective = (item: MenuShortcut): Combo => {
@@ -87,7 +92,7 @@ export function ShortcutsPane() {
 
   const record = async (item: MenuShortcut) => {
     setRecording(item.id);
-    const combo = await recordShortcut();
+    const combo = await withWorkflows((w) => w.record(RECORDER));
     setRecording(null);
 
     if (!combo) return;

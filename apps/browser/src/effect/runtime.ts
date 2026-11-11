@@ -11,6 +11,7 @@ import { SharingEngine, SharingService } from "../components/library/sharingServ
 import { captureEngineLayer } from "../components/capture/captureEngine";
 import { CaptureService } from "../components/capture/service";
 import { ExtensionsEngine, ExtensionsService } from "../components/extensions/service";
+import { SettingsEngine, SettingsWorkflows } from "../components/settings/workflows";
 import { LittleBayEngine, LittleBayService } from "../components/littleBay/service";
 import { MediaEngine, MediaService } from "../components/media/service";
 import { PreviewEngine, PreviewService } from "../components/site/previewService";
@@ -74,6 +75,7 @@ export type AppServices =
   | ProfileCleanup
   | Scheduler
   | SearchService
+  | SettingsWorkflows
   | SharingService
   | ShellService
   | Sync
@@ -121,6 +123,8 @@ const littleBay = LittleBayService.layer.pipe(Layer.provide(Layer.mergeAll(Littl
 const integration = AppIntegrationService.layer.pipe(Layer.provide(IntegrationEngine.layer));
 
 const lifecycle = PageLifecycleService.layer.pipe(Layer.provide(Layer.mergeAll(LifecycleEngine.layer, Scheduler.layer)));
+
+const settings = SettingsWorkflows.layer.pipe(Layer.provide(SettingsEngine.layer));
 
 const media = MediaService.layer.pipe(Layer.provide(MediaEngine.layer));
 
@@ -173,6 +177,7 @@ export const appLayer = Layer.mergeAll(
   lifecycle,
   pageWork,
   search,
+  settings,
   telemetry,
   calendar,
   automation,

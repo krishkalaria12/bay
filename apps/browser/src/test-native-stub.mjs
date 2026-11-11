@@ -134,6 +134,15 @@ export const systemState = () => Promise.resolve({ memoryPressure: "normal", phy
 export const onSystemState = () => ({ remove() {} });
 export const releaseProfile = () => Promise.resolve();
 
+// The settings' protected work: passwords behind Touch ID, clearing data, and recording a shortcut.
+export const cancelShortcutRecording = () => Promise.resolve();
+export const recordShortcut = () => Promise.resolve(null);
+export const exportPasswords = () => Promise.resolve({ status: "cancelled" });
+export const getNeverSavePasswordOrigins = () => Promise.resolve([]);
+export const listPasswords = () => Promise.resolve([]);
+export const unlockPasswords = () => Promise.resolve(false);
+export const clearBrowsingData = () => Promise.resolve();
+
 // The engine's media: its share sources, its cast dialogs and routes, and its own Picture in Picture.
 export const killTask = () => Promise.resolve(true);
 export const getDisplayMediaSources = () => Promise.resolve([]);
