@@ -11,6 +11,7 @@ import { PreviewService } from "../components/site/previewService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { AutomationEngine, AutomationService, CliEngine } from "../components/cli/automationService";
+import { SearchNetwork, SearchService } from "../components/commandBar/searchService";
 import { DownloadEngine, DownloadWorkService } from "../lib/downloadWorkService";
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
@@ -41,6 +42,7 @@ export type AppServices =
   | NotificationService
   | Persistence
   | PreviewService
+  | SearchService
   | ProfileCleanup
   | Scheduler
   | SharingService
@@ -75,6 +77,8 @@ const automation = AutomationService.layer.pipe(Layer.provide(Layer.mergeAll(Aut
 
 const preview = PreviewService.layer.pipe(Layer.provide(Http.layer));
 
+const search = SearchService.layer.pipe(Layer.provide(SearchNetwork.layer));
+
 const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEngine.layer, Http.layer)));
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
@@ -95,6 +99,7 @@ export const appLayer = Layer.mergeAll(
   notifications,
   localFiles,
   downloads,
+  search,
   calendar,
   automation,
   preview,
