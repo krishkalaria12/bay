@@ -4,11 +4,13 @@ import type { BottomSheetBackgroundProps } from "@gorhom/bottom-sheet";
 import type { JSX } from "react";
 import { StyleSheet, useColorScheme, View } from "react-native";
 
+import { radius } from "@/chrome/tokens";
+
 import { PanelSheetShared, type PanelSheetProps } from "./PanelSheetShared";
 
 export type { PanelSheetProps } from "./PanelSheetShared";
 
-export { ActionRow, Group, SectionLabel } from "./PanelSheetShared";
+export { ActionRow, Group, SectionLabel, SheetIconButton } from "./PanelSheetShared";
 
 // iOS: the same sheet contents as Android, over a Liquid Glass background (I6) instead of a solid one.
 export function PanelSheet(props: PanelSheetProps): JSX.Element {
@@ -23,7 +25,7 @@ export function PanelSheet(props: PanelSheetProps): JSX.Element {
 // bright or busy page; the page still shows through.
 const TINT = { light: "#F5F5F580", dark: "#121214A6" } as const;
 
-// The sheet's background layer: glass under the handle and the rows. It runs 28pt past the sheet's bottom edge, so
+// The sheet's background layer: glass under the handle and the rows. It runs a corner's height past the sheet's bottom edge, so
 // the rounded corners only show at the top; the extra reaches under the home indicator, off screen. The shape key is
 // Expo's native field name.
 function GlassBackground({ style }: BottomSheetBackgroundProps): JSX.Element {
@@ -31,12 +33,12 @@ function GlassBackground({ style }: BottomSheetBackgroundProps): JSX.Element {
 
   return (
     <View style={style} pointerEvents="none">
-      <Host style={[StyleSheet.absoluteFill, { bottom: -28 }]}>
+      <Host style={[StyleSheet.absoluteFill, { bottom: -radius.sheet }]}>
         <RoundedRectangle
-          cornerRadius={28}
+          cornerRadius={radius.sheet}
           modifiers={[
             foregroundStyle("transparent"),
-            glassEffect({ glass: { variant: "regular", tint }, ["shape"]: "roundedRectangle", cornerRadius: 28 }),
+            glassEffect({ glass: { variant: "regular", tint }, ["shape"]: "roundedRectangle", cornerRadius: radius.sheet }),
             // Only a backdrop: VoiceOver skips it.
             accessibilityHidden(true),
           ]}
