@@ -22,7 +22,15 @@ const screen = (id) => ({ id, kind: "screen", title: id });
 const fakeEngine = (lab) =>
   Layer.succeed(MediaEngine)({
     sources: () => Effect.sync(() => (lab.sourceCalls++, [screen(`screen-${lab.sourceCalls}`)])),
-    resolveDisplayMedia: (tabId, requestId, sourceId) => Effect.sync(() => void lab.answers.push({ tabId, requestId, sourceId })),
+    resolveDisplayMedia: (tabId, requestId, sourceId) =>
+      Effect.gen(function* () {
+        lab.answers.push({ tabId, requestId, sourceId });
+
+        if (lab.answerGate?.requestId === requestId) {
+          lab.answerGate.started.resolve();
+          yield* Effect.promise(() => lab.answerGate.finished.promise);
+        }
+      }),
     captureSourceId: (tabId) =>
       Effect.promise(async () => {
         if (lab.captureGate) await lab.captureGate.promise;
@@ -53,6 +61,7 @@ const fakeEngine = (lab) =>
 const withMedia = async (use) => {
   const lab = {
     answers: [],
+    answerGate: null,
     autoPip: [],
     captureGate: null,
     closed: [],
@@ -156,6 +165,35 @@ test("a tab chosen after the picker was cancelled does not answer", async () => 
 
     assert.equal(await sharing, null);
     assert.deepEqual(lab.answers, [{ tabId: TAB, requestId: "r1", sourceId: null }], "only the cancellation answered");
+  });
+});
+
+test("a delayed cancellation cannot replace a newer screen-sharing request", async () => {
+  await withMedia(async ({ lab, media }) => {
+    await media((service) => service.requestDisplayMedia(TAB, request("A")));
+
+    lab.answerGate = { requestId: "A", started: Promise.withResolvers(), finished: Promise.withResolvers() };
+
+    const replacing = media((service) => service.requestDisplayMedia(TAB, request("B")));
+
+    try {
+      await lab.answerGate.started.promise;
+      await media((service) => service.requestDisplayMedia(TAB, request("C")));
+      assert.equal(useMedia.getState().displayRequests[TAB]?.id, "C");
+    } finally {
+      lab.answerGate.finished.resolve();
+      await replacing;
+    }
+
+    assert.equal(useMedia.getState().displayRequests[TAB]?.id, "C", "the latest request keeps its picker");
+    await media((service) => service.answerDisplayMedia(TAB, "C", "screen-c"));
+
+    assert.deepEqual(lab.answers, [
+      { tabId: TAB, requestId: "A", sourceId: null },
+      { tabId: TAB, requestId: "B", sourceId: null },
+      { tabId: TAB, requestId: "C", sourceId: "screen-c" },
+    ]);
+    assert.equal(useMedia.getState().displayRequests[TAB], undefined);
   });
 });
 

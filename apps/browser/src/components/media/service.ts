@@ -217,24 +217,25 @@ export class MediaService extends Context.Service<
           yield* Fiber.interrupt(picker.poll);
         });
 
-      const answer = (tabId: string, requestId: string, sourceId: string | null): Effect.Effect<void> =>
+      const resolveRequest = (tabId: string, requestId: string, sourceId: string | null): Effect.Effect<void> =>
         Effect.gen(function* () {
-          if (!take(tabId, requestId)) return;
-
           yield* stopSources(tabId, requestId);
           yield* engine.resolveDisplayMedia(tabId, requestId, sourceId).pipe(Effect.catch(report));
         });
 
+      const answer = (tabId: string, requestId: string, sourceId: string | null): Effect.Effect<void> =>
+        Effect.suspend(() => (take(tabId, requestId) ? resolveRequest(tabId, requestId, sourceId) : Effect.void));
+
       const requestDisplayMedia = (tabId: string, request: DisplayMediaRequest): Effect.Effect<void> =>
         Effect.gen(function* () {
           const pending = pendingOf(tabId);
-
-          // The page is not left waiting for a choice that is gone.
-          if (pending) yield* answer(tabId, pending.id, null);
-
           const pageUrl = useBrowser.getState().tabs[tabId]?.url ?? "";
 
+          // Publish the replacement before waiting for native cleanup, so a newer request cannot be overwritten.
           useMedia.setState((m) => ({ displayRequests: { ...m.displayRequests, [tabId]: { ...request, pageUrl } } }));
+
+          // The page is not left waiting for a choice that is gone.
+          if (pending) yield* resolveRequest(tabId, pending.id, null);
         });
 
       const pollSources = (tabId: string, requestId: string, onSources: (sources: DisplayMediaSource[]) => void): Effect.Effect<void> =>
