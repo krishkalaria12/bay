@@ -185,7 +185,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
       onClose={props.onClose}
       title={t("pageMenu.title")}
       testID="page-menu"
-      height="70%"
+      height="66%"
       header={<SiteHeader title={props.title} url={props.url} blocking={props.blocking} />}
       // Settings sits beside the close button, so the twelve page actions fill the grid's three rows.
       accessory={<SheetIconButton testID="page-settings" icon="settings" label={t("pageMenu.settings")} onPress={act(props.onSettings)} tone="default" />}
