@@ -19,6 +19,7 @@ import { TaggedError } from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { Scheduler } from "../effect/ports/scheduler";
@@ -158,17 +159,17 @@ export class CalendarService extends Context.Service<
       const scheduler = yield* Scheduler;
       const scope = yield* Scope.Scope;
 
-      const readEvents = (ids: string[]): Effect.Effect<CalendarEvent[], never> => {
+      const readEvents = (ids: string[]): Effect.Effect<CalendarEvent[], CalendarFailure> => {
         if (!ids.length) return Effect.succeed(noEvents);
 
         const start = new Date();
 
         start.setHours(0, 0, 0, 0);
 
-        return engine.events(start.getTime(), Date.now() + CALENDAR_HORIZON_MS, ids).pipe(Effect.catch(() => Effect.succeed(noEvents)));
+        return engine.events(start.getTime(), Date.now() + CALENDAR_HORIZON_MS, ids);
       };
 
-      const readCalendar = (): Effect.Effect<void> =>
+      const readCalendar = (): Effect.Effect<void, CalendarFailure> =>
         Effect.gen(function* () {
           if (fixtureMode) {
             const { calendars, events } = loadFixture();
@@ -187,8 +188,7 @@ export class CalendarService extends Context.Service<
             return;
           }
 
-          const denied: CalendarAuthorization = "denied";
-          const access = yield* engine.authorization().pipe(Effect.catch(() => Effect.succeed(denied)));
+          const access = yield* engine.authorization();
 
           if (access !== "fullAccess") {
             yield* Effect.sync(() => useCalendar.setState({ access, calendars: [], events: [], error: null }));
@@ -196,8 +196,7 @@ export class CalendarService extends Context.Service<
             return;
           }
 
-          const none: SystemCalendar[] = [];
-          const calendars = yield* engine.calendars().pipe(Effect.catch(() => Effect.succeed(none)));
+          const calendars = yield* engine.calendars();
 
           const ids = visibleCalendars(calendars);
           const events = yield* readEvents(ids);
@@ -214,36 +213,44 @@ export class CalendarService extends Context.Service<
         });
 
       // The refresh that is running now, if any: the calendar is read once at a time.
-      let inflight: Effect.Effect<void> | undefined;
+      let inflight: Fiber.Fiber<void> | undefined;
 
       const refresh = (): Effect.Effect<void> =>
-        Effect.gen(function* () {
-          const running = inflight;
+        Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const running = inflight;
 
-          if (running) {
-            yield* running;
+            if (running) {
+              yield* restore(Fiber.join(running));
 
-            return;
-          }
-
-          const reading = Effect.gen(function* () {
-            yield* Effect.sync(() => useCalendar.setState({ loading: true }));
-
-            const exit = yield* Effect.exit(readCalendar());
-
-            yield* Effect.sync(() => useCalendar.setState({ loading: false }));
-
-            if (Exit.isFailure(exit)) {
-              yield* Effect.sync(() => useCalendar.setState({ error: String(Cause.squash(exit.cause)) }));
+              return;
             }
-          });
 
-          inflight = reading;
+            const reading = Effect.gen(function* () {
+              yield* Effect.sync(() => useCalendar.setState({ loading: true }));
 
-          yield* reading;
+              const exit = yield* Effect.exit(readCalendar());
 
-          inflight = undefined;
-        });
+              if (Exit.isFailure(exit)) {
+                const failure = Cause.squash(exit.cause);
+                const cause = failure instanceof CalendarFailure ? failure.cause : failure;
+
+                yield* Effect.sync(() => useCalendar.setState({ error: cause instanceof Error ? cause.message : String(cause) }));
+              }
+            }).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  inflight = undefined;
+                  useCalendar.setState({ loading: false });
+                }),
+              ),
+            );
+
+            inflight = yield* Effect.forkIn(restore(reading), scope);
+
+            yield* restore(Fiber.join(inflight));
+          }),
+        );
 
       const connect = (): Effect.Effect<boolean> =>
         Effect.gen(function* () {
