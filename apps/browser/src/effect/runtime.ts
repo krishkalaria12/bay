@@ -25,6 +25,7 @@ import { SearchNetwork, SearchService } from "../components/commandBar/searchSer
 import { PageWorkEngine, PageWorkService } from "../components/site/pageWorkService";
 import { DownloadEngine, DownloadWorkService } from "../lib/downloadWorkService";
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
+import { LifecycleEngine, PageLifecycleService } from "../lib/pageLifecycleService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
 import { Persistence } from "../lib/persistenceService";
 import { ShellEngine, ShellService } from "../lib/shellService";
@@ -66,6 +67,7 @@ export type AppServices =
   | LocalFileService
   | MediaService
   | NotificationService
+  | PageLifecycleService
   | PageWorkService
   | Persistence
   | PreviewService
@@ -118,6 +120,8 @@ const littleBay = LittleBayService.layer.pipe(Layer.provide(Layer.mergeAll(Littl
 
 const integration = AppIntegrationService.layer.pipe(Layer.provide(IntegrationEngine.layer));
 
+const lifecycle = PageLifecycleService.layer.pipe(Layer.provide(Layer.mergeAll(LifecycleEngine.layer, Scheduler.layer)));
+
 const media = MediaService.layer.pipe(Layer.provide(MediaEngine.layer));
 
 const pageWork = PageWorkService.layer.pipe(Layer.provide(PageWorkEngine.layer));
@@ -166,6 +170,7 @@ export const appLayer = Layer.mergeAll(
   integration,
   littleBay,
   media,
+  lifecycle,
   pageWork,
   search,
   telemetry,
@@ -243,6 +248,10 @@ export const startAppServices = (): Promise<void> =>
         const littleBay = yield* LittleBayService;
 
         yield* littleBay.start;
+
+        const lifecycle = yield* PageLifecycleService;
+
+        yield* lifecycle.start;
       }),
     )
     .catch((cause: unknown) => {

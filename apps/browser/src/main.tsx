@@ -12,7 +12,6 @@ import { startAppIntegration } from "./lib/appMenuIntegration";
 import { startNativeSync } from "./lib/shellBridge";
 import { startPersistence } from "./lib/persistenceService";
 import { perfMark, perfProbeEnabled, probeStore } from "./lib/perfProbe";
-import { startTabLifecycle } from "./lib/tabLifecycle";
 import { startTabPages } from "./lib/tabNavigation";
 import { startSync } from "./sync/engine";
 import { setStoreBatching, useBrowser } from "./store/browserStore";
@@ -46,8 +45,6 @@ startAppIntegration();
 startCliControl();
 
 startUserScripts();
-
-startTabLifecycle();
 
 startTranslate();
 

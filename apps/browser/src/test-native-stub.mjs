@@ -129,6 +129,11 @@ export const onCommand = () => ({ remove() {} });
 export const onNotificationResponse = () => ({ remove() {} });
 export const onScriptCommand = () => ({ remove() {} });
 
+// The Mac's memory and power, and the engine's profiles.
+export const systemState = () => Promise.resolve({ memoryPressure: "normal", physicalMemory: 16 * 2 ** 30, onBattery: false, lowPowerMode: false });
+export const onSystemState = () => ({ remove() {} });
+export const releaseProfile = () => Promise.resolve();
+
 // The engine's media: its share sources, its cast dialogs and routes, and its own Picture in Picture.
 export const killTask = () => Promise.resolve(true);
 export const getDisplayMediaSources = () => Promise.resolve([]);
