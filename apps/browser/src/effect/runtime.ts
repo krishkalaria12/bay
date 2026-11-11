@@ -9,6 +9,7 @@ import { LibraryEngine, LibraryService } from "../components/library/libraryServ
 import { SharingEngine, SharingService } from "../components/library/sharingService";
 import { ExtensionsEngine, ExtensionsService } from "../components/extensions/service";
 import { PreviewEngine, PreviewService } from "../components/site/previewService";
+import { BoostEngine, BoostsService } from "../components/boosts/service";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { EngineTabsEngine, EngineTabsService } from "../lib/engineTabs";
 import { EnrichmentEngine, EnrichmentService } from "../lib/enrichmentService";
@@ -37,6 +38,7 @@ export type AppServices =
   | ActivityService
   | AutomationService
   | Bookmarks
+  | BoostsService
   | CalendarService
   | Diagnostics
   | DownloadWorkService
@@ -109,6 +111,8 @@ const enrichment = EnrichmentService.layer.pipe(Layer.provide(EnrichmentEngine.l
 
 const usage = UsageService.layer.pipe(Layer.provide(Scheduler.layer));
 
+const boosts = BoostsService.layer.pipe(Layer.provide(Layer.mergeAll(BoostEngine.layer, Documents.layer)));
+
 const updater = UpdaterService.layer.pipe(Layer.provide(UpdaterEngine.layer));
 
 /** The app's services, ready to be built. */
@@ -127,6 +131,7 @@ export const appLayer = Layer.mergeAll(
   notifications,
   localFiles,
   downloads,
+  boosts,
   search,
   calendar,
   automation,

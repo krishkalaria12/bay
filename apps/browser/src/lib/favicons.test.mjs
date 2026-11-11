@@ -502,9 +502,65 @@ test("capacity counts ignore replacement keys and a known source keeps its full 
   assert.equal(state().profiles.work.srcs, srcs);
   assert.equal(state().profiles.work.pages["https://site/a"], "data:0");
 
-  // Replacing a page repeatedly must not count each report as an additional key.
+  // Replacing a page repeatedly must not count every report as an additional key.
   for (let i = 1; i < MAX_FAVICONS; i++) noteFavicon("a", `src:${i}`);
   flush(t);
   assert.deepEqual(state().profiles.work.pages, { "https://site/a": `data:${MAX_FAVICONS - 1}` });
   assert.equal(state().profiles.work.srcs, srcs);
+});
+
+test("a profile that is cleared takes its own icons with it, and the work on its way with them", async (t) => {
+  setup(t, {
+    work: { pages: { "https://site/a": "data:a" }, srcs: {}, appearances: {} },
+    other: { pages: { "https://site/b": "data:b" }, srcs: {}, appearances: {} },
+  });
+
+  const answer = deferred();
+  const calls = [];
+
+  globalThis.faviconTest.lookup = (profile, pages) => {
+    calls.push([profile, [...pages]]);
+
+    return answer.promise;
+  };
+
+  useFavicon("https://site/c", null, "work");
+  await advance();
+  assert.equal(calls.length, 1, "the icon was looked up");
+
+  // The profile's icons are cleared while the answer is on its way.
+  pruneProfileFavicons("work");
+
+  answer.resolve({ pages: new Map([["https://site/c", { uri: "native" }]]) });
+  await drain();
+  flush(t);
+
+  assert.deepEqual(state().profiles.work, empty(), "the cleared profile's icons are gone");
+  assert.deepEqual(state().profiles.other.pages, { "https://site/b": "data:b" }, "the other profile keeps its own icons");
+});
+
+test("a page whose history is deleted while its icon is on its way gets no icon", async (t) => {
+  setup(t);
+
+  const answer = deferred();
+  const calls = [];
+
+  globalThis.faviconTest.lookup = (profile, pages) => {
+    calls.push([profile, [...pages]]);
+
+    return answer.promise;
+  };
+
+  useFavicon("https://gone/", null, "work");
+  await advance();
+  assert.equal(calls.length, 1, "the icon was looked up");
+
+  // The page's history is deleted while the answer is on its way.
+  history(["https://gone/"]);
+
+  answer.resolve({ pages: new Map([["https://gone/", { uri: "native" }]]) });
+  await drain();
+  flush(t);
+
+  assert.equal(state().profiles.work?.pages?.["https://gone/"], undefined, "the icon of a page that is gone is not written back");
 });

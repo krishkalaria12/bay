@@ -1,8 +1,18 @@
 import { setBoosts as setEngineBoosts, type EngineBoostStyle } from "@bay/chromium";
-import { readDocument, writeDocument } from "@bay/desktop";
+import { readDocument } from "@bay/desktop";
 import { create } from "zustand";
-import { engineBoosts, newBoost, normalizeBoost, normalizeScript, tabBoostStyle, type Boost, type BoostPalette, type BoostScript } from "../../lib/boosts";
-import { isJsonObject, type JsonValue } from "../../lib/json";
+import {
+  BOOSTS_FILE,
+  engineBoosts,
+  newBoost,
+  normalizeBoost,
+  normalizeScript,
+  parseBoostDocument,
+  tabBoostStyle,
+  type Boost,
+  type BoostPalette,
+  type BoostScript,
+} from "../../lib/boosts";
 import { hex, SPACE_COLORS, spaceThemeKey, themeFor } from "../../lib/theme";
 import { onWebviewAttached, webviews } from "../../lib/webviews";
 import { useBrowser, type BrowserState } from "../../store/browserStore";
@@ -10,7 +20,8 @@ import { newId } from "../../store/model";
 import { DEFAULT_SPACE } from "../../store/spaces";
 
 // Boosts' store: every Boost (synced: sync/boosts.ts), this Mac's scripts (never synced), and Boosts' own switch.
-// Saved to boosts.json; every change reaches the engine, which restyles the pages it shows at once.
+// The service (service.ts) keeps boosts.json in step with it; every change reaches the engine, which restyles the
+// pages it shows at once.
 
 export type BoostsState = {
   loaded: boolean;
@@ -23,8 +34,6 @@ export type BoostsState = {
   scriptsAcknowledged: boolean;
 };
 
-const FILE = "boosts.json";
-
 export const useBoosts = create<BoostsState>()(() => ({ loaded: false, error: null, on: true, boosts: {}, scripts: {}, scriptsAcknowledged: false }));
 
 let started = false;
@@ -36,8 +45,7 @@ export function startBoosts() {
   useBoosts.subscribe((s, prev) => {
     if (!s.loaded || s.error) return;
 
-    if (s.boosts !== prev.boosts || s.scripts !== prev.scripts || s.on !== prev.on || s.scriptsAcknowledged !== prev.scriptsAcknowledged) save(s);
-
+    // The document is the service's business: the store only tells the engine and the tabs.
     if (s.boosts !== prev.boosts || s.scripts !== prev.scripts || s.on !== prev.on) {
       scheduleEngine();
       scheduleTabs();
@@ -63,40 +71,19 @@ export function startBoosts() {
 
 function load() {
   try {
-    const json = readDocument(FILE);
-    const data: JsonValue = json ? JSON.parse(json) : {};
+    const document = parseBoostDocument(readDocument(BOOSTS_FILE));
 
-    if (!isJsonObject(data)) throw new Error("Boosts file isn't a JSON object");
-    const savedBoosts = isJsonObject(data.boosts) ? data.boosts : {};
-    const boosts: Record<string, Boost> = {};
-
-    for (const raw of Object.values(savedBoosts)) {
-      const b = normalizeBoost(raw);
-
-      if (b) boosts[b.id] = b;
-    }
-
-    const scripts: Record<string, BoostScript> = {};
-    const savedScripts = isJsonObject(data.scripts) ? data.scripts : {};
-
-    for (const [id, raw] of Object.entries(savedScripts)) {
-      const script = normalizeScript(raw);
-
-      if (script && boosts[id]) scripts[id] = script;
-    }
-
-    useBoosts.setState({ loaded: true, error: null, on: data.on !== false, boosts, scripts, scriptsAcknowledged: data.scriptsAcknowledged === true });
+    useBoosts.setState({
+      loaded: true,
+      error: null,
+      on: document.on,
+      boosts: document.boosts,
+      scripts: document.scripts,
+      scriptsAcknowledged: document.scriptsAcknowledged,
+    });
   } catch (error) {
     // An unreadable file is kept as it is, not overwritten: nothing is saved until it's fixed.
     useBoosts.setState({ loaded: true, error: `Couldn't read Boosts: ${String(error)}` });
-  }
-}
-
-function save(s: BoostsState) {
-  try {
-    writeDocument(FILE, JSON.stringify({ version: 1, on: s.on, boosts: s.boosts, scripts: s.scripts, scriptsAcknowledged: s.scriptsAcknowledged }));
-  } catch (error) {
-    console.warn("Couldn't save Boosts", error);
   }
 }
 

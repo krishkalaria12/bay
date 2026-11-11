@@ -491,6 +491,52 @@ export function tabBoostStyle(palette: BoostPalette, boosts: Boost[], on: boolea
   };
 }
 
+// MARK: The document
+
+/** The file the Boosts are kept in: this Mac's own, beside the session. */
+export const BOOSTS_FILE = "boosts.json";
+
+/** What the document holds: the Boosts, this Mac's scripts, and Boosts' own switch. */
+export type BoostDocument = {
+  readonly on: boolean;
+  readonly boosts: Record<string, Boost>;
+  readonly scripts: Record<string, BoostScript>;
+  readonly scriptsAcknowledged: boolean;
+};
+
+/** The document as it is written: the shape it has always had, so an older Bay reads it back. */
+export function boostDocumentJson(document: BoostDocument): string {
+  return JSON.stringify({ version: 1, on: document.on, boosts: document.boosts, scripts: document.scripts, scriptsAcknowledged: document.scriptsAcknowledged });
+}
+
+/** The document as it is read: only what it can trust. A file that isn't one is an error, not an empty document. */
+export function parseBoostDocument(json: string | null): BoostDocument {
+  const data: JsonValue = json ? JSON.parse(json) : {};
+
+  if (!isJsonObject(data)) throw new Error("Boosts file isn't a JSON object");
+
+  const boosts: Record<string, Boost> = {};
+  const savedBoosts = isJsonObject(data.boosts) ? data.boosts : {};
+
+  for (const raw of Object.values(savedBoosts)) {
+    const b = normalizeBoost(raw);
+
+    if (b) boosts[b.id] = b;
+  }
+
+  const scripts: Record<string, BoostScript> = {};
+  const savedScripts = isJsonObject(data.scripts) ? data.scripts : {};
+
+  // A script without its Boost is not a script: the Boost it belongs to is gone.
+  for (const [id, raw] of Object.entries(savedScripts)) {
+    const script = normalizeScript(raw);
+
+    if (script && boosts[id]) scripts[id] = script;
+  }
+
+  return { on: data.on !== false, boosts, scripts, scriptsAcknowledged: data.scriptsAcknowledged === true };
+}
+
 // MARK: Shuffle, import and export
 
 /** Zen's "Shuffle Vibes": a random tint and font, the rest as it was. `random` returns 0–1. */
