@@ -16,6 +16,7 @@ import { DownloadEngine, DownloadWorkService } from "../lib/downloadWorkService"
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
 import { Persistence } from "../lib/persistenceService";
+import { UpdaterEngine, UpdaterService } from "../lib/updaterService";
 import { Sync } from "../sync/service";
 import { ImportEngine, ImportWorkflow } from "../components/import/workflow";
 import { ProfileCleanup, ProfileEngine } from "../lib/profileCleanup";
@@ -46,6 +47,7 @@ export type AppServices =
   | ProfileCleanup
   | Scheduler
   | SharingService
+  | UpdaterService
   | Sync;
 
 // One memo map, so a service that two layers need is one instance and not two.
@@ -83,6 +85,8 @@ const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEn
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
+const updater = UpdaterService.layer.pipe(Layer.provide(UpdaterEngine.layer));
+
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
   diagnostics,
@@ -105,6 +109,7 @@ export const appLayer = Layer.mergeAll(
   preview,
   sharing,
   library,
+  updater,
 ).pipe(Layer.provide(diagnostics));
 
 /**
@@ -155,6 +160,10 @@ export const startAppServices = (): Promise<void> =>
         const library = yield* LibraryService;
 
         yield* library.start;
+
+        const updater = yield* UpdaterService;
+
+        yield* updater.start;
       }),
     )
     .catch((cause: unknown) => {
