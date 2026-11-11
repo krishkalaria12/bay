@@ -6,11 +6,14 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 
 const { fakeHttp } = await import("../../effect/testing.ts");
-const { PreviewService } = await import("./previewService.ts");
+const { PreviewEngine, PreviewService } = await import("./previewService.ts");
+
+// A link preview never asks a page: the page is there only for the site previews.
+const noPages = Layer.succeed(PreviewEngine)({ fetch: () => Effect.succeed(null) });
 
 const withPreview = async (use) => {
   const http = fakeHttp();
-  const runtime = ManagedRuntime.make(PreviewService.layer.pipe(Layer.provide(http.layer)));
+  const runtime = ManagedRuntime.make(PreviewService.layer.pipe(Layer.provide(Layer.mergeAll(http.layer, noPages))));
 
   try {
     await use({ http, runtime });
