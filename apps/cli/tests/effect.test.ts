@@ -4,6 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { main } from "../src/cli.ts";
 import { lockStore, openStore, Store, waitForStatus } from "../src/scriptsStore.ts";
 
@@ -19,6 +20,42 @@ afterEach(() => {
 });
 
 describe("the scripts store", () => {
+  it("interrupts lock polling while another holder keeps the lock", async () => {
+    const other = new Store(root);
+    other.open(true);
+    expect(other.tryLock()).toBe(true);
+
+    const contender = new Store(root);
+    contender.open(true);
+    const controller = new AbortController();
+    let attempted!: () => void;
+    const firstAttempt = new Promise<void>((resolve) => (attempted = resolve));
+    const tryLock = contender.tryLock.bind(contender);
+
+    contender.tryLock = () => {
+      attempted();
+
+      return tryLock();
+    };
+
+    const waiting = Effect.runPromiseExit(Effect.scoped(lockStore(contender)), { signal: controller.signal });
+
+    try {
+      await firstAttempt;
+      controller.abort();
+
+      const interrupted = await Promise.race([waiting.then(() => true), Bun.sleep(300).then(() => false)]);
+
+      expect(interrupted).toBe(true);
+      expect(Exit.isFailure(await waiting)).toBe(true);
+      expect(contender.tryLock()).toBe(false);
+    } finally {
+      other.close();
+      await waiting;
+      contender.close();
+    }
+  });
+
   it("waits for another holder to let go of the lock, and gives it back with its scope", async () => {
     const other = new Store(root);
     other.open(true);

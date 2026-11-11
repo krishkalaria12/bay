@@ -220,55 +220,40 @@ export class Run {
     if (this.topSettled) return;
     this.topSettled = true;
 
-    for (const waiter of this.topSettledWaiters) waiter();
-    this.topSettledWaiters.length = 0;
+    for (const waiter of this.topSettledWaiters.splice(0)) waiter();
   }
 
-  waitTopSettled(timeoutMs: number): Promise<boolean> {
-    if (this.topSettled) return Promise.resolve(true);
-
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        const idx = this.topSettledWaiters.indexOf(done);
-
-        if (idx !== -1) this.topSettledWaiters.splice(idx, 1);
-        resolve(this.topSettled);
-      }, timeoutMs);
-
-      const done = () => {
-        clearTimeout(timer);
-        resolve(true);
-      };
-
-      this.topSettledWaiters.push(done);
-    });
+  waitTopSettled(timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
+    return this.waitFor(() => this.topSettled, this.topSettledWaiters, timeoutMs, signal);
   }
 
   notifyLoaded(): void {
     if (this.loaded) return;
     this.loaded = true;
 
-    for (const waiter of this.loadedWaiters) waiter();
-    this.loadedWaiters.length = 0;
+    for (const waiter of this.loadedWaiters.splice(0)) waiter();
   }
 
-  waitLoaded(timeoutMs: number): Promise<boolean> {
-    if (this.loaded) return Promise.resolve(true);
+  waitLoaded(timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
+    return this.waitFor(() => this.loaded, this.loadedWaiters, timeoutMs, signal);
+  }
+
+  private waitFor(ready: () => boolean, waiters: Array<() => void>, timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
+    if (ready() || signal?.aborted) return Promise.resolve(ready());
 
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        const idx = this.loadedWaiters.indexOf(done);
-
-        if (idx !== -1) this.loadedWaiters.splice(idx, 1);
-        resolve(this.loaded);
-      }, timeoutMs);
-
       const done = () => {
         clearTimeout(timer);
-        resolve(true);
+        signal?.removeEventListener("abort", done);
+        const idx = waiters.indexOf(done);
+
+        if (idx !== -1) waiters.splice(idx, 1);
+        resolve(ready());
       };
 
-      this.loadedWaiters.push(done);
+      const timer = setTimeout(done, timeoutMs);
+      waiters.push(done);
+      signal?.addEventListener("abort", done, { once: true });
     });
   }
 
@@ -611,26 +596,17 @@ export const runTest = (
 
       // The connection: Bay that can't be reached is the endpoint's failure, not the test's.
       const cdp = yield* Effect.acquireRelease(
-        Effect.tryPromise({
-          try: async () => {
-            const connection = new Cdp(endpoint.ws);
-
-            try {
-              await connection.open(CONNECT_TIMEOUT);
-            } catch (error) {
-              await connection.close();
-              throw error;
-            }
-
-            return connection;
-          },
-          catch: (error) =>
-            new EndpointError(
-              endpoint.explicit ? redact(`can't connect to ${endpoint.source} (${error instanceof Error ? error.message : String(error)})`) : NOT_REACHABLE,
-            ),
-        }),
+        Effect.sync(() => new Cdp(endpoint.ws)),
         (connection) => Effect.promise(() => connection.close()),
       );
+
+      yield* Effect.tryPromise({
+        try: () => cdp.open(CONNECT_TIMEOUT),
+        catch: (error) =>
+          new EndpointError(
+            endpoint.explicit ? redact(`can't connect to ${endpoint.source} (${error instanceof Error ? error.message : String(error)})`) : NOT_REACHABLE,
+          ),
+      });
 
       run.cdp = cdp;
       cdp.addListener((method, params, session) => run.onEvent(method, params, session));
@@ -694,7 +670,7 @@ export const runTest = (
           return;
         }
 
-        const settled = yield* Effect.promise(() => run.waitTopSettled(RUN_TIMEOUT));
+        const settled = yield* Effect.promise((signal) => run.waitTopSettled(RUN_TIMEOUT, signal));
 
         if (!settled || !run.topSettled) {
           report.error = report.unsettled
@@ -704,7 +680,7 @@ export const runTest = (
           return;
         }
 
-        yield* Effect.promise(() => run.waitLoaded(LOAD_GRACE));
+        yield* Effect.promise((signal) => run.waitLoaded(LOAD_GRACE, signal));
 
         // Where the page ended up: an answer that doesn't come leaves it unknown.
         const info = yield* cdpCall(() => cdp.send("Target.getTargetInfo", { targetId: target })).pipe(Effect.catch(() => Effect.succeed(null)));

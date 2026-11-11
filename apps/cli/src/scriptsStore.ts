@@ -814,7 +814,7 @@ export const openStore = (dataRoot: string, create: boolean): Effect.Effect<Stor
  * LOCK_TIMEOUT seconds. The lock is given back when the scope closes.
  */
 export const lockStore = (store: Store): Effect.Effect<void, StoreError, Scope.Scope> =>
-  Effect.acquireRelease(
+  Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
       const deadline = Date.now() + LOCK_TIMEOUT * 1000;
 
@@ -822,10 +822,11 @@ export const lockStore = (store: Store): Effect.Effect<void, StoreError, Scope.S
         if (Date.now() >= deadline)
           return yield* Effect.fail(new StoreError(`another bay scripts command or Bay has held ${store.lockPath} for ${LOCK_TIMEOUT}s`));
 
-        yield* Effect.sleep(Duration.millis(LOCK_POLL));
+        yield* restore(Effect.sleep(Duration.millis(LOCK_POLL)));
       }
+
+      yield* Effect.addFinalizer(() => Effect.sync(() => store.unlock()));
     }),
-    () => Effect.sync(() => store.unlock()),
   );
 
 /** How a wait for Bay's report ended. */

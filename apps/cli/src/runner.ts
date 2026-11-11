@@ -157,19 +157,19 @@ export type RunFailure = UserCodeError | EndpointError | ExecTimeout | ExecError
 
 // The connection to Bay, for the scope: it is closed when the scope closes, however the run ended.
 const connected = (endpoint: Endpoint): Effect.Effect<Session, EndpointError | ExecError, Scope.Scope> =>
-  Effect.acquireRelease(
-    Effect.gen(function* () {
-      const session = new Session(endpoint);
+  Effect.gen(function* () {
+    const session = yield* Effect.acquireRelease(
+      Effect.sync(() => new Session(endpoint)),
+      (session) => Effect.promise(() => session.close()),
+    );
 
-      yield* Effect.tryPromise({
-        try: () => session.connect(),
-        catch: runError,
-      }).pipe(Effect.onError(() => Effect.promise(() => session.close())));
+    yield* Effect.tryPromise({
+      try: () => session.connect(),
+      catch: runError,
+    });
 
-      return session;
-    }),
-    (session) => Effect.promise(() => session.close()),
-  );
+    return session;
+  });
 
 /**
  * Runs the user's code against Bay and gives back its value. The connection is the run's: it closes when the run
