@@ -18,6 +18,7 @@ import { DownloadEngine, DownloadWorkService } from "../lib/downloadWorkService"
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
 import { Persistence } from "../lib/persistenceService";
+import { TidyEngine, TidyWorkService } from "../lib/tidyWorkService";
 import { ShellEngine, ShellService } from "../lib/shellService";
 import { UpdaterEngine, UpdaterService } from "../lib/updaterService";
 import { Sync } from "../sync/service";
@@ -56,7 +57,8 @@ export type AppServices =
   | SharingService
   | UpdaterService
   | UsageService
-  | Sync;
+  | Sync
+  | TidyWorkService;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -93,6 +95,8 @@ const sharing = SharingService.layer.pipe(Layer.provide(Layer.mergeAll(SharingEn
 
 const library = LibraryService.layer.pipe(Layer.provide(LibraryEngine.layer));
 
+const tidy = TidyWorkService.layer.pipe(Layer.provide(TidyEngine.layer));
+
 const engineTabs = EngineTabsService.layer.pipe(Layer.provide(EngineTabsEngine.layer));
 
 const shell = ShellService.layer.pipe(Layer.provide(Layer.mergeAll(ShellEngine.layer, Scheduler.layer)));
@@ -125,6 +129,7 @@ export const appLayer = Layer.mergeAll(
   preview,
   sharing,
   library,
+  tidy,
   engineTabs,
   shell,
   enrichment,
