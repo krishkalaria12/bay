@@ -249,7 +249,7 @@ describe("Store", () => {
   it("applies installs and uninstalls cleanly", async () => {
     const store = new Store(root);
     store.open(true);
-    store.lock();
+    expect(store.tryLock()).toBe(true);
 
     const scriptDir = join(tmpdir(), `bay-script-test-${Date.now()}`);
     mkdirSync(scriptDir, { recursive: true });

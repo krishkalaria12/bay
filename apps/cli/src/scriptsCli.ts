@@ -1,13 +1,16 @@
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { Argument, Command, Flag } from "effect/cli";
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as v from "valibot";
-import { dataRoot, EndpointError, explicitDataRoot, requireControl, resolveEndpoint } from "./endpoint.ts";
+import { dataDirFlag, portFlag, secondsFlag, toggle, wsFlag } from "./cliFlags.ts";
+import { dataRoot, explicitDataRoot, requireControl, requireControlEffect, resolveEndpoint } from "./endpoint.ts";
+import { CommandExit, complain, exitWith, failWith, messageOf, redactedOutput, say } from "./exit.ts";
 import { JsonValueSchema } from "./guard.ts";
-import { installOutputRedaction } from "./redact.ts";
 import { formatReport, runTest } from "./scriptsTest.ts";
-import { repairIfPresent, Store, type ScriptRecord, type StatusRecord } from "./scriptsStore.ts";
+import { lockStore, openStore, repairIfPresent, Store, StoreError, waitForStatus, type ScriptRecord, type StatusRecord } from "./scriptsStore.ts";
 import { build, checkMatch, defaultUrl, slug, urlRuns } from "./userscript.ts";
-import { numericOption, parseArguments } from "./args.ts";
 import { isRecord } from "./util.ts";
 
 const ProfileSchema = v.object({
@@ -33,15 +36,7 @@ A script is a .ts or .js file (a .user.js from Violentmonkey or Tampermonkey wor
   @noframes                     top frame only (default: every frame)
 @grant other than none, @require and @resource are ignored with a warning: there are no GM_* APIs, and relative
 imports are bundled by the bundler instead (one IIFE, recent Chrome, not minified; types are stripped, not checked; no
-tsconfig.json is read). Imports must stay inside the script's own folder, and nothing from Bay's data folder.
-
-Commands:
-  new NAME           scaffold NAME.user.ts in the current directory
-  test FILE          run it once in a background tab of its own and report what it did
-  install FILE       build it and have Bay run it (needs "Let the bay command control Bay" on)
-  uninstall NAME     remove an installed script by @name or id
-  list               the installed scripts
-`;
+tsconfig.json is read). Imports must stay inside the script's own folder, and nothing from Bay's data folder.`;
 
 export const TEST_DESCRIPTION = `Build FILE, open a background tab of its own, register the script at document start, open the page, and report.
 
@@ -86,353 +81,233 @@ console.log({quoted}, "ran on", location.href);
 
 export const UNKNOWN_EXIT = 3;
 
-function say(text: string): void {
-  process.stdout.write(`${text}\n`);
-}
+// MARK: new
+
+const scriptsNew = Command.make(
+  "new",
+  {
+    name: Argument.String("name").pipe(Argument.withDescription("the script's name"), Argument.optional),
+    match: Flag.String("match").pipe(Flag.withDescription("a page pattern it runs on (repeatable)"), Flag.atLeast(0)),
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const name = Option.getOrElse(input.name, () => "").trim();
+
+      if (!name || name.includes("\n")) return yield* failWith(1, "bay scripts new: give the script a name");
+
+      const stem = /^[a-zA-Z0-9_.-]+$/.test(name) ? name : slug(name);
+      const path = resolve(process.cwd(), `${stem}.user.ts`);
+      const patterns = input.match.length ? [...input.match] : ["https://example.com/*"];
+
+      yield* Effect.try({ try: () => patterns.forEach((pattern) => checkMatch(pattern, "match")), catch: (error) => error }).pipe(
+        Effect.catch((error) => failWith(1, `bay scripts new: ${messageOf(error)}`)),
+      );
+
+      const content = NEW_TEMPLATE.replace(/\{name\}/g, name)
+        .replace("{matches}", patterns.map((p) => `// @match       ${p}\n`).join(""))
+        .replace("{quoted}", JSON.stringify(name));
+
+      if (existsSync(path)) return yield* failWith(1, `bay scripts new: ${path} already exists`);
+
+      yield* Effect.try({ try: () => writeFileSync(path, content, { encoding: "utf8", flag: "wx" }), catch: (error) => error }).pipe(
+        Effect.catch((error) => failWith(1, `bay scripts new: ${messageOf(error)}`)),
+      );
+
+      yield* say(path);
+    }),
+).pipe(
+  Command.withDescription("Scaffold NAME.user.ts in the current directory. Use --match PATTERN to choose where it runs."),
+  Command.withShortDescription("scaffold NAME.user.ts in the current directory"),
+);
+
+// MARK: test
+
+const scriptsTest = Command.make(
+  "test",
+  {
+    file: Argument.String("file").pipe(Argument.withDescription("the script to test"), Argument.optional),
+    url: Flag.String("url").pipe(Flag.withDescription("the page to open (else the first concrete @match)"), Flag.optional),
+    expect: Flag.String("expect").pipe(Flag.withDescription("a JavaScript expression that must turn truthy"), Flag.optional),
+    wait: secondsFlag("wait", 2, "listen this many seconds after the page loaded"),
+    screenshot: Flag.String("screenshot").pipe(Flag.withDescription("save a PNG of the page here"), Flag.optional),
+    keep: toggle("keep", "leave the test tab open"),
+    json: toggle("json", "print the report as JSON"),
+    dataDir: dataDirFlag,
+    port: portFlag,
+    ws: wsFlag,
+  },
+  (input) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* redactedOutput;
+
+        const file = Option.getOrNull(input.file);
+
+        if (!file) return yield* failWith(1, "bay scripts test: give FILE");
+
+        const dataDir = Option.getOrUndefined(input.dataDir);
+
+        // A test that can't start says so where the report would go.
+        const notRun = (msg: string) =>
+          (input.json ? say(JSON.stringify({ ok: false, ran: false, script: file, error: msg }, null, 2)) : complain(`bay scripts: ${msg}`)).pipe(
+            Effect.andThen(exitWith(1)),
+          );
+
+        const built = yield* Effect.tryPromise({ try: () => build(file, { sourcemap: true, dataDirs: [dataRoot(dataDir)] }), catch: messageOf }).pipe(
+          Effect.catch(notRun),
+        );
+
+        const targetUrl = Option.getOrUndefined(input.url) || defaultUrl(built.meta);
+
+        if (!targetUrl) return yield* notRun("no @match gives a concrete page to open; pass --url URL");
+
+        if (!urlRuns(built.meta, targetUrl)) built.meta.warnings.push(`${targetUrl} doesn't match the script's @match/@include rules, so it won't run there`);
+
+        const endpoint = yield* resolveEndpoint({ ws: Option.getOrUndefined(input.ws), port: Option.getOrUndefined(input.port), dataDir }).pipe(
+          Effect.catch((error) => failWith(2, `bay: ${error.message}`)),
+        );
+
+        const report = yield* runTest(
+          built,
+          targetUrl,
+          endpoint,
+          Option.getOrUndefined(input.expect),
+          input.wait,
+          Option.getOrUndefined(input.screenshot),
+          input.keep,
+        ).pipe(Effect.catch((error) => failWith(2, `bay: ${error.message}`)));
+
+        yield* say(input.json ? JSON.stringify(report.to_dict(), null, 2) : formatReport(report));
+
+        if (!report.ok) return yield* exitWith(1);
+      }),
+    ),
+).pipe(Command.withDescription(TEST_DESCRIPTION), Command.withShortDescription("run it once in a background tab of its own and report what it did"));
 
-function complain(text: string): void {
-  process.stderr.write(`${text}\n`);
-}
+// MARK: install and uninstall
 
-export async function runScriptsCommand(args: string[]): Promise<number> {
-  const sub = args[0];
-
-  if (!sub || sub === "--help" || sub === "-h") {
-    say(SCRIPTS_DESCRIPTION);
-
-    return 0;
-  }
-
-  if (sub === "new") {
-    return runNew(args.slice(1));
-  }
-
-  if (sub === "test") {
-    installOutputRedaction();
-
-    return runTestCommand(args.slice(1));
-  }
-
-  if (sub === "install" || sub === "uninstall") {
-    return runChange(sub, args.slice(1));
-  }
-
-  if (sub === "list") {
-    return runList(args.slice(1));
-  }
-
-  complain(`bay scripts: unknown command ${JSON.stringify(sub)} (see bay scripts --help)`);
-
-  return 1;
-}
-
-export function runNew(args: string[]): number {
-  const { values, positionals } = parseArguments(
-    args,
-    {
-      match: { type: "string", multiple: true },
-      help: { type: "boolean", short: "h" },
-    },
-    1,
-  );
-
-  if (values.help) {
-    say("Scaffold NAME.user.ts in the current directory. Use --match PATTERN to choose where it runs.");
-
-    return 0;
-  }
-
-  const name = (positionals[0] ?? "").trim();
-  const matches = values.match ?? [];
-
-  if (!name || name.includes("\n")) {
-    complain("bay scripts new: give the script a name");
-
-    return 1;
-  }
-
-  const stem = /^[a-zA-Z0-9_.-]+$/.test(name) ? name : slug(name);
-  const path = resolve(process.cwd(), `${stem}.user.ts`);
-  const patterns = matches.length ? matches : ["https://example.com/*"];
-
-  try {
-    for (const pattern of patterns) {
-      checkMatch(pattern, "match");
-    }
-  } catch (error) {
-    complain(`bay scripts new: ${error instanceof Error ? error.message : String(error)}`);
-
-    return 1;
-  }
-
-  const matchesLines = patterns.map((p) => `// @match       ${p}\n`).join("");
-
-  const content = NEW_TEMPLATE.replace(/\{name\}/g, name)
-    .replace("{matches}", matchesLines)
-    .replace("{quoted}", JSON.stringify(name));
-
-  if (existsSync(path)) {
-    complain(`bay scripts new: ${path} already exists`);
-
-    return 1;
-  }
-
-  try {
-    writeFileSync(path, content, { encoding: "utf8", flag: "wx" });
-  } catch (error) {
-    complain(`bay scripts new: ${error instanceof Error ? error.message : String(error)}`);
-
-    return 1;
-  }
-
-  say(path);
-
-  return 0;
-}
-
-export async function runTestCommand(args: string[]): Promise<number> {
-  const { values, positionals } = parseArguments(
-    args,
-    {
-      url: { type: "string" },
-      expect: { type: "string" },
-      wait: { type: "string" },
-      screenshot: { type: "string" },
-      keep: { type: "boolean" },
-      json: { type: "boolean" },
-      "data-dir": { type: "string" },
-      port: { type: "string" },
-      ws: { type: "string" },
-      help: { type: "boolean", short: "h" },
-    },
-    1,
-  );
-
-  if (values.help) {
-    say(TEST_DESCRIPTION);
-
-    return 0;
-  }
-
-  const file = positionals[0];
-  const url = values.url;
-  const expectExpr = values.expect;
-  const wait = numericOption(values.wait, "--wait", 2)!;
-  const screenshot = values.screenshot;
-  const keep = values.keep ?? false;
-  const asJson = values.json ?? false;
-  const dataDir = values["data-dir"];
-  const port = numericOption(values.port, "--port");
-  const ws = values.ws;
-
-  if (!file) {
-    complain("bay scripts test: give FILE");
-
-    return 1;
-  }
-
-  const root = dataRoot(dataDir);
-  let built;
-
-  try {
-    built = await build(file, { sourcemap: true, dataDirs: [root] });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-
-    if (asJson) {
-      say(JSON.stringify({ ok: false, ran: false, script: file, error: msg }, null, 2));
-    } else {
-      complain(`bay scripts: ${msg}`);
-    }
-
-    return 1;
-  }
-
-  const targetUrl = url || defaultUrl(built.meta);
-
-  if (!targetUrl) {
-    const msg = "no @match gives a concrete page to open; pass --url URL";
-
-    if (asJson) {
-      say(JSON.stringify({ ok: false, ran: false, script: file, error: msg }, null, 2));
-    } else {
-      complain(`bay scripts: ${msg}`);
-    }
-
-    return 1;
-  }
-
-  if (!urlRuns(built.meta, targetUrl)) {
-    built.meta.warnings.push(`${targetUrl} doesn't match the script's @match/@include rules, so it won't run there`);
-  }
-
-  let endpoint;
-
-  try {
-    endpoint = await resolveEndpoint({ ws, port, dataDir });
-  } catch (error) {
-    complain(`bay: ${error instanceof Error ? error.message : String(error)}`);
-
-    return 2;
-  }
-
-  let report;
-
-  try {
-    report = await runTest(built, targetUrl, endpoint, expectExpr, wait, screenshot, keep);
-  } catch (error) {
-    if (error instanceof EndpointError) {
-      complain(`bay: ${error.message}`);
-
-      return 2;
-    }
-
-    complain(`bay scripts test: ${error instanceof Error ? error.message : String(error)}`);
-
-    return 1;
-  }
-
-  if (asJson) {
-    say(JSON.stringify(report.to_dict(), null, 2));
-  } else {
-    say(formatReport(report));
-  }
-
-  return report.ok ? 0 : 1;
-}
-
-export async function runChange(kind: "install" | "uninstall", args: string[]): Promise<number> {
-  const { values, positionals } = parseArguments(
-    args,
-    {
-      "data-dir": { type: "string" },
-      help: { type: "boolean", short: "h" },
-    },
-    1,
-  );
-
-  if (values.help) {
-    say(kind === "install" ? INSTALL_DESCRIPTION : "Remove an installed script by its @name or id.");
-
-    return 0;
-  }
-
-  const targetArg = positionals[0];
-  const dataDir = values["data-dir"];
-
-  if (!targetArg) {
-    complain(`bay scripts ${kind}: give ${kind === "install" ? "FILE" : "NAME"}`);
-
-    return 1;
-  }
-
-  const root = dataRoot(dataDir);
-  let built = null;
-
-  if (kind === "install") {
-    try {
-      built = await build(targetArg, { dataDirs: [root] });
-    } catch (error) {
-      complain(`bay scripts: ${error instanceof Error ? error.message : String(error)}`);
-
-      return 1;
-    }
-
-    for (const w of [...built.meta.warnings, ...built.warnings]) {
-      say(`warning: ${w}`);
-    }
-
-    if (!built.meta.matches.length && !built.meta.includes.length) {
-      complain("bay scripts: add an @match or @include line so the script runs somewhere");
-
-      return 1;
-    }
-  }
-
+// Whether Bay is still there to report: its control file is valid.
+const controlAlive = (root: string) => () => {
   try {
     requireControl(root);
-  } catch (error) {
-    complain(`bay: ${error instanceof Error ? error.message : String(error)}`);
 
-    return 2;
+    return true;
+  } catch {
+    return false;
   }
+};
 
-  const store = new Store(root);
-  let summary = "";
-  let generation = 0;
-  let removedAll = false;
+// Applies a change under the store's lock, then waits for Bay to report it.
+const applyChange = (root: string, change: (store: Store) => Effect.Effect<[string, number], CommandExit | StoreError>) =>
+  Effect.gen(function* () {
+    yield* requireControlEffect(root).pipe(Effect.catch((error) => failWith(2, `bay: ${error.message}`)));
 
-  try {
-    store.open(true);
-    store.lock();
+    const [summary, generation, removedAll, store] = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* openStore(root, true);
 
-    if (built !== null) {
-      const [record, gen] = store.apply({ add: built });
-      generation = gen;
-      summary = `${record.updated ? "updated" : "installed"} ${describe(record)}`;
-    } else {
-      const found = store.find(targetArg);
+        if (!store) return yield* Effect.fail(new StoreError(`${root} doesn't exist`));
 
-      if (!found) {
-        const names =
-          store
-            .installed()
-            .map((m) => m.name || m.id)
-            .join(", ") || "none";
+        yield* lockStore(store);
 
-        complain(`bay scripts: no installed script is named ${JSON.stringify(targetArg)} (installed: ${names})`);
+        const [summary, generation] = yield* change(store);
 
-        return 1;
-      }
+        return [summary, generation, !store.extensionPresent(), store] as const;
+      }),
+    ).pipe(Effect.catch((error) => (error instanceof CommandExit ? Effect.fail(error) : failWith(1, `bay scripts: ${error.message}`))));
 
-      const [record, gen] = store.apply({ remove: String(found.id) });
-      generation = gen;
-      summary = `uninstalled ${record.name} (${record.id})`;
+    yield* say(summary);
+    yield* say(`generation ${generation}`);
+
+    const [outcome, status] = yield* waitForStatus(store, generation, controlAlive(root)).pipe(
+      Effect.catch((error) => failWith(1, `bay scripts: ${error.message}`)),
+    );
+
+    if (outcome === "quit") return yield* say("Bay quit (or control was turned off) before applying it; it applies the change on its next launch");
+
+    if (outcome === "timeout") {
+      yield* say(`Bay hasn't reported generation ${generation} after 10 s: the outcome is unknown, it may still be applying it (see bay scripts list)`);
+
+      return yield* exitWith(UNKNOWN_EXIT);
     }
 
-    removedAll = !store.extensionPresent();
-  } catch (error) {
-    complain(`bay scripts: ${error instanceof Error ? error.message : String(error)}`);
+    if (outcome === "superseded") yield* say(`a newer change (generation ${status?.generation}) replaced this one; Bay reported that one:`);
 
-    return 1;
-  } finally {
-    store.close();
-  }
+    const failed = printProfiles(status || {}, outcome === "superseded" ? false : removedAll);
 
-  say(summary);
-  say(`generation ${generation}`);
+    if (failed) return yield* exitWith(failed);
+  });
 
-  const alive = () => {
-    try {
-      requireControl(root);
+// A store step that threw: its failure, as the store's.
+const storeStep = <A>(run: () => A): Effect.Effect<A, StoreError> =>
+  Effect.try({ try: run, catch: (error) => (error instanceof StoreError ? error : new StoreError(messageOf(error))) });
 
-      return true;
-    } catch {
-      return false;
-    }
-  };
+const scriptsInstall = Command.make(
+  "install",
+  {
+    file: Argument.String("file").pipe(Argument.withDescription("the script to install"), Argument.optional),
+    dataDir: dataDirFlag,
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const file = Option.getOrNull(input.file);
 
-  const [outcome, status] = store.waitStatus(generation, alive);
+      if (!file) return yield* failWith(1, "bay scripts install: give FILE");
 
-  if (outcome === "quit") {
-    say("Bay quit (or control was turned off) before applying it; it applies the change on its next launch");
+      const root = dataRoot(Option.getOrUndefined(input.dataDir));
 
-    return 0;
-  }
+      const built = yield* Effect.tryPromise({ try: () => build(file, { dataDirs: [root] }), catch: messageOf }).pipe(
+        Effect.catch((msg) => failWith(1, `bay scripts: ${msg}`)),
+      );
 
-  if (outcome === "timeout") {
-    say(`Bay hasn't reported generation ${generation} after 10 s: the outcome is unknown, it may still be applying it (see bay scripts list)`);
+      for (const warning of [...built.meta.warnings, ...built.warnings]) yield* say(`warning: ${warning}`);
 
-    return UNKNOWN_EXIT;
-  }
+      if (!built.meta.matches.length && !built.meta.includes.length)
+        return yield* failWith(1, "bay scripts: add an @match or @include line so the script runs somewhere");
 
-  if (outcome === "superseded") {
-    say(`a newer change (generation ${status?.generation}) replaced this one; Bay reported that one:`);
-    removedAll = false;
-  }
+      yield* applyChange(root, (store) =>
+        storeStep((): [string, number] => {
+          const [record, generation] = store.apply({ add: built });
 
-  return printProfiles(status || {}, removedAll);
-}
+          return [`${record.updated ? "updated" : "installed"} ${describe(record)}`, generation];
+        }),
+      );
+    }),
+).pipe(Command.withDescription(INSTALL_DESCRIPTION), Command.withShortDescription('build it and have Bay run it (needs "Let the bay command control Bay" on)'));
+
+const scriptsUninstall = Command.make(
+  "uninstall",
+  {
+    name: Argument.String("name").pipe(Argument.withDescription("the script's @name or id"), Argument.optional),
+    dataDir: dataDirFlag,
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const name = Option.getOrNull(input.name);
+
+      if (!name) return yield* failWith(1, "bay scripts uninstall: give NAME");
+
+      const root = dataRoot(Option.getOrUndefined(input.dataDir));
+
+      yield* applyChange(root, (store) =>
+        Effect.gen(function* () {
+          const found = yield* storeStep(() => store.find(name));
+
+          if (!found) {
+            const names = (yield* storeStep(() => store.installed())).map((m) => m.name || m.id).join(", ") || "none";
+
+            return yield* failWith(1, `bay scripts: no installed script is named ${JSON.stringify(name)} (installed: ${names})`);
+          }
+
+          const [record, generation] = yield* storeStep(() => store.apply({ remove: String(found.id) }));
+
+          const change: [string, number] = [`uninstalled ${record.name} (${record.id})`, generation];
+
+          return change;
+        }),
+      );
+    }),
+).pipe(Command.withDescription("Remove an installed script by its @name or id."), Command.withShortDescription("remove an installed script by @name or id"));
 
 export function describe(record: ScriptRecord): string {
   const version = record.version ? ` ${record.version}` : "";
@@ -483,106 +358,83 @@ export function profileLines(status: ScriptsStatus, removed = false): [string[],
 export function printProfiles(status: ScriptsStatus, removed = false): number {
   const [lines, failed] = profileLines(status, removed);
 
-  for (const line of lines) {
-    say(line);
-  }
+  for (const line of lines) process.stdout.write(`${line}\n`);
 
   return failed ? 1 : 0;
 }
 
-export function runList(args: string[]): number {
-  const { values } = parseArguments(args, {
-    json: { type: "boolean" },
-    "data-dir": { type: "string" },
-    help: { type: "boolean", short: "h" },
-  });
+// MARK: list
 
-  if (values.help) {
-    say("List the installed scripts and what Bay last reported about them.");
+/** What the store holds, as the list shows it. */
+type Listing = { scripts: ScriptRecord[]; generation: number; status: StatusRecord | null; removed: boolean };
 
-    return 0;
-  }
+const scriptsList = Command.make(
+  "list",
+  {
+    json: toggle("json", "print the scripts as JSON"),
+    dataDir: dataDirFlag,
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const dataDir = Option.getOrUndefined(input.dataDir);
+      const root = dataRoot(dataDir);
 
-  const asJson = values.json ?? false;
-  const dataDir = values["data-dir"];
+      // The store is only repaired where Bay is trusted to be: a data dir that was given, or one Bay runs from.
+      const trusted = explicitDataRoot(dataDir) !== null || controlAlive(root)();
 
-  const root = dataRoot(dataDir);
-  let trusted = explicitDataRoot(dataDir) !== null;
+      let note: string | null = null;
 
-  if (!trusted) {
-    try {
-      requireControl(root);
-      trusted = true;
-    } catch {
-      trusted = false;
-    }
-  }
+      if (trusted) {
+        note = yield* repairIfPresent(root).pipe(Effect.catch((error) => failWith(1, `bay scripts: can't check the installed scripts (${error.message})`)));
 
-  let note: string | null = null;
-
-  if (trusted) {
-    try {
-      note = repairIfPresent(root);
-    } catch (error) {
-      complain(`bay scripts: can't check the installed scripts (${error instanceof Error ? error.message : String(error)})`);
-
-      return 1;
-    }
-
-    if (note && !asJson) {
-      say(`repaired: ${note}`);
-    }
-  }
-
-  const store = new Store(root);
-  let scripts: Array<ScriptRecord> = [];
-  let generation = 0;
-  let status: StatusRecord | null = null;
-  let removed = false;
-
-  try {
-    store.open(false);
-    scripts = store.installed();
-    generation = store.generation();
-    status = store.status();
-    removed = generation > 0 && !store.extensionPresent();
-  } catch (error) {
-    complain(`bay scripts: ${error instanceof Error ? error.message : String(error)}`);
-
-    return 1;
-  } finally {
-    store.close();
-  }
-
-  if (asJson) {
-    say(JSON.stringify({ scripts, generation, status, repaired: note }, null, 2));
-
-    return 0;
-  }
-
-  if (!scripts.length) {
-    say("no scripts installed");
-  }
-
-  for (const record of scripts) {
-    say(describe(record));
-    say(`  source: ${record.source_file}`);
-  }
-
-  if (generation) {
-    const reported = status?.generation;
-
-    if (reported === generation) {
-      const [lines] = profileLines(status || {}, removed);
-      say(`generation ${generation}, reported by Bay:`);
-
-      for (const line of lines) {
-        say(`  ${line}`);
+        if (note && !input.json) yield* say(`repaired: ${note}`);
       }
-    } else {
-      say(`generation ${generation}, not reported by Bay yet${reported ? ` (it last reported ${reported})` : ""}`);
-    }
-  }
 
-  return 0;
-}
+      const listing = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const store = yield* openStore(root, false);
+
+          const nothing: Listing = { scripts: [], generation: 0, status: null, removed: false };
+
+          if (!store) return nothing;
+
+          return yield* storeStep((): Listing => {
+            const generation = store.generation();
+
+            return { scripts: store.installed(), generation, status: store.status(), removed: generation > 0 && !store.extensionPresent() };
+          });
+        }),
+      ).pipe(Effect.catch((error) => failWith(1, `bay scripts: ${error.message}`)));
+
+      const { scripts, generation, status, removed } = listing;
+
+      if (input.json) return yield* say(JSON.stringify({ scripts, generation, status, repaired: note }, null, 2));
+
+      if (!scripts.length) yield* say("no scripts installed");
+
+      for (const record of scripts) {
+        yield* say(describe(record));
+        yield* say(`  source: ${record.source_file}`);
+      }
+
+      if (!generation) return;
+
+      const reported = status?.generation;
+
+      if (reported !== generation) return yield* say(`generation ${generation}, not reported by Bay yet${reported ? ` (it last reported ${reported})` : ""}`);
+
+      const [lines] = profileLines(status || {}, removed);
+
+      yield* say(`generation ${generation}, reported by Bay:`);
+
+      for (const line of lines) yield* say(`  ${line}`);
+    }),
+).pipe(Command.withDescription("List the installed scripts and what Bay last reported about them."), Command.withShortDescription("the installed scripts"));
+
+// MARK: The scripts command
+
+export const scripts = Command.make("scripts").pipe(
+  Command.withDescription(SCRIPTS_DESCRIPTION),
+  Command.withShortDescription("write, test and install userscripts"),
+  Command.withSubcommands([scriptsNew, scriptsTest, scriptsInstall, scriptsUninstall, scriptsList]),
+);

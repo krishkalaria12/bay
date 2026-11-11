@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as v from "valibot";
 import { Cdp, CdpError, ConnectionLost, isCdpObject, type CdpObject } from "./cdp.ts";
 import { Endpoint, EndpointError, NOT_REACHABLE } from "./endpoint.ts";
@@ -516,37 +518,53 @@ export async function evaluatePlain(cdp: Cdp, session: string, expression: strin
   return rawResult?.value ?? null;
 }
 
-export async function listenExpect(cdp: Cdp, session: string, expression: string | undefined, wait: number): Promise<ExpectResult | null> {
-  if (!expression) {
-    if (wait > 0) await Bun.sleep(wait * 1000);
+/**
+ * Listens for `wait` seconds after the run: with an expression, it is asked again every EXPECT_POLL ms until it is
+ * truthy, and the rest of the wait is listened through either way. Chrome reports an unhandled rejection about a
+ * second late, so the wait is not cut short.
+ */
+export const listenExpect = (
+  cdp: Cdp,
+  session: string,
+  expression: string | undefined,
+  wait: number,
+): Effect.Effect<ExpectResult | null, ConnectionLost | CdpError> =>
+  Effect.gen(function* () {
+    const deadline = Date.now() + Math.max(wait, 0) * 1000;
 
-    return null;
-  }
+    if (!expression) {
+      if (wait > 0) yield* Effect.sleep(Duration.seconds(wait));
 
-  const deadline = Date.now() + Math.max(wait, 0) * 1000;
-  let outcome: ExpectResult | null = null;
-
-  while (true) {
-    outcome = await evaluateExpect(cdp, session, expression);
-    outcome.expression = expression;
-
-    if ((!outcome.error && outcome.truthy) || Date.now() >= deadline) {
-      break;
+      return null;
     }
 
-    await Bun.sleep(EXPECT_POLL);
+    let outcome: ExpectResult;
 
-    if (cdp.closed) throw new ConnectionLost();
-  }
+    for (;;) {
+      outcome = yield* cdpCall(() => evaluateExpect(cdp, session, expression));
+      outcome.expression = expression;
 
-  const remaining = deadline - Date.now();
+      if ((!outcome.error && outcome.truthy) || Date.now() >= deadline) break;
 
-  if (remaining > 0) {
-    await Bun.sleep(remaining);
-  }
+      yield* Effect.sleep(Duration.millis(EXPECT_POLL));
 
-  return outcome;
-}
+      if (cdp.closed) return yield* Effect.fail(new ConnectionLost());
+    }
+
+    const remaining = deadline - Date.now();
+
+    if (remaining > 0) yield* Effect.sleep(Duration.millis(remaining));
+
+    return outcome;
+  });
+
+// A CDP step: its failures stay the connection's own, anything else is a CDP error.
+const cdpCall = <A>(run: () => Promise<A>): Effect.Effect<A, ConnectionLost | CdpError> =>
+  Effect.tryPromise({
+    try: run,
+    catch: (error) =>
+      error instanceof ConnectionLost || error instanceof CdpError ? error : new CdpError(error instanceof Error ? error.message : String(error)),
+  });
 
 export async function captureScreenshot(cdp: Cdp, session: string, path: string, report: Report): Promise<string | null> {
   try {
@@ -563,7 +581,12 @@ export async function captureScreenshot(cdp: Cdp, session: string, path: string,
   }
 }
 
-export async function runTest(
+/**
+ * Builds the run: a connection of its own, a background tab, the script registered at document start, and the page.
+ * Each is a resource of the test's scope, so the tab closes and the script goes (unless --keep) and the connection
+ * closes however the test ends: it finished, it failed, or it was interrupted.
+ */
+export const runTest = (
   build: Build,
   url: string,
   endpoint: Endpoint,
@@ -571,144 +594,159 @@ export async function runTest(
   wait: number,
   screenshotPath: string | undefined,
   keep: boolean,
-): Promise<Report> {
-  const report = new Report(build.path, url, build.meta.run_at);
-  report.warnings.push(...build.meta.warnings, ...build.warnings);
+): Effect.Effect<Report, EndpointError> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const report = new Report(build.path, url, build.meta.run_at);
+      report.warnings.push(...build.meta.warnings, ...build.warnings);
 
-  if (build.meta.world === "ISOLATED") {
-    report.warnings.push(
-      "@inject-into content: this test runs the script in the page's world (bay command connections can't " +
-        "create isolated worlds); installed, it runs in an isolated world and can't see page globals",
-    );
-  }
-
-  const run = new Run(build, url, report);
-  const cdp = (run.cdp = new Cdp(endpoint.ws));
-
-  try {
-    await cdp.open(CONNECT_TIMEOUT);
-  } catch (error) {
-    if (endpoint.explicit) {
-      throw new EndpointError(redact(`can't connect to ${endpoint.source} (${error instanceof Error ? error.message : String(error)})`));
-    }
-
-    throw new EndpointError(NOT_REACHABLE);
-  }
-
-  cdp.addListener((method, params, session) => run.onEvent(method, params, session));
-
-  let target: string | null = null;
-  let scriptId: string | null = null;
-
-  try {
-    try {
-      const created = await cdp.send("Target.createTarget", { url: "about:blank", background: true });
-
-      if (!v.is(v.string(), created.targetId)) {
-        throw new CdpError("Target.createTarget returned no targetId");
+      if (build.meta.world === "ISOLATED") {
+        report.warnings.push(
+          "@inject-into content: this test runs the script in the page's world (bay command connections can't " +
+            "create isolated worlds); installed, it runs in an isolated world and can't see page globals",
+        );
       }
 
-      target = created.targetId;
-      const attached = await cdp.send("Target.attachToTarget", { targetId: target, flatten: true });
+      const run = new Run(build, url, report);
 
-      if (!v.is(v.string(), attached.sessionId)) {
-        throw new CdpError("Target.attachToTarget returned no sessionId");
-      }
+      // The connection: Bay that can't be reached is the endpoint's failure, not the test's.
+      const cdp = yield* Effect.acquireRelease(
+        Effect.tryPromise({
+          try: async () => {
+            const connection = new Cdp(endpoint.ws);
 
-      const session = (run.topSession = attached.sessionId);
-      await cdp.send("Runtime.enable", {}, session);
-      await cdp.send("Page.enable", {}, session);
-      const added = await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: run.source }, session);
-      scriptId = v.is(v.string(), added.identifier) && added.identifier ? added.identifier : null;
+            try {
+              await connection.open(CONNECT_TIMEOUT);
+            } catch (error) {
+              await connection.close();
+              throw error;
+            }
 
-      if (!build.meta.noframes) {
-        await cdp.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, session);
-      }
+            return connection;
+          },
+          catch: (error) =>
+            new EndpointError(
+              endpoint.explicit ? redact(`can't connect to ${endpoint.source} (${error instanceof Error ? error.message : String(error)})`) : NOT_REACHABLE,
+            ),
+        }),
+        (connection) => Effect.promise(() => connection.close()),
+      );
 
-      const navigated = await cdp.send("Page.navigate", { url }, session, RUN_TIMEOUT);
+      run.cdp = cdp;
+      cdp.addListener((method, params, session) => run.onEvent(method, params, session));
 
-      if (navigated.errorText) {
-        report.error = `couldn't open ${url}: ${navigated.errorText}`;
+      // A cleanup step: bounded, and never the test's failure.
+      const cleanup = (step: () => Promise<CdpObject>) =>
+        Effect.promise(() =>
+          step().then(
+            () => undefined,
+            () => undefined,
+          ),
+        );
 
-        return report;
-      }
+      const steps = Effect.gen(function* () {
+        // The tab: kept for the user with --keep, else closed with the scope.
+        const target = yield* Effect.acquireRelease(
+          cdpCall(async () => {
+            const created = await cdp.send("Target.createTarget", { url: "about:blank", background: true });
 
-      // Settle
-      const settled = await run.waitTopSettled(RUN_TIMEOUT);
+            if (!v.is(v.string(), created.targetId)) throw new CdpError("Target.createTarget returned no targetId");
 
-      if (!settled || !run.topSettled) {
-        report.error = report.unsettled
-          ? `the script's first pass in the top frame didn't finish within ${RUN_TIMEOUT / 1000}s (an endless loop?)`
-          : `the top frame didn't run or skip the script within ${RUN_TIMEOUT / 1000}s`;
+            return created.targetId;
+          }),
+          (targetId) =>
+            keep ? Effect.sync(() => void (report.kept = targetId)) : cleanup(() => cdp.send("Target.closeTarget", { targetId }, undefined, CLEANUP_TIMEOUT)),
+        );
 
-        return report;
-      }
+        const session = yield* cdpCall(async () => {
+          const attached = await cdp.send("Target.attachToTarget", { targetId: target, flatten: true });
 
-      await run.waitLoaded(LOAD_GRACE);
+          if (!v.is(v.string(), attached.sessionId)) throw new CdpError("Target.attachToTarget returned no sessionId");
 
-      // Final URL
-      try {
-        const info = await cdp.send("Target.getTargetInfo", { targetId: target });
-        const targetInfo = isCdpObject(info.targetInfo) ? info.targetInfo : undefined;
-        const urlText = v.is(v.string(), targetInfo?.url) ? targetInfo.url : null;
+          await cdp.send("Runtime.enable", {}, attached.sessionId);
+          await cdp.send("Page.enable", {}, attached.sessionId);
 
-        report.final_url = urlText || null;
-      } catch {}
+          return attached.sessionId;
+        });
 
-      // Expect & listen
-      report.expect = await listenExpect(cdp, session, expectExpr, wait);
+        run.topSession = session;
 
-      // Check frames
-      if (!build.meta.noframes) {
-        const counted = await evaluatePlain(cdp, session, 'document.querySelectorAll("iframe, frame").length');
-        const frames = v.is(v.number(), counted) ? counted : 0;
-        const reported = report.frames.filter((f) => !f.top && (f.state === "done" || f.state === "skip")).length;
+        // The script, registered at document start: taken out again with the scope, unless the tab is kept.
+        yield* Effect.acquireRelease(
+          cdpCall(async () => {
+            const added = await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: run.source }, session);
 
-        if (frames > reported) {
-          report.warnings.push(
-            `${frames - reported} of the page's ${frames} iframes never reported back: they hadn't loaded, or they show ` +
-              "an extension's or the browser's own page, which Bay's control connection never reaches (a --port test " +
-              "server does)",
-          );
+            return v.is(v.string(), added.identifier) && added.identifier ? added.identifier : null;
+          }),
+          (identifier) =>
+            identifier && !keep ? cleanup(() => cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier }, session, CLEANUP_TIMEOUT)) : Effect.void,
+        );
+
+        if (!build.meta.noframes) {
+          yield* cdpCall(() => cdp.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, session));
         }
-      }
 
-      if (screenshotPath) {
-        report.screenshot = await captureScreenshot(cdp, session, screenshotPath, report);
-      }
-    } catch (error) {
-      if (error instanceof ConnectionLost) {
-        throw new EndpointError(!endpoint.explicit ? NOT_REACHABLE : redact(`lost the connection to ${endpoint.source}`));
-      }
+        const navigated = yield* cdpCall(() => cdp.send("Page.navigate", { url }, session, RUN_TIMEOUT));
 
-      if (error instanceof CdpError) {
-        report.error = redact(error.message);
-      } else {
-        report.error = error instanceof Error ? error.message : String(error);
-      }
-    }
+        if (navigated.errorText) {
+          report.error = `couldn't open ${url}: ${navigated.errorText}`;
 
-    return report;
-  } finally {
-    if (target && keep) {
-      report.kept = target;
-    } else {
-      if (scriptId && run.topSession) {
-        try {
-          await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: scriptId }, run.topSession, CLEANUP_TIMEOUT);
-        } catch {}
-      }
+          return;
+        }
 
-      if (target) {
-        try {
-          await cdp.send("Target.closeTarget", { targetId: target }, undefined, CLEANUP_TIMEOUT);
-        } catch {}
-      }
-    }
+        const settled = yield* Effect.promise(() => run.waitTopSettled(RUN_TIMEOUT));
 
-    await cdp.close();
-  }
-}
+        if (!settled || !run.topSettled) {
+          report.error = report.unsettled
+            ? `the script's first pass in the top frame didn't finish within ${RUN_TIMEOUT / 1000}s (an endless loop?)`
+            : `the top frame didn't run or skip the script within ${RUN_TIMEOUT / 1000}s`;
+
+          return;
+        }
+
+        yield* Effect.promise(() => run.waitLoaded(LOAD_GRACE));
+
+        // Where the page ended up: an answer that doesn't come leaves it unknown.
+        const info = yield* cdpCall(() => cdp.send("Target.getTargetInfo", { targetId: target })).pipe(Effect.catch(() => Effect.succeed(null)));
+        const targetInfo = info && isCdpObject(info.targetInfo) ? info.targetInfo : undefined;
+
+        if (info) report.final_url = (v.is(v.string(), targetInfo?.url) ? targetInfo.url : null) || null;
+
+        report.expect = yield* listenExpect(cdp, session, expectExpr, wait);
+
+        if (!build.meta.noframes) {
+          const counted = yield* cdpCall(() => evaluatePlain(cdp, session, 'document.querySelectorAll("iframe, frame").length'));
+          const frames = v.is(v.number(), counted) ? counted : 0;
+          const reported = report.frames.filter((f) => !f.top && (f.state === "done" || f.state === "skip")).length;
+
+          if (frames > reported) {
+            report.warnings.push(
+              `${frames - reported} of the page's ${frames} iframes never reported back: they hadn't loaded, or they show ` +
+                "an extension's or the browser's own page, which Bay's control connection never reaches (a --port test " +
+                "server does)",
+            );
+          }
+        }
+
+        if (screenshotPath) report.screenshot = yield* Effect.promise(() => captureScreenshot(cdp, session, screenshotPath, report));
+      });
+
+      // The connection lost is Bay's; any other failure is the report's.
+      yield* steps.pipe(
+        Effect.catch((error) => {
+          if (error instanceof ConnectionLost) {
+            return Effect.fail(new EndpointError(!endpoint.explicit ? NOT_REACHABLE : redact(`lost the connection to ${endpoint.source}`)));
+          }
+
+          return Effect.sync(() => {
+            report.error = redact(error.message);
+          });
+        }),
+      );
+
+      return report;
+    }),
+  );
 
 export function formatReport(report: Report): string {
   const lines: string[] = [];

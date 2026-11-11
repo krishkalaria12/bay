@@ -1,6 +1,8 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as v from "valibot";
 import { addSecret } from "./redact.ts";
 import { expandHome, isRecord } from "./util.ts";
@@ -25,16 +27,27 @@ export type Endpoint = {
 
 export type EndpointChoice = { ws?: string; port?: number; dataDir?: string };
 
-export async function resolveEndpoint(choice: EndpointChoice = {}): Promise<Endpoint> {
-  if (choice.ws) return fromWs(choice.ws, "--ws");
+/** Where the running Bay is: --ws, else --port, else $BAY_CDP_URL, else the data dir's control file. */
+export const resolveEndpoint = (choice: EndpointChoice = {}): Effect.Effect<Endpoint, EndpointError> =>
+  Effect.suspend(() => {
+    if (choice.ws) return endpointOf(() => fromWs(choice.ws!, "--ws"));
 
-  if (choice.port !== undefined) return fromPort(choice.port);
-  const envWs = process.env.BAY_CDP_URL;
+    if (choice.port !== undefined) return fromPort(choice.port);
+    const envWs = process.env.BAY_CDP_URL;
 
-  if (envWs) return fromWs(envWs, "BAY_CDP_URL");
+    if (envWs) return endpointOf(() => fromWs(envWs, "BAY_CDP_URL"));
 
-  return fromControlFile(join(dataRoot(choice.dataDir), "Chromium", CONTROL_FILE));
-}
+    return endpointOf(() => fromControlFile(join(dataRoot(choice.dataDir), "Chromium", CONTROL_FILE)));
+  });
+
+/** The control file's endpoint, as an Effect: Bay isn't reachable when it isn't valid. */
+export const requireControlEffect = (root: string): Effect.Effect<Endpoint, EndpointError> => endpointOf(() => requireControl(root));
+
+const endpointOf = (read: () => Endpoint): Effect.Effect<Endpoint, EndpointError> =>
+  Effect.try({
+    try: read,
+    catch: (error) => (error instanceof EndpointError ? error : new EndpointError(error instanceof Error ? error.message : String(error))),
+  });
 
 export function dataRoot(dataDir?: string): string {
   const root = dataDir || process.env.BAY_DATA_DIR;
@@ -72,25 +85,36 @@ function fromWs(url: string, source: string): Endpoint {
   return { ws: parsed.href, source, explicit: true, active: null };
 }
 
-async function fromPort(port: number): Promise<Endpoint> {
-  if (!Number.isInteger(port) || port <= 0 || port >= 65536) throw new EndpointError(`--port must be between 1 and 65535, not ${port}`);
-  let answer: unknown;
+// How long a plain DevTools server has to answer.
+const PORT_TIMEOUT = Duration.seconds(3);
 
-  try {
-    const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(3000) });
+const fromPort = (port: number): Effect.Effect<Endpoint, EndpointError> =>
+  Effect.gen(function* () {
+    if (!Number.isInteger(port) || port <= 0 || port >= 65536) return yield* Effect.fail(new EndpointError(`--port must be between 1 and 65535, not ${port}`));
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    answer = await response.json();
-  } catch (error) {
-    throw new EndpointError(`no DevTools server answers on 127.0.0.1:${port} (${reason(error instanceof Error ? error : String(error))})`);
-  }
+    const unreachable = <E>(error: E) =>
+      new EndpointError(`no DevTools server answers on 127.0.0.1:${port} (${reason(error instanceof Error ? error : String(error))})`);
 
-  const ws = isRecord(answer) ? answer.webSocketDebuggerUrl : null;
+    // The request is cancelled with the effect: a server that takes too long is not waited on.
+    const answer = yield* Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal });
 
-  if (!v.is(v.string(), ws)) throw new EndpointError(`127.0.0.1:${port}/json/version has no webSocketDebuggerUrl`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-  return fromWs(ws, `--port ${port}`);
-}
+        const body: unknown = await response.json();
+
+        return body;
+      },
+      catch: unreachable,
+    }).pipe(Effect.timeoutOrElse({ duration: PORT_TIMEOUT, orElse: () => Effect.fail(unreachable(new Error("timed out"))) }));
+
+    const ws = isRecord(answer) ? answer.webSocketDebuggerUrl : null;
+
+    if (!v.is(v.string(), ws)) return yield* Effect.fail(new EndpointError(`127.0.0.1:${port}/json/version has no webSocketDebuggerUrl`));
+
+    return yield* endpointOf(() => fromWs(ws, `--port ${port}`));
+  });
 
 export function fromControlFile(path: string): Endpoint {
   let fd: number;
