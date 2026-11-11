@@ -1,9 +1,9 @@
-import { listTasks, onExtensionsChanged } from "@bay/chromium";
+import { onExtensionsChanged, type EngineTask } from "@bay/chromium";
 import { onAppEvent } from "@bay/desktop";
 import { useTranslate } from "../components/site/pageWorkService";
 import { useBrowser } from "../store/browserStore";
 import { useSync } from "../sync/engine";
-import { capture, endSession, flush, isSharing, startClient } from "./client";
+import { capture, endSession, isSharing, startClient } from "./client";
 import { reportNativeCrashes } from "./errors";
 import { takeOmniboxLatency } from "./track";
 import { EXTENSION_SETTLE_MS } from "./config";
@@ -30,7 +30,7 @@ function emitCounts() {
 const size = <T>(o: Record<string, T>) => Object.keys(o).length;
 
 function watchStore() {
-  useBrowser.subscribe((s, prev) => {
+  return useBrowser.subscribe((s, prev) => {
     if (!isSharing()) return;
 
     if (s.tabs !== prev.tabs) counts.tabs += Math.max(0, size(s.tabs) - size(prev.tabs));
@@ -63,7 +63,8 @@ function profileSwitched(profiles: number) {
 
 function watchSync() {
   let last = useSync.getState().status;
-  useSync.subscribe(({ status }) => {
+
+  return useSync.subscribe(({ status }) => {
     const was = last;
     last = status;
 
@@ -75,7 +76,7 @@ function watchSync() {
 }
 
 function watchTranslate() {
-  useTranslate.subscribe((s, prev) => {
+  return useTranslate.subscribe((s, prev) => {
     if (!isSharing()) return;
 
     for (const tabId in s) if (s[tabId]?.status === "translating" && prev[tabId]?.status !== "translating") capture("translate_used");
@@ -83,46 +84,43 @@ function watchTranslate() {
 }
 
 function watchExtensions() {
-  onExtensionsChanged((e) => {
+  const subscription = onExtensionsChanged((e) => {
     if (e.event === "installed" && Date.now() - startedAt > EXTENSION_SETTLE_MS) capture("extension_installed");
   });
+
+  return () => subscription.remove();
 }
 
 // MARK: Performance
 
 const mb = (bytes: number) => Math.round(bytes / 1_048_576);
 
-async function sampleMemory() {
+/** Records a memory sample from the engine's tasks, read twice a moment apart (usageService.ts takes the reads). */
+export function recordMemorySample(tasks: EngineTask[]) {
   if (!isSharing()) return;
+  let total = 0;
+  let browser = 0;
+  let gpu = 0;
+  let renderers = 0;
 
-  try {
-    await listTasks();
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const tasks = await listTasks();
-    let total = 0;
-    let browser = 0;
-    let gpu = 0;
-    let renderers = 0;
+  for (const t of tasks) {
+    const m = Math.max(0, t.memory);
+    total += m;
 
-    for (const t of tasks) {
-      const m = Math.max(0, t.memory);
-      total += m;
+    if (t.type === "browser") browser += m;
+    else if (t.type === "gpu") gpu += m;
+    else if (t.type === "renderer") renderers++;
+  }
 
-      if (t.type === "browser") browser += m;
-      else if (t.type === "gpu") gpu += m;
-      else if (t.type === "renderer") renderers++;
-    }
-
-    if (!total) return;
-    capture("perf_memory", {
-      total_mb: mb(total),
-      browser_mb: mb(browser),
-      gpu_mb: mb(gpu),
-      renderer_processes: renderers,
-      tabs: size(useBrowser.getState().tabs),
-      uptime_hours: Math.round((Date.now() - startedAt) / HOUR_MS),
-    });
-  } catch {}
+  if (!total) return;
+  capture("perf_memory", {
+    total_mb: mb(total),
+    browser_mb: mb(browser),
+    gpu_mb: mb(gpu),
+    renderer_processes: renderers,
+    tabs: size(useBrowser.getState().tabs),
+    uptime_hours: Math.round((Date.now() - startedAt) / HOUR_MS),
+  });
 }
 
 function emitOmniboxLatency() {
@@ -133,20 +131,14 @@ function emitOmniboxLatency() {
   capture("perf_omnibox", { samples: samples.length, p50_ms: at(0.5), p95_ms: at(0.95), max_ms: samples.at(-1)! });
 }
 
-function hourly() {
+/**
+ * The hourly counts, as the app's grid runs them; the memory sample goes with them (usageService.ts). The counters
+ * it resets are reset whether or not the user shares anything, so the job is needed either way.
+ */
+export function sampleUsage() {
   emitCounts();
   emitOmniboxLatency();
-  void sampleMemory();
 }
-
-/**
- * The hourly sample, as the app's grid runs it. The counters it resets are reset whether or not the user shares
- * anything, so the job is needed either way.
- */
-export const sampleUsage = hourly;
-
-/** The memory sample the app takes once, a while after it starts. */
-export const sampleMemoryOnce = () => sampleMemory();
 
 /** The native crashes of the last run, which the Mac keeps for a while. */
 export const reportNativeCrashesOnce = () => reportNativeCrashes();
@@ -159,14 +151,19 @@ export function startUsage() {
 
     if (session.updatedFrom) capture("app_updated", { from_version: session.updatedFrom });
   }
+}
 
-  watchStore();
-  watchSync();
-  watchTranslate();
-  watchExtensions();
+/**
+ * Watches what the usage counts: the store, sync, translation and the extensions, and the quit that sends the
+ * session's counts. The usage service holds the watch in the app's scope (usageService.ts); the answer stops it.
+ */
+export function watchUsage(): () => void {
+  const quit = onAppEvent((e) => e.type === "willQuit" && sessionEnding());
+  const stops = [watchStore(), watchSync(), watchTranslate(), watchExtensions(), () => quit.remove()];
 
-  // The session ends with the app: the counters go out before the process goes.
-  onAppEvent((e) => e.type === "willQuit" && sessionEnding());
+  return () => {
+    for (const stop of stops) stop();
+  };
 }
 
 export function sessionEnding() {
@@ -175,10 +172,4 @@ export function sessionEnding() {
   emitOmniboxLatency();
   capture("app_session_ended", { duration_minutes: Math.round((Date.now() - startedAt) / 60_000) });
   endSession();
-}
-
-export async function devHourly() {
-  hourly();
-  await new Promise((resolve) => setTimeout(resolve, 2500));
-  await flush();
 }
