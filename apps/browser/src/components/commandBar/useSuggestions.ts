@@ -3,8 +3,6 @@ import {
   findBang,
   customBangTable,
   joinBangTables,
-  createCurrencyConverter,
-  createSuggestFetcher,
   engineById,
   findScope,
   hostOf,
@@ -15,7 +13,9 @@ import {
   type SearchScope,
   type SuggestionResult,
 } from "@bay/core";
+import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useState } from "react";
+import { runDesktop } from "../../effect/runtime";
 import { bookmarksByUrl } from "../../store/bookmarks";
 import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { bookmarkSpaceId } from "../../store/model";
@@ -26,6 +26,7 @@ import { currentBarActions } from "./commandBarActions";
 import { mayBeBang, useBangs } from "./bangs";
 import { NO_HISTORY } from "../../store/constants";
 import { SUGGEST_WARM_SLICE_MS } from "./constants";
+import { SearchService, type Search } from "./searchService";
 
 const NO_REMOTE: string[] = [];
 const EMPTY: SuggestionResult = { items: [], completion: "" };
@@ -126,6 +127,23 @@ function remoteFor(remote: { text: string; list: string[] }, query: string): str
   return remote.list.filter((s) => s.toLowerCase().startsWith(q));
 }
 
+// MARK: The search work
+
+// Each mounted command bar is its own session: its own requests, its own in-flight work.
+let sessions = 0;
+
+const nextSession = () => `suggestions-${++sessions}`;
+
+/** Runs a piece of the search work on the app's runtime. */
+const withSearch = (work: (search: Search) => Effect.Effect<void>): Promise<void> =>
+  runDesktop(
+    Effect.gen(function* () {
+      const search = yield* SearchService;
+
+      yield* work(search);
+    }),
+  );
+
 export function useSuggestions({
   text,
   active,
@@ -180,25 +198,33 @@ export function useSuggestions({
   }, [source]);
 
   const [remote, setRemote] = useState<{ text: string; list: string[] }>({ text: "", list: [] });
-  const [fetcher] = useState(() => createSuggestFetcher({ fetch: (url, init) => fetch(url, init) }));
+  const [session] = useState(nextSession);
   const query = text.trim();
   const [currency, setCurrency] = useState<CurrencyAnswer | null>(null);
-  const [convertCurrency] = useState(() => createCurrencyConverter({ fetch: (url, init) => fetch(url, init) }));
   useEffect(() => {
-    if (!active || !calculatorEnabled || scope || !parseCurrency(query)) return;
-    let cancelled = false;
+    // A query that is not a currency asks for nothing, and drops the answer that is still on its way.
+    if (!active || scope || !parseCurrency(query)) {
+      void withSearch((search) => search.stopConversion(session));
 
+      return;
+    }
+
+    // The rates come after a moment: a query that is still being typed is not a currency yet.
     const timer = setTimeout(() => {
-      void convertCurrency(query).then((answer) => {
-        if (!cancelled) setCurrency(answer);
-      });
+      void withSearch((search) =>
+        search.convert(session, {
+          expression: query,
+          policy: calculatorEnabled ? "ask" : "off",
+          onResult: (answer) => setCurrency(answer),
+        }),
+      );
     }, 180);
 
     return () => {
-      cancelled = true;
       clearTimeout(timer);
+      void withSearch((search) => search.stopConversion(session));
     };
-  }, [active, calculatorEnabled, scope, query, convertCurrency]);
+  }, [active, calculatorEnabled, scope, query, session]);
   const bundledBangs = useBangs(active && bangsEnabled && !scope && query.includes("!"));
   const customBangs = useMemo(() => customBangTable(engines.filter((e) => e.custom)), [engines]);
 
@@ -212,16 +238,27 @@ export function useSuggestions({
   const fromEngine = suggestEngine(scope, engines, engine);
   useEffect(() => {
     const q = query.replace(/^\?/, "").trim();
+    // A query that is an address, a page's history or a bang is the app's own work: the engine is not asked.
+    const wanted = active && !!q && !/^[a-z][a-z0-9+.-]*:\/\//i.test(q) && scope?.kind !== "history" && !bang && !(!scope && pendingBang);
 
-    if (!active || !suggestionsOn || !q || /^[a-z][a-z0-9+.-]*:\/\//i.test(q) || scope?.kind === "history" || bang || (!scope && pendingBang)) {
-      fetcher.cancel();
+    if (!wanted) {
+      void withSearch((search) => search.stopSuggestions(session));
 
       return;
     }
 
-    fetcher.request(fromEngine, q, (list) => setRemote({ text: query, list }));
-  }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, fetcher]);
-  useEffect(() => () => fetcher.cancel(), [fetcher]);
+    void withSearch((search) =>
+      search.suggest(session, {
+        engine: fromEngine,
+        query: q,
+        policy: suggestionsOn ? "ask" : "off",
+        onResult: (list) => setRemote({ text: query, list }),
+      }),
+    );
+  }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, session]);
+
+  // The palette closed: the work in flight goes with it, and the session is let go.
+  useEffect(() => () => void withSearch((search) => search.close(session)), [session]);
 
   if (!active || !query) return EMPTY;
 

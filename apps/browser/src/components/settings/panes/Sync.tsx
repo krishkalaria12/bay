@@ -20,6 +20,7 @@ import { SpaceBadge } from "../../spaces/icons";
 import { Button, Group, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { folderLabel, showConnectDevice, showPhraseEntry, showRecoveryKit, showStopSync } from "./SyncSheets";
+import { SyncStopped } from "../../../sync/service";
 
 export function SyncPane() {
   const theme = useTheme();
@@ -212,8 +213,13 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
 
     if (choice === "kit") showRecoveryKit();
     else if (choice === "copy") await SyncNative?.copyRecoveryPhrase();
-    else if (choice === "now") await syncNow();
-    else if (choice === "reveal" && info) await SyncNative?.revealFolder(info.path);
+    else if (choice === "now") {
+      try {
+        await syncNow();
+      } catch (error) {
+        if (!(error instanceof SyncStopped)) throw error;
+      }
+    } else if (choice === "reveal" && info) await SyncNative?.revealFolder(info.path);
     else if (choice === "stop") showStopSync();
   };
 

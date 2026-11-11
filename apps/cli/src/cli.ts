@@ -1,11 +1,24 @@
+// The bay command: its commands, their flags, and how each one ends.
+//
+// The commands are Effect CLI commands. A handler is an Effect that either succeeds (status 0) or fails with the
+// status the shell sees (exit.ts); what it has to say it prints on the way. A flag the parser rejects is one line on
+// stderr, `bay <command>: <why>`, and status 1; help and the version are printed as the parser builds them.
+import { BunServices } from "@effect/platform-bun";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import { Argument, CliConfig, CliError, CliOutput, Command, Flag, GlobalFlag } from "effect/cli";
 import { readFileSync } from "node:fs";
 import { dataRoot, EndpointError, explicitDataRoot, resolveEndpoint } from "./endpoint.ts";
-import { drainOutput, installOutputRedaction } from "./redact.ts";
+import { CommandExit, exitWith, failWith, messageOf, redactedOutput, say } from "./exit.ts";
 import * as runner from "./runner.ts";
-import { runScriptsCommand } from "./scriptsCli.ts";
+import { dataDirFlag, portFlag, secondsFlag, toggle, wsFlag } from "./cliFlags.ts";
+import { scripts } from "./scriptsCli.ts";
 import { install as installSkills, TARGETS } from "./skills.ts";
 import { VERSION } from "./version.ts";
-import { ArgumentError, numericOption, parseArguments } from "./args.ts";
+import { redact } from "./redact.ts";
 
 export const DESCRIPTION = "Control a running Bay from the terminal.";
 
@@ -27,17 +40,8 @@ Bay keeps running after every exec.
 
 Exit status: 0 done, 1 the code raised or timed out, 2 Bay can't be reached or closed the connection, 130 interrupted.
 
-Examples:
-  bay exec 'await tab.title()'
-  bay exec 't = await newTab("https://example.com"); await t.title()'
-  bay exec -f script.ts --json
-  echo 'tabs.length' | bay exec -
-  bay exec 'await history({ days: 1, domains: true })' --json
-`;
-
-export const EXEC_EPILOG = `Endpoint: --ws, else --port (plain DevTools servers only), else $BAY_CDP_URL, else
-<data dir>/Chromium/BayControl.json with --data-dir or $BAY_DATA_DIR, else the installed Bay's.
-`;
+Endpoint: --ws, else --port (plain DevTools servers only), else $BAY_CDP_URL, else
+<data dir>/Chromium/BayControl.json with --data-dir or $BAY_DATA_DIR, else the installed Bay's.`;
 
 export const SKILLS_DESCRIPTION = `Install the bay agent skill (SKILL.md) so coding agents know how to drive Bay.
 
@@ -46,239 +50,184 @@ Targets and where they install (user level; --project uses the current directory
   codex         ~/.agents/skills            ./.agents/skills
   claude-code   ~/.claude/skills            ./.claude/skills
   cursor        ~/.cursor/skills            ./.cursor/skills
-  opencode      ~/.config/opencode/skills   ./.opencode/skills
-`;
+  opencode      ~/.config/opencode/skills   ./.opencode/skills`;
 
-function printHelp(): void {
-  process.stdout.write(`bay ${VERSION}
+// MARK: exec
 
-${DESCRIPTION}
+// Where the code comes from: the argument, a file, or stdin.
+const readSource = (code: string | null, file: string | null): Effect.Effect<{ source: string; filename: string }, CommandExit> =>
+  Effect.gen(function* () {
+    const stdin = Effect.promise(() => Bun.stdin.text()).pipe(Effect.map((source) => ({ source, filename: "<stdin>" })));
 
-Commands:
-  exec       run code against the running Bay
-  scripts    write, test and install userscripts
-  skills     install the bay agent skill
-  --version  print version
-`);
-}
+    if (file !== null) {
+      if (code !== null) return yield* failWith(1, "bay exec: give CODE or -f FILE, not both");
 
-function printExecHelp(): void {
-  process.stdout.write(`bay exec: run code against the running Bay
+      if (file === "-") return yield* stdin;
 
-${EXEC_DESCRIPTION}
-${EXEC_EPILOG}
-`);
-}
-
-function printSkillsHelp(): void {
-  process.stdout.write(`bay skills: install the bay agent skill
-
-${SKILLS_DESCRIPTION}
-Commands:
-  install [--target TARGET] [--project]
-`);
-}
-
-export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
-  if (argv.length === 1 && (argv[0] === "--version" || argv[0] === "-v")) {
-    process.stdout.write(`bay ${VERSION}\n`);
-
-    return 0;
-  }
-
-  if (!argv.length || argv[0] === "--help" || argv[0] === "-h") {
-    printHelp();
-
-    return 0;
-  }
-
-  const command = argv[0];
-  const rest = argv.slice(1);
-
-  try {
-    if (command === "exec") return await runExec(rest);
-
-    if (command === "skills") return runSkills(rest);
-
-    if (command === "scripts") return await runScriptsCommand(rest);
-  } catch (error) {
-    if (!(error instanceof ArgumentError)) throw error;
-    process.stderr.write(`bay ${command}: ${error.message}\n`);
-
-    return 1;
-  }
-
-  process.stderr.write(`unknown command: ${command}\n`);
-  printHelp();
-
-  return 1;
-}
-
-export async function runExec(args: string[]): Promise<number> {
-  installOutputRedaction();
-
-  try {
-    return await innerRunExec(args);
-  } finally {
-    drainOutput();
-  }
-}
-
-async function innerRunExec(args: string[]): Promise<number> {
-  const { values, positionals } = parseArguments(
-    args,
-    {
-      file: { type: "string", short: "f" },
-      "data-dir": { type: "string" },
-      port: { type: "string" },
-      ws: { type: "string" },
-      timeout: { type: "string" },
-      json: { type: "boolean" },
-      help: { type: "boolean", short: "h" },
-    },
-    1,
-  );
-
-  if (values.help) {
-    printExecHelp();
-
-    return 0;
-  }
-
-  const code = positionals[0] ?? null;
-  const file = values.file;
-  const dataDir = values["data-dir"];
-  const port = numericOption(values.port, "--port");
-  const ws = values.ws;
-  const timeout = numericOption(values.timeout, "--timeout", 300)!;
-  const asJson = values.json ?? false;
-
-  let source = "";
-  let filename = "<exec>";
-
-  if (file) {
-    if (code !== null) {
-      process.stderr.write("bay exec: give CODE or -f FILE, not both\n");
-
-      return 1;
+      return yield* Effect.try({
+        try: () => ({ source: readFileSync(file, "utf8"), filename: file }),
+        catch: (error) => error,
+      }).pipe(Effect.catch((error) => failWith(1, `bay exec: ${messageOf(error)}`)));
     }
 
-    if (file === "-") {
-      source = await Bun.stdin.text();
-      filename = "<stdin>";
-    } else {
-      try {
-        source = readFileSync(file, "utf8");
-        filename = file;
-      } catch (error) {
-        process.stderr.write(`bay exec: ${error instanceof Error ? error.message : String(error)}\n`);
+    if (code === null || code === "-") {
+      if (code === null && process.stdin.isTTY) return yield* failWith(1, "bay exec: give CODE, - (stdin) or -f FILE");
 
-        return 1;
-      }
-    }
-  } else if (code === null || code === "-") {
-    if (code === null && process.stdin.isTTY) {
-      process.stderr.write("bay exec: give CODE, - (stdin) or -f FILE\n");
-
-      return 1;
+      return yield* stdin;
     }
 
-    source = await Bun.stdin.text();
-    filename = "<stdin>";
-  } else {
-    source = code;
-  }
-
-  try {
-    runner.compileCode(source, filename);
-  } catch (error) {
-    runner.printErr(runner.formatSyntaxError(error instanceof Error ? error : new Error(String(error))));
-
-    return 1;
-  }
-
-  let endpoint;
-
-  try {
-    endpoint = await resolveEndpoint({ ws, port, dataDir });
-  } catch (error) {
-    runner.printErr(`bay: ${error instanceof Error ? error.message : String(error)}`);
-
-    return 2;
-  }
-
-  const root = endpoint.explicit ? explicitDataRoot(dataDir) : dataRoot(dataDir);
-
-  let value: unknown;
-
-  try {
-    value = await runner.runCode(source, filename, endpoint, timeout || null, root ?? undefined);
-  } catch (error) {
-    if (error instanceof EndpointError) {
-      runner.printErr(`bay: ${error.message}`);
-
-      return 2;
-    }
-
-    if (error instanceof runner.UserCodeError) {
-      runner.printErr(runner.formatUserError(error));
-
-      return 1;
-    }
-
-    if (error instanceof runner.ExecTimeout) {
-      runner.printErr(`bay exec: ${error.message}`);
-
-      return 1;
-    }
-
-    if (error instanceof runner.ExecInterrupted) return 130;
-    runner.printErr(`bay exec: ${error instanceof Error ? error.message : String(error)}`);
-
-    return 1;
-  }
-
-  try {
-    const text = runner.formatValue(value, asJson);
-
-    if (text !== null) {
-      process.stdout.write(`${text}\n`);
-    }
-  } catch (error) {
-    runner.printErr(`bay exec: can't print the result as JSON (${error instanceof Error ? error.message : String(error)})`);
-
-    return 1;
-  }
-
-  return 0;
-}
-
-export function runSkills(args: string[]): number {
-  if (!args.length || args[0] === "--help" || args[0] === "-h") {
-    printSkillsHelp();
-
-    return 0;
-  }
-
-  if (args[0] !== "install") throw new ArgumentError(`unknown command: ${args[0]}`);
-
-  const { values } = parseArguments(args.slice(1), {
-    project: { type: "boolean" },
-    target: { type: "string", multiple: true },
-    help: { type: "boolean", short: "h" },
+    return { source: code, filename: "<exec>" };
   });
 
-  if (values.help) {
-    printSkillsHelp();
+export const exec = Command.make(
+  "exec",
+  {
+    code: Argument.String("code").pipe(Argument.withDescription("the code to run, or - for stdin"), Argument.optional),
+    file: Flag.String("file").pipe(Flag.withAlias("f"), Flag.withDescription("run FILE (- for stdin)"), Flag.optional),
+    dataDir: dataDirFlag,
+    port: portFlag,
+    ws: wsFlag,
+    timeout: secondsFlag("timeout", 300, "give up after SECONDS (0 never)"),
+    json: toggle("json", "print the value as JSON"),
+  },
+  (input) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* redactedOutput;
 
-    return 0;
-  }
+        const dataDir = Option.getOrUndefined(input.dataDir);
+        const { source, filename } = yield* readSource(Option.getOrNull(input.code), Option.getOrNull(input.file));
 
-  const targets = values.target ?? ["general"];
+        // A syntax error is the user's to fix, before Bay is reached at all.
+        yield* Effect.try({ try: () => runner.compileCode(source, filename), catch: (error) => error }).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => runner.printErr(runner.formatSyntaxError(error instanceof Error ? error : new Error(String(error))))).pipe(
+              Effect.andThen(exitWith(1)),
+            ),
+          ),
+        );
 
-  for (const target of targets) {
-    if (!TARGETS.has(target)) throw new ArgumentError(`invalid target: ${target}. Choices: ${[...TARGETS.keys()].sort().join(", ")}`);
-  }
+        const endpoint = yield* resolveEndpoint({ ws: Option.getOrUndefined(input.ws), port: Option.getOrUndefined(input.port), dataDir }).pipe(
+          Effect.catch((error) => Effect.sync(() => runner.printErr(`bay: ${error.message}`)).pipe(Effect.andThen(exitWith(2)))),
+        );
 
-  return installSkills(targets, values.project ?? false);
+        const root = endpoint.explicit ? explicitDataRoot(dataDir) : dataRoot(dataDir);
+
+        const value = yield* runner.runCodeEffect(source, filename, endpoint, input.timeout || null, root ?? undefined).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              if (error instanceof EndpointError) {
+                runner.printErr(`bay: ${error.message}`);
+
+                return yield* exitWith(2);
+              }
+
+              if (error instanceof runner.UserCodeError) runner.printErr(runner.formatUserError(error));
+              else runner.printErr(`bay exec: ${error.message}`);
+
+              return yield* exitWith(1);
+            }),
+          ),
+        );
+
+        const text = yield* Effect.try({ try: () => runner.formatValue(value, input.json), catch: (error) => error }).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => runner.printErr(`bay exec: can't print the result as JSON (${messageOf(error)})`)).pipe(Effect.andThen(exitWith(1))),
+          ),
+        );
+
+        if (text !== null) yield* say(text);
+      }),
+    ),
+).pipe(
+  Command.withDescription(EXEC_DESCRIPTION),
+  Command.withShortDescription("run code against the running Bay"),
+  Command.withExamples([
+    { command: "bay exec 'await tab.title()'", description: "the title of the page the user is on" },
+    { command: `bay exec 't = await newTab("https://example.com"); await t.title()'`, description: "open a page and read it" },
+    { command: "bay exec -f script.ts --json", description: "run a file, and print its value as JSON" },
+    { command: "echo 'tabs.length' | bay exec -", description: "run code from stdin" },
+    { command: "bay exec 'await history({ days: 1, domains: true })' --json", description: "the last day's history per domain" },
+  ]),
+);
+
+// MARK: skills
+
+const skillsInstall = Command.make(
+  "install",
+  {
+    target: Flag.Literals("target", [...TARGETS.keys()].sort()).pipe(Flag.withDescription("where the skill goes (repeatable)"), Flag.atLeast(0)),
+    project: toggle("project", "install into the current directory instead of your home folder"),
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const status = yield* Effect.sync(() => installSkills(input.target.length ? [...input.target] : ["general"], input.project));
+
+      if (status !== 0) return yield* exitWith(status);
+    }),
+).pipe(
+  Command.withDescription("Install the bay agent skill: --target TARGET (repeatable, default general), --project for the current directory."),
+  Command.withShortDescription("install the skill"),
+);
+
+export const skills = Command.make("skills").pipe(
+  Command.withDescription(SKILLS_DESCRIPTION),
+  Command.withShortDescription("install the bay agent skill"),
+  Command.withSubcommands([skillsInstall]),
+);
+
+// MARK: The command
+
+export const bay = Command.make("bay").pipe(Command.withDescription(DESCRIPTION), Command.withSubcommands([exec, scripts, skills]));
+
+// The parser's output: help and the version as it builds them, and a rejected invocation as one line on stderr.
+const presenter: CliOutput.Presenter = {
+  present: (event) => {
+    if (event._tag === "Version") return say(`bay ${VERSION}`);
+
+    if (event._tag === "InvalidInvocation") {
+      const [first] = event.errors;
+      // Named as the top command, as the error lines of every bay command are: `bay scripts: ...`.
+      const command = event.commandPath.slice(0, 2).join(" ") || "bay";
+
+      return Effect.sync(() => void process.stderr.write(redact(`${command}: ${first ? first.message : "invalid arguments"}\n`)));
+    }
+
+    return CliOutput.defaultPresenter.present(event);
+  },
+};
+
+/** What the command runs with: Bun's platform, the presenter, and the global flags it keeps. */
+export const cliLayer = Layer.mergeAll(
+  BunServices.layer,
+  CliOutput.layerPresenter(presenter),
+  CliConfig.layer({ builtIns: [GlobalFlag.Help, GlobalFlag.Version, GlobalFlag.Completions] }),
+);
+
+/** The status a run of the command ended with. */
+export const statusOf = (exit: Exit.Exit<unknown, unknown>): number => {
+  if (Exit.isSuccess(exit)) return 0;
+
+  if (Cause.hasInterruptsOnly(exit.cause)) return 130;
+
+  const error = Cause.squash(exit.cause);
+
+  if (error instanceof CommandExit) return error.status;
+
+  // Help the user asked for, or a command with no handler: help, and success. A parse error: status 1.
+  if (error instanceof CliError.ShowHelp) return error.errors.length ? 1 : 0;
+
+  if (CliError.isCliError(error)) return 1;
+
+  process.stderr.write(`bay: ${messageOf(error)}\n`);
+
+  return 1;
+};
+
+/** The command, for these arguments. */
+export const program = (argv: readonly string[]) => Command.runWith(bay, { version: VERSION })(argv).pipe(Effect.provide(cliLayer));
+
+/** Runs the command for `argv` and gives back its status. */
+export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
+  return statusOf(await Effect.runPromiseExit(program(argv)));
 }

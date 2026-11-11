@@ -1,213 +1,85 @@
-import { onDownload, releaseProfile } from "@bay/chromium";
-import {
-  closeWindow,
-  isDarkAppearance,
-  onAppEvent,
-  onCommand,
-  onOpenURLs,
-  onWindowEvent,
-  openWindow,
-  replyToTerminate,
-  setAppearance,
-  setMenuStateParts,
-  setWindowTitle,
-  windowIds,
-  type MenuBookmark,
-  type MenuState,
-} from "@bay/desktop";
+import { type MenuBookmark, type MenuState } from "@bay/desktop";
 import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
 import { useBrowser, type BrowserState } from "../store/browserStore";
-import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId, tabLabel, windowTitle } from "../store/model";
+import { activeTab, bookmarkSpaceId, IDLE_LIVE, tabLabel, windowTitle } from "../store/model";
 import { pinnableSplit, pinRowTitle, splitOf } from "../store/splits";
 import { canGoBack, canGoForward } from "../components/window/historyMenu";
 import type { Bookmarks, BookmarkNode } from "../store/types";
 import { startTidyDownloads } from "./tidyDownloads";
-import { isUtilityWindowId } from "../components/settings/windows";
 import { isInternalTab } from "../components/pages/pageUrls";
 import { sidebarMenuState } from "../components/sidebar/sidebarCommands";
 import { openWindow as createWindow } from "./actions";
 import { openExternalUrls } from "../components/littleBay/actions";
-import { startLittleBayAccess } from "../components/littleBay/access";
-import { startLittleBayPutAway } from "../components/littleBay/putAway";
 import { meetingToJoin } from "../activity/meetingAlerts";
-import { useCalendar } from "../activity/calendar";
-import { everySlowly } from "./throttledTimers";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./appCommands";
 import { startSidebarMoveUndoSync } from "./folderUndo";
-import { flushPersistence, resumePersistence } from "./persist";
+import { beginQuit, cancelQuit } from "./quit";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
-import { extensionMenu, useExtensions } from "../components/extensions/state";
-import { subscribeMenuInputs } from "./menuUpdates";
+import { extensionMenu } from "../components/extensions/state";
+import { desktopRuntime } from "../effect/runtime";
+import { captureException } from "../telemetry/errors";
+import * as Effect from "effect/Effect";
+import { ShellService, type ShellHandlers } from "./shellService";
 
-let quitting = false;
-export const isQuitting = () => quitting;
+/**
+ * Starts the shell: the native listeners are registered and the native chrome is kept in step with the app.
+ *
+ * The runtime owns the service: this module only hands it the app's own handlers.
+ */
+const startShell = (handlers: ShellHandlers): Promise<void> =>
+  desktopRuntime
+    .runPromise(
+      Effect.gen(function* () {
+        const shell = yield* ShellService;
+
+        yield* shell.start(handlers);
+      }),
+    )
+    .catch((cause: unknown) => {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+
+      captureException(error, "console");
+      console.error("The native shell could not start", error);
+    });
 
 export function startNativeSync() {
   const store = useBrowser;
 
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
-  onCommand(runCommand);
+  // The app's own wiring: the sidebar's undo, the window that asks before it closes and the extensions. It stays
+  // here, and it stays synchronous. Little Bay's put-away and shortcut are its service's (startAppServices).
   startSidebarMoveUndoSync();
   startWindowCloseGuard();
   startExtensionsBridge();
-  startLittleBayAccess();
-  startLittleBayPutAway();
-  onOpenURLs(openExternalUrls);
-  onDownload((d) => store.getState().upsertDownload(d));
   startTidyDownloads();
 
+  // The app's own appearance: the Mac is asked about it, and told what the app wants.
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
-  void setAppearance(store.getState().settings.appearance);
-  void isDarkAppearance().then((dark) => store.getState().setAppDark(dark));
 
-  onAppEvent((e) => {
-    const s = store.getState();
+  // The native listeners are the shell's: it registers them once, in its own scope, and gives them back when it
+  // is given back. This only hands it the app's own handlers.
+  void startShell({
+    command: runCommand,
+    appEvent: (event) => {
+      const s = store.getState();
 
-    if (e.type === "appearance") s.setAppDark(e.dark);
+      if (event.type === "appearance") s.setAppDark(event.dark);
 
-    if (e.type === "reopen") createWindow();
+      if (event.type === "reopen") createWindow();
 
-    if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
+      if (event.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
 
-    if (e.type === "willQuit") {
-      quitting = true;
-      flushPersistence({ final: true });
-      void replyToTerminate(true);
-    }
+      // The quit handshake: the app saves what it has and answers, and keeps running when the user calls it off.
+      if (event.type === "willQuit") beginQuit();
 
-    if (e.type === "quitCancelled") {
-      quitting = false;
-      resumePersistence();
-    }
-  });
-
-  onWindowEvent((e) => {
-    const s = store.getState();
-
-    if (e.type === "focus") s.setFocusedWindow(e.id);
-
-    if (e.type === "frame") s.setWindowFrame(e.id, e.frame);
-
-    if (e.type === "close") {
-      if (quitting) return;
-      open.delete(e.id);
-      s.closeWindow(e.id);
-      releaseIfIncognito(e.id, s);
-    }
-  });
-
-  const open = new Set<string>();
-  const titles = new Map<string, string>();
-
-  const releaseIfIncognito = (id: string, s: BrowserState) => {
-    if (s.windows[id]?.incognito) void releaseProfile(incognitoSpaceId(id));
-  };
-
-  const syncWindows = (s: BrowserState, prev?: BrowserState) => {
-    // Open the focused window last so it comes to front.
-    const focused = s.ui.focusedWindowId;
-    const order = s.windowOrder.filter((id) => id !== focused);
-
-    if (focused && s.windows[focused]) order.push(focused);
-
-    for (const id of order) {
-      const w = s.windows[id]!;
-
-      if (!open.has(id)) {
-        open.add(id);
-        titles.set(id, windowTitle(s, id));
-        const profile = engineProfile(w.spaceId);
-        const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.littleBaySize } : {};
-        void openWindow(id, { frame: w.frame, incognito: w.incognito, title: titles.get(id), focus: id === s.ui.focusedWindowId, profile, ...small });
-      }
-    }
-
-    for (const id of Array.from(open)) {
-      if (s.windows[id]) continue;
-      open.delete(id);
-      titles.delete(id);
-      void closeWindow(id);
-
-      if (prev?.windows[id]?.incognito) void releaseProfile(incognitoSpaceId(id));
-    }
-
-    if (prev && s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows && s.spaces === prev.spaces) return;
-
-    for (const id of open) {
-      const title = windowTitle(s, id);
-
-      if (titles.get(id) !== title) {
-        titles.set(id, title);
-        void setWindowTitle(id, title);
-      }
-    }
-  };
-
-  let lastMenu = "";
-  let lastBookmarkMenus: unknown[] = [];
-  let menuTimer: ReturnType<typeof setTimeout> | undefined;
-
-  const syncMenu = () => {
-    menuTimer = undefined;
-    const state = menuState(store.getState());
-    // The bookmark menus are cached per bookmarks tree (bookmarkMenus), so they compare by identity;
-    // stringifying them (thousands of bookmarks) on every store change is what this sync used to spend.
-    const { bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks, ...rest } = state;
-    const bookmarkMenus = [bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks];
-    const json = JSON.stringify(rest);
-    const bookmarksChanged = !bookmarkMenus.every((menu, i) => menu === lastBookmarkMenus[i]);
-
-    if (json === lastMenu && !bookmarksChanged) return;
-    lastMenu = json;
-    lastBookmarkMenus = bookmarkMenus;
-    void setMenuStateParts(state, bookmarksChanged);
-  };
-
-  // The windows open now, without first asking which exist: that answer comes from the main thread, which Chrome's
-  // startup holds, and waiting for it put 20–100 ms before the first frame. Opening one that exists (after a JS reload)
-  // only brings it forward; the ones the store doesn't have close when the answer comes.
-  syncWindows(store.getState());
-  syncMenu();
-  store.subscribe((s, prev) => {
-    syncWindows(s, prev);
-  });
-  subscribeMenuInputs(() => {
-    menuTimer ??= setTimeout(syncMenu, 120);
-  });
-  store.subscribe((s, prev) => {
-    if (s.settings.appearance !== prev.settings.appearance) void setAppearance(s.settings.appearance);
-  });
-  useExtensions.subscribe((e, prev) => {
-    if (e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
-  });
-  // Join Meeting (⌃⌘J) comes and goes with the calendar and the clock, not the store.
-  useCalendar.subscribe((c, prev) => {
-    if (c.events !== prev.events) menuTimer ??= setTimeout(syncMenu, 120);
-  });
-  everySlowly({
-    every: 30_000,
-    run: () => void (menuTimer ??= setTimeout(syncMenu, 120)),
-    needed: () => useCalendar.getState().events.length > 0,
-    watch: (changed) => useCalendar.subscribe(changed),
-  });
-  void windowIds().then((ids) => {
-    const s = store.getState();
-
-    for (const id of ids) {
-      if (!s.windows[id]) {
-        if (!isUtilityWindowId(id)) void closeWindow(id);
-        continue;
-      }
-
-      // One that already existed kept the title it had (openWindow leaves it be): send the current one.
-      const title = windowTitle(s, id);
-      titles.set(id, title);
-      void setWindowTitle(id, title);
-    }
+      if (event.type === "quitCancelled") cancelQuit();
+    },
+    openURLs: openExternalUrls,
+    menu: menuState,
   });
 }
 

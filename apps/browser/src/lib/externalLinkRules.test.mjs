@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { defaultLinkDestination, matchingLinkRule, normalizeExternalLinkRules, validateLinkPattern } from "./externalLinkRules.ts";
 import { mostRecentSpace } from "../store/littleBay.ts";
 import { useBrowser } from "../store/browserStore.ts";
-import { flushPersistence, loadSession, startPersistence } from "./persist.ts";
+import { loadSession } from "./persist.ts";
+import { flushPersistence, startPersistence } from "./persistenceService.ts";
 import { docs } from "../test-native-stub.mjs";
 
 const rule = (pattern, rest = {}) => ({ id: pattern, pattern, destination: { kind: "newWindow" }, ...rest });

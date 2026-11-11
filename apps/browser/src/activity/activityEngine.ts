@@ -1,89 +1,21 @@
-import { onWindowEvent } from "@bay/desktop";
+import * as Effect from "effect/Effect";
 import { useBrowser } from "../store/browserStore";
-import { activeTabId, pinnedPage, viewTabIds } from "../store/model";
-import { everySlowly } from "../lib/throttledTimers";
+import { viewTabIds } from "../store/model";
+import { runDesktop } from "../effect/runtime";
 import { SOURCES } from "./sources";
-import { applyFetch, createFolder, finishCompleting, live, markRead, removeFolder, setStatus, useLive } from "./activityStore";
-import { LiveError, type CompletionState, type LiveFolderKind, type LiveItem, type LiveSourceId, type PullRequestSection } from "./types";
-import { COMPLETION_MS, REFRESH_INTERVAL_MS, STALE_ON_FOCUS_MS } from "./constants";
+import { createFolder, live, markRead, removeFolder } from "./activityStore";
+import { ActivityService } from "./activityService";
+import { LiveError, type LiveFolderKind, type LiveItem, type LiveSourceId } from "./types";
 
-const inflight = new Map<string, Promise<void>>();
-const fetchedSources = new Map<string, Set<LiveSourceId>>();
-
-const SECTION_ORDER: Record<PullRequestSection, number> = { authored: 0, review: 1, team: 2 };
-
-function order(items: LiveItem[]): LiveItem[] {
-  return [...items].sort((a, b) => (SECTION_ORDER[a.section ?? "authored"] ?? 0) - (SECTION_ORDER[b.section ?? "authored"] ?? 0) || b.updatedAt - a.updatedAt);
-}
-
+/** Refreshes a folder: the sources are asked, and the answers land in the store. */
 export function refreshFolder(folderId: string): Promise<void> {
-  const running = inflight.get(folderId);
+  return runDesktop(
+    Effect.gen(function* () {
+      const activity = yield* ActivityService;
 
-  if (running) return running;
-  const task = run(folderId).finally(() => inflight.delete(folderId));
-  inflight.set(folderId, task);
-
-  return task;
-}
-
-async function run(folderId: string) {
-  const folder = live().folders[folderId];
-
-  if (!folder) return;
-  const before = live();
-  setStatus(folderId, { state: before.status[folderId]?.lastFetch ? "updating" : "initializing" });
-  const prev = before.items[folderId] ?? [];
-  const animating = new Set(before.completing[folderId] ?? []);
-  const results = await Promise.allSettled(folder.sources.map((id) => SOURCES[id].fetch(folder)));
-
-  const next: LiveItem[] = [];
-  const failed: { source: LiveSourceId; error: Error }[] = [];
-  results.forEach((r, i) => {
-    const source = folder.sources[i]!;
-
-    if (r.status === "fulfilled") next.push(...r.value);
-    else {
-      failed.push({ source, error: r.reason });
-      next.push(...prev.filter((it) => it.source === source && !animating.has(it.id)));
-    }
-  });
-
-  if (!live().folders[folderId]) return;
-
-  const ids = new Set(next.map((it) => it.id));
-  const missing = prev.filter((it) => !ids.has(it.id) && !animating.has(it.id) && !failed.some((f) => f.source === it.source));
-  const gone: Record<string, CompletionState> = {};
-
-  for (const source of new Set(missing.map((it) => it.source))) {
-    const resolve = SOURCES[source].resolveGone;
-
-    if (!resolve) continue;
-    Object.assign(gone, await resolve(missing.filter((it) => it.source === source)).catch(() => ({})));
-  }
-
-  const firstFailure = failed[0];
-
-  if (firstFailure && failed.length === folder.sources.length && !prev.length && !before.status[folderId]?.lastFetch) {
-    setStatus(folderId, { state: "error", error: describe(firstFailure.source, firstFailure.error) });
-
-    return;
-  }
-
-  const lastSources = fetchedSources.get(folderId);
-  const quiet = new Set(lastSources ? next.flatMap((it) => (lastSources.has(it.source) ? [] : [it.id])) : []);
-  fetchedSources.set(folderId, new Set(folder.sources.filter((id) => !failed.some((f) => f.source === id))));
-  applyFetch(folderId, order(next), gone, Date.now(), quiet);
-
-  if (firstFailure) setStatus(folderId, { state: "error", error: describe(firstFailure.source, firstFailure.error) });
-  const leaving = Object.keys(gone);
-
-  if (leaving.length) setTimeout(() => finishCompleting(folderId, leaving), COMPLETION_MS);
-}
-
-function describe(source: LiveSourceId, error: Error) {
-  if (error instanceof LiveError) return { kind: error.kind, message: error.message, source };
-
-  return { kind: "other" as const, message: String(error?.message ?? error), source };
+      yield* activity.refresh(folderId);
+    }),
+  );
 }
 
 export function statusText(folderId: string, now = Date.now()): string {
@@ -169,74 +101,13 @@ export function deleteLiveFolder(folderId: string) {
 
 // MARK: Background refresh
 
-let started = false;
-const lastNudge = new Map<string, number>();
-
+/** Starts the live folders' refresh: the sweep, and the checks that ask for a folder the user is looking at. */
 export function startLiveEngine() {
-  if (started) return;
-  started = true;
+  void runDesktop(
+    Effect.gen(function* () {
+      const activity = yield* ActivityService;
 
-  const orphans = () => {
-    const s = useBrowser.getState();
-    const folders = live().folders;
-
-    for (const t of Object.values(s.tabs)) if (t.liveItem && !folders[t.liveItem.folderId]) s.updateTab(t.id, { liveItem: undefined });
-  };
-
-  orphans();
-  useLive.subscribe((s, prev) => {
-    if (s.folders !== prev.folders) orphans();
-  });
-
-  useBrowser.subscribe((s, prev) => {
-    if (s.spaces === prev.spaces) return;
-
-    for (const f of Object.values(live().folders)) if (!s.spaces[f.spaceId]) removeFolder(f.id);
-  });
-
-  const due = (id: string, maxAge: number) => {
-    const f = live().folders[id];
-    const st = live().status[id];
-
-    return !!f && (!st?.lastFetch || Date.now() - st.lastFetch >= maxAge);
-  };
-
-  setTimeout(() => live().folderOrder.forEach((id) => void refreshFolder(id)), 2500);
-  everySlowly({
-    every: 30_000,
-    run: () => {
-      for (const id of live().folderOrder) if (due(id, REFRESH_INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
-    },
-    needed: () => live().folderOrder.length > 0,
-    watch: (changed) => useLive.subscribe((s, prev) => s.folderOrder !== prev.folderOrder && changed()),
-  });
-  onWindowEvent((e) => {
-    if (e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void refreshFolder(id);
-  });
-
-  useBrowser.subscribe((s, prev) => {
-    if (s.tabs === prev.tabs) return;
-
-    for (const id in s.tabs) {
-      const t = s.tabs[id]!;
-
-      // Pinned (a tile or a row), it leaves its live folder.
-      if (t.liveItem && pinnedPage(t) && !(prev.tabs[id] && pinnedPage(prev.tabs[id]!))) useBrowser.getState().updateTab(id, { liveItem: undefined });
-    }
-  });
-
-  useBrowser.subscribe((s, prev) => {
-    if (s.windows === prev.windows) return;
-
-    for (const windowId of s.windowOrder) {
-      const before = activeTabId(prev, windowId);
-
-      if (!before || before === activeTabId(s, windowId)) continue;
-      const folderId = s.tabs[before]?.liveItem?.folderId;
-
-      if (!folderId || Date.now() - (lastNudge.get(folderId) ?? 0) < 20_000) continue;
-      lastNudge.set(folderId, Date.now());
-      setTimeout(() => void refreshFolder(folderId), 3000);
-    }
-  });
+      yield* activity.start;
+    }),
+  );
 }

@@ -1,8 +1,9 @@
-import { readDocument, writeDocument } from "@bay/desktop";
+import { readDocument } from "@bay/desktop";
 import { create } from "zustand";
 import { useBrowser } from "../store/browserStore";
 import { sidebarUndoWindow } from "../store/sidebarUndo";
 import type { CompletedItem, CompletionState, FolderStatus, LiveAccount, LiveFolder, LiveFolderKind, LiveItem, LiveSourceId } from "./types";
+import type { SavedDocument } from "../lib/savedDocument";
 import { LIVE_DOC, MAX_COMPLETED_ITEMS, MAX_KNOWN_ITEMS } from "./constants";
 
 export type LiveConfig = {
@@ -110,21 +111,22 @@ export const useLive = create<LiveState>()(() => ({
 export const live = () => useLive.getState();
 export const setLive = (patch: Partial<LiveState> | ((s: LiveState) => Partial<LiveState>)) => useLive.setState(patch);
 
-let timer: ReturnType<typeof setTimeout> | undefined;
-
-useLive.subscribe((s, prev) => {
-  if (PERSISTED.every((k) => s[k] === prev[k])) return;
-  clearTimeout(timer);
-  timer = setTimeout(() => {
+/**
+ * The live folders' document, as the app's saving keeps it (lib/persistenceService.ts): a change is written with the
+ * session's own, so a burst of them is one write, a write that fails is tried again, and the quit saves it too.
+ */
+export const liveFoldersDocument: SavedDocument = {
+  name: LIVE_DOC,
+  json: () => {
     const s = live();
 
-    try {
-      writeDocument(LIVE_DOC, JSON.stringify(Object.fromEntries(PERSISTED.map((k) => [k, s[k]]))));
-    } catch (error) {
-      console.warn("Couldn't save live folders", error);
-    }
-  }, 800);
-});
+    return JSON.stringify(Object.fromEntries(PERSISTED.map((k) => [k, s[k]])));
+  },
+  watch: (changed) =>
+    useLive.subscribe((s, prev) => {
+      if (!PERSISTED.every((k) => s[k] === prev[k])) changed();
+    }),
+};
 
 let counter = 0;
 const newId = () => `lf-${Date.now().toString(36)}-${(++counter).toString(36)}`;

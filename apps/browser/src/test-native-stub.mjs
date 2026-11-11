@@ -1,6 +1,19 @@
 export const docs = new Map();
 export const readDocument = (name) => docs.get(name) ?? null;
-export const writeDocument = (name, contents) => docs.set(name, contents);
+
+// A test can make a document fail to write, and can see what was written.
+export const writeErrors = new Map();
+export const writes = [];
+
+export const writeDocument = (name, contents) => {
+  writes.push(name);
+
+  const error = writeErrors.get(name);
+
+  if (error) throw error;
+
+  docs.set(name, contents);
+};
 
 // Native file access is opt-in for each test. A synced path by itself has no grant.
 export const localFileAnswers = {
@@ -35,6 +48,7 @@ export const jsReload = { on: false };
 export const isJsReload = () => jsReload.on;
 export const appInfo = { appVersion: "1.0" };
 export const systemInfo = () => ({ ...appInfo });
+export const crashReports = () => Promise.resolve([]);
 export const calendarAuthorization = () => "notDetermined";
 export const requestCalendarAccess = () => Promise.resolve(false);
 export const systemCalendars = () => Promise.resolve([]);
@@ -79,8 +93,78 @@ export const setSidebarMoveUndo = (windowId, available, focus = false) => (sideb
 export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise.resolve());
 export const openWindow = () => Promise.resolve();
 export const onAppEvent = () => ({ remove() {} });
+
+// The updater: what it knows, and what it reports.
+export const updaterAnswers = { state: { available: false }, pending: null };
+
+export const onUpdatePending = (listener) => {
+  updaterAnswers.listener = listener;
+
+  return { remove() {} };
+};
+
+export const updaterState = () => Promise.resolve(updaterAnswers.state);
+export const installPendingUpdate = () => Promise.resolve();
+
+// The engine's own tasks, and the extensions it reports.
+export const listTasks = () => Promise.resolve([]);
+
+export const onExtensionsChanged = () => ({ remove() {} });
+
+// The Mac's capture calls: the clipboard, Downloads, the share menu and Portrait's frame.
+export const copyCaptureImage = () => Promise.resolve(true);
+export const saveCaptureImage = () => Promise.resolve(null);
+export const shareCaptureImage = () => Promise.resolve();
+export const portraitCaptureImage = () => Promise.resolve(null);
+export const copyImage = () => false;
+export const revealFile = () => Promise.resolve();
+
+// Little Bay from any app, Handoff and AppleScript.
+export const setLittleBayHotKey = () => Promise.resolve("off");
+export const setLittleBayMenuBarItem = () => Promise.resolve();
+export const setWindowActivity = () => Promise.resolve();
+export const setScriptState = () => Promise.resolve();
+export const replyToScript = () => Promise.resolve();
+export const onCommand = () => ({ remove() {} });
+export const onNotificationResponse = () => ({ remove() {} });
+export const onScriptCommand = () => ({ remove() {} });
+
+// The Mac's memory and power, and the engine's profiles.
+export const systemState = () => Promise.resolve({ memoryPressure: "normal", physicalMemory: 16 * 2 ** 30, onBattery: false, lowPowerMode: false });
+export const onSystemState = () => ({ remove() {} });
+export const releaseProfile = () => Promise.resolve();
+
+// The settings' protected work: passwords behind Touch ID, clearing data, and recording a shortcut.
+export const cancelShortcutRecording = () => Promise.resolve();
+export const recordShortcut = () => Promise.resolve(null);
+export const exportPasswords = () => Promise.resolve({ status: "cancelled" });
+export const getNeverSavePasswordOrigins = () => Promise.resolve([]);
+export const listPasswords = () => Promise.resolve([]);
+export const unlockPasswords = () => Promise.resolve(false);
+export const clearBrowsingData = () => Promise.resolve();
+
+// The engine's media: its share sources, its cast dialogs and routes, and its own Picture in Picture.
+export const killTask = () => Promise.resolve(true);
+export const getDisplayMediaSources = () => Promise.resolve([]);
+export const onCastDialog = () => ({ remove() {} });
+export const onCastRoutes = () => ({ remove() {} });
+export const showCastDialog = () => Promise.resolve(true);
+export const closeCastDialog = () => Promise.resolve();
+export const watchCastRoutes = () => Promise.resolve();
+export const setDisplayMediaPicker = () => Promise.resolve();
+export const setAutoPictureInPicture = () => Promise.resolve();
+
+// The native side's answer to the app's quit: what it was told.
+export const terminated = [];
+export const replyToTerminate = (ok) => (terminated.push(ok), Promise.resolve());
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();
+
+// The app's notification permission, and the questions the native side asks.
+export const notificationAnswers = { permission: "granted", request: true, settings: 0 };
+export const notificationPermission = () => Promise.resolve(notificationAnswers.permission);
+export const requestNotificationPermission = () => Promise.resolve(notificationAnswers.request);
+export const openNotificationSettings = () => (notificationAnswers.settings++, Promise.resolve());
 export const fetchFavicon = () => Promise.resolve(null);
 export const iconTheme = () => Promise.resolve(null);
 export const cancelDownload = () => Promise.resolve();
@@ -148,9 +232,15 @@ const emitHistory = (change) => {
 
 export const onHistoryChanged = (listener) => (historyListeners.add(listener), { remove: () => historyListeners.delete(listener) });
 
-// Each profile the app asked to watch, in order (Chrome's events reach the app only once it watches).
+/** A change Chrome reports, as the engine does. */
+export const chromeHistoryChange = (change) => emitHistory(change);
+
+// Each profile the app asked to watch, in order (Chrome's events reach the app only once it watches), and how many
+// visits had been moved into Chrome when it asked (the move goes first).
 export const historyWatches = [];
-export const watchHistory = async (profile) => (historyWatches.push(profile), { ok: true });
+export const historyWatchedAfter = [];
+export const historyMoved = [];
+export const watchHistory = async (profile) => (historyWatches.push(profile), historyWatchedAfter.push(historyMoved.length), { ok: true });
 
 const addVisit = (profile, url, title, at) => {
   const db = chromeHistory(profile);
@@ -173,6 +263,8 @@ export const queryHistory = async (profile, maxUrls = 5000, maxVisits = 50) =>
 
 export const addHistoryVisits = async (profile, pages, toleranceMs = 1000) => {
   let added = 0;
+
+  historyMoved.push(pages.length);
 
   for (const page of pages) {
     // One to one: each visit Chrome has accounts for one asked for.
@@ -438,3 +530,28 @@ export const readUserScripts = async () => ({ state: "empty" });
 export const readUserScriptsStatus = async () => null;
 export const writeUserScriptsStatus = async () => {};
 export const onUserScriptsChange = () => ({ remove() {} });
+
+// The engine's extensions: what is installed, and what a test wants to see.
+export const installedExtensions = [];
+
+export const listExtensions = async () => installedExtensions;
+
+export const installExtension = async (options, profile) => {
+  const id = `ext-${installedExtensions.length + 1}`;
+
+  installedExtensions.push({ id, profile, path: options.path, enabled: true, blockedByPolicy: false, state: "ENABLED", errors: [] });
+
+  return id;
+};
+
+export const reloadExtension = async (id, profile) => {
+  const ext = installedExtensions.find((e) => e.id === id && e.profile === profile);
+
+  if (ext) ext.enabled = true;
+};
+
+export const uninstallExtension = async (id, profile) => {
+  const at = installedExtensions.findIndex((e) => e.id === id && e.profile === profile);
+
+  if (at >= 0) installedExtensions.splice(at, 1);
+};

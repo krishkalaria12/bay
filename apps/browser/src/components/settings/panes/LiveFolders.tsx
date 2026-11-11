@@ -4,18 +4,19 @@ import { Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../../lib/theme";
 import { deleteLiveFolder, refreshFolder, statusText } from "../../../activity/activityEngine";
-import { connectGoogleDrive } from "../../../activity/googleAuth";
-import { isMocked } from "../../../activity/net";
 import {
+  cancelConnection,
   connectBitbucket,
   connectConfluence,
   connectGithub,
+  connectGoogleDrive,
   connectNotion,
   disconnect,
-  SOURCES,
   startGithubDeviceFlow,
-  type DeviceFlow,
-} from "../../../activity/sources";
+  type DeviceSignIn,
+} from "../../../activity/connections";
+import { isMocked } from "../../../activity/net";
+import { SOURCES } from "../../../activity/sources";
 import { live, updateConfig, useLive } from "../../../activity/activityStore";
 import type { LiveAccount, LiveSourceId } from "../../../activity/types";
 import { useBrowser } from "../../../store/browserStore";
@@ -205,7 +206,7 @@ function GithubConnect({ busy, run }: ConnectProps) {
   const theme = useTheme();
   const [token, setToken] = useState("");
   const [clientId, setClientId] = useState(live().config.githubClientId);
-  const [flow, setFlow] = useState<DeviceFlow | null>(null);
+  const [flow, setFlow] = useState<DeviceSignIn | null>(null);
   useEffect(() => () => flow?.cancel(), [flow]);
 
   const signIn = () =>
@@ -334,6 +335,9 @@ function ConfluenceConnect({ busy, run }: ConnectProps) {
 function GoogleConnect({ busy, run }: ConnectProps) {
   const [clientId, setClientId] = useState(live().config.googleClientId);
   const [secret, setSecret] = useState("");
+
+  // The sheet closes while Google is signing in: the sign-in ends, and its tab goes with it.
+  useEffect(() => () => cancelConnection("gdrive"), []);
 
   const go = () =>
     void run(async () => {

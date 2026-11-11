@@ -1,13 +1,27 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, test } from "node:test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import { docs, engineBoostCalls } from "@bay/desktop";
 import { engineBoosts, newBoost, DEFAULT_BOOST_COLOR } from "../lib/boosts.ts";
 import { addBoost, setBoostScript, startBoosts, useBoosts } from "../components/boosts/state.ts";
+import { BoostEngine, BoostsService } from "../components/boosts/service.ts";
+import { Documents } from "../effect/ports/documents.ts";
+import { fakeDiagnostics } from "../effect/testing.ts";
 import { useBrowser } from "../store/browserStore.ts";
 import { webviewRef } from "../lib/webviews.ts";
 import { boostsAdapter } from "./boosts.ts";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The Boosts document has one writer: the service that owns it. The test runs it, so the document follows the store
+// the way the app's runtime does.
+const boostsRuntime = ManagedRuntime.make(BoostsService.layer.pipe(Layer.provide(Layer.mergeAll(BoostEngine.layer, Documents.layer, fakeDiagnostics().layer))));
+
+await boostsRuntime.runPromise(Effect.void);
+
+after(() => boostsRuntime.dispose());
 
 test("boost sync carries a boost's look and CSS, never its JavaScript", async () => {
   docs.delete("boosts.json");

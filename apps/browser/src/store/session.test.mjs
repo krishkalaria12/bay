@@ -4,8 +4,9 @@ import { test } from "node:test";
 
 const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
-const { migrateHistoryFile, reloadHistory, startHistory } = await import("../lib/history.ts");
-const { flushPersistence, loadSession, startPersistence } = await import("../lib/persist.ts");
+const { migrateHistoryFile, reloadHistory, startHistory, stopHistory } = await import("../lib/history.ts");
+const { loadSession } = await import("../lib/persist.ts");
+const { flushPersistence, startPersistence } = await import("../lib/persistenceService.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
@@ -206,24 +207,26 @@ test("history.json's move goes before watching Chrome's history; the view then h
   stub.docs.clear();
   stub.historyDbs.clear();
   stub.historyWatches.length = 0;
+  stub.historyWatchedAfter.length = 0;
+  stub.historyMoved.length = 0;
   const now = Date.now();
   const entry = (url, times) => ({ url, title: url, favicon: null, visits: times.length, lastVisit: times.at(-1), visitTimes: times });
   stub.docs.set("history.json", JSON.stringify({ version: 2, history: { default: [entry("https://moved.com/", [now - DAY, now - 1000])] } }));
-  const stop = startHistory();
-  assert.deepEqual(stub.historyWatches, [], "not watched while the file moves");
 
-  for (let i = 0; i < 50 && !S().history.default?.length; i++) await new Promise((r) => setTimeout(r, 10));
-  assert.deepEqual(stub.historyWatches, [""], "watched once it's in");
+  await startHistory();
+
+  assert.deepEqual(stub.historyWatches, [""], "watched once the file is in");
+  assert.ok(stub.historyWatchedAfter[0] > 0, "the visits were moved in before Chrome was watched");
   assert.equal(S().history.default?.[0]?.url, "https://moved.com/");
   assert.equal(S().history.default[0].visits, 2);
-  stop();
+  await stopHistory();
 });
 
 test("history is a view of Chrome's: visits, deletions and a relaunch all read back what Chrome has", async () => {
   reset();
   stub.docs.clear();
   stub.historyDbs.clear();
-  const stop = startHistory();
+  await startHistory();
   await reloadHistory();
   const urls = () => (S().history.default ?? []).map((h) => h.url);
   stub.chromeVisit("", "https://a.com/", "A");
@@ -242,7 +245,7 @@ test("history is a view of Chrome's: visits, deletions and a relaunch all read b
   const before = S().history.default;
   await reloadHistory();
   assert.deepEqual(S().history.default, before);
-  stop();
+  await stopHistory();
 });
 
 // Pinned tabs (0.2.2): ⌘W unloads a pinned tab instead of closing it, and a closed window parks its pins for the

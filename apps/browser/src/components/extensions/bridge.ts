@@ -1,13 +1,8 @@
-import {
-  onExtensionInstallPrompt,
-  onExtensionSidePanel,
-  onExtensionsChanged,
-  onExtensionTabsRequest,
-  resolveExtensionInstallPrompt,
-  webStoreExtensionId,
-  type TabsRequest,
-} from "@bay/chromium";
+import { onExtensionInstallPrompt, onExtensionSidePanel, onExtensionTabsRequest, webStoreExtensionId, type TabsRequest } from "@bay/chromium";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 import { AppState } from "react-native";
+import { desktopRuntime } from "../../effect/runtime";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
 import { useBrowser, type BrowserState } from "../../store/browserStore";
@@ -15,7 +10,7 @@ import { changedIds } from "../../store/recordDiff";
 import { activeTabId, engineProfile } from "../../store/model";
 import { tabForBrowser, usePages } from "../window/pageState";
 import { refreshActionStates } from "./actions";
-import { startExtensionSearchEngines } from "./searchEngines";
+import { ExtensionsService, type Extensions } from "./service";
 import * as state from "./state";
 import {
   activateExtension,
@@ -24,7 +19,6 @@ import {
   extensionProfile,
   findExtension,
   openSidePanel,
-  refreshExtensions,
   showInstallPrompt,
   wantedSidePanels,
   syncSidePanel,
@@ -32,27 +26,23 @@ import {
   windowExtensions,
 } from "./state";
 
+/**
+ * Runs the service's work on the app's runtime. The service is asked for by name, so this module does not depend on
+ * the runtime's own list of services.
+ */
+const run = <A>(work: (extensions: Extensions) => Effect.Effect<A>): void => {
+  void desktopRuntime
+    .context()
+    .then((context) => desktopRuntime.runPromise(work(Context.getUnsafe(ExtensionsService)(context))))
+    .catch((cause: unknown) => console.error("The extensions could not run", cause));
+};
+
 export function startExtensionsBridge() {
+  // The service owns the engine's report and the profiles it reads: it listens once, and gives the registration
+  // back when the app's scope closes.
+  run((extensions) => extensions.start);
+
   onExtensionTabsRequest(openRequestedTab);
-  startExtensionSearchEngines();
-  onExtensionsChanged(({ profile }) => void refreshExtensions(profile));
-
-  const loaded = new Set<string>();
-
-  const loadProfiles = (s: BrowserState) => {
-    for (const id of s.windowOrder) {
-      const profile = extensionProfile(s, id);
-
-      if (loaded.has(profile)) continue;
-      loaded.add(profile);
-      void refreshExtensions(profile);
-    }
-  };
-
-  loadProfiles(useBrowser.getState());
-  useBrowser.subscribe((s, prev) => {
-    if (s.windows !== prev.windows) loadProfiles(s);
-  });
 
   startActionStates();
   startSidePanels();
@@ -108,13 +98,15 @@ function toolbarAnchor(windowId: string, extensionId: string) {
 
 function startActionStates() {
   // Extensions change their action and side panel without telling the app (NNCore has no event for it): look again
-  // every 1.5 s while the app is active. Everything the app itself changes asks at once, below.
-  setInterval(() => {
-    if (AppState.currentState !== "active") return;
-    void refreshActionStates();
+  // every 1.5 s while the app is active (the service's poll). Everything the app itself changes asks at once, below.
+  run((extensions) =>
+    extensions.pollActions(() => {
+      if (AppState.currentState !== "active") return;
+      void refreshActionStates();
 
-    for (const [windowId] of wantedSidePanels()) void syncSidePanel(windowId);
-  }, 1500);
+      for (const [windowId] of wantedSidePanels()) void syncSidePanel(windowId);
+    }),
+  );
   // Actions are the shown tabs' own: a change to a tab in the background doesn't ask again.
   useBrowser.subscribe((s, prev) => {
     if (s.windows !== prev.windows || s.ui.focusedWindowId !== prev.ui.focusedWindowId) return void refreshActionStates();
@@ -228,7 +220,8 @@ function startWebStoreIntegration() {
     const windowId = (tabId && s.tabs[tabId]?.windowId) || s.ui.focusedWindowId || s.windowOrder[0];
 
     if (windowId) showInstallPrompt(windowId, prompt);
-    else void resolveExtensionInstallPrompt(prompt.requestId, false);
+    // No window can show the prompt: the engine is told no, and the service remembers it.
+    else run((extensions) => extensions.answer(prompt.requestId, false));
   });
   const listening = new Map<string, string>();
 

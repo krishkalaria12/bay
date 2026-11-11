@@ -1,4 +1,7 @@
 import { dlopen, FFIType } from "bun:ffi";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import * as v from "valibot";
 import {
   closeSync,
@@ -53,6 +56,7 @@ interface GeneratedManifest {
 export const LOCK_TIMEOUT = 30;
 export const STATUS_TIMEOUT = 10;
 export const STATUS_POLL = 100;
+export const LOCK_POLL = 50;
 export const RENAME_SWAP = 0x2;
 export const AT_FDCWD = -2;
 
@@ -183,25 +187,27 @@ export class Store {
     return true;
   }
 
-  lock(): void {
-    const lockPath = join(this.path, ".lock");
-    const fd = openSync(lockPath, constants.O_RDWR | constants.O_CREAT, 0o600);
-    const deadline = Date.now() + LOCK_TIMEOUT * 1000;
+  /** Takes the store's lock if it is free, and says whether it did. The waiting is lockStore's. */
+  tryLock(): boolean {
+    if (this.lockFd !== null) return true;
 
-    while (true) {
-      const ret = libSystem.symbols.flock(fd, 2 | 4); // LOCK_EX | LOCK_NB
+    const fd = openSync(join(this.path, ".lock"), constants.O_RDWR | constants.O_CREAT, 0o600);
 
-      if (ret === 0) break;
+    if (libSystem.symbols.flock(fd, 2 | 4) === 0) {
+      // LOCK_EX | LOCK_NB
+      this.lockFd = fd;
 
-      if (Date.now() >= deadline) {
-        closeSync(fd);
-        throw new StoreError(`another bay scripts command or Bay has held ${lockPath} for ${LOCK_TIMEOUT}s`);
-      }
-
-      Bun.sleepSync(50);
+      return true;
     }
 
-    this.lockFd = fd;
+    closeSync(fd);
+
+    return false;
+  }
+
+  /** Where the lock is. */
+  get lockPath(): string {
+    return join(this.path, ".lock");
   }
 
   unlock(): void {
@@ -650,29 +656,6 @@ export class Store {
 
     return null;
   }
-
-  waitStatus(generation: number, alive: () => boolean): [string, StatusRecord | null] {
-    const deadline = Date.now() + STATUS_TIMEOUT * 1000;
-
-    while (true) {
-      const status = this.status();
-      const reported = status?.generation;
-
-      if (reported !== undefined && reported >= generation) {
-        return [reported > generation ? "superseded" : "reported", status];
-      }
-
-      if (!alive()) {
-        return ["quit", null];
-      }
-
-      if (Date.now() >= deadline) {
-        return ["timeout", null];
-      }
-
-      Bun.sleepSync(STATUS_POLL);
-    }
-  }
 }
 
 export function metaFromRecord(record: ScriptRecord): Meta {
@@ -793,22 +776,80 @@ export function validateManifest(manifest: GeneratedManifest, jsFiles: Set<strin
   }
 }
 
-export function repairIfPresent(dataRoot: string): string | null {
-  const store = new Store(dataRoot);
+/** Repairs an interrupted change, when there is a store to repair: what it did, or nothing. Holds the lock while it does. */
+export const repairIfPresent = (dataRoot: string): Effect.Effect<string | null, StoreError> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const store = yield* openStore(dataRoot, false);
 
-  try {
-    if (!store.open(false) || (!existsSync(store.scriptsDir) && !store.extensionPresent() && !store.generation())) {
-      return null;
+      if (!store || (!existsSync(store.scriptsDir) && !store.extensionPresent() && !store.generation())) return null;
+
+      yield* lockStore(store);
+
+      if (!existsSync(store.scriptsDir)) mkdirSync(store.scriptsDir, { recursive: true, mode: 0o755 });
+
+      return yield* attempt(() => store.repair());
+    }),
+  );
+
+// MARK: The store's lifetime
+
+/** A store step that threw: its failure, as the store's. */
+const attempt = <A>(run: () => A): Effect.Effect<A, StoreError> =>
+  Effect.try({ try: run, catch: (error) => (error instanceof StoreError ? error : new StoreError(error instanceof Error ? error.message : String(error))) });
+
+/** Opens the store for the scope: nothing when it isn't there and `create` is off. Its lock goes when the scope closes. */
+export const openStore = (dataRoot: string, create: boolean): Effect.Effect<Store | null, StoreError, Scope.Scope> =>
+  Effect.acquireRelease(
+    attempt(() => {
+      const store = new Store(dataRoot);
+
+      return store.open(create) ? store : null;
+    }),
+    (store) => Effect.sync(() => store?.close()),
+  );
+
+/**
+ * Takes the store's lock for the scope, waiting for another bay command or Bay to let go of it, for up to
+ * LOCK_TIMEOUT seconds. The lock is given back when the scope closes.
+ */
+export const lockStore = (store: Store): Effect.Effect<void, StoreError, Scope.Scope> =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const deadline = Date.now() + LOCK_TIMEOUT * 1000;
+
+      while (!(yield* attempt(() => store.tryLock()))) {
+        if (Date.now() >= deadline)
+          return yield* Effect.fail(new StoreError(`another bay scripts command or Bay has held ${store.lockPath} for ${LOCK_TIMEOUT}s`));
+
+        yield* restore(Effect.sleep(Duration.millis(LOCK_POLL)));
+      }
+
+      yield* Effect.addFinalizer(() => Effect.sync(() => store.unlock()));
+    }),
+  );
+
+/** How a wait for Bay's report ended. */
+export type StatusOutcome = "reported" | "superseded" | "quit" | "timeout";
+
+/**
+ * Waits up to STATUS_TIMEOUT seconds for Bay to report `generation`: a newer report supersedes it, and Bay quitting
+ * (`alive` turning false) ends the wait.
+ */
+export const waitForStatus = (store: Store, generation: number, alive: () => boolean): Effect.Effect<[StatusOutcome, StatusRecord | null], StoreError> =>
+  Effect.gen(function* () {
+    const deadline = Date.now() + STATUS_TIMEOUT * 1000;
+
+    for (;;) {
+      const status = yield* attempt(() => store.status());
+      const reported = status?.generation;
+
+      if (reported !== undefined && reported >= generation) return [reported > generation ? "superseded" : "reported", status] as const;
+
+      if (!alive()) return ["quit", null] as const;
+
+      if (Date.now() >= deadline) return ["timeout", null] as const;
+
+      yield* Effect.sleep(Duration.millis(STATUS_POLL));
     }
-
-    store.lock();
-
-    if (!existsSync(store.scriptsDir)) {
-      mkdirSync(store.scriptsDir, { recursive: true, mode: 0o755 });
-    }
-
-    return store.repair();
-  } finally {
-    store.close();
-  }
-}
+  }).pipe(Effect.map(([outcome, status]): [StatusOutcome, StatusRecord | null] => [outcome, status]));

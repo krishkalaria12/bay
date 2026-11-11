@@ -1,4 +1,4 @@
-import { cancelShortcutRecording, menuShortcuts, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/desktop";
+import { menuShortcuts, type HotKeyStatus, type MenuShortcut } from "@bay/desktop";
 import { useEffect, useState } from "react";
 import { useBrowser } from "../../../store/browserStore";
 import type { LittleBayShortcut } from "../../../store/settings";
@@ -6,6 +6,10 @@ import { DEFAULT_LITTLE_BAY_SHORTCUT, useLittleBayAccess } from "../../littleBay
 import { Group, PopUp, Row, SectionHeader, SettingToggle, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { comboId, formatShortcut, ShortcutField } from "./Shortcuts";
+import { withWorkflows } from "../settingsCommands";
+
+// The recorder this pane is: closing it stops its own recording, and no other pane's.
+const RECORDER = "littleBay";
 
 const PUT_AWAY_CHOICES = [
   { value: "1", title: "After 1 hour" },
@@ -27,12 +31,13 @@ export function LittleBaySettings() {
   useEffect(() => {
     void menuShortcuts().then(setMenus);
 
-    return () => void cancelShortcutRecording();
+    // The pane's recording stops with the pane.
+    return () => void withWorkflows((w) => w.stopRecording(RECORDER));
   }, []);
 
   const record = async () => {
     setRecording(true);
-    const combo = await recordShortcut();
+    const combo = await withWorkflows((w) => w.record(RECORDER));
     setRecording(false);
     // A global shortcut needs ⌘, ⌥ or ⌃: a bare key or ⇧ and a key would take typing from every app.
     const modifiers = (combo?.modifiers ?? []).filter((m): m is LittleBayShortcut["modifiers"][number] => m !== "function");
