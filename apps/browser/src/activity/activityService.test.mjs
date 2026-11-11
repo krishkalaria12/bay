@@ -78,6 +78,12 @@ const withService = async (use) => {
   }
 };
 
+// Waits until the sources were asked `count` times: a slow machine takes longer to get there, and a fixed wait would
+// race it.
+const untilAsked = async (lab, count) => {
+  for (let i = 0; i < 1000 && lab.asked.length < count; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+};
+
 const refresh = (runtime, folderId) =>
   runtime.runPromise(
     Effect.gen(function* () {
@@ -99,7 +105,7 @@ test("a folder is refreshed once at a time: the second ask waits for the first",
 
     const first = refresh(runtime, folderId);
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await untilAsked(lab, 2);
 
     assert.deepEqual(lab.asked, ["github", "bitbucket"]);
 
@@ -148,7 +154,8 @@ test("a folder that was deleted while it refreshed writes nothing", async () => 
 
     const refreshing = refresh(runtime, folderId);
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // The folder goes while its request is out.
+    await untilAsked(lab, 1);
     removeFolder(folderId);
     lab.release();
     await refreshing;
