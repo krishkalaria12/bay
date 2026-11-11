@@ -14,7 +14,7 @@ const { AppIntegrationService, IntegrationEngine } = await import("./appIntegrat
 const S = () => useBrowser.getState();
 
 const withIntegration = async (use) => {
-  const lab = { activities: [], states: [], replies: [], scriptListeners: [], commandListeners: [], responseListeners: [] };
+  const lab = { activities: [], states: [], replies: [], scriptListeners: [], commandListeners: [], responseListeners: [], heldActivity: null };
 
   const listen = (list) => (listener) =>
     Effect.sync(() => {
@@ -27,7 +27,18 @@ const withIntegration = async (use) => {
     onCommand: listen("commandListeners"),
     onNotificationResponse: listen("responseListeners"),
     onScriptCommand: listen("scriptListeners"),
-    setWindowActivity: (windowId, url, title) => Effect.sync(() => void lab.activities.push({ windowId, url, title })),
+    setWindowActivity: (windowId, url, title) =>
+      Effect.suspend(() => {
+        lab.activities.push({ windowId, url, title });
+
+        if (lab.heldActivity?.windowId !== windowId) return Effect.void;
+
+        const held = lab.heldActivity;
+
+        lab.heldActivity = null;
+
+        return Effect.promise(() => held.promise);
+      }),
     setScriptState: (state) => Effect.sync(() => void lab.states.push(state)),
     replyToScript: (id, result, error) => Effect.sync(() => void lab.replies.push({ id, result, error })),
   });
@@ -121,6 +132,33 @@ test("a script's command is answered once, after the state it changed", async ()
       ],
     );
     assert.deepEqual(lab.replies[0].result, { done: true });
+  });
+});
+
+test("a delayed Handoff update cannot publish an older page for another window", async () => {
+  await withIntegration(async ({ lab, service, handlers, advance, settle }) => {
+    const first = S().windowOrder[0] ?? S().createWindow();
+    const second = S().createWindow({ url: "https://example.com/old" });
+    const tab = S().windows[second].activeTabIds[S().windows[second].spaceId];
+    const held = Promise.withResolvers();
+
+    lab.heldActivity = { windowId: first, promise: held.promise };
+
+    await service((integration) => integration.start(handlers));
+
+    try {
+      await advance(1_000);
+      assert.equal(lab.activities.length, 1, "the first window's update is still pending");
+      S().updateTab(tab, { url: "https://example.com/new", title: "New" });
+      await advance(250);
+
+      assert.equal(lab.activities.at(-1).url, "https://example.com/new");
+    } finally {
+      held.resolve();
+      await settle();
+    }
+
+    assert.equal(lab.activities.filter((activity) => activity.windowId === second).at(-1).url, "https://example.com/new");
   });
 });
 

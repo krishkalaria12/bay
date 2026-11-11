@@ -186,10 +186,13 @@ export class AppIntegrationService extends Context.Service<
 
       const syncHandoff = (): Effect.Effect<void> =>
         Effect.gen(function* () {
-          const s = useBrowser.getState();
+          for (const id of useBrowser.getState().windowOrder) {
+            // Earlier native updates may have waited while this window changed or closed.
+            const current = useBrowser.getState();
 
-          for (const id of s.windowOrder) {
-            const { url, title } = windowActivity(s, id);
+            if (!current.windows[id]) continue;
+
+            const { url, title } = windowActivity(current, id);
             const key = `${url}\n${title}`;
 
             if (told.get(id) === key) continue;
@@ -199,7 +202,7 @@ export class AppIntegrationService extends Context.Service<
             yield* engine.setWindowActivity(id, url, title || null).pipe(Effect.catch(report));
           }
 
-          for (const id of told.keys()) if (!s.windows[id]) told.delete(id);
+          for (const id of told.keys()) if (!useBrowser.getState().windows[id]) told.delete(id);
         });
 
       // MARK: AppleScript
