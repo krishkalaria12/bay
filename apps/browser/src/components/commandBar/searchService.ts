@@ -4,7 +4,15 @@
 // it, and the palette closing takes the work with it. The debounce and the cache stay where they have always been —
 // in the shared fetcher, which the desktop and the phone both use — and the service owns the generations and the
 // lifetime around it.
-import { createCurrencyConverter, createSuggestFetcher, type CurrencyAnswer, type FetchLike, type SearchEngine, type SuggestFetcher } from "@bay/core";
+import {
+  createCurrencyConverter,
+  createSuggestFetcher,
+  MAX_BANG_LIST_CHARS,
+  type CurrencyAnswer,
+  type FetchLike,
+  type SearchEngine,
+  type SuggestFetcher,
+} from "@bay/core";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
@@ -126,9 +134,6 @@ const BANG_LIST_URL = "https://services.helium.imput.net/bangs.json";
 
 /** How long the bang list may take. */
 const BANG_LIST_TIMEOUT_MS = 10_000;
-
-/** The largest bang list the app keeps. */
-const MAX_BANG_LIST_CHARS = 5_000_000;
 
 /** What the bang list's answer was. */
 export type BangListReply = {
