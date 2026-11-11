@@ -369,3 +369,38 @@ test("a command that goes through reads the profile again", async () => {
     assert.deepEqual(lab.listed, [profile], "the profile was read again");
   });
 });
+
+test("an accepted install is read again after a moment, and once more later", async () => {
+  await withExtensions(async ({ lab, runtime, service }) => {
+    await runtime.runPromise(service.refreshAfterInstall("default"));
+    assert.equal(lab.listed.length, 0, "not at once");
+
+    await runtime.runPromise(TestClock.adjust(1500));
+    assert.deepEqual(lab.listed, ["default"]);
+
+    await runtime.runPromise(TestClock.adjust(3500));
+    assert.deepEqual(lab.listed, ["default", "default"], "five seconds after the install");
+
+    await runtime.runPromise(TestClock.adjust(60_000));
+    assert.equal(lab.listed.length, 2, "and no more");
+  });
+});
+
+test("the toolbar's actions are looked at by one poll, which ends with the app's scope", async () => {
+  let ticks = 0;
+
+  await withExtensions(async ({ runtime, service }) => {
+    await runtime.runPromise(service.pollActions(() => ticks++));
+    await runtime.runPromise(service.pollActions(() => ticks++));
+    await runtime.runPromise(TestClock.adjust(0));
+    assert.equal(ticks, 1, "one poll, however many ask");
+
+    await runtime.runPromise(TestClock.adjust(1500 * 3));
+    assert.equal(ticks, 4);
+  });
+
+  const after = ticks;
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(ticks, after, "the closed scope's poll looks no more");
+});

@@ -16,11 +16,14 @@ import {
   type InstalledExtension,
 } from "@bay/chromium";
 import { confirm, showMenu } from "@bay/desktop";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../../effect/runtime";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
 import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { activeTabId, engineProfile } from "../../store/model";
 import { openSettings } from "../settings/windows";
+import { ExtensionsService } from "./service";
 import { closeSidePanelsOf, toggleSidePanel } from "./sidePanels";
 import { browserIdOf, extensionProfile, pageProfile, shownIn, useExtensions, windowExtensions, type Anchor } from "./store";
 
@@ -143,7 +146,13 @@ export async function confirmInstall() {
     useExtensions.setState({ install: null });
     await resolveExtensionInstallPrompt(request.prompt.requestId, true);
 
-    for (const ms of [1500, 5000]) setTimeout(() => void refreshExtensions(request.profile), ms);
+    void runDesktop(
+      Effect.gen(function* () {
+        const extensions = yield* ExtensionsService;
+
+        yield* extensions.refreshAfterInstall(request.profile);
+      }),
+    );
 
     return;
   }

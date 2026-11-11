@@ -25,6 +25,13 @@ import { extensionProfile, useExtensions } from "./store";
 const FIRST_RECONCILE_DELAY = Duration.millis(3000);
 const RECONCILE_DELAY = Duration.millis(400);
 
+// An install the user accepted is finished by the engine on its own: it is read again after these.
+const INSTALL_SETTLE_FIRST = Duration.millis(1500);
+const INSTALL_SETTLE_LAST = Duration.millis(3500);
+
+// How often the toolbar's actions are looked at again: the engine has no event for them.
+const ACTION_POLL = Duration.millis(1500);
+
 /** The extensions could not be read, changed or installed. */
 export class ExtensionFailure extends TaggedError("ExtensionFailure")<{
   readonly operation: Operation;
@@ -160,6 +167,10 @@ export class ExtensionsService extends Context.Service<
     readonly uninstall: (id: string, profile: string) => Effect.Effect<void, ExtensionFailure>;
     /** Answers the engine's question about an extension's permissions. */
     readonly answer: (requestId: string, accepted: boolean) => Effect.Effect<void>;
+    /** Reads a profile again a moment after an install the user accepted, and once more later: the engine finishes it on its own. */
+    readonly refreshAfterInstall: (profile: string) => Effect.Effect<void>;
+    /** Looks again at the toolbar actions every 1.5 s, in the app's scope: the engine has no event for them. Once. */
+    readonly pollActions: (tick: () => void) => Effect.Effect<void>;
   }
 >()("bay/ExtensionsService") {
   static readonly layer = Layer.effect(
@@ -380,6 +391,43 @@ export class ExtensionsService extends Context.Service<
         release = undefined;
       });
 
+      // The engine finishes an accepted install on its own: the profile is read again after a moment, and once more
+      // after a while, in the app's scope.
+      const refreshAfterInstall = (profile: string): Effect.Effect<void> =>
+        Effect.forkIn(
+          Effect.gen(function* () {
+            yield* Effect.sleep(INSTALL_SETTLE_FIRST);
+            yield* refresh(profile, false);
+            yield* Effect.sleep(INSTALL_SETTLE_LAST);
+            yield* refresh(profile, false);
+          }),
+          scope,
+        ).pipe(Effect.asVoid);
+
+      // The toolbar's actions change without an event: one poll, however many windows, until the app's scope closes.
+      let polling = false;
+
+      const pollActions = (tick: () => void): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          if (polling) return;
+
+          polling = true;
+
+          yield* Effect.forkIn(
+            Effect.sync(tick).pipe(
+              Effect.catchDefect((defect) => reportDefect({ name: "extensions.actions" }, defect)),
+              Effect.andThen(Effect.sleep(ACTION_POLL)),
+              Effect.forever,
+              Effect.ensuring(
+                Effect.sync(() => {
+                  polling = false;
+                }),
+              ),
+            ),
+            scope,
+          );
+        });
+
       return ExtensionsService.of({
         start,
         stop,
@@ -388,6 +436,8 @@ export class ExtensionsService extends Context.Service<
         update,
         uninstall,
         answer,
+        refreshAfterInstall,
+        pollActions,
       });
     }),
   );

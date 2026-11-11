@@ -98,13 +98,15 @@ function toolbarAnchor(windowId: string, extensionId: string) {
 
 function startActionStates() {
   // Extensions change their action and side panel without telling the app (NNCore has no event for it): look again
-  // every 1.5 s while the app is active. Everything the app itself changes asks at once, below.
-  setInterval(() => {
-    if (AppState.currentState !== "active") return;
-    void refreshActionStates();
+  // every 1.5 s while the app is active (the service's poll). Everything the app itself changes asks at once, below.
+  run((extensions) =>
+    extensions.pollActions(() => {
+      if (AppState.currentState !== "active") return;
+      void refreshActionStates();
 
-    for (const [windowId] of wantedSidePanels()) void syncSidePanel(windowId);
-  }, 1500);
+      for (const [windowId] of wantedSidePanels()) void syncSidePanel(windowId);
+    }),
+  );
   // Actions are the shown tabs' own: a change to a tab in the background doesn't ask again.
   useBrowser.subscribe((s, prev) => {
     if (s.windows !== prev.windows || s.ui.focusedWindowId !== prev.ui.focusedWindowId) return void refreshActionStates();
