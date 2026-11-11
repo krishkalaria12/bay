@@ -16,6 +16,7 @@ import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
+import { useThemeColor } from "heroui-native";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, View } from "react-native";
@@ -25,8 +26,10 @@ import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { tick } from "@/chrome/haptics";
+import { Icon } from "@/chrome/Icon";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Text } from "@/chrome/Text";
+import { iconSize } from "@/chrome/tokens";
 import { crashReportText, crashReports } from "@/crashReports";
 import { t as translate, useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
@@ -83,6 +86,7 @@ const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLo
 export function BrowserScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const t = useT();
+  const muted = useThemeColor("muted");
   // An open sheet is modal for screen readers: the browser behind it steps out of their way. Toasts stay, since they
   // answer what was done in the sheet.
   const behindSheet = hiddenFromScreenReaders(useSheetOpen());
@@ -767,13 +771,17 @@ export function BrowserScreen(): JSX.Element {
                 />
               </View>
               {/* The backdrop's label says this; touches pass through to it. */}
-              <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="items-center">
-                <Text variant="subhead" tone="muted">
+              <View
+                pointerEvents="none"
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                className="items-center"
+                style={{ gap: 2 }}
+              >
+                <Text variant="subhead" weight="medium" tone="muted">
                   {t("start.tapToSearch")}
                 </Text>
-                <Text variant="subhead" tone="muted" style={{ marginTop: 2 }}>
-                  ↓
-                </Text>
+                <Icon name="down" color={muted} size={iconSize.small} />
               </View>
             </View>
           </View>

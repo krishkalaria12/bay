@@ -61,7 +61,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
                 <Text modifiers={[font({ size: 15, weight: "medium" }), truncationMode("tail")]}>{site}</Text>
               </HStack>
             ) : (
-              <Image systemName="magnifyingglass" modifiers={[frame({ width: 92 })]} />
+              <Image systemName="magnifyingglass" modifiers={[font({ size: 17, weight: "medium" }), frame({ width: 92, height: 20 })]} />
             )}
           </Button>
         </Host>

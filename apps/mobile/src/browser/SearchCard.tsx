@@ -13,11 +13,12 @@ import { Icon } from "@/chrome/Icon";
 import { SPRING, useReducedMotion } from "@/chrome/motion";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
-import { inputFont } from "@/chrome/tokens";
+import { iconSize, inputFont, radius, space } from "@/chrome/tokens";
 import { useT, type Translate } from "@/i18n";
 import type { BrowserData } from "@/store/types";
 import { resolveAddress } from "./address";
 import { SiteIcon } from "./SiteIcon";
+import { siteName } from "./siteName";
 import { useSuggestions, type Row } from "./useSuggestions";
 
 export type OpenTarget = { kind: "url"; url: string } | { kind: "tab"; id: string } | { kind: "archived"; id: string };
@@ -252,9 +253,10 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
               onPress={() => {
                 void pasteAndGo();
               }}
-              className="mt-2 h-10 flex-row items-center gap-2 rounded-2xl px-3 active:bg-black/5 dark:active:bg-white/10"
+              className="flex-row items-center active:bg-black/5 dark:active:bg-white/10"
+              style={{ marginTop: space.xs, minHeight: 44, gap: space.md, paddingHorizontal: space.md, borderRadius: radius.control }}
             >
-              <Icon name="copy" color={secondary} size={18} />
+              <Icon name="copy" color={secondary} size={iconSize.row} />
               <Text variant="callout" color={text}>
                 {t("search.pasteAndGo")}
               </Text>
@@ -262,7 +264,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
           )}
 
           {pins.length && !query ? (
-            <View className="mt-2.5 flex-row gap-2.5">
+            <View className="flex-row" style={{ marginTop: space.sm, gap: space.sm }}>
               {pins.map((site, index) => (
                 <Pressable
                   key={site.id}
@@ -270,9 +272,13 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                   accessibilityRole="button"
                   accessibilityLabel={site.title || displayUrl(site.url)}
                   onPress={() => onOpen({ kind: "url", url: site.url })}
-                  className="h-14 flex-1 items-center justify-center rounded-2xl bg-black/5 active:bg-black/10 dark:bg-white/10"
+                  className={privately ? "flex-1 items-center bg-white/10 active:bg-white/20" : "flex-1 items-center bg-default active:opacity-70"}
+                  style={{ gap: space.xs + 2, paddingTop: space.md, paddingBottom: space.sm + 2, borderRadius: radius.tile }}
                 >
-                  <SiteIcon url={site.url} size={26} />
+                  <SiteIcon url={site.url} size={28} />
+                  <Text variant="caption" color={text} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
+                    {site.title || siteName(site.url)}
+                  </Text>
                 </Pressable>
               ))}
               {Array.from({ length: 4 - pins.length }, (_, index) => (

@@ -1,4 +1,3 @@
-import { hostOf } from "@bay/core/src/input.ts";
 import { useRef, type JSX } from "react";
 import { View } from "react-native";
 
@@ -6,11 +5,14 @@ import { gridShift, tileArriving, tileLeaving, useReducedMotion } from "@/chrome
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Surface } from "@/chrome/Surface";
 import { Text } from "@/chrome/Text";
+import { radius, rowHeight, space } from "@/chrome/tokens";
 import { useT } from "@/i18n";
 import type { HistoryEntry, PinnedSite } from "@/store/types";
 import { SiteIcon } from "./SiteIcon";
+import { siteName } from "./siteName";
 
 const PINS = 8;
+const PIN_TILE = 60;
 const RECENT = 3;
 
 export interface StartPageProps {
@@ -19,8 +21,6 @@ export interface StartPageProps {
   onOpen: (url: string) => void;
   onUnpin: (site: PinnedSite) => void;
 }
-
-const siteName = (url: string) => hostOf(url).replace(/^www\./, "");
 
 /** Pinned sites and the last few pages, over the wallpaper above "Tap to search". */
 export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): JSX.Element | null {
@@ -68,12 +68,13 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
                 unpinning.current = null;
                 onUnpin(site);
               }}
-              className="w-1/4 items-center gap-1.5"
+              className="w-1/4 items-center"
+              style={{ gap: space.sm }}
               layout={shift}
               entering={arriving}
               exiting={leaving}
             >
-              <Surface radius={20} style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
+              <Surface radius={radius.tile} style={{ width: PIN_TILE, height: PIN_TILE, alignItems: "center", justifyContent: "center" }}>
                 <SiteIcon url={site.url} size={30} />
               </Surface>
               <Text numberOfLines={1} variant="caption" weight="regular" style={{ maxWidth: 76 }}>
@@ -84,7 +85,7 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
         </View>
       ) : null}
       {recent.length ? (
-        <Surface radius={22} style={{ paddingVertical: 4 }}>
+        <Surface radius={radius.card} style={{ paddingVertical: space.xs }}>
           {recent.map((entry, index) => (
             <PressFeedback
               key={entry.url}
@@ -92,17 +93,18 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
               accessibilityRole="button"
               accessibilityLabel={t("start.openSite", { name: entry.title || siteName(entry.url) })}
               onPress={() => onOpen(entry.url)}
-              className="min-h-12 flex-row items-center gap-3 px-4 py-2"
+              className="flex-row items-center"
+              style={{ minHeight: rowHeight, gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.sm }}
               layout={shift}
               entering={arriving}
               exiting={leaving}
             >
-              <SiteIcon url={entry.url} size={22} />
+              <SiteIcon url={entry.url} size={28} />
               <View className="flex-1">
-                <Text numberOfLines={1} variant="callout">
+                <Text variant="callout" weight="medium" numberOfLines={1}>
                   {entry.title || siteName(entry.url)}
                 </Text>
-                <Text numberOfLines={1} variant="footnote" tone="muted">
+                <Text variant="footnote" tone="muted" numberOfLines={1}>
                   {siteName(entry.url)}
                 </Text>
               </View>
