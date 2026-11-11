@@ -7,7 +7,7 @@ import { ActivityService, LiveSources } from "../activity/activityService";
 import { CalendarEngine, CalendarService } from "../activity/calendarService";
 import { LibraryEngine, LibraryService } from "../components/library/libraryService";
 import { SharingEngine, SharingService } from "../components/library/sharingService";
-import { PreviewService } from "../components/site/previewService";
+import { PreviewEngine, PreviewService } from "../components/site/previewService";
 import { Bookmarks, BookmarkEngine } from "../lib/bookmarkService";
 import { History, HistoryEngine } from "../lib/historyService";
 import { AutomationEngine, AutomationService, CliEngine } from "../components/cli/automationService";
@@ -75,7 +75,7 @@ const calendar = CalendarService.layer.pipe(Layer.provide(Layer.mergeAll(Calenda
 
 const automation = AutomationService.layer.pipe(Layer.provide(Layer.mergeAll(AutomationEngine.layer, CliEngine.layer)));
 
-const preview = PreviewService.layer.pipe(Layer.provide(Http.layer));
+const preview = PreviewService.layer.pipe(Layer.provide(Layer.mergeAll(Http.layer, PreviewEngine.layer)));
 
 const search = SearchService.layer.pipe(Layer.provide(SearchNetwork.layer));
 

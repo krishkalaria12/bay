@@ -1,39 +1,21 @@
 import * as v from "valibot";
 import { FadeLabel, Symbol } from "@bay/desktop";
+import * as Effect from "effect/Effect";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useIsSleeping } from "../../lib/tabLifecycle";
-import { webviews } from "../../lib/webviews";
 import { ago } from "../../activity/meetings";
 import { useBrowser } from "../../store/browserStore";
 import { HoverSurface, SmallButton } from "../activity/LiveItemCard";
 import { useHover } from "../ui/primitives";
 import { dismissHover } from "../sidebar/hover";
+import { runDesktop } from "../../effect/runtime";
+import { PreviewService, type SitePreview } from "../site/previewService";
 import type { Anchor } from "../sidebar/state";
-import {
-  fetchScript,
-  githubPullsHeaders,
-  githubPullsUrls,
-  gmailAccount,
-  gmailFeedUrl,
-  parseGithubPulls,
-  parseGmailFeed,
-  previewSiteOf,
-  signedOut,
-  tabPlace,
-  type Fetched,
-  type GithubData,
-  type GmailData,
-  type PreviewSite,
-  type Pull,
-  type Review,
-} from "./knownSites";
+import { gmailAccount, previewSiteOf, type GithubData, type GmailData, type PreviewSite, type Pull, type Review } from "./knownSites";
 
 const FRESH_MS = 60_000;
-
-// A page that never answers (its policy stopped the request) shows as one that didn't, not as loading forever.
-const ANSWER_MS = 8_000;
 const ROWS = 5;
 
 type Answer<T> = { kind: "ready"; data: T } | { kind: "signedOut" } | { kind: "unloaded" } | { kind: "unreadable" };
@@ -41,7 +23,7 @@ type Answer<T> = { kind: "ready"; data: T } | { kind: "signedOut" } | { kind: "u
 type State<T> = Answer<T> | { kind: "loading" };
 
 // The last answer per tab: shown at once on the next hover while a fresh one comes, never older than a minute unasked.
-const answers = new Map<string, { at: number; answer: Answer<unknown> }>();
+const answers = new Map<string, { at: number; answer: Answer<GmailData | GithubData> }>();
 
 /** A test's data for a tab, as if its site had answered (lib/devHarness.ts). */
 export function primePreview(tabId: string, data: GmailData | GithubData) {
@@ -61,40 +43,14 @@ export function useSitePreview(tabId: string | undefined): PreviewSite | null {
   });
 }
 
-async function ask(tabId: string, site: PreviewSite): Promise<Answer<GmailData | GithubData>> {
-  const view = webviews.get(tabId);
-  const tab = useBrowser.getState().tabs[tabId];
+async function ask(tabId: string, site: PreviewSite): Promise<SitePreview> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const preview = yield* PreviewService;
 
-  if (!view || !tab) return { kind: "unloaded" };
-  const place = tabPlace(site, tab.url);
-
-  if (place === "signIn") return { kind: "signedOut" };
-
-  if (place === "elsewhere") return { kind: "unloaded" };
-  const urls = site === "gmail" ? [gmailFeedUrl(gmailAccount(tab.url))] : githubPullsUrls;
-  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), ANSWER_MS));
-  const headers = site === "github" ? githubPullsHeaders : {};
-  const all = await Promise.race([view.evaluate<Fetched[]>(fetchScript(urls, headers)).catch(() => null), timeout]);
-
-  if (!all?.length) return { kind: "unreadable" };
-
-  if (all.some(signedOut)) return { kind: "signedOut" };
-
-  if (site === "gmail") {
-    const f = all[0]!;
-
-    // A fetch the page couldn't make (the tab is on Google's sign-in, another origin) is a signed-out tab too.
-    if ("error" in f) return { kind: "signedOut" };
-    const data = parseGmailFeed(f.body);
-
-    return data ? { kind: "ready", data } : { kind: "unreadable" };
-  }
-
-  const [authored, requested] = all.map((f) => ("error" in f ? null : parseGithubPulls(f.body)));
-
-  if (!authored || !requested) return { kind: "unreadable" };
-
-  return { kind: "ready", data: { authored, requested } };
+      return yield* preview.site(tabId, site);
+    }),
+  );
 }
 
 function usePreviewData<T>(tabId: string, site: PreviewSite): State<T> {
@@ -108,6 +64,9 @@ function usePreviewData<T>(tabId: string, site: PreviewSite): State<T> {
     if (cached && Date.now() - cached.at < FRESH_MS) return;
     let live = true;
     void ask(tabId, site).then((answer) => {
+      // A newer preview for the same tab came in while this one was out: its answer is the one that counts.
+      if (answer.kind === "stale") return;
+
       answers.set(tabId, { at: Date.now(), answer });
 
       if (live) {
@@ -115,7 +74,6 @@ function usePreviewData<T>(tabId: string, site: PreviewSite): State<T> {
         setState(answer as Answer<T>);
       }
     });
-
     return () => {
       live = false;
     };
