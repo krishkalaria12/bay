@@ -9,7 +9,7 @@ import { useBrowser } from "../../store/browserStore";
 import type { SpaceColor } from "../../store/types";
 import { IMPORT_WINDOW_ID, useImportRequest } from "../settings/windows";
 import { emptyCounts, importDiaProfile, openInWebStore, profileColorFor, type ImportCounts, type ExtensionFailure } from "./apply";
-import { DIA_POLL_MS, DONE_DELAY_MS, ENCRYPTED, KINDS } from "./constants";
+import { DONE_DELAY_MS, ENCRYPTED, KINDS } from "./constants";
 import { importModule } from "./module";
 import { ImportFailure, ImportUnavailable, ImportWorkflow, type Workflow } from "./workflow";
 
@@ -469,14 +469,24 @@ export function useImportFlow() {
 
   useEffect(() => {
     if (!api || step !== "dia") return;
-    const timer = diaStatus === "notRunning" ? setInterval(() => void refreshDia(), DIA_POLL_MS) : null;
+    // Dia isn't running: the workflow waits for it, and stops waiting when the flow moves on or closes.
+    const waiting = new AbortController();
+
+    if (diaStatus === "notRunning") {
+      void ask((w) => w.waitForDia(waiting.signal)).then(
+        (status) => {
+          if (!waiting.signal.aborted && status !== "notRunning") void refreshDia();
+        },
+        () => {},
+      );
+    }
 
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active" && (diaStatus === "denied" || diaStatus === "notRunning")) void refreshDia();
     });
 
     return () => {
-      if (timer) clearInterval(timer);
+      waiting.abort();
       sub.remove();
     };
   }, [step, diaStatus, api]);

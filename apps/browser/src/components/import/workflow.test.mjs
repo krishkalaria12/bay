@@ -31,6 +31,8 @@ const bookmarks = (title) => ({ type: "folder", title, children: [{ type: "url",
 
 const fakeEngine = () => {
   const lab = {
+    diaStatuses: [],
+    statusChecks: 0,
     asked: [],
     unlocked: 0,
     forgotten: 0,
@@ -85,7 +87,7 @@ const fakeEngine = () => {
     importBookmarksHTML: () => Effect.succeed({ type: "folder", title: "", children: [] }),
     chooseImportFile: () => Effect.succeed(null),
     safariHasFullDiskAccess: () => true,
-    diaAutomationStatus: () => Effect.succeed("granted"),
+    diaAutomationStatus: () => Effect.sync(() => (lab.statusChecks++, lab.diaStatuses.shift() ?? "granted")),
     requestDiaAutomation: () => Effect.succeed("granted"),
     openDia: () => Effect.void,
     readDiaTabs: () =>
@@ -231,5 +233,41 @@ test("Dia's read waits for a window, and gives up within the launch grace", asyn
     await reading;
     assert.equal(reads, 8);
     assert.equal(lab.reads, 9, "the first read, and one for each retry");
+  });
+});
+
+test("the wait for Dia asks until it runs, and asks nothing once the flow closes", async () => {
+  await withWorkflow(async ({ lab, runtime }) => {
+    const wait = (signal) =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const workflow = yield* ImportWorkflow;
+
+          return yield* workflow.waitForDia(signal);
+        }),
+      );
+
+    lab.diaStatuses.push("notRunning", "notRunning", "granted");
+
+    const waiting = wait(new AbortController().signal);
+
+    for (let i = 0; i < 3; i++) await runtime.runPromise(TestClock.adjust(1_500));
+
+    assert.equal(await waiting, "granted");
+    assert.equal(lab.statusChecks, 3);
+
+    // The flow closed while it waited: nothing more is asked.
+    const closing = new AbortController();
+
+    lab.diaStatuses.push("notRunning");
+
+    const stopped = wait(closing.signal);
+
+    await runtime.runPromise(TestClock.adjust(1_500));
+    closing.abort();
+    await runtime.runPromise(TestClock.adjust(1_500 * 4));
+
+    assert.equal(await stopped, "notRunning");
+    assert.equal(lab.statusChecks, 4, "no ask after the flow closed");
   });
 });

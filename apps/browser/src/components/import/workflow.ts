@@ -189,6 +189,8 @@ export type Workflow = {
   readonly requestDia: () => Effect.Effect<DiaAutomationStatus, ImportFailure | ImportUnavailable>;
   /** Opens Dia. */
   readonly openDia: () => Effect.Effect<void, ImportFailure | ImportUnavailable>;
+  /** Waits for Dia to be running, asking again every little while, and says what it found. Stops when the flow closes. */
+  readonly waitForDia: (signal: AbortSignal) => Effect.Effect<DiaAutomationStatus, ImportFailure | ImportUnavailable>;
   /** Whether this Mac may read Safari's data. */
   readonly safariAccess: () => Effect.Effect<boolean>;
   /** Imports Safari's data, from the export file or from Safari itself. */
@@ -434,6 +436,21 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
           yield* engine.openDia();
         });
 
+      // Dia is not running: it is asked again until it is, or until the flow that waits for it closes. A flow that
+      // closed asks nothing more.
+      const waitForDia = (signal: AbortSignal): Effect.Effect<DiaAutomationStatus, ImportFailure | ImportUnavailable> =>
+        Effect.gen(function* () {
+          for (;;) {
+            yield* Effect.sleep(Duration.millis(DIA_POLL_MS));
+
+            if (signal.aborted) return "notRunning" as const;
+
+            const status = yield* engine.diaAutomationStatus();
+
+            if (status !== "notRunning" || signal.aborted) return status;
+          }
+        });
+
       const importSafari = (request: SafariRequest): Effect.Effect<ImportOutcome, ImportFailure | ImportUnavailable> =>
         Effect.gen(function* () {
           const failed: ImportKind[] = [];
@@ -465,6 +482,7 @@ export class ImportWorkflow extends Context.Service<ImportWorkflow, Workflow>()(
         unlocked: (browserId) => Effect.sync(() => engine.isBrowserUnlocked(browserId)),
         import: importData,
         readDiaTabs,
+        waitForDia,
         diaStatus: () => engine.diaAutomationStatus(),
         requestDia: () => engine.requestDiaAutomation(),
         openDia,
