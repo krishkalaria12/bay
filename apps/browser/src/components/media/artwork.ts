@@ -26,12 +26,14 @@ export function useArtwork(tabId: string, url: string | null | undefined): strin
     // A tab with no page of its own has no artwork to fetch.
     if (!webviews.get(tabId)) return;
 
+    const key = keyOf(tabId, url);
+
     askArtwork({
       tabId,
       url,
       onArtwork: (found) => {
         useArtworks.setState((s) => {
-          const entries = { ...s.entries, [keyOf(tabId, url)]: { uri: found, at: Date.now() } };
+          const entries = { ...s.entries, [key]: { uri: found, at: Date.now() } };
           const keys = Object.keys(entries).sort((a, b) => entries[a]!.at - entries[b]!.at);
 
           for (const old of keys.slice(0, Math.max(0, keys.length - ARTWORK_CACHE_ENTRIES))) delete entries[old];
