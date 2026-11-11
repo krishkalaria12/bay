@@ -372,6 +372,7 @@ export function setSharing(on: boolean, source: SharingSource) {
     askDoneAt: saved.askDoneAt ?? now,
   });
   capture("sharing_turned_on", { source });
+  void startDelivery();
 }
 
 export const dismissAsk = () => save({ askDoneAt: Date.now() });
@@ -445,5 +446,5 @@ export function uuidv7() {
   const ms = Date.now().toString(16).padStart(12, "0");
   const h = hex(18);
 
-  return `${ms.slice(0, 8)}-${ms.slice(8, 12)}-7${h.slice(12, 15)}-${variant()}${h.slice(15, 18)}-${h.slice(18, 29)}`;
+  return `${ms.slice(0, 8)}-${ms.slice(8, 12)}-7${h.slice(0, 3)}-${variant()}${h.slice(3, 6)}-${h.slice(6, 18)}`;
 }
