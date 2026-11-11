@@ -438,10 +438,17 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     decisionHandler(.allow)
   }
 
-  /// Attachments and types WebKit can't show become downloads.
+  /// Attachments and types WebKit can't show become downloads. An HTTP error never does: it is the server's answer
+  /// to show as a page, as Safari and Chrome do. A cancelled sign-in's 401, which often has no body and no
+  /// Content-Type, would otherwise count as a type WebKit can't show and come back as a refused download.
   func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
                decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-    let disposition = (navigationResponse.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
+    let http = navigationResponse.response as? HTTPURLResponse
+    if let status = http?.statusCode, status >= 400 {
+      decisionHandler(.allow)
+      return
+    }
+    let disposition = http?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
     let attachment = disposition.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("attachment")
     decisionHandler(attachment || !navigationResponse.canShowMIMEType ? .download : .allow)
   }
