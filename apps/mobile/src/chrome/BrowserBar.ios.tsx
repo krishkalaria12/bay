@@ -1,5 +1,5 @@
 import { Button, HStack, Host, Image, Text } from "@expo/ui/swift-ui";
-import { accessibilityLabel, buttonStyle, controlSize, font, frame, tint, truncationMode } from "@expo/ui/swift-ui/modifiers";
+import { accessibilityIdentifier, accessibilityLabel, buttonStyle, controlSize, font, frame, tint, truncationMode } from "@expo/ui/swift-ui/modifiers";
 import type { JSX } from "react";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -47,6 +47,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
               ...(prominentTint ? [buttonStyle("glassProminent"), tint(prominentTint)] : [buttonStyle("glass")]),
               controlSize("large"),
               accessibilityLabel(search.label),
+              accessibilityIdentifier(search.id),
             ]}
           >
             {barNewTab(props) ? (

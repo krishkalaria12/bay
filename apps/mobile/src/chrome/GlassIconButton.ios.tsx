@@ -36,6 +36,8 @@ export function GlassIconButton(props: {
             modifiers.buttonBorderShape("circle"),
             modifiers.controlSize("large"),
             modifiers.accessibilityLabel(props.label),
+            // On the button itself, so the accessibility tree names it as tests do; the view around it is only a frame.
+            modifiers.accessibilityIdentifier(props.id),
             modifiers.disabled(props.isDisabled ?? false),
             ...(props.onLongPress ? [modifiers.onLongPressGesture(onLongPress)] : []),
           ]}
