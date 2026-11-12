@@ -13,12 +13,12 @@ import { Icon } from "@/chrome/Icon";
 import { SPRING } from "@/chrome/motion";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
-import { inputFont } from "@/chrome/tokens";
+import { inputFont, space } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { formatDate, useT, type MessageKey } from "@/i18n";
 import type { HistoryEntry } from "@/store/types";
 import { groupByDay, type DayGroupId } from "./historyGroups";
-import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { ActionRow, PanelSheet, SectionLabel, SheetFitEnd } from "./PanelSheet";
 
 const SHOWN = 200;
 
@@ -68,6 +68,7 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
   const [confirming, setConfirming] = useState(false);
   const insets = useSafeAreaInsets();
   const Scrollable = useBottomSheetScrollableCreator();
+  const listBottom = Math.max(insets.bottom, space.gutter) + space.md;
   const t = useT();
   const needle = query.trim().toLowerCase();
   const matches = needle ? history.filter((entry) => entry.title.toLowerCase().includes(needle) || entry.url.toLowerCase().includes(needle)) : history;
@@ -106,25 +107,29 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
   return (
     <PanelSheet visible={visible} onClose={onClose} title={t("history.title")} testID="history-screen" height="85%" listMode>
       {history.length === 0 ? (
-        <>
-          <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
-          <View testID="history-empty" className="py-12">
-            <Text accessibilityRole="header" variant="headline" className="text-center">
-              {t("history.empty")}
-            </Text>
-            <Text variant="subhead" tone="muted" className="mt-2 text-center">
-              {t("history.emptyDetail")}
-            </Text>
+        <SheetFitEnd enabled={!query}>
+          <View style={{ paddingHorizontal: space.gutter, paddingBottom: listBottom }}>
+            <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
+            <View testID="history-empty" className="py-12">
+              <Text accessibilityRole="header" variant="headline" className="text-center">
+                {t("history.empty")}
+              </Text>
+              <Text variant="subhead" tone="muted" className="mt-2 text-center">
+                {t("history.emptyDetail")}
+              </Text>
+            </View>
           </View>
-        </>
+        </SheetFitEnd>
       ) : groups.length === 0 ? (
-        <>
-          <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
-          <Text testID="history-no-matches" accessibilityLiveRegion="polite" tone="muted" className="py-8 text-center">
-            {t("history.noMatches", { query: query.trim() })}
-          </Text>
-          {clearFooter()}
-        </>
+        <SheetFitEnd enabled={!query}>
+          <View style={{ paddingHorizontal: space.gutter, paddingBottom: listBottom }}>
+            <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
+            <Text testID="history-no-matches" accessibilityLiveRegion="polite" tone="muted" className="py-8 text-center">
+              {t("history.noMatches", { query: query.trim() })}
+            </Text>
+            {clearFooter()}
+          </View>
+        </SheetFitEnd>
       ) : (
         <LegendList
           data={rows}
@@ -132,9 +137,14 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
           estimatedItemSize={56}
           keyboardShouldPersistTaps="handled"
           renderScrollComponent={Scrollable}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
+          contentContainerStyle={{ paddingHorizontal: space.gutter, paddingBottom: listBottom }}
           ListHeaderComponent={<SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />}
-          ListFooterComponent={clearFooter()}
+          // The list doesn't report its size through the sheet's scroll view; where its footer ends does.
+          ListFooterComponent={
+            <SheetFitEnd after={listBottom} enabled={!query}>
+              {clearFooter()}
+            </SheetFitEnd>
+          }
           renderItem={({ item }) => {
             if (item.kind === "label") return <SectionLabel>{item.label}</SectionLabel>;
             const entry = item.entry;

@@ -6,10 +6,11 @@ import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text } from "@/chrome/Text";
+import { space } from "@/chrome/tokens";
 import { useT } from "@/i18n";
 import { groupByDay } from "./historyGroups";
 import { DAY_GROUP_LABELS, pageTitle, SearchField, siteName, SiteRow, time } from "./HistoryPanel";
-import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { ActionRow, PanelSheet, SectionLabel, SheetFitEnd } from "./PanelSheet";
 
 type Row = { kind: "label"; label: string } | { kind: "entry"; item: ArchiveItem };
 
@@ -34,6 +35,7 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
   const [confirming, setConfirming] = useState(false);
   const insets = useSafeAreaInsets();
   const Scrollable = useBottomSheetScrollableCreator();
+  const listBottom = Math.max(insets.bottom, space.gutter) + space.md;
   const t = useT();
   useEffect(() => {
     if (visible) setConfirming(false);
@@ -77,22 +79,28 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
   return (
     <PanelSheet visible={visible} onClose={onClose} title={t("archive.title")} testID="archive-screen" height="85%" listMode>
       {items.length === 0 ? (
-        <View testID="archive-empty" className="py-12">
-          <Text accessibilityRole="header" className="text-center">
-            {t("archive.empty")}
-          </Text>
-          <Text variant="subhead" tone="muted" className="mt-2 text-center">
-            {t("archive.emptyDetail")}
-          </Text>
-        </View>
+        <SheetFitEnd enabled={!query}>
+          <View style={{ paddingHorizontal: space.gutter, paddingBottom: listBottom }}>
+            <View testID="archive-empty" className="py-12">
+              <Text accessibilityRole="header" variant="headline" className="text-center">
+                {t("archive.empty")}
+              </Text>
+              <Text variant="subhead" tone="muted" className="mt-2 text-center">
+                {t("archive.emptyDetail")}
+              </Text>
+            </View>
+          </View>
+        </SheetFitEnd>
       ) : groups.length === 0 ? (
-        <>
-          <SearchField testID="archive-search" value={query} onChange={setQuery} placeholder={t("archive.search")} />
-          <Text testID="archive-no-matches" accessibilityLiveRegion="polite" tone="muted" className="py-8 text-center">
-            {t("archive.noMatches", { query: query.trim() })}
-          </Text>
-          {clearFooter()}
-        </>
+        <SheetFitEnd enabled={!query}>
+          <View style={{ paddingHorizontal: space.gutter, paddingBottom: listBottom }}>
+            <SearchField testID="archive-search" value={query} onChange={setQuery} placeholder={t("archive.search")} />
+            <Text testID="archive-no-matches" accessibilityLiveRegion="polite" tone="muted" className="py-8 text-center">
+              {t("archive.noMatches", { query: query.trim() })}
+            </Text>
+            {clearFooter()}
+          </View>
+        </SheetFitEnd>
       ) : (
         <LegendList
           data={rows}
@@ -100,9 +108,14 @@ export function ArchivePanel({ visible, onClose, items, onRestore, onRemove, onC
           estimatedItemSize={56}
           keyboardShouldPersistTaps="handled"
           renderScrollComponent={Scrollable}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
+          contentContainerStyle={{ paddingHorizontal: space.gutter, paddingBottom: listBottom }}
           ListHeaderComponent={<SearchField testID="archive-search" value={query} onChange={setQuery} placeholder={t("archive.search")} />}
-          ListFooterComponent={clearFooter()}
+          // The list doesn't report its size through the sheet's scroll view; where its footer ends does.
+          ListFooterComponent={
+            <SheetFitEnd after={listBottom} enabled={!query}>
+              {clearFooter()}
+            </SheetFitEnd>
+          }
           renderItem={({ item }) => {
             if (item.kind === "label") return <SectionLabel>{item.label}</SectionLabel>;
             const entry = item.item;

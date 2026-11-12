@@ -10,7 +10,7 @@ import { PanelSheetShared, type PanelSheetProps } from "./PanelSheetShared";
 
 export type { PanelSheetProps } from "./PanelSheetShared";
 
-export { ActionRow, Group, SectionLabel, SheetIconButton } from "./PanelSheetShared";
+export { ActionRow, Group, SectionLabel, SheetFitEnd, SheetIconButton } from "./PanelSheetShared";
 
 // iOS: the same sheet contents as Android, over a Liquid Glass background (I6) instead of a solid one.
 export function PanelSheet(props: PanelSheetProps): JSX.Element {

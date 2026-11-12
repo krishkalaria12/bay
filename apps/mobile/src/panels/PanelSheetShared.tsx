@@ -1,7 +1,21 @@
 import { BottomSheetScrollView, type BottomSheetBackgroundProps } from "@gorhom/bottom-sheet";
 import { BottomSheet, useThemeColor } from "heroui-native";
-import { Children, createContext, isValidElement, useContext, useEffect, useState, type FC, type JSX, type ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
+import {
+  Children,
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type FC,
+  type JSX,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -63,6 +77,29 @@ export function PanelSheetShared({
 
   if (visible && !shown) setShown(true);
 
+  // The sheet fits what it holds: it stands as tall as its grabber, its header and its content, up to `height`; longer
+  // content scrolls inside it as before. The header and the content are measured; the grabber's area is fixed.
+  const { height: windowHeight } = useWindowDimensions();
+  const tallest = Math.round((parseFloat(height) / 100) * windowHeight);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const snap = headerHeight && contentHeight ? Math.max(Math.min(GRABBER_AREA + headerHeight + contentHeight + ROUNDING, tallest), SHORTEST_SHEET) : tallest;
+  // A closing sheet unmounts its content, which reports almost no height: keep the open sheet's measure.
+  const open = useRef(visible);
+  open.current = visible;
+
+  const room = useRef<ComponentRef<typeof View>>(null);
+
+  const fit = useMemo(
+    () => ({
+      room,
+      reportContentHeight: (measured: number) => {
+        if (open.current && measured > 0) setContentHeight(measured);
+      },
+    }),
+    [],
+  );
+
   // While it is open the browser behind steps out of VoiceOver and TalkBack (openSheets.ts). It counts from the moment
   // it opens to the moment it is asked to close, not to the end of its animation, so the page is back at once.
   useEffect(() => {
@@ -84,7 +121,7 @@ export function PanelSheetShared({
       <BottomSheet.Portal disableFullWindowOverlay>
         <BottomSheet.Overlay variant="default" isCloseOnPress={dismissible} />
         <BottomSheet.Content
-          snapPoints={[height]}
+          snapPoints={[snap]}
           enableDynamicSizing={false}
           enableOverDrag={false}
           enablePanDownToClose={dismissible}
@@ -99,7 +136,10 @@ export function PanelSheetShared({
             reduceMotion: reduced ? ReduceMotion.Always : ReduceMotion.System,
           }}
           onClose={() => setShown(false)}
+          // HeroUI pads the bottom by the safe area too; the sheet's own content already does, and padded twice every
+          // sheet ended in an empty strip (and fitted sheets came out short of their content).
           contentContainerClassName="h-full"
+          contentContainerProps={{ style: { paddingBottom: 0 } }}
           backgroundClassName={background ? "bg-transparent" : "bg-surface"}
           backgroundStyle={{ borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet }}
           backgroundComponent={background}
@@ -107,6 +147,7 @@ export function PanelSheetShared({
           {/* Modal for VoiceOver: what sits beside the sheet's content inside the sheet is skipped too. */}
           <View testID={testID} className="flex-1" accessibilityViewIsModal>
             <View
+              onLayout={(event) => setHeaderHeight(Math.round(event.nativeEvent.layout.height))}
               className="flex-row items-center"
               style={{
                 gap: space.md,
@@ -136,23 +177,67 @@ export function PanelSheetShared({
               </View>
             </View>
             {listMode ? (
-              <View className="flex-1">{visible || shown ? children : null}</View>
+              <SheetFit.Provider value={fit}>
+                <View ref={room} className="flex-1">
+                  {visible || shown ? children : null}
+                </View>
+              </SheetFit.Provider>
             ) : (
-              <BottomSheetScrollView
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{
-                  paddingLeft: insets.left + space.gutter,
-                  paddingRight: insets.right + space.gutter,
-                  paddingBottom: Math.max(insets.bottom, space.gutter) + space.md,
-                }}
-              >
-                {visible || shown ? children : null}
-              </BottomSheetScrollView>
+              <View className="flex-1">
+                <BottomSheetScrollView
+                  keyboardShouldPersistTaps="handled"
+                  onContentSizeChange={(_, measured) => fit.reportContentHeight(Math.round(measured))}
+                  contentContainerStyle={{
+                    paddingLeft: insets.left + space.gutter,
+                    paddingRight: insets.right + space.gutter,
+                    paddingBottom: Math.max(insets.bottom, space.gutter) + space.md,
+                  }}
+                >
+                  {visible || shown ? children : null}
+                </BottomSheetScrollView>
+              </View>
             )}
           </View>
         </BottomSheet.Content>
       </BottomSheet.Portal>
     </BottomSheet>
+  );
+}
+
+/** The grabber above a sheet's header, with the space gorhom keeps around it. */
+const GRABBER_AREA = 44;
+
+/** Room for rounding in the measured heights, so a fitted sheet never scrolls by a fraction of a point. */
+const ROUNDING = 2;
+
+/** No sheet is shorter than this, however little it holds. */
+const SHORTEST_SHEET = 200;
+
+/** Lets a list sheet (`listMode`) report how tall its list is, so the sheet can fit it. */
+const SheetFit = createContext<{ reportContentHeight: (height: number) => void; room: RefObject<ComponentRef<typeof View> | null> } | null>(null);
+
+/**
+ * For a `listMode` sheet: wraps the last thing in the list (its footer, or an empty state), and reports where that ends
+ * plus `after` (the list's bottom padding), so the sheet stands as tall as the list, up to its `height`. Pass
+ * `enabled={false}` to keep the sheet's size, as while a search narrows the list.
+ */
+export function SheetFitEnd({ after = 0, enabled = true, children }: { after?: number; enabled?: boolean; children: ReactNode }): JSX.Element {
+  const fit = useContext(SheetFit);
+  const end = useRef<ComponentRef<typeof View>>(null);
+
+  return (
+    <View
+      ref={end}
+      onLayout={() => {
+        const area = fit?.room.current;
+
+        if (!enabled || !area || !end.current) return;
+        // Measured against the sheet's list area: a list lays its footer out in a container of its own.
+        end.current.measureLayout(area, (_x: number, y: number, _width: number, height: number) => fit.reportContentHeight(Math.round(y + height + after)));
+      }}
+    >
+      {children}
+    </View>
   );
 }
 
