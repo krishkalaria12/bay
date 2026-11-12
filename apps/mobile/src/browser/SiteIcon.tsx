@@ -16,11 +16,14 @@ export function SiteIcon({
   url,
   size = 28,
   bare = false,
+  color,
 }: {
   url: string;
   size?: number;
   /** Already on a tile of its own (a pin): the icon or the letter alone, without a second tile around it. */
   bare?: boolean;
+  /** A bare monogram's colour, for tiles the theme doesn't colour (a private card, a photo). */
+  color?: string;
 }): JSX.Element {
   const host = siteHost(url);
   const icon = useBrowserStore((state) => state.data.favicons[host]);
@@ -85,6 +88,7 @@ export function SiteIcon({
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
         weight="semibold"
+        color={color}
         style={{ fontSize: size * 0.82, lineHeight: size, textAlign: "center", width: size }}
       >
         {letter}

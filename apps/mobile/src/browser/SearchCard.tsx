@@ -276,9 +276,9 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                   accessibilityLabel={site.title || displayUrl(site.url)}
                   onPress={() => onOpen({ kind: "url", url: site.url })}
                   className={privately ? "flex-1 items-center bg-white/10" : "flex-1 items-center bg-default"}
-                  style={{ gap: space.xs + 2, paddingTop: space.md, paddingBottom: space.sm + 2, borderRadius: radius.tile }}
+                  style={{ gap: space.sm, paddingVertical: space.md, borderRadius: radius.tile }}
                 >
-                  <SiteIcon url={site.url} size={iconSize.control} bare />
+                  <SiteIcon url={site.url} size={iconSize.control} bare color={text} />
                   <Text variant="caption" color={text} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
                     {site.title || siteName(site.url)}
                   </Text>
