@@ -240,20 +240,29 @@ def run(command, cwd=None, env=None):
 
 
 def run_until(command, cwd, env, minutes):
-    """Run a resumable Windows build, stopping it after `minutes`. Returns whether it finished."""
+    """Run a resumable build, stopping it after `minutes`. Returns whether it finished."""
     command = resolve(command, env)
-    process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                               creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+    windows = sys.platform == "win32"
+    # Its own process group, so the stop reaches ninja and the compilers under autoninja.
+    group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if windows else {"start_new_session": True}
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL, **group)
     try:
         code = process.wait(minutes * 60)
     except subprocess.TimeoutExpired:
         with contextlib.suppress(OSError):
-            process.send_signal(signal.CTRL_BREAK_EVENT)
+            if windows:
+                process.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                os.killpg(process.pid, signal.SIGINT)
         try:
             process.wait(120)
         except subprocess.TimeoutExpired:
             # Ninja logs each finished step, so a forced stop only repeats the running ones.
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], check=False)
+            if windows:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], check=False)
+            else:
+                with contextlib.suppress(OSError):
+                    os.killpg(process.pid, signal.SIGKILL)
             process.wait()
         return False
     if code:
@@ -634,6 +643,9 @@ def archive_linux(root, output):
     require_tools(("zstd", "objcopy", "strip", "readelf"), os.environ)
     binaries = root / "chromium_git/chromium/src" / platform_lock("linux")["outputDirectory"]
     executables = ("bay", "chrome_sandbox", "chrome_crashpad_handler")
+    # A CI build (--ci-minutes) has no symbols to split off; a release build must.
+    args_file = binaries / "args.gn"
+    symbols_required = not (args_file.is_file() and "symbol_level = 0" in args_file.read_text().splitlines())
     for name in (*executables, "icudtl.dat", "resources.pak", "locales"):
         path = binaries / name
         valid_type = path.is_dir() if name == "locales" else path.is_file()
@@ -676,6 +688,7 @@ def archive_linux(root, output):
         staging = pathlib.Path(temporary)
         runtime = staging / "engine"
         symbols = staging / "symbols"
+        symbols.mkdir()
         for name, source in sorted(files.items()):
             if source.is_symlink():
                 raise RuntimeError(f"Linux archive does not accept symlinks: {source}")
@@ -693,7 +706,7 @@ def archive_linux(root, output):
             if is_elf:
                 sections = subprocess.check_output(["readelf", "--sections", "--wide", source], text=True)
                 if ".debug_info" not in sections:
-                    if name.removeprefix("runtime/") in executables:
+                    if symbols_required and name.removeprefix("runtime/") in executables:
                         raise RuntimeError(f"no debug info in {source}; rebuild with symbol_level=1")
                     continue
                 debug = symbols / pathlib.Path(name).parent / ".debug" / (target.name + ".debug")
@@ -736,7 +749,7 @@ def main():
     parser.add_argument("--jobs", type=int)
     parser.add_argument("--target", action="append", default=[])
     parser.add_argument("--ci-minutes", type=int,
-                        help=f"Windows only: build for free CI runners, stopping after this long with exit code {STOPPED_EXIT_CODE}")
+                        help=f"build for free CI runners, stopping after this long with exit code {STOPPED_EXIT_CODE}")
     args = parser.parse_args()
     platform = args.platform
     if args.command == "pin":
@@ -751,8 +764,8 @@ def main():
     if args.jobs is not None and args.jobs < 1:
         parser.error("--jobs must be positive")
     if args.ci_minutes is not None:
-        if platform != "win" or args.ci_minutes < 1:
-            parser.error("--ci-minutes must be positive and needs --platform win")
+        if args.ci_minutes < 1:
+            parser.error("--ci-minutes must be positive")
         GN_ARGS.update(CI_GN_ARGS)
     root = (args.root or default_root(platform)).resolve()
     env = environment(root, platform)

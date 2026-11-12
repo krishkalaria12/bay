@@ -465,14 +465,45 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(build.call_args.kwargs, {"ci_minutes": 5})
         self.assertEqual(engine.GN_ARGS["symbol_level"], 1)
 
-    def test_cli_refuses_a_timed_linux_build(self):
+    def test_cli_times_a_linux_ci_build_with_ci_arguments(self):
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(sys, "platform", "linux"), \
              mock.patch.object(engine.host_platform, "machine", return_value="x86_64"), \
+             mock.patch.object(engine, "nixos_without_loader", return_value=False), \
              mock.patch.object(sys, "argv", ["engine.py", "--platform", "linux", "build", "--root", directory,
                                             "--ci-minutes", "5"]), \
-             mock.patch("sys.stderr"), self.assertRaises(SystemExit):
+             mock.patch.dict(engine.GN_ARGS), mock.patch.object(engine, "environment", return_value={}), \
+             mock.patch.object(engine, "build", return_value=False) as build, \
+             self.assertRaises(SystemExit) as stopped:
             engine.main()
+            self.assertEqual(engine.GN_ARGS["symbol_level"], 0)
+        self.assertEqual(stopped.exception.code, engine.STOPPED_EXIT_CODE)
+        self.assertEqual(build.call_args.args[4], "linux")
+        self.assertEqual(build.call_args.kwargs, {"ci_minutes": 5})
+
+    def posix_run_until(self, wait):
+        process = mock.Mock(pid=4321)
+        process.wait.side_effect = wait
+        with mock.patch.object(engine.sys, "platform", "linux"), \
+             mock.patch.object(engine.subprocess, "Popen", return_value=process) as popen, \
+             mock.patch.object(engine.os, "killpg", create=True) as killpg:
+            return engine.run_until(["autoninja"], None, {"PATH": ""}, 5), popen, killpg
+
+    def test_posix_timed_build_runs_in_its_own_session_and_interrupts_the_group(self):
+        finished, popen, killpg = self.posix_run_until([0])
+        self.assertIs(finished, True)
+        self.assertIs(popen.call_args.kwargs["start_new_session"], True)
+        killpg.assert_not_called()
+        timeout = subprocess.TimeoutExpired("autoninja", 300)
+        finished, _, killpg = self.posix_run_until([timeout, 0])
+        self.assertIs(finished, False)
+        self.assertEqual(killpg.call_args_list, [mock.call(4321, engine.signal.SIGINT)])
+        finished, _, killpg = self.posix_run_until([timeout, timeout, 0])
+        self.assertIs(finished, False)
+        self.assertEqual(killpg.call_args_list, [mock.call(4321, engine.signal.SIGINT),
+                                                 mock.call(4321, engine.signal.SIGKILL)])
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.posix_run_until([1])
 
     def test_timed_build_uses_fail_fast_ninja_and_writes_no_stamp_when_paused(self):
         # Adding the budget to this tick and subtracting it again rounds above five minutes.
@@ -769,6 +800,22 @@ class LinuxArchiveTests(unittest.TestCase):
                 self.assertEqual(artifact.with_suffix(".zst.sha256").read_text(),
                                  f"{engine.sha256(artifact)}  {artifact.name}\n")
             self.assertEqual((binaries / "bay").read_bytes(), original)
+
+    def test_ci_archive_without_symbols_ships_the_runtime_and_an_empty_symbol_archive(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "verify_checkout"), \
+             mock.patch.object(engine, "require_tools"), mock.patch.object(engine, "source_digest", return_value="digest"), \
+             mock.patch.object(engine, "artifact_id", return_value="fixture-linux"), \
+             mock.patch.object(engine, "run", side_effect=self.fake_run), \
+             mock.patch.object(engine.subprocess, "check_output", return_value="no debug sections"):
+            root = Path(directory)
+            binaries = self.make_build(root)
+            (binaries / "args.gn").write_text('is_debug = false\nsymbol_level = 0\n')
+            output = root / "archive"
+            engine.archive(root, output, "linux")
+            with tarfile.open(output / "fixture-linux.tar.zst") as archive:
+                self.assertEqual(archive.extractfile("runtime/bay").read(), (binaries / "bay").read_bytes())
+            with tarfile.open(output / "fixture-linux-symbols.tar.zst") as archive:
+                self.assertEqual(archive.getnames(), [])
 
     def test_archive_refuses_build_stamp_with_stale_sysroot_provenance(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "verify_checkout"), \

@@ -429,7 +429,8 @@ class ArtifactTests(unittest.TestCase):
     def run_until(self, wait):
         process = mock.Mock()
         process.wait.side_effect = wait
-        with mock.patch.object(engine.subprocess, "Popen", return_value=process), \
+        with mock.patch.object(engine.sys, "platform", "win32"), \
+                mock.patch.object(engine.subprocess, "Popen", return_value=process), \
                 mock.patch.object(engine.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, create=True), \
                 mock.patch.object(engine.signal, "CTRL_BREAK_EVENT", 1, create=True), \
                 mock.patch.object(engine.subprocess, "run") as run:
