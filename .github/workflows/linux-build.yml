@@ -1,0 +1,222 @@
+name: Linux build from source
+# Compiles the pinned engine on free GitHub runners and packages Bay for Linux:
+# the AppImage, .deb, .rpm, tarball and AUR PKGBUILD, unsigned, for testing. A
+# job ends after six hours, so each stage compiles for a while, saves the build
+# tree as an artifact, and the next stage resumes from it. New runs resume from
+# the newest saved tree too, so a compile fix costs what it touches rather than
+# a full build. The engine targets Chromium's Debian Bullseye sysroot, so the
+# runner's Ubuntu doesn't limit which distributions the packages run on.
+#
+# Start a run: git tag linux-build-N && git push origin linux-build-N
+on:
+  workflow_dispatch:
+  push:
+    tags: ["linux-build-*"]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: linux-build
+  cancel-in-progress: true
+env:
+  # Raise the number to start from a clean tree, as a changed patch needs.
+  STATE_ARTIFACT: linux-engine-state-1
+  ENGINE_ARTIFACT: linux-engine
+  # On the volume scripts/linux/ci-disk.sh makes. The path must stay the same in every stage.
+  ENGINE_ROOT: /engine/be
+  STATE_DIR: /engine/state
+jobs:
+  engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        stage: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Find saved state
+        id: state
+        run: |
+          echo "JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+          built=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$ENGINE_ARTIFACT" --jq .total_count)
+          if (( built > 0 )); then echo "DONE=true" >> "$GITHUB_ENV"; exit 0; fi
+          # Only this repository's own runs can seed a build, never a fork's pull request.
+          newest='[.artifacts[] | select(.expired | not) | select(.workflow_run.repository_id == .workflow_run.head_repository_id)] | sort_by(.created_at) | last | .workflow_run.id // empty'
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$STATE_ARTIFACT&per_page=100" --jq "$newest")
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: env.DONE != 'true'
+      - uses: actions/setup-python@v5
+        if: env.DONE != 'true'
+        with:
+          python-version: "3.12"
+      - name: Reuse an engine built from these sources
+        id: reuse
+        if: env.DONE != 'true'
+        run: |
+          # The engine's id hashes every source it is built from, so an earlier run's engine with
+          # this id is this engine: republish it instead of restoring and compiling the tree. A
+          # change outside those sources (the app, the packaging) then goes straight to packaging,
+          # and the packages job checks the id again.
+          id=$(python scripts/engine.py --platform linux pin | jq -r .id)
+          recent='[.artifacts[] | select(.expired | not) | select(.workflow_run.repository_id == .workflow_run.head_repository_id)] | sort_by(.created_at) | reverse | .[:3] | .[].workflow_run.id'
+          for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$ENGINE_ARTIFACT&per_page=100" --jq "$recent"); do
+            rm -rf dist/engine
+            if gh run download "$run" -R "$GITHUB_REPOSITORY" -n "$ENGINE_ARTIFACT" -D dist/engine && [[ -f "dist/engine/$id.tar.zst" ]]; then
+              echo "Reusing $id from run $run"
+              echo "DONE=true" >> "$GITHUB_ENV"
+              echo "reused=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          rm -rf dist/engine
+          echo "No recent run built $id; compiling it"
+      - name: Make room for the engine
+        if: env.DONE != 'true'
+        run: bash scripts/linux/ci-disk.sh /engine
+      - name: Install base tools
+        if: env.DONE != 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git patch pkg-config binutils tar xz-utils zstd file lsb-release
+      - name: Install Rust for the native content blocker
+        if: env.DONE != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - name: Verify state archive support
+        if: env.DONE != 'true'
+        run: python -m unittest scripts/windows/test_engine_state.py -v
+      - name: Download saved state
+        if: env.DONE != 'true' && steps.state.outputs.run != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.STATE_ARTIFACT }}
+          path: ${{ env.STATE_DIR }}
+          run-id: ${{ steps.state.outputs.run }}
+          github-token: ${{ github.token }}
+      - name: Restore saved state
+        if: env.DONE != 'true' && steps.state.outputs.run != ''
+        run: |
+          python scripts/windows/engine-state.py restore --root "$ENGINE_ROOT" --archive "$STATE_DIR/state.tar.zst"
+          rm -rf "$STATE_DIR"
+      - name: Download sources
+        if: env.DONE != 'true' && steps.state.outputs.run == ''
+        run: python scripts/engine.py --platform linux download --root "$ENGINE_ROOT"
+      - name: Install Chromium's build dependencies
+        # Every stage: each starts on a fresh runner, and the restored tree carries the script.
+        if: env.DONE != 'true'
+        run: sudo "$ENGINE_ROOT/chromium_git/chromium/src/build/install-build-deps.sh" --no-prompt --no-arm --no-chromeos-fonts
+      - name: Patch sources
+        if: env.DONE != 'true' && steps.state.outputs.run == ''
+        run: python scripts/engine.py --platform linux prepare --root "$ENGINE_ROOT"
+      - name: Check saved state survives on the real tree
+        if: env.DONE != 'true' && steps.state.outputs.run == ''
+        run: python scripts/windows/engine-state.py check --root "$ENGINE_ROOT" --archive "$STATE_DIR/check/state.tar.zst"
+      - name: Compile
+        id: compile
+        if: env.DONE != 'true'
+        run: |
+          # Leave a little over an hour of the job to archive and save the tree.
+          minutes=$(( 290 - ($(date +%s) - JOB_STARTED) / 60 ))
+          (( minutes < 10 )) && minutes=10
+          set +e
+          python scripts/engine.py --platform linux build --root "$ENGINE_ROOT" --jobs 4 --ci-minutes "$minutes" 2>&1 | tee compile.log
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          # 124 is a deliberate pause: save the tree and let the next stage resume.
+          # Every other failure stops this job and cancels the remaining stages,
+          # after the tree is saved so the run with the fix resumes from here.
+          if [[ $code != 0 && $code != 124 ]]; then exit "$code"; fi
+          exit 0
+      - name: Archive engine
+        # A later stage skips Compile, and a skipped step's null output equals '0' in a
+        # condition, so check DONE too.
+        if: env.DONE != 'true' && steps.compile.outputs.code == '0'
+        run: python scripts/engine.py --platform linux archive --root "$ENGINE_ROOT" --output dist/engine
+      - name: Upload engine
+        if: steps.reuse.outputs.reused == 'true' || (env.DONE != 'true' && steps.compile.outputs.code == '0')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ENGINE_ARTIFACT }}
+          path: dist/engine/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Compress state
+        if: ${{ !cancelled() && steps.compile.outputs.code != '' }}
+        run: |
+          python scripts/windows/engine-state.py create --root "$ENGINE_ROOT" --archive "$STATE_DIR/state.tar.zst"
+          ls -lh "$STATE_DIR/state.tar.zst"
+      - name: Upload state
+        if: ${{ !cancelled() && steps.compile.outputs.code != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.STATE_ARTIFACT }}
+          path: ${{ env.STATE_DIR }}/state.tar.zst
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 7
+  packages:
+    needs: engine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      # Runners have no FUSE: appimagetool and the AppImage under test unpack themselves instead of mounting.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ENGINE_ARTIFACT }}
+          path: dist/engine
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update -q
+          # zsync has zsyncmake, rpm has rpmbuild; the libraries are those build-app.py's ldd check resolves.
+          sudo apt-get install -y -q zstd zsync rpm xvfb xdotool fonts-liberation libasound2t64 libatk-bridge2.0-0t64 \
+            libatk1.0-0t64 libcups2t64 libgbm1 libgtk-3-0t64 libnss3 libsecret-1-0 libvulkan1 libxkbcommon0 \
+            libxcomposite1 libxdamage1 libxrandr2
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/appimagetool" /usr/local/bin/appimagetool
+      - name: Build app
+        run: |
+          # The engine must be the one this checkout's sources build.
+          id=$(python scripts/engine.py --platform linux pin | jq -r .id)
+          archive="dist/engine/$id.tar.zst"
+          python scripts/linux/build-app.py --engine-archive "$archive" --sha256 "$(cut -d' ' -f1 "$archive.sha256")" \
+            --output dist/linux-app
+      - name: Package
+        run: scripts/linux/release.sh --app dist/linux-app --version "0.1.$GITHUB_RUN_NUMBER" --output dist/linux-release
+      - name: Check the AppImage opens a window
+        continue-on-error: true
+        run: |
+          # The runner's Ubuntu restricts the user namespaces Chromium's sandbox needs to programs with an AppArmor
+          # profile, which an AppImage can't install (packaging/linux/AppRun).
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          xvfb-run -a scripts/linux/smoke.sh dist/linux-release/Bay-*-x86_64.AppImage 60
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bay-linux-packages
+          path: dist/linux-release/
+          if-no-files-found: error
+          compression-level: 0

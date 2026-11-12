@@ -144,6 +144,27 @@ recognizes an earlier patch even when a later patch rewrites its files. A failed
 ungoogled run may have partially changed files; inspect its report at
 `$CB/logs/ungoogled-patches.tsv` rather than resetting or deleting the checkout.
 
+## Building on GitHub runners
+
+`.github/workflows/linux-build.yml` builds the engine and every package on free
+GitHub runners, so no local Linux machine is needed. Start a run by pushing a tag:
+
+```sh
+git tag linux-build-1 && git push origin linux-build-1
+```
+
+`scripts/linux/ci-disk.sh` joins the runner's two disks into one volume for the
+tree. A job stops after six hours, so each stage builds with `--ci-minutes`
+(without symbols), saves the tree as a `linux-engine-state-N` artifact and the
+next stage resumes from it. Later runs resume from the newest saved tree for
+seven days; raise `STATE_ARTIFACT` when a changed patch needs a clean tree. A run
+whose engine id matches an earlier run's engine goes straight to packaging.
+
+The `bay-linux-packages` artifact holds the AppImage and `.zsync`, `.deb`,
+`.rpm`, tarball, AUR `PKGBUILD` and `SHA256SUMS`, all unsigned. Its smoke step
+opens the AppImage under Xvfb and is allowed to fail, so read its log. It doesn't
+check the sandbox's AppArmor setup, the GPU or video decoding.
+
 ## Updating an existing Linux checkout
 
 Let an active build finish before changing the repo. Build stamps describe the
