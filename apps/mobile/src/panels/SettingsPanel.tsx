@@ -10,7 +10,7 @@ import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials
 import { Icon } from "@/chrome/Icon";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
-import { radius } from "@/chrome/tokens";
+import { radius, space } from "@/chrome/tokens";
 import {
   detectLocale,
   LOCALE_IDS,
@@ -702,7 +702,7 @@ function WallpaperPicker({
 
   return (
     <>
-      <View className="mt-1 flex-row flex-wrap" style={{ rowGap: 16 }}>
+      <View className="mt-1 flex-row flex-wrap" style={{ rowGap: space.lg }}>
         {tiles.map((id, index) => {
           const selected = id === value;
           const empty = id === "photo" && !photo;
@@ -744,10 +744,22 @@ function WallpaperPicker({
                   <Wallpaper id={id} scale={0.6} />
                 )}
                 {empty ? null : (
-                  <View className="absolute bottom-2.5 left-0 right-0 flex-row justify-center gap-1">
-                    <View className="h-3 w-3 rounded-full bg-foreground/15" />
-                    <View className="h-3 w-8 rounded-full bg-foreground/15" />
-                    <View className="h-3 w-3 rounded-full bg-foreground/15" />
+                  // The start page in miniature: the greeting and date, a row of pins, then the bar.
+                  <View className="absolute bottom-2.5 left-0 right-0 gap-2 px-2.5">
+                    <View className="gap-1">
+                      <View className="h-2 w-3/5 rounded-full bg-foreground/30" />
+                      <View className="h-1.5 w-2/5 rounded-full bg-foreground/15" />
+                    </View>
+                    <View className="flex-row justify-between">
+                      {[0, 1, 2, 3].map((pin) => (
+                        <View key={pin} className="h-4 w-4 rounded-[5px] bg-foreground/15" />
+                      ))}
+                    </View>
+                    <View className="mt-1.5 flex-row justify-center gap-1">
+                      <View className="h-3 w-3 rounded-full bg-foreground/15" />
+                      <View className="h-3 w-8 rounded-full bg-foreground/15" />
+                      <View className="h-3 w-3 rounded-full bg-foreground/15" />
+                    </View>
                   </View>
                 )}
               </View>
