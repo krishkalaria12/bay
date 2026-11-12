@@ -52,7 +52,7 @@ export const iconSize = {
 export const rowHeight = 52;
 
 /** A step of the type scale (`typeScale`). */
-export type TextVariant = "title" | "headline" | "body" | "callout" | "subhead" | "footnote" | "caption" | "micro";
+export type TextVariant = "display" | "title" | "headline" | "body" | "callout" | "subhead" | "footnote" | "caption" | "micro";
 
 /** The weights Bay's text comes in; Android has one Inter face for each. */
 export type TextWeight = "regular" | "medium" | "semibold" | "bold";
@@ -70,6 +70,8 @@ interface Step {
  * step; a `Text` can still ask for another.
  */
 export const typeScale: Record<TextVariant, Step> = {
+  /** The start page's greeting: the one large line in the app. */
+  display: { size: 32, lineHeight: 38, weight: "bold", tracking: -0.8 },
   /** Sheet titles. */
   title: { size: 22, lineHeight: 28, weight: "bold", tracking: -0.45 },
   /** A sheet's subject (the page's title), empty states. */

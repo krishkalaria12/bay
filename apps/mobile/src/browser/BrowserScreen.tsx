@@ -49,7 +49,7 @@ import { saveLogin, savedLoginFor } from "./credentials";
 import { originOf } from "./logins";
 import { PrivateLock } from "./PrivateLock";
 import { SearchCard, type OpenTarget } from "./SearchCard";
-import { StartPage } from "./StartPage";
+import { ON_PHOTO_MUTED, StartPage } from "./StartPage";
 import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
 import { TabSwipe } from "./TabSwipe";
@@ -655,6 +655,7 @@ export function BrowserScreen(): JSX.Element {
   const topColor = locked && active.private ? null : error?.tabId === active.id ? null : (pageColors[active.id] ?? null);
   const tabError = error?.tabId === active.id ? error : null;
   const fullscreen = fullscreenByTab[active.id] ?? false;
+  const onPhoto = data.preferences.wallpaper === "photo" && Boolean(data.preferences.wallpaperPhoto);
 
   return (
     <View className="flex-1 bg-background">
@@ -761,6 +762,7 @@ export function BrowserScreen(): JSX.Element {
                 <StartPage
                   pins={data.pinnedSites}
                   history={data.history}
+                  onPhoto={onPhoto}
                   onOpen={(url) => open({ kind: "url", url }, false)}
                   onUnpin={(site) => {
                     const index = data.pinnedSites.indexOf(site);
@@ -778,10 +780,10 @@ export function BrowserScreen(): JSX.Element {
                 className="items-center"
                 style={{ gap: 2 }}
               >
-                <Text variant="subhead" weight="medium" tone="muted">
+                <Text variant="subhead" weight="medium" color={onPhoto ? ON_PHOTO_MUTED : muted}>
                   {t("start.tapToSearch")}
                 </Text>
-                <Icon name="down" color={muted} size={iconSize.small} />
+                <Icon name="down" color={onPhoto ? ON_PHOTO_MUTED : muted} size={iconSize.small} />
               </View>
             </View>
           </View>

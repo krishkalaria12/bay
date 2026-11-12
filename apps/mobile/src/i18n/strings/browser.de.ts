@@ -5,6 +5,10 @@ export const browserDe: BrowserStrings = {
   "start.tapToSearch": "Zum Suchen tippen",
   "start.openSite": "{name} öffnen",
   "start.longPressToUnpin": "Lange drücken zum Lösen",
+  "start.morning": "Guten Morgen",
+  "start.afternoon": "Guten Tag",
+  "start.evening": "Guten Abend",
+  "start.recent": "Zuletzt besucht",
 
   // Search card.
   "search.close": "Suche schließen",
