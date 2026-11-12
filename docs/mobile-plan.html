@@ -1228,9 +1228,9 @@
                 </td>
                 <td><code>81d15293</code>, <code>a85d8544</code></td>
                 <td>
-                  <span class="st done">Landed</span> The app builds, installs and runs on the simulator now. One thing is still wrong: a sheet opened over a
-                  page draws its rows on top of the page but has no background of its own, so the page shows through it — the Liquid Glass behind the sheet does
-                  not appear.
+                  <span class="st done">Landed</span> The app builds, installs and runs on the simulator now. Sheets lost their glass, icons and pill buttons
+                  because they drew in a full-window overlay with no view controller, where Expo UI's <code>Host</code> never attaches; they now draw in the
+                  app's own window (<code>59d373d4</code>).
                 </td>
               </tr>
               <tr>
@@ -1245,6 +1245,22 @@
                   <span class="st done">Landed</span> Eight of the nine pass on the iPhone now. On Android one passes and eight still fail: the download toast,
                   the reader, the find on page and the search suggestions depend on what the pages themselves say, and the switcher's own scroll does not reach
                   the second card.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">The round after <span class="kind">12 November</span></th>
+                <td>
+                  Languages and the accessibility pass (B18), system AutoFill and passkeys (B20), the sheet glass, a cancelled sign-in that came back as a
+                  refused download on iOS, "Where does it go?" failing on a plain-http redirect on iOS, and the switcher's cards missing from Android's
+                  accessibility tree. Tests now load pages Bay serves itself (<code>.argent/pages/</code>), and seven new ones cover the settings pages, the
+                  start page, wallpaper, YouTube and swipe up to close.
+                </td>
+                <td><code>74de77b3</code>..<code>fd79e7df</code></td>
+                <td>
+                  <span class="st done">Landed</span> All sixteen e2e tests pass on both the iPhone and the Android emulator. Not yet tried on a real phone:
+                  AutoFill, passkeys, VoiceOver and TalkBack, and switching language. Known gaps, each passed on a rerun: on Android one tap in ten on page
+                  zoom's "larger" was lost, and a new tab once stayed on <code>about:blank</code> while the bar showed m.youtube.com (the load never reached the
+                  WebView, possibly a race in a new tab's first load); on iOS a tap in fresh-start was lost once just after a cold boot.
                 </td>
               </tr>
             </tbody>
@@ -1716,8 +1732,12 @@
               </tr>
               <tr>
                 <td class="id">B18</td>
-                <th scope="row">Languages, accessibility pass <span class="kind">Feature</span></th>
-                <td>All text is hard-coded English; Lens ships 14 languages. Controls have labels, but no full VoiceOver and TalkBack pass is recorded.</td>
+                <th scope="row">Languages, accessibility pass <span class="kind">Feature</span> <span class="st done">Landed</span></th>
+                <td>
+                  All text is hard-coded English; Lens ships 14 languages. Controls have labels, but no full VoiceOver and TalkBack pass is recorded. Now: seven
+                  languages (English, Spanish, French, German, Brazilian Portuguese, Japanese, Hindi) chosen in Settings or following the phone, a catalogue
+                  test that keeps their keys and placeholders in step, and screen-reader labels, states and headers across the app, with open sheets modal.
+                </td>
                 <td>Lens</td>
                 <td><span class="tag shared">Shared</span></td>
                 <td>M</td>
@@ -1742,10 +1762,12 @@
               </tr>
               <tr>
                 <td class="id">B20</td>
-                <th scope="row">Passwords and passkeys <span class="kind">Phase 6</span> <span class="st done">Landed (passwords)</span></th>
+                <th scope="row">Passwords and passkeys <span class="kind">Phase 6</span> <span class="st done">Landed</span></th>
                 <td>
                   <code>expo-secure-store</code> isn't added yet. iOS needs Apple's web-browser entitlement; Android uses Credential Manager. Without this,
-                  people retype passwords on every site.
+                  people retype passwords on every site. Now: Android pages reach the autofill service, and passkeys go through the WebView's Credential Manager
+                  support where it has it; iOS gets password AutoFill with the web-browser entitlement and claims the passkey one only with
+                  <code>BAY_WEB_PASSKEYS=1</code>. Waiting on Apple for both entitlements and on Google to list Bay as a privileged browser for passkeys.
                 </td>
                 <td>Lens, Desktop</td>
                 <td><span class="tag api">Shared + 2 native</span></td>
@@ -1999,77 +2021,77 @@
                 <td>Open links from other apps, default browser</td>
                 <td class="c">✓</td>
                 <td class="c">✓</td>
-                <td><span class="st miss">Missing</span></td>
+                <td><span class="st done">Landed</span></td>
                 <td class="id">B9</td>
               </tr>
               <tr>
                 <td>Widgets and app icon quick actions</td>
                 <td class="c">✓</td>
                 <td class="c">✓</td>
-                <td><span class="st miss">Missing</span></td>
+                <td><span class="st done">Landed</span></td>
                 <td class="id">B15</td>
               </tr>
               <tr>
                 <td>Voice search</td>
                 <td class="c">✓</td>
                 <td class="c">✓</td>
-                <td><span class="st miss">Missing</span></td>
+                <td><span class="st done">Landed</span></td>
                 <td class="id">B16</td>
               </tr>
               <tr>
                 <td>Landscape and fullscreen video</td>
                 <td class="c">✓</td>
                 <td class="c">✓</td>
-                <td><span class="st miss">Missing</span></td>
+                <td><span class="st done">Landed</span></td>
                 <td class="id">B10, A2</td>
               </tr>
               <tr>
                 <td>Tabs keep history after relaunch</td>
                 <td class="c">✓</td>
                 <td class="c">✓</td>
-                <td><span class="st miss">Missing</span></td>
+                <td><span class="st done">Landed</span></td>
                 <td class="id">B6</td>
               </tr>
               <tr>
                 <td>Link preview (Peek)</td>
                 <td class="c">✓</td>
                 <td class="c">✓</td>
-                <td><span class="st miss">Missing</span></td>
+                <td><span class="st done">Landed</span></td>
                 <td class="id">B11</td>
               </tr>
               <tr>
                 <td>Per-site zoom, Reader and desktop mode</td>
                 <td class="c">·</td>
                 <td class="c">✓</td>
-                <td><span class="st part">Partly, blocking only</span></td>
+                <td><span class="st done">Landed</span></td>
                 <td class="id">B12</td>
               </tr>
               <tr>
                 <td>Picture in Picture, skip in media controls</td>
                 <td class="c">·</td>
                 <td class="c">✓</td>
-                <td><span class="st part">Partly, play, pause, stop</span></td>
+                <td><span class="st done">Landed</span></td>
                 <td class="id">B17</td>
               </tr>
               <tr>
                 <td>Swipe anywhere to go back and forward</td>
                 <td class="c">·</td>
                 <td class="c">✓</td>
-                <td><span class="st part">Partly, iOS edge only</span></td>
+                <td><span class="st done">Landed, edge swipes</span></td>
                 <td class="id">A4</td>
               </tr>
               <tr>
                 <td>Languages beyond English</td>
                 <td class="c">✓</td>
                 <td class="c">14</td>
-                <td><span class="st miss">Missing</span></td>
+                <td><span class="st done">Landed, 7</span></td>
                 <td class="id">B18</td>
               </tr>
               <tr>
                 <td>Import tabs from Arc</td>
                 <td class="c">export</td>
                 <td class="c">·</td>
-                <td><span class="st miss">Missing</span></td>
+                <td><span class="st done">Landed</span></td>
                 <td class="id">B2</td>
               </tr>
               <tr>
@@ -2083,7 +2105,7 @@
                 <td>Auto archive, searchable</td>
                 <td class="c">12 h</td>
                 <td class="c">✓</td>
-                <td><span class="st part">Partly, 1 day minimum</span></td>
+                <td><span class="st done">Landed, 12 h</span></td>
                 <td class="id">B4</td>
               </tr>
               <tr>
@@ -2286,12 +2308,18 @@
               our hands. <span class="st done">Landed</span>: Bay answers <code>http</code>/<code>https</code> on both apps, opens what other apps hand it in a
               tab, and claims the web-browser entitlement behind <code>BAY_DEFAULT_BROWSER=1</code> for the request to Apple.
             </li>
-            <li><span class="tag api">Shared + 2 native</span> Password and passkey AutoFill (B20).</li>
+            <li>
+              <span class="tag api">Shared + 2 native</span> Password and passkey AutoFill (B20). <span class="st done">Landed</span>; passkeys wait on Apple's
+              and Google's approval.
+            </li>
             <li><span class="tag shared">Shared</span> Import Arc tabs (B2) and the small Arc touches (B4). <span class="st done">Both landed</span></li>
-            <li><span class="tag shared">Shared</span> Release setup and tablet flag (B8, D7).</li>
+            <li>
+              <span class="tag shared">Shared</span> Release setup and tablet flag (B8, D7). <span class="st done">Landed</span>; the EAS project and the first
+              builds are still to do (<code>docs/mobile-releasing.md</code>).
+            </li>
             <li>
               Publish TestFlight and Google Play testing builds. Add one line to the switch guide on the Bay site: export your Arc Search tabs before 23
-              November.
+              November. <span class="st done">The site line landed</span>; the builds wait on the EAS project.
             </li>
           </ul>
           <div class="done-when">
@@ -2308,9 +2336,9 @@
             In order: Peek (B11), per-site settings and desktop mode (B12), image long-press (B13), Android edge swipes (A4), share to Bay (B14), quick actions
             then widgets (B15), voice search (B16), richer media controls (B17), languages and accessibility (B18).
             <span class="st done"
-              >Stage 4's features all landed: Peek, per-site settings, image long-press, share, quick actions with widgets, voice search and media
-              controls</span
-            >.
+              >Stage 4's features all landed: Peek, per-site settings, image long-press, share, quick actions with widgets, voice search, media controls, and
+              languages with accessibility</span
+            >. Their e2e tests are still to write.
           </p>
           <div class="done-when">
             <p><strong>Done when:</strong> each has an e2e test on both, as usual.</p>
