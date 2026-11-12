@@ -26,7 +26,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const prominentTint = props.privately ? PRIVATE_TINT : undefined;
 
   return (
-    <View className="flex-row items-center justify-center gap-4">
+    <View className="flex-row items-center justify-center gap-3">
       <SwipeUp onSwipeUp={props.mode === "page" ? props.onTabsSwipeUp : undefined}>
         <GlassIconButton
           id={left.id}

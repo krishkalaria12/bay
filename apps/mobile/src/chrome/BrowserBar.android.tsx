@@ -72,7 +72,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const [left, search, right] = barButtons(props, t);
 
   return (
-    <View className="flex-row items-center justify-center gap-4">
+    <View className="flex-row items-center justify-center gap-3">
       <SwipeUp onSwipeUp={props.mode === "page" ? props.onTabsSwipeUp : undefined}>
         <BarPressable button={left} icon={left.icon} privately={props.privately} />
       </SwipeUp>

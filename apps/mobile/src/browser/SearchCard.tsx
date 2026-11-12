@@ -70,7 +70,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
   // as selected text raced fast typing: a key pressed before the completion arrived was overwritten and lost.
   const selection = addressSelected ? { start: 0, end: query.length } : undefined;
 
-  const cardPosition = useAnimatedStyle(() => ({ bottom: Math.max(keyboard.height.value, insets.bottom) + 8 }));
+  const cardPosition = useAnimatedStyle(() => ({ bottom: Math.max(keyboard.height.value, insets.bottom) + space.sm }));
 
   // The field grows out of the capsule it replaces (A2): the pill widens from the capsule's width to the field's,
   // and what is written in it comes in as it widens.
@@ -145,7 +145,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
         style={StyleSheet.absoluteFill}
         onPress={onDismiss}
       />
-      <Animated.View style={[{ position: "absolute", left: 8 + insets.left, right: 8 + insets.right }, cardPosition]}>
+      <Animated.View style={[{ position: "absolute", left: space.edge + insets.left, right: space.edge + insets.right }, cardPosition]}>
         <Surface radius={radius.panel} style={{ padding: 10 }} testID={privately ? "search-card-private" : undefined}>
           {privately ? <View className="absolute inset-0 bg-neutral-900/95" style={{ borderRadius: radius.panel }} pointerEvents="none" /> : null}
           <View

@@ -22,7 +22,11 @@ export const radius = {
   sheet: 32,
 } as const;
 
-/** Spacing on a 4pt grid. `gutter` is the distance from the screen's (or a sheet's) edge to its content. */
+/**
+ * Spacing on a 4pt grid. Three named distances set the app's rhythm: `gutter` from the screen's (or a sheet's) edge to
+ * its content, `edge` from the screen's edge to a floating card (search, find, toasts, the mini player), and `section`
+ * between one block of a sheet and the next.
+ */
 export const space = {
   xxs: 2,
   xs: 4,
@@ -31,7 +35,9 @@ export const space = {
   lg: 16,
   xl: 24,
   xxl: 32,
-  gutter: 20,
+  gutter: 16,
+  edge: 12,
+  section: 20,
 } as const;
 
 /** Icon sizes: inside text (`inline`), in rows (`row`), in bars and tiles (`control`). */

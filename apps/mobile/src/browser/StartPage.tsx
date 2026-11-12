@@ -49,7 +49,7 @@ export function StartPage({ pins, history, onOpen, onUnpin }: StartPageProps): J
 
   return (
     // Touches between the tiles fall through to the start screen behind, which opens search.
-    <View testID="start-page" className="w-full gap-6 px-5" pointerEvents="box-none">
+    <View testID="start-page" className="w-full" style={{ gap: space.section, paddingHorizontal: space.gutter }} pointerEvents="box-none">
       {pins.length ? (
         <View className="flex-row flex-wrap justify-center" style={{ rowGap: 16 }} pointerEvents="box-none">
           {pins.slice(0, PINS).map((site, index) => (

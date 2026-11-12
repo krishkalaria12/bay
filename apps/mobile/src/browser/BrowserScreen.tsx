@@ -29,7 +29,7 @@ import { tick } from "@/chrome/haptics";
 import { Icon } from "@/chrome/Icon";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Text } from "@/chrome/Text";
-import { iconSize } from "@/chrome/tokens";
+import { iconSize, space } from "@/chrome/tokens";
 import { crashReportText, crashReports } from "@/crashReports";
 import { t as translate, useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
@@ -756,8 +756,8 @@ export function BrowserScreen(): JSX.Element {
               style={StyleSheet.absoluteFill}
               onPress={() => search(false)}
             />
-            <View className="flex-1 items-center justify-end" style={{ paddingBottom: insets.bottom + BAR_HEIGHT + 40 }} pointerEvents="box-none">
-              <View className="mb-8 w-full" style={{ paddingLeft: insets.left, paddingRight: insets.right }} pointerEvents="box-none">
+            <View className="flex-1 items-center justify-end" style={{ paddingBottom: insets.bottom + BAR_HEIGHT + space.xxl }} pointerEvents="box-none">
+              <View className="w-full" style={{ marginBottom: space.xl, paddingLeft: insets.left, paddingRight: insets.right }} pointerEvents="box-none">
                 <StartPage
                   pins={data.pinnedSites}
                   history={data.history}
@@ -827,8 +827,16 @@ export function BrowserScreen(): JSX.Element {
 
       {overlay !== "search" && !find.open && !fullscreen ? (
         <Animated.View
-          className="absolute inset-x-0 gap-3"
-          style={[{ bottom: Math.max(insets.bottom, 12) + 4, paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }, barStyle]}
+          className="absolute inset-x-0"
+          style={[
+            {
+              gap: space.md,
+              bottom: Math.max(insets.bottom, space.md) + space.xs,
+              paddingLeft: insets.left + space.edge,
+              paddingRight: insets.right + space.edge,
+            },
+            barStyle,
+          ]}
           pointerEvents="box-none"
         >
           {hasPage && showPages && !(locked && active.private) ? reading.controls : null}

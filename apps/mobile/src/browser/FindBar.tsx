@@ -29,12 +29,12 @@ export function FindBar({ query, count, index, onChange, onStep, onDone }: FindB
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
   const t = useT();
-  const position = useAnimatedStyle(() => ({ bottom: Math.max(keyboard.height.value, insets.bottom) + 8 }));
+  const position = useAnimatedStyle(() => ({ bottom: Math.max(keyboard.height.value, insets.bottom) + space.sm }));
   const matches = Boolean(count);
   const status = !query || count === null ? "" : count === 0 ? t("find.noMatches") : t("find.matchCount", { index: index + 1, count });
 
   return (
-    <Animated.View style={[{ position: "absolute", left: 8 + insets.left, right: 8 + insets.right }, position]} testID="find-bar">
+    <Animated.View style={[{ position: "absolute", left: space.edge + insets.left, right: space.edge + insets.right }, position]} testID="find-bar">
       <Surface radius={radius.card} style={{ padding: space.sm }}>
         <View className="flex-row items-center gap-1">
           <View className="h-11 flex-1 flex-row items-center rounded-full border border-black/10 bg-white/60 pl-4 pr-3 dark:border-white/10 dark:bg-white/10">

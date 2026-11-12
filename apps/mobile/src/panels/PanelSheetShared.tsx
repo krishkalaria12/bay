@@ -113,7 +113,7 @@ export function PanelSheetShared({
                 paddingLeft: insets.left + space.gutter,
                 paddingRight: insets.right + space.gutter,
                 paddingTop: space.xs,
-                paddingBottom: space.lg,
+                paddingBottom: space.md,
               }}
             >
               <View className="flex-1 flex-row items-center" style={{ gap: space.xs }}>
@@ -289,7 +289,7 @@ export function SectionLabel({ children, inset = false }: { children: ReactNode;
       variant="footnote"
       weight="semibold"
       tone="muted"
-      style={{ marginTop: space.xl, marginBottom: space.sm, paddingHorizontal: inset ? ROW_INSET : 0 }}
+      style={{ marginTop: space.section, marginBottom: space.sm, paddingHorizontal: inset ? ROW_INSET : 0 }}
     >
       {children}
     </Text>
