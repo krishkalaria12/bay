@@ -5,11 +5,11 @@ import { useEffect, useState, type JSX } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Text } from "@/chrome/Text";
 import { useT } from "@/i18n";
 import { groupByDay } from "./historyGroups";
 import { DAY_GROUP_LABELS, pageTitle, SearchField, siteName, SiteRow, time } from "./HistoryPanel";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
-import { Text } from "@/chrome/Text";
 
 type Row = { kind: "label"; label: string } | { kind: "entry"; item: ArchiveItem };
 

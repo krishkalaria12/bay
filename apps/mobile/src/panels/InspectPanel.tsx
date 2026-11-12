@@ -1,12 +1,12 @@
 import type { JSX } from "react";
 import { Platform, Pressable, View } from "react-native";
 
+import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 import { useT, type Translate } from "@/i18n";
 import type { InspectedElement, InspectedFont } from "@/pagescripts/inspect";
 
 import { PanelSheet, SectionLabel } from "./PanelSheet";
-import { Text } from "@/chrome/Text";
-import { radius } from "@/chrome/tokens";
 
 const MONOSPACE = Platform.select({ ios: "Menlo", default: "monospace" });
 

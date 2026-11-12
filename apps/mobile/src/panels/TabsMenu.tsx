@@ -3,11 +3,11 @@ import { useThemeColor } from "heroui-native";
 import { useState, type JSX } from "react";
 import { View } from "react-native";
 
-import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { inputFont } from "@/chrome/tokens";
 import { useT } from "@/i18n";
 import { spaceName } from "@/store/spaceName";
 import type { BrowserFolder, BrowserSpace } from "@/store/types";
-import { inputFont } from "@/chrome/tokens";
+import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
 
 export interface TabsMenuProps {
   visible: boolean;

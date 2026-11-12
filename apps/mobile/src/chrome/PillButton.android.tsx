@@ -2,7 +2,7 @@ import type { JSX } from "react";
 import { Pressable } from "react-native";
 
 import type { PillButtonProps } from "./PillButton.types";
-import { Text } from "@/chrome/Text";
+import { Text } from "./Text";
 
 // A short text action ("Open", "Cancel"): a flat translucent capsule.
 export function PillButton({ testID, label, accessibilityLabel, onPress, disabled = false, compact }: PillButtonProps): JSX.Element {

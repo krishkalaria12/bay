@@ -1,11 +1,11 @@
 import { useThemeColor } from "heroui-native";
 import type { JSX } from "react";
 import { Pressable, View } from "react-native";
+import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 import { useT, type MessageKey } from "@/i18n";
 import { READER_FONTS, READER_SIZES, READER_THEMES, type ReaderFont, type ReaderSettings, type ReaderThemeId } from "@/pagescripts/reader";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
-import { Text } from "@/chrome/Text";
-import { radius } from "@/chrome/tokens";
 
 const FONT_NAMES: Record<ReaderFont, MessageKey> = { serif: "reader.fontSerif", sans: "reader.fontSans", mono: "reader.fontMono" };
 

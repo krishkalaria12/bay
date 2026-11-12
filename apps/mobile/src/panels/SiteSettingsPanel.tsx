@@ -1,13 +1,13 @@
 import { useEffect, useState, type JSX } from "react";
 import { View } from "react-native";
 
+import { PressFeedback } from "@/chrome/PressFeedback";
+import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { useT } from "@/i18n";
 import { TEXT_SIZE } from "@/store/model";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
-import { PressFeedback } from "@/chrome/PressFeedback";
-import { Text } from "@/chrome/Text";
-import { radius } from "@/chrome/tokens";
 
 export interface SiteSettingsPanelProps {
   visible: boolean;
