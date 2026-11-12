@@ -54,6 +54,8 @@ depot_tools during download. Before GN generation it checks `pkg-config`, `ar`,
 libsecret development/runtime packages into that sysroot. This uses `ar` and
 `tar` on every distro; `dpkg` is not required. Packages are cached under
 `$BAY_ENGINE_ROOT/libsecret-packages`. It also generates missing CEF paths.
+The overlay moves libsecret's pkg-config file into `usr/lib/pkgconfig`, matching
+Chromium's sysroot layout, and retains its multiarch library paths.
 
 ## NixOS
 

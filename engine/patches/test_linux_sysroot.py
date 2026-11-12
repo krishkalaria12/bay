@@ -31,7 +31,10 @@ def deb(payload):
 class SysrootTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("ar") and shutil.which("tar"), "requires host ar and tar")
     def test_verified_cache_extracts_with_ar_and_tar_and_repeated_install_works(self):
-        payload = {"usr/lib/x86_64-linux-gnu/pkgconfig/libsecret-1.pc": b"prefix=/usr\n",
+        payload = {"usr/lib/x86_64-linux-gnu/pkgconfig/libsecret-1.pc":
+                   b"prefix=/usr\nName: libsecret\nDescription: fixture\nVersion: 0.20.4\n"
+                   b"Libs: -L${prefix}/lib/x86_64-linux-gnu -lsecret-1\n"
+                   b"Cflags: -I${prefix}/include/libsecret-1\n",
                    "usr/lib/x86_64-linux-gnu/libsecret-1.so": b"library",
                    "usr/include/libsecret-1/libsecret/secret.h": b"header"}
         data = deb(payload)
@@ -49,7 +52,19 @@ class SysrootTests(unittest.TestCase):
             for _ in range(2):
                 sysroot.install(root, target, os.environ, run)
                 for name, content in payload.items():
-                    self.assertEqual((target / name).read_bytes(), content)
+                    installed = name.replace("x86_64-linux-gnu/pkgconfig/", "pkgconfig/")
+                    self.assertEqual((target / installed).read_bytes(), content)
+                if shutil.which("pkg-config"):
+                    # Chromium's pkg-config.py searches these sysroot directories,
+                    # without Debian's multiarch directory or host packages.
+                    env = dict(os.environ, PKG_CONFIG_PATH="", PKG_CONFIG_SYSROOT_DIR="",
+                               PKG_CONFIG_LIBDIR=os.pathsep.join(str(target / path) for path in
+                                   ("usr/lib/pkgconfig", "usr/share/pkgconfig")))
+                    query = subprocess.run(["pkg-config", "--cflags", "--libs", "libsecret-1"],
+                                           env=env, capture_output=True, text=True)
+                    self.assertEqual(query.returncode, 0, query.stderr)
+                    self.assertIn("-lsecret-1", query.stdout)
+                    self.assertIn("/include/libsecret-1", query.stdout)
             urlopen.assert_not_called()
 
     def test_bad_download_never_extracts_or_replaces_cache(self):
