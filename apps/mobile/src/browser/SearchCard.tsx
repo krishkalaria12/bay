@@ -5,7 +5,7 @@ import * as Clipboard from "expo-clipboard";
 import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type ComponentRef, type JSX } from "react";
 import { Pressable, StyleSheet, Text as Span, TextInput, View } from "react-native";
-import Animated, { Extrapolation, interpolate, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, { Extrapolation, FadeIn, interpolate, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -138,6 +138,8 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 
   return (
     <View style={StyleSheet.absoluteFill} testID="search-card">
+      {/* Dims what's behind, so the card and its suggestions stand clear of a busy page. */}
+      <Animated.View entering={FadeIn.duration(SCRIM_FADE)} className="bg-black/15 dark:bg-black/40" style={StyleSheet.absoluteFill} pointerEvents="none" />
       <Pressable
         testID="search-dismiss"
         accessibilityRole="button"
@@ -210,7 +212,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                   className="h-11 w-11 items-center justify-center"
                   onPress={() => fill("")}
                 >
-                  <Icon name="close" color={secondary} size={20} />
+                  <Icon name="close" color={secondary} size={iconSize.row} />
                 </Pressable>
               ) : null}
               <Pressable
@@ -222,7 +224,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                 className="h-11 w-11 items-center justify-center"
                 onPress={() => void listen()}
               >
-                <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={22} />
+                <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={iconSize.control} />
               </Pressable>
               {privateAvailable ? (
                 <Pressable
@@ -233,7 +235,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                   className="h-11 w-11 items-center justify-center"
                   onPress={() => setPrivately((on) => !on)}
                 >
-                  <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={22} />
+                  <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={iconSize.control} />
                 </Pressable>
               ) : (
                 <View className="w-3" />
@@ -310,6 +312,8 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 }
 
 // Shared by the field and its completion so the completion lines up after the typed text.
+const SCRIM_FADE = 160;
+
 const inputTextStyle = { ...inputFont("headline", "regular"), padding: 0, margin: 0 } as const;
 
 function rowText(row: Row, engine: SearchEngine, t: Translate) {
@@ -365,7 +369,7 @@ function SuggestionRow({
       className="flex-row items-center gap-3 pl-2 active:bg-black/5 dark:active:bg-white/10"
       style={{ minHeight: rowHeight, borderRadius: radius.tile }}
     >
-      <View className="w-7 items-center">{row.kind === "page" ? <SiteIcon url={row.url} /> : <Icon name="search" color={muted} size={20} />}</View>
+      <View className="w-7 items-center">{row.kind === "page" ? <SiteIcon url={row.url} /> : <Icon name="search" color={muted} size={iconSize.row} />}</View>
       <View className="flex-1 py-1.5">
         <Text numberOfLines={1} color={foreground}>
           {title}
@@ -382,7 +386,7 @@ function SuggestionRow({
           onPress={() => onFill(row.kind === "page" ? row.url : row.query)}
           className="h-11 w-11 items-center justify-center"
         >
-          <Icon name="fill" color={muted} size={18} />
+          <Icon name="fill" color={muted} size={iconSize.small} />
         </Pressable>
       ) : null}
     </Pressable>
