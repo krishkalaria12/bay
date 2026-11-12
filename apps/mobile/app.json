@@ -25,7 +25,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#151C36"
       },
       "predictiveBackGestureEnabled": false,
       "package": "in.krishkalaria.bay.mobile",
