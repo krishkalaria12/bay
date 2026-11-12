@@ -41,6 +41,7 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   pullToRefresh: true,
   startPageAfterHours: null,
   youtube: { shorts: false, suggestions: false, distractions: false },
+  welcomed: false,
 };
 
 export const TEXT_SIZE = { min: 80, max: 200, step: 10 } as const;
@@ -76,6 +77,10 @@ const DOWNLOAD_STATES = ["downloading", "finished", "failed", "cancelled"] as co
 /** The one space every tab started in: documents saved before spaces existed (v1) land here. */
 export const PERSONAL_SPACE_ID = "personal";
 export const PERSONAL_SPACE: BrowserSpace = { id: PERSONAL_SPACE_ID, name: "Personal", color: "blue" };
+
+/** The error a download keeps when Bay closed during it; shown in the reader's language when it is read back. */
+export const INTERRUPTED_DOWNLOAD = "Bay closed before it finished.";
+
 export const SPACE_COLORS: readonly SpaceColor[] = ["blue", "green", "orange", "red", "violet", "gray"];
 const SPACE_COLOR_PICKLIST: readonly SpaceColor[] = SPACE_COLORS;
 
@@ -886,7 +891,7 @@ export function parseBrowserData(value: JsonValue, fallback: BrowserData): Brows
         received: bytes(entry.received),
         total: bytes(entry.total),
         ...(v.is(v.string(), entry.path) && entry.path ? { path: entry.path } : undefined),
-        ...(interrupted ? { error: "Bay closed before it finished." } : v.is(v.string(), entry.error) ? { error: entry.error } : {}),
+        ...(interrupted ? { error: INTERRUPTED_DOWNLOAD } : v.is(v.string(), entry.error) ? { error: entry.error } : {}),
         startedAt: entry.startedAt,
       },
     ];
@@ -982,6 +987,8 @@ export function parsePreferences(savedPreferences: JsonObject): BrowserPreferenc
       suggestions: isRecord(savedPreferences.youtube) && savedPreferences.youtube.suggestions === true,
       distractions: isRecord(savedPreferences.youtube) && savedPreferences.youtube.distractions === true,
     },
+    // Saved before the welcome existed: whoever saved it has used Bay already.
+    welcomed: savedPreferences.welcomed !== false,
   };
 }
 

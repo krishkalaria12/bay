@@ -7,7 +7,7 @@ public class BayEngineModule: Module {
   public func definition() -> ModuleDefinition {
     Name("BayEngine")
 
-    Events("onDownload", "onMediaControl")
+    Events("onDownload", "onMediaControl", "onShare")
 
     OnCreate { [weak self] in
       // Pages' audio keeps playing with the silent switch on and while Bay is in the background, as in Safari.
@@ -39,6 +39,12 @@ public class BayEngineModule: Module {
     // Voice search (B16): one listen, resolved with the transcript or null.
     AsyncFunction("startListening") { (promise: Promise) in
       BayVoice.listen(promise: promise)
+    }.runOnQueue(.main)
+
+    // A share that launched Bay cold (B14): the iOS share extension opens `bay://share?url=…` instead, which the
+    // normal linking pipeline answers, so there is nothing here to take.
+    AsyncFunction("takeShare") { (promise: Promise) in
+      promise.resolve(nil)
     }.runOnQueue(.main)
 
     AsyncFunction("clearData") { (promise: Promise) in

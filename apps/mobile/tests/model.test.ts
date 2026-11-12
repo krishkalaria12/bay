@@ -149,6 +149,8 @@ test("saved state is validated and repaired", () => {
     pullToRefresh: true,
     startPageAfterHours: null,
     youtube: { shorts: false, suggestions: false, distractions: false },
+    // Saved before the welcome existed, so its owner has seen Bay already.
+    welcomed: true,
   });
   assert.equal(data.spaces[0]?.id, "personal");
   assert.equal(data.activeSpaceId, "personal");
@@ -431,6 +433,23 @@ test("importing links opens unknown pages in the background and can archive them
       ["e", 5],
     ],
   );
+});
+
+test("a fresh install shows the welcome once, and an older install never does", () => {
+  let data = initialBrowserData(page("a", "https://a.com/"));
+  assert.equal(data.preferences.welcomed, false);
+
+  // Quitting half-way through keeps it waiting for the next launch.
+  const halfWay = JSON.parse(JSON.stringify({ version: 2, ...data }));
+  assert.equal(parseBrowserData(halfWay, data).preferences.welcomed, false);
+
+  data = reduceBrowserData(data, { type: "preferences", update: { welcomed: true } });
+  assert.equal(data.preferences.welcomed, true);
+  assert.equal(parseBrowserData(JSON.parse(JSON.stringify({ version: 2, ...data })), data).preferences.welcomed, true);
+
+  // Saved before the welcome existed: its owner knows Bay already.
+  const { welcomed: _welcomed, ...older } = data.preferences;
+  assert.equal(parseBrowserData(JSON.parse(JSON.stringify({ version: 2, ...data, preferences: older })), data).preferences.welcomed, true);
 });
 
 test("the wallpaper is one of Bay's built-ins", () => {

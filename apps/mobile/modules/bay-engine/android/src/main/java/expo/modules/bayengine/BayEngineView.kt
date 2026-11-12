@@ -274,6 +274,17 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     // Pinch to zoom, without the old on-screen +/- buttons. A site's viewport limits still apply.
     settings.builtInZoomControls = true
     settings.displayZoomControls = false
+    // Password AutoFill (B20): the WebView hands a page's sign-in fields to the user's autofill service (Google
+    // Password Manager, or whichever app they chose) and offers to save what's typed when the form submits. That is
+    // the WebView's own behaviour; this only rules out a parent view ever hiding the page from the service.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) importantForAutofill = IMPORTANT_FOR_AUTOFILL_YES
+    // Passkeys (B20): WebAuthn on any site, as a browser, which the WebView sends through Credential Manager. Off by
+    // default in the WebView, and the setting needs a WebView recent enough to have it. Passkeys
+    // from a provider only reach Bay once that provider allows Bay as a browser (Google Password Manager's privileged
+    // apps list); the manifest's CREDENTIAL_MANAGER_SET_ORIGIN lets the WebView name the page's origin in the request.
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION)) {
+      WebSettingsCompat.setWebAuthenticationSupport(settings, WebSettingsCompat.WEB_AUTHENTICATION_SUPPORT_FOR_BROWSER)
+    }
     overScrollMode = OVER_SCROLL_NEVER
     setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
       // A private page's cookies are in its own profile. Asked per address, so a redirect to another host gets its own.

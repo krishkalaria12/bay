@@ -88,14 +88,14 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   required init(appContext: AppContext? = nil) {
-    webView = Self.makeWebView(isPrivate: false)
+    webView = Self.makeWebView(isPrivate: false, desktopMode: false)
     super.init(appContext: appContext)
     clipsToBounds = true
     refreshControl.addTarget(self, action: #selector(refresh), for: .valueChanged)
     setUpWebView()
   }
 
-  private static func makeWebView(isPrivate: Bool) -> WKWebView {
+  private static func makeWebView(isPrivate: Bool, desktopMode: Bool) -> WKWebView {
     let configuration = WKWebViewConfiguration()
     if isPrivate { configuration.websiteDataStore = BayPrivateBrowsing.dataStore() }
     // Video plays in the page when it asks to (playsinline), as in Safari.
@@ -143,7 +143,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     // Sites' custom players call `element.requestFullscreen()`, which WebKit only honours when this is on
     // (native `<video>` fullscreen already works with `allowsInlineMediaPlayback`). Android gets the same
     // behaviour from `onShowCustomView` in its WebChromeClient.
-    webView.isElementFullscreenEnabled = true
+    webView.configuration.preferences.isElementFullscreenEnabled = true
     webView.accessibilityElementsHidden = !isActive
     webView.isHidden = isSuspended
     webView.scrollView.delegate = self
@@ -172,7 +172,7 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     webView.uiDelegate = nil
     webView.scrollView.delegate = nil
     webView.removeFromSuperview()
-    webView = Self.makeWebView(isPrivate: isPrivate)
+    webView = Self.makeWebView(isPrivate: isPrivate, desktopMode: desktopMode)
     setUpWebView()
     setNeedsLayout()
   }
@@ -438,21 +438,28 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     decisionHandler(.allow)
   }
 
-  /// Attachments and types WebKit can't show become downloads.
+  /// Attachments and types WebKit can't show become downloads. An HTTP error never does: it is the server's answer
+  /// to show as a page, as Safari and Chrome do. A cancelled sign-in's 401, which often has no body and no
+  /// Content-Type, would otherwise count as a type WebKit can't show and come back as a refused download.
   func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
                decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-    let disposition = (navigationResponse.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
+    let http = navigationResponse.response as? HTTPURLResponse
+    if let status = http?.statusCode, status >= 400 {
+      decisionHandler(.allow)
+      return
+    }
+    let disposition = http?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
     let attachment = disposition.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("attachment")
     decisionHandler(attachment || !navigationResponse.canShowMIMEType ? .download : .allow)
   }
 
   func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
-    BayDownloads.shared.track(download, url: navigationAction.request.url, isPrivate: isPrivate)
+    BayDownloads.shared.track(download, url: navigationAction.request.url, isPrivate: isPrivate, webView: webView)
     navigationBecameDownload()
   }
 
   func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
-    BayDownloads.shared.track(download, url: navigationResponse.response.url, isPrivate: isPrivate)
+    BayDownloads.shared.track(download, url: navigationResponse.response.url, isPrivate: isPrivate, webView: webView)
     navigationBecameDownload()
   }
 
@@ -552,10 +559,11 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
-               initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?, Bool) -> Void) {
+               initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
     let id = UUID().uuidString
+    // WebKit takes the text the page gets: nothing when the sheet is dismissed.
     pendingPageRequests[id] = { accepted, value in
-      if accepted { completionHandler(value, true) } else { completionHandler(nil, false) }
+      completionHandler(accepted ? (value ?? "") : nil)
     }
     emitPageRequest(id: id, kind: "prompt", message: prompt, defaultValue: defaultText)
   }

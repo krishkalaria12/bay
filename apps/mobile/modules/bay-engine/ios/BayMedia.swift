@@ -22,7 +22,7 @@ final class BayMedia: NSObject {
     var info: [String: Any] = [
       MPMediaItemPropertyTitle: title,
       MPMediaItemPropertyArtist: site,
-      MPMediaItemPropertyMediaType: MPMediaType.audio.rawValue,
+      MPMediaItemPropertyMediaType: MPMediaType.anyAudio.rawValue,
       MPNowPlayingInfoPropertyPlaybackRate: playing ? 1.0 : 0.0,
     ]
     // If WebKit is already driving playback (e.g. a fullscreen player), don't fight it with a stale position:
@@ -80,9 +80,9 @@ final class BayMedia: NSObject {
     center.togglePlayPauseCommand.isEnabled = true
     center.stopCommand.isEnabled = true
     center.skipForwardCommand.isEnabled = true
-    center.skipForwardCommand.skipInterval = 10
+    center.skipForwardCommand.preferredIntervals = [NSNumber(value: 10)]
     center.skipBackwardCommand.isEnabled = true
-    center.skipBackwardCommand.skipInterval = 10
+    center.skipBackwardCommand.preferredIntervals = [NSNumber(value: 10)]
     // The hardware headset button is a play/pause toggle in every other browser.
     center.changePlaybackPositionCommand.isEnabled = false
   }

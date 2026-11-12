@@ -1,6 +1,7 @@
 import { Host, Image } from "@expo/ui/swift-ui";
-import { font, foregroundStyle } from "@expo/ui/swift-ui/modifiers";
+import { accessibilityHidden, font, foregroundStyle } from "@expo/ui/swift-ui/modifiers";
 import type { ComponentProps, JSX } from "react";
+import { View } from "react-native";
 
 import type { IconName, IconProps } from "./Icon.types";
 
@@ -49,13 +50,19 @@ const symbols: Record<IconName, NonNullable<ComponentProps<typeof Image>["system
   palette: "paintpalette",
   tune: "slider.horizontal.3",
   visibility: "eye",
+  tick: "checkmark",
 };
 
-// An SF Symbol inside React Native layout. The host ignores touches so the surrounding Pressable gets them.
+// An SF Symbol inside React Native layout. The host ignores touches so the surrounding Pressable gets them, and
+// VoiceOver skips it: the control around it carries the label, and SwiftUI would otherwise read the symbol's name.
+// Every symbol sits centred in the same size × size square, like Android's Material Symbols: a symbol's own width varies
+// (a pin is narrower than a gear), and sized to that, the text beside each icon started somewhere else.
 export function Icon({ name, color, size = 24 }: IconProps): JSX.Element {
   return (
-    <Host matchContents pointerEvents="none">
-      <Image systemName={symbols[name]} modifiers={[font({ size: size * 0.75 }), foregroundStyle(color)]} />
-    </Host>
+    <View pointerEvents="none" style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      <Host matchContents pointerEvents="none">
+        <Image systemName={symbols[name]} modifiers={[font({ size: size * 0.75 }), foregroundStyle(color), accessibilityHidden(true)]} />
+      </Host>
+    </View>
   );
 }

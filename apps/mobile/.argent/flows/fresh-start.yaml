@@ -10,6 +10,11 @@ steps:
           url: exp+bay://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081
   - await: { visible: { id: bar-search }, timeout: 60000 }
   - await: { idle: true, timeout: 15000 }
+  # A fresh install opens on the welcome; tapping its glass dome lets Bay through.
+  - when: { visible: { id: welcome-start } }
+    steps:
+      - tap: { id: welcome-start }
+      - await: { hidden: { id: welcome-start }, timeout: 10000 }
   - when: { visible: { id: bar-more } }
     steps:
       - tap: { id: bar-more }
@@ -20,6 +25,9 @@ steps:
       - tap: { id: bar-settings }
   - await: { visible: { id: settings-screen }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }
+  # "Clear browsing data" sits below the fold of a phone-sized sheet, so scroll to it before tapping.
+  - swipe: { from: { x: 0.5, y: 0.75 }, direction: up }
+  - scroll-to: { target: { id: settings-clear-data } }
   - tap: { id: settings-clear-data }
   - await: { visible: { id: clear-data-confirm }, timeout: 10000 }
   - await: { idle: true, timeout: 15000 }

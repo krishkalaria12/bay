@@ -1,8 +1,11 @@
-import { Typography, useThemeColor } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
+import { PressFeedback } from "@/chrome/PressFeedback";
+import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
+import { useT } from "@/i18n";
 import { TEXT_SIZE } from "@/store/model";
 import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 
@@ -25,6 +28,7 @@ export interface SiteSettingsPanelProps {
 
 /** Per-site settings (B12): what this host keeps instead of the global choices. */
 export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
+  const t = useT();
   // Rarely needed zoom control sits one step away, so the panel fits without scrolling.
   const [zoom, setZoom] = useState(false);
   useEffect(() => {
@@ -40,20 +44,27 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
 
   if (zoom) {
     return (
-      <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setZoom(false)} title="Page zoom" testID="site-settings" height="60%">
+      <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setZoom(false)} title={t("site.zoom")} testID="site-settings" height="60%">
         <SiteZoom textSize={props.textSize} globalTextSize={props.globalTextSize} onChange={props.onTextSize} />
       </PanelSheet>
     );
   }
 
   return (
-    <PanelSheet visible={props.visible} onClose={props.onClose} title="This site" testID="site-settings" height="60%" header={<SiteHeader url={props.url} />}>
+    <PanelSheet
+      visible={props.visible}
+      onClose={props.onClose}
+      title={t("site.title")}
+      testID="site-settings"
+      height="60%"
+      header={<SiteHeader url={props.url} />}
+    >
       <Group>
         <ActionRow
           testID="site-text-size"
           icon="textSize"
-          label="Page zoom"
-          detail={props.textSize === null ? `Follows Bay's ${props.globalTextSize}%` : `${props.textSize}% on this site`}
+          label={t("site.zoom")}
+          detail={props.textSize === null ? t("site.zoom.follows", { size: props.globalTextSize }) : t("site.zoom.onSite", { size: props.textSize })}
           value={props.textSize === null ? undefined : `${props.textSize}%`}
           chevron
           onPress={act(() => setZoom(true))}
@@ -61,16 +72,16 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
         <ActionRow
           testID="site-reader"
           icon="reader"
-          label="Open Reader automatically"
-          detail="As each article here loads"
+          label={t("site.reader")}
+          detail={t("site.reader.detail")}
           toggle={props.reader}
           onPress={() => props.onReader(!props.reader)}
         />
         <ActionRow
           testID="site-desktop"
           icon="desktop"
-          label="Desktop site"
-          detail="Asks this site for the desktop page"
+          label={t("site.desktop")}
+          detail={t("site.desktop.detail")}
           toggle={props.desktop}
           onPress={() => props.onDesktop(!props.desktop)}
         />
@@ -81,7 +92,7 @@ export function SiteSettingsPanel(props: SiteSettingsPanelProps): JSX.Element {
             <ActionRow
               testID="site-reset"
               destructive
-              label="Reset this site"
+              label={t("site.reset")}
               onPress={() => {
                 props.onTextSize(null);
                 props.onReader(false);
@@ -105,7 +116,7 @@ function SiteZoom({
   globalTextSize: number;
   onChange: (textSize: number | null) => void;
 }): JSX.Element {
-  const foreground = useThemeColor("foreground");
+  const t = useT();
   // Untouched zooms stay null until the buttons are used, so a look costs nothing.
   const [value, setValue] = useState(textSize ?? globalTextSize);
 
@@ -117,48 +128,54 @@ function SiteZoom({
 
   return (
     <>
-      <View className="rounded-[20px] bg-default p-4">
-        <Typography className="text-muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
+      <View className="bg-default p-4" style={{ borderRadius: radius.card }}>
+        <Text tone="muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
           example.com
-        </Typography>
-        <Typography className="mt-1 font-semibold" style={{ fontSize: (20 * value) / 100, lineHeight: (26 * value) / 100 }}>
-          The quiet bay
-        </Typography>
-        <Typography className="mt-1" style={{ fontSize: (16 * value) / 100, lineHeight: (23 * value) / 100 }}>
-          This site shows its text and images at this size, whatever Bay's zoom is.
-        </Typography>
+        </Text>
+        <Text weight="semibold" className="mt-1" style={{ fontSize: (20 * value) / 100, lineHeight: (26 * value) / 100 }}>
+          {t("settings.zoom.previewTitle")}
+        </Text>
+        <Text className="mt-1" style={{ fontSize: (16 * value) / 100, lineHeight: (23 * value) / 100 }}>
+          {t("site.zoom.previewBody")}
+        </Text>
       </View>
       <View className="mt-4 flex-row items-center gap-3">
-        <Pressable
+        <PressFeedback
           testID="site-zoom-smaller"
           accessibilityRole="button"
-          accessibilityLabel="Zoom out"
+          accessibilityLabel={t("site.zoom.out")}
+          accessibilityState={{ disabled: value <= TEXT_SIZE.min }}
           disabled={value <= TEXT_SIZE.min}
           onPress={() => step(-1)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value <= TEXT_SIZE.min ? 0.35 : 1 }}
         >
-          <Typography style={{ color: foreground, fontSize: 15 }}>A</Typography>
-        </Pressable>
-        <Typography testID="site-zoom-value" className="w-16 text-center text-lg font-semibold">
+          <Text variant="callout" weight="medium">
+            A
+          </Text>
+        </PressFeedback>
+        <Text testID="site-zoom-value" accessibilityLiveRegion="polite" variant="headline" className="w-16 text-center">
           {`${value}%`}
-        </Typography>
-        <Pressable
+        </Text>
+        <PressFeedback
           testID="site-zoom-larger"
           accessibilityRole="button"
-          accessibilityLabel="Zoom in"
+          accessibilityLabel={t("site.zoom.in")}
+          accessibilityState={{ disabled: value >= TEXT_SIZE.max }}
           disabled={value >= TEXT_SIZE.max}
           onPress={() => step(1)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value >= TEXT_SIZE.max ? 0.35 : 1 }}
         >
-          <Typography style={{ color: foreground, fontSize: 21 }}>A</Typography>
-        </Pressable>
+          <Text variant="title" weight="medium">
+            A
+          </Text>
+        </PressFeedback>
       </View>
       {textSize !== null ? (
         <View className="mt-4">
           <Group>
-            <ActionRow testID="site-zoom-follow" label={`Follow Bay's ${globalTextSize}%`} onPress={() => onChange(null)} />
+            <ActionRow testID="site-zoom-follow" label={t("site.zoom.follow", { size: globalTextSize })} onPress={() => onChange(null)} />
           </Group>
         </View>
       ) : null}
@@ -171,12 +188,12 @@ function SiteHeader({ url }: { url: string }): JSX.Element {
   return (
     <View className="flex-1 flex-row items-center gap-2.5">
       {url ? <SiteIcon url={url} size={30} /> : null}
-      <Typography testID="site-settings-host" numberOfLines={1} className="flex-1 text-lg font-semibold">
+      <Text testID="site-settings-host" numberOfLines={1} accessibilityRole="header" variant="headline" className="flex-1">
         {url
           .replace(/^https?:\/\//, "")
           .replace(/^www\./, "")
           .replace(/\/.*$/, "")}
-      </Typography>
+      </Text>
     </View>
   );
 }

@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { Image, StyleSheet, useColorScheme, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Pattern, Rect, Stop } from "react-native-svg";
 
+import type { MessageKey } from "@/i18n";
 import type { WallpaperId } from "@/store/types";
 
 interface Palette {
@@ -31,7 +32,17 @@ const WALLPAPER_PALETTES: Record<Exclude<WallpaperId, "plain" | "photo">, { ligh
   },
 };
 
-export const WALLPAPER_NAMES: Record<WallpaperId, string> = { bay: "Sea mist", dusk: "Dusk", forest: "Forest", plain: "Plain", photo: "Your photo" };
+/** Each wallpaper's name in the catalogue, for Settings to show in the current language. */
+export const WALLPAPER_NAMES: Record<WallpaperId, MessageKey> = {
+  bay: "settings.wallpapers.bay",
+  dusk: "settings.wallpapers.dusk",
+  forest: "settings.wallpapers.forest",
+  plain: "settings.wallpapers.plain",
+  photo: "settings.wallpapers.photo",
+};
+
+// A wallpaper is only a backdrop: screen readers skip it.
+const hidden = { accessible: false, accessibilityElementsHidden: true, importantForAccessibility: "no-hide-descendants" } as const;
 
 function wallpaperPalette(id: WallpaperId, dark: boolean): Palette | null {
   return id === "plain" || id === "photo" ? null : WALLPAPER_PALETTES[id][dark ? "dark" : "light"];
@@ -52,7 +63,7 @@ export function Wallpaper({
 
   if (id === "photo" && photo) {
     return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={StyleSheet.absoluteFill} pointerEvents="none" {...hidden}>
         {/* Decoded at the view's size (resizeMethod), not the photo's: a 12 MP photo would take ~48 MB as a bitmap. */}
         <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} resizeMode="cover" resizeMethod="resize" fadeDuration={0} />
         {/* Darkens the lower half, where the start page's text sits, so it reads on any photo. */}
@@ -69,10 +80,10 @@ export function Wallpaper({
     );
   }
 
-  if (!colors) return <View style={StyleSheet.absoluteFill} className="bg-background" pointerEvents="none" />;
+  if (!colors) return <View style={StyleSheet.absoluteFill} className="bg-background" pointerEvents="none" {...hidden} />;
 
   return (
-    <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+    <Svg style={StyleSheet.absoluteFill} pointerEvents="none" {...hidden}>
       <Defs>
         <LinearGradient id={`wash-${id}`} x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={colors.top} />

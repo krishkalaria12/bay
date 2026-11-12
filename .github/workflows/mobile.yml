@@ -1,0 +1,52 @@
+# Builds the mobile app with EAS (docs/mobile-releasing.md): a preview build for testers, or the production build
+# the stores take. It runs on demand only: an EAS build costs build minutes and, for the stores, a review.
+#
+#   gh workflow run mobile.yml -f profile=preview -f platform=all
+name: Mobile
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Build profile (apps/mobile/eas.json)
+        type: choice
+        options: [preview, production]
+        default: preview
+      platform:
+        description: Platform
+        type: choice
+        options: [all, ios, android]
+        default: all
+
+concurrency:
+  # A production build and a preview of the same app would race for the same version number.
+  group: mobile-${{ inputs.profile }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ inputs.profile }} (${{ inputs.platform }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # The app is its own workspace with its own lockfile, and it links @bay/core from the root workspace, so both
+      # installs are needed before the build.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+        working-directory: apps/mobile
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: eas build --platform ${{ inputs.platform }} --profile ${{ inputs.profile }} --non-interactive --wait
+        working-directory: apps/mobile

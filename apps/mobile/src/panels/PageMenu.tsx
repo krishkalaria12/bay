@@ -1,11 +1,15 @@
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
 import { Icon } from "@/chrome/Icon";
 import type { IconName } from "@/chrome/Icon.types";
+import { PressFeedback } from "@/chrome/PressFeedback";
+import { Text } from "@/chrome/Text";
+import { iconSize, radius, space } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
-import { ActionRow, Group, PanelSheet } from "./PanelSheet";
+import { useT } from "@/i18n";
+import { ActionRow, Group, PanelSheet, SheetIconButton } from "./PanelSheet";
 
 export interface PageMenuProps {
   visible: boolean;
@@ -64,18 +68,18 @@ function NavigationAction({
   const foreground = useThemeColor("foreground");
 
   return (
-    <Pressable
+    <PressFeedback
       testID={id}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+      className="h-12 flex-1 items-center justify-center rounded-full bg-default"
       style={{ opacity: disabled ? 0.35 : 1 }}
     >
-      <Icon name={icon} color={foreground} size={22} />
-    </Pressable>
+      <Icon name={icon} color={foreground} size={iconSize.control} />
+    </PressFeedback>
   );
 }
 
@@ -100,32 +104,37 @@ function Tile({
   const accent = useThemeColor("accent");
 
   return (
-    <Pressable
+    <PressFeedback
       testID={id}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      className={`h-[72px] items-center justify-center gap-1.5 rounded-2xl active:opacity-70 ${active ? "bg-accent/15" : "bg-default"}`}
-      style={{ width: "23.5%" }}
+      className={`items-center justify-center ${active ? "bg-accent/15" : "bg-default"}`}
+      style={{ width: TILE_WIDTH, height: 76, gap: 6, borderRadius: radius.tile }}
     >
-      <Icon name={icon} color={active ? accent : foreground} size={22} />
-      <Typography numberOfLines={1} className={`px-1 text-[12px] ${active ? "text-accent" : "text-foreground"}`}>
+      <Icon name={icon} color={active ? accent : foreground} size={iconSize.control} />
+      <Text variant="caption" tone={active ? "accent" : "default"} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
         {label}
-      </Typography>
-    </Pressable>
+      </Text>
+    </PressFeedback>
   );
 }
 
+/** Four tiles to a row, with the same gap between them as between the rows. */
+const TILE_GAP = space.sm;
+const TILE_WIDTH = `${(100 - 3 * 2.2) / 4}%` as const;
+
 function TileGrid({ children }: { children: JSX.Element | (JSX.Element | null)[] }): JSX.Element {
   return (
-    <View className="mt-3 flex-row flex-wrap" style={{ columnGap: "2%", rowGap: 8 }}>
+    <View className="flex-row flex-wrap" style={{ marginTop: TILE_GAP, columnGap: "2.2%", rowGap: TILE_GAP }}>
       {children}
     </View>
   );
 }
 
 export function PageMenu(props: PageMenuProps): JSX.Element {
+  const t = useT();
   // Rarely used page tools sit one step away, so the menu fits without scrolling.
   const [tools, setTools] = useState(false);
   useEffect(() => {
@@ -141,17 +150,30 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
 
   if (tools) {
     return (
-      <PanelSheet visible={props.visible} onClose={props.onClose} onBack={() => setTools(false)} title="Page tools" testID="page-menu" height="64%">
+      <PanelSheet
+        visible={props.visible}
+        onClose={props.onClose}
+        onBack={() => setTools(false)}
+        title={t("pageMenu.toolsTitle")}
+        testID="page-menu"
+        height="70%"
+      >
         <Group>
           <ActionRow
             testID="page-hide-elements"
             icon="hide"
-            label="Hide elements"
-            detail="Tap things on the page to remove them"
+            label={t("pageMenu.hideElements")}
+            detail={t("pageMenu.hideElements.detail")}
             onPress={act(props.onHideElements)}
           />
-          <ActionRow testID="page-inspect" icon="inspect" label="Inspect element" detail="Fonts, colours and CSS" onPress={act(props.onInspect)} />
-          <ActionRow testID="page-markdown" icon="markdown" label="Copy as Markdown" detail="The article, ready to paste" onPress={act(props.onCopyMarkdown)} />
+          <ActionRow testID="page-inspect" icon="inspect" label={t("pageMenu.inspect")} detail={t("pageMenu.inspect.detail")} onPress={act(props.onInspect)} />
+          <ActionRow
+            testID="page-markdown"
+            icon="markdown"
+            label={t("pageMenu.markdown")}
+            detail={t("pageMenu.markdown.detail")}
+            onPress={act(props.onCopyMarkdown)}
+          />
         </Group>
       </PanelSheet>
     );
@@ -161,10 +183,12 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
     <PanelSheet
       visible={props.visible}
       onClose={props.onClose}
-      title="Page"
+      title={t("pageMenu.title")}
       testID="page-menu"
-      height="64%"
+      height="66%"
       header={<SiteHeader title={props.title} url={props.url} blocking={props.blocking} />}
+      // Settings sits beside the close button, so the twelve page actions fill the grid's three rows.
+      accessory={<SheetIconButton testID="page-settings" icon="settings" label={t("pageMenu.settings")} onPress={act(props.onSettings)} tone="default" />}
     >
       {props.blocking !== "off" || props.hiddenCount ? (
         <Group>
@@ -172,8 +196,8 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
             <ActionRow
               testID="page-blocking"
               icon="shield"
-              label="Block ads and trackers"
-              detail={props.blocking === "paused" ? "Paused on this site" : "On for this site"}
+              label={t("pageMenu.blocking")}
+              detail={props.blocking === "paused" ? t("pageMenu.blocking.paused") : t("pageMenu.blocking.on")}
               toggle={props.blocking === "on"}
               onPress={props.onToggleBlocking}
             />
@@ -182,50 +206,49 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
             <ActionRow
               testID="page-show-hidden"
               icon="visibility"
-              label={props.hiddenCount === 1 ? "Show 1 hidden element" : `Show ${props.hiddenCount} hidden elements`}
+              label={props.hiddenCount === 1 ? t("pageMenu.hiddenOne") : t("pageMenu.hiddenMany", { count: props.hiddenCount })}
               onPress={act(props.onShowHidden)}
             />
           ) : null}
         </Group>
       ) : null}
-      <View className="mt-3 flex-row gap-2">
-        <NavigationAction id="page-back" icon="back" label="Back" disabled={!props.canGoBack} onPress={act(props.onBack)} />
-        <NavigationAction id="page-forward" icon="forward" label="Forward" disabled={!props.canGoForward} onPress={act(props.onForward)} />
+      <View className="flex-row" style={{ marginTop: space.md, gap: TILE_GAP }}>
+        <NavigationAction id="page-back" icon="back" label={t("pageMenu.back")} disabled={!props.canGoBack} onPress={act(props.onBack)} />
+        <NavigationAction id="page-forward" icon="forward" label={t("pageMenu.forward")} disabled={!props.canGoForward} onPress={act(props.onForward)} />
         <NavigationAction
           id={props.isLoading ? "page-stop" : "page-reload"}
           icon={props.isLoading ? "close" : "reload"}
-          label={props.isLoading ? "Stop" : "Reload"}
+          label={props.isLoading ? t("pageMenu.stop") : t("pageMenu.reload")}
           onPress={act(props.isLoading ? props.onStop : props.onReload)}
         />
-        <NavigationAction id="page-share" icon="share" label="Share" onPress={act(props.onShare)} />
+        <NavigationAction id="page-share" icon="share" label={t("pageMenu.share")} onPress={act(props.onShare)} />
       </View>
       <TileGrid>
-        <Tile id="page-new-tab" icon="add" label="New tab" onPress={act(props.onNewTab)} />
-        {props.privateAvailable ? <Tile id="page-new-private" icon="private" label="Private tab" onPress={act(props.onNewPrivateTab)} /> : null}
-        <Tile id="page-find" icon="find" label="Find" onPress={act(props.onFind)} />
+        <Tile id="page-new-tab" icon="add" label={t("pageMenu.newTab")} onPress={act(props.onNewTab)} />
+        {props.privateAvailable ? <Tile id="page-new-private" icon="private" label={t("pageMenu.privateTab")} onPress={act(props.onNewPrivateTab)} /> : null}
+        <Tile id="page-find" icon="find" label={t("pageMenu.find")} onPress={act(props.onFind)} />
         <Tile
           id="page-reader"
           icon="reader"
-          label="Reader"
-          accessibilityLabel={props.readerActive ? "Reader settings" : "Reader"}
+          label={t("pageMenu.reader")}
+          accessibilityLabel={props.readerActive ? t("pageMenu.readerSettings") : t("pageMenu.reader")}
           active={props.readerActive}
           onPress={act(props.onReader)}
         />
         <Tile
           id="page-pin"
           icon={props.isPinned ? "unpin" : "pin"}
-          label={props.isPinned ? "Unpin" : "Pin"}
+          label={props.isPinned ? t("pageMenu.unpin") : t("pageMenu.pin")}
           active={props.isPinned}
           onPress={act(props.onPin)}
         />
-        <Tile id="page-translate" icon="translate" label="Translate" onPress={act(props.onTranslate)} />
-        <Tile id="page-copy" icon="link" label="Copy link" onPress={act(props.onCopy)} />
-        <Tile id="page-more-tools" icon="more" label="Tools" onPress={() => setTools(true)} />
-        <Tile id="page-site-settings" icon="tune" label="This site" onPress={act(props.onSiteSettings)} />
-        <Tile id="page-history" icon="history" label="History" onPress={act(props.onHistory)} />
-        <Tile id="page-downloads" icon="download" label="Downloads" onPress={act(props.onDownloads)} />
-        <Tile id="page-close-tab" icon="archive" label="Archive" onPress={act(props.onCloseTab)} />
-        <Tile id="page-settings" icon="settings" label="Settings" onPress={act(props.onSettings)} />
+        <Tile id="page-translate" icon="translate" label={t("pageMenu.translate")} onPress={act(props.onTranslate)} />
+        <Tile id="page-copy" icon="link" label={t("pageMenu.copyLink")} onPress={act(props.onCopy)} />
+        <Tile id="page-more-tools" icon="more" label={t("pageMenu.tools")} onPress={() => setTools(true)} />
+        <Tile id="page-site-settings" icon="tune" label={t("pageMenu.thisSite")} onPress={act(props.onSiteSettings)} />
+        <Tile id="page-history" icon="history" label={t("pageMenu.history")} onPress={act(props.onHistory)} />
+        <Tile id="page-downloads" icon="download" label={t("pageMenu.downloads")} onPress={act(props.onDownloads)} />
+        <Tile id="page-close-tab" icon="archive" label={t("pageMenu.archive")} onPress={act(props.onCloseTab)} />
       </TileGrid>
     </PanelSheet>
   );
@@ -235,32 +258,33 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
 function SiteHeader({ title, url, blocking }: { title: string; url: string; blocking: PageMenuProps["blocking"] }): JSX.Element {
   const muted = useThemeColor("muted");
   const danger = useThemeColor("danger");
+  const t = useT();
   const web = /^https?:/.test(url);
   const insecure = url.startsWith("http:");
 
   const status = [
-    web ? (insecure ? "Not secure" : "Secure") : "",
-    blocking === "on" ? "Ads and trackers blocked" : blocking === "paused" ? "Blocking paused" : "",
+    web ? (insecure ? t("pageMenu.notSecure") : t("pageMenu.secure")) : "",
+    blocking === "on" ? t("pageMenu.blocked") : blocking === "paused" ? t("pageMenu.blockingPaused") : "",
   ]
     .filter(Boolean)
     .join(" · ");
 
   return (
-    <View className="flex-row items-center gap-3">
-      {url ? <SiteIcon url={url} size={40} /> : null}
+    <View className="flex-row items-center" style={{ gap: space.md }}>
+      {url ? <SiteIcon url={url} size={44} /> : null}
       <View className="flex-1">
-        <Typography numberOfLines={1} className="text-[17px] font-semibold">
+        <Text variant="headline" numberOfLines={1} accessibilityRole="header">
           {title || url}
-        </Typography>
-        <Typography testID="page-menu-url" numberOfLines={1} className="text-[13px] text-muted">
+        </Text>
+        <Text testID="page-menu-url" variant="footnote" tone="muted" numberOfLines={1}>
           {url}
-        </Typography>
+        </Text>
         {status ? (
-          <View className="mt-0.5 flex-row items-center gap-1" accessible accessibilityLabel={status}>
-            {web ? <Icon name={insecure ? "error" : "lock"} color={insecure ? danger : muted} size={12} /> : null}
-            <Typography numberOfLines={1} className={insecure ? "text-xs text-danger" : "text-xs text-muted"}>
+          <View className="flex-row items-center" style={{ gap: space.xs, marginTop: space.xxs }} accessible accessibilityLabel={status}>
+            {web ? <Icon name={insecure ? "error" : "lock"} color={insecure ? danger : muted} size={iconSize.inline - 2} /> : null}
+            <Text variant="caption" weight="regular" tone={insecure ? "danger" : "muted"} numberOfLines={1}>
               {status}
-            </Typography>
+            </Text>
           </View>
         ) : null}
       </View>
