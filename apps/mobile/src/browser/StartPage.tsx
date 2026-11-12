@@ -114,7 +114,7 @@ export function StartPage({ pins, history, onPhoto, onOpen, onUnpin }: StartPage
               exiting={leaving}
             >
               <Surface radius={radius.tile} style={styles.tile}>
-                <SiteIcon url={site.url} size={PIN_ICON} />
+                <SiteIcon url={site.url} size={PIN_ICON} bare />
               </Surface>
               {/* The label may run past its tile, into the gap beside it, but never into the next label. */}
               <Text numberOfLines={1} variant="caption" color={ink} style={[{ width: PIN_TILE + columnGap - space.xs, textAlign: "center" }, shadow]}>

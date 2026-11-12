@@ -278,7 +278,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                   className={privately ? "flex-1 items-center bg-white/10" : "flex-1 items-center bg-default"}
                   style={{ gap: space.xs + 2, paddingTop: space.md, paddingBottom: space.sm + 2, borderRadius: radius.tile }}
                 >
-                  <SiteIcon url={site.url} size={28} />
+                  <SiteIcon url={site.url} size={iconSize.control} bare />
                   <Text variant="caption" color={text} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
                     {site.title || siteName(site.url)}
                   </Text>

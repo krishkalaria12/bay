@@ -12,13 +12,43 @@ const tints = ["#DCE8F5", "#F3E2D6", "#E3EEDF", "#ECE1F2", "#F5E9C9", "#DDEEEE"]
  * The site's saved icon on a tile matching the theme, else a monogram. Icons are local files (`favicons.ts`), so this
  * never loads anything. It always sits beside the site's name, so screen readers skip it.
  */
-export function SiteIcon({ url, size = 28 }: { url: string; size?: number }): JSX.Element {
+export function SiteIcon({
+  url,
+  size = 28,
+  bare = false,
+}: {
+  url: string;
+  size?: number;
+  /** Already on a tile of its own (a pin): the icon or the letter alone, without a second tile around it. */
+  bare?: boolean;
+}): JSX.Element {
   const host = siteHost(url);
   const icon = useBrowserStore((state) => state.data.favicons[host]);
   const [broken, setBroken] = useState<string | null>(null);
   // Sites that switch icons with the colour scheme (GitHub's turns white in dark mode) gave the one for this theme.
   const tile = useColorScheme() === "dark" ? "#2C2C2E" : "#FFFFFF";
   const radius = size * 0.28;
+
+  // The cache was cleared or the file isn't an image: show the monogram, and fetch it again next visit.
+  const forget = (broke: string) => {
+    setBroken(broke);
+    useBrowserStore.getState().dispatch({ type: "favicon", host, uri: null });
+  };
+
+  if (icon && broken !== icon && bare) {
+    return (
+      <Image
+        accessible={false}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        source={{ uri: icon, width: size, height: size }}
+        style={{ width: size, height: size, borderRadius: radius * 0.5 }}
+        resizeMethod="resize"
+        fadeDuration={0}
+        onError={() => forget(icon)}
+      />
+    );
+  }
 
   if (icon && broken !== icon) {
     const inner = Math.round(size * 0.72);
@@ -36,11 +66,7 @@ export function SiteIcon({ url, size = 28 }: { url: string; size?: number }): JS
           style={{ width: inner, height: inner, borderRadius: radius * 0.5 }}
           resizeMethod="resize"
           fadeDuration={0}
-          onError={() => {
-            // The cache was cleared or the file isn't an image: show the monogram, and fetch it again next visit.
-            setBroken(icon);
-            useBrowserStore.getState().dispatch({ type: "favicon", host, uri: null });
-          }}
+          onError={() => forget(icon)}
         />
       </View>
     );
@@ -51,6 +77,20 @@ export function SiteIcon({ url, size = 28 }: { url: string; size?: number }): JS
   let hash = 0;
 
   for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+
+  if (bare) {
+    return (
+      <Text
+        accessible={false}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        weight="semibold"
+        style={{ fontSize: size * 0.82, lineHeight: size, textAlign: "center", width: size }}
+      >
+        {letter}
+      </Text>
+    );
+  }
 
   return (
     <View
