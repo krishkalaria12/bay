@@ -16,4 +16,10 @@ export const chromePtBR: ChromeStrings = {
   "sheet.back": "Voltar",
   "sheet.close": "Fechar {title}",
   "sheet.selected": "Selecionado",
+
+  // Welcome.
+  "welcome.title": "Um jeito mais calmo de navegar.",
+  "welcome.body": "Anúncios e rastreadores são bloqueados desde o início, e tudo fica ao alcance do polegar.",
+  "welcome.swipe": "Deslize para cima para começar",
+  "welcome.start": "Começar a navegar",
 };

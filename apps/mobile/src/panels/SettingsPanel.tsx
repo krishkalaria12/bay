@@ -1,13 +1,16 @@
 import Constants from "expo-constants";
 import { File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
-import { Image, Pressable, View } from "react-native";
+import { Image, View } from "react-native";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
 import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
 import { Icon } from "@/chrome/Icon";
+import { PressFeedback } from "@/chrome/PressFeedback";
+import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
 import {
   detectLocale,
   LOCALE_IDS,
@@ -97,9 +100,13 @@ const pages: Record<Page, { title: MessageKey; parent: Page }> = {
   startPage: { title: "settings.startPage", parent: "browsing" },
 };
 
-/** Explains the rows above it, in the sheet's muted small print. */
+/** Explains the rows above it, in the sheet's muted small print, lined up with the rows' text. */
 function Note({ children }: { children: string }): JSX.Element {
-  return <Typography className="mt-2 px-1 text-[13px] leading-5 text-muted">{children}</Typography>;
+  return (
+    <Text variant="footnote" tone="muted" className="mt-2 px-4">
+      {children}
+    </Text>
+  );
 }
 
 /** The language the phone is set to, as Bay would show it, so the System row can say what it means today. */
@@ -569,16 +576,18 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             />
           </Group>
           {busy ? (
-            <Typography testID="clear-data-busy" accessibilityLiveRegion="polite" className="mt-3 px-1 text-sm text-muted">
+            <Text testID="clear-data-busy" accessibilityLiveRegion="polite" variant="subhead" tone="muted" className="mt-3 px-4">
               {t("settings.clearingWebsiteData")}
-            </Typography>
+            </Text>
           ) : null}
           {error ? (
-            <Typography testID="clear-data-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-3 px-1 text-sm text-danger">
+            <Text testID="clear-data-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-3 px-4">
               {error}
-            </Typography>
+            </Text>
           ) : null}
-          <Typography className="mt-6 text-center text-xs text-muted">{t("settings.version", { version: Constants.expoConfig?.version ?? "" })}</Typography>
+          <Text variant="caption" weight="regular" tone="muted" className="mt-6 text-center">
+            {t("settings.version", { version: Constants.expoConfig?.version ?? "" })}
+          </Text>
         </>
       );
   }
@@ -606,45 +615,45 @@ function TextSize({ value, onChange }: { value: number; onChange: (size: number)
 
   return (
     <>
-      <View className="rounded-[20px] bg-default p-4">
-        <Typography className="text-muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
+      <View className="bg-default p-4" style={{ borderRadius: radius.card }}>
+        <Text tone="muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
           example.com
-        </Typography>
-        <Typography className="mt-1 font-semibold" style={{ fontSize: (20 * value) / 100, lineHeight: (26 * value) / 100 }}>
+        </Text>
+        <Text weight="semibold" className="mt-1" style={{ fontSize: (20 * value) / 100, lineHeight: (26 * value) / 100 }}>
           {t("settings.zoom.previewTitle")}
-        </Typography>
-        <Typography className="mt-1" style={{ fontSize: (16 * value) / 100, lineHeight: (23 * value) / 100 }}>
+        </Text>
+        <Text className="mt-1" style={{ fontSize: (16 * value) / 100, lineHeight: (23 * value) / 100 }}>
           {t("settings.zoom.previewBody")}
-        </Typography>
+        </Text>
       </View>
       <View className="mt-4 flex-row items-center gap-3">
-        <Pressable
+        <PressFeedback
           testID="text-size-smaller"
           accessibilityRole="button"
           accessibilityLabel={t("settings.zoom.out")}
           accessibilityState={{ disabled: value <= TEXT_SIZE.min }}
           disabled={value <= TEXT_SIZE.min}
           onPress={() => step(-TEXT_SIZE.step)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value <= TEXT_SIZE.min ? 0.35 : 1 }}
         >
           <Icon name="textSize" color={foreground} size={16} />
-        </Pressable>
-        <Typography testID="text-size-value" accessibilityLiveRegion="polite" className="w-16 text-center text-lg font-semibold">
+        </PressFeedback>
+        <Text testID="text-size-value" accessibilityLiveRegion="polite" variant="headline" className="w-16 text-center">
           {`${value}%`}
-        </Typography>
-        <Pressable
+        </Text>
+        <PressFeedback
           testID="text-size-larger"
           accessibilityRole="button"
           accessibilityLabel={t("settings.zoom.in")}
           accessibilityState={{ disabled: value >= TEXT_SIZE.max }}
           disabled={value >= TEXT_SIZE.max}
           onPress={() => step(TEXT_SIZE.step)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value >= TEXT_SIZE.max ? 0.35 : 1 }}
         >
           <Icon name="textSize" color={foreground} size={26} />
-        </Pressable>
+        </PressFeedback>
       </View>
       {value !== 100 ? (
         <View className="mt-4">
@@ -693,13 +702,13 @@ function WallpaperPicker({
 
   return (
     <>
-      <View className="mt-1 flex-row flex-wrap" style={{ rowGap: 16 }}>
+      <View className="mt-1 flex-row flex-wrap" style={{ rowGap: space.lg }}>
         {tiles.map((id, index) => {
           const selected = id === value;
           const empty = id === "photo" && !photo;
 
           return (
-            <Pressable
+            <PressFeedback
               key={id}
               testID={`settings-wallpaper-${id}`}
               accessibilityRole="radio"
@@ -716,16 +725,16 @@ function WallpaperPicker({
                   () => setError(true),
                 );
               }}
-              className="items-center gap-2 active:opacity-70"
+              className="items-center gap-2"
               style={{ width: "31%", marginRight: index % 3 === 2 ? 0 : "3.5%" }}
             >
               <View
                 className={
                   selected
-                    ? "w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-accent"
-                    : "w-full items-center justify-center overflow-hidden rounded-2xl border border-foreground/10"
+                    ? "w-full items-center justify-center overflow-hidden border-2 border-accent"
+                    : "w-full items-center justify-center overflow-hidden border border-foreground/10"
                 }
-                style={{ aspectRatio: 0.62 }}
+                style={{ aspectRatio: 0.62, borderRadius: radius.tile }}
               >
                 {empty ? (
                   <Icon name="add" size={28} color={foreground} />
@@ -735,25 +744,48 @@ function WallpaperPicker({
                   <Wallpaper id={id} scale={0.6} />
                 )}
                 {empty ? null : (
-                  <View className="absolute bottom-2.5 left-0 right-0 flex-row justify-center gap-1">
-                    <View className="h-3 w-3 rounded-full bg-foreground/15" />
-                    <View className="h-3 w-8 rounded-full bg-foreground/15" />
-                    <View className="h-3 w-3 rounded-full bg-foreground/15" />
+                  // The start page in miniature: the greeting and date, a row of pins, then the bar.
+                  <View className="absolute bottom-2.5 left-0 right-0 gap-2 px-2.5">
+                    <View className="gap-1">
+                      <View className="h-2 w-3/5 rounded-full bg-foreground/30" />
+                      <View className="h-1.5 w-2/5 rounded-full bg-foreground/15" />
+                    </View>
+                    <View className="flex-row justify-between">
+                      {[0, 1, 2, 3].map((pin) => (
+                        <View key={pin} className="h-4 w-4 rounded-[5px] bg-foreground/15" />
+                      ))}
+                    </View>
+                    <View className="mt-1.5 flex-row justify-center gap-1">
+                      <View className="h-3 w-3 rounded-full bg-foreground/15" />
+                      <View className="h-3 w-8 rounded-full bg-foreground/15" />
+                      <View className="h-3 w-3 rounded-full bg-foreground/15" />
+                    </View>
                   </View>
                 )}
               </View>
-              <Typography className={selected ? "text-sm font-medium text-accent" : "text-sm"}>
+              <Text variant="subhead" weight={selected ? "medium" : undefined} tone={selected ? "accent" : "default"}>
                 {empty ? t("settings.wallpaper.choose") : t(WALLPAPER_NAMES[id])}
-              </Typography>
-            </Pressable>
+              </Text>
+            </PressFeedback>
           );
         })}
       </View>
-      {photo ? <Typography className="mt-4 px-1 text-sm text-muted">{t("settings.wallpaper.chooseAgain")}</Typography> : null}
+      {photo ? (
+        <Text variant="subhead" tone="muted" className="mt-4 px-4">
+          {t("settings.wallpaper.chooseAgain")}
+        </Text>
+      ) : null}
       {error ? (
-        <Typography testID="settings-wallpaper-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-3 px-1 text-sm text-danger">
+        <Text
+          testID="settings-wallpaper-error"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+          variant="subhead"
+          tone="danger"
+          className="mt-3 px-4"
+        >
           {t("settings.wallpaper.failed")}
-        </Typography>
+        </Text>
       ) : null}
     </>
   );

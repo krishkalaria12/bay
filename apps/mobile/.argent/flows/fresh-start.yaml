@@ -21,6 +21,11 @@ steps:
     steps:
       - tap: { id: page-request-cancel }
       - await: { hidden: { id: page-request-cancel }, timeout: 10000 }
+  # A fresh install opens on the welcome; tapping its glass dome lets Bay through.
+  - when: { visible: { id: welcome-start } }
+    steps:
+      - tap: { id: welcome-start }
+      - await: { hidden: { id: welcome-start }, timeout: 10000 }
   - when: { visible: { id: bar-more } }
     steps:
       - tap: { id: bar-more }

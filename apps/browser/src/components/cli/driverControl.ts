@@ -1,81 +1,36 @@
-import * as v from "valibot";
-import { isJsonObject, type JsonValue } from "../../lib/json";
-import { cliControlStatus, onCliControlChanged, setCliActiveTab, setCliControl, type CliControlStatus } from "@bay/chromium";
-import { installedCliVersion, installCli, onCliInstallLine, readDocument, writeDocument, type CliInstallResult } from "@bay/desktop";
-import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
-import { tabEngine } from "../../store/engines";
-import { activeTabId } from "../../store/model";
-import { shownPeek } from "../../store/peeks";
-import { pageOf, usePages } from "../window/pageState";
+// The terminal control: the command line tool that drives the app, and the app's side of it.
+//
+// The work is in components/cli/automationService.ts. This is where the app reaches it.
+import type { CliControlStatus } from "@bay/chromium";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../../effect/runtime";
+import { AutomationService, shownCliTab, useCli } from "./automationService";
 
-const INSTALL_DOC = "bay-cli.json";
+export { shownCliTab, useCli };
 
-type SavedInstall = { binPath?: string; error?: string };
+/** Starts the terminal control: the server is asked for, and the active tab is kept. */
+export function startCliControl() {
+  void runDesktop(
+    Effect.gen(function* () {
+      const automation = yield* AutomationService;
 
-function savedInstall(): SavedInstall {
-  try {
-    const saved: JsonValue = JSON.parse(readDocument(INSTALL_DOC) ?? "{}");
-
-    if (!isJsonObject(saved)) return {};
-
-    return { binPath: v.is(v.string(), saved.binPath) ? saved.binPath : undefined, error: v.is(v.string(), saved.error) ? saved.error : undefined };
-  } catch {
-    return {};
-  }
+      yield* automation.startCli;
+    }),
+  );
 }
 
-const saved = savedInstall();
+/** Installs the command line tool, and says how it went. */
+export function installCliInBackground(): Promise<{ ok: boolean; appVersion: string; error?: string; binPath?: string; lines: string[] }> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const automation = yield* AutomationService;
 
-export const useCli = create<{
-  server: CliControlStatus | null;
-  installing: boolean;
-  step: string | null;
-  installedVersion: string | null;
-  binPath: string | null;
-  error: string | null;
-}>()(() => ({
-  server: null,
-  installing: false,
-  step: null,
-  installedVersion: installedCliVersion(),
-  binPath: saved.binPath ?? null,
-  error: saved.error ?? null,
-}));
-
-let installation: Promise<CliInstallResult> | null = null;
-
-export function installCliInBackground(): Promise<CliInstallResult> {
-  if (installation) return installation;
-  useCli.setState({ installing: true, step: null, error: null });
-
-  const lines = onCliInstallLine((line) => {
-    const step = /^step (\S+)/.exec(line)?.[1];
-
-    if (step) useCli.setState({ step });
-  });
-
-  installation = installCli()
-    .catch((cause: unknown): CliInstallResult => ({ ok: false, appVersion: "", error: message(cause), lines: [] }))
-    .then((result) => {
-      lines.remove();
-      installation = null;
-      const error = result.ok ? null : (result.error ?? "The installer stopped.");
-      const binPath = result.binPath ?? useCli.getState().binPath;
-      useCli.setState({ installing: false, step: null, installedVersion: installedCliVersion(), binPath, error });
-
-      try {
-        writeDocument(INSTALL_DOC, JSON.stringify({ version: 1, binPath, error }));
-      } catch (error) {
-        console.warn("[cli] couldn't save the install status", error);
-      }
-
-      return result;
-    });
-
-  return installation;
+      return yield* automation.install();
+    }),
+  );
 }
 
+/** What the app tells the user about the command line tool. */
 export function describeCliInstall(state: ReturnType<typeof useCli.getState>): string {
   if (state.installing) return state.step ? `Installing (${state.step})…` : "Installing…";
 
@@ -86,6 +41,7 @@ export function describeCliInstall(state: ReturnType<typeof useCli.getState>): s
   return "Run Bay from your terminal with TypeScript or JavaScript.";
 }
 
+/** What the app tells the user about the terminal control. */
 export function describeCliControl(server: CliControlStatus | null): string {
   if (server?.reason) return server.reason;
 
@@ -97,97 +53,3 @@ export function describeCliControl(server: CliControlStatus | null): string {
 
   return "Commands can read and interact with open Chromium pages and install userscripts. Turning this off disconnects them.";
 }
-
-/** The current pane, including a Peek over it, once its Chromium page exists. */
-export function shownCliTab(s: BrowserState): number | null {
-  const windowId = s.ui.focusedWindowId;
-
-  if (!windowId || !s.windows[windowId]) return null;
-  const id = shownPeek(s, windowId)?.tabId ?? activeTabId(s, windowId);
-  const tab = id ? s.tabs[id] : undefined;
-
-  if (
-    !id ||
-    !tab ||
-    !/^(https?|about|data|blob):/i.test(tab.url) ||
-    !(tab.navigation || tab.adoptId) ||
-    tabEngine(s, id) !== "chromium" ||
-    pageOf(id).newTabShown
-  )
-    return null;
-
-  return usePages.getState().chromeTabs[id] ?? null;
-}
-
-let started = false;
-
-export function startCliControl() {
-  if (started) return;
-  started = true;
-  let request = 0;
-  let inFlight = 0;
-  let generation = 0;
-  let applied: boolean | null = null;
-  let sentActive: number | null | undefined;
-
-  const pushActive = () => {
-    const server = useCli.getState().server;
-
-    if (server?.state !== "on" && server?.state !== "starting") {
-      sentActive = undefined;
-
-      return;
-    }
-
-    const active = shownCliTab(useBrowser.getState());
-
-    if (active === sentActive) return;
-    sentActive = active;
-    void setCliActiveTab(active).catch(() => {
-      sentActive = undefined;
-    });
-  };
-
-  const apply = (server: CliControlStatus, reconcile: boolean) => {
-    if ((server.generation ?? generation) < generation) return;
-
-    if ((server.generation ?? generation) > generation) sentActive = undefined;
-    generation = Math.max(generation, server.generation ?? 0);
-    useCli.setState({ server });
-
-    if (reconcile && server.state === "off" && server.reason && useBrowser.getState().settings.cliControl === true) {
-      useBrowser.getState().updateSettings({ cliControl: false });
-    }
-
-    pushActive();
-  };
-
-  onCliControlChanged((server) => apply(server, inFlight === 0));
-
-  const sync = () => {
-    const on = useBrowser.getState().settings.cliControl === true;
-
-    if (on === applied) return;
-    const first = applied === null;
-    applied = on;
-    const mine = ++request;
-    inFlight++;
-
-    const settle = (server: CliControlStatus) => {
-      inFlight--;
-
-      if (mine === request) apply(server, true);
-    };
-
-    void (first && !on ? cliControlStatus() : setCliControl(on)).then(settle, (cause: unknown) => settle({ state: "off", reason: message(cause) }));
-  };
-
-  useBrowser.subscribe(() => {
-    sync();
-    pushActive();
-  });
-  usePages.subscribe(pushActive);
-  sync();
-}
-
-const message = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));

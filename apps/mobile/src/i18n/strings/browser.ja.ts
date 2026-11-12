@@ -5,6 +5,10 @@ export const browserJa: BrowserStrings = {
   "start.tapToSearch": "タップして検索",
   "start.openSite": "{name}を開く",
   "start.longPressToUnpin": "長押しでピン留めを解除",
+  "start.morning": "おはようございます",
+  "start.afternoon": "こんにちは",
+  "start.evening": "こんばんは",
+  "start.recent": "最近",
 
   // Search card.
   "search.close": "検索を閉じる",

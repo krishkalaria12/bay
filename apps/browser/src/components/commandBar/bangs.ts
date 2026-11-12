@@ -1,8 +1,11 @@
 import * as v from "valibot";
 import { bangDocument, bangTable, checkedBangTable, findBang, joinBangTables, readBangDocument, slimBangs, type BangTable } from "@bay/core";
 import { readDocument, saveDocument, writeDocument } from "@bay/desktop";
+import * as Effect from "effect/Effect";
 import { useEffect, useSyncExternalStore } from "react";
-import { fetchBangList, loadBundledBangs } from "./bangPlatform";
+import { runDesktop } from "../../effect/runtime";
+import { loadBundledBangs } from "./bangPlatform";
+import { SearchService } from "./searchService";
 
 const LIST_DOC = "bangs.txt";
 const STATE_DOC = "bangs-state.json";
@@ -190,9 +193,16 @@ export async function refreshBangs(): Promise<BangRefresh> {
   try {
     await loadBangs();
     const etag = tableSource === "bundled" ? (await loadBundledBangs()).BANG_LIST_ETAG : storedEtag;
-    const request = fetchBangList(etag);
+
     writeState({ checkedAt: now });
-    const reply = await request;
+
+    const reply = await runDesktop(
+      Effect.gen(function* () {
+        const search = yield* SearchService;
+
+        return yield* search.bangList(etag);
+      }),
+    );
 
     if (reply.status === 304) return note(304, "unchanged");
 

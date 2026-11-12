@@ -1,35 +1,38 @@
-import { readDocument, retainLibraryImage, writeDocument } from "@bay/desktop";
-import { create } from "zustand";
+// The Library: the Easels and the media this Mac keeps.
+//
+// The work is in components/library/libraryService.ts. This is where the app reaches it.
+import type { CaptureSource } from "./model";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../../effect/runtime";
+import { LibraryService, readLibrary, useLibrary } from "./libraryService";
+import { mediaItem, parseEasel, type EaselDocument, type LibraryMedia } from "./model";
 import { newId } from "../../store/model";
-import { mediaItem, parseEasel, readLibrary, type CaptureSource, type EaselDocument, type LibraryData, type LibraryMedia } from "./model";
 
-export type LibraryState = LibraryData & { loaded: boolean; error: string | null };
+export { useLibrary };
 
-export const useLibrary = create<LibraryState>()(() => ({ version: 1, easels: {}, media: {}, removedMediaPaths: [], loaded: false, error: null }));
-let stop: (() => void) | undefined;
-
+/** Reads the library, and writes it back after every change. */
 export function startLibrary() {
-  if (useLibrary.getState().loaded) return;
-  stop?.();
+  // The library shows at once: the document is read before the app draws anything.
+  readLibrary();
 
-  try {
-    useLibrary.setState({ ...readLibrary(readDocument("library.json")), loaded: true, error: null });
-  } catch (error) {
-    // Do not overwrite an unreadable document. The user can recover it instead of silently losing it.
-    useLibrary.setState({ loaded: true, error: `Couldn't read Library: ${String(error)}` });
-  }
+  void runDesktop(
+    Effect.gen(function* () {
+      const library = yield* LibraryService;
 
-  stop = useLibrary.subscribe((s, prev) => {
-    if (!s.loaded || !prev.loaded) return;
+      yield* library.start;
+    }),
+  );
+}
 
-    if ((s.easels === prev.easels && s.media === prev.media && s.removedMediaPaths === prev.removedMediaPaths) || s.error) return;
+/** Keeps a copy of an image, and adds it to the library. */
+export function saveLibraryMedia(image: { path: string; width: number; height: number }, name: string, source?: CaptureSource): Promise<LibraryMedia | null> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const library = yield* LibraryService;
 
-    try {
-      writeDocument("library.json", JSON.stringify({ version: 1, easels: s.easels, media: s.media, removedMediaPaths: s.removedMediaPaths }));
-    } catch (error) {
-      useLibrary.setState({ error: `Couldn't save Library: ${String(error)}` });
-    }
-  });
+      return yield* library.saveMedia(image, name, source);
+    }),
+  );
 }
 
 export function createEasel(spaceId: string, title = "Untitled Easel"): string | null {
@@ -121,20 +124,6 @@ export function deleteEasel(id: string) {
     return { easels };
   });
   // Assets can still be referenced by another Easel, Library media, or native undo. Keep them for recovery.
-}
-
-export async function saveLibraryMedia(image: { path: string; width: number; height: number }, name: string, source?: CaptureSource) {
-  startLibrary();
-
-  if (useLibrary.getState().error) return null;
-  const retained = await retainLibraryImage(image.path);
-
-  if (!retained || useLibrary.getState().error) return null;
-  const id = newId("media");
-  const media: LibraryMedia = { id, name, ...retained, createdAt: Date.now(), ...(source ? { source } : undefined) };
-  useLibrary.setState((s) => ({ media: { ...s.media, [id]: media } }));
-
-  return media;
 }
 
 export function removeLibraryMedia(id: string) {

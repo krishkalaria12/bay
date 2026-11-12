@@ -174,7 +174,7 @@ new file mode 100644
 index 000000000..d97afa4a9
 --- /dev/null
 +++ b/include/cef_bay.h
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,60 @@
 +// Copyright (c) 2026 The Bay Authors. All rights reserved.
 +//
 +// Feature markers for Bay's CEF patches (see the Bay repository,
@@ -194,9 +194,6 @@ index 000000000..d97afa4a9
 +// CefBrowserHost::CreateTabInBrowser, CefBrowserHost::SetWindowActive,
 +// CefBrowserHost::ActivateTab, CefBrowserHost::MoveToBrowser.
 +#define CEF_NN_CHROME_TABS 1
-+
-+// CefRequestContext::LoadComponentExtension / UnloadComponentExtension.
-+#define CEF_NN_COMPONENT_EXTENSIONS 1
 +
 +// CefBrowserHost::GetTabId.
 +#define CEF_NN_TAB_SESSION_ID 1
@@ -238,39 +235,6 @@ index 000000000..d97afa4a9
 +#define CEF_NN_SAFE_STORAGE 1
 +
 +#endif  // CEF_INCLUDE_CEF_BAY_H_
-diff --git a/include/cef_request_context.h b/include/cef_request_context.h
-index 77a1c0249..0e6f2b0df 100644
---- a/include/cef_request_context.h
-+++ b/include/cef_request_context.h
-@@ -365,6 +365,28 @@ class CefRequestContext : public CefPreferenceManager {
-   ///
-   /*--cef(default_retval=CEF_COLOR_VARIANT_SYSTEM)--*/
-   virtual cef_color_variant_t GetChromeColorSchemeVariant() = 0;
-+
-+#if CEF_API_ADDED(CEF_EXPERIMENTAL)
-+  ///
-+  /// Chrome style only. Loads the unpacked extension in |root_directory| as a
-+  /// component (built-in) extension of this context's profile, replacing an
-+  /// earlier one with the same ID. Component extensions need no developer
-+  /// mode, can't be disabled or removed by the user, and run in incognito
-+  /// profiles too. The manifest must contain a "key" (the extension ID is
-+  /// derived from it). Returns the extension ID, or an empty string on
-+  /// failure. Must be called on the browser process UI thread after the
-+  /// context is initialized.
-+  ///
-+  /*--cef(added=experimental)--*/
-+  virtual CefString LoadComponentExtension(const CefString& root_directory) = 0;
-+
-+  ///
-+  /// Chrome style only. Unloads a component extension added with
-+  /// LoadComponentExtension. Must be called on the browser process UI thread.
-+  ///
-+  /*--cef(added=experimental)--*/
-+  virtual void UnloadComponentExtension(const CefString& extension_id) = 0;
-+#endif
- };
- 
- #endif  // CEF_INCLUDE_CEF_REQUEST_CONTEXT_H_
 diff --git a/include/cef_request_context_handler.h b/include/cef_request_context_handler.h
 index 4f0241baf..849f9b591 100644
 --- a/include/cef_request_context_handler.h
@@ -1466,70 +1430,6 @@ index e5363cc46..00aa5dc4c 100644
    // This callback may arrive before OnDownloadCreated, so we allow association
    // from either method.
    CefRefPtr<CefBrowserHostBase> browser = GetOrAssociateBrowser(item);
-diff --git a/libcef/browser/request_context_impl.cc b/libcef/browser/request_context_impl.cc
-index 40dc0900a..8b8b60be5 100644
---- a/libcef/browser/request_context_impl.cc
-+++ b/libcef/browser/request_context_impl.cc
-@@ -17,6 +17,7 @@
- #include "cef/libcef/common/task_runner_impl.h"
- #include "cef/libcef/common/values_impl.h"
- #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-+#include "chrome/browser/extensions/component_loader.h"
- #include "chrome/browser/profiles/profile.h"
- #include "chrome/browser/themes/theme_service.h"
- #include "chrome/browser/themes/theme_service_factory.h"
-@@ -678,6 +679,38 @@ cef_color_t CefRequestContextImpl::GetChromeColorSchemeColor() {
-   return 0;
- }
- 
-+CefString CefRequestContextImpl::LoadComponentExtension(
-+    const CefString& root_directory) {
-+  if (!CEF_CURRENTLY_ON_UIT()) {
-+    DCHECK(false) << "called on invalid thread";
-+    return CefString();
-+  }
-+  if (!VerifyBrowserContext() || root_directory.empty()) {
-+    return CefString();
-+  }
-+  auto* loader = extensions::ComponentLoader::Get(
-+      browser_context()->AsBrowserContext());
-+  if (!loader) {
-+    return CefString();
-+  }
-+  return loader->AddOrReplace(base::FilePath(root_directory.ToString()));
-+}
-+
-+void CefRequestContextImpl::UnloadComponentExtension(
-+    const CefString& extension_id) {
-+  if (!CEF_CURRENTLY_ON_UIT()) {
-+    DCHECK(false) << "called on invalid thread";
-+    return;
-+  }
-+  if (!VerifyBrowserContext()) {
-+    return;
-+  }
-+  if (auto* loader = extensions::ComponentLoader::Get(
-+          browser_context()->AsBrowserContext())) {
-+    loader->Remove(extensions::ExtensionId(extension_id.ToString()));
-+  }
-+}
-+
- cef_color_variant_t CefRequestContextImpl::GetChromeColorSchemeVariant() {
-   if (!VerifyBrowserContext()) {
-     return CEF_COLOR_VARIANT_SYSTEM;
-diff --git a/libcef/browser/request_context_impl.h b/libcef/browser/request_context_impl.h
-index 7a61f4a5f..db0a5bcf4 100644
---- a/libcef/browser/request_context_impl.h
-+++ b/libcef/browser/request_context_impl.h
-@@ -147,6 +147,8 @@ class CefRequestContextImpl : public CefRequestContext {
-   cef_color_variant_t GetChromeColorSchemeMode() override;
-   cef_color_t GetChromeColorSchemeColor() override;
-   cef_color_variant_t GetChromeColorSchemeVariant() override;
-+  CefString LoadComponentExtension(const CefString& root_directory) override;
-+  void UnloadComponentExtension(const CefString& extension_id) override;
- 
-   const CefRequestContextSettings& settings() const { return config_.settings; }
- 
 diff --git a/libcef/browser/views/browser_view_impl.cc b/libcef/browser/views/browser_view_impl.cc
 index d0c486772..1be48e55d 100644
 --- a/libcef/browser/views/browser_view_impl.cc

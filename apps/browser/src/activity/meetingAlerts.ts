@@ -6,7 +6,9 @@ import { joinMeeting } from "./meetingGroups";
 import { ALERT_LEADS, dueAlerts, joinableMeeting, joinLink, joinTitle, relativeTime, type CalendarEvent } from "./meetings";
 import { JOINABLE_BEFORE_MS } from "../components/activity/constants";
 import { openWindow } from "../lib/actions";
-import { everySlowly } from "../lib/throttledTimers";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../effect/runtime";
+import { Scheduler } from "../effect/ports/scheduler";
 import { dismissAlert, live } from "./activityStore";
 
 export const useMeetingAlert = create<{ event: CalendarEvent | null }>()(() => ({ event: null }));
@@ -91,16 +93,22 @@ export function startMeetingAlerts() {
   });
   useCalendar.subscribe((s, prev) => s.events !== prev.events && check());
   // Only while there are events to alert for, or an alert to take down.
-  everySlowly({
-    every: 10_000,
-    run: check,
-    needed: () => useCalendar.getState().events.length > 0 || !!useMeetingAlert.getState().event,
-    watch: (changed) => {
-      const calendar = useCalendar.subscribe(changed);
-      const alert = useMeetingAlert.subscribe(changed);
+  void runDesktop(
+    Effect.gen(function* () {
+      const scheduler = yield* Scheduler;
 
-      return () => (calendar(), alert());
-    },
-  });
+      yield* scheduler.every({
+        every: 10_000,
+        run: Effect.sync(check),
+        needed: () => useCalendar.getState().events.length > 0 || !!useMeetingAlert.getState().event,
+        watch: (changed) => {
+          const calendar = useCalendar.subscribe(changed);
+          const alert = useMeetingAlert.subscribe(changed);
+
+          return () => (calendar(), alert());
+        },
+      });
+    }),
+  );
   check();
 }

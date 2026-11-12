@@ -5,7 +5,9 @@ import { activeTabId } from "../store/model";
 import { groupOf } from "../store/tabTidying";
 import { connectCalendar, useCalendar } from "./calendar";
 import { eventForCall, isCalendarUrl, meetingOf, relatedLinks, type CalendarEvent } from "./meetings";
-import { everySlowly } from "../lib/throttledTimers";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../effect/runtime";
+import { Scheduler } from "../effect/ports/scheduler";
 import { live, setMeetingGroup, updateCalendarSettings, useLive } from "./activityStore";
 import { MEETING_CLEANUP_IDLE_MS, MEETING_FALLBACK_TITLE } from "./constants";
 
@@ -102,12 +104,19 @@ export function startMeetingGroups() {
     }
   });
 
-  everySlowly({
-    every: 30_000,
-    run: () => tick(store(), Date.now()),
-    needed: () => Object.keys(live().meetingGroups).length > 0,
-    watch: (changed) => useLive.subscribe((s, prev) => s.meetingGroups !== prev.meetingGroups && changed()),
-  });
+  // The sweep for the groups that are ending: it runs on the app's shared grid.
+  void runDesktop(
+    Effect.gen(function* () {
+      const scheduler = yield* Scheduler;
+
+      yield* scheduler.every({
+        every: 30_000,
+        run: Effect.sync(() => void tick(store(), Date.now())),
+        needed: () => Object.keys(live().meetingGroups).length > 0,
+        watch: (changed) => useLive.subscribe((s, prev) => s.meetingGroups !== prev.meetingGroups && changed()),
+      });
+    }),
+  );
 }
 
 async function offerAlerts(windowId: string) {

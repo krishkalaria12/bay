@@ -5,6 +5,10 @@ export const browserPtBR: BrowserStrings = {
   "start.tapToSearch": "Toque para pesquisar",
   "start.openSite": "Abrir {name}",
   "start.longPressToUnpin": "Mantenha pressionado para desafixar",
+  "start.morning": "Bom dia",
+  "start.afternoon": "Boa tarde",
+  "start.evening": "Boa noite",
+  "start.recent": "Recentes",
 
   // Search card.
   "search.close": "Fechar a pesquisa",

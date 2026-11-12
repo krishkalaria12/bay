@@ -5,6 +5,10 @@ export const browserHi: BrowserStrings = {
   "start.tapToSearch": "खोजने के लिए टैप करें",
   "start.openSite": "{name} खोलें",
   "start.longPressToUnpin": "पिन हटाने के लिए देर तक दबाएँ",
+  "start.morning": "सुप्रभात",
+  "start.afternoon": "शुभ दोपहर",
+  "start.evening": "शुभ संध्या",
+  "start.recent": "हाल ही में",
 
   // Search card.
   "search.close": "खोज बंद करें",

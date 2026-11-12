@@ -1,5 +1,5 @@
 import { prepareTabTransfer, releaseTabTransfer } from "@bay/chromium";
-import { isInternalTab } from "../components/pages/pageUrls";
+import { isInternalTab } from "../components/pages/internalPages";
 import { useBrowser } from "../store/browserStore";
 import { changedIds } from "../store/recordDiff";
 import { engineProfile } from "../store/model";

@@ -1,39 +1,19 @@
-import { searchEngineList } from "@bay/chromium";
+// The search engines the extensions have registered: what the app keeps of them.
+//
+// The engine's list is the app's list, profile by profile: a profile's engines replace its own, and the other
+// profiles' engines are left alone. When the list is read is the service's business (components/extensions/service.ts).
+import type { EngineSearchEngineList } from "@bay/chromium";
 import { extensionEnginesFromChrome } from "@bay/core";
-import { useBrowser } from "../../store/browserStore";
 import type { JsonValue } from "../../lib/json";
-import { useExtensions } from "./state";
+import { useBrowser } from "../../store/browserStore";
 
-export function startExtensionSearchEngines() {
-  const timers: Record<string, ReturnType<typeof setTimeout>> = {};
-  const read = new Set<string>();
-  useExtensions.subscribe((e, prev) => {
-    if (e.lists === prev.lists) return;
+/** The profile's search engines, as the app keeps them. */
+export function applyExtensionSearchEngines(profile: string, list: EngineSearchEngineList): void {
+  const json: JsonValue | null | undefined = JSON.parse(JSON.stringify(list));
 
-    for (const [profile, list] of Object.entries(e.lists)) {
-      if (list === prev.lists[profile]) continue;
-      clearTimeout(timers[profile]);
-      timers[profile] = setTimeout(() => void refreshExtensionSearchEngines(profile), 400);
+  if (json == null) return;
 
-      if (!read.has(profile)) setTimeout(() => void refreshExtensionSearchEngines(profile), 3000);
-      read.add(profile);
-    }
-  });
-}
-
-export async function refreshExtensionSearchEngines(profile: string) {
-  let list: JsonValue | null | undefined;
-
-  try {
-    list = JSON.parse(JSON.stringify(await searchEngineList(profile)));
-  } catch (error) {
-    console.warn("[extensions] search engines failed", error);
-
-    return;
-  }
-
-  if (list == null) return;
-  const engines = extensionEnginesFromChrome(profile, list);
+  const engines = extensionEnginesFromChrome(profile, json);
   const s = useBrowser.getState();
   const current = s.settings.extensionSearchEngines ?? [];
   const next = [...current.filter((e) => e.profile !== profile), ...engines];

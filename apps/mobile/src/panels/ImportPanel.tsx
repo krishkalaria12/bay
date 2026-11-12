@@ -1,10 +1,12 @@
 import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import * as Clipboard from "expo-clipboard";
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
 import { View } from "react-native";
 
 import { PillButton } from "@/chrome/PillButton";
+import { Text } from "@/chrome/Text";
+import { fontFor, radius } from "@/chrome/tokens";
 import type { ImportedTab } from "@/browser/importTabs";
 import { importedTabs } from "@/browser/importTabs";
 import { useT } from "@/i18n";
@@ -51,8 +53,10 @@ export function ImportPanel({ visible, onClose, onImport }: ImportPanelProps): J
 
   return (
     <PanelSheet visible={visible} onClose={onClose} title={t("import.title")} testID="import-screen" height="80%">
-      <Typography className="text-sm text-muted">{t("import.help")}</Typography>
-      <View className="mt-3 rounded-[20px] bg-default p-3">
+      <Text variant="subhead" tone="muted">
+        {t("import.help")}
+      </Text>
+      <View className="mt-3 bg-default p-3" style={{ borderRadius: radius.tile }}>
         <BottomSheetTextInput
           testID="import-text"
           accessibilityLabel={t("import.field")}
@@ -63,13 +67,13 @@ export function ImportPanel({ visible, onClose, onImport }: ImportPanelProps): J
           multiline
           autoCapitalize="none"
           autoCorrect={false}
-          style={{ color: foreground, fontSize: 15, lineHeight: 21, minHeight: 150, padding: 0, textAlignVertical: "top" }}
+          style={[fontFor("callout"), { color: foreground, minHeight: 150, padding: 0, textAlignVertical: "top" }]}
         />
       </View>
       <View className="mt-2 flex-row items-center justify-between">
-        <Typography testID="import-count" accessibilityLiveRegion="polite" className="text-sm text-muted">
+        <Text testID="import-count" accessibilityLiveRegion="polite" variant="subhead" tone="muted">
           {count ? (count === 1 ? t("import.oneLink") : t("import.linksFound", { count })) : t("import.none")}
-        </Typography>
+        </Text>
         <PillButton
           testID="import-paste"
           label={t("import.paste")}
@@ -81,9 +85,9 @@ export function ImportPanel({ visible, onClose, onImport }: ImportPanelProps): J
         />
       </View>
       {pasteFailed ? (
-        <Typography testID="import-paste-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-2 text-sm text-danger">
+        <Text testID="import-paste-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-2">
           {t("import.pasteFailed")}
-        </Typography>
+        </Text>
       ) : null}
       <View className="mt-4 flex-row items-center justify-end gap-2">
         <PillButton
@@ -101,7 +105,9 @@ export function ImportPanel({ visible, onClose, onImport }: ImportPanelProps): J
           onPress={() => onImport(tabs, "tabs")}
         />
       </View>
-      <Typography className="mt-3 text-xs text-muted">{t("import.note")}</Typography>
+      <Text variant="caption" weight="regular" tone="muted" className="mt-3">
+        {t("import.note")}
+      </Text>
     </PanelSheet>
   );
 }

@@ -3,7 +3,8 @@ import { test } from "node:test";
 
 const stub = await import("../test-native-stub.mjs");
 const { useBrowser } = await import("../store/browserStore.ts");
-const { loadSession, startPersistence } = await import("./persist.ts");
+const { loadSession } = await import("./persist.ts");
+const { startPersistence } = await import("./persistenceService.ts");
 const { engineProfile } = await import("../store/model.ts");
 
 const legacy = () => ({

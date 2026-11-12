@@ -6,6 +6,10 @@ export const browser = {
   "start.tapToSearch": "Tap to search",
   "start.openSite": "Open {name}",
   "start.longPressToUnpin": "Long press to unpin",
+  "start.morning": "Good morning",
+  "start.afternoon": "Good afternoon",
+  "start.evening": "Good evening",
+  "start.recent": "Recent",
 
   // Search card (SearchCard.tsx).
   "search.close": "Close search",

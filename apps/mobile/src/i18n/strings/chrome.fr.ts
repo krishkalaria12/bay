@@ -16,4 +16,10 @@ export const chromeFr: ChromeStrings = {
   "sheet.back": "Retour",
   "sheet.close": "Fermer {title}",
   "sheet.selected": "Sélectionné",
+
+  // Welcome.
+  "welcome.title": "Une façon plus sereine de naviguer.",
+  "welcome.body": "Pubs et traqueurs sont bloqués dès le départ, et tout reste sous votre pouce.",
+  "welcome.swipe": "Balayez vers le haut pour commencer",
+  "welcome.start": "Commencer à naviguer",
 };

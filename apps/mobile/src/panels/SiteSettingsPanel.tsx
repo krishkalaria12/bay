@@ -1,7 +1,9 @@
-import { Typography, useThemeColor } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
+import { PressFeedback } from "@/chrome/PressFeedback";
+import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { useT } from "@/i18n";
 import { TEXT_SIZE } from "@/store/model";
@@ -114,7 +116,6 @@ function SiteZoom({
   globalTextSize: number;
   onChange: (textSize: number | null) => void;
 }): JSX.Element {
-  const foreground = useThemeColor("foreground");
   const t = useT();
   // Untouched zooms stay null until the buttons are used, so a look costs nothing.
   const [value, setValue] = useState(textSize ?? globalTextSize);
@@ -127,45 +128,49 @@ function SiteZoom({
 
   return (
     <>
-      <View className="rounded-[20px] bg-default p-4">
-        <Typography className="text-muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
+      <View className="bg-default p-4" style={{ borderRadius: radius.card }}>
+        <Text tone="muted" style={{ fontSize: (13 * value) / 100, lineHeight: (18 * value) / 100 }}>
           example.com
-        </Typography>
-        <Typography className="mt-1 font-semibold" style={{ fontSize: (20 * value) / 100, lineHeight: (26 * value) / 100 }}>
+        </Text>
+        <Text weight="semibold" className="mt-1" style={{ fontSize: (20 * value) / 100, lineHeight: (26 * value) / 100 }}>
           {t("settings.zoom.previewTitle")}
-        </Typography>
-        <Typography className="mt-1" style={{ fontSize: (16 * value) / 100, lineHeight: (23 * value) / 100 }}>
+        </Text>
+        <Text className="mt-1" style={{ fontSize: (16 * value) / 100, lineHeight: (23 * value) / 100 }}>
           {t("site.zoom.previewBody")}
-        </Typography>
+        </Text>
       </View>
       <View className="mt-4 flex-row items-center gap-3">
-        <Pressable
+        <PressFeedback
           testID="site-zoom-smaller"
           accessibilityRole="button"
           accessibilityLabel={t("site.zoom.out")}
           accessibilityState={{ disabled: value <= TEXT_SIZE.min }}
           disabled={value <= TEXT_SIZE.min}
           onPress={() => step(-1)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value <= TEXT_SIZE.min ? 0.35 : 1 }}
         >
-          <Typography style={{ color: foreground, fontSize: 15 }}>A</Typography>
-        </Pressable>
-        <Typography testID="site-zoom-value" accessibilityLiveRegion="polite" className="w-16 text-center text-lg font-semibold">
+          <Text variant="callout" weight="medium">
+            A
+          </Text>
+        </PressFeedback>
+        <Text testID="site-zoom-value" accessibilityLiveRegion="polite" variant="headline" className="w-16 text-center">
           {`${value}%`}
-        </Typography>
-        <Pressable
+        </Text>
+        <PressFeedback
           testID="site-zoom-larger"
           accessibilityRole="button"
           accessibilityLabel={t("site.zoom.in")}
           accessibilityState={{ disabled: value >= TEXT_SIZE.max }}
           disabled={value >= TEXT_SIZE.max}
           onPress={() => step(1)}
-          className="h-12 flex-1 items-center justify-center rounded-full bg-default active:opacity-70"
+          className="h-12 flex-1 items-center justify-center rounded-full bg-default"
           style={{ opacity: value >= TEXT_SIZE.max ? 0.35 : 1 }}
         >
-          <Typography style={{ color: foreground, fontSize: 21 }}>A</Typography>
-        </Pressable>
+          <Text variant="title" weight="medium">
+            A
+          </Text>
+        </PressFeedback>
       </View>
       {textSize !== null ? (
         <View className="mt-4">
@@ -183,12 +188,12 @@ function SiteHeader({ url }: { url: string }): JSX.Element {
   return (
     <View className="flex-1 flex-row items-center gap-2.5">
       {url ? <SiteIcon url={url} size={30} /> : null}
-      <Typography testID="site-settings-host" numberOfLines={1} accessibilityRole="header" className="flex-1 text-lg font-semibold">
+      <Text testID="site-settings-host" numberOfLines={1} accessibilityRole="header" variant="headline" className="flex-1">
         {url
           .replace(/^https?:\/\//, "")
           .replace(/^www\./, "")
           .replace(/\/.*$/, "")}
-      </Typography>
+      </Text>
     </View>
   );
 }

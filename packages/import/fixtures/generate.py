@@ -28,7 +28,6 @@ import sqlite3
 import struct
 import subprocess
 import tempfile
-import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SUPPORT = os.path.join(HERE, "home", "Library", "Application Support")
@@ -1209,15 +1208,6 @@ def build_exports():
         shutil.rmtree(folder_dir)
     for name, data in files.items():
         write(os.path.join(folder_dir, name), data)
-    zip_path = os.path.join(HERE, "safari", "Safari Export.zip")
-    with zipfile.ZipFile(zip_path, "w") as z:
-        for name, data in files.items():
-            info = zipfile.ZipInfo("Safari Export/" + name, date_time=(2026, 9, 1, 0, 0, 0))
-            # Mix of deflated and stored entries, as zip writers do.
-            info.compress_type = zipfile.ZIP_STORED if name.endswith(".csv") else zipfile.ZIP_DEFLATED
-            z.writestr(info, data)
-        z.writestr(zipfile.ZipInfo("__MACOSX/Safari Export/._Bookmarks.html", date_time=(2026, 9, 1, 0, 0, 0)), b"junk")
-    write(os.path.join(HERE, "safari", "not-an-export.zip"), b"PK\x05\x06" + b"\0" * 18)
 
     csv_dir = os.path.join(HERE, "csv")
     write(os.path.join(csv_dir, "chrome-passwords.csv"),

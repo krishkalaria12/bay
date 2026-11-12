@@ -7,11 +7,11 @@ import { WindowRoot } from "./App";
 import { quietLaunchTabs } from "./components/window/BlankTabSurface";
 import { DevErrorBoundary } from "./DevErrorBoundary";
 import { startTranslate } from "./components/site/translateState";
+import { startAppServices } from "./effect/runtime";
 import { startAppIntegration } from "./lib/appMenuIntegration";
 import { startNativeSync } from "./lib/shellBridge";
-import { startPersistence } from "./lib/persist";
+import { startPersistence } from "./lib/persistenceService";
 import { perfMark, perfProbeEnabled, probeStore } from "./lib/perfProbe";
-import { startTabLifecycle } from "./lib/tabLifecycle";
 import { startTabPages } from "./lib/tabNavigation";
 import { startSync } from "./sync/engine";
 import { setStoreBatching, useBrowser } from "./store/browserStore";
@@ -29,6 +29,9 @@ setStoreBatching(unstable_batchedUpdates);
 
 startPersistence();
 
+// The runtime takes over the work that outlives the bootstrap: the saving, and later the rest.
+void startAppServices();
+
 // Before the native sync: a moved tab's page is handed off before the window it left closes (lib/tabNavigation.ts).
 startTabPages();
 
@@ -42,8 +45,6 @@ startAppIntegration();
 startCliControl();
 
 startUserScripts();
-
-startTabLifecycle();
 
 startTranslate();
 

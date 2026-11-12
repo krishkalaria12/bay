@@ -1,9 +1,9 @@
 import { hostOf } from "@bay/core/src/input.ts";
 import { BottomSheetTextInput, useBottomSheetScrollableCreator } from "@gorhom/bottom-sheet";
 import { LegendList } from "@legendapp/list/react-native";
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useState, type JSX } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,11 +12,13 @@ import { scheduleOnRN } from "react-native-worklets";
 import { Icon } from "@/chrome/Icon";
 import { SPRING } from "@/chrome/motion";
 import { PressFeedback } from "@/chrome/PressFeedback";
+import { Text } from "@/chrome/Text";
+import { inputFont, space } from "@/chrome/tokens";
 import { SiteIcon } from "@/browser/SiteIcon";
 import { formatDate, useT, type MessageKey } from "@/i18n";
 import type { HistoryEntry } from "@/store/types";
 import { groupByDay, type DayGroupId } from "./historyGroups";
-import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { ActionRow, PanelSheet, SectionLabel, SheetFitEnd } from "./PanelSheet";
 
 const SHOWN = 200;
 
@@ -66,6 +68,7 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
   const [confirming, setConfirming] = useState(false);
   const insets = useSafeAreaInsets();
   const Scrollable = useBottomSheetScrollableCreator();
+  const listBottom = Math.max(insets.bottom, space.gutter) + space.md;
   const t = useT();
   const needle = query.trim().toLowerCase();
   const matches = needle ? history.filter((entry) => entry.title.toLowerCase().includes(needle) || entry.url.toLowerCase().includes(needle)) : history;
@@ -104,23 +107,29 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
   return (
     <PanelSheet visible={visible} onClose={onClose} title={t("history.title")} testID="history-screen" height="85%" listMode>
       {history.length === 0 ? (
-        <>
-          <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
-          <View testID="history-empty" className="py-12">
-            <Typography accessibilityRole="header" className="text-center">
-              {t("history.empty")}
-            </Typography>
-            <Typography className="mt-2 text-center text-sm text-muted">{t("history.emptyDetail")}</Typography>
+        <SheetFitEnd enabled={!query}>
+          <View style={{ paddingHorizontal: space.gutter, paddingBottom: listBottom }}>
+            <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
+            <View testID="history-empty" className="py-12">
+              <Text accessibilityRole="header" variant="headline" className="text-center">
+                {t("history.empty")}
+              </Text>
+              <Text variant="subhead" tone="muted" className="mt-2 text-center">
+                {t("history.emptyDetail")}
+              </Text>
+            </View>
           </View>
-        </>
+        </SheetFitEnd>
       ) : groups.length === 0 ? (
-        <>
-          <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
-          <Typography testID="history-no-matches" accessibilityLiveRegion="polite" className="py-8 text-center text-muted">
-            {t("history.noMatches", { query: query.trim() })}
-          </Typography>
-          {clearFooter()}
-        </>
+        <SheetFitEnd enabled={!query}>
+          <View style={{ paddingHorizontal: space.gutter, paddingBottom: listBottom }}>
+            <SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />
+            <Text testID="history-no-matches" accessibilityLiveRegion="polite" tone="muted" className="py-8 text-center">
+              {t("history.noMatches", { query: query.trim() })}
+            </Text>
+            {clearFooter()}
+          </View>
+        </SheetFitEnd>
       ) : (
         <LegendList
           data={rows}
@@ -128,9 +137,14 @@ export function HistoryPanel({ visible, onClose, history, onOpen, onRemove, onCl
           estimatedItemSize={56}
           keyboardShouldPersistTaps="handled"
           renderScrollComponent={Scrollable}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 12 }}
+          contentContainerStyle={{ paddingHorizontal: space.gutter, paddingBottom: listBottom }}
           ListHeaderComponent={<SearchField testID="history-search" value={query} onChange={setQuery} placeholder={t("history.search")} />}
-          ListFooterComponent={clearFooter()}
+          // The list doesn't report its size through the sheet's scroll view; where its footer ends does.
+          ListFooterComponent={
+            <SheetFitEnd after={listBottom} enabled={!query}>
+              {clearFooter()}
+            </SheetFitEnd>
+          }
           renderItem={({ item }) => {
             if (item.kind === "label") return <SectionLabel>{item.label}</SectionLabel>;
             const entry = item.entry;
@@ -186,7 +200,7 @@ export function SearchField({
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
-        style={{ flex: 1, color: foreground, fontSize: 16, paddingVertical: 10 }}
+        style={[inputFont("body"), { flex: 1, color: foreground, paddingVertical: 10 }]}
       />
     </View>
   );
@@ -203,7 +217,6 @@ export function SiteRow(props: {
   onRemove: () => void;
   removeLabel: string;
 }) {
-  const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
   const danger = useThemeColor("danger");
   const t = useT();
@@ -257,23 +270,23 @@ export function SiteRow(props: {
             >
               <SiteIcon url={props.url} size={28} />
               <View className="flex-1">
-                <Text numberOfLines={1} style={{ color: foreground, fontSize: 15 }}>
+                <Text variant="callout" numberOfLines={1}>
                   {props.title}
                 </Text>
-                <Text numberOfLines={1} style={{ color: muted, fontSize: 12.5 }}>
+                <Text variant="footnote" tone="muted" numberOfLines={1}>
                   {props.detail}
                 </Text>
               </View>
             </PressFeedback>
-            <Pressable
+            <PressFeedback
               testID={props.removeTestID}
               accessibilityRole="button"
               accessibilityLabel={props.removeLabel}
               onPress={props.onRemove}
-              className="h-11 w-11 items-center justify-center active:opacity-60"
+              className="h-11 w-11 items-center justify-center"
             >
               <Icon name="close" color={muted} size={18} />
-            </Pressable>
+            </PressFeedback>
           </View>
         </Animated.View>
       </GestureDetector>

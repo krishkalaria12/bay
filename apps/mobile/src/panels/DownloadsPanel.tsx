@@ -1,12 +1,13 @@
 import { useBottomSheetScrollableCreator } from "@gorhom/bottom-sheet";
 import { LegendList } from "@legendapp/list/react-native";
-import { Typography } from "heroui-native";
+
 import { useEffect, useState, type JSX } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PillButton } from "@/chrome/PillButton";
+import { Text } from "@/chrome/Text";
 import { formatNumber, useT, type Translate } from "@/i18n";
 import { INTERRUPTED_DOWNLOAD } from "@/store/model";
 import type { DownloadItem } from "@/store/types";
@@ -55,10 +56,10 @@ export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, 
                 onPress={() => onOpen(item)}
                 className="min-h-14 flex-1 justify-center py-2"
               >
-                <Typography numberOfLines={1}>{item.filename}</Typography>
-                <Typography testID={`download-${index}-status`} numberOfLines={1} className="text-sm text-muted">
+                <Text numberOfLines={1}>{item.filename}</Text>
+                <Text testID={`download-${index}-status`} numberOfLines={1} variant="subhead" tone="muted">
                   {downloadStatus(item, t)}
-                </Typography>
+                </Text>
                 {item.state === "downloading" ? <DownloadProgress item={item} /> : null}
               </Pressable>
               <PillButton
@@ -77,9 +78,9 @@ export function DownloadsPanel({ visible, onClose, downloads, onOpen, onCancel, 
           style={{ flex: 1 }}
         />
       ) : (
-        <Typography testID="downloads-empty" className="text-muted">
+        <Text testID="downloads-empty" tone="muted">
           {t("downloads.empty")}
-        </Typography>
+        </Text>
       )}
     </PanelSheet>
   );

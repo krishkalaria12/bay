@@ -1,5 +1,5 @@
 import { addDownloadListener, cancelDownload, openDownload } from "@bay/engine";
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useEffect, useState, type JSX } from "react";
 import { PermissionsAndroid, Platform, Pressable, View } from "react-native";
 import Animated, {
@@ -19,6 +19,8 @@ import { Icon } from "@/chrome/Icon";
 import { PillButton } from "@/chrome/PillButton";
 import { Surface } from "@/chrome/Surface";
 import { announce } from "@/chrome/screenReader";
+import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
 import { t as translate, useT } from "@/i18n";
 import { DownloadProgress, downloadStatus } from "@/panels/DownloadsPanel";
 import { useBrowserStore } from "@/store/browser";
@@ -88,7 +90,7 @@ export function DownloadToast({ item, onOpen, onShowAll }: { item: DownloadItem;
 
   return (
     <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOutDown.duration(180)}>
-      <Surface radius={18} style={{ padding: 12 }}>
+      <Surface radius={radius.card} style={{ padding: space.md }}>
         <View className="flex-row items-center gap-3">
           <DownloadBadge key={item.state} state={item.state} />
           <Pressable
@@ -98,12 +100,12 @@ export function DownloadToast({ item, onOpen, onShowAll }: { item: DownloadItem;
             onPress={onShowAll}
             className="flex-1"
           >
-            <Typography numberOfLines={1} className="font-medium">
+            <Text numberOfLines={1} weight="medium">
               {heading}
-            </Typography>
-            <Typography testID="download-toast-status" numberOfLines={1} className="text-sm text-muted">
+            </Text>
+            <Text testID="download-toast-status" numberOfLines={1} variant="subhead" tone="muted">
               {status}
-            </Typography>
+            </Text>
           </Pressable>
           {item.state === "finished" ? (
             <Animated.View entering={FadeIn.duration(200)}>

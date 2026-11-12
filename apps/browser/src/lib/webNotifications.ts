@@ -1,125 +1,71 @@
+// The app's notifications: the ones a site asks for, and the ones the app posts.
+//
+// The work is in lib/notificationService.ts. This is where the app reaches it.
 import type { WebNotification } from "@bay/chromium";
-import {
-  confirm,
-  notificationPermission,
-  openNotificationSettings,
-  postNotification,
-  removeNotifications,
-  requestNotificationPermission,
-  type NotificationResponse,
-} from "@bay/desktop";
+import type { NotificationResponse } from "@bay/desktop";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../effect/runtime";
 import { useBrowser } from "../store/browserStore";
 import { focus, switchToTab } from "./actions";
+import { NotificationService, shownNotifications } from "./notificationService";
 import { webviews } from "./webviews";
-import { NOTIFICATION_ICON_PIXELS, NOTIFICATION_ICON_TIMEOUT_MS } from "./constants";
 
-const shown = new Map<string, string>();
+/** Shows the notification a site asked for, if the app may show it. */
+export function showWebNotification(tabId: string, n: WebNotification): void {
+  void runDesktop(
+    Effect.gen(function* () {
+      const notifications = yield* NotificationService;
 
-const macId = (n: WebNotification) => (n.tag ? `web:${n.origin}#${n.tag}` : `web:${n.id}`);
-
-export function showWebNotification(tabId: string, n: WebNotification) {
-  const s = useBrowser.getState();
-  const tab = s.tabs[tabId];
-  const window = tab ? s.windows[tab.windowId] : undefined;
-
-  // Dismiss incognito notifications.
-  if (!tab || !window || window.incognito) return void webviews.get(tabId)?.notificationAction(n.id, "close");
-  const id = macId(n);
-  shown.set(id, n.id);
-  let site = n.origin;
-
-  try {
-    site = new URL(n.origin).host;
-  } catch {}
-
-  void ensureNotificationPermission(tab.windowId).then(async (allowed) => {
-    if (!allowed || shown.get(id) !== n.id) return;
-    const icon = n.icon ? await iconFor(tabId, n.icon) : undefined;
-
-    if (shown.get(id) !== n.id) return;
-    void postNotification({
-      id,
-      title: n.title,
-      body: n.body,
-      subtitle: site,
-      silent: n.silent,
-      icon,
-      tabId,
-      windowId: tab.windowId,
-      origin: n.origin,
-      dismissible: true,
-      data: { engineId: n.id },
-    });
-  });
+      yield* notifications.show(tabId, n);
+    }),
+  );
 }
 
-// Load icons through the page tab's request context.
-async function iconFor(tabId: string, url: string): Promise<string | undefined> {
-  const view = webviews.get(tabId);
+/** Takes down the notifications a page asked for. */
+export function closeWebNotification(engineId: string): void {
+  void runDesktop(
+    Effect.gen(function* () {
+      const notifications = yield* NotificationService;
 
-  if (!view) return undefined;
-  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), NOTIFICATION_ICON_TIMEOUT_MS));
-  const image = await Promise.race([view.downloadImage(url, NOTIFICATION_ICON_PIXELS).catch(() => null), timeout]);
-
-  return image?.uri ?? undefined;
+      yield* notifications.close(engineId);
+    }),
+  );
 }
 
-export function closeWebNotification(engineId: string) {
-  for (const [id, shownId] of shown) {
-    if (shownId !== engineId) continue;
-    shown.delete(id);
-    void removeNotifications([id]);
-  }
-}
+/**
+ * What the user did with a notification: it opens the page, or tells the page.
+ *
+ * The answer is read at once: the native side waits for it, and the page has to hear it now.
+ */
+export function handleWebNotificationResponse(response: NotificationResponse): boolean {
+  if (!response.id.startsWith("web:")) return false;
 
-export function handleWebNotificationResponse({ id, action, tabId, data }: NotificationResponse): boolean {
-  if (!id.startsWith("web:")) return false;
+  // SAFETY: data comes from the notification service's own postNotification data field, which sets engineId as a string.
+  const engineId = (response.data as { engineId?: string } | null)?.engineId;
 
-  // SAFETY: data comes from this module's own postNotification data field, which sets engineId as a string.
-  const engineId = (data as { engineId?: string } | null)?.engineId;
+  if (engineId && shownNotifications.get(response.id) === engineId) shownNotifications.delete(response.id);
 
-  if (engineId && shown.get(id) === engineId) shown.delete(id);
-  const tab = tabId ? useBrowser.getState().tabs[tabId] : undefined;
+  const tab = response.tabId ? useBrowser.getState().tabs[response.tabId] : undefined;
 
   if (!tab) return true;
 
-  if (action === "click") {
+  if (response.action === "click") {
     switchToTab(tab.id);
     focus(tab.windowId);
   }
 
-  if (engineId) void webviews.get(tab.id)?.notificationAction(engineId, action);
+  if (engineId) webviews.get(tab.id)?.notificationAction(engineId, response.action);
 
   return true;
 }
 
-let asked = false;
-
-// Ask once before opening Notification Settings.
+/** Whether the app may show notifications, asking the user once if it may not. */
 export async function ensureNotificationPermission(windowId?: string): Promise<boolean> {
-  const status = await notificationPermission();
+  return runDesktop(
+    Effect.gen(function* () {
+      const notifications = yield* NotificationService;
 
-  if (status === "granted" || status === "provisional") return true;
-
-  if (status === "notDetermined") return requestNotificationPermission();
-
-  if (asked) return false;
-  asked = true;
-
-  const { confirmed } = await confirm({
-    title: "Bay Needs Notifications Permission",
-    message: "You need to open System Settings to give Bay permission to show you Notifications.",
-    confirmTitle: "Open System Settings",
-    cancelTitle: "Not Now",
-    windowId,
-  });
-
-  if (confirmed) void openNotificationSettings();
-
-  return false;
-}
-
-if (__DEV__) {
-  // SAFETY: nnNotifications is the notifications helper's own dev-harness surface, read only by tests.
-  (globalThis as { nnNotifications?: unknown }).nnNotifications = { shown };
+      return yield* notifications.ensurePermission(windowId);
+    }),
+  );
 }

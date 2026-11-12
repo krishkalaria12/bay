@@ -1,6 +1,8 @@
 import { useThemeColor } from "heroui-native";
 import type { JSX } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
+import { Text } from "@/chrome/Text";
+import { radius } from "@/chrome/tokens";
 import { useT, type MessageKey } from "@/i18n";
 import { READER_FONTS, READER_SIZES, READER_THEMES, type ReaderFont, type ReaderSettings, type ReaderThemeId } from "@/pagescripts/reader";
 import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
@@ -91,7 +93,9 @@ export function ReaderPanel({
                 className="size-9 items-center justify-center rounded-full"
                 style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: "rgba(127,127,127,0.35)" }}
               >
-                <Text style={{ color: theme.text, fontSize: 14 }}>Aa</Text>
+                <Text variant="subhead" color={theme.text}>
+                  Aa
+                </Text>
               </View>
             </Pressable>
           );
@@ -112,10 +116,10 @@ function Choice({ id, label, selected, disabled, onPress }: { id: string; label:
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
       onPress={onPress}
-      className="min-h-11 flex-1 items-center justify-center rounded-2xl border-2 bg-default px-3"
-      style={{ opacity: disabled ? 0.4 : 1, borderColor: selected ? accent : "transparent" }}
+      className="min-h-11 flex-1 items-center justify-center border-2 bg-default px-3"
+      style={{ opacity: disabled ? 0.4 : 1, borderColor: selected ? accent : "transparent", borderRadius: radius.tile }}
     >
-      <Text className="text-sm text-foreground">{label}</Text>
+      <Text variant="subhead">{label}</Text>
     </Pressable>
   );
 }

@@ -1,85 +1,35 @@
-import { closeCastDialog, onCastDialog, onCastRoutes, showCastDialog, watchCastRoutes, type CastDialog, type CastRoute } from "@bay/chromium";
-import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
-import { activeTabId, engineProfile, incognitoSpaceId } from "../../store/model";
-import { browserIdOf } from "../extensions/state";
-import { tabForBrowser } from "../window/pageState";
+// The cast picker, as the windows reach it. The engine's dialogs and routes are heard by the media service
+// (service.ts): this is where a window opens and closes its dialog, and reads the routes its profile can cast to.
+import type { CastRoute } from "@bay/chromium";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../../effect/runtime";
+import { useBrowser } from "../../store/browserStore";
+import { castProfile, MediaService, useCast, type Media } from "./service";
 
-type CastStore = {
-  dialogs: Record<string, CastDialog>;
-  routes: Record<string, CastRoute[]>;
-};
-
-export const useCast = create<CastStore>()(() => ({ dialogs: {}, routes: {} }));
+export { castProfile, useCast } from "./service";
 
 if (__DEV__)
   // SAFETY: nnCast is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
   (globalThis as { nnCast?: unknown }).nnCast = { useCast };
 
-export function castProfile(s: BrowserState, windowId: string): string {
-  const w = s.windows[windowId];
+/** Runs something with the media work, on the runtime the app shares. */
+export const withMedia = <A>(program: (media: Media) => Effect.Effect<A>): Promise<A> =>
+  runDesktop(
+    Effect.gen(function* () {
+      const media = yield* MediaService;
 
-  return !w ? "" : w.incognito ? incognitoSpaceId(windowId) : engineProfile(w.spaceId);
+      return yield* program(media);
+    }),
+  );
+
+/** Opens the cast dialog of the window's tab, or closes the one it has open. */
+export function toggleCastPicker(windowId: string): Promise<void> {
+  return withMedia((media) => media.toggleCastPicker(windowId));
 }
 
-let started = false;
-
-export function startCast() {
-  if (started) return;
-  started = true;
-  onCastDialog((dialog) => {
-    const tabId = tabForBrowser(dialog.browserId);
-
-    if (!tabId) {
-      if (dialog.open) void closeCastDialog(dialog.id);
-
-      return;
-    }
-
-    useCast.setState((c) => {
-      const dialogs = { ...c.dialogs };
-
-      if (dialog.open) dialogs[tabId] = dialog;
-      else if (dialogs[tabId]?.id === dialog.id) delete dialogs[tabId];
-
-      return { dialogs };
-    });
-  });
-  onCastRoutes(({ profile, routes }) => useCast.setState((c) => ({ routes: { ...c.routes, [profile]: routes } })));
-  const watched = new Set<string>();
-
-  const watch = (s: BrowserState) => {
-    for (const id of s.windowOrder) {
-      const profile = castProfile(s, id);
-
-      if (watched.has(profile)) continue;
-      watched.add(profile);
-      void watchCastRoutes(profile);
-    }
-  };
-
-  watch(useBrowser.getState());
-  useBrowser.subscribe((s, prev) => {
-    if (s.windowOrder !== prev.windowOrder) watch(s);
-  });
-}
-
-export async function toggleCastPicker(windowId: string) {
-  const tabId = activeTabId(useBrowser.getState(), windowId);
-
-  if (!tabId) return;
-  const open = useCast.getState().dialogs[tabId];
-
-  if (open) return closeCastPicker(tabId);
-  const browserId = browserIdOf(tabId);
-
-  if (browserId) await showCastDialog(browserId);
-}
-
+/** Closes the cast dialog a tab has open. */
 export function closeCastPicker(tabId: string) {
-  const dialog = useCast.getState().dialogs[tabId];
-
-  if (dialog) void closeCastDialog(dialog.id);
+  void withMedia((media) => media.closeCastPicker(tabId));
 }
 
 const NONE: CastRoute[] = [];

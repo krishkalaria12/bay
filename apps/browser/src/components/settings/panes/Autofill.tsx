@@ -34,14 +34,15 @@ export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) 
   const [enabled, setEnabled] = useState<{ addresses: boolean; cards: boolean } | null>(null);
   const profile = engineProfile(spaceId);
 
-  const load = () => {
+  // The lists of the profile asked for: an answer for a profile the pane has since left is dropped.
+  const load = (live: () => boolean = () => true) => {
     const addressesLoaded = listAddresses(profile)
-      .then(setAddresses)
-      .catch(() => setAddresses([]));
+      .then((list) => live() && setAddresses(list))
+      .catch(() => live() && setAddresses([]));
 
     void listCards(profile)
-      .then(setCards)
-      .catch(() => setCards([]));
+      .then((list) => live() && setCards(list))
+      .catch(() => live() && setCards([]));
 
     return addressesLoaded;
   };
@@ -50,7 +51,7 @@ export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) 
     setEnabled(null);
     // Load prefs after the profile list initializes its request context.
     let current = true;
-    void load().then(() =>
+    void load(() => current).then(() =>
       getAutofillSettings(profile)
         .then((e) => current && setEnabled(e))
         .catch(() => {}),

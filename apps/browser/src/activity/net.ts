@@ -68,6 +68,8 @@ export function base64(text: string): string {
 
 export const basic = (user: string, secret: string) => `Basic ${base64(`${user}:${secret}`)}`;
 
+export const notionHeaders = (token: string) => ({ Authorization: `Bearer ${token}`, "Notion-Version": "2022-06-28", "Content-Type": "application/json" });
+
 const account = (source: LiveSourceId) => (mock ? `mock:${source}` : source);
 export const getSecret = (source: LiveSourceId) => keychainGet(account(source));
 export const setSecret = (source: LiveSourceId, secret: string) => keychainSet(account(source), secret);

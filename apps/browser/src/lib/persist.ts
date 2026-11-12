@@ -5,15 +5,12 @@ import { inPinnedContainer, isIncognitoSpace, newId, snapshotTab } from "../stor
 import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
 import { isolateSavedSpaces } from "../store/spaces";
 import { normalizeLocalFiles } from "../store/localFiles";
-import { startLibrary } from "../components/library/state";
-import { startBoosts } from "../components/boosts/state";
-import { startFavicons } from "./favicons";
-import { startBookmarks } from "./bookmarks";
-import { startHistory } from "./history";
-import { startProfileDataCleanup } from "./profileCleanup";
-import { PERSIST_VERSION, SAVE_DELAY_MS } from "./constants";
+import { PERSIST_VERSION } from "./constants";
 
-type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
+// The app's documents: what they hold and how they are written. The saving itself is the coordinator's
+// (lib/persistenceService.ts).
+
+export type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
 
 const serialized =
   <T>(serialize: (s: BrowserState) => T) =>
@@ -98,7 +95,7 @@ export function sessionJson(s: BrowserState): string {
   ]);
 }
 
-const DOCS: Doc[] = [
+export const DOCS: Doc[] = [
   {
     name: "downloads.json",
     sources: (s) => [s.downloads],
@@ -143,14 +140,6 @@ function read<T>(name: string): T | null {
     console.warn(`Couldn't read ${name}`, error);
 
     return null;
-  }
-}
-
-function write(name: string, json: string) {
-  try {
-    writeDocument(name, json);
-  } catch (error) {
-    console.warn(`Couldn't save ${name}`, error);
   }
 }
 
@@ -306,110 +295,20 @@ export function loadSession(): HydrateData | null {
   return data;
 }
 
-let flush: () => void = () => {};
-let resume: () => void = () => {};
+/**
+ * The saved session no longer matches the store: the spaces were isolated, or the file was written by an older
+ * version. The session is written again before anything else.
+ */
+export function sessionNeedsRewrite(session: HydrateData | null): boolean {
+  if (!session?.spaces) return false;
 
-// From the quit's last save until the quit ends or is cancelled: what the quit itself does to the store (its windows
-// closing) is never saved.
-let frozen = false;
+  if (!read<SessionV2>("session.json")?.spaces) return true;
 
-export function flushPersistence({ final = false } = {}) {
-  flush();
-
-  if (final) frozen = true;
+  return Object.entries(session.spaces).some(([id, space]) => space.profileId !== useBrowser.getState().spaces[id]?.profileId);
 }
 
-// The quit was cancelled (a page's beforeunload said Stay): saving goes on, starting with what changed meanwhile.
-export function resumePersistence() {
-  frozen = false;
-  resume();
-}
-
-export function startPersistence() {
-  const session = loadSession();
-  useBrowser.getState().hydrate(session ?? {});
-  startLibrary();
-  startBoosts();
-
-  const lastSources = new Map<string, unknown[]>();
-  const lastJson = new Map<string, string>();
-  const dirty = new Set<Doc>();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  const save = () => {
-    clearTimeout(timer);
-    timer = undefined;
-
-    if (frozen) return;
-    const s = useBrowser.getState();
-
-    for (const doc of DOCS.filter((d) => dirty.has(d))) {
-      const json = doc.json(s);
-
-      if (lastJson.get(doc.name) !== json) {
-        lastJson.set(doc.name, json);
-        write(doc.name, json);
-      }
-    }
-
-    dirty.clear();
-  };
-
-  flush = save;
-
-  const check = (s: BrowserState, initial = false) => {
-    if (frozen) return;
-
-    for (const doc of DOCS) {
-      const sources = doc.sources(s);
-      const prev = lastSources.get(doc.name);
-
-      if (prev && sources.every((v, i) => v === prev[i])) continue;
-      lastSources.set(doc.name, sources);
-
-      if (!initial) dirty.add(doc);
-    }
-
-    if (dirty.size && !timer) timer = setTimeout(save, SAVE_DELAY_MS);
-  };
-
-  check(useBrowser.getState(), true);
-
-  if (
-    session?.spaces &&
-    (!read<SessionV2>("session.json")?.spaces ||
-      Object.entries(session.spaces).some(([id, space]) => space.profileId !== useBrowser.getState().spaces[id]?.profileId))
-  ) {
-    dirty.add(DOCS.find((doc) => doc.name === "session.json")!);
-    save();
-  }
-
-  resume = () => {
-    check(useBrowser.getState());
-    save();
-  };
-
-  const stopFavicons = startFavicons();
-  const stopHistory = startHistory();
-  const stopBookmarks = startBookmarks();
-  const stopProfileData = startProfileDataCleanup();
-
-  const stopSession = useBrowser.subscribe((s, prev) => {
-    check(s);
-
-    if (s.windows !== prev.windows) forgetClosedIncognito(s, prev);
-  });
-
-  return () => {
-    stopFavicons();
-    stopHistory();
-    stopBookmarks();
-    stopProfileData();
-    stopSession();
-  };
-}
-
-function forgetClosedIncognito(s: BrowserState, prev: BrowserState) {
+/** A private window's downloads and its pages' site data go with it. */
+export function forgetClosedIncognito(s: BrowserState, prev: BrowserState) {
   for (const w of Object.values(prev.windows)) {
     if (!w.incognito || s.windows[w.id]) continue;
 

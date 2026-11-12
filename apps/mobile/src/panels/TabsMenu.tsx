@@ -3,10 +3,11 @@ import { useThemeColor } from "heroui-native";
 import { useState, type JSX } from "react";
 import { View } from "react-native";
 
-import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
+import { inputFont } from "@/chrome/tokens";
 import { useT } from "@/i18n";
 import { spaceName } from "@/store/spaceName";
 import type { BrowserFolder, BrowserSpace } from "@/store/types";
+import { ActionRow, PanelSheet, SectionLabel } from "./PanelSheet";
 
 export interface TabsMenuProps {
   visible: boolean;
@@ -86,7 +87,7 @@ export function TabsMenu(props: TabsMenuProps): JSX.Element {
               else if (page === "newFolder") act(() => props.onNewFolder(trimmed));
               else if (page === "renameFolder" && props.activeFolderId) act(() => props.onRenameFolder(props.activeFolderId!, trimmed));
             }}
-            style={{ flex: 1, color: foreground, fontSize: 16, paddingVertical: 10 }}
+            style={[inputFont("body"), { flex: 1, color: foreground, paddingVertical: 10 }]}
           />
         </View>
         <ActionRow testID={`tabs-menu-name-save`} label={t("tabsMenu.done")} onPress={() => setPage("main")} />

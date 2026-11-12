@@ -1,10 +1,12 @@
 import { EngineView, type PageRequest, type Tab } from "@bay/engine";
-import { Typography, useThemeColor } from "heroui-native";
+import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { View } from "react-native";
 
+import { Text } from "@/chrome/Text";
+import { radius, space } from "@/chrome/tokens";
 import { useT } from "@/i18n";
-import { ActionRow, PanelSheet } from "./PanelSheet";
+import { ActionRow, Group, PanelSheet } from "./PanelSheet";
 
 export interface LinkMenuProps {
   visible: boolean;
@@ -72,45 +74,53 @@ function LinkActions(props: LinkMenuProps): JSX.Element {
 
   return (
     <>
-      {props.title && props.title !== props.url ? <Typography numberOfLines={2}>{props.title}</Typography> : null}
       <Peek url={props.url} privately={props.privately} desktopMode={props.desktopMode} />
-      <Typography testID="link-menu-url" className="mb-3 text-sm text-muted" numberOfLines={3}>
+      {props.title && props.title !== props.url ? (
+        <Text variant="callout" weight="medium" numberOfLines={2} style={{ paddingHorizontal: space.xs }}>
+          {props.title}
+        </Text>
+      ) : null}
+      <Text testID="link-menu-url" variant="footnote" tone="muted" numberOfLines={3} style={{ paddingHorizontal: space.xs, marginBottom: space.lg }}>
         {props.url}
-      </Typography>
-      <ActionRow testID="link-open-tab" label={props.image ? t("linkMenu.openImage") : t("linkMenu.openTab")} onPress={() => act(props.onOpenTab)} />
+      </Text>
       {props.image ? (
-        <>
-          <ActionRow testID="link-image-copy" label={t("linkMenu.copyImage")} onPress={() => act(props.onCopy)} />
-          <ActionRow testID="link-image-share" label={t("linkMenu.shareImage")} onPress={() => act(props.onShare)} />
-          <ActionRow testID="link-image-save" label={t("linkMenu.saveImage")} onPress={() => act(props.onSave)} />
-        </>
+        <Group>
+          <ActionRow testID="link-open-tab" icon="add" label={t("linkMenu.openImage")} onPress={() => act(props.onOpenTab)} />
+          <ActionRow testID="link-image-copy" icon="copy" label={t("linkMenu.copyImage")} onPress={() => act(props.onCopy)} />
+          <ActionRow testID="link-image-share" icon="share" label={t("linkMenu.shareImage")} onPress={() => act(props.onShare)} />
+          <ActionRow testID="link-image-save" icon="download" label={t("linkMenu.saveImage")} onPress={() => act(props.onSave)} />
+        </Group>
       ) : (
-        <>
-          <ActionRow testID="link-open-background" label={t("linkMenu.openBackground")} onPress={() => act(props.onOpenBackground)} />
-          <ActionRow testID="link-copy" label={t("linkMenu.copyLink")} onPress={() => act(props.onCopy)} />
-          <ActionRow testID="link-share" label={t("linkMenu.share")} onPress={() => act(props.onShare)} />
+        <Group>
+          <ActionRow testID="link-open-tab" icon="add" label={t("linkMenu.openTab")} onPress={() => act(props.onOpenTab)} />
+          <ActionRow testID="link-open-background" icon="tabs" label={t("linkMenu.openBackground")} onPress={() => act(props.onOpenBackground)} />
+          <ActionRow testID="link-copy" icon="link" label={t("linkMenu.copyLink")} onPress={() => act(props.onCopy)} />
+          <ActionRow testID="link-share" icon="share" label={t("linkMenu.share")} onPress={() => act(props.onShare)} />
           <ActionRow
             testID="link-destination"
+            icon="forward"
             label={resolving ? t("linkMenu.checking") : t("linkMenu.where")}
             disabled={resolving}
             onPress={() => {
               void resolveDestination();
             }}
           />
-        </>
+        </Group>
       )}
       {destination ? (
-        <View className="mt-3 rounded-2xl bg-default p-3" accessibilityLiveRegion="polite">
-          <Typography className="mb-1 text-sm text-muted">{t("linkMenu.destination")}</Typography>
-          <Typography testID="link-destination-result" selectable>
+        <View className="mt-3 bg-default p-4" style={{ borderRadius: radius.card }} accessibilityLiveRegion="polite">
+          <Text variant="subhead" tone="muted" className="mb-1">
+            {t("linkMenu.destination")}
+          </Text>
+          <Text testID="link-destination-result" selectable>
             {destination}
-          </Typography>
+          </Text>
         </View>
       ) : null}
       {error ? (
-        <Typography testID="link-destination-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" className="mt-3 text-sm text-danger">
+        <Text testID="link-destination-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-3">
           {error}
-        </Typography>
+        </Text>
       ) : null}
     </>
   );
@@ -138,8 +148,8 @@ function Peek({ url, privately, desktopMode }: { url: string; privately: boolean
   return (
     <View
       testID="link-preview"
-      className="mb-3 overflow-hidden rounded-2xl bg-default"
-      style={{ height: PREVIEW_HEIGHT }}
+      className="overflow-hidden bg-default"
+      style={{ height: PREVIEW_HEIGHT, borderRadius: radius.card, marginBottom: space.md }}
       pointerEvents="none"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"

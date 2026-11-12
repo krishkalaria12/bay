@@ -42,6 +42,9 @@ jobs:
           pnpm --filter @bay/sync exec node --test "src/**/*.test.ts"
       - name: Engine freshness checks
         run: node --test scripts/tests/test-engine-fresh.mjs
+      # Effect is the desktop app's: the shared packages, the other apps and the store stay free of it.
+      - name: Effect boundary
+        run: node --test scripts/tests/test-effect-boundary.mjs
       - name: React Compiler
         run: pnpm compiler:check
       - name: Rust content blocker

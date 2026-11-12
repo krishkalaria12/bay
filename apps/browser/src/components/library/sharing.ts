@@ -1,171 +1,48 @@
-import * as v from "valibot";
-import {
-  createEaselShareIdentity,
-  isEaselWebSharingEnabled,
-  keychainDelete,
-  keychainGet,
-  keychainSet,
-  readEaselShareRecords,
-  saveDocument,
-} from "@bay/desktop";
-import { create } from "zustand";
+// The shared Easels: the pages the app publishes to its website, and the keys that own them.
+//
+// The work is in components/library/sharingService.ts. This is where the app reaches it.
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../../effect/runtime";
+import { easelShareURL, SharingFailure, SharingService, useEaselShares } from "./sharingService";
 
-const ORIGIN = "https://bay.krishkalaria.in";
-const FILE = "easel-shares.json";
-const account = (id: string) => `easel-share:${id}`;
+export { easelShareURL, useEaselShares };
 
-type Publication = { id: string; publishedAt: number | null; revision: number };
-
-type ShareState = { loaded: boolean; error: string | null; records: Record<string, Publication>; busy: Record<string, boolean> };
-
-export const useEaselShares = create<ShareState>()(() => ({ loaded: false, error: null, records: {}, busy: {} }));
-let saves = Promise.resolve();
-
-export const easelShareURL = (id: string) => `${ORIGIN}/easel/${id}/`;
-
+/** Reads the sharing records. */
 export function startEaselShares() {
-  if (useEaselShares.getState().loaded) return;
+  void runDesktop(
+    Effect.gen(function* () {
+      const sharing = yield* SharingService;
 
-  try {
-    const text = readEaselShareRecords();
-    const data = text === null ? { version: 1, records: {} } : JSON.parse(text);
-
-    if (data?.version !== 1 || !data.records || !v.is(v.object({}), data.records) || Array.isArray(data.records)) throw new Error("Invalid sharing records");
-
-    // SAFETY: Publication[]) { assertion matches the runtime value validated at this call site.
-    for (const value of Object.values(data.records) as Publication[]) {
-      if (
-        !value ||
-        !/^[a-f0-9]{32}$/.test(value.id) ||
-        !Number.isSafeInteger(value.revision) ||
-        value.revision < 1 ||
-        (value.publishedAt !== null && !Number.isFinite(value.publishedAt))
-      ) {
-        throw new Error("Invalid sharing record");
-      }
-    }
-
-    useEaselShares.setState({ loaded: true, records: data.records, error: null });
-  } catch {
-    useEaselShares.setState({ loaded: true, error: "Couldn't read Easel sharing records. Restore easel-shares.json before changing shared pages." });
-  }
+      yield* sharing.start;
+    }),
+  );
 }
 
-// Save before sending anything: even an interrupted upload must retain the ability to stop sharing.
-function saveRecord(easelId: string, value: Publication | null) {
-  const next = saves.then(async () => {
-    const records = { ...useEaselShares.getState().records };
+// The app is told what went wrong in its own words: the sharing failure carries the message.
+const asError = (error: Error | SharingFailure): Error => (error instanceof SharingFailure ? new Error(error.message) : error);
 
-    if (value) records[easelId] = value;
-    else delete records[easelId];
-    await saveDocument(FILE, JSON.stringify({ version: 1, records }));
-    useEaselShares.setState({ records });
-  });
+/** Publishes the Easel, and gives the link to share it by. */
+export function publishEasel(easelId: string, snapshot: () => Promise<string>): Promise<string> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const sharing = yield* SharingService;
 
-  saves = next.catch(() => {});
-
-  return next;
-}
-
-async function exclusive<T>(easelId: string, run: () => Promise<T>): Promise<T> {
-  startEaselShares();
-  const state = useEaselShares.getState();
-
-  if (state.error) throw new Error(state.error);
-
-  if (state.busy[easelId]) throw new Error("This Easel is already being shared. Wait for it to finish.");
-  useEaselShares.setState({ busy: { ...state.busy, [easelId]: true } });
-
-  try {
-    return await run();
-  } finally {
-    const busy = { ...useEaselShares.getState().busy };
-    delete busy[easelId];
-    useEaselShares.setState({ busy });
-  }
-}
-
-async function managementKey(id: string) {
-  const key = await keychainGet(account(id));
-
-  if (!key || !/^[a-f0-9]{64}$/.test(key))
-    throw new Error("The sharing key is unavailable in Keychain. Restore access to it before changing this shared page.");
-
-  return key;
-}
-
-async function request(publication: Publication, method: "PUT" | "DELETE", body?: string) {
-  const key = await managementKey(publication.id);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-
-  try {
-    const response = await fetch(`${ORIGIN}/api/easels/${publication.id}`, {
-      method,
-      headers: { Authorization: `Bearer ${key}`, ...(body ? { "Content-Type": "application/json" } : undefined) },
-      body,
-      signal: controller.signal,
-      redirect: "error",
-    });
-
-    if (!response.ok) {
-      const messages = new Map<number, string>([
-        [400, "This Easel couldn't be shared. Check its source links or export it as HTML."],
-        [401, "The sharing key wasn't accepted. Restore Keychain access before trying again."],
-        [403, "This Mac couldn't authorize a change to the shared page. Check its sharing key in Keychain."],
-        [404, "Web sharing isn't available on Bay's website yet. Export this Easel as HTML instead."],
-        [409, "A newer snapshot reached the shared page first. Publish again to share your current Easel."],
-        [410, "This link has been stopped. Stop sharing here, then publish a new link."],
-        [413, "This Easel is too large to share. Export it as HTML instead."],
-        [429, "Too many sharing requests. Wait a minute and try again."],
-      ]);
-
-      const message = messages.get(response.status) ?? `Sharing failed (${response.status}). Try again.`;
-      throw new Error(message);
-    }
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") throw new Error("Sharing timed out. Retry or stop sharing to check the link's status.");
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-export async function publishEasel(easelId: string, snapshot: () => Promise<string>) {
-  if (!isEaselWebSharingEnabled()) throw new Error("Easel web sharing is disabled.");
-
-  return exclusive(easelId, async () => {
-    const body = JSON.parse(await snapshot());
-    let publication = useEaselShares.getState().records[easelId];
-
-    if (!publication) {
-      const identity = await createEaselShareIdentity();
-
-      if (!/^[a-f0-9]{32}$/.test(identity.id) || !/^[a-f0-9]{64}$/.test(identity.key)) throw new Error("Couldn't create a secure sharing link.");
-
-      if (!(await keychainSet(account(identity.id), identity.key))) throw new Error("Couldn't save the sharing key in Keychain. Nothing was published.");
-      publication = { id: identity.id, publishedAt: null, revision: 0 };
-    }
-
-    if (publication.revision >= Number.MAX_SAFE_INTEGER) throw new Error("Stop sharing and publish a new link before updating this page.");
-    publication = { ...publication, revision: publication.revision + 1 };
-    await saveRecord(easelId, publication);
-    await request(publication, "PUT", JSON.stringify({ ...body, revision: publication.revision }));
-    await saveRecord(easelId, { ...publication, publishedAt: Date.now() });
-
-    return easelShareURL(publication.id);
+      return yield* sharing.publish(easelId, () => Effect.promise(snapshot));
+    }),
+  ).catch((error: Error | SharingFailure) => {
+    throw asError(error);
   });
 }
 
-export function stopSharingEasel(easelId: string) {
-  return exclusive(easelId, async () => {
-    const publication = useEaselShares.getState().records[easelId];
+/** Stops sharing the Easel. */
+export function stopSharingEasel(easelId: string): Promise<void> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const sharing = yield* SharingService;
 
-    if (!publication) return;
-
-    if (!isEaselWebSharingEnabled()) throw new Error("Easel web sharing is disabled. Enable it before stopping sharing or deleting a shared Easel.");
-    await request(publication, "DELETE");
-    await saveRecord(easelId, null);
-    await keychainDelete(account(publication.id));
+      yield* sharing.stop(easelId);
+    }),
+  ).catch((error: Error | SharingFailure) => {
+    throw asError(error);
   });
 }

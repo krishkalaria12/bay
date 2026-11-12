@@ -1,5 +1,5 @@
 import { Button, HStack, Host, Image, Text } from "@expo/ui/swift-ui";
-import { accessibilityLabel, buttonStyle, controlSize, font, frame, tint, truncationMode } from "@expo/ui/swift-ui/modifiers";
+import { accessibilityIdentifier, accessibilityLabel, buttonStyle, controlSize, font, frame, tint, truncationMode } from "@expo/ui/swift-ui/modifiers";
 import type { JSX } from "react";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -26,7 +26,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const prominentTint = props.privately ? PRIVATE_TINT : undefined;
 
   return (
-    <View className="flex-row items-center justify-center gap-4">
+    <View className="flex-row items-center justify-center gap-3">
       <SwipeUp onSwipeUp={props.mode === "page" ? props.onTabsSwipeUp : undefined}>
         <GlassIconButton
           id={left.id}
@@ -47,6 +47,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
               ...(prominentTint ? [buttonStyle("glassProminent"), tint(prominentTint)] : [buttonStyle("glass")]),
               controlSize("large"),
               accessibilityLabel(search.label),
+              accessibilityIdentifier(search.id),
             ]}
           >
             {barNewTab(props) ? (
@@ -61,7 +62,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
                 <Text modifiers={[font({ size: 15, weight: "medium" }), truncationMode("tail")]}>{site}</Text>
               </HStack>
             ) : (
-              <Image systemName="magnifyingglass" modifiers={[frame({ width: 92 })]} />
+              <Image systemName="magnifyingglass" modifiers={[font({ size: 17, weight: "medium" }), frame({ width: 92, height: 20 })]} />
             )}
           </Button>
         </Host>

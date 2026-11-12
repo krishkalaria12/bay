@@ -1,6 +1,6 @@
 import { useThemeColor } from "heroui-native";
 import type { JSX } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 import Animated from "react-native-reanimated";
 
 import { useT } from "@/i18n";
@@ -10,6 +10,7 @@ import { LoadProgress } from "./LoadProgress";
 import { MaterialSymbol, type MaterialSymbolName } from "./MaterialSymbol";
 import { SwipeUp } from "./SwipeUp";
 import { TabCount } from "./TabCount";
+import { Text } from "./Text";
 
 // Same layout as iOS, drawn the way Arc Search does on Android: flat translucent buttons with a hairline edge.
 function BarPressable({
@@ -54,7 +55,7 @@ function BarPressable({
         <View className="flex-row items-center gap-1 px-3.5">
           {insecure ? <MaterialSymbol name="error" color={danger} size={16} /> : null}
           {leading ? <MaterialSymbol name={leading} color={foreground} size={20} /> : null}
-          <Text numberOfLines={1} className="shrink" style={{ color: foreground, fontSize: 15, fontWeight: "500" }}>
+          <Text numberOfLines={1} className="shrink" variant="callout" weight="medium" color={foreground}>
             {text}
           </Text>
         </View>
@@ -71,7 +72,7 @@ export function BrowserBar(props: BrowserBarProps): JSX.Element {
   const [left, search, right] = barButtons(props, t);
 
   return (
-    <View className="flex-row items-center justify-center gap-4">
+    <View className="flex-row items-center justify-center gap-3">
       <SwipeUp onSwipeUp={props.mode === "page" ? props.onTabsSwipeUp : undefined}>
         <BarPressable button={left} icon={left.icon} privately={props.privately} />
       </SwipeUp>

@@ -17,17 +17,20 @@ import { fetch as expoFetch } from "expo/fetch";
 import * as Linking from "expo-linking";
 import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
+import { useThemeColor } from "heroui-native";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useThemeColor } from "heroui-native";
 import { Uniwind } from "uniwind";
 
 import { BrowserBar } from "@/chrome/BrowserBar";
 import { tick } from "@/chrome/haptics";
+import { Icon } from "@/chrome/Icon";
 import { hiddenFromScreenReaders } from "@/chrome/screenReader";
+import { Text } from "@/chrome/Text";
+import { iconSize, space } from "@/chrome/tokens";
 import { crashReportText, crashReports } from "@/crashReports";
 import { t as translate, useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
@@ -47,7 +50,7 @@ import { saveLogin, savedLoginFor } from "./credentials";
 import { originOf } from "./logins";
 import { PrivateLock } from "./PrivateLock";
 import { SearchCard, type OpenTarget } from "./SearchCard";
-import { StartPage } from "./StartPage";
+import { ON_PHOTO_MUTED, StartPage } from "./StartPage";
 import { TabPage } from "./TabPage";
 import { TabSwitcher } from "./TabSwitcher";
 import { TabSwipe } from "./TabSwipe";
@@ -83,8 +86,8 @@ const blankNavigation: NavigationState = { url: "", title: "", progress: 0, isLo
 
 export function BrowserScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
-  const muted = useThemeColor("muted");
   const t = useT();
+  const muted = useThemeColor("muted");
   // An open sheet is modal for screen readers: the browser behind it steps out of their way. Toasts stay, since they
   // answer what was done in the sheet.
   const behindSheet = hiddenFromScreenReaders(useSheetOpen());
@@ -653,6 +656,7 @@ export function BrowserScreen(): JSX.Element {
   const topColor = locked && active.private ? null : error?.tabId === active.id ? null : (pageColors[active.id] ?? null);
   const tabError = error?.tabId === active.id ? error : null;
   const fullscreen = fullscreenByTab[active.id] ?? false;
+  const onPhoto = data.preferences.wallpaper === "photo" && Boolean(data.preferences.wallpaperPhoto);
 
   return (
     <View className="flex-1 bg-background">
@@ -754,11 +758,12 @@ export function BrowserScreen(): JSX.Element {
               style={StyleSheet.absoluteFill}
               onPress={() => search(false)}
             />
-            <View className="flex-1 items-center justify-end" style={{ paddingBottom: insets.bottom + BAR_HEIGHT + 40 }} pointerEvents="box-none">
-              <View className="mb-8 w-full" style={{ paddingLeft: insets.left, paddingRight: insets.right }} pointerEvents="box-none">
+            <View className="flex-1 items-center justify-end" style={{ paddingBottom: insets.bottom + BAR_HEIGHT + space.xxl }} pointerEvents="box-none">
+              <View className="w-full" style={{ marginBottom: space.xl, paddingLeft: insets.left, paddingRight: insets.right }} pointerEvents="box-none">
                 <StartPage
                   pins={data.pinnedSites}
                   history={data.history}
+                  onPhoto={onPhoto}
                   onOpen={(url) => open({ kind: "url", url }, false)}
                   onUnpin={(site) => {
                     const index = data.pinnedSites.indexOf(site);
@@ -769,9 +774,17 @@ export function BrowserScreen(): JSX.Element {
                 />
               </View>
               {/* The backdrop's label says this; touches pass through to it. */}
-              <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="items-center">
-                <Text style={{ color: muted, fontSize: 14 }}>{t("start.tapToSearch")}</Text>
-                <Text style={{ color: muted, fontSize: 14, marginTop: 2 }}>↓</Text>
+              <View
+                pointerEvents="none"
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                className="items-center"
+                style={{ gap: 2 }}
+              >
+                <Text variant="subhead" weight="medium" color={onPhoto ? ON_PHOTO_MUTED : muted}>
+                  {t("start.tapToSearch")}
+                </Text>
+                <Icon name="down" color={onPhoto ? ON_PHOTO_MUTED : muted} size={iconSize.small} />
               </View>
             </View>
           </View>
@@ -817,8 +830,16 @@ export function BrowserScreen(): JSX.Element {
 
       {overlay !== "search" && !find.open && !fullscreen ? (
         <Animated.View
-          className="absolute inset-x-0 gap-3"
-          style={[{ bottom: Math.max(insets.bottom, 12) + 4, paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }, barStyle]}
+          className="absolute inset-x-0"
+          style={[
+            {
+              gap: space.md,
+              bottom: Math.max(insets.bottom, space.md) + space.xs,
+              paddingLeft: insets.left + space.edge,
+              paddingRight: insets.right + space.edge,
+            },
+            barStyle,
+          ]}
           pointerEvents="box-none"
         >
           {hasPage && showPages && !(locked && active.private) ? reading.controls : null}

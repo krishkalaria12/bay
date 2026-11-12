@@ -25,7 +25,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#151C36"
       },
       "predictiveBackGestureEnabled": false,
       "package": "in.krishkalaria.bay.mobile",
@@ -39,12 +39,16 @@
     "plugins": [
       "./modules/bay-engine/app.plugin.js",
       "expo-router",
+      // The launch animation (scripts/splash-animation.py draws it): Bay's icon builds itself natively while the
+      // JavaScript loads, then hands over to the app (src/app/index.tsx hides it).
       [
-        "expo-splash-screen",
+        "react-native-splash-motion",
         {
-          "image": "./assets/images/splash-icon.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "source": "./assets/splash/bay.json",
+          "background": "#F4F0E8",
+          "width": 160,
+          "still": "./assets/splash/bay-first-frame.png",
+          "loopMarker": "loop"
         }
       ],
       [

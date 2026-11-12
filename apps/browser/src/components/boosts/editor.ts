@@ -1,6 +1,9 @@
 import { confirm, openTextFile, prompt, saveTextFile } from "@bay/desktop";
+import * as Context from "effect/Context";
 import { create } from "zustand";
 import * as v from "valibot";
+import { desktopRuntime } from "../../effect/runtime";
+import { captureException } from "../../telemetry/errors";
 import { boostChanges, boostHost, cleanSelector, exportBoost, importBoost, newBoost, shuffledBoost, type Boost } from "../../lib/boosts";
 import { isJsonObject, JsonValueSchema, type JsonInput } from "../../lib/json";
 import { webviews } from "../../lib/webviews";
@@ -8,7 +11,8 @@ import { useBrowser } from "../../store/browserStore";
 import { newId } from "../../store/model";
 import { setPopover } from "../window/pageState";
 import { showToast } from "../split/splitActions";
-import { countScript, pickerScript, previewScript, type PickerMode } from "./pickerScript";
+import { pickerScript, previewScript, type PickerMode } from "./pickerScript";
+import { BoostsService, type Boosts } from "./service";
 import { addBoost, addSelector, boostsForHost, createBoost, deleteBoost, setBoostScript, startBoosts, updateBoost, useBoosts } from "./state";
 
 // The Boost editor over a tab's page (BoostEditor.tsx), as Arc's and Zen's: one Boost of the page's site at a time,
@@ -25,16 +29,59 @@ export type EditorSession = {
   pickerId: string | null;
   // How many elements each zap hides on the page now.
   counts: Record<string, number>;
+  // The editor's generation: a count the page gives belongs to the generation that asked for it. It changes when the
+  // editor takes another Boost, and when the page it is over is another one.
+  generation: string;
 };
 
 export const useBoostEditor = create<{ sessions: Record<string, EditorSession> }>(() => ({ sessions: {} }));
 
 export const useEditorSession = (tabId: string) => useBoostEditor((e) => e.sessions[tabId] ?? null);
 const sessionOf = (tabId: string) => useBoostEditor.getState().sessions[tabId] ?? null;
-const countRequests = new Map<string, symbol>();
+
+/**
+ * The Boosts service, as the app's runtime holds it. It is asked for by name, so this module does not depend on the
+ * runtime's own list of services.
+ */
+let service: Boosts | null = null;
+
+const boostsService = async (): Promise<Boosts | null> => {
+  // The runtime keeps the service for the life of the app: it is looked up once.
+  if (service) return service;
+
+  try {
+    const context = await desktopRuntime.context();
+
+    service = Context.getUnsafe(BoostsService)(context);
+
+    return service;
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+
+    captureException(error, "console");
+    console.error("The Boosts service could not be reached", error);
+
+    return null;
+  }
+};
+
+/** Gives up the count the editor was waiting for: it closed, or another Boost took its place. */
+async function abandonCounts(tabId: string, generation: string | undefined) {
+  if (!generation) return;
+
+  const boosts = await boostsService();
+
+  if (!boosts) return;
+
+  await desktopRuntime.runPromise(boosts.abandon(tabId, generation));
+}
 
 function patchSession(tabId: string, patch: Partial<EditorSession> | null) {
-  if (patch === null || patch.boostId !== undefined) countRequests.delete(tabId);
+  const session = sessionOf(tabId);
+
+  // The editor that asked for a count is gone, or another Boost took its place: its answer is not wanted.
+  if (patch === null || patch.boostId !== undefined || patch.generation !== undefined) void abandonCounts(tabId, session?.generation);
+
   useBoostEditor.setState((e) => {
     const sessions = { ...e.sessions };
 
@@ -80,7 +127,10 @@ export function openBoostEditor(tabId: string, options: { boostId?: string; fres
   setPopover(tabId, null);
   stopPicking(tabId);
   useBoostEditor.setState((e) => ({
-    sessions: { ...e.sessions, [tabId]: { boostId: boost.id, host, view: "look", picking: null, pickerId: null, counts: {} } },
+    sessions: {
+      ...e.sessions,
+      [tabId]: { boostId: boost.id, host, view: "look", picking: null, pickerId: null, counts: {}, generation: newId("boostEditor") },
+    },
   }));
   void refreshCounts(tabId);
 }
@@ -116,7 +166,7 @@ export const setEditorView = (tabId: string, view: EditorView) => patchSession(t
 export function switchEditorBoost(tabId: string, boostId: string) {
   if (useBoosts.getState().boosts[boostId]?.host !== sessionOf(tabId)?.host) return;
   stopPicking(tabId);
-  patchSession(tabId, { boostId, counts: {} });
+  patchSession(tabId, { boostId, counts: {}, generation: newId("boostEditor") });
 
   if (!useBoosts.getState().boosts[boostId]?.enabled) updateBoost(boostId, { enabled: true });
   void refreshCounts(tabId);
@@ -182,19 +232,26 @@ export async function refreshCounts(tabId: string) {
   const boost = session ? useBoosts.getState().boosts[session.boostId] : undefined;
 
   if (!session || !boost) return;
-  const request = Symbol();
-  countRequests.set(tabId, request);
-  const counts: Record<string, number> = {};
 
-  if (boost.zaps.length) {
-    const result = await webviews.get(tabId)?.evaluate<number[]>(countScript(boost.zaps));
+  try {
+    const boosts = await boostsService();
 
-    if (Array.isArray(result)) boost.zaps.forEach((s, i) => (counts[s] = Number(result[i]) || 0));
+    if (!boosts) return;
+
+    const outcome = await desktopRuntime.runPromise(boosts.counts({ tabId, generation: session.generation, selectors: boost.zaps }));
+
+    // The editor that asked closed, or another one took its place: the answer is not this one's.
+    if (outcome.kind !== "counts") return;
+
+    if (sessionOf(tabId)?.generation !== session.generation) return;
+
+    patchSession(tabId, { counts: outcome.counts });
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+
+    captureException(error, "console");
+    console.error("The Boost counts could not be read", error);
   }
-
-  if (countRequests.get(tabId) !== request) return;
-  countRequests.delete(tabId);
-  patchSession(tabId, { counts });
 }
 
 /** Shows a zap's elements for a moment (its row hovered); null hides them again. */
@@ -363,7 +420,10 @@ function startBoostEditor() {
     if (s.tabs === prev.tabs) return;
 
     for (const tabId of Object.keys(useBoostEditor.getState().sessions)) {
-      if (s.tabs[tabId]?.url !== prev.tabs[tabId]?.url || s.tabs[tabId]?.navigation !== prev.tabs[tabId]?.navigation) countRequests.delete(tabId);
+      // The page is another one now: the count in flight is for the page that was there.
+      if (s.tabs[tabId]?.url !== prev.tabs[tabId]?.url || s.tabs[tabId]?.navigation !== prev.tabs[tabId]?.navigation) {
+        patchSession(tabId, { generation: newId("boostEditor") });
+      }
     }
 
     check();
@@ -374,7 +434,8 @@ function startBoostEditor() {
     if (s.live === prev.live) return;
 
     for (const tabId of Object.keys(useBoostEditor.getState().sessions)) {
-      if (!prev.live[tabId]?.isLoading && s.live[tabId]?.isLoading) countRequests.delete(tabId);
+      // The page is loading: the count in flight is for the page that was there.
+      if (!prev.live[tabId]?.isLoading && s.live[tabId]?.isLoading) patchSession(tabId, { generation: newId("boostEditor") });
 
       if (prev.live[tabId]?.isLoading && !s.live[tabId]?.isLoading) {
         stopPicking(tabId);

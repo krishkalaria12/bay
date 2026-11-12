@@ -4,18 +4,22 @@ import { startListening } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
 import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type ComponentRef, type JSX } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { Extrapolation, interpolate, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { Pressable, StyleSheet, Text as Span, TextInput, View } from "react-native";
+import Animated, { Extrapolation, FadeIn, interpolate, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/chrome/Icon";
 import { SPRING, useReducedMotion } from "@/chrome/motion";
+import { PressFeedback } from "@/chrome/PressFeedback";
 import { Surface } from "@/chrome/Surface";
+import { Text } from "@/chrome/Text";
+import { iconSize, inputFont, radius, rowHeight, space } from "@/chrome/tokens";
 import { useT, type Translate } from "@/i18n";
 import type { BrowserData } from "@/store/types";
 import { resolveAddress } from "./address";
 import { SiteIcon } from "./SiteIcon";
+import { siteName } from "./siteName";
 import { useSuggestions, type Row } from "./useSuggestions";
 
 export type OpenTarget = { kind: "url"; url: string } | { kind: "tab"; id: string } | { kind: "archived"; id: string };
@@ -66,7 +70,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
   // as selected text raced fast typing: a key pressed before the completion arrived was overwritten and lost.
   const selection = addressSelected ? { start: 0, end: query.length } : undefined;
 
-  const cardPosition = useAnimatedStyle(() => ({ bottom: Math.max(keyboard.height.value, insets.bottom) + 8 }));
+  const cardPosition = useAnimatedStyle(() => ({ bottom: Math.max(keyboard.height.value, insets.bottom) + space.sm }));
 
   // The field grows out of the capsule it replaces (A2): the pill widens from the capsule's width to the field's,
   // and what is written in it comes in as it widens.
@@ -134,6 +138,8 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 
   return (
     <View style={StyleSheet.absoluteFill} testID="search-card">
+      {/* Dims what's behind, so the card and its suggestions stand clear of a busy page. */}
+      <Animated.View entering={FadeIn.duration(SCRIM_FADE)} className="bg-black/15 dark:bg-black/40" style={StyleSheet.absoluteFill} pointerEvents="none" />
       <Pressable
         testID="search-dismiss"
         accessibilityRole="button"
@@ -141,9 +147,9 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
         style={StyleSheet.absoluteFill}
         onPress={onDismiss}
       />
-      <Animated.View style={[{ position: "absolute", left: 8 + insets.left, right: 8 + insets.right }, cardPosition]}>
-        <Surface radius={30} style={{ padding: 10 }} testID={privately ? "search-card-private" : undefined}>
-          {privately ? <View className="absolute inset-0 rounded-[30px] bg-neutral-900/95" pointerEvents="none" /> : null}
+      <Animated.View style={[{ position: "absolute", left: space.edge + insets.left, right: space.edge + insets.right }, cardPosition]}>
+        <Surface radius={radius.panel} style={{ padding: 10 }} testID={privately ? "search-card-private" : undefined}>
+          {privately ? <View className="absolute inset-0 bg-neutral-900/95" style={{ borderRadius: radius.panel }} pointerEvents="none" /> : null}
           <View
             className="relative"
             onLayout={(event) => {
@@ -174,8 +180,9 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                     importantForAccessibility="no-hide-descendants"
                     style={[inputTextStyle, { position: "absolute", left: 0, right: 0, top: 0, height: 46, lineHeight: 46, color: text }]}
                   >
-                    <Text style={{ color: "transparent" }}>{query}</Text>
-                    <Text style={{ backgroundColor: privately ? "rgba(255,255,255,0.18)" : "rgba(10,132,255,0.22)" }}>{completion}</Text>
+                    {/* Spans: they take the line's font and colour from the text around them. */}
+                    <Span style={{ color: "transparent" }}>{query}</Span>
+                    <Span style={{ backgroundColor: privately ? "rgba(255,255,255,0.18)" : "rgba(10,132,255,0.22)" }}>{completion}</Span>
                   </Text>
                 ) : null}
                 <TextInput
@@ -205,7 +212,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                   className="h-11 w-11 items-center justify-center"
                   onPress={() => fill("")}
                 >
-                  <Icon name="close" color={secondary} size={20} />
+                  <Icon name="close" color={secondary} size={iconSize.row} />
                 </Pressable>
               ) : null}
               <Pressable
@@ -217,7 +224,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                 className="h-11 w-11 items-center justify-center"
                 onPress={() => void listen()}
               >
-                <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={22} />
+                <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={iconSize.control} />
               </Pressable>
               {privateAvailable ? (
                 <Pressable
@@ -228,7 +235,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
                   className="h-11 w-11 items-center justify-center"
                   onPress={() => setPrivately((on) => !on)}
                 >
-                  <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={22} />
+                  <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={iconSize.control} />
                 </Pressable>
               ) : (
                 <View className="w-3" />
@@ -236,7 +243,7 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
             </Animated.View>
           </View>
           {privately ? (
-            <Text testID="private-notice" accessibilityLiveRegion="polite" style={{ color: secondary, fontSize: 13, marginTop: 8, marginLeft: 16 }}>
+            <Text testID="private-notice" accessibilityLiveRegion="polite" variant="footnote" color={secondary} style={{ marginTop: 8, marginLeft: 16 }}>
               {t("search.privateNotice")}
             </Text>
           ) : null}
@@ -249,26 +256,33 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
               onPress={() => {
                 void pasteAndGo();
               }}
-              className="mt-2 h-10 flex-row items-center gap-2 rounded-2xl px-3 active:bg-black/5 dark:active:bg-white/10"
+              className="flex-row items-center active:bg-black/5 dark:active:bg-white/10"
+              style={{ marginTop: space.xs, minHeight: 44, gap: space.md, paddingHorizontal: space.md, borderRadius: radius.control }}
             >
-              <Icon name="copy" color={secondary} size={18} />
-              <Text style={{ color: text, fontSize: 15 }}>{t("search.pasteAndGo")}</Text>
+              <Icon name="copy" color={secondary} size={iconSize.row} />
+              <Text variant="callout" color={text}>
+                {t("search.pasteAndGo")}
+              </Text>
             </Pressable>
           )}
 
           {pins.length && !query ? (
-            <View className="mt-2.5 flex-row gap-2.5">
+            <View className="flex-row" style={{ marginTop: space.sm, gap: space.sm }}>
               {pins.map((site, index) => (
-                <Pressable
+                <PressFeedback
                   key={site.id}
                   testID={`pinned-${index}`}
                   accessibilityRole="button"
                   accessibilityLabel={site.title || displayUrl(site.url)}
                   onPress={() => onOpen({ kind: "url", url: site.url })}
-                  className="h-14 flex-1 items-center justify-center rounded-2xl bg-black/5 active:bg-black/10 dark:bg-white/10"
+                  className={privately ? "flex-1 items-center bg-white/10" : "flex-1 items-center bg-default"}
+                  style={{ gap: space.sm, paddingVertical: space.md, borderRadius: radius.tile }}
                 >
-                  <SiteIcon url={site.url} size={26} />
-                </Pressable>
+                  <SiteIcon url={site.url} size={iconSize.control} bare color={text} />
+                  <Text variant="caption" color={text} numberOfLines={1} style={{ paddingHorizontal: space.xs }}>
+                    {site.title || siteName(site.url)}
+                  </Text>
+                </PressFeedback>
               ))}
               {Array.from({ length: 4 - pins.length }, (_, index) => (
                 <View key={`empty-${index}`} className="flex-1" />
@@ -298,7 +312,9 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
 }
 
 // Shared by the field and its completion so the completion lines up after the typed text.
-const inputTextStyle = { fontSize: 17, padding: 0, margin: 0, includeFontPadding: false } as const;
+const SCRIM_FADE = 160;
+
+const inputTextStyle = { ...inputFont("headline", "regular"), padding: 0, margin: 0 } as const;
 
 function rowText(row: Row, engine: SearchEngine, t: Translate) {
   switch (row.kind) {
@@ -350,14 +366,15 @@ function SuggestionRow({
         if (event.nativeEvent.actionName === "fill" && fillText !== null) onFill(fillText);
       }}
       onPress={onOpen}
-      className="min-h-[52px] flex-row items-center gap-3 rounded-2xl pl-2 active:bg-black/5"
+      className="flex-row items-center gap-3 pl-2 active:bg-black/5 dark:active:bg-white/10"
+      style={{ minHeight: rowHeight, borderRadius: radius.tile }}
     >
-      <View className="w-7 items-center">{row.kind === "page" ? <SiteIcon url={row.url} /> : <Icon name="search" color={muted} size={20} />}</View>
+      <View className="w-7 items-center">{row.kind === "page" ? <SiteIcon url={row.url} /> : <Icon name="search" color={muted} size={iconSize.row} />}</View>
       <View className="flex-1 py-1.5">
-        <Text numberOfLines={1} style={{ color: foreground, fontSize: 16 }}>
+        <Text numberOfLines={1} color={foreground}>
           {title}
         </Text>
-        <Text numberOfLines={1} style={{ color: muted, fontSize: 12.5 }}>
+        <Text numberOfLines={1} variant="footnote" color={muted}>
           {detail}
         </Text>
       </View>
@@ -369,7 +386,7 @@ function SuggestionRow({
           onPress={() => onFill(row.kind === "page" ? row.url : row.query)}
           className="h-11 w-11 items-center justify-center"
         >
-          <Icon name="fill" color={muted} size={18} />
+          <Icon name="fill" color={muted} size={iconSize.small} />
         </Pressable>
       ) : null}
     </Pressable>

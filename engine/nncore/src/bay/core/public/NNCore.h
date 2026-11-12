@@ -326,23 +326,6 @@ NNCORE_EXPORT
 @property(readonly) BOOL offTheRecord;
 // The Profile went (shutdown, profile deletion): every call is then a no-op.
 @property(readonly) BOOL destroyed;
-// A component extension (Chrome's built-in kind; the manifest has a `key`, which fixes the
-// id): runs hidden from chrome://extensions and the profile's list (CEF's
-// LoadComponentExtension). Loading one already running from `path` is a no-op returning its
-// id. nil on failure.
-- (nullable NSString*)loadComponentExtension:(NSString*)path;
-- (void)unloadComponentExtension:(NSString*)extensionId;
-// Holds this profile's web navigations (its off-the-record profiles' too) until the
-// declarativeNetRequest rulesets of `extensionId`, an extension about to load into it, are in
-// force: a content blocker's rules then apply from the profile's first page. Chrome reads them
-// from disk after loading the extension and holds no request for them. A no-op when they are in
-// force already. Ends by itself once they are, or after 10 s (logged as an error).
-- (void)holdNavigationsUntilRulesetsOf:(NSString*)extensionId;
-// Ends the hold now (the extension couldn't load), logged as an error with `reason`.
-- (void)releaseNavigationHold:(NSString*)reason;
-// Ends the hold now because the extension is ready (one without rulesets, which the host waits
-// for itself), logged as a success.
-- (void)releaseNavigationHoldReady;
 // Reports this profile's Cast routes to engine:castRoutes:profile: (now and on change).
 - (void)watchCastRoutes;
 // chrome.management-style install of an unpacked extension (MV3 fine).

@@ -108,6 +108,8 @@ export interface BrowserPreferences {
   startPageAfterHours: number | null;
   /** What to hide on YouTube, with Brave's lists. */
   youtube: YouTubeCleanup;
+  /** The welcome has been seen (or skipped); a fresh install shows it once. */
+  welcomed: boolean;
 }
 
 export type ThemeChoice = "system" | "light" | "dark";
@@ -130,7 +132,16 @@ export type YouTubeCleanup = {
 };
 
 /** Preferences the settings screen changes in one step. */
-export const SIMPLE_PREFERENCE_KEYS = ["theme", "textSize", "searchSuggestions", "skipAmp", "pullToRefresh", "startPageAfterHours", "youtube"] as const;
+export const SIMPLE_PREFERENCE_KEYS = [
+  "theme",
+  "textSize",
+  "searchSuggestions",
+  "skipAmp",
+  "pullToRefresh",
+  "startPageAfterHours",
+  "youtube",
+  "welcomed",
+] as const;
 
 export type SimplePreferences = Pick<BrowserPreferences, (typeof SIMPLE_PREFERENCE_KEYS)[number]>;
 
