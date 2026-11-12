@@ -12,11 +12,8 @@ if [ -f "$out/.version" ] && [ "$(cat "$out/.version")" = "$stamp" ] && [ -s "$o
 mkdir -p "$vendor"
 tmp=$(mktemp -d "$vendor/.blocker-resources.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
-archive="$vendor/ubo/uBlock0_$version.chromium.zip"
-if [ ! -f "$archive" ]; then
-  archive="$tmp/ubo.zip"
-  curl -fsSL --retry 3 --max-time 120 -o "$archive" "https://github.com/gorhill/uBlock/releases/download/$version/uBlock0_$version.chromium.zip"
-fi
+archive="$tmp/ubo.zip"
+curl -fsSL --retry 3 --max-time 120 -o "$archive" "https://github.com/gorhill/uBlock/releases/download/$version/uBlock0_$version.chromium.zip"
 echo "$sha  $archive" | shasum -a 256 -c - >&2
 unzip -q "$archive" -d "$tmp"
 source="$tmp/uBlock0.chromium"
