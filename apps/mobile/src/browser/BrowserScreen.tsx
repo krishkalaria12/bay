@@ -13,6 +13,7 @@ import {
   type Tab,
 } from "@bay/engine";
 import * as Clipboard from "expo-clipboard";
+import { fetch as expoFetch } from "expo/fetch";
 import * as Linking from "expo-linking";
 import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
@@ -1168,8 +1169,42 @@ async function resolveDestination(url: string): Promise<string> {
 
     return response.url || url;
   } catch {
+    // iOS's App Transport Security refuses a plain-http hop, and the whole fetch fails with it (iana.org/domains/example
+    // redirects to http://www.iana.org/…). Walk the redirects one at a time instead: the hop that can't be loaded is
+    // where the link goes.
+    const last = await lastHop(url, controller.signal);
+
+    if (last) return last;
+
     throw new Error(translate("linkMenu.unreachable"));
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// Browsers give up after about 20; a link menu needs far fewer to say where a link goes.
+const MAX_REDIRECTS = 10;
+
+/** The last address a link's redirects reach, read hop by hop; null when the link itself can't be reached. */
+async function lastHop(url: string, signal: AbortSignal): Promise<string | null> {
+  let current = url;
+
+  for (let hop = 0; hop < MAX_REDIRECTS; hop++) {
+    let location: string | null;
+
+    try {
+      const response = await expoFetch(current, { method: "HEAD", redirect: "manual", signal });
+
+      location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+    } catch {
+      return hop === 0 ? null : current;
+    }
+
+    if (!location) return current;
+
+    // A relative Location resolves against the hop that sent it; an absolute one stays as it is.
+    current = new URL(location, current).href;
+  }
+
+  return current;
 }

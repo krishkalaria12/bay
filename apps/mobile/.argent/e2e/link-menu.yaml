@@ -1,48 +1,52 @@
-# Link menu: long-press a link for Bay's menu instead of the engine's, open it in a background tab, and check
-# where a link goes without opening it. Needs network access to www.iana.org.
+# Link menu: long-press a link for Bay's menu instead of the engine's, open it in a background tab, and check where a
+# link goes without opening it. Needs network access to iana.org.
+#
+# The page is .argent/pages/link.html, served by Metro (which both devices reach at 127.0.0.1:8081), so what the link
+# says and where it sits never change: one link, "Example link", drawn as a block that fills the screen, to
+# https://iana.org/domains/example, which redirects to www.iana.org/help/example-domains. That keeps the menu's live
+# preview of the link small too: a preview of a page with hundreds of links (IANA's protocols page) filled Android's
+# tree before the menu's own rows.
 steps:
   - run: ../flows/fresh-start
   - tap: { id: start-screen }
   - await: { visible: { id: address-input }, timeout: 10000 }
-  - type: { into: { id: address-input }, text: "www.iana.org/help/example-domains" }
+  - type: { into: { id: address-input }, text: "127.0.0.1:8081/assets/.argent/pages/link.html" }
+  - await: { visible: { id: bar-more }, timeout: 30000 }
+  - await: { hidden: { id: page-progress }, timeout: 30000 }
+  - await: { idle: true, timeout: 15000 }
+  # Android's tree has the page's links, so the link is pressed by its text. iOS's runner tree has no web content, so
+  # it presses the middle of the screen, which the link's block covers on any phone.
   - when: { platform: android }
     steps:
-      - await: { visible: { text: Protocols }, timeout: 30000 }
-      - await: { idle: true, timeout: 20000 }
-      - long-press: { text: Protocols }
-  # iOS: WKWebView's links are in the accessibility tree but not the runner's view tree (and a raw tool step would
-  # unpin the app), so wait for the page to settle and long-press the "Protocols" link where IANA's header puts it
-  # on the iPhone 18 Pro.
+      - await: { visible: { text: Example link }, timeout: 10000 }
+      - long-press: { text: Example link }
   - when: { platform: ios }
     steps:
-      - await: { visible: { id: bar-more }, timeout: 30000 }
-      # The header moves down once IANA's logo loads, so press only after the load finishes.
-      - await: { hidden: { id: page-progress }, timeout: 30000 }
-      - await: { idle: true, stableFor: 1500, timeout: 30000 }
-      - long-press: { x: 0.34, y: 0.195 }
-  - await: { text: { in: { id: link-menu-url }, contains: "iana.org/protocols" }, timeout: 10000 }
+      - long-press: { x: 0.5, y: 0.5 }
+  - await: { text: { in: { id: link-menu-url }, equals: "https://iana.org/domains/example" }, timeout: 10000 }
   - tap: { id: link-open-background }
   - await: { hidden: { id: link-menu-url }, timeout: 10000 }
+
+  # The link opened in a second tab, behind this one.
+  - await: { visible: { id: bar-tabs }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
   - tap: { id: bar-tabs }
   - await: { visible: { id: tab-card-1 }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
   - tap: { id: tab-card-0 }
+  - await: { visible: { id: bar-more }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # Where does it go: the redirects are followed without opening the page.
   - when: { platform: android }
     steps:
-      - await: { visible: { text: Protocols }, timeout: 30000 }
-      - await: { idle: true, timeout: 20000 }
-      - long-press: { text: Protocols }
-  # iOS: WKWebView's links are in the accessibility tree but not the runner's view tree (and a raw tool step would
-  # unpin the app), so wait for the page to settle and long-press the "Protocols" link where IANA's header puts it
-  # on the iPhone 18 Pro.
+      - await: { visible: { text: Example link }, timeout: 10000 }
+      - long-press: { text: Example link }
   - when: { platform: ios }
     steps:
-      - await: { visible: { id: bar-more }, timeout: 30000 }
-      # The header moves down once IANA's logo loads, so press only after the load finishes.
-      - await: { hidden: { id: page-progress }, timeout: 30000 }
-      - await: { idle: true, stableFor: 1500, timeout: 30000 }
-      - long-press: { x: 0.34, y: 0.195 }
+      - long-press: { x: 0.5, y: 0.5 }
   - await: { visible: { id: link-destination }, timeout: 10000 }
   - tap: { id: link-destination }
-  - await: { text: { in: { id: link-destination-result }, contains: "iana.org/protocols" }, timeout: 20000 }
+  - await: { text: { in: { id: link-destination-result }, contains: "iana.org/help/example-domains" }, timeout: 20000 }
   - tap: { id: link-menu-close }
   - await: { hidden: { id: link-menu-url }, timeout: 10000 }

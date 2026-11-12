@@ -1,0 +1,61 @@
+# Appearance: the theme Bay's own screens follow, and the row behind that says which theme is on. The theme only
+# changes colours, so what the test proves is that the choice is kept, shown and taken back.
+steps:
+  - run: ../flows/fresh-start
+
+  # Settings opens on its first page, where the theme is chosen from.
+  - tap: { id: bar-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - await: { visible: { id: settings-appearance }, timeout: 10000 }
+
+  # The Appearance page holds the theme, the wallpaper and the page zoom.
+  - tap: { id: settings-appearance }
+  - await: { visible: { id: settings-theme-system }, timeout: 10000 }
+  - await: { visible: { id: settings-theme-light }, timeout: 10000 }
+  - await: { visible: { id: settings-theme-dark }, timeout: 10000 }
+  - await: { text: { in: { id: settings-theme-system }, contains: "Match phone" }, timeout: 10000 }
+  - await: { text: { in: { id: settings-theme-light }, contains: "Light" }, timeout: 10000 }
+  - await: { text: { in: { id: settings-theme-dark }, contains: "Dark" }, timeout: 10000 }
+
+  # Following the phone is the default: pick it, so the test starts from a known theme.
+  - tap: { id: settings-theme-system }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-appearance-value }, timeout: 10000 }
+  - await: { text: { in: { id: settings-appearance-value }, equals: "Match phone" }, timeout: 10000 }
+
+  # A dark theme: Bay's own screens follow it, and the row behind says so.
+  - tap: { id: settings-appearance }
+  - await: { visible: { id: settings-theme-dark }, timeout: 10000 }
+  - tap: { id: settings-theme-dark }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { text: { in: { id: settings-appearance-value }, equals: "Dark" }, timeout: 10000 }
+
+  # And a light one, the same way round.
+  - tap: { id: settings-appearance }
+  - await: { visible: { id: settings-theme-light }, timeout: 10000 }
+  - tap: { id: settings-theme-light }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { text: { in: { id: settings-appearance-value }, equals: "Light" }, timeout: 10000 }
+
+  # The theme holds across the app: close the sheet and open it again, and the same theme is on.
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
+  - await: { visible: { id: start-screen }, timeout: 10000 }
+  - tap: { id: bar-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - await: { text: { in: { id: settings-appearance-value }, equals: "Light" }, timeout: 10000 }
+
+  # Put the theme back to the one the phone follows, so the next run starts as it did.
+  - tap: { id: settings-appearance }
+  - await: { visible: { id: settings-theme-system }, timeout: 10000 }
+  - tap: { id: settings-theme-system }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-screen-back }
+  - await: { text: { in: { id: settings-appearance-value }, equals: "Match phone" }, timeout: 10000 }
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }

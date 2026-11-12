@@ -1,0 +1,84 @@
+# Browsing: how long tabs stay open and the pull to refresh switch, and the search engine Bay searches with, proved by
+# a search that goes to it. The start page and YouTube rows have tests of their own (start-page, youtube).
+# Needs network access to duckduckgo.com, the engine the search is proved with.
+steps:
+  - run: ../flows/fresh-start
+
+  - tap: { id: bar-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+
+  # Browsing: tabs and pages.
+  - tap: { id: settings-browsing }
+  - await: { visible: { id: settings-archive }, timeout: 10000 }
+  - await: { visible: { id: settings-pull-refresh }, timeout: 10000 }
+
+  # How long a tab stays open. The row says how long, and the choice is kept.
+  - tap: { id: settings-archive }
+  - await: { visible: { id: settings-archive-7 }, timeout: 10000 }
+  - tap: { id: settings-archive-7 }
+  - await: { idle: true, timeout: 10000 }
+  - await: { text: { in: { id: settings-archive-value }, equals: "7 days" }, timeout: 10000 }
+  # Twelve hours instead: the row behind follows the choice.
+  - tap: { id: settings-archive }
+  - await: { visible: { id: settings-archive-0.5 }, timeout: 10000 }
+  - tap: { id: settings-archive-0.5 }
+  - await: { idle: true, timeout: 10000 }
+  - await: { text: { in: { id: settings-archive-value }, equals: "12 hours" }, timeout: 10000 }
+  # Seven days again, as it was.
+  - tap: { id: settings-archive }
+  - await: { visible: { id: settings-archive-7 }, timeout: 10000 }
+  - tap: { id: settings-archive-7 }
+  - await: { idle: true, timeout: 10000 }
+  - await: { text: { in: { id: settings-archive-value }, equals: "7 days" }, timeout: 10000 }
+
+  # Pull to refresh is a switch, and a switch's state is not in the tree, so it is flipped and flipped back: two
+  # taps leave the row where it was.
+  - tap: { id: settings-pull-refresh }
+  - await: { idle: true, timeout: 10000 }
+  - tap: { id: settings-pull-refresh }
+  - await: { idle: true, timeout: 10000 }
+  - await: { visible: { id: settings-pull-refresh }, timeout: 10000 }
+
+  # The search engine is chosen on the first page of Settings, and the row says which one is on.
+  - tap: { id: settings-screen-back }
+  - await: { visible: { id: settings-engine }, timeout: 10000 }
+  - tap: { id: settings-engine }
+  - await: { visible: { id: settings-engine-google }, timeout: 10000 }
+  - await: { visible: { id: settings-engine-duckduckgo }, timeout: 10000 }
+  # Google is the default: pick it, so the test starts from a known engine.
+  - tap: { id: settings-engine-google }
+  - await: { idle: true, timeout: 10000 }
+  - await: { text: { in: { id: settings-engine-value }, equals: "Google" }, timeout: 10000 }
+  # DuckDuckGo instead.
+  - tap: { id: settings-engine }
+  - await: { visible: { id: settings-engine-duckduckgo }, timeout: 10000 }
+  - tap: { id: settings-engine-duckduckgo }
+  - await: { idle: true, timeout: 10000 }
+  - await: { text: { in: { id: settings-engine-value }, equals: "DuckDuckGo" }, timeout: 10000 }
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
+
+  # A search now goes to that engine, not to Google.
+  - tap: { id: bar-search }
+  - await: { visible: { id: address-input }, timeout: 10000 }
+  - type: { into: { id: address-input }, text: "bay browser" }
+  - await: { idle: true, timeout: 20000 }
+  - tap: { id: bar-more }
+  - await: { text: { in: { id: page-menu-url }, contains: "duckduckgo.com/?q=bay" }, timeout: 30000 }
+  - tap: { id: page-menu-close }
+  - await: { hidden: { id: page-menu-url }, timeout: 10000 }
+
+  # Put the engine back, so the next run starts as it did.
+  - tap: { id: bar-more }
+  - await: { visible: { id: page-settings }, timeout: 10000 }
+  - tap: { id: page-settings }
+  - await: { visible: { id: settings-screen }, timeout: 10000 }
+  - await: { idle: true, timeout: 15000 }
+  - tap: { id: settings-engine }
+  - await: { visible: { id: settings-engine-google }, timeout: 10000 }
+  - tap: { id: settings-engine-google }
+  - await: { idle: true, timeout: 10000 }
+  - await: { text: { in: { id: settings-engine-value }, equals: "Google" }, timeout: 10000 }
+  - tap: { id: settings-screen-close }
+  - await: { hidden: { id: settings-screen-close }, timeout: 10000 }
