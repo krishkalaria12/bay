@@ -16,4 +16,10 @@ export const chromeDe: ChromeStrings = {
   "sheet.back": "Zurück",
   "sheet.close": "{title} schließen",
   "sheet.selected": "Ausgewählt",
+
+  // Welcome.
+  "welcome.title": "Ruhiger durchs Web.",
+  "welcome.body": "Werbung und Tracker sind von Anfang an blockiert, und alles liegt unter deinem Daumen.",
+  "welcome.swipe": "Zum Starten nach oben wischen",
+  "welcome.start": "Lossurfen",
 };

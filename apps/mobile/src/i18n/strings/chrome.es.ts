@@ -16,4 +16,10 @@ export const chromeEs: ChromeStrings = {
   "sheet.back": "Atrás",
   "sheet.close": "Cerrar {title}",
   "sheet.selected": "Seleccionado",
+
+  // Welcome.
+  "welcome.title": "Una forma más tranquila de navegar.",
+  "welcome.body": "Los anuncios y rastreadores se bloquean desde el principio, y todo queda al alcance de tu pulgar.",
+  "welcome.swipe": "Desliza hacia arriba para empezar",
+  "welcome.start": "Empezar a navegar",
 };

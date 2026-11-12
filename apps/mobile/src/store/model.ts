@@ -41,6 +41,7 @@ export const DEFAULT_PREFERENCES: BrowserPreferences = {
   pullToRefresh: true,
   startPageAfterHours: null,
   youtube: { shorts: false, suggestions: false, distractions: false },
+  welcomed: false,
 };
 
 export const TEXT_SIZE = { min: 80, max: 200, step: 10 } as const;
@@ -986,6 +987,8 @@ export function parsePreferences(savedPreferences: JsonObject): BrowserPreferenc
       suggestions: isRecord(savedPreferences.youtube) && savedPreferences.youtube.suggestions === true,
       distractions: isRecord(savedPreferences.youtube) && savedPreferences.youtube.distractions === true,
     },
+    // Saved before the welcome existed: whoever saved it has used Bay already.
+    welcomed: savedPreferences.welcomed !== false,
   };
 }
 

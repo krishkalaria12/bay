@@ -16,4 +16,10 @@ export const chromeJa: ChromeStrings = {
   "sheet.back": "戻る",
   "sheet.close": "{title}を閉じる",
   "sheet.selected": "選択中",
+
+  // Welcome.
+  "welcome.title": "もっと静かに、ウェブを。",
+  "welcome.body": "広告とトラッカーは最初からブロック。すべては親指の届くところに。",
+  "welcome.swipe": "上にスワイプして開始",
+  "welcome.start": "ブラウズを始める",
 };

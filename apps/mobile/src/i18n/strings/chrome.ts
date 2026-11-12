@@ -17,6 +17,12 @@ export const chrome = {
   "sheet.back": "Back",
   "sheet.close": "Close {title}",
   "sheet.selected": "Selected",
+
+  // The welcome (onboarding/Welcome.tsx).
+  "welcome.title": "A calmer way to browse the web.",
+  "welcome.body": "Ads and trackers are blocked from the start, and everything sits under your thumb.",
+  "welcome.swipe": "Swipe up to start",
+  "welcome.start": "Start browsing",
 };
 
 /** Every locale's slice carries exactly these keys, so a missing translation is a type error. */
