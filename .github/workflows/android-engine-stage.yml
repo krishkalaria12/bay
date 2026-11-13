@@ -40,7 +40,9 @@ jobs:
           pin=$(python scripts/android/engine.py pin)
           echo "$pin"
           echo "id=$(jq -r .id <<<"$pin")" >> "$GITHUB_OUTPUT"
-          echo "STATE_ARTIFACT=$(jq -r .stateArtifact <<<"$pin")" >> "$GITHUB_ENV"
+          # GITHUB_ENV only reaches later steps, so this step reads its own copy.
+          state=$(jq -r .stateArtifact <<<"$pin")
+          echo "STATE_ARTIFACT=$state" >> "$GITHUB_ENV"
           built=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$ENGINE_ARTIFACT" --jq .total_count)
           if (( built > 0 )); then
             echo "An earlier stage published the engine"
@@ -48,9 +50,12 @@ jobs:
             exit 0
           fi
           # Saved work only counts from this repository's own pushes and dispatches of android-engine.yml: never a
-          # fork's pull request, and never another workflow that happens to upload the same name.
+          # fork's pull request, and never another workflow that happens to upload the same name. The name is
+          # checked here too, in case the API's filter ever matches loosely.
           trusted() {
+            [[ -n $1 ]] || return 1
             gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$1&per_page=100" --jq '[.artifacts[]
+              | select(.name == "'"$1"'")
               | select(.expired | not) | select(.workflow_run.repository_id == .workflow_run.head_repository_id)]
               | sort_by(.created_at) | reverse | .[].workflow_run.id' | while read -r run; do
               if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" --jq '.path + " " + .event' |
@@ -60,7 +65,7 @@ jobs:
             done
           }
           echo "engine_runs=$(trusted "$ENGINE_ARTIFACT" | head -3 | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
-          echo "state_run=$(trusted "$STATE_ARTIFACT" | head -1)" >> "$GITHUB_OUTPUT"
+          echo "state_run=$(trusted "$state" | head -1)" >> "$GITHUB_OUTPUT"
       - name: Reuse an engine built from these sources
         id: reuse
         if: env.DONE != 'true' && steps.find.outputs.engine_runs != ''
