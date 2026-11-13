@@ -12,7 +12,7 @@ import { DecodeError } from "./errors.ts";
 import { BrowserState } from "./ports/browserState.ts";
 import { Diagnostics, type Diagnostic } from "./ports/diagnostics.ts";
 import { Engine, PageScriptFailed } from "./ports/engine.ts";
-import { Files, type FileRoot } from "./ports/files.ts";
+import { Files, type FileError, type FileRoot } from "./ports/files.ts";
 import { Http, HttpError, type HttpRequest, type HttpResponse } from "./ports/http.ts";
 import { Lifecycle, type AppStatus } from "./ports/lifecycle.ts";
 import { Links } from "./ports/links.ts";
@@ -92,11 +92,17 @@ export const fakeDiagnostics = (): FakeDiagnostics => {
 export type FakeFiles = {
   readonly layer: Layer.Layer<Files>;
   readonly files: Map<string, string>;
+  /**
+   * Answers a download of `url` with what `contents` gives. The file is there, empty, while it runs, as a native
+   * download's is. A download nobody answered writes its own address.
+   */
+  readonly answerDownload: (url: string, contents: Effect.Effect<string, FileError>) => void;
 };
 
 /** Files in memory: a read comes back what was written. */
 export const fakeFiles = (): FakeFiles => {
   const files = new Map<string, string>();
+  const downloads = new Map<string, Effect.Effect<string, FileError>>();
   const key = (root: FileRoot, path: string) => `${root}/${path}`;
 
   return {
@@ -114,10 +120,23 @@ export const fakeFiles = (): FakeFiles => {
           files.set(key(root, to), contents);
           files.delete(key(root, from));
         }),
+      head: (root, path, bytes) => Effect.succeed((files.get(key(root, path)) ?? "").slice(0, bytes)),
+      uri: (root, path) => Effect.succeed(`file:///${key(root, path)}`),
       size: (root, path) => Effect.succeed(files.get(key(root, path))?.length ?? 0),
       // The fake has no digests: it answers with the number of characters.
       digest: (root, path) => Effect.succeed(String(files.get(key(root, path))?.length ?? 0)),
-      download: (root, path, url) => Effect.sync(() => void files.set(key(root, path), url)),
+      download: (root, path, url) =>
+        Effect.gen(function* () {
+          const answer = downloads.get(url);
+
+          if (!answer) return void files.set(key(root, path), url);
+
+          files.set(key(root, path), "");
+
+          const contents = yield* answer;
+
+          files.set(key(root, path), contents);
+        }),
       list: (root, path) =>
         Effect.sync(() => {
           const prefix = `${root}/${path}/`;
@@ -132,6 +151,7 @@ export const fakeFiles = (): FakeFiles => {
       createDirectory: () => Effect.void,
     }),
     files,
+    answerDownload: (url, contents) => void downloads.set(url, contents),
   };
 };
 
@@ -515,11 +535,22 @@ export const fakeBrowserState = (ledger: ResourceLedger = new ResourceLedger()):
   let data = initialBrowserData(createTab("tab-1", Date.now()));
   let ready = false;
   const subscribers = new Set<(data: BrowserData, previous: BrowserData) => void>();
+  const waiting = new Set<() => void>();
 
   return {
     layer: Layer.succeed(BrowserState)({
       data: () => Effect.succeed(data),
       ready: () => Effect.succeed(ready),
+      awaitReady: () =>
+        Effect.callback<void>((resume) => {
+          if (ready) return resume(Effect.void);
+
+          const wake = () => resume(Effect.void);
+
+          waiting.add(wake);
+
+          return Effect.sync(() => void waiting.delete(wake));
+        }),
       dispatch: (action: BrowserAction) =>
         Effect.sync(() => {
           const previous = data;
@@ -564,6 +595,10 @@ export const fakeBrowserState = (ledger: ResourceLedger = new ResourceLedger()):
     ready: () => ready,
     markReady: () => {
       ready = true;
+
+      for (const wake of waiting) wake();
+
+      waiting.clear();
     },
   };
 };

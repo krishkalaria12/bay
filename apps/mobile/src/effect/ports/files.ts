@@ -42,11 +42,15 @@ export class Files extends Context.Service<
     readonly delete: (root: FileRoot, path: string) => Effect.Effect<void, FileError>;
     /** Moves a file, replacing the one that is in the way. */
     readonly move: (root: FileRoot, from: string, to: string) => Effect.Effect<void, FileError>;
+    /** A file's first bytes, one character per byte, so a caller can tell what a file is without reading all of it. */
+    readonly head: (root: FileRoot, path: string, bytes: number) => Effect.Effect<string, FileError>;
+    /** The file:// URI a native module opens a file by. */
+    readonly uri: (root: FileRoot, path: string) => Effect.Effect<string, FileError>;
     /** How many bytes a file holds. */
     readonly size: (root: FileRoot, path: string) => Effect.Effect<number, FileError>;
     /** The digest of a file's contents. */
     readonly digest: (root: FileRoot, path: string, algorithm: FileDigest) => Effect.Effect<string, FileError>;
-    /** Downloads a file into a root. */
+    /** Downloads a file into a root. Interrupting it cancels the download. */
     readonly download: (root: FileRoot, path: string, url: string, headers?: Readonly<Record<string, string>>) => Effect.Effect<void, FileError>;
     /** The names of the files in a directory. */
     readonly list: (root: FileRoot, path: string) => Effect.Effect<readonly string[], FileError>;
@@ -76,12 +80,28 @@ export class Files extends Context.Service<
       withFiles({ name: "files.move", resource: from }, async ({ File, Paths }) => {
         await new File(Paths[root], from).move(new File(Paths[root], to), { overwrite: true });
       }),
+    head: (root, path, bytes) =>
+      withFiles({ name: "files.head", resource: path }, async ({ File, Paths }) => {
+        const handle = new File(Paths[root], path).open();
+
+        try {
+          return String.fromCharCode(...(await handle.readBytes(bytes)));
+        } finally {
+          handle.close();
+        }
+      }),
+    uri: (root, path) => withFiles({ name: "files.uri", resource: path }, async ({ File, Paths }) => new File(Paths[root], path).uri),
     size: (root, path) => withFiles({ name: "files.size", resource: path }, async ({ File, Paths }) => new File(Paths[root], path).size),
     digest: (root, path, algorithm) =>
       withFiles({ name: "files.digest", resource: path }, async ({ File, Paths }) => await new File(Paths[root], path).digest(algorithm)),
     download: (root, path, url, headers) =>
-      withFiles({ name: "files.download", resource: path }, async ({ File, Paths }) => {
-        await File.downloadFileAsync(url, new File(Paths[root], path), { headers: headers ? { ...headers } : undefined, idempotent: true });
+      Effect.tryPromise({
+        try: async (signal) => {
+          const { File, Paths } = await fileSystem();
+
+          await File.downloadFileAsync(url, new File(Paths[root], path), { headers: headers ? { ...headers } : undefined, idempotent: true, signal });
+        },
+        catch: (cause) => new FileError({ operation: { name: "files.download", resource: path }, cause }),
       }),
     list: (root, path) =>
       withFiles({ name: "files.list", resource: path }, async ({ Directory, Paths }) => new Directory(Paths[root], path).list().map((entry) => entry.name)),

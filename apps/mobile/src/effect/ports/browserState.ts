@@ -43,6 +43,8 @@ export class BrowserState extends Context.Service<
     readonly data: () => Effect.Effect<BrowserData, NativeUnavailable>;
     /** Whether the saved state has been read and the store is the one the app draws from. */
     readonly ready: () => Effect.Effect<boolean, NativeUnavailable>;
+    /** Waits until the saved state has been read. Reading it may change nothing, so this is not a change to subscribe to. */
+    readonly awaitReady: () => Effect.Effect<void, NativeUnavailable>;
     /** Changes the state. */
     readonly dispatch: (action: BrowserAction) => Effect.Effect<void, NativeUnavailable>;
     /**
@@ -73,6 +75,21 @@ export class BrowserState extends Context.Service<
       return BrowserState.of({
         data: () => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().data)),
         ready: () => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().ready)),
+        awaitReady: () =>
+          Effect.flatMap(storeModule, (module) =>
+            Effect.callback<void>((resume) => {
+              if (module.useBrowserStore.getState().ready) return resume(Effect.void);
+
+              const unsubscribe = module.useBrowserStore.subscribe((state) => {
+                if (!state.ready) return;
+
+                unsubscribe();
+                resume(Effect.void);
+              });
+
+              return Effect.sync(unsubscribe);
+            }),
+          ),
         dispatch: (action) => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().dispatch(action))),
         restore: (saved) => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().restore(saved))),
         subscribe: (listener) =>
