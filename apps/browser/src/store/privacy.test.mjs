@@ -5,11 +5,25 @@ import { test } from "node:test";
 const { useBrowser } = await import("./browserStore.ts");
 const model = await import("./model.ts");
 const { cleanedTabsFor } = await import("./tabTidying.ts");
-const { flushPersistence, loadSession, startPersistence } = await import("../lib/persist.ts");
+const { loadSession } = await import("../lib/persist.ts");
+const { flushPersistence, startPersistence } = await import("../lib/persistenceService.ts");
+const { ProfileCleanup } = await import("../lib/profileCleanup.ts");
+const { runDesktop } = await import("../effect/runtime.ts");
+const Effect = await import("effect/Effect");
 const drop = await import("../components/window/windowDrop.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
+
+// The cleanup of a deleted profile's data is the runtime's work.
+const startCleanup = () =>
+  runDesktop(
+    Effect.gen(function* () {
+      const cleanup = yield* ProfileCleanup;
+
+      yield* cleanup.start;
+    }),
+  );
 
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.
 (await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
@@ -259,6 +273,8 @@ test("favicons: incognito icons stay in memory and in their own profile; nothing
   const { noteFavicon, resolveFavicon, useFavicons } = await import("../lib/favicons.ts");
   const { webviews } = await import("../lib/webviews.ts");
   stub.docs.clear();
+  // The icons are fetched by the enrichment service, which the runtime owns.
+  await runDesktop(Effect.void);
   const stop = startPersistence();
   const normal = S().createWindow({ url: "https://site.example/a" });
   const incognito = S().createWindow({ incognito: true, url: "https://secret.example/x" });
@@ -271,8 +287,13 @@ test("favicons: incognito icons stay in memory and in their own profile; nothing
 
   noteFavicon(normalTab, "https://site.example/favicon.ico");
   noteFavicon(privateTab, "https://secret.example/favicon.ico");
-  // Recorded icons land with the next frame's batch.
-  await new Promise((r) => setTimeout(r, 50));
+
+  // Wait for both worker answers and the cache batch before checking their isolation.
+  for (let attempt = 0; attempt < 500; attempt++) {
+    if (resolveFavicon("https://site.example/a") && resolveFavicon("https://secret.example/x", null, privateProfile)) break;
+
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
 
   assert.equal(resolveFavicon("https://site.example/a")?.uri, "data:image/png;base64,SITE");
   assert.equal(resolveFavicon("https://secret.example/x"), null);
@@ -360,6 +381,7 @@ test("queued profile data is deleted once, and stays queued in session.json unti
   const work = S().createSpace({ name: "Work" });
   S().createWindow({ spaceId: work, url: "https://work.example/" });
   S().deleteSpace("default");
+  await startCleanup();
   await settle();
   assert.deepEqual(stub.deletedProfileData, [""]);
   assert.deepEqual(S().orphanedProfileData, [""], "a failed deletion stays queued");
@@ -370,6 +392,7 @@ test("queued profile data is deleted once, and stays queued in session.json unti
   // Next launch: it's tried again and leaves the queue once it succeeds.
   stub.profileDataLeft.clear();
   const again = startPersistence();
+  await startCleanup();
   await settle();
   assert.deepEqual(stub.deletedProfileData, ["", ""]);
   assert.deepEqual(S().orphanedProfileData, []);

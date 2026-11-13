@@ -1,14 +1,14 @@
-import { sendService } from "../runtime/serviceClient";
 import { onAppEvent, onWindowEvent, postNotification, removeNotifications } from "@bay/desktop";
 import { create } from "zustand";
-import { useBrowser, type BrowserStore } from "../store/browserStore";
 import { browserRead } from "../store/read";
 import { reportBrowserCommand } from "../runtime/commands";
+import { sendService } from "../runtime/serviceClient";
 import { useCalendar } from "./calendar";
 import { joinMeeting } from "./meetingGroups";
 import { ALERT_LEADS, dueAlerts, joinableMeeting, joinLink, joinTitle, relativeTime, type CalendarEvent } from "./meetings";
 import { JOINABLE_BEFORE_MS } from "../components/activity/constants";
-import { createWindow as openWindow } from "../runtime/windowActions";
+import { createWindow } from "../runtime/windowActions";
+import { useBrowser, type BrowserStore } from "../store/browserStore";
 import { everySlowly } from "../lib/throttledTimers";
 import { dismissAlert, live } from "./activityStore";
 
@@ -63,7 +63,7 @@ export function joinMeetingNow(): boolean {
   const windowId = frontWindow();
 
   if (windowId) joinEvent(event, false, windowId);
-  else reportBrowserCommand(openWindow().then((id) => joinEvent(event, false, id)));
+  else reportBrowserCommand(createWindow().then((id) => joinEvent(event, false, id)));
 
   return true;
 }
@@ -124,6 +124,7 @@ export function startMeetingAlerts(browser: BrowserStore = useBrowser): () => vo
 
     cleanups.push(() => windowEvents.remove());
     cleanups.push(useCalendar.subscribe((s, prev) => s.events !== prev.events && check()));
+    // The check for a meeting that just came due, on the app's shared grid, and stops with this watcher.
     cleanups.push(
       everySlowly({
         every: 10_000,

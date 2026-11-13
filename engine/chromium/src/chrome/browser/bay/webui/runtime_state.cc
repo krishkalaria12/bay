@@ -443,6 +443,33 @@ bool ImportCommand(const base::DictValue& c) {
   }
   return false;
 }
+bool ServiceNumber(const base::DictValue& value, const char* key, bool positive = false, double maximum = 9007199254740991.0) {
+  const auto number = value.FindDouble(key);
+  return number && std::isfinite(*number) && *number >= 0 && (!positive || *number > 0) && *number <= maximum;
+}
+bool ServiceImage(const base::DictValue& image) {
+  return CommandFields(image, {"path", "width", "height"}) &&
+      CommandText(image, "path", 16384) && AbsoluteLocalPath(*image.FindString("path")) &&
+      ServiceNumber(image, "width", true, 1000000) && ServiceNumber(image, "height", true, 1000000);
+}
+bool CaptureSource(const base::Value& value) {
+  if (value.is_none()) return true;
+  if (!value.is_dict()) return false;
+  const auto& source = value.GetDict();
+  if (!CommandFields(source, {"url", "title"}, {"clip", "viewportWidth", "viewportHeight", "profileId"}) ||
+      !CommandText(source, "url", 65536, true) || !CommandText(source, "title", 16384, true) ||
+      (source.contains("profileId") && !CommandText(source, "profileId", 4096, true))) return false;
+  for (const auto* key : {"viewportWidth", "viewportHeight"})
+    if (source.contains(key) && !ServiceNumber(source, key, true, 1000000)) return false;
+  if (const auto* clip = source.Find("clip")) {
+    if (!clip->is_list() || clip->GetList().size() != 4) return false;
+    for (size_t i = 0; i < 4; ++i) {
+      const auto& part = clip->GetList()[i];
+      if ((!part.is_double() && !part.is_int()) || !std::isfinite(part.GetDouble()) || part.GetDouble() < 0 || (i >= 2 && part.GetDouble() == 0)) return false;
+    }
+  }
+  return true;
+}
 bool ServiceCommand(const base::DictValue& state, base::FunctionRef<bool(const std::string&)> acts_for,
                     const base::DictValue& c) {
   const auto* a = c.FindString("action");
@@ -473,6 +500,69 @@ bool ServiceCommand(const base::DictValue& state, base::FunctionRef<bool(const s
   const auto patch = [&](size_t i, std::initializer_list<std::string_view> fields) {
     return i < v.size() && v[i].is_dict() && ServiceFields(v[i].GetDict(), fields);
   };
+  if (action == "settingsUnlock" || action == "settingsPasswords" || action == "settingsImportCsv" || action == "settingsExportCsv")
+    return v.size() == 1 && text(0) && public_space(v[0].GetString());
+  if (action == "settingsClearData") {
+    if (v.size() != 2 || !text(0) || !public_space(v[0].GetString()) || !v[1].is_dict()) return false;
+    const auto& request = v[1].GetDict();
+    return CommandFields(request, {"history", "siteData"}, {"since"}) && request.FindBool("history").has_value() &&
+        request.FindBool("siteData").has_value() && (!request.contains("since") || ServiceNumber(request, "since"));
+  }
+  if (action == "librarySaveMedia") {
+    if (v.size() != 4 || !own_window(0) || !v[1].is_dict() || !ServiceImage(v[1].GetDict()) ||
+        !v[2].is_string() || v[2].GetString().size() > 16384 || !CaptureSource(v[3])) return false;
+    const auto* window = state.FindDict("windows")->FindDict(v[0].GetString());
+    const auto* space_id = window ? window->FindString("spaceId") : nullptr;
+    if (!space_id || !public_space(*space_id) || window->FindBool("incognito").value_or(false)) return false;
+    const auto* kind = window->FindString("kind");
+    if (kind && *kind == "small") return false;
+    if (v[3].is_dict()) {
+      const auto* profile = v[3].GetDict().FindString("profileId");
+      const auto* space = state.FindDict("spaces")->FindDict(*space_id);
+      const auto* native_profile = space->FindString("profileId");
+      const auto& expected = native_profile && !native_profile->empty() ? *native_profile : *space_id;
+      if (profile && *profile != (expected == "default" ? "" : expected)) return false;
+    }
+    return true;
+  }
+  if (action == "tidyTabs") return v.size() == 1 && own_window(0);
+  if (action == "downloadRename" || action == "downloadUndo") {
+    if (v.size() != 2 || !text(0) || !text(1)) return false;
+    const auto& name = v[1].GetString();
+    if (name == "." || name == ".." || name.find_first_of("/\\") != std::string::npos ||
+        name.find('\0') != std::string::npos) return false;
+    for (const auto& item : *state.FindList("downloads")) {
+      if (!item.is_dict()) continue;
+      const auto* id = item.GetDict().FindString("id");
+      const auto* profile = item.GetDict().FindString("profile");
+      if (id && *id == v[0].GetString()) return !profile || !PrivateSpace(*profile);
+    }
+    return false;
+  }
+  if (action == "localFileReconnect") {
+    const auto* files = state.FindDict("localFiles");
+    const auto* file = v.size() == 1 && text(0) && files ? files->FindDict(v[0].GetString()) : nullptr;
+    const auto* space = file ? file->FindString("spaceId") : nullptr;
+    return space && public_space(*space);
+  }
+  if (action == "localFileOpen" || action == "localFilePeek" || action == "localFileClose") {
+    if (v.size() != 3 || !own_window(0) || !text(1) || !v[2].is_string() || v[2].GetString().size() > 16384) return false;
+    const auto& path = v[2].GetString();
+    if ((!path.empty() && (path.front() == '/' || path.front() == '\\')) ||
+        (path.size() > 1 && path[1] == ':') || path.find('\0') != std::string::npos) return false;
+    size_t begin = 0;
+    while (begin <= path.size()) {
+      const auto end = path.find_first_of("/\\", begin);
+      if (path.substr(begin, end == std::string::npos ? end : end - begin) == "..") return false;
+      if (end == std::string::npos) break;
+      begin = end + 1;
+    }
+    const auto* file = state.FindDict("localFiles")->FindDict(v[1].GetString());
+    const auto* space = file ? file->FindString("spaceId") : nullptr;
+    const auto* window = state.FindDict("windows")->FindDict(v[0].GetString());
+    const auto* target_space = window ? window->FindString("spaceId") : nullptr;
+    return space && target_space && public_space(*space) && *space == *target_space;
+  }
   if (action == "liveCreate") return v.size() == 2 && own_window(0) && Choice(v[1], {"pullRequests", "documents"});
   if (action == "liveRemove" || action == "liveRefresh") return v.size() == 1 && folder(0);
   if (action == "liveUpdate") {
@@ -613,7 +703,15 @@ RuntimeResultKind RuntimeCommandResultKind(const base::DictValue& command) {
     const auto* action = command.FindString("action");
     if (!action) return RuntimeResultKind::kNone;
     if (*action == "liveCreate" || *action == "liveOpen" || *action == "meetingGroup" || *action == "addRemoteProfile") return RuntimeResultKind::kOptionalId;
-    if (*action == "calendarConnect") return RuntimeResultKind::kBoolean;
+    if (*action == "calendarConnect" || *action == "localFileReconnect" || *action == "settingsUnlock") return RuntimeResultKind::kBoolean;
+    if (*action == "settingsPasswords") return RuntimeResultKind::kPasswords;
+    if (*action == "settingsImportCsv") return RuntimeResultKind::kPasswordImport;
+    if (*action == "settingsExportCsv") return RuntimeResultKind::kPasswordExport;
+    if (*action == "settingsClearData") return RuntimeResultKind::kClearData;
+    if (*action == "librarySaveMedia") return RuntimeResultKind::kLibraryMedia;
+    if (*action == "downloadRename" || *action == "downloadUndo") return RuntimeResultKind::kOptionalText;
+    if (*action == "tidyTabs") return RuntimeResultKind::kTidy;
+    if (*action == "localFileOpen" || *action == "localFilePeek") return RuntimeResultKind::kLocalFile;
     if (*action == "githubStart") return RuntimeResultKind::kGithub;
     if (*action == "turnOnSync" || *action == "enterRecoveryPhrase") return RuntimeResultKind::kSync;
     if (*action == "folderInfo") return RuntimeResultKind::kFolder;
@@ -677,6 +775,80 @@ bool IsRuntimeReply(const base::DictValue& reply,
                      CommandText(*object, "path", 4096) && CommandText(*object, "defaultPath", 4096);
     for (const auto* key : {"iCloudAvailable", "inICloud", "exists", "writable", "hasSyncData"})
       service_result &= object->FindBool(key).has_value();
+  }
+  if (result_kind == RuntimeResultKind::kPasswords) {
+    service_result = value && value->is_none();
+    if (object) {
+      const auto* passwords = object->FindList("passwords");
+      const auto* never = object->FindList("never");
+      service_result = CommandFields(*object, {"passwords", "never"}) && passwords && passwords->size() <= 10000 && never && never->size() <= 10000;
+      if (passwords) for (const auto& password : *passwords) {
+        if (!password.is_dict()) { service_result = false; break; }
+        const auto& item = password.GetDict();
+        service_result &= CommandFields(item, {"origin", "username", "created", "modified"}) &&
+            CommandText(item, "origin", 65536) && CommandText(item, "username", 16384, true) &&
+            ServiceNumber(item, "created") && ServiceNumber(item, "modified");
+      }
+      if (never) for (const auto& origin : *never)
+        service_result &= origin.is_string() && !origin.GetString().empty() && origin.GetString().size() <= 65536;
+    }
+  }
+  if (result_kind == RuntimeResultKind::kPasswordImport && object) {
+    const auto* kind = object->FindString("kind");
+    if (kind && (*kind == "cancelled" || *kind == "unavailable")) service_result = CommandFields(*object, {"kind"});
+    if (kind && *kind == "imported") service_result = CommandFields(*object, {"kind", "saved"}) && ServiceNumber(*object, "saved", false, 1000000);
+    if (kind && *kind == "failed") service_result = CommandFields(*object, {"kind", "reason"}) && CommandText(*object, "reason", 4096);
+  }
+  if (result_kind == RuntimeResultKind::kPasswordExport && object) {
+    const auto* status = object->Find("status");
+    service_result = status && Choice(*status, {"succeeded", "cancelled", "writeFailed", "reauthFailed", "inProgress"}) &&
+        CommandFields(*object, {"status"}, {"path"}) && (!object->contains("path") || CommandText(*object, "path", 16384));
+  }
+  if (result_kind == RuntimeResultKind::kClearData && object) {
+    const auto* engine = object->Find("engine");
+    service_result = CommandFields(*object, {"history", "engine"}) && object->FindBool("history").has_value() &&
+        engine && Choice(*engine, {"none", "cleared", "failed"});
+  }
+  if (result_kind == RuntimeResultKind::kLibraryMedia) {
+    service_result = value && value->is_none();
+    if (object) {
+      const auto* source = object->Find("source");
+      auto image = base::DictValue();
+      for (const auto* key : {"path", "width", "height"})
+        if (const auto* field = object->Find(key)) image.Set(key, field->Clone());
+      service_result = CommandFields(*object, {"id", "path", "width", "height", "name", "createdAt"}, {"source"}) &&
+          ServiceImage(image) && CommandText(*object, "id", 4096) && CommandText(*object, "name", 16384, true) &&
+          ServiceNumber(*object, "createdAt") && (!source || CaptureSource(*source));
+    }
+  }
+  if (result_kind == RuntimeResultKind::kOptionalText)
+    service_result = value && (value->is_none() || (value->is_string() && value->GetString().size() <= 16384));
+  if (result_kind == RuntimeResultKind::kLocalFile && object) {
+    const auto* status = object->Find("status");
+    service_result = status && Choice(*status, {"available", "missing", "inaccessible"}) &&
+        CommandFields(*object, {"status"}, {"path", "name", "kind", "url", "browserReadable"});
+    for (const auto* key : {"path", "name", "url"})
+      service_result &= !object->contains(key) || CommandText(*object, key, 16384, true);
+    if (const auto* kind = object->Find("kind")) service_result &= Choice(*kind, {"file", "folder"});
+    service_result &= !object->contains("browserReadable") || object->FindBool("browserReadable").has_value();
+  }
+  if (result_kind == RuntimeResultKind::kTidy && object) {
+    const auto* kind = object->FindString("kind");
+    if (kind && (*kind == "gone" || *kind == "busy")) service_result = CommandFields(*object, {"kind"});
+    if (kind && (*kind == "nothing" || *kind == "tidied")) {
+      const auto* loose = object->FindList("loose");
+      service_result = loose && loose->size() <= 10000;
+      if (loose) for (const auto& id : *loose)
+        service_result &= id.is_string() && !id.GetString().empty() && id.GetString().size() <= 4096;
+      if (*kind == "nothing") service_result &= CommandFields(*object, {"kind", "loose"});
+      else {
+        const auto groups = RuntimeInteger(*object, "groups");
+        const auto moved = RuntimeInteger(*object, "moved");
+        const auto* source = object->Find("source");
+        service_result &= CommandFields(*object, {"kind", "loose", "groups", "moved", "source"}) &&
+            groups && *groups <= 1000000 && moved && *moved <= 1000000 && source && Choice(*source, {"model", "site"});
+      }
+    }
   }
   const auto encoded = value ? base::WriteJson(*value) : std::nullopt;
   const bool json_result = (id_list_result || service_result || result_kind == RuntimeResultKind::kImport) && value &&

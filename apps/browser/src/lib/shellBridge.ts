@@ -1,319 +1,181 @@
-import { startChromeTabs } from "./engineTabs";
-import { onDownload, releaseProfile } from "@bay/chromium";
-import { capabilities, isMac } from "@bay/platform";
-import {
-  closeWindow,
-  confirm,
-  focusWindow,
-  onAppEvent,
-  onCommand,
-  onOpenURLs,
-  onWindowEvent,
-  openWindow,
-  replyToTerminate,
-  setAppearance,
-  setMenuStateParts,
-  setWindowTitle,
-  windowIds,
-  type OpenWindowOptions,
-  type MenuBookmark,
-  type MenuState,
-} from "@bay/desktop";
+import { type CommandEvent, type MenuBookmark, type MenuState } from "@bay/desktop";
+import { isMac } from "@bay/platform";
 import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
-import { useBrowser, type BrowserStore, type BrowserState } from "../store/browserStore";
-import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId, tabLabel, windowTitle } from "../store/model";
+import { useBrowser, type BrowserState, type BrowserStore } from "../store/browserStore";
+import { activeTab, bookmarkSpaceId, IDLE_LIVE, tabLabel, windowTitle } from "../store/model";
 import { pinnableSplit, pinRowTitle, splitOf } from "../store/splits";
 import { canGoBack, canGoForward } from "../components/window/historyMenu";
 import type { Bookmarks, BookmarkNode } from "../store/types";
 import { startTidyDownloads } from "./tidyDownloads";
-import { isUtilityWindowId } from "../components/settings/windows";
 import { isInternalTab } from "../components/pages/pageUrls";
 import { sidebarMenuState } from "../components/sidebar/sidebarCommands";
 import { openWindow as createWindow } from "./actions";
-import { reportBrowserCommand } from "../runtime/commands";
 import { openExternalUrls, openLittleBay } from "../components/littleBay/actions";
-import { startLittleBayAccess } from "../components/littleBay/access";
-import { startLittleBayPutAway } from "../components/littleBay/putAway";
+import { reportBrowserCommand } from "../runtime/commands";
+import { EngineTabsService, type EngineTabs } from "./engineTabs";
 import { meetingToJoin } from "../activity/meetingAlerts";
-import { useCalendar } from "../activity/calendar";
-import { everySlowly } from "./throttledTimers";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./appCommands";
 import { startSidebarMoveUndoSync } from "./folderUndo";
-import type { PersistenceOwner } from "./persist";
-import { prepareSyncForQuit, resumeSyncAfterQuit } from "../sync/engine";
-import { prepareTelemetryForQuit, resumeTelemetryAfterQuit } from "../telemetry/usage";
-import { prepareApplicationQuit, quitAnyway } from "./quitPreparation";
+import { beginQuit, cancelQuit } from "./quit";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
-import { extensionMenu, useExtensions } from "../components/extensions/state";
-import { subscribeMenuInputs } from "./menuUpdates";
-import { createNativeWindowReconciler } from "./nativeWindows";
-import { nativeWindowPlacement } from "../store/windowPlacement";
-import { startWindowPlacementSync } from "./windowPlacementSync";
-import { startAppearanceSync } from "./appearanceSync";
+import { extensionMenu } from "../components/extensions/state";
+import { runtimeForStore, type ApplicationRuntime } from "../effect/runtime";
+import { captureException } from "../telemetry/errors";
+import * as Effect from "effect/Effect";
+import { ShellService, type Shell, type ShellHandlers, type ShellOptions } from "./shellService";
+import type { PersistenceOwner } from "./persist";
 
-let quitting = false;
-let quitAttempt = 0;
-export const isQuitting = () => quitting;
+export { isQuitting } from "./quit";
 
+/**
+ * Starts the shell: the native listeners are registered and the native chrome is kept in step with the app.
+ *
+ * The runtime owns the service: this module only hands it the app's own handlers.
+ */
+const startShell = (runtime: ApplicationRuntime, handlers: ShellHandlers, options: ShellOptions): Promise<Shell> =>
+  runtime.runPromise(
+    Effect.gen(function* () {
+      const shell = yield* ShellService;
+
+      yield* shell.start(handlers, options);
+
+      return shell;
+    }),
+  );
+
+/** Starts the engine's tab strips for one store's runtime. The answer is the service, once it is there. */
+const startEngineTabs = (runtime: ApplicationRuntime): Promise<EngineTabs> => {
+  const tabs = runtime.runPromise(
+    Effect.gen(function* () {
+      return yield* EngineTabsService;
+    }),
+  );
+
+  void tabs
+    .then((service) => runtime.runPromise(service.start))
+    .catch((cause: unknown) => {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+
+      captureException(error, "console");
+      console.error("The engine's tab strips could not be reconciled", error);
+    });
+
+  return tabs;
+};
+
+/** The native chrome, as the coordinator reaches it. */
+export type NativeSync = {
+  /** Brings the native windows in step with an accepted state. */
+  reconcile(state: BrowserState): Promise<void>;
+  /** Gives the native listeners back. */
+  dispose(): void;
+};
+
+/**
+ * The commands the shared host's coordinator answers itself. Its windows run the menu's commands (runtime/windowMain.ts);
+ * the tray and the shortcut open a window or a Little Bay when Bay may have none, so on the Chrome-hosted desktop,
+ * where the coordinator is the one document that lives as long as Bay does, they are its.
+ */
+const coordinatorCommand = (event: CommandEvent): void => {
+  if (event.command === "newLittleBay") reportBrowserCommand(openLittleBay());
+
+  if (event.command === "newWindow") reportBrowserCommand(createWindow());
+};
+
+/**
+ * Starts the app's native wiring for one store: the listeners, the native windows, and the quit handshake.
+ *
+ * The shared host's coordinator (`shared`) leaves the app's own wiring to its windows, which run the commands and the
+ * extensions bridge themselves. It reconciles the engine's tab strips with the store it owns, and its native windows
+ * follow the states it accepts (reconcile).
+ */
 export function startNativeSync({
   persistence,
   store = useBrowser,
   shared = false,
 }: {
-  persistence: Pick<PersistenceOwner, "flush" | "resume">;
+  /** The saving the quit handshake flushes. The app's own saving is used when there is none. */
+  persistence?: Pick<PersistenceOwner, "flush" | "resume">;
   store?: BrowserStore;
   shared?: boolean;
-}) {
-  const stops: (() => void)[] = [];
-  let disposed = false;
-
+} = {}): NativeSync {
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
-  if (shared) {
-    stops.push(startChromeTabs({ store, shared: true })!);
-
-    // On the Chrome-hosted desktop the coordinator is the one document that lives as long as Bay does, so the shortcut
-    // and tray icon are its.
-    if (!isMac) {
-      startLittleBayAccess();
-      startLittleBayPutAway();
-
-      const opens = onCommand((e) => {
-        if (e.command === "newLittleBay") reportBrowserCommand(openLittleBay());
-
-        if (e.command === "newWindow") reportBrowserCommand(createWindow());
-      });
-
-      stops.push(() => opens.remove());
-    }
-  }
-
+  // The app's own wiring: the sidebar's undo, the window that asks before it closes and the extensions. It stays
+  // here, and it stays synchronous. Little Bay's put-away and shortcut are its service's (runtime/services.ts).
   if (!shared) {
-    const commands = onCommand(runCommand);
-    stops.push(() => commands.remove());
-    stops.push(startSidebarMoveUndoSync());
-    stops.push(startWindowCloseGuard());
+    startSidebarMoveUndoSync();
+    startWindowCloseGuard();
     startExtensionsBridge();
-
-    if (store === useBrowser) {
-      startLittleBayAccess();
-      startLittleBayPutAway();
-    }
   }
 
-  const urls = onOpenURLs(openExternalUrls);
-  const downloads = onDownload((d) => store.getState().upsertDownload(d));
-  stops.push(
-    () => urls.remove(),
-    () => downloads.remove(),
-  );
-  stops.push(startTidyDownloads(store));
+  const runtime = runtimeForStore(store);
 
+  // The coordinator's own document shows no pages, so no page card starts the tab strips: it reconciles them with
+  // the store it owns.
+  const tabs = shared ? startEngineTabs(runtime) : undefined;
+
+  const stopDownloads = startTidyDownloads(store);
+
+  // The app's own appearance: the Mac is asked about it, and told what the app wants.
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
-  void setAppearance(store.getState().settings.appearance);
-  stops.push(startAppearanceSync((dark) => store.getState().setAppDark(dark)));
 
-  const appEvents = onAppEvent((e) => {
-    const s = store.getState();
+  // The native listeners are the shell's: it registers them once, in its own scope, and gives them back when it
+  // is given back. This only hands it the app's own handlers.
+  let disposed = false;
 
-    if (e.type === "reopen") createWindow();
+  const command = !shared ? runCommand : isMac ? undefined : coordinatorCommand;
 
-    if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
+  const shell = startShell(
+    runtime,
+    {
+      command,
+      appEvent: (event) => {
+        const s = store.getState();
 
-    if (e.type === "willQuit") {
-      quitting = true;
-      const attempt = ++quitAttempt;
-      const isCurrent = () => quitting && attempt === quitAttempt;
-      void prepareApplicationQuit({
-        isCurrent,
-        prepareSync: prepareSyncForQuit,
-        flushSession: () => persistence.flush({ final: true }),
-        // The service owner acknowledges Live alongside session/downloads.
-        flushLive: () => Promise.resolve(),
-        flushTelemetry: prepareTelemetryForQuit,
-      })
-        .then(
-          (prepared) => {
-            if (prepared && isCurrent()) return replyToTerminate(true);
-          },
-          async (error) => {
-            console.error("Couldn't save app data before quitting", error);
+        if (event.type === "reopen") reportBrowserCommand(createWindow());
 
-            if (!isCurrent()) return;
-            const quit = await quitAnyway(error, confirm);
+        if (event.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
 
-            if (isCurrent()) return replyToTerminate(quit);
-          },
-        )
-        .catch((error) => console.error("Couldn't reply to app shutdown", error));
-    }
+        // The quit handshake: the app saves what it has and answers, and keeps running when the user calls it off.
+        if (event.type === "willQuit") void beginQuit(persistence).catch((error) => console.error("Couldn't reply to app shutdown", error));
 
-    if (e.type === "quitCancelled") {
-      quitting = false;
-      quitAttempt++;
-      resumeSyncAfterQuit();
-      persistence.resume();
-      void resumeTelemetryAfterQuit().catch((error) => console.error("Couldn't restore telemetry after cancelled quit", error));
-    }
-  });
-
-  const placement = startWindowPlacementSync(store);
-  stops.push(() => placement.dispose());
-
-  const windowEvents = onWindowEvent((e) => {
-    const s = store.getState();
-
-    if (e.type === "focus") s.setFocusedWindow(e.id);
-
-    if (e.type === "frame") s.setWindowFrame(e.id, e.frame);
-
-    if (e.type === "close") {
-      if (quitting) return;
-      windows.nativeClosed(e.id);
-      s.closeWindow(e.id);
-    }
-  });
-
-  stops.push(
-    () => appEvents.remove(),
-    () => windowEvents.remove(),
-  );
-
-  const windows = createNativeWindowReconciler<OpenWindowOptions>({
-    open: async (id, options) => {
-      await openWindow(id, options);
-      placement.opened(id);
+        if (event.type === "quitCancelled") cancelQuit(persistence);
+      },
+      openURLs: openExternalUrls,
+      menu: menuState,
     },
-    close: closeWindow,
-    setTitle: setWindowTitle,
-    focus: focusWindow,
-    openFailed: (id) => store.getState().closeWindow(id),
-    closed: (id, options) => {
-      if (options.incognito) void releaseProfile(incognitoSpaceId(id));
-    },
-    report: (operation, id, error) => console.error(`Couldn't ${operation} window ${id}`, error),
+    { shared },
+  );
+
+  void shell.catch((cause: unknown) => {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+
+    captureException(error, "console");
+    console.error("The native shell could not start", error);
   });
-
-  const syncWindows = (s: BrowserState, prev?: BrowserState) => {
-    if (
-      prev &&
-      s.tabs === prev.tabs &&
-      s.tabLists === prev.tabLists &&
-      s.windows === prev.windows &&
-      s.spaces === prev.spaces &&
-      s.ui.focusedWindowId === prev.ui.focusedWindowId
-    )
-      return;
-    // Dispatch the focused window last so it comes to front.
-    const focused = s.ui.focusedWindowId;
-    const order = s.windowOrder.filter((id) => id !== focused);
-
-    if (focused && s.windows[focused]) order.push(focused);
-    windows.sync(
-      order.map((id) => {
-        const w = s.windows[id]!;
-        const title = windowTitle(s, id);
-        // A macOS window shows any profile's pages. A Chrome-hosted one is the Default profile's and keeps a Browser for
-        // each other profile its spaces show (WindowRegistry::BrowserFor), so a space switch never replaces the window.
-        const profile = isMac || w.incognito ? engineProfile(w.spaceId) : "";
-        const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.littleBaySize } : {};
-
-        return { id, title, options: { ...nativeWindowPlacement(w), incognito: w.incognito, title, focus: id === focused, profile, ...small } };
-      }),
-      focused,
-    );
-  };
-
-  let lastMenu = "";
-  let lastBookmarkMenus: unknown[] = [];
-  let menuTimer: ReturnType<typeof setTimeout> | undefined;
-
-  const syncMenu = () => {
-    menuTimer = undefined;
-
-    if (!capabilities.menuBar) return;
-    const state = menuState(store.getState());
-    // The bookmark menus are cached per bookmarks tree (bookmarkMenus), so they compare by identity;
-    // stringifying them (thousands of bookmarks) on every store change is what this sync used to spend.
-    const { bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks, ...rest } = state;
-    const bookmarkMenus = [bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks];
-    const json = JSON.stringify(rest);
-    const bookmarksChanged = !bookmarkMenus.every((menu, i) => menu === lastBookmarkMenus[i]);
-
-    if (json === lastMenu && !bookmarksChanged) return;
-    lastMenu = json;
-    lastBookmarkMenus = bookmarkMenus;
-    void setMenuStateParts(state, bookmarksChanged);
-  };
-
-  // The windows open now, without first asking which exist: that answer comes from the main thread, which Chrome's
-  // startup holds, and waiting for it put 20–100 ms before the first frame. Opening one that exists (after a JS reload)
-  // only brings it forward; the ones the store doesn't have close when the answer comes.
-  if (!shared) syncWindows(store.getState());
-  syncMenu();
-  stops.push(
-    store.subscribe((s, prev) => {
-      if (!shared) syncWindows(s, prev);
-    }),
-  );
-
-  if (capabilities.menuBar) stops.push(subscribeMenuInputs(() => void (menuTimer ??= setTimeout(syncMenu, 120))));
-  stops.push(
-    store.subscribe((s, prev) => {
-      if (s.settings.appearance !== prev.settings.appearance) void setAppearance(s.settings.appearance);
-    }),
-  );
-  stops.push(
-    useExtensions.subscribe((e, prev) => {
-      if (capabilities.menuBar && e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
-    }),
-  );
-  stops.push(
-    useCalendar.subscribe((c, prev) => {
-      if (capabilities.menuBar && c.events !== prev.events) menuTimer ??= setTimeout(syncMenu, 120);
-    }),
-  );
-  stops.push(
-    everySlowly({
-      every: 30_000,
-      run: () => void (menuTimer ??= setTimeout(syncMenu, 120)),
-      needed: () => capabilities.menuBar && useCalendar.getState().events.length > 0,
-      watch: (changed) => useCalendar.subscribe(changed),
-    }),
-  );
-
-  if (!shared)
-    void windowIds().then((ids) => {
-      if (disposed) return;
-      const s = store.getState();
-
-      for (const id of ids) {
-        if (!s.windows[id]) {
-          if (!isUtilityWindowId(id)) void closeWindow(id);
-          continue;
-        }
-
-        // One that already existed kept the title it had (openWindow leaves it be): send the current one.
-        const title = windowTitle(s, id);
-        void setWindowTitle(id, title);
-      }
-    });
 
   return {
-    async reconcile(state: BrowserState) {
+    reconcile: async (state) => {
       if (disposed) return;
-      syncWindows(state);
-      await windows.flush();
-    },
-    dispose() {
-      disposed = true;
-      clearTimeout(menuTimer);
-      windows.dispose();
+      const service = await shell;
 
-      for (const stop of stops.reverse()) stop();
+      if (!disposed) await runtime.runPromise(service.reconcile(state));
+    },
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      stopDownloads();
+
+      void tabs?.then((service) => Effect.runPromise(service.stop)).catch((error) => console.error("Couldn't stop the engine's tab strips", error));
+      void shell
+        .then((service) => Effect.runPromise(service.stop))
+        .catch((error) => {
+          console.error("Couldn't stop the native shell", error);
+        });
     },
   };
 }

@@ -1,11 +1,8 @@
-import { setAutoPictureInPicture, setDisplayMediaPicker } from "@bay/chromium";
 import { useState } from "react";
-import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSettings, useTab, useTabLive } from "../../store/hooks";
 import { usePage } from "../window/pageState";
-import { startCast } from "./cast";
+import { withMedia } from "./cast";
 import { startTabShareCleanup } from "./ShareBar";
-import { cancelDisplayMediaOnNavigation } from "./SharePicker";
 import { autoPictureInPictureAt } from "./state";
 
 // Whether a tab's WebView pops its video out when the user leaves it. The native view decides when the user left
@@ -31,22 +28,10 @@ export function useAutoPictureInPicture(tabId: string, visible: boolean): boolea
 
 let started = false;
 
+/** Starts the app's media work once, however many pages mount: the service owns the engine's listeners. */
 export function startMedia() {
   if (started) return;
   started = true;
-  void setDisplayMediaPicker(true);
-  // Chrome's automatic PiP (a call's own window on a tab switch, Dia's behaviour) goes with ours.
-  let autoPip: boolean | null = null;
-
-  const syncAutoPip = () => {
-    const on = useBrowser.getState().settings.autoPictureInPicture ?? true;
-
-    if (on !== autoPip) void setAutoPictureInPicture((autoPip = on));
-  };
-
-  syncAutoPip();
-  useBrowser.subscribe(syncAutoPip);
-  cancelDisplayMediaOnNavigation();
   startTabShareCleanup();
-  startCast();
+  void withMedia((media) => media.start);
 }

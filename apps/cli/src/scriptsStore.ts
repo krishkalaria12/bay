@@ -1,4 +1,8 @@
 import { dlopen, FFIType } from "bun:ffi";
+import { sleepSync } from "bun";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import * as v from "valibot";
 import {
   closeSync,
@@ -54,6 +58,7 @@ interface GeneratedManifest {
 export const LOCK_TIMEOUT = 30;
 export const STATUS_TIMEOUT = 10;
 export const STATUS_POLL = 100;
+export const LOCK_POLL = 50;
 export const RENAME_SWAP = 0x2;
 export const AT_FDCWD = -2;
 
@@ -121,10 +126,7 @@ function openWindows() {
       args: [FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr],
       returns: FFIType.i32,
     },
-    UnlockFileEx: {
-      args: [FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr],
-      returns: FFIType.i32,
-    },
+    UnlockFileEx: { args: [FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
     CloseHandle: { args: [FFIType.u64], returns: FFIType.i32 },
     GetLastError: { args: [], returns: FFIType.u32 },
   });
@@ -143,7 +145,7 @@ function randomHex(bytes = 6): string {
   return randomBytes(bytes).toString("hex");
 }
 
-// The caller holds Store.lock(). Windows has no directory exchange; keep
+// The caller holds the store's lock. Windows has no directory exchange; keep
 // readers behind that lock until all three same-volume moves have finished.
 export function swap(first: string, second: string): void {
   if (process.platform === "win32") {
@@ -189,7 +191,9 @@ export function swap(first: string, second: string): void {
 
   const ret = (exchange ??= openExchange())(Buffer.from(`${first}\0`), Buffer.from(`${second}\0`));
 
-  if (ret !== 0) throw new StoreError(`can't swap ${first} and ${second}`);
+  if (ret !== 0) {
+    throw new StoreError(`can't swap ${first} and ${second}`);
+  }
 }
 
 // Recover a process that stopped between Windows' directory moves. The old
@@ -252,10 +256,13 @@ function recoverSwaps(directory: string): void {
   }
 }
 
-function lockFile(path: string): () => void {
-  const deadline = Date.now() + LOCK_TIMEOUT * 1000;
-  const timeout = () => new StoreError(`another bay scripts command or Bay has held ${path} for ${LOCK_TIMEOUT}s`);
-
+/**
+ * Takes the lock file's lock without waiting: the way to give it back when it was free, nothing when it was not.
+ *
+ * The lock file must be a plain file. A symbolic link would let another folder take the lock's place, and a hard
+ * link would let a second name lock the same file, so both are refused.
+ */
+function acquireLock(path: string): (() => void) | null {
   if (process.platform === "win32") {
     const { symbols } = (windows ??= openWindows());
     // Share reads and writes, but not deletion: every reader locks the same
@@ -265,23 +272,25 @@ function lockFile(path: string): () => void {
     if (handle === 0xffffffffffffffffn) throw new StoreError(`can't open ${path} (Windows error ${symbols.GetLastError()})`);
     const info = new Uint32Array(13);
     const overlapped = new BigUint64Array(4); // 64-bit OVERLAPPED, offset zero.
+    let locked = false;
 
     try {
       if (!symbols.GetFileInformationByHandle(handle, info) || (info[0]! & 0x410) !== 0 || info[10] !== 1) {
         throw new StoreError(`${path} must be a plain file without links`);
       }
 
-      while (!symbols.LockFileEx(handle, 3, 0, 1, 0, overlapped)) {
+      // LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY: the lock is taken or the handle is busy.
+      if (!symbols.LockFileEx(handle, 3, 0, 1, 0, overlapped)) {
         const error = symbols.GetLastError();
 
         if (error !== 33) throw new StoreError(`can't lock ${path} (Windows error ${error})`);
 
-        if (Date.now() >= deadline) throw timeout();
-        Bun.sleepSync(50);
+        return null;
       }
-    } catch (error) {
-      symbols.CloseHandle(handle);
-      throw error;
+
+      locked = true;
+    } finally {
+      if (!locked) symbols.CloseHandle(handle);
     }
 
     return () => {
@@ -291,21 +300,30 @@ function lockFile(path: string): () => void {
   }
 
   const { symbols } = posixLibrary();
-  const fd = openSync(path, constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+  let fd: number;
+
+  try {
+    fd = openSync(path, constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+  } catch (error) {
+    // SAFETY: the only errors reaching here come from node:fs calls, which carry an ErrnoException code.
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") throw new StoreError(`${path} is a symbolic link`);
+
+    throw error;
+  }
+
+  let locked = false;
 
   try {
     const info = fstatSync(fd);
 
     if (!info.isFile() || info.nlink !== 1) throw new StoreError(`${path} must be a plain file without links`);
 
-    while (symbols.flock(fd, 2 | 4) !== 0) {
-      // LOCK_EX | LOCK_NB
-      if (Date.now() >= deadline) throw timeout();
-      Bun.sleepSync(50);
-    }
-  } catch (error) {
-    closeSync(fd);
-    throw error;
+    // LOCK_EX | LOCK_NB
+    if (symbols.flock(fd, 2 | 4) !== 0) return null;
+
+    locked = true;
+  } finally {
+    if (!locked) closeSync(fd);
   }
 
   return () => {
@@ -395,16 +413,27 @@ export class Store {
 
         if (info.isSymbolicLink() || !info.isDirectory()) throw new StoreError(`${directory} must be a plain folder`);
       } else if (create) {
-        mkdirSync(directory, { mode: directory === this.path ? 0o700 : 0o755 });
+        mkdirSync(directory, { recursive: true, mode: directory === this.path ? 0o700 : 0o755 });
       }
     }
 
     return true;
   }
 
-  lock(): void {
-    if (this.releaseLock) throw new StoreError("this scripts store is already locked");
-    this.releaseLock = lockFile(join(this.path, ".lock"));
+  /**
+   * Takes the store's lock if it is free, and says whether it did. The waiting is lock()'s and lockStore's.
+   *
+   * Holding the lock also finishes an exchange that a crashed run left half-done, so every holder of the lock sees
+   * the same folders.
+   */
+  tryLock(): boolean {
+    if (this.releaseLock) return true;
+
+    const release = acquireLock(this.lockPath);
+
+    if (!release) return false;
+
+    this.releaseLock = release;
 
     try {
       recoverSwaps(this.path);
@@ -413,6 +442,28 @@ export class Store {
       this.unlock();
       throw error;
     }
+
+    return true;
+  }
+
+  /**
+   * Takes the store's lock, waiting for it until it is free.
+   *
+   * The caller holds the lock until it unlocks. Windows has no directory exchange, so the lock is the only way to
+   * keep two processes out of the same store.
+   */
+  lock(): void {
+    if (this.releaseLock) throw new StoreError("this scripts store is already locked");
+
+    while (!this.tryLock()) {
+      // The lock is held elsewhere: wait a little and try again.
+      sleepSync(LOCK_POLL);
+    }
+  }
+
+  /** Where the lock is. */
+  get lockPath(): string {
+    return join(this.path, ".lock");
   }
 
   unlock(): void {
@@ -860,29 +911,6 @@ export class Store {
 
     return null;
   }
-
-  waitStatus(generation: number, alive: () => boolean): [string, StatusRecord | null] {
-    const deadline = Date.now() + STATUS_TIMEOUT * 1000;
-
-    while (true) {
-      const status = this.status();
-      const reported = status?.generation;
-
-      if (reported !== undefined && reported >= generation) {
-        return [reported > generation ? "superseded" : "reported", status];
-      }
-
-      if (!alive()) {
-        return ["quit", null];
-      }
-
-      if (Date.now() >= deadline) {
-        return ["timeout", null];
-      }
-
-      Bun.sleepSync(STATUS_POLL);
-    }
-  }
 }
 
 export function metaFromRecord(record: ScriptRecord): Meta {
@@ -1003,22 +1031,80 @@ export function validateManifest(manifest: GeneratedManifest, jsFiles: Set<strin
   }
 }
 
-export function repairIfPresent(dataRoot: string): string | null {
-  const store = new Store(dataRoot);
+/** Repairs an interrupted change, when there is a store to repair: what it did, or nothing. Holds the lock while it does. */
+export const repairIfPresent = (dataRoot: string): Effect.Effect<string | null, StoreError> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const store = yield* openStore(dataRoot, false);
 
-  try {
-    if (!store.open(false) || (!existsSync(store.scriptsDir) && !store.extensionPresent() && !store.generation())) {
-      return null;
+      if (!store || (!existsSync(store.scriptsDir) && !store.extensionPresent() && !store.generation())) return null;
+
+      yield* lockStore(store);
+
+      if (!existsSync(store.scriptsDir)) mkdirSync(store.scriptsDir, { recursive: true, mode: 0o755 });
+
+      return yield* attempt(() => store.repair());
+    }),
+  );
+
+// MARK: The store's lifetime
+
+/** A store step that threw: its failure, as the store's. */
+const attempt = <A>(run: () => A): Effect.Effect<A, StoreError> =>
+  Effect.try({ try: run, catch: (error) => (error instanceof StoreError ? error : new StoreError(error instanceof Error ? error.message : String(error))) });
+
+/** Opens the store for the scope: nothing when it isn't there and `create` is off. Its lock goes when the scope closes. */
+export const openStore = (dataRoot: string, create: boolean): Effect.Effect<Store | null, StoreError, Scope.Scope> =>
+  Effect.acquireRelease(
+    attempt(() => {
+      const store = new Store(dataRoot);
+
+      return store.open(create) ? store : null;
+    }),
+    (store) => Effect.sync(() => store?.close()),
+  );
+
+/**
+ * Takes the store's lock for the scope, waiting for another bay command or Bay to let go of it, for up to
+ * LOCK_TIMEOUT seconds. The lock is given back when the scope closes.
+ */
+export const lockStore = (store: Store): Effect.Effect<void, StoreError, Scope.Scope> =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const deadline = Date.now() + LOCK_TIMEOUT * 1000;
+
+      while (!(yield* attempt(() => store.tryLock()))) {
+        if (Date.now() >= deadline)
+          return yield* Effect.fail(new StoreError(`another bay scripts command or Bay has held ${store.lockPath} for ${LOCK_TIMEOUT}s`));
+
+        yield* restore(Effect.sleep(Duration.millis(LOCK_POLL)));
+      }
+
+      yield* Effect.addFinalizer(() => Effect.sync(() => store.unlock()));
+    }),
+  );
+
+/** How a wait for Bay's report ended. */
+export type StatusOutcome = "reported" | "superseded" | "quit" | "timeout";
+
+/**
+ * Waits up to STATUS_TIMEOUT seconds for Bay to report `generation`: a newer report supersedes it, and Bay quitting
+ * (`alive` turning false) ends the wait.
+ */
+export const waitForStatus = (store: Store, generation: number, alive: () => boolean): Effect.Effect<[StatusOutcome, StatusRecord | null], StoreError> =>
+  Effect.gen(function* () {
+    const deadline = Date.now() + STATUS_TIMEOUT * 1000;
+
+    for (;;) {
+      const status = yield* attempt(() => store.status());
+      const reported = status?.generation;
+
+      if (reported !== undefined && reported >= generation) return [reported > generation ? "superseded" : "reported", status] as const;
+
+      if (!alive()) return ["quit", null] as const;
+
+      if (Date.now() >= deadline) return ["timeout", null] as const;
+
+      yield* Effect.sleep(Duration.millis(STATUS_POLL));
     }
-
-    store.lock();
-
-    if (!existsSync(store.scriptsDir)) {
-      mkdirSync(store.scriptsDir, { recursive: true, mode: 0o755 });
-    }
-
-    return store.repair();
-  } finally {
-    store.close();
-  }
-}
+  }).pipe(Effect.map(([outcome, status]): [StatusOutcome, StatusRecord | null] => [outcome, status]));

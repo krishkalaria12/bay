@@ -12,7 +12,7 @@ import { createProfileDataCleanup } from "./profileCleanup.ts";
 import * as native from "../test-native-stub.mjs";
 
 const settle = async () => {
-  for (let i = 0; i < 12; i++) await Promise.resolve();
+  for (let i = 0; i < 12; i++) await new Promise((resolve) => setImmediate(resolve));
 };
 
 const storeFor = (engine) => {
@@ -129,6 +129,8 @@ test("favicon caches and download queues belong to their browser instance", asyn
     second.noteFavicon(tb, "https://icon.example/b");
     await settle();
     t.mock.timers.tick(16);
+    await settle();
+    t.mock.timers.tick(16);
     assert.deepEqual(Object.keys(first.useFavicons.getState().profiles), ["icons-a"]);
     assert.deepEqual(Object.keys(second.useFavicons.getState().profiles), ["icons-b"]);
     assert.equal(first.resolveFavicon("https://page.example/", null, "local").uri, "data:a");
@@ -156,6 +158,9 @@ test("late favicon download after disposal cannot refill its cache", async (t) =
   });
 
   service.noteFavicon(tab, "https://icon.example/");
+  await settle();
+  t.mock.timers.tick(16);
+  await settle();
   service.dispose();
   resolve({ uri: "data:late" });
   await settle();
@@ -179,7 +184,9 @@ test("profile cleanup disposal cancels delays without affecting another instance
   try {
     first.start();
     second.start();
+    await settle();
     first.dispose();
+    await settle();
     t.mock.timers.tick(1500);
     await settle();
     assert.deepEqual(native.deletedProfileData, ["removed"]);
@@ -232,16 +239,22 @@ test("a stopped profile cleanup cannot acknowledge deletion after restart", asyn
   store.setState({ orphanedProfileData: ["pending"] });
   const service = createProfileDataCleanup(store);
   const stopFirst = service.start();
-  t.mock.timers.tick(1500);
-  await Promise.resolve();
-  assert.deepEqual(native.deletedProfileData, ["pending"]);
-  stopFirst();
-  const stopSecond = service.start();
+  await settle();
+  // The wait the delete was in is the stopped owner's: nothing is deleted, and the profile stays queued.
   stopFirst();
   await settle();
+  t.mock.timers.tick(1500);
+  await settle();
+  assert.deepEqual(native.deletedProfileData, []);
   assert.deepEqual(store.getState().orphanedProfileData, ["pending"]);
+
+  const stopSecond = service.start();
+  // The first start's stop is spent: it does not stop the start that replaced it.
+  stopFirst();
+  await settle();
   t.mock.timers.tick(1500);
   await settle();
+  assert.deepEqual(native.deletedProfileData, ["pending"]);
   assert.deepEqual(store.getState().orphanedProfileData, []);
   stopSecond();
 });
@@ -263,6 +276,9 @@ test("a closed private tab's late favicon cannot repopulate its profile", async 
   try {
     service.start();
     service.noteFavicon(tab, "https://icon.example/");
+    await settle();
+    t.mock.timers.tick(16);
+    await settle();
     store.getState().closeWindow(window);
     resolve({ uri: "data:secret" });
     await settle();
@@ -313,6 +329,8 @@ test("a private favicon cached before disposal cannot survive a stopped-window c
   try {
     service.start();
     service.noteFavicon(tab, "https://icon.example/private");
+    await settle();
+    t.mock.timers.tick(16);
     await settle();
     t.mock.timers.tick(16);
     assert.equal(service.resolveFavicon("https://private-cache.example/", null, spaceId).uri, "data:private-cache");

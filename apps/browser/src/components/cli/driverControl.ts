@@ -1,85 +1,79 @@
-import * as v from "valibot";
-import { isJsonObject, type JsonValue } from "../../lib/json";
-import { cliControlStatus, onCliControlChanged, setCliActiveTab, setCliControl, type CliControlStatus } from "@bay/chromium";
-import { installedCliVersion, installCli, onCliInstallLine, readDocument, writeDocument, type CliInstallResult } from "@bay/desktop";
-import { create } from "zustand";
-import { useBrowserRead as useBrowser } from "../../store/read";
-import type { BrowserProjection } from "../../runtime/projection";
-import { reportBrowserCommand } from "../../runtime/commands";
-import { updateSettings } from "../../runtime/settingsActions";
-import { tabEngine } from "../../store/engines";
-import { activeTabId } from "../../store/model";
-import { shownPeek } from "../../store/peeks";
+// The terminal control: the command line tool that drives the app, and the app's side of it.
+//
+// The work is in components/cli/automationService.ts. This is where the app reaches it.
+import type { CliControlStatus } from "@bay/chromium";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../../effect/runtime";
+import { browserRead } from "../../store/read";
 import { usePages } from "../window/pageState";
+import { AutomationService, shownCliTab, tellCliActiveTab, useCli } from "./automationService";
 
-const INSTALL_DOC = "bay-cli.json";
+export { shownCliTab, useCli };
 
-type SavedInstall = { binPath?: string; error?: string };
+/**
+ * Starts the terminal control: the server is asked for, and the active tab is kept.
+ *
+ * A document that has no pages of its own (the coordinator on Linux and Windows) says so with `activeTab: false`:
+ * the window that shows the page names the tab the commands act on.
+ */
+export function startCliControl({ activeTab = true } = {}): Promise<void> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const automation = yield* AutomationService;
 
-function savedInstall(): SavedInstall {
-  try {
-    const saved: JsonValue = JSON.parse(readDocument(INSTALL_DOC) ?? "{}");
-
-    if (!isJsonObject(saved)) return {};
-
-    return { binPath: v.is(v.string(), saved.binPath) ? saved.binPath : undefined, error: v.is(v.string(), saved.error) ? saved.error : undefined };
-  } catch {
-    return {};
-  }
+      yield* automation.startCli({ activeTab });
+    }),
+  );
 }
 
-const saved = savedInstall();
+/**
+ * A window document on Linux and Windows: it holds its own pages, so the focused one says which tab is shown.
+ *
+ * The server's state comes from the coordinator, which owns it; the window only names the tab.
+ */
+export function startCliActiveTab(windowId: string) {
+  let sent: number | null | undefined;
 
-export const useCli = create<{
-  server: CliControlStatus | null;
-  installing: boolean;
-  step: string | null;
-  installedVersion: string | null;
-  binPath: string | null;
-  error: string | null;
-}>()(() => ({
-  server: null,
-  installing: false,
-  step: null,
-  installedVersion: installedCliVersion(),
-  binPath: saved.binPath ?? null,
-  error: saved.error ?? null,
-}));
+  const owns = () => browserRead.getState().ui.focusedWindowId === windowId;
 
-let installation: Promise<CliInstallResult> | null = null;
+  const push = () => {
+    const server = useCli.getState().server;
 
-export function installCliInBackground(): Promise<CliInstallResult> {
-  if (installation) return installation;
-  useCli.setState({ installing: true, step: null, error: null });
+    if (!owns() || (server?.state !== "on" && server?.state !== "starting")) {
+      sent = undefined;
 
-  const lines = onCliInstallLine((line) => {
-    const step = /^step (\S+)/.exec(line)?.[1];
+      return;
+    }
 
-    if (step) useCli.setState({ step });
-  });
+    const active = shownCliTab(browserRead.getState());
 
-  installation = installCli()
-    .catch((cause: unknown): CliInstallResult => ({ ok: false, appVersion: "", error: message(cause), lines: [] }))
-    .then((result) => {
-      lines.remove();
-      installation = null;
-      const error = result.ok ? null : (result.error ?? "The installer stopped.");
-      const binPath = result.binPath ?? useCli.getState().binPath;
-      const installedVersion = result.installedVersion === undefined ? installedCliVersion() : result.installedVersion;
-      useCli.setState({ installing: false, step: null, installedVersion, binPath, error });
+    if (active === sent) return;
 
-      try {
-        writeDocument(INSTALL_DOC, JSON.stringify({ version: 1, binPath, error }));
-      } catch (error) {
-        console.warn("[cli] couldn't save the install status", error);
-      }
-
-      return result;
+    sent = active;
+    void tellCliActiveTab(active).catch(() => {
+      // The native side did not take it: the next push tries again.
+      sent = undefined;
     });
+  };
 
-  return installation;
+  useCli.subscribe(push);
+  browserRead.subscribe(push);
+  usePages.subscribe(push);
+  push();
 }
 
+/** Installs the command line tool, and says how it went. */
+export function installCliInBackground(): Promise<{ ok: boolean; appVersion: string; error?: string; binPath?: string; lines: string[] }> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const automation = yield* AutomationService;
+
+      return yield* automation.install();
+    }),
+  );
+}
+
+/** What the app tells the user about the command line tool. */
 export function describeCliInstall(state: ReturnType<typeof useCli.getState>): string {
   if (state.installing) return state.step ? `Installing (${state.step})…` : "Installing…";
 
@@ -90,6 +84,7 @@ export function describeCliInstall(state: ReturnType<typeof useCli.getState>): s
   return "Run Bay from your terminal with TypeScript or JavaScript.";
 }
 
+/** What the app tells the user about the terminal control. */
 export function describeCliControl(server: CliControlStatus | null): string {
   if (server?.reason) return server.reason;
 
@@ -101,107 +96,3 @@ export function describeCliControl(server: CliControlStatus | null): string {
 
   return "Commands can read and interact with open Chromium pages and install userscripts. Turning this off disconnects them.";
 }
-
-/** The current pane, including a Peek over it, once its Chromium page exists. */
-export function shownCliTab(s: BrowserProjection): number | null {
-  const windowId = s.ui.focusedWindowId;
-
-  if (!windowId || !s.windows[windowId]) return null;
-  const id = shownPeek(s, windowId)?.tabId ?? activeTabId(s, windowId);
-  const tab = id ? s.tabs[id] : undefined;
-
-  if (!id || !tab || !/^(https?|about|data|blob):/i.test(tab.url) || !(tab.navigation || tab.adoptId) || tabEngine(s, id) !== "chromium" || tab.newTabHistory)
-    return null;
-
-  return usePages.getState().chromeTabs[id] ?? null;
-}
-
-// Tells the engine the tab commands act on by default, while `owns` says this document knows it.
-function activeTabPush(owns: () => boolean) {
-  let sent: number | null | undefined;
-
-  const forget = () => {
-    sent = undefined;
-  };
-
-  const push = () => {
-    const server = useCli.getState().server;
-
-    if (!owns() || (server?.state !== "on" && server?.state !== "starting")) return forget();
-    const active = shownCliTab(useBrowser.getState());
-
-    if (active === sent) return;
-    sent = active;
-    void setCliActiveTab(active).catch(forget);
-  };
-
-  return { push, forget };
-}
-
-let started = false;
-
-/**
- * Keeps the engine's control server on the setting. Linux's and Windows' coordinator document does this with
- * `activeTab: false`: it has no pages, and engine events reach only it, so windows get the status from its service state.
- */
-export function startCliControl({ activeTab = true } = {}) {
-  if (started) return;
-  started = true;
-  let request = 0;
-  let inFlight = 0;
-  let generation = 0;
-  let applied: boolean | null = null;
-  const { push: pushActive, forget: forgetActive } = activeTabPush(() => activeTab);
-
-  const apply = (server: CliControlStatus, reconcile: boolean) => {
-    if ((server.generation ?? generation) < generation) return;
-
-    if ((server.generation ?? generation) > generation) forgetActive();
-    generation = Math.max(generation, server.generation ?? 0);
-    useCli.setState({ server });
-
-    if (reconcile && server.state === "off" && server.reason && useBrowser.getState().settings.cliControl === true) {
-      reportBrowserCommand(updateSettings({ cliControl: false }));
-    }
-
-    pushActive();
-  };
-
-  onCliControlChanged((server) => apply(server, inFlight === 0));
-
-  const sync = () => {
-    const on = useBrowser.getState().settings.cliControl === true;
-
-    if (on === applied) return;
-    const first = applied === null;
-    applied = on;
-    const mine = ++request;
-    inFlight++;
-
-    const settle = (server: CliControlStatus) => {
-      inFlight--;
-
-      if (mine === request) apply(server, true);
-    };
-
-    void (first && !on ? cliControlStatus() : setCliControl(on)).then(settle, (cause: unknown) => settle({ state: "off", reason: message(cause) }));
-  };
-
-  useBrowser.subscribe(() => {
-    sync();
-    pushActive();
-  });
-  usePages.subscribe(pushActive);
-  sync();
-}
-
-/** A window document on Linux and Windows: it holds its own pages, so the focused one says which tab is shown. */
-export function startCliActiveTab(windowId: string) {
-  const { push } = activeTabPush(() => useBrowser.getState().ui.focusedWindowId === windowId);
-  useCli.subscribe(push);
-  useBrowser.subscribe(push);
-  usePages.subscribe(push);
-  push();
-}
-
-const message = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));

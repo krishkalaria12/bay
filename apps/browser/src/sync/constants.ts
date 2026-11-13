@@ -17,3 +17,9 @@ export const HISTORY_WINDOW_MS = 90 * 86_400_000;
 export const SAME_VISIT_MS = 1;
 export const MAX_DEVICE_TABS = 30;
 export const PASSWORD_READ_INTERVAL_MS = 30_000;
+
+// How the passwords' apply waits for Chrome to write them (adapters.ts): this many reads, this far apart, and how
+// long the reads stay quiet when Chrome has not caught up by then.
+export const LOGIN_WRITE_CHECKS = 20;
+export const LOGIN_WRITE_CHECK_GAP_MS = 250;
+export const LOGIN_QUIET_AFTER_MS = 30_000;

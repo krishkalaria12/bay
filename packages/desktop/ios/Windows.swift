@@ -12,7 +12,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
   var emit: ((String, [String: Any]) -> Void)?
   private var closingFromJS = Set<String>()
   private weak var lastPlaced: NSWindow?
-  private var legacyFrame = UserDefaults.standard.string(forKey: "NSWindow Frame BrowserWindow")
   private(set) var auxKinds: [String: String] = [:]
   // Little Bay windows (Arc's Little Arc): browser windows that open centred at their remembered size.
   private(set) var smallIds = Set<String>()
@@ -416,11 +415,12 @@ final class WindowManager: NSObject, NSWindowDelegate {
       window.setFrame(NSRect(origin: .zero, size: source.frame.size), display: false)
       let topLeft = NSPoint(x: source.frame.minX, y: source.frame.maxY)
       window.setFrameTopLeftPoint(window.cascadeTopLeft(from: topLeft))
-    } else if let legacy = legacyFrame, windows.isEmpty {
-      window.setFrame(from: legacy)
-      legacyFrame = nil
-    } else {
-      window.center()
+    } else if !window.setFrameUsingName("BrowserWindow") {
+      if let screen = window.screen ?? NSScreen.main {
+        window.setFrame(screen.visibleFrame, display: false)
+      } else {
+        window.center()
+      }
     }
   }
 
@@ -501,6 +501,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   @objc private func sizeChanged(_ notification: Notification) {
     guard let window = notification.object as? NSWindow, !window.inLiveResize else { return }
     relayoutRoot(window)
+    reportFrame(window)
   }
 
   /// Lay out RCTRootView immediately after programmatic frame changes; occluded windows may not get a display pass.
@@ -559,6 +560,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
   private func reportFrame(_ window: NSWindow) {
     guard let id = id(of: window), !window.styleMask.contains(.fullScreen), window.parent == nil else { return }
+    if isMainWindow(window) { window.saveFrame(usingName: "BrowserWindow") }
     let f = window.frame
     emit?("onWindowEvent", ["type": "frame", "id": id, "frame": [f.minX, f.minY, f.width, f.height]])
   }

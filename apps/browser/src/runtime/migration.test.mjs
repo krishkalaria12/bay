@@ -169,9 +169,10 @@ async function start(t, options = {}) {
   const coordinator = await createBrowserCoordinator({ store, transport: broker.coordinatorTransport, ...options });
   const clients = ["window-one", "window-two"].map((clientId) => createBrowserClient({ clientId, transport: broker.windowTransport(clientId) }));
   await Promise.all(clients.map((client) => client.ready));
-  t.after(() => {
+  t.after(async () => {
     clients.forEach((client) => client.close());
     coordinator.dispose();
+    await coordinator.settled;
   });
 
   return { store, first, second, broker, coordinator, clients };

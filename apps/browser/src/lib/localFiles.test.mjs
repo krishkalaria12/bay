@@ -70,12 +70,18 @@ test("nested file opens forward only a root grant plus relative path", async () 
 test("late native resolution does not open a file after its pin was removed", async () => {
   const { windowId, id } = setup();
   let finish;
+  const entered = Promise.withResolvers();
+
   localFileAnswers.open = () =>
     new Promise((resolve) => {
       finish = resolve;
+      entered.resolve();
     });
   const count = Object.keys(S().tabs).length;
   const pending = openLocalFile(windowId, id);
+
+  // The Effect runtime acquires its layers before entering the native request.
+  await entered.promise;
   S().removeLocalFile(id);
   finish({ status: "available", browserReadable: true, url: "file:///Users/owner/A.pdf" });
   assert.equal((await pending).status, "inaccessible");

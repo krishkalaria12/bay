@@ -1,18 +1,29 @@
 import { setBoosts as setEngineBoosts, type EngineBoostStyle } from "@bay/chromium";
-import { readDocument, writeDocument } from "@bay/desktop";
+import { readDocument } from "@bay/desktop";
 import { create } from "zustand";
-import { hasServiceClient } from "../../runtime/serviceClient";
-import { engineBoosts, newBoost, normalizeBoost, normalizeScript, tabBoostStyle, type Boost, type BoostPalette, type BoostScript } from "../../lib/boosts";
-import { isJsonObject, type JsonValue } from "../../lib/json";
+import {
+  BOOSTS_FILE,
+  engineBoosts,
+  newBoost,
+  normalizeBoost,
+  normalizeScript,
+  parseBoostDocument,
+  tabBoostStyle,
+  type Boost,
+  type BoostPalette,
+  type BoostScript,
+} from "../../lib/boosts";
 import { hex, SPACE_COLORS, spaceThemeKey, themeFor } from "../../lib/theme";
 import { onWebviewAttached, webviews } from "../../lib/webviews";
+import { hasServiceClient } from "../../runtime/serviceClient";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import type { BrowserProjection } from "../../runtime/projection";
 import { newId } from "../../store/model";
 import { DEFAULT_SPACE } from "../../store/spaces";
 
 // Boosts' store: every Boost (synced: sync/boosts.ts), this Mac's scripts (never synced), and Boosts' own switch.
-// Saved to boosts.json; every change reaches the engine, which restyles the pages it shows at once.
+// The service (service.ts) keeps boosts.json in step with it; every change reaches the engine, which restyles the
+// pages it shows at once.
 
 export type BoostsState = {
   loaded: boolean;
@@ -25,25 +36,19 @@ export type BoostsState = {
   scriptsAcknowledged: boolean;
 };
 
-const FILE = "boosts.json";
-
 export const useBoosts = create<BoostsState>()(() => ({ loaded: false, error: null, on: true, boosts: {}, scripts: {}, scriptsAcknowledged: false }));
 
 let loaded = false;
 let started = false;
 
-/** Sync loads persisted data without starting page-style observers or timers. */
+/** Sync loads the persisted Boosts without starting the page-style observers or their timers. */
 export function ensureBoostsLoaded() {
   if (hasServiceClient() || loaded) return;
   loaded = true;
   load();
-  useBoosts.subscribe((s, prev) => {
-    if (!s.loaded || s.error) return;
-
-    if (s.boosts !== prev.boosts || s.scripts !== prev.scripts || s.on !== prev.on || s.scriptsAcknowledged !== prev.scriptsAcknowledged) save(s);
-  });
 }
 
+/** The Boosts are the app's own: a window that only reads the app's state has none of its own to keep. */
 export const boostsAvailable = () => !hasServiceClient();
 
 export function startBoosts() {
@@ -51,6 +56,9 @@ export function startBoosts() {
   started = true;
   ensureBoostsLoaded();
   useBoosts.subscribe((s, prev) => {
+    if (!s.loaded || s.error) return;
+
+    // The document is the service's business: the store only tells the engine and the tabs.
     if (s.boosts !== prev.boosts || s.scripts !== prev.scripts || s.on !== prev.on) {
       scheduleEngine();
       scheduleTabs();
@@ -61,7 +69,6 @@ export function startBoosts() {
     if (s.tabs !== prev.tabs || s.spaces !== prev.spaces || s.ui.appDark !== prev.ui.appDark) scheduleTabs();
   });
   onWebviewAttached((tabId, handle) => {
-    if (hasServiceClient()) return;
     const browser = useBrowser.getState();
     const tab = browser.tabs[tabId];
 
@@ -77,42 +84,19 @@ export function startBoosts() {
 
 function load() {
   try {
-    const json = readDocument(FILE);
-    const data: JsonValue = json ? JSON.parse(json) : {};
+    const document = parseBoostDocument(readDocument(BOOSTS_FILE));
 
-    if (!isJsonObject(data)) throw new Error("Boosts file isn't a JSON object");
-    const savedBoosts = isJsonObject(data.boosts) ? data.boosts : {};
-    const boosts: Record<string, Boost> = {};
-
-    for (const raw of Object.values(savedBoosts)) {
-      const b = normalizeBoost(raw);
-
-      if (b) boosts[b.id] = b;
-    }
-
-    const scripts: Record<string, BoostScript> = {};
-    const savedScripts = isJsonObject(data.scripts) ? data.scripts : {};
-
-    for (const [id, raw] of Object.entries(savedScripts)) {
-      const script = normalizeScript(raw);
-
-      if (script && boosts[id]) scripts[id] = script;
-    }
-
-    useBoosts.setState({ loaded: true, error: null, on: data.on !== false, boosts, scripts, scriptsAcknowledged: data.scriptsAcknowledged === true });
+    useBoosts.setState({
+      loaded: true,
+      error: null,
+      on: document.on,
+      boosts: document.boosts,
+      scripts: document.scripts,
+      scriptsAcknowledged: document.scriptsAcknowledged,
+    });
   } catch (error) {
     // An unreadable file is kept as it is, not overwritten: nothing is saved until it's fixed.
     useBoosts.setState({ loaded: true, error: `Couldn't read Boosts: ${String(error)}` });
-  }
-}
-
-function save(s: BoostsState) {
-  if (hasServiceClient()) return;
-
-  try {
-    writeDocument(FILE, JSON.stringify({ version: 1, on: s.on, boosts: s.boosts, scripts: s.scripts, scriptsAcknowledged: s.scriptsAcknowledged }));
-  } catch (error) {
-    console.warn("Couldn't save Boosts", error);
   }
 }
 
@@ -123,8 +107,6 @@ let lastEngine = "";
 
 // Typing in the CSS field changes a Boost many times a second: the engine takes the latest a moment later.
 function scheduleEngine() {
-  if (hasServiceClient()) return;
-
   if (engineTimer) return;
   engineTimer = setTimeout(() => {
     engineTimer = null;
@@ -133,7 +115,6 @@ function scheduleEngine() {
 }
 
 function pushEngine() {
-  if (hasServiceClient()) return;
   const s = useBoosts.getState();
 
   if (!s.loaded) return;
@@ -151,8 +132,6 @@ const sentStyles = new Map<string, string>();
 let tabsTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleTabs() {
-  if (hasServiceClient()) return;
-
   if (tabsTimer) return;
   tabsTimer = setTimeout(() => {
     tabsTimer = null;
@@ -161,7 +140,7 @@ function scheduleTabs() {
 }
 
 /** A space's palette for Boosts: its window's colours and text in the current appearance. */
-export function spacePalette(s: BrowserProjection, spaceId: string): BoostPalette {
+export function spacePalette(s: BrowserState, spaceId: string): BoostPalette {
   const space = s.spaces[spaceId] ?? DEFAULT_SPACE;
   const theme = themeFor(spaceThemeKey(space, s.ui.appDark));
   const colors = space.theme?.colors.length ? space.theme.colors : [(SPACE_COLORS[space.color] ?? SPACE_COLORS.plum).swatch.slice(0, 7)];
@@ -179,7 +158,6 @@ export function spacePalette(s: BrowserProjection, spaceId: string): BoostPalett
 }
 
 function pushTabs() {
-  if (hasServiceClient()) return;
   const boosts = useBoosts.getState();
   const s = useBrowser.getState();
   const styles = new Map<string, { style: EngineBoostStyle; json: string }>();

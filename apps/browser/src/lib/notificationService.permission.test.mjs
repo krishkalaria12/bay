@@ -2,7 +2,27 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { notificationState } from "../test-native-stub.mjs";
 import { capabilities } from "../test-platform-stub.mjs";
-import { ensureNotificationPermission } from "./notificationPermission.ts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import { ReadBrowser } from "../effect/windowPorts.ts";
+
+// The permission the notification service asks for, against the native host's own answers (test-native-stub).
+const { useBrowser } = await import("../store/browserStore.ts");
+const { NotificationEngine, NotificationService } = await import("./notificationService.ts");
+const { Diagnostics } = await import("../effect/ports/diagnostics.ts");
+
+async function ensureNotificationPermission() {
+  const runtime = ManagedRuntime.make(
+    NotificationService.layer.pipe(Layer.provide(ReadBrowser.layer(useBrowser)), Layer.provide(Layer.mergeAll(NotificationEngine.layer, Diagnostics.layer))),
+  );
+
+  try {
+    return await runtime.runPromise(Effect.flatMap(NotificationService, (notifications) => notifications.ensurePermission()));
+  } finally {
+    await runtime.dispose();
+  }
+}
 
 beforeEach(() => {
   Object.assign(notificationState, { querySupported: true, permission: "granted", requested: false, queries: 0, requests: 0 });

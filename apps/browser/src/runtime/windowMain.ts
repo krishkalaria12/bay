@@ -5,7 +5,9 @@ import { quietLaunchTabs } from "../components/window/BlankTabSurface";
 import { registerWindowApplication } from "../windowEntry";
 import { startTranslate } from "../components/site/translateState";
 import { startAppIntegration } from "../lib/appMenuIntegration";
-import { startTabLifecycle } from "../lib/tabLifecycle";
+import * as Effect from "effect/Effect";
+import { runWindow } from "../effect/windowRuntime";
+import { PageLifecycleService } from "../lib/pageLifecycleService";
 import { startTabPages } from "../lib/tabNavigation";
 import { startWindowCloseGuard } from "../lib/windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
@@ -22,9 +24,12 @@ export function startWindowMain(windowId: string) {
   onCommand(runCommand);
   startWebShortcuts();
   startWindowCloseGuard();
+  // The window is not the coordinator: the extensions' own services and the application lifecycle belong to it.
   startExtensionsBridge({ sharedWindow: true });
   startTabPages();
-  startTabLifecycle();
+  void runWindow(Effect.flatMap(PageLifecycleService, (lifecycle) => lifecycle.start)).catch((error) =>
+    console.error("The window's page lifecycle could not start", error),
+  );
   startTranslate();
   startAppIntegration({ sharedWindow: true });
   registerWindowApplication();

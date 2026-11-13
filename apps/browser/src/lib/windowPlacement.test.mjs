@@ -138,6 +138,23 @@ if (!process.env.BAY_PLACEMENT_CHILD) {
     }
   });
 
+  test("a save writes only the placement the host can restore", async () => {
+    const { store, id } = setup();
+    const extra = { fullscreen: true, minimized: true, position: [99, 88] };
+
+    store.setState((s) => ({ windows: { ...s.windows, [id]: { ...s.windows[id], ...extra } } }));
+    store.getState().closeWindow(store.getState().createWindow({ frame, url: "https://closed.example/" }));
+    const closed = store.getState().closedWindows.at(-1);
+    store.setState({ closedWindows: [...store.getState().closedWindows.slice(0, -1), { ...closed, window: { ...closed.window, frame, ...extra } }] });
+    const disk = await save(store);
+
+    for (const w of [disk.windows[0], disk.closedWindows.at(-1).window]) {
+      assert.deepEqual(w.frame, global ? frame : null);
+
+      if (!global) for (const key of Object.keys(extra)) assert.equal(key in w, false, `${key} stays off disk`);
+    }
+  });
+
   test("malformed and sparse size tuples are never restored or forwarded", () => {
     for (const size of [[0, 1], [-1, 1], [1, Infinity], [1, NaN], [1, "2"], [1], [1, 2, 3], Array(2), null, { width: 1, height: 2 }]) {
       assert.deepEqual(restoredWindowPlacement({ frame: null, size, maximized: "true" }), {});

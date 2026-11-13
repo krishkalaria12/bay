@@ -2,6 +2,8 @@
 // from it is still running. Only an installed layout has the `.leases` folder: a dev run from the source tree doesn't.
 import { closeSync, mkdirSync, openSync, realpathSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
+import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 
 type Lease = { release: () => Promise<void> };
 
@@ -34,6 +36,9 @@ export function takeLease(): Lease {
     return NONE;
   }
 }
+
+/** The lease, for the scope: taken when it opens and given back when it closes, however the command ended. */
+export const leased: Effect.Effect<void, never, Scope.Scope> = Effect.acquireRelease(Effect.sync(takeLease), (lease) => Effect.promise(() => lease.release()));
 
 // Kept for the installer's copy of the layout rule.
 export function leaseRoot(execPath: string): string {

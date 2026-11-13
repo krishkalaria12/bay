@@ -3,8 +3,6 @@ import {
   findBang,
   customBangTable,
   joinBangTables,
-  createCurrencyConverter,
-  createSuggestFetcher,
   engineById,
   findScope,
   hostOf,
@@ -15,12 +13,12 @@ import {
   type SearchScope,
   type SuggestionResult,
 } from "@bay/core";
+import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useState } from "react";
-import { isMac } from "@bay/platform";
-import { engineCall } from "@bay/chromium";
+import { runWindow } from "../../effect/windowRuntime";
 import { bookmarksByUrl } from "../../store/bookmarks";
-import { useBrowserRead as useBrowser } from "../../store/read";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { bookmarkSpaceId } from "../../store/model";
 import { cleanedTabsFor } from "../../store/tabTidying";
 import { defaultSearchEngine, searchEngines } from "../../store/settings";
@@ -36,7 +34,8 @@ import { currentBarActions } from "./commandBarActions";
 import { mayBeBang, useBangs } from "./bangs";
 import { NO_HISTORY } from "../../store/constants";
 import { SUGGEST_WARM_SLICE_MS } from "./constants";
-import { createSuggestionFetch, suggestionProfile } from "./suggestFetch";
+import { SearchService, type Search } from "./searchService";
+import { suggestionProfile } from "./suggestFetch";
 
 const NO_REMOTE: string[] = [];
 const EMPTY: SuggestionResult = { items: [], completion: "" };
@@ -137,6 +136,23 @@ function remoteFor(remote: { text: string; list: string[] }, query: string): str
   return remote.list.filter((s) => s.toLowerCase().startsWith(q));
 }
 
+// MARK: The search work
+
+// Each mounted command bar is its own session: its own requests, its own in-flight work.
+let sessions = 0;
+
+const nextSession = () => `suggestions-${++sessions}`;
+
+/** Runs a piece of the search work on the app's runtime. */
+const withSearch = (work: (search: Search) => Effect.Effect<void>): Promise<void> =>
+  runWindow(
+    Effect.gen(function* () {
+      const search = yield* SearchService;
+
+      yield* work(search);
+    }),
+  );
+
 export function useSuggestions({
   text,
   active,
@@ -191,45 +207,33 @@ export function useSuggestions({
   }, [source]);
 
   const [remote, setRemote] = useState<{ text: string; list: string[] }>({ text: "", list: [] });
-  const fromEngine = suggestEngine(scope, engines, engine);
-  // Built-in suggestions carry no profile state or cookies. Extension endpoints
-  // are checked against the profile that registered that exact engine record.
-  const nativeProfile = useBrowser((s) => suggestionProfile(fromEngine, s.settings.extensionSearchEngines ?? []));
-
-  const fetcher = useMemo(
-    () =>
-      createSuggestFetcher({
-        fetch: createSuggestionFetch(
-          (url, init) => fetch(url, init),
-          isMac
-            ? undefined
-            : (url) =>
-                nativeProfile === null
-                  ? Promise.reject(new Error("The search extension profile is unavailable"))
-                  : engineCall("nn_search_suggestions", nativeProfile, { url, client: windowId }),
-        ),
-      }),
-    [nativeProfile, windowId],
-  );
-
+  const [session] = useState(nextSession);
   const query = text.trim();
   const [currency, setCurrency] = useState<CurrencyAnswer | null>(null);
-  const [convertCurrency] = useState(() => createCurrencyConverter({ fetch: (url, init) => fetch(url, init) }));
   useEffect(() => {
-    if (!active || !calculatorEnabled || scope || !parseCurrency(query)) return;
-    let cancelled = false;
+    // A query that is not a currency asks for nothing, and drops the answer that is still on its way.
+    if (!active || scope || !parseCurrency(query)) {
+      void withSearch((search) => search.stopConversion(session));
 
+      return;
+    }
+
+    // The rates come after a moment: a query that is still being typed is not a currency yet.
     const timer = setTimeout(() => {
-      void convertCurrency(query).then((answer) => {
-        if (!cancelled) setCurrency(answer);
-      });
+      void withSearch((search) =>
+        search.convert(session, {
+          expression: query,
+          policy: calculatorEnabled ? "ask" : "off",
+          onResult: (answer) => setCurrency(answer),
+        }),
+      );
     }, 180);
 
     return () => {
-      cancelled = true;
       clearTimeout(timer);
+      void withSearch((search) => search.stopConversion(session));
     };
-  }, [active, calculatorEnabled, scope, query, convertCurrency]);
+  }, [active, calculatorEnabled, scope, query, session]);
   const bundledBangs = useBangs(active && bangsEnabled && !scope && query.includes("!"));
   const customBangs = useMemo(() => customBangTable(engines.filter((e) => e.custom)), [engines]);
 
@@ -240,18 +244,35 @@ export function useSuggestions({
 
   const bang = useMemo(() => (bangs ? findBang(query, bangs) : null), [bangs, query]);
   const pendingBang = bangsEnabled && !bundledBangs && mayBeBang(query);
+  const fromEngine = suggestEngine(scope, engines, engine);
+  // Built-in suggestions carry no profile state or cookies. An extension's engine is asked in the profile that
+  // registered that exact engine record.
+  const nativeProfile = useBrowser((s) => suggestionProfile(fromEngine, s.settings.extensionSearchEngines ?? []));
   useEffect(() => {
     const q = query.replace(/^\?/, "").trim();
+    // A query that is an address, a page's history or a bang is the app's own work: the engine is not asked.
+    const wanted = active && !!q && !/^[a-z][a-z0-9+.-]*:\/\//i.test(q) && scope?.kind !== "history" && !bang && !(!scope && pendingBang);
 
-    if (!active || !suggestionsOn || !q || /^[a-z][a-z0-9+.-]*:\/\//i.test(q) || scope?.kind === "history" || bang || (!scope && pendingBang)) {
-      fetcher.cancel();
+    if (!wanted) {
+      void withSearch((search) => search.stopSuggestions(session));
 
       return;
     }
 
-    fetcher.request(fromEngine, q, (list) => setRemote({ text: query, list }));
-  }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, fetcher]);
-  useEffect(() => () => fetcher.cancel(), [fetcher]);
+    void withSearch((search) =>
+      search.suggest(session, {
+        engine: fromEngine,
+        query: q,
+        policy: suggestionsOn ? "ask" : "off",
+        profile: nativeProfile,
+        client: windowId,
+        onResult: (list) => setRemote({ text: query, list }),
+      }),
+    );
+  }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, session, nativeProfile, windowId]);
+
+  // The palette closed: the work in flight goes with it, and the session is let go.
+  useEffect(() => () => void withSearch((search) => search.close(session)), [session]);
 
   if (!active || !query) return EMPTY;
 

@@ -32,17 +32,21 @@ test("one authority owns cleanup and data services across its windows, and dispo
     },
   });
   const owner = startCoordinatorServices({ store });
-  t.after(() => owner.dispose());
+  t.after(async () => {
+    owner.dispose();
+    await owner.settled;
+  });
   assert.equal(startCoordinatorServices({ store }), owner);
   emitAppEvent({ type: "resignActive" });
   emitAppEvent({ type: "screenLocked" });
   assert.equal(abandoned, 2);
   t.mock.timers.tick(AUTO_CLEAN_EVERY_MS);
   assert.equal(cleaned, 1);
-  await tick();
+  await owner.ready;
   assert.equal(useBrowser.getState(), legacy);
   owner.dispose();
   owner.dispose();
+  await owner.settled;
   assert.deepEqual(listeners(), before);
   const writes = t.mock.method(docs, "set");
   store.getState().updateSettings({ sidebarWidth: 345 });
@@ -67,8 +71,9 @@ test("background persistence preserves recovered state and acknowledges both fin
   store.getState().updateTab(tabId, { adoptId: "native-page" }, { progress: 0.7 });
   const hydrate = t.mock.method(store.getState(), "hydrate");
   const owner = startCoordinatorServices({ store });
-  t.after(() => {
+  t.after(async () => {
     owner.dispose();
+    await owner.settled;
     heldSaves.on = false;
     heldSaves.queue.length = 0;
   });

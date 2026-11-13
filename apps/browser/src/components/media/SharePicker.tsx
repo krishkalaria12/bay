@@ -1,12 +1,10 @@
-import { ScrollView } from "@bay/platform";
-import { Pressable, View } from "@bay/platform";
-import { getDisplayMediaSources, type DisplayMediaRequest, type DisplayMediaSource } from "@bay/chromium";
+import type { DisplayMediaRequest, DisplayMediaSource } from "@bay/chromium";
 import { runningAppIcon, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, View } from "@bay/platform";
 import { Text } from "react-native";
 import { Image } from "expo-image";
 import { useTheme } from "../../lib/theme";
-import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile } from "../../store/model";
 import { Popover, PromptButton } from "../toolbar/buttons";
@@ -14,7 +12,8 @@ import { usePages } from "../window/pageState";
 import { Favicon, useHover } from "../ui/primitives";
 import { noteTabShare } from "./ShareBar";
 import { useMedia } from "./state";
-import { SHARE_PICKER_WIDTH, SHARE_SOURCES_REFRESH_MS } from "./constants";
+import { withMedia } from "./cast";
+import { SHARE_PICKER_WIDTH } from "./constants";
 
 const TAB = "tab:";
 
@@ -31,77 +30,35 @@ function shareableTabs(tabId: string) {
     .sort((a, b) => (a.id === tabId ? 1 : b.id === tabId ? -1 : b.lastActiveAt - a.lastActiveAt));
 }
 
-type Pending = DisplayMediaRequest & { pageUrl: string };
-
+/** A page asks to share a screen: the picker shows its request until the user chooses. */
 export function requestDisplayMedia(tabId: string, request: DisplayMediaRequest) {
-  const pending = useMedia.getState().displayRequests[tabId];
-
-  if (request.cancelled) {
-    if (pending?.id === request.id)
-      useMedia.setState((m) => {
-        const displayRequests = { ...m.displayRequests };
-        delete displayRequests[tabId];
-
-        return { displayRequests };
-      });
-
-    return;
-  }
-
-  if (pending) void webviews.get(tabId)?.resolveDisplayMedia(pending.id, null);
-  const pageUrl = useBrowser.getState().tabs[tabId]?.url ?? "";
-  // SAFETY: Pending } })) assertion matches the runtime value validated at this call site.
-  useMedia.setState((m) => ({ displayRequests: { ...m.displayRequests, [tabId]: { ...request, pageUrl } as Pending } }));
+  void withMedia((media) => media.requestDisplayMedia(tabId, request));
 }
 
 // The NNCore acceptance run answers the picker as a click would.
 if (__DEV__)
-  // SAFETY: { nnSharePicker? assertion matches the runtime value validated at this call site.
+  // SAFETY: nnSharePicker is a dev-only debug handle on globalThis with no ambient declaration; production never reads this name.
   (globalThis as { nnSharePicker?: unknown }).nnSharePicker = {
     answerDisplayMedia: (tabId: string, sourceId: string | null) => answerDisplayMedia(tabId, sourceId),
     shareTab: (tabId: string, sharedTabId: string) => shareTab(tabId, sharedTabId),
   };
 
+/** Answers the tab's request with a screen, or with nothing. */
 export function answerDisplayMedia(tabId: string, sourceId: string | null) {
   const request = useMedia.getState().displayRequests[tabId];
 
-  if (!request) return;
-  void webviews.get(tabId)?.resolveDisplayMedia(request.id, sourceId);
-  useMedia.setState((m) => {
-    const displayRequests = { ...m.displayRequests };
-    delete displayRequests[tabId];
-
-    return { displayRequests };
-  });
+  if (request) void withMedia((media) => media.answerDisplayMedia(tabId, request.id, sourceId));
 }
 
-// Shares another tab: its capture id, read just before (a renderer change replaces it).
+// Shares another tab: the answer is for the request the picker showed, and for no other.
 async function shareTab(tabId: string, sharedTabId: string) {
   const request = useMedia.getState().displayRequests[tabId];
 
   if (!request) return;
-  const source = await webviews.get(sharedTabId)?.mediaCaptureSourceId();
 
-  // A newer request replaced this one meanwhile (and answered it): this choice was for the old one.
-  if (useMedia.getState().displayRequests[tabId] !== request) return;
+  const source = await withMedia((media) => media.shareTab(tabId, request.id, sharedTabId));
 
   if (source) noteTabShare(tabId, sharedTabId, request.origin);
-  answerDisplayMedia(tabId, source ?? null);
-}
-
-export function cancelDisplayMediaOnNavigation() {
-  const page = (url: string) => url.replace(/#.*$/, "");
-
-  return useBrowser.subscribe((s, prev) => {
-    if (s.tabs === prev.tabs) return;
-
-    // SAFETY: [string, Pending][]) { assertion matches the runtime value validated at this call site.
-    for (const [tabId, request] of Object.entries(useMedia.getState().displayRequests) as [string, Pending][]) {
-      const url = s.tabs[tabId]?.url;
-
-      if (url !== undefined && page(url) !== page(request.pageUrl)) answerDisplayMedia(tabId, null);
-    }
-  });
 }
 
 const hostOf = (origin: string) => {
@@ -124,14 +81,16 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
     if (!request) return;
     setSources(request.sources);
     setSelected(null);
-    let live = true;
-    const t = setInterval(() => void getDisplayMediaSources().then((next) => live && setSources(next)), SHARE_SOURCES_REFRESH_MS);
+    // The list stays fresh while the picker shows this request; the service stops when it closes or is answered.
+    const requestId = request.id;
+
+    void withMedia((media) => media.watchSources(tabId, requestId, setSources));
     // SAFETY: { focus? assertion matches the runtime value validated at this call site.
-    setTimeout(() => (list.current as { focus?: () => void } | null)?.focus?.(), 50);
+    const focus = setTimeout(() => (list.current as { focus?: () => void } | null)?.focus?.(), 50);
 
     return () => {
-      live = false;
-      clearInterval(t);
+      clearTimeout(focus);
+      void withMedia((media) => media.stopSources(tabId, requestId));
     };
   }, [request?.id]);
 

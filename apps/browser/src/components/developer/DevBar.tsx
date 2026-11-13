@@ -21,7 +21,7 @@ import { showUrlBarMenu } from "../commandBar/paste";
 import { useHover } from "../ui/primitives";
 import { copyPageUrl } from "../site/selection";
 import { HistoryButton, ReloadButton, TabProgressBar } from "../toolbar/Toolbar";
-import { copyScreenshot } from "./screenshot";
+import { copyScreenshot } from "../capture/state";
 import { toggleInspecting, useIsInspecting } from "./devMode";
 import { isLocalDevSite } from "./localDevSites";
 import { DEV_BAR_HEIGHT, STRIPE_GAP } from "./constants";

@@ -31,6 +31,7 @@ const WORDS = {
     optionShift: "⌥⇧",
     unlockMethod: "Touch ID or your login password",
     systemSettings: "System Settings",
+    secretStore: "the Keychain",
     yourOtherComputers: "your other Macs",
     yourComputer: "your Mac",
   },
@@ -43,6 +44,7 @@ const WORDS = {
     openFolderTitle: "Open in File Explorer",
     unlockMethod: "Windows Hello or your login password",
     systemSettings: "Settings",
+    secretStore: "Windows Credential Manager",
   },
   linux: {
     ...DESKTOP,
@@ -53,6 +55,7 @@ const WORDS = {
     openFolderTitle: "Open Folder",
     unlockMethod: "your login password",
     systemSettings: "system settings",
+    secretStore: "your desktop keyring",
   },
 };
 

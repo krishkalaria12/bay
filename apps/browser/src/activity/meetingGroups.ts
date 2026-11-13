@@ -1,23 +1,28 @@
+import { reportBrowserCommand } from "../runtime/commands";
 import { hasServiceClient, requestService } from "../runtime/serviceClient";
 import { confirm } from "@bay/desktop";
-import { reportBrowserCommand } from "../runtime/commands";
-import { addTabsToGroup, closeGroup, createGroup } from "../runtime/organizeActions";
-import { activate, newTab } from "../runtime/tabActions";
-import { browserRead } from "../store/read";
 import { useBrowser, type BrowserState, type BrowserStore } from "../store/browserStore";
-import type { BrowserProjection } from "../runtime/projection";
+import { browserRead } from "../store/read";
 import { changedIds } from "../store/recordDiff";
 import { activeTabId, pinnedPage } from "../store/model";
 import { groupOf } from "../store/tabTidying";
+import { addTabsToGroup, closeGroup, createGroup } from "../runtime/organizeActions";
+import { activate, newTab } from "../runtime/tabActions";
 import { connectCalendar, useCalendar } from "./calendar";
 import { eventForCall, isCalendarUrl, meetingOf, relatedLinks, type CalendarEvent } from "./meetings";
 import { everySlowly } from "../lib/throttledTimers";
 import { live, setMeetingGroup, updateCalendarSettings, useLive, type MeetingGroup } from "./activityStore";
 import { MEETING_CLEANUP_IDLE_MS, MEETING_FALLBACK_TITLE } from "./constants";
 
+/** Where a call's tab belongs: an existing group, or a new one to make. */
 type MeetingTarget = { groupId: string; add: boolean } | { meeting: Omit<MeetingGroup, "groupId"> };
 
-function meetingTarget(s: Pick<BrowserProjection, "tabs" | "groups">, tabId: string, event?: CalendarEvent | null): MeetingTarget {
+/** The group a call belongs in, in the store it is found in. */
+function meetingTarget(
+  s: Pick<import("../runtime/projection").BrowserProjection, "tabs" | "groups">,
+  tabId: string,
+  event?: CalendarEvent | null,
+): MeetingTarget {
   const tab = s.tabs[tabId];
   const call = tab && meetingOf(tab.url);
 
@@ -71,8 +76,12 @@ export async function groupCall(tabId: string, event?: CalendarEvent | null): Pr
   return groupId;
 }
 
-// Coordinator watchers use the authority directly so later changes in the same
-// notification see the group immediately, without a renderer command round trip.
+/**
+ * Groups a call in a named store.
+ *
+ * The coordinator owns the store, so the grouping happens there: a window asks for it over the command transport
+ * rather than grouping a tab in a store it does not own.
+ */
 export function groupCallInStore(browser: BrowserStore, tabId: string, event?: CalendarEvent | null): string {
   const target = meetingTarget(browser.getState(), tabId, event);
 
@@ -84,11 +93,35 @@ export function groupCallInStore(browser: BrowserStore, tabId: string, event?: C
 
   const groupId = browser.getState().createGroup([tabId], { name: target.meeting.title });
 
-  if (groupId) setMeetingGroup({ ...target.meeting, groupId });
+  if (groupId) setMeetingGroup({ groupId, ...target.meeting });
 
   return groupId;
 }
 
+/** Joins a meeting in a named store: the call's tab, and the links that go with it. */
+export function joinMeetingInStore(browser: BrowserStore, windowId: string, event: CalendarEvent, joinUrl: string, openAll = false) {
+  const s = browser.getState();
+
+  if (!s.windows[windowId] || s.windows[windowId]!.incognito) return;
+  const callTab = s.newTab(windowId, { url: joinUrl });
+  const grouped = s.settings.autoGroupMeetingTabs ? groupCallInStore(browser, callTab, event) : "";
+
+  if (openAll)
+    for (const url of relatedLinks(event)) {
+      const id = browser.getState().newTab(windowId, { url, background: true, openerId: callTab });
+
+      if (grouped && !groupOf(browser.getState(), id)) browser.getState().addTabsToGroup(grouped, [id]);
+    }
+
+  browser.getState().activate(callTab);
+}
+
+/**
+ * Joins a meeting.
+ *
+ * The tabs are the coordinator's, so they are opened over the command transport: a window asks, and the
+ * coordinator does it in the store it owns.
+ */
 export async function joinMeeting(windowId: string, event: CalendarEvent, joinUrl: string, openAll = false) {
   const s = browserRead.getState();
 
@@ -155,6 +188,7 @@ export function startMeetingGroups(browser: BrowserStore = useBrowser): () => vo
         }
       }),
     );
+    // The sweep for the groups that are ending: it runs on the app's shared grid, and stops with this watcher.
     cleanups.push(
       everySlowly({
         every: 30_000,
@@ -217,21 +251,4 @@ export function tick(s: BrowserState, now: number, browser?: BrowserStore) {
       else reportBrowserCommand(closeGroup(m.groupId));
     }
   }
-}
-
-export function joinMeetingInStore(browser: BrowserStore, windowId: string, event: CalendarEvent, joinUrl: string, openAll = false) {
-  const s = browser.getState();
-
-  if (!s.windows[windowId] || s.windows[windowId]!.incognito) return;
-  const callTab = s.newTab(windowId, { url: joinUrl });
-  const grouped = s.settings.autoGroupMeetingTabs ? groupCallInStore(browser, callTab, event) : "";
-
-  if (openAll)
-    for (const url of relatedLinks(event)) {
-      const id = browser.getState().newTab(windowId, { url, background: true, openerId: callTab });
-
-      if (grouped && !groupOf(browser.getState(), id)) browser.getState().addTabsToGroup(grouped, [id]);
-    }
-
-  browser.getState().activate(callTab);
 }

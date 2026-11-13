@@ -16,6 +16,11 @@ import { redact } from "./redact.ts";
 import { createSourceFile, isExpressionStatement, ScriptKind, ScriptTarget } from "typescript";
 import { ConnectionLost } from "./cdp.ts";
 import { type JsonValue } from "./util.ts";
+import * as Cause from "effect/Cause";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import type * as Scope from "effect/Scope";
 import * as v from "valibot";
 
 export const NO_PAGE_TAB = "the user isn't on a web page (New Tab or another Bay view); open one with new_tab(url) or pick one from tabs";
@@ -35,9 +40,14 @@ export class ExecTimeout extends Error {
   override name = "ExecTimeout";
 }
 
-export class ExecInterrupted extends Error {
-  override name = "ExecInterrupted";
+/** The run went wrong outside the user's code, and not for want of Bay. */
+export class ExecError extends Error {
+  override name = "ExecError";
 }
+
+// A failure outside the user's code: Bay's own, or the run's.
+const runError = <E>(error: E): EndpointError | ExecError =>
+  error instanceof EndpointError ? error : new ExecError(error instanceof Error ? error.message : String(error));
 
 export function createNoTab(message = NO_PAGE_TAB) {
   return new Proxy(
@@ -142,58 +152,88 @@ export function buildNamespace(session: Session, filename: string, dataRoot?: st
   return namespace;
 }
 
-export async function runCode(source: string, filename: string, endpoint: Endpoint, timeoutSeconds: number | null, dataRoot?: string): Promise<JsonValue> {
-  const fn = compileCode(source, filename);
-  const session = new Session(endpoint);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
-  let interrupt: (() => void) | undefined;
+/** How a run of the user's code can end, other than with its value. */
+export type RunFailure = UserCodeError | EndpointError | ExecTimeout | ExecError;
 
-  try {
-    await session.connect();
-    const namespace = buildNamespace(session, filename, dataRoot);
-    const active = await session.activeTarget();
-    const pageTabs = await session.pageTabs(active);
-    namespace.tabs.push(...pageTabs);
+// The connection to Bay, for the scope: it is closed when the scope closes, however the run ended.
+const connected = (endpoint: Endpoint): Effect.Effect<Session, EndpointError | ExecError, Scope.Scope> =>
+  Effect.gen(function* () {
+    const session = yield* Effect.acquireRelease(
+      Effect.sync(() => new Session(endpoint)),
+      (session) => Effect.promise(() => session.close()),
+    );
 
-    const current = await session.currentTab(pageTabs, active);
-    namespace.tab = current ?? createNoTab(NO_VISIBLE_TAB);
-
-    const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : 0;
-
-    const executePromise = (async () => {
-      try {
-        return await fn(namespace);
-      } catch (error) {
-        if (error instanceof ConnectionLost) throw new EndpointError(`lost the connection to ${session.lost()}`);
-        throw new UserCodeError(error instanceof Error ? error : new Error(String(error)), filename);
-      }
-    })();
-
-    const cdpClosedPromise = session.cdp.whenClosed().then(() => {
-      throw new EndpointError(`lost the connection to ${session.lost()}`);
+    yield* Effect.tryPromise({
+      try: () => session.connect(),
+      catch: runError,
     });
 
-    const interrupted = new Promise<never>((_, reject) => {
-      interrupt = () => reject(new ExecInterrupted("interrupted"));
+    return session;
+  });
 
-      for (const signal of signals) process.on(signal, interrupt);
-    });
+/**
+ * Runs the user's code against Bay and gives back its value. The connection is the run's: it closes when the run
+ * ends, whether the code finished, failed, timed out, lost Bay or was interrupted (Ctrl-C). The code itself is a
+ * promise the CLI cannot stop: an interrupted run stops waiting for it and closes the connection under it.
+ */
+export const runCodeEffect = (
+  source: string,
+  filename: string,
+  endpoint: Endpoint,
+  timeoutSeconds: number | null,
+  dataRoot?: string,
+): Effect.Effect<JsonValue, RunFailure> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const fn = compileCode(source, filename);
+      const session = yield* connected(endpoint);
+      const lost = () => new EndpointError(`lost the connection to ${session.lost()}`);
 
-    if (timeoutMs > 0) {
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new ExecTimeout(`timed out after ${timeoutSeconds}s`)), timeoutMs);
+      const prepare = Effect.tryPromise({
+        try: async () => {
+          const namespace = buildNamespace(session, filename, dataRoot);
+          const active = await session.activeTarget();
+          const pageTabs = await session.pageTabs(active);
+          namespace.tabs.push(...pageTabs);
+
+          const current = await session.currentTab(pageTabs, active);
+          namespace.tab = current ?? createNoTab(NO_VISIBLE_TAB);
+
+          return namespace;
+        },
+        catch: (error) => (error instanceof ConnectionLost ? lost() : runError(error)),
       });
 
-      return await Promise.race([executePromise, cdpClosedPromise, timeoutPromise, interrupted]);
-    }
+      const namespace = yield* prepare;
 
-    return await Promise.race([executePromise, cdpClosedPromise, interrupted]);
-  } finally {
-    if (interrupt) for (const signal of signals) process.off(signal, interrupt);
-    clearTimeout(timer);
-    await session.close();
-  }
+      const execute = Effect.tryPromise({
+        try: () => fn(namespace),
+        catch: (error) => (error instanceof ConnectionLost ? lost() : new UserCodeError(error instanceof Error ? error : new Error(String(error)), filename)),
+      });
+
+      // Bay closing the connection ends the run, whatever the code is waiting for.
+      const closed = Effect.promise(() => session.cdp.whenClosed()).pipe(Effect.andThen(Effect.fail(lost())));
+
+      const run = Effect.raceFirst(execute, closed);
+
+      if (!timeoutSeconds) return yield* run;
+
+      return yield* run.pipe(
+        Effect.timeoutOrElse({
+          duration: Duration.seconds(timeoutSeconds),
+          orElse: () => Effect.fail(new ExecTimeout(`timed out after ${timeoutSeconds}s`)),
+        }),
+      );
+    }),
+  );
+
+/** The same run, for a caller that wants a promise: a failure rejects with the error itself. */
+export async function runCode(source: string, filename: string, endpoint: Endpoint, timeoutSeconds: number | null, dataRoot?: string): Promise<JsonValue> {
+  const exit = await Effect.runPromiseExit(runCodeEffect(source, filename, endpoint, timeoutSeconds, dataRoot));
+
+  if (Exit.isSuccess(exit)) return exit.value;
+
+  throw Cause.squash(exit.cause);
 }
 
 export function formatValue<T>(value: T, asJson: boolean): string | null {
@@ -219,8 +259,9 @@ export function formatUserError(error: UserCodeError): string {
   return redact(stack);
 }
 
+// A syntax error is the transpiler's message: its stack is the CLI's own frames, not the user's code.
 export function formatSyntaxError(error: Error): string {
-  return redact(error.stack || `${error.name}: ${error.message}`);
+  return redact(`${error.name}: ${error.message}`);
 }
 
 export function printErr(text: string): void {

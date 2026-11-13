@@ -116,7 +116,11 @@ export function showPhraseEntry(folder: FolderInfo | null, onChooseFolder?: () =
   showSettingsSheet(<PhraseSheet folder={folder} onChooseFolder={onChooseFolder} />);
 }
 
-const phraseError = (r: Awaited<ReturnType<typeof enterRecoveryPhrase>>): string | null => {
+// The sync engine may refuse the phrase for its own reasons: it is paused while the app quits, and it may not open
+// the data it saved. The pane knows them all.
+type PhraseOutcome = Awaited<ReturnType<typeof enterRecoveryPhrase>> | { error: "quitting" | "savedData" };
+
+const phraseError = (r: PhraseOutcome): string | null => {
   if ("ok" in r) return null;
 
   switch (r.error) {
@@ -131,7 +135,7 @@ const phraseError = (r: Awaited<ReturnType<typeof enterRecoveryPhrase>>): string
     case "noData":
       return "There’s no synced data in this folder yet. Choose the folder your other devices sync to, or wait for it to finish downloading.";
     case "keychain":
-      return "Couldn’t save the sync key in your Keychain.";
+      return `Couldn’t save the sync key in ${platformWords.secretStore}.`;
     case "unavailable":
       return "Sync isn’t available in this build.";
     case "quitting":

@@ -12,6 +12,7 @@ import { parseServiceCommand } from "./serviceCommands";
 import { isUtilityWindowId } from "../components/settings/windows";
 import { checked } from "../lib/checked";
 import type { JsonInput } from "../lib/json";
+import { disposeWindowRuntime, installWindowRuntime } from "../effect/windowRuntime";
 
 export async function startWindowRuntimeEntry(transport: WindowRuntimeTransport<BrowserProjection, BrowserCommand, unknown>, onError: (error: Error) => void) {
   const client = createBrowserClient({ clientId: transport.bootstrap.clientId, transport });
@@ -20,6 +21,7 @@ export async function startWindowRuntimeEntry(transport: WindowRuntimeTransport<
   function dispose() {
     if (disposed) return;
     disposed = true;
+    void disposeWindowRuntime().catch((error) => console.error("The window's services could not stop", error));
     // The read, command and service clients stay installed until this document is replaced (they are
     // never uninstalled): returning to the local singleton would create a second writer after disconnect.
     client.close();
@@ -35,6 +37,7 @@ export async function startWindowRuntimeEntry(transport: WindowRuntimeTransport<
     installBrowserReadSource(createClientBrowserReadSource(client));
     installBrowserCommands(createClientBrowserCommands(client));
     installServiceClient((action, args) => client.dispatch(parseServiceCommand(checked<JsonInput>({ method: "serviceAction", action, args }))));
+    installWindowRuntime(windowId);
 
     const syncServices = () => {
       if (client.getStatus() === "closed") {

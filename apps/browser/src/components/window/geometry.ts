@@ -153,6 +153,10 @@ export const NO_TOOLBAR: ToolbarGeometry = {
   urlLeft: 8,
 };
 
+// No toolbar on the window's top-left pane with the sidebar on the right: the window buttons show over its corner on
+// hover, so what starts there (Developer Mode's bar, prompts) starts past them.
+export const NO_TOOLBAR_PAST_LIGHTS: ToolbarGeometry = { ...NO_TOOLBAR, urlLeft: TRAFFIC_LIGHTS_OFFSET };
+
 const noToolbars = new Map<number, ToolbarGeometry>();
 
 /** No toolbar, but developer bars and prompts must still clear the window's corners. */

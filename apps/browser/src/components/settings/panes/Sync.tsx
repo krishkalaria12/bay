@@ -1,7 +1,7 @@
-import { View, isMac } from "@bay/platform";
 import { showMenu, Symbol } from "@bay/desktop";
 import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState } from "react";
+import { isMac, View } from "@bay/platform";
 import { Linking, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useSpaces } from "../../../store/hooks";
@@ -21,6 +21,7 @@ import { SpaceBadge } from "../../spaces/icons";
 import { Button, Group, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { folderLabel, showConnectDevice, showPhraseEntry, showRecoveryKit, showStopSync } from "./SyncSheets";
+import { SyncStopped } from "../../../sync/service";
 import { platformWords } from "../../../lib/platformWords";
 
 export function SyncPane() {
@@ -214,8 +215,13 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
 
     if (choice === "kit") showRecoveryKit();
     else if (choice === "copy") await SyncNative?.copyRecoveryPhrase();
-    else if (choice === "now") await syncNow();
-    else if (choice === "reveal" && info) await SyncNative?.revealFolder(info.path);
+    else if (choice === "now") {
+      try {
+        await syncNow();
+      } catch (error) {
+        if (!(error instanceof SyncStopped)) throw error;
+      }
+    } else if (choice === "reveal" && info) await SyncNative?.revealFolder(info.path);
     else if (choice === "stop") showStopSync();
   };
 

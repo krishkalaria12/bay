@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 globalThis.__DEV__ = false;
 
-// The internal pages pull in the whole UI: a stand-in for them, and for the engine's task and system calls.
+// A stand-in for the engine's task and system calls.
 const nncore = new URL("../test-native-stub.mjs", import.meta.url).href;
 
 const stubs = {
@@ -14,7 +14,6 @@ const stubs = {
     export const onSystemState = () => ({ remove() {} });
     export const systemState = async () => ({ memoryPressure: "normal", physicalMemory: 8 * 2 ** 30, onBattery: false, lowPowerMode: false });
     export const releaseProfile = async () => {};`,
-  "../components/pages/index": "export const isInternalTab = (t) => !/^https?:/.test(t.url ?? '');",
 };
 
 registerHooks({
@@ -30,6 +29,21 @@ const { webviews } = await import("./webviews.ts");
 const lifecycle = await import("./tabLifecycle.ts");
 
 const S = () => useBrowser.getState();
+
+// What the lifecycle service does at launch (pageLifecycleService.ts), once: the Mac says what it has, the dev
+// handle goes in, and the tabs out of sight start their idle time as the windows change.
+let policyStarted = false;
+
+function startPolicy() {
+  if (policyStarted) return;
+  policyStarted = true;
+  lifecycle.noteSystem({ memoryPressure: "normal", physicalMemory: 8 * 2 ** 30, onBattery: false, lowPowerMode: false });
+  lifecycle.installLifecycleDevHandle();
+  lifecycle.trackShown();
+  useBrowser.subscribe((s, prev) => {
+    if (s.windows !== prev.windows || s.splits !== prev.splits) lifecycle.trackShown(s);
+  });
+}
 
 // A page in a tab: evaluate answers whether it has unsaved input.
 function fakePage() {
@@ -108,7 +122,7 @@ test("awake sites survive two idle hours and sleep last only under critical memo
   };
 
   for (const [id, page] of pages) load(id, page);
-  lifecycle.startTabLifecycle();
+  startPolicy();
   await new Promise((resolve) => setImmediate(resolve));
   // The largest Macs' timer (smaller ones': below).
   globalThis.nnLifecycle.simulate({ physicalMemory: 32 * 2 ** 30 });
@@ -160,7 +174,7 @@ test("warning pressure can reclaim a small recent session while keeping active, 
   const now = Date.now();
   t.mock.timers.enable({ apis: ["Date", "setInterval", "setTimeout"], now });
   globalThis.__DEV__ = true;
-  lifecycle.startTabLifecycle();
+  startPolicy();
   await new Promise((resolve) => setImmediate(resolve));
   S().hydrate({});
   const w = S().createWindow({ url: "https://active.example" });
@@ -213,12 +227,8 @@ test("warning pressure can reclaim a small recent session while keeping active, 
   }
 });
 
-test("pending startup preloads stop when memory or power conditions worsen", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  globalThis.__DEV__ = true;
-  lifecycle.startTabLifecycle();
-  await new Promise((resolve) => setImmediate(resolve));
-  globalThis.__DEV__ = false;
+test("pending startup preloads stop when memory or power conditions worsen", async () => {
+  startPolicy();
   const sys = { memoryPressure: "normal", physicalMemory: 8 * 2 ** 30, onBattery: false, lowPowerMode: false };
   S().hydrate({});
   const w = S().createWindow({ url: "https://shown.example" });
@@ -228,15 +238,15 @@ test("pending startup preloads stop when memory or power conditions worsen", asy
   try {
     for (const patch of [{ memoryPressure: "warning" }, { memoryPressure: "critical" }, { onBattery: true }, { lowPowerMode: true }]) {
       globalThis.nnLifecycle.simulate(sys);
-      assert.deepEqual(lifecycle.reloadRecentTabs(sys), [id]);
+      assert.deepEqual(lifecycle.recentTabsToReload(sys), [id]);
       globalThis.nnLifecycle.simulate(patch);
-      t.mock.timers.tick(2000);
+      lifecycle.wakeRecentTab(id, sys);
       assert.equal(S().tabs[id].navigation, null);
     }
 
     globalThis.nnLifecycle.simulate(sys);
-    assert.deepEqual(lifecycle.reloadRecentTabs(sys), [id]);
-    t.mock.timers.tick(2000);
+    assert.deepEqual(lifecycle.recentTabsToReload(sys), [id]);
+    lifecycle.wakeRecentTab(id, sys);
     assert.ok(S().tabs[id].navigation, "normal conditions still allow the preload");
   } finally {
     globalThis.nnLifecycle.simulate(null);
@@ -272,7 +282,7 @@ test("smaller Macs sleep background tabs sooner and keep fewer recent ones awake
     lifecycle.noteReady(id);
   }
 
-  lifecycle.startTabLifecycle();
+  startPolicy();
   await new Promise((resolve) => setImmediate(resolve));
   // A window change notes when each loaded background page was hidden.
   S().toggleSidebar(w);

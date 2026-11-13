@@ -1,8 +1,7 @@
-import { ScrollView } from "@bay/platform";
-import { Pressable, View } from "@bay/platform";
-import { killTask, listTasks, type EngineTask } from "@bay/chromium";
+import type { EngineTask } from "@bay/chromium";
 import { Symbol, WindowDragRegion } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, View } from "@bay/platform";
 import { StyleSheet, Text } from "react-native";
 import { Image } from "expo-image";
 import { switchToTab } from "../../lib/actions";
@@ -14,7 +13,8 @@ import type { Tab } from "../../store/types";
 import { usePages } from "../window/pageState";
 import { Favicon, useHover } from "../ui/primitives";
 import { Button, useFormColors } from "../settings/controls";
-import { TASK_POLL_MS, TASK_ROW_HEIGHT, TASK_TOOLBAR_HEIGHT } from "./constants";
+import { withMedia } from "../media/cast";
+import { TASK_ROW_HEIGHT, TASK_TOOLBAR_HEIGHT } from "./constants";
 
 type SortKey = "task" | "memory" | "cpu" | "gpu";
 
@@ -66,6 +66,9 @@ function taskRows(tasks: EngineTask[], tabs: Record<string, Tab>, browsers: Reco
   });
 }
 
+// Each open task manager is one listing of the engine's tasks.
+let nextListing = 0;
+
 export function TaskManagerWindow() {
   const theme = useTheme();
   const colors = useFormColors();
@@ -75,22 +78,13 @@ export function TaskManagerWindow() {
   const tabs = useBrowser((s) => s.tabs);
   const browsers = usePages((s) => s.browsers);
 
+  // The list is the media service's: it polls while a task manager is open, and stops when the last one closes.
   useEffect(() => {
-    let live = true;
+    const id = `task-manager-${(nextListing += 1)}`;
 
-    const poll = () =>
-      void listTasks().then(
-        (list) => live && setTasks(list),
-        () => {},
-      );
+    void withMedia((media) => media.watchTasks(id, setTasks));
 
-    poll();
-    const timer = setInterval(poll, TASK_POLL_MS);
-
-    return () => {
-      live = false;
-      clearInterval(timer);
-    };
+    return () => void withMedia((media) => media.stopTasks(id));
   }, []);
 
   const rows = taskRows(tasks, tabs, browsers, sort);
@@ -102,7 +96,9 @@ export function TaskManagerWindow() {
 
   const endProcess = () => {
     if (!selectedRow?.killable) return;
-    void killTask(selectedRow.id).then(() => listTasks().then(setTasks, () => {}));
+    const id = selectedRow.id;
+
+    void withMedia((media) => media.endTask(id));
     setSelected(null);
   };
 

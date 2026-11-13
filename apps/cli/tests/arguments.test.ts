@@ -4,6 +4,18 @@ import { resolve } from "node:path";
 const entry = resolve(import.meta.dir, "../bin/bay.ts");
 
 describe("CLI argument validation", () => {
+  it.each([
+    [["exec", "1", "ws://127.0.0.1:9222/devtools/browser/test?token=argument-secret-12345"]],
+    [["exec", "1", "--port", "ws://127.0.0.1:9222/devtools/browser/test?token=argument-secret-12345"]],
+  ])("redacts control tokens from parser errors for %j", (args: string[]) => {
+    const result = Bun.spawnSync([process.execPath, entry, ...args]);
+    const stderr = result.stderr.toString();
+
+    expect(result.exitCode).toBe(1);
+    expect(stderr).toContain("token=***");
+    expect(stderr).not.toContain("argument-secret-12345");
+  });
+
   it.each(
     [
       ["exec", "--port"],

@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 
-// The editor only needs showToast from the layout actions. Loading the rest would pull in native UI.
+// The editor only needs showToast from the layout actions. Loading the rest would pull in native UI. The Boosts
+// service comes from the app's runtime, which the test gives the editor as the one it asks.
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "../split/splitActions" && context.parentURL?.endsWith("/boosts/editor.ts")) {
-      return { url: "data:text/javascript,export const showToast = (...args) => globalThis.boostTestToasts.push(args)", shortCircuit: true };
+    if (context.parentURL?.endsWith("/boosts/editor.ts")) {
+      if (specifier === "../split/splitActions") {
+        return { url: "data:text/javascript,export const showToast = (...args) => globalThis.boostTestToasts.push(args)", shortCircuit: true };
+      }
+
+      if (specifier === "../../effect/runtime") {
+        return { url: "data:text/javascript,export const desktopRuntime = globalThis.boostTest.runtime", shortCircuit: true };
+      }
     }
 
     return next(specifier, context);
@@ -16,13 +25,27 @@ registerHooks({
 globalThis.boostTestToasts = [];
 
 const native = await import("../../test-native-stub.mjs");
+const { fakeDiagnostics, fakeDocuments } = await import("../../effect/testing.ts");
 const { useBrowser } = await import("../../store/browserStore.ts");
 const { webviews } = await import("../../lib/webviews.ts");
 const { exportBoost, newBoost } = await import("../../lib/boosts.ts");
 const { useBoosts, startBoosts } = await import("./state.ts");
+const { BoostEngine, BoostsService } = await import("./service.ts");
+
+// The service the editor asks for: the real one, over the page the test counts on.
+globalThis.boostTest = {
+  runtime: ManagedRuntime.make(BoostsService.layer.pipe(Layer.provide(Layer.mergeAll(BoostEngine.layer, fakeDocuments().layer, fakeDiagnostics().layer)))),
+};
+
 const editor = await import("./editor.ts");
+const { installServiceClient } = await import("../../runtime/serviceClient.ts");
 const S = () => useBrowser.getState();
 const E = () => editor.useBoostEditor.getState();
+
+// Lets the work the editor started finish: the count goes through the service to the page and back.
+const settle = async () => {
+  for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+};
 
 function setup() {
   editor.useBoostEditor.setState({ sessions: {} });
@@ -185,7 +208,7 @@ function countingPage() {
 
   const answer = async (index, counts) => {
     pending[index].resolve(counts);
-    await new Promise((resolve) => setImmediate(resolve));
+    await settle();
   };
 
   return { tabId, pending, answer };
@@ -194,6 +217,7 @@ function countingPage() {
 test("counts requested for A cannot populate B after switching boosts", async () => {
   const { tabId, pending, answer } = countingPage();
   editor.switchEditorBoost(tabId, "b");
+  await settle();
   assert.equal(pending.length, 2);
   await answer(0, [7]);
   assert.deepEqual(E().sessions[tabId].counts, {});
@@ -204,6 +228,7 @@ test("counts requested for A cannot populate B after switching boosts", async ()
 test("the newest count request wins when evaluations complete out of order", async () => {
   const { tabId, answer } = countingPage();
   const latest = editor.refreshCounts(tabId);
+  await settle();
   await answer(1, [9]);
   await latest;
   await answer(0, [1]);
@@ -214,9 +239,21 @@ test("closing and reopening the same boost invalidates its earlier count request
   const { tabId, answer } = countingPage();
   editor.closeBoostEditor(tabId);
   editor.openBoostEditor(tabId, { boostId: "a" });
+  await settle();
   await answer(1, [4]);
   await answer(0, [99]);
   assert.deepEqual(E().sessions[tabId].counts, { ".a": 4 });
+});
+
+test("a count that comes back after the editor closed cannot patch it", async () => {
+  const { tabId, answer } = countingPage();
+
+  editor.closeBoostEditor(tabId);
+
+  await settle();
+  await answer(0, [7]);
+
+  assert.equal(E().sessions[tabId], undefined, "the closed editor is given no answer");
 });
 
 for (const navigation of ["same-host URL", "same-URL navigation request", "loading start"]) {
@@ -227,9 +264,11 @@ for (const navigation of ["same-host URL", "same-URL navigation request", "loadi
     else if (navigation === "same-URL navigation request") {
       useBrowser.setState((s) => ({ tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], navigation: { url: s.tabs[tabId].url, seq: 12345 } } } }));
     } else useBrowser.setState((s) => ({ live: { ...s.live, [tabId]: { ...s.live[tabId], isLoading: true } } }));
+    await settle();
     await answer(0, [99]);
     assert.deepEqual(E().sessions[tabId].counts, {});
     const latest = editor.refreshCounts(tabId);
+    await settle();
     await answer(1, [2]);
     await latest;
     assert.deepEqual(E().sessions[tabId].counts, { ".a": 2 });
@@ -240,6 +279,7 @@ test("unrelated tab title and editor view updates keep a valid count request", a
   const { tabId, answer } = countingPage();
   useBrowser.setState((s) => ({ tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], title: "Updated title" } } }));
   editor.setEditorView(tabId, "code");
+  await settle();
   await answer(0, [5]);
   assert.deepEqual(E().sessions[tabId].counts, { ".a": 5 });
 });
@@ -348,4 +388,23 @@ test("a file dialog that's busy or can't save says so, and a cancelled one says 
   assert.deepEqual(globalThis.boostTestToasts.at(-1).slice(1, 3), ["Couldn't Import the Boost", "Finish with the open file dialog first."]);
   native.shellDialogAnswers.saveTextFile = saveTextFile;
   native.shellDialogAnswers.openTextFile = openTextFile;
+});
+
+test("a window that only reads the app's state says Boosts are unavailable and changes nothing", async () => {
+  const { tabId } = setup();
+  const before = useBoosts.getState();
+  const stopClient = installServiceClient(async () => null);
+
+  try {
+    assert.equal(editor.canBoost(tabId), false);
+    editor.openBoostEditor(tabId);
+    assert.equal(E().sessions[tabId], undefined);
+    assert.deepEqual(globalThis.boostTestToasts.at(-1).slice(1, 3), ["Boosts Are Unavailable", "Boost editing is not supported in this window yet."]);
+    await editor.importBoostFile(tabId);
+    editor.toggleSiteBoosts(tabId);
+    assert.equal(useBoosts.getState(), before);
+    assert.equal(globalThis.boostTestToasts.length, 1);
+  } finally {
+    stopClient();
+  }
 });

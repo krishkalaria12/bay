@@ -9,6 +9,11 @@ import * as stub from "../../test-native-stub.mjs";
 
 const S = () => useBrowser.getState();
 
+// The terminal control asks the native side at its own pace: the test waits for the calls it expects.
+const until = async (check, tries = 50) => {
+  for (let i = 0; i < tries && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 5));
+};
+
 beforeEach(() => {
   S().hydrate({});
   usePages.setState({ pages: {}, browsers: {}, chromeTabs: {} });
@@ -94,26 +99,27 @@ test("newer control requests win and policy revocation switches the setting off"
   const pending = [];
   stub.cliControlAnswers.call = (on) =>
     on === undefined ? Promise.resolve({ state: "off", generation: 0 }) : new Promise((resolve) => pending.push({ on, resolve }));
-  startCliControl();
-  await Promise.resolve();
+  await startCliControl();
   S().updateSettings({ cliControl: true });
   S().updateSettings({ cliControl: false });
+  await until(() => pending.length >= 2);
   assert.deepEqual(
     pending.map((call) => call.on),
     [true, false],
   );
+  // The later answer settles first, and wins: the earlier one is stale.
   pending[1].resolve({ state: "off", generation: 2 });
-  await Promise.resolve();
+  await until(() => useCli.getState().server?.generation === 2);
   pending[0].resolve({ state: "on", generation: 1 });
-  await Promise.resolve();
+  await until(() => useCli.getState().server?.generation === 2);
   assert.equal(useCli.getState().server.state, "off");
   S().updateSettings({ cliControl: true });
+  await until(() => pending.length >= 3);
   pending[2].resolve({ state: "on", generation: 3 });
-  await Promise.resolve();
+  await until(() => stub.cliActiveCalls.at(-1) === 81);
   assert.equal(stub.cliActiveCalls.at(-1), 81);
   stub.emitCliControl({ state: "off", generation: 4, reason: "Disabled by policy" });
+  await until(() => S().settings.cliControl === false);
   assert.equal(S().settings.cliControl, false);
   assert.equal(useCli.getState().server.reason, "Disabled by policy");
-  pending[3].resolve({ state: "off", generation: 4, reason: "Disabled by policy" });
-  await Promise.resolve();
 });

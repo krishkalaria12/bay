@@ -1,9 +1,8 @@
-import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/desktop";
-import { useEffect } from "react";
+import { Pressable, View } from "@bay/platform";
 import { ActivityIndicator, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
-import { installUpdate, updateTitle, usePendingUpdate, watchPendingUpdate } from "../../lib/updates";
+import { installUpdate, updateTitle, usePendingUpdate } from "../../lib/updates";
 import { useHover } from "../ui/primitives";
 
 /** The row over the sidebar's foot while an update waits (as Arc's): "Update Bay", "Downloading Update…" with a spinner
@@ -11,8 +10,6 @@ import { useHover } from "../ui/primitives";
 export const UPDATE_ROW_HEIGHT = 40;
 
 export function useUpdateRowShown() {
-  useEffect(watchPendingUpdate, []);
-
   return usePendingUpdate((u) => !!u.pending);
 }
 

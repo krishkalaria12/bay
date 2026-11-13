@@ -18,8 +18,10 @@ import { installErrorReporting, startTelemetry } from "../telemetry";
 import { startApplicationLifecycle } from "../lib/appMenuIntegration";
 import { startCliControl } from "../components/cli/driverControl";
 import { startUserScripts } from "../components/cli/userScripts";
-import { requestOnboarding } from "./onboardingRequest";
+import { requestOnboarding, type OnboardingRequest } from "./onboardingRequest";
+import type { OnboardingStep } from "../components/onboarding/state";
 
+/** The coordinator's own document: it holds the writable store, the app's services and the native shell. */
 export async function startCoordinatorEntry(transport: BrowserCoordinatorTransport, onError: (error: Error) => void) {
   const store = useBrowser;
   // Before anything saves: a new install's first window writes a session of its own.
@@ -63,7 +65,7 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
             if (state.windows !== previous.windows) refresh();
           }),
         );
-        // Telemetry persistence and application upgrades have one owner too.
+        // Telemetry has one owner too: its client stops with the coordinator.
         stops.push(startTelemetry());
       } catch (error) {
         for (const stop of stops.reverse()) stop();
@@ -71,6 +73,9 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
       }
 
       return {
+        get settled() {
+          return persistence.settled;
+        },
         flush: persistence.flush,
         resume: persistence.resume,
         dispose() {
@@ -89,13 +94,14 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
     // Before the windows open: a first run's window then starts on onboarding rather than showing the browser first.
     startApplicationLifecycle({
       returning,
-      start(step, picked) {
+      start(step: OnboardingStep, picked: OnboardingRequest["picked"]) {
         const windowId = resolveWindowId(store.getState());
 
         if (windowId) requestOnboarding(windowId, step, picked);
       },
     });
     await coordinator.announceReady();
+    // The coordinator's own document holds no pages: the windows tell the engine which tab is shown.
     startCliControl({ activeTab: false });
     startUserScripts();
 

@@ -1,4 +1,3 @@
-import { restorableClosedEntry, restorableClosedWindow, restorableWindow } from "../store/windowPlacement";
 import { cancelDownload, endWebKitPrivateSession, isJsReload, type Download } from "@bay/chromium";
 import { readDocument, saveDocument, writeDocument } from "@bay/desktop";
 import { useBrowser, type BrowserState, type BrowserStore, type HydrateData } from "../store/browserStore";
@@ -6,15 +5,20 @@ import { inPinnedContainer, isIncognitoSpace, makeTab, newId, snapshotTab } from
 import type { BrowserWindow, ClosedTab, Tab, TabSnapshot } from "../store/types";
 import { isolateSavedSpaces } from "../store/spaces";
 import { normalizeLocalFiles } from "../store/localFiles";
-import { startLibrary } from "../components/library/state";
-import { startBoosts } from "../components/boosts/state";
-import { createFaviconService, startFavicons } from "./favicons";
-import { createBookmarksService, startBookmarks } from "./bookmarks";
-import { createHistoryService, startHistory } from "./history";
-import { createProfileDataCleanup, startProfileDataCleanup } from "./profileCleanup";
+import { restorableClosedEntry, restorableClosedWindow, restorableWindow } from "../store/windowPlacement";
 import { PERSIST_VERSION, SAVE_DELAY_MS } from "./constants";
+import { startBoosts } from "../components/boosts/state";
+import { readLibrary } from "../components/library/libraryService";
+import { createFaviconService } from "./favicons";
+import type { SavedDocument } from "./savedDocument";
 
-type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
+// The app's documents: what they hold and how they are written, and the saving that writes them.
+//
+// The saving is the app's one writer. There is one owner per store, one subscription to that store, one timer and
+// one quit handshake: the coordinator (runtime/services.ts) owns it, and a second start for the same store finds the
+// same owner, so a session is never written twice.
+
+export type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
 
 const serialized =
   <T>(serialize: (s: BrowserState) => T) =>
@@ -57,6 +61,7 @@ function objectJson(fields: [string, string | undefined][]): string {
 /** session.json's document. */
 export function sessionJson(s: BrowserState): string {
   // Private windows, Little Bay and peeks aren't restored: closing (or quitting) throws their pages away.
+  // A host without global coordinates writes only the placement it can restore: size and maximized, never a frame.
   const windows = Object.values(s.windows)
     .filter((w) => !w.incognito && w.kind !== "small")
     .map(restorableWindow);
@@ -102,7 +107,7 @@ export function sessionJson(s: BrowserState): string {
   ]);
 }
 
-const DOCS: Doc[] = [
+export const DOCS: Doc[] = [
   {
     name: "downloads.json",
     sources: (s) => [s.downloads],
@@ -150,14 +155,6 @@ function read<T>(name: string): T | null {
   }
 }
 
-function write(name: string, json: string) {
-  try {
-    writeDocument(name, json);
-  } catch (error) {
-    console.warn(`Couldn't save ${name}`, error);
-  }
-}
-
 const byId = <T extends { id: string }>(list: T[] | undefined) => Object.fromEntries((list ?? []).map((x) => [x.id, x]));
 
 type SessionV2 = {
@@ -191,6 +188,7 @@ type SessionV2 = {
   cleanedTabs?: BrowserState["cleanedTabs"];
 };
 
+/** A record that named its space by its old id: the space it belongs to now. */
 function locatedInSpace<T extends { spaceId: string }>(value: T & { profileId?: string }): T {
   const { profileId, ...current } = value;
 
@@ -394,87 +392,202 @@ export function loadSession(): HydrateData | null {
   return data;
 }
 
+/**
+ * The saved session no longer matches the store: the spaces were isolated, or the file was written by an older
+ * version. The session is written again before anything else.
+ */
+export function sessionNeedsRewrite(session: HydrateData | null, store: BrowserStore = useBrowser): boolean {
+  if (!session?.spaces) return false;
+
+  if (!read<SessionV2>("session.json")?.spaces) return true;
+
+  const spaces = store.getState().spaces;
+
+  return Object.entries(session.spaces).some(([id, space]) => space.profileId !== spaces[id]?.profileId);
+}
+
+/** A private window's downloads and its pages' site data go with it. */
+export function forgetClosedIncognito(s: BrowserState, prev: BrowserState) {
+  for (const w of Object.values(prev.windows)) {
+    if (!w.incognito || s.windows[w.id]) continue;
+
+    for (const d of s.downloads) if (d.profile === w.spaceId && d.state === "downloading") void cancelDownload(d.id);
+    s.forgetDownloads(w.spaceId);
+    // Its WebKit pages' cookies and site data, kept in memory for the window, go with it.
+    void endWebKitPrivateSession(w.spaceId);
+  }
+}
+
+// MARK: The saving
+
+/** The app's saving, as the quit handshake and the runtime reach it. */
 export type PersistenceOwner = {
+  /** Writes every document that changed, now. */
   flush(options?: { final?: boolean }): Promise<void>;
+  /** The quit was cancelled: saving goes on, starting with what changed meanwhile. */
   resume(): void;
+  /** Gives the saving back: the subscription, the timer and the services it holds. */
   dispose(): void;
 };
 
-/** Restore disk state before creating the shared authority. Recovery skips this. */
+/** Loads the saved session into the given store and returns it. */
 export function restoreBrowserSession(store: BrowserStore) {
   const session = loadSession();
+
   store.getState().hydrate(session ?? {});
-  startLibrary();
+  readLibrary();
   startBoosts();
 
   return session;
 }
 
-/** Owns session/download persistence for one authority store. Global history,
- * bookmark, favicon and profile services are started separately by its caller.
- */
-export function createPersistence({ store, restoreSession = true }: { store: BrowserStore; restoreSession?: boolean }): PersistenceOwner {
-  const session = restoreSession ? restoreBrowserSession(store) : null;
+/** What one store's saving holds: the owner itself, and what it has to give back. */
+type Saved = {
+  readonly owner: PersistenceOwner;
+  /** The stops the saving holds: the store subscription, the timer and the services it started. */
+  readonly stops: (() => void)[];
+  /** Adds documents another store keeps, so they are written with the session's. */
+  readonly addDocuments: (documents: readonly SavedDocument[]) => void;
+  /** Whether the store's own services (the favicons) are running. */
+  services: boolean;
+};
+
+/** The saving each store has. One store, one owner: a second start finds the first. */
+const saved = new WeakMap<BrowserStore, Saved>();
+
+const writeNow = (name: string, json: string): boolean => {
+  try {
+    writeDocument(name, json);
+
+    return true;
+  } catch (error) {
+    console.warn(`Couldn't save ${name}`, error);
+
+    return false;
+  }
+};
+
+function createSaved({ store, restoreSession, documents }: { store: BrowserStore; restoreSession: boolean; documents: readonly SavedDocument[] }): Saved {
+  // What the saving remembers between changes: the last source values it compared, the last contents it wrote, and
+  // the documents it still owes.
   const lastSources = new Map<string, unknown[]>();
   const lastJson = new Map<string, string>();
   const dirty = new Set<Doc>();
+  const dirtyOther = new Set<SavedDocument>();
+  const extra = new Set<SavedDocument>();
+  const stops: (() => void)[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let generation = 0;
-  let finalFlush: Promise<void> | null = null;
+  // From the quit's last save until the quit ends or is called off: what the quit itself does to the store is never saved.
   let frozen = false;
   let disposed = false;
+  // A generation counts the writes that are still on their way: a resumed save does not answer for the frozen one.
+  let generation = 0;
+  let finalFlush: Promise<void> | null = null;
+  let finalSnapshot: BrowserState | undefined;
 
-  function save(final = false, snapshot = store.getState()): Promise<void> {
+  // The write the disk acknowledges: the quit waits for it, so the session is on disk before the app goes.
+  const acknowledge = (name: string, json: string, saving: number, failed: () => void): Promise<void> => {
+    let written: Promise<void>;
+
+    try {
+      written = Promise.resolve(saveDocument(name, json));
+    } catch (error) {
+      written = Promise.reject(error);
+    }
+
+    return written.then(
+      () => {
+        if (!disposed && saving === generation) lastJson.set(name, json);
+      },
+      (error) => {
+        // A write that fails stays owed: the next save tries it again.
+        if (!disposed && saving === generation) {
+          lastJson.delete(name);
+          failed();
+        }
+
+        throw error;
+      },
+    );
+  };
+
+  const save = (final = false, snapshot = store.getState()): Promise<void> => {
     clearTimeout(timer);
     timer = undefined;
 
     if (disposed) return Promise.reject(new Error("Persistence owner is disposed"));
 
     if (frozen && !final) return finalFlush ?? Promise.resolve();
-    const savingGeneration = generation;
+
+    const saving = generation;
     const pending: Promise<void>[] = [];
 
-    for (const doc of DOCS.filter((d) => final || dirty.has(d))) {
+    for (const doc of DOCS) {
+      if (!final && !dirty.has(doc)) continue;
+
       const json = doc.json(snapshot);
 
       if (final) {
-        // Re-save every final document, including a previous background write
-        // whose completion is otherwise unknown on an asynchronous host.
-        let saved: Promise<void>;
-
-        try {
-          saved = Promise.resolve(saveDocument(doc.name, json));
-        } catch (error) {
-          saved = Promise.reject(error);
-        }
-
+        // The quit's last write: every document is written again, and the disk acknowledges each one.
         pending.push(
-          saved.then(
-            () => {
-              if (!disposed && savingGeneration === generation) lastJson.set(doc.name, json);
-            },
-            (error) => {
-              if (!disposed && savingGeneration === generation) {
-                lastJson.delete(doc.name);
-                dirty.add(doc);
-              }
-
-              throw error;
-            },
-          ),
+          acknowledge(doc.name, json, saving, () => {
+            dirty.add(doc);
+          }),
         );
-      } else if (lastJson.get(doc.name) !== json) {
-        lastJson.set(doc.name, json);
-        write(doc.name, json);
+        continue;
       }
+
+      if (lastJson.get(doc.name) === json) {
+        dirty.delete(doc);
+        continue;
+      }
+
+      if (!writeNow(doc.name, json)) continue;
+
+      lastJson.set(doc.name, json);
+      dirty.delete(doc);
     }
 
-    dirty.clear();
+    for (const doc of final ? extra : dirtyOther) {
+      const json = doc.json();
 
-    return Promise.all(pending).then(() => {});
-  }
+      if (lastJson.get(doc.name) === json) {
+        dirtyOther.delete(doc);
+        continue;
+      }
 
-  function check(state: BrowserState, initial = false) {
+      if (final) {
+        pending.push(
+          acknowledge(doc.name, json, saving, () => {
+            dirtyOther.add(doc);
+          }),
+        );
+        continue;
+      }
+
+      if (!writeNow(doc.name, json)) continue;
+
+      lastJson.set(doc.name, json);
+      dirtyOther.delete(doc);
+    }
+
+    // A failed acknowledgement does not mean the other accepted native writes have settled yet.
+    return Promise.allSettled(pending).then((results) => {
+      const failed = results.find((result) => result.status === "rejected");
+
+      if (failed?.status === "rejected") throw failed.reason;
+    });
+  };
+
+  const saveSoon = () => {
+    if (frozen || timer) return;
+
+    timer = setTimeout(() => {
+      void save().catch((error) => console.warn("Couldn't save the session", error));
+    }, SAVE_DELAY_MS);
+  };
+
+  const check = (state: BrowserState, initial = false) => {
     if (disposed || frozen) return;
 
     for (const doc of DOCS) {
@@ -487,51 +600,60 @@ export function createPersistence({ store, restoreSession = true }: { store: Bro
       if (!initial) dirty.add(doc);
     }
 
-    if (dirty.size && !timer)
-      timer = setTimeout(() => {
-        try {
-          void save().catch((error) => console.warn("Couldn't save the session", error));
-        } catch (error) {
-          console.warn("Couldn't save the session", error);
-        }
-      }, SAVE_DELAY_MS);
-  }
+    if (dirty.size) saveSoon();
+  };
+
+  // Another store's document changed: it is written with the session's, after the same wait.
+  // While the quit is saving, the change waits: a cancelled quit writes it when saving resumes.
+  const otherChanged = (doc: SavedDocument) => {
+    dirtyOther.add(doc);
+
+    saveSoon();
+  };
+
+  const addDocuments = (documents: readonly SavedDocument[]) => {
+    for (const doc of documents) {
+      if (extra.has(doc)) continue;
+      extra.add(doc);
+      stops.push(doc.watch(() => otherChanged(doc)));
+    }
+  };
+
+  addDocuments(documents);
+
+  const session = restoreSession ? restoreBrowserSession(store) : null;
 
   check(store.getState(), true);
 
   // A session saved with profiles, or before its spaces were isolated, is written once in its current shape.
-  if (
-    session?.spaces &&
-    (!read<SessionV2>("session.json")?.spaces ||
-      Object.entries(session.spaces).some(([id, space]) => space.profileId !== store.getState().spaces[id]?.profileId))
-  ) {
+  if (session?.spaces && sessionNeedsRewrite(session, store)) {
     dirty.add(DOCS.find((doc) => doc.name === "session.json")!);
 
-    try {
-      void save().catch((error) => console.warn("Couldn't save the session", error));
-    } catch (error) {
-      console.warn("Couldn't save the session", error);
-    }
+    void save().catch((error) => console.warn("Couldn't save the session", error));
   }
 
   const unsubscribe = store.subscribe((_state, previous) => {
-    // Space/private-window cleanup can produce nested updates before this
-    // subscriber runs, so save the current state rather than the outer event.
+    // Space/private-window cleanup can produce nested updates before this subscriber runs, so save the current
+    // state rather than the outer event.
     const state = store.getState();
+
     check(state);
 
     if (state.windows !== previous.windows) forgetClosedIncognito(state, previous);
   });
 
-  return {
+  stops.push(unsubscribe);
+
+  const owner: PersistenceOwner = {
     flush({ final = false } = {}) {
       if (disposed) return Promise.reject(new Error("Persistence owner is disposed"));
 
       if (final) {
         if (finalFlush) return finalFlush;
-        // Capture before freezing. Window closure during quit must not replace
-        // this snapshot while its acknowledged writes are still in flight.
-        const snapshot = store.getState();
+        // Capture before freezing. Window closure during the quit must not replace this snapshot while its
+        // acknowledged writes are still in flight.
+        const snapshot = (finalSnapshot ??= store.getState());
+
         frozen = true;
 
         try {
@@ -540,7 +662,14 @@ export function createPersistence({ store, restoreSession = true }: { store: Bro
           finalFlush = Promise.reject(error);
         }
 
-        return finalFlush;
+        const pending = finalFlush;
+
+        void pending.catch(() => {
+          // A failed quit can retry the same frozen snapshot. An older failure cannot clear a newer attempt.
+          if (finalFlush === pending) finalFlush = null;
+        });
+
+        return pending;
       }
 
       try {
@@ -554,13 +683,10 @@ export function createPersistence({ store, restoreSession = true }: { store: Bro
       generation++;
       frozen = false;
       finalFlush = null;
+      finalSnapshot = undefined;
       check(store.getState());
 
-      try {
-        void save().catch((error) => console.warn("Couldn't save the session", error));
-      } catch (error) {
-        console.warn("Couldn't save the session", error);
-      }
+      void save().catch((error) => console.warn("Couldn't save the session", error));
     },
     dispose() {
       if (disposed) return;
@@ -568,73 +694,134 @@ export function createPersistence({ store, restoreSession = true }: { store: Bro
       generation++;
       clearTimeout(timer);
       timer = undefined;
-      unsubscribe();
       dirty.clear();
+      dirtyOther.clear();
       lastSources.clear();
       lastJson.clear();
       finalFlush = null;
-    },
-  };
-}
+      finalSnapshot = undefined;
 
-let defaultPersistence: PersistenceOwner | null = null;
-let stopDefault: (() => void) | null = null;
-
-export function flushPersistence(options: { final?: boolean } = {}) {
-  return defaultPersistence?.flush(options) ?? Promise.resolve();
-}
-
-// A page's beforeunload cancelled quit. Resume from whatever changed meanwhile.
-export function resumePersistence() {
-  defaultPersistence?.resume();
-}
-
-/** All document/native-data watchers belong to the same authority store. */
-export function createBrowserPersistence({ store, restoreSession = true }: { store: BrowserStore; restoreSession?: boolean }): PersistenceOwner {
-  const owner = createPersistence({ store, restoreSession });
-  const stops: (() => void)[] = [];
-  let stopped = false;
-
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-
-    try {
-      for (const stopService of stops.reverse()) {
+      for (const stop of stops.reverse()) {
         try {
-          stopService();
+          stop();
         } catch (error) {
           console.error("[runtime] persistence service cleanup failed", error);
         }
       }
-    } finally {
-      owner.dispose();
-    }
+    },
   };
 
+  // A disposed owner is gone: the next owner for this store starts from the saved session again.
+  const forget = () => {
+    if (saved.get(store)?.owner === owner) saved.delete(store);
+  };
+
+  stops.push(forget);
+
+  return { owner, stops, addDocuments, services: false };
+}
+
+/**
+ * The saving for one store: the session and the downloads.
+ *
+ * The owner for a store is found, not made twice: there is one subscription and one writer for a session.
+ */
+export function createPersistence({
+  store,
+  restoreSession = true,
+  documents = [],
+}: {
+  store: BrowserStore;
+  restoreSession?: boolean;
+  documents?: readonly SavedDocument[];
+}): PersistenceOwner {
+  const existing = saved.get(store);
+
+  if (existing) {
+    existing.addDocuments(documents);
+
+    return existing.owner;
+  }
+
+  const created = createSaved({ store, restoreSession, documents });
+
+  saved.set(store, created);
+
+  return created.owner;
+}
+
+/**
+ * The store's own services: the ones that read Chrome and keep the app's own documents.
+ *
+ * The history, the bookmarks and the profile cleanup are the Effect runtime's services (lib/historyService.ts and its
+ * neighbours): it owns them and starts them, so the saving does not keep a second copy of them.
+ */
+function startStoreServices(store: BrowserStore): (() => void)[] {
+  const stops: (() => void)[] = [];
+
   try {
-    stops.push(store === useBrowser ? startFavicons() : createFaviconService(store).start());
-    stops.push(store === useBrowser ? startHistory() : createHistoryService(store).start());
-    stops.push(store === useBrowser ? startBookmarks() : createBookmarksService(store).start());
-    stops.push(store === useBrowser ? startProfileDataCleanup() : createProfileDataCleanup(store).start());
+    stops.push(createFaviconService(store).start());
   } catch (error) {
-    stop();
+    for (const stop of stops.reverse()) stop();
+
     throw error;
   }
 
-  return { flush: owner.flush, resume: owner.resume, dispose: stop };
+  return stops;
 }
 
-/** Compatibility entry for the single-runtime host and existing integrations. */
-export function startPersistence() {
+/**
+ * The app's saving for one store: the session, the downloads, and the favicons the store's pages show.
+ */
+export function createBrowserPersistence({
+  store,
+  restoreSession = true,
+  documents = [],
+}: {
+  store: BrowserStore;
+  restoreSession?: boolean;
+  documents?: readonly SavedDocument[];
+}): PersistenceOwner {
+  const owner = createPersistence({ store, restoreSession, documents });
+  const record = saved.get(store)!;
+
+  if (!record.services) {
+    record.services = true;
+
+    for (const stop of startStoreServices(store)) record.stops.push(stop);
+  }
+
+  return owner;
+}
+
+/** The saving the app's own store has, if it has one. */
+const ownerOf = (store: BrowserStore) => saved.get(store)?.owner;
+
+let defaultOwner: PersistenceOwner | null = null;
+let stopDefault: (() => void) | null = null;
+
+/** Writes every document that changed, now. The quit handshake needs it before the process goes. */
+export function flushPersistence(options: { final?: boolean } = {}): Promise<void> {
+  return (defaultOwner ?? ownerOf(useBrowser))?.flush(options) ?? Promise.resolve();
+}
+
+/** The quit was cancelled: saving goes on, starting with what changed meanwhile. */
+export function resumePersistence(): void {
+  (defaultOwner ?? ownerOf(useBrowser))?.resume();
+}
+
+/** Starts the app's saving: the saved session is loaded, and every change from now on is written. */
+export function startPersistence({ documents = [] }: { documents?: readonly SavedDocument[] } = {}): () => void {
   stopDefault?.();
-  const owner = createBrowserPersistence({ store: useBrowser });
-  defaultPersistence = owner;
+
+  const owner = createBrowserPersistence({ store: useBrowser, documents });
+
+  defaultOwner = owner;
 
   const stop = () => {
     owner.dispose();
 
-    if (defaultPersistence === owner) defaultPersistence = null;
+    if (defaultOwner === owner) defaultOwner = null;
 
     if (stopDefault === stop) stopDefault = null;
   };
@@ -642,15 +829,4 @@ export function startPersistence() {
   stopDefault = stop;
 
   return stop;
-}
-
-function forgetClosedIncognito(s: BrowserState, prev: BrowserState) {
-  for (const w of Object.values(prev.windows)) {
-    if (!w.incognito || s.windows[w.id]) continue;
-
-    for (const d of s.downloads) if (d.profile === w.spaceId && d.state === "downloading") void cancelDownload(d.id);
-    s.forgetDownloads(w.spaceId);
-    // Its WebKit pages' cookies and site data, kept in memory for the window, go with it.
-    void endWebKitPrivateSession(w.spaceId);
-  }
 }
