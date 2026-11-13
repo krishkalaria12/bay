@@ -1,7 +1,8 @@
 import type { DisplayMediaRequest, DisplayMediaSource } from "@bay/chromium";
 import { runningAppIcon, Symbol } from "@bay/desktop";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "@bay/platform";
+import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile } from "../../store/model";

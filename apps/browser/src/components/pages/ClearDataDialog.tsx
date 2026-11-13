@@ -1,6 +1,7 @@
 import { Surface } from "@bay/desktop";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, View } from "@bay/platform";
+import { StyleSheet, Text } from "react-native";
 import { create } from "zustand";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
