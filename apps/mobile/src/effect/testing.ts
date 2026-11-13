@@ -194,6 +194,19 @@ export const fakeHttp = (): FakeHttp => {
       return Effect.succeed({ ...answer, headers: answer.headers ?? noHeaders });
     });
 
+  // A probe reads the status whatever it is: only a request with no answer at all fails.
+  const probe = (request: HttpRequest) =>
+    Effect.suspend(() => {
+      requests.push(request);
+      const answer = answers.get(request.url);
+
+      if (answer instanceof Error) {
+        return Effect.fail(new HttpError({ operation: { name: "http.probe", resource: request.url }, status: 0, cause: answer }));
+      }
+
+      return Effect.succeed({ status: answer?.status ?? 404, url: request.url, headers: answer?.headers ?? noHeaders });
+    });
+
   return {
     layer: Layer.succeed(Http)({
       send,
@@ -206,6 +219,7 @@ export const fakeHttp = (): FakeHttp => {
             }),
           ),
         ),
+      probe,
     }),
     requests,
     answer: (url, response) => void answers.set(url, response),
@@ -253,7 +267,7 @@ export type FakeEngine = {
   readonly blocking: readonly { readonly files: readonly string[] | null; readonly version: string }[];
   /** The hosts where blocking was paused. */
   readonly pausedHosts: readonly (readonly string[])[];
-  /** The downloads that were opened. */
+  /** The downloads that were opened, by id. */
   readonly openedDownloads: readonly string[];
   /** The downloads that were cancelled. */
   readonly cancelledDownloads: readonly string[];
@@ -349,9 +363,9 @@ export const fakeEngine = (ledger: ResourceLedger = new ResourceLedger()): FakeE
           pausedHosts.push([...hosts]);
         }),
       setTrackingParameters: (_table: TrackingParameters) => Effect.void,
-      openDownload: (reference) =>
+      openDownload: (download) =>
         Effect.sync(() => {
-          openedDownloads.push(reference);
+          openedDownloads.push(download.id);
         }),
       cancelDownload: (id) =>
         Effect.sync(() => {
@@ -537,6 +551,17 @@ export const fakeBrowserState = (ledger: ResourceLedger = new ResourceLedger()):
   const subscribers = new Set<(data: BrowserData, previous: BrowserData) => void>();
   const waiting = new Set<() => void>();
 
+  const dispatchNow = (action: BrowserAction) => {
+    const previous = data;
+    const next = reduceBrowserData(data, action);
+
+    if (next === previous) return;
+
+    data = next;
+
+    for (const subscriber of subscribers) subscriber(data, previous);
+  };
+
   return {
     layer: Layer.succeed(BrowserState)({
       data: () => Effect.succeed(data),
@@ -551,17 +576,8 @@ export const fakeBrowserState = (ledger: ResourceLedger = new ResourceLedger()):
 
           return Effect.sync(() => void waiting.delete(wake));
         }),
-      dispatch: (action: BrowserAction) =>
-        Effect.sync(() => {
-          const previous = data;
-          const next = reduceBrowserData(data, action);
-
-          if (next === previous) return;
-
-          data = next;
-
-          for (const subscriber of subscribers) subscriber(data, previous);
-        }),
+      dispatch: (action: BrowserAction) => Effect.sync(() => dispatchNow(action)),
+      dispatcher: () => Effect.succeed(dispatchNow),
       restore: (saved) =>
         Effect.sync(() => {
           const previous = data;

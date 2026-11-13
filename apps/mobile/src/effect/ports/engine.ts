@@ -63,8 +63,8 @@ export class Engine extends Context.Service<
     readonly setBlockingPausedHosts: (hosts: readonly string[]) => Effect.Effect<void, EngineError>;
     /** Gives the engine the table of tracking parameters to strip. */
     readonly setTrackingParameters: (table: TrackingParameters) => Effect.Effect<void, EngineError>;
-    /** Opens a finished download by the reference the engine gave it. */
-    readonly openDownload: (reference: string) => Effect.Effect<void, EngineError>;
+    /** Opens a finished download. The engine works out whether the platform opens it by its id or by its file. */
+    readonly openDownload: (download: { readonly id: string; readonly path?: string }) => Effect.Effect<void, EngineError>;
     /** Stops a download that is still running. */
     readonly cancelDownload: (id: string) => Effect.Effect<void, EngineError>;
     /** Saves a web image into the photo library. */
@@ -176,11 +176,7 @@ export class Engine extends Context.Service<
               catch: (cause) => new EngineError({ operation: { name: "engine.setTrackingParameters" }, cause }),
             });
           }),
-        openDownload: (reference) =>
-          call({ name: "engine.openDownload", resource: reference }, (engine) =>
-            // The engine derives the native reference from the download, so both halves carry the reference itself.
-            engine.openDownload({ id: reference, path: reference }),
-          ),
+        openDownload: (download) => call({ name: "engine.openDownload", resource: download.id }, (engine) => engine.openDownload(download)),
         cancelDownload: (id) => call({ name: "engine.cancelDownload", resource: id }, (engine) => engine.cancelDownload(id)),
         saveImage: (url) => call({ name: "engine.saveImage", resource: url }, (engine) => engine.saveImage(url)),
         startListening: () => call({ name: "engine.startListening" }, (engine) => engine.startListening()),

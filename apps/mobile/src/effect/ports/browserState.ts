@@ -47,6 +47,8 @@ export class BrowserState extends Context.Service<
     readonly awaitReady: () => Effect.Effect<void, NativeUnavailable>;
     /** Changes the state. */
     readonly dispatch: (action: BrowserAction) => Effect.Effect<void, NativeUnavailable>;
+    /** The store's own dispatch, for a native callback that has to change the state before it returns. */
+    readonly dispatcher: () => Effect.Effect<(action: BrowserAction) => void, NativeUnavailable>;
     /**
      * Replaces the state with the saved one, archiving the tabs left alone too long, and says the store is ready. With
      * nothing saved, the state the store started with stays and is ready as it is.
@@ -91,6 +93,7 @@ export class BrowserState extends Context.Service<
             }),
           ),
         dispatch: (action) => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().dispatch(action))),
+        dispatcher: () => Effect.map(storeModule, (module) => (action: BrowserAction) => module.useBrowserStore.getState().dispatch(action)),
         restore: (saved) => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().restore(saved))),
         subscribe: (listener) =>
           Effect.gen(function* () {

@@ -28,6 +28,14 @@ export type HttpResponse = {
   readonly headers: { get: (name: string) => string | null };
 };
 
+/** Where a request ended up and what the server said there. */
+export type HttpProbe = {
+  readonly status: number;
+  /** The address the response came from, after the redirects that were followed. */
+  readonly url: string;
+  readonly headers: { get: (name: string) => string | null };
+};
+
 /** The request did not come back as a success: it failed, or it came back with a status that isn't one. */
 export class HttpError extends TaggedError("HttpError")<{
   readonly operation: Operation;
@@ -72,6 +80,12 @@ export class Http extends Context.Service<
     readonly send: (request: HttpRequest) => Effect.Effect<HttpResponse, HttpError>;
     /** Sends the request and decodes the body. `decode` turns the raw text into the caller's own type. */
     readonly sendJson: <A>(request: HttpRequest, decode: (body: string) => A) => Effect.Effect<A, HttpError | DecodeError>;
+    /**
+     * Sends the request and reads where it ended up, whatever the status: only a request that never reached a server
+     * fails. The body is never read. A request that keeps its redirects (`redirect: "manual"`) goes through Expo's
+     * fetch, because React Native's follows them whatever it is asked.
+     */
+    readonly probe: (request: HttpRequest) => Effect.Effect<HttpProbe, HttpError>;
   }
 >()("bay/Http") {
   static readonly layer = Layer.effect(
@@ -105,6 +119,24 @@ export class Http extends Context.Service<
           catch: (cause) => (cause instanceof HttpError ? cause : new HttpError({ operation, status: 0, cause })),
         });
 
+      const probe = (request: HttpRequest) =>
+        Effect.tryPromise({
+          try: async (signal): Promise<HttpProbe> => {
+            const init = {
+              method: request.method ?? "GET",
+              headers: request.headers,
+              credentials: request.credentials ?? "omit",
+              redirect: request.redirect ?? "follow",
+              signal: link(request.signal, signal),
+            };
+
+            const response = request.redirect === "manual" ? await (await import("expo/fetch")).fetch(request.url, init) : await fetch(request.url, init);
+
+            return { status: response.status, url: response.url || request.url, headers: response.headers };
+          },
+          catch: (cause) => new HttpError({ operation: { name: "http.probe", resource: request.url }, status: 0, cause }),
+        });
+
       return Http.of({
         send: (request) => send(request, { name: "http.send", resource: request.url }),
         sendJson: (request, decode) =>
@@ -116,6 +148,7 @@ export class Http extends Context.Service<
               }),
             ),
           ),
+        probe,
       });
     }),
   );
