@@ -231,6 +231,13 @@ export class MediaService extends Context.Service<
 
       const requestDisplayMedia = (tabId: string, request: DisplayMediaRequest): Effect.Effect<void> =>
         Effect.gen(function* () {
+          // The page took its request back: the picker closes, and nothing is answered.
+          if (request.cancelled) {
+            if (take(tabId, request.id)) yield* stopSources(tabId, request.id);
+
+            return;
+          }
+
           const pending = pendingOf(tabId);
           const pageUrl = useBrowser.getState().tabs[tabId]?.url ?? "";
 
