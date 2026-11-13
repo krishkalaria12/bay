@@ -29,7 +29,7 @@ export function createPreviewTransport(): NativeTransport {
     ],
     constants: {
       BayApp: { apiVersion: 9 },
-      BayShell: { preview: true, hostingSpike: query.has("spike"), ...(query.has("window") ? { windowId: String(query.get("window")) } : undefined) },
+      BayShell: { preview: true, ...(query.has("window") ? { windowId: String(query.get("window")) } : undefined) },
     },
     snapshots: {
       BayShell: { documents, windowButtonLayout: { left: [], right: ["minimize", "maximize", "close"] } },
