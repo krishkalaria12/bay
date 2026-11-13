@@ -761,7 +761,7 @@
             <p>Shared JavaScript injected on both engines: reader, hide elements, inspector, font identifier.</p>
           </div>
           <div class="layer">
-            <b>Android embedder · <code>engine/mobile</code> → <code>//bay/mobile</code> (phase 7)</b>
+            <b>Android embedder · <code>engine/android</code> → <code>//bay/mobile</code> (phase 7)</b>
             <p>
               C++ on <code>content/public</code>, with <code>//bay/content</code> for blocking; copied into the Chromium tree by an <code>apply.sh</code>, like
               <code>engine/nncore</code>.
@@ -878,7 +878,10 @@
               </tr>
               <tr>
                 <td>ungoogled-chromium patches and domain substitution</td>
-                <td><b>Reused</b>, minus desktop-only patches. ungoogled-chromium already maintains Android variants.</td>
+                <td>
+                  <b>Audit and pin for Android.</b> Verify compatible privacy patches and domain substitution against the selected Chromium revision; a
+                  compatible Android variant is not yet a proven dependency. See the <a href="android-chromium-plan.html#reuse">engine implementation plan</a>.
+                </td>
               </tr>
               <tr>
                 <td>Bay's 33 <code>chromium-*.patch</code> files</td>
@@ -2513,14 +2516,28 @@
           <div class="stage-number">7</div>
           <div>
             <h3>Our Chromium on Android</h3>
+            <p>
+              The <a href="android-chromium-plan.html">Android Chromium implementation plan</a> expands this phase with repository evidence, native code
+              changes, GitHub runner capacity gates, AAR packaging, data migration and acceptance tests. iOS stays on <code>WKWebView</code> only.
+            </p>
             <ul>
               <li>
-                On the Linux machine: a copy of the pinned tree with Android dependencies; build upstream <code>content_shell</code> for arm64 and run it under
-                Argent.
+                On a Linux GitHub Actions runner: resolve the direct Chromium pin and Android dependencies, measure disk and checkpoint capacity, then build
+                upstream <code>content_shell_apk</code> for arm64 and run it under Argent. Provision a larger Linux runner if standard hosted capacity is
+                insufficient.
               </li>
-              <li>Split <code>//bay/content</code> out of NNCore. Write <code>//bay/mobile</code> and wrap it as <code>bay-engine.aar</code>.</li>
-              <li>Swap the Kotlin side of <code>bay-engine</code> from the system WebView to the AAR. Blocking moves to desktop's blocker.</li>
-              <li>Publish the AAR per engine tree and fetch it in the app's prebuild. Rebase with each desktop Chromium update from then on.</li>
+              <li>
+                Extract portable <code>//bay/content</code> code from NNCore, preserving desktop behavior. Write <code>//bay/mobile</code> and prove its AAR,
+                resources, JNI and sandboxed child processes in a small Gradle host before integrating Expo.
+              </li>
+              <li>
+                Replace the Kotlin WebView adapter with the Chromium adapter, preserve the shared engine contract, and version native state separately. iOS
+                keeps its WebKit implementation and blocker.
+              </li>
+              <li>
+                Publish an immutable engine artifact and fetch it during local and remote Android prebuild. Qualify both platforms and ship Chromium security
+                fixes through app updates.
+              </li>
             </ul>
             <div class="check">
               <strong>Done when</strong>
