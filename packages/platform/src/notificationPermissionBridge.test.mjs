@@ -19,7 +19,7 @@ registerHooks({
   },
 });
 
-test("notification preflight follows the real host method contract", async (t) => {
+test("notification permission methods follow the real host method contract", async (t) => {
   const calls = [];
 
   const info = {
@@ -45,10 +45,10 @@ test("notification preflight follows the real host method contract", async (t) =
 
   t.after(() => connection.remove());
   const app = await import(appURL);
-  const { ensureNotificationPermission } = await import("../../../apps/browser/src/lib/notificationPermission.ts");
 
+  // Linux has no permission query: nothing reaches the host. The app's preflight then tries delivery
+  // (apps/browser/src/lib/notificationService.permission.test.mjs).
   assert.equal(app.hasNotificationPermissionQuery(), false);
-  assert.equal(await ensureNotificationPermission(), true);
   await assert.rejects(app.notificationPermission(), /unavailable/);
   await assert.rejects(app.requestNotificationPermission(), /unavailable/);
   await assert.rejects(app.openNotificationSettings(), /unavailable/);
@@ -57,10 +57,11 @@ test("notification preflight follows the real host method contract", async (t) =
   info.platform = "windows";
   info.optionalMethods.push("BayApp.notificationPermission", "BayApp.requestNotificationPermission", "BayApp.openNotificationSettings");
   assert.equal(app.hasNotificationPermissionQuery(), true);
-  assert.equal(await ensureNotificationPermission(), true);
+  assert.equal(await app.notificationPermission(), "granted");
   assert.deepEqual(calls, ["BayApp.notificationPermission"]);
   permission = "notDetermined";
-  assert.equal(await ensureNotificationPermission(), true);
+  assert.equal(await app.notificationPermission(), "notDetermined");
+  assert.equal(await app.requestNotificationPermission(), true);
   assert.deepEqual(calls.slice(1), ["BayApp.notificationPermission", "BayApp.requestNotificationPermission"]);
 
   // The bridge must hide a cached method when a later host snapshot omits it.
