@@ -35,6 +35,7 @@ import { mayBeBang, useBangs } from "./bangs";
 import { NO_HISTORY } from "../../store/constants";
 import { SUGGEST_WARM_SLICE_MS } from "./constants";
 import { SearchService, type Search } from "./searchService";
+import { suggestionProfile } from "./suggestFetch";
 
 const NO_REMOTE: string[] = [];
 const EMPTY: SuggestionResult = { items: [], completion: "" };
@@ -244,6 +245,9 @@ export function useSuggestions({
   const bang = useMemo(() => (bangs ? findBang(query, bangs) : null), [bangs, query]);
   const pendingBang = bangsEnabled && !bundledBangs && mayBeBang(query);
   const fromEngine = suggestEngine(scope, engines, engine);
+  // Built-in suggestions carry no profile state or cookies. An extension's engine is asked in the profile that
+  // registered that exact engine record.
+  const nativeProfile = useBrowser((s) => suggestionProfile(fromEngine, s.settings.extensionSearchEngines ?? []));
   useEffect(() => {
     const q = query.replace(/^\?/, "").trim();
     // A query that is an address, a page's history or a bang is the app's own work: the engine is not asked.
@@ -260,10 +264,12 @@ export function useSuggestions({
         engine: fromEngine,
         query: q,
         policy: suggestionsOn ? "ask" : "off",
+        profile: nativeProfile,
+        client: windowId,
         onResult: (list) => setRemote({ text: query, list }),
       }),
     );
-  }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, session]);
+  }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, session, nativeProfile, windowId]);
 
   // The palette closed: the work in flight goes with it, and the session is let go.
   useEffect(() => () => void withSearch((search) => search.close(session)), [session]);
