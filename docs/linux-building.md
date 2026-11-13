@@ -59,6 +59,13 @@ Chromium's sysroot layout, and retains its multiarch library paths.
 
 ## NixOS
 
+CI's `bay-linux-packages` artifact includes `bay-<version>-nixos-x64.nar.zst`
+and a matching `.README` with installation commands. This is the NixOS package
+plus its full runtime closure, built from the same release tarball with pinned
+nixpkgs. Verify `SHA256SUMS`, import the archive with `nix-store --import` as
+root, then install the store path named in the `.README` in your user profile.
+It requires no local engine build or dependency downloads.
+
 Chromium downloads prebuilt host tools (clang, gn, siso, Node and CIPD's
 Python) that expect `/lib64/ld-linux-x86-64.so.2` and libraries under
 `/usr/lib`. NixOS has neither, so the driver refuses to start there until
@@ -163,7 +170,7 @@ seven days; raise `STATE_ARTIFACT` when a changed patch needs a clean tree. A ru
 whose engine id matches an earlier run's engine goes straight to packaging.
 
 The `bay-linux-packages` artifact holds the AppImage and `.zsync`, `.deb`,
-`.rpm`, tarball, AUR `PKGBUILD` and `SHA256SUMS`, all unsigned. Its smoke step
+`.rpm`, tarball, AUR `PKGBUILD`, NixOS closure and `SHA256SUMS`, all unsigned. Its smoke step
 opens the AppImage under Xvfb and is allowed to fail, so read its log. It doesn't
 check the sandbox's AppArmor setup, the GPU or video decoding.
 

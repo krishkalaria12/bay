@@ -1,6 +1,6 @@
 name: Linux build from source
 # Compiles the pinned engine on free GitHub runners and packages Bay for Linux:
-# the AppImage, .deb, .rpm, tarball and AUR PKGBUILD, unsigned, for testing. A
+# the AppImage, .deb, .rpm, tarball, AUR PKGBUILD and NixOS closure, unsigned, for testing. A
 # job ends after six hours, so each stage compiles for a while, saves the build
 # tree as an artifact, and the next stage resumes from it. New runs resume from
 # the newest saved tree too, so a compile fix costs what it touches rather than
@@ -206,8 +206,14 @@ jobs:
           archive="dist/engine/$id.tar.zst"
           python scripts/linux/build-app.py --engine-archive "$archive" --sha256 "$(cut -d' ' -f1 "$archive.sha256")" \
             --output dist/linux-app
+      - uses: cachix/install-nix-action@v31.11.5
+        with:
+          # Pinned nixos-26.05, including both Qt versions used by Chromium's shims.
+          nix_path: nixpkgs=https://github.com/NixOS/nixpkgs/archive/ac588ef1c914865dad517b337ea0eb9694a4021c.tar.gz
       - name: Package
-        run: scripts/linux/release.sh --app dist/linux-app --version "0.1.$GITHUB_RUN_NUMBER" --output dist/linux-release
+        run: |
+          scripts/linux/release.sh --app dist/linux-app --version "0.1.$GITHUB_RUN_NUMBER" \
+            --output dist/linux-release --formats tar,deb,rpm,appimage,aur,nix
       - name: Check the AppImage opens a window
         continue-on-error: true
         run: |

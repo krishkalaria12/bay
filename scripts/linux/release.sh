@@ -4,7 +4,8 @@
 #
 #   scripts/linux/release.sh --app dist/linux-app --version 1.4.0 [--output dist/linux-release] [--formats tar,deb,...]
 #
-# Formats default to all of tar,deb,rpm,appimage,aur; aur needs tar. Set BAY_GPG_KEY to sign every artifact and
+# Formats default to tar,deb,rpm,appimage,aur; add nix for a NixOS closure. Both aur and nix need tar.
+# Set BAY_GPG_KEY to sign every artifact and
 # SHA256SUMS with detached ASCII signatures. Publishing is a separate step.
 set -euo pipefail
 
@@ -25,9 +26,11 @@ done
 want() { [[ ",$formats," == *",$1,"* ]]; }
 need() { command -v "$1" >/dev/null || { echo "$2 needs $1 on PATH" >&2; exit 1; }; }
 want aur && ! want tar && { echo "the aur format needs tar" >&2; exit 2; }
+want nix && ! want tar && { echo "the nix format needs tar" >&2; exit 2; }
 want deb && need dpkg-deb deb
 want rpm && need rpmbuild rpm
 want appimage && need appimagetool appimage && need zsyncmake appimage
+want nix && need nix-build nix && need nix-store nix && need zstd nix
 [[ -n "${BAY_GPG_KEY:-}" ]] && need gpg signing
 
 python3 "$repo/scripts/linux/build-app.py" --verify "$app" >/dev/null
@@ -125,6 +128,42 @@ if want aur; then
   mkdir -p "$output/aur"
   sed -e "s/@VERSION@/$version/" -e "s/@SHA256@/$(sha256sum "$tarball" | cut -d' ' -f1)/" "$packaging/aur/PKGBUILD.in" >"$output/aur/PKGBUILD"
   if command -v makepkg >/dev/null; then (cd "$output/aur" && makepkg --printsrcinfo >.SRCINFO); fi
+fi
+
+if want nix; then
+  store=$(nix-build "$packaging/nix" --arg tarball "$tarball" --out-link "$work/nix-result")
+  [[ "$store" =~ ^/nix/store/[a-z0-9]{32}-bay-[0-9]+\.[0-9]+\.[0-9]+$ && "$store" == *-bay-"$version" ]] || {
+    echo "unexpected Nix output: $store" >&2; exit 1;
+  }
+  # Export every referenced store path, including runtime libraries, for an offline import on NixOS.
+  closure=$(nix-store --query --requisites "$store")
+  [[ -n "$closure" ]] || { echo "Nix returned an empty closure" >&2; exit 1; }
+  paths=()
+  while IFS= read -r path; do paths+=("$path"); done <<<"$closure"
+  archive="$output/bay-$version-nixos-x64.nar.zst"
+  nix-store --export "${paths[@]}" | zstd -T0 -3 -q -f -o "$archive"
+  instructions="$output/bay-$version-nixos-x64.README"
+  cat >"$instructions" <<EOF
+Bay $version for x86_64 NixOS
+
+This archive contains Bay and its complete Nix runtime closure. Importing it
+needs no compiler, nixpkgs checkout or dependency downloads.
+
+Verify the downloaded files against SHA256SUMS, then import and install:
+
+  zstd -dc bay-$version-nixos-x64.nar.zst | sudo nix-store --import
+  nix --extra-experimental-features nix-command profile install $store
+  bay
+
+The first command imports the store paths as root. The second installs Bay in
+your user profile and keeps its dependencies from being garbage-collected.
+The sandbox uses unprivileged user namespaces. GPU drivers and a running
+desktop/keyring still come from your NixOS system.
+
+To build from the ordinary release tarball or install declaratively instead,
+see packaging/linux/nix and the NixOS section of docs/linux-building.md.
+EOF
+  artifacts+=("$archive" "$instructions")
 fi
 
 (cd "$output" && sha256sum "${artifacts[@]##*/}" >SHA256SUMS)

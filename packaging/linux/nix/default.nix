@@ -29,6 +29,7 @@ pkgs.stdenv.mkDerivation {
 
   nativeBuildInputs = with pkgs; [
     makeWrapper
+    jq
     patchelf
     wrapGAppsHook3
   ];
@@ -58,6 +59,13 @@ pkgs.stdenv.mkDerivation {
     for executable in bay chrome_crashpad_handler chrome-sandbox; do
       patchelf --set-interpreter "$interpreter" --set-rpath "${libraryPath}" ${app}/$executable
     done
+    if [ -f ${app}/bay-cli/bay ]; then
+      patchelf --set-interpreter "$interpreter" --set-rpath "${libraryPath}" ${app}/bay-cli/bay
+      # The in-app CLI installer verifies these bytes before installing the command.
+      digest=$(sha256sum ${app}/bay-cli/bay | cut -d' ' -f1)
+      jq --arg digest "$digest" '.sha256 = $digest' ${app}/bay-cli/manifest.json > cli-manifest.json
+      mv cli-manifest.json ${app}/bay-cli/manifest.json
+    fi
     find ${app} -type f \( -name '*.so' -o -name '*.so.*' \) -exec patchelf --set-rpath "${libraryPath}" {} \;
     substituteInPlace $out/share/applications/bay.desktop --replace-fail /usr/bin/bay $out/bin/bay
     runHook postInstall
@@ -87,6 +95,10 @@ pkgs.stdenv.mkDerivation {
     done)
     if [ -n "$missing" ]; then
       echo "unresolved libraries:"; echo "$missing"; exit 1
+    fi
+    $out/bin/bay --version
+    if [ -f ${app}/bay-cli/bay ]; then
+      ${app}/bay-cli/bay --version
     fi
     runHook postInstallCheck
   '';
