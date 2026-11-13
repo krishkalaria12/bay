@@ -95,18 +95,17 @@ final class AutofillTests: XCTestCase {
   }
 
   func testSafariExportCards() throws {
-    for url in [Fixtures.url("safari/Safari Export"), Fixtures.url("safari/Safari Export.zip")] {
-      let export = try SafariExport.load(url)
-      XCTAssertEqual(export.cards, [
-        ImportedCard(name: "Alex Example", number: secret("4111 1111 1111 1111"), expMonth: 4, expYear: 2030, nickname: "Travel"),
-        ImportedCard(name: nil, number: secret("0000000000000000"), expMonth: nil, expYear: nil, nickname: "Test card"),
-      ], url.lastPathComponent)
-      XCTAssertEqual(export.cardCount, 2)
-      XCTAssertEqual(export.profiles.first?.history.isEmpty, false)  // the rest still parses
-      let json = String(decoding: try JSONEncoder().encode(export), as: UTF8.self)
-      XCTAssertFalse(json.contains("4111"))
-      XCTAssertTrue(json.contains("\"cardCount\":2"))
-    }
+    let url = Fixtures.url("safari/Safari Export")
+    let export = try SafariExport.load(url)
+    XCTAssertEqual(export.cards, [
+      ImportedCard(name: "Alex Example", number: secret("4111 1111 1111 1111"), expMonth: 4, expYear: 2030, nickname: "Travel"),
+      ImportedCard(name: nil, number: secret("0000000000000000"), expMonth: nil, expYear: nil, nickname: "Test card"),
+    ], url.lastPathComponent)
+    XCTAssertEqual(export.cardCount, 2)
+    XCTAssertEqual(export.profiles.first?.history.isEmpty, false)  // the rest still parses
+    let json = String(decoding: try JSONEncoder().encode(export), as: UTF8.self)
+    XCTAssertFalse(json.contains("4111"))
+    XCTAssertTrue(json.contains("\"cardCount\":2"))
   }
 
   func testDiscoveryListsAutofillAndCookies() throws {

@@ -1,11 +1,13 @@
-import { listTasks, onExtensionsChanged } from "@bay/chromium";
-import { useTranslate } from "../components/site/translateState";
+import { onExtensionsChanged, type EngineTask } from "@bay/chromium";
+import { onAppEvent } from "@bay/desktop";
+import * as Effect from "effect/Effect";
+import { useTranslate } from "../components/site/pageWorkService";
 import { useBrowser } from "../store/browserStore";
 import { useSync } from "../sync/engine";
 import { capture, endSession, flush, isSharing, resumeClientAfterQuit, startClient, stopClient } from "./client";
 import { reportNativeCrashes } from "./errors";
 import { takeOmniboxLatency } from "./track";
-import { EXTENSION_SETTLE_MS, FIRST_MEMORY_SAMPLE_MS } from "./config";
+import { EXTENSION_SETTLE_MS } from "./config";
 
 const HOUR_MS = 60 * 60_000;
 
@@ -94,43 +96,32 @@ function watchExtensions() {
 
 const mb = (bytes: number) => Math.round(bytes / 1_048_576);
 
-let usageGeneration = 0;
-
-async function sampleMemory() {
-  const generation = usageGeneration;
-
+/** Records a memory sample from the engine's tasks, read twice a moment apart (usageService.ts takes the reads). */
+export function recordMemorySample(tasks: EngineTask[]) {
   if (!isSharing()) return;
+  let total = 0;
+  let browser = 0;
+  let gpu = 0;
+  let renderers = 0;
 
-  try {
-    await listTasks();
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const tasks = await listTasks();
+  for (const t of tasks) {
+    const m = Math.max(0, t.memory);
+    total += m;
 
-    if (generation !== usageGeneration) return;
-    let total = 0;
-    let browser = 0;
-    let gpu = 0;
-    let renderers = 0;
+    if (t.type === "browser") browser += m;
+    else if (t.type === "gpu") gpu += m;
+    else if (t.type === "renderer") renderers++;
+  }
 
-    for (const t of tasks) {
-      const m = Math.max(0, t.memory);
-      total += m;
-
-      if (t.type === "browser") browser += m;
-      else if (t.type === "gpu") gpu += m;
-      else if (t.type === "renderer") renderers++;
-    }
-
-    if (!total) return;
-    capture("perf_memory", {
-      total_mb: mb(total),
-      browser_mb: mb(browser),
-      gpu_mb: mb(gpu),
-      renderer_processes: renderers,
-      tabs: size(useBrowser.getState().tabs),
-      uptime_hours: Math.round((Date.now() - startedAt) / HOUR_MS),
-    });
-  } catch {}
+  if (!total) return;
+  capture("perf_memory", {
+    total_mb: mb(total),
+    browser_mb: mb(browser),
+    gpu_mb: mb(gpu),
+    renderer_processes: renderers,
+    tabs: size(useBrowser.getState().tabs),
+    uptime_hours: Math.round((Date.now() - startedAt) / HOUR_MS),
+  });
 }
 
 function emitOmniboxLatency() {
@@ -141,40 +132,35 @@ function emitOmniboxLatency() {
   capture("perf_omnibox", { samples: samples.length, p50_ms: at(0.5), p95_ms: at(0.95), max_ms: samples.at(-1)! });
 }
 
-function hourly() {
+/**
+ * The hourly counts, as the app's grid runs them; the memory sample goes with them (usageService.ts). The counters
+ * it resets are reset whether or not the user shares anything, so the job is needed either way.
+ */
+export function sampleUsage() {
   emitCounts();
   emitOmniboxLatency();
-  void sampleMemory();
 }
+
+/** The native crashes of the last run, which the Mac keeps for a while. */
+export const reportNativeCrashesOnce = () => reportNativeCrashes();
 
 let stopUsage: (() => void) | undefined;
 
 export function startUsage(): () => void {
   if (stopUsage) return stopUsage;
-  usageGeneration++;
+  const stopWatching = watchUsage();
   const session = startClient();
-  let crashes: ReturnType<typeof setTimeout> | undefined;
 
   if (session) {
     capture("app_launched", { previous_session: session.previous });
 
     if (session.updatedFrom) capture("app_updated", { from_version: session.updatedFrom });
-    crashes = setTimeout(() => void reportNativeCrashes(), 5000);
   }
-
-  const stops = [watchStore(), watchSync(), watchTranslate(), watchExtensions()];
-  const sample = setTimeout(() => void sampleMemory(), FIRST_MEMORY_SAMPLE_MS);
-  const interval = setInterval(hourly, HOUR_MS);
 
   const stop = () => {
     if (stopUsage !== stop) return;
     stopUsage = undefined;
-    usageGeneration++;
-    clearTimeout(crashes);
-    clearTimeout(sample);
-    clearInterval(interval);
-
-    for (const remove of stops) remove();
+    stopWatching();
     stopClient();
   };
 
@@ -183,8 +169,48 @@ export function startUsage(): () => void {
   return stop;
 }
 
+/**
+ * Watches what the usage counts: the store, sync, translation and the extensions, and the quit that sends the
+ * session's counts. The usage service holds the watch in the app's scope (usageService.ts); the answer stops it.
+ */
+let usageWatch: { users: number; stop: () => void } | undefined;
+
+export function watchUsage(): () => void {
+  if (!usageWatch) {
+    const quit = onAppEvent((e) => e.type === "willQuit" && sessionEnding());
+    const stops = [watchStore(), watchSync(), watchTranslate(), watchExtensions(), () => quit.remove()];
+    usageWatch = { users: 0, stop: () => stops.forEach((stop) => stop?.()) };
+  }
+
+  const watch = usageWatch;
+  watch.users++;
+  let released = false;
+
+  return () => {
+    if (released) return;
+    released = true;
+
+    if (--watch.users === 0) {
+      watch.stop();
+
+      if (usageWatch === watch) usageWatch = undefined;
+    }
+  };
+}
+
+export function sessionEnding() {
+  void prepareTelemetryForQuit().catch((error) => console.warn("Couldn't checkpoint telemetry before quitting", error));
+}
+
+// MARK: The quit
+
+// The quit is prepared once: the session's counts are sent once, and the delivery holds until the app decides.
 let quitPrepared = false;
 
+/**
+ * The quit handshake: the session's counts are sent and the telemetry is written to disk. The delivery holds while
+ * the app decides, and the answer never waits for the network.
+ */
 export function prepareTelemetryForQuit(): Promise<void> {
   if (!quitPrepared) {
     quitPrepared = true;
@@ -199,18 +225,27 @@ export function prepareTelemetryForQuit(): Promise<void> {
   return endSession();
 }
 
+/** The quit was called off: the delivery goes on with what is queued. */
 export function resumeTelemetryAfterQuit(): Promise<void> {
   quitPrepared = false;
 
   return resumeClientAfterQuit();
 }
 
-export function sessionEnding() {
-  void prepareTelemetryForQuit().catch((error) => console.warn("Couldn't checkpoint telemetry before quitting", error));
-}
+// MARK: The dev harness
 
-export async function devHourly() {
-  hourly();
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+/** The hourly sample, now: the dev harness's way to see it without waiting an hour. */
+export async function devHourly(): Promise<void> {
+  // The runtime and the usage service are reached when the sample is asked for: the app's own start does not pull
+  // the runtime in through this module, and the service's own imports reach back into it.
+  const [{ runDesktop }, { UsageService }] = await Promise.all([import("../effect/runtime"), import("./usageService")]);
+
+  await runDesktop(
+    Effect.gen(function* () {
+      const usage = yield* UsageService;
+
+      yield* usage.sampleNow;
+    }),
+  );
   await flush();
 }

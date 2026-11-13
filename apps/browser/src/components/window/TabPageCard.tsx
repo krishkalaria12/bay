@@ -1,50 +1,35 @@
-import * as tabCommands from "../../runtime/tabActions";
-import * as v from "valibot";
-import { JsonValueSchema } from "../../lib/json";
-import { View } from "@bay/platform";
 import { WebView, type OpenWindowRequest, type PageEngine } from "@bay/chromium";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { StyleSheet, TextInput } from "react-native";
-import Animated from "@bay/platform/motion";
+import { StyleSheet, TextInput, View } from "react-native";
+import Animated from "react-native-reanimated";
+import * as v from "valibot";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { focus, switchToTab } from "../../lib/actions";
 import { noteFavicon } from "../../lib/favicons";
-import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
-import { isQuitting } from "../../lib/shellBridge";
+import { JsonValueSchema } from "../../lib/json";
+import { isQuitting } from "../../lib/quit";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { startChromeTabs } from "../../lib/engineTabs";
+import { startChromeTabs } from "../../lib/chromeTabs";
 import { handOff, wantsPage } from "../../lib/tabNavigation";
 import { noteDiscarded, noteGone, noteReady } from "../../lib/tabLifecycle";
 import { followSiteChoice, noteWebKitPage, persistEngine, playInWebKit } from "../../lib/pageEngines";
 import { webviewRef, webviews } from "../../lib/webviews";
-import { useBrowserRead as useBrowser } from "../../store/read";
-import { useBrowser as legacyBrowser } from "../../store/browserStore";
+import { useBrowser } from "../../store/browserStore";
 import { useActiveTabId, useSidebarOpen, useTab, useWindowId, useQuietBrowser } from "../../store/hooks";
-import { activeTabId, engineProfileFor, viewTabIds, windowTabIds } from "../../store/model";
-import { successors } from "../../store/tabs";
+import { useEngineView } from "../../store/engineView";
+import { activeTabId, engineProfile, viewTabIds, wake, windowTabIds } from "../../store/model";
+import { removeTabs } from "../../store/tabs";
 import { peeksLinks, shownPeek } from "../../store/peeks";
 import { splitOf } from "../../store/splits";
-import type { DeepReadonly } from "../../runtime/projection";
 import { tabEngine } from "../../store/engines";
-
-type SplitView = DeepReadonly<import("../../store/types").SplitView>;
-
+import type { DeepReadonly } from "../../runtime/projection";
 import { BookmarksBar, useBookmarksBarShown } from "../bookmarks/BookmarksBar";
-import { useWindowButtonLayout } from "./windowButtons";
 import { BOOKMARKS_BAR_HEIGHT } from "../bookmarks/constants";
 import { FindBar } from "../find/FindBar";
-import {
-  NO_TOOLBAR,
-  noToolbarGeometry,
-  paneButtonClearance,
-  splitGeometry,
-  toolbarEndRoom,
-  toolbarGeometry,
-  type Rect,
-  type ToolbarGeometry,
-} from "./geometry";
+import { NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, splitGeometry, toolbarGeometry, type Rect, type ToolbarGeometry } from "./geometry";
+import { SIDEBAR_BUTTON_END_ROOM } from "./constants";
 import { dismissPermissions, startPermissionPrompts } from "../site/permissions";
 import { clearChromeTabId, patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePopover } from "./pageState";
 import { useTabDrag } from "../tabStrip/tabStripDrag";
@@ -101,10 +86,9 @@ import { closeCaptureOnEscape, onCaptureGesture, onCaptureMessage, startCaptures
 import { BoostEditor } from "../boosts/BoostEditor";
 import { closeBoostEditorOnEscape, onBoostMessage } from "../boosts/editor";
 import { useIsDeveloperTab } from "../developer/localDevSites";
-import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
-import { openPeek } from "../../runtime/splitActions";
-import { activate, closeTab, navigate } from "../../runtime/tabActions";
-import { browserRead, useBrowserRead } from "../../store/read";
+
+// The window's state is read as a projection: a split is read, never written.
+type SplitView = DeepReadonly<import("../../store/types").SplitView>;
 
 // Where the card's panes are: the active tab's (or its split's), or the full-screen tab's over everything.
 function cardPanes(split: SplitView | undefined, activeId: string | undefined, fullscreenTab: string | null | undefined, width: number, height: number) {
@@ -141,14 +125,12 @@ function warmPaneRects(warm: string[], splits: SplitView[], width: number, heigh
 // The tab a window shows once `leaving` goes, if another than it shows now: worked out as the drag starts, not followed.
 function successorOf(windowId: string, leaving: string[]): string | undefined {
   const s = useBrowser.getState();
-  const window = s.windows[windowId];
-  const next = window ? successors(s, window, new Set(leaving))[window.spaceId] : undefined;
+  const next = activeTabId(removeTabs(s, leaving, false), windowId);
 
   return next && next !== activeTabId(s, windowId) ? next : undefined;
 }
 
 export function ContentCard() {
-  const windowButtons = useWindowButtonLayout();
   const windowId = useWindowId();
   const activeId = useActiveTabId();
   const split = useQuietBrowser((s) => splitOf(s, activeId));
@@ -200,7 +182,7 @@ export function ContentCard() {
     for (const id of Object.keys(panes)) {
       const t = s.tabs[id];
 
-      if (t?.url && !t.navigation && !t.adoptId) reportBrowserCommand(dispatchBrowserCommand({ method: "wakeTab", tabId: id }));
+      if (t?.url && !t.navigation && !t.adoptId) s.updateTab(id, { ...wake(t), unloaded: undefined });
     }
   }, [panes]);
 
@@ -248,7 +230,7 @@ export function ContentCard() {
         // Keep mount order stable; reordering native subviews while tabs move can shuffle them.
         .sort((a, b) => a!.createdAt - b!.createdAt)
         // A tab whose space changed profile is another view: its page is the other engine profile's.
-        .map((t) => `${t!.id}|${t!.spaceId}|${engineProfileFor(t!.spaceId, s.spaces)}`);
+        .map((t) => `${t!.id}|${t!.spaceId}|${engineProfile(t!.spaceId)}`);
 
       shownMemo.current = { mounted, panes: framed, tabs: s.tabs, keys };
 
@@ -259,20 +241,16 @@ export function ContentCard() {
   const geometryFor = (rect: Rect | undefined): ToolbarGeometry => {
     if (small) return NO_TOOLBAR;
     const leading = !!rect && rect.x === 0 && rect.y === 0;
+
+    if (addressInSidebar) return !sidebarOpen && leading ? NO_TOOLBAR_PAST_LIGHTS : NO_TOOLBAR;
     // The pane at the top right, beside a sidebar docked on the right: its toolbar's end holds the toggle.
     const trailing = !!rect && rect.y === 0 && rect.x + rect.width >= size.width - 1;
-    const clearance = paneButtonClearance(leading, trailing, tabLayout, sidebarOpen, sidebarRight);
 
-    if (addressInSidebar) return noToolbarGeometry(clearance.clearTrafficLights, windowButtons);
-
-    return toolbarGeometry(
-      {
-        sidebarButton: leading && tabLayout === "sidebar" && !sidebarRight,
-        sidebarButtonEnd: trailing && sidebarRight,
-        ...clearance,
-      },
-      windowButtons,
-    );
+    return toolbarGeometry({
+      sidebarButton: leading && tabLayout === "sidebar" && !sidebarRight,
+      sidebarButtonEnd: trailing && sidebarRight,
+      clearTrafficLights: leading && tabLayout === "sidebar" && (!sidebarOpen || sidebarRight),
+    });
   };
 
   // A link's peek over the pane of the tab it came from (linkOverlay/PeekLayer.tsx).
@@ -284,7 +262,7 @@ export function ContentCard() {
     if (!origin || !focusedRect || addressInSidebar || small) return;
     const g = geometryFor(focusedRect);
     setUrlAnchor(windowId, { left: origin.x + focusedRect.x + g.urlLeft, top: origin.y + focusedRect.y, width: focusedRect.width - g.urlLeft - 12 });
-  }, [origin, focusedRect?.x, focusedRect?.y, focusedRect?.width, tabLayout, sidebarOpen, sidebarRight, addressInSidebar, windowButtons]);
+  }, [origin, focusedRect?.x, focusedRect?.y, focusedRect?.width, tabLayout, sidebarOpen, sidebarRight, addressInSidebar]);
 
   return (
     <View
@@ -406,9 +384,9 @@ const TabPane = memo(function TabPane({
   const autoLayout = autoHide && toolbar && !fullscreen && !devBar;
   // The page's own popovers open under the bar's end (inside a sidebar toggle there), or under the sidebar's field at
   // the page's start.
-  const barEnd = 8 + toolbarEndRoom(geometry);
+  const barEnd = 8 + (geometry.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0);
   // Without a toolbar, past the window buttons when they show over this pane's corner.
-  const pageStart = toolbar || devBar ? 8 : geometry.urlLeft;
+  const pageStart = geometry === NO_TOOLBAR_PAST_LIGHTS ? geometry.urlLeft : 8;
   const popoverSide = toolbar || devBar ? { right: barEnd } : { left: pageStart };
   const motion = useToolbarMotion({ enabled: autoLayout, mode, height: frame.height, extra: bookmarksBar ? BOOKMARKS_BAR_HEIGHT : 0, doc });
   // A tab switched to shows its bar.
@@ -421,10 +399,7 @@ const TabPane = memo(function TabPane({
     if (!focused || !visible || isNewTab || small) return;
 
     const timer = setTimeout(() => {
-      // React Native Web's TextInput state has only currentlyFocusedField.
-      const typing = TextInput.State.currentlyFocusedInput?.() ?? TextInput.State.currentlyFocusedField?.();
-
-      if (useBrowser.getState().windowUi[windowId]?.panel?.open || typing) return;
+      if (useBrowser.getState().windowUi[windowId]?.panel?.open || TextInput.State.currentlyFocusedInput()) return;
       void webviews.get(tabId)?.focus();
     }, 0);
 
@@ -435,7 +410,7 @@ const TabPane = memo(function TabPane({
     <Animated.View
       pointerEvents={visible && !covered && !leaving ? "auto" : "none"}
       onTouchStart={() => {
-        if (visible && !focused) reportBrowserCommand(tabCommands.activate(tabId));
+        if (visible && !focused) useBrowser.getState().activate(tabId);
       }}
       style={[
         {
@@ -527,7 +502,7 @@ type TabWebViewProps = { tabId: string; visible: boolean; warm: boolean };
 // The tab's page in its engine's view (store/engines.ts): moving it to the other engine mounts that one's view, which
 // loads the page again.
 function TabWebView(props: TabWebViewProps) {
-  const engine = useBrowserRead((s) => tabEngine(s, props.tabId));
+  const engine = useEngineView((s) => tabEngine(s, props.tabId));
 
   return <EngineWebView key={engine} engine={engine} {...props} />;
 }
@@ -536,8 +511,8 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
   const navigation = useTab(tabId, (t) => t?.navigation);
   const adoptId = useTab(tabId, (t) => t?.adoptId);
   const spaceId = useTab(tabId, (t) => t?.spaceId ?? "");
-  const tab = () => browserRead.getState().tabs[tabId];
-  const store = () => legacyBrowser.getState();
+  const tab = () => useBrowser.getState().tabs[tabId];
+  const store = () => useBrowser.getState();
   // One for the view's life (its tab never changes): it keeps the handle it registered, to unregister only that.
   const [ref] = useState(() => webviewRef(tabId));
   const autoPictureInPicture = useAutoPictureInPicture(tabId, visible);
@@ -562,14 +537,13 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
   // This view goes while its tab keeps its page (lib/tabNavigation.ts): handed off before the native unmount (a layout
   // effect's cleanup runs in the commit). A tab that closed, went to sleep, changed profile or is going to one of the
   // app's own pages or to the other engine closes its page with the view.
-  const mountedProfile = useRef(engineProfileFor(spaceId, browserRead.getState().spaces));
+  const mountedProfile = useRef(engineProfile(spaceId));
   useLayoutEffect(
     () => () => {
       const t = tab();
       const sameEngine = tabEngine(store(), tabId) === engine;
 
-      if (wantsPage(t) && sameEngine && engineProfileFor(t.spaceId, browserRead.getState().spaces) === mountedProfile.current && !isQuitting())
-        handOff(tabId, mountedProfile.current);
+      if (wantsPage(t) && sameEngine && engineProfile(t.spaceId) === mountedProfile.current && !isQuitting()) handOff(tabId, mountedProfile.current);
     },
     [],
   );
@@ -586,7 +560,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       engine={engine}
       style={StyleSheet.absoluteFill}
       url={navigation?.url ?? (adoptId ? tab()?.url : undefined)}
-      profile={engineProfileFor(spaceId, browserRead.getState().spaces)}
+      profile={engineProfile(spaceId)}
       adoptId={adoptId}
       transferKey={tabId}
       visible={visible}
@@ -606,7 +580,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
 
         // A fresh browser reports about:blank before the requested navigation commits.
         if (target !== null && isBlank(url) && !target.startsWith("about:")) {
-          if (!pageFactsInCoordinator()) store().updateLive(tabId, { isLoading: true });
+          store().updateLive(tabId, { isLoading: true });
 
           return;
         }
@@ -615,11 +589,11 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         // The navigated reducer keeps the page behind a New Tab page shown by Back (store/tabs.ts).
         const behindNewTab = tab()?.newTabHistory?.url === url;
 
-        if (!pageFactsInCoordinator()) store().navigated(tabId, { url, title }, { isLoading, canGoBack, canGoForward, themeColor });
-
-        if (behindNewTab) return;
-
         if (fromNewTab.current && url && !isBlank(url)) patchPage(tabId, { backToNewTab: true });
+        store().navigated(tabId, { url, title }, { isLoading, canGoBack, canGoForward, themeColor });
+
+        // The page behind the New Tab page only refreshes its title: the tab still shows the New Tab page.
+        if (behindNewTab) return;
 
         if (engine === "webkit") noteWebKitPage(tabId, { url, title, isLoading, committedUrl: committedUrl ?? "" });
 
@@ -657,13 +631,11 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         const t = tab();
 
         if (!t) return;
-        const coordinated = pageFactsInCoordinator();
-        const s = browserRead.getState();
-
-        if (!coordinated) store().updateLive(tabId, { isLoading: false });
+        const s = store();
+        s.updateLive(tabId, { isLoading: false });
 
         if (committedUrl) {
-          if (!coordinated && t.url !== committedUrl) store().updateTab(tabId, { url: committedUrl });
+          if (t.url !== committedUrl) s.updateTab(tabId, { url: committedUrl });
 
           return;
         }
@@ -671,33 +643,20 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         const others = viewTabIds(s, t.windowId, t.spaceId).some((id) => id !== tabId);
         const opened = !!(t.openerId || t.adoptId) && !pageOf(tabId).wasNewTab;
 
-        if (!skipped && opened && !s.live[tabId]?.canGoBack && others) {
-          if (!coordinated) store().closeTab(tabId);
-
-          return;
-        }
-
+        if (!skipped && opened && !s.live[tabId]?.canGoBack && others) return s.closeTab(tabId);
         patchPage(tabId, { backToNewTab: false });
-
-        if (!coordinated) store().updateTab(tabId, { url: "", title: "", favicon: null, newTabHistory: undefined });
+        s.updateTab(tabId, { url: "", title: "", favicon: null, newTabHistory: undefined });
       }}
-      onProgress={(progress) => {
-        if (!pageFactsInCoordinator()) store().updateLive(tabId, { progress });
-      }}
-      onZoom={({ zoom }) => {
-        if (!pageFactsInCoordinator()) store().updateTab(tabId, { zoom });
-      }}
-      onFindResult={({ count, active }) => {
-        if (!pageFactsInCoordinator()) store().setFind(tabId, { count, active });
-      }}
+      onProgress={(progress) => store().updateLive(tabId, { progress })}
+      onZoom={({ zoom }) => store().updateTab(tabId, { zoom })}
+      onFindResult={({ count, active }) => store().setFind(tabId, { count, active })}
       onFavicon={(favicon) => {
         if (!favicon || !tab()) return;
-
-        if (!pageFactsInCoordinator()) store().faviconChanged(tabId, favicon);
+        store().faviconChanged(tabId, favicon);
         noteFavicon(tabId, favicon);
       }}
       onMedia={({ playing, muted }) => {
-        if (!pageFactsInCoordinator()) store().updateLive(tabId, { playingAudio: playing });
+        store().updateLive(tabId, { playingAudio: playing });
 
         // A new browser can drop mute state before its first page load.
         if (tab()?.muted && !muted) void webviews.get(tabId)?.setMuted(true);
@@ -711,8 +670,9 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         // The engine judged it another site (Chrome's own rule); the tab stayed. A tab that has just stopped peeking
         // still gets its click: the link loads in it.
         if (!/^https?:/i.test(url)) return;
-        const s = browserRead.getState();
-        reportBrowserCommand(peeksLinks(s, tabId) ? openPeek(tabId, url, point) : navigate(tabId, url, { userInitiated: false }));
+
+        if (peeksLinks(store(), tabId)) store().openPeek(tabId, url, undefined, point);
+        else store().navigate(tabId, url, { userInitiated: false });
       }}
       onCrashed={(crashed) => {
         if (!isQuitting()) patchPage(tabId, { crashed, unresponsive: false, fullscreen: false, status: "" });
@@ -729,20 +689,18 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         const first = !pageOf(tabId).popups.length;
         patchPage(tabId, { popups: [...pageOf(tabId).popups, popup] });
 
-        if (first)
-          void shouldPromptForPopups(engineProfileFor(spaceId, browserRead.getState().spaces), popup.origin).then((ask) => ask && setPopover(tabId, "popups"));
+        if (first) void shouldPromptForPopups(engineProfile(spaceId), popup.origin).then((ask) => ask && setPopover(tabId, "popups"));
       }}
       onPasswordPrompt={(prompt) => showPasswordPrompt(tabId, prompt)}
       onAutofillPrompt={(prompt, id) => showAutofillPrompt(tabId, prompt, id)}
       onExternalApp={(externalApp) => patchPage(tabId, { externalApp })}
       onPageFocus={() => {
         const t = tab();
-        const s = browserRead.getState();
 
-        if (t && splitOf(s, tabId) && s.windows[t.windowId]?.activeTabIds[t.spaceId] !== tabId) reportBrowserCommand(activate(tabId));
+        if (t && splitOf(store(), tabId) && store().windows[t.windowId]?.activeTabIds[t.spaceId] !== tabId) store().activate(tabId);
       }}
       // Engine close callbacks also fire during quit; don't remove saved-session tabs then.
-      onWindowClose={() => !isQuitting() && reportBrowserCommand(closeTab(tabId))}
+      onWindowClose={() => !isQuitting() && store().closeTab(tabId)}
       onNotification={(notification) => showWebNotification(tabId, notification)}
       onCommand={({ command, text, modifiers }) => {
         if (command === "search") searchSelection(tabId, text, modifiers);
@@ -789,8 +747,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
         pending.current = url;
         fromNewTab.current = false;
         patchPage(tabId, { backToNewTab: false, status: "" });
-
-        if (!pageFactsInCoordinator()) store().updateLive(tabId, { isLoading: false, progress: 0, canGoBack: false, canGoForward: false, playingAudio: false });
+        store().updateLive(tabId, { isLoading: false, progress: 0, canGoBack: false, canGoForward: false, playingAudio: false });
         noteDiscarded(tabId);
       }}
       onActivateRequest={() => {

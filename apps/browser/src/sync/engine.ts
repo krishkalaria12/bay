@@ -1,4 +1,6 @@
 import * as v from "valibot";
+import * as Effect from "effect/Effect";
+import { Sync, SyncFailure, SyncStopped, type SyncWorker } from "./service";
 import { ownsProfileData } from "../store/spaces";
 import { checked } from "../lib/checked";
 import { isJsonObject, type JsonInput, type JsonObject } from "../lib/json";
@@ -40,7 +42,7 @@ import {
   type DeviceTabs,
   type ProfileRecord,
 } from "./adapters";
-import { APP_SCOPE, SYNC_AFTER_EDIT_MS, SYNC_CYCLE_MS, SYNC_DOC, SYNC_JOURNAL_FILE, SYNC_STATE_FILE } from "./constants";
+import { APP_SCOPE, SYNC_AFTER_EDIT_MS, SYNC_DOC, SYNC_JOURNAL_FILE, SYNC_STATE_FILE } from "./constants";
 import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules";
 import { localFilesAdapter } from "./localFiles";
 import { boostsAdapter } from "./boosts";
@@ -133,9 +135,9 @@ export const useSync = create<SyncUi>(() => ({
 let doc: SyncDoc = emptyDoc();
 let savedJson = "";
 let running = false;
-let again = false;
-let timer: ReturnType<typeof setTimeout> | undefined;
-let slowTimer: ReturnType<typeof setTimeout> | undefined;
+let stopping = false;
+let worker: SyncWorker | undefined;
+let opening: Promise<SyncWorker> | undefined;
 let forcePasswords = false;
 const passwordAdapters = new Map<string, Adapter>();
 let started = false;
@@ -470,9 +472,6 @@ export function prepareSyncForQuit(): Promise<void> {
   if (quitAttempt) return quitAttempt.promise;
   quitPaused = true;
   saveGeneration++;
-  clearTimeout(timer);
-  timer = undefined;
-  again = false;
   let resolve!: () => void;
   let reject!: (error: Error) => void;
 
@@ -618,14 +617,72 @@ function guardTransport(transport: Transport, generation: number): Transport {
 
 // MARK: The cycle
 
+// Resolve the app owner only when it runs work. Importing sync state in a window must not acquire app services.
+const runSync = <A, E>(program: Effect.Effect<A, E, Sync>): Promise<A> => {
+  const owner = syncStore();
+
+  return import("../effect/runtime").then(({ runForStore }) => runForStore(owner, program));
+};
+
+const getWorker = (): Promise<SyncWorker> => {
+  opening ??= runSync(
+    Effect.gen(function* () {
+      const service = yield* Sync;
+
+      const ready = yield* service.open({
+        enabled: () => started && doc.enabled && stateLoaded && !quitPaused,
+        initialize: Effect.tryPromise({
+          try: () => startup,
+          catch: (cause) => new SyncFailure({ operation: "initialize", cause }),
+        }),
+        cycle: (retiring, forced) =>
+          Effect.tryPromise({
+            try: async () => {
+              forcePasswords = forced;
+              const outcome = await runCycle({ retiring });
+
+              if (outcome.error) throw outcome.error;
+            },
+            catch: (cause) => new SyncFailure({ operation: "cycle", cause }),
+          }),
+        updating: () => {
+          if (started && useSync.getState().status === "updated") publishUi({ status: "updating" });
+        },
+        retire: () => useSync.getState().status !== "locked",
+        stop: (deleteData) =>
+          Effect.tryPromise({
+            try: () => finishStop(deleteData),
+            catch: (cause) => new SyncFailure({ operation: "stop", cause }),
+          }),
+        // Store and Boost subscriptions belong to startSync and schedule this same worker.
+        subscribe: () => () => {},
+      });
+
+      worker = ready;
+
+      return ready;
+    }),
+  );
+
+  return opening;
+};
+
 export function scheduleSync(delay = SYNC_AFTER_EDIT_MS) {
-  if (!started || !doc.enabled || quitPaused) return;
-  clearTimeout(timer);
-  timer = setTimeout(() => void runCycle(), delay);
+  if (!started || !doc.enabled || quitPaused || stopping || !stateLoaded) return;
+  // Scheduled edits run on a later timer turn; only an explicit syncNow runs immediately.
+  const queuedDelay = Math.max(1, delay);
+
+  if (worker) worker.schedule(queuedDelay);
+  else
+    void getWorker()
+      .then((ready) => ready.schedule(queuedDelay))
+      .catch(() => publishUi({ status: "stalled", error: "Couldn't start sync." }));
 }
 
 export async function syncNow() {
   if (hasServiceClient()) return requestService<void>("syncNow");
+
+  if (stopping) throw new SyncStopped();
 
   if (quitPaused) {
     if (activeCycle) await activeCycle;
@@ -634,20 +691,27 @@ export async function syncNow() {
   }
 
   const generation = syncGeneration();
-  forcePasswords = true;
   await startup;
   assertSyncGeneration(generation);
+  const ready = await getWorker();
 
-  if (activeCycle) await activeCycle;
-  else if (!quitPaused) await runCycle();
+  // Quit may begin while startup or runtime acquisition yields. Join the accepted cycle without queuing another.
+  if (quitPaused) {
+    if (activeCycle) await activeCycle;
+
+    return;
+  }
+
+  try {
+    await runSync(ready.now);
+  } catch (error) {
+    // Disposing this owner cancels its waiting caller; a replacement owner is unaffected.
+    if (syncGeneration() === generation) throw error;
+  }
 }
 
 function runCycle({ retiring = false } = {}): Promise<CycleOutcome> {
-  if (activeCycle) {
-    again = true;
-
-    return activeCycle;
-  }
+  if (activeCycle) return activeCycle;
 
   if ((quitPaused && !retiring) || !stateLoaded) return Promise.resolve({});
   const task = executeCycle({ retiring });
@@ -668,8 +732,6 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
 
   if (!native || !doc.enabled || !doc.folder || !doc.deviceId) return {};
   running = true;
-  clearTimeout(timer);
-  const slow = (slowTimer = setTimeout(() => isCurrent() && useSync.getState().status === "updated" && publishUi({ status: "updating" }), 1000));
   let cycleClock: Clock | null = null;
 
   try {
@@ -756,24 +818,11 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
 
     return { error };
   } finally {
-    clearTimeout(slow);
-
-    if (slowTimer === slow) slowTimer = undefined;
-
     if (isCurrent()) {
       running = false;
 
       if (cycleClock) doc.clock = cycleClock.last;
       save();
-
-      if (doc.enabled) {
-        if (again) {
-          again = false;
-          scheduleSync(0);
-        } else {
-          scheduleSync(SYNC_CYCLE_MS);
-        }
-      }
     }
   }
 }
@@ -884,6 +933,7 @@ export async function chooseSyncFolder(): Promise<string | null> {
 }
 
 function begin(folder: string, deviceId: string, joining: boolean) {
+  stopping = false;
   saveGeneration++;
   savedState = null;
   metadataLoadError = null;
@@ -892,6 +942,7 @@ function begin(folder: string, deviceId: string, joining: boolean) {
   clearJournal();
   save();
   publishUi({ status: "starting", error: null });
+  worker?.resume();
   scheduleSync(0);
 }
 
@@ -981,21 +1032,20 @@ export function stopSync(options: { deleteData?: boolean } = {}): Promise<void> 
 }
 
 async function stopSyncInternal({ deleteData = false } = {}) {
+  if (!SyncNative || !doc.enabled) return;
+  stopping = true;
+  const ready = await getWorker();
+  await runSync(ready.stop(deleteData));
+}
+
+async function finishStop(deleteData: boolean) {
   const generation = syncGeneration();
   const native = SyncNative;
 
   if (!native || !doc.enabled) return;
-  clearTimeout(timer);
   await startup;
 
   if (activeCycle) await activeCycle;
-  assertSyncGeneration(generation);
-
-  try {
-    if (useSync.getState().status !== "locked") await runCycle({ retiring: true });
-  } catch {}
-
-  clearTimeout(timer);
   assertSyncGeneration(generation);
   const folder = doc.folder;
 
@@ -1074,13 +1124,12 @@ let unsubscribeBoosts: (() => void) | undefined;
 
 export function stopSyncEngine() {
   started = false;
+  stopping = false;
+  worker?.dispose();
+  worker = undefined;
+  opening = undefined;
   saveGeneration++;
   quitPaused = false;
-  clearTimeout(timer);
-  timer = undefined;
-  again = false;
-  clearTimeout(slowTimer);
-  slowTimer = undefined;
   unsubscribe?.();
   unsubscribe = undefined;
   unsubscribeBoosts?.();

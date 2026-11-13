@@ -1,3 +1,13 @@
+import * as Effect from "effect/Effect";
+import { runForStore } from "../effect/runtime";
+import { LocalFileService } from "../lib/localFileService";
+import { DownloadWorkService } from "../lib/downloadWorkService";
+import { TidyWorkService } from "../lib/tidyWorkService";
+import { engineProfileFor } from "../store/model";
+import { executeSettingsAction } from "../components/settings/authorityCommands";
+import { LibraryService } from "../components/library/libraryService";
+import { parseServiceResult } from "./serviceCommands";
+import type { LocalFileAccess } from "@bay/desktop";
 import { setSharing, dismissAsk } from "../telemetry/client";
 import type { BrowserStore } from "../store/browserStore";
 import type { ServiceCommand, ServiceResult } from "./serviceCommands";
@@ -42,18 +52,149 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
     return w;
   };
 
+  const pinInWindow = (windowId: string, pinId: string) => {
+    const window = publicWindow(windowId);
+    const pin = browser.getState().localFiles[pinId];
+
+    if (!pin || pin.spaceId !== window.spaceId) return invalidCommand("file does not belong to the window's space");
+    requireCommandSpace(browser.getState(), pin.spaceId);
+
+    return pin;
+  };
+
+  const download = (id: string) => {
+    const state = browser.getState();
+    const item = state.downloads.find((item) => item.id === id);
+
+    if (!item || !state.spaceOrder.some((id) => engineProfileFor(id, state.spaces) === (item.profile ?? "")))
+      return invalidCommand("download no longer exists");
+
+    return item;
+  };
+
+  const fileResult = (access: LocalFileAccess): ServiceResult => {
+    const result: LocalFileAccess = { status: access.status };
+
+    if (access.path !== undefined) result.path = access.path;
+
+    if (access.name !== undefined) result.name = access.name;
+
+    if (access.kind !== undefined) result.kind = access.kind;
+
+    if (access.url !== undefined) result.url = access.url;
+
+    if (access.browserReadable !== undefined) result.browserReadable = access.browserReadable;
+
+    return result;
+  };
+
   switch (command.action) {
+    case "settingsUnlock":
+    case "settingsPasswords":
+    case "settingsImportCsv":
+    case "settingsExportCsv":
+    case "settingsClearData": {
+      requireCommandSpace(browser.getState(), command.args[0]);
+      const result = await executeSettingsAction(browser, command.action, command.args);
+
+      return parseServiceResult(result, command.action);
+    }
+
+    case "librarySaveMedia": {
+      const [windowId, image, name, source] = command.args;
+      const window = publicWindow(windowId);
+      const profile = engineProfileFor(window.spaceId, browser.getState().spaces);
+
+      if (source?.profileId !== undefined && source.profileId !== profile) return invalidCommand("capture belongs to another profile");
+
+      const result = await runForStore(
+        browser,
+        Effect.flatMap(LibraryService, (library) => library.saveMedia(image, name, source ?? undefined)),
+      );
+
+      return parseServiceResult(result === null ? null : JSON.parse(JSON.stringify(result)), command.action);
+    }
+
+    case "tidyTabs": {
+      publicWindow(command.args[0]);
+
+      const outcome = await runForStore(
+        browser,
+        Effect.flatMap(TidyWorkService, (tidy) => tidy.run({ windowId: command.args[0] })),
+      );
+
+      return outcome.kind === "tidied" || outcome.kind === "nothing" ? { ...outcome, loose: [...outcome.loose] } : outcome;
+    }
+
+    case "downloadRename": {
+      const item = download(command.args[0]);
+      const name = command.args[1];
+
+      return runForStore(
+        browser,
+        Effect.flatMap(DownloadWorkService, (work) => work.rename(item, { filename: name, stem: name, extension: "", basis: "file" })),
+      );
+    }
+
+    case "downloadUndo": {
+      const item = download(command.args[0]);
+
+      return runForStore(
+        browser,
+        Effect.flatMap(DownloadWorkService, (work) => work.undo(item, command.args[1])),
+      );
+    }
+
+    case "localFileOpen":
+    case "localFilePeek": {
+      const [windowId, pinId, relativePath] = command.args;
+      pinInWindow(windowId, pinId);
+
+      const access = await runForStore(
+        browser,
+        Effect.flatMap(LocalFileService, (files) =>
+          command.action === "localFileOpen" ? files.open(windowId, pinId, relativePath) : files.peek(windowId, pinId, relativePath),
+        ),
+      );
+
+      return fileResult(access);
+    }
+
+    case "localFileClose": {
+      const [windowId, pinId, relativePath] = command.args;
+      pinInWindow(windowId, pinId);
+      await runForStore(
+        browser,
+        Effect.flatMap(LocalFileService, (files) => files.close(windowId, pinId, relativePath)),
+      );
+      break;
+    }
+
+    case "localFileReconnect": {
+      const pin = browser.getState().localFiles[command.args[0]];
+
+      if (!pin) return invalidCommand("file no longer exists");
+      requireCommandSpace(browser.getState(), pin.spaceId);
+
+      return runForStore(
+        browser,
+        Effect.flatMap(LocalFileService, (files) => files.reconnect(command.args[0])),
+      );
+    }
+
     case "liveCreate":
       publicWindow(command.args[0]);
 
-      return await newLiveFolder(...command.args, browser);
+      // The live engine is bound to the store this command came from (runtime/serviceState.ts), so the folders
+      // it keeps are the authority's own.
+      return await newLiveFolder(...command.args);
     case "liveUpdate":
       folder(command.args[0]);
       updateFolder(...command.args);
       break;
     case "liveRemove":
       folder(command.args[0]);
-      deleteLiveFolder(...command.args, browser);
+      deleteLiveFolder(...command.args);
       break;
     case "liveMove":
       folder(command.args[0]);
@@ -86,7 +227,7 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
 
       if (!item) return invalidCommand("live item no longer exists");
 
-      return await openLiveItem(w, id, item, { background }, browser);
+      return await openLiveItem(w, id, item, { background });
     }
 
     case "liveConnect": {

@@ -1,7 +1,6 @@
 import { prepareTabTransfer, releaseTabTransfer } from "@bay/chromium";
-import { isInternalTab } from "../components/pages/pageUrls";
+import { isInternalTab } from "../components/pages/internalPages";
 import { useBrowserRead as useBrowser } from "../store/read";
-import { pageFactsInCoordinator } from "./pageFactOwnership";
 import { changedIds } from "../store/recordDiff";
 import { engineProfile } from "../store/model";
 import type { Tab } from "../store/types";
@@ -22,15 +21,14 @@ const handedOff = new Map<string, string>();
 /** The tab's page outlives its current view (a view going, or the tab leaving its window). */
 export function handOff(tabId: string, profile: string) {
   handedOff.set(tabId, profile);
-
-  if (!pageFactsInCoordinator()) prepareTabTransfer(tabId);
+  prepareTabTransfer(tabId);
 }
 
 /** Before lib/shellBridge.ts's sync (startNativeSync), which closes a window the store dropped: store listeners run in the
  *  order they subscribed, so a tab moved out of a window that closes with the move (its last tab) is handed off before
  *  that window's close reaches the main queue (NNCoreWebView keepTransfersOfWindow:). */
 export function startTabPages() {
-  return useBrowser.subscribe((s, prev) => {
+  useBrowser.subscribe((s, prev) => {
     if (s.tabs === prev.tabs) return;
 
     for (const id of changedIds(s.tabs, prev.tabs)) {
@@ -43,8 +41,7 @@ export function startTabPages() {
 
       if (kept !== undefined && !(wantsPage(tab) && profile === kept)) {
         handedOff.delete(id);
-
-        if (!pageFactsInCoordinator()) releaseTabTransfer(id);
+        releaseTabTransfer(id);
       }
     }
   });

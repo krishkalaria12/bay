@@ -4,6 +4,7 @@ import { sendService } from "../runtime/serviceClient";
 import { useBrowser, type BrowserStore } from "../store/browserStore";
 import { registerSidebarUndo, sidebarUndoWindow } from "../store/sidebarUndo";
 import type { CompletedItem, CompletionState, FolderStatus, LiveAccount, LiveFolder, LiveFolderKind, LiveItem, LiveSourceId } from "./types";
+import type { SavedDocument } from "../lib/savedDocument";
 import { LIVE_DOC, MAX_COMPLETED_ITEMS, MAX_KNOWN_ITEMS } from "./constants";
 
 export type LiveConfig = {
@@ -113,19 +114,45 @@ export const useLive = create<LiveState>()(() => initialState());
 export const live = () => useLive.getState();
 export const setLive = (patch: Partial<LiveState> | ((s: LiveState) => Partial<LiveState>)) => useLive.setState(patch);
 
+/**
+ * The store the live folders belong to.
+ *
+ * The live state is the app's, not the coordinator's: a window reads it and the coordinator owns it. This says which
+ * store writes it, so the coordinator's authority store is the one that is saved.
+ */
+let browserOwner: BrowserStore = useBrowser;
+
+/** Binds the live folders to a store, and gives back the unbind. */
+export function bindLiveStoreBrowser(browser: BrowserStore): () => void {
+  const previous = browserOwner;
+  browserOwner = browser;
+
+  return () => {
+    if (browserOwner === browser) browserOwner = previous;
+  };
+}
+
+/**
+ * The live folders' own saving.
+ *
+ * The folders are the app's, not the coordinator's: a window reads them and the coordinator owns them. This is the
+ * owner of their document, so a change is written with the session's own and the quit saves them too.
+ */
 type LivePersistence = { stop(): void; flush(final: boolean): Promise<void>; resume(): void };
 
 let persistence: LivePersistence | undefined;
 
+/** Writes the live folders' document now. */
 export function flushLivePersistence({ final = false } = {}): Promise<void> {
   return persistence?.flush(final) ?? Promise.resolve();
 }
 
+/** A quit was cancelled: the saving goes on, starting with what changed meanwhile. */
 export function resumeLivePersistence() {
   persistence?.resume();
 }
 
-/** Load shared Live state once, before services and windows start using it. */
+/** Owns the live folders' saving, and gives back its stop. */
 export function startLivePersistence(): () => void {
   if (persistence) return persistence.stop;
   useLive.setState(initialState(load()), true);
@@ -200,6 +227,38 @@ export function startLivePersistence(): () => void {
   return stop;
 }
 
+/**
+ * The live folders' document, as the app's saving keeps it (lib/persistenceService.ts): a change is written with the
+ * session's own, so a burst of them is one write, a write that fails is tried again, and the quit saves it too.
+ */
+export const liveFoldersDocument: SavedDocument = {
+  name: LIVE_DOC,
+  json: () => {
+    const s = live();
+
+    return JSON.stringify(Object.fromEntries(PERSISTED.map((k) => [k, s[k]])));
+  },
+  watch: (changed) =>
+    useLive.subscribe((s, prev) => {
+      if (!PERSISTED.every((k) => s[k] === prev[k])) changed();
+    }),
+};
+
+type LiveFolderUndo = { id: string; before: Partial<LiveFolder>; after: Partial<LiveFolder> };
+
+// Restores only the fields a later edit has not changed again.
+registerSidebarUndo("liveFolder", (value) => {
+  // SAFETY: the checks above established this shape.
+  const { id, before, after } = value as LiveFolderUndo;
+  const current = useLive.getState().folders[id];
+
+  if (!current) return;
+  const restore: Partial<LiveFolder> = {};
+
+  for (const key of ["name", "icon"] as const) if (key in before && (current[key] ?? null) === after[key]) Object.assign(restore, { [key]: before[key] });
+  setLive({ folders: { ...useLive.getState().folders, [id]: { ...current, ...restore } } });
+});
+
 let counter = 0;
 const newId = () => `lf-${Date.now().toString(36)}-${(++counter).toString(36)}`;
 
@@ -232,32 +291,6 @@ export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: Li
   return id;
 }
 
-let browserOwner: BrowserStore = useBrowser;
-
-export function bindLiveStoreBrowser(browser: BrowserStore): () => void {
-  const previous = browserOwner;
-  browserOwner = browser;
-
-  return () => {
-    if (browserOwner === browser) browserOwner = previous;
-  };
-}
-
-type LiveFolderUndo = { id: string; before: Partial<LiveFolder>; after: Partial<LiveFolder> };
-
-// Restores only the fields a later edit has not changed again.
-registerSidebarUndo("liveFolder", (value) => {
-  // SAFETY: the checks above established this shape.
-  const { id, before, after } = value as LiveFolderUndo;
-  const current = useLive.getState().folders[id];
-
-  if (!current) return;
-  const restore: Partial<LiveFolder> = {};
-
-  for (const key of ["name", "icon"] as const) if (key in before && (current[key] ?? null) === after[key]) Object.assign(restore, { [key]: before[key] });
-  setLive({ folders: { ...useLive.getState().folders, [id]: { ...current, ...restore } } });
-});
-
 export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | "spaceId" | "kind">>, originWindowId?: string) {
   if (sendService("liveUpdate", [id, patch])) return;
   const before = useLive.getState().folders[id];
@@ -270,6 +303,18 @@ export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | 
     const data: LiveFolderUndo = { id, before: pick(before), after: pick(patch) };
     browserOwner.getState().pushSidebarUndo(windowId, { kind: "liveFolder", data });
   }
+}
+
+/** Marks an item unread in a folder. */
+export function markUnread(folderId: string, itemId: string) {
+  if (sendService("liveUnread", [folderId, itemId])) return;
+  setLive((s) => ({ unread: { ...s.unread, [folderId]: [...new Set([...(s.unread[folderId] ?? []), itemId])] } }));
+}
+
+/** Sets one of the live view's own flags: a stack's expansion, or the show-all switch. */
+export function setLiveView(field: "expandedStacks" | "showAll", key: string, value: boolean) {
+  if (sendService("liveView", [field, key, value])) return;
+  setLive((s) => ({ [field]: { ...s[field], [key]: value } }));
 }
 
 const without = <T>(record: Record<string, T>, key: string) => {
@@ -378,14 +423,17 @@ export function setAccount(source: LiveSourceId, account: LiveAccount | null) {
 }
 
 export const updateConfig = (patch: Partial<LiveConfig>) => {
-  if (!sendService("liveConfig", [patch])) setLive((s) => ({ config: { ...s.config, ...patch } }));
+  if (sendService("liveConfig", [patch])) return;
+  setLive((s) => ({ config: { ...s.config, ...patch } }));
 };
 
 export const updateCalendarSettings = (patch: Partial<CalendarSettings>) => {
-  if (!sendService("calendarSettings", [patch])) setLive((s) => ({ calendar: { ...s.calendar, ...patch } }));
+  if (sendService("calendarSettings", [patch])) return;
+  setLive((s) => ({ calendar: { ...s.calendar, ...patch } }));
 };
 
 export function dismissAlert(occurrence: string) {
+  if (sendService("alertDismiss", [occurrence])) return;
   setLive((s) => (s.dismissedAlerts.includes(occurrence) ? {} : { dismissedAlerts: [...s.dismissedAlerts, occurrence].slice(-200) }));
 }
 
@@ -398,13 +446,3 @@ export function setMeetingGroup(group: MeetingGroup | null, groupId?: string) {
 }
 
 export const profileFolders = (s: LiveState, spaceId: string) => s.folderOrder.filter((id) => s.folders[id]?.spaceId === spaceId);
-
-export function markUnread(folderId: string, itemId: string) {
-  if (sendService("liveUnread", [folderId, itemId])) return;
-  setLive((s) => ({ unread: { ...s.unread, [folderId]: [...new Set([...(s.unread[folderId] ?? []), itemId])] } }));
-}
-
-export function setLiveView(field: "expandedStacks" | "showAll", key: string, value: boolean) {
-  if (sendService("liveView", [field, key, value])) return;
-  setLive((s) => ({ [field]: { ...s[field], [key]: value } }));
-}

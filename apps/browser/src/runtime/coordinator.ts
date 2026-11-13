@@ -95,7 +95,7 @@ export async function createBrowserCoordinator({
   let unsubscribeAuthority = () => {};
   let unsubscribeCommands = () => {};
   let unsubscribeClose = () => {};
-  let services: PersistenceOwner | undefined;
+  let services: (PersistenceOwner & { readonly settled?: Promise<void> }) | undefined;
   const pageFacts = createPageFactConsumer(store);
   let unsubscribePages = () => {};
   const pageOpens = new Map<string, { fingerprint: string; promise: Promise<void>; complete: boolean }>();
@@ -283,6 +283,9 @@ export async function createBrowserCoordinator({
     active();
 
     return {
+      get settled(): Promise<void> {
+        return services?.settled ?? Promise.resolve();
+      },
       getSnapshot: authority.getSnapshot,
       flushPersistence(options?: { final?: boolean }) {
         active();

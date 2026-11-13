@@ -21,7 +21,7 @@ RuntimeRequestStatus ValidateRuntimeRequest(const base::DictValue& request,
 bool IsRuntimeCommit(const base::DictValue& commit,
                      const std::string& epoch,
                      double expected_revision);
-enum class RuntimeResultKind { kNone, kIdList, kRequiredId, kOptionalId, kBoolean, kGithub, kSync, kFolder, kImport };
+enum class RuntimeResultKind { kNone, kIdList, kRequiredId, kOptionalId, kBoolean, kGithub, kSync, kFolder, kImport, kOptionalText, kTidy, kLocalFile, kPasswords, kPasswordImport, kPasswordExport, kClearData, kLibraryMedia };
 RuntimeResultKind RuntimeCommandResultKind(const base::DictValue& command);
 bool IsRuntimeReply(const base::DictValue& reply,
                     const std::string& epoch,

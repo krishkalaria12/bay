@@ -30,6 +30,7 @@
     "@bay/sync": "workspace:*",
     "@expo/metro-runtime": "~6.1.2",
     "@legendapp/list": "^3.6.0",
+    "effect": "4.1.3",
     "expo": "~54.0.37",
     "expo-modules-core": "~3.0.29",
     "react": "19.1.4",

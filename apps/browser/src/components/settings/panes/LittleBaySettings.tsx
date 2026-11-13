@@ -1,16 +1,17 @@
-import { isMac } from "@bay/platform";
-import { cancelShortcutRecording, recordShortcut, type HotKeyStatus, type MenuShortcut } from "@bay/desktop";
-import { useEffect, useRef, useState } from "react";
-import { menuShortcuts } from "../../../lib/keyBindings";
-import { useBrowserRead as useBrowser } from "../../../store/read";
 import { updateSettings } from "../../../runtime/settingsActions";
 import { reportBrowserCommand } from "../../../runtime/commands";
-import type { Settings } from "../../../store/settings";
+import { menuShortcuts, type HotKeyStatus, type MenuShortcut } from "@bay/desktop";
+import { useEffect, useState } from "react";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import type { LittleBayShortcut } from "../../../store/settings";
 import { DEFAULT_LITTLE_BAY_SHORTCUT, useLittleBayAccess } from "../../littleBay/access";
 import { Group, PopUp, Row, SectionHeader, SettingToggle, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { comboId, formatShortcut, ShortcutField } from "./Shortcuts";
+import { withWorkflows } from "../settingsCommands";
+
+// The recorder this pane is: closing it stops its own recording, and no other pane's.
+const RECORDER = "littleBay";
 
 const PUT_AWAY_CHOICES = [
   { value: "1", title: "After 1 hour" },
@@ -22,28 +23,24 @@ const PUT_AWAY_CHOICES = [
 
 // Little Bay, as Little Arc: from any app with a shortcut or the menu bar, and put away once left alone.
 export function LittleBaySettings() {
-  const savedShortcut = useBrowser((s) => s.settings.littleBayShortcut);
-  const shortcut = savedShortcut ? { ...savedShortcut, modifiers: [...savedShortcut.modifiers] } : null;
+  const shortcut = useBrowser((s) => s.settings.littleBayShortcut);
   const hours = useBrowser((s) => s.settings.littleBayPutAwayAfterHours);
   const status = useLittleBayAccess((a) => a.status);
   const overrides = useBrowser((s) => s.settings.shortcuts);
-  const update = (patch: Partial<Settings>) => reportBrowserCommand(updateSettings(patch));
+  const update = (patch: Parameters<typeof updateSettings>[0]) => reportBrowserCommand(updateSettings(patch));
   const [recording, setRecording] = useState(false);
-  const latestRecording = useRef(0);
   const [menus, setMenus] = useState<MenuShortcut[]>([]);
   useEffect(() => {
     void menuShortcuts().then(setMenus);
 
-    return () => void cancelShortcutRecording();
+    // The pane's recording stops with the pane.
+    return () => void withWorkflows((w) => w.stopRecording(RECORDER));
   }, []);
 
   const record = async () => {
-    const run = ++latestRecording.current;
     setRecording(true);
-    const combo = await recordShortcut();
-
-    // A later recording replaced this one, and its field stays lit.
-    if (run === latestRecording.current) setRecording(false);
+    const combo = await withWorkflows((w) => w.record(RECORDER));
+    setRecording(false);
     // A global shortcut needs ⌘, ⌥ or ⌃: a bare key or ⇧ and a key would take typing from every app.
     const modifiers = (combo?.modifiers ?? []).filter((m): m is LittleBayShortcut["modifiers"][number] => m !== "function");
 
@@ -88,7 +85,7 @@ export function LittleBaySettings() {
           setting="littleBayMenuBarItem"
           settingId={SETTINGS.littleBayMenuBarItem.id}
           title={SETTINGS.littleBayMenuBarItem.title}
-          description={isMac ? "A button in the menu bar that opens Little Bay." : "An icon in the system tray that opens Little Bay."}
+          description="A button in the menu bar that opens Little Bay."
         />
         <Row
           settingId={SETTINGS.littleBayPutAwayAfterHours.id}
@@ -107,13 +104,11 @@ export function LittleBaySettings() {
   );
 }
 
-function shortcutDescription(shortcut: LittleBayShortcut | null, status: HotKeyStatus, clash: MenuShortcut | undefined): string {
+function shortcutDescription(shortcut: { key: string; modifiers: readonly string[] } | null, status: HotKeyStatus, clash: MenuShortcut | undefined): string {
   if (!shortcut) return "A shortcut that opens Little Bay ready to type, even when Bay is in the background.";
   const keys = formatShortcut(shortcut);
 
-  if (status === "taken") return `${keys} is taken by another app or by ${isMac ? "macOS" : "your desktop"}. Choose another.`;
-
-  if (status === "unavailable") return "Your desktop doesn't let apps use a shortcut from anywhere. Use the tray icon, or the shortcut inside Bay.";
+  if (status === "taken") return `${keys} is taken by another app or by macOS. Choose another.`;
 
   if (clash) return `Also Bay's ${clash.title}: in Bay, ${keys} opens Little Bay instead.`;
 

@@ -2137,3 +2137,74 @@ TEST(RuntimeLocalFilesTest, RequiresBoundedIdListReplies) {
 }
 
 }  // namespace bay
+
+TEST(RuntimeEffectServicesTest, AuthorizesFilesDownloadsAndSettingsAtTheNativeBoundary) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  state.FindDict("localFiles")->Set("pin", base::DictValue().Set("spaceId", "default"));
+  state.FindDict("localFiles")->Set("private-pin", base::DictValue().Set("spaceId", "incognito:private"));
+  state.FindList("downloads")->Append(base::DictValue().Set("id", "download").Set("profile", ""));
+  state.FindList("downloads")->Append(base::DictValue().Set("id", "private-download").Set("profile", "incognito:private"));
+  const auto action = [](const char* name, base::ListValue args) {
+    return base::DictValue().Set("method", "serviceAction").Set("action", name).Set("args", std::move(args));
+  };
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("tidyTabs", base::ListValue().Append("normal"))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other", action("tidyTabs", base::ListValue().Append("normal"))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", action("tidyTabs", base::ListValue().Append("private"))));
+  for (const char* name : {"localFileOpen", "localFilePeek", "localFileClose"}) {
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action(name, base::ListValue().Append("normal").Append("pin").Append("nested/file.pdf"))));
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action(name, base::ListValue().Append("normal").Append("pin").Append(""))));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other", action(name, base::ListValue().Append("normal").Append("pin").Append(""))));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action(name, base::ListValue().Append("normal").Append("private-pin").Append(""))));
+    for (const char* path : {"/root", "C:\\root", "../secret", "nested\\..\\secret"})
+      EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action(name, base::ListValue().Append("normal").Append("pin").Append(path))));
+  }
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("localFileReconnect", base::ListValue().Append("pin"))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("localFileReconnect", base::ListValue().Append("private-pin"))));
+  for (const char* name : {"downloadRename", "downloadUndo"}) {
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action(name, base::ListValue().Append("download").Append("report.pdf"))));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action(name, base::ListValue().Append("private-download").Append("report.pdf"))));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action(name, base::ListValue().Append("download").Append("../report.pdf"))));
+  }
+  for (const char* name : {"settingsUnlock", "settingsPasswords", "settingsImportCsv", "settingsExportCsv"}) {
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action(name, base::ListValue().Append("default"))));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action(name, base::ListValue().Append("incognito:private"))));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", action(name, base::ListValue().Append("default"))));
+  }
+  auto clear = base::DictValue().Set("history", true).Set("siteData", false).Set("since", 1);
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("settingsClearData", base::ListValue().Append("default").Append(clear.Clone()))));
+  clear.Set("secret", true);
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("settingsClearData", base::ListValue().Append("default").Append(std::move(clear)))));
+  auto image = base::DictValue().Set("path", "/tmp/capture.png").Set("width", 640).Set("height", 480);
+  auto source = base::DictValue().Set("url", "https://example.com/").Set("title", "Page").Set("profileId", "");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("librarySaveMedia", base::ListValue().Append("normal").Append(image.Clone()).Append("Capture").Append(source.Clone()))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other", action("librarySaveMedia", base::ListValue().Append("normal").Append(image.Clone()).Append("Capture").Append(source.Clone()))));
+  source.Set("profileId", "incognito:private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("librarySaveMedia", base::ListValue().Append("normal").Append(image.Clone()).Append("Capture").Append(std::move(source)))));
+}
+
+TEST(RuntimeEffectServicesTest, RepliesContainOnlyTheRequestedWorkflowOutcome) {
+  const auto reply = [](const char* action, base::Value value) {
+    const auto command = base::DictValue().Set("method", "serviceAction").Set("action", action);
+    const auto result = base::DictValue().Set("epoch", "epoch").Set("revision", 1).Set("value", std::move(value));
+    return IsRuntimeReply(result, "epoch", 1, 1, RuntimeCommandResultKind(command));
+  };
+  EXPECT_TRUE(reply("downloadRename", base::Value("/Downloads/report.pdf")));
+  EXPECT_TRUE(reply("downloadUndo", base::Value()));
+  EXPECT_TRUE(reply("localFileReconnect", base::Value(true)));
+  EXPECT_FALSE(reply("localFileReconnect", base::Value("yes")));
+  EXPECT_TRUE(reply("localFileOpen", base::Value(Json(R"({"status":"inaccessible"})"))));
+  EXPECT_FALSE(reply("localFileOpen", base::Value(Json(R"({"status":"available","nativeHandle":"forged"})"))));
+  EXPECT_TRUE(reply("tidyTabs", base::Value(Json(R"({"kind":"tidied","groups":1,"moved":2,"loose":[],"source":"site"})"))));
+  EXPECT_FALSE(reply("tidyTabs", base::Value(Json(R"({"kind":"tidied","groups":1,"moved":2,"loose":[],"source":"site","token":"secret"})"))));
+  EXPECT_TRUE(reply("settingsPasswords", base::Value(Json(R"({"passwords":[{"origin":"https://example.com","username":"reader","created":1,"modified":2}],"never":[]})"))));
+  EXPECT_FALSE(reply("settingsPasswords", base::Value(Json(R"({"passwords":[{"origin":"https://example.com","username":"reader","password":"secret","created":1,"modified":2}],"never":[]})"))));
+  EXPECT_TRUE(reply("settingsImportCsv", base::Value(Json(R"({"kind":"cancelled"})"))));
+  EXPECT_FALSE(reply("settingsImportCsv", base::Value(Json(R"({"kind":"cancelled","saved":0})"))));
+  EXPECT_TRUE(reply("settingsExportCsv", base::Value(Json(R"({"status":"reauthFailed"})"))));
+  EXPECT_FALSE(reply("settingsClearData", base::Value(Json(R"({"history":true,"engine":"maybe"})"))));
+  EXPECT_TRUE(reply("librarySaveMedia", base::Value(Json(R"({"id":"m","path":"/tmp/capture.png","width":640,"height":480,"name":"Capture","createdAt":1})"))));
+  EXPECT_FALSE(reply("librarySaveMedia", base::Value(Json(R"({"id":"m","path":"/tmp/capture.png","width":640,"height":480,"name":"Capture","createdAt":1,"nativeHandle":"forged"})"))));
+}

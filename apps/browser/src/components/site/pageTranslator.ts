@@ -154,6 +154,10 @@ if (!window[KEY]) {
       }
       return true;
     },
+    // The token this document's translation runs under. A document that was replaced has another one, or none.
+    identity() {
+      return this.token;
+    },
     revert() {
       this.active = false;
       this.token = null;
@@ -174,6 +178,6 @@ if (!window[KEY]) {
 }
 `;
 
-export function translatorCall(op: "sample" | "start" | "next" | "apply" | "revert", ...args: unknown[]): string {
+export function translatorCall(op: "sample" | "start" | "next" | "apply" | "revert" | "identity", ...args: unknown[]): string {
   return `${INSTALL}\npost("result", JSON.stringify(window[Symbol.for("bay.translator")].${op}(...${JSON.stringify(args)})));`;
 }

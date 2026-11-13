@@ -4,7 +4,7 @@ import { onAppEvent, onWindowEvent } from "@bay/desktop";
 import { create } from "zustand";
 import { pageOf } from "../components/window/pageState";
 import { useMedia } from "../components/media/state";
-import { isInternalTab } from "../components/pages/index";
+import { isInternalTab } from "../components/pages/internalPages";
 import { useBrowserRead as useBrowser } from "../store/read";
 import type { BrowserProjection as BrowserState } from "../runtime/projection";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
@@ -55,7 +55,8 @@ let activeSince = Date.now();
 let activeTotal = 0;
 const activeClock = () => activeTotal + (appActive ? Date.now() - activeSince : 0);
 
-function setAppActive(active: boolean) {
+/** Whether Bay is the app in front: idle time is the app's active time. */
+export function setAppActive(active: boolean) {
   if (active === appActive) return;
 
   if (appActive) activeTotal += Date.now() - activeSince;
@@ -107,6 +108,7 @@ export function keepAliveReason(s: BrowserState, id: string): string | null {
 
   if (page.permission) return "asking for permission";
 
+  // The tab kept the page it showed, so Back has somewhere to go.
   if (tab.newTabHistory) return "kept for Forward";
   const media = useMedia.getState();
 
@@ -142,8 +144,17 @@ for (let i = 0; !unsaved && i < frames.length; i++) {
 }
 post("result", JSON.stringify(unsaved));`;
 
-const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T) =>
-  Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
+// The page's answer, or the fallback once the time is up. The timer goes with the answer: a page that answered leaves
+// nothing waiting behind it.
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const late = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
 
 async function hasUnsavedInput(handle: WebViewHandle): Promise<boolean | null> {
   const result = await withTimeout(
@@ -327,138 +338,203 @@ function releaseUnusedProfiles() {
 
 // MARK: Launch
 
-export function reloadRecentTabs(sys: SystemState) {
+/** The tabs reopened in the background at launch: the most recent few, on a Mac with the memory and power for them. */
+export function recentTabsToReload(sys: SystemState, state: BrowserState = store()): string[] {
   const gb = sys.physicalMemory / 2 ** 30;
   const busy = sys.onBattery || sys.lowPowerMode || sys.memoryPressure !== "normal";
   const count = busy ? 0 : gb >= 32 ? 4 : gb >= 16 ? 3 : gb >= 8 ? 1 : 0;
-  const s = store();
+  const s = state;
   const shown = shownTabIds(s);
   const since = Date.now() - 24 * 60 * 60_000;
 
-  const ids = Object.values(s.tabs)
+  return Object.values(s.tabs)
     .filter((t) => t.url && !t.navigation && !t.adoptId && !t.unloaded && !shown.has(t.id) && !isInternalTab(t) && t.lastActiveAt >= since)
     .filter((t) => s.windows[t.windowId]?.spaceId === t.spaceId)
     .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
     .slice(0, count)
     .map((t) => t.id);
+}
 
-  ids.forEach((id, i) =>
-    setTimeout(
-      () => {
-        const latest = currentSystem() ?? sys;
+/** How long after launch, and after each other, the recent tabs are reopened. */
+export const RELOAD_SPACING_MS = 2000;
 
-        if (latest.onBattery || latest.lowPowerMode || latest.memoryPressure !== "normal") return;
-        const t = store().tabs[id];
+/**
+ * The tabs reopened in the background at launch, one after another: the most recent few, on a Mac with the memory
+ * and power for them. Each one waits its turn, and each checks the Mac again before it reopens.
+ */
+export function reloadRecentTabs(sys: SystemState): string[] {
+  const ids = recentTabsToReload(sys);
 
-        if (t?.url && !t.navigation && !t.adoptId) reportBrowserCommand(dispatchBrowserCommand({ method: "wakeTab", tabId: id }));
-      },
-      2000 * (i + 1),
-    ),
-  );
+  ids.forEach((id, index) => {
+    setTimeout(() => wakeRecentTab(id, sys), RELOAD_SPACING_MS * (index + 1));
+  });
 
   return ids;
 }
 
+/** Reopens one of the recent tabs, unless the Mac has since become busy or the tab has a page already. */
+export function wakeRecentTab(id: string, sys: SystemState, read: () => BrowserState = store) {
+  const latest = currentSystem() ?? sys;
+
+  if (latest.onBattery || latest.lowPowerMode || latest.memoryPressure !== "normal") return;
+  const t = read().tabs[id];
+
+  if (t?.url && !t.navigation && !t.adoptId) reportBrowserCommand(dispatchBrowserCommand({ method: "wakeTab", tabId: id }));
+}
+
+// MARK: What the lifecycle service hears (pageLifecycleService.ts)
+
+let lastShown = new Set<string>();
+
+/** The tabs that went out of sight start their idle time; the ones in sight have none. */
+export function trackShown(s: BrowserState = store()) {
+  const shown = shownTabIds(s);
+  const now = activeClock();
+
+  for (const id of lastShown) if (!shown.has(id)) hiddenAt.set(id, now);
+
+  for (const id of shown) hiddenAt.delete(id);
+
+  for (const id of webviews.keys()) if (!shown.has(id) && !hiddenAt.has(id)) hiddenAt.set(id, now);
+  lastShown = shown;
+}
+
+/** The Mac's memory and power, as it reports them. The answer says whether memory pressure just rose. */
+export function noteSystem(state: SystemState): boolean {
+  const pressureRose = state.memoryPressure !== "normal" && state.memoryPressure !== system?.memoryPressure;
+  system = state;
+
+  return pressureRose;
+}
+
+/** The Mac's memory and power as the app last heard them. */
+export const lastSystem = currentSystem;
+
 // MARK: Start
 
-let started = false;
+let stopLifecycle: (() => void) | undefined;
 
-export function startTabLifecycle() {
-  if (started) return;
-  started = true;
+/**
+ * Starts the lifecycle watcher: the Mac's window and app events, the memory and power it reports, the sweep on the
+ * shared grid, and the recent tabs reopening once the Mac has said what it has.
+ *
+ * The policy itself is the one above (the service in pageLifecycleService.ts reaches the same functions): what is
+ * kept, what sleeps, and the check a page answers before it does.
+ */
+export function startTabLifecycle(): () => void {
+  if (stopLifecycle) return stopLifecycle;
 
-  onWindowEvent((e) => e.type === "focus" && setAppActive(true));
-  onAppEvent((e) => (e.type === "resignActive" || e.type === "screenLocked") && setAppActive(false));
+  const removals: (() => void)[] = [];
 
-  let lastShown = new Set<string>();
-
-  const track = (s: BrowserState) => {
-    const shown = shownTabIds(s);
-    const now = activeClock();
-
-    for (const id of lastShown) if (!shown.has(id)) hiddenAt.set(id, now);
-
-    for (const id of shown) hiddenAt.delete(id);
-
-    for (const id of webviews.keys()) if (!shown.has(id) && !hiddenAt.has(id)) hiddenAt.set(id, now);
-    lastShown = shown;
-  };
-
-  track(store());
-  useBrowser.subscribe((s, prev) => {
-    if (s.windows !== prev.windows || s.splits !== prev.splits) track(s);
+  const windows = onWindowEvent((event) => {
+    if (event.type === "focus") setAppActive(true);
   });
 
-  const onSystem = (state: SystemState) => {
-    const pressureRose = state.memoryPressure !== "normal" && state.memoryPressure !== system?.memoryPressure;
-    system = state;
+  const app = onAppEvent((event) => {
+    if (event.type === "resignActive" || event.type === "screenLocked") setAppActive(false);
+  });
 
-    if (pressureRose) void sweep();
-  };
+  removals.push(
+    () => windows.remove(),
+    () => app.remove(),
+  );
 
-  void Promise.resolve()
-    .then(systemState)
-    .then(
-      (state) => {
-        system = state;
-        onSystemState(onSystem);
-        setTimeout(() => reloadRecentTabs(currentSystem()!), 3000);
-      },
-      () => {},
-    );
+  trackShown();
 
-  everySlowly({
-    every: LIFECYCLE_SWEEP_MS,
-    run: () => {
-      track(store());
-      void sweep();
+  removals.push(
+    useBrowser.subscribe((s, prev) => {
+      if (s.windows !== prev.windows || s.splits !== prev.splits) trackShown(s);
+    }),
+  );
+
+  const reported = onSystemState((state) => {
+    // Memory pressure that just rose sweeps at once.
+    if (noteSystem(state)) void sweep();
+  });
+
+  removals.push(() => reported.remove());
+
+  // The Mac says what memory and power it has: until it does, nothing reopens.
+  void Promise.resolve(systemState()).then(
+    (state) => {
+      noteSystem(state);
+      setTimeout(() => reloadRecentTabs(lastSystem() ?? state), 3000);
     },
-  });
+    () => {},
+  );
 
-  if (__DEV__) {
-    // SAFETY: nnLifecycle is the lifecycle policy's own dev-harness surface, read only by tests.
-    (globalThis as { nnLifecycle?: unknown }).nnLifecycle = {
-      policy: POLICY,
-      sweep,
-      sleepTab,
-      reloadRecentTabs,
-      state: () => ({
-        ...useLifecycle.getState(),
-        system: currentSystem(),
-        appActive,
-        activeClock: activeClock(),
-        hiddenAt: Object.fromEntries(hiddenAt),
-        loadedProfiles: [...loadedProfiles],
-        loaded: loadedTabIds(),
-      }),
-      keepAliveReason: (id: string) => keepAliveReason(store(), id),
-      memory: () =>
-        listTasks()
-          .then(() => new Promise((resolve) => setTimeout(resolve, 2500)))
-          .then(listTasks)
-          .then((tasks) => {
-            const byType: Record<string, number> = {};
-            const seen = new Set<string>();
+  removals.push(
+    everySlowly({
+      every: LIFECYCLE_SWEEP_MS,
+      run: () => {
+        trackShown();
 
-            for (const t of tasks) {
-              const key = t.browserIds.length ? `${t.type}:${t.memory}` : `${t.id}`;
-
-              if (t.memory < 0 || seen.has(key)) continue;
-              seen.add(key);
-              byType[t.type] = (byType[t.type] ?? 0) + t.memory / 2 ** 20;
-            }
-
-            const total = Object.values(byType).reduce((a, b) => a + b, 0);
-
-            return {
-              totalMB: Math.round(total),
-              byTypeMB: Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, Math.round(v)])),
-              tasks: tasks.length,
-            };
-          }),
-      simulate: (patch: Partial<SystemState> | null) => {
-        systemOverride = patch;
+        void sweep();
       },
-    };
-  }
+    }),
+  );
+
+  if (__DEV__) installLifecycleDevHandle();
+
+  stopLifecycle = () => {
+    stopLifecycle = undefined;
+
+    for (const remove of removals.reverse()) {
+      try {
+        remove();
+      } catch (error) {
+        console.error("[runtime] tab lifecycle cleanup failed", error);
+      }
+    }
+  };
+
+  return stopLifecycle;
+}
+
+/** The lifecycle policy's own dev-harness surface, read only by tests. */
+export function installLifecycleDevHandle() {
+  // SAFETY: nnLifecycle is the lifecycle policy's own dev-harness surface, read only by tests.
+  (globalThis as { nnLifecycle?: unknown }).nnLifecycle = {
+    policy: POLICY,
+    sweep,
+    sleepTab,
+    reloadRecentTabs: recentTabsToReload,
+    state: () => ({
+      ...useLifecycle.getState(),
+      system: currentSystem(),
+      appActive,
+      activeClock: activeClock(),
+      hiddenAt: Object.fromEntries(hiddenAt),
+      loadedProfiles: [...loadedProfiles],
+      loaded: loadedTabIds(),
+    }),
+    keepAliveReason: (id: string) => keepAliveReason(store(), id),
+    memory: () =>
+      listTasks()
+        .then(() => new Promise((resolve) => setTimeout(resolve, 2500)))
+        .then(listTasks)
+        .then((tasks) => {
+          const byType: Record<string, number> = {};
+          const seen = new Set<string>();
+
+          for (const t of tasks) {
+            const key = t.browserIds.length ? `${t.type}:${t.memory}` : `${t.id}`;
+
+            if (t.memory < 0 || seen.has(key)) continue;
+            seen.add(key);
+            byType[t.type] = (byType[t.type] ?? 0) + t.memory / 2 ** 20;
+          }
+
+          const total = Object.values(byType).reduce((a, b) => a + b, 0);
+
+          return {
+            totalMB: Math.round(total),
+            byTypeMB: Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, Math.round(v)])),
+            tasks: tasks.length,
+          };
+        }),
+    simulate: (patch: Partial<SystemState> | null) => {
+      systemOverride = patch;
+    },
+  };
 }

@@ -1,225 +1,91 @@
-import {
-  calendarAuthorization,
-  launchEnvironment,
-  onCalendarChanged,
-  readDocument,
-  requestCalendarAccess,
-  systemCalendarEvents,
-  systemCalendars,
-  type CalendarAuthorization,
-  type SystemCalendar,
-} from "@bay/desktop";
+// The calendar: what the Mac's calendar holds, and what the app shows of it.
+//
+// The work is in activity/calendarService.ts. This is where the app reaches it.
+import { hasServiceClient, requestService, sendService } from "../runtime/serviceClient";
 import { useEffect, useState } from "react";
-import { create } from "zustand";
-import { hasServiceClient, requestService } from "../runtime/serviceClient";
-import { everySlowly } from "../lib/throttledTimers";
-import type { CalendarEvent } from "./meetings";
-import { live, updateCalendarSettings, useLive } from "./activityStore";
-import { CALENDAR_HORIZON_MS } from "./constants";
+import * as Effect from "effect/Effect";
+import { runForStore } from "../effect/runtime";
+import { startStoreService } from "../effect/storeService";
+import { useBrowser, type BrowserStore } from "../store/browserStore";
+import { live, updateCalendarSettings } from "./activityStore";
+import { CalendarService, calendarConnected, useCalendar } from "./calendarService";
 
-export type CalendarData = {
-  access: CalendarAuthorization | "fixture";
-  calendars: SystemCalendar[];
-  events: CalendarEvent[];
-  loading: boolean;
-  error: string | null;
-  lastFetch: number | null;
-};
+export { calendarConnected, useCalendar };
 
-export const useCalendar = create<CalendarData>()(() => ({
-  access: "notDetermined",
-  calendars: [],
-  events: [],
-  loading: false,
-  error: null,
-  lastFetch: null,
-}));
+export type { CalendarData } from "./calendarService";
 
-type Fixture = {
-  calendars: SystemCalendar[];
-  events: (Omit<CalendarEvent, "start" | "end" | "occurrence"> & { startInMinutes: number; durationMinutes: number })[];
-};
+// The store's calendar refresh, so one store that starts it twice gets one stop.
+const calendars = new WeakMap<BrowserStore, () => void>();
 
-const fixtureMode = (() => {
-  try {
-    return typeof __DEV__ !== "undefined" && __DEV__ && launchEnvironment("BAY_CALENDAR_FIXTURE") === "1";
-  } catch {
-    return false;
-  }
-})();
-
-const launchedAt = Date.now();
-
-function loadFixture() {
-  // SAFETY: Fixture assertion matches the runtime value validated at this call site.
-  const raw = JSON.parse(readDocument("calendar-fixture.json") ?? '{"calendars":[],"events":[]}') as Fixture;
-  const base = Math.floor(launchedAt / 60_000) * 60_000;
-
-  const events = raw.events.map(({ startInMinutes, durationMinutes, ...e }) => {
-    const start = base + startInMinutes * 60_000;
-
-    return { ...e, start, end: start + durationMinutes * 60_000, occurrence: `${e.id}@${start}` };
-  });
-
-  return { calendars: raw.calendars, events };
-}
-
-const visible = (calendars: SystemCalendar[]) => {
-  const hidden = new Set(live().calendar.hiddenCalendarIds);
-
-  return calendars.flatMap((c) => (!hidden.has(c.id) ? [c.id] : []));
-};
-
-type CalendarScope = { active: boolean };
-
-let service: { scope: CalendarScope; stop: () => void } | undefined;
-let inflight: { promise: Promise<void>; scope?: CalendarScope } | undefined;
-
+/** Reads the Mac's calendar and shows it. */
 export function refreshCalendar(): Promise<void> {
-  if (hasServiceClient()) return requestService("calendarRefresh");
+  if (hasServiceClient()) return requestService("calendarRefresh", []);
 
-  if (inflight) return inflight.promise;
-  const scope = service?.scope;
-  const active = () => !scope || scope.active;
+  return runForStore(
+    useBrowser,
+    Effect.gen(function* () {
+      const calendar = yield* CalendarService;
 
-  const run = async () => {
-    useCalendar.setState({ loading: true });
-
-    try {
-      if (fixtureMode) {
-        const { calendars, events } = loadFixture();
-        const ids = new Set(visible(calendars));
-        useCalendar.setState({ access: "fixture", calendars, events: events.filter((e) => ids.has(e.calendarId)), error: null, lastFetch: Date.now() });
-
-        return;
-      }
-
-      const access = calendarAuthorization();
-
-      if (access !== "fullAccess") {
-        useCalendar.setState({ access, calendars: [], events: [], error: null });
-
-        return;
-      }
-
-      const calendars = await systemCalendars();
-
-      if (!active()) return;
-      const ids = visible(calendars);
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const events = ids.length ? await systemCalendarEvents(start.getTime(), Date.now() + CALENDAR_HORIZON_MS, ids) : [];
-
-      if (!active()) return;
-      useCalendar.setState({ access, calendars, events: events.sort((a, b) => a.start - b.start), error: null, lastFetch: Date.now() });
-    } catch (error) {
-      if (active()) {
-        // SAFETY: the checks above established this shape.
-        useCalendar.setState({ error: String((error as Error)?.message ?? error) });
-      }
-    } finally {
-      if (active()) useCalendar.setState({ loading: false });
-    }
-  };
-
-  const task = {
-    scope,
-    promise: run().finally(() => {
-      if (inflight === task) inflight = undefined;
+      yield* calendar.refresh();
     }),
-  };
-
-  inflight = task;
-
-  return task.promise;
+  );
 }
 
-// Request EventKit access only from an explicit click.
-export async function connectCalendar(active: () => boolean = () => true): Promise<boolean> {
-  if (hasServiceClient()) return active() ? requestService("calendarConnect") : false;
+/** Asks the Mac for the calendar's access, and shows it. */
+export function connectCalendar(): Promise<boolean> {
+  if (hasServiceClient()) return requestService("calendarConnect", []);
 
-  if (!active()) return false;
+  return runForStore(
+    useBrowser,
+    Effect.gen(function* () {
+      const calendar = yield* CalendarService;
 
-  if (fixtureMode) {
-    await refreshCalendar();
-
-    return true;
-  }
-
-  const granted = await requestCalendarAccess();
-
-  if (!active()) return granted;
-  await refreshCalendar();
-
-  return granted;
+      return yield* calendar.connect();
+    }),
+  );
 }
 
-export const calendarConnected = () => {
-  const access = useCalendar.getState().access;
+/** Starts the refreshes: at the launch, when the calendar changes, and every few minutes. */
+export function startCalendar(browser: BrowserStore = useBrowser): () => void {
+  const existing = calendars.get(browser);
 
-  return access === "fullAccess" || access === "fixture";
-};
+  if (existing) return existing;
 
-export function startCalendar(): () => void {
-  if (service) return service.stop;
-  const scope: CalendarScope = { active: true };
-  const disposers: (() => void)[] = [];
-
-  const stop = () => {
-    if (!scope.active) return;
-    scope.active = false;
-
-    if (service?.scope === scope) service = undefined;
-
-    for (const dispose of disposers) {
-      try {
-        dispose();
-      } catch (error) {
-        console.warn("Couldn't stop calendar watcher", error);
-      }
-    }
-
-    if (inflight?.scope === scope) {
-      inflight = undefined;
-      useCalendar.setState({ loading: false });
-    }
+  const forget = () => {
+    if (calendars.get(browser) === once) calendars.delete(browser);
   };
 
-  service = { scope, stop };
+  const stop = startStoreService(
+    browser,
+    "The calendar could not be watched",
+    Effect.gen(function* () {
+      const calendar = yield* CalendarService;
 
-  try {
-    void refreshCalendar();
+      yield* calendar.start;
+    }),
+    Effect.gen(function* () {
+      const calendar = yield* CalendarService;
 
-    const changed = onCalendarChanged(() => {
-      if (scope.active) void refreshCalendar();
-    });
+      yield* calendar.stop;
+    }),
+    forget,
+  );
 
-    disposers.push(() => changed.remove());
-    // Only while connected: connecting refreshes on its own.
-    disposers.push(
-      everySlowly({
-        every: 5 * 60_000,
-        run: () => void refreshCalendar(),
-        needed: calendarConnected,
-        watch: (changed) => useCalendar.subscribe((s, prev) => s.access !== prev.access && changed()),
-      }),
-    );
-    disposers.push(
-      useLive.subscribe((s, prev) => {
-        if (s.calendar.hiddenCalendarIds !== prev.calendar.hiddenCalendarIds) void refreshCalendar();
-      }),
-    );
-  } catch (error) {
+  const once = () => {
+    forget();
     stop();
-    throw error;
-  }
+  };
 
-  return stop;
+  calendars.set(browser, once);
+
+  return once;
 }
 
 export const setCalendarHidden = (id: string, hidden: boolean) => {
-  const ids = live().calendar.hiddenCalendarIds.filter((c) => c !== id);
-  updateCalendarSettings({ hiddenCalendarIds: hidden ? [...ids, id] : ids });
+  if (sendService("calendarHidden", [id, hidden])) return;
+  const current = live().calendar.hiddenCalendarIds.filter((c) => c !== id);
+
+  updateCalendarSettings({ hiddenCalendarIds: hidden ? [...current, id] : current });
 };
 
 export function useNow(intervalMs = 15_000, enabled = true): number {

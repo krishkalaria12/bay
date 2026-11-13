@@ -16,9 +16,9 @@ const shellWithControlledWrites = `
 // Usage's quit accounting is real; only unrelated UI/sync observers and the
 // native crash reporter are stubbed to avoid loading React Native UI in Node.
 const observers = {
-  "@bay/chromium": "export async function listTasks() { return []; } export function onExtensionsChanged() {}",
-  "../components/site/translateState": "export const useTranslate = { subscribe() {} };",
-  "../sync/engine": "export const useSync = { getState: () => ({ status: 'off' }), subscribe() {} };",
+  "@bay/chromium": "export async function listTasks() { return []; } export function onExtensionsChanged() { return { remove() {} }; }",
+  "../components/site/pageWorkService": "export const useTranslate = { subscribe() { return () => {}; } };",
+  "../sync/engine": "export const useSync = { getState: () => ({ status: 'off' }), subscribe() { return () => {}; } };",
   "./errors": "export async function reportNativeCrashes() {}",
 };
 
@@ -239,10 +239,15 @@ test("refreshing a checkpoint does not repeat session accounting", async () => {
 });
 
 test("quit aborts uploads, starts no new requests and ignores late results after resume", async (context) => {
+  const { slowTimersForTests } = await import("../lib/throttledTimers.ts");
+  let now = 1_000_000_020_000;
+  const grid = slowTimersForTests(() => now);
+  context.after(() => slowTimersForTests(() => Date.now()));
   const pending = [];
   context.mock.method(globalThis, "fetch", (_url, options) => new Promise((resolve) => pending.push({ options, resolve })));
   capture("retained_upload");
   const sending = flush();
+  await settle();
   assert.equal(pending.length, 1);
   const requestsBefore = requestLog().length;
   await prepareTelemetryForQuit();
@@ -251,13 +256,15 @@ test("quit aborts uploads, starts no new requests and ignores late results after
   await flush();
   assert.equal(pending.length, 1);
   await resumeTelemetryAfterQuit();
-  pending[0].resolve({ status: 200 });
+  pending[0].resolve(new Response(null, { status: 200 }));
   await sending;
   assert.equal(requestLog().length, requestsBefore);
   assert.ok(queue().events.some((e) => e.event === "retained_upload"));
-  context.mock.timers.tick(30_000);
+  now += 30_000;
+  grid.fire();
+  await settle();
   assert.equal(pending.length, 2);
-  pending[1].resolve({ status: 200 });
+  pending[1].resolve(new Response(null, { status: 200 }));
   await settle();
   assert.equal(devState().queued.events, 0);
 });

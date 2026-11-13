@@ -3,7 +3,20 @@ import { nativeContracts } from "../../../packages/platform/src/nativeContracts.
 
 export const docs = new Map();
 export const readDocument = (name) => docs.get(name) ?? null;
-export const writeDocument = (name, contents) => docs.set(name, contents);
+
+// A test can make a document fail to write, and can see what was written.
+export const writeErrors = new Map();
+export const writes = [];
+
+export const writeDocument = (name, contents) => {
+  writes.push(name);
+
+  const error = writeErrors.get(name);
+
+  if (error) throw error;
+
+  docs.set(name, contents);
+};
 
 // Native file access is opt-in for each test. A synced path by itself has no grant.
 export const localFileAnswers = {
@@ -37,13 +50,12 @@ export const jsReload = { on: false };
 export const isJsReload = () => jsReload.on;
 export const appInfo = { appVersion: "1.0" };
 export const systemInfo = () => ({ ...appInfo });
+export const crashReports = () => Promise.resolve([]);
 export const calendarAuthorization = () => "notDetermined";
 export const requestCalendarAccess = () => Promise.resolve(false);
 export const systemCalendars = () => Promise.resolve([]);
 export const systemCalendarEvents = () => Promise.resolve([]);
-export const calendarChangedListeners = new Set();
 export const onCalendarChanged = (listener) => (calendarChangedListeners.add(listener), { remove: () => calendarChangedListeners.delete(listener) });
-export const emitCalendarChanged = () => calendarChangedListeners.forEach((listener) => listener());
 
 export const keychainAnswers = {
   get: async () => null,
@@ -64,8 +76,6 @@ export const easelSharingAnswers = {
 export const createEaselShareIdentity = () => easelSharingAnswers.identity();
 export const isEaselWebSharingEnabled = () => easelSharingAnswers.enabled;
 export const readEaselShareRecords = () => easelSharingAnswers.readRecords();
-export const readCurrentEaselShareRecords = async () => easelSharingAnswers.readRecords();
-export const requestEaselShare = (...args) => easelSharingAnswers.request?.(...args) ?? null;
 
 export const shellDialogAnswers = {
   confirm: async () => ({ confirmed: false, suppressed: false }),
@@ -77,46 +87,86 @@ export const shellDialogAnswers = {
 export const confirm = (...args) => shellDialogAnswers.confirm(...args);
 export const openTextFile = (...args) => shellDialogAnswers.openTextFile(...args);
 export const prompt = (...args) => shellDialogAnswers.prompt(...args);
-export const setDialogPresenter = () => {};
 export const saveTextFile = (...args) => shellDialogAnswers.saveTextFile(...args);
-export const windowEventListeners = new Set();
 export const onWindowEvent = (listener) => (windowEventListeners.add(listener), { remove: () => windowEventListeners.delete(listener) });
-export const emitWindowEvent = (event) => windowEventListeners.forEach((listener) => listener(event));
 export const focusedWindows = [];
 export const sidebarMoveUndoCalls = [];
 export const setSidebarMoveUndo = (windowId, available, focus = false) => (sidebarMoveUndoCalls.push({ windowId, available, focus }), Promise.resolve());
 export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise.resolve());
-export const appEventListeners = new Set();
+export const openWindow = () => Promise.resolve();
 export const onAppEvent = (listener) => (appEventListeners.add(listener), { remove: () => appEventListeners.delete(listener) });
-export const emitAppEvent = (event) => appEventListeners.forEach((listener) => listener(event));
-export const appearanceState = { query: () => Promise.resolve(false) };
-export const isDarkAppearance = () => appearanceState.query();
-export const pageEventListeners = new Set();
-export const onPageEvent = (listener) => (pageEventListeners.add(listener), { remove: () => pageEventListeners.delete(listener) });
-export const emitPageEvent = (event) => pageEventListeners.forEach((listener) => listener(event));
-export const pageOpenListeners = new Set();
-export const onPageOpen = (listener) => (pageOpenListeners.add(listener), { remove: () => pageOpenListeners.delete(listener) });
-export const emitPageOpen = (event) => pageOpenListeners.forEach((listener) => listener(event));
-export const finishedPageOpens = [];
-export const finishPageOpen = (offerId, tabId) => (finishedPageOpens.push({ offerId, tabId }), Promise.resolve());
-export const pageEventSource = { replay: [], openReplay: [], error: null, starts: 0, stops: 0 };
 
-export const startPageEvents = () => {
-  pageEventSource.starts++;
-  pageEventSource.replay.forEach(emitPageEvent);
-  pageEventSource.openReplay.forEach(emitPageOpen);
+// The updater: what it knows, and what it reports.
+export const updaterAnswers = { state: { available: false }, pending: null };
 
-  return pageEventSource.error ? Promise.reject(pageEventSource.error) : Promise.resolve();
+export const onUpdatePending = (listener) => {
+  updaterAnswers.listener = listener;
+
+  return { remove() {} };
 };
 
-export const stopPageEvents = () => (pageEventSource.stops++, Promise.resolve());
-export const notificationState = { querySupported: true, permission: "granted", requested: false, queries: 0, requests: 0 };
-export const hasNotificationPermissionQuery = () => notificationState.querySupported;
-export const notificationPermission = () => (notificationState.queries++, Promise.resolve(notificationState.permission));
-export const requestNotificationPermission = () => (notificationState.requests++, Promise.resolve(notificationState.requested));
-export const openNotificationSettings = () => Promise.resolve();
+export const updaterState = () => Promise.resolve(updaterAnswers.state);
+export const installPendingUpdate = () => Promise.resolve();
+
+// The engine's own tasks, and the extensions it reports.
+export const listTasks = () => Promise.resolve([]);
+
+export const onExtensionsChanged = () => ({ remove() {} });
+
+// The Mac's capture calls: the clipboard, Downloads, the share menu and Portrait's frame.
+export const copyCaptureImage = () => Promise.resolve(true);
+export const saveCaptureImage = () => Promise.resolve(null);
+export const shareCaptureImage = () => Promise.resolve();
+export const portraitCaptureImage = () => Promise.resolve(null);
+export const copyImage = () => false;
+export const revealFile = () => Promise.resolve();
+
+// Little Bay from any app, Handoff and AppleScript.
+export const setLittleBayHotKey = () => Promise.resolve("off");
+export const setLittleBayMenuBarItem = () => Promise.resolve();
+export const setWindowActivity = () => Promise.resolve();
+export const setScriptState = () => Promise.resolve();
+export const replyToScript = () => Promise.resolve();
+export const onCommand = () => ({ remove() {} });
+export const onNotificationResponse = () => ({ remove() {} });
+export const onScriptCommand = () => ({ remove() {} });
+
+// The Mac's memory and power, and the engine's profiles.
+export const systemState = () => Promise.resolve({ memoryPressure: "normal", physicalMemory: 16 * 2 ** 30, onBattery: false, lowPowerMode: false });
+export const onSystemState = () => ({ remove() {} });
+export const releaseProfile = () => Promise.resolve();
+
+// The settings' protected work: passwords behind Touch ID, clearing data, and recording a shortcut.
+export const cancelShortcutRecording = () => Promise.resolve();
+export const recordShortcut = () => Promise.resolve(null);
+export const exportPasswords = () => Promise.resolve({ status: "cancelled" });
+export const getNeverSavePasswordOrigins = () => Promise.resolve([]);
+export const listPasswords = () => Promise.resolve([]);
+export const unlockPasswords = () => Promise.resolve(false);
+export const clearBrowsingData = () => Promise.resolve();
+
+// The engine's media: its share sources, its cast dialogs and routes, and its own Picture in Picture.
+export const killTask = () => Promise.resolve(true);
+export const getDisplayMediaSources = () => Promise.resolve([]);
+export const onCastDialog = () => ({ remove() {} });
+export const onCastRoutes = () => ({ remove() {} });
+export const showCastDialog = () => Promise.resolve(true);
+export const closeCastDialog = () => Promise.resolve();
+export const watchCastRoutes = () => Promise.resolve();
+export const setDisplayMediaPicker = () => Promise.resolve();
+export const setAutoPictureInPicture = () => Promise.resolve();
+
+// The native side's answer to the app's quit: what it was told.
+export const terminated = [];
+export const replyToTerminate = (ok) => (terminated.push(ok), Promise.resolve());
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();
+
+// The app's notification permission, and the questions the native side asks.
+export const notificationAnswers = { permission: "granted", request: true, settings: 0 };
+export const notificationPermission = () => (notificationState.queries++, Promise.resolve(notificationAnswers.permission));
+export const requestNotificationPermission = () => (notificationState.requests++, Promise.resolve(notificationAnswers.request));
+export const openNotificationSettings = () => (notificationAnswers.settings++, Promise.resolve());
 export const fetchFavicon = () => Promise.resolve(null);
 export const iconTheme = () => Promise.resolve(null);
 export const cancelDownload = () => Promise.resolve();
@@ -128,11 +178,6 @@ export const endWebKitPrivateSession = (session) => (endedWebKitSessions.push(se
 export const WEBKIT_SITE_SETTINGS = ["camera", "microphone"];
 export const getWebKitSiteSettings = () => Promise.resolve({});
 export const setWebKitSiteSetting = () => Promise.resolve();
-export const menuShortcuts = () => Promise.resolve([]);
-export const showMenu = () => Promise.resolve(null);
-export const documentSpecks = (rects) => Promise.resolve(rects.map(() => []));
-export const setLittleBayHotKey = () => Promise.resolve("off");
-export const setLittleBayMenuBarItem = () => Promise.resolve();
 
 // Tidy Downloads: renames go on the path's folder unless it's /gone/; a test can read what was asked.
 export const renameCalls = [];
@@ -150,37 +195,6 @@ export const deletedProfileData = [];
 export const profileDataLeft = new Map();
 export const deleteProfileData = (profile) => (deletedProfileData.push(profile), Promise.resolve(profileDataLeft.get(profile) ?? []));
 
-/** Validate injected native mocks against the same contracts used by the Windows dispatcher. */
-export function assertNativeStub(name, stub, { partial = false } = {}) {
-  const contract = nativeContracts.modules[name];
-
-  if (!contract) throw new Error(`Unknown native stub ${name}`);
-
-  if (!stub || !v.is(v.object({}), stub)) throw new TypeError(`${name} must be an object`);
-
-  for (const [method, spec] of Object.entries(contract.methods)) {
-    if (partial && !(method in stub)) continue;
-
-    if (spec.optional && stub[method] == null) continue;
-
-    if (!v.is(v.function_(), stub[method])) throw new TypeError(`${name}.${method} must be a function`);
-  }
-
-  for (const [key, type] of Object.entries(contract.constants)) {
-    if (partial && !(key in stub)) continue;
-
-    if (["number", "string", "boolean"].includes(type) && !v.is(v[type](), stub[key])) {
-      throw new TypeError(`${name}.${key} must be ${type}`);
-    }
-  }
-
-  if (!partial && contract.events.length && !v.is(v.function_(), stub.addListener)) {
-    throw new TypeError(`${name}.addListener must be a function`);
-  }
-
-  return stub;
-}
-
 // expo-modules-core: a test installs native modules on globalThis.nnTestNativeModules.
 export const requireOptionalNativeModule = (name) => {
   const stub = globalThis.nnTestNativeModules?.[name] ?? null;
@@ -189,6 +203,8 @@ export const requireOptionalNativeModule = (name) => {
 };
 
 export const requireNativeModule = (name) => globalThis.nnTestNativeModules?.[name] ?? {};
+
+// The platform's native helpers: a test runs without a native host, so the fallback answers.
 export const nativeRandomUUID = (fallback) => fallback();
 export const nativeSnapshot = (_module, _method, _args, fallback) => fallback();
 
@@ -227,9 +243,15 @@ const emitHistory = (change) => {
 
 export const onHistoryChanged = (listener) => (historyListeners.add(listener), { remove: () => historyListeners.delete(listener) });
 
-// Each profile the app asked to watch, in order (Chrome's events reach the app only once it watches).
+/** A change Chrome reports, as the engine does. */
+export const chromeHistoryChange = (change) => emitHistory(change);
+
+// Each profile the app asked to watch, in order (Chrome's events reach the app only once it watches), and how many
+// visits had been moved into Chrome when it asked (the move goes first).
 export const historyWatches = [];
-export const watchHistory = async (profile) => (historyWatches.push(profile), { ok: true });
+export const historyWatchedAfter = [];
+export const historyMoved = [];
+export const watchHistory = async (profile) => (historyWatches.push(profile), historyWatchedAfter.push(historyMoved.length), { ok: true });
 
 const addVisit = (profile, url, title, at) => {
   const db = chromeHistory(profile);
@@ -252,6 +274,8 @@ export const queryHistory = async (profile, maxUrls = 5000, maxVisits = 50) =>
 
 export const addHistoryVisits = async (profile, pages, toleranceMs = 1000) => {
   let added = 0;
+
+  historyMoved.push(pages.length);
 
   for (const page of pages) {
     // One to one: each visit Chrome has accounts for one asked for.
@@ -479,29 +503,9 @@ export const extensionAnswers = { actionStates: async () => ({}), sidePanelUrl: 
 export const extensionActionStates = (browserId, ids) => extensionAnswers.actionStates(browserId, ids);
 export const extensionSidePanelUrl = (browserId, extensionId) => extensionAnswers.sidePanelUrl(browserId, extensionId);
 
-export const copyText = () => {};
-
-// The caption buttons the app draws: Windows' alone.
-export const windowButtonLayout = () => ({ left: [], right: process.env.BAY_TEST_PLATFORM === "windows" ? ["minimize", "maximize", "close"] : [] });
-
-export const captionState = { query: () => Promise.resolve({ maximized: false, fullscreen: false }) };
-export const windowState = (windowId) => captionState.query(windowId);
-
-// Desktop drag preview and live geometry, controlled by layout tests.
-export const tabDragNative = { calls: [], frame: () => Promise.resolve(null) };
-export const windowFrame = (id) => tabDragNative.frame(id);
-export const hapticTick = () => {};
-
-export const dragPreview = Object.fromEntries(
-  ["begin", "page", "update", "cancel", "placeholder", "end"].map((method) => [method, (...args) => tabDragNative.calls.push([method, ...args])]),
-);
-
-export const openWindow = () => Promise.resolve();
-
 // Library assets: a test can replace the importer to simulate an unavailable file.
 export const libraryImages = { retain: async (path) => ({ path: `/data/Library Media/${path.split("/").pop()}`, width: 640, height: 480 }) };
 export const retainLibraryImage = (path) => libraryImages.retain(path);
-export const libraryImageUri = (path) => `file://${path}`;
 
 export const sidebarKeyboardCalls = [];
 export const setSidebarKeyboard = (windowId, active) => (sidebarKeyboardCalls.push({ windowId, active }), Promise.resolve());
@@ -538,7 +542,158 @@ export const readUserScriptsStatus = async () => null;
 export const writeUserScriptsStatus = async () => {};
 export const onUserScriptsChange = () => ({ remove() {} });
 
-// Permission prompts (components/site/permissions.ts): a test fires what the host sends.
+// The engine's extensions: what is installed, and what a test wants to see.
+export const installedExtensions = [];
+
+export const listExtensions = async () => installedExtensions;
+
+export const installExtension = async (options, profile) => {
+  const id = `ext-${installedExtensions.length + 1}`;
+
+  installedExtensions.push({ id, profile, path: options.path, enabled: true, blockedByPolicy: false, state: "ENABLED", errors: [] });
+
+  return id;
+};
+
+export const reloadExtension = async (id, profile) => {
+  const ext = installedExtensions.find((e) => e.id === id && e.profile === profile);
+
+  if (ext) ext.enabled = true;
+};
+
+export const uninstallExtension = async (id, profile) => {
+  const at = installedExtensions.findIndex((e) => e.id === id && e.profile === profile);
+
+  if (at >= 0) installedExtensions.splice(at, 1);
+};
+
+// Native controls shared by the WebUI and macOS service tests.
+export const calendarChangedListeners = new Set();
+
+export const emitCalendarChanged = () => calendarChangedListeners.forEach((listener) => listener());
+
+export const readCurrentEaselShareRecords = async () => easelSharingAnswers.readRecords();
+
+export const requestEaselShare = (...args) => easelSharingAnswers.request?.(...args) ?? null;
+
+export const setDialogPresenter = () => {};
+
+export const windowEventListeners = new Set();
+
+export const emitWindowEvent = (event) => windowEventListeners.forEach((listener) => listener(event));
+
+export const appEventListeners = new Set();
+
+export const emitAppEvent = (event) => appEventListeners.forEach((listener) => listener(event));
+
+export const appearanceState = { query: () => Promise.resolve(false) };
+
+export const isDarkAppearance = () => appearanceState.query();
+
+export const pageEventListeners = new Set();
+
+export const onPageEvent = (listener) => (pageEventListeners.add(listener), { remove: () => pageEventListeners.delete(listener) });
+
+export const emitPageEvent = (event) => pageEventListeners.forEach((listener) => listener(event));
+
+export const pageOpenListeners = new Set();
+
+export const onPageOpen = (listener) => (pageOpenListeners.add(listener), { remove: () => pageOpenListeners.delete(listener) });
+
+export const emitPageOpen = (event) => pageOpenListeners.forEach((listener) => listener(event));
+
+export const finishedPageOpens = [];
+
+export const finishPageOpen = (offerId, tabId) => (finishedPageOpens.push({ offerId, tabId }), Promise.resolve());
+
+export const pageEventSource = { replay: [], openReplay: [], error: null, starts: 0, stops: 0 };
+
+export const startPageEvents = () => {
+  pageEventSource.starts++;
+  pageEventSource.replay.forEach(emitPageEvent);
+  pageEventSource.openReplay.forEach(emitPageOpen);
+
+  return pageEventSource.error ? Promise.reject(pageEventSource.error) : Promise.resolve();
+};
+
+export const stopPageEvents = () => (pageEventSource.stops++, Promise.resolve());
+
+export const notificationState = {
+  querySupported: true,
+  queries: 0,
+  requests: 0,
+  get permission() {
+    return notificationAnswers.permission;
+  },
+  set permission(value) {
+    notificationAnswers.permission = value;
+  },
+  get requested() {
+    return notificationAnswers.request;
+  },
+  set requested(value) {
+    notificationAnswers.request = value;
+  },
+};
+
+export const hasNotificationPermissionQuery = () => notificationState.querySupported;
+
+export const menuShortcuts = () => Promise.resolve([]);
+
+export const showMenu = () => Promise.resolve(null);
+
+export const documentSpecks = (rects) => Promise.resolve(rects.map(() => []));
+
+export function assertNativeStub(name, stub, { partial = false } = {}) {
+  const contract = nativeContracts.modules[name];
+
+  if (!contract) throw new Error(`Unknown native stub ${name}`);
+
+  if (!stub || !v.is(v.object({}), stub)) throw new TypeError(`${name} must be an object`);
+
+  for (const [method, spec] of Object.entries(contract.methods)) {
+    if (partial && !(method in stub)) continue;
+
+    if (spec.optional && stub[method] == null) continue;
+
+    if (!v.is(v.function_(), stub[method])) throw new TypeError(`${name}.${method} must be a function`);
+  }
+
+  for (const [key, type] of Object.entries(contract.constants)) {
+    if (partial && !(key in stub)) continue;
+
+    if (["number", "string", "boolean"].includes(type) && !v.is(v[type](), stub[key])) {
+      throw new TypeError(`${name}.${key} must be ${type}`);
+    }
+  }
+
+  if (!partial && contract.events.length && !v.is(v.function_(), stub.addListener)) {
+    throw new TypeError(`${name}.addListener must be a function`);
+  }
+
+  return stub;
+}
+
+export const copyText = () => {};
+
+export const windowButtonLayout = () => ({ left: [], right: process.env.BAY_TEST_PLATFORM === "windows" ? ["minimize", "maximize", "close"] : [] });
+
+export const captionState = { query: () => Promise.resolve({ maximized: false, fullscreen: false }) };
+
+export const windowState = (windowId) => captionState.query(windowId);
+
+export const tabDragNative = { calls: [], frame: () => Promise.resolve(null) };
+
+export const windowFrame = (id) => tabDragNative.frame(id);
+
+export const hapticTick = () => {};
+
+export const dragPreview = Object.fromEntries(
+  ["begin", "page", "update", "cancel", "placeholder", "end"].map((method) => [method, (...args) => tabDragNative.calls.push([method, ...args])]),
+);
+
+export const libraryImageUri = (path) => `file://${path}`;
+
 const permissionListeners = new Map();
 
 const permissionListener = (name) => (listener) => {
@@ -548,6 +703,9 @@ const permissionListener = (name) => (listener) => {
 };
 
 export const onPermission = permissionListener("onPermission");
+
 export const onPermissionDismissed = permissionListener("onPermissionDismissed");
+
 export const permissionEvents = { fire: (name, value) => permissionListeners.get(name)?.(value) };
+
 export const resolvePermission = () => Promise.resolve();

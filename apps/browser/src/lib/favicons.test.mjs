@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as TestClock from "effect/testing/TestClock";
+import { AuthorityStore } from "../effect/ports/store.ts";
 
 // Execute hook effects without a renderer. The stores and queued production pipeline stay real.
 const native = new URL("../test-native-stub.mjs", import.meta.url).href;
@@ -30,6 +36,8 @@ const { useBrowser } = await import("../store/browserStore.ts");
 const { setSpaceProfiles } = await import("../store/model.ts");
 const { webviews } = await import("./webviews.ts");
 const { FAVICON_FLUSH_MS, FAVICON_LOOKUP_DELAY_MS, MAX_FAVICONS, APPEARANCE_SWAP_MS } = await import("./constants.ts");
+const { EnrichmentEngine, EnrichmentFailure, EnrichmentService, held } = await import("./enrichmentService.ts");
+const { fakeDiagnostics, testClockLayer } = await import("../effect/testing.ts");
 
 const { useFavicons, noteFavicon, faviconFailed, pruneProfileFavicons, resolveFavicon, startFavicons, useFavicon, useFaviconTheme } =
   await import("./favicons.ts");
@@ -37,8 +45,57 @@ const { useFavicons, noteFavicon, faviconFailed, pruneProfileFavicons, resolveFa
 const state = () => useFavicons.getState();
 const empty = () => ({ pages: {}, srcs: {}, appearances: {} });
 
+// The Mac, as the favicons test wants it: the answers the test scripts.
+const engineLayer = () =>
+  Layer.succeed(EnrichmentEngine)({
+    favicons: (profile, pages) =>
+      Effect.tryPromise({
+        try: () => globalThis.faviconTest.lookup(profile, [...pages]),
+        catch: (cause) => new EnrichmentFailure({ operation: { name: "enrichment.favicons", resource: profile }, cause }),
+      }).pipe(
+        Effect.map((found) => {
+          const answers = new Map();
+
+          for (const page of pages) answers.set(page, found.pages.get(page)?.uri ?? null);
+
+          return answers;
+        }),
+      ),
+    icon: (tabId, src) =>
+      Effect.suspend(() => {
+        const view = webviews.get(tabId);
+
+        if (!view) return Effect.succeed(null);
+
+        return Effect.tryPromise({
+          try: () => view.downloadFavicon(src),
+          catch: (cause) => new EnrichmentFailure({ operation: { name: "enrichment.icon", resource: src }, cause }),
+        }).pipe(Effect.map((image) => image?.uri ?? null));
+      }),
+    favicon: () => Effect.succeed(null),
+    theme: (uri) =>
+      Effect.tryPromise({
+        try: () => globalThis.faviconTest.theme({ uri }),
+        catch: (cause) => new EnrichmentFailure({ operation: { name: "enrichment.theme", resource: uri }, cause }),
+      }).pipe(Effect.map((theme) => theme ?? null)),
+    picture: () => Effect.succeed(null),
+    artwork: () => Effect.succeed(null),
+  });
+
+// The enrichment service the cache asks: it owns the lookups, the fetches and the themes.
+let enrichment;
+
+// Moves the clock, and gives the burst that woke a turn to answer.
+const advance = async (ms = FAVICON_LOOKUP_DELAY_MS) => {
+  await enrichment.runPromise(TestClock.adjust(Duration.millis(ms)));
+  await new Promise((resolve) => setImmediate(resolve));
+};
+
 const drain = async () => {
-  for (let i = 0; i < 8; i++) await Promise.resolve();
+  for (let i = 0; i < 8; i++) {
+    await Promise.resolve();
+    await advance();
+  }
 };
 
 function deferred() {
@@ -63,6 +120,16 @@ function setup(t, profiles = {}, themes = {}) {
     lookup: async () => ({ pages: new Map(), icons: new Map() }),
     theme: async () => null,
   };
+
+  const runtime = ManagedRuntime.make(
+    EnrichmentService.layer.pipe(
+      Layer.provide(AuthorityStore.layer(useBrowser)),
+      Layer.provide(engineLayer()),
+      Layer.provideMerge(Layer.mergeAll(fakeDiagnostics().layer, testClockLayer)),
+    ),
+  );
+
+  enrichment = runtime;
   const stop = startFavicons();
   t.after(async () => {
     stop();
@@ -71,6 +138,7 @@ function setup(t, profiles = {}, themes = {}) {
     await drain();
     t.mock.timers.tick(FAVICON_FLUSH_MS);
     webviews.clear();
+    await runtime.dispose();
   });
 }
 
@@ -107,6 +175,8 @@ test("download bursts share inflight answers and publish once, then identical re
   noteFavicon("a", "shared");
   noteFavicon("b", "shared");
   noteFavicon("a", "shared");
+  // The fetches are the enrichment service's work: they go out in one burst.
+  await drain();
   assert.equal(calls, 1);
   answer.resolve({ uri: "data:shared" });
   await drain();
@@ -136,6 +206,12 @@ test("a burst bounds map enumeration and never mutates published snapshots", asy
 
   for (let i = 0; i < 1000; i++) noteFavicon(String(i), `src:${i}`);
   await drain();
+
+  // Bounded download workers need several turns for a large burst. Measure the flush once all answers landed.
+  for (let attempt = 0; attempt < 1000 && held().length; attempt++) await advance();
+
+  assert.deepEqual(held(), [], "the whole burst finished before measuring its cache write");
+
   const keys = Object.keys;
   let scanned = 0;
   Object.keys = (map) => {
@@ -294,6 +370,8 @@ test("theme answers coalesce with icons, preserve both branches and retain cap r
   for (const id of ["a", "b", "c"]) useFaviconTheme(`https://site/${id}`, null, "work");
   tab("next");
   const before = state();
+  // The theme analysis is the enrichment service's work: it goes out in one burst.
+  await drain();
   answers.get("uri:a").resolve({ color: "red" });
   await drain();
   noteFavicon("next", "next");
@@ -378,13 +456,15 @@ test("native lookup answers flush after pending reports and capped resets notify
   };
 
   useFavicon("https://missing/", null, "work");
-  t.mock.timers.tick(FAVICON_LOOKUP_DELAY_MS);
+  await advance();
   assert.deepEqual(calls, [["work", ["https://missing/"]]]);
   tab("a");
   noteFavicon("a", "a");
   await drain();
   lookup.resolve({ pages: new Map([["https://missing/", { uri: "native" }]]) });
   await drain();
+  // The report of the tab landed after the lookup's answer, so it waits for the next flush.
+  flush(t);
   assert.equal(state().profiles.work.pages["https://site/a"], "data:a");
   assert.equal(state().profiles.work.pages["https://missing/"], "native");
   useFavicons.setState({ profiles: { work: { ...state().profiles.work, pages: { ...state().profiles.work.pages, "https://none/": null } } } });
@@ -398,18 +478,21 @@ test("native lookup answers flush after pending reports and capped resets notify
   await drain();
   flush(t);
   assert.equal(state().profiles.work.pages["https://missing/"], undefined);
-  t.mock.timers.tick(FAVICON_LOOKUP_DELAY_MS);
+  await advance();
   assert.deepEqual(calls[1], ["work", ["https://none/"]], "reset checks watchers on pages other than the newly recorded page");
   pruneProfileFavicons("work");
   useFavicon("https://missing/", null, "work");
-  t.mock.timers.tick(FAVICON_LOOKUP_DELAY_MS);
+  await advance();
   assert.equal(calls.length, 3);
 });
 
 test("shared engine profiles coalesce while other profiles and their published maps remain independent", async (t) => {
   const kept = freezeIcons({ pages: { "https://kept/": "kept" }, srcs: {}, appearances: {} });
   setup(t, { kept });
-  useBrowser.setState({ spaces: { ...useBrowser.getState().spaces, personal: { profileId: "shared" }, work: { profileId: "shared" } } });
+  const spaces = useBrowser.getState().spaces;
+  useBrowser.setState({
+    spaces: { ...spaces, personal: { ...spaces.default, id: "personal", profileId: "shared" }, work: { ...spaces.default, id: "work", profileId: "shared" } },
+  });
   tab("a", "https://site/a", "personal");
   tab("b", "https://site/b", "work");
   tab("c", "https://site/c", "other");
@@ -433,9 +516,65 @@ test("capacity counts ignore replacement keys and a known source keeps its full 
   assert.equal(state().profiles.work.srcs, srcs);
   assert.equal(state().profiles.work.pages["https://site/a"], "data:0");
 
-  // Replacing a page repeatedly must not count each report as an additional key.
+  // Replacing a page repeatedly must not count every report as an additional key.
   for (let i = 1; i < MAX_FAVICONS; i++) noteFavicon("a", `src:${i}`);
   flush(t);
   assert.deepEqual(state().profiles.work.pages, { "https://site/a": `data:${MAX_FAVICONS - 1}` });
   assert.equal(state().profiles.work.srcs, srcs);
+});
+
+test("a profile that is cleared takes its own icons with it, and the work on its way with them", async (t) => {
+  setup(t, {
+    work: { pages: { "https://site/a": "data:a" }, srcs: {}, appearances: {} },
+    other: { pages: { "https://site/b": "data:b" }, srcs: {}, appearances: {} },
+  });
+
+  const answer = deferred();
+  const calls = [];
+
+  globalThis.faviconTest.lookup = (profile, pages) => {
+    calls.push([profile, [...pages]]);
+
+    return answer.promise;
+  };
+
+  useFavicon("https://site/c", null, "work");
+  await advance();
+  assert.equal(calls.length, 1, "the icon was looked up");
+
+  // The profile's icons are cleared while the answer is on its way.
+  pruneProfileFavicons("work");
+
+  answer.resolve({ pages: new Map([["https://site/c", { uri: "native" }]]) });
+  await drain();
+  flush(t);
+
+  assert.deepEqual(state().profiles.work, empty(), "the cleared profile's icons are gone");
+  assert.deepEqual(state().profiles.other.pages, { "https://site/b": "data:b" }, "the other profile keeps its own icons");
+});
+
+test("a page whose history is deleted while its icon is on its way gets no icon", async (t) => {
+  setup(t);
+
+  const answer = deferred();
+  const calls = [];
+
+  globalThis.faviconTest.lookup = (profile, pages) => {
+    calls.push([profile, [...pages]]);
+
+    return answer.promise;
+  };
+
+  useFavicon("https://gone/", null, "work");
+  await advance();
+  assert.equal(calls.length, 1, "the icon was looked up");
+
+  // The page's history is deleted while the answer is on its way.
+  history(["https://gone/"]);
+
+  answer.resolve({ pages: new Map([["https://gone/", { uri: "native" }]]) });
+  await drain();
+  flush(t);
+
+  assert.equal(state().profiles.work?.pages?.["https://gone/"], undefined, "the icon of a page that is gone is not written back");
 });

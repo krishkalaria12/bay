@@ -36,7 +36,12 @@ class SpacePager {
   private external = 0;
   private externalGeneration = 0;
 
-  constructor(readonly windowId: string) {
+  // The window this pager belongs to. It is a plain field: a parameter property is a transform, and the tests run
+  // the app's TypeScript as it is.
+  readonly windowId: string;
+
+  constructor(windowId: string) {
+    this.windowId = windowId;
     this.pos = makeMutable(Math.max(0, this.index()));
     this.state.setState({ pages: this.warmPages() });
     this.unsubscribe = useBrowser.subscribe((s, prev) => {

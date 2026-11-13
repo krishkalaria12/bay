@@ -1,18 +1,20 @@
-import { formatShortcut as formatStroke, isMac, menuKeyName, menuShortcutStroke, platformOS, Pressable, View, shortcutLabel } from "@bay/platform";
-import { lookup } from "@bay/core";
-import { cancelShortcutRecording, recordShortcut, Symbol, type MenuShortcut } from "@bay/desktop";
-import { useEffect, useRef, useState } from "react";
-import { Text } from "react-native";
-import { menuShortcuts } from "../../../lib/keyBindings";
-import { reportBrowserCommand } from "../../../runtime/commands";
 import { updateSettings } from "../../../runtime/settingsActions";
-import { useBrowserRead, browserRead } from "../../../store/read";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { lookup } from "@bay/core";
+import { menuShortcuts, Symbol, type MenuShortcut } from "@bay/desktop";
+import { useEffect, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { IconButton, useHover } from "../../ui/primitives";
 import { matchesQuery } from "../../pages/PageLayout";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, useFormColors } from "../controls";
+import { withWorkflows } from "../settingsCommands";
 
-type Combo = { key: string; modifiers: string[] };
+// The recorder this pane is: closing it stops its own recording, and no other pane's.
+const RECORDER = "shortcuts";
+
+type Combo = { key: string; modifiers: readonly string[] };
 
 type Filter = "all" | "customized" | "conflicts";
 
@@ -41,34 +43,29 @@ const KEY_NAMES = {
 export function formatShortcut({ key, modifiers }: Combo): string {
   if (!key) return "";
 
-  // SAFETY: the checks above established this shape.
-  if (!isMac) {
-    // SAFETY: the checks above established this shape.
-    return formatStroke(menuShortcutStroke(menuKeyName(key), modifiers as Parameters<typeof menuShortcutStroke>[1]), platformOS);
-  }
-
   const mods = MOD_ORDER.flatMap((m) => (modifiers.includes(m) ? [lookup(MOD_GLYPH, m) ?? ""] : [])).join("");
+
   const code = key.charCodeAt(0);
   const name = lookup(KEY_NAMES, key) ?? (code >= 0xf704 && code <= 0xf717 ? `F${code - 0xf703}` : key.toUpperCase());
 
-  return shortcutLabel(mods + name);
+  return mods + name;
 }
 
 export const comboId = (c: Combo) => (c.key ? `${[...c.modifiers].sort().join("+")}+${c.key.toLowerCase()}` : "");
 
 export function ShortcutsPane() {
   const theme = useTheme();
-  const overrides = useBrowserRead((s) => s.settings.shortcuts);
+  const overrides = useBrowser((s) => s.settings.shortcuts);
   const [items, setItems] = useState<MenuShortcut[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [recording, setRecording] = useState<string | null>(null);
-  const latestRecording = useRef(0);
 
   useEffect(() => {
     void menuShortcuts().then(setItems);
 
-    return () => void cancelShortcutRecording();
+    // The pane's recording stops with the pane.
+    return () => void withWorkflows((w) => w.stopRecording(RECORDER));
   }, []);
 
   const effective = (item: MenuShortcut): Combo => {
@@ -88,7 +85,7 @@ export function ShortcutsPane() {
   const conflictsOf = (item: MenuShortcut) => (conflicts.get(comboId(effective(item))) ?? []).filter((x) => x.id !== item.id);
 
   const setShortcut = (id: string, combo: Combo | null) => {
-    const next = Object.fromEntries(Object.entries(browserRead.getState().settings.shortcuts).map(([name, keys]) => [name, [...keys]]));
+    const next = Object.fromEntries(Object.entries(useBrowser.getState().settings.shortcuts).map(([id, keys]) => [id, [...keys]]));
 
     if (combo) next[id] = [combo.key, ...combo.modifiers];
     else delete next[id];
@@ -96,12 +93,9 @@ export function ShortcutsPane() {
   };
 
   const record = async (item: MenuShortcut) => {
-    const run = ++latestRecording.current;
     setRecording(item.id);
-    const combo = await recordShortcut();
-
-    // A later recording replaced this one, and its field stays lit.
-    if (run === latestRecording.current) setRecording(null);
+    const combo = await withWorkflows((w) => w.record(RECORDER));
+    setRecording(null);
 
     if (!combo) return;
     const isDefault = combo.key === item.defaultKey && comboId(combo) === comboId({ key: item.defaultKey, modifiers: item.defaultModifiers });

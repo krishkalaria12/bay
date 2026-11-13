@@ -1,5 +1,5 @@
-import { faviconsFor, fetchFavicon, onHistoryChanged, removeLegacyFavicons } from "@bay/chromium";
-import { iconTheme, readDocument, removeDocument, type IconTheme } from "@bay/desktop";
+import { onHistoryChanged, removeLegacyFavicons } from "@bay/chromium";
+import { readDocument, removeDocument, type IconTheme } from "@bay/desktop";
 import { useEffect } from "react";
 import { create, useStore } from "zustand";
 import { batchStoreUpdates, useBrowser, type BrowserState, type BrowserStore } from "../store/browserStore";
@@ -7,6 +7,13 @@ import { engineProfileFor, isIncognitoSpace } from "../store/model";
 import { DEFAULT_SPACE_ID } from "../store/constants";
 import { selectStore } from "../store/derivedStores";
 import { webviews } from "./webviews";
+import { APPEARANCE_SWAP_MS, FAVICON_FLUSH_MS, MAX_FAVICONS } from "./constants";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import { ReadBrowser } from "../effect/windowPorts";
+import { Diagnostics } from "../effect/ports/diagnostics";
+import { createEnrichmentRequests, EnrichmentEngine, EnrichmentFailure, enrichmentForStore, bindDefaultEnrichment } from "./enrichmentService";
 
 // Favicons are Chrome's (FaviconService): Chrome saves a page's icon when the page shows it and drops it with the
 // page's history. This is the app's in-memory cache of them, by page, plus what Chrome doesn't keep:
@@ -24,12 +31,6 @@ type Icons = {
 };
 
 const EMPTY: Icons = { pages: {}, srcs: {}, appearances: {} };
-const APPEARANCE_SWAP_MS = 5000;
-const MAX_ICONS = 3000;
-const LOOKUP_DELAY_MS = 16;
-
-// Per engine call (nn_favicons_get answers up to 500).
-const LOOKUP_BATCH = 200;
 
 type Favicons = {
   // Keyed by cache key: the engine profile, or a private profile's own id.
@@ -39,40 +40,28 @@ type Favicons = {
 
 export const pageKey = (url: string) => url.replace(/#.*$/, "");
 
-class FaviconBatch {
-  private sizes = new WeakMap<object, number>();
-
-  size<Value>(map: Record<string, Value>): number {
-    return this.sizes.get(map) ?? Object.keys(map).length;
-  }
-
-  set<T>(map: Record<string, T>, key: string, value: T, capped = false): Record<string, T> {
-    let size = this.size(map);
-
-    // At capacity even replacing an existing key starts over, just as a single queued write did.
-    if (capped && size >= MAX_ICONS) {
-      map = { [key]: value };
-      size = 1;
-    } else {
-      if (!this.sizes.has(map)) map = { ...map };
-
-      if (!Object.hasOwn(map, key)) size++;
-      Object.defineProperty(map, key, { value, enumerable: true, configurable: true, writable: true });
-    }
-
-    this.sizes.set(map, size);
-
-    return map;
-  }
-}
-
 export type ResolvedFavicon = { uri: string; spaceId: string };
 
 type FaviconServiceOptions = {
   downloadFavicon?: (tabId: string, src: string) => Promise<{ uri: string } | null>;
 };
 
-export function createFaviconService(browser: BrowserStore, options: FaviconServiceOptions = {}) {
+const faviconServices = new WeakMap<BrowserStore, FaviconService>();
+
+export type FaviconService = ReturnType<typeof makeFaviconService>;
+
+/** One cache, pending queue and listener set for each browser authority. */
+export function createFaviconService(browser: BrowserStore, options: FaviconServiceOptions = {}): FaviconService {
+  const existing = faviconServices.get(browser);
+
+  if (existing) return existing;
+  const created = makeFaviconService(browser, options);
+  faviconServices.set(browser, created);
+
+  return created;
+}
+
+function makeFaviconService(browser: BrowserStore, options: FaviconServiceOptions) {
   let active = true;
   let generation = 0;
   let appearanceChangedAt = -Infinity;
@@ -80,17 +69,84 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
   let stopWatching: (() => void) | undefined;
   const current = (run: number) => active && generation === run;
   const useFavicons = create<Favicons>(() => ({ profiles: {}, themes: {} }));
-
   const cacheKey = (spaceId: string) => (isIncognitoSpace(spaceId) ? spaceId : engineProfileFor(spaceId, browser.getState().spaces));
+  const requests = options.downloadFavicon ? createEnrichmentRequests() : enrichmentForStore(browser);
+  let workers: ManagedRuntime.ManagedRuntime<import("./enrichmentService").EnrichmentService, never> | undefined;
 
+  const ready = () => {
+    if (!options.downloadFavicon || workers) return;
+    const custom = options.downloadFavicon;
+
+    const engine = Layer.effect(
+      EnrichmentEngine,
+      Effect.map(EnrichmentEngine, (native) => ({
+        ...native,
+        icon: (tabId: string, src: string) =>
+          Effect.tryPromise({
+            try: () => custom(tabId, src),
+            catch: (cause) => new EnrichmentFailure({ operation: { name: "enrichment.icon", resource: src }, cause }),
+          }).pipe(Effect.map((image) => image?.uri ?? null)),
+      })),
+    ).pipe(Layer.provide(EnrichmentEngine.layer));
+
+    workers = ManagedRuntime.make(requests.layer.pipe(Layer.provide(Layer.mergeAll(engine, Diagnostics.layer, ReadBrowser.layer(browser)))));
+    void workers.context().catch((error) => console.error("The favicon workers could not start", error));
+  };
+
+  const askFavicons = (request: import("./enrichmentService").FaviconRequest) => {
+    ready();
+    requests.requestFavicons(request);
+  };
+
+  const askIcon = (request: import("./enrichmentService").IconRequest) => {
+    ready();
+    requests.requestIcon(request);
+  };
+
+  const askTheme = (request: import("./enrichmentService").ThemeRequest) => {
+    ready();
+    requests.requestTheme(request);
+  };
+
+  const forgetProfile = requests.invalidateProfile;
+  const forgetPage = requests.forgetPage;
   // MARK: Writing
 
   // Answers come in bursts (a launch asks Chrome about every tab's page, then checks each icon's shape), so changes
   // wait for the next frame and land together, in order: one store update and one commit. A change that gives back
   // what it got changes nothing, and no icon re-renders for it.
+  // Only maps made by this flush can be edited in place. Published maps are copied on their first write;
+  // counts follow those copies so a burst doesn't enumerate and spread a growing map for every icon.
+  // Keep ownership local to the flush: subscribers can synchronously queue and flush another batch.
+  class FaviconBatch {
+    private sizes = new WeakMap<object, number>();
+
+    size<Value>(map: Record<string, Value>): number {
+      return this.sizes.get(map) ?? Object.keys(map).length;
+    }
+
+    set<T>(map: Record<string, T>, key: string, value: T, capped = false): Record<string, T> {
+      let size = this.size(map);
+
+      // At capacity even replacing an existing key starts over, just as a single queued write did.
+      if (capped && size >= MAX_FAVICONS) {
+        map = { [key]: value };
+        size = 1;
+      } else {
+        if (!this.sizes.has(map)) map = { ...map };
+
+        if (!Object.hasOwn(map, key)) size++;
+        Object.defineProperty(map, key, { value, enumerable: true, configurable: true, writable: true });
+      }
+
+      this.sizes.set(map, size);
+
+      return map;
+    }
+  }
+
   type Change = (f: Favicons, batch: FaviconBatch) => Favicons;
 
-  const FLUSH_MS = 16;
   const changes: Change[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -99,7 +155,7 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
     changes.push(change);
 
     if (now) flush();
-    else flushTimer ??= setTimeout(flush, FLUSH_MS);
+    else flushTimer ??= setTimeout(flush, FAVICON_FLUSH_MS);
   }
 
   function flush() {
@@ -107,7 +163,7 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
     flushTimer = undefined;
     const all = changes.splice(0);
 
-    if (all.length)
+    if (all.length) {
       batchStoreUpdates(() =>
         useFavicons.setState((f) => {
           const batch = new FaviconBatch();
@@ -115,6 +171,7 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
           return all.reduce((s, change) => change(s, batch), f);
         }),
       );
+    }
   }
 
   // `now` for what the user did (Clear Data, a closed private window) and for answers that come batched: applied after
@@ -136,76 +193,63 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
 
   // MARK: Asking Chrome
 
-  const queued = new Map<string, Set<string>>();
+  // The pages that have been asked for, by profile. A page is asked again when its lookup failed, or when its
+  // history was deleted.
   const asked = new Set<string>();
-  let lookupTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // The answers for a profile land in its cache. One sink per profile, so the answer of a lookup is one write.
+  const sinks = new Map<string, (icons: ReadonlyMap<string, string | null>) => void>();
+
+  const sinkFor = (profile: string) => {
+    const existing = sinks.get(profile);
+
+    if (existing) return existing;
+
+    const run = generation;
+
+    const sink = (answers: ReadonlyMap<string, string | null>) => {
+      if (!current(run)) return;
+      update(
+        profile,
+        (icons) => {
+          let next: Record<string, string | null> | undefined;
+
+          for (const [page, uri] of answers) {
+            if (icons.pages[page] === uri) continue;
+            next ??= { ...icons.pages };
+            next[page] = uri;
+            touch(page);
+          }
+
+          return next ? { ...icons, pages: next } : icons;
+          // One answer is already a batch (up to LOOKUP_BATCH pages): it lands at once, not on another timer.
+        },
+        true,
+      );
+    };
+
+    sinks.set(profile, sink);
+
+    return sink;
+  };
 
   function ask(key: string, page: string) {
-    if (!active) return;
-
     if (isIncognitoSpace(key) || asked.has(`${key}|${page}`)) return;
     asked.add(`${key}|${page}`);
 
-    if (!queued.has(key)) queued.set(key, new Set());
-    queued.get(key)!.add(page);
-    lookupTimer ??= setTimeout(lookUp, LOOKUP_DELAY_MS);
-  }
-
-  function lookUp() {
-    lookupTimer = undefined;
-    const batches = [...queued];
-    queued.clear();
-
-    for (const [key, pages] of batches) {
-      const all = [...pages];
-
-      for (let i = 0; i < all.length; i += LOOKUP_BATCH) lookUpPages(key, all.slice(i, i + LOOKUP_BATCH));
-    }
-  }
-
-  function lookUpPages(key: string, list: string[]) {
-    const run = generation;
-    void faviconsFor(key, list)
-      .then(
-        (found) =>
-          current(run) &&
-          update(
-            key,
-            (icons) => {
-              let next: Record<string, string | null> | undefined;
-
-              for (const page of list) {
-                const uri = found.pages.get(page)?.uri ?? null;
-
-                if (icons.pages[page] === uri) continue;
-                next ??= { ...icons.pages };
-                next[page] = uri;
-                touch(page);
-              }
-
-              return next ? { ...icons, pages: next } : icons;
-              // One answer is already a batch (up to LOOKUP_BATCH pages): it lands at once, not on another timer.
-            },
-            true,
-          ),
-      )
-      .catch((error) => {
-        if (!current(run)) return;
-
-        // Asked again next time it's shown.
-        for (const page of list) asked.delete(`${key}|${page}`);
-        console.warn("[favicons] lookup failed", error);
-      });
+    askFavicons({
+      profile: key,
+      page,
+      onAnswers: sinkFor(key),
+      // Asked again next time the page is shown.
+      onFailed: () => void asked.delete(`${key}|${page}`),
+    });
   }
 
   // MARK: Recording
 
-  const inflight = new Map<string, Promise<string | null>>();
-
   /** A tab reports its page's icon: shown at once, and Chrome keeps it with the page. */
   function noteFavicon(tabId: string, src: string) {
-    if (!active) return;
-    const run = generation;
     const tab = browser.getState().tabs[tabId];
 
     if (!tab?.url || !src) return;
@@ -214,27 +258,24 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
     const known = useFavicons.getState().profiles[key]?.srcs[src];
 
     if (known) return remember(key, page, src, known);
-    const download = options.downloadFavicon;
 
-    if (!download) return;
-    const id = `${key}|${src}`;
-    let pending = inflight.get(id);
+    if (!options.downloadFavicon && !webviews.get(tabId)) return;
+    const run = generation;
 
-    if (!pending) {
-      pending = download(tabId, src)
-        .then((image) => image?.uri ?? null)
-        .catch(() => null);
-      inflight.set(id, pending);
-      const request = pending;
-      void pending.finally(() => {
-        if (inflight.get(id) === request) inflight.delete(id);
-      });
-    }
+    // The tabs that report the same icon share one fetch.
+    askIcon({
+      profile: key,
+      page,
+      src,
+      tabId,
+      onIcon: (uri) => {
+        if (!current(run)) return;
+        const latest = browser.getState();
 
-    void pending.then((uri) => {
-      const latest = browser.getState().tabs[tabId];
+        if (isIncognitoSpace(key) && latest.tabs[tabId]?.spaceId !== key) return;
 
-      if (current(run) && uri && latest?.spaceId === tab.spaceId && pageKey(latest.url) === page) remember(key, page, src, uri);
+        if (uri) remember(key, page, src, uri);
+      },
     });
   }
 
@@ -253,7 +294,7 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
 
       if (swapped && previous && previous !== uri) appearances = batch.set(appearances, page, dark ? [previous, uri] : [uri, previous]);
       // A map that starts over forgets every other page.
-      const startsOver = batch.size(icons.pages) >= MAX_ICONS;
+      const startsOver = batch.size(icons.pages) >= MAX_FAVICONS;
 
       if (startsOver) touchAll();
       else touch(page);
@@ -268,25 +309,22 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
   // An icon Chrome doesn't have for a page the app names with one (an imported bookmark never visited): fetched
   // without cookies and handed to Chrome, which keeps it as an on-demand icon.
   function fetchMissing(spaceId: string, url: string, src: string) {
-    const run = generation;
     const key = cacheKey(spaceId);
 
     if (isIncognitoSpace(spaceId) || !/^https?:/i.test(src)) return;
     const id = `${key}|${src}`;
 
-    if (inflight.has(id) || failedFetches.has(id)) return;
+    if (failedFetches.has(id)) return;
 
-    const pending = fetchFavicon(src, key, pageKey(url))
-      .then((image) => image?.uri ?? null)
-      .catch(() => null);
-
-    inflight.set(id, pending);
-    void pending.then((uri) => {
-      if (!current(run)) return;
-      inflight.delete(id);
-
-      if (uri) remember(key, pageKey(url), src, uri);
-      else failedFetches.add(id);
+    askIcon({
+      profile: key,
+      page: pageKey(url),
+      src,
+      tabId: null,
+      onIcon: (uri) => {
+        if (uri) remember(key, pageKey(url), src, uri);
+        else failedFetches.add(id);
+      },
     });
   }
 
@@ -338,7 +376,7 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
 
   // Callers re-render on an appearance change themselves (useAppearanceDark): the lookup reads it for
   // icons that have a light and a dark version.
-  const appearance = selectStore(browser, (s) => s.ui.appDark);
+  const appearance = selectStore(browser, (state) => state.ui.appDark);
   const useAppearanceDark = () => useStore(appearance);
 
   // Whether every profile the lookup reads has Chrome's answer for the page (an icon, or none).
@@ -372,13 +410,10 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
 
     if (f.profiles === prev.profiles) return;
 
-    // oxlint-disable-next-line no-useless-spread -- A watcher may unsubscribe or register another watcher during delivery.
-    for (const page of pages ?? [...watchers.keys()]) for (const w of [...(watchers.get(page) ?? [])]) check(w);
+    for (const page of pages ?? Array.from(watchers.keys())) for (const w of Array.from(watchers.get(page) ?? [])) check(w);
   }
 
   function watch(w: Watcher) {
-    if (!active) return () => {};
-
     if (!watching) {
       watching = true;
       stopWatching = useFavicons.subscribe(onFavicons);
@@ -418,25 +453,19 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
 
   // MARK: Themes
 
-  const theming = new Set<string>();
-
   function useFaviconTheme(url: string, src?: string | null, spaceId?: string): IconTheme | null | undefined {
     const uri = useFavicons(() => resolveFavicon(url, src, spaceId)?.uri ?? null);
     const theme = useFavicons((f) => (uri ? f.themes[uri] : undefined));
     const pending = !!uri && theme === undefined;
     useEffect(() => {
-      if (!pending || !uri || theming.has(uri)) return;
+      if (!pending || !uri) return;
       const run = generation;
-      theming.add(uri);
-      void iconTheme({ uri })
-        .catch(() => null)
-        .then(
-          (found) =>
-            current(run) && queue((f, batch) => (f.themes[uri] === (found ?? null) ? f : { ...f, themes: batch.set(f.themes, uri, found ?? null, true) })),
-        )
-        .finally(() => {
-          if (current(run)) theming.delete(uri);
-        });
+
+      askTheme({
+        uri,
+        onTheme: (found) =>
+          current(run) && queue((f, batch) => (f.themes[uri] === (found ?? null) ? f : { ...f, themes: batch.set(f.themes, uri, found ?? null, true) })),
+      });
     }, [pending, uri]);
 
     return theme;
@@ -445,7 +474,9 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
   // MARK: Housekeeping
 
   function forget(key: string) {
-    for (const id of asked) if (id.startsWith(`${key}|`)) asked.delete(id);
+    for (const id of Array.from(asked)) if (id.startsWith(`${key}|`)) asked.delete(id);
+    // The work that was on its way is not the profile's any more.
+    forgetProfile(key);
     touchAll();
     update(key, () => EMPTY, true);
   }
@@ -462,17 +493,24 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
         if (readDocument(doc) === null) continue;
         removeDocument(doc);
 
-        if (!isIncognitoSpace(id)) void removeLegacyFavicons(engineProfileFor(id, s.spaces)).catch(() => {});
+        if (!isIncognitoSpace(id)) void removeLegacyFavicons(engineProfileFor(id, browser.getState().spaces)).catch(() => {});
       } catch (error) {
         console.warn(`[favicons] couldn't remove ${doc}`, error);
       }
     }
   }
 
-  function startFavicons() {
+  function start() {
     if (stopListening) return stopListening;
     active = true;
     const run = generation;
+    // Windows may close while this owner was stopped.
+    const openProfiles = new Set(Object.values(browser.getState().windows).map((window) => window.spaceId));
+
+    for (const id of Object.keys(useFavicons.getState().profiles)) {
+      if (isIncognitoSpace(id) && !openProfiles.has(id)) forget(id);
+    }
+
     removeLegacyFiles(browser.getState());
 
     const history = onHistoryChanged((change) => {
@@ -482,7 +520,12 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
       const gone = new Set(change.urls.map(pageKey));
       const key = change.profile;
 
-      for (const page of gone) asked.delete(`${key}|${page}`);
+      for (const page of gone) {
+        asked.delete(`${key}|${page}`);
+        // The answer that was on its way is not the page's any more.
+        forgetPage(key, page);
+      }
+
       update(key, (icons) => {
         if (!Object.keys(icons.pages).some((page) => gone.has(page))) return icons;
 
@@ -511,15 +554,17 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
       }
     });
 
-    stopListening = () => {
-      if (!current(run)) return;
+    const giveBack = () => {
+      if (stopListening !== giveBack) return;
       history.remove();
       stop();
       stopListening = undefined;
       dispose();
     };
 
-    return stopListening;
+    stopListening = giveBack;
+
+    return giveBack;
   }
 
   function dispose() {
@@ -531,39 +576,28 @@ export function createFaviconService(browser: BrowserStore, options: FaviconServ
 
     active = false;
     generation++;
-    clearTimeout(lookupTimer);
     clearTimeout(flushTimer);
-    lookupTimer = flushTimer = undefined;
+    flushTimer = undefined;
     changes.length = 0;
-    queued.clear();
     asked.clear();
-    inflight.clear();
+    sinks.clear();
     failedFetches.clear();
-    theming.clear();
     watchers.clear();
     stopWatching?.();
     stopWatching = undefined;
     watching = false;
     touched = new Set();
-    // Windows can close while this instance is stopped. Drop its cached images
-    // and themes so a later start cannot expose a departed private profile.
+    const previous = workers;
+    workers = undefined;
+    void previous?.dispose().catch((error) => console.error("The favicon workers could not stop", error));
     useFavicons.setState({ profiles: {}, themes: {} });
   }
 
-  return {
-    start: startFavicons,
-    dispose,
-    useFavicons,
-    useAppearanceDark,
-    useFavicon,
-    useFaviconTheme,
-    noteFavicon,
-    faviconFailed,
-    resolveFavicon,
-    pruneProfileFavicons,
-  };
+  return { start, dispose, useFavicons, useAppearanceDark, useFavicon, useFaviconTheme, noteFavicon, faviconFailed, resolveFavicon, pruneProfileFavicons };
 }
 
-const favicons = createFaviconService(useBrowser, { downloadFavicon: async (tabId, src) => webviews.get(tabId)?.downloadFavicon(src) ?? null });
+bindDefaultEnrichment(useBrowser);
+
+const favicons = createFaviconService(useBrowser);
 export const { useFavicons, useAppearanceDark, useFavicon, useFaviconTheme, noteFavicon, faviconFailed, resolveFavicon, pruneProfileFavicons } = favicons;
 export const startFavicons = favicons.start;

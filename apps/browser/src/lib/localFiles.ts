@@ -1,87 +1,66 @@
-import { localFiles, type LocalFileAccess } from "@bay/desktop";
-import { browserRead } from "../store/read";
-import { activate, closeTabs, newTab, updateTabDetails } from "../runtime/tabActions";
-import { closePeek, openPeek } from "../runtime/splitActions";
-import { activeTabId } from "../store/model";
+// The app's local files: where a Space's files live, and what this Mac may read of them.
+//
+// The work is in lib/localFileService.ts. This is where the app reaches it.
+import type { LocalFileAccess } from "@bay/desktop";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../effect/runtime";
+import { LocalFileService } from "./localFileService";
+import { hasServiceClient, requestService } from "../runtime/serviceClient";
 import { platformWords } from "./platformWords";
 
 /** Resolves native access before opening anything. Synced paths alone never authorize a file. */
-export async function openLocalFile(windowId: string, pinId: string, relativePath = ""): Promise<LocalFileAccess> {
-  const s = browserRead.getState();
-  const pin = s.localFiles[pinId];
-  const w = s.windows[windowId];
+export function openLocalFile(windowId: string, pinId: string, relativePath = ""): Promise<LocalFileAccess> {
+  if (hasServiceClient()) return requestService("localFileOpen", [windowId, pinId, relativePath]);
 
-  if (!pin || !w || w.incognito || !s.spaces[pin.spaceId]) return { status: "inaccessible" };
-  const access = await localFiles.open(pin.path, relativePath);
-  const next = browserRead.getState();
+  return runDesktop(
+    Effect.gen(function* () {
+      const files = yield* LocalFileService;
 
-  if (access.status !== "available" || !access.browserReadable || !access.url?.startsWith("file://")) return access;
-
-  // A tab must not appear after its pin or window was removed while native resolution was pending.
-  if (next.localFiles[pinId]?.path !== pin.path || !next.windows[windowId] || !next.spaces[pin.spaceId]) return { status: "inaccessible" };
-  const existing = Object.values(next.tabs).find((tab) => tab.spaceId === pin.spaceId && tab.url === access.url && !tab.peekOf);
-
-  if (existing) await activate(existing.id, windowId);
-  else {
-    const tabId = await newTab(windowId, { url: access.url, spaceId: pin.spaceId });
-
-    if (tabId) await updateTabDetails(tabId, { customTitle: relativePath ? (access.name ?? pin.name) : pin.name });
-  }
-
-  return access;
-}
-
-export async function reconnectLocalFile(pinId: string): Promise<boolean> {
-  const pin = browserRead.getState().localFiles[pinId];
-
-  if (!pin) return false;
-
-  // Native saves an alias under the original synced path. Reconnection is local to this Mac.
-  return !!(await localFiles.reconnect(pin.path, pin.kind));
+      return yield* files.open(windowId, pinId, relativePath);
+    }),
+  );
 }
 
 /** Space peeks browser-readable files; other formats keep their native app's preview/open behavior. */
-export async function peekLocalFile(windowId: string, pinId: string, relativePath = ""): Promise<LocalFileAccess> {
-  const pin = browserRead.getState().localFiles[pinId];
+export function peekLocalFile(windowId: string, pinId: string, relativePath = ""): Promise<LocalFileAccess> {
+  if (hasServiceClient()) return requestService("localFilePeek", [windowId, pinId, relativePath]);
 
-  if (!pin) return { status: "inaccessible" };
-  const access = await localFiles.inspect(pin.path, relativePath);
-  const s = browserRead.getState();
+  return runDesktop(
+    Effect.gen(function* () {
+      const files = yield* LocalFileService;
 
-  if (s.localFiles[pinId]?.path !== pin.path || !s.windows[windowId] || s.windows[windowId]!.incognito) return { status: "inaccessible" };
+      return yield* files.peek(windowId, pinId, relativePath);
+    }),
+  );
+}
 
-  if (access.status !== "available") return access;
-  const from = activeTabId(s, windowId);
+/** Native saves an alias under the original synced path. Reconnection is local to this Mac. */
+export function reconnectLocalFile(pinId: string): Promise<boolean> {
+  if (hasServiceClient()) return requestService("localFileReconnect", [pinId]);
 
-  if (from && access.browserReadable && access.url?.startsWith("file://")) {
-    // Shared-space tabs can still be hosted by another window. The peek belongs to this window's page.
-    if (s.tabs[from]?.windowId !== windowId) await activate(from, windowId);
-    await openPeek(from, access.url);
-  } else return openLocalFile(windowId, pinId, relativePath);
+  return runDesktop(
+    Effect.gen(function* () {
+      const files = yield* LocalFileService;
 
-  return access;
+      return yield* files.reconnect(pinId);
+    }),
+  );
 }
 
 /** Descendant rows close their opened page. They never delete or move a filesystem entry. */
-export async function closeLocalFileTab(windowId: string, pinId: string, relativePath: string): Promise<void> {
-  const pin = browserRead.getState().localFiles[pinId];
+export function closeLocalFileTab(windowId: string, pinId: string, relativePath: string): Promise<void> {
+  if (hasServiceClient()) return requestService("localFileClose", [windowId, pinId, relativePath]).then(() => {});
 
-  if (!pin) return;
-  const access = await localFiles.inspect(pin.path, relativePath);
-  const s = browserRead.getState();
+  return runDesktop(
+    Effect.gen(function* () {
+      const files = yield* LocalFileService;
 
-  if (s.localFiles[pinId]?.path !== pin.path || !s.windows[windowId] || !access.url) return;
-  const peekId = s.peeks[windowId]?.tabId;
-
-  if (peekId && s.tabs[peekId]?.spaceId === pin.spaceId && s.tabs[peekId]?.url === access.url) await closePeek(windowId);
-
-  const tabIds = Object.values(s.tabs)
-    .filter((tab) => !tab.peekOf && tab.spaceId === pin.spaceId && tab.url === access.url)
-    .map((tab) => tab.id);
-
-  if (tabIds.length) await closeTabs(tabIds);
+      yield* files.close(windowId, pinId, relativePath);
+    }),
+  );
 }
 
+/** What the app tells the user about a file it may not read. */
 export function localFileStatusText(access: LocalFileAccess | null): string {
   if (!access) return "Checking access…";
 

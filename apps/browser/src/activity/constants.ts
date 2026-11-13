@@ -24,7 +24,7 @@ export const MEETING_CLEANUP_IDLE_MS = 30 * 60_000;
 // Dia: 5 / 2 min.
 export const WIGGLE_MARKS_MIN = [5, 2];
 
-// MARK: Services (github.ts, googleAuth.ts)
+// MARK: Services (github.ts, connectionService.ts)
 
 export const DETAILS_PAGE = 10;
 export const GOOGLE_REDIRECT = "http://127.0.0.1:53682/bay-oauth";

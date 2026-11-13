@@ -54,7 +54,6 @@
 #include "services/network/public/mojom/websocket.mojom.h"
 #include "bay/core/nn_lifetime.h"
 #include "bay/core/nn_context_menu.h"
-#include "bay/core/nn_navigation_hold.h"
 #include "bay/core/nn_page_channel.h"
 #include "bay/core/nn_peek_links.h"
 #include "bay/core/nn_request_filter.h"
@@ -357,7 +356,6 @@ class NNContentBrowserClient : public ChromeContentBrowserClient {
     ChromeContentBrowserClient::CreateThrottlesForNavigation(registry);
     bay::AddScriptsPagesThrottle(registry);
     AddAppSchemeThrottle(registry);
-    MaybeAddNavigationHoldThrottle(registry);
     MaybeAddPeekLinksThrottle(registry);
     MaybeAddRequestFilterThrottle(registry);
   }

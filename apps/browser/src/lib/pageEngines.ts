@@ -1,13 +1,14 @@
-import { addHistoryVisits, hasWebKit, type PageEngine } from "@bay/chromium";
-import { confirm } from "@bay/desktop";
+import { addHistoryVisits, type PageEngine } from "@bay/chromium";
+import * as Effect from "effect/Effect";
+import { PageWorkService } from "../components/site/pageWorkService";
 import { pageOf, patchPage } from "../components/window/pageState";
+import { runDesktop } from "../effect/runtime";
 import { showToast } from "../components/ui/toasts";
 import { useBrowser } from "../store/browserStore";
 import { canUseWebKit, chosenEngine, ENGINE_NAMES, siteOf, tabEngine, visitRecorder, type WebKitPage } from "../store/engines";
 import { engineProfile, isIncognitoSpace, navigationTo } from "../store/model";
 import type { Tab } from "../store/types";
 import { wantsPage } from "./tabNavigation";
-import { webviews } from "./webviews";
 
 // Moving pages between Chromium and WebKit (store/engines.ts decides which a tab is in). A move reloads the page in the
 // other engine's view (ContentCard keys the tab's WebView by its engine); each engine keeps its own sign-ins.
@@ -23,35 +24,23 @@ const siteMoves = new Map<string, number>();
 const SITE_MOVE_SPACING_MS = 10_000;
 const hostLabel = (site: string) => new URL(site).hostname.replace(/^www\./, "");
 
-const UNSAVED_WORK = `(() => {
-  const fields = Array.from(document.querySelectorAll("input:not([type=hidden]):not([type=password]):not([type=submit]):not([type=button]), textarea, select"));
-  const changed = (f) => f.type === "checkbox" || f.type === "radio" ? f.checked !== f.defaultChecked : f.tagName === "SELECT" ? Array.from(f.options).some((o) => o.selected !== o.defaultSelected) : f.value !== f.defaultValue;
-  const editing = document.activeElement && document.activeElement.isContentEditable;
-  post("result", JSON.stringify(fields.some(changed) || !!editing));
-})()`;
-
-async function hasUnsavedWork(tabId: string): Promise<boolean> {
-  const web = webviews.get(tabId);
-
-  if (!web) return false;
-
-  return (await Promise.race([web.evaluate<boolean>(UNSAVED_WORK), new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500))])) === true;
-}
-
 /** A tab keeps the engine its first view chose. */
 export function persistEngine(tabId: string, engine: PageEngine) {
-  // Without WebKit every page is Chromium's; there is nothing to keep.
-  if (!hasWebKit()) return;
   const t = store().tabs[tabId];
 
   if (t && !t.engine) store().updateTab(tabId, { engine });
 }
 
-async function mayLeavePage(t: Tab, title: string, message: string, confirmTitle: string): Promise<boolean> {
-  if (!wantsPage(t) || !(await hasUnsavedWork(t.id))) return true;
-  const { confirmed } = await confirm({ title, message, confirmTitle, cancelTitle: "Stay on Page", windowId: t.windowId });
+// The page moves to another engine only when the user says so: the page work asks whether it holds input a reload
+// would lose (pageWorkService.ts), and asks the user when it does.
+function mayLeavePage(t: Tab, title: string, message: string, confirmTitle: string): Promise<boolean> {
+  return runDesktop(
+    Effect.gen(function* () {
+      const pageWork = yield* PageWorkService;
 
-  return confirmed;
+      return yield* pageWork.mayLeavePage(t.id, { title, message, confirmTitle, cancelTitle: "Stay on Page", windowId: t.windowId });
+    }),
+  );
 }
 
 const pageUrl = (t: Tab | undefined) => t?.url || t?.navigation?.url || "";

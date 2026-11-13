@@ -319,7 +319,7 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
             history,
             historyFloor: {},
             // A view handed in (tests) counts as read; the app's history and bookmarks come from Chrome later
-            // (lib/history.ts, lib/bookmarks.ts).
+            // (lib/historyService.ts, lib/bookmarks.ts).
             historyReady: Object.fromEntries(Object.keys(history).map((p) => [p, true as const])),
             bookmarks,
             bookmarksReady: Object.fromEntries(

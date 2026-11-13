@@ -17,12 +17,12 @@ const ALLOWED = {
   "runtime/coordinatorEntry.ts": "the coordinator's authority store",
   "lib/shellBridge.ts": "coordinator native sync",
   "lib/persist.ts": "coordinator persistence",
-  "lib/history.ts": "coordinator history service",
   "lib/bookmarks.ts": "coordinator bookmark service",
   "lib/favicons.ts": "coordinator favicon service",
   "lib/profileCleanup.ts": "coordinator profile data service",
   "activity/index.ts": "coordinator Live services",
   "activity/activityEngine.ts": "coordinator Live services",
+  "activity/calendar.ts": "coordinator calendar service; window requests go through the service client",
   "activity/meetingAlerts.ts": "coordinator meeting alerts",
   "activity/meetingGroups.ts": "coordinator meeting groups",
   "activity/activityStore.ts": "coordinator Live folder undo; window mutations dispatch liveUpdate service",
@@ -33,7 +33,6 @@ const ALLOWED = {
   "components/extensions/bridge.ts": "legacy page adoption",
   "components/window/openFromPage.ts": "legacy page adoption",
   "components/split/splitActions.ts": "legacy page adoption",
-  "lib/engineTabs.ts": "legacy tab strip mirror",
   // WebKit is macOS's alone, and macOS runs the legacy entry: without it (hasWebKit()) these never write.
   "lib/pageEngines.ts": "WebKit page engine moves",
 };

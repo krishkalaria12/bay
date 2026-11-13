@@ -2,6 +2,10 @@
 // and extensionless relative imports find their .ts/.tsx file.
 import { registerHooks } from "node:module";
 
+// Metro defines this for the app's own code; Node does not. The app's modules read it at their top level, so it
+// is here for every test.
+globalThis.__DEV__ = false;
+
 const stub = new URL("./test-native-stub.mjs", import.meta.url).href;
 const native = new Set(["@bay/desktop", "@bay/chromium", "expo-modules-core"]);
 

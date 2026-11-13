@@ -1,15 +1,12 @@
-import { Pressable, View } from "@bay/platform";
-import { clearBrowsingData, type BrowsingDataType } from "@bay/chromium";
 import { Surface } from "@bay/desktop";
 import { useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { create } from "zustand";
-import { pruneProfileFavicons } from "../../lib/favicons";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { engineProfile, isIncognitoSpace, spaceFor } from "../../store/model";
+import { spaceFor } from "../../store/model";
 import { Button, Checkbox, PopUp } from "../settings/controls";
-import { clearHistory } from "../../runtime/bookmarkActions";
+import { withWorkflows } from "../settings/settingsCommands";
 
 const RANGES = [
   { value: "hour", title: "Last hour", ms: 3_600_000 },
@@ -34,21 +31,19 @@ export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose
   const [siteData, setSiteData] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  const [failed, setFailed] = useState(false);
+
+  // The app's history goes at once; the engine's data may not. A clear that could not finish says what it did,
+  // and is not tried again on its own.
   const clear = async () => {
     setBusy(true);
+    setFailed(false);
     const ms = RANGES.find((r) => r.value === range)!.ms;
     const since = ms === Infinity ? undefined : Date.now() - ms;
-
-    if (history) {
-      // A private window's history is Chrome's alone, cleared below.
-      if (!isIncognitoSpace(spaceId)) await clearHistory(spaceId, since);
-      pruneProfileFavicons(spaceId);
-    }
-
-    const types: BrowsingDataType[] = [...(history ? ["history" as const] : []), ...(siteData ? ["siteData" as const, "cache" as const] : [])];
-
-    if (types.length && !isIncognitoSpace(spaceId)) await clearBrowsingData(engineProfile(spaceId), types, since);
+    const outcome = await withWorkflows((w) => w.clearData(spaceId, { since, history, siteData }));
     setBusy(false);
+
+    if (outcome.engine === "failed") return setFailed(true);
     onClose();
   };
 
@@ -76,6 +71,13 @@ export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose
           <Option value={history} onChange={setHistory} title="Browsing history" subtitle="Clears the pages you visited from History and the command bar." />
           <Option value={siteData} onChange={setSiteData} title="Cookies, site data and cached files" subtitle="Signs you out of most sites." />
         </View>
+        {failed && (
+          <Text style={{ fontSize: 12, marginTop: 14, color: theme.textSecondary }}>
+            {history
+              ? "History was cleared, but cookies, site data and cached files couldn't be. Try again."
+              : "Cookies, site data and cached files couldn't be cleared. Try again."}
+          </Text>
+        )}
         <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 22 }}>
           <Button title="Cancel" onPress={onClose} />
           <Button title="Clear Data" kind="primary" disabled={busy || (!history && !siteData)} onPress={() => void clear()} />

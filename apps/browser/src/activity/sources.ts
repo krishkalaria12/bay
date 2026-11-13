@@ -1,4 +1,3 @@
-import { hasServiceClient, requestService } from "../runtime/serviceClient";
 import {
   CONFLUENCE_CQL,
   DRIVE_QUERY,
@@ -21,16 +20,20 @@ import {
   GITHUB_QUERY,
   GITHUB_STATE_QUERY,
   GITHUB_VARIABLES,
+  githubAnswer,
+  githubBody,
+  githubHeaders,
   mapGithub,
-  VIEWER_QUERY,
   withDetails,
   type DetailsResponse,
   type GithubResponse,
 } from "./github";
 import { DETAILS_PAGE } from "./constants";
-import { basic, deleteSecret, endpoints, form, getSecret, request, setSecret } from "./net";
-import { live, setAccount, updateConfig } from "./activityStore";
-import { LiveError, type CompletionState, type LiveAccount, type LiveFolder, type LiveItem, type LiveSourceId } from "./types";
+import { accountToken } from "./connectionService";
+import { basic, endpoints, getSecret, notionHeaders, request } from "./net";
+import { live } from "./activityStore";
+import { LiveError, type CompletionState, type LiveFolder, type LiveItem, type LiveSourceId } from "./types";
+import { cancelConnection } from "./connections";
 
 export type LiveSource = {
   id: LiveSourceId;
@@ -54,16 +57,15 @@ async function secret(source: LiveSourceId): Promise<string> {
 async function githubGraphql<T>(token: string, query: string, variables: Record<string, string | string[]> = {}): Promise<T> {
   const json = await request<T & { errors?: { type?: string; message: string }[] }>(endpoints.githubGraphql, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables }),
+    headers: githubHeaders(token),
+    body: githubBody(query, variables),
   });
 
-  const error = json.errors?.[0];
+  const answer = githubAnswer(json);
 
-  // SAFETY: { data? assertion matches the runtime value validated at this call site.
-  if (error && !(json as { data?: unknown }).data) throw new LiveError(error.type === "RATE_LIMITED" ? "rateLimited" : "other", error.message);
+  if (!answer.ok) throw answer.error;
 
-  return json;
+  return answer.data;
 }
 
 const github: LiveSource = {
@@ -147,8 +149,6 @@ const bitbucket: LiveSource = {
 
 // MARK: Notion
 
-const notionHeaders = (token: string) => ({ Authorization: `Bearer ${token}`, "Notion-Version": "2022-06-28", "Content-Type": "application/json" });
-
 const notion: LiveSource = {
   id: "notion",
   name: "Notion",
@@ -186,37 +186,14 @@ const confluence: LiveSource = {
 
 // MARK: Google Drive
 
-type GoogleTokens = { access_token: string; refresh_token: string; expires_at: number; client_secret: string };
-
-async function googleAccessToken(): Promise<string> {
-  // SAFETY: GoogleTokens assertion matches the runtime value validated at this call site.
-  const stored = JSON.parse(await secret("gdrive")) as GoogleTokens;
-
-  if (stored.expires_at > Date.now() + 60_000) return stored.access_token;
-
-  const json = await request<{ access_token: string; expires_in: number }>(endpoints.googleToken, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: form({
-      client_id: live().config.googleClientId,
-      client_secret: stored.client_secret,
-      refresh_token: stored.refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  await setSecret("gdrive", JSON.stringify({ ...stored, access_token: json.access_token, expires_at: Date.now() + json.expires_in * 1000 }));
-
-  return json.access_token;
-}
-
 const gdrive: LiveSource = {
   id: "gdrive",
   name: "Google Drive",
   kind: "documents",
   site: "https://drive.google.com",
   async fetch() {
-    const token = await googleAccessToken();
+    // The service owns the token behind it: it is refreshed when it is due, and a disconnected account has none.
+    const token = await accountToken("gdrive");
 
     const query = Object.entries(DRIVE_QUERY)
       .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
@@ -228,181 +205,14 @@ const gdrive: LiveSource = {
 
 export const SOURCES: Record<LiveSourceId, LiveSource> = { github, bitbucket, notion, confluence, gdrive };
 
-// MARK: Connecting accounts
+// Compatibility entry points share the Effect connection implementation.
+export { connectGithub, connectBitbucket, connectNotion, connectConfluence, disconnect, startGithubDeviceFlow } from "./connections";
 
-type AccountScope = { active: boolean };
+export type { DeviceSignIn as DeviceFlow } from "./connections";
 
-let accountScope: AccountScope | undefined;
-
+/** Account flows are cancelled when the coordinator's service-state owner stops. */
 export function startAccountRequests(): () => void {
-  const scope: AccountScope = { active: true };
-  accountScope = scope;
-
   return () => {
-    scope.active = false;
-
-    if (accountScope === scope) accountScope = undefined;
+    for (const source of Object.values(SOURCES)) cancelConnection(source.id);
   };
-}
-
-const checkAccountScope = (scope: AccountScope | undefined) => {
-  if (scope && !scope.active) throw new Error("Account request owner is stopped");
-};
-
-const account = (login: string, name: string | null, avatar: string | null): LiveAccount => ({ login, name, avatar, connectedAt: Date.now() });
-
-export async function connectGithub(token: string) {
-  if (hasServiceClient()) return requestService<void>("liveConnect", ["github", [token]]);
-  const scope = accountScope;
-  const json = await githubGraphql<{ data?: { viewer: { login: string; name: string | null; avatarUrl: string } } }>(token.trim(), VIEWER_QUERY);
-  const viewer = json.data?.viewer;
-
-  if (!viewer) throw new LiveError("signedOut", "GitHub didn't accept the token");
-  checkAccountScope(scope);
-  await setSecret("github", token.trim());
-  checkAccountScope(scope);
-  setAccount("github", account(viewer.login, viewer.name, viewer.avatarUrl));
-}
-
-export type DeviceFlow = { userCode: string; verificationUri: string; expiresAt: number; done: Promise<void>; cancel(): void };
-
-export async function startGithubDeviceFlow(clientId: string): Promise<DeviceFlow> {
-  if (hasServiceClient()) {
-    const flow = await requestService<{ id: string; userCode: string; verificationUri: string; expiresAt: number }>("githubStart", [clientId]);
-
-    return {
-      ...flow,
-      done: requestService("githubWait", [flow.id]),
-      cancel: () => {
-        void requestService("githubCancel", [flow.id]).catch(console.error);
-      },
-    };
-  }
-
-  const code = await request<{ device_code: string; user_code: string; verification_uri: string; expires_in: number; interval: number }>(
-    `${endpoints.githubWeb}/login/device/code`,
-    { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form({ client_id: clientId, scope: "repo read:org" }) },
-  );
-
-  let cancelled = false;
-  let interval = Math.max(code.interval, 1) * 1000;
-  const expiresAt = Date.now() + code.expires_in * 1000;
-
-  const done = (async () => {
-    while (!cancelled && Date.now() < expiresAt) {
-      await new Promise((r) => setTimeout(r, interval));
-
-      if (cancelled) break;
-
-      const json = await request<{ access_token?: string; error?: string; interval?: number }>(`${endpoints.githubWeb}/login/oauth/access_token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: form({ client_id: clientId, device_code: code.device_code, grant_type: "urn:ietf:params:oauth:grant-type:device_code" }),
-      });
-
-      if (json.access_token) return connectGithub(json.access_token);
-
-      if (json.error === "slow_down") interval = (json.interval ?? interval / 1000 + 5) * 1000;
-      else if (json.error && json.error !== "authorization_pending")
-        throw new LiveError("signedOut", json.error === "access_denied" ? "Access was denied" : json.error);
-    }
-
-    throw new LiveError("signedOut", cancelled ? "Cancelled" : "The code expired");
-  })();
-
-  return { userCode: code.user_code, verificationUri: code.verification_uri, expiresAt, done, cancel: () => (cancelled = true) };
-}
-
-export async function connectBitbucket(user: string, token: string) {
-  if (hasServiceClient()) return requestService<void>("liveConnect", ["bitbucket", [user, token]]);
-  const scope = accountScope;
-
-  const me = await request<{ account_id: string; display_name: string; links?: { avatar?: { href: string } } }>(`${endpoints.bitbucket}/user`, {
-    headers: { Authorization: basic(user.trim(), token.trim()) },
-  });
-
-  checkAccountScope(scope);
-  await setSecret("bitbucket", token.trim());
-  checkAccountScope(scope);
-  updateConfig({ bitbucketUser: user.trim() });
-  checkAccountScope(scope);
-  setAccount("bitbucket", account(me.account_id, me.display_name, me.links?.avatar?.href ?? null));
-}
-
-export async function connectNotion(token: string) {
-  if (hasServiceClient()) return requestService<void>("liveConnect", ["notion", [token]]);
-  const scope = accountScope;
-  const me = await request<{ name?: string; bot?: { workspace_name?: string } }>(`${endpoints.notion}/users/me`, { headers: notionHeaders(token.trim()) });
-  checkAccountScope(scope);
-  await setSecret("notion", token.trim());
-  checkAccountScope(scope);
-  setAccount("notion", account(me.bot?.workspace_name ?? me.name ?? "Notion", me.bot?.workspace_name ?? null, null));
-}
-
-export async function connectConfluence(site: string, email: string, token: string) {
-  if (hasServiceClient()) return requestService<void>("liveConnect", ["confluence", [site, email, token]]);
-  const scope = accountScope;
-
-  const base = site
-    .trim()
-    .replace(/\/+$/, "")
-    .replace(/^(?!https?:\/\/)/, "https://");
-
-  const me = await request<{ accountId: string; displayName: string }>(`${endpoints.confluence(base)}/wiki/rest/api/user/current`, {
-    headers: { Authorization: basic(email.trim(), token.trim()) },
-  });
-
-  checkAccountScope(scope);
-  await setSecret("confluence", token.trim());
-  checkAccountScope(scope);
-  updateConfig({ confluenceSite: base, confluenceEmail: email.trim() });
-  checkAccountScope(scope);
-  setAccount("confluence", account(me.accountId, me.displayName, null));
-}
-
-export async function connectGoogle(clientId: string, clientSecret: string, code: string, verifier: string, redirectUri: string) {
-  const scope = accountScope;
-
-  const json = await request<{ access_token: string; refresh_token?: string; expires_in: number }>(endpoints.googleToken, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: form({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-      code_verifier: verifier,
-      grant_type: "authorization_code",
-      redirect_uri: redirectUri,
-    }),
-  });
-
-  if (!json.refresh_token) throw new LiveError("signedOut", "Google didn't return a refresh token");
-
-  const tokens: GoogleTokens = {
-    access_token: json.access_token,
-    refresh_token: json.refresh_token,
-    expires_at: Date.now() + json.expires_in * 1000,
-    client_secret: clientSecret,
-  };
-
-  checkAccountScope(scope);
-  await setSecret("gdrive", JSON.stringify(tokens));
-
-  const about = await request<{ user?: { displayName: string; emailAddress: string; photoLink?: string } }>(`${endpoints.drive}/about?fields=user`, {
-    headers: { Authorization: `Bearer ${json.access_token}` },
-  }).catch(() => null);
-
-  checkAccountScope(scope);
-  updateConfig({ googleClientId: clientId });
-  checkAccountScope(scope);
-  setAccount("gdrive", account(about?.user?.emailAddress ?? "Google Drive", about?.user?.displayName ?? null, about?.user?.photoLink ?? null));
-}
-
-export async function disconnect(source: LiveSourceId) {
-  if (hasServiceClient()) return requestService<void>("liveDisconnect", [source]);
-  const scope = accountScope;
-  checkAccountScope(scope);
-  await deleteSecret(source);
-  checkAccountScope(scope);
-  setAccount(source, null);
 }

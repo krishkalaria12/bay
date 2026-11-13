@@ -1,28 +1,17 @@
-import * as v from "valibot";
-import { reportBrowserCommand } from "../../runtime/commands";
-import * as tabCommands from "../../runtime/tabActions";
-import {
-  onExtensionInstallPrompt,
-  onExtensionSidePanel,
-  onExtensionsChanged,
-  onExtensionTabsRequest,
-  resolveExtensionInstallPrompt,
-  webStoreExtensionId,
-  type TabsRequest,
-} from "@bay/chromium";
+import { onExtensionInstallPrompt, onExtensionSidePanel, onExtensionTabsRequest, webStoreExtensionId, type TabsRequest } from "@bay/chromium";
 import { getNativeHostInfo } from "@bay/platform/nativeBridge";
+import * as Effect from "effect/Effect";
 import { AppState } from "react-native";
+import * as v from "valibot";
+import { runWindow } from "../../effect/windowRuntime";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
-import { useBrowserRead as useBrowser } from "../../store/read";
-import type { BrowserProjection as BrowserState } from "../../runtime/projection";
-import { useBrowser as legacyBrowser } from "../../store/browserStore";
+import { useBrowser, type BrowserState } from "../../store/browserStore";
 import { changedIds } from "../../store/recordDiff";
-import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
 import { activeTabId, engineProfile } from "../../store/model";
 import { tabForBrowser, usePages } from "../window/pageState";
 import { refreshActionStates } from "./actions";
-import { startExtensionSearchEngines } from "./searchEngines";
+import { ExtensionsService, type Extensions } from "./service";
 import * as state from "./state";
 import {
   activateExtension,
@@ -31,7 +20,6 @@ import {
   extensionProfile,
   findExtension,
   openSidePanel,
-  refreshExtensions,
   showInstallPrompt,
   wantedSidePanels,
   syncSidePanel,
@@ -39,28 +27,20 @@ import {
   windowExtensions,
 } from "./state";
 
+/**
+ * Runs the service's work on the app's runtime. The service is asked for by name, so this module does not depend on
+ * the runtime's own list of services.
+ */
+const run = <A>(work: (extensions: Extensions) => Effect.Effect<A>): void => {
+  void runWindow(Effect.flatMap(ExtensionsService, work)).catch((cause: unknown) => console.error("The extensions could not run", cause));
+};
+
 export function startExtensionsBridge({ sharedWindow = false } = {}) {
+  // The service owns the engine's report and the profiles it reads: it listens once, and gives the registration
+  // back when the app's scope closes.
+  run((extensions) => extensions.start);
+
   onExtensionTabsRequest(openRequestedTab);
-
-  if (!sharedWindow) startExtensionSearchEngines();
-  onExtensionsChanged(({ profile }) => void refreshExtensions(profile));
-
-  const loaded = new Set<string>();
-
-  const loadProfiles = (s: BrowserState) => {
-    for (const id of s.windowOrder) {
-      const profile = extensionProfile(s, id);
-
-      if (loaded.has(profile)) continue;
-      loaded.add(profile);
-      void refreshExtensions(profile);
-    }
-  };
-
-  loadProfiles(useBrowser.getState());
-  useBrowser.subscribe((s, prev) => {
-    if (s.windows !== prev.windows) loadProfiles(s);
-  });
 
   startActionStates();
   startSidePanels();
@@ -71,9 +51,6 @@ export function startExtensionsBridge({ sharedWindow = false } = {}) {
 
 function openRequestedTab(request: TabsRequest) {
   if (!request.url) return;
-  // Only the coordinator may adopt a live page (runtime/pageOpen.ts), and extension requests are not offered to it:
-  // in shared mode the URL opens afresh, as it does without a matching profile.
-  const adoptId = pageFactsInCoordinator() ? undefined : request.adoptId;
   const s = useBrowser.getState();
   const ofProfile = (id: string) => !!s.windows[id] && !s.windows[id]!.incognito && engineProfile(s.windows[id]!.spaceId) === request.profile;
 
@@ -86,20 +63,22 @@ function openRequestedTab(request: TabsRequest) {
 
   // A live tab Chrome made keeps its profile's cookies and storage: adopted only under an app profile on that profile,
   // in a window showing it, else in a new window of it. Without one, the URL opens afresh (and Chrome's tab goes).
-  const spaceId = adoptId
+  const spaceId = request.adoptId
     ? windowId && ofProfile(windowId)
       ? s.windows[windowId]!.spaceId
       : s.spaceOrder.find((p) => engineProfile(p) === request.profile)
     : undefined;
 
-  if (adoptId && spaceId) {
-    if (windowId && ofProfile(windowId)) legacyBrowser.getState().newTab(windowId, { url: request.url, adoptId, spaceId, background });
-    else legacyBrowser.getState().createWindow({ url: request.url, adoptId, spaceId });
+  if (request.adoptId && spaceId) {
+    if (windowId && ofProfile(windowId)) s.newTab(windowId, { url: request.url, adoptId: request.adoptId, spaceId, background });
+    // The window is the app's own: it takes the page Chrome made. A user's command never adopts a page, so this does
+    // not go through the command transport.
+    else s.createWindow({ url: request.url, adoptId: request.adoptId, spaceId });
 
     return;
   }
 
-  if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url: request.url, background }));
+  if (windowId) s.newTab(windowId, { url: request.url, background });
   else openWindow({ url: request.url });
 }
 
@@ -119,13 +98,15 @@ function toolbarAnchor(windowId: string, extensionId: string) {
 
 function startActionStates() {
   // Extensions change their action and side panel without telling the app (NNCore has no event for it): look again
-  // every 1.5 s while the app is active. Everything the app itself changes asks at once, below.
-  setInterval(() => {
-    if (AppState.currentState !== "active") return;
-    void refreshActionStates();
+  // every 1.5 s while the app is active (the service's poll). Everything the app itself changes asks at once, below.
+  run((extensions) =>
+    extensions.pollActions(() => {
+      if (AppState.currentState !== "active") return;
+      void refreshActionStates();
 
-    for (const [windowId] of wantedSidePanels()) void syncSidePanel(windowId);
-  }, 1500);
+      for (const [windowId] of wantedSidePanels()) void syncSidePanel(windowId);
+    }),
+  );
   // Actions are the shown tabs' own: a change to a tab in the background doesn't ask again.
   useBrowser.subscribe((s, prev) => {
     if (s.windows !== prev.windows || s.ui.focusedWindowId !== prev.ui.focusedWindowId) return void refreshActionStates();
@@ -238,10 +219,12 @@ function startWebStoreIntegration(sharedWindow: boolean) {
     const tabId = prompt.browserId ? tabForBrowser(prompt.browserId) : undefined;
     // The web host asks one window, the one this document shows: the prompt is its own.
     const own = sharedWindow ? getNativeHostInfo().constants.BayShell?.windowId : undefined;
-    const windowId = (v.is(v.string(), own) && own) || (tabId && s.tabs[tabId]?.windowId) || s.ui.focusedWindowId || s.windowOrder[0];
+    const ownWindow = v.is(v.string(), own) ? own : undefined;
+    const windowId = ownWindow || (tabId && s.tabs[tabId]?.windowId) || s.ui.focusedWindowId || s.windowOrder[0];
 
     if (windowId) showInstallPrompt(windowId, prompt);
-    else void resolveExtensionInstallPrompt(prompt.requestId, false);
+    // No window can show the prompt: the engine is told no, and the service remembers it.
+    else run((extensions) => extensions.answer(prompt.requestId, false));
   });
   const listening = new Map<string, string>();
 

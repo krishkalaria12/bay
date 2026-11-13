@@ -3,7 +3,8 @@ import { test } from "node:test";
 
 const stub = await import("../test-native-stub.mjs");
 const { useBrowser } = await import("../store/browserStore.ts");
-const { flushPersistence, loadSession, startPersistence } = await import("./persist.ts");
+const { loadSession } = await import("./persist.ts");
+const { flushPersistence, startPersistence } = await import("./persistenceService.ts");
 const { folderTabIds } = await import("../store/folders.ts");
 const S = () => useBrowser.getState();
 

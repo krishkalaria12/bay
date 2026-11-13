@@ -1,115 +1,95 @@
-import { View, platformOS } from "@bay/platform";
 import {
   deletePassword,
-  exportPasswords,
-  getNeverSavePasswordOrigins,
   getPassword,
   getPasswordAutofill,
-  listPasswords,
-  savePassword,
-  secretStorage,
   setNeverSavePasswords,
   setPasswordAutofill,
-  unlockPasswords,
   updatePassword,
   type SavedPassword,
-  type SecretStorageKind,
 } from "@bay/chromium";
 import { confirm, copyText, Symbol, systemInfo } from "@bay/desktop";
 import { useEffect, useState } from "react";
-import { Text } from "react-native";
-import { browserRead } from "../../../store/read";
+import { Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile, plural } from "../../../store/model";
-import { importModule } from "../../import/module";
 import { hostLabel, matchesQuery } from "../../pages/PageLayout";
 import { Favicon, IconButton } from "../../ui/primitives";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, Sheet, TextField, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
-import { PASSWORDS_UNLOCK_MS } from "../constants";
-import { passwordStorageDescription, secretStorageWarning } from "../secretStorage";
-import { platformWords } from "../../../lib/platformWords";
+import { usePasswordsUnlocked, withWorkflows } from "../settingsCommands";
 
 // 1Password connects to a browser it has been told to trust, and only to one installed in Applications.
 function passwordManagerAppsNote() {
-  const apps = `1Password, Bitwarden, KeePassXC and Proton Pass extensions connect to their ${platformWords.desktopApps}.`;
+  const apps = "1Password, Bitwarden, KeePassXC and Proton Pass extensions connect to their Mac apps.";
 
   return systemInfo().inApplicationsFolder === false
     ? `${apps} For 1Password, move Bay to your Applications folder and reopen it (1Password only connects to browsers there), then in the 1Password app open Settings › Browser › Add Browser and choose it.`
     : `${apps} For 1Password, add Bay once: in the 1Password app, open Settings › Browser › Add Browser and choose Bay.`;
 }
 
-const unlockedUntil = new Map<string, number>();
-const isUnlocked = (profile: string) => Date.now() < (unlockedUntil.get(profile) ?? 0);
-
 export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => initial ?? browserRead.getState().settings.defaultSpaceId);
-  const [, setUnlockedAt] = useState(0);
+  const [spaceId, setSpaceId] = useState(() => initial ?? useBrowser.getState().settings.defaultSpaceId);
   const [list, setList] = useState<SavedPassword[] | null>(null);
   const [never, setNever] = useState<string[]>([]);
   const [autofill, setAutofill] = useState(true);
   const [query, setQuery] = useState("");
   const [importStatus, setImportStatus] = useState("");
   const [exportStatus, setExportStatus] = useState("");
-  const [storage, setStorage] = useState<SecretStorageKind | null>(null);
   const profile = engineProfile(spaceId);
-  const unlocked = isUnlocked(profile);
+  const unlocked = usePasswordsUnlocked(profile);
 
-  const load = () => {
-    void listPasswords(profile)
-      .then(setList)
-      .catch(() => setList([]));
-    void getNeverSavePasswordOrigins(profile)
-      .then(setNever)
-      .catch(() => {});
+  // The profile's list: an answer for a profile the pane has since left is dropped.
+  const load = (live: () => boolean = () => true) => {
+    void withWorkflows((w) => w.passwords(profile)).then((answer) => {
+      if (!answer || !live()) return;
+      setList(answer.passwords);
+      setNever(answer.never);
+    });
   };
 
   useEffect(() => {
-    if (unlocked) load();
+    setList(null);
+    setNever([]);
+
+    if (!unlocked) return;
+    let current = true;
+    load(() => current);
+
+    return () => void (current = false);
   }, [unlocked, spaceId]);
-  useEffect(
-    () =>
-      void getPasswordAutofill(profile)
-        .then(setAutofill)
-        .catch(() => {}),
-    [profile],
-  );
+  useEffect(() => {
+    let current = true;
 
-  useEffect(() => void secretStorage().then(setStorage), []);
-  const storageWarning = secretStorageWarning(storage);
+    void getPasswordAutofill(profile)
+      .then((on) => current && setAutofill(on))
+      .catch(() => {});
 
-  const unlock = async () => {
-    if (!(await unlockPasswords(profile))) return;
-    unlockedUntil.set(profile, Date.now() + PASSWORDS_UNLOCK_MS);
-    setUnlockedAt(Date.now());
-  };
+    return () => void (current = false);
+  }, [profile]);
+
+  const unlock = () => void withWorkflows((w) => w.unlock(profile));
 
   const importCsv = async () => {
-    const mod = importModule();
+    const outcome = await withWorkflows((w) => w.importCsv(profile));
 
-    if (!mod) return setImportStatus("Importing isn't available in this build.");
-    const path = await mod.chooseImportFile("passwordsCSV");
+    if (outcome.kind === "unavailable") return setImportStatus("Importing isn't available in this build.");
 
-    if (!path) return;
+    if (outcome.kind === "cancelled") return;
 
-    try {
-      const saved = await saveImported(profile, await mod.importPasswordsCSV(path));
-      setImportStatus(`Imported ${plural(saved, "password")}.`);
-      load();
-    } catch (e) {
-      // SAFETY: Error).message} assertion matches the runtime value validated at this call site.
-      setImportStatus(`Couldn't import that file: ${(e as Error).message}`);
-    }
+    if (outcome.kind === "failed") return setImportStatus(`Couldn't import that file: ${outcome.reason}`);
+    setImportStatus(`Imported ${plural(outcome.saved, "password")}.`);
+    load();
   };
 
   const exportCsv = async () => {
-    const { status, path } = await exportPasswords(profile);
-    const folder = path ? path.split(/[\\/]/).slice(-2, -1)[0] : "";
+    const { status, path } = await withWorkflows((w) => w.exportCsv(profile));
+    const folder = path ? path.split("/").slice(-2, -1)[0] : "";
 
     if (status === "succeeded") setExportStatus(`Saved to “${folder}”. Delete the file once you're done with it.`);
     else if (status === "writeFailed") setExportStatus("Couldn't write the file. Try another folder.");
@@ -123,19 +103,12 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
     <View>
       <SectionHeader
         title="Passwords"
-        description={passwordStorageDescription(platformOS)}
+        description="Saved on this Mac, separately for each profile, and encrypted with a key in your Keychain."
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
       />
       <Group>
-        {storageWarning ? (
-          <Row
-            icon={<Symbol name="exclamationmark.triangle.fill" size={14} color="#FF9500" style={{ width: 28, height: 20 }} />}
-            title={storageWarning.title}
-            description={storageWarning.description}
-          />
-        ) : null}
         <Row
           title="Offer to save and fill passwords"
           description="Offers to save a login after you sign in, and suggests saved ones when you click a login field."
@@ -163,8 +136,8 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
         <View style={{ alignItems: "center", gap: 10, marginTop: 40 }}>
           <Symbol name="lock.fill" size={26} color={theme.textTertiary} style={{ width: 36, height: 36 }} />
           <Text style={{ fontSize: 14, fontWeight: "500", color: theme.textPrimary }}>Passwords are locked</Text>
-          <Text style={{ fontSize: 12, color: theme.textSecondary }}>Unlock with {platformWords.unlockMethod} to see them.</Text>
-          <Button title="Unlock" kind="primary" onPress={() => void unlock()} style={{ marginTop: 6 }} />
+          <Text style={{ fontSize: 12, color: theme.textSecondary }}>Unlock with Touch ID or your login password to see them.</Text>
+          <Button title="Unlock" kind="primary" onPress={unlock} style={{ marginTop: 6 }} />
         </View>
       ) : (
         <>
@@ -182,7 +155,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
                   icon={<Favicon url={p.origin} />}
                   title={hostLabel(p.origin)}
                   description={p.username || "(no username)"}
-                  onPress={() => showSettingsSheet(<PasswordSheet profile={profile} saved={p} onChanged={load} />)}
+                  onPress={() => showSettingsSheet(<PasswordSheet profile={profile} saved={p} onChanged={() => load()} />)}
                 />
               ))
             )}
@@ -193,7 +166,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
               <Group>
                 {never.map((origin) => (
                   <Row key={origin} icon={<Favicon url={origin} />} title={hostLabel(origin)}>
-                    <Button title="Remove" onPress={() => void setNeverSavePasswords(profile, origin, false).then(load)} />
+                    <Button title="Remove" onPress={() => void setNeverSavePasswords(profile, origin, false).then(() => load())} />
                   </Row>
                 ))}
               </Group>
@@ -203,21 +176,6 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
       )}
     </View>
   );
-}
-
-// The imported passwords saved: those with a site and a password.
-async function saveImported(profile: string, creds: { url: string; username: string; password: string }[]): Promise<number> {
-  let saved = 0;
-
-  for (const c of creds) if (c.url && c.password && (await savePassword(profile, originOf(c.url), c.username, c.password))) saved++;
-
-  return saved;
-}
-
-function originOf(url: string) {
-  const m = /^([a-z][a-z0-9+.-]*:\/\/[^/?#]+)/i.exec(url);
-
-  return m ? m[1]! : url;
 }
 
 function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: SavedPassword; onChanged: () => void }) {

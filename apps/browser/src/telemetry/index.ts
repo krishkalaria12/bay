@@ -3,9 +3,24 @@ import { createElement } from "react";
 import { devState, flush, requestLog, setSharing, useTelemetry } from "./client";
 import { captureException, installErrorReporting, reportNativeCrashes } from "./errors";
 import { devOmniboxSampler } from "./track";
-import { devHourly, sessionEnding, startUsage } from "./usage";
+import * as Effect from "effect/Effect";
+import { runDesktop } from "../effect/runtime";
+import { sessionEnding, startUsage } from "./usage";
+import { UsageService } from "./usageService";
 
 export { installErrorReporting };
+
+// The hourly sample, now, and what it queued sent: the dev harness's way to see it without waiting an hour.
+async function devHourly() {
+  await runDesktop(
+    Effect.gen(function* () {
+      const usage = yield* UsageService;
+
+      yield* usage.sampleNow;
+    }),
+  );
+  await flush();
+}
 
 export function startTelemetry() {
   const stop = startUsage();

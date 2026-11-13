@@ -9,7 +9,6 @@ import { startAppIntegration } from "./lib/appMenuIntegration";
 import { startNativeSync } from "./lib/shellBridge";
 import { startCoordinatorServices } from "./runtime/services";
 import { perfMark, perfProbeEnabled, probeStore } from "./lib/perfProbe";
-import { startTabLifecycle } from "./lib/tabLifecycle";
 import { startTabPages } from "./lib/tabNavigation";
 import { startSync } from "./sync/engine";
 import { setStoreBatching, useBrowser } from "./store/browserStore";
@@ -25,7 +24,9 @@ installErrorReporting();
 
 setStoreBatching(batchedUpdates);
 
-const backgroundServices = startCoordinatorServices({ store: useBrowser, restoreSession: true });
+// The single-runtime entry is its own authority: one owner for the saving, Live and the app's services, as the
+// shared host's coordinator has (runtime/coordinatorEntry.ts). Its pages are in this document, so it watches them too.
+const backgroundServices = startCoordinatorServices({ store: useBrowser, restoreSession: true, pageLifecycle: true });
 
 // Before the native sync: a moved tab's page is handed off before the window it left closes (lib/tabNavigation.ts).
 startTabPages();
@@ -37,11 +38,9 @@ quietLaunchTabs();
 
 startAppIntegration();
 
-if (isMac) startCliControl();
+if (isMac) void startCliControl();
 
 startUserScripts();
-
-startTabLifecycle();
 
 startTranslate();
 
