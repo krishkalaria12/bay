@@ -41,7 +41,8 @@ Bay keeps running after every exec.
 Exit status: 0 done, 1 the code raised or timed out, 2 Bay can't be reached or closed the connection, 130 interrupted.
 
 Endpoint: --ws, else --port (plain DevTools servers only), else $BAY_CDP_URL, else
-<data dir>/Chromium/BayControl.json with --data-dir or $BAY_DATA_DIR, else the installed Bay's.`;
+<data dir>/BayControl.json on Linux and Windows, or <data dir>/Chromium/BayControl.json on macOS,
+with --data-dir or $BAY_DATA_DIR, else the installed Bay's native data directory.`;
 
 export const SKILLS_DESCRIPTION = `Install the bay agent skill (SKILL.md) so coding agents know how to drive Bay.
 

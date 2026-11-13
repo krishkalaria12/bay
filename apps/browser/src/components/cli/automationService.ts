@@ -32,6 +32,7 @@ import {
 import { create } from "zustand";
 import * as Context from "effect/Context";
 import { TaggedError } from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -82,6 +83,9 @@ const withoutPrivate = (path: string) => path.replace(/^\/private(?=\/(tmp|var|e
 const loadedFrom = (ext: InstalledExtension, path: string) => !!ext.path && withoutPrivate(ext.path) === withoutPrivate(path);
 
 const BLOCKED = "Bay Scripts can only hold content scripts, and the engine blocked this copy.";
+
+/** How long a folder that is still being published waits before it is read again. */
+const SCRIPTS_RETRY_MS = 100;
 
 const withError = (unloaded: ScriptsOutcome, refused: string): ScriptsOutcome =>
   "error" in unloaded ? { error: `${refused} (and the loaded copy couldn't be removed: ${unloaded.error})` } : { error: refused };
@@ -276,6 +280,8 @@ export class AutomationService extends Context.Service<
       let lastStatus: string | null = null;
       let running = false;
       let again = false;
+      // A folder the command line tool is still publishing is read again shortly, with no watch event of its own.
+      let retry: Fiber.Fiber<void> | undefined;
 
       const load = (profile: string, path: string): Effect.Effect<ScriptsOutcome> =>
         Effect.gen(function* () {
@@ -317,7 +323,26 @@ export class AutomationService extends Context.Service<
 
           if (!enabled() || again) return;
 
-          if (folder.state === "empty" || folder.state === "busy" || folder.state === "pending") return;
+          if (folder.state === "busy" || folder.state === "pending") {
+            // A watcher can fire before the tool releases its publication lock, and a Windows directory exchange
+            // briefly has no extension in place.
+            retry = yield* Effect.forkIn(
+              Effect.sleep(Duration.millis(SCRIPTS_RETRY_MS)).pipe(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    retry = undefined;
+
+                    if (enabled()) Queue.offerUnsafe(requests, { kind: "scripts" });
+                  }),
+                ),
+              ),
+              scope,
+            );
+
+            return;
+          }
+
+          if (folder.state === "empty") return;
 
           const generation = folder.generation ?? 0;
           const targets = scriptsTargets(useBrowser.getState());
@@ -375,6 +400,15 @@ export class AutomationService extends Context.Service<
 
       const schedule = (): Effect.Effect<void> =>
         Effect.gen(function* () {
+          // A pass that runs now reads the folder itself: the retry that was waiting is not needed.
+          if (retry) {
+            const waiting = retry;
+
+            retry = undefined;
+
+            yield* Fiber.interrupt(waiting);
+          }
+
           if (running) {
             again = true;
 
@@ -507,7 +541,10 @@ export class AutomationService extends Context.Service<
                   const error = result.ok ? null : (result.error ?? "The installer stopped.");
                   const binPath = result.binPath ?? useCli.getState().binPath;
 
-                  useCli.setState({ installing: false, step: null, installedVersion: installedCliVersion(), binPath, error });
+                  // The installer says which version it left in place; an older installer leaves the app to look.
+                  const installedVersion = result.installedVersion === undefined ? installedCliVersion() : result.installedVersion;
+
+                  useCli.setState({ installing: false, step: null, installedVersion, binPath, error });
 
                   try {
                     writeDocument(INSTALL_DOC, JSON.stringify({ version: 1, binPath, error }));
