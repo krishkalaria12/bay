@@ -21,7 +21,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_command_line.h"
 #include "base/test/scoped_path_override.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
@@ -1317,7 +1316,6 @@ TEST_F(NativeHostTest, CoordinatorCannotOpenSyncPickers) {
 
 TEST_F(FilePickerTest, WindowCannotMutateSyncOrReadProfilePasswords) {
   WindowHost();
-  ASSERT_TRUE(AppRuntime::Enabled());
   for (const char* method :
        {"createPhrase", "unlock", "forget", "chainStatus", "createChain",
         "deleteChain", "sealLocal", "openLocal", "readPasswords"}) {
@@ -2007,13 +2005,16 @@ class NativeHostQuitTest : public NativeHostTest {
   } client_;
 
   void SetUp() override {
-    command_.GetProcessCommandLine()->AppendSwitch("bay-legacy-runtime");
     NativeHostTest::SetUp();
     ON_CALL(window_, GetProfile()).WillByDefault(testing::Return(profile()));
     ON_CALL(window_, GetWeakPtr())
         .WillByDefault(testing::Return(window_weak_factory_.GetWeakPtr()));
     client_.Connect(*host_);
     task_environment()->RunUntilIdle();
+    // This render-host harness has no ProfileManager or live coordinator
+    // renderer. Attach its document explicitly to exercise native ownership.
+    AppRuntime::StartForTesting(window_, base::DictValue());
+    AppRuntime::GetIfStarted()->SetCoordinatorHost(host_);
   }
   void TearDown() override {
     NativeHost::CancelQuit();
@@ -2038,16 +2039,6 @@ class NativeHostQuitTest : public NativeHostTest {
     window_host_ = host->GetWeakPtr();
     task_environment()->RunUntilIdle();
   }
-  void UseSharedCoordinator() {
-    command_.GetProcessCommandLine()->RemoveSwitch("bay-legacy-runtime");
-    // This render-host harness has no ProfileManager or live coordinator
-    // renderer. Attach its document explicitly to exercise native ownership.
-    AppRuntime::StartForWindow(window_);
-    ASSERT_TRUE(AppRuntime::GetIfStarted());
-    AppRuntime::GetIfStarted()->SetCoordinatorHost(host_);
-  }
-
-  base::test::ScopedCommandLine command_;
   testing::NiceMock<PickerWindow> window_;
   base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
   std::unique_ptr<content::WebContents> window_contents_;
@@ -2070,9 +2061,7 @@ TEST_F(NativeHostQuitTest, WaitsForRendererSaveAndCoalescesQuitRequests) {
   ExpectError(Invoke("BayShell", "replyToTerminate", "[true]"), "stale_quit");
 }
 
-TEST_F(NativeHostQuitTest,
-       SharedCoordinatorOwnsQuitAndWindowCannotAcknowledge) {
-  UseSharedCoordinator();
+TEST_F(NativeHostQuitTest, CoordinatorOwnsQuitAndWindowCannotAcknowledge) {
   AddWindowHost();
   base::test::TestFuture<bool> result;
   Prepare(result.GetCallback());
@@ -2089,8 +2078,8 @@ TEST_F(NativeHostQuitTest,
   EXPECT_FALSE(CloseWindow());
 }
 
-TEST_F(NativeHostQuitTest, MissingSharedCoordinatorRefusesToQuit) {
-  command_.GetProcessCommandLine()->RemoveSwitch("bay-legacy-runtime");
+TEST_F(NativeHostQuitTest, MissingCoordinatorRefusesToQuit) {
+  AppRuntime::ShutdownIfStarted();
   ASSERT_FALSE(AppRuntime::GetIfStarted());
   base::test::TestFuture<bool> result;
   Prepare(result.GetCallback());
@@ -2166,7 +2155,6 @@ TEST_F(NativeHostQuitTest, CancellingBeforeAckSettlesOnceAndResumesRenderer) {
 }
 
 TEST_F(NativeHostQuitTest, LastWindowClosePostsOneQuitAndHonorsSaveFailure) {
-  UseSharedCoordinator();
   AddWindowHost();
   // The mock window is not in GlobalBrowserCollection. Supply its browser
   // keep-alive so AttemptExit reaches BrowserCloseManager instead of exiting.

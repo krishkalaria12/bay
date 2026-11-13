@@ -8,7 +8,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_command_line.h"
+#include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_registry.h"
@@ -29,8 +29,18 @@ class TabStripMirrorTest : public BrowserWithTestWindowTest {
     return "Default";
   }
   void SetUp() override {
-    command_line_.GetProcessCommandLine()->AppendSwitch("bay-legacy-runtime");
     BrowserWithTestWindowTest::SetUp();
+    // The broker mounts only the pages accepted state gives this window.
+    base::DictValue tabs;
+    for (const char* key : {"a", "b", "c"})
+      tabs.Set(key, base::DictValue()
+                        .Set("spaceId", "default")
+                        .Set("windowId", "strip-test"));
+    AppRuntime::StartForTesting(
+        *browser(),
+        base::DictValue()
+            .Set("spaces", base::DictValue().Set("default", base::DictValue()))
+            .Set("tabs", std::move(tabs)));
     ASSERT_TRUE(
         WindowRegistry::Get()
             .Open(HostContext::ForWindow(*browser()), "strip-test",
@@ -46,6 +56,7 @@ class TabStripMirrorTest : public BrowserWithTestWindowTest {
   }
   void TearDown() override {
     TabStripMirror::Get().Start(TabStripMirror::Sink());
+    AppRuntime::ShutdownIfStarted();
     BrowserWithTestWindowTest::TearDown();
   }
   void Mount(const std::string& key) {
@@ -86,14 +97,9 @@ class TabStripMirrorTest : public BrowserWithTestWindowTest {
     return base::JSONReader::ReadDict(result, base::JSON_PARSE_RFC)
         .value_or(base::DictValue());
   }
-  void UseSharedRuntime() {
-    command_line_.GetProcessCommandLine()->RemoveSwitch("bay-legacy-runtime");
-    command_line_.GetProcessCommandLine()->RemoveSwitch("bay-hosting-spike");
-  }
   std::vector<base::DictValue> transactions_;
 
  private:
-  base::test::ScopedCommandLine command_line_;
   int next_command_ = 100;
 };
 
@@ -193,9 +199,8 @@ TEST_F(TabStripMirrorTest, AppChangesBatchAndSnapshotsDoNotConsumeTheirEvents) {
   EXPECT_TRUE(transactions_.back().Find("cmd")->is_none());
 }
 
-TEST_F(TabStripMirrorTest, SharedWindowCannotReadOrChangeOtherWindowsStrips) {
+TEST_F(TabStripMirrorTest, WindowCannotReadOrChangeOtherWindowsStrips) {
   Mount("a");
-  UseSharedRuntime();
   EXPECT_TRUE(Invoke("tabStrips", base::ListValue(), true).FindDict("error"));
   const auto before = transactions_.size();
   EXPECT_TRUE(Invoke("tabStripCommand",

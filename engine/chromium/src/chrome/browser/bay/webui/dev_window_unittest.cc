@@ -8,7 +8,6 @@
 #include "base/json/json_reader.h"
 #include "base/scoped_environment_variable_override.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_command_line.h"
 #include "chrome/browser/bay/webui/dev_window_input.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/bay/webui/window_registry.h"
@@ -79,7 +78,6 @@ class DevWindowTest : public BrowserWithTestWindowTest {
     return window;
   }
   void SetUp() override {
-    command_line_.GetProcessCommandLine()->AppendSwitch("bay-legacy-runtime");
     BrowserWithTestWindowTest::SetUp();
     owner_ = current_window_;
     ASSERT_TRUE(
@@ -116,7 +114,6 @@ class DevWindowTest : public BrowserWithTestWindowTest {
 
  private:
   TrackingWindow* current_window_ = nullptr;
-  base::test::ScopedCommandLine command_line_;
 };
 
 TEST_F(DevWindowTest, EnumeratesOwnedWindowsAndResolvesTabNumbers) {
