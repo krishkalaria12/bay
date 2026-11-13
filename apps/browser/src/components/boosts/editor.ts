@@ -9,11 +9,12 @@ import { isJsonObject, JsonValueSchema, type JsonInput } from "../../lib/json";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { newId } from "../../store/model";
+import { platformWords } from "../../lib/platformWords";
 import { setPopover } from "../window/pageState";
 import { showToast } from "../split/splitActions";
 import { pickerScript, previewScript, type PickerMode } from "./pickerScript";
 import { BoostsService, type Boosts } from "./service";
-import { addBoost, addSelector, boostsForHost, createBoost, deleteBoost, setBoostScript, startBoosts, updateBoost, useBoosts } from "./state";
+import { addBoost, addSelector, boostsAvailable, boostsForHost, createBoost, deleteBoost, setBoostScript, startBoosts, updateBoost, useBoosts } from "./state";
 
 // The Boost editor over a tab's page (BoostEditor.tsx), as Arc's and Zen's: one Boost of the page's site at a time,
 // changed as you go, the page the preview. Zap, Focus and the selector picker run in the page (pickerScript.ts).
@@ -90,13 +91,22 @@ function patchSession(tabId: string, patch: Partial<EditorSession> | null) {
 }
 
 /** The tab's page can have a Boost: a website. */
-export const canBoost = (tabId: string) => !!boostHost(useBrowser.getState().tabs[tabId]?.url);
+export const canBoost = (tabId: string) => boostsAvailable() && !!boostHost(useBrowser.getState().tabs[tabId]?.url);
 
 /**
  * Opens the editor over a tab with one of its site's Boosts: `boostId`, else the first one, else a new one (Arc's
  * "New Boost" makes a new one even when there are others: `fresh`).
  */
 export function openBoostEditor(tabId: string, options: { boostId?: string; fresh?: boolean } = {}) {
+  // A window that only reads the app's state keeps no Boosts of its own to edit.
+  if (!boostsAvailable()) {
+    const tab = useBrowser.getState().tabs[tabId];
+
+    if (tab) showToast(tab.windowId, "Boosts Are Unavailable", "Boost editing is not supported in this window yet.");
+
+    return;
+  }
+
   startBoosts();
   startBoostEditor();
   const tab = useBrowser.getState().tabs[tabId];
@@ -264,7 +274,7 @@ export async function toggleBoostScript(tabId: string, id: string, host: string,
   if (on && !useBoosts.getState().scriptsAcknowledged) {
     const { confirmed } = await confirm({
       title: "Run JavaScript on this site?",
-      message: `A JavaScript Boost runs on every page of ${host} you open on this Mac, and can read and change what's on them. Run only code you wrote or trust. It stays on this Mac: JavaScript Boosts never sync, and don't run in private windows unless you allow it.`,
+      message: `A JavaScript Boost runs on every page of ${host} you open on ${platformWords.thisComputer}, and can read and change what's on them. Run only code you wrote or trust. It stays on ${platformWords.thisComputer}: JavaScript Boosts never sync, and don't run in private windows unless you allow it.`,
       confirmTitle: "Turn On",
       windowId: useBrowser.getState().tabs[tabId]?.windowId,
     });
@@ -319,7 +329,7 @@ export async function removeBoost(tabId: string | null, id: string) {
 
   const { confirmed } = await confirm({
     title: `Delete “${boost.name}”?`,
-    message: `${boost.host} goes back to how it looks without it, on your other Macs too.`,
+    message: `${boost.host} goes back to how it looks without it, on ${platformWords.yourOtherComputers} too.`,
     confirmTitle: "Delete",
     destructive: true,
     windowId,
@@ -378,6 +388,8 @@ function fileDialogFailed(title: string, message: string, cause: unknown) {
 
 /** A Boost from a file (Bay's or Zen's) for the tab's site, opened in the editor. Its script stays off. */
 export async function importBoostFile(tabId: string) {
+  if (!boostsAvailable()) return;
+
   const tab = useBrowser.getState().tabs[tabId];
   const host = boostHost(tab?.url);
 
@@ -468,6 +480,8 @@ export function siteBoosts(tabId: string): Boost[] {
 
 /** The site's Boosts all off, or (if none is on) back on: the command bar's switch. */
 export function toggleSiteBoosts(tabId: string) {
+  if (!boostsAvailable()) return;
+
   const tab = useBrowser.getState().tabs[tabId];
   const boosts = siteBoosts(tabId);
 

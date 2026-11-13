@@ -26,7 +26,8 @@ import type { BrowserProjection } from "../../runtime/projection";
 type CaptureTab = BrowserProjection["tabs"][string];
 
 import { LibraryService } from "../library/libraryService";
-import { webLink, type CaptureSource, type LibraryMedia } from "../library/model";
+import { fileNameOf, webLink, type CaptureSource, type LibraryMedia } from "../library/model";
+import { platformWords } from "../../lib/platformWords";
 import { isInternalTab } from "../pages/internalPages";
 import { showToast } from "../ui/toasts";
 import { captureScript } from "./captureScript";
@@ -395,12 +396,12 @@ export class CaptureService extends Context.Service<
       const savedToast = (windowId: string, path: string | null, title: string) => {
         if (!path) return showToast(windowId, "Couldn’t Save the Capture", "Bay couldn’t write to Downloads.", ICON);
 
-        const file = path.split("/").pop() ?? path;
+        const file = fileNameOf(path) || path;
 
         showToast(windowId, title, `In Downloads as ${file}`, {
           icon: "arrow.down.circle",
           key: "capture",
-          action: { title: "Show in Finder", run: () => engine.reveal(path) },
+          action: { title: platformWords.revealTitle, run: () => engine.reveal(path) },
         });
       };
 

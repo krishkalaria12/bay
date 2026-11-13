@@ -38,6 +38,7 @@ globalThis.boostTest = {
 };
 
 const editor = await import("./editor.ts");
+const { installServiceClient } = await import("../../runtime/serviceClient.ts");
 const S = () => useBrowser.getState();
 const E = () => editor.useBoostEditor.getState();
 
@@ -387,4 +388,23 @@ test("a file dialog that's busy or can't save says so, and a cancelled one says 
   assert.deepEqual(globalThis.boostTestToasts.at(-1).slice(1, 3), ["Couldn't Import the Boost", "Finish with the open file dialog first."]);
   native.shellDialogAnswers.saveTextFile = saveTextFile;
   native.shellDialogAnswers.openTextFile = openTextFile;
+});
+
+test("a window that only reads the app's state says Boosts are unavailable and changes nothing", async () => {
+  const { tabId } = setup();
+  const before = useBoosts.getState();
+  const stopClient = installServiceClient(async () => null);
+
+  try {
+    assert.equal(editor.canBoost(tabId), false);
+    editor.openBoostEditor(tabId);
+    assert.equal(E().sessions[tabId], undefined);
+    assert.deepEqual(globalThis.boostTestToasts.at(-1).slice(1, 3), ["Boosts Are Unavailable", "Boost editing is not supported in this window yet."]);
+    await editor.importBoostFile(tabId);
+    editor.toggleSiteBoosts(tabId);
+    assert.equal(useBoosts.getState(), before);
+    assert.equal(globalThis.boostTestToasts.length, 1);
+  } finally {
+    stopClient();
+  }
 });
