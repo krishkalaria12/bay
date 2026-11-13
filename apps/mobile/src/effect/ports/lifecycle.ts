@@ -1,6 +1,7 @@
 // The app's state: whether it is in the foreground, in the background, or on its way between. One native registration
-// per scope, so the app scope owns the only listener there is. React Native is loaded inside the call, so this file
-// stays importable where React Native is not.
+// for the whole app: a handler from any scope joins it, in the order the handlers were registered, and the registration
+// goes when the last handler does. React Native is loaded inside the call, so this file stays importable where React
+// Native is not.
 import type { AppStateStatus } from "react-native";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -25,12 +26,6 @@ const appStatus = (status: AppStateStatus): AppStatus | null => {
   }
 };
 
-/** What one scope registered: the native subscription and the handlers that read it. */
-type Registration = {
-  readonly subscription: { remove(): void };
-  readonly handlers: Set<(status: AppStatus) => void>;
-};
-
 /** React Native's app state, loaded when it is first needed. */
 const appStateModule = Effect.tryPromise({
   try: () => import("react-native").then((module) => module.AppState),
@@ -40,7 +35,11 @@ const appStateModule = Effect.tryPromise({
 export class Lifecycle extends Context.Service<
   Lifecycle,
   {
-    /** Registers a handler for the app's state. It stops when the scope that registered it closes. */
+    /**
+     * Registers a handler for the app's state. Handlers run in the order they were registered, inside the native
+     * callback, so what they start begins before the callback returns. It stops when the scope that registered it
+     * closes.
+     */
     readonly onChange: (handler: (status: AppStatus) => void) => Effect.Effect<void, never, Scope.Scope>;
   }
 >()("bay/Lifecycle") {
@@ -48,7 +47,9 @@ export class Lifecycle extends Context.Service<
     Lifecycle,
     Effect.gen(function* () {
       const diagnostics = yield* Diagnostics;
-      const registrations = new WeakMap<Scope.Scope, Registration>();
+      // Each registration is an entry of its own, so the same function registered twice is two handlers.
+      const handlers = new Set<{ readonly handle: (status: AppStatus) => void }>();
+      let subscription: { remove(): void } | undefined;
 
       /**
        * React Native's app state, or nothing when it could not be loaded. A missing native module is reported once and
@@ -65,36 +66,32 @@ export class Lifecycle extends Context.Service<
         onChange: (handler) =>
           Effect.gen(function* () {
             const scope = yield* Scope.Scope;
-            const existing = registrations.get(scope);
-
-            // The scope already listens: this handler joins the one native registration.
-            if (existing) {
-              existing.handlers.add(handler);
-
-              return;
-            }
-
             const appState = yield* appStateOrNothing;
 
             if (!appState) return;
 
-            const handlers = new Set([handler]);
+            const entry = { handle: handler };
 
-            const subscription = appState.addEventListener("change", (status) => {
+            handlers.add(entry);
+
+            subscription ??= appState.addEventListener("change", (status) => {
               const known = appStatus(status);
 
               if (!known) return;
 
-              for (const each of handlers) each(known);
+              for (const each of handlers) each.handle(known);
             });
-
-            registrations.set(scope, { subscription, handlers });
 
             yield* Scope.addFinalizer(
               scope,
               Effect.sync(() => {
-                registrations.delete(scope);
+                handlers.delete(entry);
+
+                // The last handler is gone, and the native registration goes with it.
+                if (handlers.size > 0 || !subscription) return;
+
                 subscription.remove();
+                subscription = undefined;
               }),
             );
           }),
