@@ -13,6 +13,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as v from "valibot";
 import { AuthorityStore } from "../effect/ports/store";
 import { Diagnostics } from "../effect/ports/diagnostics";
+import { platformWords } from "../lib/platformWords";
 import { GOOGLE_REDIRECT, GOOGLE_SCOPE } from "./constants";
 import { githubAnswer, githubBody, githubHeaders, VIEWER_QUERY, type ViewerAnswer } from "./github";
 import { basic, deleteSecret, endpoints, form, getSecret, notionHeaders, request, setSecret } from "./net";
@@ -82,7 +83,7 @@ const REPORTS = {
   "connection.google": "Google didn't accept the sign-in",
   "connection.device": "The GitHub sign-in didn't finish",
   "connection.refresh": "The account's token could not be refreshed",
-  "connection.keychain": "The Keychain could not be reached",
+  "connection.keychain": `Couldn't reach ${platformWords.secretStore}`,
 } satisfies Record<string, string>;
 
 // The work the service reports under.
@@ -100,11 +101,11 @@ export type ProviderRequest = {
 export class ConnectionEngine extends Context.Service<
   ConnectionEngine,
   {
-    /** Reads the account's secret from the Keychain. */
+    /** Reads the account's secret from the system's secret store. */
     readonly readSecret: (source: LiveSourceId) => Effect.Effect<string | null, LiveError>;
-    /** Writes the account's secret to the Keychain. */
+    /** Writes the account's secret to the system's secret store. */
     readonly writeSecret: (source: LiveSourceId, secret: string) => Effect.Effect<void, LiveError>;
-    /** Removes the account's secret from the Keychain. */
+    /** Removes the account's secret from the system's secret store. */
     readonly deleteSecret: (source: LiveSourceId) => Effect.Effect<void, LiveError>;
     /** Sends a request to a provider. The request is cancelled with the effect that made it. */
     readonly send: <A>(request: ProviderRequest) => Effect.Effect<A, LiveError>;
@@ -122,14 +123,18 @@ export class ConnectionEngine extends Context.Service<
       const browser = yield* AuthorityStore;
 
       return ConnectionEngine.of({
-        readSecret: (source) => Effect.tryPromise({ try: () => getSecret(source), catch: () => new LiveError("other", "Couldn't read the Keychain") }),
+        readSecret: (source) =>
+          Effect.tryPromise({ try: () => getSecret(source), catch: () => new LiveError("other", `Couldn't read ${platformWords.secretStore}`) }),
         writeSecret: (source, secret) =>
           Effect.tryPromise({
             try: () => setSecret(source, secret).then(() => undefined),
-            catch: () => new LiveError("other", "Couldn't write to the Keychain"),
+            catch: () => new LiveError("other", `Couldn't write to ${platformWords.secretStore}`),
           }),
         deleteSecret: (source) =>
-          Effect.tryPromise({ try: () => deleteSecret(source).then(() => undefined), catch: () => new LiveError("other", "Couldn't reach the Keychain") }),
+          Effect.tryPromise({
+            try: () => deleteSecret(source).then(() => undefined),
+            catch: () => new LiveError("other", `Couldn't reach ${platformWords.secretStore}`),
+          }),
         send: <A>(req: ProviderRequest) =>
           Effect.tryPromise({
             try: (signal) => request<A>(req.url, { method: req.method, headers: req.headers, body: req.body, signal }),
