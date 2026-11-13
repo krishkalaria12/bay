@@ -27,7 +27,7 @@ const owners = new WeakMap<BrowserStore, CoordinatorServices>();
 
 /** The app's services the authority owns: Chrome's history and bookmarks, the profile cleanup, the Library, Little
  * Bay, the usage the telemetry sends and the updater. They are started from the runtime the authority owns, so there
- * is one of each. The saving is the owner's own (createBrowserPersistence), never the runtime's Persistence service.
+ * is one of each. The saving is the owner's own (createBrowserPersistence); the runtime has no saving service.
  * Page lifecycle watches the pages a document shows: the shared host's windows start their own (runtime/windowMain.ts),
  * so only the single-runtime entry asks for it here.
  */

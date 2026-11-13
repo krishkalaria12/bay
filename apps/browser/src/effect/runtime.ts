@@ -34,7 +34,6 @@ import type { DownloadWorkService } from "../lib/downloadWorkService";
 import type { LocalFileService } from "../lib/localFileService";
 import type { PageLifecycleService } from "../lib/pageLifecycleService";
 import type { NotificationService } from "../lib/notificationService";
-import type { Persistence } from "../lib/persistenceService";
 import type { ShellService } from "../lib/shellService";
 import type { TidyWorkService } from "../lib/tidyWorkService";
 import type { UpdaterService } from "../lib/updaterService";
@@ -77,7 +76,6 @@ export type AppServices =
   | NotificationService
   | PageLifecycleService
   | PageWorkService
-  | Persistence
   | PreviewService
   | ProfileCleanup
   | Scheduler
@@ -204,9 +202,3 @@ export const desktopReady = (): Promise<void> => desktopRuntime.context().then((
 export const disposeDesktopRuntime = () => desktopRuntime.dispose();
 export const runDesktop = <A, E>(program: Effect.Effect<A, E, AppServices>): Promise<A> => desktopRuntime.runPromise(program);
 export const runForStore = <A, E>(store: BrowserStore, program: Effect.Effect<A, E, AppServices>): Promise<A> => runtimeForStore(store).runPromise(program);
-
-export const startAppServices = async (): Promise<void> => {
-  const owner = await currentRuntime();
-  const { startRuntimeServices } = await import("./runtimeLayer");
-  await startRuntimeServices(owner);
-};

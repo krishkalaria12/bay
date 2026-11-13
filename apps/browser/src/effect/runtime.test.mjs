@@ -10,13 +10,12 @@ const { Diagnostics } = await import("./ports/diagnostics.ts");
 const { Documents } = await import("./ports/documents.ts");
 const { Http } = await import("./ports/http.ts");
 const { Scheduler } = await import("./ports/scheduler.ts");
-const { desktopReady, desktopRuntime, startAppServices } = await import("./runtime.ts");
+const { desktopReady, desktopRuntime, runtimeForStore } = await import("./runtime.ts");
 const { appLayer: servicesLayer } = await import("./runtimeLayer.ts");
 const { AuthorityStore } = await import("./ports/store.ts");
 const { ReadBrowser } = await import("./windowPorts.ts");
-const { useBrowser } = await import("../store/browserStore.ts");
+const { createBrowserStore, useBrowser } = await import("../store/browserStore.ts");
 const appLayer = servicesLayer.pipe(Layer.provideMerge(Layer.mergeAll(AuthorityStore.layer(useBrowser), ReadBrowser.layer(useBrowser))));
-const { Persistence } = await import("../lib/persistenceService.ts");
 const { History } = await import("../lib/historyService.ts");
 const { Bookmarks } = await import("../lib/bookmarkService.ts");
 const { ProfileCleanup } = await import("../lib/profileCleanup.ts");
@@ -26,6 +25,7 @@ const { UsageService } = await import("../telemetry/usageService.ts");
 const { LittleBayService } = await import("../components/littleBay/service.ts");
 const { PageLifecycleService } = await import("../lib/pageLifecycleService.ts");
 const { slowTimersForTests } = await import("../lib/throttledTimers.ts");
+const { startCoordinatorServices } = await import("../runtime/services.ts");
 
 const B = 1_000_000_020_000;
 const lab = slowTimersForTests(() => B);
@@ -74,24 +74,24 @@ test("a runtime that is disposed gives back everything it was holding", async ()
   assert.equal(lab.pending(), null);
 });
 
-test("pending or failed history startup leaves unrelated services free to start", async (t) => {
-  const tags = [Persistence, History, Bookmarks, ProfileCleanup, LibraryService, UpdaterService, UsageService, LittleBayService, PageLifecycleService];
-  const services = await desktopRuntime.runPromise(Effect.all(tags));
-  const original = services.map((service) => service.start);
+test("pending or failed history startup leaves the coordinator's other services free to start", async (t) => {
+  const store = createBrowserStore();
+  const tags = [History, Bookmarks, ProfileCleanup, LibraryService, UpdaterService, UsageService, LittleBayService, PageLifecycleService];
+  // The coordinator's services are its store's runtime's: the same instances it starts.
+  const services = await runtimeForStore(store).runPromise(Effect.all(tags));
   const calls = [];
   const history = Promise.withResolvers();
   const reported = t.mock.method(console, "error", () => {});
 
   for (let i = 0; i < services.length; i++) services[i].start = Effect.sync(() => void calls.push(i));
 
-  services[1].start = services[1].start.pipe(Effect.andThen(Effect.promise(() => history.promise)));
-  services[2].start = services[2].start.pipe(Effect.andThen(Effect.fail(new Error("bookmark read failed"))));
+  services[0].start = services[0].start.pipe(Effect.andThen(Effect.promise(() => history.promise)));
+  services[1].start = services[1].start.pipe(Effect.andThen(Effect.fail(new Error("bookmark read failed"))));
 
-  const starting = startAppServices();
+  const owner = startCoordinatorServices({ store, pageLifecycle: true });
 
   try {
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.equal(calls[0], 0, "persistence registers before background services");
     assert.deepEqual(
       [...calls].sort((a, b) => a - b),
       tags.map((_, i) => i),
@@ -99,9 +99,9 @@ test("pending or failed history startup leaves unrelated services free to start"
     );
   } finally {
     history.resolve();
-    await starting;
-
-    for (let i = 0; i < services.length; i++) services[i].start = original[i];
+    await owner.ready;
+    owner.dispose();
+    await owner.settled;
   }
 
   assert.equal(reported.mock.callCount(), 1, "a failed service is reported once");

@@ -1,7 +1,7 @@
-// The desktop runtime: one per JavaScript application instance, shared by every window. Its layers are the app's
-// infrastructure — the ports a workflow reaches the outside world through — and the services that own a workflow.
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
+// The desktop runtime's layers: the app's infrastructure — the ports a workflow reaches the outside world through —
+// and the services that own a workflow. Each authority store builds its own runtime from them (effect/runtime.ts), and
+// the coordinator starts the long-lived ones (runtime/services.ts). The session's saving is not one of them: the
+// coordinator's owner (lib/persist.ts) is the one writer of a store's documents.
 import * as Layer from "effect/Layer";
 import { ActivityService, LiveSources } from "../activity/activityService";
 import { CalendarEngine, CalendarService } from "../activity/calendarService";
@@ -28,7 +28,6 @@ import { DownloadEngine, DownloadWorkService } from "../lib/downloadWorkService"
 import { LocalFileEngine, LocalFileService } from "../lib/localFileService";
 import { LifecycleEngine, PageLifecycleService } from "../lib/pageLifecycleService";
 import { NotificationEngine, NotificationService } from "../lib/notificationService";
-import { Persistence } from "../lib/persistenceService";
 import { ShellEngine, ShellService } from "../lib/shellService";
 import { TidyEngine, TidyWorkService } from "../lib/tidyWorkService";
 import { UpdaterEngine, UpdaterService } from "../lib/updaterService";
@@ -37,13 +36,10 @@ import { DiagnosticsService, TelemetryEngine } from "../telemetry/service";
 import { UsageService } from "../telemetry/usageService";
 import { ImportEngine, ImportWorkflow } from "../components/import/workflow";
 import { ProfileCleanup, ProfileEngine } from "../lib/profileCleanup";
-import { captureException } from "../telemetry/errors";
 import { Diagnostics } from "./ports/diagnostics";
 import { Documents } from "./ports/documents";
 import { Http } from "./ports/http";
 import { Scheduler } from "./ports/scheduler";
-
-import type { ApplicationRuntime } from "./runtime";
 
 const diagnostics = Diagnostics.layer;
 
@@ -117,7 +113,6 @@ export const appLayer = Layer.mergeAll(
   Documents.layer,
   Http.layer,
   Scheduler.layer,
-  Persistence.layer,
   history,
   bookmarks,
   profileCleanup,
@@ -151,55 +146,3 @@ export const appLayer = Layer.mergeAll(
   enrichment,
   engineTabs,
 ).pipe(Layer.provide(diagnostics));
-
-/**
- * Starts the services that outlive the bootstrap. The app's own synchronous start stays in main.tsx: this only
- * takes over the work that can wait for the runtime to be ready.
- *
- * A runtime that cannot be built is a failure the user never sees, but the app still has to run: it is reported
- * once, where every other failure goes.
- */
-export const startRuntimeServices = (runtime: ApplicationRuntime): Promise<void> =>
-  runtime
-    .runPromise(
-      Effect.gen(function* () {
-        const persistence = yield* Persistence;
-
-        yield* persistence.start;
-
-        const history = yield* History;
-        const bookmarks = yield* Bookmarks;
-        const cleanup = yield* ProfileCleanup;
-        const library = yield* LibraryService;
-        const updater = yield* UpdaterService;
-        const usage = yield* UsageService;
-        const littleBay = yield* LittleBayService;
-        const lifecycle = yield* PageLifecycleService;
-
-        // Each service owns its startup. A native read that waits or fails must not hold up the others.
-        yield* Effect.forEach(
-          [history.start, bookmarks.start, cleanup.start, library.start, updater.start, usage.start, littleBay.start, lifecycle.start],
-          (start) =>
-            start.pipe(
-              Effect.catchCauseIf(
-                (cause) => !Cause.hasInterruptsOnly(cause),
-                (cause) =>
-                  Effect.sync(() => {
-                    const failure = Cause.squash(cause);
-                    const error = failure instanceof Error ? failure : new Error(String(failure));
-
-                    captureException(error, "console");
-                    console.error("An app service could not start", error);
-                  }),
-              ),
-            ),
-          { concurrency: "unbounded", discard: true },
-        );
-      }),
-    )
-    .catch((cause: unknown) => {
-      const error = cause instanceof Error ? cause : new Error(String(cause));
-
-      captureException(error, "console");
-      console.error("The app's services could not start", error);
-    });

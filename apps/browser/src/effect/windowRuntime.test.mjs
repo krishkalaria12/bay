@@ -6,7 +6,7 @@ import * as Option from "effect/Option";
 import { AuthorityStore } from "./ports/store.ts";
 import { makeWindowRuntime } from "./windowRuntime.ts";
 import { MediaService } from "../components/media/service.ts";
-import { Persistence } from "../lib/persistenceService.ts";
+import { History } from "../lib/historyService.ts";
 import { createBrowserStore } from "../store/browserStore.ts";
 import { createLocalBrowserReadSource } from "../store/read.ts";
 
@@ -35,7 +35,7 @@ function viewSource() {
   };
 }
 
-test("a window runtime has view services without application authority or persistence", async () => {
+test("a window runtime has view services without application authority or its services", async () => {
   const { source, windowId } = viewSource();
   const runtime = makeWindowRuntime(source, windowId);
 
@@ -43,7 +43,7 @@ test("a window runtime has view services without application authority or persis
     const context = await runtime.context();
 
     assert.ok(Option.isNone(Context.getOption(context, AuthorityStore)));
-    assert.ok(Option.isNone(Context.getOption(context, Persistence)));
+    assert.ok(Option.isNone(Context.getOption(context, History)));
     assert.equal("createWindow" in source.getState(), false, "the source is a projection, without reducers");
     assert.ok(await runtime.runPromise(MediaService));
   } finally {
