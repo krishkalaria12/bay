@@ -65,7 +65,7 @@ import { TabSwipe } from "./TabSwipe";
 import { TabZoom, type Frame } from "./TabZoom";
 import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
-import { fetchFavicon } from "./favicons";
+import { Favicons } from "./favicons";
 import type { ImportedTab } from "./importTabs";
 import { bayCommand, incomingLink, type BayCommand } from "./incomingLink";
 import { sameNavigation } from "./navigationEvents";
@@ -359,13 +359,12 @@ export function BrowserScreen(): JSX.Element {
       dispatch({ type: "visit", url: state.url, title: state.title, favicon: null, now: Date.now() });
       const view = views.get(tabId);
 
-      if (view) fetchFavicon(view, state.url);
-
-      // The tab's picture, once the page has drawn: a newer visit replaces it.
+      // The site's icon, and the tab's picture once the page has drawn: a newer visit replaces the picture.
       if (view) {
         runCommand(
-          { name: "snapshots.visited", resource: tabId },
+          { name: "page.visited", resource: tabId },
           Effect.gen(function* () {
+            yield* (yield* Favicons).fetch(view, state.url);
             yield* (yield* Snapshots).visited(tabId, view, () => failed.has(tabId));
           }),
         );

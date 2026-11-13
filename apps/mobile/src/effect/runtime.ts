@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Scope from "effect/Scope";
+import { Favicons } from "../browser/favicons.ts";
 import { Snapshots } from "../browser/snapshots.ts";
 import { recordCrash } from "../crashReports.ts";
 import { LocaleService } from "../i18n/service.ts";
@@ -20,7 +21,7 @@ import { Links } from "./ports/links.ts";
 import { SecureStore } from "./ports/secureStore.ts";
 
 /** The services every mobile workflow can rely on. */
-export type AppServices = Files | Http | SecureStore | Engine | Lifecycle | Links | BrowserState | Diagnostics | Snapshots;
+export type AppServices = Files | Http | SecureStore | Engine | Lifecycle | Links | BrowserState | Diagnostics | Snapshots | Favicons;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -37,6 +38,7 @@ const locale = LocaleService.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer
 const blocker = Blocker.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Http.layer, Engine.layer, BrowserState.layer)));
 // Page work reads the page through the engine and lands its results in the browser's state.
 const snapshots = Snapshots.layer.pipe(Layer.provide(Layer.mergeAll(Engine.layer, BrowserState.layer)));
+const favicons = Favicons.layer.pipe(Layer.provide(Layer.mergeAll(Engine.layer, Files.layer, BrowserState.layer)));
 
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
@@ -52,6 +54,7 @@ export const appLayer = Layer.mergeAll(
   locale,
   blocker,
   snapshots,
+  favicons,
 ).pipe(Layer.provide(diagnostics));
 
 /** The key the runtime keeps itself under, so a reloaded module can find the one it replaces. */
@@ -147,6 +150,11 @@ const startServices = (): Promise<void> =>
               const snapshots = yield* Snapshots;
 
               yield* snapshots.start;
+            }),
+            Effect.gen(function* () {
+              const favicons = yield* Favicons;
+
+              yield* favicons.start;
             }),
           ];
 
