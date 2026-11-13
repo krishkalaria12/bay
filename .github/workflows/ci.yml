@@ -42,6 +42,9 @@ jobs:
           pnpm --filter @bay/sync exec node --test "src/**/*.test.ts"
       - name: Engine freshness checks
         run: node --test scripts/tests/test-engine-fresh.mjs
+      # The Android engine's build driver and the archive that resumes its runner stages (GNU tar and zstd here).
+      - name: Android engine scripts
+        run: python3 -m unittest scripts/android/test_engine.py scripts/lib/test_engine_state.py -v
       # Effect is the desktop app's: the shared packages, the other apps and the store stay free of it.
       - name: Effect boundary
         run: node --test scripts/tests/test-effect-boundary.mjs

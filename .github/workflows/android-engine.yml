@@ -1,0 +1,74 @@
+name: Android engine
+# Builds the pinned Chromium for Android (engine/android/lock.json) on GitHub's Linux runners, as phase P0 of
+# docs/android-chromium-plan.html: upstream content_shell_apk for arm64, unpatched, with a capacity report from every
+# stage. A hosted job ends after six hours, so each stage compiles for a while, saves the tree, and the next stage
+# resumes from it. A later run resumes from the newest saved tree for the same pin and GN args, and a run whose engine
+# id matches an earlier artifact republishes it without compiling.
+#
+# Start a run: git tag android-engine-N && git push origin android-engine-N
+on:
+  workflow_dispatch:
+  push:
+    tags: ["android-engine-*"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: android-engine
+  # Cancelling a stage mid-compile throws away its unsaved progress; let a running build finish.
+  cancel-in-progress: false
+
+jobs:
+  stage-1:
+    uses: ./.github/workflows/android-engine-stage.yml
+    with:
+      stage: 1
+  stage-2:
+    needs: stage-1
+    uses: ./.github/workflows/android-engine-stage.yml
+    with:
+      stage: 2
+  stage-3:
+    needs: stage-2
+    uses: ./.github/workflows/android-engine-stage.yml
+    with:
+      stage: 3
+  stage-4:
+    needs: stage-3
+    uses: ./.github/workflows/android-engine-stage.yml
+    with:
+      stage: 4
+  stage-5:
+    needs: stage-4
+    uses: ./.github/workflows/android-engine-stage.yml
+    with:
+      stage: 5
+  stage-6:
+    needs: stage-5
+    uses: ./.github/workflows/android-engine-stage.yml
+    with:
+      stage: 6
+
+  # Every stage can pause successfully, so a green stage proves nothing on its own: the run passes only when it
+  # published the engine.
+  engine:
+    needs: stage-6
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check the engine was published
+        run: |
+          if [[ "${{ needs.stage-6.result }}" != success ]]; then
+            echo "::error::a stage failed or was skipped (stage-6: ${{ needs.stage-6.result }})"
+            exit 1
+          fi
+          count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=android-engine" --jq .total_count)
+          if (( count == 0 )); then
+            echo "::error::six stages ran out before the engine finished; start another run to resume from the saved tree"
+            exit 1
+          fi
