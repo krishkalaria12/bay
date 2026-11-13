@@ -43,6 +43,9 @@ def make_linux_sysroot(src, install="installer"):
     return directory
 
 
+# Windows has no SIGKILL; the POSIX build tests run there too, with the signal POSIX would send.
+POSIX_SIGKILL = getattr(engine.signal, "SIGKILL", 9)
+
 class PlatformTests(unittest.TestCase):
     def test_windows_lock_remains_flat_and_linux_compatibility_is_unmeasured(self):
         self.assertEqual(engine.LOCK, engine.platform_lock("win"))
@@ -486,7 +489,8 @@ class BuildTests(unittest.TestCase):
         process.wait.side_effect = wait
         with mock.patch.object(engine.sys, "platform", "linux"), \
              mock.patch.object(engine.subprocess, "Popen", return_value=process) as popen, \
-             mock.patch.object(engine.os, "killpg", create=True) as killpg:
+             mock.patch.object(engine.os, "killpg", create=True) as killpg, \
+             mock.patch.object(engine.signal, "SIGKILL", POSIX_SIGKILL, create=True):
             return engine.run_until(["autoninja"], None, {"PATH": ""}, 5), popen, killpg
 
     def test_posix_timed_build_runs_in_its_own_session_and_interrupts_the_group(self):
@@ -501,7 +505,7 @@ class BuildTests(unittest.TestCase):
         finished, _, killpg = self.posix_run_until([timeout, timeout, 0])
         self.assertIs(finished, False)
         self.assertEqual(killpg.call_args_list, [mock.call(4321, engine.signal.SIGINT),
-                                                 mock.call(4321, engine.signal.SIGKILL)])
+                                                 mock.call(4321, POSIX_SIGKILL)])
         with self.assertRaises(subprocess.CalledProcessError):
             self.posix_run_until([1])
 
