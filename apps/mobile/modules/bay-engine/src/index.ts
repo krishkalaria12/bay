@@ -152,6 +152,7 @@ const nativeEngine = requireNativeModule<{
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
   privateBrowsingSupported: boolean;
+  engineInfo: EngineInfo;
   openDownload(reference: string): Promise<void>;
   cancelDownload(id: string): Promise<void>;
   saveImage(url: string): Promise<void>;
@@ -162,6 +163,17 @@ const nativeEngine = requireNativeModule<{
   takeShare(): Promise<string | null>;
   setMediaSession?(title: string | null, site: string, playing: boolean): Promise<void>;
 }>("BayEngine");
+
+/** The engine that renders pages: system WebKit on iOS; on Android, the system WebView until Bay's own Chromium. */
+export interface EngineInfo {
+  family: "webkit" | "webview" | "chromium";
+  /** For people: WebKit, System WebView or Chromium. */
+  name: string;
+  /** The engine's version, or the iOS version WebKit comes with; empty when the system won't say. */
+  version: string;
+}
+
+export const engineInfo: EngineInfo = nativeEngine.engineInfo;
 
 /** False on Android when the installed WebView can't keep a separate profile; private tabs are unavailable then. */
 export const privateBrowsingSupported: boolean = nativeEngine.privateBrowsingSupported;

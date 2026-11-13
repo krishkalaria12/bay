@@ -292,6 +292,7 @@ export const panelsJa: PanelStrings = {
   "settings.archive.weekShort": "7日",
   "settings.archive.monthShort": "30日",
   "settings.version": "Bay {version}",
+  "settings.engine": "{engine} {version}",
   "settings.language.system": "システム",
   "settings.language.systemDetail": "スマートフォンに合わせる · {language}",
   "pageRequest.thisSite": "このサイト",

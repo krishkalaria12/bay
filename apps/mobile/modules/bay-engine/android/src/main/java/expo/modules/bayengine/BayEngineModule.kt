@@ -6,6 +6,7 @@ import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import androidx.webkit.WebStorageCompat
+import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Queues
@@ -97,6 +98,11 @@ class BayEngineModule : Module() {
     AsyncFunction("pruneTabStates") { keep: List<String> -> appContext.reactContext?.let { BayEngineTabStates.prune(it, keep) } }
 
     Constant("privateBrowsingSupported") { BayEngineView.privateBrowsingSupported }
+    // Pages render with the system WebView until Bay's own Chromium replaces it (docs/android-chromium-plan.html).
+    Constant("engineInfo") {
+      val webView = appContext.reactContext?.let { WebViewCompat.getCurrentWebViewPackage(it) }
+      mapOf("family" to "webview", "name" to "System WebView", "version" to (webView?.versionName ?: ""))
+    }
 
     AsyncFunction("setContentBlocking") { files: List<String>?, version: String, promise: Promise ->
       val context = appContext.reactContext

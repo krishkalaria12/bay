@@ -292,6 +292,7 @@ export const panelsDe: PanelStrings = {
   "settings.archive.weekShort": "7 Tage",
   "settings.archive.monthShort": "30 Tage",
   "settings.version": "Bay {version}",
+  "settings.engine": "{engine} {version}",
   "settings.language.system": "System",
   "settings.language.systemDetail": "Folgt deinem Telefon · {language}",
   "pageRequest.thisSite": "diese Website",

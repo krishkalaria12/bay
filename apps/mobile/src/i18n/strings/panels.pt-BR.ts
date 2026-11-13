@@ -292,6 +292,7 @@ export const panelsPtBR: PanelStrings = {
   "settings.archive.weekShort": "7 dias",
   "settings.archive.monthShort": "30 dias",
   "settings.version": "Bay {version}",
+  "settings.engine": "{engine} {version}",
   "settings.language.system": "Sistema",
   "settings.language.systemDetail": "Segue seu celular · {language}",
   "pageRequest.thisSite": "este site",

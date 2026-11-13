@@ -74,6 +74,11 @@ public class BayEngineModule: Module {
     }
 
     Constant("privateBrowsingSupported") { true }
+    // Pages render with the system's WebKit, which updates with iOS.
+    Constant("engineInfo") { () -> [String: String] in
+      let os = ProcessInfo.processInfo.operatingSystemVersion
+      return ["family": "webkit", "name": "WebKit", "version": "iOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"]
+    }
 
     AsyncFunction("setContentBlocking") { (files: [String]?, version: String, promise: Promise) in
       let finish: (Result<Int, Error>) -> Void = { result in
