@@ -50,7 +50,7 @@ const fakeEngine = () => {
       Effect.sync(() => {
         lab.unlocked++;
       }),
-    isBrowserUnlocked: () => false,
+    isBrowserUnlocked: () => Effect.succeed(false),
     forgetUnlockedKeys: () => {
       lab.forgotten++;
     },
@@ -95,7 +95,7 @@ const fakeEngine = () => {
     importSafariDirect: () => Effect.succeed({ profiles: [], bookmarks: undefined, passwordCSV: undefined }),
     importBookmarksHTML: () => Effect.succeed({ type: "folder", title: "", children: [] }),
     chooseImportFile: () => Effect.succeed(null),
-    safariHasFullDiskAccess: () => true,
+    safariHasFullDiskAccess: () => Effect.succeed(true),
     diaAutomationStatus: () => Effect.sync(() => (lab.statusChecks++, lab.diaStatuses.shift() ?? "granted")),
     requestDiaAutomation: () => Effect.succeed("granted"),
     openDia: () => Effect.void,
@@ -322,4 +322,120 @@ test("the wait for Dia asks until it runs, and asks nothing once the flow closes
     assert.equal(await stopped, "notRunning");
     assert.equal(lab.statusChecks, 4, "no ask after the flow closed");
   });
+});
+
+const run = (runtime, use) =>
+  runtime.runPromise(
+    Effect.gen(function* () {
+      const workflow = yield* ImportWorkflow;
+
+      return yield* use(workflow);
+    }),
+  );
+
+test("a write that fails partway ends the import, keeps what landed and fails what is left", async () => {
+  await withWorkflow(async ({ lab, runtime }) => {
+    S().hydrate({});
+
+    const errors = console.error;
+
+    console.error = () => {};
+
+    lab.answers.set("one", (job) => ({
+      browserId: job.browserId,
+      profileId: job.profileId,
+      profile: { name: job.profileId },
+      spaces: [],
+      bookmarks: bookmarks(job.profileId),
+      get history() {
+        throw new Error("The disk is full");
+      },
+      tabs: [],
+      favorites: [],
+      credentials: [],
+      warnings: [],
+      failed: [],
+      vaultToken: undefined,
+      cookieCount: 0,
+      addressCount: 0,
+      cardCount: 0,
+      extensions: [],
+    }));
+
+    try {
+      const outcome = await run(runtime, (workflow) => workflow.import({ ...request(), kinds: new Set(["bookmarks", "history"]) }));
+
+      assert.deepEqual(lab.asked, ["one"], "no later profile begins");
+      assert.ok(
+        Object.values(S().bookmarks.nodes).some((node) => node.title === "one"),
+        "what landed stays",
+      );
+      assert.deepEqual(
+        outcome.failures.map((f) => [f.kind, f.profiles]),
+        [
+          ["bookmarks", ["One", "Two"]],
+          ["history", ["One", "Two"]],
+        ],
+      );
+      assert.equal(lab.forgotten, 1);
+    } finally {
+      console.error = errors;
+    }
+  });
+});
+
+test("an app-bound or export-only secret's guidance reaches the notes", async () => {
+  await withWorkflow(async ({ lab, runtime }) => {
+    S().hydrate({});
+    lab.answers.set("one", (job) => ({
+      browserId: job.browserId,
+      profileId: job.profileId,
+      profile: { name: job.profileId },
+      spaces: [],
+      bookmarks: bookmarks(job.profileId),
+      history: [],
+      tabs: [],
+      favorites: [],
+      credentials: [],
+      warnings: [
+        { code: "appBound", kind: "cookies", message: "Chrome keeps its cookies bound to Chrome" },
+        { code: "passwordExportRequired", kind: "passwords", message: "Export Chrome's passwords to a CSV first" },
+      ],
+      failed: [],
+      vaultToken: undefined,
+      cookieCount: 0,
+      addressCount: 0,
+      cardCount: 0,
+      extensions: [],
+    }));
+
+    const outcome = await run(runtime, (workflow) => workflow.import({ ...request(), profileIds: ["one"] }));
+
+    assert.deepEqual(outcome.notes, ["Chrome keeps its cookies bound to Chrome.", "Export Chrome's passwords to a CSV first."]);
+  });
+});
+
+test("whether a browser is unlocked is the native module's answer, and a check that fails says so", async () => {
+  const fake = ManagedRuntime.make(fakeEngine().layer);
+  let answer = Effect.succeed(true);
+
+  const layer = Layer.succeed(ImportEngine)({
+    ...(await fake.runPromise(ImportEngine)),
+    isBrowserUnlocked: () => answer,
+    safariHasFullDiskAccess: () => Effect.fail(new ImportFailure({ code: "unreadable", operation: "import.safariAccess", cause: new Error("no") })),
+  });
+
+  const runtime = ManagedRuntime.make(ImportWorkflow.layer.pipe(Layer.provide(ReadBrowser.layer(useBrowser)), Layer.provide(layer)));
+
+  try {
+    assert.equal(await run(runtime, (workflow) => workflow.unlocked("chrome")), true);
+    answer = Effect.succeed(false);
+    assert.equal(await run(runtime, (workflow) => workflow.unlocked("chrome")), false);
+    answer = Effect.fail(new ImportFailure({ code: "unreadable", operation: "import.unlocked", cause: new Error("no") }));
+    await assert.rejects(run(runtime, (workflow) => workflow.unlocked("chrome")));
+    assert.equal(await run(runtime, (workflow) => workflow.safariAccess()), false, "an access check that fails is not access");
+  } finally {
+    await runtime.dispose();
+    await fake.dispose();
+  }
 });

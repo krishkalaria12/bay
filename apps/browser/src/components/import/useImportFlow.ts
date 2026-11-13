@@ -1,7 +1,7 @@
 import { createSpace } from "../../runtime/spaceActions";
 import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportKind, ImportProgress, SpaceSummary } from "@bay/import";
 import { closeWindow, confirm } from "@bay/desktop";
-import { platformOS } from "@bay/platform";
+import { isMac, platformOS } from "@bay/platform";
 import * as Effect from "effect/Effect";
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
@@ -56,13 +56,16 @@ export function useImportFlow() {
   const [dia, setDia] = useState<DiaTabsResult | null>(null);
   const [asking, setAsking] = useState(false);
   const abort = useRef<AbortController | null>(null);
+  // The browser the user chose last: an answer about an earlier choice is not shown for this one.
+  const choice = useRef(0);
+  const checkingUnlock = useRef(false);
   const requested = useImportRequest((s) => s.browserId);
 
   const recheckAccess = async () => {
     if (!api) return;
 
     if (step === "safari") {
-      const access = await ask((w) => w.safariAccess());
+      const access = await ask((w) => w.safariAccess()).catch(() => false);
 
       return setFullDiskAccess(access);
     }
@@ -80,6 +83,7 @@ export function useImportFlow() {
   };
 
   const choose = (b: BrowserSource) => {
+    const selected = ++choice.current;
     setSource(b);
     const defaults = b.profiles.filter((p) => p.isDefault);
     setSourceProfiles((defaults.length ? defaults : b.profiles.slice(0, 1)).map((p) => p.id));
@@ -93,7 +97,15 @@ export function useImportFlow() {
 
     setKinds(new Set(available));
 
-    if (b.family === "safari") void ask((w) => w.safariAccess()).then(setFullDiskAccess);
+    if (b.family === "safari")
+      void ask((w) => w.safariAccess()).then(
+        (access) => {
+          if (choice.current === selected) setFullDiskAccess(access);
+        },
+        () => {
+          if (choice.current === selected) setFullDiskAccess(false);
+        },
+      );
     setDia(null);
     setExtensions([]);
     setNotes([]);
@@ -116,37 +128,47 @@ export function useImportFlow() {
   // Linux's basic store needs no keyring: the encrypted data comes without one.
   const basicStore = platformOS === "linux" && source?.family === "chromium";
 
+  // One check at a time: a second click while the keychain is asked does not start a second import.
   const next = async () => {
-    if (!source) return;
-    setError(null);
+    if (!source || checkingUnlock.current) return;
+    const selected = choice.current;
 
-    if (step === "choose" && isDiaTabs) {
-      setDiaStatus("checking");
-      setStep("dia");
+    return checkUnlock(
+      checkingUnlock,
+      async () => {
+        setError(null);
 
-      return void refreshDia();
-    }
+        if (step === "choose" && isDiaTabs) {
+          setDiaStatus("checking");
+          setStep("dia");
 
-    if (step === "profiles" && isDiaTabs && dia) return void runDia(dia, sourceProfiles, kinds);
+          return void refreshDia();
+        }
 
-    if (step === "choose") {
-      if (source.needsFullDiskAccess) return setStep("access");
+        if (step === "profiles" && isDiaTabs && dia) return void runDia(dia, sourceProfiles, kinds);
 
-      if (source.requiresExport) return setStep("safari");
+        if (step === "choose") {
+          if (source.needsFullDiskAccess) return setStep("access");
 
-      if (source.profiles.length > 1 || (isArc && allSpaces.length > 1)) return setStep("profiles");
-    }
+          if (source.requiresExport) return setStep("safari");
 
-    if (
-      (step === "choose" || step === "profiles") &&
-      ENCRYPTED.some((k) => kinds.has(k)) &&
-      source.needsKeychain &&
-      !(await ask((w) => w.unlocked(source.id)))
-    ) {
-      return setStep("unlock");
-    }
+          if (source.profiles.length > 1 || (isArc && allSpaces.length > 1)) return setStep("profiles");
+        }
 
-    void run(kinds);
+        if ((step === "choose" || step === "profiles") && ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain) {
+          const unlocked = await ask((w) => w.unlocked(source.id));
+
+          if (choice.current !== selected) return;
+
+          if (!unlocked) return setStep("unlock");
+        }
+
+        void run(kinds);
+      },
+      () => {
+        if (choice.current === selected) setError(`Couldn't check access to ${source.name}. Try again.`);
+      },
+    );
   };
 
   const unlock = async () => {
@@ -159,7 +181,13 @@ export function useImportFlow() {
       void run(kinds);
     } catch {
       setUnlocking(false);
-      setError(`macOS didn't allow access to ${source.name}'s keychain item. Try again, or skip the encrypted data.`);
+      setError(
+        isMac
+          ? `macOS didn't allow access to ${source.name}'s keychain item. Try again, or skip the encrypted data.`
+          : basicStore
+            ? `Couldn't unlock ${source.name}'s data. Try again, or continue without unlocking to import data that doesn't need the keyring.`
+            : `Couldn't decrypt ${source.name}'s data. Try again, or skip the encrypted data.`,
+      );
     }
   };
 
@@ -400,7 +428,7 @@ export function useImportFlow() {
             ? `${APP_NAME} still doesn't have Full Disk Access. Grant it above, or use the export file below.`
             : "Couldn't read Safari's data. Try the export file below.",
         );
-        void ask((w) => w.safariAccess()).then(setFullDiskAccess);
+        void ask((w) => w.safariAccess()).then(setFullDiskAccess, () => setFullDiskAccess(false));
       },
     );
   };
@@ -413,7 +441,12 @@ export function useImportFlow() {
 
     if (source.family === "safari") return void importSafariDirect();
 
-    if (ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain && !(await ask((w) => w.unlocked(source.id)))) return void unlock();
+    if (ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain) {
+      const unlocked = await ask((w) => w.unlocked(source.id)).catch(() => false);
+
+      if (!unlocked) return void unlock();
+    }
+
     void run(kinds);
   };
 
@@ -437,7 +470,7 @@ export function useImportFlow() {
     );
   };
 
-  const openExtensions = () => {
+  const openExtensions = async () => {
     const bySpace = new Map<string, Set<string>>();
 
     for (const { spaceId, extension } of extensions) {
@@ -447,7 +480,7 @@ export function useImportFlow() {
       bySpace.get(spaceId)!.add(extension.webStoreUrl);
     }
 
-    for (const [spaceId, urls] of bySpace) openInWebStore(spaceId, [...urls]);
+    for (const [spaceId, urls] of bySpace) await openInWebStore(spaceId, [...urls]);
     setExtensions([]);
   };
 
@@ -610,6 +643,19 @@ export function useImportFlow() {
 
 // SAFETY: { code? assertion matches the runtime value validated at this call site.
 const errorCode = (cause: unknown) => (cause as { code?: string }).code;
+
+// Runs a check that asks the native side, marking it busy while it runs; a check that fails says so.
+async function checkUnlock(checking: { current: boolean }, action: () => Promise<void>, onError: () => void): Promise<void> {
+  checking.current = true;
+
+  try {
+    await action();
+  } catch {
+    onError();
+  } finally {
+    checking.current = false;
+  }
+}
 
 function defaultTarget(): string {
   const s = useBrowser.getState();
