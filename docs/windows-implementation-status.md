@@ -1,13 +1,29 @@
 # Windows implementation checkpoint
 
-Updated 21 October 2026. Windows 10 and Windows 11 x64 are supported targets.
+Updated 13 November 2026. Windows 10 and Windows 11 x64 are supported targets.
 Mica requires Windows 11 build 22621 or later. macOS keeps its existing native
 host. The `ios` directories contain macOS sources, not mobile application targets.
 
 The [port plan](windows-port-plan.html) uses react-native-web inside
 `chrome://bay`, a Mojo native bridge, and SurfaceEmbed page elements. The Windows
-build now targets Chrome with Bay's NNCore layer. The port is still in progress;
-no Windows Chromium build or native hosting acceptance run has passed yet.
+build targets Chrome with Bay's NNCore layer.
+
+## Build status
+
+The engine and an unsigned installer compile on free GitHub runners
+(`windows-build.yml`, started by a `windows-build-N` tag). Builds have passed
+since `windows-build-17` on 7 November 2026; each one runs the Windows unit test
+targets and a smoke launch that checks the window opens and its UI logs no
+errors. The installers from those builds run on the Windows test PC.
+`windows-build-29` builds the Effect TS merge. The Linux branch compiles the
+same host the same way (`linux-build.yml`).
+
+`chrome://bay` runs only the shared runtime: a browser-owned coordinator
+document owns the state and each window document shows a read-only projection.
+The single-document mode (`--bay-legacy-runtime`) and the hosting diagnostic
+page (`--bay-hosting-spike`) that came before it are removed. The localhost
+preview still runs the single-document entry the macOS app uses, since it has no
+coordinator.
 
 ## Implemented and checked on macOS
 
@@ -21,7 +37,7 @@ no Windows Chromium build or native hosting acceptance run has passed yet.
   cancelling quit invalidates stale save callbacks and resumes persistence.
 - Web view adapters cover desktop keys, hover, focus, menus, drag regions,
   Fluent glyphs and CSS effects. Mobile platform policy and the former React
-  Native for Windows host have been removed.
+  Native for Windows host are gone.
 - Portable import tests cover Chromium, Firefox, Arc, HTML, CSV, sessions,
   committed SQLite WAL data, source preservation and cancellation. Windows
   secret readers use DPAPI and Firefox NSS. App-bound secrets return export
@@ -36,8 +52,8 @@ no Windows Chromium build or native hosting acceptance run has passed yet.
   arguments, revalidate cached installers, and support cancellation markers.
 - The macOS production JavaScript bundle still builds.
 
-The former React Native for Windows implementation is recoverable from commit
-`f9e87f27`. Its portable import and sync services remain in this branch.
+The portable import and sync services from the earlier React Native for Windows
+host remain in this branch.
 
 ## Chrome host and runtime progress
 
@@ -53,12 +69,11 @@ overlay, a Reanimated animation, frame-interval sampling, bridge timing, an IME
 input and native page controls. In the localhost preview it displays explicit
 placeholders instead of substituting iframes or claiming native results.
 
-The host now includes native window registration, isolated private-profile
+The host includes native window registration, isolated private-profile
 lifetime, tab mount leases and transfer ownership, extension and Cast adapters,
 atomic document storage, clipboard, file dialogs, system integration and Windows
 credential storage. Parked pages rejoin Chrome's tab strips before application
-quit so Chrome can run their beforeunload handlers. These paths still need
-Windows build and runtime verification.
+quit so Chrome can run their beforeunload handlers.
 
 Portable NNCore sources and Chrome import/sync service targets are linked in
 the build definitions. Profile routing refuses unknown unloaded profiles, and
@@ -95,9 +110,7 @@ Two-client integration tests exercise concurrent commands, publication before
 acknowledgement, duplicate requests, one native reconciliation/persistence owner,
 and disconnects without falling back to the local writable store.
 
-The shared runtime is now the Windows default; `--bay-legacy-runtime` restores
-the single-renderer entry for comparison. macOS still requires
-`--bay-shared-runtime`. A browser-owned detached WebContents holds the
+A browser-owned detached WebContents holds the
 coordinator, authenticates document connections and retains accepted state for
 bounded crash recovery. Native projections remove other windows' private data;
 global engine, data and window events go to the coordinator. The coordinator
@@ -116,10 +129,8 @@ Chrome checks the tab's profile against accepted state and authorizes each
 mount against its window owner. Sequenced, bounded replay restores current
 facts after coordinator replacement; stale page identities are rejected.
 Window callbacks retain local prompts and presentation effects, with shared
-store fact writes disabled in experimental shared mode. Legacy startup keeps
-its existing callback behavior. Eight native page-fact authorization and replay
-tests pass alongside the 38 command/privacy tests. These checks and native
-source syntax checks ran on macOS; Windows runtime behavior remains unverified.
+store fact writes disabled. Eight native page-fact authorization and replay
+tests pass alongside the 38 command/privacy tests.
 
 Pages Chrome already opened now have a separate coordinator-only handoff route.
 Chrome offers the live WebContents with a browser-generated token, and the
@@ -131,17 +142,14 @@ Pending offers replay after coordinator replacement; rejected offers close, and
 accepted offers remain owned until mount or tab removal. New private windows
 can claim Chrome's exact offered private profile. A page from an existing private
 window instead opens a fresh private session when a separate private window is
-requested. Legacy callbacks keep their existing routing.
+requested.
 
 The coordinator exposes an accepted-publication hook for native window
 reconciliation. Shared startup must use that hook so new native windows open
 after their page and profile claims are accepted. Offer routing, duplicate
 delivery, recovery, publication failures and two-client convergence have
-JavaScript coverage. Native handoff helpers have C++ coverage; actual transfer
-between Windows windows still needs runtime acceptance. All 51 native runtime
-tests pass against pinned Chromium libraries on macOS, including five handoff
-tests. The changed native sources also pass syntax checks with generated Mojo
-bindings. These checks do not establish Windows runtime behavior.
+JavaScript coverage. Native handoff helpers have C++ coverage, including five
+handoff tests among the native runtime tests.
 
 Startup now branches on the role Chrome assigns. A new coordinator epoch
 restores the session from disk before revision zero; a replacement coordinator
@@ -179,16 +187,13 @@ every window agrees on it. When a tab's accepted window changes, Chrome parks
 its page before either window sees the change; a page that cannot be parked
 loads its URL afresh in the destination. A source audit test fails if window
 code imports the writable store outside the coordinator services and the
-legacy-only paths.
+macOS entry's paths.
 
-Verification on macOS: 584 browser, 52 platform and 56 native runtime tests,
-TypeScript, lint, contract checks, the production web and macOS JavaScript
-bundles and the Windows pipeline tests pass. The changed native sources pass macOS-target syntax checks
-with generated Mojo bindings; the Windows-only `BaySync` restriction has not
-been compiled. Two-window behavior on Windows, including page transfer between
-windows, startup, quit and coordinator recovery, still needs runtime acceptance.
+Two-window behavior on Windows, including page transfer between windows,
+startup, quit and coordinator recovery, still needs a full manual pass on
+Windows hardware.
 
-Known limits in shared mode: extension tab requests open their URL afresh
+Known limits: extension tab requests open their URL afresh
 rather than adopting Chrome's live tab, the Chrome tab-strip mirror stays off
 (the Windows host does not implement it), and Live folders are not available in
 private windows.
@@ -198,8 +203,7 @@ acknowledged final session save. Native page controls cover printing, saving,
 screenshots, certificate details and media operations. Windows browser and
 installer identities, executable names, associations and taskbar IDs now agree.
 Remaining work includes complete native event/OS coverage and the Windows
-acceptance runs. The diagnostic page
-does not establish a complete browser host.
+acceptance runs.
 
 ## Frame, notifications and menus
 
@@ -241,16 +245,10 @@ a macOS-only patch; it is rebased.
 
 ## Windows Chrome opens itself
 
-With `--bay-legacy-runtime`, one full UI document runs per process. A normal
-window Chrome opens on its own while a Bay window exists (a second launch with
-`--new-window`, a taskbar task, an extension's `chrome.windows.create`) is
-absorbed: it is never shown, its document refuses to start, and its tabs move
-into the most recently active Bay window. Pages in another regular profile
-reopen there; private pages are dropped rather than copied into a regular
-profile. Bay's own additional windows stay unavailable in that mode.
-
-With the shared runtime such a window is absorbed the same way, but its pages
-go to the coordinator: each regular page is offered as a new tab of the most
+A normal window Chrome opens on its own while a Bay window exists (a second
+launch with `--new-window`, a taskbar task, an extension's
+`chrome.windows.create`) is absorbed: it is never shown and its document refuses
+to start. Its pages go to the coordinator: each regular page is offered as a new tab of the most
 recently active regular Bay window (`AppRuntime::AdoptPage`), the active one in
 front. New tab and blank pages, and private pages, close with the window. Only
 the coordinator opens browser windows, from accepted state.
@@ -261,7 +259,7 @@ The window registry offers each such page the same way, as a tab of that
 window or of the most recently active regular Bay window, once accepted state
 names one. Pages the broker holds and pages a page opened are left alone.
 
-## Utility windows in the shared runtime
+## Utility windows
 
 Settings, Import and Task Manager have no record in the shared state. Any
 window may open one. The broker gives it the projection a regular window gets,
@@ -272,7 +270,7 @@ another window comes with the window's options, or with an `opened` window event
 when Settings is already open. Window documents also receive their own window
 events now, so the caption buttons follow maximize and restore.
 
-## Not yet working in the shared runtime
+## Not yet working
 
 - Task Manager cannot match processes to tabs, because pages are mounted in
   other documents. Rows show Chrome's task titles, without favicons, and
@@ -296,11 +294,9 @@ hover and click, and Mica with readable text in light and dark themes (then
 again with `--bay-disable-mica`). Notifications: a toast appears, and clicking
 it focuses its tab, including after a cold start from the toast.
 
-Build the pinned Chrome target and run the hosting gate before accepting the
-architecture. Record compositor transparency and clipping, focus and keyboard
-routing, DPI changes, IME, accessibility, video, fullscreen, PiP, DevTools,
-independent profiles, private browsing and tab transfer. Measure the actual Mojo
-bridge and animation behavior. Window liveness alone does not pass this gate.
+Also check compositor transparency and clipping, focus and keyboard routing,
+DPI changes, IME, accessibility, video, fullscreen, PiP, DevTools, independent
+profiles, private browsing and tab transfer.
 
 Installer, signatures, updater rollback, default-browser registration, import
 from installed browsers and recovery-kit output also require Windows tests.
@@ -311,8 +307,7 @@ On macOS:
 
 ```sh
 pnpm web
-# Open the localhost URL with ?spike=1 for the hosting test page,
-# or ?onboarding=1 to exercise the full onboarding flow.
+# Open the localhost URL with ?onboarding=1 to exercise the full onboarding flow.
 pnpm build:web
 pnpm typecheck
 pnpm typecheck:web
@@ -344,12 +339,12 @@ and enough space for the complete Chromium source and build output.
 ```powershell
 python scripts/windows/engine.py all --root C:\bay-engine --output C:\bay-artifacts
 # Stage the matching engine artifact through scripts/windows/build-app.py.
-pwsh -File scripts/windows/smoke.ps1 -AppPath C:\bay-app\Bay.exe -HostingSpike
+pwsh -File scripts/windows/smoke.ps1 -AppPath C:\bay-app\Bay.exe
 ```
 
 The Chromium target `chrome/browser/bay/webui:runtime_unittests` exercises the
 browser-side privacy projections and command envelopes. Build and run it with
 the same output configuration as the engine.
 
-`smoke.ps1` checks process and window liveness. Complete the manual hosting gate
-on the visible diagnostic page separately.
+`smoke.ps1` checks that Bay opens a window, keeps running and its UI logs no
+errors. It does not replace the manual checks above.
