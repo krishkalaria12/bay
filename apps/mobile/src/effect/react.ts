@@ -15,8 +15,8 @@ const OPERATION: Operation = { name: "command" };
 
 /** What a hook gives a component: a way to run work, and the last answer. */
 export type Command<A, E = unknown> = {
-  /** Runs a program. The answer arrives in `result`. */
-  readonly run: (program: Effect.Effect<A, E, AppServices>) => void;
+  /** Runs a program. The answer arrives in `result`. It runs in the hook's scope, which holds what it registers. */
+  readonly run: (program: Effect.Effect<A, E, AppServices | Scope.Scope>) => void;
   /** The last answer, or null while there isn't one. */
   readonly result: CommandResult<A> | null;
 };
@@ -25,7 +25,11 @@ export type Command<A, E = unknown> = {
  * Runs a program in a scope and reads how it ended. The scope owns the work: closing it interrupts the program and
  * runs the finalizers the program registered.
  */
-const runInScope = <A>(program: Effect.Effect<A, unknown, AppServices>, scope: Scope.Closeable, onResult: (result: CommandResult<A>) => void): void => {
+const runInScope = <A>(
+  program: Effect.Effect<A, unknown, AppServices | Scope.Scope>,
+  scope: Scope.Closeable,
+  onResult: (result: CommandResult<A>) => void,
+): void => {
   const workflow = Effect.gen(function* () {
     const fiber = yield* Effect.forkIn(Scope.provide(scope)(program), scope);
     const exit = yield* Fiber.await(fiber);
@@ -62,7 +66,7 @@ export function useCommand<A = void, E = unknown>(): Command<A, E> {
     };
   }, []);
 
-  const run = useCallback((program: Effect.Effect<A, E, AppServices>) => {
+  const run = useCallback((program: Effect.Effect<A, E, AppServices | Scope.Scope>) => {
     let scope = scopeRef.current;
 
     if (!scope) {
@@ -111,7 +115,7 @@ export function useScopedWork<A = void, E = unknown>(key: string): Command<A, E>
   }, [key]);
 
   const run = useCallback(
-    (program: Effect.Effect<A, E, AppServices>) => {
+    (program: Effect.Effect<A, E, AppServices | Scope.Scope>) => {
       let current = workRef.current;
 
       if (!current || current.key !== key) {
