@@ -428,8 +428,8 @@ pub unsafe extern "C" fn bay_blocker_use_resources(
 }
 
 /// The engine cached at `cache` for `version`, or one built from the `count` list files (then cached), with the
-/// resources file loaded; null when the lists can't be read. `platform`: 0 desktop, 1 Android, 2 iOS. Free with
-/// `bay_blocker_free`.
+/// resources file loaded; null when the lists can't be read. `platform`: 0 desktop, 1 Android WebView, 2 iOS,
+/// 3 Android Chromium. Free with `bay_blocker_free`.
 ///
 /// # Safety
 /// `files` must point to `count` valid strings; `cache`, `version` must be valid strings; `resources` may be null.
@@ -443,11 +443,7 @@ pub unsafe extern "C" fn bay_blocker_load(
     platform: u8,
 ) -> *mut Blocker {
     let paths: Vec<String> = (0..count).filter_map(|i| read(*files.add(i))).collect();
-    let platform = match platform {
-        1 => crate::Platform::AndroidWebView,
-        2 => crate::Platform::IosWebKit,
-        _ => crate::Platform::DesktopChromium,
-    };
+    let platform = crate::Platform::from_ffi(platform);
     let (Some(cache), Some(version)) = (read(cache), read(version)) else {
         return std::ptr::null_mut();
     };
