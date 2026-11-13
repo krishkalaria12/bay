@@ -19,6 +19,8 @@ import * as Linking from "expo-linking";
 import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
 import { useThemeColor } from "heroui-native";
+import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, View } from "react-native";
@@ -33,6 +35,10 @@ import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Text } from "@/chrome/Text";
 import { iconSize, space } from "@/chrome/tokens";
 import { crashReportText, crashReports } from "@/crashReports";
+import { Diagnostics } from "@/effect/ports/diagnostics";
+import { Engine } from "@/effect/ports/engine";
+import { Lifecycle } from "@/effect/ports/lifecycle";
+import { useCommand } from "@/effect/react";
 import { t as translate, useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
@@ -139,10 +145,6 @@ export function BrowserScreen(): JSX.Element {
   const incoming = useRef<string | null>(null);
   const barHidden = useSharedValue(0);
 
-  useEffect(() => {
-    void useBrowserStore.getState().load();
-  }, []);
-
   const active = data.tabs.find((tab) => tab.id === data.activeTabId) ?? data.tabs[0]!;
   const spaceTabs = data.tabs.filter((tab) => tab.spaceId === data.activeSpaceId);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -198,18 +200,44 @@ export function BrowserScreen(): JSX.Element {
   useEffect(() => {
     if (ready) startFresh.current();
   }, [ready]);
+  // Leaving the foreground and coming back, heard through the app's one lifecycle registration. The screen joins it
+  // once the saved tabs are in, after the store's own handler, so each change is handled in the order it always was.
+  const { run: runLifecycleWork } = useCommand();
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        startFresh.current();
-      } else {
-        // The system may end Bay while it is in the background: keep each page's history, scroll and form text.
-        for (const view of views.values()) void view.saveState().catch(() => {});
-      }
-    });
+    if (!ready) return;
 
-    return () => subscription.remove();
-  }, []);
+    runLifecycleWork(
+      Effect.gen(function* () {
+        const lifecycle = yield* Lifecycle;
+        const engine = yield* Engine;
+        const diagnostics = yield* Diagnostics;
+        // Each save starts inside the native callback, before Bay is suspended.
+        const run = yield* FiberSet.makeRuntime<never>();
+
+        yield* lifecycle.onChange((state) => {
+          if (state === "active") {
+            startFresh.current();
+
+            return;
+          }
+
+          // The system may end Bay while it is in the background: keep each page's history, scroll and form text. A
+          // page that can't be saved reopens from its address, so a failure is only worth a warning.
+          for (const view of views.values()) {
+            run(
+              engine
+                .saveState(view)
+                .pipe(
+                  Effect.catch((error) =>
+                    diagnostics.warn(`Couldn't save a page's state: ${error.cause instanceof Error ? error.cause.message : String(error.cause)}`),
+                  ),
+                ),
+            );
+          }
+        });
+      }),
+    );
+  }, [ready, runLifecycleWork]);
   const blockerStatus = useBlockerStatus((state) => state.status);
 
   // Private tabs lock as soon as Bay leaves the foreground, which also keeps them out of the app switcher.

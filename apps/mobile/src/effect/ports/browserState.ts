@@ -16,15 +16,25 @@ type BrowserStoreModule = typeof import("../../store/browser.ts");
 
 let loaded: Promise<BrowserStoreModule> | undefined;
 
-/** The store, loaded when it is first needed. */
-const storeModule = Effect.tryPromise({
-  try: () => {
-    loaded ??= import("../../store/browser.ts");
+/** The store once it has loaded. */
+let store: BrowserStoreModule | undefined;
 
-    return loaded;
-  },
-  catch: (cause) => new NativeUnavailable({ operation: { name: "browserState.load" }, cause }),
-});
+/**
+ * The store, loaded when it is first needed. Once it is there it is handed over at once, so a call made from a native
+ * callback, like leaving the foreground, reaches the store before the callback returns.
+ */
+const storeModule = Effect.suspend(() =>
+  store
+    ? Effect.succeed(store)
+    : Effect.tryPromise({
+        try: () => {
+          loaded ??= import("../../store/browser.ts").then((module) => (store = module));
+
+          return loaded;
+        },
+        catch: (cause) => new NativeUnavailable({ operation: { name: "browserState.load" }, cause }),
+      }),
+);
 
 export class BrowserState extends Context.Service<
   BrowserState,
@@ -35,6 +45,11 @@ export class BrowserState extends Context.Service<
     readonly ready: () => Effect.Effect<boolean, NativeUnavailable>;
     /** Changes the state. */
     readonly dispatch: (action: BrowserAction) => Effect.Effect<void, NativeUnavailable>;
+    /**
+     * Replaces the state with the saved one, archiving the tabs left alone too long, and says the store is ready. With
+     * nothing saved, the state the store started with stays and is ready as it is.
+     */
+    readonly restore: (saved: BrowserData | null) => Effect.Effect<void, NativeUnavailable>;
     /** Calls `listener` when the state changes. It stops when the scope that registered it closes. */
     readonly subscribe: (listener: (data: BrowserData, previous: BrowserData) => void) => Effect.Effect<void, never, Scope.Scope>;
   }
@@ -59,6 +74,7 @@ export class BrowserState extends Context.Service<
         data: () => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().data)),
         ready: () => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().ready)),
         dispatch: (action) => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().dispatch(action))),
+        restore: (saved) => Effect.flatMap(storeModule, (module) => Effect.sync(() => module.useBrowserStore.getState().restore(saved))),
         subscribe: (listener) =>
           Effect.gen(function* () {
             const scope = yield* Scope.Scope;

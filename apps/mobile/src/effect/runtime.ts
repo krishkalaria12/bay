@@ -7,6 +7,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Scope from "effect/Scope";
 import { recordCrash } from "../crashReports.ts";
 import { LocaleService } from "../i18n/service.ts";
+import { Persistence } from "../store/persistence.ts";
 import { BrowserState } from "./ports/browserState.ts";
 import { Diagnostics } from "./ports/diagnostics.ts";
 import { Engine } from "./ports/engine.ts";
@@ -27,7 +28,8 @@ const diagnostics = Diagnostics.layer;
 // The links port reads the engine's share listener, so it needs the engine to be there.
 const links = Links.layer.pipe(Layer.provide(Engine.layer));
 
-// The saved language on disk, kept through the ports it shares with everything else.
+// The browsing state and the saved language on disk, kept through the ports they share with everything else.
+const persistence = Persistence.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, BrowserState.layer, Engine.layer, Lifecycle.layer, diagnostics)));
 const locale = LocaleService.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Lifecycle.layer, diagnostics)));
 
 /** The app's services, ready to be built. */
@@ -40,6 +42,7 @@ export const appLayer = Layer.mergeAll(
   Lifecycle.layer,
   links,
   BrowserState.layer,
+  persistence,
   locale,
 ).pipe(Layer.provide(diagnostics));
 
@@ -95,8 +98,8 @@ export const runMobile = <A, E>(program: Effect.Effect<A, E, AppServices>): Prom
 export const disposeMobileRuntime = (): Promise<void> => mobileRuntime.dispose();
 
 /**
- * Starts the services that outlive the bootstrap: the saved language, which follows the app's state, and the links
- * that reach Bay from other apps.
+ * Starts the services that outlive the bootstrap: the browsing state and the saved language, which follow the app's
+ * state, and the links that reach Bay from other apps.
  *
  * A service that fails to start is a failure the user never sees, but the app still has to run: it is reported once,
  * where every other failure goes, and the others still start.
@@ -112,6 +115,11 @@ const startServices = (): Promise<void> =>
           // The listeners are registered on the app scope now; what they do belongs to the services that follow.
           // Each start needs a different service, so the list is typed by what the app layer gives them all.
           const starts: readonly Effect.Effect<void, unknown, Scope.Scope | Layer.Success<typeof appLayer>>[] = [
+            Effect.gen(function* () {
+              const persistence = yield* Persistence;
+
+              yield* persistence.start();
+            }),
             Effect.gen(function* () {
               const locale = yield* LocaleService;
 

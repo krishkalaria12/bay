@@ -531,6 +531,18 @@ export const fakeBrowserState = (ledger: ResourceLedger = new ResourceLedger()):
 
           for (const subscriber of subscribers) subscriber(data, previous);
         }),
+      restore: (saved) =>
+        Effect.sync(() => {
+          const previous = data;
+
+          ready = true;
+
+          if (!saved) return;
+
+          data = reduceBrowserData(saved, { type: "archive-stale", now: Date.now() });
+
+          for (const subscriber of subscribers) subscriber(data, previous);
+        }),
       subscribe: (listener) =>
         Effect.gen(function* () {
           const scope = yield* Scope.Scope;
