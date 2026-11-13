@@ -7,6 +7,11 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Scope from "effect/Scope";
 import { Favicons } from "../browser/favicons.ts";
 import { Snapshots } from "../browser/snapshots.ts";
+import { Logins } from "../browser/credentials.ts";
+import { startDownloads } from "../browser/downloads.ts";
+import { IncomingLinks } from "../browser/incoming.ts";
+import { LinkResolver } from "../browser/linkResolver.ts";
+import { PrivateSession } from "../browser/privateSession.ts";
 import { recordCrash } from "../crashReports.ts";
 import { LocaleService } from "../i18n/service.ts";
 import { Persistence } from "../store/persistence.ts";
@@ -21,7 +26,21 @@ import { Links } from "./ports/links.ts";
 import { SecureStore } from "./ports/secureStore.ts";
 
 /** The services every mobile workflow can rely on. */
-export type AppServices = Files | Http | SecureStore | Engine | Lifecycle | Links | BrowserState | Diagnostics | Snapshots | Favicons;
+export type AppServices =
+  | Files
+  | Http
+  | SecureStore
+  | Engine
+  | Lifecycle
+  | Links
+  | BrowserState
+  | Diagnostics
+  | Snapshots
+  | Favicons
+  | Logins
+  | PrivateSession
+  | IncomingLinks
+  | LinkResolver;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -34,11 +53,20 @@ const links = Links.layer.pipe(Layer.provide(Engine.layer));
 // The browsing state and the saved language on disk, kept through the ports they share with everything else.
 const persistence = Persistence.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, BrowserState.layer, Engine.layer, Lifecycle.layer, diagnostics)));
 const locale = LocaleService.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Lifecycle.layer, diagnostics)));
+
 // The content blocker follows the preferences and keeps the filter lists on disk fresh.
 const blocker = Blocker.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Http.layer, Engine.layer, BrowserState.layer)));
+
 // Page work reads the page through the engine and lands its results in the browser's state.
 const snapshots = Snapshots.layer.pipe(Layer.provide(Layer.mergeAll(Engine.layer, BrowserState.layer)));
 const favicons = Favicons.layer.pipe(Layer.provide(Layer.mergeAll(Engine.layer, Files.layer, BrowserState.layer)));
+
+// Saved logins, the private session and the links that reach Bay. The memo map builds each port once, however many
+// services need it.
+const logins = Logins.layer.pipe(Layer.provide(SecureStore.layer));
+const privateSession = PrivateSession.layer.pipe(Layer.provide(Layer.mergeAll(Engine.layer, BrowserState.layer)));
+const incomingLinks = IncomingLinks.layer.pipe(Layer.provide(Layer.mergeAll(links, BrowserState.layer)));
+const linkResolver = LinkResolver.layer.pipe(Layer.provide(Http.layer));
 
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
@@ -55,6 +83,10 @@ export const appLayer = Layer.mergeAll(
   blocker,
   snapshots,
   favicons,
+  logins,
+  privateSession,
+  incomingLinks,
+  linkResolver,
 ).pipe(Layer.provide(diagnostics));
 
 /** The key the runtime keeps itself under, so a reloaded module can find the one it replaces. */
@@ -121,7 +153,7 @@ const startServices = (): Promise<void> =>
       Scope.provide(appScope)(
         Effect.gen(function* () {
           const diagnostics = yield* Diagnostics;
-          const links = yield* Links;
+
           // The listeners are registered on the app scope now; what they do belongs to the services that follow.
           // Each start needs a different service, so the list is typed by what the app layer gives them all.
           const starts: readonly Effect.Effect<void, unknown, Scope.Scope | Layer.Success<typeof appLayer>>[] = [
@@ -134,12 +166,6 @@ const startServices = (): Promise<void> =>
               const locale = yield* LocaleService;
 
               yield* locale.start();
-            }),
-            Effect.gen(function* () {
-              yield* links.onLink(() => undefined);
-            }),
-            Effect.gen(function* () {
-              yield* links.onShare(() => undefined);
             }),
             Effect.gen(function* () {
               const blocker = yield* Blocker;
@@ -156,6 +182,17 @@ const startServices = (): Promise<void> =>
 
               yield* favicons.start;
             }),
+            Effect.gen(function* () {
+              const incomingLinks = yield* IncomingLinks;
+
+              yield* incomingLinks.start;
+            }),
+            Effect.gen(function* () {
+              const privateSession = yield* PrivateSession;
+
+              yield* privateSession.start;
+            }),
+            startDownloads,
           ];
 
           // Each service owns its startup. One that fails must not hold up the others.

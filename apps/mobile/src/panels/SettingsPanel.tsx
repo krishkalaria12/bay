@@ -8,6 +8,7 @@ import { engineInfo } from "@bay/engine";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
 import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
+import { useScopedWork } from "@/effect/react";
 import { Icon } from "@/chrome/Icon";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
@@ -164,8 +165,10 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Saved logins (B20), reloaded each time the sheet opens on the privacy page.
-  const [logins, setLogins] = useState<SavedLogin[] | null>(null);
+  // Saved logins (B20), reloaded each time the sheet opens on the privacy page. Leaving the page drops the read.
+  const loginsOpen = props.visible && page === "privacy";
+  const { run: runLogins, result: loginsResult } = useScopedWork<readonly SavedLogin[]>(loginsOpen ? "logins" : "closed");
+  const logins = loginsResult?._tag === "Done" ? loginsResult.value : null;
   const mounted = useRef(true);
   useEffect(
     () => () => {
@@ -181,14 +184,11 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   }, [props.visible]);
 
   useEffect(() => {
-    if (!props.visible || page !== "privacy") return;
+    if (loginsOpen) runLogins(savedLogins);
+  }, [loginsOpen, runLogins]);
 
-    void savedLogins().then(setLogins, () => setLogins([]));
-  }, [props.visible, page]);
-
-  async function forgetSaved(login: SavedLogin): Promise<void> {
-    await forgetLogin(login.origin, login.username).catch(() => {});
-    void savedLogins().then(setLogins, () => undefined);
+  function forgetSaved(login: SavedLogin): void {
+    runLogins(forgetLogin(login.origin, login.username));
   }
 
   async function clearData(): Promise<void> {
@@ -303,7 +303,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                     detail={login.origin}
                     value={t("settings.passwords.delete")}
                     destructive
-                    onPress={() => void forgetSaved(login)}
+                    onPress={() => forgetSaved(login)}
                   />
                 ))}
               </Group>

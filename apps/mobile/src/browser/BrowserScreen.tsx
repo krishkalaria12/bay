@@ -1,26 +1,15 @@
 import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
 import { hostOf } from "@bay/core/src/input.ts";
-import {
-  clearData,
-  privateBrowsingSupported,
-  saveImage,
-  setPrivateSessionActive,
-  addShareListener,
-  takeShare,
-  type LinkPress,
-  type NavigationState,
-  type PageRequest,
-  type PageScroll,
-  type Tab,
-} from "@bay/engine";
+import { clearData, privateBrowsingSupported, saveImage, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FiberSet from "effect/FiberSet";
+import * as Scope from "effect/Scope";
 import * as Clipboard from "expo-clipboard";
-import { fetch as expoFetch } from "expo/fetch";
-import * as Linking from "expo-linking";
 import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
 import { useThemeColor } from "heroui-native";
-import * as Effect from "effect/Effect";
-import * as FiberSet from "effect/FiberSet";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { AppState, BackHandler, Keyboard, Platform, Pressable, Share, StyleSheet, View } from "react-native";
@@ -40,7 +29,7 @@ import { Diagnostics } from "@/effect/ports/diagnostics";
 import { Engine } from "@/effect/ports/engine";
 import { Lifecycle } from "@/effect/ports/lifecycle";
 import { useCommand } from "@/effect/react";
-import { t as translate, useT, type Translate } from "@/i18n";
+import { useT, type Translate } from "@/i18n";
 import { ArchivePanel, LinkMenu, PageMenu, SettingsPanel, SiteSettingsPanel, TabsMenu } from "@/panels";
 import { DownloadsPanel } from "@/panels/DownloadsPanel";
 import { HistoryPanel } from "@/panels/HistoryPanel";
@@ -54,7 +43,7 @@ import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
 import type { BrowserTab } from "@/store/types";
 import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
-import { saveLogin, savedLoginFor } from "./credentials";
+import { Logins } from "./credentials";
 import { originOf } from "./logins";
 import { PrivateLock } from "./PrivateLock";
 import { SearchCard, type OpenTarget } from "./SearchCard";
@@ -67,6 +56,7 @@ import { Wallpaper } from "./Wallpaper";
 import { FindBar } from "./FindBar";
 import { Favicons } from "./favicons";
 import type { ImportedTab } from "./importTabs";
+import { IncomingLinks } from "./incoming";
 import { bayCommand, incomingLink, type BayCommand } from "./incomingLink";
 import { sameNavigation } from "./navigationEvents";
 import { Snapshots } from "./snapshots";
@@ -86,6 +76,32 @@ const visited = new Map<string, string>();
 
 // Tabs whose current load failed: the engine shows its own error document, whose title and snapshot aren't the page's.
 const failed = new Set<string>();
+
+// Work tied to a tab's current page, like a silent sign-in waiting on the secure store. It ends when the tab loads
+// again or its view goes, because the engine cancels the page's requests then.
+const tabWork = new Map<string, Scope.Closeable>();
+
+/** Runs a program for a tab's current page: a new load or a closed tab interrupts it. */
+function runForTab(tabId: string, name: string, program: Effect.Effect<void, never, Logins>): void {
+  let scope = tabWork.get(tabId);
+
+  if (!scope) {
+    scope = Effect.runSync(Scope.make());
+    tabWork.set(tabId, scope);
+  }
+
+  runCommand({ name, resource: tabId }, Effect.flatMap(Effect.forkIn(program, scope), Fiber.join));
+}
+
+/** Ends the work tied to a tab's page. */
+function endTabWork(tabId: string): void {
+  const scope = tabWork.get(tabId);
+
+  if (!scope) return;
+
+  tabWork.delete(tabId);
+  void Effect.runPromise(Scope.close(scope, Exit.void));
+}
 
 type Overlay = "none" | "search" | "tabs";
 
@@ -143,8 +159,6 @@ export function BrowserScreen(): JSX.Element {
   const lastTab = useRef<string | null>(null);
   // A card in the switcher, growing into the page it stands for (A1).
   const [zoom, setZoom] = useState<{ tab: BrowserTab; frame: Frame } | null>(null);
-  // A link another app handed Bay (B9): `null` between links, whatever they sent until the tabs can take it.
-  const incoming = useRef<string | null>(null);
   const barHidden = useSharedValue(0);
 
   const active = data.tabs.find((tab) => tab.id === data.activeTabId) ?? data.tabs[0]!;
@@ -165,12 +179,6 @@ export function BrowserScreen(): JSX.Element {
   const { blockContent, blockingPausedHosts, lockPrivateTabs } = data.preferences;
   const hasPrivateTabs = data.tabs.some((tab) => tab.private);
   const lockEnabled = lockPrivateTabs && hasPrivateTabs;
-
-  // Only MAX_LIVE page views stay mounted, so the private session belongs to the private tabs, not their views: it
-  // lasts until the last private tab closes, and a launch (which never restores private tabs) ends any left over.
-  useEffect(() => {
-    setPrivateSessionActive(hasPrivateTabs).catch((cause: unknown) => console.warn("Couldn't update the private session.", cause));
-  }, [hasPrivateTabs]);
 
   const { theme, startPageAfterHours } = data.preferences;
   useEffect(() => {
@@ -255,32 +263,16 @@ export function BrowserScreen(): JSX.Element {
     return () => subscription.remove();
   }, [lockEnabled]);
 
-  // Links from other apps (B9): the default browser hands Bay whole web addresses. A link arriving while Bay runs
-  // opens at once; one that launched Bay waits for the saved tabs, so a cold start never opens over nothing.
-  useEffect(() => {
-    function take(url: string | null): void {
-      incoming.current = url;
-
-      // Ready is read live: the subscription is set up once, before the tabs load.
-      if (useBrowserStore.getState().ready) openIncomingLink();
-    }
-
-    void Linking.getInitialURL().then(take);
-    const subscription = Linking.addEventListener("url", (event) => take(event.url));
-    // Shares from other apps (B14): an Android SEND intent on a running app, and one that launched Bay cold read
-    // once on mount. iOS's extension opens `bay://share?url=…`, which the two lines above answer.
-    const shares = addShareListener(take);
-    void takeShare().then(take);
-
-    return () => {
-      subscription.remove();
-      shares.remove();
-    };
-  }, []);
+  // Links from other apps (B9, B14): the default browser hands Bay whole web addresses. The app listens for them and
+  // keeps one that launched Bay until the saved tabs load; the screen opens each as it is handed over, with the
+  // newest of its own handlers.
+  const openIncoming = useRef<(url: string) => void>(() => {});
+  openIncoming.current = openIncomingLink;
+  const { run: listenForLinks } = useCommand<never, never>();
 
   useEffect(() => {
-    if (ready) openIncomingLink();
-  }, [ready]);
+    listenForLinks(IncomingLinks.use((incoming) => incoming.receive((url) => openIncoming.current(url))));
+  }, [listenForLinks]);
 
   async function authenticate(): Promise<boolean> {
     const result = await LocalAuthentication.authenticateAsync({ promptMessage: t("lock.prompt") });
@@ -336,7 +328,8 @@ export function BrowserScreen(): JSX.Element {
     if (started) {
       // A new document has no media until it reports some.
       media.loadStarted(tabId);
-      // The engine cancels a pending dialog when a tab loads, so its sheet goes with it.
+      // The engine cancels a pending dialog when a tab loads, so its sheet goes with it, and so does a sign-in lookup.
+      endTabWork(tabId);
       setPageRequests((previous) => (previous.some((entry) => entry.tabId === tabId) ? previous.filter((entry) => entry.tabId !== tabId) : previous));
       failed.delete(tabId);
       setError((current) => (current?.tabId === tabId ? null : current));
@@ -431,9 +424,7 @@ export function BrowserScreen(): JSX.Element {
     else if (privateBrowsingSupported) openTab("", false, true);
   }
 
-  function openIncomingLink(): void {
-    const incomingUrl = incoming.current;
-    incoming.current = null;
+  function openIncomingLink(incomingUrl: string): void {
     const command = bayCommand(incomingUrl);
 
     if (command) {
@@ -549,16 +540,32 @@ export function BrowserScreen(): JSX.Element {
       const privately = Boolean(useBrowserStore.getState().data.tabs.find((tab) => tab.id === tabId)?.private);
 
       if (origin && !privately) {
-        void savedLoginFor(origin).then((login) => {
-          if (login) {
-            void views
-              .get(tabId)
-              ?.answerPageRequest(request.id, true, undefined, login.username, login.password)
-              .catch(() => {});
-          } else {
-            setPageRequests((previous) => (previous.some((entry) => entry.request.id === request.id) ? previous : [...previous, { tabId, request }]));
-          }
-        });
+        // The lookup belongs to the page that asked: when the tab loads again or closes, it stops, so a login found
+        // late never reaches the next page.
+        runForTab(
+          tabId,
+          "logins.signIn",
+          Effect.gen(function* () {
+            const logins = yield* Logins;
+            // A secure store that can't be read asks the user instead.
+            const login = yield* logins.find(origin).pipe(Effect.orElseSucceed(() => null));
+
+            if (!login) {
+              yield* Effect.sync(() =>
+                setPageRequests((previous) => (previous.some((entry) => entry.request.id === request.id) ? previous : [...previous, { tabId, request }])),
+              );
+
+              return;
+            }
+
+            const view = views.get(tabId);
+
+            if (!view) return;
+
+            // The page may have dropped the request on its own; then there is no one left to answer.
+            yield* Effect.tryPromise(() => view.answerPageRequest(request.id, true, undefined, login.username, login.password)).pipe(Effect.ignore);
+          }),
+        );
 
         return;
       }
@@ -582,7 +589,14 @@ export function BrowserScreen(): JSX.Element {
       const origin = originOf(current.request.url);
       const privately = Boolean(useBrowserStore.getState().data.tabs.find((tab) => tab.id === current.tabId)?.private);
 
-      if (origin && !privately) void saveLogin({ origin, username, password, savedAt: Date.now() }).catch(() => {});
+      if (origin && !privately) {
+        const login = { origin, username, password, savedAt: Date.now() };
+
+        runCommand(
+          { name: "logins.save", resource: origin },
+          Logins.use((logins) => logins.save(login)),
+        );
+      }
     }
   }
 
@@ -743,7 +757,13 @@ export function BrowserScreen(): JSX.Element {
                       } else reading.pageMessage(message);
                     }
                   }}
-                  register={(view) => (view ? views.set(id, view) : views.delete(id))}
+                  register={(view) => {
+                    if (view) views.set(id, view);
+                    else {
+                      views.delete(id);
+                      endTabWork(id);
+                    }
+                  }}
                   onNavigation={(state) => onNavigation(id, state)}
                   onError={({ url, message }) => {
                     failed.add(id);
@@ -1161,7 +1181,6 @@ export function BrowserScreen(): JSX.Element {
             .then(() => toast.show(Platform.OS === "ios" ? t("toast.savedToPhotos") : t("toast.savedToDownloads")))
             .catch(() => toast.show(t("toast.imageNotSaved")));
         }}
-        onResolveDestination={() => resolveDestination(link?.url ?? "")}
       />
       <PageRequestPanel request={pageRequest?.request ?? null} onAnswer={answerPageRequest} />
 
@@ -1202,56 +1221,4 @@ function translateUrl(url: string): string {
   const language = Intl.DateTimeFormat().resolvedOptions().locale.split("-")[0] || "en";
 
   return `https://translate.google.com/translate?sl=auto&tl=${language}&u=${encodeURIComponent(url)}`;
-}
-
-/** Follow a link's redirects without opening it, to show where it really goes. */
-async function resolveDestination(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
-
-  try {
-    let response = await fetch(url, { method: "HEAD", signal: controller.signal });
-
-    if (response.status === 405 || response.status === 501) response = await fetch(url, { signal: controller.signal });
-
-    return response.url || url;
-  } catch {
-    // iOS's App Transport Security refuses a plain-http hop, and the whole fetch fails with it (iana.org/domains/example
-    // redirects to http://www.iana.org/…). Walk the redirects one at a time instead: the hop that can't be loaded is
-    // where the link goes.
-    const last = await lastHop(url, controller.signal);
-
-    if (last) return last;
-
-    throw new Error(translate("linkMenu.unreachable"));
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-// Browsers give up after about 20; a link menu needs far fewer to say where a link goes.
-const MAX_REDIRECTS = 10;
-
-/** The last address a link's redirects reach, read hop by hop; null when the link itself can't be reached. */
-async function lastHop(url: string, signal: AbortSignal): Promise<string | null> {
-  let current = url;
-
-  for (let hop = 0; hop < MAX_REDIRECTS; hop++) {
-    let location: string | null;
-
-    try {
-      const response = await expoFetch(current, { method: "HEAD", redirect: "manual", signal });
-
-      location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
-    } catch {
-      return hop === 0 ? null : current;
-    }
-
-    if (!location) return current;
-
-    // A relative Location resolves against the hop that sent it; an absolute one stays as it is.
-    current = new URL(location, current).href;
-  }
-
-  return current;
 }
