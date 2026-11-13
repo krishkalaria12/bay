@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { Sync, SyncFailure, SyncStopped, type SyncWorker } from "./service";
 import { ownsProfileData } from "../store/spaces";
 import { checked } from "../lib/checked";
+import { platformWords } from "../lib/platformWords";
 import { isJsonObject, type JsonInput, type JsonObject } from "../lib/json";
 import { readDocument, saveDocument, writeDocument } from "@bay/desktop";
 import {
@@ -54,8 +55,8 @@ export const DATA_TYPES: { id: DataType; title: string; description: string }[] 
   { id: "bookmarks", title: "Bookmarks", description: "Each synced space’s bookmarks bar and other bookmarks." },
   { id: "history", title: "History", description: "The last 90 days." },
   { id: "tabs", title: "Open Tabs", description: "Your other devices’ tabs show in the tab overflow menu." },
-  { id: "pinned", title: "Pinned Tabs and Groups", description: "Pinned tabs, folders and file paths. File access stays on each Mac." },
-  { id: "passwords", title: "Passwords", description: "Saved passwords. Turning sync off never removes them from this Mac." },
+  { id: "pinned", title: "Pinned Tabs and Groups", description: `Pinned tabs, folders and file paths. File access stays on ${platformWords.eachComputer}.` },
+  { id: "passwords", title: "Passwords", description: `Saved passwords. Turning sync off never removes them from ${platformWords.thisComputer}.` },
   { id: "settings", title: "Settings", description: "Search engine, appearance, tab and keyboard settings." },
 ];
 
@@ -538,7 +539,7 @@ function publishUi(patch: Partial<SyncUi> = {}) {
   });
 }
 
-export const deviceName = () => SyncNative?.deviceName() ?? "This Mac";
+export const deviceName = () => SyncNative?.deviceName() ?? platformWords.thisComputerTitle;
 
 // MARK: Adapters
 
@@ -962,7 +963,7 @@ async function turnOnSyncInternal(folder: string): Promise<{ ok: true } | { erro
   const deviceId = native.newDeviceId();
 
   try {
-    if (!(await native.createPhrase(deviceId))) return { error: "Couldn’t save the sync key in your Keychain." };
+    if (!(await native.createPhrase(deviceId))) return { error: `Couldn’t save the sync key in ${platformWords.secretStore}.` };
     assertSyncGeneration(generation);
     await native.createChain(folder);
   } catch (error) {

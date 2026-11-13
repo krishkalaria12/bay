@@ -134,7 +134,7 @@ const phraseError = (r: PhraseOutcome): string | null => {
     case "noData":
       return "There’s no synced data in this folder yet. Choose the folder your other devices sync to, or wait for it to finish downloading.";
     case "keychain":
-      return "Couldn’t save the sync key in your Keychain.";
+      return `Couldn’t save the sync key in ${platformWords.secretStore}.`;
     case "unavailable":
       return "Sync isn’t available in this build.";
     case "quitting":

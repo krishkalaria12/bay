@@ -126,7 +126,7 @@ export class ShellEngine extends Context.Service<
         catch: (cause) =>
           new ShellFailure({
             operation: { name: "shell.windowIds" },
-            message: "The windows the Mac has open could not be read.",
+            message: "The system's open windows could not be read.",
             cause,
           }),
       }),
@@ -136,7 +136,7 @@ export class ShellEngine extends Context.Service<
         catch: (cause) =>
           new ShellFailure({
             operation: { name: "shell.isDarkAppearance" },
-            message: "The Mac's appearance could not be read.",
+            message: "The system's appearance could not be read.",
             cause,
           }),
       }),
@@ -146,7 +146,7 @@ export class ShellEngine extends Context.Service<
         catch: (cause) =>
           new ShellFailure({
             operation: { name: "shell.setAppearance" },
-            message: "The Mac's appearance could not be set.",
+            message: "The system's appearance could not be set.",
             cause,
           }),
       }),
@@ -196,7 +196,7 @@ export class ShellEngine extends Context.Service<
         catch: (cause) =>
           new ShellFailure({
             operation: { name: "shell.setMenuState" },
-            message: "The menu's state could not be sent to the Mac.",
+            message: "The menu's state could not be sent to the system.",
             cause,
           }),
       }),

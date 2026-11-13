@@ -307,7 +307,7 @@ function CardSheet({ profile, saved, onChanged }: { profile: string; saved?: Sav
   };
 
   const remove = async () => {
-    if (!saved || !(await confirmDelete("Delete this card?", "Its number is removed from your Keychain too."))) return;
+    if (!saved || !(await confirmDelete("Delete this card?", `Its number is removed from ${cardStoreName(platformOS)} too.`))) return;
     await deleteCard(profile, saved.id);
     onChanged();
     closeSettingsSheet();

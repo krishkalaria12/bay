@@ -1,4 +1,5 @@
 import { View, isMac, shortcutLabel } from "@bay/platform";
+import { platformWords } from "../../../lib/platformWords";
 import {
   checkForUpdates,
   isDefaultBrowser,
@@ -184,7 +185,7 @@ function UpdatesSection() {
         description={
           <TidyModelNote
             available="Apple's on-device model writes the new names. Nothing leaves this Mac."
-            fallback="Bay cleans the names on this Mac. Nothing leaves it."
+            fallback={`Bay cleans the names on ${platformWords.thisComputer}. Nothing leaves it.`}
           />
         }
       />
