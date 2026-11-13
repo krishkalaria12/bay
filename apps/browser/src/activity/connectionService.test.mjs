@@ -7,7 +7,8 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as TestClock from "effect/testing/TestClock";
 
-const { ConnectionEngine, ConnectionService } = await import("./connectionService.ts");
+const { ConnectionEngine, ConnectionService, currentConnections } = await import("./connectionService.ts");
+const { startAccountRequests } = await import("./sources.ts");
 const { LiveError } = await import("./types.ts");
 const { endpoints } = await import("./net.ts");
 const { GOOGLE_REDIRECT } = await import("./constants.ts");
@@ -420,5 +421,58 @@ test("a token never reaches a diagnostic", async () => {
     for (const report of diagnostics.reports) {
       assert.equal(JSON.stringify(report).includes("ghp_the_token"), false, "the token was in the report");
     }
+  });
+});
+
+test("a connection still being checked when its owner stops writes neither the Keychain nor the account", async () => {
+  await withConnections(async ({ lab, work }) => {
+    lab.gate = Promise.withResolvers();
+    lab.answers.set(`${endpoints.notion}/users/me`, { name: "Late", bot: { workspace_name: "Late" } });
+
+    const before = live().accounts.notion;
+    const stopRequests = startAccountRequests();
+    const connecting = work((service) => service.connectNotion("notion-token"));
+
+    await tick();
+    assert.equal(lab.requests.length, 1, "the token is being checked");
+
+    // The coordinator's service-state owner stops while the provider has not answered.
+    stopRequests();
+    stopRequests();
+    lab.gate.resolve();
+
+    await assert.rejects(connecting, /Cancelled/);
+    assert.deepEqual(lab.writesStarted, [], "the late answer did not reach the Keychain");
+    assert.equal(live().accounts.notion, before, "the late answer did not connect the account");
+
+    // A request the next owner makes is its own, and connects.
+    lab.gate = null;
+    await work((service) => service.connectNotion("notion-token"));
+    assert.deepEqual(lab.writes, ["notion"]);
+    assert.equal(live().accounts.notion?.login, "Late");
+
+    await work((service) => service.disconnect("notion"));
+  });
+});
+
+test("a runtime that goes takes its late answers and its token refresh with it", async () => {
+  await withConnections(async ({ lab, runtime, work }) => {
+    lab.gate = Promise.withResolvers();
+    lab.answers.set(`${endpoints.confluence("https://late.example")}/wiki/rest/api/user/current`, { accountId: "late", displayName: "Late" });
+
+    const before = live().accounts.confluence;
+    const connecting = work((service) => service.connectConfluence("late.example", "me@example.com", "token"));
+
+    connecting.catch(() => {});
+    await tick();
+    assert.ok(currentConnections(), "the app reaches the runtime's connections");
+
+    await runtime.dispose();
+    lab.gate.resolve();
+    await tick();
+
+    assert.equal(currentConnections(), null, "the app no longer reaches a runtime that went");
+    assert.deepEqual(lab.writesStarted, [], "the late answer did not reach the Keychain");
+    assert.equal(live().accounts.confluence, before, "the late answer did not connect the account");
   });
 });

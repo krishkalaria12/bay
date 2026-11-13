@@ -31,7 +31,7 @@ registerHooks({
   },
 });
 
-const { refreshCalendar, startCalendar, useCalendar } = await import("./calendar.ts");
+const { connectCalendar, refreshCalendar, startCalendar, useCalendar } = await import("./calendar.ts");
 const { live, updateCalendarSettings, useLive } = await import("./activityStore.ts");
 const { slowTimersForTests } = await import("../lib/throttledTimers.ts");
 
@@ -226,3 +226,48 @@ for (const failure of ["native registration", "later subscription"]) {
     await settle();
   });
 }
+
+test("calendar permission completion cannot start a refresh for a disposed meeting owner", async (context) => {
+  setup(context);
+  const permission = deferred();
+  const ask = native.permission;
+
+  native.permission = () => permission.promise;
+  context.after(() => {
+    native.permission = ask;
+  });
+  let reads = 0;
+
+  native.calendars = async () => {
+    reads++;
+
+    return [{ id: "late" }];
+  };
+
+  let active = true;
+  const connecting = connectCalendar(() => active);
+
+  await settle();
+  const snapshot = useCalendar.getState();
+
+  active = false;
+  permission.resolve(true);
+  assert.equal(await connecting, true, "the owner that went still gets the Mac's answer");
+  await settle();
+  assert.equal(reads, 0, "the answer started no read");
+  assert.equal(useCalendar.getState(), snapshot);
+});
+
+test("calendar permission completion refreshes for an owner that is still there", async (context) => {
+  setup(context);
+  let reads = 0;
+
+  native.calendars = async () => {
+    reads++;
+
+    return [];
+  };
+
+  assert.equal(await connectCalendar(() => true), true);
+  assert.equal(reads, 1);
+});

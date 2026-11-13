@@ -33,7 +33,7 @@ import { accountToken } from "./connectionService";
 import { basic, endpoints, getSecret, notionHeaders, request } from "./net";
 import { live } from "./activityStore";
 import { LiveError, type CompletionState, type LiveFolder, type LiveItem, type LiveSourceId } from "./types";
-import { cancelConnection } from "./connections";
+import { retireConnections } from "./connections";
 
 export type LiveSource = {
   id: LiveSourceId;
@@ -210,9 +210,16 @@ export { connectGithub, connectBitbucket, connectNotion, connectConfluence, disc
 
 export type { DeviceSignIn as DeviceFlow } from "./connections";
 
-/** Account flows are cancelled when the coordinator's service-state owner stops. */
+/**
+ * The coordinator's service-state owner holds the account requests. When it stops, the flows end and a connection
+ * still waiting on a provider or the Keychain writes nothing, so it cannot land in the owner that comes next.
+ */
 export function startAccountRequests(): () => void {
+  let stopped = false;
+
   return () => {
-    for (const source of Object.values(SOURCES)) cancelConnection(source.id);
+    if (stopped) return;
+    stopped = true;
+    retireConnections();
   };
 }

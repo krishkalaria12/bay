@@ -117,7 +117,7 @@ test("live results after disposal cannot overwrite a restarted fetch or clear it
   const previous = refreshFolder(folderId);
   stop();
   SOURCES.github.fetch.mock.mockImplementation(() => current.promise);
-  await start();
+  const stopCurrent = await start();
   const pending = refreshFolder(folderId);
   old.resolve([item("old")]);
   await previous;
@@ -131,7 +131,9 @@ test("live results after disposal cannot overwrite a restarted fetch or clear it
   await pending;
   await joined;
   assert.equal(live().items[folderId][0].id, "current");
-  stop();
+  // The restarted engine stops too, and an explicit refresh still works without it.
+  stopCurrent();
+  await settle();
   SOURCES.github.fetch.mock.mockImplementation(async () => [item("manual")]);
   await refreshFolder(folderId);
   assert.equal(live().items[folderId][0].id, "manual");

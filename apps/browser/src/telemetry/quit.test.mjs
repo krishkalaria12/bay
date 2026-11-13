@@ -283,3 +283,13 @@ test("cancelled quit preserves new usage counts instead of resetting the resumed
   assert.equal(counts[0].properties.windows_opened, 1);
   assert.equal(counts[1].properties.windows_opened, 1);
 });
+
+test("turning sharing on while the app quits keeps the session closed, and a cancelled quit opens it", async () => {
+  setSharing(false, "settings");
+  await prepareTelemetryForQuit();
+  setSharing(true, "settings");
+  assert.equal(devState().saved.sharing, true);
+  assert.equal(devState().saved.sessionOpen, false, "the next launch is not read as a crash");
+  await resumeTelemetryAfterQuit();
+  assert.equal(devState().saved.sessionOpen, true);
+});

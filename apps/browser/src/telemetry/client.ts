@@ -408,7 +408,8 @@ export function setSharing(on: boolean, source: SharingSource) {
     installId: uuidv4(),
     crashCursor: now,
     lastVersion: appInfo().appVersion,
-    sessionOpen: true,
+    // Turned on while the app quits: the session is already over, so the next launch is not read as a crash.
+    sessionOpen: !suspended,
     decidedAt: now,
     askDoneAt: saved.askDoneAt ?? now,
   });

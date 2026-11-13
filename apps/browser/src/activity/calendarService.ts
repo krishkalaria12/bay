@@ -146,8 +146,11 @@ export class CalendarService extends Context.Service<
   {
     /** Reads the Mac's calendar and shows it. */
     readonly refresh: () => Effect.Effect<void>;
-    /** Asks the Mac for the calendar's access, and shows it. */
-    readonly connect: () => Effect.Effect<boolean>;
+    /**
+     * Asks the Mac for the calendar's access, and shows it. `active` is the asking owner: an owner that went while
+     * the Mac was asking gets the answer, but starts no read.
+     */
+    readonly connect: (active?: () => boolean) => Effect.Effect<boolean>;
     /** Starts the refreshes: at the launch, when the calendar changes, and every few minutes. */
     readonly start: Effect.Effect<void>;
     /** Stops the watchers and the polling; the next start registers them again. */
@@ -267,9 +270,12 @@ export class CalendarService extends Context.Service<
           }),
         );
 
-      const connect = (): Effect.Effect<boolean> =>
+      const connect = (active: () => boolean = () => true): Effect.Effect<boolean> =>
         Effect.gen(function* () {
           const granted = yield* engine.requestAccess().pipe(Effect.catch(() => Effect.succeed(false)));
+
+          // The owner that asked is gone: its answer must not start a read that lands on the next owner's state.
+          if (!active()) return granted;
 
           yield* refresh();
 

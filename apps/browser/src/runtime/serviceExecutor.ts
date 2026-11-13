@@ -185,16 +185,15 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
     case "liveCreate":
       publicWindow(command.args[0]);
 
-      // The live engine is bound to the store this command came from (runtime/serviceState.ts), so the folders
-      // it keeps are the authority's own.
-      return await newLiveFolder(...command.args);
+      // The folder and its first refresh belong to the authority this command came from.
+      return await newLiveFolder(...command.args, browser);
     case "liveUpdate":
       folder(command.args[0]);
       updateFolder(...command.args);
       break;
     case "liveRemove":
       folder(command.args[0]);
-      deleteLiveFolder(...command.args);
+      deleteLiveFolder(...command.args, browser);
       break;
     case "liveMove":
       folder(command.args[0]);
@@ -216,7 +215,7 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
       break;
     case "liveRefresh":
       folder(command.args[0]);
-      await refreshFolder(...command.args);
+      await refreshFolder(...command.args, browser);
       break;
     case "liveOpen": {
       const [w, id, itemId, background] = command.args;
@@ -227,7 +226,7 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
 
       if (!item) return invalidCommand("live item no longer exists");
 
-      return await openLiveItem(w, id, item, { background });
+      return await openLiveItem(w, id, item, { background }, browser);
     }
 
     case "liveConnect": {
@@ -282,7 +281,8 @@ export async function executeServiceCommand(browser: BrowserStore, command: Serv
       await refreshCalendar();
       break;
     case "calendarConnect":
-      return connectCalendar();
+      // A command owner that stops while the Mac asks gets the answer, but starts no read.
+      return connectCalendar(isActive);
     case "calendarHidden":
       setCalendarHidden(...command.args);
       break;

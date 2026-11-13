@@ -65,9 +65,8 @@ export async function startCoordinatorEntry(transport: BrowserCoordinatorTranspo
             if (state.windows !== previous.windows) refresh();
           }),
         );
-        // Telemetry has one owner too. Its sessions live in the runtime's scope, so the telemetry gives back
-        // nothing of its own here.
-        startTelemetry();
+        // Telemetry has one owner too: its client stops with the coordinator.
+        stops.push(startTelemetry());
       } catch (error) {
         for (const stop of stops.reverse()) stop();
         throw error;

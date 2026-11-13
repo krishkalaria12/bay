@@ -31,16 +31,19 @@ export function refreshCalendar(): Promise<void> {
   );
 }
 
-/** Asks the Mac for the calendar's access, and shows it. */
-export function connectCalendar(): Promise<boolean> {
-  if (hasServiceClient()) return requestService("calendarConnect", []);
+/**
+ * Asks the Mac for the calendar's access, and shows it. `active` is the asking owner: one that went while the Mac
+ * was asking starts no read.
+ */
+export function connectCalendar(active: () => boolean = () => true): Promise<boolean> {
+  if (hasServiceClient()) return active() ? requestService("calendarConnect", []) : Promise.resolve(false);
 
   return runForStore(
     useBrowser,
     Effect.gen(function* () {
       const calendar = yield* CalendarService;
 
-      return yield* calendar.connect();
+      return yield* calendar.connect(active);
     }),
   );
 }

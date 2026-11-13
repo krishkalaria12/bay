@@ -54,6 +54,15 @@ export const cancelConnection = (source: LiveSourceId): void => {
   void Effect.runFork(service.cancelFlow(source));
 };
 
+/** The owner of the account requests went: every flow ends, and an answer still on its way connects nothing. */
+export const retireConnections = (): void => {
+  const service = currentConnections();
+
+  if (!service) return;
+
+  Effect.runSync(service.retire);
+};
+
 /** Starts GitHub's device flow: the code to type in, and the wait for it. */
 export const startGithubDeviceFlow = async (clientId: string): Promise<DeviceSignIn> => {
   if (hasServiceClient()) {

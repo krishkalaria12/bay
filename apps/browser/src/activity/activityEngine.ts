@@ -95,7 +95,7 @@ export function newLiveFolder(windowId: string, kind: LiveFolderKind, browser: B
       : (["notion", "confluence", "gdrive"] as const).filter((id) => s.accounts[id]);
 
   const id = createFolder(w.spaceId, kind, sources.length ? sources : undefined);
-  void refreshFolder(id);
+  void refreshFolder(id, browser);
 
   return id;
 }

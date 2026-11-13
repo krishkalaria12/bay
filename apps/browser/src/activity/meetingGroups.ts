@@ -218,7 +218,7 @@ async function offerAlerts(windowId: string, active: () => boolean) {
 
   if (!active()) return;
 
-  if (confirmed) await connectCalendar();
+  if (confirmed) await connectCalendar(active);
   else updateCalendarSettings({ alertLead: "never" });
 }
 

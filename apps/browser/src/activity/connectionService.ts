@@ -60,6 +60,9 @@ const parseTokens = (secret: string): GoogleTokens | null => {
 // The account as the app shows it.
 const account = (login: string, name: string | null, avatar: string | null): LiveAccount => ({ login, name, avatar, connectedAt: Date.now() });
 
+// Every account the app connects: an owner that goes moves each of them on.
+const ACCOUNTS: readonly LiveSourceId[] = ["github", "bitbucket", "notion", "confluence", "gdrive"];
+
 // The flow an account is having: the OAuth tab, or the device poll.
 type Flow = { readonly cancel: () => void };
 
@@ -190,6 +193,11 @@ export class ConnectionService extends Context.Service<
     readonly disconnect: (source: LiveSourceId) => Effect.Effect<void, LiveError>;
     /** The account's token, refreshed when it is due. */
     readonly token: (source: LiveSourceId) => Effect.Effect<string, LiveError>;
+    /**
+     * The owner of the requests went: every flow ends and every account moves on, so an answer still on its way
+     * writes neither the Keychain nor the account, here or in the owner that comes next.
+     */
+    readonly retire: Effect.Effect<void>;
   }
 >()("bay/ConnectionService") {
   static readonly layer = Layer.effect(
@@ -636,6 +644,17 @@ export class ConnectionService extends Context.Service<
           Effect.catch((error) => report("connection.keychain", source, error)),
         );
 
+      const retire = Effect.forEach(
+        ACCOUNTS,
+        (source) =>
+          Effect.suspend(() => {
+            generations.set(source, generation(source) + 1);
+
+            return endFlow(source);
+          }),
+        { discard: true },
+      );
+
       const service = ConnectionService.of({
         connectGithub,
         connectBitbucket,
@@ -646,12 +665,26 @@ export class ConnectionService extends Context.Service<
         cancelFlow: endFlow,
         disconnect,
         token,
+        retire,
       });
 
       // The sources ask for the token they need; the service owns the refresh behind it.
-      refresh = (source) => Effect.runPromise(token(source));
+      const ownRefresh = (source: LiveSourceId) => Effect.runPromise(token(source));
 
+      refresh = ownRefresh;
       installed = service;
+
+      // The runtime that built the service goes: its late answers land nowhere, and the app no longer reaches it.
+      yield* Scope.addFinalizer(
+        scope,
+        Effect.suspend(() => {
+          if (installed === service) installed = null;
+
+          if (refresh === ownRefresh) refresh = null;
+
+          return retire;
+        }),
+      );
 
       return service;
     }),
