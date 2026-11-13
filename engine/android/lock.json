@@ -6,6 +6,7 @@
   "chromiumUrl": "https://chromium.googlesource.com/chromium/src.git",
   "depotToolsCommit": "ccecefb58648ac0a416756b0a4591ec8905a7f55",
   "toolchains": "The Android SDK, NDK, JDK, clang and Rust come from the pinned Chromium DEPS; engine.json records the versions each build used.",
+  "gclientTargetOs": ["android"],
   "abi": "arm64-v8a",
   "outputDirectory": "out/Android_arm64",
   "target": "content_shell_apk",

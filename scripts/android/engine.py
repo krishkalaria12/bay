@@ -232,8 +232,8 @@ def fetch_source(root: pathlib.Path, env):
         '  "custom_deps": {},\n'
         '  "custom_vars": {},\n'
         '}]\n'
-        'target_os = ["android"]\n'
-        'target_os_only = True\n')
+        # Added to the host's own (Linux) dependencies, which the host toolchain needs: its sysroot, for one.
+        f'target_os = {json.dumps(LOCK["gclientTargetOs"])}\n')
 
 
 def download(root: pathlib.Path):
