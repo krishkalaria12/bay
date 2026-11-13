@@ -589,7 +589,7 @@ fn load_engine(
     version: &str,
     platform: crate::Platform,
 ) -> std::io::Result<Blocker> {
-    let header = format!("bay-adblock:{version}\n");
+    let header = format!("bay-adblock:{}:{version}\n", platform.cache_name());
     if let Ok(bytes) = std::fs::read(cache) {
         if let Some(blocker) = bytes
             .strip_prefix(header.as_bytes())
@@ -1155,6 +1155,11 @@ mod tests {
         let rebuilt =
             load_cached(&files, &cache, "v2", crate::Platform::AndroidWebView, None).unwrap();
         assert!(!blocked(&rebuilt));
+        // Another platform's cache at the same path and version is rebuilt, not reused.
+        std::fs::write(&list, "||ads.example^\n").unwrap();
+        let other =
+            load_cached(&files, &cache, "v2", crate::Platform::AndroidChromium, None).unwrap();
+        assert!(blocked(&other));
         std::fs::remove_dir_all(dir).ok();
     }
 

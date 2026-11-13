@@ -4,6 +4,9 @@ Bay for iPhone and Android lives in `apps/mobile` (Expo SDK 58). The desktop app
 covers the Mac build, this file covers the two stores.
 
 The plan behind it is `docs/mobile-plan.html`; item B8 is the release setup and stage 3 is the first public release.
+The Android engine transition is specified in [the Chromium implementation plan](android-chromium-plan.html): Linux GitHub
+Actions builds the engine artifact, EAS assembles the mobile app, and iOS keeps WebKit. That pipeline is planned work;
+the current Android implementation still uses the system WebView.
 
 ## What ships
 

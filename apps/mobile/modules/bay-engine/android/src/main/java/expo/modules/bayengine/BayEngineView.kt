@@ -55,6 +55,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.ProfileStore
 import androidx.webkit.ScriptHandler
 import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebStorageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import expo.modules.interfaces.permissions.Permissions
@@ -168,6 +169,8 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   /** Hosts this view moved from HTTP to HTTPS, with when; an HTTPS page that sends it straight back keeps HTTP. */
   private val upgradedHosts = mutableMapOf<String, Long>()
   private var usesPrivateProfile = false
+  /** The private session's profile this view's page uses, or null for a normal page. */
+  private var privateProfileName: String? = null
   private var scriptlets: ScriptHandler? = null
 
   /** Private pages use a separate WebView profile, deleted when the last private page closes. Set before the first load. */
@@ -234,8 +237,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     // A profile must be set before anything else touches the WebView.
     usesPrivateProfile = isPrivate && privateBrowsingSupported
     if (usesPrivateProfile) {
-      ProfileStore.getInstance().getOrCreateProfile(PRIVATE_PROFILE)
-      WebViewCompat.setProfile(this, PRIVATE_PROFILE)
+      val profile = privateSessionProfile()
+      privateProfileName = profile
+      ProfileStore.getInstance().getOrCreateProfile(profile)
+      WebViewCompat.setProfile(this, profile)
       privateViews += 1
     }
     layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
@@ -288,7 +293,7 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
     overScrollMode = OVER_SCROLL_NEVER
     setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
       // A private page's cookies are in its own profile. Asked per address, so a redirect to another host gets its own.
-      val cookieManager = if (usesPrivateProfile) ProfileStore.getInstance().getProfile(PRIVATE_PROFILE)?.cookieManager else CookieManager.getInstance()
+      val cookieManager = if (usesPrivateProfile) privateProfileName?.let { ProfileStore.getInstance().getProfile(it) }?.cookieManager else CookieManager.getInstance()
       // File hosts often refuse a download that doesn't say which page it came from.
       BayDownloads.start(context, url, userAgent, contentDisposition, mimeType, { address -> cookieManager?.getCookie(address) }, this.url, usesPrivateProfile)
       // The navigation became a download and never finishes, so the page stops loading here, back on the page it
@@ -465,9 +470,10 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
         popup.settings.setSupportMultipleWindows(true)
 
         // A popup from a private tab must live in the same private profile as its opener.
-        if (usesPrivateProfile) {
-          ProfileStore.getInstance().getOrCreateProfile(PRIVATE_PROFILE)
-          WebViewCompat.setProfile(popup, PRIVATE_PROFILE)
+        val profile = privateProfileName
+        if (usesPrivateProfile && profile != null) {
+          ProfileStore.getInstance().getOrCreateProfile(profile)
+          WebViewCompat.setProfile(popup, profile)
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(popup, false)
 
@@ -1020,9 +1026,9 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   private fun releasePrivateProfile() {
     if (!usesPrivateProfile) return
     usesPrivateProfile = false
+    privateProfileName = null
     privateViews -= 1
-    // The profile's cookies and storage go with it once no private page is left.
-    if (privateViews == 0) runCatching { ProfileStore.getInstance().deleteProfile(PRIVATE_PROFILE) }
+    endUnusedPrivateSession()
   }
 
   /** Loads once, when the view is created, unless a navigation already started. Invalid addresses are ignored. */
@@ -1376,8 +1382,76 @@ class BayEngineView(context: Context, appContext: AppContext) : ExpoView(context
   )
 
   companion object {
-    private const val PRIVATE_PROFILE = "bay-private"
+    /** Private session profiles are named `bay-private-<id>`; the bare name is the one older versions used. */
+    private const val PRIVATE_PROFILE_PREFIX = "bay-private"
+    private const val PROFILE_DELETION_ATTEMPTS = 12
     private var privateViews = 0
+    /** The app has private tabs, mounted or not (`setPrivateSessionActive`). */
+    private var privateSessionActive = false
+    /**
+     * The current private session's profile. Each session gets a new one: WebView lets go of a profile some time after
+     * its last page is destroyed, so a new session must never reuse one whose deletion is still waiting.
+     */
+    private var currentPrivateProfile: String? = null
+    private val profileHandler = Handler(Looper.getMainLooper())
+    private val retryProfileDeletion = Runnable { deleteRetiredPrivateProfiles() }
+    private var profileDeletionAttempts = 0
+
+    private fun privateSessionProfile(): String =
+      currentPrivateProfile ?: "$PRIVATE_PROFILE_PREFIX-${UUID.randomUUID()}".also { currentPrivateProfile = it }
+
+    /** Main thread. Only a few page views stay live, so the session outlives its views while private tabs exist. */
+    fun setPrivateSessionActive(active: Boolean) {
+      privateSessionActive = active
+      endUnusedPrivateSession()
+    }
+
+    /** Once no private tab or page is left, the session ends and its profile, with its cookies and storage, goes. */
+    private fun endUnusedPrivateSession() {
+      if (privateViews > 0 || privateSessionActive) return
+      currentPrivateProfile?.let(::wipePrivateProfile)
+      currentPrivateProfile = null
+      profileDeletionAttempts = 0
+      deleteRetiredPrivateProfiles()
+    }
+
+    /**
+     * Clears an ended session's cookies, storage and cache at once. WebView usually holds a profile it has used until
+     * the process ends, so deleting the profile itself often waits for the next launch.
+     */
+    private fun wipePrivateProfile(name: String) {
+      val profile = runCatching { ProfileStore.getInstance().getProfile(name) }.getOrNull() ?: return
+      profile.cookieManager.removeAllCookies { profile.cookieManager.flush() }
+      if (WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
+        WebStorageCompat.deleteBrowsingData(profile.webStorage) {}
+      } else {
+        profile.webStorage.deleteAllData()
+      }
+    }
+
+    /**
+     * Deletes every private profile but the current session's. One WebView still holds can't be deleted yet, so it is
+     * tried again, less often each time; the next launch deletes what's left. Profiles persist on disk, so this also
+     * removes ones a killed process left behind: a new process starts without private tabs.
+     */
+    private fun deleteRetiredPrivateProfiles() {
+      if (!privateBrowsingSupported) return
+      profileHandler.removeCallbacks(retryProfileDeletion)
+      val store = ProfileStore.getInstance()
+      var waiting = false
+      for (name in store.allProfileNames) {
+        if (!name.startsWith(PRIVATE_PROFILE_PREFIX) || name == currentPrivateProfile) continue
+        try {
+          store.deleteProfile(name)
+        } catch (inUse: IllegalStateException) {
+          waiting = true
+        }
+      }
+      if (waiting && profileDeletionAttempts < PROFILE_DELETION_ATTEMPTS) {
+        profileDeletionAttempts += 1
+        profileHandler.postDelayed(retryProfileDeletion, 1_000L shl minOf(profileDeletionAttempts, 6))
+      }
+    }
     /** Encodes and writes snapshots off the main thread, one at a time. */
     private val snapshotWriter = Executors.newSingleThreadExecutor()
     /** Base64 cap for a blob download crossing the bridge (~50 MB of file bytes). */

@@ -81,7 +81,10 @@ export interface EngineViewProps extends ViewProps {
    * saves it as the page changes. Ignored for private tabs, which leave nothing behind. Tab ids are the natural key.
    */
   stateKey?: string;
-  /** A private page keeps nothing: it uses a separate data store (iOS) or profile (Android), wiped when the last private page closes. Set at creation. */
+  /**
+   * A private page keeps nothing: it uses a separate data store (iOS) or profile (Android), wiped when the last private
+   * tab closes (`setPrivateSessionActive`). Set at creation.
+   */
   private?: boolean;
   /** Defaults to true. Hidden tabs pass false so assistive technology skips them. */
   active?: boolean;
@@ -142,12 +145,14 @@ export const EngineView = requireNativeView<EngineViewProps>("BayEngine");
 
 const nativeEngine = requireNativeModule<{
   clearData(): Promise<void>;
+  setPrivateSessionActive(active: boolean): Promise<void>;
   pruneSnapshots(keep: string[]): Promise<void>;
   pruneTabStates(keep: string[]): Promise<void>;
   setContentBlocking(listFiles: string[] | null, version: string): Promise<number | null>;
   setBlockingPausedHosts(hosts: string[]): void;
   setTrackingParameters(json: string): boolean;
   privateBrowsingSupported: boolean;
+  engineInfo: EngineInfo;
   openDownload(reference: string): Promise<void>;
   cancelDownload(id: string): Promise<void>;
   saveImage(url: string): Promise<void>;
@@ -158,6 +163,17 @@ const nativeEngine = requireNativeModule<{
   takeShare(): Promise<string | null>;
   setMediaSession?(title: string | null, site: string, playing: boolean): Promise<void>;
 }>("BayEngine");
+
+/** The engine that renders pages: system WebKit on iOS; on Android, the system WebView until Bay's own Chromium. */
+export interface EngineInfo {
+  family: "webkit" | "webview" | "chromium";
+  /** For people: WebKit, System WebView or Chromium. */
+  name: string;
+  /** The engine's version, or the iOS version WebKit comes with; empty when the system won't say. */
+  version: string;
+}
+
+export const engineInfo: EngineInfo = nativeEngine.engineInfo;
 
 /** False on Android when the installed WebView can't keep a separate profile; private tabs are unavailable then. */
 export const privateBrowsingSupported: boolean = nativeEngine.privateBrowsingSupported;
@@ -186,6 +202,15 @@ export interface TrackingParameters {
 /** The tracking-parameter table (`TRACKING_PARAMS` from `@bay/core`) both engines strip from main-frame navigations. */
 export function setTrackingParameters(table: TrackingParameters): boolean {
   return nativeEngine.setTrackingParameters(JSON.stringify(table));
+}
+
+/**
+ * Whether the app has private tabs, mounted or not. Only a few page views stay live, so private views come and go
+ * while their tabs exist: the private session (its cookies and storage) lasts while this is true, and ends once it
+ * is false and no private view is left. Call it whenever that changes, and once at launch.
+ */
+export function setPrivateSessionActive(active: boolean): Promise<void> {
+  return nativeEngine.setPrivateSessionActive(active);
 }
 
 /** Clear cookies, website storage, network cache and tab snapshots. Close page views first to prevent websites writing new data. */

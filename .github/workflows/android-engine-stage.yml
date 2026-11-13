@@ -1,0 +1,183 @@
+name: Android engine stage
+# One stage of android-engine.yml: resume the saved tree (or sync a fresh one), compile until the stage's time runs out,
+# then save the tree for the next stage. The first stage to finish the build publishes the `android-engine` artifact,
+# and the stages after it end straight away.
+on:
+  workflow_call:
+    inputs:
+      stage:
+        type: number
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  ENGINE_ARTIFACT: android-engine
+  # On the volume scripts/android/ci-disk.sh makes. The path must stay the same in every stage.
+  ENGINE_ROOT: /engine/root
+  STATE_DIR: /engine/state
+  REPORT_DIR: ${{ github.workspace }}/capacity
+
+jobs:
+  stage:
+    name: Stage ${{ inputs.stage }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Note the start
+        run: echo "JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Find saved work
+        id: find
+        run: |
+          pin=$(python scripts/android/engine.py pin)
+          echo "$pin"
+          echo "id=$(jq -r .id <<<"$pin")" >> "$GITHUB_OUTPUT"
+          # GITHUB_ENV only reaches later steps, so this step reads its own copy.
+          state=$(jq -r .stateArtifact <<<"$pin")
+          echo "STATE_ARTIFACT=$state" >> "$GITHUB_ENV"
+          built=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$ENGINE_ARTIFACT" --jq .total_count)
+          if (( built > 0 )); then
+            echo "An earlier stage published the engine"
+            echo "DONE=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          # Saved work only counts from this repository's own pushes and dispatches of android-engine.yml: never a
+          # fork's pull request, and never another workflow that happens to upload the same name. The name is
+          # checked here too, in case the API's filter ever matches loosely.
+          trusted() {
+            [[ -n $1 ]] || return 1
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$1&per_page=100" --jq '[.artifacts[]
+              | select(.name == "'"$1"'")
+              | select(.expired | not) | select(.workflow_run.repository_id == .workflow_run.head_repository_id)]
+              | sort_by(.created_at) | reverse | .[].workflow_run.id' | while read -r run; do
+              if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" --jq '.path + " " + .event' |
+                grep -Eqx '\.github/workflows/android-engine\.yml (push|workflow_dispatch)'; then
+                echo "$run"
+              fi
+            done
+          }
+          echo "engine_runs=$(trusted "$ENGINE_ARTIFACT" | head -3 | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+          echo "state_run=$(trusted "$state" | head -1)" >> "$GITHUB_OUTPUT"
+      - name: Reuse an engine built from these sources
+        id: reuse
+        if: env.DONE != 'true' && steps.find.outputs.engine_runs != ''
+        run: |
+          # The id hashes the pin, the GN args and the build driver, so an engine with this id is this engine.
+          for run in ${{ steps.find.outputs.engine_runs }}; do
+            rm -rf dist/android-engine
+            if gh run download "$run" -R "$GITHUB_REPOSITORY" -n "$ENGINE_ARTIFACT" -D dist/android-engine &&
+              [[ $(jq -r .id dist/android-engine/engine.json) == "${{ steps.find.outputs.id }}" ]]; then
+              (cd dist/android-engine && jq -r '.files | to_entries[] | "\(.value.sha256)  \(.key)"' engine.json | sha256sum -c -)
+              echo "Reusing ${{ steps.find.outputs.id }} from run $run"
+              echo "DONE=true" >> "$GITHUB_ENV"
+              echo "reused=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          rm -rf dist/android-engine
+          echo "No recent run built ${{ steps.find.outputs.id }}; compiling it"
+      - name: Make room for the engine
+        if: env.DONE != 'true'
+        run: bash scripts/android/ci-disk.sh /engine
+      - name: Start measuring
+        if: env.DONE != 'true'
+        run: |
+          nohup python scripts/android/capacity.py sample --dir "$REPORT_DIR" --path /engine >/dev/null 2>&1 &
+          python scripts/android/capacity.py snapshot --dir "$REPORT_DIR" --path /engine --label "stage-${{ inputs.stage }}-start"
+      - name: Install base tools
+        if: env.DONE != 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git curl file lsb-release zstd
+      - name: Download saved state
+        if: env.DONE != 'true' && steps.find.outputs.state_run != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.STATE_ARTIFACT }}
+          path: ${{ env.STATE_DIR }}
+          run-id: ${{ steps.find.outputs.state_run }}
+          github-token: ${{ github.token }}
+      - name: Restore saved state
+        if: env.DONE != 'true' && steps.find.outputs.state_run != ''
+        run: |
+          python scripts/android/capacity.py snapshot --dir "$REPORT_DIR" --path /engine --label "state-downloaded" \
+            --size "state=$STATE_DIR"
+          time python scripts/lib/engine-state.py restore --root "$ENGINE_ROOT" --archive "$STATE_DIR/state.tar.zst"
+          rm -rf "$STATE_DIR"
+          python scripts/android/engine.py verify --root "$ENGINE_ROOT"
+          python scripts/android/capacity.py snapshot --dir "$REPORT_DIR" --path /engine --label "state-restored"
+      - name: Download sources
+        if: env.DONE != 'true' && steps.find.outputs.state_run == ''
+        run: |
+          time python scripts/android/engine.py download --root "$ENGINE_ROOT"
+          python scripts/android/capacity.py snapshot --dir "$REPORT_DIR" --path /engine --label "synced" \
+            --size "src=$ENGINE_ROOT/chromium/src" --size "depot_tools=$ENGINE_ROOT/depot_tools"
+      - name: Install Chromium's build dependencies
+        # Every stage: each starts on a fresh runner, and the restored tree carries the script.
+        if: env.DONE != 'true'
+        run: sudo "$ENGINE_ROOT/chromium/src/build/install-build-deps.sh" --android --no-prompt --no-arm --no-chromeos-fonts
+      - name: Compile
+        id: compile
+        if: env.DONE != 'true'
+        run: |
+          # Leave a little over an hour of the job to measure, compress and upload the tree.
+          minutes=$(( 280 - ($(date +%s) - JOB_STARTED) / 60 ))
+          (( minutes < 10 )) && minutes=10
+          set +e
+          python scripts/android/engine.py build --root "$ENGINE_ROOT" --jobs 4 --ci-minutes "$minutes" 2>&1 | tee compile.log
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          python scripts/android/capacity.py snapshot --dir "$REPORT_DIR" --path /engine --label "compiled-$code" \
+            --size "src=$ENGINE_ROOT/chromium/src" --size "out=$ENGINE_ROOT/chromium/src/out"
+          # 124 is a deliberate pause: save the tree and let the next stage resume. Any other failure saves the tree
+          # too (the steps below), then fails this stage so the run stops and the fixed run resumes from here.
+          if [[ $code != 0 && $code != 124 ]]; then exit "$code"; fi
+      - name: Archive engine
+        # A later stage skips Compile, and a skipped step's empty output compares equal to '0', so check DONE too.
+        if: env.DONE != 'true' && steps.compile.outputs.code == '0'
+        run: python scripts/android/engine.py archive --root "$ENGINE_ROOT" --output dist/android-engine
+      - name: Upload engine
+        if: steps.reuse.outputs.reused == 'true' || (env.DONE != 'true' && steps.compile.outputs.code == '0')
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ENGINE_ARTIFACT }}
+          path: dist/android-engine/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Compress state
+        if: ${{ !cancelled() && env.DONE != 'true' && steps.compile.outputs.code != '' }}
+        run: |
+          time python scripts/lib/engine-state.py create --root "$ENGINE_ROOT" --archive "$STATE_DIR/state.tar.zst"
+          ls -l "$STATE_DIR"
+          python scripts/android/capacity.py snapshot --dir "$REPORT_DIR" --path /engine --label "state-compressed" \
+            --size "state=$STATE_DIR"
+      - name: Upload state
+        if: ${{ !cancelled() && env.DONE != 'true' && steps.compile.outputs.code != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.STATE_ARTIFACT }}
+          path: ${{ env.STATE_DIR }}/state.tar.zst*
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 7
+      - name: Upload capacity report
+        if: ${{ always() && env.DONE != 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-capacity-stage-${{ inputs.stage }}
+          path: |
+            ${{ env.REPORT_DIR }}
+            compile.log
+          if-no-files-found: ignore
+          retention-days: 30

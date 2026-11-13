@@ -4,6 +4,7 @@ import {
   clearData,
   privateBrowsingSupported,
   saveImage,
+  setPrivateSessionActive,
   addShareListener,
   takeShare,
   type LinkPress,
@@ -158,9 +159,16 @@ export function BrowserScreen(): JSX.Element {
   const mounted = [...new Set([active.id, ...playing, ...live.filter((id) => existing.has(id))])].slice(0, MAX_LIVE);
   const mountedKey = mounted.join(" ");
   const { blockContent, blockingPausedHosts, lockPrivateTabs } = data.preferences;
-  const lockEnabled = lockPrivateTabs && data.tabs.some((tab) => tab.private);
+  const hasPrivateTabs = data.tabs.some((tab) => tab.private);
+  const lockEnabled = lockPrivateTabs && hasPrivateTabs;
 
   useContentBlocking(ready, blockContent, blockingPausedHosts);
+
+  // Only MAX_LIVE page views stay mounted, so the private session belongs to the private tabs, not their views: it
+  // lasts until the last private tab closes, and a launch (which never restores private tabs) ends any left over.
+  useEffect(() => {
+    setPrivateSessionActive(hasPrivateTabs).catch((cause: unknown) => console.warn("Couldn't update the private session.", cause));
+  }, [hasPrivateTabs]);
 
   const { theme, startPageAfterHours } = data.preferences;
   useEffect(() => {
