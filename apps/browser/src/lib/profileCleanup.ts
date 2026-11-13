@@ -229,9 +229,14 @@ export function createProfileDataCleanup(browser: BrowserStore): ProfileDataClea
 
   if (existing) return existing;
 
+  // Each start's own stop: the stop a start gave back is inert once another start has replaced it.
+  let started = 0;
+
   const created: ProfileDataCleanup = {
     store: browser,
     start() {
+      const own = ++started;
+
       void run(
         browser,
         Effect.gen(function* () {
@@ -242,17 +247,11 @@ export function createProfileDataCleanup(browser: BrowserStore): ProfileDataClea
       );
 
       return () => {
-        void run(
-          browser,
-          Effect.gen(function* () {
-            const cleanup = yield* ProfileCleanup;
-
-            yield* cleanup.stop;
-          }),
-        );
+        if (own === started) created.stop();
       };
     },
     stop() {
+      started++;
       void run(
         browser,
         Effect.gen(function* () {

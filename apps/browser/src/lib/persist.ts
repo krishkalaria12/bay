@@ -15,8 +15,8 @@ import type { SavedDocument } from "./savedDocument";
 // The app's documents: what they hold and how they are written, and the saving that writes them.
 //
 // The saving is the app's one writer. There is one owner per store, one subscription to that store, one timer and
-// one quit handshake: the Effect service (lib/persistenceService.ts) and the coordinator's runtime both reach the
-// same owner for a store, so a session is never written twice.
+// one quit handshake: the coordinator (runtime/services.ts) owns it, and a second start for the same store finds the
+// same owner, so a session is never written twice.
 
 export type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
 
@@ -61,7 +61,11 @@ function objectJson(fields: [string, string | undefined][]): string {
 /** session.json's document. */
 export function sessionJson(s: BrowserState): string {
   // Private windows, Little Bay and peeks aren't restored: closing (or quitting) throws their pages away.
-  const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
+  // A host without global coordinates writes only the placement it can restore: size and maximized, never a frame.
+  const windows = Object.values(s.windows)
+    .filter((w) => !w.incognito && w.kind !== "small")
+    .map(restorableWindow);
+
   const kept = new Set(windows.map((w) => w.id));
   const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small" && !t.peekOf;
   const tabs = Object.values(s.tabs).filter(own);
@@ -96,7 +100,7 @@ export function sessionJson(s: BrowserState): string {
     ["splits", json(Object.values(s.splits).filter((v) => v.tabIds.every((id) => saved.has(id))))],
     // The store keeps private windows out of these lists; filter again so nothing private is ever written.
     ["closedTabs", json(s.closedTabs.filter((c) => publicTab(c.tab)))],
-    ["closedWindows", json(s.closedWindows.filter((c) => c.tabs.every(publicTab)))],
+    ["closedWindows", json(s.closedWindows.filter((c) => c.tabs.every(publicTab)).map(restorableClosedEntry))],
     ["closedGroups", json(s.closedGroups.filter((c) => c.tabs.every(publicTab)))],
     ["deletedGroups", json(s.deletedGroups.filter((c) => c.tabs.every(publicTab)))],
     ["cleanedTabs", json(s.cleanedTabs.filter((c) => publicTab(c.tab)))],
@@ -720,8 +724,7 @@ function createSaved({ store, restoreSession, documents }: { store: BrowserStore
 /**
  * The saving for one store: the session and the downloads.
  *
- * The owner for a store is found, not made twice: the Effect service and the coordinator's runtime both reach the
- * same one, so there is one subscription and one writer for a session.
+ * The owner for a store is found, not made twice: there is one subscription and one writer for a session.
  */
 export function createPersistence({
   store,

@@ -152,7 +152,18 @@ export class LocalFileService extends Context.Service<
 
           if (s.localFiles[pinId]?.path !== pin.path || !s.windows[windowId] || !access.url) return;
 
-          for (const tab of Object.values(s.tabs)) if (tab.spaceId === pin.spaceId && tab.url === access.url) s.closeTab(tab.id);
+          // The window's peek of the file closes as a peek; the tabs that show it close together, as one edit.
+          const peekId = s.peeks[windowId]?.tabId;
+
+          if (peekId && s.tabs[peekId]?.spaceId === pin.spaceId && s.tabs[peekId]?.url === access.url) s.closePeek(windowId);
+
+          const after = browser.getState();
+
+          const tabIds = Object.values(after.tabs)
+            .filter((tab) => !tab.peekOf && tab.spaceId === pin.spaceId && tab.url === access.url)
+            .map((tab) => tab.id);
+
+          if (tabIds.length) after.closeTabs(tabIds);
         });
 
       return LocalFileService.of({ open, peek, reconnect, close });

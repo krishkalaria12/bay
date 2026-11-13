@@ -18,7 +18,7 @@ import { engineProfile } from "../store/model";
 import { isInternalTab } from "../components/pages/internalPages";
 
 // The name renameFile settled on, which gains " (1)" when the suggestion was taken.
-const baseName = (path: string) => path.split("/").pop() ?? path;
+const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
 type DownloadPageContext = { title?: string; url?: string };
 

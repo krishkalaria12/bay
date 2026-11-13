@@ -830,11 +830,16 @@ export class Bookmarks extends Context.Service<
           cacheTimer = undefined;
         };
 
+        // A stop while the old file moves in ends this start: a later start reads the trees again.
+        const run = generation;
+
         return Effect.gen(function* () {
           // The app's scope owns the listener and the subscription.
           yield* Scope.addFinalizer(scope, Effect.sync(stopWatchingNow));
 
           const result = yield* migrate();
+
+          if (run !== generation) return;
 
           legacyMoved = result !== "kept";
 

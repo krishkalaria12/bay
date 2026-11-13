@@ -66,7 +66,7 @@ export function useTidySuggestion(d: Download | undefined): TidyName | null {
 
 // MARK: Applying
 
-const baseName = (path: string) => path.split("/").pop() ?? path;
+const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
 export async function applyTidyName(d: Download, suggestion: TidyName): Promise<string | null> {
   if (hasServiceClient()) return requestService("downloadRename", [d.id, suggestion.filename]);
@@ -84,13 +84,14 @@ function clipped(name: string): string {
   return name.length <= 44 ? name : `${name.slice(0, 28)}…${name.slice(-15)}`;
 }
 
-function showRenamed(d: Download, original: { filename: string; path: string }, path: string, windowId: string) {
-  const renamed = useBrowser.getState().downloads.find((x) => x.id === d.id) ?? { ...d, filename: baseName(path), path };
+// `owner`: the store that named the download. Its toast and its undo stay with that store.
+function showRenamed(d: Download, original: { filename: string; path: string }, path: string, windowId: string, owner?: BrowserStore) {
+  const renamed = (owner ?? useBrowser).getState().downloads.find((x) => x.id === d.id) ?? { ...d, filename: baseName(path), path };
   showToast(windowId, `Renamed to “${renamed.filename}”`, `Was “${clipped(original.filename)}”`, {
     icon: "wand.and.stars",
     key: `tidy-undo:${d.id}`,
     duration: 8000,
-    action: { title: "Undo", run: () => void undoTidyName(renamed, original, windowId) },
+    action: { title: "Undo", run: () => void undoTidyName(renamed, original, windowId, owner) },
   });
 }
 
@@ -107,16 +108,18 @@ export async function tidyRename(d: Download, suggestion: TidyName, windowId: st
   showRenamed(d, original, path, windowId);
 }
 
-async function undoTidyName(d: Download, original: { filename: string; path: string }, windowId: string) {
-  const path = hasServiceClient()
-    ? await requestService<string | null>("downloadUndo", [d.id, original.filename])
-    : await runDesktop(
-        Effect.gen(function* () {
-          const work = yield* DownloadWorkService;
+async function undoTidyName(d: Download, original: { filename: string; path: string }, windowId: string, owner?: BrowserStore) {
+  const undo = Effect.gen(function* () {
+    const work = yield* DownloadWorkService;
 
-          return yield* work.undo(d, original.filename);
-        }),
-      );
+    return yield* work.undo(d, original.filename);
+  });
+
+  const path = owner
+    ? await runForStore(owner, undo)
+    : hasServiceClient()
+      ? await requestService<string | null>("downloadUndo", [d.id, original.filename])
+      : await runDesktop(undo);
 
   if (!path) {
     showToast(windowId, "Couldn’t Undo", "The original name is no longer available.", { icon: "exclamationmark.triangle" });
@@ -156,7 +159,7 @@ export async function tidyFinishedDownload(d: Download, s: BrowserState = useBro
   if (!windowId) return;
 
   // Nobody asked for this rename, so a file that can't take the name just keeps its own.
-  showRenamed(d, named.original, named.path, windowId);
+  showRenamed(d, named.original, named.path, windowId, owner);
 }
 
 /** Watches for downloads that finish while Bay watches, and gives them a readable name. */

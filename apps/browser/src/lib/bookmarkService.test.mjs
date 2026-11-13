@@ -38,6 +38,7 @@ const fakeEngine = () => {
     // The failure the read or the apply meets, when there is one.
     failure: null,
     applyFailure: null,
+    applyGate: null,
   };
 
   const layer = Layer.succeed(BookmarkEngine)({
@@ -62,6 +63,18 @@ const fakeEngine = () => {
       }),
     apply: (engine, ops) =>
       Effect.suspend(() => {
+        // An apply waits for this, when it is set.
+        if (fake.applyGate) {
+          const gate = fake.applyGate;
+
+          fake.applyGate = null;
+
+          return Effect.andThen(
+            Effect.promise(() => gate),
+            Effect.sync(() => ({ skipped: 0, invalid: [] })),
+          );
+        }
+
         if (fake.applyFailure) {
           const cause = fake.applyFailure;
 
@@ -371,4 +384,45 @@ test("bookmark runtimes update only their own authority store", async (t) => {
   );
   assert.ok(Object.values(second.getState().bookmarks.nodes).some((node) => node.title === "second"));
   assert.equal(useBrowser.getState(), legacy);
+});
+
+test("a stop while the old file moves in ends that start: no tree is read or shown after it", async () => {
+  const browser = createBrowserStore();
+  const { engine, runtime } = setup(browser);
+
+  browser.getState().hydrate({});
+  stub.docs.set(
+    "bookmarks.json",
+    JSON.stringify({
+      version: 2,
+      bookmarks: {
+        roots: { default: { bar: "bm-bar", other: "bm-other" } },
+        nodes: {
+          "bm-bar": { id: "bm-bar", parentId: null, kind: "folder", title: "Bookmarks Bar", children: ["bm-a"], addedAt: 1 },
+          "bm-other": { id: "bm-other", parentId: null, kind: "folder", title: "Other Bookmarks", children: [], addedAt: 1 },
+          "bm-a": { id: "bm-a", parentId: "bm-bar", kind: "url", title: "A", url: "https://a.example/", favicon: null, addedAt: 1 },
+        },
+      },
+    }),
+  );
+
+  const moving = Promise.withResolvers();
+
+  engine.applyGate = moving.promise;
+
+  try {
+    const starting = start(runtime);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    await stop(runtime);
+    moving.resolve();
+    await starting;
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(engine.reads, [], "the stopped start reads no tree");
+    assert.deepEqual(browser.getState().bookmarksReady, {}, "the stopped start marks nothing ready");
+  } finally {
+    stub.docs.delete("bookmarks.json");
+    await runtime.dispose();
+  }
 });

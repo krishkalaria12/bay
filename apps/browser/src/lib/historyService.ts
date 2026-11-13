@@ -510,6 +510,9 @@ export class History extends Context.Service<
           stopSubscription();
         };
 
+        // A stop while the old file moves in ends this start: a later start reads the views again.
+        const run = generation;
+
         return Effect.gen(function* () {
           // The app's scope owns the listener and the subscription.
           yield* Scope.addFinalizer(scope, Effect.sync(stopWatchingNow));
@@ -519,6 +522,8 @@ export class History extends Context.Service<
           if (!moving) yield* loadAll();
 
           const result = yield* migrate();
+
+          if (run !== generation) return;
 
           legacyMoved = result !== "kept";
 

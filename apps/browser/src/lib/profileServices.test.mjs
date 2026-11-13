@@ -249,6 +249,8 @@ test("a stopped profile cleanup cannot acknowledge deletion after restart", asyn
   assert.deepEqual(store.getState().orphanedProfileData, ["pending"]);
 
   const stopSecond = service.start();
+  // The first start's stop is spent: it does not stop the start that replaced it.
+  stopFirst();
   await settle();
   t.mock.timers.tick(1500);
   await settle();

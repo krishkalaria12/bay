@@ -35,6 +35,8 @@ const fakeEngine = () => {
     adds: [],
     // A read waits for this, when it is set.
     gate: null,
+    // The old file's move waits for this, when it is set.
+    addGate: null,
     // The failure the read or the add meets, when there is one.
     failure: null,
   };
@@ -59,14 +61,25 @@ const fakeEngine = () => {
           catch: (cause) => new HistoryError({ operation: { name: "history.query", resource: profile }, cause }),
         });
       }),
-    add: (profile, pages) =>
-      Effect.sync(() => {
+    add: (profile, pages) => {
+      const added = Effect.sync(() => {
         if (fake.failure) throw fake.failure;
 
         fake.adds.push({ profile, pages });
 
         return pages.length;
-      }),
+      });
+
+      // An add waits for this, when it is set.
+      const gate = fake.addGate;
+
+      return gate
+        ? Effect.andThen(
+            Effect.promise(() => gate),
+            added,
+          )
+        : added;
+    },
   });
 
   return {
@@ -308,4 +321,52 @@ test("history runtimes update only their own authority store", async (t) => {
   assert.equal(first.getState().history.default[0].url, "https://first.example/");
   assert.equal(second.getState().history.default[0].url, "https://second.example/");
   assert.equal(useBrowser.getState(), legacy);
+});
+
+test("a stop while the old file moves in ends that start: nothing is read or shown after it", async () => {
+  stub.docs.clear();
+  const browser = createBrowserStore();
+  const { engine, runtime } = setup(browser);
+
+  browser.getState().hydrate({});
+  const visit = Date.now() - 1_000;
+
+  stub.docs.set(
+    "history.json",
+    JSON.stringify({
+      version: 2,
+      history: { default: [{ url: "https://old.com/", title: "Old", favicon: null, visits: 1, lastVisit: visit, visitTimes: [visit] }] },
+    }),
+  );
+
+  let release = () => {};
+
+  engine.addGate = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  try {
+    const starting = start(runtime);
+
+    await tick();
+    assert.deepEqual(engine.queries, [], "the views wait for the old file");
+
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const history = yield* History;
+
+        yield* history.stop;
+      }),
+    );
+
+    release();
+    await starting;
+    await tick();
+
+    assert.deepEqual(engine.queries, [], "the stopped start reads nothing");
+    assert.deepEqual(browser.getState().historyReady, {}, "the stopped start marks nothing ready");
+  } finally {
+    stub.docs.delete("history.json");
+    await runtime.dispose();
+  }
 });
