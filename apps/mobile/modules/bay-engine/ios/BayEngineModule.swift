@@ -47,6 +47,10 @@ public class BayEngineModule: Module {
       promise.resolve(nil)
     }.runOnQueue(.main)
 
+    AsyncFunction("setPrivateSessionActive") { (active: Bool) in
+      BayPrivateBrowsing.setActive(active)
+    }.runOnQueue(.main)
+
     AsyncFunction("clearData") { (promise: Promise) in
       WKWebsiteDataStore.default().removeData(
         ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast

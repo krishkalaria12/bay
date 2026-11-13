@@ -63,6 +63,10 @@ class BayEngineModule : Module() {
       BayVoice.listen(appContext.currentActivity, promise)
     }.runOnQueue(Queues.MAIN)
 
+    AsyncFunction("setPrivateSessionActive") { active: Boolean ->
+      BayEngineView.setPrivateSessionActive(active)
+    }.runOnQueue(Queues.MAIN)
+
     AsyncFunction("clearData") { promise: Promise ->
       val context = appContext.reactContext
       if (context == null) {
