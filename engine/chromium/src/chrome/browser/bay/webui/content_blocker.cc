@@ -1032,12 +1032,15 @@ std::unique_ptr<ContentBlocker::Built> BuildEngine(
   std::string cached_key;
   if (use_cache && base::ReadFileToString(key_path, &cached_key) &&
       cached_key == key) {
-    std::string data;
+    auto data = std::make_unique<std::string>();
     auto cached_ids = ReadJson(meta_path);
-    if (base::ReadFileToString(engine_path, &data) && cached_ids &&
+    if (base::ReadFileToString(engine_path, data.get()) && cached_ids &&
         cached_ids->is_list() && Strings(&cached_ids->GetList()) == ids) {
+      // Rust keeps the bytes until the engine is freed, or releases them on failure.
+      auto* owner = data.release();
       blocker = bay_blocker_deserialize(
-          reinterpret_cast<const uint8_t*>(data.data()), data.size());
+          reinterpret_cast<const uint8_t*>(owner->data()), owner->size(), owner,
+          [](void* bytes) { delete static_cast<std::string*>(bytes); });
     }
   }
   if (!blocker) {
