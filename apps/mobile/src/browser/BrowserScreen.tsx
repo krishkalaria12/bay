@@ -35,6 +35,7 @@ import { hiddenFromScreenReaders } from "@/chrome/screenReader";
 import { Text } from "@/chrome/Text";
 import { iconSize, space } from "@/chrome/tokens";
 import { crashReportText, crashReports } from "@/crashReports";
+import { runCommand } from "@/effect/commands";
 import { Diagnostics } from "@/effect/ports/diagnostics";
 import { Engine } from "@/effect/ports/engine";
 import { Lifecycle } from "@/effect/ports/lifecycle";
@@ -68,6 +69,7 @@ import { fetchFavicon } from "./favicons";
 import type { ImportedTab } from "./importTabs";
 import { bayCommand, incomingLink, type BayCommand } from "./incomingLink";
 import { sameNavigation } from "./navigationEvents";
+import { Snapshots } from "./snapshots";
 import { MiniPlayer } from "./MiniPlayer";
 import { PageError } from "./PageError";
 import { Toast, useToast } from "./Toast";
@@ -309,14 +311,17 @@ export function BrowserScreen(): JSX.Element {
   const find = useFindInPage(views.get(active.id), `${active.id} ${active.url}`);
   const reading = useReadingTools(active, views.get(active.id), page.isLoading, locked && Boolean(active.private), (cause) => fail(active.id, cause));
 
+  /** Takes the tab's picture for the switcher now. Snapshots skips private tabs and failed pages. */
   function capture(tabId: string): void {
-    // Private pages leave no snapshot files behind.
-    if (failed.has(tabId) || data.tabs.find((tab) => tab.id === tabId)?.private) return;
-    void views
-      .get(tabId)
-      ?.snapshot()
-      .then((uri) => uri && dispatch({ type: "update-tab", id: tabId, update: { snapshot: uri } }))
-      .catch(() => {});
+    const view = views.get(tabId);
+
+    if (!view) return;
+    runCommand(
+      { name: "snapshots.capture", resource: tabId },
+      Effect.gen(function* () {
+        yield* (yield* Snapshots).capture(tabId, view, () => failed.has(tabId));
+      }),
+    );
   }
 
   function onNavigation(tabId: string, state: NavigationState): void {
@@ -355,7 +360,16 @@ export function BrowserScreen(): JSX.Element {
       const view = views.get(tabId);
 
       if (view) fetchFavicon(view, state.url);
-      setTimeout(() => capture(tabId), 700);
+
+      // The tab's picture, once the page has drawn: a newer visit replaces it.
+      if (view) {
+        runCommand(
+          { name: "snapshots.visited", resource: tabId },
+          Effect.gen(function* () {
+            yield* (yield* Snapshots).visited(tabId, view, () => failed.has(tabId));
+          }),
+        );
+      }
     }
   }
 

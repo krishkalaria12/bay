@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Scope from "effect/Scope";
+import { Snapshots } from "../browser/snapshots.ts";
 import { recordCrash } from "../crashReports.ts";
 import { LocaleService } from "../i18n/service.ts";
 import { Persistence } from "../store/persistence.ts";
@@ -19,7 +20,7 @@ import { Links } from "./ports/links.ts";
 import { SecureStore } from "./ports/secureStore.ts";
 
 /** The services every mobile workflow can rely on. */
-export type AppServices = Files | Http | SecureStore | Engine | Lifecycle | Links | BrowserState | Diagnostics;
+export type AppServices = Files | Http | SecureStore | Engine | Lifecycle | Links | BrowserState | Diagnostics | Snapshots;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -34,6 +35,8 @@ const persistence = Persistence.layer.pipe(Layer.provide(Layer.mergeAll(Files.la
 const locale = LocaleService.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Lifecycle.layer, diagnostics)));
 // The content blocker follows the preferences and keeps the filter lists on disk fresh.
 const blocker = Blocker.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Http.layer, Engine.layer, BrowserState.layer)));
+// Page work reads the page through the engine and lands its results in the browser's state.
+const snapshots = Snapshots.layer.pipe(Layer.provide(Layer.mergeAll(Engine.layer, BrowserState.layer)));
 
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
@@ -48,6 +51,7 @@ export const appLayer = Layer.mergeAll(
   persistence,
   locale,
   blocker,
+  snapshots,
 ).pipe(Layer.provide(diagnostics));
 
 /** The key the runtime keeps itself under, so a reloaded module can find the one it replaces. */
@@ -115,7 +119,6 @@ const startServices = (): Promise<void> =>
         Effect.gen(function* () {
           const diagnostics = yield* Diagnostics;
           const links = yield* Links;
-
           // The listeners are registered on the app scope now; what they do belongs to the services that follow.
           // Each start needs a different service, so the list is typed by what the app layer gives them all.
           const starts: readonly Effect.Effect<void, unknown, Scope.Scope | Layer.Success<typeof appLayer>>[] = [
@@ -139,6 +142,11 @@ const startServices = (): Promise<void> =>
               const blocker = yield* Blocker;
 
               yield* blocker.start;
+            }),
+            Effect.gen(function* () {
+              const snapshots = yield* Snapshots;
+
+              yield* snapshots.start;
             }),
           ];
 
