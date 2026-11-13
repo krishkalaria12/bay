@@ -141,11 +141,6 @@ download the `bay-windows-installer` artifact from the run. Later runs resume fr
 the newest saved tree for seven days. After a change to a patch, raise
 `STATE_ARTIFACT` in the workflow to start from a clean tree.
 
-The [hosting gate](hosting-gate.md) records Phase 2 separately from process
-liveness. Run it on Windows 11 at 100% and 150%, and Windows 10. The smoke command
-accepts `-HostingSpike` to launch that diagnostic page, but still checks only
-process and window liveness.
-
 Before a beta release, use clean Windows 10 and Windows 11 installations:
 
 - Launch `--enable-features=Webium,SurfaceEmbed chrome://webui-browser` and test
@@ -156,6 +151,9 @@ Before a beta release, use clean Windows 10 and Windows 11 installations:
   instance and profile.
 - Exercise tabs, split panes, shortcuts, IME, permissions, extensions, downloads
   and nested menu/dialog loops.
+- Move a live tab to another window and confirm it doesn't reload. Check Mica
+  follows window activation on Windows 11 22H2+ and Windows 10 shows the solid
+  backdrop.
 - Check Narrator/NVDA, keyboard focus, high contrast, transparency disabled,
   100/150/200% scale, mixed-DPI monitors and Intel/AMD/NVIDIA graphics.
 - Update a signed build; reject altered, wrong-publisher and older payloads.

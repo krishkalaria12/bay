@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/check.h"
-#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/base64.h"
@@ -160,7 +159,7 @@ UpdaterService& AppUpdater() {
         for (const auto& [owner, host] : Hosts()) {
           if (host) {
             host->PublishHostInfo();
-            if (!AppRuntime::Enabled() || host->is_coordinator()) {
+            if (host->is_coordinator()) {
               const auto* pending = state.Find("pending");
               host->Emit("BayApp", "onUpdatePending",
                          base::Value(base::DictValue().Set(
@@ -195,12 +194,8 @@ void CompleteQuitPreparation(bool proceed) {
     std::move(callback).Run(proceed);
 }
 base::WeakPtr<NativeHost> QuitOwner() {
-  if (AppRuntime::Enabled()) {
-    auto* runtime = AppRuntime::GetIfStarted();
-    return runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>();
-  }
-  return Hosts().size() == 1 ? Hosts().begin()->second
-                             : base::WeakPtr<NativeHost>();
+  auto* runtime = AppRuntime::GetIfStarted();
+  return runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>();
 }
 void PrepareRendererForQuit(base::OnceCallback<void(bool)> completion) {
   auto& quit = PendingQuit();
@@ -208,12 +203,11 @@ void PrepareRendererForQuit(base::OnceCallback<void(bool)> completion) {
     quit.callbacks.push_back(std::move(completion));
     return;
   }
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike") ||
-      Hosts().empty()) {
+  if (Hosts().empty()) {
     std::move(completion).Run(true);
     return;
   }
-  // Shared mode has one browser-owned coordinator, never an arbitrary visible
+  // The browser-owned coordinator prepares, never an arbitrary visible
   // renderer selected by map order.
   auto owner = QuitOwner();
   if (!owner) {
@@ -277,13 +271,11 @@ bool Boolean(const base::ListValue& values,
   const auto* value = At(values, index);
   return value && value->is_bool() ? value->GetBool() : fallback;
 }
-// The hosts that get the engine's events: every one, or with the shared
-// runtime only the coordinator.
+// The hosts that get the engine's events: only the coordinator.
 std::vector<base::WeakPtr<NativeHost>> EventHosts() {
   std::vector<base::WeakPtr<NativeHost>> hosts;
   for (const auto& entry : Hosts()) {
-    if (entry.second &&
-        (!AppRuntime::Enabled() || entry.second->is_coordinator()))
+    if (entry.second && entry.second->is_coordinator())
       hosts.push_back(entry.second);
   }
   return hosts;
@@ -301,7 +293,7 @@ void EmitTabStrip(base::DictValue transaction) {
 void EmitPermissionEvent(const char* event, base::DictValue payload) {
   const base::Value value(std::move(payload));
   for (const auto& [raw, host] : Hosts()) {
-    if (host && (!AppRuntime::Enabled() || !host->is_coordinator()))
+    if (host && !host->is_coordinator())
       host->Emit("BayCEF", event, value.Clone());
   }
 }
@@ -321,14 +313,14 @@ void EmitDownload(base::DictValue download) {
   }
 }
 // The window that asks about an extension install: the one showing the tab
-// that asked, else the one used last. One host only, so the prompt is answered
-// once; with the shared runtime a window, as windows show the prompts.
+// that asked, else the one used last. One window document only, so the prompt
+// is answered once; the coordinator shows no prompts.
 base::WeakPtr<NativeHost> PromptWindow(content::WebContents* parent,
                                        base::DictValue prompt) {
   auto window_host = [](BrowserWindowInterface* frame) -> NativeHost* {
     for (const auto& [raw, host] : Hosts()) {
       if (host && host->can_receive_events() && frame && host->browser() == frame &&
-          (!AppRuntime::Enabled() || !host->is_coordinator()))
+          !host->is_coordinator())
         return host.get();
     }
     return nullptr;
@@ -346,15 +338,6 @@ base::WeakPtr<NativeHost> PromptWindow(content::WebContents* parent,
           return !target;
         },
         BrowserCollection::Order::kActivation);
-  }
-  // The single-renderer runtime: its one document shows every window.
-  if (!target && !AppRuntime::Enabled()) {
-    for (const auto& [raw, host] : Hosts()) {
-      if (host && host->can_receive_events()) {
-        target = host.get();
-        break;
-      }
-    }
   }
   if (!target)
     return nullptr;
@@ -412,7 +395,7 @@ void HostEvent(const std::string& module,
   for (const auto& entry : Hosts())
     hosts.push_back(entry.second);
   for (const auto& host : hosts)
-    if (host && (!AppRuntime::Enabled() || host->is_coordinator()))
+    if (host && host->is_coordinator())
       host->Emit(module.c_str(), event.c_str(), payload.Clone());
 }
 #endif
@@ -430,8 +413,7 @@ void DataEvent(const std::string& module,
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 bool NativeHost::HandleWindowClose(BrowserWindowInterface* browser) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike") ||
-      browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
+  if (browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
     return false;
   // A shortcut or tray icon still leads back in: the window just closes.
   if (LittleBayAccess::Get().KeepsBayRunning())
@@ -439,20 +421,16 @@ bool NativeHost::HandleWindowClose(BrowserWindowInterface* browser) {
   const auto host = QuitOwner();
   if (!host)
     return false;
-  if (AppRuntime::Enabled()) {
-    auto* runtime = AppRuntime::GetIfStarted();
-    if (runtime && runtime->IsRetiringStartupWindow(browser))
-      return false;
-    if (WindowRegistry::Get().Ids().size() > 1)
-      return false;
-    bool is_shell = false;
-    for (const auto& [owner, candidate] : Hosts())
-      is_shell |= candidate && candidate->browser() == browser;
-    if (!is_shell)
-      return false;
-  } else if (host->browser() != browser) {
+  auto* runtime = AppRuntime::GetIfStarted();
+  if (runtime && runtime->IsRetiringStartupWindow(browser))
     return false;
-  }
+  if (WindowRegistry::Get().Ids().size() > 1)
+    return false;
+  bool is_shell = false;
+  for (const auto& [owner, candidate] : Hosts())
+    is_shell |= candidate && candidate->browser() == browser;
+  if (!is_shell)
+    return false;
   // Posting lets WebUIBrowserWindow rearm the consumed widget callback
   // before application shutdown can synchronously call Close() again.
   if (!g_quit_requested && !browser_shutdown::IsTryingToQuit()) {
@@ -1129,8 +1107,7 @@ NativeHost::~NativeHost() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   bool notification_client = false;
   for (const auto& [owner, host] : Hosts()) {
-    if (host && host->client_ &&
-        (!AppRuntime::Enabled() || host->is_coordinator())) {
+    if (host && host->client_ && host->is_coordinator()) {
       notification_client = true;
       break;
     }
@@ -1205,7 +1182,7 @@ base::DictValue NativeHost::Info() const {
 #endif
   base::DictValue shell;
   shell.Set("role", context_.role_name());
-  shell.Set("sharedRuntime", AppRuntime::Enabled());
+  shell.Set("sharedRuntime", true);
   shell.Set("globalWindowCoordinates", GlobalWindowCoordinates());
   shell.Set("runtimeRole", context_.role_name());
   if (auto* window = context_.window()) {
@@ -1214,8 +1191,6 @@ base::DictValue NativeHost::Info() const {
       shell.Set("windowId", window_id);
     shell.Set("windowOptions", WindowRegistry::Get().OptionsFor(window));
   }
-  shell.Set("hostingSpike", base::CommandLine::ForCurrentProcess()->HasSwitch(
-                                "bay-hosting-spike"));
 #if BUILDFLAG(IS_WIN)
   shell.Set("initializationError", platform_services_->initialization_error());
 #elif BUILDFLAG(IS_LINUX)
@@ -1386,7 +1361,7 @@ base::DictValue NativeHost::Info() const {
   host_methods->Append("BayCli.installedVersion");
   host_methods->Append("BayCli.install");
 #endif
-  if (AppRuntime::Enabled() && is_coordinator()) {
+  if (is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
     methods->Append("BayCEF.stopPageEvents");
@@ -1471,7 +1446,7 @@ void NativeHost::SetClient(
         }
       },
       GetWeakPtr()));
-  if (!AppRuntime::Enabled() || is_coordinator()) {
+  if (is_coordinator()) {
     // Activation can arrive before the trusted document connects. Drain only
     // after its Mojo client is bound; the renderer retains startup responses
     // until app integration subscribes.
@@ -1690,9 +1665,9 @@ void NativeHost::Invoke(const std::string& module,
       return;
     }
     auto* runtime = AppRuntime::GetIfStarted();
-    const bool accepted = AppRuntime::Enabled() && is_coordinator() && runtime &&
-                          runtime->FinishPageOpen(
-                              this, offer->GetString(), target->GetIfString());
+    const bool accepted =
+        is_coordinator() && runtime &&
+        runtime->FinishPageOpen(this, offer->GetString(), target->GetIfString());
     std::move(callback).Run(
         accepted ? Success()
                  : Failure("forbidden", "The page offer has no accepted target"));
@@ -1702,7 +1677,7 @@ void NativeHost::Invoke(const std::string& module,
       (method == "startPageEvents" || method == "stopPageEvents")) {
     auto* runtime = AppRuntime::GetIfStarted();
     const bool accepted =
-        AppRuntime::Enabled() && is_coordinator() && runtime &&
+        is_coordinator() && runtime &&
         (method == "startPageEvents" ? runtime->StartPageEvents(this)
                                      : runtime->StopPageEvents(this));
     std::move(callback).Run(accepted ? Success()
@@ -1794,7 +1769,7 @@ void NativeHost::Invoke(const std::string& module,
   }
 #endif
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
-  if (module == "BaySync" && AppRuntime::Enabled() && !is_coordinator()) {
+  if (module == "BaySync" && !is_coordinator()) {
     bool local = false;
     for (const char* name : {"chooseFolder", "folderInfo", "revealFolder", "deviceName", "newDeviceId",
                              "recoveryKitPreview", "saveRecoveryKit", "copyRecoveryKit", "shareRecoveryKit",
@@ -2108,23 +2083,15 @@ void NativeHost::Invoke(const std::string& module,
         return;
       }
       const auto id = Text(args, 0);
-      // Without the shared runtime each full UI owns one Zustand runtime, and
-      // a second independent one could overwrite session state. With it, the
-      // coordinator opens browser windows from accepted state, and any window
-      // opens a utility window, which has no record in that state. The
-      // diagnostic has no app store and can exercise native window behavior
-      // either way.
-      const bool spike = base::CommandLine::ForCurrentProcess()->HasSwitch(
-          "bay-hosting-spike");
+      // The coordinator opens browser windows from accepted state, and any
+      // window opens a utility window, which has no record in that state.
       const auto* kind = options->GetDict().FindString("kind");
       const bool utility = kind && IsUtilityWindowKind(*kind);
-      if (!windows.Find(id) && !windows.Ids().empty() && !spike &&
-          !(AppRuntime::Enabled() && (is_coordinator() || utility))) {
+      if (!windows.Find(id) && !windows.Ids().empty() && !is_coordinator() &&
+          !utility) {
         std::move(callback).Run(Failure(
             "unavailable",
-            AppRuntime::Enabled()
-                ? "Only the application coordinator opens browser windows"
-                : "Additional windows require the shared application runtime"));
+            "Only the application coordinator opens browser windows"));
         return;
       }
       result = windows.Open(context_, id, options->GetDict());

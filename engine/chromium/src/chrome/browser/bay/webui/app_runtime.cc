@@ -4,7 +4,6 @@
 #include <cmath>
 #include <memory>
 #include <utility>
-#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -14,7 +13,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "base/uuid.h"
-#include "chrome/browser/bay/webui/app_runtime_options.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/native_host.mojom.h"
@@ -372,14 +370,11 @@ bool AppRuntime::CanAdoptInto(const std::string& window_id) const {
       accepted_->FindDict("state")->FindDict("windows")->FindDict(window_id);
   return window && !window->FindBool("incognito").value_or(false);
 }
-bool AppRuntime::Enabled() {
-  return IsAppRuntimeEnabled(*base::CommandLine::ForCurrentProcess());
-}
 AppRuntime* AppRuntime::GetIfStarted() {
   return Instance().get();
 }
 void AppRuntime::StartForWindow(BrowserWindowInterface& window) {
-  if (!Enabled() || Instance())
+  if (Instance())
     return;
   Instance() = std::unique_ptr<AppRuntime>(new AppRuntime(window));
   Instance()->Start();
@@ -895,8 +890,6 @@ void ShutdownAppRuntimeIfStarted() {
 }
 void BindAppRuntime(content::WebUI* web_ui,
                     mojo::PendingReceiver<mojom::AppRuntime> receiver) {
-  if (!AppRuntime::Enabled())
-    return;
   if (auto* runtime = AppRuntime::GetIfStarted())
     runtime->Bind(web_ui, std::move(receiver));
 }

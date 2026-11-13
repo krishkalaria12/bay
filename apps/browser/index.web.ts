@@ -26,8 +26,9 @@ declare global {
 
 async function start() {
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+  const native = location.protocol === "chrome:" && location.hostname === "bay";
 
-  if (location.protocol === "chrome:" && location.hostname === "bay") {
+  if (native) {
     const deadline = performance.now() + 5000;
 
     while (!globalThis.__bayNativeHostReady) {
@@ -79,23 +80,14 @@ async function start() {
 
   if (v.is(v.string(), initializationError) && initializationError) throw new Error(initializationError);
 
-  if (getNativeHostInfo().constants.BayShell?.hostingSpike === true) {
-    const root = document.getElementById("root");
-
-    if (!root) throw new Error("The WebUI root element is missing");
-    const { startHostingSpike } = await import("./src/web/HostingSpike");
-    startHostingSpike(root);
-
-    return;
-  }
-
   const shell = getNativeHostInfo().constants.BayShell;
 
-  if (shell?.sharedRuntime === true) {
-    const role = shell.runtimeRole;
+  // chrome://bay always runs the shared runtime: one coordinator document owns the state and each window projects it.
+  if (native) {
+    const role = shell?.runtimeRole;
 
     if (role !== "coordinator" && role !== "window") throw new Error("The native host did not assign a runtime role");
-    const windowId = shell.windowId;
+    const windowId = shell?.windowId;
 
     if (role === "window" && (!v.is(v.string(), windowId) || !windowId)) throw new Error("The native host did not assign a window");
     const ready = globalThis.__bayAppRuntimeReady;
@@ -148,9 +140,10 @@ async function start() {
     return;
   }
 
+  // The localhost preview has no coordinator, so it runs the single-document entry macOS uses.
   await import("./src/main");
   const [{ AppRegistry }, { useBrowser }] = await Promise.all([import("react-native"), import("./src/store/browserStore")]);
-  const hostId = getNativeHostInfo().constants.BayShell?.windowId;
+  const hostId = shell?.windowId;
   const windowId = v.is(v.string(), hostId) ? hostId : useBrowser.getState().windowOrder[0];
 
   if (!windowId) throw new Error("The host did not provide a window to render");

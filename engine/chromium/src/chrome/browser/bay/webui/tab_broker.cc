@@ -113,8 +113,6 @@ class TabBroker::Entry final : public content::WebContentsObserver {
                            ui::PageTransition,
                            bool,
                            bool) override {
-    if (!AppRuntime::Enabled())
-      return;
     AppRuntime::MarkOpenedByPage(opened);
     if (key.empty() || !contents || !profile)
       return;
@@ -132,7 +130,7 @@ class TabBroker::Entry final : public content::WebContentsObserver {
                          event, std::move(payload));
   }
   void ObserveFacts(const std::string& profile_id) {
-    if (!AppRuntime::Enabled() || key.empty()) {
+    if (key.empty()) {
       facts.reset();
       return;
     }
@@ -330,7 +328,7 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* window,
   const std::string adopt_id = adopt_value ? adopt_value->GetString() : "";
   if (key.size() > 256 || adopt_id.size() > 256)
     return {.error = "Transfer key or adoption id is too long"};
-  if (AppRuntime::Enabled() && !adopt_id.empty() && key.empty())
+  if (!adopt_id.empty() && key.empty())
     return {.error = "An adopted page requires its accepted application tab key"};
   const auto profile_name = browser->GetProfile()
                                 ->GetOriginalProfile()
@@ -342,7 +340,7 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* window,
           ? "incognito:" + WindowRegistry::Get().IdFor(browser)
       : profile_name == "Default" ? ""
                                   : profile_name;
-  if (AppRuntime::Enabled() && !key.empty()) {
+  if (!key.empty()) {
     auto* runtime = AppRuntime::GetIfStarted();
     if (!runtime || !runtime->CanMountPage(WindowRegistry::Get().IdFor(browser),
                                            key, native_profile, adopt_id))
@@ -414,7 +412,7 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* window,
   CHECK_NE(entry->lease, 0u);
   entry->ObserveFacts(native_profile);
   TabStripMirror::Get().Refresh();
-  if (!adopt_id.empty() && AppRuntime::Enabled()) {
+  if (!adopt_id.empty()) {
     if (auto* runtime = AppRuntime::GetIfStarted())
       runtime->PageOpenMounted(adopt_id, key);
   }

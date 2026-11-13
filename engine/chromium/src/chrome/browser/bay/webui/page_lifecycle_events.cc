@@ -4,9 +4,7 @@
 #include <string>
 #include <utility>
 
-#include "base/functional/bind.h"
 #include "base/no_destructor.h"
-#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/profiles/profile.h"
@@ -36,19 +34,6 @@ class PendingActivation
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
 WEB_CONTENTS_USER_DATA_KEY_IMPL(PendingActivation);
-const char* Disposition(WindowOpenDisposition disposition) {
-  switch (disposition) {
-    case WindowOpenDisposition::NEW_FOREGROUND_TAB:
-    case WindowOpenDisposition::SINGLETON_TAB:
-    case WindowOpenDisposition::SWITCH_TO_TAB: return "foreground";
-    case WindowOpenDisposition::NEW_BACKGROUND_TAB: return "background";
-    case WindowOpenDisposition::NEW_WINDOW: return "window";
-    case WindowOpenDisposition::NEW_POPUP: return "popup";
-    case WindowOpenDisposition::OFF_THE_RECORD: return "incognito";
-    case WindowOpenDisposition::NEW_SPLIT_VIEW: return "split";
-    default: return nullptr;
-  }
-}
 }  // namespace
 
 void PageLifecycleEvents::Start(ViewSink sink) {
@@ -116,37 +101,5 @@ bool PageLifecycleEvents::HandleEngineEvent(
                .Set("userGesture",
                     payload.FindBool("userGesture").value_or(false)));
   return true;
-}
-void PageLifecycleEvents::OpenRequestedURL(
-    content::WebContents* source, content::WebContents* opened, const GURL& url,
-    WindowOpenDisposition disposition, bool user_gesture) {
-  const char* intent = Disposition(disposition);
-  if (!source || !opened || source == opened || !intent || !url.is_valid() ||
-      url.SchemeIs("javascript") || url.SchemeIs("bay") ||
-      source->GetBrowserContext() != opened->GetBrowserContext() || !Sink() ||
-      !TabBroker::Get().HasPageKey(source))
-    return;
-  // An extension view with no application tab key keeps Chrome's popup path.
-  // The source's normal app view always subscribes to onOpenWindow.
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(
-          [](base::WeakPtr<content::WebContents> source,
-             base::WeakPtr<content::WebContents> opened, GURL url,
-             std::string intent, bool gesture) {
-            if (!source || !opened || !Sink())
-              return;
-            auto offer = TabBroker::Get().Offer(opened.get());
-            if (offer.adopt_id.empty())
-              return;
-            auto sink = Sink();
-            if (!sink.Run(source.get(), "onOpenWindow",
-                          base::DictValue()
-                              .Set("url", url.spec())
-                              .Set("disposition", std::move(intent))
-                              .Set("adoptId", offer.adopt_id)
-                              .Set("userGesture", gesture)))
-              TabBroker::Get().ReleaseOffer(offer.adopt_id);
-          }, source->GetWeakPtr(), opened->GetWeakPtr(), url,
-          std::string(intent), user_gesture));
 }
 }  // namespace bay

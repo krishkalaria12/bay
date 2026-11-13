@@ -237,8 +237,9 @@
           <h1>Remaining Linux and Windows parity work</h1>
           <p class="lede">Finish the implementation follow-ups below, then run native acceptance on Linux and Windows.</p>
           <p class="meta">
-            Updated 4 Nov 2026. <code>feat/linux</code> and <code>feat/windows</code> carry the same shared code; only Linux services, packaging, tests and
-            documentation stay on <code>feat/linux</code>.
+            Updated 13 Nov 2026. <code>feat/linux</code> and <code>feat/windows</code> carry the same shared code; only Linux services, packaging, tests and
+            documentation stay on <code>feat/linux</code>. Both compile on GitHub runners: <code>windows-build.yml</code> makes the engine and installer, and
+            <code>linux-build.yml</code> makes the engine and every Linux package (AppImage, .deb, .rpm, tarball, AUR).
           </p>
         </header>
         <section id="followups" aria-labelledby="followups-h">
@@ -251,14 +252,16 @@
         <section id="sync" aria-labelledby="sync-h">
           <h2 id="sync-h">2. Branch sync</h2>
           <p class="prose">
-            The branches were synced on 4 Nov 2026 by copying the shared tree to <code>feat/windows</code> and merging it back. The Windows code paths in that
-            tree have not been compiled yet, and unit tests gated to Linux in <code>BUILD.gn</code> don't build on Windows.
+            The branches were synced on 4 Nov 2026 by copying the shared tree to <code>feat/windows</code> and merging it back, and again on 13 Nov 2026 with
+            main's Effect TS rewrite. Windows builds have compiled and passed their unit tests and smoke launch since <code>windows-build-17</code> (7 Nov);
+            <code>linux-build-4</code> (13 Nov) compiled the Effect merge and its AppImage passed a launch check under Xvfb. Unit tests gated to Linux in
+            <code>BUILD.gn</code> don't build on Windows.
           </p>
         </section>
         <section id="runtime" aria-labelledby="runtime-h">
           <h2 id="runtime-h">3. Runtime acceptance</h2>
           <p class="prose">
-            The native Linux and Windows applications still need linking and execution. The acceptance assignments below come from
+            Both applications link and launch on CI; the checks below need real desktops. The acceptance assignments below come from
             <a href="linux-work-split.md">linux-work-split.md</a>.
           </p>
           <div class="table-wrap">
@@ -279,7 +282,7 @@
                 <tr>
                   <td>T2</td>
                   <td>D</td>
-                  <td>Hosting gate: SurfaceEmbed on Wayland and X11, GNOME and KDE; go/no-go record</td>
+                  <td>SurfaceEmbed on Wayland and X11, GNOME and KDE</td>
                 </tr>
                 <tr>
                   <td>T3</td>
@@ -407,7 +410,7 @@
             <li>Exercise page-script selection and Capture gestures, live media controls and notifications across frames, navigation and window transfers.</li>
             <li>Test password, address and card prompts, blocked popups, link status and cross-site Peek, camera/microphone/screen indicators and PiP.</li>
             <li>Test popup adoption, page focus requests, internal app links, and discard/reload recovery during window transfers.</li>
-            <li>Run Windows build and hosting acceptance using <a href="windows-implementation-status.md">the Windows status document</a>.</li>
+            <li>Run the Windows acceptance checks in <a href="windows-implementation-status.md">the Windows status document</a>.</li>
           </ul>
         </section>
         <section id="decisions" aria-labelledby="decisions-h">

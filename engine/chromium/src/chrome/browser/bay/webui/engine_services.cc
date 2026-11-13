@@ -926,9 +926,9 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
     return true;
   }
   if (method == "listDownloads") {
-    // Download events reach the coordinator only, so a shared-runtime window
-    // has nothing to catch up on.
-    if (AppRuntime::Enabled() && context_.is_window()) {
+    // Download events reach the coordinator only, so a window has nothing to
+    // catch up on.
+    if (context_.is_window()) {
       std::move(response).Run(Success(base::Value(base::ListValue())));
       return true;
     }

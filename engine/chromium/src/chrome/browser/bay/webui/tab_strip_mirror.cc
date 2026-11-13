@@ -256,7 +256,7 @@ bool TabStripMirror::Dispatch(const HostContext& context,
                               Response& response) {
   if (method != "tabStrips" && method != "tabStripCommand")
     return false;
-  if (!context.profile() || (AppRuntime::Enabled() && context.is_window())) {
+  if (!context.profile() || context.is_window()) {
     std::move(response).Run(
         Failure("permission_denied", "Tab strips belong to the coordinator"));
     return true;

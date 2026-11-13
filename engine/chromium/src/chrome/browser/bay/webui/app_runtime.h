@@ -37,7 +37,6 @@ class NativeHost;
 class AppRuntime final : public ProfileManagerObserver,
                          public content::WebContentsObserver {
  public:
-  static bool Enabled();
   static AppRuntime* GetIfStarted();
   static void StartForWindow(BrowserWindowInterface& window);
   static void ShutdownIfStarted();

@@ -81,16 +81,9 @@ TabObserver::TabObserver(content::WebContents* contents, FactCallback facts)
 }
 TabObserver::~TabObserver() = default;
 void TabObserver::DidOpenRequestedURL(
-    content::WebContents* opened, content::RenderFrameHost* source_frame, const GURL& url,
+    content::WebContents* opened, content::RenderFrameHost*, const GURL& url,
     const content::Referrer&, WindowOpenDisposition disposition,
     ui::PageTransition, bool, bool) {
-  if (!AppRuntime::Enabled()) {
-    if (!facts_ && current())
-      PageLifecycleEvents::OpenRequestedURL(
-          web_contents(), opened, url, disposition,
-          source_frame && source_frame->HasTransientUserActivation());
-    return;
-  }
   AppRuntime::MarkOpenedByPage(opened);
   // App tabs have one broker-owned observer. Standalone extension views only
   // have this lease-scoped observer, so use their trusted host window instead.

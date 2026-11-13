@@ -100,16 +100,16 @@ class WindowRegistry final : public BrowserCollectionObserver {
   // A normal window Chrome opens on its own (a relaunch, the taskbar, an
   // extension) has no Bay window id and is absorbed: its document refuses to
   // start, and on Show its tabs join the most recently active Bay window
-  // before it closes unshown. With the shared runtime its pages are offered to
-  // the coordinator (AppRuntime::AdoptPage).
+  // before it closes unshown: its pages are offered to the coordinator
+  // (AppRuntime::AdoptPage).
   bool IsAbsorbed(BrowserWindowInterface* browser) const;
   // Returns true when `browser` is absorbed and must not be shown.
   bool AbsorbOnShow(BrowserWindowInterface* browser);
   // A page Chrome adds to a Bay window by itself (a link another app opened,
-  // a startup URL, an extension's new tab) has no Bay tab. With the shared
-  // runtime it is offered as a tab of that window, or of the most recently
-  // active regular Bay window, once accepted state names one. Pages a page
-  // opened belong to AppRuntime::OpenPage.
+  // a startup URL, an extension's new tab) has no Bay tab. It is offered as a
+  // tab of that window, or of the most recently active regular Bay window,
+  // once accepted state names one. Pages a page opened belong to
+  // AppRuntime::OpenPage.
   void AdoptLaunchPages();
 
  private:
@@ -134,8 +134,8 @@ class WindowRegistry final : public BrowserCollectionObserver {
   void BoundsChanged(BrowserWindowInterface* browser, const gfx::Rect& bounds);
   void ShowStateChanged(BrowserWindowInterface* browser);
   void MoveIntoBayWindow(base::WeakPtr<BrowserWindowInterface> source);
-  // The most recently active Bay window other than `except`; with the shared
-  // runtime only a regular window that has an id.
+  // The most recently active regular Bay window with an id, other than
+  // `except`.
   BrowserWindowInterface* MostRecentBayWindow(
       BrowserWindowInterface* except) const;
   void PageInserted(BrowserWindowInterface* browser,
