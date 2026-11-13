@@ -1,7 +1,7 @@
 # Linux port: work split
 
 How the rest of the [Linux port plan](linux-port-plan.html) splits between three developers, **K**, **D** and **A**, so all three can work in parallel.
-Written 23 Oct 2026, against `feat/linux` at `398b8d0e`. Status updated 26 Oct 2026: K1–K4, K8–K9, D1, A2, A3 and the K8 Linux sync integration follow-up are source-complete. Linux native linking and desktop acceptance remain stage 2 work. Keep assignments with their current owners.
+Written 23 Oct 2026, against `feat/linux` at `398b8d0e`. Status updated 26 Oct 2026: K1–K4, K8–K9, D1, A2, A3 and the K8 Linux sync integration follow-up are source-complete. Updated 13 Nov 2026: the engine and packages build on GitHub runners (T1); desktop acceptance remains stage 2 work. Keep assignments with their current owners.
 
 The work runs in two stages:
 
@@ -39,7 +39,7 @@ None of the Linux native test binaries have been linked or run.
 ## Working rules
 
 - **Branches.** Each person works on short branches off `feat/linux` (`feat/linux-k-*`, `feat/linux-d-*` and `feat/linux-a-*`) and merges them back into `feat/linux`. Merge, don't rebase shared history. Pull `feat/linux` before starting each item.
-- **Order.** All of stage 1 first. The engine build, the hosting gate and all Linux testing wait for stage 2, even on D's and A's machines.
+- **Order.** All of stage 1 first. The engine build and all Linux testing wait for stage 2, even on D's and A's machines.
 - **Checks before each commit:**
   - Typechecks, JS and Python tests, the contracts check, lint and format.
   - Linux x64 release and DCHECK syntax checks for changed native sources.
@@ -142,10 +142,10 @@ Use these agreements so ownership changes do not block implementation:
 
 Starts when every stage 1 box is ticked. D and A run their assigned steps on Arch and report failures with logs. K owns engine, host, frame, window, import and keychain fixes, including K1–K4, K8–K9 and the host sources already done. D owns sync crypto and key store fixes, D1. A owns UI and packaging fixes, A2–A3. Fixes are ordinary code commits, so K can make them without a Linux machine.
 
-D produces the T1 engine archive and shares it with A before A starts runtime checks. Both use the same engine revision and app commit. After T1, D and A can run independent checks in parallel; T2 is the hosting go/no-go gate for app-level acceptance. Each runner re-runs failed checks after the owner fixes them.
+The T1 packages come from `linux-build.yml`; D and A install the same run's build before runtime checks. D and A can run independent checks in parallel; T2 comes first, since app-level acceptance depends on pages painting. Each runner re-runs failed checks after the owner fixes them.
 
-- [ ] **T1 · D · Engine build (Phase 1, L = 3).** Follow prerequisite steps 1–7 directly on Arch and build the stock baseline. Then run `scripts/engine.py --platform linux prepare`, `build` and `archive`. Record the glibc floor and finalise the distro tiers. Every later step needs this.
-- [ ] **T2 · D · Hosting gate (Phase 2, L = 3).** SurfaceEmbed painting on Wayland and X11 comes first, then the rest of the gate table on GNOME and KDE. Write the go/no-go record. If it fails, try GuestContents, then L‑A; K writes that fallback.
+- [x] **T1 · D · Engine build (Phase 1, L = 3).** Done on GitHub runners: `linux-build.yml` builds the engine and every package (`linux-build-4`, 13 Nov 2026). Still to record: the glibc floor and the final distro tiers. A local build follows prerequisite steps 1–7, then `scripts/engine.py --platform linux prepare`, `build` and `archive`.
+- [ ] **T2 · D · SurfaceEmbed on real desktops (L = 3).** The hosting spike page is removed; check the real app instead. SurfaceEmbed painting on Wayland and X11 comes first, then input, focus, IME, accessibility, backdrop and tab moves on GNOME and KDE. If painting fails, try GuestContents, then L‑A; K writes that fallback.
 - [ ] **T3 · D · Native tests and Phase 3 acceptance (M = 2).**
   - Link and run all Linux native test targets in `docs/engine-cli.md`.
   - Check Phase 3's exit criteria: real tabs, split panes, popups, extensions, prompts, PiP, DevTools, and the same engine JSON as on Mac and Windows.

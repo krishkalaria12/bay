@@ -773,6 +773,14 @@
           <div class="prose">
             <div class="callout ok">
               <p>
+                <strong>Status, 13 November 2026.</strong> Bay compiles on Linux. <code>linux-build.yml</code> builds the engine and every package (AppImage,
+                .deb, .rpm, tarball, AUR) on GitHub runners, and <code>linux-build-4</code> built the Effect TS merge; its AppImage opened a window with no UI
+                errors under Xvfb. Windows builds the same host the same way. <code>chrome://bay</code> now runs only the shared runtime: the single-document
+                mode and Phase&nbsp;2's hosting spike page are removed, so the hosting gate below is replaced by acceptance on real desktops.
+              </p>
+            </div>
+            <div class="callout ok">
+              <p>
                 <strong>Yes, Bay can run on Linux, on the same host as Windows.</strong> Since 17 October 2026 the Windows plan renders Bay's UI inside the
                 engine: the React UI runs on react-native-web as a Chrome WebUI page (<code>chrome://bay</code>), each tab is an
                 <code>&lt;embed&gt;</code> backed by Chromium's <strong>SurfaceEmbed</strong>, and the engine is NNCore, which is Chrome plus Bay's layer, as on
@@ -1254,8 +1262,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   </td>
                   <td><code>app_runtime.cc</code>, <code>runtime_state.cc</code>, <code>apps/browser/src/runtime</code></td>
                   <td>
-                    <span class="chip Enable">warn</span> <code>AppRuntime::Enabled()</code> defaults on only on Windows, and the UI's
-                    <code>pageFactsInCoordinator()</code> checks <code>isWindows</code>. Both become a web-host check
+                    <span class="chip Enable">done</span> The shared runtime is the only <code>chrome://bay</code> runtime on Windows and Linux, and the UI's
+                    <code>pageFactsInCoordinator()</code> reads the host's <code>sharedRuntime</code> constant
                   </td>
                 </tr>
                 <tr>
@@ -1368,7 +1376,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <h4>Last, on the Linux machine</h4>
               <ol>
                 <li><strong>Prerequisites and engine build</strong> (<a href="#prereqs">steps</a>, <a href="#p1">Phase&nbsp;1</a>).</li>
-                <li><strong>Hosting gate</strong> (<a href="#p2">Phase&nbsp;2</a>): SurfaceEmbed painting on Wayland and X11 first.</li>
+                <li><strong>SurfaceEmbed on real desktops</strong>: painting on Wayland and X11 first.</li>
                 <li><strong>Acceptance</strong>: the exit criteria of Phases&nbsp;3–6 on GNOME and KDE.</li>
                 <li><strong>Packages and matrix</strong> (<a href="#p7">Phase&nbsp;7</a>, <a href="#p8">8</a>): clean VMs, GPUs, IME, accessibility, beta.</li>
               </ol>
@@ -1581,7 +1589,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                     decorations) and keep glass, vibrancy, shaders, dock, menu bar and traffic lights off.
                   </li>
                   <li>
-                    Shared runtime by web host, not by Windows: <code>AppRuntime::Enabled()</code> defaults on for Linux too, and
+                    Shared runtime by web host, not by Windows: <code>chrome://bay</code> runs only the shared runtime on Linux too, and
                     <code>pageFactsInCoordinator()</code> checks the host's <code>sharedRuntime</code> constant without <code>isWindows</code>.
                   </li>
                   <li>
@@ -2706,8 +2714,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <td><span class="chip risk">High</span></td>
                   <td>
                     Keep Linux-only code thin (switches, siblings, packaging); check every step on the Mac with unit tests and, once the Debian sysroot is
-                    fetched, a Linux-target syntax check; run the Windows hosting gate first if a Windows machine is free; both fallbacks keep the UI, bridge,
-                    runtime and data work
+                    fetched, a Linux-target syntax check; both fallbacks keep the UI, bridge, runtime and data work
                   </td>
                 </tr>
                 <tr>
@@ -2870,8 +2877,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td>Build and test order</td>
                   <td>
-                    <strong>Decided 21 Oct 2026:</strong> code first on the Mac; the engine build, the hosting gate and all Linux testing run last on the Linux
-                    machine. See <a href="#order">Order of work</a>
+                    <strong>Decided 21 Oct 2026:</strong> code first on the Mac; the engine build and all Linux testing run last on the Linux machine. See
+                    <a href="#order">Order of work</a>
                   </td>
                   <td>—</td>
                 </tr>
