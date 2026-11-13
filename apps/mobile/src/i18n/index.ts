@@ -20,10 +20,10 @@ let chosen: Locale = matchLocale(intlTag());
 // The language the user picked in Settings, or null while Bay follows the device.
 let saved: Locale | null = null;
 
-// Set once the user picks a language, so a slow read of the saved one can't undo the pick.
-let picked = false;
-
 const listeners = new Set<() => void>();
+
+// What hears about a pick in Settings: the locale service, which keeps it on disk.
+const pickHandlers = new Set<(locale: Locale | null) => void>();
 
 function notify(): void {
   for (const listener of listeners) listener();
@@ -56,32 +56,32 @@ export function savedLocale(): Locale | null {
 
 /**
  * Shows the app in another language and keeps that choice for the next launch. Null follows the device's language
- * again and forgets the saved one.
+ * again and forgets the saved one. The language changes at once; keeping it is the locale service's work, which hears
+ * about the pick before this returns.
  */
 export function setLocale(locale: Locale | null): void {
-  picked = true;
+  showLocale(locale, locale ?? matchLocale(intlTag()));
 
-  if (saved !== locale) {
-    saved = locale;
-    notify();
-  }
-
-  choose(locale ?? matchLocale(intlTag()));
-  persist(locale);
+  for (const handler of pickHandlers) handler(locale);
 }
 
-/** Reads the saved language, or the device's own when there is none. Call it once, when the app starts. */
-export async function loadLocale(): Promise<void> {
-  const stored = await readLocale();
-
-  if (picked) return;
-
-  if (stored) {
-    saved = stored;
+/** Shows `shown`, with `picked` as the language the user picked, or null while Bay follows the device. */
+export function showLocale(picked: Locale | null, shown: Locale): void {
+  if (saved !== picked) {
+    saved = picked;
     notify();
   }
 
-  choose(stored ?? (await detectLocale()));
+  choose(shown);
+}
+
+/** Calls `handler` with each language picked in Settings, until the returned function is called. */
+export function onPick(handler: (locale: Locale | null) => void): () => void {
+  pickHandlers.add(handler);
+
+  return () => {
+    pickHandlers.delete(handler);
+  };
 }
 
 /** Follows a change of the device's language while Bay runs; a language picked in Settings stays. */
@@ -199,29 +199,3 @@ const NATIVE_LOCALE = v.object({
   I18nManager: v.optional(v.object({ localeIdentifier: v.string() })),
   SettingsManager: v.optional(v.object({ settings: v.optional(v.object({ AppleLocale: v.string() })) })),
 });
-
-async function readLocale(): Promise<Locale | null> {
-  try {
-    const files = await import("./files.ts");
-
-    return await files.readLocaleFile();
-  } catch (cause) {
-    console.warn("Couldn't read the saved language.", cause);
-
-    return null;
-  }
-}
-
-// One write at a time, in the order they were asked for: two writing the same temporary file at once lose one.
-let writing: Promise<void> = Promise.resolve();
-
-function persist(locale: Locale | null): void {
-  writing = writing
-    .then(async () => {
-      const files = await import("./files.ts");
-
-      if (locale) await files.writeLocaleFile(locale);
-      else files.deleteLocaleFile();
-    })
-    .catch((cause: unknown) => console.warn("Couldn't save the chosen language.", cause));
-}

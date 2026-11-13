@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Scope from "effect/Scope";
 import { recordCrash } from "../crashReports.ts";
+import { LocaleService } from "../i18n/service.ts";
 import { BrowserState } from "./ports/browserState.ts";
 import { Diagnostics } from "./ports/diagnostics.ts";
 import { Engine } from "./ports/engine.ts";
@@ -26,10 +27,21 @@ const diagnostics = Diagnostics.layer;
 // The links port reads the engine's share listener, so it needs the engine to be there.
 const links = Links.layer.pipe(Layer.provide(Engine.layer));
 
+// The saved language on disk, kept through the ports it shares with everything else.
+const locale = LocaleService.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Lifecycle.layer, diagnostics)));
+
 /** The app's services, ready to be built. */
-export const appLayer = Layer.mergeAll(diagnostics, Files.layer, Http.layer, SecureStore.layer, Engine.layer, Lifecycle.layer, links, BrowserState.layer).pipe(
-  Layer.provide(diagnostics),
-);
+export const appLayer = Layer.mergeAll(
+  diagnostics,
+  Files.layer,
+  Http.layer,
+  SecureStore.layer,
+  Engine.layer,
+  Lifecycle.layer,
+  links,
+  BrowserState.layer,
+  locale,
+).pipe(Layer.provide(diagnostics));
 
 /** The key the runtime keeps itself under, so a reloaded module can find the one it replaces. */
 const RUNTIME_KEY = "__bayMobileEffectRuntime__";
@@ -83,25 +95,27 @@ export const runMobile = <A, E>(program: Effect.Effect<A, E, AppServices>): Prom
 export const disposeMobileRuntime = (): Promise<void> => mobileRuntime.dispose();
 
 /**
- * Starts the services that outlive the bootstrap. For now that is the app scope's own listeners: the app state and
- * the links that reach Bay from other apps.
+ * Starts the services that outlive the bootstrap: the saved language, which follows the app's state, and the links
+ * that reach Bay from other apps.
  *
  * A service that fails to start is a failure the user never sees, but the app still has to run: it is reported once,
  * where every other failure goes, and the others still start.
  */
-export const startAppServices = (): Promise<void> =>
+const startServices = (): Promise<void> =>
   mobileRuntime
     .runPromise(
       Scope.provide(appScope)(
         Effect.gen(function* () {
           const diagnostics = yield* Diagnostics;
-          const lifecycle = yield* Lifecycle;
           const links = yield* Links;
 
           // The listeners are registered on the app scope now; what they do belongs to the services that follow.
-          const starts = [
+          // Each start needs a different service, so the list is typed by what the app layer gives them all.
+          const starts: readonly Effect.Effect<void, unknown, Scope.Scope | Layer.Success<typeof appLayer>>[] = [
             Effect.gen(function* () {
-              yield* lifecycle.onChange(() => undefined);
+              const locale = yield* LocaleService;
+
+              yield* locale.start();
             }),
             Effect.gen(function* () {
               yield* links.onLink(() => undefined);
@@ -138,3 +152,8 @@ export const startAppServices = (): Promise<void> =>
       recordCrash(error);
       console.error("The app's services could not start", error);
     });
+
+let started: Promise<void> | undefined;
+
+/** Starts the app's services once per runtime: a layout reloaded in development must not start them a second time. */
+export const startAppServices = (): Promise<void> => (started ??= startServices());

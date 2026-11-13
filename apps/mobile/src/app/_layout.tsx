@@ -1,29 +1,25 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { HeroUINativeProvider } from "heroui-native";
-import { useEffect, type JSX } from "react";
-import { AppState } from "react-native";
+import { type JSX } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useAppFonts } from "@/chrome/fonts";
-import { loadLocale, refreshDeviceLocale } from "@/i18n";
+import { installCrashReports } from "@/crashReports";
+import { startAppServices } from "@/effect/runtime";
 
 import "../global.css";
 
-// The saved language is read before the first screen draws, alongside the browsing state, so the app opens in it.
-void loadLocale();
+// A crash in a release build says nothing, so Bay keeps what happened (B8). The watch goes on first, so nothing that
+// goes wrong on the way to the first screen is lost.
+installCrashReports();
+
+// The saved browsing state and language are read before the first screen draws, so the app opens on them. The splash
+// stays up until the store says it is ready.
+void startAppServices();
 
 export default function RootLayout(): JSX.Element | null {
   const fontsReady = useAppFonts();
-
-  // A language changed in the phone's settings while Bay was away shows on return, unless one was picked in Bay.
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") refreshDeviceLocale();
-    });
-
-    return () => subscription.remove();
-  }, []);
 
   // The splash screen stays up until then.
   if (!fontsReady) return null;
