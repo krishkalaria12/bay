@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "base/check.h"
-#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ref.h"
@@ -30,8 +29,6 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/browser_window/public/desktop_browser_window_capabilities.h"
-#include "chrome/browser/ui/navigator/browser_navigator.h"
-#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #include "chrome/browser/ui/window_metadata/window_metadata_controller.h"
@@ -39,8 +36,6 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/base_window.h"
-#include "ui/base/page_transition_types.h"
-#include "ui/base/window_open_disposition.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -96,8 +91,7 @@ class WindowRegistry::Entry final : public views::WidgetObserver,
  public:
   Entry(WindowRegistry& registry, BrowserWindowInterface* browser)
       : registry_(registry), browser_(browser->GetWeakPtr()) {
-    if (auto* strip = browser->GetTabStripModel();
-        strip && AppRuntime::Enabled())
+    if (auto* strip = browser->GetTabStripModel())
       strip->AddObserver(this);
     if (auto* window = browser->GetWindow();
         window && !GlobalWindowCoordinates())
@@ -347,7 +341,7 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
   if (incognito && !profile_name.empty() && profile_name != "incognito:" + id)
     return Failure("Incognito profile id must match its window id");
   Profile* profile = nullptr;
-  if (!context.is_window() && AppRuntime::Enabled()) {
+  if (!context.is_window()) {
     if (auto* runtime = AppRuntime::GetIfStarted())
       profile = runtime->PageOpenProfileForWindow(id);
     if (profile && !incognito)
@@ -674,12 +668,10 @@ std::optional<gfx::Rect> WindowRegistry::Frame(const std::string& id) const {
 }
 
 void WindowRegistry::PublishHostInfo() {
-  if (AppRuntime::Enabled()) {
-    auto* runtime = AppRuntime::GetIfStarted();
-    if (auto host =
-            runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>())
-      host->PublishHostInfo();
-  }
+  auto* runtime = AppRuntime::GetIfStarted();
+  if (auto host =
+          runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>())
+    host->PublishHostInfo();
   std::vector<std::pair<base::WeakPtr<NativeHost>, base::RepeatingClosure>>
       callbacks;
   for (const auto& [host, state] : hosts_)
@@ -690,24 +682,14 @@ void WindowRegistry::PublishHostInfo() {
   }
 }
 void WindowRegistry::Broadcast(base::DictValue event) {
-  if (AppRuntime::Enabled()) {
-    // The coordinator hears every window; a window document its own events,
-    // for its caption and its focus.
-    if (const auto* id = event.FindString("id"))
-      EmitToWindow(*id, event.Clone());
-    auto* runtime = AppRuntime::GetIfStarted();
-    if (auto host =
-            runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>())
-      host->Emit("BayShell", "onWindowEvent", base::Value(std::move(event)));
-    return;
-  }
-  std::vector<base::WeakPtr<NativeHost>> hosts;
-  for (const auto& [host, state] : hosts_)
-    hosts.push_back(state->host);
-  for (const auto& host : hosts) {
-    if (host)
-      host->Emit("BayShell", "onWindowEvent", base::Value(event.Clone()));
-  }
+  // The coordinator hears every window; a window document its own events, for
+  // its caption and its focus.
+  if (const auto* id = event.FindString("id"))
+    EmitToWindow(*id, event.Clone());
+  auto* runtime = AppRuntime::GetIfStarted();
+  if (auto host =
+          runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>())
+    host->Emit("BayShell", "onWindowEvent", base::Value(std::move(event)));
 }
 void WindowRegistry::EmitToWindow(const std::string& id,
                                   base::DictValue event) {
@@ -765,8 +747,7 @@ void WindowRegistry::OnBrowserCreated(BrowserWindowInterface* browser) {
     }
   }
   // Decided once, before the window's document can ask for host info.
-  if (!known && entry.id.empty() &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike")) {
+  if (!known && entry.id.empty()) {
     entry.absorbed =
         std::ranges::any_of(entries_, [browser](const auto& other) {
           return other.first != browser && !other.second->absorbed;
@@ -791,9 +772,8 @@ void WindowRegistry::MoveIntoBayWindow(
     base::WeakPtr<BrowserWindowInterface> source) {
   if (!source)
     return;
-  // With the shared runtime the coordinator owns every tab: the pages go to it,
-  // for a regular browser window.
-  const bool shared = AppRuntime::Enabled();
+  // The coordinator owns every tab: the pages go to it, for a regular browser
+  // window.
   BrowserWindowInterface* target = MostRecentBayWindow(source.get());
 #if BUILDFLAG(IS_LINUX)
   // The absorbed window is never shown. Its launch token activates the Bay
@@ -805,7 +785,7 @@ void WindowRegistry::MoveIntoBayWindow(
       base::nix::SetActivationToken(token);
   }
 #endif
-  auto* runtime = shared ? AppRuntime::GetIfStarted() : nullptr;
+  auto* runtime = AppRuntime::GetIfStarted();
   if (target && runtime) {
     // Offering a page parks it, out of this tab strip.
     TabStripModel* from = source->GetTabStripModel();
@@ -818,31 +798,12 @@ void WindowRegistry::MoveIntoBayWindow(
         runtime->AdoptPage(page.get(), IdFor(target), page.get() == active);
     }
     target->GetWindow()->Activate();
-  } else if (target && !shared) {
-    TabStripModel* from = source->GetTabStripModel();
-    TabStripModel* to = target->GetTabStripModel();
-    if (source->GetProfile() == target->GetProfile()) {
-      while (!from->empty())
-        to->AppendTab(from->DetachTabAtForInsertion(0), /*foreground=*/true);
-    } else if (!source->GetProfile()->IsOffTheRecord()) {
-      // Pages cannot change profile. Reopen them in the Bay window's profile;
-      // private pages are never copied into a regular one.
-      for (int i = 0; i < from->count(); ++i) {
-        NavigateParams params(target,
-                              from->GetWebContentsAt(i)->GetVisibleURL(),
-                              ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-        params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-        Navigate(&params);
-      }
-    }
-    target->GetWindow()->Activate();
   }
   if (source)
     source->GetWindow()->Close();
 }
 BrowserWindowInterface* WindowRegistry::MostRecentBayWindow(
     BrowserWindowInterface* except) const {
-  const bool shared = AppRuntime::Enabled();
   BrowserWindowInterface* target = nullptr;
   GlobalBrowserCollection::GetInstance()->ForEach(
       [&](BrowserWindowInterface* browser) {
@@ -851,8 +812,8 @@ BrowserWindowInterface* WindowRegistry::MostRecentBayWindow(
             browser->IsDeleteScheduled())
           return true;
         const auto* kind = it->second->options.FindString("kind");
-        if (shared && (it->second->id.empty() || !kind || *kind != "browser" ||
-                       browser->GetProfile()->IsOffTheRecord()))
+        if (it->second->id.empty() || !kind || *kind != "browser" ||
+            browser->GetProfile()->IsOffTheRecord())
           return true;
         target = browser;
         return false;

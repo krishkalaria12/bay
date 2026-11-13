@@ -22,7 +22,7 @@ namespace bay {
 class HostContext;
 
 // The desktop host's revisioned Chrome tab strips. One observer owns all Bay
-// strips; shared-runtime events and writes belong to its coordinator only.
+// strips; its events and writes belong to the coordinator only.
 class TabStripMirror final : public BrowserCollectionObserver,
                              public TabStripModelObserver {
  public:
