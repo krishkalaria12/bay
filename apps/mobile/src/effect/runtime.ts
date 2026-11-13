@@ -8,6 +8,7 @@ import * as Scope from "effect/Scope";
 import { recordCrash } from "../crashReports.ts";
 import { LocaleService } from "../i18n/service.ts";
 import { Persistence } from "../store/persistence.ts";
+import { Blocker } from "../privacy/blocker.ts";
 import { BrowserState } from "./ports/browserState.ts";
 import { Diagnostics } from "./ports/diagnostics.ts";
 import { Engine } from "./ports/engine.ts";
@@ -31,6 +32,8 @@ const links = Links.layer.pipe(Layer.provide(Engine.layer));
 // The browsing state and the saved language on disk, kept through the ports they share with everything else.
 const persistence = Persistence.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, BrowserState.layer, Engine.layer, Lifecycle.layer, diagnostics)));
 const locale = LocaleService.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Lifecycle.layer, diagnostics)));
+// The content blocker follows the preferences and keeps the filter lists on disk fresh.
+const blocker = Blocker.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Http.layer, Engine.layer, BrowserState.layer)));
 
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
@@ -44,6 +47,7 @@ export const appLayer = Layer.mergeAll(
   BrowserState.layer,
   persistence,
   locale,
+  blocker,
 ).pipe(Layer.provide(diagnostics));
 
 /** The key the runtime keeps itself under, so a reloaded module can find the one it replaces. */
@@ -99,7 +103,7 @@ export const disposeMobileRuntime = (): Promise<void> => mobileRuntime.dispose()
 
 /**
  * Starts the services that outlive the bootstrap: the browsing state and the saved language, which follow the app's
- * state, and the links that reach Bay from other apps.
+ * state, the content blocker, and the links that reach Bay from other apps.
  *
  * A service that fails to start is a failure the user never sees, but the app still has to run: it is reported once,
  * where every other failure goes, and the others still start.
@@ -130,6 +134,11 @@ const startServices = (): Promise<void> =>
             }),
             Effect.gen(function* () {
               yield* links.onShare(() => undefined);
+            }),
+            Effect.gen(function* () {
+              const blocker = yield* Blocker;
+
+              yield* blocker.start;
             }),
           ];
 

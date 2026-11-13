@@ -48,7 +48,7 @@ import { useSheetOpen } from "@/panels/openSheets";
 import { PageRequestPanel } from "@/panels/PageRequest";
 import { youtubeSelectors } from "@/pagescripts/youtube";
 import { parseImagePress } from "@/pagescripts/images";
-import { useBlockerStatus, useContentBlocking, type BlockerStatus } from "@/privacy/contentBlocking";
+import { useBlockerStatus, type BlockerStatus } from "@/privacy/contentBlocking";
 import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
 import type { BrowserTab } from "@/store/types";
@@ -163,8 +163,6 @@ export function BrowserScreen(): JSX.Element {
   const { blockContent, blockingPausedHosts, lockPrivateTabs } = data.preferences;
   const hasPrivateTabs = data.tabs.some((tab) => tab.private);
   const lockEnabled = lockPrivateTabs && hasPrivateTabs;
-
-  useContentBlocking(ready, blockContent, blockingPausedHosts);
 
   // Only MAX_LIVE page views stay mounted, so the private session belongs to the private tabs, not their views: it
   // lasts until the last private tab closes, and a launch (which never restores private tabs) ends any left over.
