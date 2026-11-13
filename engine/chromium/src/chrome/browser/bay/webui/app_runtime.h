@@ -39,6 +39,10 @@ class AppRuntime final : public ProfileManagerObserver,
  public:
   static AppRuntime* GetIfStarted();
   static void StartForWindow(BrowserWindowInterface& window);
+  // A runtime that loads no coordinator and has already accepted `state`, so
+  // tests can mount the pages it names.
+  static void StartForTesting(BrowserWindowInterface& window,
+                              base::DictValue state);
   static void ShutdownIfStarted();
   bool Owns(content::WebContents* contents) const;
   Profile* profile() const;
