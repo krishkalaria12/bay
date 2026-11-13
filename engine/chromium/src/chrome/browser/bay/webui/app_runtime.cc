@@ -4,6 +4,7 @@
 #include <cmath>
 #include <memory>
 #include <utility>
+#include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -378,6 +379,12 @@ void AppRuntime::StartForWindow(BrowserWindowInterface& window) {
     return;
   Instance() = std::unique_ptr<AppRuntime>(new AppRuntime(window));
   Instance()->Start();
+}
+void AppRuntime::StartForTesting(BrowserWindowInterface& window,
+                                 base::DictValue state) {
+  CHECK(!Instance());
+  Instance() = std::unique_ptr<AppRuntime>(new AppRuntime(window));
+  Instance()->accepted_ = base::DictValue().Set("state", std::move(state));
 }
 void AppRuntime::ShutdownIfStarted() {
   if (Instance()) {
