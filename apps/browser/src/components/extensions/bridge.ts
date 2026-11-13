@@ -6,7 +6,12 @@ import * as v from "valibot";
 import { runWindow } from "../../effect/windowRuntime";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browserStore";
+import { reportBrowserCommand } from "../../runtime/commands";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import * as tabCommands from "../../runtime/tabActions";
+import { useBrowser as authority } from "../../store/browserStore";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
 import { changedIds } from "../../store/recordDiff";
 import { activeTabId, engineProfile } from "../../store/model";
 import { tabForBrowser, usePages } from "../window/pageState";
@@ -51,6 +56,9 @@ export function startExtensionsBridge({ sharedWindow = false } = {}) {
 
 function openRequestedTab(request: TabsRequest) {
   if (!request.url) return;
+  // Only the coordinator may adopt a live page (runtime/pageOpen.ts), and extension requests are not offered to it:
+  // in shared mode the URL opens afresh, as it does without a matching profile.
+  const adoptId = pageFactsInCoordinator() ? undefined : request.adoptId;
   const s = useBrowser.getState();
   const ofProfile = (id: string) => !!s.windows[id] && !s.windows[id]!.incognito && engineProfile(s.windows[id]!.spaceId) === request.profile;
 
@@ -63,22 +71,22 @@ function openRequestedTab(request: TabsRequest) {
 
   // A live tab Chrome made keeps its profile's cookies and storage: adopted only under an app profile on that profile,
   // in a window showing it, else in a new window of it. Without one, the URL opens afresh (and Chrome's tab goes).
-  const spaceId = request.adoptId
+  const spaceId = adoptId
     ? windowId && ofProfile(windowId)
       ? s.windows[windowId]!.spaceId
       : s.spaceOrder.find((p) => engineProfile(p) === request.profile)
     : undefined;
 
-  if (request.adoptId && spaceId) {
-    if (windowId && ofProfile(windowId)) s.newTab(windowId, { url: request.url, adoptId: request.adoptId, spaceId, background });
+  if (adoptId && spaceId) {
+    if (windowId && ofProfile(windowId)) authority.getState().newTab(windowId, { url: request.url, adoptId, spaceId, background });
     // The window is the app's own: it takes the page Chrome made. A user's command never adopts a page, so this does
     // not go through the command transport.
-    else s.createWindow({ url: request.url, adoptId: request.adoptId, spaceId });
+    else authority.getState().createWindow({ url: request.url, adoptId, spaceId });
 
     return;
   }
 
-  if (windowId) s.newTab(windowId, { url: request.url, background });
+  if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url: request.url, background }));
   else openWindow({ url: request.url });
 }
 

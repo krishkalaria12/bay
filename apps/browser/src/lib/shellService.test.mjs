@@ -54,18 +54,26 @@ const fakeEngine = (lab) =>
     onDownload: (listener) => Effect.sync(() => listen(lab, "download", listener)),
     windowIds: () =>
       lab.windowIdsFail ? Effect.fail(failure("shell.windowIds", "The windows the Mac has open could not be read.")) : Effect.succeed(lab.windowIds),
-    isDarkAppearance: () => Effect.succeed(false),
+    isDarkAppearance: () => (lab.darkAnswer ? Effect.promise(() => lab.darkAnswer) : Effect.succeed(false)),
     setAppearance: (mode) =>
       Effect.sync(() => {
         lab.appearances.push(mode);
       }),
     openWindow: (id) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         lab.opened.push(id);
+
+        if (lab.heldOpen) yield* Effect.promise(() => lab.heldOpen);
+
+        if (lab.failOpen.has(id)) yield* Effect.fail(failure("shell.openWindow", "The window could not be opened."));
       }),
     closeWindow: (id) =>
       Effect.sync(() => {
         lab.closed.push(id);
+      }),
+    focusWindow: (id) =>
+      Effect.sync(() => {
+        lab.focused.push(id);
       }),
     setWindowTitle: (id, title) =>
       Effect.sync(() => {
@@ -102,6 +110,8 @@ const withShell = async (use) => {
     closed: [],
     commands: [],
     events: [],
+    failOpen: new Set(),
+    focused: [],
     givenBack: 0,
     listeners: [],
     menus: [],
@@ -327,5 +337,112 @@ test("the shell's own changes stop when it is given back", async () => {
     await settle();
 
     assert.equal(lab.appearances.length, before, "the Mac was not told");
+  });
+});
+
+const deferred = () => {
+  let resolve;
+
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+
+  return { promise, resolve };
+};
+
+test("a window the Mac could not open is taken out of the app, and reported once", async () => {
+  await withShell(async ({ lab, runtime, service, handlers }) => {
+    const { useBrowser } = await import("../store/browserStore.ts");
+
+    const id = useBrowser.getState().createWindow();
+
+    lab.failOpen.add(id);
+
+    await runtime.runPromise(service.start(handlers));
+    await settle();
+
+    assert.equal(useBrowser.getState().windows[id], undefined, "the window nothing shows is gone from the app");
+    assert.deepEqual(
+      lab.reports.map((r) => r.operation.name),
+      ["shell.openWindow"],
+      "the failure was reported once",
+    );
+    assert.equal(lab.opened.filter((opened) => opened === id).length, 1, "the window was not opened again");
+    assert.ok(lab.closed.includes(id), "whatever the Mac made of it was closed");
+  });
+});
+
+test("the shared host's shell opens windows for the states the coordinator accepts, and leaves the host's own be", async () => {
+  await withShell(async ({ lab, runtime, service, handlers }) => {
+    const { useBrowser } = await import("../store/browserStore.ts");
+
+    const first = useBrowser.getState().createWindow();
+
+    // The host's own window (the coordinator's document) is one the app does not know.
+    lab.windowIds = ["coordinator"];
+
+    // The coordinator answers no menu command here: its windows run them.
+    const withoutCommand = { ...handlers, command: undefined };
+
+    await runtime.runPromise(service.start(withoutCommand, { shared: true }));
+    await settle();
+
+    assert.equal(lab.listeners.filter((l) => l.kind === "command").length, 0, "no command handler was registered");
+    assert.ok(!lab.opened.includes(first), "a window waits for the coordinator to accept it");
+    assert.ok(!lab.closed.includes("coordinator"), "the host's own window stays");
+
+    const second = useBrowser.getState().createWindow();
+
+    assert.ok(!lab.opened.includes(second), "a change to the store opens nothing by itself");
+
+    // The coordinator accepts the state: the windows open, and it waits for the Mac's answer.
+    const held = deferred();
+
+    lab.heldOpen = held.promise;
+
+    let reconciled = false;
+
+    const reconciling = runtime.runPromise(service.reconcile(useBrowser.getState())).then(() => {
+      reconciled = true;
+    });
+
+    await settle();
+
+    assert.ok(lab.opened.includes(first) && lab.opened.includes(second), "the accepted windows were opened");
+    assert.equal(reconciled, false, "the coordinator waits for the Mac to open them");
+
+    held.resolve();
+    await reconciling;
+
+    assert.equal(reconciled, true, "the coordinator goes on once the Mac answered");
+
+    lab.heldOpen = undefined;
+    useBrowser.getState().closeWindow(first);
+    useBrowser.getState().closeWindow(second);
+  });
+});
+
+test("the appearance the Mac reports wins over its answer to the first question", async () => {
+  await withShell(async ({ lab, runtime, service, handlers }) => {
+    const { useBrowser } = await import("../store/browserStore.ts");
+    const answer = deferred();
+
+    lab.darkAnswer = answer.promise;
+
+    await runtime.runPromise(service.start(handlers));
+
+    // The Mac goes dark while the first question is still on its way.
+    const app = lab.listeners.find((l) => l.kind === "app");
+
+    app.listener({ type: "appearance", dark: true });
+
+    assert.equal(useBrowser.getState().ui.appDark, true, "the app follows the Mac at once");
+    assert.ok(lab.events.includes("appearance"), "the app still hears the event");
+
+    // The answer to the first question comes back: it is older than the report.
+    answer.resolve(false);
+    await settle();
+
+    assert.equal(useBrowser.getState().ui.appDark, true, "the older answer did not win");
   });
 });

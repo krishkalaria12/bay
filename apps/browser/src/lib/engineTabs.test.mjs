@@ -239,3 +239,99 @@ test("a command the engine does not answer is not sent again", async () => {
     useBrowser.getState().closeWindow(w);
   });
 });
+
+// The reconciliation, reading the engine for the store a runtime is given.
+const withAuthority = async (engine, store, use) => {
+  globalThis.nnTestTabStrip = engine;
+
+  const diagnostics = fakeDiagnostics();
+
+  const runtime = ManagedRuntime.make(
+    EngineTabsService.layer.pipe(Layer.provide(AuthorityStore.layer(store)), Layer.provide(EngineTabsEngine.layer), Layer.provide(diagnostics.layer)),
+  );
+
+  const service = await runtime.runPromise(EngineTabsService);
+
+  try {
+    await use({ runtime, service });
+  } finally {
+    await runtime.dispose();
+  }
+};
+
+// A store of its own with one window of two tabs, and the strip the engine has for it.
+const authorityWithStrip = async (engine) => {
+  const { createBrowserStore } = await import("../store/browserStore.ts");
+  const { activeTabId } = await import("../store/model.ts");
+  const store = createBrowserStore();
+  const windowId = store.getState().createWindow({ url: "https://first.example" });
+  const first = activeTabId(store.getState(), windowId);
+  const second = store.getState().newTab(windowId, { url: "https://second.example", background: true });
+
+  engine.strip(
+    1,
+    [
+      { key: first, browser: 1, pinned: false },
+      { key: second, browser: 2, pinned: false },
+    ],
+    1,
+  );
+
+  // Chrome shows the second tab: the change it reports names the app's window.
+  const activateSecond = () => {
+    engine.strips.get(1).active = 2;
+    engine.deliver({ rev: ++engine.rev, cmd: null, strips: [{ ...engine.state(1), appWindow: windowId }] });
+  };
+
+  return { store, windowId, first, second, activeTabId: () => activeTabId(store.getState(), windowId), activateSecond };
+};
+
+test("the reconciliation writes the store it is given, never the app's own", async () => {
+  const engine = new FakeEngine();
+  const a = await authorityWithStrip(engine);
+  const appState = useBrowser.getState();
+
+  await withAuthority(engine, a.store, async ({ runtime, service }) => {
+    await runtime.runPromise(service.start);
+    await tick();
+
+    a.activateSecond();
+    await tick();
+
+    assert.equal(a.activeTabId(), a.second, "Chrome's change reached the store the runtime was given");
+    assert.equal(useBrowser.getState(), appState, "the app's own store was not written");
+
+    await runtime.runPromise(service.stop);
+
+    assert.equal(engine.listener, undefined, "the engine's transactions were given back");
+  });
+});
+
+test("a stopped reconciliation ignores a late snapshot, and starts again from a new one", async () => {
+  const engine = new FakeEngine();
+  const a = await authorityWithStrip(engine);
+
+  engine.snapshotDelay = 20;
+
+  await withAuthority(engine, a.store, async ({ runtime, service }) => {
+    const started = runtime.runPromise(service.start);
+
+    await runtime.runPromise(service.stop);
+    await started;
+    await tick();
+
+    assert.equal(globalThis.nnChromeTabs.strips().length, 0, "the answer that came after the stop was not applied");
+    assert.equal(globalThis.nnChromeTabs.state().lastRev, -1, "the reconciliation does not believe it knows the strips");
+
+    engine.snapshotDelay = 0;
+    await runtime.runPromise(service.start);
+    await tick();
+
+    assert.equal(globalThis.nnChromeTabs.strips().length, 1, "a new start read the strips again");
+
+    a.activateSecond();
+    await tick();
+
+    assert.equal(a.activeTabId(), a.second, "the restarted reconciliation writes the store");
+  });
+});

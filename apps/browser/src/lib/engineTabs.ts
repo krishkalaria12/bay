@@ -294,6 +294,8 @@ export class EngineTabsService extends Context.Service<
           const snapshot = yield* engine.snapshot();
 
           yield* Effect.sync(() => {
+            // The reconciliation stopped while the engine answered: the answer is for a store it no longer writes.
+            if (!active) return;
             applySnapshot(snapshot);
             known = true;
             reported = false;
@@ -339,8 +341,17 @@ export class EngineTabsService extends Context.Service<
         stopStore?.();
         stopStore = undefined;
 
-        // What the app believed about the strips is stale now: a shell that starts again reads the state again.
+        // What the app believed about the strips is stale now: a shell that starts again reads the state again, and
+        // waits for no command it sent before.
         known = false;
+        lastRev = -1;
+        early = [];
+        mirror.clear();
+        inflight.clear();
+        groups.clear();
+        tried.clear();
+        seen.clear();
+        changedAt.clear();
       };
 
       const start = Effect.gen(function* () {

@@ -1,4 +1,5 @@
-import { type MenuBookmark, type MenuState } from "@bay/desktop";
+import { type CommandEvent, type MenuBookmark, type MenuState } from "@bay/desktop";
+import { isMac } from "@bay/platform";
 import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
 import { useBrowser, type BrowserState, type BrowserStore } from "../store/browserStore";
@@ -10,7 +11,9 @@ import { startTidyDownloads } from "./tidyDownloads";
 import { isInternalTab } from "../components/pages/pageUrls";
 import { sidebarMenuState } from "../components/sidebar/sidebarCommands";
 import { openWindow as createWindow } from "./actions";
-import { openExternalUrls } from "../components/littleBay/actions";
+import { openExternalUrls, openLittleBay } from "../components/littleBay/actions";
+import { reportBrowserCommand } from "../runtime/commands";
+import { EngineTabsService, type EngineTabs } from "./engineTabs";
 import { meetingToJoin } from "../activity/meetingAlerts";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./appCommands";
@@ -22,7 +25,7 @@ import { extensionMenu } from "../components/extensions/state";
 import { runtimeForStore, type ApplicationRuntime } from "../effect/runtime";
 import { captureException } from "../telemetry/errors";
 import * as Effect from "effect/Effect";
-import { ShellService, type Shell, type ShellHandlers } from "./shellService";
+import { ShellService, type Shell, type ShellHandlers, type ShellOptions } from "./shellService";
 import type { PersistenceOwner } from "./persist";
 
 export { isQuitting } from "./quit";
@@ -32,16 +35,36 @@ export { isQuitting } from "./quit";
  *
  * The runtime owns the service: this module only hands it the app's own handlers.
  */
-const startShell = (runtime: ApplicationRuntime, handlers: ShellHandlers): Promise<Shell> =>
+const startShell = (runtime: ApplicationRuntime, handlers: ShellHandlers, options: ShellOptions): Promise<Shell> =>
   runtime.runPromise(
     Effect.gen(function* () {
       const shell = yield* ShellService;
 
-      yield* shell.start(handlers);
+      yield* shell.start(handlers, options);
 
       return shell;
     }),
   );
+
+/** Starts the engine's tab strips for one store's runtime. The answer is the service, once it is there. */
+const startEngineTabs = (runtime: ApplicationRuntime): Promise<EngineTabs> => {
+  const tabs = runtime.runPromise(
+    Effect.gen(function* () {
+      return yield* EngineTabsService;
+    }),
+  );
+
+  void tabs
+    .then((service) => runtime.runPromise(service.start))
+    .catch((cause: unknown) => {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+
+      captureException(error, "console");
+      console.error("The engine's tab strips could not be reconciled", error);
+    });
+
+  return tabs;
+};
 
 /** The native chrome, as the coordinator reaches it. */
 export type NativeSync = {
@@ -52,10 +75,22 @@ export type NativeSync = {
 };
 
 /**
+ * The commands the shared host's coordinator answers itself. Its windows run the menu's commands (runtime/windowMain.ts);
+ * the tray and the shortcut open a window or a Little Bay when Bay may have none, so on the Chrome-hosted desktop,
+ * where the coordinator is the one document that lives as long as Bay does, they are its.
+ */
+const coordinatorCommand = (event: CommandEvent): void => {
+  if (event.command === "newLittleBay") reportBrowserCommand(openLittleBay());
+
+  if (event.command === "newWindow") reportBrowserCommand(createWindow());
+};
+
+/**
  * Starts the app's native wiring for one store: the listeners, the native windows, and the quit handshake.
  *
- * A shared window leaves the app's own wiring to the coordinator that owns the document: it starts the commands and
- * the extensions bridge itself, and it hands this the store the native chrome follows.
+ * The shared host's coordinator (`shared`) leaves the app's own wiring to its windows, which run the commands and the
+ * extensions bridge themselves. It reconciles the engine's tab strips with the store it owns, and its native windows
+ * follow the states it accepts (reconcile).
  */
 export function startNativeSync({
   persistence,
@@ -70,12 +105,18 @@ export function startNativeSync({
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
   // The app's own wiring: the sidebar's undo, the window that asks before it closes and the extensions. It stays
-  // here, and it stays synchronous. Little Bay's put-away and shortcut are its service's (startAppServices).
+  // here, and it stays synchronous. Little Bay's put-away and shortcut are its service's (runtime/services.ts).
   if (!shared) {
     startSidebarMoveUndoSync();
     startWindowCloseGuard();
     startExtensionsBridge();
   }
+
+  const runtime = runtimeForStore(store);
+
+  // The coordinator's own document shows no pages, so no page card starts the tab strips: it reconciles them with
+  // the store it owns.
+  const tabs = shared ? startEngineTabs(runtime) : undefined;
 
   const stopDownloads = startTidyDownloads(store);
 
@@ -84,27 +125,31 @@ export function startNativeSync({
 
   // The native listeners are the shell's: it registers them once, in its own scope, and gives them back when it
   // is given back. This only hands it the app's own handlers.
-  const runtime = runtimeForStore(store);
+  let disposed = false;
 
-  const shell = startShell(runtime, {
-    command: runCommand,
-    appEvent: (event) => {
-      const s = store.getState();
+  const command = !shared ? runCommand : isMac ? undefined : coordinatorCommand;
 
-      if (event.type === "appearance") s.setAppDark(event.dark);
+  const shell = startShell(
+    runtime,
+    {
+      command,
+      appEvent: (event) => {
+        const s = store.getState();
 
-      if (event.type === "reopen") createWindow();
+        if (event.type === "reopen") reportBrowserCommand(createWindow());
 
-      if (event.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
+        if (event.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
 
-      // The quit handshake: the app saves what it has and answers, and keeps running when the user calls it off.
-      if (event.type === "willQuit") void beginQuit(persistence).catch((error) => console.error("Couldn't reply to app shutdown", error));
+        // The quit handshake: the app saves what it has and answers, and keeps running when the user calls it off.
+        if (event.type === "willQuit") void beginQuit(persistence).catch((error) => console.error("Couldn't reply to app shutdown", error));
 
-      if (event.type === "quitCancelled") cancelQuit(persistence);
+        if (event.type === "quitCancelled") cancelQuit(persistence);
+      },
+      openURLs: openExternalUrls,
+      menu: menuState,
     },
-    openURLs: openExternalUrls,
-    menu: menuState,
-  });
+    { shared },
+  );
 
   void shell.catch((cause: unknown) => {
     const error = cause instanceof Error ? cause : new Error(String(cause));
@@ -114,9 +159,18 @@ export function startNativeSync({
   });
 
   return {
-    reconcile: (state) => shell.then((service) => runtime.runPromise(service.reconcile(state))),
+    reconcile: async (state) => {
+      if (disposed) return;
+      const service = await shell;
+
+      if (!disposed) await runtime.runPromise(service.reconcile(state));
+    },
     dispose: () => {
+      if (disposed) return;
+      disposed = true;
       stopDownloads();
+
+      void tabs?.then((service) => Effect.runPromise(service.stop)).catch((error) => console.error("Couldn't stop the engine's tab strips", error));
       void shell
         .then((service) => Effect.runPromise(service.stop))
         .catch((error) => {
