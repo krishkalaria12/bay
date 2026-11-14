@@ -16,7 +16,7 @@ import android.os.IBinder
 
 /**
  * A page's media playing while Bay is in the background: a media playback foreground service keeps the process (and
- * the WebView playing) alive, with a media notification whose play/pause and stop go back to JavaScript as the module's
+ * the engine playing) alive, with a media notification whose play/pause and stop go back to JavaScript as the module's
  * `onMediaControl` event. JavaScript sets what's playing with `BayMedia.update` and ends it with `BayMedia.clear`.
  */
 object BayMedia {

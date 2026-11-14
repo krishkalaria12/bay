@@ -3,10 +3,6 @@ package expo.modules.bayengine
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.webkit.CookieManager
-import android.webkit.WebStorage
-import androidx.webkit.WebStorageCompat
-import androidx.webkit.WebViewFeature
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
@@ -19,7 +15,7 @@ class BayEngineModule : Module() {
     Events("onDownload", "onMediaControl")
 
     OnActivityResult { _, payload ->
-      if (!BayFileChooser.deliver(payload)) BayVoice.deliver(payload)
+      if (!BayEngineBackend.deliverActivityResult(payload)) BayVoice.deliver(payload)
     }
 
     OnCreate {
@@ -44,12 +40,12 @@ class BayEngineModule : Module() {
       else BayDownloads.open(context, id, promise)
     }.runOnQueue(Queues.MAIN)
 
-    AsyncFunction("cancelDownload") { id: String -> appContext.reactContext?.let { BayDownloads.cancel(it, id) } }
+    AsyncFunction("cancelDownload") { id: String -> BayDownloads.cancel(id) }
 
     AsyncFunction("saveImage") { url: String, promise: Promise ->
       val context = appContext.reactContext
       if (context == null) promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
-      else BayDownloads.saveImage(context, url, promise)
+      else BayEngineBackend.saveImage(context, url, promise)
     }.runOnQueue(Queues.MAIN)
 
     // A share intent that launched Bay cold (B14) never fires OnNewIntent; JavaScript asks for it once on mount.
@@ -63,28 +59,32 @@ class BayEngineModule : Module() {
       BayVoice.listen(appContext.currentActivity, promise)
     }.runOnQueue(Queues.MAIN)
 
+    AsyncFunction("setPrivateSessionActive") { active: Boolean ->
+      BayEngineBackend.setPrivateSessionActive(active)
+    }.runOnQueue(Queues.MAIN)
+
     AsyncFunction("clearData") { promise: Promise ->
       val context = appContext.reactContext
       if (context == null) {
         promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
-      } else if (!WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
-        // The legacy API has no completion callback and does not promise all modern storage types.
-        promise.reject("E_WEBVIEW_UPDATE_REQUIRED", "Update Android System WebView to clear all website data.", null)
-      } else {
-        try {
-          WebStorageCompat.deleteBrowsingData(WebStorage.getInstance()) {
-            try {
-              CookieManager.getInstance().flush()
-              BayEngineSnapshots.clear(context)
-              BayEngineTabStates.clear(context)
-              promise.resolve(null)
-            } catch (error: Exception) {
-              promise.reject("E_CLEAR_DATA", "Couldn't clear website data.", error)
-            }
+        return@AsyncFunction
+      }
+      try {
+        BayEngineBackend.clearWebsiteData(context) { error ->
+          if (error != null) {
+            promise.reject(error.code, error.message, error.cause)
+            return@clearWebsiteData
           }
-        } catch (error: Exception) {
-          promise.reject("E_CLEAR_DATA", "Couldn't clear website data.", error)
+          try {
+            BayEngineSnapshots.clear(context)
+            BayEngineTabStates.clear(context)
+            promise.resolve(null)
+          } catch (failure: Exception) {
+            promise.reject("E_CLEAR_DATA", "Couldn't clear website data.", failure)
+          }
         }
+      } catch (error: Exception) {
+        promise.reject("E_CLEAR_DATA", "Couldn't clear website data.", error)
       }
     }.runOnQueue(Queues.MAIN)
 
@@ -92,7 +92,7 @@ class BayEngineModule : Module() {
 
     AsyncFunction("pruneTabStates") { keep: List<String> -> appContext.reactContext?.let { BayEngineTabStates.prune(it, keep) } }
 
-    Constant("privateBrowsingSupported") { BayEngineView.privateBrowsingSupported }
+    Constant("engineInfo") { BayEngineBackend.engineInfo(appContext.reactContext) }
 
     AsyncFunction("setContentBlocking") { files: List<String>?, version: String, promise: Promise ->
       val context = appContext.reactContext
@@ -100,14 +100,14 @@ class BayEngineModule : Module() {
         promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
         return@AsyncFunction
       }
-      BayContentBlocker.apply(files, version, context) { result ->
+      BayEngineBackend.setContentBlocking(files, version, context) { result ->
         result.fold({ promise.resolve(null) }, { promise.reject("E_CONTENT_BLOCKING", "Couldn't prepare the content blocker.", it) })
       }
     }.runOnQueue(Queues.MAIN)
 
-    Function("setBlockingPausedHosts") { hosts: List<String> -> BayContentBlocker.setPausedHosts(hosts) }
+    Function("setBlockingPausedHosts") { hosts: List<String> -> BayEngineBackend.setBlockingPausedHosts(hosts) }
 
-    Function("setTrackingParameters") { json: String -> BayAdblock.nativeSetTracking(json) }
+    Function("setTrackingParameters") { json: String -> BayEngineBackend.setTrackingParameters(json) }
 
     View(BayEngineView::class) {
       Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress", "onPageMessage", "onFullscreenChange", "onPageRequest", "onNewWindow")
@@ -115,11 +115,12 @@ class BayEngineModule : Module() {
       Prop("private") { view: BayEngineView, isPrivate: Boolean -> view.isPrivate = isPrivate }
       Prop("active") { view: BayEngineView, active: Boolean -> view.isActive = active }
       Prop("suspended") { view: BayEngineView, suspended: Boolean -> view.isSuspended = suspended }
+      Prop("desktopMode") { view: BayEngineView, desktop: Boolean -> view.desktopMode = desktop }
       Prop("stateKey") { view: BayEngineView, key: String? -> view.stateKey = key }
       Prop("initialUrl") { view: BayEngineView, url: String? -> view.loadInitial(url) }
       AsyncFunction("load") { view: BayEngineView, url: String -> view.load(url) }
-      AsyncFunction("goBack") { view: BayEngineView -> view.webView.goBack() }
-      AsyncFunction("goForward") { view: BayEngineView -> view.webView.goForward() }
+      AsyncFunction("goBack") { view: BayEngineView -> view.goBack() }.runOnQueue(Queues.MAIN)
+      AsyncFunction("goForward") { view: BayEngineView -> view.goForward() }.runOnQueue(Queues.MAIN)
       AsyncFunction("reload") { view: BayEngineView -> view.reload() }
       AsyncFunction("stop") { view: BayEngineView -> view.stop() }
       AsyncFunction("snapshot") { view: BayEngineView, promise: Promise -> view.snapshot(promise) }.runOnQueue(Queues.MAIN)

@@ -77,7 +77,8 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   /// Desktop site (B12): the page asks its site again with a desktop browser's agent, so the server answers with
-  /// the desktop layout. The page reloads when this changes.
+  /// the desktop layout, and WebKit lays it out as a desktop page (the navigation policy). The page reloads when this
+  /// changes.
   var desktopMode = false {
     didSet {
       guard desktopMode != oldValue else { return }
@@ -411,31 +412,35 @@ class BayEngineView: ExpoView, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
   }
 
   func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-               decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+               preferences: WKWebpagePreferences,
+               decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+    // Desktop site (B12) lays the page out as a desktop browser would, wide and shrunk to fit, as Safari's "Request
+    // Desktop Website" does; the agent stays the macOS one (`customUserAgent`), which has no "Mobile" token.
+    preferences.preferredContentMode = desktopMode ? .desktop : .mobile
     // A link to another app asks first (B5), then stays cancelled here; the web page it came from stays open.
     guard let url = navigationAction.request.url else {
-      decisionHandler(.cancel)
+      decisionHandler(.cancel, preferences)
       return
     }
     if !isWebURL(url) {
       if navigationAction.targetFrame?.isMainFrame != false, isExternalURL(url) { requestExternal(url) }
-      decisionHandler(.cancel)
+      decisionHandler(.cancel, preferences)
       return
     }
     if navigationAction.shouldPerformDownload {
-      decisionHandler(.download)
+      decisionHandler(.download, preferences)
       return
     }
     if navigationAction.targetFrame?.isMainFrame == true {
       if (navigationAction.request.httpMethod ?? "GET") == "GET", let replacement = BayTracking.clean(url) ?? httpsUpgrade(url) {
-        decisionHandler(.cancel)
+        decisionHandler(.cancel, preferences)
         webView.load(URLRequest(url: replacement))
         return
       }
       applyContentRules(for: url)
       applyScriptlets(for: url)
     }
-    decisionHandler(.allow)
+    decisionHandler(.allow, preferences)
   }
 
   /// Attachments and types WebKit can't show become downloads. An HTTP error never does: it is the server's answer

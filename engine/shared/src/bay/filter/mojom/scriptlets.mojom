@@ -1,0 +1,15 @@
+// Copyright 2026 Bay authors.
+// Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
+
+// The content blocker's IPC (//bay/filter), the same on every engine. In NNCore's module, so desktop's own interfaces
+// (//bay/core/mojom) and these share one C++ namespace.
+module nncore.mojom;
+
+// A renderer → the browser (process-wide): the content blocker's scriptlets for a document,
+// asked synchronously as its main world starts, so they run before the page's own scripts
+// (as an extension's document_start content script would). frame_url: the document's URL;
+// top_origin: its tab's top-level origin (the blocker's per-site pause). Empty: none.
+interface NNScriptlets {
+  [Sync]
+  Get(string frame_url, string top_origin) => (string script);
+};

@@ -292,6 +292,7 @@ export const panelsHi: PanelStrings = {
   "settings.archive.weekShort": "7 दिन",
   "settings.archive.monthShort": "30 दिन",
   "settings.version": "Bay {version}",
+  "settings.engine": "{engine} {version}",
   "settings.language.system": "सिस्टम",
   "settings.language.systemDetail": "फ़ोन के अनुसार · {language}",
   "pageRequest.thisSite": "यह साइट",

@@ -47,6 +47,10 @@ public class BayEngineModule: Module {
       promise.resolve(nil)
     }.runOnQueue(.main)
 
+    AsyncFunction("setPrivateSessionActive") { (active: Bool) in
+      BayPrivateBrowsing.setActive(active)
+    }.runOnQueue(.main)
+
     AsyncFunction("clearData") { (promise: Promise) in
       WKWebsiteDataStore.default().removeData(
         ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast
@@ -69,7 +73,11 @@ public class BayEngineModule: Module {
       BayEngineTabStates.prune(keeping: keep)
     }
 
-    Constant("privateBrowsingSupported") { true }
+    // Pages render with the system's WebKit, which updates with iOS.
+    Constant("engineInfo") { () -> [String: String] in
+      let os = ProcessInfo.processInfo.operatingSystemVersion
+      return ["family": "webkit", "name": "WebKit", "version": "iOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"]
+    }
 
     AsyncFunction("setContentBlocking") { (files: [String]?, version: String, promise: Promise) in
       let finish: (Result<Int, Error>) -> Void = { result in
@@ -110,6 +118,9 @@ public class BayEngineModule: Module {
       }
       Prop("suspended", false) { (view: BayEngineView, suspended: Bool) in
         view.isSuspended = suspended
+      }
+      Prop("desktopMode", false) { (view: BayEngineView, desktop: Bool) in
+        view.desktopMode = desktop
       }
       Prop("stateKey") { (view: BayEngineView, key: String?) in
         view.stateKey = key

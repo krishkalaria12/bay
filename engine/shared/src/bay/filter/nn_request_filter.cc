@@ -1,4 +1,4 @@
-#include "bay/core/nn_request_filter.h"
+#include "bay/filter/nn_request_filter.h"
 
 #include <algorithm>
 #include <atomic>
@@ -47,7 +47,7 @@
 #include "mojo/public/cpp/system/data_pipe_producer.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "mojo/public/cpp/system/string_data_source.h"
-#include "bay/core/mojom/nncore.mojom.h"
+#include "bay/filter/mojom/scriptlets.mojom.h"
 #include "base/json/json_writer.h"
 #include "net/base/data_url.h"
 #include "net/base/ip_address.h"

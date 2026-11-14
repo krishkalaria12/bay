@@ -8,14 +8,16 @@ import android.app.Service
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.annotation.TargetApi
 import android.content.pm.ServiceInfo
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.MediaStore
+import java.io.File
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
@@ -23,12 +25,12 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 /**
- * Page downloads on Android 10 and later, fetched by Bay itself and written into the public Downloads folder through
- * MediaStore, inside a data-sync foreground service with a progress notification. Not DownloadManager: it runs every
- * download as a JobScheduler job, and the system holds those back while the phone is warm (thermal status "moderate",
- * common while charging on mobile data), so a download could sit at "pending" for as long as the phone stayed warm.
+ * Downloads, written into the public Downloads folder through MediaStore inside a data-sync foreground service with a
+ * progress notification. The engine fetches a page's downloads itself and reports them here; a saved image whose page
+ * is gone is fetched here. Not DownloadManager: it runs every download as a JobScheduler job, and the system holds
+ * those back while the phone is warm (thermal status "moderate", common while charging on mobile data), so a download
+ * could sit at "pending" for as long as the phone stayed warm.
  */
-@TargetApi(Build.VERSION_CODES.Q)
 object BayDownloader {
   private class Job(
     val id: String,
@@ -41,6 +43,9 @@ object BayDownloader {
     @Volatile var connection: HttpURLConnection? = null
     @Volatile var received = 0L
     @Volatile var total = 0L
+    @Volatile var lastSent = 0L
+    /** For a download the page engine fetches: stops its transfer (main thread). */
+    var cancelEngine: (() -> Unit)? = null
   }
 
   private class Cancelled : Exception()
@@ -52,6 +57,9 @@ object BayDownloader {
 
   // Three at a time; the rest wait their turn (and say "Starting…" until then).
   private val executor = Executors.newFixedThreadPool(3)
+  /** Moves the engine's finished files into Downloads, one at a time, apart from Bay's own transfers. */
+  private val mover = Executors.newSingleThreadExecutor()
+  private val main = Handler(Looper.getMainLooper())
   private val jobs = ConcurrentHashMap<String, Job>()
   @Volatile internal var service: BayDownloadService? = null
   private var lastNotified = 0L
@@ -68,12 +76,75 @@ object BayDownloader {
   ) {
     val appContext = context.applicationContext
     val job = Job("b-${UUID.randomUUID()}", url, BayDownloads.filenameFor(url, contentDisposition, mimeType), mimeType, isPrivate)
+    begin(appContext, job)
+    executor.execute { run(appContext, job, userAgent, cookiesFor, referer) }
+  }
+
+  /**
+   * A download the page engine fetches itself (Bay's Chromium): shown like Bay's own, with the engine reporting its
+   * progress here, and moved from the engine's cache into Downloads when it finishes. Returns its id.
+   */
+  fun startFromEngine(context: Context, url: String, filename: String, mimeType: String?, total: Long, isPrivate: Boolean, cancel: () -> Unit): String {
+    val job = Job("b-${UUID.randomUUID()}", url, filename, mimeType, isPrivate)
+    job.total = total.coerceAtLeast(0)
+    job.cancelEngine = cancel
+    begin(context.applicationContext, job)
+    return job.id
+  }
+
+  fun engineProgress(context: Context, id: String, received: Long, total: Long) {
+    val job = jobs[id] ?: return
+    job.received = received
+    job.total = total.coerceAtLeast(0)
+    val now = SystemClock.elapsedRealtime()
+    if (now - job.lastSent < PROGRESS_MS) return
+    job.lastSent = now
+    send(job, "progress")
+    notifyProgress(context)
+  }
+
+  /** The engine's file at `path` is complete: it moves into Downloads, and the engine's copy goes. */
+  fun engineFinished(context: Context, id: String, path: String, mimeType: String?) {
+    val file = File(path)
+    val job = jobs[id]
+    val appContext = context.applicationContext
+    mover.execute {
+      try {
+        if (job == null) return@execute
+        job.received = file.length()
+        val item = writeToDownloads(appContext, job, mimeType?.takeIf { it.isNotEmpty() } ?: job.mimeType) { output ->
+          file.inputStream().use { it.copyTo(output, 64 * 1024) }
+        }
+        finish(appContext, job, item)
+      } catch (error: Exception) {
+        job?.let { fail(appContext, it, error) }
+      } finally {
+        file.delete()
+        // The engine writes each download in a directory of its own; it goes too once empty.
+        file.parentFile?.delete()
+        job?.let(::end)
+      }
+    }
+  }
+
+  fun engineFailed(context: Context, id: String, message: String) {
+    val job = jobs[id] ?: return
+    fail(context.applicationContext, job, Failure(message))
+    end(job)
+  }
+
+  fun engineCancelled(id: String) {
+    val job = jobs[id] ?: return
+    send(job, "cancelled")
+    end(job)
+  }
+
+  private fun begin(context: Context, job: Job) {
     jobs[job.id] = job
     send(job, "started", waiting = "Starting…")
     // Android 12+ refuses to start a foreground service while Bay is in the background (a page that starts a download
     // late); the download still runs, just without the notification keeping Bay alive.
-    runCatching { appContext.startForegroundService(Intent(appContext, BayDownloadService::class.java)) }
-    executor.execute { run(appContext, job, userAgent, cookiesFor, referer) }
+    runCatching { context.startForegroundService(Intent(context, BayDownloadService::class.java)) }
   }
 
   /** True when `id` was one of Bay's own downloads (finished ones are already gone and need nothing). */
@@ -81,6 +152,7 @@ object BayDownloader {
     if (!id.startsWith("b-")) return false
     jobs[id]?.let { job ->
       job.cancelled = true
+      job.cancelEngine?.let { main.post(it) }
       // Unblocks a read that's waiting on the network.
       Thread { runCatching { job.connection?.disconnect() } }.start()
     }
@@ -88,8 +160,6 @@ object BayDownloader {
   }
 
   private fun run(context: Context, job: Job, userAgent: String?, cookiesFor: (String) -> String?, referer: String?) {
-    val resolver = context.contentResolver
-    var item: Uri? = null
     try {
       val connection = connect(job, userAgent, cookiesFor, referer)
       job.total = connection.contentLengthLong.coerceAtLeast(0)
@@ -97,9 +167,8 @@ object BayDownloader {
         ?: job.mimeType
       // The response can name the file better than the link did (a redirect to the real file, a late Content-Disposition).
       connection.getHeaderField("Content-Disposition")?.let { job.filename = BayDownloads.filenameFor(connection.url.toString(), it, type) }
-      item = insert(context, job.filename, type)
-      send(job, "progress")
-      resolver.openOutputStream(item)?.use { output ->
+      val item = writeToDownloads(context, job, type) { output ->
+        send(job, "progress")
         connection.inputStream.use { input ->
           val buffer = ByteArray(64 * 1024)
           var lastSent = SystemClock.elapsedRealtime()
@@ -117,37 +186,64 @@ object BayDownloader {
             }
           }
         }
-      } ?: throw Failure("Bay couldn't save to Downloads.")
-      if (job.cancelled) throw Cancelled()
-      if (job.total > 0 && job.received < job.total) throw Failure("The connection dropped before the download finished.")
-      resolver.update(item, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
-      // MediaStore renames a duplicate ("film (1).mkv"); show the name it really has.
-      resolver.query(item, arrayOf(MediaStore.Downloads.DISPLAY_NAME), null, null, null)?.use { cursor ->
-        if (cursor.moveToFirst()) cursor.getString(0)?.let { job.filename = it }
+        if (job.total > 0 && job.received < job.total) throw Failure("The connection dropped before the download finished.")
       }
-      if (job.total == 0L) job.total = job.received
-      send(job, "finished", path = item.toString())
-      notifyDone(context, job, item, null)
+      finish(context, job, item)
     } catch (error: Exception) {
-      item?.let { runCatching { resolver.delete(it, null, null) } }
-      if (job.cancelled || error is Cancelled) {
-        send(job, "cancelled")
-      } else {
-        val message = when (error) {
-          is Failure -> error.message ?: "The download failed."
-          is java.net.UnknownHostException -> "No connection."
-          is java.net.SocketTimeoutException -> "The site stopped responding."
-          is java.io.IOException -> "The connection dropped before the download finished."
-          else -> "The download failed."
-        }
-        send(job, "failed", error = message)
-        notifyDone(context, job, null, message)
-      }
+      fail(context, job, error)
     } finally {
       runCatching { job.connection?.disconnect() }
-      jobs.remove(job.id)
-      service?.let { running -> if (jobs.isEmpty()) running.finish() else running.refresh() }
+      end(job)
     }
+  }
+
+  /**
+   * Writes a download into the public Downloads folder through `write`, and returns its MediaStore item. Nothing is
+   * left behind when it fails or is cancelled.
+   */
+  private fun writeToDownloads(context: Context, job: Job, type: String?, write: (OutputStream) -> Unit): Uri {
+    val resolver = context.contentResolver
+    val item = insert(context, job.filename, type)
+    try {
+      resolver.openOutputStream(item)?.use(write) ?: throw Failure("Bay couldn't save to Downloads.")
+      if (job.cancelled) throw Cancelled()
+      resolver.update(item, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+    } catch (error: Exception) {
+      runCatching { resolver.delete(item, null, null) }
+      throw error
+    }
+    // MediaStore renames a duplicate ("film (1).mkv"); show the name it really has.
+    resolver.query(item, arrayOf(MediaStore.Downloads.DISPLAY_NAME), null, null, null)?.use { cursor ->
+      if (cursor.moveToFirst()) cursor.getString(0)?.let { job.filename = it }
+    }
+    return item
+  }
+
+  private fun finish(context: Context, job: Job, item: Uri) {
+    if (job.total == 0L) job.total = job.received
+    send(job, "finished", path = item.toString())
+    notifyDone(context, job, item, null)
+  }
+
+  private fun fail(context: Context, job: Job, error: Exception) {
+    if (job.cancelled || error is Cancelled) {
+      send(job, "cancelled")
+      return
+    }
+    val message = when (error) {
+      is Failure -> error.message ?: "The download failed."
+      is java.net.UnknownHostException -> "No connection."
+      is java.net.SocketTimeoutException -> "The site stopped responding."
+      is java.io.IOException -> "The connection dropped before the download finished."
+      else -> "The download failed."
+    }
+    send(job, "failed", error = message)
+    notifyDone(context, job, null, message)
+  }
+
+  private fun end(job: Job) {
+    jobs.remove(job.id)
+    service?.let { running -> if (jobs.isEmpty()) running.finish() else running.refresh() }
   }
 
   /** Follows redirects itself, so an http → https hop works and each host only gets its own cookies. */
@@ -295,7 +391,6 @@ object BayDownloader {
 }
 
 /** Keeps Bay's process running while it downloads, with the progress notification. */
-@TargetApi(Build.VERSION_CODES.Q)
 class BayDownloadService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -316,11 +411,7 @@ class BayDownloadService : Service() {
 
   fun refresh() {
     val notification = BayDownloader.progressNotification(this)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-    } else {
-      startForeground(NOTIFICATION_ID, notification)
-    }
+    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
   }
 
   fun finish() {

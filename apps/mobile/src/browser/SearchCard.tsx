@@ -30,7 +30,6 @@ export interface SearchCardProps {
   engine: SearchEngine;
   data: BrowserData;
   /** Offer the private toggle (false when the engine can't keep a private profile). */
-  privateAvailable: boolean;
   /** Start with private on, as when searching from a private tab. */
   initialPrivate: boolean;
   onOpen: (target: OpenTarget, privately: boolean) => void;
@@ -45,14 +44,14 @@ function targetFor(row: Row): OpenTarget {
   return { kind: "url", url: row.url };
 }
 
-export function SearchCard({ initialText, engine, data, privateAvailable, initialPrivate, onOpen: open, onDismiss }: SearchCardProps): JSX.Element {
+export function SearchCard({ initialText, engine, data, initialPrivate, onOpen: open, onDismiss }: SearchCardProps): JSX.Element {
   const insets = useSafeAreaInsets();
   const keyboard = useAnimatedKeyboard();
   const foreground = useThemeColor("foreground");
   const muted = useThemeColor("muted");
   const t = useT();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
-  const [privately, setPrivately] = useState(initialPrivate && privateAvailable);
+  const [privately, setPrivately] = useState(initialPrivate);
   const onOpen = (target: OpenTarget): void => open(target, privately);
   // A private search card is dark in both themes, like Lens.
   const text = privately ? "#F4F4F5" : foreground;
@@ -226,20 +225,16 @@ export function SearchCard({ initialText, engine, data, privateAvailable, initia
               >
                 <Icon name="mic" color={listening ? (privately ? "#F4F4F5" : foreground) : secondary} size={iconSize.control} />
               </Pressable>
-              {privateAvailable ? (
-                <Pressable
-                  testID="private-toggle"
-                  accessibilityRole="switch"
-                  accessibilityLabel={t("search.private")}
-                  accessibilityState={{ checked: privately }}
-                  className="h-11 w-11 items-center justify-center"
-                  onPress={() => setPrivately((on) => !on)}
-                >
-                  <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={iconSize.control} />
-                </Pressable>
-              ) : (
-                <View className="w-3" />
-              )}
+              <Pressable
+                testID="private-toggle"
+                accessibilityRole="switch"
+                accessibilityLabel={t("search.private")}
+                accessibilityState={{ checked: privately }}
+                className="h-11 w-11 items-center justify-center"
+                onPress={() => setPrivately((on) => !on)}
+              >
+                <Icon name="private" color={privately ? "#F4F4F5" : secondary} size={iconSize.control} />
+              </Pressable>
             </Animated.View>
           </View>
           {privately ? (

@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Builds Bay's Rust content blocker (packages/adblock) for both mobile engines:
-#   iOS      modules/bay-engine/ios/BayAdblock.xcframework (static, device + simulator)
-#   Android  modules/bay-engine/android/src/main/jniLibs/<abi>/libbay_adblock.so
-# plus the scriptlet and redirect resources (packages/adblock/resources/resources.json) in each app bundle.
-# Both are generated and git-ignored. scripts/native runs this when the Rust sources are newer than the outputs.
-# Needs rustup with the aarch64-apple-ios, aarch64-apple-ios-sim and aarch64-linux-android targets, and the NDK.
+# Builds Bay's Rust content blocker (packages/adblock) for iOS, modules/bay-engine/ios/BayAdblock.xcframework (static,
+# device + simulator), and copies its scriptlet and redirect resources (packages/adblock/resources/resources.json)
+# into each app bundle. Android's blocker is inside Bay's engine (bay-engine.aar), so Android only takes the resources.
+# All of it is generated and git-ignored. scripts/native runs this before each build.
+# Needs rustup with the aarch64-apple-ios and aarch64-apple-ios-sim targets.
 #
 #   scripts/adblock              both platforms
 #   scripts/adblock ios          one platform
@@ -34,13 +33,8 @@ for platform in "${platforms[@]}"; do
     cp "$crate/resources/resources.json" modules/bay-engine/ios/BayAdblockResources/bay-adblock-resources.json
     echo "adblock: ios built"
   else
-    ndk=$(ls -d "$ANDROID_HOME"/ndk/*/ | grep -v incomplete | sort -V | tail -1)
-    export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${ndk}toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang
-    build aarch64-linux-android cdylib
-    mkdir -p modules/bay-engine/android/src/main/jniLibs/arm64-v8a
-    cp "$crate/target/aarch64-linux-android/release/libbay_adblock.so" modules/bay-engine/android/src/main/jniLibs/arm64-v8a/
     mkdir -p modules/bay-engine/android/src/main/assets
     cp "$crate/resources/resources.json" modules/bay-engine/android/src/main/assets/bay-adblock-resources.json
-    echo "adblock: android built"
+    echo "adblock: android resources copied"
   fi
 done

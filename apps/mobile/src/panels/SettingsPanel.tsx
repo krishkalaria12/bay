@@ -4,6 +4,7 @@ import { launchImageLibraryAsync } from "expo-image-picker";
 import { useThemeColor } from "heroui-native";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { Image, View } from "react-native";
+import { engineInfo } from "@bay/engine";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
 import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
@@ -44,7 +45,6 @@ export interface SettingsPanelProps {
   pausedHosts: readonly string[];
   onResumeBlocking: (host: string) => void;
   /** Hidden when the engine can't keep private tabs. */
-  privateAvailable: boolean;
   lockPrivateTabs: boolean;
   onLockPrivateTabsChange: (enabled: boolean) => void;
   wallpaper: WallpaperId;
@@ -265,15 +265,13 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               toggle={prefs.skipAmp}
               onPress={() => change({ skipAmp: !prefs.skipAmp })}
             />
-            {props.privateAvailable ? (
-              <ActionRow
-                testID="settings-lock-private"
-                label={t("settings.lockPrivate")}
-                detail={t("settings.lockPrivate.detail")}
-                toggle={props.lockPrivateTabs}
-                onPress={() => props.onLockPrivateTabsChange(!props.lockPrivateTabs)}
-              />
-            ) : null}
+            <ActionRow
+              testID="settings-lock-private"
+              label={t("settings.lockPrivate")}
+              detail={t("settings.lockPrivate.detail")}
+              toggle={props.lockPrivateTabs}
+              onPress={() => props.onLockPrivateTabsChange(!props.lockPrivateTabs)}
+            />
           </Group>
           {props.pausedHosts.length ? (
             <>
@@ -587,6 +585,9 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           ) : null}
           <Text variant="caption" weight="regular" tone="muted" className="mt-6 text-center">
             {t("settings.version", { version: Constants.expoConfig?.version ?? "" })}
+          </Text>
+          <Text testID="settings-engine-info" variant="caption" weight="regular" tone="muted" className="mt-1 text-center">
+            {t("settings.engine", { engine: engineInfo.name, version: engineInfo.version }).trim()}
           </Text>
         </>
       );

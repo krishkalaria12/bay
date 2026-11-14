@@ -10,17 +10,36 @@ use std::borrow::Cow;
 pub enum Platform {
     /// Desktop Bay: Chromium with a user stylesheet.
     DesktopChromium,
-    /// Android: the system WebView (Chromium), with injected cosmetic CSS.
-    AndroidWebView,
     /// iOS: WebKit content-blocking rules, as uBO resolves lists for Safari.
     IosWebKit,
+    /// Android: Bay's own Chromium engine (docs/android-chromium-plan.html), with native network hooks.
+    AndroidChromium,
 }
 
 impl Platform {
+    /// The C ABI's `platform` value (bay_adblock.h). The numbers are stable; unknown ones mean desktop. 1 was the
+    /// system WebView on Android, which Bay no longer uses.
+    pub fn from_ffi(value: u8) -> Self {
+        match value {
+            2 => Self::IosWebKit,
+            3 => Self::AndroidChromium,
+            _ => Self::DesktopChromium,
+        }
+    }
+
+    /// The name a cached engine is stored under, so one platform never loads another's rules.
+    pub fn cache_name(self) -> &'static str {
+        match self {
+            Self::DesktopChromium => "desktop-chromium",
+            Self::IosWebKit => "ios-webkit",
+            Self::AndroidChromium => "android-chromium",
+        }
+    }
+
     fn true_tokens(self) -> &'static [&'static str] {
         match self {
             Self::DesktopChromium => &["env_chromium", "ext_ublock", "cap_user_stylesheet"],
-            Self::AndroidWebView => &[
+            Self::AndroidChromium => &[
                 "env_chromium",
                 "env_mobile",
                 "ext_ublock",
@@ -182,12 +201,20 @@ mod tests {
         let list = "!#if env_mobile\nmobile\n!#endif\n!#if env_safari\nsafari\n!#else\nnot-safari\n!#endif\n";
         assert_eq!(preprocess(list), "not-safari\n");
         assert_eq!(
-            preprocess_for(list, Platform::AndroidWebView),
-            "mobile\nnot-safari\n"
-        );
-        assert_eq!(
             preprocess_for(list, Platform::IosWebKit),
             "mobile\nsafari\n"
         );
+        assert_eq!(
+            preprocess_for(list, Platform::AndroidChromium),
+            "mobile\nnot-safari\n"
+        );
+    }
+
+    #[test]
+    fn ffi_values_stay_stable() {
+        assert_eq!(Platform::from_ffi(0), Platform::DesktopChromium);
+        assert_eq!(Platform::from_ffi(2), Platform::IosWebKit);
+        assert_eq!(Platform::from_ffi(3), Platform::AndroidChromium);
+        assert_eq!(Platform::from_ffi(200), Platform::DesktopChromium);
     }
 }

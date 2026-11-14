@@ -294,6 +294,7 @@ export const panels = {
   "settings.archive.weekShort": "7 days",
   "settings.archive.monthShort": "30 days",
   "settings.version": "Bay {version}",
+  "settings.engine": "{engine} {version}",
   "settings.language.system": "System",
   "settings.language.systemDetail": "Follows your phone · {language}",
 

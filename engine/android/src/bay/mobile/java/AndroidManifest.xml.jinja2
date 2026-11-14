@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Copyright 2026 Bay authors. The child process services follow content/shell/android/shell_apk/AndroidManifest.xml.jinja2,
+Copyright 2012 The Chromium Authors. Use of this source code is governed by a BSD-style license that can be found in the
+LICENSE file.
+
+bay-engine.aar's manifest, merged into the app's. The package names the AAR's resources (org.bay.engine.R).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.bay.engine">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <!-- Renderers start from an app zygote that preloads the engine, so each new page process starts quickly. -->
+    <application
+        android:zygotePreloadName="org.chromium.content_public.app.ZygotePreload"
+        android:zygotePreloadNativeLib="lib{{ library_name }}.so">
+
+        <!-- Pages render in isolated processes with no permissions of their own: a compromised renderer can't reach
+             the app's data. Chromium starts one per site, up to this many. -->
+        {% set num_sandboxed_services = 40 %}
+        <meta-data android:name="org.chromium.content.browser.NUM_SANDBOXED_SERVICES"
+                   android:value="{{ num_sandboxed_services }}"/>
+        {% for i in range(num_sandboxed_services) %}
+        <service android:name="org.chromium.content.app.SandboxedProcessService{{ i }}"
+                 android:process=":sandboxed_process{{ i }}"
+                 {% if (i == 0) %}
+                 android:useAppZygote="true"
+                 {% endif %}
+                 android:isolatedProcess="true"
+                 android:exported="false" />
+        {% endfor %}
+
+        <!-- The GPU and network/utility processes: separate from the app's, not isolated. -->
+        {% set num_privileged_services = 5 %}
+        <meta-data android:name="org.chromium.content.browser.NUM_PRIVILEGED_SERVICES"
+                   android:value="{{ num_privileged_services }}"/>
+        {% for i in range(num_privileged_services) %}
+        <service android:name="org.chromium.content.app.PrivilegedProcessService{{ i }}"
+                 android:process=":privileged_process{{ i }}"
+                 android:isolatedProcess="false"
+                 android:exported="false" />
+        {% endfor %}
+    </application>
+</manifest>

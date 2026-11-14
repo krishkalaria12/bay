@@ -26,7 +26,6 @@ export interface PageMenuProps {
   /** Elements the user hid on this site. */
   hiddenCount: number;
   onShowHidden: () => void;
-  privateAvailable: boolean;
   onNewTab: () => void;
   onNewPrivateTab: () => void;
   onBack: () => void;
@@ -225,7 +224,7 @@ export function PageMenu(props: PageMenuProps): JSX.Element {
       </View>
       <TileGrid>
         <Tile id="page-new-tab" icon="add" label={t("pageMenu.newTab")} onPress={act(props.onNewTab)} />
-        {props.privateAvailable ? <Tile id="page-new-private" icon="private" label={t("pageMenu.privateTab")} onPress={act(props.onNewPrivateTab)} /> : null}
+        <Tile id="page-new-private" icon="private" label={t("pageMenu.privateTab")} onPress={act(props.onNewPrivateTab)} />
         <Tile id="page-find" icon="find" label={t("pageMenu.find")} onPress={act(props.onFind)} />
         <Tile
           id="page-reader"
