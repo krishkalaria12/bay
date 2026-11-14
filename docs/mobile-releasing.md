@@ -112,4 +112,3 @@ keeps the debug signature.
 To build the app yourself, pin a published engine in `apps/mobile/android-engine.json` (the release notes print the
 line to use) and run `node scripts/fetch-android-engine.mjs` from `apps/mobile`; `pnpm native` does this for you. A
 built engine on disk installs with `--from <directory>`. An Android build stops if no engine is installed.
-

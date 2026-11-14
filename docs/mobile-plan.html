@@ -1768,8 +1768,8 @@
                 <th scope="row">Passwords and passkeys <span class="kind">Phase 6</span> <span class="st done">Landed</span></th>
                 <td>
                   <code>expo-secure-store</code> isn't added yet. iOS needs Apple's web-browser entitlement; Android uses Credential Manager. Without this,
-                  people retype passwords on every site. Now: Android pages reach the autofill service, and passkeys go through the WebView's Credential Manager
-                  support where it has it; iOS gets password AutoFill with the web-browser entitlement and claims the passkey one only with
+                  people retype passwords on every site. Now: Android pages reach the autofill service, and passkeys go through Bay's Chromium to Android's
+                  Credential Manager; iOS gets password AutoFill with the web-browser entitlement and claims the passkey one only with
                   <code>BAY_WEB_PASSKEYS=1</code>. Waiting on Apple for both entitlements and on Google to list Bay as a privileged browser for passkeys.
                 </td>
                 <td>Lens, Desktop</td>
