@@ -41,6 +41,10 @@ internal object BayEngineBackend {
   // Private sessions -------------------------------------------------------------------------------------------
 
   private var privateProfile: BayProfile? = null
+  /** Ended sessions whose downloads were still running; each goes once no private download is left. */
+  private val retiredProfiles = mutableListOf<BayProfile>()
+  /** Private downloads in flight, by engine id. */
+  private val privateDownloads = mutableSetOf<String>()
   private var privateViews = 0
   /** The app has private tabs, mounted or not (`setPrivateSessionActive`). */
   private var privateSessionActive = false
@@ -61,11 +65,21 @@ internal object BayEngineBackend {
     endUnusedPrivateSession()
   }
 
-  /** Once no private tab or page is left, the session ends: its cookies, storage and cache were only in memory. */
+  /**
+   * Once no private tab or page is left, the session ends: its cookies, storage and cache were only in memory, and
+   * the next private tab gets a new profile. A download the session started keeps its profile until it finishes.
+   */
   private fun endUnusedPrivateSession() {
     if (privateViews > 0 || privateSessionActive) return
-    privateProfile?.destroy()
+    val ended = privateProfile ?: return
     privateProfile = null
+    if (privateDownloads.isEmpty()) ended.destroy() else retiredProfiles += ended
+  }
+
+  private fun privateDownloadEnded(id: String) {
+    if (!privateDownloads.remove(id) || privateDownloads.isNotEmpty()) return
+    retiredProfiles.forEach(BayProfile::destroy)
+    retiredProfiles.clear()
   }
 
   // Website data -----------------------------------------------------------------------------------------------
@@ -147,6 +161,7 @@ internal object BayEngineBackend {
     val jobs = mutableMapOf<String, String>()
     EngineDownloads.setListener(object : EngineDownloads.Listener {
       override fun onStarted(id: String, url: String, filename: String, mimeType: String, total: Long, isPrivate: Boolean) {
+        if (isPrivate) privateDownloads += id
         jobs[id] = BayDownloader.startFromEngine(context, url, filename, mimeType.ifEmpty { null }, total, isPrivate) { EngineDownloads.cancel(id) }
       }
 
@@ -155,15 +170,18 @@ internal object BayEngineBackend {
       }
 
       override fun onFinished(id: String, path: String, mimeType: String) {
+        privateDownloadEnded(id)
         val job = jobs.remove(id)
         if (job == null) File(path).delete() else BayDownloader.engineFinished(context, job, path, mimeType)
       }
 
       override fun onFailed(id: String, message: String) {
+        privateDownloadEnded(id)
         jobs.remove(id)?.let { BayDownloader.engineFailed(context, it, message) }
       }
 
       override fun onCancelled(id: String) {
+        privateDownloadEnded(id)
         jobs.remove(id)?.let(BayDownloader::engineCancelled)
       }
     })

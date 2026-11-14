@@ -29,6 +29,9 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
     var resumed = false
     /// The web view the download came from: WebKit continues a download through it.
     weak var webView: WKWebView?
+    /// A private download's session store, held while it runs: the session can end (its last private tab closes)
+    /// before the download does, and the next private tab gets a new store either way (BayPrivateBrowsing).
+    var privateStore: WKWebsiteDataStore?
     /// The download's BGContinuedProcessingTask on iOS 26, once the system starts it.
     var task: AnyObject?
   }
@@ -56,7 +59,8 @@ final class BayDownloads: NSObject, WKDownloadDelegate {
     askToNotify()
     let id = UUID().uuidString
     let filename = Self.cleanFilename(url?.lastPathComponent ?? "")
-    entries[ObjectIdentifier(download)] = Entry(id: id, url: url?.absoluteString ?? "", isPrivate: isPrivate, filename: filename, webView: webView)
+    entries[ObjectIdentifier(download)] = Entry(id: id, url: url?.absoluteString ?? "", isPrivate: isPrivate, filename: filename, webView: webView,
+                                                 privateStore: isPrivate ? webView.configuration.websiteDataStore : nil)
     downloads[id] = download
     holdBackgroundTime()
     startContinuedProcessing(id: id, title: Self.systemTitle(filename, isPrivate: isPrivate))
