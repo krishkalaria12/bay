@@ -1271,18 +1271,18 @@
                 <td>
                   The app's asynchronous work moved onto one Effect runtime (<code>docs/mobile-effect-plan.html</code>, packages 01–06): saving state, the
                   language, the app lifecycle, the content blocker, page scripts, reading tools and find, snapshots, site icons, saved logins, page requests,
-                  the private session, incoming links, the link resolver, downloads and clearing data. A dynamic <code>import("react-native")</code> read
-                  React Native's deprecated exports and crashed iOS at launch; it is now a lazy <code>require</code>.
+                  the private session, incoming links, the link resolver, downloads and clearing data. A dynamic <code>import("react-native")</code> read React
+                  Native's deprecated exports and crashed iOS at launch; it is now a lazy <code>require</code>.
                 </td>
                 <td><code>c8dfb5fc</code>..<code>68087831</code></td>
                 <td>
                   <span class="st done">Landed</span> All seventeen e2e tests pass on both the iPhone and the Android emulator, and 166 Node tests pass. Not yet
                   measured: the Hermes bundle size, cold launch on Release builds and the React Profiler page-load check the plan asks for. Not yet tried on a
-                  real phone: killing Bay in the background and reopening, Face ID, a real sign-in answered silently, AutoFill. Known gaps: on iOS
-                  <code>private-session</code> failed three runs in a row (the second private session showed a cookie, <code>bay=zzzzzz</code>, that the run
-                  never set, and the session was never ended), then passed five runs in a row, the full suite included; the cause wasn't found. On Android
-                  <code>power-tools</code> lost a tap once while Metro reloaded the app, and on iOS find counted "No matches" once for a word typed while the
-                  keyboard rose; both passed on a rerun.
+                  real phone: killing Bay in the background and reopening, Face ID, a real sign-in answered silently, AutoFill. Known gaps, each passed on a
+                  rerun: on iOS <code>private-session</code> lost its tap on Find's Done three runs in a row, still in the first private session (no cookie
+                  crossed sessions), then passed eleven times; the find bar rides on the keyboard, which may still be resizing its predictions bar when the
+                  count shows, so the test now waits for the screen to settle before tapping Done. On Android <code>power-tools</code> lost a tap once while
+                  Metro reloaded the app, and on iOS find counted "No matches" once for a word typed while the keyboard rose.
                 </td>
               </tr>
             </tbody>
