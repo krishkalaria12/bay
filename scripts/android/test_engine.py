@@ -72,16 +72,24 @@ class IdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             overlay = base / "overlay"
-            (overlay / "bay/mobile").mkdir(parents=True)
-            (overlay / "bay/mobile/BUILD.gn").write_text("new")
+            for directory in engine.OVERLAY_DIRECTORIES:
+                (overlay / directory).mkdir(parents=True)
+                (overlay / directory / "BUILD.gn").write_text("new")
+            desktop = base / "desktop"
+            for name in engine.SHARED_DESKTOP_SOURCES:
+                (desktop / name).parent.mkdir(parents=True, exist_ok=True)
+                (desktop / name).write_text("desktop " + name)
             src = base / "root/chromium/src"
             (src / "bay/mobile").mkdir(parents=True)
             (src / "bay/mobile/stale.cc").write_text("old")
             (src / "content").mkdir()
             (src / "content/keep.cc").write_text("chromium")
-            with mock.patch.object(engine, "OVERLAY", overlay):
+            with mock.patch.object(engine, "OVERLAY", overlay), mock.patch.object(engine, "DESKTOP_CORE", desktop):
                 engine.apply_overlay(base / "root")
             self.assertEqual((src / "bay/mobile/BUILD.gn").read_text(), "new")
+            self.assertEqual((src / "bay/core/BUILD.gn").read_text(), "new")
+            self.assertEqual((src / "bay/core/nn_request_filter.cc").read_text(), "desktop nn_request_filter.cc")
+            self.assertEqual((src / "bay/core/mojom/nncore.mojom").read_text(), "desktop mojom/nncore.mojom")
             self.assertFalse((src / "bay/mobile/stale.cc").exists())
             self.assertEqual((src / "content/keep.cc").read_text(), "chromium")
 

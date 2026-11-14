@@ -22,6 +22,7 @@ _java_sources = [
 
 # Java classes whose methods native code calls, or that call native code.
 _jni_sources = [
+  "java/src/org/bay/engine/BayEngine.java",
   "java/src/org/bay/engine/BayProfile.java",
   "java/src/org/bay/engine/BayTab.java",
 ]
@@ -38,6 +39,8 @@ source_set("lib") {
     "browser/bay_browser_context.h",
     "browser/bay_browser_main_parts.cc",
     "browser/bay_browser_main_parts.h",
+    "browser/bay_content_blocker.cc",
+    "browser/bay_content_blocker.h",
     "browser/bay_content_browser_client.cc",
     "browser/bay_content_browser_client.h",
     "browser/bay_engine_android.cc",
@@ -55,6 +58,8 @@ source_set("lib") {
   deps = [
     ":jni_headers",
     "//base",
+    "//bay/core:request_filter",
+    "//bay/core/mojom",
     "//components/embedder_support",
     "//components/embedder_support:user_agent",
     "//components/embedder_support/android:view",
@@ -77,6 +82,9 @@ source_set("lib") {
     "//url",
     "//v8",
   ]
+  # Bay's content blocker (packages/adblock), built by scripts/android/engine.py with cargo for this ABI. Its C ABI is
+  # bay_adblock.h, copied beside these sources.
+  libs = [ "$root_out_dir/bay_adblock/aarch64-linux-android/release/libbay_adblock.a" ]
 }
 
 shared_library_with_jni("libbay_engine") {

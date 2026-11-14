@@ -7,6 +7,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "bay/mobile/browser/bay_browser_context.h"
+#include "bay/mobile/browser/bay_content_blocker.h"
 #include "content/public/common/result_codes.h"
 
 namespace bay {
@@ -53,6 +54,7 @@ std::unique_ptr<BayBrowserContext> BayBrowserMainParts::CreatePrivateProfile() {
 }
 
 int BayBrowserMainParts::PreMainMessageLoopRun() {
+  BayContentBlocker::Install();
   return content::RESULT_CODE_NORMAL_EXIT;
 }
 

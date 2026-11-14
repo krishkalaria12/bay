@@ -9,6 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/posix/global_descriptors.h"
+#include "bay/core/nn_request_filter.h"
 #include "bay/mobile/browser/bay_browser_main_parts.h"
 #include "bay/mobile/browser/bay_tab.h"
 #include "bay/mobile/common/bay_descriptors.h"
@@ -17,8 +18,12 @@
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/posix_file_descriptor_info.h"
 #include "content/public/browser/web_contents.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/auth.h"
+#include "net/base/net_errors.h"
+#include "net/http/http_request_headers.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/websocket.mojom.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "url/url_constants.h"
 
@@ -126,6 +131,66 @@ void BayContentBrowserClient::ConfigureNetworkContextParams(
 
 std::vector<base::FilePath> BayContentBrowserClient::GetNetworkContextsParentDirectory() {
   return {BayBrowserMainParts::ProfilesDirectory()};
+}
+
+// Bay's content blocker (desktop's filter, //bay/core) sees navigations, subresources, responses and WebSockets of every
+// page, in every profile. It filters nothing until the app sets lists (BayContentBlocker).
+void BayContentBrowserClient::CreateThrottlesForNavigation(content::NavigationThrottleRegistry& registry) {
+  nncore::MaybeAddRequestFilterThrottle(registry);
+}
+
+void BayContentBrowserClient::WillCreateURLLoaderFactory(
+    content::BrowserContext* browser_context,
+    content::RenderFrameHost* frame,
+    int render_process_id,
+    URLLoaderFactoryType type,
+    const url::Origin& request_initiator,
+    const net::IsolationInfo& isolation_info,
+    std::optional<int64_t> navigation_id,
+    ukm::SourceIdObj ukm_source_id,
+    network::URLLoaderFactoryBuilder& factory_builder,
+    mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>* header_client,
+    bool* bypass_redirect_checks,
+    bool* disable_secure_dns,
+    network::mojom::URLLoaderFactoryOverridePtr* factory_override,
+    scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
+    bool is_for_network_service) {
+  auto cookie_policy =
+      nncore::MaybeFilterURLLoaderFactory(type, request_initiator, isolation_info, factory_builder, frame);
+  if (cookie_policy) {
+    std::move(cookie_policy).Run(header_client);
+  }
+}
+
+void BayContentBrowserClient::ExposeInterfacesToRenderer(service_manager::BinderRegistry* registry,
+                                                         blink::AssociatedInterfaceRegistry* associated_registry,
+                                                         content::RenderProcessHost* render_process_host) {
+  // The blocker's scriptlets, which each document asks for as it starts (BayContentRendererClient).
+  nncore::ExposeScriptlets(registry);
+}
+
+bool BayContentBrowserClient::WillInterceptWebSocket(content::RenderFrameHost* frame) {
+  return nncore::HasRequestFilter();
+}
+
+void BayContentBrowserClient::CreateWebSocket(content::RenderFrameHost* frame,
+                                              WebSocketFactory factory,
+                                              const GURL& url,
+                                              const net::SiteForCookies& site_for_cookies,
+                                              const std::optional<std::string>& user_agent,
+                                              mojo::PendingRemote<network::mojom::WebSocketHandshakeClient> client,
+                                              WebSocketOptions options) {
+  if (nncore::ShouldBlockWebSocket(frame, url, site_for_cookies)) {
+    mojo::Remote<network::mojom::WebSocketHandshakeClient>(std::move(client))
+        ->OnFailure("Blocked by Bay's content blocker", net::ERR_BLOCKED_BY_CLIENT, 0);
+    return;
+  }
+  std::vector<network::mojom::HttpHeaderPtr> headers;
+  if (user_agent) {
+    headers.push_back(network::mojom::HttpHeader::New(net::HttpRequestHeaders::kUserAgent, *user_agent));
+  }
+  std::move(factory).Run(url, std::move(headers), std::move(client), mojo::NullRemote(),
+                         std::move(options.header_client));
 }
 
 std::unique_ptr<content::LoginDelegate> BayContentBrowserClient::CreateLoginDelegate(

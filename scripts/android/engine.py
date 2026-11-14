@@ -41,7 +41,13 @@ BASE_STAMP = "bay-android-base.json"
 BUILD_STAMP = "bay-android-build.json"
 OVERLAY = REPO / "engine/android/src"
 # Directories the overlay owns in chromium/src: replaced whole on every build.
-OVERLAY_DIRECTORIES = ("bay/mobile",)
+OVERLAY_DIRECTORIES = ("bay/core", "bay/mobile")
+# Desktop's own sources, compiled unchanged into Android's engine (bay/core): one content-blocking filter for both.
+DESKTOP_CORE = REPO / "engine/nncore/src/bay/core"
+SHARED_DESKTOP_SOURCES = ("nn_cookie_filter.cc", "nn_cookie_filter.h", "nn_request_filter.cc", "nn_request_filter.h",
+                          "mojom/BUILD.gn", "mojom/nncore.mojom")
+ADBLOCK = REPO / "packages/adblock"
+RUST_TARGET = "aarch64-linux-android"
 # What a saved build tree depends on. The target and Bay's own sources aren't here: a change to them is an incremental
 # rebuild of the same tree.
 BASE_KEYS = ("chromium", "chromiumRef", "chromiumCommit", "chromiumUrl", "depotToolsCommit", "gclientTargetOs", "abi",
@@ -71,10 +77,24 @@ def tree_digest(directory: pathlib.Path) -> str:
     return value.hexdigest()
 
 
+def shared_sources_digest() -> str:
+    value = hashlib.sha256()
+    for name in SHARED_DESKTOP_SOURCES:
+        value.update(name.encode() + b"\0")
+        value.update(bytes.fromhex(sha256(DESKTOP_CORE / name)))
+    for name in ("Cargo.toml", "Cargo.lock"):
+        value.update(bytes.fromhex(sha256(ADBLOCK / name)))
+    value.update(tree_digest(ADBLOCK / "src").encode())
+    value.update(tree_digest(ADBLOCK / "include").encode())
+    value.update(tree_digest(ADBLOCK / "vendor").encode())
+    value.update(bytes.fromhex(sha256(ADBLOCK / "resources/resources.json")))
+    return value.hexdigest()
+
+
 def engine_id(lock=LOCK) -> str:
     """The artifact: the base, the target, and everything in this repository that shapes it."""
     return digest(base_id(lock).encode(), lock["target"].encode(), DRIVER_PATH.read_bytes(),
-                  tree_digest(OVERLAY).encode())[:16]
+                  tree_digest(OVERLAY).encode(), shared_sources_digest().encode())[:16]
 
 
 def describe_pin(lock=LOCK) -> dict:
@@ -189,6 +209,12 @@ def run_until(command, cwd, env, minutes) -> bool:
     return True
 
 
+def require_tools(names, env):
+    missing = [name for name in names if not shutil.which(name, path=env.get("PATH"))]
+    if missing:
+        raise RuntimeError(f"missing build tools: {', '.join(missing)}")
+
+
 def require_linux_host():
     if sys.platform != "linux" or os.uname().machine not in ("x86_64", "amd64"):
         raise RuntimeError("Chromium for Android builds only on an x86-64 Linux host")
@@ -291,6 +317,22 @@ def apply_overlay(root: pathlib.Path):
         if target.exists():
             shutil.rmtree(target)
         shutil.copytree(OVERLAY / directory, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    for name in SHARED_DESKTOP_SOURCES:
+        destination = src / "bay/core" / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(DESKTOP_CORE / name, destination)
+    (src / "bay/mobile/adblock").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ADBLOCK / "include/bay_adblock.h", src / "bay/mobile/adblock/bay_adblock.h")
+
+
+def build_adblock(src: pathlib.Path, env: dict):
+    """Bay's Rust content blocker as a static library for the engine's ABI, where //bay/mobile links it.
+
+    Without the JNI bridge (the system-WebView engine's), and pure Rust: a static library needs no linker."""
+    require_tools(("cargo",), env)
+    run(["cargo", "rustc", "--release", "--lib", "--locked", "--target", RUST_TARGET, "--crate-type", "staticlib",
+         "--no-default-features", "--manifest-path", ADBLOCK / "Cargo.toml",
+         "--target-dir", src / LOCK["outputDirectory"] / "bay_adblock"], env=env)
 
 
 def build(root: pathlib.Path, jobs: int | None, ci_minutes: int | None) -> bool:
@@ -299,6 +341,7 @@ def build(root: pathlib.Path, jobs: int | None, ci_minutes: int | None) -> bool:
     env = environment(root)
     (root / BUILD_STAMP).unlink(missing_ok=True)
     apply_overlay(root)
+    build_adblock(source_dir(root), env)
     generate(root, env)
     command = ["autoninja", "-C", LOCK["outputDirectory"]]
     if jobs:

@@ -1,0 +1,26 @@
+# Desktop's content-blocking filter, built for Android's engine: the same implementation both hosts run
+# (docs/android-chromium-plan.html, P1). scripts/android/engine.py copies nn_request_filter.*, nn_cookie_filter.* and
+# mojom/ here from engine/nncore/src/bay/core unchanged; only this build file is Android's.
+
+source_set("request_filter") {
+  sources = [
+    "nn_cookie_filter.cc",
+    "nn_cookie_filter.h",
+    "nn_request_filter.cc",
+    "nn_request_filter.h",
+  ]
+  public_deps = [
+    "//bay/core/mojom",
+    "//content/public/browser",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+    "//services/service_manager/public/cpp",
+  ]
+  deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
+    "//net",
+    "//url",
+  ]
+}

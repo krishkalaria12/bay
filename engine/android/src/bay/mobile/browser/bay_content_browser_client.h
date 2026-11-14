@@ -39,6 +39,34 @@ class BayContentBrowserClient : public content::ContentBrowserClient {
                                      cert_verifier::mojom::CertVerifierCreationParams*
                                          cert_verifier_creation_params) override;
   std::vector<base::FilePath> GetNetworkContextsParentDirectory() override;
+  void CreateThrottlesForNavigation(content::NavigationThrottleRegistry& registry) override;
+  void WillCreateURLLoaderFactory(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* frame,
+      int render_process_id,
+      URLLoaderFactoryType type,
+      const url::Origin& request_initiator,
+      const net::IsolationInfo& isolation_info,
+      std::optional<int64_t> navigation_id,
+      ukm::SourceIdObj ukm_source_id,
+      network::URLLoaderFactoryBuilder& factory_builder,
+      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>* header_client,
+      bool* bypass_redirect_checks,
+      bool* disable_secure_dns,
+      network::mojom::URLLoaderFactoryOverridePtr* factory_override,
+      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
+      bool is_for_network_service) override;
+  void ExposeInterfacesToRenderer(service_manager::BinderRegistry* registry,
+                                  blink::AssociatedInterfaceRegistry* associated_registry,
+                                  content::RenderProcessHost* render_process_host) override;
+  bool WillInterceptWebSocket(content::RenderFrameHost* frame) override;
+  void CreateWebSocket(content::RenderFrameHost* frame,
+                       WebSocketFactory factory,
+                       const GURL& url,
+                       const net::SiteForCookies& site_for_cookies,
+                       const std::optional<std::string>& user_agent,
+                       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient> client,
+                       WebSocketOptions options) override;
   std::unique_ptr<content::LoginDelegate> CreateLoginDelegate(
       const net::AuthChallengeInfo& auth_info,
       content::WebContents* web_contents,

@@ -5,6 +5,9 @@ package org.bay.engine;
 
 import android.app.Activity;
 import android.content.Context;
+import android.util.SparseArray;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.ThreadUtils;
@@ -15,18 +18,31 @@ import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.DeviceUtils;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.IntentRequestTracker;
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+import org.jni_zero.NativeMethods;
+import org.json.JSONArray;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.WeakHashMap;
 
 /** Bay's Chromium engine: start it once, then make {@link BayProfile}s and {@link BayTab}s. */
+@JNINamespace("bay")
 public final class BayEngine {
     public interface StartCallback {
         void onStarted();
 
         void onFailed();
     }
+
+    public interface ContentBlockingCallback {
+        /** {@code loaded}: whether the lists could be read and compiled; the previous ones stay otherwise. */
+        void onApplied(boolean loaded);
+    }
+
+    private static final SparseArray<ContentBlockingCallback> sBlockingCallbacks = new SparseArray<>();
+    private static int sNextBlockingRequest;
 
     private static boolean sStarted;
     private static boolean sStarting;
@@ -96,6 +112,53 @@ public final class BayEngine {
         }
     }
 
+    // Content blocking --------------------------------------------------------------------------------------------
+
+    /**
+     * Blocks requests in every tab with these filter list files (paths), or stops blocking with an empty list. The
+     * lists are compiled off the UI thread and cached at {@code cachePath} for {@code version}, so a later launch with
+     * the same version loads them at once. {@code resourcesPath} is the scriptlet and redirect resources file.
+     */
+    public static void setContentBlocking(
+            String[] files,
+            String version,
+            String cachePath,
+            @Nullable String resourcesPath,
+            ContentBlockingCallback callback) {
+        ThreadUtils.assertOnUiThread();
+        int requestId = ++sNextBlockingRequest;
+        sBlockingCallbacks.put(requestId, callback);
+        BayEngineJni.get()
+                .setContentBlocking(
+                        new JSONArray(java.util.Arrays.asList(files)).toString(),
+                        version,
+                        cachePath,
+                        resourcesPath,
+                        requestId);
+    }
+
+    @CalledByNative
+    private static void onContentBlockingApplied(int requestId, boolean loaded) {
+        ContentBlockingCallback callback = sBlockingCallbacks.get(requestId);
+        sBlockingCallbacks.remove(requestId);
+        if (callback != null) callback.onApplied(loaded);
+    }
+
+    /** Sites (hosts, matching their subdomains) where blocking is paused. */
+    public static void setBlockingPausedHosts(String[] hosts) {
+        BayEngineJni.get().setBlockingPausedHosts(new JSONArray(java.util.Arrays.asList(hosts)).toString());
+    }
+
+    /** The tracking-parameter table navigations drop (@bay/core's TRACKING_PARAMS, as JSON). */
+    public static boolean setTrackingParameters(String json) {
+        return BayEngineJni.get().setTrackingParameters(json);
+    }
+
+    /** {@code url} without its tracking parameters, or null when it has none. */
+    public static @Nullable String cleanUrl(String url) {
+        return BayEngineJni.get().cleanUrl(url);
+    }
+
     /** The engine's window for an activity: one per activity, shared by its tabs. */
     static ActivityWindowAndroid windowFor(Activity activity) {
         ActivityWindowAndroid window = sWindows.get(activity);
@@ -110,5 +173,22 @@ public final class BayEngine {
             sWindows.put(activity, window);
         }
         return window;
+    }
+
+    @NativeMethods
+    interface Natives {
+        void setContentBlocking(
+                String filesJson,
+                String version,
+                String cachePath,
+                @Nullable String resourcesPath,
+                int requestId);
+
+        void setBlockingPausedHosts(String hostsJson);
+
+        boolean setTrackingParameters(String json);
+
+        @Nullable
+        String cleanUrl(String url);
     }
 }

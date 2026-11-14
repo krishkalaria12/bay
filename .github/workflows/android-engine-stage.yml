@@ -97,6 +97,11 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q git curl file lsb-release zstd
+      - name: Install Rust for the content blocker
+        if: env.DONE != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
       - name: Download saved state
         if: env.DONE != 'true' && steps.find.outputs.state_run != ''
         uses: actions/download-artifact@v8

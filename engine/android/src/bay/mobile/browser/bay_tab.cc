@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
@@ -19,11 +20,14 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "bay/mobile/browser/bay_browser_context.h"
+#include "bay/mobile/browser/bay_content_blocker.h"
 #include "bay/mobile/common/bay_isolated_world.h"
 #include "components/js_injection/browser/js_communication_host.h"
 #include "components/js_injection/browser/web_message.h"
 #include "components/js_injection/browser/web_message_host.h"
 #include "components/js_injection/browser/web_message_host_factory.h"
+#include "components/js_injection/browser/web_message_reply_proxy.h"
+#include "components/js_injection/common/interfaces.mojom.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/media_capture_devices.h"
 #include "content/public/browser/page.h"
@@ -60,24 +64,90 @@ class TabPointer : public base::SupportsUserData::Data {
   const raw_ptr<BayTab> tab_;
 };
 
-// One per document that posts through __bayPage. Only the main frame's page tools count: a subframe's isolated
-// world can post too, but nothing Bay runs lives there.
+// Collects the classes and ids a document uses and asks for the blocker's CSS for them: at DOMContentLoaded (with the
+// site's own rules), then after load for any new ones. Runs in Bay's isolated world of every frame; a cross-origin
+// frame (ads, embeds) only gets its site rules, since scanning its whole DOM runs on the page's main thread.
+constexpr char16_t kCosmeticScript[] = uR"JS((() => {
+  if (window.__bayCosmeticDone) return;
+  window.__bayCosmeticDone = true;
+  let scan = true;
+  try { scan = window === window.top || !!window.top.location.href; } catch (e) { scan = false; }
+  const seen = { classes: new Set(), ids: new Set() };
+  let first = true;
+  __bayPage.addEventListener("message", (event) => {
+    let reply;
+    try { reply = JSON.parse(event.data); } catch (e) { return; }
+    if (!reply || reply.kind !== "cosmetic" || !reply.css) return;
+    const style = document.createElement("style");
+    style.textContent = reply.css;
+    (document.head || document.documentElement).appendChild(style);
+  });
+  const ask = () => {
+    const classes = [], ids = [];
+    if (scan) for (const el of document.querySelectorAll("[class],[id]")) {
+      for (const c of el.classList) if (!seen.classes.has(c)) { seen.classes.add(c); classes.push(c); }
+      if (el.id && !seen.ids.has(el.id)) { seen.ids.add(el.id); ids.push(el.id); }
+    }
+    if (!first && !classes.length && !ids.length) return;
+    __bayPage.postMessage(JSON.stringify({ kind: "cosmetic", url: location.href, classes, ids, first }));
+    first = false;
+  };
+  ask();
+  if (scan) window.addEventListener("load", ask, { once: true });
+})();)JS";
+
+// One per document that posts through __bayPage. Cosmetic requests are answered here, for any frame; everything else
+// counts only from the main frame: a subframe's isolated world can post too, but none of Bay's page tools live there.
 class PageToolsHost : public js_injection::WebMessageHost {
  public:
-  PageToolsHost(BayTab* tab, bool is_main_frame) : tab_(tab), is_main_frame_(is_main_frame) {}
+  PageToolsHost(BayTab* tab, bool is_main_frame, js_injection::WebMessageReplyProxy* proxy)
+      : tab_(tab), is_main_frame_(is_main_frame), proxy_(proxy) {}
 
   void OnPostMessage(std::unique_ptr<js_injection::WebMessage> message) override {
-    if (!is_main_frame_) {
+    const auto* text = std::get_if<std::u16string>(&message->message);
+    if (!text) {
       return;
     }
-    if (const auto* text = std::get_if<std::u16string>(&message->message)) {
+    if (AnswerCosmetic(*text)) {
+      return;
+    }
+    if (is_main_frame_) {
       tab_->OnPageToolsMessage(*text);
     }
   }
 
  private:
+  bool AnswerCosmetic(const std::u16string& text) {
+    std::optional<base::Value> parsed = base::JSONReader::Read(base::UTF16ToUTF8(text));
+    if (!parsed || !parsed->is_dict()) {
+      return false;
+    }
+    const base::Value::Dict& request = parsed->GetDict();
+    const std::string* kind = request.FindString("kind");
+    if (!kind || *kind != "cosmetic") {
+      return false;
+    }
+    const std::string* url = request.FindString("url");
+    const base::Value::List* classes = request.FindList("classes");
+    const base::Value::List* ids = request.FindList("ids");
+    if (!url || !classes || !ids) {
+      return true;
+    }
+    const std::string css = BayContentBlocker::CosmeticCss(
+        *url, base::WriteJson(*classes).value_or("[]"), base::WriteJson(*ids).value_or("[]"),
+        request.FindBool("first").value_or(false));
+    if (!css.empty()) {
+      base::Value::Dict reply;
+      reply.Set("kind", "cosmetic");
+      reply.Set("css", css);
+      proxy_->PostWebMessage(base::UTF8ToUTF16(base::WriteJson(reply).value_or("{}")));
+    }
+    return true;
+  }
+
   const raw_ptr<BayTab> tab_;
   const bool is_main_frame_;
+  const raw_ptr<js_injection::WebMessageReplyProxy> proxy_;
 };
 
 class PageToolsHostFactory : public js_injection::WebMessageHostFactory {
@@ -88,7 +158,7 @@ class PageToolsHostFactory : public js_injection::WebMessageHostFactory {
                                                            const std::string& origin_string,
                                                            bool is_main_frame,
                                                            js_injection::WebMessageReplyProxy* proxy) override {
-    return std::make_unique<PageToolsHost>(tab_, is_main_frame);
+    return std::make_unique<PageToolsHost>(tab_, is_main_frame, proxy);
   }
 
  private:
@@ -136,6 +206,8 @@ BayTab::BayTab(JNIEnv* env, const JavaRef<jobject>& java_tab, BayBrowserContext*
   const std::u16string error = js_communication_->AddWebMessageHostFactory(
       std::make_unique<PageToolsHostFactory>(this), kPageToolsMessenger, {"*"}, kPageToolsWorldId);
   DCHECK(error.empty()) << error;
+  js_communication_->AddPersistentJavaScript(kCosmeticScript, js_injection::mojom::DocumentInjectionTime::kDocumentEnd,
+                                             {"*"}, kPageToolsWorldId);
 }
 
 BayTab::~BayTab() {
