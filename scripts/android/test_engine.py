@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).with_name("engine.py")
 SPEC = importlib.util.spec_from_file_location("bay_android_engine", SCRIPT)
@@ -45,12 +46,63 @@ class IdentityTests(unittest.TestCase):
         pin = json.loads(subprocess.check_output([sys.executable, SCRIPT, "pin"], text=True))
         self.assertEqual(pin["stateArtifact"], f"android-engine-state-{pin['baseId']}")
         self.assertTrue(pin["id"].startswith(f"bay-android-engine-{engine.LOCK['chromium']}-arm64-"))
+        self.assertEqual(pin["target"], "bay/mobile:aar")
 
     def test_gn_args_change_the_saved_tree_and_artifact(self):
         changed = copy.deepcopy(engine.LOCK)
         changed["gnArgs"]["symbol_level"] = 1
         self.assertNotEqual(engine.base_id(changed), engine.base_id())
         self.assertNotEqual(engine.engine_id(changed), engine.engine_id())
+
+    def test_target_and_sources_change_the_artifact_not_the_saved_tree(self):
+        retargeted = copy.deepcopy(engine.LOCK)
+        retargeted["target"] = "bay/mobile:other"
+        self.assertEqual(engine.base_id(retargeted), engine.base_id())
+        self.assertNotEqual(engine.engine_id(retargeted), engine.engine_id())
+        with tempfile.TemporaryDirectory() as directory:
+            overlay = Path(directory)
+            (overlay / "bay/mobile").mkdir(parents=True)
+            (overlay / "bay/mobile/a.cc").write_text("one")
+            with mock.patch.object(engine, "OVERLAY", overlay):
+                before = engine.engine_id()
+                (overlay / "bay/mobile/a.cc").write_text("two")
+                self.assertNotEqual(engine.engine_id(), before)
+
+    def test_overlay_replaces_only_its_directories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            overlay = base / "overlay"
+            (overlay / "bay/mobile").mkdir(parents=True)
+            (overlay / "bay/mobile/BUILD.gn").write_text("new")
+            src = base / "root/chromium/src"
+            (src / "bay/mobile").mkdir(parents=True)
+            (src / "bay/mobile/stale.cc").write_text("old")
+            (src / "content").mkdir()
+            (src / "content/keep.cc").write_text("chromium")
+            with mock.patch.object(engine, "OVERLAY", overlay):
+                engine.apply_overlay(base / "root")
+            self.assertEqual((src / "bay/mobile/BUILD.gn").read_text(), "new")
+            self.assertFalse((src / "bay/mobile/stale.cc").exists())
+            self.assertEqual((src / "content/keep.cc").read_text(), "chromium")
+
+    def test_elf_alignment_reads_load_segments(self):
+        header = bytearray(64)
+        header[:5] = b"\x7fELF\x02"
+        header[0x20:0x28] = (64).to_bytes(8, "little")
+        header[0x36:0x38] = (56).to_bytes(2, "little")
+        header[0x38:0x3a] = (2).to_bytes(2, "little")
+        segments = b""
+        for align in (16384, 65536):
+            entry = bytearray(56)
+            entry[0:4] = (1).to_bytes(4, "little")
+            entry[48:56] = align.to_bytes(8, "little")
+            segments += bytes(entry)
+        with tempfile.TemporaryDirectory() as directory:
+            library = Path(directory) / "lib.so"
+            library.write_bytes(bytes(header) + segments)
+            self.assertEqual(engine.elf_alignment(library), 16384)
+            library.write_bytes(b"not an elf")
+            self.assertIsNone(engine.elf_alignment(library))
 
     def test_ids_ignore_key_order(self):
         reordered = dict(reversed(list(engine.LOCK.items())))

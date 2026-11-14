@@ -9,7 +9,8 @@
   "gclientTargetOs": ["android"],
   "abi": "arm64-v8a",
   "outputDirectory": "out/Android_arm64",
-  "target": "content_shell_apk",
+  "target": "bay/mobile:aar",
+  "artifact": "bay-engine.aar",
   "gnArgs": {
     "target_os": "android",
     "target_cpu": "arm64",

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 Bay authors. Use of this source code is governed by a BSD-style license that can be found in the
+     LICENSE file. -->
+<resources>
+    <!-- Not shown to people: names the engine in logs and the app's About line. -->
+    <string name="bay_engine_name" translatable="false">Chromium</string>
+</resources>
