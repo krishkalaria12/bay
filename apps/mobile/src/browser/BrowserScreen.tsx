@@ -1,11 +1,9 @@
 import { cleanUrl } from "@bay/core/src/cleanUrl.ts";
 import { hostOf } from "@bay/core/src/input.ts";
-import { clearData, privateBrowsingSupported, saveImage, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
+import { privateBrowsingSupported, saveImage, type LinkPress, type NavigationState, type PageRequest, type PageScroll, type Tab } from "@bay/engine";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
-import * as Scope from "effect/Scope";
 import * as Clipboard from "expo-clipboard";
 import * as LocalAuthentication from "expo-local-authentication";
 import { StatusBar } from "expo-status-bar";
@@ -43,6 +41,7 @@ import { newId, useBrowserStore } from "@/store/browser";
 import { siteSettingFor, type SiteSetting } from "@/store/model";
 import type { BrowserTab } from "@/store/types";
 import { engineFor, isWebURL, SEARCH_ENGINES } from "./address";
+import { ClearData, ViewRegistry } from "./clearData";
 import { Logins } from "./credentials";
 import { originOf } from "./logins";
 import { PrivateLock } from "./PrivateLock";
@@ -60,6 +59,7 @@ import { IncomingLinks } from "./incoming";
 import { bayCommand, incomingLink, type BayCommand } from "./incomingLink";
 import { sameNavigation } from "./navigationEvents";
 import { Snapshots } from "./snapshots";
+import { TabWork } from "./tabWork";
 import { MiniPlayer } from "./MiniPlayer";
 import { PageError } from "./PageError";
 import { Toast, useToast } from "./Toast";
@@ -71,36 +71,27 @@ import { useTabMedia } from "./useTabMedia";
 // Live page views kept in memory; other tabs reload from their address when opened.
 const MAX_LIVE = 4;
 const BAR_HEIGHT = 52;
-const views = new Map<string, Tab>();
+const views = new ViewRegistry();
 const visited = new Map<string, string>();
 
 // Tabs whose current load failed: the engine shows its own error document, whose title and snapshot aren't the page's.
 const failed = new Set<string>();
 
-// Work tied to a tab's current page, like a silent sign-in waiting on the secure store. It ends when the tab loads
-// again or its view goes, because the engine cancels the page's requests then.
-const tabWork = new Map<string, Scope.Closeable>();
-
-/** Runs a program for a tab's current page: a new load or a closed tab interrupts it. */
+/**
+ * Runs a program for a tab's current page under `name`, like a silent sign-in waiting on the secure store. It is the
+ * tab's work: a new load, a closed view or tab, or a newer run under the same name interrupts it, because the engine
+ * cancels the page's requests then.
+ */
 function runForTab(tabId: string, name: string, program: Effect.Effect<void, never, Logins>): void {
-  let scope = tabWork.get(tabId);
-
-  if (!scope) {
-    scope = Effect.runSync(Scope.make());
-    tabWork.set(tabId, scope);
-  }
-
-  runCommand({ name, resource: tabId }, Effect.flatMap(Effect.forkIn(program, scope), Fiber.join));
+  runCommand({ name, resource: tabId }, TabWork.use((work) => work.run(tabId, name, program)).pipe(Effect.flatMap(Fiber.join)));
 }
 
 /** Ends the work tied to a tab's page. */
 function endTabWork(tabId: string): void {
-  const scope = tabWork.get(tabId);
-
-  if (!scope) return;
-
-  tabWork.delete(tabId);
-  void Effect.runPromise(Scope.close(scope, Exit.void));
+  runCommand(
+    { name: "tabWork.end", resource: tabId },
+    TabWork.use((work) => work.end(tabId)),
+  );
 }
 
 type Overlay = "none" | "search" | "tabs";
@@ -544,7 +535,7 @@ export function BrowserScreen(): JSX.Element {
         // late never reaches the next page.
         runForTab(
           tabId,
-          "logins.signIn",
+          `logins.signIn ${request.id}`,
           Effect.gen(function* () {
             const logins = yield* Logins;
             // A secure store that can't be read asks the user instead.
@@ -643,16 +634,20 @@ export function BrowserScreen(): JSX.Element {
     dispatch({ type: "lock-private-tabs", enabled });
   }
 
-  async function wipe(): Promise<void> {
-    reset();
-    setNavigation({});
-    setLive([]);
-    visited.clear();
-    failed.clear();
-    // Let the page views unmount first so no page writes fresh data.
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    await clearData();
-  }
+  // Clearing browsing data (Settings) starts the browser afresh: the store, the pages on screen and what the screen
+  // remembered about them. The wipe waits for the page views to go before the engine clears what pages kept.
+  const wipe = ClearData.use((clearData) =>
+    clearData.clear({
+      reset: () => {
+        reset();
+        setNavigation({});
+        setLive([]);
+        visited.clear();
+        failed.clear();
+      },
+      views,
+    }),
+  );
 
   // Android Back, newest state each press; registered once while the screen is focused.
   const backRef = useRef<() => boolean>(() => false);
@@ -1129,7 +1124,7 @@ export function BrowserScreen(): JSX.Element {
         onResumeBlocking={(paused) => dispatch({ type: "pause-blocking", host: paused, paused: false })}
         preferences={data.preferences}
         onPreferencesChange={(update) => dispatch({ type: "preferences", update })}
-        onClearData={wipe}
+        clearData={wipe}
         onImport={() => setPanel("import")}
         downloadCount={downloads.downloads.length}
         onDownloads={() => setPanel("downloads")}

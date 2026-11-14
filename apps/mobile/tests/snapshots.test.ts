@@ -1,5 +1,5 @@
-// Tab snapshots (src/browser/snapshots.ts): one pending picture per tab, a moment after each visit, never for a
-// closed tab, a private tab or a page that failed.
+// Tab snapshots (src/browser/snapshots.ts): one pending picture per tab, a moment after each visit, kept as the tab's
+// page work (src/browser/tabWork.ts), never for a closed tab, a private tab or a page that failed.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Tab } from "@bay/engine";
@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
 
 import { SNAPSHOT_DELAY_MS, Snapshots } from "../src/browser/snapshots.ts";
+import { TabWork } from "../src/browser/tabWork.ts";
 import { BrowserState } from "../src/effect/ports/browserState.ts";
 import { Engine } from "../src/effect/ports/engine.ts";
 import { fakeBrowserState, fakeDiagnostics, fakeEngine, withTestClock } from "../src/effect/testing.ts";
@@ -49,7 +50,8 @@ const setup = () => {
     }),
   ).pipe(Layer.provide(fakeEngine().layer));
 
-  const layer = Snapshots.layer.pipe(Layer.provideMerge(Layer.mergeAll(engine, browserState.layer, diagnostics.layer)));
+  const ports = Layer.mergeAll(engine, browserState.layer, diagnostics.layer);
+  const layer = Snapshots.layer.pipe(Layer.provideMerge(TabWork.layer), Layer.provideMerge(ports));
 
   return { pictured, browserState, diagnostics, layer };
 };
@@ -72,7 +74,7 @@ test("the newest visit replaces the picture a tab was waiting for", async () => 
       Effect.gen(function* () {
         const snapshots = yield* Snapshots;
 
-        yield* snapshots.start;
+        yield* (yield* TabWork).start;
         yield* snapshots.visited("tab-1", first, notFailed);
         yield* TestClock.adjust(SNAPSHOT_DELAY_MS / 2);
         yield* snapshots.visited("tab-1", second, notFailed);
@@ -101,7 +103,7 @@ test("a tab that closes before its picture gets none", async () => {
         const snapshots = yield* Snapshots;
         const state = yield* BrowserState;
 
-        yield* snapshots.start;
+        yield* (yield* TabWork).start;
         yield* state.dispatch({ type: "new-tab", tab: createTab("tab-2", 1, "https://bay.example"), background: false });
         yield* snapshots.visited("tab-2", view, notFailed);
         yield* state.dispatch({ type: "close-tab", id: "tab-2", now: 2, fallback: createTab("tab-3", 2) });
@@ -125,7 +127,7 @@ test("a private tab and a failed page leave no picture", async () => {
         const snapshots = yield* Snapshots;
         const state = yield* BrowserState;
 
-        yield* snapshots.start;
+        yield* (yield* TabWork).start;
         yield* state.dispatch({ type: "new-tab", tab: createTab("private-1", 1, "https://bay.example", true), background: true });
         yield* snapshots.visited("private-1", fakeView(), notFailed);
         yield* snapshots.capture("private-1", fakeView(), notFailed);

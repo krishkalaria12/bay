@@ -44,12 +44,20 @@ const runInScope = <A>(program: Effect.Effect<A, unknown, ScopedServices>, scope
   });
 };
 
+/** A component's own command, which also says whether it is still working. */
+export type OwnCommand<A, E = unknown> = Command<A, E> & {
+  /** Whether a program it ran has yet to answer. */
+  readonly running: boolean;
+};
+
 /**
  * Runs work that belongs to the component. The work is interrupted when the component unmounts, and a result that
  * arrives after that is dropped.
  */
-export function useCommand<A = void, E = unknown>(): Command<A, E> {
+export function useCommand<A = void, E = unknown>(): OwnCommand<A, E> {
   const [result, setResult] = useState<CommandResult<A> | null>(null);
+  // How many of the programs it ran have yet to answer.
+  const [pending, setPending] = useState(0);
   const scopeRef = useRef<Scope.Closeable | null>(null);
   const mountedRef = useRef(true);
 
@@ -76,15 +84,17 @@ export function useCommand<A = void, E = unknown>(): Command<A, E> {
       scopeRef.current = scope;
     }
 
+    setPending((count) => count + 1);
     runInScope(program, scope, (answer) => {
       // A result that arrives after the component unmounted is dropped.
       if (!mountedRef.current) return;
 
+      setPending((count) => count - 1);
       setResult(answer);
     });
   }, []);
 
-  return { run, result };
+  return { run, result, running: pending > 0 };
 }
 
 /** A scope and the key it belongs to. */

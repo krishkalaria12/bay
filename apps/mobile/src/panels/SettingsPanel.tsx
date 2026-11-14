@@ -2,13 +2,16 @@ import Constants from "expo-constants";
 import { File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
 import { useThemeColor } from "heroui-native";
-import { useEffect, useRef, useState, type JSX } from "react";
+import * as Effect from "effect/Effect";
+import { useEffect, useState, type JSX } from "react";
 import { Image, View } from "react-native";
 import { engineInfo } from "@bay/engine";
 
 import { WALLPAPER_NAMES, Wallpaper } from "@/browser/Wallpaper";
+import type { ClearData } from "@/browser/clearData";
 import { forgetLogin, savedLogins, type SavedLogin } from "@/browser/credentials";
-import { useScopedWork } from "@/effect/react";
+import type { EngineError } from "@/effect/ports/engine";
+import { useCommand, useScopedWork } from "@/effect/react";
 import { Icon } from "@/chrome/Icon";
 import { PressFeedback } from "@/chrome/PressFeedback";
 import { Text } from "@/chrome/Text";
@@ -55,7 +58,8 @@ export interface SettingsPanelProps {
   onWallpaperChange: (id: WallpaperId, photo?: string) => void;
   preferences: SimplePreferences;
   onPreferencesChange: (update: Partial<SimplePreferences>) => void;
-  onClearData: () => Promise<void>;
+  /** Clears browsing data and starts the browser afresh. The sheet runs it and shows how it ended. */
+  clearData: Effect.Effect<void, EngineError, ClearData>;
   /** Opens the import sheet for tabs exported from another browser. */
   onImport: () => void;
   downloadCount: number;
@@ -163,24 +167,20 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const savedLocale = useSavedLocale();
   const [page, setPage] = useState<Page>("main");
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Clearing browsing data is the sheet's own command: it is busy while the wipe runs, and its answer either closes
+  // the sheet or says the wipe failed. Nothing tries it again.
+  const wipe = useCommand();
+  const busy = wipe.running;
+  const [failed, setFailed] = useState(false);
   // Saved logins (B20), reloaded each time the sheet opens on the privacy page. Leaving the page drops the read.
   const loginsOpen = props.visible && page === "privacy";
   const { run: runLogins, result: loginsResult } = useScopedWork<readonly SavedLogin[]>(loginsOpen ? "logins" : "closed");
   const logins = loginsResult?._tag === "Done" ? loginsResult.value : null;
-  const mounted = useRef(true);
-  useEffect(
-    () => () => {
-      mounted.current = false;
-    },
-    [],
-  );
   useEffect(() => {
     if (!props.visible) return;
     setPage("main");
     setConfirming(false);
-    setError(null);
+    setFailed(false);
   }, [props.visible]);
 
   useEffect(() => {
@@ -191,23 +191,23 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     runLogins(forgetLogin(login.origin, login.username));
   }
 
-  async function clearData(): Promise<void> {
+  function clearData(): void {
     if (busy) return;
-    setBusy(true);
-    setError(null);
-
-    try {
-      await props.onClearData();
-
-      if (!mounted.current) return;
-      setConfirming(false);
-      // The empty start page behind the sheet shows the result.
-      props.onClose();
-    } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : t("settings.clearDataFailed"));
-    } finally {
-      if (mounted.current) setBusy(false);
-    }
+    setFailed(false);
+    wipe.run(
+      props.clearData.pipe(
+        Effect.matchEffect({
+          onSuccess: () =>
+            Effect.sync(() => {
+              setConfirming(false);
+              // The empty start page behind the sheet shows the result.
+              props.onClose();
+            }),
+          // A wipe that failed says so under the button; the reset already happened, so it isn't run again.
+          onFailure: () => Effect.sync(() => setFailed(true)),
+        }),
+      ),
+    );
   }
 
   const { preferences: prefs, onPreferencesChange: change } = props;
@@ -541,9 +541,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                 detail={t("settings.clearAllData.detail")}
                 destructive
                 disabled={busy}
-                onPress={() => {
-                  void clearData();
-                }}
+                onPress={clearData}
               />
             ) : (
               <ActionRow
@@ -554,7 +552,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                 disabled={busy}
                 onPress={() => {
                   setConfirming(true);
-                  setError(null);
+                  setFailed(false);
                 }}
               />
             )}
@@ -581,9 +579,9 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               {t("settings.clearingWebsiteData")}
             </Text>
           ) : null}
-          {error ? (
+          {failed ? (
             <Text testID="clear-data-error" accessibilityRole="alert" accessibilityLiveRegion="assertive" variant="subhead" tone="danger" className="mt-3 px-4">
-              {error}
+              {t("settings.clearDataFailed")}
             </Text>
           ) : null}
           <Text variant="caption" weight="regular" tone="muted" className="mt-6 text-center">

@@ -5,8 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Scope from "effect/Scope";
+import { ClearData } from "../browser/clearData.ts";
 import { Favicons } from "../browser/favicons.ts";
 import { Snapshots } from "../browser/snapshots.ts";
+import { TabWork } from "../browser/tabWork.ts";
 import { Logins } from "../browser/credentials.ts";
 import { startDownloads } from "../browser/downloads.ts";
 import { IncomingLinks } from "../browser/incoming.ts";
@@ -35,12 +37,14 @@ export type AppServices =
   | Links
   | BrowserState
   | Diagnostics
+  | TabWork
   | Snapshots
   | Favicons
   | Logins
   | PrivateSession
   | IncomingLinks
-  | LinkResolver;
+  | LinkResolver
+  | ClearData;
 
 // One memo map, so a service that two layers need is one instance and not two.
 const memoMap = Layer.makeMemoMapUnsafe();
@@ -57,8 +61,10 @@ const locale = LocaleService.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer
 // The content blocker follows the preferences and keeps the filter lists on disk fresh.
 const blocker = Blocker.layer.pipe(Layer.provide(Layer.mergeAll(Files.layer, Http.layer, Engine.layer, BrowserState.layer)));
 
-// Page work reads the page through the engine and lands its results in the browser's state.
-const snapshots = Snapshots.layer.pipe(Layer.provide(Layer.mergeAll(Engine.layer, BrowserState.layer)));
+// Page work reads the page through the engine and lands its results in the browser's state. What waits on a tab's
+// page is the tab's work, which ends with the page.
+const tabWork = TabWork.layer.pipe(Layer.provide(BrowserState.layer));
+const snapshots = Snapshots.layer.pipe(Layer.provide(Layer.mergeAll(tabWork, Engine.layer, BrowserState.layer)));
 const favicons = Favicons.layer.pipe(Layer.provide(Layer.mergeAll(Engine.layer, Files.layer, BrowserState.layer)));
 
 // Saved logins, the private session and the links that reach Bay. The memo map builds each port once, however many
@@ -67,6 +73,9 @@ const logins = Logins.layer.pipe(Layer.provide(SecureStore.layer));
 const privateSession = PrivateSession.layer.pipe(Layer.provide(Layer.mergeAll(Engine.layer, BrowserState.layer)));
 const incomingLinks = IncomingLinks.layer.pipe(Layer.provide(Layer.mergeAll(links, BrowserState.layer)));
 const linkResolver = LinkResolver.layer.pipe(Layer.provide(Http.layer));
+
+// Clearing browsing data stops the tabs' work before the engine clears what pages kept.
+const clearData = ClearData.layer.pipe(Layer.provide(Layer.mergeAll(tabWork, Engine.layer)));
 
 /** The app's services, ready to be built. */
 export const appLayer = Layer.mergeAll(
@@ -81,12 +90,14 @@ export const appLayer = Layer.mergeAll(
   persistence,
   locale,
   blocker,
+  tabWork,
   snapshots,
   favicons,
   logins,
   privateSession,
   incomingLinks,
   linkResolver,
+  clearData,
 ).pipe(Layer.provide(diagnostics));
 
 /** The key the runtime keeps itself under, so a reloaded module can find the one it replaces. */
@@ -173,9 +184,9 @@ const startServices = (): Promise<void> =>
               yield* blocker.start;
             }),
             Effect.gen(function* () {
-              const snapshots = yield* Snapshots;
+              const tabWork = yield* TabWork;
 
-              yield* snapshots.start;
+              yield* tabWork.start;
             }),
             Effect.gen(function* () {
               const favicons = yield* Favicons;

@@ -1,17 +1,15 @@
 // Tab snapshots: the picture of each tab the switcher shows. One is taken a moment after a tab visits a page, so the
 // page has drawn, and a newer visit replaces the picture the tab was still waiting for. Private tabs and pages that
-// failed leave no picture behind, and a tab that closes takes its pending picture with it. Pictures are best effort:
-// a page that can't be drawn keeps the one it had.
+// failed leave no picture behind. The pending picture is the tab's page work, so a tab that loads again, loses its
+// view or closes takes it with it. Pictures are best effort: a page that can't be drawn keeps the one it had.
 import type { Tab } from "@bay/engine";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as FiberMap from "effect/FiberMap";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Scope from "effect/Scope";
 import { BrowserState } from "../effect/ports/browserState.ts";
 import { Diagnostics } from "../effect/ports/diagnostics.ts";
 import { Engine } from "../effect/ports/engine.ts";
+import { TabWork } from "./tabWork.ts";
 
 /** How long a page has to draw after it loads before its picture is taken. */
 export const SNAPSHOT_DELAY_MS = 700;
@@ -26,8 +24,6 @@ export class Snapshots extends Context.Service<
     readonly visited: (tabId: string, view: Tab, failed: () => boolean) => Effect.Effect<void>;
     /** Takes the tab's picture now, for the switcher that is about to show it. */
     readonly capture: (tabId: string, view: Tab, failed: () => boolean) => Effect.Effect<void>;
-    /** Lets go of the pictures closed tabs were waiting for. It runs on the app scope. */
-    readonly start: Effect.Effect<void, never, Scope.Scope>;
   }
 >()("bay/Snapshots") {
   static readonly layer = Layer.effect(
@@ -36,8 +32,8 @@ export class Snapshots extends Context.Service<
       const engine = yield* Engine;
       const browserState = yield* BrowserState;
       const diagnostics = yield* Diagnostics;
-      // The picture each tab is waiting for. Running another one for the same tab interrupts the one it replaces.
-      const pending = yield* FiberMap.make<string>();
+      // The picture a tab is waiting for is its page work under one name, so a newer visit interrupts the one it replaces.
+      const tabWork = yield* TabWork;
 
       const take = (tabId: string, view: Tab, failed: () => boolean) =>
         Effect.gen(function* () {
@@ -61,22 +57,8 @@ export class Snapshots extends Context.Service<
 
       return Snapshots.of({
         visited: (tabId, view, failed) =>
-          FiberMap.run(pending, tabId)(Effect.andThen(Effect.sleep(SNAPSHOT_DELAY_MS), take(tabId, view, failed))).pipe(Effect.asVoid),
+          tabWork.run(tabId, "snapshot", Effect.andThen(Effect.sleep(SNAPSHOT_DELAY_MS), take(tabId, view, failed))).pipe(Effect.asVoid),
         capture: take,
-        start: browserState.subscribe((data, previous) => {
-          if (data.tabs === previous.tabs) return;
-
-          const open = new Set(data.tabs.map((tab) => tab.id));
-
-          for (const tab of previous.tabs) {
-            if (open.has(tab.id)) continue;
-
-            const waiting = FiberMap.getUnsafe(pending, tab.id);
-
-            // The store's listener is a plain callback, so the closed tab's capture is interrupted from here directly.
-            if (Option.isSome(waiting)) waiting.value.interruptUnsafe();
-          }
-        }),
       });
     }),
   );
