@@ -12,10 +12,13 @@
 #include "base/android/jni_string.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/scoped_observation.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "bay/mobile/browser/bay_browser_context.h"
 #include "bay/mobile/browser/bay_browser_main_parts.h"
 #include "bay/mobile/browser/bay_content_blocker.h"
+#include "content/public/browser/browsing_data_remover.h"
 
 // Must come after the headers above.
 #include "bay/mobile/jni_headers/BayEngine_jni.h"
@@ -43,6 +46,24 @@ std::vector<std::string> StringList(const std::string& json) {
   }
   return items;
 }
+
+// Hands a finished data removal to Java, then goes: every removal task has exactly one of these.
+class ClearDataObserver : public content::BrowsingDataRemover::Observer {
+ public:
+  ClearDataObserver(content::BrowsingDataRemover* remover, const JavaRef<jobject>& callback)
+      : callback_(callback) {
+    observation_.Observe(remover);
+  }
+
+  void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
+    Java_BayProfile_onDataCleared(base::android::AttachCurrentThread(), callback_, failed_data_types == 0);
+    delete this;
+  }
+
+ private:
+  base::android::ScopedJavaGlobalRef<jobject> callback_;
+  base::ScopedObservation<content::BrowsingDataRemover, content::BrowsingDataRemover::Observer> observation_{this};
+};
 
 }  // namespace
 
@@ -91,6 +112,16 @@ static int64_t JNI_BayProfile_CreatePrivate(JNIEnv* env) {
 static void JNI_BayProfile_DestroyPrivate(JNIEnv* env, int64_t profile_ptr) {
   std::unique_ptr<BayBrowserContext> profile(reinterpret_cast<BayBrowserContext*>(profile_ptr));
   CHECK(profile->IsOffTheRecord());
+}
+
+// Everything a site keeps in this profile: cookies, storage of every kind, the HTTP cache and media licences.
+static void JNI_BayProfile_ClearData(JNIEnv* env, int64_t profile_ptr, const JavaRef<jobject>& callback) {
+  using Remover = content::BrowsingDataRemover;
+  Remover* remover = reinterpret_cast<BayBrowserContext*>(profile_ptr)->GetBrowsingDataRemover();
+  auto* observer = new ClearDataObserver(remover, callback);
+  remover->RemoveAndReply(base::Time(), base::Time::Max(),
+                          Remover::DATA_TYPE_ON_STORAGE_PARTITION | Remover::DATA_TYPE_MEDIA_LICENSES,
+                          Remover::ORIGIN_TYPE_UNPROTECTED_WEB | Remover::ORIGIN_TYPE_PROTECTED_WEB, observer);
 }
 
 }  // namespace bay

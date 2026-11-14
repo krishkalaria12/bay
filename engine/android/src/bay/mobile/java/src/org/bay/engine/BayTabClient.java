@@ -15,7 +15,7 @@ public interface BayTabClient {
     /** The main frame failed to load. {@code code} is Chromium's net error name, such as {@code ERR_NAME_NOT_RESOLVED}. */
     void onMainFrameError(String url, String code, String description);
 
-    /** A navigation became a download. {@code blank} when the tab had no page before it. */
+    /** A navigation became a download ({@link BayDownloads} follows it). {@code blank}: the tab had no page before. */
     void onDownloadStarted(String url, boolean blank);
 
     /** A page tool's {@code post(message)}, as JSON text. */
@@ -35,6 +35,12 @@ public interface BayTabClient {
 
     /** An {@code <input type=file>}. {@code acceptTypes} is the comma-separated accept list. */
     void onFileChooser(int requestId, String acceptTypes, boolean multiple, boolean capture);
+
+    /**
+     * A long press on a link or an image: {@code linkUrl} or {@code imageUrl} is empty when it isn't one. {@code x} and
+     * {@code y} are where, as fractions of the tab's view.
+     */
+    void onContextMenu(String linkUrl, String linkText, String imageUrl, float x, float y);
 
     /** A link to another app (tel:, mailto:, intent:, an app's scheme). The page stays where it is. */
     void onExternalUrl(String url, boolean userGesture);

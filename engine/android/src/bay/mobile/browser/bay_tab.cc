@@ -4,10 +4,12 @@
 
 #include "bay/mobile/browser/bay_tab.h"
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
 #include "base/android/jni_string.h"
+#include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
@@ -22,21 +24,40 @@
 #include "bay/mobile/browser/bay_browser_context.h"
 #include "bay/mobile/browser/bay_content_blocker.h"
 #include "bay/mobile/common/bay_isolated_world.h"
+#include "components/download/public/common/download_url_parameters.h"
+#include "components/embedder_support/user_agent_utils.h"
 #include "components/js_injection/browser/js_communication_host.h"
 #include "components/js_injection/browser/web_message.h"
 #include "components/js_injection/browser/web_message_host.h"
 #include "components/js_injection/browser/web_message_host_factory.h"
 #include "components/js_injection/browser/web_message_reply_proxy.h"
 #include "components/js_injection/common/interfaces.mojom.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/context_menu_params.h"
+#include "content/public/browser/download_manager.h"
+#include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/media_capture_devices.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/navigation_entry_restore_context.h"
 #include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/restore_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/javascript_dialog_type.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "third_party/blink/public/common/messaging/string_message_codec.h"
+#include "third_party/blink/public/common/page_state/page_state.h"
+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/android/java_bitmap.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 
 // Must come after the headers above.
 #include "bay/mobile/jni_headers/BayTab_jni.h"
@@ -192,6 +213,44 @@ int DialogTypeForJava(content::JavaScriptDialogType type) {
   return 0;
 }
 
+// Desktop site (B12): Chrome on macOS at this engine's version, which BayTab.java turns on per navigation. Mobile
+// pages get the engine's own Android agent.
+blink::UserAgentOverride DesktopUserAgent() {
+  blink::UserAgentOverride desktop;
+  desktop.ua_string_override = embedder_support::BuildUserAgentFromOSAndProduct(
+      "Macintosh; Intel Mac OS X 10_15_7", embedder_support::GetProductAndVersion());
+  blink::UserAgentMetadata metadata = embedder_support::GetUserAgentMetadata();
+  metadata.platform = "macOS";
+  metadata.platform_version = "10.15.7";
+  metadata.architecture = "x86";
+  metadata.bitness = "64";
+  metadata.model = std::string();
+  metadata.mobile = false;
+  metadata.form_factors = {blink::kDesktopFormFactor};
+  desktop.ua_metadata_override = std::move(metadata);
+  return desktop;
+}
+
+// Saved tab states (BayTab.saveState): a version, the current entry, and each entry's address, title, page state and
+// desktop-site flag. A state of another version, or one that doesn't parse, restores nothing.
+constexpr int kStateVersion = 1;
+
+constexpr net::NetworkTrafficAnnotationTag kSaveImageAnnotation = net::DefineNetworkTrafficAnnotation("bay_save_image",
+                                                                                                      R"(
+    semantics {
+      sender: "Bay"
+      description: "Saves an image from a page to the person's downloads."
+      trigger: "The person chooses Save image in a page's menu."
+      data: "The image's address, with the site's cookies, as the page would load it."
+      destination: WEBSITE
+    }
+    policy {
+      cookies_allowed: YES
+      cookies_store: "The page's profile."
+      setting: "None: it only runs when the person asks."
+      policy_exception_justification: "Not a //chrome feature."
+    })");
+
 }  // namespace
 
 BayTab::BayTab(JNIEnv* env, const JavaRef<jobject>& java_tab, BayBrowserContext* browser_context)
@@ -200,6 +259,8 @@ BayTab::BayTab(JNIEnv* env, const JavaRef<jobject>& java_tab, BayBrowserContext*
   web_contents_ = content::WebContents::Create(params);
   web_contents_->SetUserData(kTabKey, std::make_unique<TabPointer>(this));
   web_contents_->SetDelegate(this);
+  // Used only by navigations that ask for the desktop site (BayTab.java, NavigationController.setUseDesktopUserAgent).
+  web_contents_->SetUserAgentOverride(DesktopUserAgent(), /*override_in_new_tabs=*/false);
   Observe(web_contents_.get());
 
   js_communication_ = std::make_unique<js_injection::JsCommunicationHost>(web_contents_.get());
@@ -251,6 +312,136 @@ void BayTab::OnPageToolsMessage(const std::u16string& message) {
     return;
   }
   Java_BayTab_onPageToolsMessage(env, java_tab, ConvertUTF16ToJavaString(env, message));
+}
+
+std::string BayTab::SaveState() {
+  content::NavigationController& controller = web_contents_->GetController();
+  base::Value::List entries;
+  int current = -1;
+  for (int i = 0; i < controller.GetEntryCount(); ++i) {
+    content::NavigationEntry* entry = controller.GetEntryAtIndex(i);
+    // Bay's error and start pages aren't history worth keeping; the entries around them are.
+    if (entry->IsInitialEntry() || !entry->GetURL().SchemeIsHTTPOrHTTPS()) {
+      continue;
+    }
+    if (i <= controller.GetCurrentEntryIndex()) {
+      current = static_cast<int>(entries.size());
+    }
+    base::Value::Dict saved;
+    saved.Set("url", entry->GetURL().spec());
+    saved.Set("title", entry->GetTitle());
+    saved.Set("state", base::Base64Encode(entry->GetPageState().ToEncodedData()));
+    saved.Set("desktop", entry->GetIsOverridingUserAgent());
+    entries.Append(std::move(saved));
+  }
+  if (entries.empty() || current < 0) {
+    return std::string();
+  }
+  base::Value::Dict state;
+  state.Set("version", kStateVersion);
+  state.Set("index", current);
+  state.Set("entries", std::move(entries));
+  return base::WriteJson(state).value_or(std::string());
+}
+
+bool BayTab::RestoreState(const std::string& state) {
+  content::NavigationController& controller = web_contents_->GetController();
+  std::optional<base::Value> parsed = base::JSONReader::Read(state);
+  const base::Value::Dict* saved = parsed ? parsed->GetIfDict() : nullptr;
+  if (!saved || saved->FindInt("version") != kStateVersion || !controller.IsInitialBlankNavigation()) {
+    return false;
+  }
+  const base::Value::List* list = saved->FindList("entries");
+  const int index = saved->FindInt("index").value_or(-1);
+  if (!list || index < 0 || index >= static_cast<int>(list->size())) {
+    return false;
+  }
+  std::unique_ptr<content::NavigationEntryRestoreContext> context = content::NavigationEntryRestoreContext::Create();
+  std::vector<std::unique_ptr<content::NavigationEntry>> entries;
+  for (const base::Value& item : *list) {
+    const base::Value::Dict* fields = item.GetIfDict();
+    const std::string* url = fields ? fields->FindString("url") : nullptr;
+    const std::string* encoded = fields ? fields->FindString("state") : nullptr;
+    std::string page_state;
+    if (!url || !encoded || !GURL(*url).SchemeIsHTTPOrHTTPS() || !base::Base64Decode(*encoded, &page_state)) {
+      return false;
+    }
+    std::unique_ptr<content::NavigationEntry> entry = content::NavigationEntry::Create();
+    entry->SetURL(GURL(*url));
+    if (const std::string* title = fields->FindString("title")) {
+      entry->SetTitle(base::UTF8ToUTF16(*title));
+    }
+    entry->SetPageState(blink::PageState::CreateFromEncodedData(page_state), context.get());
+    entry->SetIsOverridingUserAgent(fields->FindBool("desktop").value_or(false));
+    entries.push_back(std::move(entry));
+  }
+  controller.Restore(index, content::RestoreType::kRestored, &entries);
+  controller.LoadIfNecessary();
+  return true;
+}
+
+void BayTab::CaptureSnapshot(int request_id, int max_width) {
+  content::RenderWidgetHostView* view = web_contents_->GetRenderWidgetHostView();
+  const gfx::Size size = view ? view->GetViewBounds().size() : gfx::Size();
+  if (!view || !view->IsSurfaceAvailableForCopy() || size.IsEmpty() || max_width <= 0) {
+    DeliverSnapshot(request_id, nullptr);
+    return;
+  }
+  const float scale = std::min(1.0f, static_cast<float>(max_width) / size.width());
+  const gfx::Size output(std::max(1, static_cast<int>(size.width() * scale)),
+                         std::max(1, static_cast<int>(size.height() * scale)));
+  view->CopyFromSurface(gfx::Rect(), output, base::TimeDelta(),
+                        base::BindOnce(
+                            [](base::WeakPtr<BayTab> tab, int request_id,
+                               const content::CopyFromSurfaceResult& result) {
+                              if (tab) {
+                                tab->DeliverSnapshot(request_id, result.has_value() ? &result->bitmap : nullptr);
+                              }
+                            },
+                            GetWeakPtr(), request_id));
+}
+
+void BayTab::DeliverSnapshot(int request_id, const SkBitmap* bitmap) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> java_tab = GetJavaDelegate(env);
+  if (java_tab.is_null()) {
+    return;
+  }
+  Java_BayTab_onSnapshot(env, java_tab, request_id,
+                         bitmap && !bitmap->drawsNothing()
+                             ? gfx::ConvertToJavaBitmap(*bitmap, gfx::OomBehavior::kReturnNullOnOom)
+                             : ScopedJavaLocalRef<jobject>());
+}
+
+void BayTab::Download(const GURL& url) {
+  if (!url.is_valid()) {
+    return;
+  }
+  std::unique_ptr<download::DownloadUrlParameters> params =
+      content::DownloadRequestUtils::CreateDownloadForWebContentsMainFrame(web_contents_.get(), url,
+                                                                           kSaveImageAnnotation);
+  params->set_download_source(download::DownloadSource::CONTEXT_MENU);
+  web_contents_->GetBrowserContext()->GetDownloadManager()->DownloadUrl(std::move(params));
+}
+
+// A long press on a link or an image: the app shows its own menu where the finger is. Anything else (text) keeps
+// Chromium's own selection.
+bool BayTab::HandleContextMenu(content::RenderFrameHost& render_frame_host, const content::ContextMenuParams& params) {
+  const bool image = params.media_type == blink::mojom::ContextMenuDataMediaType::kImage;
+  const bool link = params.link_url.SchemeIsHTTPOrHTTPS();
+  if (!image && !link) {
+    return false;
+  }
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> java_tab = GetJavaDelegate(env);
+  if (java_tab.is_null()) {
+    return false;
+  }
+  Java_BayTab_onContextMenu(env, java_tab, ConvertUTF8ToJavaString(env, link ? params.link_url.spec() : std::string()),
+                            ConvertUTF16ToJavaString(env, params.link_text),
+                            ConvertUTF8ToJavaString(env, image ? params.src_url.spec() : std::string()), params.x,
+                            params.y);
+  return true;
 }
 
 int BayTab::AskPermission(PermissionKind kind, const url::Origin& origin, base::OnceCallback<void(bool)> callback) {
@@ -611,6 +802,23 @@ static void JNI_BayTab_AnswerFileChooser(JNIEnv* env,
                                          int32_t request_id,
                                          const JavaRef<jstring>& files_json) {
   reinterpret_cast<BayTab*>(tab_ptr)->AnswerFileChooser(request_id, ConvertJavaStringToUTF8(env, files_json));
+}
+
+static ScopedJavaLocalRef<jstring> JNI_BayTab_SaveState(JNIEnv* env, int64_t tab_ptr) {
+  const std::string state = reinterpret_cast<BayTab*>(tab_ptr)->SaveState();
+  return state.empty() ? ScopedJavaLocalRef<jstring>() : ConvertUTF8ToJavaString(env, state);
+}
+
+static bool JNI_BayTab_RestoreState(JNIEnv* env, int64_t tab_ptr, const JavaRef<jstring>& state) {
+  return reinterpret_cast<BayTab*>(tab_ptr)->RestoreState(ConvertJavaStringToUTF8(env, state));
+}
+
+static void JNI_BayTab_CaptureSnapshot(JNIEnv* env, int64_t tab_ptr, int32_t request_id, int32_t max_width) {
+  reinterpret_cast<BayTab*>(tab_ptr)->CaptureSnapshot(request_id, max_width);
+}
+
+static void JNI_BayTab_Download(JNIEnv* env, int64_t tab_ptr, const JavaRef<jstring>& url) {
+  reinterpret_cast<BayTab*>(tab_ptr)->Download(GURL(ConvertJavaStringToUTF8(env, url)));
 }
 
 }  // namespace bay

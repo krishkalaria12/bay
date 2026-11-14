@@ -3,6 +3,7 @@
 
 #include "bay/mobile/browser/bay_browser_context.h"
 
+#include "bay/mobile/browser/bay_download_manager_delegate.h"
 #include "bay/mobile/browser/bay_permission_manager.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/simple_dependency_manager.h"
@@ -41,8 +42,10 @@ bool BayBrowserContext::IsOffTheRecord() {
 }
 
 content::DownloadManagerDelegate* BayBrowserContext::GetDownloadManagerDelegate() {
-  // Downloads are handed to the app as they start (BayTab), which saves them with the system's download manager.
-  return nullptr;
+  if (!download_delegate_) {
+    download_delegate_ = std::make_unique<BayDownloadManagerDelegate>(GetDownloadManager());
+  }
+  return download_delegate_.get();
 }
 
 content::BrowserPluginGuestManager* BayBrowserContext::GetGuestManager() {

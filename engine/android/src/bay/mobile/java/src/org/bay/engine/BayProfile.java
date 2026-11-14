@@ -4,6 +4,7 @@
 package org.bay.engine;
 
 import org.chromium.base.ThreadUtils;
+import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
@@ -58,6 +59,26 @@ public final class BayProfile {
         mNativeProfile = 0;
     }
 
+    /** Whether {@link #clearData} removed everything. */
+    public interface ClearDataCallback {
+        void onCleared(boolean complete);
+    }
+
+    /** Removes the profile's cookies, site storage and cache. Open pages stay open, signed out. */
+    public void clearData(ClearDataCallback callback) {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeProfile == 0) {
+            callback.onCleared(true);
+            return;
+        }
+        BayProfileJni.get().clearData(mNativeProfile, callback);
+    }
+
+    @CalledByNative
+    private static void onDataCleared(Object callback, boolean complete) {
+        ((ClearDataCallback) callback).onCleared(complete);
+    }
+
     long nativePointer() {
         if (mNativeProfile == 0) throw new IllegalStateException("The profile was destroyed.");
         return mNativeProfile;
@@ -78,5 +99,7 @@ public final class BayProfile {
         long createPrivate();
 
         void destroyPrivate(long profilePtr);
+
+        void clearData(long profilePtr, Object callback);
     }
 }

@@ -12,6 +12,7 @@ assert(is_android, "//bay/mobile is Bay's Android engine")
 assert(!is_component_build, "bay-engine.aar ships one self-contained library")
 
 _java_sources = [
+  "java/src/org/bay/engine/BayDownloads.java",
   "java/src/org/bay/engine/BayEngine.java",
   "java/src/org/bay/engine/BayEngineApplication.java",
   "java/src/org/bay/engine/BayProfile.java",
@@ -22,6 +23,7 @@ _java_sources = [
 
 # Java classes whose methods native code calls, or that call native code.
 _jni_sources = [
+  "java/src/org/bay/engine/BayDownloads.java",
   "java/src/org/bay/engine/BayEngine.java",
   "java/src/org/bay/engine/BayProfile.java",
   "java/src/org/bay/engine/BayTab.java",
@@ -43,6 +45,8 @@ source_set("lib") {
     "browser/bay_content_blocker.h",
     "browser/bay_content_browser_client.cc",
     "browser/bay_content_browser_client.h",
+    "browser/bay_download_manager_delegate.cc",
+    "browser/bay_download_manager_delegate.h",
     "browser/bay_engine_android.cc",
     "browser/bay_permission_manager.cc",
     "browser/bay_permission_manager.h",
@@ -60,6 +64,7 @@ source_set("lib") {
     "//base",
     "//bay/core:request_filter",
     "//bay/core/mojom",
+    "//components/download/public/common:public",
     "//components/embedder_support",
     "//components/embedder_support:user_agent",
     "//components/embedder_support/android:view",
@@ -77,8 +82,10 @@ source_set("lib") {
     "//services/network/public/mojom",
     "//third_party/blink/public:blink_headers",
     "//third_party/blink/public/common",
+    "//skia",
     "//ui/android",
     "//ui/base",
+    "//ui/gfx",
     "//url",
     "//v8",
   ]

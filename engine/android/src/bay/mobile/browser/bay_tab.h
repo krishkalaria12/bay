@@ -17,7 +17,10 @@
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/base/auth.h"
+#include "url/gurl.h"
 #include "url/origin.h"
+
+class SkBitmap;
 
 namespace content {
 class FileSelectListener;
@@ -55,6 +58,14 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   void AnswerPermission(int request_id, bool granted);
   void AnswerDialog(int request_id, bool accepted, const std::u16string& text);
   void AnswerFileChooser(int request_id, const std::string& files_json);
+  // The back/forward history with each page's state (scroll position, form text), as JSON, or "" with nothing to
+  // keep. RestoreState puts one back before the tab's first load, and says whether it did.
+  std::string SaveState();
+  bool RestoreState(const std::string& state);
+  // A picture of the page at most `max_width` pixels wide, to Java's onSnapshot with this id (null when there's none).
+  void CaptureSnapshot(int request_id, int max_width);
+  // Downloads `url` as the page would, with its cookies (BayDownloadManagerDelegate saves it).
+  void Download(const GURL& url);
 
   // Location, asked by BayPermissionManager. An answer lasts for the current page.
   bool HasLocationGrant(const url::Origin& origin) const;
@@ -82,6 +93,8 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
                                        const std::string& frame_name,
                                        const GURL& target_url) override;
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(content::WebContents* source) override;
+  bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
+                         const content::ContextMenuParams& params) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
@@ -114,6 +127,7 @@ class BayTab : public web_contents_delegate_android::WebContentsDelegateAndroid,
   void AnswerMediaRequest(const content::MediaStreamRequest& request,
                           content::MediaResponseCallback callback,
                           bool granted);
+  void DeliverSnapshot(int request_id, const SkBitmap* bitmap);
   // Declines every open request: its page is gone. Java hears of it unless the tab itself is going.
   void CancelRequests(bool notify_java);
 

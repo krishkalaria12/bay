@@ -4,9 +4,12 @@
 package org.bay.engine;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.TerminationStatus;
 import org.chromium.base.ThreadUtils;
@@ -18,6 +21,7 @@ import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.content_public.browser.navigation_controller.UserAgentOverrideOption;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.url.GURL;
@@ -56,6 +60,11 @@ public final class BayTab extends WebContentsDelegateAndroid {
         void onError(String message);
     }
 
+    /** The result of {@link #captureSnapshot}: the page's picture, or null when it has none to give. */
+    public interface SnapshotCallback {
+        void onSnapshot(@Nullable Bitmap bitmap);
+    }
+
     private long mNativeTab;
     private final BayProfile mProfile;
     private final BayTabClient mClient;
@@ -66,6 +75,9 @@ public final class BayTab extends WebContentsDelegateAndroid {
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final Map<String, EvaluationCallback> mEvaluations = new HashMap<>();
     private int mNextEvaluation;
+    private final Map<Integer, SnapshotCallback> mSnapshots = new HashMap<>();
+    private int mNextSnapshot;
+    private boolean mDesktopMode;
     private boolean mFullscreen;
     private float mLastScrollOffset;
 
@@ -113,7 +125,54 @@ public final class BayTab extends WebContentsDelegateAndroid {
     /** Loads an address the person typed or chose. */
     public void loadUrl(String url) {
         LoadUrlParams params = new LoadUrlParams(url, PageTransition.TYPED);
+        params.setOverrideUserAgent(
+                mDesktopMode ? UserAgentOverrideOption.TRUE : UserAgentOverrideOption.FALSE);
         mWebContents.getNavigationController().loadUrl(params);
+    }
+
+    /**
+     * Desktop site (B12): the site is asked again as Chrome on a Mac, so it answers with its desktop layout.
+     * Changing it reloads the page; the page's links and history keep the choice.
+     */
+    public void setDesktopMode(boolean desktop) {
+        if (mDesktopMode == desktop) return;
+        mDesktopMode = desktop;
+        mWebContents
+                .getNavigationController()
+                .setUseDesktopUserAgent(
+                        desktop, /* reloadOnChange= */ !getUrl().isEmpty(), /* skipOnInitialNavigation= */ false);
+    }
+
+    /** The back/forward history with each page's scroll position and form text, or null with nothing to keep. */
+    public @Nullable String saveState() {
+        return mNativeTab == 0 ? null : BayTabJni.get().saveState(mNativeTab);
+    }
+
+    /** Puts a {@link #saveState} back, before the tab's first load, and loads its current page. */
+    public boolean restoreState(String state) {
+        return mNativeTab != 0 && BayTabJni.get().restoreState(mNativeTab, state);
+    }
+
+    /** A picture of the page as it is on screen, at most {@code maxWidth} pixels wide. */
+    public void captureSnapshot(int maxWidth, SnapshotCallback callback) {
+        if (mNativeTab == 0) {
+            callback.onSnapshot(null);
+            return;
+        }
+        int id = ++mNextSnapshot;
+        mSnapshots.put(id, callback);
+        BayTabJni.get().captureSnapshot(mNativeTab, id, maxWidth);
+    }
+
+    @CalledByNative
+    private void onSnapshot(int requestId, @Nullable Bitmap bitmap) {
+        SnapshotCallback callback = mSnapshots.remove(requestId);
+        if (callback != null) callback.onSnapshot(bitmap);
+    }
+
+    /** Downloads {@code url} as this page would load it, with its cookies ({@link BayDownloads}). */
+    public void download(String url) {
+        if (mNativeTab != 0) BayTabJni.get().download(mNativeTab, url);
     }
 
     public void goBack() {
@@ -295,6 +354,20 @@ public final class BayTab extends WebContentsDelegateAndroid {
         mClient.onExternalUrl(url, userGesture);
     }
 
+    /** Native coordinates are CSS pixels in the view; the client gets fractions of the view's size. */
+    @CalledByNative
+    private void onContextMenu(String linkUrl, String linkText, String imageUrl, int x, int y) {
+        float density = mView.getResources().getDisplayMetrics().density;
+        float width = Math.max(1, mView.getWidth());
+        float height = Math.max(1, mView.getHeight());
+        mClient.onContextMenu(
+                linkUrl,
+                linkText,
+                imageUrl,
+                Math.min(1f, Math.max(0f, x * density / width)),
+                Math.min(1f, Math.max(0f, y * density / height)));
+    }
+
     @CalledByNative
     private void onRequestsCancelled() {
         mClient.onRequestsCancelled();
@@ -344,6 +417,9 @@ public final class BayTab extends WebContentsDelegateAndroid {
         ThreadUtils.assertOnUiThread();
         if (mNativeTab == 0) return;
         rejectEvaluations("The page closed before the script finished.");
+        Map<Integer, SnapshotCallback> snapshots = new HashMap<>(mSnapshots);
+        mSnapshots.clear();
+        for (SnapshotCallback callback : snapshots.values()) callback.onSnapshot(null);
         mHandler.removeCallbacksAndMessages(null);
         GestureListenerManager gestures = GestureListenerManager.fromWebContents(mWebContents);
         if (gestures != null) gestures.removeListener(mScrollListener);
@@ -420,5 +496,13 @@ public final class BayTab extends WebContentsDelegateAndroid {
                 long tabPtr, int requestId, boolean accepted, String username, String password);
 
         void answerFileChooser(long tabPtr, int requestId, String filesJson);
+
+        String saveState(long tabPtr);
+
+        boolean restoreState(long tabPtr, String state);
+
+        void captureSnapshot(long tabPtr, int requestId, int maxWidth);
+
+        void download(long tabPtr, String url);
     }
 }

@@ -13,6 +13,7 @@ class SimpleFactoryKey;
 
 namespace bay {
 
+class BayDownloadManagerDelegate;
 class BayPermissionManager;
 
 // One browsing session's storage. The normal profile keeps cookies, site storage and the HTTP cache on disk under
@@ -48,6 +49,7 @@ class BayBrowserContext : public content::BrowserContext {
   const base::FilePath path_;
   const bool off_the_record_;
   std::unique_ptr<SimpleFactoryKey> key_;
+  std::unique_ptr<BayDownloadManagerDelegate> download_delegate_;
   std::unique_ptr<BayPermissionManager> permission_manager_;
 };
 
